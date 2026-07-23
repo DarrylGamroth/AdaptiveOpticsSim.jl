@@ -338,10 +338,16 @@ mutable struct EnsembleCounter
     owner::Any
 end
 
+struct ImmutableEnsembleMember
+    owner::Base.RefValue{Int}
+end
+
 EnsembleCounter(value::Int=0) = EnsembleCounter(value, Ref(value))
 
 AdaptiveOpticsSim.ensemble_ownership_roots(counter::EnsembleCounter) =
     (counter.owner,)
+AdaptiveOpticsSim.ensemble_ownership_roots(member::ImmutableEnsembleMember) =
+    (member.owner,)
 
 function increment_counter!(counter::EnsembleCounter)
     counter.value += 1
@@ -361,6 +367,9 @@ end
     ) === ensemble
     @test (first_counter.value, second_counter.value) == (1, 11)
 
+    immutable_values = SimulationEnsemble(1, 1)
+    @test ensemble_members(immutable_values) === (1, 1)
+
     threaded = SimulationEnsemble(
         EnsembleCounter(),
         EnsembleCounter();
@@ -373,6 +382,11 @@ end
     @test_throws InvalidConfiguration SimulationEnsemble(
         EnsembleCounter(0, shared_owner),
         EnsembleCounter(0, shared_owner);
+        policy=ThreadedExecution(),
+    )
+    @test_throws InvalidConfiguration SimulationEnsemble(
+        ImmutableEnsembleMember(shared_owner),
+        ImmutableEnsembleMember(shared_owner);
         policy=ThreadedExecution(),
     )
     @test_throws InvalidConfiguration SimulationEnsemble(())

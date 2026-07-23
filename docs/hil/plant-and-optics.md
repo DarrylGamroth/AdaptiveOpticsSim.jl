@@ -320,8 +320,9 @@ Static aberrations and controllable optics form or expose optical surfaces that
 apply to an explicit caller-owned path product. They do not mutate a shared
 telescope scratch plane. This boundary permits independent paths to share one
 telescope definition and permits co-conjugated optics to remain independent;
-the later HIL gates still define placement, visibility, command timing, and
-effective-state semantics.
+Gate 4 defines independent endpoint command timing and effective-state
+semantics. Later HIL gates still define physical placement, path visibility,
+device dynamics, and boundary pacing.
 
 Reusable propagating optics follow the same split. In particular, a spatial
 filter owns its prepared mask definition separately from its single-writer FFT
@@ -372,17 +373,14 @@ compatible rate product may then feed several detectors with independent state
 and exposure durations. Each applies its presampling response on the
 declared optical grid, integrates over physical pixels, applies QE and elapsed
 time exactly once, and then applies its coupling, stochastic response, and
-readout. The transitional frame-step shared runtime still draws detector noise
-sequentially from one runtime RNG, so it does not claim tuple-order-independent
-stochastic streams. The schedule-free prepared plant requires a run seed and
-derivation version, binds stable identities to atmosphere layers, providers,
-detectors, and declared device roles, and supplies their independent streams as
-specified by the [`determinism policy`](../deterministic-simulation.md).
-Multilayer plant atmospheres require explicit layer identities so reordering
-layers does not reassign their streams. The frame-step runtime
-preflights every detector's exact prepared binding and idle state before
-advancing the atmosphere, but unforeseen execution failures are fail-stop
-rather than transactional rollback. Changing a
+readout. The schedule-free prepared plant requires a run seed and derivation
+version, binds stable identities to atmosphere layers, providers, detectors,
+and declared device roles, and supplies their independent streams as specified
+by the [`determinism policy`](../deterministic-simulation.md). Multilayer plant
+atmospheres require explicit layer identities so reordering layers does not
+reassign their streams. The selected serial execution performs the binding and
+epoch preflights described above before product mutation; unforeseen execution
+failures remain fail-stop rather than transactional rollback. Changing a
 detector exposure cannot change or recompute the optical result. A prepared
 external-optics result, including one produced through `Proper.jl`, enters at
 the same arrival-rate/acquisition boundary after declaring either photon

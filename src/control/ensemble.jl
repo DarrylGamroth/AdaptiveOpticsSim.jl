@@ -26,10 +26,15 @@ end
     ensemble_ownership_roots(member)
 
 Return mutable state owners that must not be shared by independently scheduled
-ensemble members. Wrapper types should extend this function and return the
-underlying mutable roots they own.
+ensemble members. Mutable members own themselves by default. Immutable
+wrappers that contain mutable state should extend this function and return
+the underlying mutable roots they own.
 """
-@inline ensemble_ownership_roots(member) = (member,)
+@inline ensemble_ownership_roots(member::T) where {T} =
+    _default_ensemble_ownership_roots(member, Val(Base.ismutabletype(T)))
+
+@inline _default_ensemble_ownership_roots(member, ::Val{true}) = (member,)
+@inline _default_ensemble_ownership_roots(member, ::Val{false}) = ()
 
 @inline _same_ownership_root(::Nothing, other) = false
 @inline _same_ownership_root(root, ::Nothing) = false

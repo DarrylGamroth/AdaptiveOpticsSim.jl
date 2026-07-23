@@ -136,7 +136,8 @@ end
     if coverage_instrumented()
         @test_skip "routing allocation assertions are disabled under coverage instrumentation"
     else
-        controller_output_payload(routing, Val(:woofer_command))
+        @test @inferred(controller_output_payload(
+            routing, Val(:woofer_command))) === products.low_order
         @test @allocated(controller_output_payload(
             routing, Val(:woofer_command))) == 0
         @test @allocated(controller_output_payload(

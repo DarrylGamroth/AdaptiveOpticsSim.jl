@@ -710,12 +710,14 @@ one remote `step!` at a time. Use AK only after measuring a representative
 member size and count on the target many-core host; its scheduling overhead can
 outweigh gains on small local workloads.
 
-Ensemble construction rejects shared mutable plant ownership. A custom wrapper
-around another runtime should implement
-`AdaptiveOpticsSim.ensemble_ownership_roots(wrapper)` and return the mutable
-plant/state objects that cannot safely be updated by another member at the
-same time. The scheduler operation passed to `run_ensemble!` must mutate and
-return normally only after the member is safe for the next coarse operation.
+Ensemble construction rejects shared mutable ownership. A mutable member owns
+itself by default. An immutable or mutable wrapper around shared state should
+implement `AdaptiveOpticsSim.ensemble_ownership_roots(wrapper)` and return the
+mutable plant/state objects that cannot safely be updated by another member at
+the same time. Immutable values with no mutable owners, such as scalar sweep
+points, require no extension. The scheduler operation passed to
+`run_ensemble!` must mutate and return normally only after the member is safe
+for the next coarse operation.
 
 Avoid nested parallelism. When using a threaded ensemble policy, normally keep
 BLAS and FFT-provider thread counts at one and let the ensemble own the coarse

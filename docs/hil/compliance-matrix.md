@@ -281,7 +281,8 @@ before Gate 1 implementation work proceeds.
   leases, outcome credit, and command outcomes
 - freeze the breaking definition/prepared-plan/mutable-state/product API policy
   without preserving the original OOPAO or frame-step object layout
-- retain the direct single-threaded CPU runtime as the numerical oracle
+- retain direct single-threaded CPU numerical paths and frozen references as
+  the numerical oracle
 
 Acceptance: every changed physical surface has a deterministic reference or an
 explicitly tracked later-gate requirement; current correctness, allocation, and

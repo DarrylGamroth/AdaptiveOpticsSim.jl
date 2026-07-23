@@ -415,8 +415,9 @@ The trigger surface is likewise qualified. Preparation canonicalizes explicit so
 consumer, trace, and fault identities into a flat finite fan-out; checks exact
 finite phase-step, jitter, drop, duplicate, label-offset, non-overtaking, and
 capacity behavior; and allocates fixed propagation, realization, observation,
-and pending-delivery storage. Runtime owns one source sequence and phase offset
-per source, one phase offset per link, and no run-length edge list. Source
+and pending-delivery storage. `TriggerTopologyState` owns one source sequence
+and phase offset per source, one phase offset per link, and no run-length edge
+list. Source
 faults remain correlated through every surviving branch, while a link fault
 affects only that link and its descendants. Equal-time source realization
 precedes delivery removal, and neither operation may silently backdate the
