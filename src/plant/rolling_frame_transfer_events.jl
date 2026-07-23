@@ -18,7 +18,7 @@ nominal per-band exposure and the delay between complete-frame readout and the
 next accepted frame start.
 """
 struct RollingShutterAcquisitionDefinition <:
-    AbstractDetectorAcquisitionEventDefinition
+    AbstractDetectorAcquisitionLifecycleDefinition
     exposure_duration::PlantDuration
     readiness_delay::PlantDuration
 
@@ -43,7 +43,7 @@ struct PreparedRollingShutterAcquisition{
     RP<:FrameReadoutProducts,
     M<:_RollingShutterEventMode,
     T<:AbstractFloat,
-} <: AbstractPreparedDetectorAcquisition
+} <: AbstractPreparedDetectorAcquisitionLifecycle
     binding::_RollingShutterAcquisitionBinding
     detector::D
     plan::P
@@ -59,7 +59,7 @@ struct PreparedRollingShutterAcquisition{
 end
 
 mutable struct RollingShutterAcquisitionState <:
-    AbstractDetectorAcquisitionEventState
+    AbstractDetectorAcquisitionLifecycleState
     binding::_RollingShutterAcquisitionBinding
     status::DetectorAcquisitionStatus
     sequence::UInt64
@@ -469,7 +469,7 @@ One prepared storage frame permits image-area integration to overlap storage
 readout without aliasing either frame.
 """
 struct FrameTransferAcquisitionDefinition <:
-    AbstractDetectorAcquisitionEventDefinition
+    AbstractDetectorAcquisitionLifecycleDefinition
     exposure_duration::PlantDuration
     readout_duration::PlantDuration
 
@@ -494,7 +494,7 @@ struct PreparedFrameTransferAcquisition{
     RP<:FrameReadoutProducts,
     A<:AbstractMatrix,
     T<:AbstractFloat,
-} <: AbstractPreparedDetectorAcquisition
+} <: AbstractPreparedDetectorAcquisitionLifecycle
     binding::_FrameTransferAcquisitionBinding
     detector::D
     plan::P
@@ -518,7 +518,7 @@ end
 end
 
 mutable struct FrameTransferAcquisitionState <:
-    AbstractDetectorAcquisitionEventState
+    AbstractDetectorAcquisitionLifecycleState
     binding::_FrameTransferAcquisitionBinding
     image_status::_FrameTransferImageStatus
     storage_status::_FrameTransferStorageStatus

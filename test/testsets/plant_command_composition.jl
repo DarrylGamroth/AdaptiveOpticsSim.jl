@@ -309,7 +309,7 @@ function command_composition_fixture(; reverse_order::Bool=false,
     loop_definition = PlantEventLoopDefinition(
         (OpticalSampleDefinition(:science,
             PeriodicSchedule(period_ns=100_000_000, phase_ns=0)),),
-        (DetectorEventDefinition(:camera,
+        (AcquisitionEventDefinition(:camera,
             GlobalShutterAcquisitionDefinition(
                 PlantDuration(300_000_000)),
             PeriodicAcquisitionStart(PeriodicSchedule(
@@ -365,7 +365,7 @@ function array_initial_command_fixture()
     loop_definition = PlantEventLoopDefinition(
         (OpticalSampleDefinition(:science,
             PeriodicSchedule(period_ns=100_000_000, phase_ns=0)),),
-        (DetectorEventDefinition(:camera,
+        (AcquisitionEventDefinition(:camera,
             GlobalShutterAcquisitionDefinition(
                 PlantDuration(300_000_000)),
             PeriodicAcquisitionStart(PeriodicSchedule(

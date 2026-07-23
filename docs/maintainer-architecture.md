@@ -141,14 +141,15 @@ Examples:
   device compatibility checks without putting IDs, shapes, rates, or device
   ordinals in type parameters
 - `PreparedPlantEventLoop` as the HIL-neutral serial virtual-time composition
-  of independent endpoint command generators, detector events, optical sample
-  schedules, one atmosphere timeline, and canonical physical-optic
-  application. Plant state is right-continuous and exposure intervals are
-  half-open. Explicit `PlantCommandTransaction` values provide all-or-none
-  admission and physical publication across distinct optics; equal time or
-  placement alone does not. The current Gate 4 surface operation treats every
-  prepared optic as one common co-conjugated group on every path, pending
-  explicit placement and visibility
+  of independent endpoint command generators, detector or direct-measurement
+  acquisition lifecycles, optical sample schedules, one atmosphere timeline
+  for due full-optical work, and canonical physical-optic application. Plant
+  state is right-continuous and exposure intervals are half-open. Explicit
+  `PlantCommandTransaction` values provide all-or-none admission and physical
+  publication across distinct optics; equal time or placement alone does not.
+  The current Gate 4 surface operation treats every prepared optic as one
+  common co-conjugated group on every path, pending explicit placement and
+  visibility
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

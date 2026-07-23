@@ -16,10 +16,23 @@ struct RNGTestAcquisitionExecution{E}
     frame::E
 end
 
+struct RNGQuietPathModel{R}
+    zero_padding::Int
+    revision::R
+end
+
+struct RNGQuietAcquisitionModel{T<:AbstractFloat}
+    exposure::T
+end
+
 Plant.plant_model_definition_style(
     ::Type{<:RNGTestPathModel}) = ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
     ::Type{<:RNGTestAcquisitionModel}) = ColdPlantModelDefinition()
+Plant.plant_model_definition_style(
+    ::Type{<:RNGQuietPathModel}) = ColdPlantModelDefinition()
+Plant.plant_model_definition_style(
+    ::Type{<:RNGQuietAcquisitionModel}) = ColdPlantModelDefinition()
 
 Plant.additional_path_rng_owner_roles(
     ::RNGTestPathExecution) = (:path_device,)
@@ -30,6 +43,34 @@ function Plant.validate_path_execution_binding(
     execution::RNGTestPathExecution, input, result)
     return Plant.validate_path_execution_binding(
         execution.imaging, input, result)
+end
+
+function Plant.prepare_path_executor(
+    model::RNGQuietPathModel,
+    definition::OpticalPathDefinition,
+    source::AbstractSource,
+    telescope::Telescope,
+    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+)
+    T = eltype(pupil_reflectivity(telescope))
+    pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
+    imaging = prepare_direct_imaging(pupil, source;
+        zero_padding=model.zero_padding)
+    return PreparedPathExecutor(
+        definition,
+        source,
+        telescope,
+        atmosphere,
+        pupil,
+        direct_imaging_output(imaging),
+        imaging;
+        materialization=prepare_pupil_opd_materialization(atmosphere,
+            telescope, source, pupil),
+        optical_model=(kind=:rng_quiet_direct_imaging,
+            zero_padding=model.zero_padding),
+        propagation_model=:fraunhofer_fft,
+        model_revisions=model.revision,
+    )
 end
 
 function Plant.execute_path_rngs!(result, input,
@@ -121,6 +162,24 @@ function Plant.prepare_acquisition_provider(
     return prepare_full_optical_provider(execution, products)
 end
 
+function Plant.prepare_acquisition_provider(
+    model::RNGQuietAcquisitionModel,
+    ::AcquisitionDefinition,
+    path::PreparedPathExecutor,
+)
+    require_path_result(path)
+    T = eltype(path.result.values)
+    detector = Detector(integration_time=T(model.exposure),
+        noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
+        T=T, backend=path.key.backend)
+    execution = FrameAcquisitionExecution(detector, path.result)
+    metadata = (kind=:detector_frame, units=:detected_electrons,
+        geometry=path.result.metadata,
+        detector=detector_export_metadata(detector))
+    products = AcquisitionProducts(execution.observation; metadata)
+    return prepare_full_optical_provider(execution, products)
+end
+
 function rng_test_definition(;
     path_order::Tuple=(:random, :quiet),
     acquisition_order::Tuple=(:noisy, :quiet_frame),
@@ -162,13 +221,13 @@ function rng_test_definition(;
         random=OpticalPathDefinition(:random, random_source,
             RNGTestPathModel(2, UInt(31))),
         quiet=OpticalPathDefinition(:quiet, quiet_source,
-            DirectSciencePathModel(2, UInt(32))),
+            RNGQuietPathModel(2, UInt(32))),
     )
     acquisition_map = (
         noisy=AcquisitionDefinition(noisy_acquisition_id, :random,
             RNGTestAcquisitionModel(T(0.5), T(0.25))),
         quiet_frame=AcquisitionDefinition(:quiet_frame, :quiet,
-            FramePlantAcquisitionModel(T(0.5), MatchingPlantPath())),
+            RNGQuietAcquisitionModel(T(0.5))),
     )
     paths = ntuple(index -> getproperty(path_map, path_order[index]),
         length(path_order))

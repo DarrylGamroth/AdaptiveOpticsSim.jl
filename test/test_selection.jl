@@ -39,6 +39,8 @@ const TEST_SUITE_SPECS = (
         "testsets/plant_command_composition.jl"),
     TestSuiteSpec("plant-controller-routing",
         "testsets/plant_controller_routing.jl"),
+    TestSuiteSpec("plant-reduced-order",
+        "testsets/plant_reduced_order.jl"),
     TestSuiteSpec("control-primitives", "testsets/control_primitives.jl"),
     TestSuiteSpec(
         "detectors-wfs",
@@ -53,10 +55,13 @@ const TEST_SUITE_SPECS = (
         ),
     ),
     TestSuiteSpec("plant-preparation", "testsets/plant_preparation.jl";
-        fixtures=("wfs_stage_contract_fixtures.jl",)),
+        fixtures=("plant_test_fixtures.jl",
+            "wfs_stage_contract_fixtures.jl")),
     TestSuiteSpec("plant-providers", "testsets/plant_providers.jl";
-        fixtures=("wfs_stage_contract_fixtures.jl",)),
-    TestSuiteSpec("plant-rng", "testsets/plant_rng.jl"),
+        fixtures=("plant_test_fixtures.jl",
+            "wfs_stage_contract_fixtures.jl")),
+    TestSuiteSpec("plant-rng", "testsets/plant_rng.jl";
+        fixtures=("plant_test_fixtures.jl",)),
     TestSuiteSpec("plant-illumination", "testsets/plant_illumination.jl"),
     TestSuiteSpec(
         "calibration-analysis",
@@ -90,6 +95,7 @@ const TEST_GROUP_SPECS = (
         "plant-event-composition",
         "plant-command-composition",
         "plant-controller-routing",
+        "plant-reduced-order",
         "plant-preparation",
         "plant-providers",
         "plant-rng",

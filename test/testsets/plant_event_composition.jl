@@ -246,7 +246,7 @@ function event_composition_fixture(; reverse_order::Bool=false,
             PeriodicSchedule(period_ns=200_000_000, phase_ns=25_000_000)),
     )
     events = (
-        DetectorEventDefinition(:science_cmos,
+        AcquisitionEventDefinition(:science_cmos,
             GlobalShutterAcquisitionDefinition(PlantDuration(200_000_000);
                 readout_duration=PlantDuration(20_000_000),
                 readiness_delay=PlantDuration(10_000_000)),
@@ -254,19 +254,19 @@ function event_composition_fixture(; reverse_order::Bool=false,
                 TriggeredAcquisitionStart(:science_camera) :
                 PeriodicAcquisitionStart(PeriodicSchedule(
                     period_ns=500_000_000, phase_ns=0))),
-        DetectorEventDefinition(:science_ccd,
+        AcquisitionEventDefinition(:science_ccd,
             GlobalShutterAcquisitionDefinition(PlantDuration(300_000_000)),
             PeriodicAcquisitionStart(PeriodicSchedule(
                 period_ns=600_000_000, phase_ns=50_000_000))),
-        DetectorEventDefinition(:science_rolling,
+        AcquisitionEventDefinition(:science_rolling,
             RollingShutterAcquisitionDefinition(PlantDuration(150_000_000)),
             PeriodicAcquisitionStart(PeriodicSchedule(
                 period_ns=500_000_000, phase_ns=250_000_000))),
-        DetectorEventDefinition(:ngs_saphira,
+        AcquisitionEventDefinition(:ngs_saphira,
             GlobalShutterAcquisitionDefinition(PlantDuration(200_000_000);
                 readout_duration=PlantDuration(10_000_000)),
             TriggeredAcquisitionStart(:ngs_camera)),
-        DetectorEventDefinition(:lgs_emccd,
+        AcquisitionEventDefinition(:lgs_emccd,
             FrameTransferAcquisitionDefinition(PlantDuration(200_000_000);
                 readout_duration=PlantDuration(300_000_000)),
             PeriodicAcquisitionStart(PeriodicSchedule(

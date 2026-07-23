@@ -1,8 +1,11 @@
 const _DETECTOR_ACQUISITION_EVENT_COMPONENT = :detector_acquisition_events
 
-abstract type AbstractDetectorAcquisitionEventDefinition end
-abstract type AbstractPreparedDetectorAcquisition end
-abstract type AbstractDetectorAcquisitionEventState end
+abstract type AbstractDetectorAcquisitionLifecycleDefinition <:
+    AbstractAcquisitionLifecycleDefinition end
+abstract type AbstractPreparedDetectorAcquisitionLifecycle <:
+    AbstractPreparedAcquisitionLifecycle end
+abstract type AbstractDetectorAcquisitionLifecycleState <:
+    AbstractAcquisitionLifecycleState end
 
 @noinline function _detector_acquisition_event_error(reason::Symbol,
     message::String)
@@ -22,7 +25,7 @@ next-acquisition readiness transition after readout completion. The initial
 event model rejects a trigger received while the detector is not ready.
 """
 struct GlobalShutterAcquisitionDefinition <:
-    AbstractDetectorAcquisitionEventDefinition
+    AbstractDetectorAcquisitionLifecycleDefinition
     exposure_duration::PlantDuration
     readout_duration::PlantDuration
     readiness_delay::PlantDuration
@@ -71,7 +74,7 @@ struct PreparedGlobalShutterAcquisition{
     RP<:FrameReadoutProducts,
     R<:_DetectorEventReadoutStyle,
     T<:AbstractFloat,
-} <: AbstractPreparedDetectorAcquisition
+} <: AbstractPreparedDetectorAcquisitionLifecycle
     binding::_GlobalShutterAcquisitionBinding
     detector::D
     plan::P
@@ -107,7 +110,7 @@ end
 
 """Separately owned, single-writer state for one prepared acquisition."""
 mutable struct GlobalShutterAcquisitionState <:
-    AbstractDetectorAcquisitionEventState
+    AbstractDetectorAcquisitionLifecycleState
     binding::_GlobalShutterAcquisitionBinding
     status::DetectorAcquisitionStatus
     sequence::UInt64

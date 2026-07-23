@@ -106,9 +106,12 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    all-or-none multi-optic transactions. Named controller products now bind
    zero-copy to exact prepared endpoints, and the superseded packed
    single-optic runtime has been removed without compatibility adapters. The
-   remaining Gate 4 slices validate reduced-order command-responsive execution
-   and close cross-backend evidence. Explicit conjugate placement and path
-   visibility remain Gate 5.
+   A deterministic linear reduced-order direct-measurement model now validates
+   command-responsive scheduled execution, matched loop closure, and expected
+   degradation inside its declared envelope. The remaining Gate 4 slices add
+   sampled device feedback, autonomous optical-device timing, and final
+   cross-backend closure. Explicit conjugate placement and path visibility
+   remain Gate 5.
    Operational execution-clock ingress liveness belongs to the later HIL
    lifecycle boundary.
 5. Immediately prove a minimal serial CPU HIL vertical slice: one scheduled

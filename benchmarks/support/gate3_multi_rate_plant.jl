@@ -273,7 +273,7 @@ function multi_rate_event_definition(raw::AbstractDict;
                 raw["lgs_sample_phase_ns"])),
     )
     events = (
-        AOSPlant.DetectorEventDefinition(:science_cmos,
+        AOSPlant.AcquisitionEventDefinition(:science_cmos,
             AOSPlant.GlobalShutterAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["science_cmos_exposure_ns"]);
                 readout_duration=AOSPlant.PlantDuration(
@@ -281,25 +281,25 @@ function multi_rate_event_definition(raw::AbstractDict;
                 readiness_delay=AOSPlant.PlantDuration(
                     raw["science_cmos_readiness_ns"])),
             AOSPlant.TriggeredAcquisitionStart(:science_camera)),
-        AOSPlant.DetectorEventDefinition(:science_ccd,
+        AOSPlant.AcquisitionEventDefinition(:science_ccd,
             AOSPlant.GlobalShutterAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["science_ccd_exposure_ns"])),
             AOSPlant.PeriodicAcquisitionStart(schedule(
                 raw["science_ccd_period_ns"],
                 raw["science_ccd_phase_ns"]))),
-        AOSPlant.DetectorEventDefinition(:science_rolling,
+        AOSPlant.AcquisitionEventDefinition(:science_rolling,
             AOSPlant.RollingShutterAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["science_rolling_exposure_ns"])),
             AOSPlant.PeriodicAcquisitionStart(schedule(
                 raw["science_rolling_period_ns"],
                 raw["science_rolling_phase_ns"]))),
-        AOSPlant.DetectorEventDefinition(:ngs_saphira,
+        AOSPlant.AcquisitionEventDefinition(:ngs_saphira,
             AOSPlant.GlobalShutterAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["ngs_saphira_exposure_ns"]);
                 readout_duration=AOSPlant.PlantDuration(
                     raw["ngs_saphira_readout_ns"])),
             AOSPlant.TriggeredAcquisitionStart(:ngs_camera)),
-        AOSPlant.DetectorEventDefinition(:lgs_emccd,
+        AOSPlant.AcquisitionEventDefinition(:lgs_emccd,
             AOSPlant.FrameTransferAcquisitionDefinition(AOSPlant.PlantDuration(
                 raw["lgs_emccd_exposure_ns"]);
                 readout_duration=AOSPlant.PlantDuration(

@@ -511,15 +511,6 @@ function Plant.prepare_acquisition_provider(
     return prepare_full_optical_provider(execution, products)
 end
 
-function captured_plant_preparation_error(f)
-    try
-        f()
-    catch error
-        return error
-    end
-    return nothing
-end
-
 function plant_preparation_intensity_map(values::AbstractArray;
     kind=FocalPlane(), coordinate_domain=AngularCoordinates(),
     spectral=MonochromaticChannel(convert(eltype(values), 1.0e-6)),
@@ -537,18 +528,6 @@ function plant_preparation_intensity_map(values::AbstractArray;
     return IntensityMap(metadata, values)
 end
 
-function assert_plant_preparation_error(f, component::Symbol,
-    reason::Symbol)
-    error = captured_plant_preparation_error(f)
-    @test error isa PlantPreparationError
-    if error isa PlantPreparationError
-        @test error.component === component
-        @test error.reason === reason
-        @test !isempty(error.msg)
-    end
-    return error
-end
-
 function prepared_path_execution_allocations(path::PreparedPathExecutor)
     execute_path!(path)
     return @allocated execute_path!(path)
@@ -558,12 +537,6 @@ function prepared_acquisition_execution_allocations(
     owner::PreparedAcquisitionOwner, rng)
     execute_acquisition!(owner, rng)
     return @allocated execute_acquisition!(owner, rng)
-end
-
-function prepared_selection_execution_allocations(selection,
-    epoch::AtmosphereEpoch)
-    execute_acquisition_selection!(selection, epoch)
-    return @allocated execute_acquisition_selection!(selection, epoch)
 end
 
 @inline plant_test_observation_values(values::AbstractArray) = values

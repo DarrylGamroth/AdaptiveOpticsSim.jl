@@ -10,6 +10,7 @@ respective package domains and enter through the explicit imports below.
 """
 module Plant
 
+using LinearAlgebra
 using Random
 
 import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
@@ -61,7 +62,7 @@ import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
     validate_plane_storage, validate_wfs_acquisition_binding,
     validate_wfs_estimation_binding, validate_wfs_measurement,
     validate_wfs_observation, validate_wfs_optical_formation_binding,
-    wavelength, wfs_measurement_path, write_output!
+    measurement_storage, wavelength, wfs_measurement_path, write_output!
 
 include("errors.jl")
 include("time.jl")
@@ -73,11 +74,14 @@ include("command_application.jl")
 include("definitions.jl")
 include("controllable_optics.jl")
 include("triggers.jl")
+include("acquisition_lifecycles.jl")
 include("detector_acquisition_events.jl")
 include("rolling_frame_transfer_events.jl")
+include("direct_measurement_events.jl")
 include("randomness.jl")
 include("product_providers.jl")
 include("preparation.jl")
+include("reduced_order.jl")
 include("controller_routing.jl")
 include("event_composition.jl")
 include("illumination.jl")

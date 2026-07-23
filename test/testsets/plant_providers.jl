@@ -19,6 +19,16 @@ struct ProviderReplayModel{T<:AbstractFloat}
     second_value::T
 end
 
+struct ProviderCountedPathModel{R}
+    zero_padding::Int
+    revision::R
+end
+
+struct ProviderCountedPathExecution{E}
+    imaging::E
+    executions::Base.RefValue{Int}
+end
+
 mutable struct ProviderReducedState{T<:AbstractFloat}
     disturbance::T
     command::T
@@ -43,9 +53,52 @@ for model in (
     ProviderUnchangedModel,
     ProviderCopiedModel,
     ProviderReplayModel,
+    ProviderCountedPathModel,
 )
     @eval Plant.plant_model_definition_style(
         ::Type{<:$model}) = ColdPlantModelDefinition()
+end
+
+function Plant.validate_path_execution_binding(
+    execution::ProviderCountedPathExecution, input, result)
+    return Plant.validate_path_execution_binding(
+        execution.imaging, input, result)
+end
+
+function Plant.execute_path!(result, input,
+    execution::ProviderCountedPathExecution)
+    Plant.validate_path_execution_binding(execution, input, result)
+    execution.executions[] += 1
+    return Plant.execute_path!(result, input, execution.imaging)
+end
+
+function Plant.prepare_path_executor(
+    model::ProviderCountedPathModel,
+    definition::OpticalPathDefinition,
+    source::AbstractSource,
+    telescope::Telescope,
+    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+)
+    T = eltype(pupil_reflectivity(telescope))
+    pupil = PupilFunction(telescope; T, backend=backend(telescope))
+    imaging = prepare_direct_imaging(pupil, source;
+        zero_padding=model.zero_padding)
+    execution = ProviderCountedPathExecution(imaging, Ref(0))
+    return PreparedPathExecutor(
+        definition,
+        source,
+        telescope,
+        atmosphere,
+        pupil,
+        direct_imaging_output(imaging),
+        execution;
+        materialization=prepare_pupil_opd_materialization(atmosphere,
+            telescope, source, pupil),
+        optical_model=(kind=:provider_counted_direct_imaging,
+            zero_padding=model.zero_padding),
+        propagation_model=:fraunhofer_fft,
+        model_revisions=model.revision,
+    )
 end
 
 Plant.acquisition_provider_style(
@@ -227,7 +280,7 @@ end
     source = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=T(3), T=T)
     path_definition = OpticalPathDefinition(:provider_path, source,
-        CountedDirectSciencePathModel(2, UInt(41)))
+        ProviderCountedPathModel(2, UInt(41)))
     acquisitions = (
         AcquisitionDefinition(:full, :provider_path,
             ProviderFullModel(T(0.5))),
