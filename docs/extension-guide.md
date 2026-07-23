@@ -56,7 +56,7 @@ that belongs to the later boundary contract.
 accepted-sequence-window, future-calendar, ordinal, and payload-storage
 capacity. Scalar payload slots require `CPUBackend()` and remain host-resident;
 fixed-shape array slots use the selected array backend. Its separately owned,
-qualified `CommandEndpointState` and
+qualified public `CommandEndpointState` and
 `CommandDispositionWorkspace` support warmed `admit_plant_command!`, one
 outstanding application-ready claim, and explicit applied/failed/pending-drain
 completion without callbacks or run-length storage. Admission copies caller
@@ -66,12 +66,22 @@ clear every disposition before reusing its workspace. Give endpoints stable,
 unique ordinals when their order keys will be composed; equal scheduled times
 order by endpoint ordinal before the endpoint-local sequence.
 
-This is a standalone core endpoint, not yet an optic-model extension hook.
-Application-stage state-dependent bounds, effective optic mutation, silence,
-safe values, atomic multi-optic latch, and `PreparedPlant` event composition
-remain later Gate 4 slices. `prepare_plant` therefore still rejects nonempty
-controllable-optic topology rather than silently ignoring it. An incremental
-schema must preserve pending deltas; only absolute commands may select
+The separately owned qualified public `CommandApplicationState` binds one explicit
+initial effective command and any required copied safe command to one exact
+endpoint-state owner before its first successful admission.
+`apply_claimed_plant_command!` transactionally implements absolute
+replacement or incremental addition, finite-result checking, declared
+application-stage bound behavior, and terminal disposition. Array staging and
+effective storage remain on the endpoint backend. Its silence operations
+schedule exact safe/fail transitions from admission or application age, with a
+due equal-time command resolved first.
+
+This remains a standalone core endpoint layer, not yet an optic-model extension
+hook. Physical optic mutation, device-specific slew/settling/dynamics, atomic
+multi-optic latch, and `PreparedPlant` event composition remain later Gate 4
+slices. `prepare_plant` therefore still rejects nonempty controllable-optic
+topology rather than silently ignoring it. An incremental schema must preserve
+pending deltas; only absolute commands may select
 `SupersedeOlderPendingCommands`.
 
 Preparation then dispatches on those same concrete model types. A path method

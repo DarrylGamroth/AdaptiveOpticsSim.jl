@@ -83,7 +83,8 @@ function explicit_spatial_filter_cycle!(output, field, spatial_filter, plan,
 end
 
 @testset "API export curation" begin
-    exported = names(AdaptiveOpticsSim)
+    exported = filter(name -> Base.isexported(AdaptiveOpticsSim, name),
+        names(AdaptiveOpticsSim))
     # Pre-HIL stage contracts intentionally add a small, documented public
     # product/protocol seam. Keep headroom bounded so unrelated internals do
     # not drift into the ordinary user namespace.
@@ -92,7 +93,9 @@ end
     # adds nine public controllable-optic topology names. Gate 4's second slice
     # adds the typed command-schema/policy vocabulary and ordinary accessors.
     # Gate 4's third slice adds the bounded command-admission vocabulary,
-    # lifecycle operations, and read-only disposition accessors.
+    # lifecycle operations, and read-only disposition accessors. Its fourth
+    # slice is an advanced qualified seam and therefore adds public names but
+    # no ordinary exports.
     # Detector-event transitions remain qualified, while their structured
     # error joins the public exception surface.
     @test length(exported) <= 694

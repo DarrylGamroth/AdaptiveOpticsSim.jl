@@ -33,11 +33,14 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-command-admission"])) == ("plant-command-admission",)
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["plant-command-application"])) == ("plant-command-application",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-time"])) == ("plant-time",)
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
         "plant-topology",
         "plant-command-schemas",
         "plant-command-admission",
+        "plant-command-application",
         "plant-time",
         "plant-scheduler",
         "plant-triggers",
@@ -53,6 +56,7 @@ end
         "plant-topology",
         "plant-command-schemas",
         "plant-command-admission",
+        "plant-command-application",
         "plant-time",
         "plant-scheduler",
         "plant-triggers",
@@ -73,6 +77,7 @@ end
     @test occursin("plant-topology", listing_text)
     @test occursin("plant-command-schemas", listing_text)
     @test occursin("plant-command-admission", listing_text)
+    @test occursin("plant-command-application", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
 

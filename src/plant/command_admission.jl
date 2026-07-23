@@ -508,9 +508,12 @@ end
     UInt64(0), UInt64(0), zero(PlantTimestamp), zero(PlantTimestamp),
     zero(PlantTimestamp), UInt64(0), _FreeCommandSlot)
 
+mutable struct _CommandEndpointStateBinding end
+
 """Single-writer mutable storage for one prepared command endpoint."""
 mutable struct CommandEndpointState{P<:_AbstractCommandPayloadSlots}
     binding::_CommandEndpointBinding
+    state_binding::_CommandEndpointStateBinding
     payloads::P
     slots::Memory{_CommandSlotMetadata}
     calendar::Memory{UInt32}
@@ -518,10 +521,14 @@ mutable struct CommandEndpointState{P<:_AbstractCommandPayloadSlots}
     pending_count::Int
     active_count::Int
     current_timestamp::PlantTimestamp
+    last_admission_timestamp::PlantTimestamp
     highest_sequence::UInt64
     presentation_sequence::UInt64
     outstanding_slot::UInt32
     has_highest_sequence::Bool
+    has_admission::Bool
+    has_application_state::Bool
+    failed::Bool
 end
 
 function CommandEndpointState(endpoint::PreparedCommandEndpoint;
@@ -535,6 +542,7 @@ function CommandEndpointState(endpoint::PreparedCommandEndpoint;
     fill!(accepted_sequences, UInt64(0))
     return CommandEndpointState(
         getfield(endpoint, :binding),
+        _CommandEndpointStateBinding(),
         payloads,
         slots,
         Memory{UInt32}(undef, capacity),
@@ -542,9 +550,13 @@ function CommandEndpointState(endpoint::PreparedCommandEndpoint;
         0,
         0,
         initial_timestamp,
+        initial_timestamp,
         UInt64(0),
         UInt64(0),
         UInt32(0),
+        false,
+        false,
+        false,
         false,
     )
 end
@@ -571,6 +583,12 @@ end
 @inline active_command_count(state::CommandEndpointState) = state.active_count
 @inline command_endpoint_timestamp(state::CommandEndpointState) =
     state.current_timestamp
+@inline command_endpoint_failed(state::CommandEndpointState) = state.failed
+@inline function last_command_admission_timestamp(
+    state::CommandEndpointState)
+    state.has_admission || return nothing
+    return state.last_admission_timestamp
+end
 @inline command_disposition_count(workspace::CommandDispositionWorkspace) =
     workspace.count
 
@@ -626,6 +644,13 @@ end
         :outstanding_application,
         "resolve the outstanding application-ready command before another " *
         "endpoint transition")
+    return nothing
+end
+
+@inline function _require_operational_command_endpoint(
+    state::CommandEndpointState)
+    state.failed && _command_admission_error(:endpoint, :endpoint_failed,
+        "command endpoint has entered a terminal failed state")
     return nothing
 end
 
@@ -1101,6 +1126,7 @@ function admit_plant_command!(workspace::CommandDispositionWorkspace,
     timestamp::PlantTimestamp)
     _require_command_endpoint_binding(endpoint, state)
     _require_command_endpoint_binding(endpoint, workspace)
+    _require_operational_command_endpoint(state)
     _require_empty_command_dispositions(workspace)
     _require_idle_command_endpoint(state)
     _require_forward_command_timestamp(state, timestamp)
@@ -1191,6 +1217,8 @@ function admit_plant_command!(workspace::CommandDispositionWorkspace,
     _record_accepted_command_sequence!(endpoint, state, command.sequence)
     state.presentation_sequence = presentation_id.value
     state.current_timestamp = timestamp
+    state.last_admission_timestamp = timestamp
+    state.has_admission = true
     workspace.count = disposition_count
     status = scheduled <= timestamp ?
         CommandAdmittedReady : CommandAdmittedPending
@@ -1253,6 +1281,7 @@ function claim_next_application_ready_command!(
     state::CommandEndpointState,
     timestamp::PlantTimestamp)
     _require_command_endpoint_binding(endpoint, state)
+    _require_operational_command_endpoint(state)
     _require_idle_command_endpoint(state)
     _require_forward_command_timestamp(state, timestamp)
     state.current_timestamp = timestamp
@@ -1350,6 +1379,7 @@ function _finish_command_application!(
     kind::CommandTerminalKind,
     reason::CommandDispositionReason)
     _require_command_endpoint_binding(endpoint, workspace)
+    _require_operational_command_endpoint(state)
     _require_empty_command_dispositions(workspace)
     slot, metadata = _require_current_command_claim(endpoint, state, claim)
     disposition = _command_disposition(
@@ -1411,6 +1441,7 @@ function fail_pending_plant_commands!(
     reason=CommandDispositionReason(:endpoint_failure))
     _require_command_endpoint_binding(endpoint, state)
     _require_command_endpoint_binding(endpoint, workspace)
+    _require_operational_command_endpoint(state)
     _require_empty_command_dispositions(workspace)
     _require_idle_command_endpoint(state)
     _require_forward_command_timestamp(state, timestamp)
