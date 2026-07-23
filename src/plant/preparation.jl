@@ -1141,20 +1141,29 @@ struct _PreparedPlantToken end
 const _PREPARED_PLANT_TOKEN = _PreparedPlantToken()
 
 """Prepared, schedule-free plant with concrete owners and RNG streams."""
-struct PreparedPlant{D,P<:Tuple,A<:Tuple,R<:PreparedPlantRNGs}
+struct PreparedPlant{D,O<:Tuple,C<:Tuple,P<:Tuple,A<:Tuple,
+    R<:PreparedPlantRNGs}
     definition::D
+    controllable_optics::O
+    command_endpoints::C
     paths::P
     acquisitions::A
     rngs::R
 
-    function PreparedPlant(::_PreparedPlantToken, definition::D, paths::P,
+    function PreparedPlant(::_PreparedPlantToken, definition::D,
+        controllable_optics::O, command_endpoints::C, paths::P,
         acquisitions::A, rngs::R) where {
-        D,P<:Tuple,A<:Tuple,R<:PreparedPlantRNGs,
+        D,O<:Tuple,C<:Tuple,P<:Tuple,A<:Tuple,R<:PreparedPlantRNGs,
     }
-        return new{D,P,A,R}(definition, paths, acquisitions, rngs)
+        return new{D,O,C,P,A,R}(definition, controllable_optics,
+            command_endpoints, paths, acquisitions, rngs)
     end
 end
 
+@inline prepared_controllable_optics(plant::PreparedPlant) =
+    plant.controllable_optics
+@inline prepared_command_endpoints(plant::PreparedPlant) =
+    map(binding -> binding.endpoint, plant.command_endpoints)
 @inline prepared_paths(plant::PreparedPlant) = plant.paths
 @inline prepared_acquisitions(plant::PreparedPlant) = plant.acquisitions
 
@@ -1179,6 +1188,24 @@ function prepared_acquisition(plant::PreparedPlant, id)
     end
     throw(PlantPreparationError(:acquisition, :unknown_id,
         "prepared plant has no acquisition $resolved"))
+end
+
+function prepared_controllable_optic(plant::PreparedPlant, id)
+    resolved = _as_controllable_optic_id(id)
+    for optic in plant.controllable_optics
+        controllable_optic_id(optic.definition) == resolved && return optic
+    end
+    throw(PlantPreparationError(:controllable_optic, :unknown_id,
+        "prepared plant has no controllable optic $resolved"))
+end
+
+function prepared_command_endpoint(plant::PreparedPlant, id)
+    resolved = _as_command_endpoint_id(id)
+    for binding in plant.command_endpoints
+        command_endpoint_id(binding) == resolved && return binding.endpoint
+    end
+    throw(PlantPreparationError(:command_endpoint, :unknown_id,
+        "prepared plant has no command endpoint $resolved"))
 end
 
 function prepare_path_executor(definition::OpticalPathDefinition,
@@ -1360,38 +1387,41 @@ function _prepare_plant_rngs(definition::PlantDefinition, paths::Tuple,
 end
 
 """
-    prepare_plant(definition; run_seed, rng_derivation_version)
+    prepare_plant(definition; run_seed, rng_derivation_version,
+        command_endpoints=())
 
-Prepare all declared paths and acquisitions without scheduling or executing
-them. Model-specific construction dispatches on the cold model-definition
-types. Preparation may allocate and perform fallible backend/device/revision
-validation. It also derives exact stateful RNG streams from the required run
-seed, derivation version, and stable owner identities. Repeated execution uses
-the concrete tuples stored in the result. Gate 4 provides independent
-controllable-optic topology, immutable semantic command schemas, and a
-standalone bounded command-endpoint owner. Plant-level optic/application
-composition remains a later slice, so this function still rejects a nonempty
-optic set rather than silently omitting a declared physical device or schema.
+Prepare all declared controllable optics, command endpoints, paths, and
+acquisitions without scheduling or executing them. Model-specific construction
+dispatches on cold model-definition types. Preparation may allocate and perform
+fallible backend/device/revision validation. It also derives exact stateful RNG
+streams from the required run seed, derivation version, and stable owner
+identities. Repeated execution uses the concrete tuples stored in the result.
+Each declared command endpoint requires one separate
+`CommandEndpointConfiguration`; endpoint ordinals and optic order derive from
+stable identities rather than declaration position.
 """
 function prepare_plant(definition::PlantDefinition;
     run_seed,
-    rng_derivation_version=_DEFAULT_RNG_DERIVATION_VERSION)
+    rng_derivation_version=_DEFAULT_RNG_DERIVATION_VERSION,
+    command_endpoints=())
     seed = _prepare_run_seed(run_seed)
     version = _prepare_rng_derivation_version(rng_derivation_version)
-    isempty(controllable_optic_definitions(definition)) || throw(
-        PlantPreparationError(:controllable_optic,
-            :unsupported_preparation,
-            "standalone command-endpoint admission is available, but " *
-            "controllable-optic application is not yet composed by " *
-            "prepare_plant"))
+    endpoint_configurations =
+        _sorted_command_endpoint_configurations(command_endpoints)
+    optic_definitions =
+        _canonical_controllable_optic_definitions(definition)
+    prepared_endpoints = _prepare_plant_command_endpoints(definition,
+        endpoint_configurations, optic_definitions)
+    optics = _prepare_controllable_optics(definition, optic_definitions,
+        prepared_endpoints)
     paths = _prepare_path_executors(path_definitions(definition),
         plant_telescope(definition), plant_atmosphere(definition))
     acquisitions = _prepare_acquisition_owners(
         acquisition_definitions(definition), paths)
     rngs = _prepare_plant_rngs(definition, paths, acquisitions, seed,
         version)
-    return PreparedPlant(_PREPARED_PLANT_TOKEN, definition, paths,
-        acquisitions, rngs)
+    return PreparedPlant(_PREPARED_PLANT_TOKEN, definition, optics,
+        prepared_endpoints, paths, acquisitions, rngs)
 end
 
 struct _PreparedAcquisitionSelectionToken end

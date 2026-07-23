@@ -189,6 +189,8 @@ function _rebuilt_application_claim(claim;
         requested,
         admission,
         ready,
+        getfield(claim, :transaction),
+        getfield(claim, :transaction_member_count),
         Plant._PLANT_COMMAND_CLAIM_TOKEN,
     )
 end

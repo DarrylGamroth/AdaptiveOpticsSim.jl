@@ -25,6 +25,7 @@ export execute_acquisition_selection!, execute_acquisition_selection_at!
 # Command presentation and lifecycle operations. Policy vocabulary remains
 # qualified so uncommon choices do not enter the ordinary user namespace.
 export PlantCommandSequence, PlantCommand
+export CommandEndpointConfiguration
 export prepare_command_endpoint, admit_plant_command!
 export claim_next_application_ready_command!, apply_claimed_plant_command!
 export mark_plant_command_applied!, fail_plant_command_application!
@@ -90,6 +91,7 @@ public PlantCommandOrderKey, PlantCommandAdmission, PlantCommandDisposition
 public PreparedCommandEndpoint, PlantCommandApplicationClaim
 public CommandEndpointState, CommandDispositionWorkspace
 public CommandApplicationState, PlantCommandSilenceTransition
+public PlantCommandTransaction, PlantCommandTransactionAdmission
 public validate_plant_command, command_sequence, command_payload
 public command_presentation_id, command_admission_status
 public command_sequence_class, command_order_key
@@ -105,12 +107,22 @@ public command_disposition_count, command_disposition
 public clear_command_dispositions!, claimed_command_payload
 public command_endpoint_failed, last_command_admission_timestamp
 public effective_command, last_command_application_timestamp
+public initial_effective_command, safe_effective_command
+public command_transaction_id, command_transaction_member_count
+public admit_plant_command_transaction!
 public next_command_silence_timestamp, apply_command_silence_transition!
 public command_silence_action, command_silence_age_origin
 public command_silence_origin_timestamp, command_silence_deadline
 public command_silence_transition_timestamp, command_silence_age
 
 public ColdPlantModelDefinition, plant_model_definition_style
+public PreparedControllableOptic
+public prepare_controllable_optic, prepare_controllable_optic_state
+public prepare_controllable_optic_workspace
+public stage_controllable_optic_command!
+public commit_controllable_optic_command!
+public apply_controllable_optic_surface!
+public controllable_optic_implementation
 public path_id, acquisition_id, controllable_optic_id, acquisition_path_id
 public path_source, path_model, acquisition_model, controllable_optic_model
 public command_schema_id, command_schema_version, command_endpoint_id
@@ -154,7 +166,9 @@ public acquisition_product_contract, validate_acquisition_product_contract
 public acquisition_provider, acquisition_product_metadata
 public acquisition_products, acquisition_observation, acquisition_measurement
 public prepared_paths, prepared_acquisitions
+public prepared_controllable_optics, prepared_command_endpoints
 public prepared_path, prepared_acquisition
+public prepared_controllable_optic, prepared_command_endpoint
 public validate_path_execution_binding, validate_acquisition_execution_binding
 public validate_path_materialization_binding, validate_path_materialization
 public validate_acquisition_provider_binding, copy_acquisition_product!
@@ -241,3 +255,5 @@ public PreparedPlantEventLoop, PlantEventLoopState, PlantEventLoopWorkspace
 public acquisition_product_sequence, acquisition_product_ready_timestamp
 public plant_event_generator_count, plant_event_path_count
 public plant_event_acquisition_count
+public plant_event_controllable_optic_count
+public plant_event_command_endpoint_count

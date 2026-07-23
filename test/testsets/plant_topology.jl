@@ -731,7 +731,24 @@ end
     end
     @test preparation_error isa PlantPreparationError
     if preparation_error isa PlantPreparationError
-        @test preparation_error.component === :controllable_optic
-        @test preparation_error.reason === :unsupported_preparation
+        @test preparation_error.component === :command_endpoint
+        @test preparation_error.reason === :configuration_count
+    end
+
+    unsupported_model_error = captured_plant_definition_error() do
+        prepare_plant(PlantDefinition(
+            telescope=telescope,
+            atmosphere=atmosphere,
+            controllable_optics=(woofer,),
+        ); run_seed=0x1234,
+            command_endpoints=(
+                CommandEndpointConfiguration(:woofer_command,
+                    Float32[0]; capacity=1),
+            ))
+    end
+    @test unsupported_model_error isa PlantPreparationError
+    if unsupported_model_error isa PlantPreparationError
+        @test unsupported_model_error.component === :controllable_optic
+        @test unsupported_model_error.reason === :unsupported_model
     end
 end

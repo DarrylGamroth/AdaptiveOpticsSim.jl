@@ -445,15 +445,31 @@ one or more immutable `PlantCommandSchema` values, while preparation workspaces,
 mutable optic/simulation/acquisition and command state, schedules, RNG streams,
 queues, transport, and HIL descriptors are intentionally absent.
 
-The first four Gate 4 slices record controllable-optic/endpoint ownership,
-versioned semantic payload contracts, and a standalone prepared endpoint with
-fixed payload slots, accepted-sequence history, a bounded future calendar,
-application-ready claims, and terminal dispositions. Successful admission
-copies caller payload storage. Late apply-now commands retain their requested
-time but schedule at the current plant time; the endpoint never backdates.
-Only successful admission enters sequence history, so capacity/time rejection
-is retryable as a new presentation. Incremental endpoints cannot use the
-lossy older-pending supersession policy.
+The first five Gate 4 slices record controllable-optic/endpoint ownership,
+versioned semantic payload contracts, bounded endpoint state, physical-optic
+preparation, and deterministic command/event composition. A
+`CommandEndpointConfiguration` supplies each declared endpoint's bounded
+calendar/history capacities, copied initial and optional safe values, and
+payload-storage backend. `prepare_plant` requires exactly one configuration
+for every declared endpoint and prepares every declared optic; neither is
+silently omitted. Stable endpoint ordinals and optic execution order derive
+from typed identities rather than declaration position.
+
+`prepare_controllable_optic` returns immutable model-specific preparation
+data. `prepare_controllable_optic_state` and
+`prepare_controllable_optic_workspace` separately construct mutable physical
+state and scratch. During command application,
+`stage_controllable_optic_command!` validates and stages one complete
+effective endpoint value without changing the visible surface. After a
+successful stage, `commit_controllable_optic_command!` must be a bounded,
+nonthrowing publication operation. `apply_controllable_optic_surface!` applies
+the visible physical response to an already materialized path input.
+
+Successful admission copies caller payload storage. Late apply-now commands
+retain their requested time but schedule at the current plant time; the
+endpoint never backdates. Only successful admission enters sequence history,
+so capacity/time rejection is retryable as a new presentation. Incremental
+endpoints cannot use the lossy older-pending supersession policy.
 
 Exactly one separately owned `CommandApplicationState` binds an explicit
 initial held value and, when configured, a copied safe value to one exact
@@ -471,13 +487,34 @@ timestamp is the silence-age baseline. Thereafter successful admission rebases
 transition per unchanged age origin, and a due command at the same timestamp
 must be resolved first.
 
-Physical optic mutation, model-specific stroke/slew/settling dynamics,
-multi-optic atomicity, and plant event composition are not part of this
-standalone layer. Consequently `prepare_plant` still rejects a nonempty optic
-set with `PlantPreparationError`; a declared device or schema is never
-ignored. HIL session, external-clock, lease, ring, completion-credit, and
-transport metadata remain outside core command values. Execution-clock ingress
-liveness is distinct from replayable plant-time command silence.
+The routed `admit_plant_command!` overload selects the exact event-loop-owned
+endpoint and arms its command-phase generator. `PlantCommandTransaction`
+explicitly groups two or more endpoints on distinct physical optics at one
+common requested timestamp; every member endpoint must use
+`PreservePendingCommands`. `admit_plant_command_transaction!` preflights and
+stages every payload before changing any endpoint calendar. At application,
+every effective command and physical response is staged before any member is
+published. A rejected or failed member leaves every transaction member's held
+command and visible physical state unchanged. Equal timestamps, shared
+placement, and packed payloads never imply atomicity. A transaction terminated
+during admission has neither a transaction identity nor a scheduled timestamp.
+
+Plant state is right-continuous: a command effective at `t` affects an optical
+sample at `t`. Detector exposure intervals are half-open, so accumulation
+ending at `t` retains the state used strictly before `t`. The event loop copies
+terminal endpoint outcomes into a fixed-capacity
+`PlantEventLoopWorkspace` ledger; callers inspect them with
+`command_disposition_count` and `command_disposition`, then acknowledge them
+with `clear_command_dispositions!`.
+
+Gate 4 currently executes all prepared controllable optics as one common
+co-conjugated group, in canonical optic-identity order, on every due prepared
+path. Explicit plane placement, conjugate transforms, and path visibility
+remain later work. Device-specific stroke, slew, settling, hysteresis, and
+feedback remain model extensions or later physical-model work. HIL session,
+external-clock, lease, ring, completion-credit, and transport metadata remain
+outside core command values. Execution-clock ingress liveness is distinct from
+replayable plant-time command silence.
 
 Package-emitted disposition reasons are stable nonempty symbols. Admission may
 emit `:endpoint_mismatch`, `:schema_mismatch`,
@@ -491,7 +528,13 @@ Effective-command application may additionally emit `:applied_clipped`,
 `:out_of_range_failure`, `:missed_application_timestamp`, or
 `:application_storage_failure`. A fail-on-silence drain emits
 `:command_silence`; other application-failure and pending-drain callers may
-supply another nonempty `CommandDispositionReason`.
+supply another nonempty `CommandDispositionReason`. Explicit transactions use
+`:atomic_transaction_aborted` for otherwise acceptable members when another
+member rejects during application, preserve the rejecting member's own reason,
+and prefix admission-preflight abort reasons with
+`:atomic_transaction_aborted_`. Unexpected physical staging failures use
+`:physical_application_failure`; a model may provide a more specific
+`PlantCommandError` reason.
 
 `prepare_plant` requires one explicit `run_seed`, accepts a versioned
 `rng_derivation_version`, freezes each path source, and dispatches on the

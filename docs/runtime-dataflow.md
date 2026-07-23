@@ -175,8 +175,10 @@ optical sampling, readout, and complete-product readiness as separate events.
 Acquisitions may follow independent schedules or delivered edges from a common
 trigger source with per-detector delay, skew, jitter, and explicit dropped or
 duplicate-edge faults. Physical exposure timing, reported detector timestamps,
-and eventual HIL execution-clock lateness remain distinct. External RTC command
-arrival/effective-time semantics and wall-clock pacing are later gates.
+and eventual HIL execution-clock lateness remain distinct. The serial plant
+event loop now admits mapped core plant commands and applies them at exact
+virtual timestamps before equal-time optical samples. External RTC arrival,
+timestamp mapping, payload leases, and wall-clock pacing remain later gates.
 
 That target admits heterogeneous NGS/LGS WFS paths, direct science cameras,
 PROPER-backed coronagraph paths, common MCAO planes, and path-specific MOAO
@@ -230,14 +232,23 @@ schedule-free materialization contract: trigger cadence, setpoint ownership,
 publication, transport, and control authority remain later HIL or application
 concerns.
 
-The current `AOSimulation` stores one controllable optic, so existing
-multi-surface plants use `CompositeControllableOptic` as a packed-command and
-additive-application adapter. The breaking HIL refactor removes that type and
-registers each optic and independently timed command endpoint explicitly, then
-derives co-located optical execution groups during preparation. Packed transport
-schemas belong to user integration outside the general HIL package. They map to
-canonical command transactions submitted through the HIL ports and carry no
-physical grouping, clock, or atomicity semantics of their own.
+The legacy `AOSimulation` stores one controllable optic, so its characterized
+multi-surface scenarios still use `CompositeControllableOptic` as a
+packed-command and additive-application adapter. The new prepared plant path
+instead registers each optic and independently timed endpoint explicitly.
+`CommandEndpointConfiguration` supplies bounded run state, and model-specific
+preparation separates immutable plans, mutable physical response, and scratch.
+The serial event loop stages effective command and physical state together,
+then applies visible co-conjugated surfaces additively before path execution.
+The current Gate 4 implementation treats all prepared optics as one common
+all-path group; explicit placement and visibility are later work.
+
+Packed transport schemas belong to user integration outside the general HIL
+package. A user may map one packed submission into an explicit
+`PlantCommandTransaction`, whose distinct physical-optic members are admitted
+and published all-or-none at one plant timestamp. Packed storage, equal time,
+or co-conjugation alone carries no atomicity semantics. The later HIL boundary
+will correlate core dispositions with transport completion credit.
 
 Each core command endpoint prepares its payload type/shape, units, basis and
 calibration revision, absolute or incremental semantics, limits, plant-
