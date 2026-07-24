@@ -123,9 +123,10 @@ function Plant.stage_controllable_optic_command!(
     workspace::MyOpticWorkspace,
     endpoint::Plant.CommandEndpointID,
     effective_command,
+    timestamp::Plant.PlantTimestamp,
 )
     stage_complete_physical_response!(
-        workspace, plan, state, endpoint, effective_command)
+        workspace, plan, state, endpoint, effective_command, timestamp)
     return nothing
 end
 
@@ -134,8 +135,9 @@ function Plant.commit_controllable_optic_command!(
     state::MyOpticState,
     workspace::MyOpticWorkspace,
     endpoint::Plant.CommandEndpointID,
+    timestamp::Plant.PlantTimestamp,
 )
-    publish_staged_physical_response!(state, workspace, endpoint)
+    publish_staged_physical_response!(state, workspace, endpoint, timestamp)
     return nothing
 end
 
@@ -153,21 +155,81 @@ end
 response state in the separately constructed state. Every array in
 `initial_commands` is a fresh state-owned copy, so the state constructor may
 retain and mutate it; it must not substitute caller or prepared-plan storage.
-Staging may reject or fail before publication. After staging succeeds, commit
-must be bounded and nonthrowing so an explicit `PlantCommandTransaction`
-cannot expose only part of a multi-optic update. Do not infer transaction
-membership from placement, equal timestamps, or packed command storage. Every
-endpoint participating in a transaction must use
+Staging may reject or fail before publication. The supplied timestamp is the
+exact plant instant at which the effective physical response becomes visible;
+use it to preserve continuity in a time-dependent model. After staging
+succeeds, commit must be bounded and nonthrowing so an explicit
+`PlantCommandTransaction` cannot expose only part of a multi-optic update. Do
+not infer transaction membership from placement, equal timestamps, or packed
+command storage. Every endpoint participating in a transaction must use
 `PreservePendingCommands`. Outside transactions, an incremental schema must
 preserve pending deltas; only absolute commands may select
 `SupersedeOlderPendingCommands`.
 
-The current Gate 4 event loop applies all prepared optics to every due
-materialized path as one common co-conjugated execution group in canonical
-optic-identity order. Extend only path-input types for which the device has a
-well-defined surface operation. Explicit conjugate placement, geometric
-transforms, and per-path visibility remain later contracts; do not encode
-those assumptions in endpoint identity.
+The default `controllable_optic_execution_role` is
+`PupilSurfaceExecutionRole`. The Gate 4 event loop applies optics with that
+role to every due materialized path as one common co-conjugated execution group
+in canonical optic-identity order. Extend only path-input types for which the
+device has a well-defined surface operation. Explicit conjugate placement,
+geometric transforms, and general per-path visibility remain later contracts;
+do not encode those assumptions in endpoint identity.
+
+A locally generated path-specific waveform instead returns
+`AutonomousPathExecutionRole` and provides the qualified autonomous-device
+seams:
+
+```julia
+struct MyPeriodicOpticFidelity <:
+    Plant.AbstractAutonomousOpticFidelity end
+
+Plant.controllable_optic_execution_role(::MyPreparedPeriodicOptic) =
+    Plant.AutonomousPathExecutionRole()
+
+Plant.prepare_autonomous_periodic_optic(
+    plan::MyPreparedPeriodicOptic,
+    path::Plant.PreparedPathExecutor,
+    fidelity::MyPeriodicOpticFidelity,
+) = prepare_my_path_coupling(plan, path, fidelity)
+
+function Plant.initialize_autonomous_periodic_optic!(
+    plan::MyPreparedPeriodicOptic,
+    state::MyPeriodicOpticState,
+    reference::Plant.AbstractWaveformPhaseReference,
+)
+    initialize_my_phase_reference!(state, reference)
+    return nothing
+end
+
+function Plant.reset_autonomous_periodic_optic_phase!(
+    plan::MyPreparedPeriodicOptic,
+    state::MyPeriodicOpticState,
+    timestamp::Plant.PlantTimestamp,
+    sequence::UInt64,
+)
+    reset_my_phase_reference!(state, timestamp, sequence)
+    return nothing
+end
+
+function Plant.evaluate_autonomous_periodic_optic!(
+    plan::MyPreparedPeriodicOptic,
+    state::MyPeriodicOpticState,
+    coupling::MyPreparedPathCoupling,
+    timestamp::Plant.PlantTimestamp,
+)
+    evaluate_my_periodic_optic!(plan, state, coupling, timestamp)
+    return nothing
+end
+```
+
+The cold model still owns ordinary bounded `PlantCommandSchema` setpoints, and
+an `AutonomousPeriodicOpticDefinition` must bind the prepared device to one
+scheduled full-optical path and one immutable fidelity/reference contract.
+Preparation must reject incompatible paths and conflicting exclusive
+couplings. Evaluation mutates only storage owned by that prepared path, stays
+bounded, and allocates no steady-state heap storage when it is on the optical
+hot path. Do not use the autonomous role merely to encode general placement or
+visibility, and do not hide detector exposure integration in a waveform
+quadrature.
 
 Preparation then dispatches on those same concrete model types. A path method
 receives the exact definition, its run-owned frozen source, the plant telescope,
