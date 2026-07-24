@@ -108,7 +108,9 @@ function run_optional_controller_routing_checks(::Type{B},
     definition = PlantDefinition(; telescope, atmosphere,
         controllable_optics=(
             ControllableOpticDefinition(:optional_controller_routing,
-                OptionalControllerRoutingModel(), (schema,)),))
+                OptionalControllerRoutingModel(), (schema,);
+                placement=PupilPlanePlacement(),
+                visibility=AllPathVisibility()),))
     plant = prepare_plant(definition;
         run_seed=0x6101,
         command_endpoints=(

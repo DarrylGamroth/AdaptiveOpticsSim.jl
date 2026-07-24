@@ -135,10 +135,12 @@ For each due full-optical path, execution:
 5. executes each due acquisition provider into its own
    `AcquisitionProducts`
 
-The current common controllable-optic execution applies independently
-commanded co-conjugated surfaces additively. Explicit altitude placement and
-path visibility are later HIL gates; no packed or composite optic object
-couples their cadence.
+Preparation resolves required optic placement and all-path or selected-path
+visibility into canonical bounded ranges and co-placed groups. Current
+full-optical execution applies only a path's visible pupil-plane surfaces
+additively; atmospheric-conjugate placement fails closed until source-footprint
+geometry is implemented. No packed or composite optic object couples device
+cadence.
 
 Native direct science uses `prepare_direct_imaging` and
 `form_direct_image!`. Prepared PROPER integration meets native optics at the

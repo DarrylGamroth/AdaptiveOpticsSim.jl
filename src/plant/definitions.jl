@@ -210,40 +210,66 @@ function _normalize_command_schemas(schemas)
 end
 
 """
-    ControllableOpticDefinition(id, optic_model, command_schemas)
-    ControllableOpticDefinition(id, optic_model; command_schemas)
+    ControllableOpticDefinition(id, optic_model, command_schemas;
+        placement, visibility)
+    ControllableOpticDefinition(id, optic_model;
+        command_schemas, placement, visibility)
 
 Immutable declaration of one physical controllable optic and the stable
 semantic schemas of its independently timed or latched command endpoints. The
 optic model is cold configuration and must opt in through
-`plant_model_definition_style`. Mutable command state, timing, placement, path
-visibility, and prepared optical grouping are deliberately absent from this
-topology record.
+`plant_model_definition_style`. Placement and path visibility are required
+optical-topology declarations. Mutable command state, timing, and prepared
+optical grouping are deliberately absent from this topology record.
 """
-struct ControllableOpticDefinition{M,S<:Tuple}
+struct ControllableOpticDefinition{
+    M,
+    S<:Tuple,
+    P<:AbstractControllableOpticPlacement,
+    V<:AbstractControllableOpticVisibility,
+}
     id::ControllableOpticID
     optic_model::M
     command_schemas::S
+    placement::P
+    visibility::V
 
-    function ControllableOpticDefinition(id::ControllableOpticID,
-        optic_model::M, command_schemas::Tuple) where {M}
+    function ControllableOpticDefinition(
+        id::ControllableOpticID,
+        optic_model::M,
+        command_schemas::Tuple,
+        placement::P,
+        visibility::V,
+    ) where {
+        M,
+        P<:AbstractControllableOpticPlacement,
+        V<:AbstractControllableOpticVisibility,
+    }
         _require_declared_topology_value(optic_model, :controllable_optic,
             :missing_model, "model")
         _require_cold_plant_model_definition(optic_model,
             :controllable_optic, "model")
         schemas = _normalize_command_schemas(command_schemas)
-        return new{M,typeof(schemas)}(id, optic_model, schemas)
+        _require_controllable_optic_placement(placement)
+        _require_controllable_optic_visibility(visibility)
+        return new{M,typeof(schemas),P,V}(id, optic_model, schemas,
+            placement, visibility)
     end
 end
 
-function ControllableOpticDefinition(id, optic_model, command_schemas)
+function ControllableOpticDefinition(id, optic_model, command_schemas;
+    placement, visibility)
     schemas = _normalize_command_schemas(command_schemas)
     return ControllableOpticDefinition(_as_controllable_optic_id(id),
-        optic_model, schemas)
+        optic_model, schemas,
+        _require_controllable_optic_placement(placement),
+        _require_controllable_optic_visibility(visibility))
 end
 
-ControllableOpticDefinition(id, optic_model; command_schemas) =
-    ControllableOpticDefinition(id, optic_model, command_schemas)
+ControllableOpticDefinition(id, optic_model;
+    command_schemas, placement, visibility) =
+    ControllableOpticDefinition(id, optic_model, command_schemas;
+        placement, visibility)
 
 @inline path_id(path::OpticalPathDefinition) = path.id
 @inline acquisition_id(acquisition::AcquisitionDefinition) = acquisition.id
@@ -256,6 +282,10 @@ ControllableOpticDefinition(id, optic_model; command_schemas) =
     acquisition.acquisition_model
 @inline controllable_optic_model(optic::ControllableOpticDefinition) =
     optic.optic_model
+@inline controllable_optic_placement(optic::ControllableOpticDefinition) =
+    optic.placement
+@inline controllable_optic_visibility(optic::ControllableOpticDefinition) =
+    optic.visibility
 @inline command_schemas(optic::ControllableOpticDefinition) =
     optic.command_schemas
 @inline command_endpoint_ids(optic::ControllableOpticDefinition) =
@@ -468,6 +498,32 @@ function _require_acquisition_paths(paths::Tuple, acquisitions::Tuple)
     return nothing
 end
 
+function _require_controllable_optic_visibility_paths(
+    paths::Tuple, optics::Tuple)
+    for optic in optics
+        _require_controllable_optic_visibility_paths(paths, optic,
+            controllable_optic_visibility(optic))
+    end
+    return nothing
+end
+
+@inline _require_controllable_optic_visibility_paths(
+    ::Tuple, ::ControllableOpticDefinition, ::AllPathVisibility) = nothing
+
+function _require_controllable_optic_visibility_paths(
+    paths::Tuple,
+    optic::ControllableOpticDefinition,
+    visibility::SelectedPathVisibility,
+)
+    for id in selected_path_ids(visibility)
+        _contains_path_id(paths, id) || throw(PlantDefinitionError(
+            :controllable_optic, :unknown_visible_path,
+            "controllable optic $(controllable_optic_id(optic)) " *
+            "references unknown visible path $id"))
+    end
+    return nothing
+end
+
 """
     PlantDefinition(telescope, atmosphere, controllable_optics, paths,
         acquisitions)
@@ -502,6 +558,8 @@ struct PlantDefinition{T,A,O<:Tuple,P<:Tuple,Q<:Tuple}
         _require_unique_plant_command_schema_ids(controllable_optics)
         _require_unique_path_ids(paths)
         _require_unique_acquisition_ids(acquisitions)
+        _require_controllable_optic_visibility_paths(paths,
+            controllable_optics)
         _require_acquisition_paths(paths, acquisitions)
         return new{T,A,O,P,Q}(telescope, atmosphere, controllable_optics,
             paths, acquisitions)

@@ -231,11 +231,15 @@ function command_plant_definition(raw::AbstractDict;
     first = AOSPlant.ControllableOpticDefinition(
         :low_order,
         CommandPlaneOpticModel(:x, T(raw["low_order_opd_gain_m"])),
-        (first_schema,))
+        (first_schema,);
+        placement=AOSPlant.PupilPlanePlacement(),
+        visibility=AOSPlant.AllPathVisibility())
     second = AOSPlant.ControllableOpticDefinition(
         :high_order,
         CommandPlaneOpticModel(:y, T(raw["high_order_opd_gain_m"])),
-        (second_schema,))
+        (second_schema,);
+        placement=AOSPlant.PupilPlanePlacement(),
+        visibility=AOSPlant.AllPathVisibility())
     optics = reverse_declarations ? (second, first) : (first, second)
     definition = AOSPlant.PlantDefinition(
         telescope=telescope,

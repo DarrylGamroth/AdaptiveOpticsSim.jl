@@ -217,7 +217,9 @@ function reduced_order_test_fixture(;
     optics = map(schemas) do schema
         endpoint = command_endpoint_id(schema)
         ControllableOpticDefinition(Symbol(endpoint.name, :_optic),
-            ReducedOrderTestOpticModel(), (schema,))
+            ReducedOrderTestOpticModel(), (schema,);
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility())
     end
     configurations = map(schemas) do schema
         T_command = command_numeric_type(schema)

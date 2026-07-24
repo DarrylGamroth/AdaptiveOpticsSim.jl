@@ -50,7 +50,11 @@ basis/revision, absolute or incremental meaning, bounds, and policy vocabulary.
 its endpoint identity, and schema/endpoint identities must remain unique in the
 plant. These declarations still do not own mutable sequencing, an admission
 calendar, applied values, packed controller layout, atomic application,
-placement, visibility, or an optical execution group.
+or an optical execution group. Each controllable-optic definition does require
+one explicit optical `placement` and one `visibility` declaration. Use
+`PupilPlanePlacement`, `AtmosphericConjugatePlacement`, or
+`FocalPlanePlacement` and `AllPathVisibility` or `SelectedPathVisibility`;
+do not encode these contracts in endpoint identity or model labels.
 
 Use `validate_plant_command_payload` for non-mutating presentation
 compatibility. It deliberately does not clip, admit, sequence, schedule, or
@@ -167,12 +171,14 @@ preserve pending deltas; only absolute commands may select
 `SupersedeOlderPendingCommands`.
 
 The default `controllable_optic_execution_role` is
-`PupilSurfaceExecutionRole`. The Gate 4 event loop applies optics with that
-role to every due materialized path as one common co-conjugated execution group
-in canonical optic-identity order. Extend only path-input types for which the
-device has a well-defined surface operation. Explicit conjugate placement,
-geometric transforms, and general per-path visibility remain later contracts;
-do not encode those assumptions in endpoint identity.
+`PupilSurfaceExecutionRole`. Preparation resolves the declared path visibility
+into bounded per-path ranges and co-placed groups. The event loop applies only
+the visible `PupilPlanePlacement` members of a due materialized path, in
+canonical optic-identity order within their group. Extend only path-input types
+for which the device has a well-defined surface operation.
+`AtmosphericConjugatePlacement` is a declaration-only contract in the current
+slice and full-optical event preparation rejects it until source-footprint
+geometry is available.
 
 A locally generated path-specific waveform instead returns
 `AutonomousPathExecutionRole` and provides the qualified autonomous-device
@@ -224,6 +230,8 @@ end
 The cold model still owns ordinary bounded `PlantCommandSchema` setpoints, and
 an `AutonomousPeriodicOpticDefinition` must bind the prepared device to one
 scheduled full-optical path and one immutable fidelity/reference contract.
+Such a device uses `FocalPlanePlacement()` and a
+`SelectedPathVisibility` containing exactly that coupled path.
 The current event composer accepts the declared `FreeRunningPhaseReference`,
 `TriggerSourcePhaseReference`, and `TriggerResetPhaseReference` relationships.
 A new phase-reference family also needs explicit event-composition ownership
@@ -231,8 +239,8 @@ and notification semantics; subtype construction alone does not register one.
 Preparation must reject incompatible paths and conflicting exclusive
 couplings. Evaluation mutates only storage owned by that prepared path, stays
 bounded, and allocates no steady-state heap storage when it is on the optical
-hot path. Do not use the autonomous role merely to encode general placement or
-visibility, and do not hide detector exposure integration in a waveform
+hot path. Do not use the autonomous role merely to encode another placement
+kind, and do not hide detector exposure integration in a waveform
 quadrature.
 
 Preparation then dispatches on those same concrete model types. A path method

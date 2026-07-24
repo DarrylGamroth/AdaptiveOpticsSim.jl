@@ -149,6 +149,8 @@ end
         command_schemas=(
             woofer_command=topology_command_schema(:woofer_command),
         ),
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
     tweeter_schema = topology_command_schema(
         CommandEndpointID(:tweeter_command),
@@ -156,7 +158,9 @@ end
     tweeter = ControllableOpticDefinition(
         ControllableOpticID(:tweeter),
         PlantTopologyTestControllableOpticModel(:tweeter, :pupil),
-        (tweeter_schema,),
+        (tweeter_schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
     inferred_tweeter_schema = topology_command_schema(
         CommandEndpointID(:inferred_tweeter_command),
@@ -164,7 +168,9 @@ end
     inferred_tweeter = @inferred ControllableOpticDefinition(
         ControllableOpticID(:inferred_tweeter),
         PlantTopologyTestControllableOpticModel(:inferred_tweeter, :pupil),
-        (inferred_tweeter_schema,),
+        (inferred_tweeter_schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
     @test @inferred(command_endpoint_ids(inferred_tweeter)) ===
         (CommandEndpointID(:inferred_tweeter_command),)
@@ -174,7 +180,9 @@ end
         (
             topology_command_schema(:segment_a),
             topology_command_schema(:segment_b),
-        ),
+        );
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
 
     @test OpticalPathID(:science) == path_id(science_path)
@@ -375,7 +383,9 @@ end
         () -> ControllableOpticDefinition(
             1,
             PlantTopologyTestControllableOpticModel(:x, :pupil),
-            (generic_command_schema,),
+            (generic_command_schema,);
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :controllable_optic,
         :invalid_id,
@@ -384,7 +394,9 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             PlantTopologyTestControllableOpticModel(:x, :pupil),
-            (1,),
+            (1,);
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :command_schema,
         :invalid_definition,
@@ -415,7 +427,9 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             nothing,
-            (generic_command_schema,),
+            (generic_command_schema,);
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :controllable_optic,
         :missing_model,
@@ -434,7 +448,9 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             Ref(:live_state),
-            (generic_command_schema,),
+            (generic_command_schema,);
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :controllable_optic,
         :unsupported_model_definition,
@@ -459,7 +475,9 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             PlantTopologyTestInvalidDefinitionStyle(),
-            (generic_command_schema,),
+            (generic_command_schema,);
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :controllable_optic,
         :invalid_model_definition_style,
@@ -468,7 +486,9 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             PlantTopologyTestControllableOpticModel(:bad, :pupil),
-            (),
+            ();
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :controllable_optic,
         :missing_schema,
@@ -477,7 +497,9 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             PlantTopologyTestControllableOpticModel(:bad, :pupil),
-            [generic_command_schema],
+            [generic_command_schema];
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :command_schema,
         :invalid_container,
@@ -494,7 +516,9 @@ end
         () -> ControllableOpticDefinition(
             :bad,
             PlantTopologyTestControllableOpticModel(:bad, :pupil),
-            (duplicate_endpoint_a, duplicate_endpoint_b),
+            (duplicate_endpoint_a, duplicate_endpoint_b);
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :command_endpoint,
         :duplicate_id,
@@ -511,7 +535,9 @@ end
         () -> ControllableOpticDefinition(
             :bad_schema,
             PlantTopologyTestControllableOpticModel(:bad, :pupil),
-            (duplicate_schema_a, duplicate_schema_b),
+            (duplicate_schema_a, duplicate_schema_b);
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         ),
         :command_schema,
         :duplicate_id,
@@ -520,7 +546,9 @@ end
     duplicate_woofer = ControllableOpticDefinition(
         :woofer,
         PlantTopologyTestControllableOpticModel(:duplicate, :pupil),
-        (topology_command_schema(:duplicate_command),),
+        (topology_command_schema(:duplicate_command),);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
     assert_plant_definition_error(
         () -> PlantDefinition(
@@ -539,7 +567,9 @@ end
         (topology_command_schema(
             :woofer_command;
             id=:shared_endpoint_schema,
-        ),),
+        ),);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
     assert_plant_definition_error(
         () -> PlantDefinition(

@@ -41,6 +41,8 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-autonomous-optics"])) == ("plant-autonomous-optics",)
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["plant-placed-optics"])) == ("plant-placed-optics",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-time"])) == ("plant-time",)
     @test Tuple(spec.name for spec in resolve_test_suites(["gate4"])) == (
         "plant-command-schemas",
@@ -52,6 +54,8 @@ end
         "plant-reduced-order",
         "plant-autonomous-optics",
     )
+    @test Tuple(spec.name for spec in resolve_test_suites(["gate5"])) ==
+        ("plant-placed-optics",)
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
         "plant-topology",
         "plant-command-schemas",
@@ -66,6 +70,7 @@ end
         "plant-controller-routing",
         "plant-reduced-order",
         "plant-autonomous-optics",
+        "plant-placed-optics",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -86,6 +91,7 @@ end
         "plant-controller-routing",
         "plant-reduced-order",
         "plant-autonomous-optics",
+        "plant-placed-optics",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -103,9 +109,11 @@ end
     @test occursin("plant-command-admission", listing_text)
     @test occursin("plant-command-application", listing_text)
     @test occursin("plant-autonomous-optics", listing_text)
+    @test occursin("plant-placed-optics", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
     @test occursin("gate4 =", listing_text)
+    @test occursin("gate5 =", listing_text)
 
     actual_testsets = sort!(filter(
         path -> endswith(path, ".jl"),
