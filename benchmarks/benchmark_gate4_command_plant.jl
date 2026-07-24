@@ -27,6 +27,45 @@ function configure_gate4_command_benchmark!()
     return nothing
 end
 
+function require_durable_contract_configuration!(
+    output_path::AbstractString,
+    contract::AbstractDict,
+    samples::Int,
+    runs::Int,
+    warmup_cycles::Int,
+    allocation_cycles::Int,
+    endpoint_allocation_cycles::Int,
+    replay_cycles::Int,
+    long_run_cycles::Int,
+)
+    isempty(output_path) && return nothing
+    observed = (
+        samples=samples,
+        runs=runs,
+        warmup_cycles=warmup_cycles,
+        allocation_cycles=allocation_cycles,
+        endpoint_allocation_cycles=endpoint_allocation_cycles,
+        replay_cycles=replay_cycles,
+        long_run_cycles=long_run_cycles,
+    )
+    expected = (
+        samples=Int(contract["samples_per_run"]),
+        runs=Int(contract["runs"]),
+        warmup_cycles=Int(contract["warmup_cycles"]),
+        allocation_cycles=Int(contract["allocation_cycles"]),
+        endpoint_allocation_cycles=Int(
+            contract["endpoint_allocation_cycles"]),
+        replay_cycles=Int(contract["replay_cycles"]),
+        long_run_cycles=Int(contract["long_run_cycles"]),
+    )
+    observed == expected ||
+        error("refusing to write durable Gate 4 evidence with " *
+              "quick-run configuration overrides")
+    samples >= Int(contract["minimum_samples_for_p99"]) ||
+        error("durable Gate 4 evidence does not support its p99 claim")
+    return nothing
+end
+
 function gc_delta(before, after)
     return Dict(String(name) => Int64(
         getfield(after, name) - getfield(before, name))
@@ -272,6 +311,17 @@ function run_gate4_command_plant_benchmark()
         error("AOS_GATE4_COMMAND_REPLAY_CYCLES must be > 0")
     long_run_cycles > 0 ||
         error("AOS_GATE4_COMMAND_LONG_RUN_CYCLES must be > 0")
+    require_durable_contract_configuration!(
+        GATE4_COMMAND_OUTPUT_PATH,
+        contract,
+        samples,
+        runs_count,
+        warmup,
+        allocation_cycles,
+        endpoint_allocation_cycles,
+        replay_cycles,
+        long_run_cycles,
+    )
     minimum_p99_samples = Int(contract["minimum_samples_for_p99"])
     p99_supported = samples >= minimum_p99_samples
     lowest_ns = Int64(contract["histogram_lowest_ns"])
