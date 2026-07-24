@@ -88,39 +88,47 @@ The deterministic core should receive explicit simulation timestamps and remain
 independent of wall clock. The HIL companion should inject a clock from
 `Clocks.jl` rather than calling a global time function throughout the runtime:
 
-- `MonotonicClock` supplies production interval and deadline time.
-- `EpochClock` is suitable when an external wall-clock timestamp is required
-  for correlation, but not for measuring a deadline interval.
-- `CachedEpochClock` provides an inexpensive shared time value. One clock owner
-  calls `Clocks.fetch!`, `Clocks.update!`, or `Clocks.advance!`; workers read it
-  with `Clocks.time_nanos` and do not advance it independently.
+- `SystemNanoClock` supplies production monotonic nanosecond ticks for interval
+  and deadline measurement.
+- An epoch provider such as `SystemEpochNanoClock` or
+  `OffsetEpochNanoClock` is suitable when an external wall-clock timestamp is
+  required for correlation, but not for measuring a deadline interval.
+- `CachedNanoClock` provides an inexpensive, manually driven monotonic
+  nanosecond value. One clock owner calls `Clocks.update!` or
+  `Clocks.advance!`; workers read it with `Clocks.time_nanos` and do not
+  advance it independently. `CachedEpochClock` instead publishes epoch
+  milliseconds and is not an execution clock.
 
-`CachedEpochClock` is also the deterministic HIL scheduler test clock. Tests can
+`CachedNanoClock` is also the deterministic HIL scheduler test clock. Tests can
 set a known nanosecond value with `update!` and cross detector or command
 boundaries exactly with `advance!`:
 
 ```julia
-clock = Clocks.CachedEpochClock(Clocks.MonotonicClock())
+clock = Clocks.CachedNanoClock(0)
 Clocks.update!(clock, 0)
 Clocks.advance!(clock, 500_000) # exactly 500 microseconds
 ```
 
 For production measurement, the selected clock's resolution, read cost,
 cached-update cadence, and maximum observed staleness are part of the
-performance contract. A cached epoch value must not be used to claim latency
-resolution finer than its measured update behavior; use the direct monotonic
-clock for that boundary when necessary.
+performance contract. A cached monotonic value must not be used to claim
+latency resolution finer than its measured update behavior; use
+`SystemNanoClock` directly for that boundary when necessary. Cached or direct
+epoch values remain correlation metadata rather than deadline measurements.
 
 The production clock, simulation-time origin, wall-to-simulation mapping, and
 clock-update ownership must be captured in run metadata. `Clocks.jl` belongs in
 the operational HIL companion; the simulation kernel exposes explicit virtual-
 time seams so it does not acquire a wall-clock dependency.
 
-The minimal Gate 4A HIL package already depends on `Clocks.jl` and validates a
-deterministic test clock plus a monotonic production clock. Gate 8 does not
-introduce clock injection again; it hardens cached-clock ownership, measured
-staleness, lifecycle behavior, and versioned external-domain mappings without
-changing the Gate 4A execution-clock seam.
+The Gate 4A HIL companion MUST depend on `Clocks.jl`. Its execution-clock seam
+MUST accept a `Clocks.AbstractNanoClock` provider and read integer nanoseconds
+through `Clocks.time_nanos`. Gate 4A validates `CachedNanoClock` as the
+deterministic test provider and `SystemNanoClock` as the monotonic production
+provider. It MUST NOT use an epoch-clock provider for pacing or deadline
+measurement. Gate 8 does not introduce clock injection again; it hardens
+cached-clock ownership, measured staleness, lifecycle behavior, and versioned
+external-domain mappings without changing this seam.
 
 The injected `Clocks.jl` source is the **execution clock** used to pace and
 measure the simulator. Simulated trigger generation, trigger distribution, and
