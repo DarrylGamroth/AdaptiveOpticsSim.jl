@@ -1798,8 +1798,9 @@ function _optional_independent_optics_snapshot!(prepared,
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(output_frame(prepared.detector)))
     return (
-        low_order_command=copy(command_storage(prepared.low_order)),
-        dm_command=copy(command_storage(prepared.dm)),
+        low_order_command=copy(AdaptiveOpticsSim.command_storage(
+            prepared.low_order)),
+        dm_command=copy(AdaptiveOpticsSim.command_storage(prepared.dm)),
         slopes=copy(slopes(prepared.wfs)),
         frame=copy(output_frame(prepared.detector)),
     )
@@ -2966,7 +2967,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         atm,
         epoch,
     )
-    fill!(command_storage(split_dm), T(1e-8))
+    fill!(AdaptiveOpticsSim.command_storage(split_dm), T(1e-8))
     update_surface!(split_dm)
     apply_surface!(science_pupil, split_dm, DMAdditive())
     science_imaging = prepare_direct_imaging(
