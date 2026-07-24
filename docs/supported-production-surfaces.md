@@ -123,6 +123,7 @@ Primary evidence:
 - [Gate 2 serial plant CPU service-time evidence](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
 - [Gate 3 scheduler CPU evidence](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml)
 - [Gate 3 composed multi-rate CPU evidence](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
+- [Gate 4 command-responsive plant CPU evidence](../benchmarks/results/gate4/2026-07-24-command-plant.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### AMDGPU backend
@@ -138,6 +139,10 @@ Current AMDGPU-supported scope:
 - accelerator-resident reconstructor and controller storage
 - maintained Shack-Hartmann exported-pixel parity surfaces
 - independent DM and modal/low-order optic application
+- prepared controller-output routing with device-resident views and exact
+  backend/device validation
+- dynamic cycle-averaged circular-Pyramid radius/enable updates with
+  device-resident quadrature storage
 - maintained REVOLT-like production-shaped WFS frame smoke
 - prepared direct imaging with off-axis formation, spectral bundles, explicit
   extended-source expansion, independent detector fan-out, and shared-arm
@@ -167,13 +172,12 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The most recent Julia 1.12.6 AMDGPU hardware target before the packed-runtime
-removal passed all `434` checks. The retained numerical surfaces remain the
-support baseline; the newly added controller-routing and autonomous circular-
-modulation paths must pass the final Gate 4 backend closure before their
-accelerator execution is support-claimed. A later local Julia installation
-failure prevented a replacement raw latency artifact, so the July 14
-characterization remains the maintained AMD performance evidence.
+The Gate 4 candidate revision `191751f` passed all `431` maintained checks on
+Julia 1.12.6 with scalar indexing disabled. This directly covers the retained
+numerical surfaces, prepared controller-output routing, and dynamic
+cycle-averaged circular-Pyramid modulation. Gate 4 did not recharacterize AMD
+latency, so the July 14 artifact remains the maintained AMD performance
+evidence.
 
 ### GPU support-boundary rule
 
@@ -227,7 +231,7 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
-- CUDA execution. The extension, dedicated test project, fail-fast `424/424`
+- CUDA execution. The extension, dedicated test project, fail-fast `421/421`
   hardware target, and current manual WSL hardware evidence—including prepared direct
   imaging and the
   [final pre-HIL CUDA artifact](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)—are
@@ -237,8 +241,6 @@ The following are outside the current support claim:
 - Metal backend support
 - backend-audit surfaces that are not part of the maintained hardware targets
   and release-validation cadence
-- controller-output routing on CUDA or AMDGPU until the current-revision
-  hardware targets close Gate 4
 - broad claims about every detector/wfs/backend combination outside the
   maintained evidence surfaces
 - cross-package grouped/platform equivalence beyond the currently normalized

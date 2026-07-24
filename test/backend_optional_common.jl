@@ -143,6 +143,35 @@ function run_optional_controller_routing_checks(::Type{B},
     return nothing
 end
 
+function run_optional_cycle_averaged_modulation_checks(::Type{B},
+    BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    T = Float32
+    policy = CircularModulation(T(2);
+        samples=5, phase_offset=T(0.3), T=T)
+    cpu = AdaptiveOpticsSim.prepare_focal_plane_modulation(
+        policy, 8, zeros(T, 8, 8), T)
+    device = AdaptiveOpticsSim.prepare_focal_plane_modulation(
+        policy, 8, BackendArray(zeros(T, 8, 8)), T)
+    weights = copy(device.amplitude_weights)
+
+    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+        cpu, T(1.5))
+    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+        device, T(1.5))
+    @test device.phases isa BackendArray
+    @test device.amplitude_weights == weights
+    @test isapprox(sum(abs2, device.amplitude_weights), one(T);
+        rtol=8eps(T))
+    @test isapprox(Array(device.phases), cpu.phases;
+        rtol=8eps(T), atol=8eps(T))
+
+    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+        device, T(1.5); enabled=false)
+    @test Array(device.phases) == ones(Complex{T}, 8, 8, 5)
+    @test device.amplitude_weights == weights
+    return nothing
+end
+
 struct OptionalStaticAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
     screen::A
 end
@@ -1769,8 +1798,9 @@ function _optional_independent_optics_snapshot!(prepared,
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(output_frame(prepared.detector)))
     return (
-        low_order_command=copy(command_storage(prepared.low_order)),
-        dm_command=copy(command_storage(prepared.dm)),
+        low_order_command=copy(AdaptiveOpticsSim.command_storage(
+            prepared.low_order)),
+        dm_command=copy(AdaptiveOpticsSim.command_storage(prepared.dm)),
         slopes=copy(slopes(prepared.wfs)),
         frame=copy(output_frame(prepared.detector)),
     )
@@ -2819,6 +2849,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_detector_event_checks(B, backend)
     run_optional_command_application_checks(B, backend)
     run_optional_controller_routing_checks(B, backend)
+    run_optional_cycle_averaged_modulation_checks(B, backend)
 
     if get(ENV, backend_full_smoke_env(B), "0") == "1"
         include(joinpath(dirname(@__DIR__), "scripts", "gpu_smoke_contract.jl"))
@@ -2936,7 +2967,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         atm,
         epoch,
     )
-    fill!(command_storage(split_dm), T(1e-8))
+    fill!(AdaptiveOpticsSim.command_storage(split_dm), T(1e-8))
     update_surface!(split_dm)
     apply_surface!(science_pupil, split_dm, DMAdditive())
     science_imaging = prepare_direct_imaging(
@@ -2945,9 +2976,11 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         zero_padding=1,
     )
     science_rate = form_direct_image!(science_imaging)
+    split_acquisition = prepare_detector_acquisition(split_det, science_rate)
     split_frame = capture!(
         split_det,
-        science_rate;
+        science_rate,
+        split_acquisition;
         rng=MersenneTwister(17),
     )
     AdaptiveOpticsSim.synchronize_backend!(
@@ -2959,14 +2992,20 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         qe=one(T), binning=1, T=T, backend=selector)
     shared_detector_b = Detector(noise=NoiseNone(), integration_time=one(T),
         qe=one(T), binning=1, T=T, backend=selector)
+    shared_acquisition_a = prepare_detector_acquisition(
+        shared_detector_a, science_rate)
+    shared_acquisition_b = prepare_detector_acquisition(
+        shared_detector_b, science_rate)
     shared_frame_a = capture!(
         shared_detector_a,
-        science_rate;
+        science_rate,
+        shared_acquisition_a;
         rng=MersenneTwister(18),
     )
     shared_frame_b = capture!(
         shared_detector_b,
-        science_rate;
+        science_rate,
+        shared_acquisition_b;
         rng=MersenneTwister(18),
     )
     AdaptiveOpticsSim.synchronize_backend!(

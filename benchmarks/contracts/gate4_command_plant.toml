@@ -1,0 +1,59 @@
+schema_version = 1
+name = "gate4_command_plant_cpu"
+evidence_class = "warmed in-process serial CPU command-responsive plant cycle service time"
+samples_per_run = 10000
+runs = 3
+warmup_cycles = 2000
+allocation_cycles = 1000
+endpoint_allocation_cycles = 1000
+minimum_samples_for_p99 = 10000
+histogram_lowest_ns = 1
+histogram_highest_ns = 60000000000
+histogram_significant_figures = 3
+max_alloc_bytes_per_cycle = 8192
+replay_cycles = 1000
+long_run_cycles = 10000
+
+scope_exclusions = [
+    "package import, plant preparation, construction, and first-use compilation",
+    "fixed-rate open-loop arrivals, wall-clock pacing, queues, overload, and recovery",
+    "external RTC transport, descriptor publication, payload leases, and response latency",
+    "parallel execution, GPU orchestration, and host-device transfer",
+    "CPU affinity, isolation, governor control, NUMA placement, and interrupt placement",
+    "production instrument scale, model-specific capacity, or external-RTC latency claims",
+]
+
+[contract]
+question = "For one representative command-responsive optical plant, does the warmed serial boundary preserve independent multi-rate endpoint ownership, exact command terminal accounting, atomic multi-optic application, command-during-exposure causality, fixed prepared storage, bounded pending depth, and bounded Julia heap allocation while providing a reproducible service-time distribution?"
+load_model = "closed-loop self-paced serial command-cycle service-cost characterization; this is not an external RTC or HIL pacing test"
+arrival_model = "the next command cycle starts after the prior cycle, its terminal accounting, and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "the benchmark characterizes unpaced service cost and makes no fixed-arrival latency claim"
+timed_boundary = "present commands due at two independent logical cadences, process every command, optical-path, and detector-lifecycle event at the next canonical plant timestamp, and consume every resulting terminal command disposition"
+timer = "time_ns; the final clock read is included, while histogram recording is excluded from per-cycle latency and included in achieved throughput"
+correctness_oracle = "zero-allocation standalone endpoint cycles; exact terminal accounting; independent command-during-exposure integration; atomic two-optic application; same-seed declaration-order replay; endpoint capacity and maximum pending depth; and fixed prepared storage over a long run"
+threading = "one Julia thread, one BLAS thread, and one FFT provider thread"
+first_use = "recorded immediately after construction and before correctness validation or warmup; package import and preparation are excluded"
+tail_claim = "p99 is reported with 100 expected observations beyond p99 per 10000-sample run; p99.9 is diagnostic"
+latency_gate = "this run establishes a comparable command-responsive plant baseline; no absolute, fixed-arrival, or external-RTC latency threshold is asserted"
+allocation_gate = "the warmed command presentation, application, optical, detector-event, and terminal-accounting boundary may use at most 8192 Julia heap bytes per processed cycle over a 1000-cycle window"
+
+[workload]
+backend = "CPUBackend"
+numeric_type = "Float64"
+resolution = 8
+diameter_m = 8.0
+central_obstruction = 0.0
+r0_m = 0.2
+outer_scale_m = 25.0
+science_wavelength_m = 8.0e-7
+science_photon_irradiance = 100.0
+run_seed = 31232
+low_order_opd_gain_m = 8.0e-7
+high_order_opd_gain_m = 6.0e-7
+command_capacity = 4
+low_order_command_stride = 2
+high_order_command_stride = 3
+optical_sample_period_ns = 100000000
+acquisition_period_ns = 1000000000
+exposure_duration_ns = 300000000

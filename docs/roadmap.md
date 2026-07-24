@@ -90,11 +90,11 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    artifacts close the gate without claiming wall-clock pacing, external-RTC
    latency, or production instrument capacity. Keep physical trigger faults
    separate from timestamp-label faults and execution lateness.
-4. Complete the individually owned controllable-optic and command-endpoint
+4. The individually owned controllable-optic and command-endpoint
    model with prepared core plant command schemas, bounded
    timing and replayable plant-time command-silence semantics, sampled device-
    feedback acquisitions, and prepared plane groups as a deliberate breaking
-   change. The first eight Gate 4 slices now record stable physical-optic and
+   change is complete. Gate 4 records stable physical-optic and
    independently latched endpoint identities, immutable versioned semantic
    payload schemas, a bounded endpoint owner with copied payload
    slots, sequence history, future-time admission, application-ready claims,
@@ -112,7 +112,11 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    trigger-relative autonomous circular-Pyramid model now add bounded
    setpoints, free-running/source/delivered-reset phase relationships, and
    allocation-free cycle-averaged optical regeneration without point-wise RTC
-   commands. Only final cross-backend closure remains in Gate 4. Explicit
+   commands. The clean [command-responsive plant artifact](../benchmarks/results/gate4/2026-07-24-command-plant.toml)
+   closes the serial CPU service-cost, terminal-accounting, storage, and
+   allocation evidence; current-revision `421/421` CUDA and `431/431` AMDGPU
+   targets close the maintained device-resident routing and modulation
+   surfaces with scalar indexing disabled. Explicit
    conjugate placement and path visibility remain Gate 5.
    Operational execution-clock ingress liveness belongs to the later HIL
    lifecycle boundary.
