@@ -1140,28 +1140,36 @@ end
 struct _PreparedPlantToken end
 const _PREPARED_PLANT_TOKEN = _PreparedPlantToken()
 
-"""Prepared, schedule-free plant with concrete owners and RNG streams."""
+"""
+Prepared, schedule-free plant with concrete owners, bounded path-to-optic
+bindings, and RNG streams.
+"""
 struct PreparedPlant{D,O<:Tuple,C<:Tuple,P<:Tuple,A<:Tuple,
     R<:PreparedPlantRNGs}
     definition::D
     controllable_optics::O
+    controllable_optic_path_bindings::PreparedControllableOpticPathBindings
     command_endpoints::C
     paths::P
     acquisitions::A
     rngs::R
 
     function PreparedPlant(::_PreparedPlantToken, definition::D,
-        controllable_optics::O, command_endpoints::C, paths::P,
+        controllable_optics::O,
+        bindings::PreparedControllableOpticPathBindings,
+        command_endpoints::C, paths::P,
         acquisitions::A, rngs::R) where {
         D,O<:Tuple,C<:Tuple,P<:Tuple,A<:Tuple,R<:PreparedPlantRNGs,
     }
-        return new{D,O,C,P,A,R}(definition, controllable_optics,
+        return new{D,O,C,P,A,R}(definition, controllable_optics, bindings,
             command_endpoints, paths, acquisitions, rngs)
     end
 end
 
 @inline prepared_controllable_optics(plant::PreparedPlant) =
     plant.controllable_optics
+@inline prepared_controllable_optic_path_bindings(plant::PreparedPlant) =
+    plant.controllable_optic_path_bindings
 @inline prepared_command_endpoints(plant::PreparedPlant) =
     map(binding -> binding.endpoint, plant.command_endpoints)
 @inline prepared_paths(plant::PreparedPlant) = plant.paths
@@ -1398,7 +1406,9 @@ streams from the required run seed, derivation version, and stable owner
 identities. Repeated execution uses the concrete tuples stored in the result.
 Each declared command endpoint requires one separate
 `CommandEndpointConfiguration`; endpoint ordinals and optic order derive from
-stable identities rather than declaration position.
+stable identities rather than declaration position. Required optic placement
+and visibility declarations resolve to canonical bounded per-path bindings and
+co-placed groups.
 """
 function prepare_plant(definition::PlantDefinition;
     run_seed,
@@ -1416,11 +1426,12 @@ function prepare_plant(definition::PlantDefinition;
         prepared_endpoints)
     paths = _prepare_path_executors(path_definitions(definition),
         plant_telescope(definition), plant_atmosphere(definition))
+    bindings = _prepare_controllable_optic_path_bindings(optics, paths)
     acquisitions = _prepare_acquisition_owners(
         acquisition_definitions(definition), paths)
     rngs = _prepare_plant_rngs(definition, paths, acquisitions, seed,
         version)
-    return PreparedPlant(_PREPARED_PLANT_TOKEN, definition, optics,
+    return PreparedPlant(_PREPARED_PLANT_TOKEN, definition, optics, bindings,
         prepared_endpoints, paths, acquisitions, rngs)
 end
 

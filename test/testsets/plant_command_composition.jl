@@ -294,10 +294,14 @@ function command_composition_fixture(; reverse_order::Bool=false,
     second_schema = command_composition_schema(:b_tweeter)
     first = ControllableOpticDefinition(:woofer,
         CommandCompositionOpticModel(:x, T(8e-7)),
-        (first_schema,))
+        (first_schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility())
     second = ControllableOpticDefinition(:tweeter,
         CommandCompositionOpticModel(:y, T(6e-7)),
-        (second_schema,))
+        (second_schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility())
     optics = reverse_order ? (second, first) : (first, second)
     configurations = (
         CommandEndpointConfiguration(:a_woofer, 0.0; capacity=4,
@@ -356,7 +360,9 @@ function array_initial_command_fixture()
         silence_policy=CommandSilencePolicy(),
     )
     optic = ControllableOpticDefinition(:array_initial_optic,
-        ArrayInitialCommandOpticModel(), (schema,))
+        ArrayInitialCommandOpticModel(), (schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility())
     definition = PlantDefinition(; telescope, atmosphere,
         controllable_optics=(optic,), paths=(path,),
         acquisitions=(acquisition,))

@@ -177,7 +177,8 @@ function autonomous_pyramid_schema_like(schema;
 end
 
 function autonomous_pyramid_optic(schemas=autonomous_pyramid_schemas();
-    id=:pyramid_modulator)
+    id=:pyramid_modulator,
+    visibility=SelectedPathVisibility(:pyramid))
     model = CircularPyramidModulator(
         radius_endpoint=command_endpoint_id(schemas.radius),
         frequency_endpoint=command_endpoint_id(schemas.frequency),
@@ -185,7 +186,9 @@ function autonomous_pyramid_optic(schemas=autonomous_pyramid_schemas();
         enabled_endpoint=command_endpoint_id(schemas.enabled),
     )
     return ControllableOpticDefinition(id, model,
-        Tuple(schemas))
+        Tuple(schemas);
+        placement=FocalPlanePlacement(),
+        visibility)
 end
 
 function autonomous_pyramid_event_definition(;
@@ -391,7 +394,8 @@ end
     definition = PlantDefinition(;
         telescope=plant_telescope(fixture.plant.definition),
         atmosphere=plant_atmosphere(fixture.plant.definition),
-        controllable_optics=(autonomous_pyramid_optic(invalid_schemas),),
+        controllable_optics=(autonomous_pyramid_optic(invalid_schemas;
+            visibility=AllPathVisibility()),),
     )
     configurations = (
         CommandEndpointConfiguration(:mod_radius, 1.0; capacity=1),
@@ -451,7 +455,9 @@ end
     extra_definition = ControllableOpticDefinition(
         :pyramid_modulator,
         Plant.controllable_optic_model(base_optic),
-        (command_schemas(base_optic)..., extra_schema),
+        (command_schemas(base_optic)..., extra_schema);
+        placement=FocalPlanePlacement(),
+        visibility=SelectedPathVisibility(:pyramid),
     )
     count_error = autonomous_pyramid_error() do
         plant_definition = fixture.plant.definition

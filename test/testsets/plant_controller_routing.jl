@@ -51,10 +51,14 @@ function controller_routing_plant(;
         controllable_optics=(
             ControllableOpticDefinition(:woofer,
                 ControllerRoutingTestOpticModel(),
-                (woofer_schema,)),
+                (woofer_schema,);
+                placement=PupilPlanePlacement(),
+                visibility=AllPathVisibility()),
             ControllableOpticDefinition(:tweeter,
                 ControllerRoutingTestOpticModel(),
-                (tweeter_schema,)),
+                (tweeter_schema,);
+                placement=PupilPlanePlacement(),
+                visibility=AllPathVisibility()),
         ),
     )
     initial_woofer = scalar ? 0.0 : zeros(Float64, woofer_dimensions)

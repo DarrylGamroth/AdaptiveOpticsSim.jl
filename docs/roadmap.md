@@ -121,8 +121,9 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    closes the serial CPU service-cost, terminal-accounting, storage, and
    allocation evidence; current-revision `421/421` CUDA and `431/431` AMDGPU
    targets close the maintained device-resident routing and modulation
-   surfaces with scalar indexing disabled. Explicit
-   conjugate placement and path visibility remain Gate 5.
+   surfaces with scalar indexing disabled. Explicit conjugate placement and
+   path visibility begin in Gate 5 rather than being retrofitted into this
+   closed gate.
    Operational execution-clock ingress liveness belongs to the later HIL
    lifecycle boundary.
 5. Preserve the completed minimal serial CPU HIL vertical slice: one scheduled
@@ -132,8 +133,12 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    deterministic fake RTC, and fixed-arrival evidence. The qualified boundary
    remains the serial oracle while worker, GPU, transport-specific, and
    placement-planner capabilities advance through their own gates.
-6. Add path-specific NCPA, MCAO/MOAO geometry, prepared CPU execution groups,
-   then single-GPU direction batching and physical device identity behind
+6. Continue Gate 5 from its implemented placement/visibility foundation:
+   every optic now declares an optical placement and path visibility, and
+   preparation derives bounded canonical per-path bindings and co-placed
+   groups. Add NGS/LGS source-footprint geometry, MCAO/MOAO execution, and
+   path-specific sampled NCPA before advancing to prepared CPU execution
+   groups, single-GPU direction batching, and physical device identity behind
    numerical, allocation, residency, and fixed-arrival evidence.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,

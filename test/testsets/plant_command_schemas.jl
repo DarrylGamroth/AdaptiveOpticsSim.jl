@@ -494,11 +494,15 @@ end
         :woofer,
         CommandSchemaTestOpticModel(:woofer);
         command_schemas=(woofer_command=woofer_schema,),
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
     tweeter = ControllableOpticDefinition(
         :tweeter,
         CommandSchemaTestOpticModel(:tweeter),
-        (tweeter_schema,),
+        (tweeter_schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
     plant = PlantDefinition(
         telescope=telescope,
@@ -520,6 +524,8 @@ end
             :bad_key,
             CommandSchemaTestOpticModel(:bad_key);
             command_schemas=bad_key,
+            placement=PupilPlanePlacement(),
+            visibility=AllPathVisibility(),
         )
         nothing
     catch caught
@@ -539,7 +545,9 @@ end
     other = ControllableOpticDefinition(
         :other,
         CommandSchemaTestOpticModel(:other),
-        (duplicate_schema_id,),
+        (duplicate_schema_id,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
     )
     error = try
         PlantDefinition(

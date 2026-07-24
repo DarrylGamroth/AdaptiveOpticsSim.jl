@@ -1,10 +1,12 @@
 #
 # Prepared controllable optics and endpoint execution configuration
 #
-# A cold ControllableOpticDefinition describes physical identity and semantic
-# command schemas. This layer separately binds run capacities, initial/safe
-# values, backend storage, and model-specific physical preparation. Mutable
-# optic, endpoint, and workspace owners are constructed by the event loop.
+# A cold ControllableOpticDefinition describes physical identity, optical
+# placement/path visibility, and semantic command schemas. This layer
+# separately binds run capacities, initial/safe values, backend storage,
+# model-specific physical preparation, and canonical path/group lookup.
+# Mutable optic, endpoint, and workspace owners are constructed by the event
+# loop.
 #
 
 """
@@ -160,6 +162,10 @@ end
 
 @inline controllable_optic_implementation(
     optic::PreparedControllableOptic) = optic.implementation
+@inline controllable_optic_placement(optic::PreparedControllableOptic) =
+    controllable_optic_placement(optic.definition)
+@inline controllable_optic_visibility(optic::PreparedControllableOptic) =
+    controllable_optic_visibility(optic.definition)
 
 """
     prepare_controllable_optic(model, definition, telescope, atmosphere)
@@ -235,10 +241,11 @@ end
 
 """
 Apply the currently visible physical surface to one already materialized
-optical-path input. Gate 4 composition calls every optic whose execution role
-is `PupilSurfaceExecutionRole` as one common co-conjugated group in canonical
-identity order. Path-local autonomous devices use their separately prepared
-coupling; general placement and path visibility are later contracts.
+optical-path input. Composition calls only the path's prepared visible
+`PupilSurfaceExecutionRole` bindings, grouped by placement and ordered by
+canonical optic identity inside each group. Path-local autonomous devices use
+their separately prepared exact coupling. Atmospheric-conjugate transforms
+are prepared by a later geometry layer.
 """
 function apply_controllable_optic_surface!(input, implementation, state)
     throw(PlantPreparationError(:controllable_optic,
@@ -394,3 +401,245 @@ function _prepare_controllable_optics(definition::PlantDefinition,
     end
     return Tuple(optics)
 end
+
+struct _PreparedControllableOpticPathBindingsToken end
+const _PREPARED_CONTROLLABLE_OPTIC_PATH_BINDINGS_TOKEN =
+    _PreparedControllableOpticPathBindingsToken()
+
+"""
+One contiguous co-placed group in a prepared path-to-optic binding table.
+
+`representative_optic_slot` identifies an optic whose immutable placement
+describes the group. It is a run-local prepared slot, not a physical identity.
+"""
+struct PreparedControllableOpticPlaneGroup
+    path_slot::UInt32
+    representative_optic_slot::UInt32
+    first_binding::Int
+    binding_count::Int
+
+    function PreparedControllableOpticPlaneGroup(
+        ::_PreparedControllableOpticPathBindingsToken,
+        path_slot::UInt32,
+        representative_optic_slot::UInt32,
+        first_binding::Int,
+        binding_count::Int,
+    )
+        return new(path_slot, representative_optic_slot, first_binding,
+            binding_count)
+    end
+end
+
+"""
+Canonical bounded path-to-optic bindings prepared from stable identities.
+
+Paths are indexed canonically by `OpticalPathID`. Within each path, visible
+optics are grouped by optical placement and ordered by stable
+`ControllableOpticID` inside a group. The offsets provide direct bounded
+lookup; repeated execution performs no visibility-set lookup or all-optic
+scan.
+"""
+struct PreparedControllableOpticPathBindings
+    path_ids::Memory{OpticalPathID}
+    path_slots::Memory{UInt32}
+    binding_offsets::Memory{Int}
+    group_offsets::Memory{Int}
+    optic_slots::Memory{UInt32}
+    plane_groups::Memory{PreparedControllableOpticPlaneGroup}
+
+    function PreparedControllableOpticPathBindings(
+        ::_PreparedControllableOpticPathBindingsToken,
+        path_ids::Memory{OpticalPathID},
+        path_slots::Memory{UInt32},
+        binding_offsets::Memory{Int},
+        group_offsets::Memory{Int},
+        optic_slots::Memory{UInt32},
+        plane_groups::Memory{PreparedControllableOpticPlaneGroup},
+    )
+        return new(path_ids, path_slots, binding_offsets, group_offsets,
+            optic_slots, plane_groups)
+    end
+end
+
+function _optic_binding_memory(values::Vector{T}) where {T}
+    result = Memory{T}(undef, length(values))
+    copyto!(result, values)
+    return result
+end
+
+function _canonical_prepared_path_slots(paths::Tuple)
+    slots = collect(eachindex(paths))
+    sort!(slots; by=slot ->
+        String(path_id(paths[slot].definition).name))
+    return slots
+end
+
+@inline function _optic_binding_slot_isless(left::UInt32, right::UInt32,
+    optics::Tuple)
+    left_optic = optics[Int(left)]
+    right_optic = optics[Int(right)]
+    left_placement = controllable_optic_placement(left_optic)
+    right_placement = controllable_optic_placement(right_optic)
+    if _same_optic_placement(left_placement, right_placement)
+        return String(controllable_optic_id(left_optic.definition).name) <
+            String(controllable_optic_id(right_optic.definition).name)
+    end
+    return _optic_placement_isless(left_placement, right_placement)
+end
+
+function _visible_prepared_optic_slots(
+    optics::Tuple, path::OpticalPathID)
+    slots = UInt32[]
+    sizehint!(slots, length(optics))
+    @inbounds for slot in eachindex(optics)
+        optic = optics[slot]
+        _optic_visible_on_path(controllable_optic_visibility(optic), path) ||
+            continue
+        slot <= typemax(UInt32) || throw(PlantPreparationError(
+            :controllable_optic, :capacity,
+            "prepared controllable-optic count exceeds UInt32 capacity"))
+        push!(slots, UInt32(slot))
+    end
+    sort!(slots; lt=(left, right) ->
+        _optic_binding_slot_isless(left, right, optics))
+    return slots
+end
+
+function _append_prepared_optic_plane_groups!(
+    groups::Vector{PreparedControllableOpticPlaneGroup},
+    optic_slots::Vector{UInt32},
+    visible_slots::Vector{UInt32},
+    path_slot::UInt32,
+    optics::Tuple,
+)
+    isempty(visible_slots) && return nothing
+    first_binding = length(optic_slots) + 1
+    first_slot = first(visible_slots)
+    previous_placement =
+        controllable_optic_placement(optics[Int(first_slot)])
+    group_first = first_binding
+    group_representative = first_slot
+    @inbounds for slot in visible_slots
+        placement = controllable_optic_placement(optics[Int(slot)])
+        if !_same_optic_placement(previous_placement, placement)
+            push!(groups, PreparedControllableOpticPlaneGroup(
+                _PREPARED_CONTROLLABLE_OPTIC_PATH_BINDINGS_TOKEN,
+                path_slot, group_representative, group_first,
+                length(optic_slots) - group_first + 1))
+            group_first = length(optic_slots) + 1
+            group_representative = slot
+            previous_placement = placement
+        end
+        push!(optic_slots, slot)
+    end
+    push!(groups, PreparedControllableOpticPlaneGroup(
+        _PREPARED_CONTROLLABLE_OPTIC_PATH_BINDINGS_TOKEN,
+        path_slot, group_representative, group_first,
+        length(optic_slots) - group_first + 1))
+    return nothing
+end
+
+function _prepare_controllable_optic_path_bindings(
+    optics::Tuple, paths::Tuple)
+    length(paths) <= typemax(UInt32) || throw(PlantPreparationError(
+        :path, :capacity, "prepared path count exceeds UInt32 capacity"))
+    canonical_path_slots = _canonical_prepared_path_slots(paths)
+    path_ids = OpticalPathID[]
+    path_slots = UInt32[]
+    binding_offsets = Int[1]
+    group_offsets = Int[1]
+    optic_slots = UInt32[]
+    groups = PreparedControllableOpticPlaneGroup[]
+    sizehint!(path_ids, length(paths))
+    sizehint!(path_slots, length(paths))
+    sizehint!(binding_offsets, length(paths) + 1)
+    sizehint!(group_offsets, length(paths) + 1)
+    sizehint!(optic_slots, length(paths) * length(optics))
+    sizehint!(groups, length(paths) * length(optics))
+    @inbounds for path_slot_value in canonical_path_slots
+        path_slot = UInt32(path_slot_value)
+        id = path_id(paths[path_slot_value].definition)
+        push!(path_ids, id)
+        push!(path_slots, path_slot)
+        visible_slots = _visible_prepared_optic_slots(optics, id)
+        _append_prepared_optic_plane_groups!(groups, optic_slots,
+            visible_slots, path_slot, optics)
+        push!(binding_offsets, length(optic_slots) + 1)
+        push!(group_offsets, length(groups) + 1)
+    end
+    return PreparedControllableOpticPathBindings(
+        _PREPARED_CONTROLLABLE_OPTIC_PATH_BINDINGS_TOKEN,
+        _optic_binding_memory(path_ids),
+        _optic_binding_memory(path_slots),
+        _optic_binding_memory(binding_offsets),
+        _optic_binding_memory(group_offsets),
+        _optic_binding_memory(optic_slots),
+        _optic_binding_memory(groups),
+    )
+end
+
+@inline prepared_controllable_optic_path_count(
+    bindings::PreparedControllableOpticPathBindings) =
+    length(bindings.path_ids)
+@inline prepared_controllable_optic_binding_count(
+    bindings::PreparedControllableOpticPathBindings) =
+    length(bindings.optic_slots)
+@inline prepared_controllable_optic_plane_group_count(
+    bindings::PreparedControllableOpticPathBindings) =
+    length(bindings.plane_groups)
+@inline prepared_controllable_optic_path_id(
+    bindings::PreparedControllableOpticPathBindings, ordinal::Integer) =
+    bindings.path_ids[ordinal]
+
+function _prepared_controllable_optic_path_ordinal(
+    bindings::PreparedControllableOpticPathBindings,
+    path::OpticalPathID,
+)
+    @inbounds for ordinal in eachindex(bindings.path_ids)
+        bindings.path_ids[ordinal] == path && return ordinal
+    end
+    throw(PlantPreparationError(:path, :unknown_id,
+        "prepared controllable-optic bindings have no optical path $path"))
+end
+
+@inline function prepared_controllable_optic_path_slot(
+    bindings::PreparedControllableOpticPathBindings, path)
+    ordinal = _prepared_controllable_optic_path_ordinal(bindings,
+        _as_optical_path_id(path))
+    return Int(@inbounds bindings.path_slots[ordinal])
+end
+
+@inline function prepared_controllable_optic_binding_range(
+    bindings::PreparedControllableOpticPathBindings, path)
+    ordinal = _prepared_controllable_optic_path_ordinal(bindings,
+        _as_optical_path_id(path))
+    first_binding = @inbounds bindings.binding_offsets[ordinal]
+    last_binding = @inbounds bindings.binding_offsets[ordinal + 1] - 1
+    return first_binding:last_binding
+end
+
+@inline function prepared_controllable_optic_plane_group_range(
+    bindings::PreparedControllableOpticPathBindings, path)
+    ordinal = _prepared_controllable_optic_path_ordinal(bindings,
+        _as_optical_path_id(path))
+    first_group = @inbounds bindings.group_offsets[ordinal]
+    last_group = @inbounds bindings.group_offsets[ordinal + 1] - 1
+    return first_group:last_group
+end
+
+@inline prepared_controllable_optic_slot(
+    bindings::PreparedControllableOpticPathBindings, binding::Integer) =
+    Int(bindings.optic_slots[binding])
+
+@inline prepared_controllable_optic_plane_group(
+    bindings::PreparedControllableOpticPathBindings, group::Integer) =
+    bindings.plane_groups[group]
+
+@inline prepared_controllable_optic_plane_group_path_slot(
+    group::PreparedControllableOpticPlaneGroup) = Int(group.path_slot)
+@inline prepared_controllable_optic_plane_group_representative_slot(
+    group::PreparedControllableOpticPlaneGroup) =
+    Int(group.representative_optic_slot)
+@inline prepared_controllable_optic_plane_group_binding_range(
+    group::PreparedControllableOpticPlaneGroup) =
+    group.first_binding:(group.first_binding + group.binding_count - 1)

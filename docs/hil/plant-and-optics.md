@@ -22,10 +22,14 @@ latched command endpoint, and provide standalone bounded admission and
 effective-command state owners. The fifth slice prepares every declared optic
 and endpoint, composes physical command publication into the serial event
 loop, and provides explicit all-or-none transactions across distinct optics.
-The current physical composition is deliberately limited to one common
-co-conjugated group applied to every path. Device-specific dynamics, explicit
-conjugate placement, and path visibility remain their assigned later slices;
-none is hidden in an identity or schema.
+The first Gate 5 slice now requires every optic to declare its optical
+placement and all-path or selected-path visibility. Plant preparation resolves
+those declarations into canonical bounded path bindings and co-placed plane
+groups, and the serial pupil-plane path applies only its prepared visible
+range. Atmospheric-conjugate placement is declarable but fails closed in
+full-optical event preparation until the next slice supplies source-footprint
+geometry. Device-specific dynamics remain model-specific; none of these
+contracts is hidden in an identity or command schema.
 Separating a path from its acquisitions prevents a second camera or readout
 cadence from forcing duplicate propagation.
 
@@ -107,6 +111,8 @@ plant = Plant.PlantDefinition(
                     97,
                 ),
             ),
+            placement=Plant.PupilPlanePlacement(),
+            visibility=Plant.AllPathVisibility(),
         ),
         tweeter=Plant.ControllableOpticDefinition(
             :tweeter,
@@ -118,6 +124,8 @@ plant = Plant.PlantDefinition(
                     2_041,
                 ),
             ),
+            placement=Plant.PupilPlanePlacement(),
+            visibility=Plant.AllPathVisibility(),
         ),
     ),
     paths=(
@@ -321,8 +329,10 @@ apply to an explicit caller-owned path product. They do not mutate a shared
 telescope scratch plane. This boundary permits independent paths to share one
 telescope definition and permits co-conjugated optics to remain independent;
 Gate 4 defines independent endpoint command timing and effective-state
-semantics. Later HIL gates still define physical placement, path visibility,
-device dynamics, and boundary pacing.
+semantics. Gate 5 now declares placement and path visibility and prepares
+bounded bindings; later slices still define atmospheric source-footprint
+execution, sampled-aberration attachment, device dynamics, and boundary
+pacing.
 
 Reusable propagating optics follow the same split. In particular, a spatial
 filter owns its prepared mask definition separately from its single-writer FFT
@@ -758,7 +768,8 @@ the science-camera acquisition semantics to a declared photon-arrival-rate resul
 an explicitly prepared normalization conversion. Slow science or coronagraph
 work must not delay a higher-rate WFS publication.
 
-Controllable optics have a visibility set in addition to their physical plane:
+Controllable optics have a visibility declaration in addition to their
+physical placement:
 
 - SCAO and co-conjugated DM surfaces are visible to every selected path through
   the common pupil train. Each DM retains its own state and command timing even
@@ -779,9 +790,11 @@ operation.
 
 Co-conjugated additive pupil behavior, NGS, LGS, multiple WFS arms, direct
 science detectors, and the PROPER coronagraph handoff are current foundations.
-True altitude-conjugated MCAO and path-specific MOAO are target capabilities
-and must not be described as production-supported until their geometry,
-command isolation, and hardware paths have maintained evidence.
+Explicit all-path and selected-path optic bindings are now implemented for
+pupil-plane execution. True altitude-conjugated MCAO and geometrically
+corrected MOAO remain target capabilities and must not be described as
+production-supported until their source-footprint geometry, command isolation,
+and hardware paths have maintained evidence.
 
 ## Calibration Illumination Without Instrument Assumptions
 
@@ -974,7 +987,9 @@ The aggregate optic has been removed rather than retained as a compatibility
 wrapper. Its responsibilities are now separated into:
 
 - a named tuple or registry of individual controllable optics
-- placement and path-visibility traits for each optic
+- one required `PupilPlanePlacement`,
+  `AtmosphericConjugatePlacement`, or `FocalPlanePlacement` and one required
+  `AllPathVisibility` or `SelectedPathVisibility` declaration for each optic
 - one immutable semantic command schema per independently timed optic or
   segment, followed by one bounded prepared endpoint owner
 - prepared, internal plane groups derived solely for optical execution
@@ -1123,6 +1138,16 @@ open-loop DM while sharing the atmosphere and tomographic WFS measurements.
 Plane visibility and conjugate geometry are therefore separate traits. Any
 common MCAO plane or target-specific MOAO plane may contain more than one
 independently commanded device.
+
+The first Gate 5 slice implements that separation as immutable declaration and
+preparation contracts. `PreparedControllableOpticPathBindings` canonicalizes
+paths by `OpticalPathID`, groups each path's visible optics by declared
+placement, and orders members by `ControllableOpticID`. Each scheduled path
+retains a direct range into this bounded storage, so warmed pupil-plane
+execution neither scans every optic nor performs visibility-set membership.
+The table is not a universal optical graph, and an
+`AtmosphericConjugatePlacement` is intentionally rejected by full-optical
+event preparation until its geometric transform is implemented.
 
 Command transport remains independent of plane geometry. The same generic
 time-stamped endpoint can drive a pupil DM, atmospheric-conjugate DM, tip/tilt

@@ -147,11 +147,12 @@ Examples:
   exact path-local autonomous-optic bindings. Plant state is right-continuous
   and exposure intervals are half-open. Explicit `PlantCommandTransaction`
   values provide all-or-none admission and physical publication across
-  distinct optics; equal time or placement alone does not. Default
-  pupil-surface optics form one common co-conjugated group on every path.
-  `AutonomousPathExecutionRole` instead excludes an optic from that group and
-  requires one explicit `AutonomousPeriodicOpticDefinition`; general placement
-  and visibility remain later work
+  distinct optics; equal time or placement alone does not. Required
+  placement/visibility declarations resolve into bounded canonical per-path
+  ranges and co-placed groups; a due path applies only its visible pupil-plane
+  members. `AutonomousPathExecutionRole` retains one exact focal-plane
+  `AutonomousPeriodicOpticDefinition` coupling. Atmospheric-conjugate
+  source-footprint execution remains later Gate 5 work
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

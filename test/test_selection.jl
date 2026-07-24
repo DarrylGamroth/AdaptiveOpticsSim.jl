@@ -43,6 +43,8 @@ const TEST_SUITE_SPECS = (
         "testsets/plant_reduced_order.jl"),
     TestSuiteSpec("plant-autonomous-optics",
         "testsets/plant_autonomous_optics.jl"),
+    TestSuiteSpec("plant-placed-optics",
+        "testsets/plant_placed_optics.jl"),
     TestSuiteSpec("control-primitives", "testsets/control_primitives.jl"),
     TestSuiteSpec(
         "detectors-wfs",
@@ -99,6 +101,7 @@ const TEST_GROUP_SPECS = (
         "plant-controller-routing",
         "plant-reduced-order",
         "plant-autonomous-optics",
+        "plant-placed-optics",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -122,6 +125,7 @@ const TEST_GROUP_SPECS = (
         "plant-reduced-order",
         "plant-autonomous-optics",
     ),
+    "gate5" => ("plant-placed-optics",),
 )
 
 test_suite_names() = Tuple(spec.name for spec in TEST_SUITE_SPECS)

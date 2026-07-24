@@ -288,6 +288,10 @@ adds concrete single-writer owners without implicit atmosphere advancement:
 - RNG derivation and replay: `RNGDerivationVersion`, `rng_replay_metadata`
 - Definitions: `ControllableOpticDefinition`, `PlantCommandSchema`,
   `OpticalPathDefinition`, `AcquisitionDefinition`, `PlantDefinition`
+- Controllable-optic placement and visibility:
+  `PupilPlanePlacement`, `AtmosphericConjugatePlacement`,
+  `FocalPlanePlacement`, `AllPathVisibility`, `SelectedPathVisibility`;
+  `ControllableOpticDefinition` requires one of each
 - Plant-command value types: `PlantCommandSchemaVersion`,
   `CommandBasisRevision`, `CommandUnit`, `CommandSignConvention`,
   `CommandBasis`, `UnboundedCommandValues`, `UniformCommandBounds`,
@@ -554,12 +558,13 @@ terminal endpoint outcomes into a fixed-capacity
 `command_disposition_count` and `command_disposition`, then acknowledge them
 with `clear_command_dispositions!`.
 
-Gate 4 executes default pupil-surface controllable optics as one common
-co-conjugated group, in canonical optic-identity order, on every due prepared
-path. A prepared path-local autonomous execution role is excluded from that
-group and runs only through its exact `AutonomousPeriodicOpticDefinition`.
-Explicit general plane placement, conjugate transforms, and path visibility
-remain later work. Device-specific stroke, slew, settling, hysteresis, and
+Plant preparation resolves all-path or selected-path visibility into bounded
+canonical `PreparedControllableOpticPathBindings` and co-placed plane groups.
+Each due full-optical path applies only its direct visible pupil-plane binding
+range; a prepared path-local autonomous role retains its exact focal-plane
+coupling. Atmospheric-conjugate placement is declared and grouped but
+full-optical event preparation rejects it until source-footprint transforms
+are implemented. Device-specific stroke, slew, settling, hysteresis, and
 feedback remain model extensions or later physical-model work. HIL session,
 external-clock, lease, ring, completion-credit, and transport metadata remain
 outside core command values. Execution-clock ingress liveness is distinct from

@@ -187,6 +187,8 @@ struct _PreparedPlantEventPath
     origin::PlantTimestamp
     handle::EventGeneratorHandle
     requires_full_optical::Bool
+    optic_binding_start::Int
+    optic_binding_stop::Int
 end
 
 struct _PreparedPlantEventAcquisition
@@ -295,6 +297,7 @@ struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
     scheduler::PreparedEventScheduler
     actions::Memory{_PlantEventAction}
     optics::Memory{PreparedControllableOptic}
+    optic_path_bindings::PreparedControllableOpticPathBindings
     command_endpoints::Memory{_PreparedPlantEventCommandEndpoint}
     paths::Memory{_PreparedPlantEventPath}
     acquisitions::Memory{_PreparedPlantEventAcquisition}
@@ -788,6 +791,89 @@ function _event_path_requires_full_optical(id::OpticalPathID, owners)
     return false
 end
 
+@inline function _require_event_path_optic_placement(
+    ::PupilSurfaceExecutionRole,
+    ::PupilPlanePlacement,
+    ::ControllableOpticID,
+    ::OpticalPathID,
+)
+    return nothing
+end
+
+function _require_event_path_optic_placement(
+    ::PupilSurfaceExecutionRole,
+    placement::AtmosphericConjugatePlacement,
+    optic::ControllableOpticID,
+    path::OpticalPathID,
+)
+    _plant_event_loop_error(:unsupported_conjugate_geometry,
+        "controllable optic $optic on path $path is conjugated to " *
+        "$(conjugate_altitude_m(placement)) m, but atmospheric-conjugate " *
+        "footprint execution is not yet prepared")
+end
+
+function _require_event_path_optic_placement(
+    ::PupilSurfaceExecutionRole,
+    placement::FocalPlanePlacement,
+    optic::ControllableOpticID,
+    path::OpticalPathID,
+)
+    _plant_event_loop_error(:invalid_optic_placement,
+        "pupil-surface controllable optic $optic cannot execute at " *
+        "$(typeof(placement)) on path $path")
+end
+
+@inline function _require_event_path_optic_placement(
+    ::AutonomousPathExecutionRole,
+    ::FocalPlanePlacement,
+    ::ControllableOpticID,
+    ::OpticalPathID,
+)
+    return nothing
+end
+
+function _require_event_path_optic_placement(
+    ::AutonomousPathExecutionRole,
+    placement::AbstractControllableOpticPlacement,
+    optic::ControllableOpticID,
+    path::OpticalPathID,
+)
+    _plant_event_loop_error(:invalid_optic_placement,
+        "path-local autonomous controllable optic $optic requires " *
+        "FocalPlanePlacement on path $path; got $(typeof(placement))")
+end
+
+function _require_event_path_optic_placement(
+    role,
+    placement::AbstractControllableOpticPlacement,
+    optic::ControllableOpticID,
+    path::OpticalPathID,
+)
+    _plant_event_loop_error(:unsupported_optic_execution_role,
+        "controllable optic $optic on path $path declares unsupported " *
+        "execution role $(typeof(role)) for $(typeof(placement))")
+end
+
+function _require_event_path_optic_placements(
+    plant::PreparedPlant,
+    path::OpticalPathID,
+    bindings::PreparedControllableOpticPathBindings,
+    binding_range::UnitRange{Int},
+)
+    optics = getfield(plant, :controllable_optics)
+    @inbounds for binding in binding_range
+        optic_slot = prepared_controllable_optic_slot(bindings, binding)
+        optic = optics[optic_slot]
+        _require_event_path_optic_placement(
+            controllable_optic_execution_role(optic.implementation),
+            controllable_optic_placement(optic),
+            controllable_optic_id(optic.definition),
+            path,
+        )
+    end
+    return nothing
+end
+
 @inline _require_linear_reduced_order_provider(
     implementation::PreparedLinearReducedOrderProvider) = implementation
 
@@ -808,15 +894,22 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
     scheduler::PreparedEventScheduler)
     Base.@nospecialize plant
     paths = Memory{_PreparedPlantEventPath}(undef, length(definitions))
+    bindings = getfield(plant, :controllable_optic_path_bindings)
     @inbounds for index in eachindex(definitions)
         definition = definitions[index]
         path = _event_prepared_path(plant, definition.path)
         rngs = _prepared_event_path_rngs(plant, path)
         _require_rng_owner_binding(rngs, path)
         handle = event_generator_handle(scheduler, OpticalSamplePhase, index)
+        binding_range = prepared_controllable_optic_binding_range(
+            bindings, definition.path)
+        requires_full_optical =
+            _event_path_requires_full_optical(definition.path, owners)
+        requires_full_optical && _require_event_path_optic_placements(
+            plant, definition.path, bindings, binding_range)
         paths[index] = _PreparedPlantEventPath(definition.path, path, rngs,
             definition.schedule, definition.origin, handle,
-            _event_path_requires_full_optical(definition.path, owners))
+            requires_full_optical, first(binding_range), last(binding_range))
     end
     return paths
 end
@@ -884,6 +977,28 @@ function _require_all_autonomous_optics_bound(optics, definitions)
     return nothing
 end
 
+function _require_autonomous_path_visibility(
+    ::AllPathVisibility,
+    optic::ControllableOpticID,
+    path::OpticalPathID,
+)
+    _plant_event_loop_error(:invalid_autonomous_visibility,
+        "path-local autonomous controllable optic $optic must select only " *
+        "its coupled path $path")
+end
+
+function _require_autonomous_path_visibility(
+    visibility::SelectedPathVisibility,
+    optic::ControllableOpticID,
+    path::OpticalPathID,
+)
+    paths = selected_path_ids(visibility)
+    length(paths) == 1 && only(paths) == path && return nothing
+    _plant_event_loop_error(:invalid_autonomous_visibility,
+        "path-local autonomous controllable optic $optic must select only " *
+        "its coupled path $path; got $(paths)")
+end
+
 function _require_unique_autonomous_optic_couplings(bindings)
     @inbounds for right in 2:length(bindings), left in 1:(right - 1)
         _autonomous_optic_couplings_conflict(
@@ -909,6 +1024,9 @@ function _prepare_event_autonomous_optics(definitions, optics, paths,
         _require_autonomous_execution_role(
             controllable_optic_execution_role(optic.implementation),
             definition.optic)
+        _require_autonomous_path_visibility(
+            controllable_optic_visibility(optic), definition.optic,
+            definition.path)
         path_slot = _event_path_slot(paths, definition.path)
         path = paths[path_slot]
         path.requires_full_optical || _plant_event_loop_error(
@@ -1073,6 +1191,8 @@ function prepare_plant_event_loop(plant::PreparedPlant,
         capacity=length(generator_definitions))
     actions = _prepared_event_actions(scheduler)
     optics = _prepare_event_controllable_optics(plant)
+    optic_path_bindings =
+        getfield(plant, :controllable_optic_path_bindings)
     command_endpoints = _prepare_event_command_endpoints(plant, scheduler)
     paths = _prepare_event_paths(plant, sample_definitions, owners,
         scheduler)
@@ -1085,8 +1205,8 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
         getfield(getfield(plant, :rngs), :atmosphere))
     return PreparedPlantEventLoop(_PlantEventLoopBinding(), atmosphere,
-        atmosphere_rng, scheduler, actions, optics, command_endpoints, paths,
-        acquisitions, autonomous_optics,
+        atmosphere_rng, scheduler, actions, optics, optic_path_bindings,
+        command_endpoints, paths, acquisitions, autonomous_optics,
         _prepared_trigger_topology(definition.trigger_topology))
 end
 
@@ -3243,12 +3363,15 @@ function _apply_due_controllable_optics!(
     state::PlantEventLoopState,
     due_paths::Memory{Bool})
     isempty(prepared.optics) && return nothing
+    bindings = prepared.optic_path_bindings
     @inbounds for path_index in eachindex(prepared.paths)
         due_paths[path_index] || continue
         path = prepared.paths[path_index]
         path.requires_full_optical || continue
         input = path.path.input
-        for optic_index in eachindex(prepared.optics)
+        for binding in path.optic_binding_start:path.optic_binding_stop
+            optic_index =
+                prepared_controllable_optic_slot(bindings, binding)
             optic = prepared.optics[optic_index]
             _apply_event_controllable_optic_surface!(
                 controllable_optic_execution_role(optic.implementation),
