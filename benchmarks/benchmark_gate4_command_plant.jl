@@ -252,6 +252,9 @@ function run_gate4_command_plant_benchmark()
     allocation_cycles = parse(Int, get(ENV,
         "AOS_GATE4_COMMAND_ALLOCATION_CYCLES",
         string(contract["allocation_cycles"])))
+    endpoint_allocation_cycles = parse(Int, get(ENV,
+        "AOS_GATE4_COMMAND_ENDPOINT_ALLOCATION_CYCLES",
+        string(contract["endpoint_allocation_cycles"])))
     replay_cycles = parse(Int, get(ENV,
         "AOS_GATE4_COMMAND_REPLAY_CYCLES",
         string(contract["replay_cycles"])))
@@ -263,6 +266,8 @@ function run_gate4_command_plant_benchmark()
     warmup >= 0 || error("AOS_GATE4_COMMAND_WARMUP must be >= 0")
     allocation_cycles > 0 ||
         error("AOS_GATE4_COMMAND_ALLOCATION_CYCLES must be > 0")
+    endpoint_allocation_cycles > 0 ||
+        error("AOS_GATE4_COMMAND_ENDPOINT_ALLOCATION_CYCLES must be > 0")
     replay_cycles > 0 ||
         error("AOS_GATE4_COMMAND_REPLAY_CYCLES must be > 0")
     long_run_cycles > 0 ||
@@ -292,6 +297,9 @@ function run_gate4_command_plant_benchmark()
             Gate4Plant.validate_independent_exposure_and_reordering(workload),
         "atomic_application" =>
             Gate4Plant.validate_atomic_application(workload),
+        "zero_allocation_endpoint" =>
+            Gate4Plant.validate_zero_allocation_endpoint(
+                endpoint_allocation_cycles),
         "operation_replay" =>
             Gate4Plant.validate_operation_replay(workload, replay_cycles),
         "fixed_storage" => Gate4Plant.validate_fixed_storage(

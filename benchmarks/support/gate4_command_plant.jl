@@ -700,4 +700,85 @@ function validate_fixed_storage(raw::AbstractDict, warmup_cycles::Int,
     )
 end
 
+mutable struct ScalarEndpointOperation{E,S,W}
+    endpoint::E
+    state::S
+    workspace::W
+    sequence::UInt64
+end
+
+function prepare_scalar_endpoint_operation()
+    schema = command_schema(:allocation_probe)
+    endpoint = AOSPlant.prepare_command_endpoint(
+        schema; capacity=1, ordinal=1)
+    return ScalarEndpointOperation(
+        endpoint,
+        AOSPlant.CommandEndpointState(endpoint),
+        AOSPlant.CommandDispositionWorkspace(endpoint),
+        UInt64(0),
+    )
+end
+
+@inline function (operation::ScalarEndpointOperation)()
+    sequence = operation.sequence + UInt64(1)
+    timestamp = AOSPlant.PlantTimestamp(sequence)
+    admission = AOSPlant.admit_plant_command!(
+        operation.workspace,
+        operation.endpoint,
+        operation.state,
+        AOSPlant.PlantCommand(
+            AOSPlant.command_schema(operation.endpoint),
+            sequence,
+            timestamp,
+            0.25,
+        ),
+        timestamp,
+    )
+    AOSPlant.command_admission_status(admission) ==
+        AOSPlant.CommandAdmittedReady ||
+        error("zero-allocation probe command was not ready")
+    claim = AOSPlant.claim_next_application_ready_command!(
+        operation.endpoint, operation.state, timestamp)
+    claim === nothing &&
+        error("zero-allocation probe did not produce a command claim")
+    AOSPlant.claimed_command_payload(
+        operation.endpoint, operation.state, claim) == 0.25 ||
+        error("zero-allocation probe payload changed")
+    AOSPlant.mark_plant_command_applied!(
+        operation.workspace, operation.endpoint, operation.state, claim)
+    AOSPlant.command_disposition_count(operation.workspace) == 1 ||
+        error("zero-allocation probe lost its terminal disposition")
+    AOSPlant.clear_command_dispositions!(operation.workspace)
+    operation.sequence = sequence
+    return nothing
+end
+
+function run_scalar_endpoint_cycles!(
+    operation::ScalarEndpointOperation, cycles::Int)
+    cycles >= 0 || error("endpoint-cycle count must be nonnegative")
+    @inbounds for _ in 1:cycles
+        operation()
+    end
+    return nothing
+end
+
+function validate_zero_allocation_endpoint(cycles::Int)
+    cycles > 0 || error("zero-allocation endpoint cycles must be positive")
+    operation = prepare_scalar_endpoint_operation()
+    operation()
+    run_scalar_endpoint_cycles!(operation, cycles)
+    GC.gc()
+    allocated_bytes = Int64(@allocated run_scalar_endpoint_cycles!(
+        operation, cycles))
+    allocated_bytes == 0 ||
+        error("standalone command endpoint allocated $allocated_bytes bytes")
+    return Dict{String,Any}(
+        "cycles" => cycles,
+        "allocated_bytes" => allocated_bytes,
+        "allocated_bytes_per_cycle" => 0.0,
+        "zero_allocation" => true,
+        "terminal_dispositions" => cycles,
+    )
+end
+
 end # module
