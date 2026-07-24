@@ -31,6 +31,10 @@ hardware-validated GPU workflows. The core package now has:
   canonical plant timeline, bounded trigger fan-out and faults, conventional
   detector lifecycles, fixed prepared storage, and clean scheduler/composed-
   plant CPU evidence
+- a completed Gate 4A transport-neutral `AdaptiveOpticsHIL.jl` serial CPU
+  vertical slice with injected execution time, canonical command/outcome and
+  complete-product ports, bounded lease ownership, a command-responsive fake
+  RTC loop, and qualified fixed-arrival evidence
 - a canonical `AdaptiveOpticsSim.Plant` owner for HIL-neutral plant time,
   topology, commands, acquisition events, providers, preparation, and event
   composition, with a bounded root export surface and explicit Julia 1.12 API
@@ -44,8 +48,9 @@ external-RTC HIL development, following the maintained specifications indexed
 by [`hil-package-boundary.md`](hil-package-boundary.md) and tracking completion
 in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 
-1. Preserve the completed HIL prerequisite Gates 0 and 1 while implementing
-   the proposed general HIL runtime. Gate 0 separates telescope aperture/geometry
+1. Preserve the completed HIL prerequisite Gates 0 and 1 and the qualified
+   Gate 4A companion boundary while extending the general HIL runtime. Gate 0
+   separates telescope aperture/geometry
    from caller-owned optical
    planes and propagation workspaces; separate shared atmosphere evolution from
    path-local NGS/LGS/source rendering; remove temporal cadence from the
@@ -65,10 +70,10 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    science, calibration, atmosphere, and controllable-optic path now consumes
    an explicit `PupilFunction` or field product. Preserve CPU, CUDA, and AMDGPU
    correctness, residency, allocation, and latency evidence throughout the HIL
-   migration. Gate 1 freezes the breaking plant-oriented API, package/type
+   migration. Gate 1 froze the breaking plant-oriented API, package/type
    boundaries, atmosphere token/materialization lifetime, deterministic RNG
    ownership, detector event semantics, clock sequencing, and command boundary
-   before implementation begins.
+   before companion implementation began.
 2. Preserve the completed Gate 2 schedule-free plant boundary. It composes
    immutable shared atmosphere/telescope/path definitions, prepared branch-
    local executors, independent acquisition owners, stable per-owner RNGs, and
@@ -120,12 +125,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    conjugate placement and path visibility remain Gate 5.
    Operational execution-clock ingress liveness belongs to the later HIL
    lifecycle boundary.
-5. Immediately prove a minimal serial CPU HIL vertical slice: one scheduled
+5. Preserve the completed minimal serial CPU HIL vertical slice: one scheduled
    acquisition, one command-responsive optic, an injected `Clocks.jl` clock,
    HIL submission descriptors mapped into core plant commands, canonical
    complete-product and command/outcome ports, bounded SPSC/lease ownership, a
-   deterministic fake RTC, and fixed-arrival evidence. Do this before worker,
-   GPU, transport-specific, or placement-planner complexity.
+   deterministic fake RTC, and fixed-arrival evidence. The qualified boundary
+   remains the serial oracle while worker, GPU, transport-specific, and
+   placement-planner capabilities advance through their own gates.
 6. Add path-specific NCPA, MCAO/MOAO geometry, prepared CPU execution groups,
    then single-GPU direction batching and physical device identity behind
    numerical, allocation, residency, and fixed-arrival evidence.
