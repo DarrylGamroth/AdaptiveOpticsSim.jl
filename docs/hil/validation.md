@@ -103,7 +103,8 @@ evidence includes:
   selected branch
 - native sampled-NCPA and detailed `Proper.jl` science-path handoff conventions
 - exact execution-clock pacing tests using `Clocks.update!` and
-  `Clocks.advance!` on a `CachedEpochClock` in the HIL scheduler
+  `Clocks.advance!` on a monotonic-nanosecond `CachedNanoClock` in the HIL
+  scheduler
 - deterministic external-domain offset and drift mapping into canonical plant
   time
 - deterministic trigger-source and distribution-link fault record/replay,
