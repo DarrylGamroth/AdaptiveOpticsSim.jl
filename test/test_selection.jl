@@ -112,6 +112,16 @@ const TEST_GROUP_SPECS = (
     "sensors" => ("detectors-wfs",),
     "references" => ("reference-tutorials", "gate0"),
     "backends" => ("ka-cpu", "backend-smoke"),
+    "gate4" => (
+        "plant-command-schemas",
+        "plant-command-admission",
+        "plant-command-application",
+        "plant-event-composition",
+        "plant-command-composition",
+        "plant-controller-routing",
+        "plant-reduced-order",
+        "plant-autonomous-optics",
+    ),
 )
 
 test_suite_names() = Tuple(spec.name for spec in TEST_SUITE_SPECS)
