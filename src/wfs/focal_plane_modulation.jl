@@ -12,6 +12,26 @@ abstract type AbstractFocalPlaneModulation end
 """A stationary focal-plane sensor with one unit-weight optical sample."""
 struct NoModulation <: AbstractFocalPlaneModulation end
 
+@kernel function circular_modulation_phases_kernel!(
+    phases, radius, phase_offset, coordinate_start, coordinate_step,
+    point_count::Int, resolution::Int)
+    axis_1, axis_2, point = @index(Global, NTuple)
+    if axis_1 <= resolution && axis_2 <= resolution && point <= point_count
+        angle = phase_offset +
+            typeof(radius)(2pi) * typeof(radius)(point - 1) /
+                typeof(radius)(point_count)
+        sine, cosine = sincos(angle)
+        offset_x = radius * cosine
+        offset_y = radius * sine
+        coordinate_1 = coordinate_start +
+            typeof(radius)(axis_1 - 1) * coordinate_step
+        coordinate_2 = coordinate_start +
+            typeof(radius)(axis_2 - 1) * coordinate_step
+        @inbounds phases[axis_1, axis_2, point] = cis(
+            offset_x * coordinate_2 + offset_y * coordinate_1)
+    end
+end
+
 """
     CircularModulation(radius; samples, phase_offset=0)
 
@@ -151,6 +171,76 @@ function prepare_focal_plane_modulation(policy::AbstractFocalPlaneModulation,
     end
     copyto!(phases, host_phases)
     return PreparedFocalPlaneModulation(policy, phases, amplitude_weights)
+end
+
+@inline function _circular_modulation_coordinate_step(
+    ::Type{T}, resolution::Int) where {T<:AbstractFloat}
+    resolution == 1 && return zero(T)
+    return T(2pi) / T(resolution - 1)
+end
+
+function _update_cycle_averaged_circular_modulation!(
+    ::ScalarCPUStyle, prepared::PreparedFocalPlaneModulation,
+    radius::T, phase_offset::T) where {T<:AbstractFloat}
+    phases = prepared.phases
+    resolution = size(phases, 1)
+    point_count = size(phases, 3)
+    coordinates = range(-T(pi), T(pi); length=resolution)
+    @inbounds for point in axes(phases, 3)
+        angle = phase_offset + T(2pi * (point - 1) / point_count)
+        sine, cosine = sincos(angle)
+        offset_x = radius * cosine
+        offset_y = radius * sine
+        for axis_2 in axes(phases, 2), axis_1 in axes(phases, 1)
+            phases[axis_1, axis_2, point] = cis(
+                offset_x * coordinates[axis_2] +
+                offset_y * coordinates[axis_1])
+        end
+    end
+    return prepared
+end
+
+function _update_cycle_averaged_circular_modulation!(
+    style::AcceleratorStyle, prepared::PreparedFocalPlaneModulation,
+    radius::T, phase_offset::T) where {T<:AbstractFloat}
+    phases = prepared.phases
+    resolution = size(phases, 1)
+    point_count = size(phases, 3)
+    coordinate_start = -T(pi)
+    coordinate_step = _circular_modulation_coordinate_step(T, resolution)
+    launch_kernel!(style, circular_modulation_phases_kernel!, phases,
+        radius, phase_offset, coordinate_start, coordinate_step,
+        point_count, resolution; ndrange=size(phases))
+    return prepared
+end
+
+"""
+    update_cycle_averaged_circular_modulation!(
+        prepared, radius; enabled=true)
+
+Regenerate the already allocated circular focal-plane quadrature at `radius`
+without changing its point count, normalized weights, backend, or numerical
+quadrature origin. A disabled waveform is centered by setting every prepared
+quadrature point to zero offset. This operation does not integrate detector
+time or evaluate trigger-relative waveform phase.
+"""
+function update_cycle_averaged_circular_modulation!(
+    prepared::PreparedFocalPlaneModulation{<:CircularModulation},
+    radius::T; enabled::Bool=true) where {T<:AbstractFloat}
+    isfinite(radius) && radius >= zero(T) || throw(InvalidConfiguration(
+        "cycle-averaged circular modulation radius must be finite and nonnegative"))
+    eltype(prepared.amplitude_weights) === T || throw(InvalidConfiguration(
+        "cycle-averaged circular modulation radius precision must match its prepared weights"))
+    size(prepared.phases, 1) == size(prepared.phases, 2) || throw(
+        InvalidConfiguration(
+            "cycle-averaged circular modulation phases must use a square pupil grid"))
+    size(prepared.phases, 3) == prepared.policy.samples || throw(
+        InvalidConfiguration(
+            "cycle-averaged circular modulation point count changed after preparation"))
+    effective_radius = enabled ? radius : zero(T)
+    return _update_cycle_averaged_circular_modulation!(
+        execution_style(prepared.phases), prepared, effective_radius,
+        T(prepared.policy.phase_offset))
 end
 
 function legacy_modulation_policy(modulation::T,

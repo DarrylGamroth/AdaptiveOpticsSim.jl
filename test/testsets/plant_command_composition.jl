@@ -135,6 +135,7 @@ function Plant.stage_controllable_optic_command!(
     workspace::CommandCompositionOpticWorkspace{T},
     endpoint::CommandEndpointID,
     command,
+    ::PlantTimestamp,
 ) where {T}
     endpoint == prepared.endpoint ||
         throw(PlantCommandError(:physical_application,
@@ -152,7 +153,8 @@ function Plant.stage_controllable_optic_command!(
     ::ArrayInitialCommandOpticState,
     workspace::ArrayInitialCommandOpticWorkspace,
     endpoint::CommandEndpointID,
-    command::AbstractVector)
+    command::AbstractVector,
+    ::PlantTimestamp)
     endpoint == prepared.endpoint ||
         throw(PlantCommandError(:physical_application,
             :endpoint_mismatch, "array-initial test received another endpoint"))
@@ -165,6 +167,7 @@ function Plant.commit_controllable_optic_command!(
     state::CommandCompositionOpticState{T},
     workspace::CommandCompositionOpticWorkspace{T},
     ::CommandEndpointID,
+    ::PlantTimestamp,
 ) where {T}
     state.visible = workspace.staged
     return nothing
@@ -174,7 +177,8 @@ function Plant.commit_controllable_optic_command!(
     ::PreparedArrayInitialCommandOptic,
     state::ArrayInitialCommandOpticState,
     workspace::ArrayInitialCommandOpticWorkspace,
-    ::CommandEndpointID)
+    ::CommandEndpointID,
+    ::PlantTimestamp)
     copyto!(state.visible, workspace.staged)
     return nothing
 end

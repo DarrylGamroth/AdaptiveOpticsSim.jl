@@ -41,6 +41,8 @@ const TEST_SUITE_SPECS = (
         "testsets/plant_controller_routing.jl"),
     TestSuiteSpec("plant-reduced-order",
         "testsets/plant_reduced_order.jl"),
+    TestSuiteSpec("plant-autonomous-optics",
+        "testsets/plant_autonomous_optics.jl"),
     TestSuiteSpec("control-primitives", "testsets/control_primitives.jl"),
     TestSuiteSpec(
         "detectors-wfs",
@@ -96,6 +98,7 @@ const TEST_GROUP_SPECS = (
         "plant-command-composition",
         "plant-controller-routing",
         "plant-reduced-order",
+        "plant-autonomous-optics",
         "plant-preparation",
         "plant-providers",
         "plant-rng",

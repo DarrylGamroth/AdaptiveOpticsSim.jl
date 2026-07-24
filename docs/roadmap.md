@@ -94,7 +94,7 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    model with prepared core plant command schemas, bounded
    timing and replayable plant-time command-silence semantics, sampled device-
    feedback acquisitions, and prepared plane groups as a deliberate breaking
-   change. The first five Gate 4 slices now record stable physical-optic and
+   change. The first eight Gate 4 slices now record stable physical-optic and
    independently latched endpoint identities, immutable versioned semantic
    payload schemas, a bounded endpoint owner with copied payload
    slots, sequence history, future-time admission, application-ready claims,
@@ -105,13 +105,15 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    half-open detector exposure, additive co-conjugated surfaces, and explicit
    all-or-none multi-optic transactions. Named controller products now bind
    zero-copy to exact prepared endpoints, and the superseded packed
-   single-optic runtime has been removed without compatibility adapters. The
-   A deterministic linear reduced-order direct-measurement model now validates
+   single-optic runtime has been removed without compatibility adapters. A
+   deterministic linear reduced-order direct-measurement model now validates
    command-responsive scheduled execution, matched loop closure, and expected
-   degradation inside its declared envelope. The remaining Gate 4 slices add
-   sampled device feedback, autonomous optical-device timing, and final
-   cross-backend closure. Explicit conjugate placement and path visibility
-   remain Gate 5.
+   degradation inside its declared envelope. Sampled device feedback and a
+   trigger-relative autonomous circular-Pyramid model now add bounded
+   setpoints, free-running/source/delivered-reset phase relationships, and
+   allocation-free cycle-averaged optical regeneration without point-wise RTC
+   commands. Only final cross-backend closure remains in Gate 4. Explicit
+   conjugate placement and path visibility remain Gate 5.
    Operational execution-clock ingress liveness belongs to the later HIL
    lifecycle boundary.
 5. Immediately prove a minimal serial CPU HIL vertical slice: one scheduled

@@ -77,6 +77,11 @@ Current CPU-supported families:
   matched loop closure; declared residual metric, operating envelope, and
   omitted effects; and unused full-optical path bypass. Support is limited to
   the maintained CPU validity envelope in `MV-26`
+- trigger-relative autonomous circular-Pyramid modulation with bounded
+  radius/frequency/phase/enabled setpoints, free-running/source/delivered-reset
+  relationships, deterministic branch faults, and an allocation-free
+  cycle-averaged CPU optical update. This does not claim time-resolved
+  modulation or a physical steering-mirror servo
 - the schedule-free acquisition product-provider boundary: run-immutable
   full-optical or nonresponsive unchanged/copy/bounded-replay selection,
   invariant caller-owned product contracts, unused-path bypass, and zero
@@ -164,11 +169,11 @@ Current expectation:
 
 The most recent Julia 1.12.6 AMDGPU hardware target before the packed-runtime
 removal passed all `434` checks. The retained numerical surfaces remain the
-support baseline; the newly added controller-routing hardware check must pass
-the final Gate 4 backend closure before accelerator routing is support-claimed.
-A later local Julia installation failure prevented a replacement raw latency
-artifact, so the July 14 characterization remains the maintained AMD
-performance evidence.
+support baseline; the newly added controller-routing and autonomous circular-
+modulation paths must pass the final Gate 4 backend closure before their
+accelerator execution is support-claimed. A later local Julia installation
+failure prevented a replacement raw latency artifact, so the July 14
+characterization remains the maintained AMD performance evidence.
 
 ### GPU support-boundary rule
 

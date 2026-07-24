@@ -466,9 +466,10 @@ one or more immutable `PlantCommandSchema` values, while preparation workspaces,
 mutable optic/simulation/acquisition and command state, schedules, RNG streams,
 queues, transport, and HIL descriptors are intentionally absent.
 
-The first five Gate 4 slices record controllable-optic/endpoint ownership,
+The first eight Gate 4 slices record controllable-optic/endpoint ownership,
 versioned semantic payload contracts, bounded endpoint state, physical-optic
-preparation, and deterministic command/event composition. A
+preparation, deterministic command/event composition, controller-output
+routing, sampled device feedback, and autonomous periodic optics. A
 `CommandEndpointConfiguration` supplies each declared endpoint's bounded
 calendar/history capacities, copied initial and optional safe values, and
 payload-storage backend. `prepare_plant` requires exactly one configuration
@@ -483,10 +484,26 @@ state and scratch. Array-valued initial commands passed to each state
 constructor are fresh state-owned copies rather than caller or prepared-plan
 storage. During command application,
 `stage_controllable_optic_command!` validates and stages one complete
-effective endpoint value without changing the visible surface. After a
-successful stage, `commit_controllable_optic_command!` must be a bounded,
-nonthrowing publication operation. `apply_controllable_optic_surface!` applies
-the visible physical response to an already materialized path input.
+effective endpoint value without changing the visible surface. Both staging
+and commit receive the plant-effective timestamp so a time-dependent physical
+model can preserve continuity. After a successful stage,
+`commit_controllable_optic_command!` must be a bounded, nonthrowing publication
+operation. `apply_controllable_optic_surface!` applies the visible physical
+response to an already materialized path input.
+
+`AutonomousPeriodicOpticDefinition` binds one path-local autonomous optic to a
+full-optical path, immutable fidelity, and `FreeRunningPhaseReference`,
+`TriggerSourcePhaseReference`, or `TriggerResetPhaseReference`.
+`CircularPyramidModulator` is the native model and declares separate bounded
+radius, frequency, phase, and enabled endpoint roles. The corresponding
+`CycleAveragedModulationFidelity` updates the existing prepared circular
+quadrature in place from radius and enabled state; frequency and
+trigger-relative phase remain analytic inspection state because they do not
+change a complete-cycle average. The qualified
+`autonomous_waveform_phase`, `autonomous_waveform_offset`, reference
+timestamp/sequence/count, enabled, and radius accessors expose that state.
+Time-resolved modulation and steering-servo dynamics are not part of this
+baseline.
 
 Successful admission copies caller payload storage. Late apply-now commands
 retain their requested time but schedule at the current plant time; the
@@ -537,9 +554,11 @@ terminal endpoint outcomes into a fixed-capacity
 `command_disposition_count` and `command_disposition`, then acknowledge them
 with `clear_command_dispositions!`.
 
-Gate 4 currently executes all prepared controllable optics as one common
+Gate 4 executes default pupil-surface controllable optics as one common
 co-conjugated group, in canonical optic-identity order, on every due prepared
-path. Explicit plane placement, conjugate transforms, and path visibility
+path. A prepared path-local autonomous execution role is excluded from that
+group and runs only through its exact `AutonomousPeriodicOpticDefinition`.
+Explicit general plane placement, conjugate transforms, and path visibility
 remain later work. Device-specific stroke, slew, settling, hysteresis, and
 feedback remain model extensions or later physical-model work. HIL session,
 external-clock, lease, ring, completion-credit, and transport metadata remain

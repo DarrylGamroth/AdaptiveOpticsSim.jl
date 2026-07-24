@@ -479,31 +479,48 @@ latency or fixed-arrival capacity.
 ### Autonomous periodic optical devices
 
 Some optical devices execute a continuous local waveform rather than waiting
-for one external command per optical sample. A pyramid-WFS modulation mirror is
+for one external command per optical sample. A Pyramid WFS modulation mirror is
 the principal example: a local controller repeatedly drives a tip/tilt path,
 while the detector exposure is normally phase-locked to that motion. The RTC or
-supervisory integration may change radius, frequency, phase, dither, mode, or
-start/stop state through an ordinary bounded command endpoint, but the HIL
-boundary does not carry every waveform point.
+supervisory integration sends ordinary bounded setpoints, but the HIL boundary
+does not carry every waveform point.
 
-The waveform is evaluated from the effective setpoint state and its relationship
-to delivered trigger edges at each required optical sample. The trigger
-topology expresses whether the modulator produces the detector trigger, the
-detector trigger resets the modulation phase, both follow a common source, or a
-free-running waveform exposes a phase reference against which detector triggers
-are delivered. Cycles per exposure, phase offset, distribution delay/skew,
-jitter, and dropped or duplicate edges are explicit run configuration. The
-baseline need not simulate the modulation controller's internal servo clock.
+The implemented native `CircularPyramidModulator` has independent bounded
+radius, frequency, phase-offset, and enabled endpoints. Enabled state is its
+start/stop control; another model may explicitly declare dither or mode
+endpoints. Its analytic phase is evaluated from plant time without advancing a
+per-point cursor. Integer elapsed time is range-reduced before phase
+multiplication, and endpoint precisions narrower than `Float64` use widened
+phase arithmetic, so a long-running `Float32` optical model does not lose
+waveform phase merely because its run timestamp has grown.
 
-The baseline requires one prepared fidelity policy and leaves a second as a
-profile-driven extension:
+`AutonomousPeriodicOpticDefinition` selects one immutable relationship:
 
-- **cycle averaged:** evaluate a bounded modulation quadrature against one
-  frozen optical epoch; this preserves the current fast pyramid model when an
-  exposure spans an integral cycle and intra-exposure evolution is neglected
-- **time resolved (profile-driven):** evaluate modulation phase and the applicable atmosphere
-  and optic snapshots at explicit integration sample times; this supports
-  partial cycles, dither, mirror response, and trigger synchronization faults
+- `FreeRunningPhaseReference` uses its declared plant-time origin
+- `TriggerSourcePhaseReference` resets at source realization, before
+  distribution; an outgoing source drop can therefore suppress consumers
+  without inventing a stopped local oscillator
+- `TriggerResetPhaseReference` resets only on physical consumer delivery and
+  therefore observes that branch's propagation delay, skew, jitter, persistent
+  phase step, drop, and duplicate occurrence
+
+Physical delivered time drives the reset. A timestamp-label offset changes the
+reported label only. The retained reference timestamp, nominal source sequence,
+and delivered-reference count make deterministic trigger behavior observable.
+Common-trigger behavior is ordinary fan-out: detector and modulator use
+separate consumers and may therefore have independent branch faults.
+
+The implemented `CycleAveragedModulationFidelity` evaluates one bounded,
+normalized circular quadrature against one frozen optical epoch. Radius and
+enabled state regenerate preallocated quadrature storage. Frequency,
+instantaneous phase, and phase-reset history do not change a complete-cycle
+average. The detector owns exposure integration, so no quadrature weight is an
+exposure fraction.
+
+Time-resolved modulation remains a profile-driven extension. It must evaluate
+the applicable atmosphere and optic snapshots at explicit integration sample
+times when a maintained claim includes partial cycles, dither trajectory,
+mirror response, or phase-dependent synchronization effects.
 
 The fidelity policy and quadrature/sample count are immutable during a run.
 Changing a physical setpoint uses the normal effective-time command semantics;
@@ -676,9 +693,11 @@ is implemented:
 6. open exposure or row-band intervals beginning at `t`, including declared
    trigger-driven transitions
 7. materialize the atmosphere-dependent input of each unique optical path
-   needed by sample events at `t`, evaluate the remaining path and any
-   autonomous waveform at its trigger-relative phase, and accumulate those
-   samples only into intervals containing `t`
+   needed by sample events at `t`, evaluate each bound autonomous optic under
+   its prepared fidelity, execute the remaining path, and accumulate those
+   samples only into intervals containing `t`. The native cycle-averaged
+   Pyramid policy updates quadrature from effective radius/enable state while
+   retaining analytic trigger-relative phase for observability
 8. complete due detector-readout events, assign a product stream sequence, and
    mark the complete product ready; a later HIL owner attempts bounded port
    publication without changing the plant event timestamp

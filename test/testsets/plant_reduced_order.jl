@@ -103,7 +103,8 @@ function Plant.stage_controllable_optic_command!(
     ::ReducedOrderTestOpticState,
     workspace::ReducedOrderTestOpticWorkspace,
     endpoint::CommandEndpointID,
-    command::AbstractVector)
+    command::AbstractVector,
+    ::PlantTimestamp)
     endpoint == prepared.endpoint || throw(PlantCommandError(
         :physical_application, :endpoint_mismatch,
         "reduced-order test optic received another endpoint"))
@@ -115,7 +116,8 @@ function Plant.commit_controllable_optic_command!(
     ::PreparedReducedOrderTestOptic,
     state::ReducedOrderTestOpticState,
     workspace::ReducedOrderTestOpticWorkspace,
-    ::CommandEndpointID)
+    ::CommandEndpointID,
+    ::PlantTimestamp)
     copyto!(state.visible, workspace.staged)
     return nothing
 end

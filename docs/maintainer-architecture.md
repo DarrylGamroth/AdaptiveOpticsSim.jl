@@ -143,13 +143,15 @@ Examples:
 - `PreparedPlantEventLoop` as the HIL-neutral serial virtual-time composition
   of independent endpoint command generators, detector or direct-measurement
   acquisition lifecycles, optical sample schedules, one atmosphere timeline
-  for due full-optical work, and canonical physical-optic application. Plant
-  state is right-continuous and exposure intervals are half-open. Explicit
-  `PlantCommandTransaction` values provide all-or-none admission and physical
-  publication across distinct optics; equal time or placement alone does not.
-  The current Gate 4 surface operation treats every prepared optic as one
-  common co-conjugated group on every path, pending explicit placement and
-  visibility
+  for due full-optical work, canonical common-pupil surface application, and
+  exact path-local autonomous-optic bindings. Plant state is right-continuous
+  and exposure intervals are half-open. Explicit `PlantCommandTransaction`
+  values provide all-or-none admission and physical publication across
+  distinct optics; equal time or placement alone does not. Default
+  pupil-surface optics form one common co-conjugated group on every path.
+  `AutonomousPathExecutionRole` instead excludes an optic from that group and
+  requires one explicit `AutonomousPeriodicOpticDefinition`; general placement
+  and visibility remain later work
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

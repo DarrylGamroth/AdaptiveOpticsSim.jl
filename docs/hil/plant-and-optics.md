@@ -853,38 +853,70 @@ mode manager. Those remain in their owning later gates; the evaluator's
 explicit plant time and state are sufficient for deterministic schedule-free
 execution without assigning control authority to core.
 
-## Pyramid-WFS Modulation
+## Pyramid WFS Modulation
 
-A modulated pyramid WFS contains a fast path-local steering optic, but that
+A modulated Pyramid WFS contains a fast path-local steering optic, but that
 optic is not normally commanded point by point by the external RTC. A local
 waveform generator repeatedly drives the modulation path. RTC or supervisory
-integration may change modulation radius, frequency, phase, dither, mode, or
-start/stop state through a bounded setpoint command endpoint.
+integration changes declared bounded setpoints rather than sending the
+waveform samples.
 
-The modulation waveform and detector acquisition share an explicit trigger
-relationship. The modulator may generate the detector trigger, a detector
-trigger may reset modulation phase, both may follow a common trigger source, or
-a free-running waveform may expose the phase reference used to place detector
-triggers. Per-branch distribution delay, skew, jitter, and dropped or duplicate
-edges are modeled by the trigger topology in
-[`time-and-scheduling.md`](time-and-scheduling.md), not by streaming waveform
-points through an RTC port.
+The native contract is `CircularPyramidModulator`. It requires four distinct
+absolute scalar endpoint schemas in the
+`CommandBasis(:waveform_setpoint, :pyramid_modulation)` basis:
 
-The existing `PyramidWFS` diffractive implementation averages a prepared set of
-modulation positions against one unchanged path-owned pupil OPD. That remains the
-fast baseline cycle-averaged fidelity policy. Its normalized quadrature weights
-form an optical average and do not supply an exposure-time factor; detector
-acquisition still integrates the resulting rate. A later, profile-driven
-time-resolved capability additionally evaluates the modulation phase,
-atmosphere epoch, and effective optic state at explicit integration sample
-times. It is required only when partial cycles, dither, mirror response, or
-trigger-synchronization faults cannot be represented by the cycle-averaged
-contract; it does not block the first HIL vertical slice.
+- nonnegative radius in λ/D
+- nonnegative frequency in hertz
+- counterclockwise phase offset in radians
+- binary disabled/enabled state
 
-Cycle-averaged and time-resolved policies share the same optical calibration
-conventions and detector pipeline. Their fidelity, quadrature or sample count,
-cycles per exposure, phase reference, and trigger relationship are prepared
-configuration and recorded in the run manifest.
+Each schema has finite bounds and its own endpoint state, future calendar,
+command-silence policy, optional safe value, and effective timestamp. Enabled
+state is the native start/stop setpoint. Dither, waveform mode, or another
+device-specific setpoint requires a model that explicitly declares its own
+endpoint rather than a universal heterogeneous command vector.
+
+`AutonomousPeriodicOpticDefinition` binds the prepared modulator to exactly one
+full-optical Pyramid path, one immutable fidelity policy, and one phase
+relationship:
+
+- `FreeRunningPhaseReference` uses a configured plant-time origin
+- `TriggerSourcePhaseReference` follows realization of one trigger source,
+  representing a local waveform reference that can also feed a fan-out
+- `TriggerResetPhaseReference` follows physical delivery to one consumer, so
+  its branch independently observes link delay, skew, jitter, phase steps,
+  drops, and duplicates
+
+Preparation rejects an unknown source or consumer, a trigger consumer assigned
+to more than one event owner, a path-local autonomous optic without a binding,
+and two native modulators that would write the same prepared Pyramid
+quadrature. Timestamp-label faults remain reporting effects and do not move a
+physical reset. These relationships reuse the trigger topology in
+[`time-and-scheduling.md`](time-and-scheduling.md); no RTC port streams
+waveform points.
+
+The implemented `CycleAveragedModulationFidelity` regenerates the already
+allocated circular quadrature only when radius or enabled state changes. It
+preserves point count, backend, numerical quadrature origin, and normalized
+weights. Disabled state centers every quadrature point. Frequency, phase, and
+the trigger-relative analytic phase remain observable device state but cannot
+alter a complete-cycle average. A command effective at an optical-sample
+timestamp changes that sample because trigger updates precede command
+application and both precede optical execution.
+
+The existing diffractive `PyramidWFS` then averages that quadrature against one
+unchanged path-owned pupil OPD. The result remains a detector-plane
+photon-arrival-rate product: quadrature weights do not supply exposure time,
+and detector acquisition still integrates its half-open exposure exactly once.
+Changing the operating setpoint does not silently rebuild a WFS calibration
+reference or change the immutable fidelity policy.
+
+Time-resolved modulation remains profile-driven. A profile needs that separate
+fidelity when it claims partial-cycle effects, within-exposure atmosphere or
+optic evolution, dither trajectory, mirror servo response, or phase-dependent
+trigger faults that a complete-cycle average cannot represent. No
+time-resolved or physical steering-servo claim is implied by the native
+baseline.
 
 ## Optical Modeling And NCPA Boundary
 
