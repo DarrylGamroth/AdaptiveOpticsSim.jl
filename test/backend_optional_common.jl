@@ -2976,9 +2976,11 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         zero_padding=1,
     )
     science_rate = form_direct_image!(science_imaging)
+    split_acquisition = prepare_detector_acquisition(split_det, science_rate)
     split_frame = capture!(
         split_det,
-        science_rate;
+        science_rate,
+        split_acquisition;
         rng=MersenneTwister(17),
     )
     AdaptiveOpticsSim.synchronize_backend!(
@@ -2990,14 +2992,20 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         qe=one(T), binning=1, T=T, backend=selector)
     shared_detector_b = Detector(noise=NoiseNone(), integration_time=one(T),
         qe=one(T), binning=1, T=T, backend=selector)
+    shared_acquisition_a = prepare_detector_acquisition(
+        shared_detector_a, science_rate)
+    shared_acquisition_b = prepare_detector_acquisition(
+        shared_detector_b, science_rate)
     shared_frame_a = capture!(
         shared_detector_a,
-        science_rate;
+        science_rate,
+        shared_acquisition_a;
         rng=MersenneTwister(18),
     )
     shared_frame_b = capture!(
         shared_detector_b,
-        science_rate;
+        science_rate,
+        shared_acquisition_b;
         rng=MersenneTwister(18),
     )
     AdaptiveOpticsSim.synchronize_backend!(
