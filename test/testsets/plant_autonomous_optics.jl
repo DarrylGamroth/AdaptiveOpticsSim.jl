@@ -8,6 +8,9 @@ struct AutonomousPyramidAcquisitionModel{T<:AbstractFloat}
     exposure::T
 end
 
+struct UnsupportedAutonomousPhaseReference <:
+    Plant.AbstractWaveformPhaseReference end
+
 Plant.plant_model_definition_style(
     ::Type{<:AutonomousPyramidPathModel}) = ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
@@ -86,22 +89,25 @@ function Plant.prepare_acquisition_provider(
 end
 
 function autonomous_pyramid_schema(::Type{T}, endpoint::Symbol;
+    dimensions=(),
     units::Symbol,
     sign_convention::Symbol,
-    bounds::UniformCommandBounds{T},
+    basis=CommandBasis(:waveform_setpoint, :pyramid_modulation),
+    semantics=AbsoluteCommand,
+    bounds,
     silence_policy=CommandSilencePolicy(),
 ) where {T<:Real}
     return PlantCommandSchema(
         T,
-        ();
+        dimensions;
         id=Symbol(endpoint, :_schema),
         version=1,
         endpoint,
         units,
         sign_convention,
-        basis=CommandBasis(:waveform_setpoint, :pyramid_modulation),
+        basis,
         basis_revision=1,
-        semantics=AbsoluteCommand,
+        semantics,
         bounds,
         value_policy=CommandValuePolicy(),
         sequence_policy=CommandSequencePolicy(),
@@ -142,6 +148,34 @@ function autonomous_pyramid_schemas(;
     )
 end
 
+function autonomous_pyramid_schema_like(schema;
+    T=command_numeric_type(schema),
+    dimensions=command_dimensions(schema),
+    units=command_units(schema),
+    sign_convention=command_sign_convention(schema),
+    basis=command_basis(schema),
+    semantics=command_semantics(schema),
+    bounds=command_bounds(schema),
+)
+    return PlantCommandSchema(
+        T,
+        dimensions;
+        id=command_schema_id(schema),
+        version=command_schema_version(schema),
+        endpoint=command_endpoint_id(schema),
+        units,
+        sign_convention,
+        basis,
+        basis_revision=command_basis_revision(schema),
+        semantics,
+        bounds,
+        value_policy=command_value_policy(schema),
+        sequence_policy=command_sequence_policy(schema),
+        effective_time_policy=command_effective_time_policy(schema),
+        silence_policy=command_silence_policy(schema),
+    )
+end
+
 function autonomous_pyramid_optic(schemas=autonomous_pyramid_schemas();
     id=:pyramid_modulator)
     model = CircularPyramidModulator(
@@ -152,6 +186,36 @@ function autonomous_pyramid_optic(schemas=autonomous_pyramid_schemas();
     )
     return ControllableOpticDefinition(id, model,
         Tuple(schemas))
+end
+
+function autonomous_pyramid_event_definition(;
+    phase_reference=FreeRunningPhaseReference(),
+    trigger_topology=nothing,
+    acquisition_start=PeriodicAcquisitionStart(
+        PeriodicSchedule(period_ns=1_000_000_000, phase_ns=500_000_000)),
+    exposure_ns=20_000_000,
+    sample_period_ns=100_000_000,
+    optic=:pyramid_modulator,
+    path=:pyramid,
+)
+    return PlantEventLoopDefinition(
+        (OpticalSampleDefinition(path,
+            PeriodicSchedule(period_ns=sample_period_ns, phase_ns=0)),),
+        (AcquisitionEventDefinition(
+            :camera,
+            GlobalShutterAcquisitionDefinition(
+                PlantDuration(exposure_ns)),
+            acquisition_start,
+        ),);
+        trigger_topology,
+        autonomous_optics=(
+            AutonomousPeriodicOpticDefinition(
+                optic,
+                path;
+                phase_reference,
+            ),
+        ),
+    )
 end
 
 function autonomous_pyramid_fixture(;
@@ -214,23 +278,12 @@ function autonomous_pyramid_fixture(;
         run_seed=0x7c00,
         command_endpoints=configurations,
     )
-    event_definition = PlantEventLoopDefinition(
-        (OpticalSampleDefinition(:pyramid,
-            PeriodicSchedule(period_ns=sample_period_ns, phase_ns=0)),),
-        (AcquisitionEventDefinition(
-            :camera,
-            GlobalShutterAcquisitionDefinition(
-                PlantDuration(exposure_ns)),
-            acquisition_start,
-        ),);
+    event_definition = autonomous_pyramid_event_definition(;
+        phase_reference,
         trigger_topology,
-        autonomous_optics=(
-            AutonomousPeriodicOpticDefinition(
-                :pyramid_modulator,
-                :pyramid;
-                phase_reference,
-            ),
-        ),
+        acquisition_start,
+        exposure_ns,
+        sample_period_ns,
     )
     prepared = prepare_plant_event_loop(plant, event_definition)
     return (;
@@ -269,6 +322,28 @@ function autonomous_pyramid_error(f)
     return nothing
 end
 
+function autonomous_pyramid_model_preparation_error(fixture, schemas)
+    definition = autonomous_pyramid_optic(schemas)
+    plant_definition = fixture.plant.definition
+    return autonomous_pyramid_error() do
+        Plant.prepare_controllable_optic(
+            Plant.controllable_optic_model(definition),
+            definition,
+            plant_telescope(plant_definition),
+            plant_atmosphere(plant_definition),
+        )
+    end
+end
+
+function autonomous_pyramid_event_preparation_error(fixture; kwargs...)
+    return autonomous_pyramid_error() do
+        prepare_plant_event_loop(
+            fixture.plant,
+            autonomous_pyramid_event_definition(; kwargs...),
+        )
+    end
+end
+
 @inline function autonomous_pyramid_evaluation_allocations(
     implementation, state, coupling, timestamp)
     return @allocated evaluate_autonomous_periodic_optic!(
@@ -298,6 +373,18 @@ end
     @test duplicate_error isa PlantDefinitionError
     @test duplicate_error.reason == :duplicate_endpoint
 
+    endpoint = CommandEndpointID(:same)
+    positional_duplicate_error = autonomous_pyramid_error() do
+        CircularPyramidModulator(
+            endpoint,
+            endpoint,
+            CommandEndpointID(:phase),
+            CommandEndpointID(:enabled),
+        )
+    end
+    @test positional_duplicate_error isa PlantDefinitionError
+    @test positional_duplicate_error.reason == :duplicate_endpoint
+
     invalid_schemas = autonomous_pyramid_schemas(
         radius_units=:metre)
     fixture = autonomous_pyramid_fixture()
@@ -319,6 +406,65 @@ end
     @test schema_error isa PlantPreparationError
     @test schema_error.reason == :command_units
 
+    schema_cases = (
+        (:command_shape, :radius, (; dimensions=(1,))),
+        (:command_semantics, :radius,
+            (; semantics=IncrementalCommand)),
+        (:command_sign_convention, :radius,
+            (; sign_convention=CommandSignConvention(:signed_radius))),
+        (:command_basis, :radius,
+            (; basis=CommandBasis(:actuator_command, :tip_tilt))),
+        (:unbounded_setpoint, :radius,
+            (; bounds=UnboundedCommandValues())),
+        (:negative_setpoint_bound, :radius,
+            (; bounds=UniformCommandBounds(-1.0, 8.0))),
+        (:enabled_type, :enabled,
+            (; T=Float64, bounds=UniformCommandBounds(0.0, 1.0))),
+        (:enabled_bounds, :enabled,
+            (; bounds=UniformCommandBounds(UInt8(0), UInt8(2)))),
+        (:numeric_type, :frequency,
+            (; T=Float32,
+                bounds=UniformCommandBounds(0.0f0, 2_000.0f0))),
+    )
+    for (reason, role, overrides) in schema_cases
+        replacement = autonomous_pyramid_schema_like(
+            getproperty(fixture.schemas, role);
+            overrides...,
+        )
+        schemas = merge(
+            fixture.schemas,
+            NamedTuple{(role,)}((replacement,)),
+        )
+        error = autonomous_pyramid_model_preparation_error(
+            fixture, schemas)
+        @test error isa PlantPreparationError
+        @test error.reason == reason
+    end
+
+    extra_schema = autonomous_pyramid_schema(
+        Float64, :mod_extra;
+        units=:radian,
+        sign_convention=:counterclockwise_phase,
+        bounds=UniformCommandBounds(-1.0, 1.0),
+    )
+    base_optic = autonomous_pyramid_optic(fixture.schemas)
+    extra_definition = ControllableOpticDefinition(
+        :pyramid_modulator,
+        Plant.controllable_optic_model(base_optic),
+        (command_schemas(base_optic)..., extra_schema),
+    )
+    count_error = autonomous_pyramid_error() do
+        plant_definition = fixture.plant.definition
+        Plant.prepare_controllable_optic(
+            Plant.controllable_optic_model(extra_definition),
+            extra_definition,
+            plant_telescope(plant_definition),
+            plant_atmosphere(plant_definition),
+        )
+    end
+    @test count_error isa PlantPreparationError
+    @test count_error.reason == :command_schema_count
+
     missing_binding = PlantEventLoopDefinition(
         (OpticalSampleDefinition(:pyramid,
             PeriodicSchedule(period_ns=100_000_000)),),
@@ -335,6 +481,78 @@ end
     end
     @test binding_error isa PlantScheduleError
     @test binding_error.reason == :missing_autonomous_binding
+
+    unsupported_reference_error =
+        autonomous_pyramid_event_preparation_error(
+            fixture;
+            phase_reference=UnsupportedAutonomousPhaseReference(),
+        )
+    @test unsupported_reference_error isa PlantScheduleError
+    @test unsupported_reference_error.reason == :unsupported_phase_reference
+
+    for reference in (
+        TriggerSourcePhaseReference(:sync),
+        TriggerResetPhaseReference(:modulation_reset),
+    )
+        topology_error = autonomous_pyramid_event_preparation_error(
+            fixture;
+            phase_reference=reference,
+        )
+        @test topology_error isa PlantScheduleError
+        @test topology_error.reason == :missing_trigger_topology
+    end
+
+    source = TriggerSourceDefinition(
+        :sync,
+        PeriodicSchedule(period_ns=100_000_000),
+    )
+    camera_consumer = TriggerConsumerDefinition(
+        :camera_trigger,
+        TriggerSourceID(:sync),
+    )
+    topology = prepare_trigger_topology(
+        (source,),
+        (),
+        (camera_consumer,);
+        in_flight_capacity=2,
+    )
+    triggered_start = TriggeredAcquisitionStart(:camera_trigger)
+
+    trigger_binding_cases = (
+        (TriggerSourcePhaseReference(:missing_source),
+            :unknown_trigger_source),
+        (TriggerResetPhaseReference(:missing_consumer),
+            :unknown_trigger_consumer),
+        (TriggerResetPhaseReference(:camera_trigger),
+            :duplicate_trigger_consumer),
+    )
+    for (reference, reason) in trigger_binding_cases
+        error = autonomous_pyramid_event_preparation_error(
+            fixture;
+            phase_reference=reference,
+            trigger_topology=topology,
+            acquisition_start=triggered_start,
+        )
+        @test error isa PlantScheduleError
+        @test error.reason == reason
+    end
+
+    unknown_optic_error = autonomous_pyramid_event_preparation_error(
+        fixture;
+        optic=:missing_modulator,
+    )
+    @test unknown_optic_error isa PlantScheduleError
+    @test unknown_optic_error.reason == :unknown_controllable_optic
+
+    unknown_inspection_error = autonomous_pyramid_error() do
+        autonomous_waveform_radius(
+            fixture.prepared,
+            fixture.state,
+            :missing_modulator,
+        )
+    end
+    @test unknown_inspection_error isa PlantScheduleError
+    @test unknown_inspection_error.reason == :unknown_autonomous_optic
 
     second_schemas = autonomous_pyramid_schemas(prefix=:second)
     second_optic = autonomous_pyramid_optic(second_schemas;
@@ -446,6 +664,43 @@ end
 end
 
 @testset "Analytic phase and equal-time command ordering" begin
+    float32_implementation =
+        PreparedCircularPyramidModulator{Float32,UInt8}(
+            CommandEndpointID(:radius),
+            CommandEndpointID(:frequency),
+            CommandEndpointID(:phase),
+            CommandEndpointID(:enabled),
+        )
+    origin = zero(PlantTimestamp)
+    float32_state = CircularPyramidModulatorState(
+        1.0f0,
+        997.25f0,
+        0.25f0,
+        true,
+        origin,
+        0.0f0,
+        origin,
+        UInt64(0),
+        UInt64(0),
+        false,
+    )
+    @test @inferred(autonomous_waveform_phase(
+        float32_implementation,
+        float32_state,
+        PlantTimestamp(1_000_000_000_000),
+    )) == 0.25f0
+
+    unsupported_initialization_error = autonomous_pyramid_error() do
+        initialize_autonomous_periodic_optic!(
+            float32_implementation,
+            float32_state,
+            UnsupportedAutonomousPhaseReference(),
+        )
+    end
+    @test unsupported_initialization_error isa PlantPreparationError
+    @test unsupported_initialization_error.reason ==
+        :unsupported_phase_reference
+
     reference = FreeRunningPhaseReference(
         origin=PlantTimestamp(20_000_000))
     fixture = autonomous_pyramid_fixture(; phase_reference=reference)
@@ -509,6 +764,12 @@ end
     autonomous_pyramid_submit!(
         source_fixture, source_fixture.schemas.radius,
         1, 100_000_000, 2.0)
+    autonomous_pyramid_submit!(
+        source_fixture, source_fixture.schemas.frequency,
+        1, 100_000_000, 10.0)
+    autonomous_pyramid_submit!(
+        source_fixture, source_fixture.schemas.phase,
+        1, 100_000_000, 0.5)
     run_plant_events_until!(
         source_fixture.prepared,
         source_fixture.state,
@@ -521,6 +782,13 @@ end
     @test autonomous_waveform_radius(
         source_fixture.prepared, source_fixture.state,
         :pyramid_modulator) == 2.0
+    @test autonomous_waveform_phase(
+        source_fixture.prepared, source_fixture.state,
+        :pyramid_modulator, PlantTimestamp(100_000_000)) ≈ 0.5
+    @test autonomous_waveform_phase(
+        source_fixture.prepared, source_fixture.state,
+        :pyramid_modulator, PlantTimestamp(150_000_000)) ≈
+        mod(0.5 + 2pi * 10.0 * 0.05, 2pi)
     @test source_modulation.phases != initial_source_phases
     run_plant_events_until!(
         source_fixture.prepared,

@@ -489,7 +489,10 @@ The implemented native `CircularPyramidModulator` has independent bounded
 radius, frequency, phase-offset, and enabled endpoints. Enabled state is its
 start/stop control; another model may explicitly declare dither or mode
 endpoints. Its analytic phase is evaluated from plant time without advancing a
-per-point cursor.
+per-point cursor. Integer elapsed time is range-reduced before phase
+multiplication, and endpoint precisions narrower than `Float64` use widened
+phase arithmetic, so a long-running `Float32` optical model does not lose
+waveform phase merely because its run timestamp has grown.
 
 `AutonomousPeriodicOpticDefinition` selects one immutable relationship:
 

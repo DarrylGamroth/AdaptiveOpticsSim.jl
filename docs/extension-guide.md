@@ -224,6 +224,10 @@ end
 The cold model still owns ordinary bounded `PlantCommandSchema` setpoints, and
 an `AutonomousPeriodicOpticDefinition` must bind the prepared device to one
 scheduled full-optical path and one immutable fidelity/reference contract.
+The current event composer accepts the declared `FreeRunningPhaseReference`,
+`TriggerSourcePhaseReference`, and `TriggerResetPhaseReference` relationships.
+A new phase-reference family also needs explicit event-composition ownership
+and notification semantics; subtype construction alone does not register one.
 Preparation must reject incompatible paths and conflicting exclusive
 couplings. Evaluation mutates only storage owned by that prepared path, stays
 bounded, and allocates no steady-state heap storage when it is on the optical

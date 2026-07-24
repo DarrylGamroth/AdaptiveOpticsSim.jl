@@ -112,22 +112,36 @@ struct CircularPyramidModulator
     frequency_endpoint::CommandEndpointID
     phase_endpoint::CommandEndpointID
     enabled_endpoint::CommandEndpointID
+
+    function CircularPyramidModulator(
+        radius_endpoint::CommandEndpointID,
+        frequency_endpoint::CommandEndpointID,
+        phase_endpoint::CommandEndpointID,
+        enabled_endpoint::CommandEndpointID,
+    )
+        endpoints = (
+            radius_endpoint,
+            frequency_endpoint,
+            phase_endpoint,
+            enabled_endpoint,
+        )
+        @inbounds for right in 2:length(endpoints), left in 1:(right - 1)
+            endpoints[left] == endpoints[right] && throw(PlantDefinitionError(
+                :autonomous_periodic_optic, :duplicate_endpoint,
+                "circular Pyramid modulation endpoint roles must be distinct"))
+        end
+        return new(endpoints...)
+    end
 end
 
 function CircularPyramidModulator(; radius_endpoint, frequency_endpoint,
     phase_endpoint, enabled_endpoint)
-    endpoints = (
+    return CircularPyramidModulator(
         _as_command_endpoint_id(radius_endpoint),
         _as_command_endpoint_id(frequency_endpoint),
         _as_command_endpoint_id(phase_endpoint),
         _as_command_endpoint_id(enabled_endpoint),
     )
-    @inbounds for right in 2:length(endpoints), left in 1:(right - 1)
-        endpoints[left] == endpoints[right] && throw(PlantDefinitionError(
-            :autonomous_periodic_optic, :duplicate_endpoint,
-            "circular Pyramid modulation endpoint roles must be distinct"))
-    end
-    return CircularPyramidModulator(endpoints...)
 end
 
 plant_model_definition_style(::Type{CircularPyramidModulator}) =
@@ -281,8 +295,6 @@ mutable struct CircularPyramidModulatorState{T<:AbstractFloat}
     reference_timestamp::PlantTimestamp
     reference_sequence::UInt64
     reference_count::UInt64
-    last_evaluation_timestamp::PlantTimestamp
-    has_evaluation::Bool
     optical_dirty::Bool
 end
 
@@ -313,7 +325,7 @@ function prepare_controllable_optic_state(
     origin = zero(PlantTimestamp)
     return CircularPyramidModulatorState(radius, frequency, phase,
         enabled_value == one(E), origin, zero(T), origin, UInt64(0),
-        UInt64(0), origin, false, true)
+        UInt64(0), true)
 end
 
 function prepare_controllable_optic_workspace(
@@ -343,22 +355,41 @@ function stage_controllable_optic_command!(
     return nothing
 end
 
-@inline function _unwrapped_waveform_phase(
+@inline function _waveform_two_pi(::Type{T}) where {T<:AbstractFloat}
+    return T(2) * T(pi)
+end
+
+@inline function _waveform_phase_radians(
     state::CircularPyramidModulatorState{T},
     timestamp::PlantTimestamp) where {T}
+    W = promote_type(T, Float64)
     elapsed_ns = plant_nanoseconds(timestamp) -
         plant_nanoseconds(state.phase_anchor_timestamp)
-    elapsed_seconds = T(elapsed_ns) / T(1_000_000_000)
-    return state.phase_at_anchor_rad +
-        T(2pi) * state.frequency_hz * elapsed_seconds +
-        state.phase_offset_rad
+    whole_seconds, remainder_ns =
+        fldmod(elapsed_ns, _PLANT_NANOSECONDS_PER_SECOND)
+    frequency_hz = W(state.frequency_hz)
+    # Integer-Hz cycles vanish over whole seconds. Reduce the fractional
+    # frequency before multiplying by a long run time so Float32/Float64 phase
+    # precision does not decay with the absolute timestamp.
+    fractional_frequency_hz = frequency_hz - trunc(frequency_hz)
+    whole_second_cycles = mod(
+        fractional_frequency_hz * W(whole_seconds),
+        one(W),
+    )
+    subsecond_cycles = frequency_hz * W(remainder_ns) /
+        W(_PLANT_NANOSECONDS_PER_SECOND)
+    return W(state.phase_at_anchor_rad) +
+        _waveform_two_pi(W) * (whole_second_cycles + subsecond_cycles) +
+        W(state.phase_offset_rad)
 end
 
 @inline function _waveform_phase_without_offset(
     state::CircularPyramidModulatorState{T},
     timestamp::PlantTimestamp) where {T}
-    return _unwrapped_waveform_phase(state, timestamp) -
-        state.phase_offset_rad
+    W = promote_type(T, Float64)
+    phase = _waveform_phase_radians(state, timestamp) -
+        W(state.phase_offset_rad)
+    return T(mod(phase, _waveform_two_pi(W)))
 end
 
 function commit_controllable_optic_command!(
@@ -394,6 +425,14 @@ end
 @inline _phase_reference_initial(reference::TriggerResetPhaseReference) =
     reference.initial_reference
 
+function _phase_reference_initial(reference::AbstractWaveformPhaseReference)
+    throw(PlantPreparationError(
+        :autonomous_periodic_optic,
+        :unsupported_phase_reference,
+        "native circular Pyramid modulation does not support phase reference $(typeof(reference))",
+    ))
+end
+
 function initialize_autonomous_periodic_optic!(
     ::PreparedCircularPyramidModulator,
     state::CircularPyramidModulatorState,
@@ -404,8 +443,6 @@ function initialize_autonomous_periodic_optic!(
     state.reference_timestamp = origin
     state.reference_sequence = UInt64(0)
     state.reference_count = UInt64(0)
-    state.last_evaluation_timestamp = origin
-    state.has_evaluation = false
     state.optical_dirty = true
     return nothing
 end
@@ -515,14 +552,12 @@ function evaluate_autonomous_periodic_optic!(
     ::PreparedCircularPyramidModulator,
     state::CircularPyramidModulatorState,
     coupling::PreparedCycleAveragedPyramidModulation,
-    timestamp::PlantTimestamp)
+    ::PlantTimestamp)
     if state.optical_dirty
         update_cycle_averaged_circular_modulation!(
             coupling.modulation, state.radius; enabled=state.enabled)
         state.optical_dirty = false
     end
-    state.last_evaluation_timestamp = timestamp
-    state.has_evaluation = true
     return nothing
 end
 
@@ -537,7 +572,11 @@ end
     ::PreparedCircularPyramidModulator,
     state::CircularPyramidModulatorState{T},
     timestamp::PlantTimestamp) where {T}
-    return mod(_unwrapped_waveform_phase(state, timestamp), T(2pi))
+    W = promote_type(T, Float64)
+    return T(mod(
+        _waveform_phase_radians(state, timestamp),
+        _waveform_two_pi(W),
+    ))
 end
 
 @inline function autonomous_waveform_offset(

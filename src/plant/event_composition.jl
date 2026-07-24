@@ -502,6 +502,14 @@ end
 @inline _phase_reference_trigger_consumer(
     reference::TriggerResetPhaseReference) = reference.consumer
 
+function _phase_reference_trigger_consumer(
+    reference::AbstractWaveformPhaseReference)
+    _plant_event_loop_error(
+        :unsupported_phase_reference,
+        "plant event composition does not support phase reference $(typeof(reference)); use a declared free-running, trigger-source, or trigger-reset relationship",
+    )
+end
+
 function _require_autonomous_trigger_topology(
     definition::AutonomousPeriodicOpticDefinition{
         <:FreeRunningPhaseReference}, ::Any)
