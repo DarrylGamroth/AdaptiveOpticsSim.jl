@@ -999,6 +999,22 @@ end
         mark_ka_cpu_kernel!(:pyramid_mask_kernel!)
         @test ka_cpu_close(ka_mask, scalar_mask)
 
+        modulation_policy = CircularModulation(2.0;
+            samples=5, phase_offset=0.3)
+        scalar_modulation =
+            AdaptiveOpticsSim.prepare_focal_plane_modulation(
+                modulation_policy, 8, zeros(8, 8), Float64)
+        ka_modulation =
+            AdaptiveOpticsSim.prepare_focal_plane_modulation(
+                modulation_policy, 8, zeros(8, 8), Float64)
+        AdaptiveOpticsSim._update_cycle_averaged_circular_modulation!(
+            SCALAR_CPU_STYLE, scalar_modulation, 1.5, 0.3)
+        AdaptiveOpticsSim._update_cycle_averaged_circular_modulation!(
+            KA_CPU_STYLE, ka_modulation, 1.5, 0.3)
+        mark_ka_cpu_kernel!(:circular_modulation_phases_kernel!)
+        @test ka_cpu_close(
+            ka_modulation.phases, scalar_modulation.phases)
+
         intensity = reshape(collect(1.0:(4 * 4 * 4 * 4)), 16, 16)
         scalar_slopes = similar(slopes(wfs))
         ka_slopes = similar(slopes(wfs))
