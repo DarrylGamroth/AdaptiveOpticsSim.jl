@@ -154,8 +154,10 @@ function run_optional_cycle_averaged_modulation_checks(::Type{B},
         policy, 8, BackendArray(zeros(T, 8, 8)), T)
     weights = copy(device.amplitude_weights)
 
-    update_cycle_averaged_circular_modulation!(cpu, T(1.5))
-    update_cycle_averaged_circular_modulation!(device, T(1.5))
+    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+        cpu, T(1.5))
+    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+        device, T(1.5))
     @test device.phases isa BackendArray
     @test device.amplitude_weights == weights
     @test isapprox(sum(abs2, device.amplitude_weights), one(T);
@@ -163,8 +165,8 @@ function run_optional_cycle_averaged_modulation_checks(::Type{B},
     @test isapprox(Array(device.phases), cpu.phases;
         rtol=8eps(T), atol=8eps(T))
 
-    update_cycle_averaged_circular_modulation!(device, T(1.5);
-        enabled=false)
+    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+        device, T(1.5); enabled=false)
     @test Array(device.phases) == ones(Complex{T}, 8, 8, 5)
     @test device.amplitude_weights == weights
     return nothing
