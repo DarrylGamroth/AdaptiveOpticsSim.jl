@@ -205,36 +205,40 @@ end
 
 """
 Stage one validated effective endpoint command without changing the visible
-physical surface. A successful stage must make
+physical surface. `timestamp` is the plant time at which the command becomes
+physically effective. A successful stage must make
 `commit_controllable_optic_command!` an infallible bounded publication step.
 """
 function stage_controllable_optic_command!(implementation, state, workspace,
-    endpoint::CommandEndpointID, effective_command)
+    endpoint::CommandEndpointID, effective_command,
+    timestamp::PlantTimestamp)
     throw(PlantCommandError(:physical_application,
         :unsupported_optic_application,
         "prepared controllable-optic implementation " *
         "$(typeof(implementation)) does not implement staged command " *
-        "application for $endpoint"))
+        "application for $endpoint at $timestamp"))
 end
 
 """
-Publish one previously staged physical command. Implementations must keep this
-bounded and nonthrowing after successful staging so explicit multi-optic
-transactions cannot become partially visible.
+Publish one previously staged physical command at `timestamp`.
+Implementations must keep this bounded and nonthrowing after successful
+staging so explicit multi-optic transactions cannot become partially visible.
 """
 function commit_controllable_optic_command!(implementation, state, workspace,
-    endpoint::CommandEndpointID)
+    endpoint::CommandEndpointID, timestamp::PlantTimestamp)
     throw(PlantCommandError(:physical_application,
         :unsupported_optic_commit,
         "prepared controllable-optic implementation " *
         "$(typeof(implementation)) does not implement command commit for " *
-        "$endpoint"))
+        "$endpoint at $timestamp"))
 end
 
 """
 Apply the currently visible physical surface to one already materialized
-optical-path input. Gate 4 composition calls every co-conjugated optic in
-canonical identity order; placement and path visibility are later contracts.
+optical-path input. Gate 4 composition calls every optic whose execution role
+is `PupilSurfaceExecutionRole` as one common co-conjugated group in canonical
+identity order. Path-local autonomous devices use their separately prepared
+coupling; general placement and path visibility are later contracts.
 """
 function apply_controllable_optic_surface!(input, implementation, state)
     throw(PlantPreparationError(:controllable_optic,

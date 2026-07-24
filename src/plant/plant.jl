@@ -22,7 +22,8 @@ import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
     Asterism, AtmosphereEpoch, AtmosphereLayerID, CMOSSensor, CPUBackend,
     CellIntegratedMeasure, CoherentFieldCombination, Detector,
     DetectorAcquisitionPlan, DetectorPlane, DimensionlessNormalization,
-    DirectMeasurementPath, EMCCDSensor, ElectricField, ExtendedSource,
+    CircularModulation, DirectMeasurementPath, EMCCDSensor, ElectricField,
+    ExtendedSource,
     FocalPlane, FrameReadoutProducts, FrameSensorType,
     FrameTransferAcquisition, GlobalResetExposure,
     HgCdTeAvalancheArraySensor, IncoherentIntensityAddition,
@@ -31,7 +32,9 @@ import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
     MonochromaticChannel, MovingAtmosphereLayer, MultiLayerAtmosphere,
     NonCombinableProduct, OpticalProductBundle, PhotonRateNormalization,
     PreparedBundledDirectImaging, PreparedDirectImaging,
-    PreparedIncoherentDirectImaging, PupilFunction, PupilPlane,
+    PreparedFocalPlaneModulation, PreparedIncoherentDirectImaging,
+    PreparedPyramidOpticalBundleFormation, PreparedPyramidOpticalFormation,
+    PupilFunction, PupilPlane,
     RollingExposure, RollingShutter, Source,
     SpatialDensityMeasure, SpectralSource, Telescope, UnspecifiedCoherence,
     UnspecifiedNormalization, UnspecifiedSpatialMeasure,
@@ -58,6 +61,7 @@ import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
     resolve_array_backend, runtime_rng, sample_frame_read!,
     sampling_read_time, source_height_m, source_radiometric_value,
     source_radiometry, splitmix64, subtract_background_map!, topology,
+    update_cycle_averaged_circular_modulation!,
     update_sensor_persistence!, validate_atmosphere_rendering,
     validate_plane_storage, validate_wfs_acquisition_binding,
     validate_wfs_estimation_binding, validate_wfs_measurement,
@@ -83,6 +87,7 @@ include("product_providers.jl")
 include("preparation.jl")
 include("reduced_order.jl")
 include("controller_routing.jl")
+include("autonomous_periodic_optics.jl")
 include("event_composition.jl")
 include("illumination.jl")
 include("api.jl")

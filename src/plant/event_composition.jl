@@ -74,6 +74,8 @@ AcquisitionEventDefinition(acquisition,
 @inline _require_acquisition_event_definition(
     value::AcquisitionEventDefinition) =
     value
+@inline _require_autonomous_periodic_optic_definition(
+    value::AutonomousPeriodicOpticDefinition) = value
 
 function _require_optical_sample_definition(value)
     _plant_event_loop_error(:invalid_definition,
@@ -83,6 +85,11 @@ end
 function _require_acquisition_event_definition(value)
     _plant_event_loop_error(:invalid_definition,
         "acquisition event entries must be AcquisitionEventDefinition values; got $(typeof(value))")
+end
+
+function _require_autonomous_periodic_optic_definition(value)
+    _plant_event_loop_error(:invalid_definition,
+        "autonomous optic entries must be AutonomousPeriodicOpticDefinition values; got $(typeof(value))")
 end
 
 function _event_definition_tuple(values::Tuple, validator)
@@ -119,31 +126,35 @@ end
 
 """
     PlantEventLoopDefinition(optical_samples, acquisition_events;
-        trigger_topology=nothing)
+        trigger_topology=nothing, autonomous_optics=())
 
 Cold, finite declaration of periodic path samples and independently periodic or
-trigger-driven acquisition lifecycles. Preparation flattens these values into
-one fixed-capacity serial scheduler; the declaration stores no mutable cursor,
-acquisition state, or run-length event list.
+trigger-driven acquisition lifecycles plus optional trigger-relative
+autonomous optical devices. Preparation flattens scheduled values into one
+fixed-capacity serial scheduler; the declaration stores no mutable cursor,
+acquisition state, waveform state, or run-length event list.
 """
 struct PlantEventLoopDefinition
     optical_samples::Tuple
     acquisition_events::Tuple
     trigger_topology::Union{Nothing,PreparedTriggerTopology}
+    autonomous_optics::Tuple
 end
 
 function PlantEventLoopDefinition(optical_samples, acquisition_events;
-    trigger_topology=nothing)
+    trigger_topology=nothing, autonomous_optics=())
     samples = _event_definition_tuple(optical_samples,
         _require_optical_sample_definition)
     events = _event_definition_tuple(acquisition_events,
         _require_acquisition_event_definition)
+    autonomous = _event_definition_tuple(autonomous_optics,
+        _require_autonomous_periodic_optic_definition)
     isempty(samples) && _plant_event_loop_error(:empty_paths,
         "plant event loop requires at least one optical sample definition")
     isempty(events) && _plant_event_loop_error(:empty_acquisitions,
         "plant event loop requires at least one acquisition event definition")
     topology = _require_prepared_trigger_topology(trigger_topology)
-    return PlantEventLoopDefinition(samples, events, topology)
+    return PlantEventLoopDefinition(samples, events, topology, autonomous)
 end
 
 struct _NoPreparedTriggerTopology end
@@ -287,6 +298,7 @@ struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
     command_endpoints::Memory{_PreparedPlantEventCommandEndpoint}
     paths::Memory{_PreparedPlantEventPath}
     acquisitions::Memory{_PreparedPlantEventAcquisition}
+    autonomous_optics::Memory{_PreparedAutonomousPeriodicOptic}
     trigger_topology::T
 end
 
@@ -300,6 +312,8 @@ end
     prepared::PreparedPlantEventLoop) = length(prepared.optics)
 @inline plant_event_command_endpoint_count(
     prepared::PreparedPlantEventLoop) = length(prepared.command_endpoints)
+@inline plant_event_autonomous_optic_count(
+    prepared::PreparedPlantEventLoop) = length(prepared.autonomous_optics)
 
 @inline function _event_frame_execution(
     provider::PreparedFullOpticalProvider{<:FrameAcquisitionExecution})
@@ -360,6 +374,18 @@ function _sorted_acquisition_event_definitions(definitions::Tuple)
     return values
 end
 
+function _sorted_autonomous_periodic_optic_definitions(
+    definitions::Tuple)
+    values = Any[definitions...]
+    sort!(values; by=definition -> definition.optic.name)
+    @inbounds for index in 2:length(values)
+        values[index - 1].optic == values[index].optic &&
+            _plant_event_loop_error(:duplicate_autonomous_optic,
+                "controllable optic $(values[index].optic) has more than one autonomous waveform binding")
+    end
+    return values
+end
+
 function _prepared_event_path_rngs(plant::PreparedPlant,
     path::PreparedPathExecutor)
     Base.@nospecialize plant path
@@ -408,7 +434,7 @@ function _event_path_slot(paths, id::OpticalPathID)
         paths[index].id == id && return index
     end
     _plant_event_loop_error(:missing_path_schedule,
-        "acquisition references path $id without an optical sample schedule")
+        "event owner references path $id without an optical sample schedule")
 end
 
 function _event_path_slot_from_definitions(definitions, id::OpticalPathID)
@@ -423,6 +449,14 @@ function _trigger_consumer_exists(topology::PreparedTriggerTopology,
     id::TriggerConsumerID)
     @inbounds for consumer in topology.consumers
         consumer.id == id && return true
+    end
+    return false
+end
+
+function _trigger_source_exists(topology::PreparedTriggerTopology,
+    id::TriggerSourceID)
+    @inbounds for source in topology.sources
+        source.id == id && return true
     end
     return false
 end
@@ -451,49 +485,112 @@ function _require_start_trigger_topology(start::TriggeredAcquisitionStart,
     return nothing
 end
 
-function _require_unique_trigger_consumers(definitions)
-    @inbounds for right in 2:length(definitions)
-        right_start = definitions[right].start
-        _require_unique_trigger_consumer(right_start, definitions, right)
-    end
+@inline _definition_trigger_consumer(
+    definition::AcquisitionEventDefinition) =
+    _start_trigger_consumer(definition.start)
+@inline _start_trigger_consumer(::PeriodicAcquisitionStart) = nothing
+@inline _start_trigger_consumer(start::TriggeredAcquisitionStart) =
+    start.consumer
+
+@inline _definition_trigger_consumer(
+    definition::AutonomousPeriodicOpticDefinition) =
+    _phase_reference_trigger_consumer(definition.phase_reference)
+@inline _phase_reference_trigger_consumer(
+    ::FreeRunningPhaseReference) = nothing
+@inline _phase_reference_trigger_consumer(
+    ::TriggerSourcePhaseReference) = nothing
+@inline _phase_reference_trigger_consumer(
+    reference::TriggerResetPhaseReference) = reference.consumer
+
+function _require_autonomous_trigger_topology(
+    definition::AutonomousPeriodicOpticDefinition{
+        <:FreeRunningPhaseReference}, ::Any)
     return nothing
 end
 
-@inline _require_bound_trigger_consumers(::Any, ::Nothing) = nothing
+function _require_autonomous_trigger_topology(
+    definition::AutonomousPeriodicOpticDefinition{
+        <:TriggerSourcePhaseReference}, ::Nothing)
+    _plant_event_loop_error(:missing_trigger_topology,
+        "autonomous optic $(definition.optic) uses a trigger-source phase reference without a prepared trigger topology")
+end
 
-function _require_bound_trigger_consumers(definitions,
+function _require_autonomous_trigger_topology(
+    definition::AutonomousPeriodicOpticDefinition{
+        <:TriggerSourcePhaseReference},
+    topology::PreparedTriggerTopology)
+    reference = definition.phase_reference
+    _trigger_source_exists(topology, reference.source) ||
+        _plant_event_loop_error(:unknown_trigger_source,
+            "autonomous optic $(definition.optic) references unknown trigger source $(reference.source)")
+    return nothing
+end
+
+function _require_autonomous_trigger_topology(
+    definition::AutonomousPeriodicOpticDefinition{
+        <:TriggerResetPhaseReference}, ::Nothing)
+    _plant_event_loop_error(:missing_trigger_topology,
+        "autonomous optic $(definition.optic) uses a delivered-trigger phase reset without a prepared trigger topology")
+end
+
+function _require_autonomous_trigger_topology(
+    definition::AutonomousPeriodicOpticDefinition{
+        <:TriggerResetPhaseReference},
+    topology::PreparedTriggerTopology)
+    reference = definition.phase_reference
+    _trigger_consumer_exists(topology, reference.consumer) ||
+        _plant_event_loop_error(:unknown_trigger_consumer,
+            "autonomous optic $(definition.optic) references unknown trigger consumer $(reference.consumer)")
+    return nothing
+end
+
+function _record_unique_trigger_consumer!(
+    seen::Set{TriggerConsumerID}, definition)
+    consumer = _definition_trigger_consumer(definition)
+    consumer === nothing && return nothing
+    consumer in seen && _plant_event_loop_error(:duplicate_trigger_consumer,
+        "trigger consumer $consumer is bound to more than one event owner")
+    push!(seen, consumer)
+    return nothing
+end
+
+function _require_unique_trigger_consumers(
+    acquisition_definitions, autonomous_definitions)
+    seen = Set{TriggerConsumerID}()
+    foreach(definition -> _record_unique_trigger_consumer!(seen, definition),
+        acquisition_definitions)
+    foreach(definition -> _record_unique_trigger_consumer!(seen, definition),
+        autonomous_definitions)
+    return nothing
+end
+
+@inline _require_bound_trigger_consumers(
+    ::Any, ::Any, ::Nothing) = nothing
+
+function _require_bound_trigger_consumers(
+    acquisition_definitions, autonomous_definitions,
     topology::PreparedTriggerTopology)
     @inbounds for consumer in topology.consumers
         bound = false
-        for definition in definitions
-            if _start_matches_consumer(definition.start, consumer.id)
+        for definition in acquisition_definitions
+            if _definition_trigger_consumer(definition) == consumer.id
                 bound = true
                 break
             end
         end
+        if !bound
+            for definition in autonomous_definitions
+                if _definition_trigger_consumer(definition) == consumer.id
+                    bound = true
+                    break
+                end
+            end
+        end
         bound || _plant_event_loop_error(:unbound_trigger_consumer,
-            "trigger consumer $(consumer.id) has no acquisition binding")
+            "trigger consumer $(consumer.id) has no acquisition or autonomous-optic binding")
     end
     return nothing
 end
-
-@inline _require_unique_trigger_consumer(
-    ::PeriodicAcquisitionStart, ::Any, ::Int) = nothing
-
-function _require_unique_trigger_consumer(start::TriggeredAcquisitionStart,
-    definitions, right::Int)
-    @inbounds for left in 1:(right - 1)
-        _same_trigger_consumer(definitions[left].start, start) &&
-            _plant_event_loop_error(:duplicate_trigger_consumer,
-                "trigger consumer $(start.consumer) is bound to more than one acquisition")
-    end
-    return nothing
-end
-
-@inline _same_trigger_consumer(::PeriodicAcquisitionStart,
-    ::TriggeredAcquisitionStart) = false
-@inline _same_trigger_consumer(left::TriggeredAcquisitionStart,
-    right::TriggeredAcquisitionStart) = left.consumer == right.consumer
 
 @inline function _periodic_start_timestamp(start::PeriodicAcquisitionStart)
     return schedule_timestamp(start.schedule, 1, start.origin)
@@ -716,6 +813,111 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
     return paths
 end
 
+function _event_controllable_optic_slot(optics,
+    id::ControllableOpticID)
+    @inbounds for index in eachindex(optics)
+        controllable_optic_id(optics[index].definition) == id &&
+            return index
+    end
+    _plant_event_loop_error(:unknown_controllable_optic,
+        "autonomous waveform references unknown controllable optic $id")
+end
+
+@inline function _require_autonomous_execution_role(
+    ::AutonomousPathExecutionRole, ::ControllableOpticID)
+    return nothing
+end
+
+function _require_autonomous_execution_role(
+    ::PupilSurfaceExecutionRole, id::ControllableOpticID)
+    _plant_event_loop_error(:invalid_autonomous_optic,
+        "controllable optic $id uses common-pupil surface execution and cannot be bound as a path-local autonomous waveform")
+end
+
+function _require_autonomous_execution_role(
+    role, id::ControllableOpticID)
+    _plant_event_loop_error(:unsupported_optic_execution_role,
+        "controllable optic $id declares unsupported execution role $(typeof(role))")
+end
+
+function _definition_binds_autonomous_optic(definitions,
+    id::ControllableOpticID)
+    @inbounds for definition in definitions
+        definition.optic == id && return true
+    end
+    return false
+end
+
+@inline function _require_autonomous_definition_for_role(
+    ::PupilSurfaceExecutionRole, ::ControllableOpticID, ::Any)
+    return nothing
+end
+
+function _require_autonomous_definition_for_role(
+    ::AutonomousPathExecutionRole, id::ControllableOpticID, definitions)
+    _definition_binds_autonomous_optic(definitions, id) ||
+        _plant_event_loop_error(:missing_autonomous_binding,
+            "path-local autonomous controllable optic $id has no AutonomousPeriodicOpticDefinition")
+    return nothing
+end
+
+function _require_autonomous_definition_for_role(
+    role, id::ControllableOpticID, ::Any)
+    _plant_event_loop_error(:unsupported_optic_execution_role,
+        "controllable optic $id declares unsupported execution role $(typeof(role))")
+end
+
+function _require_all_autonomous_optics_bound(optics, definitions)
+    @inbounds for optic in optics
+        id = controllable_optic_id(optic.definition)
+        role = controllable_optic_execution_role(optic.implementation)
+        _require_autonomous_definition_for_role(role, id, definitions)
+    end
+    return nothing
+end
+
+function _require_unique_autonomous_optic_couplings(bindings)
+    @inbounds for right in 2:length(bindings), left in 1:(right - 1)
+        _autonomous_optic_couplings_conflict(
+            bindings[left].coupling, bindings[right].coupling) || continue
+        _plant_event_loop_error(:conflicting_autonomous_coupling,
+            "autonomous optics $(bindings[left].id) and " *
+            "$(bindings[right].id) target the same exclusive prepared " *
+            "optical coupling")
+    end
+    return nothing
+end
+
+function _prepare_event_autonomous_optics(definitions, optics, paths,
+    topology)
+    bindings = Memory{_PreparedAutonomousPeriodicOptic}(undef,
+        length(definitions))
+    @inbounds for index in eachindex(definitions)
+        definition = definitions[index]
+        _require_autonomous_trigger_topology(definition, topology)
+        optic_slot = _event_controllable_optic_slot(optics,
+            definition.optic)
+        optic = optics[optic_slot]
+        _require_autonomous_execution_role(
+            controllable_optic_execution_role(optic.implementation),
+            definition.optic)
+        path_slot = _event_path_slot(paths, definition.path)
+        path = paths[path_slot]
+        path.requires_full_optical || _plant_event_loop_error(
+            :autonomous_path_without_full_optics,
+            "autonomous optic $(definition.optic) targets path $(definition.path) without a full-optical acquisition")
+        coupling = prepare_autonomous_periodic_optic(
+            optic.implementation, path.path, definition.fidelity)
+        bindings[index] = _PreparedAutonomousPeriodicOptic(
+            definition.optic, definition.path, UInt32(optic_slot),
+            UInt32(path_slot), optic.implementation, coupling,
+            definition.phase_reference, definition.fidelity)
+    end
+    _require_all_autonomous_optics_bound(optics, definitions)
+    _require_unique_autonomous_optic_couplings(bindings)
+    return bindings
+end
+
 function _prepare_event_acquisition_lifecycle(
     plant::PreparedPlant,
     owner::PreparedAcquisitionOwner,
@@ -843,8 +1045,13 @@ function prepare_plant_event_loop(plant::PreparedPlant,
         definition.optical_samples)
     acquisition_definitions = _sorted_acquisition_event_definitions(
         definition.acquisition_events)
-    _require_unique_trigger_consumers(acquisition_definitions)
+    autonomous_definitions =
+        _sorted_autonomous_periodic_optic_definitions(
+            definition.autonomous_optics)
+    _require_unique_trigger_consumers(acquisition_definitions,
+        autonomous_definitions)
     _require_bound_trigger_consumers(acquisition_definitions,
+        autonomous_definitions,
         definition.trigger_topology)
     owners, lifecycles, products, sample_providers, rngs, path_slots =
         _prepare_event_acquisition_parts(plant, acquisition_definitions,
@@ -863,13 +1070,16 @@ function prepare_plant_event_loop(plant::PreparedPlant,
         scheduler)
     acquisitions = _prepare_event_acquisitions(acquisition_definitions,
         lifecycles, products, sample_providers, rngs, path_slots, scheduler)
+    autonomous_optics = _prepare_event_autonomous_optics(
+        autonomous_definitions, optics, paths, definition.trigger_topology)
     atmosphere = _require_selection_atmosphere(
         plant_atmosphere(getfield(plant, :definition)))
     atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
         getfield(getfield(plant, :rngs), :atmosphere))
     return PreparedPlantEventLoop(_PlantEventLoopBinding(), atmosphere,
         atmosphere_rng, scheduler, actions, optics, command_endpoints, paths,
-        acquisitions, _prepared_trigger_topology(definition.trigger_topology))
+        acquisitions, autonomous_optics,
+        _prepared_trigger_topology(definition.trigger_topology))
 end
 
 mutable struct PlantEventLoopState{T}
@@ -951,6 +1161,16 @@ function _event_controllable_optic_states(
     return states
 end
 
+function _initialize_event_autonomous_optics!(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState)
+    @inbounds for binding in prepared.autonomous_optics
+        optic_state = state.controllable_optics[Int(binding.optic_slot)]
+        initialize_autonomous_periodic_optic!(binding.implementation,
+            optic_state, binding.phase_reference)
+    end
+    return nothing
+end
+
 function PlantEventLoopState(prepared::PreparedPlantEventLoop)
     scheduler = EventSchedulerState(prepared.scheduler)
     command_endpoints, command_applications = _event_command_states(
@@ -979,6 +1199,7 @@ function PlantEventLoopState(prepared::PreparedPlantEventLoop)
         command_shadow_transactions, controllable_optics,
         acquisition_states, path_sampled,
         product_sequences, product_ready_timestamps, UInt64(0), trigger)
+    _initialize_event_autonomous_optics!(prepared, state)
     @inbounds for index in eachindex(prepared.command_endpoints)
         _schedule_event_command_endpoint!(prepared, state, index)
     end
@@ -1128,6 +1349,91 @@ function effective_command(prepared::PreparedPlantEventLoop,
     slot = _event_command_endpoint_slot(prepared,
         _as_command_endpoint_id(id))
     return effective_command(state.command_applications[slot])
+end
+
+function _event_autonomous_optic_slot(
+    prepared::PreparedPlantEventLoop, id::ControllableOpticID)
+    @inbounds for index in eachindex(prepared.autonomous_optics)
+        prepared.autonomous_optics[index].id == id && return index
+    end
+    _plant_event_loop_error(:unknown_autonomous_optic,
+        "prepared plant event loop has no autonomous optic $id")
+end
+
+@inline function _event_autonomous_optic_parts(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState, id)
+    slot = _event_autonomous_optic_slot(prepared,
+        _as_controllable_optic_id(id))
+    binding = @inbounds prepared.autonomous_optics[slot]
+    optic_state = @inbounds state.controllable_optics[
+        Int(binding.optic_slot)]
+    return binding, optic_state
+end
+
+function autonomous_waveform_phase(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, id, timestamp::PlantTimestamp)
+    _require_plant_event_loop_binding(prepared, state)
+    binding, optic_state = _event_autonomous_optic_parts(prepared, state, id)
+    return autonomous_waveform_phase(binding.implementation, optic_state,
+        timestamp)
+end
+
+function autonomous_waveform_phase(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, id)
+    return autonomous_waveform_phase(prepared, state, id,
+        scheduler_timestamp(state.scheduler))
+end
+
+function autonomous_waveform_offset(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, id, timestamp::PlantTimestamp)
+    _require_plant_event_loop_binding(prepared, state)
+    binding, optic_state = _event_autonomous_optic_parts(prepared, state, id)
+    return autonomous_waveform_offset(binding.implementation, optic_state,
+        timestamp)
+end
+
+function autonomous_waveform_offset(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, id)
+    return autonomous_waveform_offset(prepared, state, id,
+        scheduler_timestamp(state.scheduler))
+end
+
+function autonomous_waveform_reference_timestamp(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState, id)
+    _require_plant_event_loop_binding(prepared, state)
+    binding, optic_state = _event_autonomous_optic_parts(prepared, state, id)
+    return autonomous_waveform_reference_timestamp(
+        binding.implementation, optic_state)
+end
+
+function autonomous_waveform_reference_sequence(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState, id)
+    _require_plant_event_loop_binding(prepared, state)
+    binding, optic_state = _event_autonomous_optic_parts(prepared, state, id)
+    return autonomous_waveform_reference_sequence(
+        binding.implementation, optic_state)
+end
+
+function autonomous_waveform_reference_count(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState, id)
+    _require_plant_event_loop_binding(prepared, state)
+    binding, optic_state = _event_autonomous_optic_parts(prepared, state, id)
+    return autonomous_waveform_reference_count(
+        binding.implementation, optic_state)
+end
+
+function autonomous_waveform_enabled(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, id)
+    _require_plant_event_loop_binding(prepared, state)
+    binding, optic_state = _event_autonomous_optic_parts(prepared, state, id)
+    return autonomous_waveform_enabled(binding.implementation, optic_state)
+end
+
+function autonomous_waveform_radius(prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState, id)
+    _require_plant_event_loop_binding(prepared, state)
+    binding, optic_state = _event_autonomous_optic_parts(prepared, state, id)
+    return autonomous_waveform_radius(binding.implementation, optic_state)
 end
 
 @inline _event_command_endpoint(
@@ -1664,7 +1970,8 @@ end
         _event_command_application_state(state, endpoint_slot)
     stage_controllable_optic_command!(optic.implementation, optic_state,
         optic_workspace, command_endpoint_id(binding),
-        _staged_effective_command(application_state))
+        _staged_effective_command(application_state),
+        state.scheduler.current_timestamp)
     return nothing
 end
 
@@ -1677,7 +1984,8 @@ end
         _event_controllable_optic_parts(prepared, state, workspace,
             endpoint_slot)
     commit_controllable_optic_command!(optic.implementation, optic_state,
-        optic_workspace, command_endpoint_id(binding))
+        optic_workspace, command_endpoint_id(binding),
+        state.scheduler.current_timestamp)
     return nothing
 end
 
@@ -1725,7 +2033,8 @@ function _apply_event_command_claim_parts!(
     optic::PreparedControllableOptic,
     optic_state,
     optic_workspace,
-    claim::PlantCommandApplicationClaim)
+    claim::PlantCommandApplicationClaim,
+    timestamp::PlantTimestamp)
     endpoint = binding.endpoint
     staged = try
         result = _stage_claimed_plant_command!(endpoint, endpoint_state,
@@ -1733,7 +2042,7 @@ function _apply_event_command_claim_parts!(
         if result.decision == _AcceptCommandCandidate
             stage_controllable_optic_command!(optic.implementation,
                 optic_state, optic_workspace, command_endpoint_id(binding),
-                _staged_effective_command(application_state))
+                _staged_effective_command(application_state), timestamp)
         end
         result
     catch error
@@ -1744,7 +2053,7 @@ function _apply_event_command_claim_parts!(
     reason = staged.reason
     if decision == _AcceptCommandCandidate
         commit_controllable_optic_command!(optic.implementation, optic_state,
-            optic_workspace, command_endpoint_id(binding))
+            optic_workspace, command_endpoint_id(binding), timestamp)
         _commit_staged_application!(application_state, endpoint_state)
         _finish_command_application!(endpoint_workspace, endpoint,
             endpoint_state, claim, AppliedCommand, reason)
@@ -1773,7 +2082,7 @@ function _apply_event_command_claim!(
     staged = try
         _apply_event_command_claim_parts!(binding, endpoint_state,
             application_state, endpoint_workspace, optic, optic_state,
-            optic_workspace, claim)
+            optic_workspace, claim, state.scheduler.current_timestamp)
     catch
         _append_event_command_dispositions!(workspace, endpoint_workspace)
         rethrow()
@@ -2564,20 +2873,74 @@ function _process_acquisition_readiness!(prepared::PreparedPlantEventLoop,
     return nothing
 end
 
-function _triggered_acquisition_slot(prepared::PreparedPlantEventLoop,
+function _triggered_acquisition_slot_or_zero(
+    prepared::PreparedPlantEventLoop,
     consumer::TriggerConsumerID)
     @inbounds for index in eachindex(prepared.acquisitions)
         start = prepared.acquisitions[index].start
         _start_matches_consumer(start, consumer) && return UInt32(index)
     end
-    _plant_event_loop_error(:unknown_trigger_consumer,
-        "delivered trigger consumer $consumer is not bound to an acquisition")
+    return UInt32(0)
 end
 
 @inline _start_matches_consumer(::PeriodicAcquisitionStart,
     ::TriggerConsumerID) = false
 @inline _start_matches_consumer(start::TriggeredAcquisitionStart,
     consumer::TriggerConsumerID) = start.consumer == consumer
+
+@inline _phase_reference_matches_consumer(
+    ::FreeRunningPhaseReference, ::TriggerConsumerID) = false
+@inline _phase_reference_matches_consumer(
+    ::TriggerSourcePhaseReference, ::TriggerConsumerID) = false
+@inline _phase_reference_matches_consumer(
+    reference::TriggerResetPhaseReference,
+    consumer::TriggerConsumerID) = reference.consumer == consumer
+
+function _triggered_autonomous_optic_slot_or_zero(
+    prepared::PreparedPlantEventLoop,
+    consumer::TriggerConsumerID)
+    @inbounds for index in eachindex(prepared.autonomous_optics)
+        binding = prepared.autonomous_optics[index]
+        _phase_reference_matches_consumer(binding.phase_reference,
+            consumer) && return UInt32(index)
+    end
+    return UInt32(0)
+end
+
+@inline _phase_reference_matches_source(
+    ::FreeRunningPhaseReference, ::TriggerSourceID) = false
+@inline _phase_reference_matches_source(
+    ::TriggerResetPhaseReference, ::TriggerSourceID) = false
+@inline _phase_reference_matches_source(
+    reference::TriggerSourcePhaseReference,
+    source::TriggerSourceID) = reference.source == source
+
+function _notify_autonomous_trigger_source!(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
+    realization::TriggerSourceRealization)
+    nominal = nominal_trigger_edge(realization)
+    timestamp = realized_trigger_source_timestamp(realization)
+    @inbounds for binding in prepared.autonomous_optics
+        _phase_reference_matches_source(binding.phase_reference,
+            nominal.source_id) || continue
+        optic_state = state.controllable_optics[Int(binding.optic_slot)]
+        reset_autonomous_periodic_optic_phase!(binding.implementation,
+            optic_state, timestamp, nominal.sequence)
+    end
+    return nothing
+end
+
+function _reset_triggered_autonomous_optic!(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
+    slot::UInt32, delivery::TriggerDelivery)
+    binding = @inbounds prepared.autonomous_optics[Int(slot)]
+    optic_state = @inbounds state.controllable_optics[
+        Int(binding.optic_slot)]
+    reset_autonomous_periodic_optic_phase!(binding.implementation,
+        optic_state, delivered_trigger_edge(delivery).timestamp,
+        nominal_trigger_edge(delivery).sequence)
+    return nothing
+end
 
 @inline function _next_trigger_action_timestamp(
     topology::PreparedTriggerTopology, state::TriggerTopologyState)
@@ -2602,27 +2965,41 @@ function _process_trigger_topology!(
         realized_trigger_source_timestamp(source) <=
             delivered_trigger_edge(delivery).timestamp
     activated_slot = UInt32(0)
+    autonomous_slot = UInt32(0)
     activation_timestamp = zero(PlantTimestamp)
     if source_due
         realized_trigger_source_timestamp(source) == claim.key.timestamp ||
             _plant_event_loop_error(:trigger_schedule,
                 "trigger source does not match its scheduler claim")
-        realize_next_trigger_source!(workspace.trigger, topology,
-            trigger_state)
+        realization = realize_next_trigger_source!(workspace.trigger,
+            topology, trigger_state)
+        _notify_autonomous_trigger_source!(prepared, state, realization)
     else
         delivered = delivered_trigger_edge(delivery)
         delivered.timestamp == claim.key.timestamp ||
             _plant_event_loop_error(:trigger_schedule,
                 "trigger delivery does not match its scheduler claim")
-        activated_slot = _triggered_acquisition_slot(prepared,
+        activated_slot = _triggered_acquisition_slot_or_zero(prepared,
             trigger_delivery_consumer(delivery))
-        acquisition = _event_acquisition_binding(prepared, activated_slot)
-        _require_inactive_event_generator(prepared, state,
-            acquisition.start_handle, delivered.timestamp)
+        autonomous_slot = _triggered_autonomous_optic_slot_or_zero(prepared,
+            trigger_delivery_consumer(delivery))
+        xor(iszero(activated_slot), iszero(autonomous_slot)) ||
+            _plant_event_loop_error(:trigger_binding,
+                "delivered trigger consumer $(trigger_delivery_consumer(delivery)) must bind exactly one event owner")
+        if !iszero(activated_slot)
+            acquisition = _event_acquisition_binding(prepared,
+                activated_slot)
+            _require_inactive_event_generator(prepared, state,
+                acquisition.start_handle, delivered.timestamp)
+        end
         pop_next_trigger_delivery!(workspace.delivery, topology,
             trigger_state) || _plant_event_loop_error(:trigger_schedule,
             "due trigger delivery disappeared before removal")
         activation_timestamp = delivered.timestamp
+        if !iszero(autonomous_slot)
+            _reset_triggered_autonomous_optic!(prepared, state,
+                autonomous_slot, delivery)
+        end
     end
     next_timestamp = _next_trigger_action_timestamp(topology, trigger_state)
     reschedule_event!(prepared.scheduler, state.scheduler, claim,
@@ -2865,9 +3242,33 @@ function _apply_due_controllable_optics!(
         input = path.path.input
         for optic_index in eachindex(prepared.optics)
             optic = prepared.optics[optic_index]
-            apply_controllable_optic_surface!(input, optic.implementation,
+            _apply_event_controllable_optic_surface!(
+                controllable_optic_execution_role(optic.implementation),
+                input, optic.implementation,
                 state.controllable_optics[optic_index])
         end
+    end
+    return nothing
+end
+
+@inline function _apply_event_controllable_optic_surface!(
+    ::PupilSurfaceExecutionRole, input, implementation, state)
+    return apply_controllable_optic_surface!(input, implementation, state)
+end
+
+@inline function _apply_event_controllable_optic_surface!(
+    ::AutonomousPathExecutionRole, input, implementation, state)
+    return nothing
+end
+
+function _evaluate_due_autonomous_optics!(
+    prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
+    due_paths::Memory{Bool}, timestamp::PlantTimestamp)
+    @inbounds for binding in prepared.autonomous_optics
+        due_paths[Int(binding.path_slot)] || continue
+        optic_state = state.controllable_optics[Int(binding.optic_slot)]
+        evaluate_autonomous_periodic_optic!(binding.implementation,
+            optic_state, binding.coupling, timestamp)
     end
     return nothing
 end
@@ -2971,6 +3372,8 @@ function _process_optical_path_batch!(prepared::PreparedPlantEventLoop,
             epoch)
         _apply_due_controllable_optics!(prepared, state,
             workspace.due_paths)
+        _evaluate_due_autonomous_optics!(prepared, state,
+            workspace.due_paths, timestamp)
         _execute_due_paths!(prepared, workspace.due_paths)
     end
     _evaluate_due_reduced_order_samples!(prepared, state,

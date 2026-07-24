@@ -39,6 +39,8 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-controller-routing"])) == ("plant-controller-routing",)
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["plant-autonomous-optics"])) == ("plant-autonomous-optics",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-time"])) == ("plant-time",)
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
         "plant-topology",
@@ -53,6 +55,7 @@ end
         "plant-command-composition",
         "plant-controller-routing",
         "plant-reduced-order",
+        "plant-autonomous-optics",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -72,6 +75,7 @@ end
         "plant-command-composition",
         "plant-controller-routing",
         "plant-reduced-order",
+        "plant-autonomous-optics",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -88,6 +92,7 @@ end
     @test occursin("plant-command-schemas", listing_text)
     @test occursin("plant-command-admission", listing_text)
     @test occursin("plant-command-application", listing_text)
+    @test occursin("plant-autonomous-optics", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
 
