@@ -1,0 +1,8 @@
+[[artifacts]]
+id = "GATE4-COMMAND-PLANT-CPU-2026-07-24"
+purpose = "Clean-tree Gate 4 independent and atomic command causality, exact terminal accounting, bounded endpoint/storage, zero-allocation endpoint-cycle, and composed command-responsive plant service-cost evidence"
+path = "2026-07-24-command-plant.toml"
+sha256 = "d28eb9d79d31858cb119c4ab5ba758f4449a524562907338d3304f7d2ba90161"
+source_contract = "../../contracts/gate4_command_plant.toml"
+characterized_source_revision = "191751f551741bd4f941b66dc457120274403482"
+all_gates_passed = true

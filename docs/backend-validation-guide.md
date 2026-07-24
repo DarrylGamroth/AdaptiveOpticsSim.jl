@@ -164,6 +164,37 @@ significant figures remain in the artifact, and
 round-trips the stream before publication. Encoding stays outside the timed
 boundary and avoids depending on a particular compressed-wire encoder.
 
+### Gate 4 command and optic evidence
+
+Run the focused Gate 4 correctness, ownership, routing, reduced-order, and
+autonomous-optic suites with:
+
+```sh
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["quality", "gate4"])'
+```
+
+The maintained command-responsive plant characterization is:
+
+```sh
+julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate4_command_plant.jl
+```
+
+Its [versioned contract](../benchmarks/contracts/gate4_command_plant.toml) and
+[clean raw-histogram artifact](../benchmarks/results/gate4/2026-07-24-command-plant.toml)
+cover two independently timed co-pupil scalar optics, atomic two-optic
+application, command-during-exposure causality, exact terminal accounting,
+bounded endpoint storage, declaration-order replay, and a 10,000-cycle storage
+check. A standalone warmed endpoint cycle allocates zero Julia heap bytes. The
+larger composed presentation/application/optical/detector/accounting boundary
+observed 4,720.736 bytes per cycle against its declared 8 KiB ceiling.
+
+Each of three runs records 10,000 service-time samples as lossless sparse
+HdrHistograms, which supports the reported p99. The load is serial and
+self-paced: it deliberately excludes fixed-rate arrivals, wall-clock pacing,
+queues, overload, external RTC transport, and response latency.
+
 ### Optional backend smoke in `Pkg.test()`
 
 These run after the functional testsets and skip cleanly if the backend package
@@ -191,6 +222,8 @@ The reduced maintained smoke covers:
 - independent DM and modal/low-order optic formation and application parity
 - prepared controller-output routing with a device-resident view and explicit
   host/backend mismatch rejection
+- dynamic cycle-averaged circular-Pyramid radius/enable updates, disabled-state
+  centering, normalized quadrature weights, and device residency
 - curvature-through-atmosphere
 - prepared LiFT photon-rate formation, analytic interaction matrices,
   rate/count/normalized observations, analytic and numerical reconstruction,
@@ -448,10 +481,12 @@ Current clean-revision artifacts are:
 
 All listed correctness, residency, allocation, absolute-p95, and relative-p95
 gates pass. The WSL target used CUDA.jl 6.2.1, KernelAbstractions.jl 0.9.42,
-and Julia 1.12.6. The current maintained hardware targets passed `424/424` CUDA
-checks and `434/434` AMDGPU checks with scalar indexing disabled, including the
-shared LiFT matrix and device-resident schedule-free atmosphere
-materialization, direct-science formation, and detector fan-out. The
+and Julia 1.12.6. The current Gate 4 candidate revision `191751f` passed
+`421/421` CUDA checks and `431/431` AMDGPU checks with scalar indexing disabled,
+including the shared LiFT matrix, device-resident schedule-free atmosphere
+materialization, direct-science formation, detector fan-out, prepared
+controller-output routing, and dynamic cycle-averaged circular-Pyramid
+modulation. The
 current local AMDGPU latency artifact remains the
 [July 14 cross-host characterization](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml):
 the July 18 timing repetitions completed, but no replacement raw-histogram
