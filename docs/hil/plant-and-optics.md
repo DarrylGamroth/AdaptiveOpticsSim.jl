@@ -425,9 +425,9 @@ instrument and coronagraph modeling.
 
 ## WFS Optical, Acquisition, And Estimation Boundary
 
-Before implementation of the proposed general HIL runtime begins, every
-maintained wavefront-sensor family is decomposed across the same semantic
-stages without forcing the families into one concrete representation:
+Before implementation of the general HIL runtime began, every maintained
+wavefront-sensor family was decomposed across the same semantic stages without
+forcing the families into one concrete representation:
 
 ```text
 caller-owned pupil function or electric field
