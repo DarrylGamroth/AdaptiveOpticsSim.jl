@@ -193,9 +193,9 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The Gate 5 device-resident primitive candidate passed all `448` maintained
-checks on the local gfx1030 AMDGPU target and `438/438` on the WSL RTX 3050 Ti
-CUDA target with Julia 1.12.6 and scalar indexing disabled. This includes the
+Gate 5 closure validation head `02e5f29` passed all `448` maintained checks on
+the local gfx1030 AMDGPU target and `438/438` on the WSL RTX 3050 Ti CUDA
+target with Julia 1.12.6 and scalar indexing disabled. This includes the
 retained numerical surfaces, prepared controller-output routing, dynamic
 cycle-averaged circular-Pyramid modulation, direct native Plant DM
 state/staging/surface parity, run-owned sampled-aberration residency, and

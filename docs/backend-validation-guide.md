@@ -537,15 +537,15 @@ the July 18 timing repetitions completed, but no replacement raw-histogram
 artifact was retained after the host's Julia 1.12.6 installation failed a
 package-independent GC check. This is not promoted into a new latency baseline.
 
-The Gate 5 sampled-aberration candidate subsequently passed `448/448` checks
-on the local gfx1030 AMDGPU target and `438/438` checks on the WSL RTX 3050 Ti
-CUDA target, both with Julia 1.12.6 and scalar indexing disabled. CUDA used
-CUDA.jl 6.2.1; both targets used KernelAbstractions.jl 0.9.42. In addition to
-the native Plant DM active/staged and surface checks, the added matrix keeps a
-prepared sampled-aberration copy on the exact backend/device after caller
-mutation and validates identity plus transformed replacement, including zero
-outside finite support. This is direct prepared-storage and kernel evidence,
-not integrated GPU event-loop, latency, or multi-device evidence.
+The Gate 5 closure validation head `02e5f29` passed `448/448` checks on the
+local gfx1030 AMDGPU target and `438/438` checks on the WSL RTX 3050 Ti CUDA
+target, both with Julia 1.12.6 and scalar indexing disabled. CUDA used CUDA.jl
+6.2.1; both targets used KernelAbstractions.jl 0.9.42. In addition to the native
+Plant DM active/staged and surface checks, the matrix keeps a prepared
+sampled-aberration copy on the exact backend/device after caller mutation and
+validates identity plus transformed replacement, including zero outside finite
+support. This is direct prepared-storage and kernel evidence, not integrated
+GPU event-loop, latency, or multi-device evidence.
 
 The Gate 3 closure code revision `871f76a` passed the full CPU suite, the
 `424/424` CUDA target on an RTX 3050 Ti under WSL, and the `434/434` AMDGPU

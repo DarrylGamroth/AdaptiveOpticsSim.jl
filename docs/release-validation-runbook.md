@@ -137,9 +137,9 @@ in the root package environment. The archived `cuda` track defaults to
 backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
-The CUDA track has a current manual WSL validation host. The Gate 5
-sampled-aberration candidate passed the maintained `438/438` hardware target
-on Julia 1.12.6 with CUDA.jl 6.2.1 and KernelAbstractions.jl 0.9.42, on an RTX
+The CUDA track has a current manual WSL validation host. Gate 5 closure
+validation head `02e5f29` passed the maintained `438/438` hardware target on
+Julia 1.12.6 with CUDA.jl 6.2.1 and KernelAbstractions.jl 0.9.42, on an RTX
 3050 Ti with compute capability 8.6, with scalar indexing disabled. This
 includes exact device-resident defensive sampled-OPD ownership and identity
 plus transformed replacement. The separate
@@ -166,7 +166,7 @@ installed in the root package environment. The archived `amdgpu` track defaults
 to backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
-The Gate 5 sampled-aberration candidate passed `448/448` maintained checks on
+Gate 5 closure validation head `02e5f29` passed `448/448` maintained checks on
 the local gfx1030 AMD Radeon Graphics target with scalar indexing disabled and
 Julia 1.12.6. This includes direct device-resident native Plant DM state,
 staging storage, and surface parity plus exact sampled-aberration defensive

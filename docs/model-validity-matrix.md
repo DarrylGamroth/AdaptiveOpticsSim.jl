@@ -116,7 +116,7 @@ circular-Pyramid surfaces in `MV-06`, `MV-11`, and `MV-25`. The clean
 strengthens `MV-24` as serial self-paced CPU service-cost evidence; it does not
 claim fixed-arrival HIL latency or integrated GPU scheduling.
 
-The Gate 5 sampled-aberration candidate passed `448/448` checks on the same
+Gate 5 closure validation head `02e5f29` passed `448/448` checks on the same
 local gfx1030 AMDGPU target and `438/438` on the WSL RTX 3050 Ti CUDA target,
 both with Julia 1.12.6 and scalar indexing disabled. CUDA used CUDA.jl 6.2.1;
 both used KernelAbstractions.jl 0.9.42. The matrix retains native Plant DM
