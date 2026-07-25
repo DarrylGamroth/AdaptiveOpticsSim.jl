@@ -288,6 +288,12 @@ adds concrete single-writer owners without implicit atmosphere advancement:
 - RNG derivation and replay: `RNGDerivationVersion`, `rng_replay_metadata`
 - Definitions: `ControllableOpticDefinition`, `PlantCommandSchema`,
   `OpticalPathDefinition`, `AcquisitionDefinition`, `PlantDefinition`
+- Native Plant deformable mirror: `DeformableMirrorModel`, an exported
+  `AdaptiveOpticsSim.Plant` cold definition that binds actuator topology,
+  influence and actuator-response models, device-internal `Misregistration`,
+  and `PupilRelayRegistration` without owning live command/surface storage.
+  Plant preparation validates one vector actuator endpoint and constructs
+  separate active/staged native `DeformableMirror` runtimes
 - Controllable-optic placement and visibility:
   `PupilPlanePlacement`, `AtmosphericConjugatePlacement`,
   `FocalPlanePlacement`, `AllPathVisibility`, `SelectedPathVisibility`;

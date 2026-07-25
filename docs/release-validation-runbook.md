@@ -146,10 +146,11 @@ installed in the root package environment. The archived `amdgpu` track defaults
 to backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
-Gate 4 candidate revision `191751f` passed `431/431` maintained checks on the
-local gfx1030 AMD Radeon Graphics target with scalar indexing disabled, Julia
-1.12.6, AMDGPU.jl 2.7.0, KernelAbstractions.jl 0.9.42, and ROCm 7.2.1. The
-maintained AMD latency baseline remains the
+The Gate 5 native-DM candidate passed `441/441` maintained checks on the local
+gfx1030 AMD Radeon Graphics target with scalar indexing disabled and Julia
+1.12.6. This includes direct device-resident native Plant DM state, staging
+storage, and surface parity; it does not exercise an integrated GPU event
+loop. The maintained AMD latency baseline remains the
 [July 14 cross-host artifact](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml).
 A later host-side Julia installation failure prevented retention of a new raw
 histogram and is not treated as package or AMDGPU performance evidence.

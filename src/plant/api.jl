@@ -16,6 +16,7 @@ export CommandBasisRevision, CommandUnit, CommandSignConvention, CommandBasis
 export PlantCommandSchema
 export OpticalPathDefinition, AcquisitionDefinition
 export ControllableOpticDefinition, PlantDefinition
+export DeformableMirrorModel
 export PupilPlanePlacement, AtmosphericConjugatePlacement
 export FocalPlanePlacement
 export AllPathVisibility, SelectedPathVisibility

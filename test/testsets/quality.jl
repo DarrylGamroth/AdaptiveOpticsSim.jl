@@ -46,6 +46,8 @@ end
         ["plant-conjugate-geometry"])) ==
         ("plant-conjugate-geometry",)
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["plant-mcao-moao"])) == ("plant-mcao-moao",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-time"])) == ("plant-time",)
     @test Tuple(spec.name for spec in resolve_test_suites(["gate4"])) == (
         "plant-command-schemas",
@@ -58,7 +60,11 @@ end
         "plant-autonomous-optics",
     )
     @test Tuple(spec.name for spec in resolve_test_suites(["gate5"])) ==
-        ("plant-placed-optics", "plant-conjugate-geometry")
+        (
+            "plant-placed-optics",
+            "plant-conjugate-geometry",
+            "plant-mcao-moao",
+        )
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
         "plant-topology",
         "plant-command-schemas",
@@ -75,6 +81,7 @@ end
         "plant-autonomous-optics",
         "plant-placed-optics",
         "plant-conjugate-geometry",
+        "plant-mcao-moao",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -97,6 +104,7 @@ end
         "plant-autonomous-optics",
         "plant-placed-optics",
         "plant-conjugate-geometry",
+        "plant-mcao-moao",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -116,6 +124,7 @@ end
     @test occursin("plant-autonomous-optics", listing_text)
     @test occursin("plant-placed-optics", listing_text)
     @test occursin("plant-conjugate-geometry", listing_text)
+    @test occursin("plant-mcao-moao", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
     @test occursin("gate4 =", listing_text)

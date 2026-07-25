@@ -22,18 +22,19 @@ latched command endpoint, and provide standalone bounded admission and
 effective-command state owners. The fifth slice prepares every declared optic
 and endpoint, composes physical command publication into the serial event
 loop, and provides explicit all-or-none transactions across distinct optics.
-The first Gate 5 slice requires every optic to declare its optical
-placement and all-path or selected-path visibility. Plant preparation resolves
-those declarations into canonical bounded path bindings and co-placed plane
-groups, and the serial pupil-plane path applies only its prepared visible
-range. The second slice adds an immutable path-local coupling for sampled
-surfaces: it composes NGS direction or finite-height LGS cone geometry,
-conjugate altitude, explicit pupil-relay registration, and both metric sampled
-grids, then applies the result through a same-grid fast path or finite-support
-bilinear interpolation. Native DM Plant integration and complete MCAO/MOAO
-scenarios remain subsequent slices. Device-specific dynamics remain
-model-specific; none of these contracts is hidden in an identity or command
-schema.
+The first Gate 5 slice requires every optic to declare its optical placement
+and all-path or selected-path visibility. Plant preparation resolves those
+declarations into canonical bounded path bindings and co-placed plane groups,
+and the serial pupil-plane path applies only its prepared visible range. The
+second slice adds an immutable path-local coupling for sampled surfaces: it
+composes NGS direction or finite-height LGS cone geometry, conjugate altitude,
+explicit pupil-relay registration, and both metric sampled grids, then applies
+the result through a same-grid fast path or finite-support bilinear
+interpolation. The third slice integrates the native `DeformableMirror`, applies
+common multi-altitude MCAO and target-specific MOAO surfaces through those
+prepared bindings, and requires a reduced-order path to name exactly its
+visible command responses. Device-specific dynamics remain model-specific;
+none of these contracts is hidden in an identity or command schema.
 Separating a path from its acquisitions prevents a second camera or readout
 cadence from forcing duplicate propagation.
 
@@ -334,10 +335,10 @@ telescope scratch plane. This boundary permits independent paths to share one
 telescope definition and permits co-conjugated optics to remain independent;
 Gate 4 defines independent endpoint command timing and effective-state
 semantics. Gate 5 now declares placement and path visibility, prepares bounded
-bindings, and provides the generic sampled atmospheric source-footprint
-coupling. Later slices still define native DM integration,
-sampled-aberration attachment, device dynamics, complete MCAO/MOAO scenarios,
-and boundary pacing.
+bindings and sampled atmospheric source-footprint couplings, and composes
+native DMs into common MCAO and path-specific MOAO execution. Later slices
+still define sampled-aberration attachment, device dynamics, prepared parallel
+execution, and boundary pacing.
 
 Reusable propagating optics follow the same split. In particular, a spatial
 filter owns its prepared mask definition separately from its single-writer FFT
@@ -662,8 +663,10 @@ negative optical correction.
 
 Core implements this linear form for intentional direct measurements.
 `HarmonicDisturbanceModel` supplies exactly replayable explicit-time
-disturbance coordinates, `ReducedOrderCommandResponse` binds every currently
-visible endpoint to an operator and exact command-schema semantics, and
+disturbance coordinates. Each `ReducedOrderCommandResponse` binds one operator
+to exact command-schema semantics, and preparation requires the response set
+to equal the endpoint set visible on that acquisition's optical path: omitting
+a visible endpoint or including a hidden endpoint fails before execution.
 `LinearReducedOrderAcquisitionModel` supplies the path projection and sensor
 operator. `DirectMeasurementAcquisitionDefinition` exposure-averages the held
 instantaneous `WFSMeasurement` and retains ordinary periodic or delivered
@@ -716,13 +719,13 @@ validated envelope. It does not establish diffraction, aliasing, pyramid
 optical-gain, coronagraph, detector-physics, or science-performance behavior
 that the selected surrogate omits.
 
-The maintained acceptance fixture currently establishes deterministic modal
-loop closure, independent endpoint timing, clipping through the ordinary
-command layer, and expected degradation under wrong sign, excess delay, stale
-feedback, dropped updates, and a response-calibration mismatch. It does not
-yet establish tomography, raw-pixel processing, external-RTC behavior,
-instrument-scale capacity, integrated GPU event-loop execution, or comparison
-to a full-optical reference.
+The maintained acceptance fixtures establish deterministic modal loop closure,
+independent endpoint timing, clipping through the ordinary command layer,
+exact common-versus-target-local path visibility, and expected degradation
+under wrong sign, excess delay, stale feedback, dropped updates, and a
+response-calibration mismatch. They do not establish tomography fidelity,
+raw-pixel processing, external-RTC behavior, instrument-scale capacity,
+integrated GPU event-loop execution, or comparison to a full-optical reference.
 
 Different acquisitions may deliberately use different tiers in one plant. For
 example, full-sized synthetic LGS frames can load an RTC while a reduced-order
@@ -795,13 +798,13 @@ operation.
 
 Co-conjugated additive pupil behavior, NGS, LGS, multiple WFS arms, direct
 science detectors, and the PROPER coronagraph handoff are current foundations.
-Explicit all-path and selected-path optic bindings are now implemented for
-pupil-plane execution. A generic sampled-surface fixture now validates
-altitude-conjugated NGS/LGS geometry and independently commanded compatible
-surfaces. Complete native-DM MCAO and geometrically corrected MOAO remain
-target capabilities and must not be described as production-supported until
-their device integration, command isolation, scenarios, and hardware paths
-have maintained evidence.
+Explicit all-path and selected-path optic bindings are implemented for
+pupil-plane execution. Maintained fixtures validate analytic
+altitude-conjugated NGS/LGS geometry, independently commanded compatible
+surfaces, native common multi-altitude DMs, and isolated target-local MOAO DMs
+under the serial CPU event model. This establishes composition semantics, not
+production device dynamics, tomography fidelity, instrument-scale capacity,
+integrated GPU event-loop execution, or external optical equivalence.
 
 ## Calibration Illumination Without Instrument Assumptions
 
@@ -1167,6 +1170,26 @@ outside the declared finite surface support contribute zero. A wavelength-
 expanded source may share the coupling, but a multi-direction `Asterism` or
 extended source must be decomposed into separate prepared directions at an
 atmospheric conjugate.
+
+The third slice adds `Plant.DeformableMirrorModel` as the cold native DM
+definition. It fixes actuator topology, influence and actuator-response models,
+device-internal `Misregistration`, numeric type, and pupil-relay registration.
+Preparation validates one vector actuator endpoint in metres with the declared
+surface-OPD sign convention, constructs immutable influence data for the
+telescope/backend/device, and allocates separate active and staged
+`DeformableMirror` runtimes. Staging forms a complete surface in the staged
+runtime; publication swaps the active and staged owners without copying the
+surface. Path execution reads only the published surface through its immutable
+path-local coupling.
+
+The same serial scenario applies common native DMs at the pupil and multiple
+atmospheric conjugates to NGS, finite-height LGS, and science directions, while
+target-local native DMs affect only their selected MOAO science paths.
+Co-conjugated devices keep separate endpoint state and cadence. Only an
+explicit `PlantCommandTransaction` makes publication across several devices
+atomic. The corresponding reduced-order scenario resolves endpoint slots from
+the same prepared path bindings and rejects missing visible or extra hidden
+responses during preparation.
 
 Command transport remains independent of plane geometry. The same generic
 time-stamped endpoint can drive a pupil DM, atmospheric-conjugate DM, tip/tilt

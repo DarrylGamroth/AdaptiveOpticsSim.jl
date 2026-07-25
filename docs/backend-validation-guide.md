@@ -495,6 +495,14 @@ the July 18 timing repetitions completed, but no replacement raw-histogram
 artifact was retained after the host's Julia 1.12.6 installation failed a
 package-independent GC check. This is not promoted into a new latency baseline.
 
+The Gate 5 native-DM candidate subsequently passed `441/441` checks on the
+local gfx1030 AMDGPU target with Julia 1.12.6 and scalar indexing disabled.
+The added checks keep native Plant DM active/staged command and surface storage
+device-resident and compare the published surface with the standalone native
+DM on the same device. This is direct surface evidence, not integrated GPU
+event-loop, latency, or multi-device evidence. The native-DM delta has no
+corresponding CUDA hardware result.
+
 The Gate 3 closure code revision `871f76a` passed the full CPU suite, the
 `424/424` CUDA target on an RTX 3050 Ti under WSL, and the `434/434` AMDGPU
 target on a local gfx1030 device, all with Julia 1.12.6. CUDA used CUDA.jl 6.2.1;
