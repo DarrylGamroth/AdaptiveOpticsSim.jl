@@ -48,6 +48,9 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-mcao-moao"])) == ("plant-mcao-moao",)
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["plant-sampled-aberrations"])) ==
+        ("plant-sampled-aberrations",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-time"])) == ("plant-time",)
     @test Tuple(spec.name for spec in resolve_test_suites(["gate4"])) == (
         "plant-command-schemas",
@@ -64,6 +67,7 @@ end
             "plant-placed-optics",
             "plant-conjugate-geometry",
             "plant-mcao-moao",
+            "plant-sampled-aberrations",
         )
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
         "plant-topology",
@@ -82,6 +86,7 @@ end
         "plant-placed-optics",
         "plant-conjugate-geometry",
         "plant-mcao-moao",
+        "plant-sampled-aberrations",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -105,6 +110,7 @@ end
         "plant-placed-optics",
         "plant-conjugate-geometry",
         "plant-mcao-moao",
+        "plant-sampled-aberrations",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -125,6 +131,7 @@ end
     @test occursin("plant-placed-optics", listing_text)
     @test occursin("plant-conjugate-geometry", listing_text)
     @test occursin("plant-mcao-moao", listing_text)
+    @test occursin("plant-sampled-aberrations", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
     @test occursin("gate4 =", listing_text)
@@ -144,6 +151,7 @@ end
         if !isempty(spec.fixtures))
     @test fixture_users == (
         "ka-cpu",
+        "plant-sampled-aberrations",
         "detectors-wfs",
         "plant-preparation",
         "plant-providers",

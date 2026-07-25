@@ -38,6 +38,15 @@ struct ControllableOpticID
     end
 end
 
+"""Stable declared identity of one sampled static aberration."""
+struct SampledAberrationID
+    name::Symbol
+
+    function SampledAberrationID(name::Symbol)
+        return new(_require_component_name(name, :sampled_aberration))
+    end
+end
+
 """Stable declared identity of one independently timed command endpoint."""
 struct CommandEndpointID
     name::Symbol
@@ -51,6 +60,7 @@ const _PlantTopologyID = Union{
     OpticalPathID,
     AcquisitionID,
     ControllableOpticID,
+    SampledAberrationID,
     CommandEndpointID,
 }
 
@@ -90,6 +100,15 @@ function _as_controllable_optic_id(value)
     throw(PlantDefinitionError(:controllable_optic, :invalid_id,
         "controllable-optic identity must be a Symbol or " *
         "ControllableOpticID; got $(typeof(value))"))
+end
+
+@inline _as_sampled_aberration_id(id::SampledAberrationID) = id
+@inline _as_sampled_aberration_id(name::Symbol) = SampledAberrationID(name)
+
+function _as_sampled_aberration_id(value)
+    throw(PlantDefinitionError(:sampled_aberration, :invalid_id,
+        "sampled-aberration identity must be a Symbol or " *
+        "SampledAberrationID; got $(typeof(value))"))
 end
 
 @inline _as_command_endpoint_id(id::CommandEndpointID) = id

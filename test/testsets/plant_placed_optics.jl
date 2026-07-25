@@ -17,9 +17,9 @@ mutable struct PlacedOpticsTestOpticWorkspace{T<:AbstractFloat}
 end
 
 struct UnsupportedPlacedOpticPlacement <:
-       AbstractControllableOpticPlacement end
+       AbstractOpticalPlacement end
 struct UnsupportedPlacedOpticVisibility <:
-       AbstractControllableOpticVisibility end
+       AbstractPathVisibility end
 
 Plant.plant_model_definition_style(
     ::Type{PlacedOpticsTestPathModel}) = ColdPlantModelDefinition()
@@ -469,13 +469,17 @@ end
     end
     @test missing_placement isa UndefKeywordError
 
-    for (operation, reason) in (
+    for (operation, component, reason) in (
         (() -> AtmosphericConjugatePlacement(-1.0),
+            :optical_placement,
             :invalid_conjugate_altitude),
         (() -> AtmosphericConjugatePlacement(Inf),
+            :optical_placement,
             :invalid_conjugate_altitude),
-        (() -> SelectedPathVisibility(()), :empty_path_visibility),
+        (() -> SelectedPathVisibility(()),
+            :path_visibility, :empty_path_visibility),
         (() -> SelectedPathVisibility(:science, :science),
+            :path_visibility,
             :duplicate_visible_path),
         (() -> ControllableOpticDefinition(
                 :bad_placement,
@@ -483,18 +487,18 @@ end
                 (placed_optics_test_schema(:bad_placement),);
                 placement=UnsupportedPlacedOpticPlacement(),
                 visibility=AllPathVisibility(),
-            ), :invalid_placement),
+            ), :controllable_optic, :invalid_placement),
         (() -> ControllableOpticDefinition(
                 :bad_visibility,
                 PlacedOpticsTestOpticModel(),
                 (placed_optics_test_schema(:bad_visibility),);
                 placement=PupilPlanePlacement(),
                 visibility=UnsupportedPlacedOpticVisibility(),
-            ), :invalid_path_visibility),
+            ), :controllable_optic, :invalid_path_visibility),
     )
         error = placed_optics_captured_error(operation)
         @test error isa PlantDefinitionError
-        @test error.component === :controllable_optic
+        @test error.component === component
         @test error.reason === reason
     end
 

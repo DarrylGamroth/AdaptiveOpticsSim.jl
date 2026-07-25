@@ -225,8 +225,8 @@ optical grouping are deliberately absent from this topology record.
 struct ControllableOpticDefinition{
     M,
     S<:Tuple,
-    P<:AbstractControllableOpticPlacement,
-    V<:AbstractControllableOpticVisibility,
+    P<:AbstractOpticalPlacement,
+    V<:AbstractPathVisibility,
 }
     id::ControllableOpticID
     optic_model::M
@@ -242,16 +242,16 @@ struct ControllableOpticDefinition{
         visibility::V,
     ) where {
         M,
-        P<:AbstractControllableOpticPlacement,
-        V<:AbstractControllableOpticVisibility,
+        P<:AbstractOpticalPlacement,
+        V<:AbstractPathVisibility,
     }
         _require_declared_topology_value(optic_model, :controllable_optic,
             :missing_model, "model")
         _require_cold_plant_model_definition(optic_model,
             :controllable_optic, "model")
         schemas = _normalize_command_schemas(command_schemas)
-        _require_controllable_optic_placement(placement)
-        _require_controllable_optic_visibility(visibility)
+        _require_optical_placement(placement)
+        _require_path_visibility(visibility)
         return new{M,typeof(schemas),P,V}(id, optic_model, schemas,
             placement, visibility)
     end
@@ -262,8 +262,8 @@ function ControllableOpticDefinition(id, optic_model, command_schemas;
     schemas = _normalize_command_schemas(command_schemas)
     return ControllableOpticDefinition(_as_controllable_optic_id(id),
         optic_model, schemas,
-        _require_controllable_optic_placement(placement),
-        _require_controllable_optic_visibility(visibility))
+        _require_optical_placement(placement),
+        _require_path_visibility(visibility))
 end
 
 ControllableOpticDefinition(id, optic_model;
@@ -271,9 +271,176 @@ ControllableOpticDefinition(id, optic_model;
     ControllableOpticDefinition(id, optic_model, command_schemas;
         placement, visibility)
 
+@inline _require_sampled_aberration_surface(
+    surface::Union{NCPA,OPDMap}) = surface
+
+function _require_sampled_aberration_surface(surface)
+    throw(PlantDefinitionError(:sampled_aberration, :invalid_surface,
+        "sampled aberrations must contain a native NCPA or OPDMap; got " *
+        "$(typeof(surface))"))
+end
+
+@inline _require_sampled_aberration_application(
+    application::Union{DMAdditive,DMReplace}) = application
+
+function _require_sampled_aberration_application(application)
+    throw(PlantDefinitionError(:sampled_aberration,
+        :invalid_application,
+        "sampled-aberration application must be DMAdditive or DMReplace; " *
+        "got $(typeof(application))"))
+end
+
+@inline _require_sampled_aberration_placement(
+    placement::Union{
+        PupilPlanePlacement,
+        AtmosphericConjugatePlacement,
+    }) = placement
+
+function _require_sampled_aberration_placement(placement)
+    _require_optical_placement(placement, :sampled_aberration)
+    throw(PlantDefinitionError(:sampled_aberration,
+        :unsupported_placement,
+        "native sampled OPD aberrations require PupilPlanePlacement or " *
+        "AtmosphericConjugatePlacement; got $(typeof(placement))"))
+end
+
+@inline _require_sampled_aberration_registration(::Nothing) = nothing
+
+function _require_sampled_aberration_registration(registration)
+    throw(PlantDefinitionError(:sampled_aberration,
+        :invalid_pupil_relay_registration,
+        "sampled-aberration pupil-relay registration must be " *
+        "PupilRelayRegistration or nothing; got $(typeof(registration))"))
+end
+
+function _require_sampled_aberration_metadata(
+    metadata::OpticalPlaneMetadata,
+    surface::Union{NCPA,OPDMap},
+)
+    opd = surface_opd(surface)
+    typeof(metadata.kind) === PupilPlane || throw(PlantDefinitionError(
+        :sampled_aberration, :invalid_surface_plane,
+        "sampled-aberration metadata must describe PupilPlane; got " *
+        "$(typeof(metadata.kind))"))
+    typeof(metadata.coordinate_domain) === MetricCoordinates || throw(
+        PlantDefinitionError(:sampled_aberration,
+            :invalid_surface_coordinates,
+            "sampled-aberration metadata must use MetricCoordinates; got " *
+            "$(typeof(metadata.coordinate_domain))"))
+    metadata.numeric_type <: AbstractFloat || throw(PlantDefinitionError(
+        :sampled_aberration, :invalid_surface_numeric_type,
+        "sampled-aberration metadata must use real floating-point samples; " *
+        "got $(metadata.numeric_type)"))
+    axes = metadata.orientation.axes
+    (axes == (:x, :y) || axes == (:y, :x)) || throw(
+        PlantDefinitionError(:sampled_aberration,
+            :unsupported_axis_orientation,
+            "sampled-aberration axes must be (:x, :y) or (:y, :x); got " *
+            repr(axes)))
+    size(opd) == metadata.dimensions || throw(PlantDefinitionError(
+        :sampled_aberration, :surface_dimensions,
+        "sampled-aberration OPD dimensions $(size(opd)) do not match " *
+        "declared dimensions $(metadata.dimensions)"))
+    eltype(opd) === metadata.numeric_type || throw(PlantDefinitionError(
+        :sampled_aberration, :surface_numeric_type,
+        "sampled-aberration OPD numeric type $(eltype(opd)) does not match " *
+        "declared type $(metadata.numeric_type)"))
+    typeof(backend(opd)) === typeof(metadata.backend) || throw(
+        PlantDefinitionError(:sampled_aberration, :surface_backend,
+            "sampled-aberration OPD and metadata use different array " *
+            "backends"))
+    plane_device(opd) == metadata.device || throw(PlantDefinitionError(
+        :sampled_aberration, :surface_device,
+        "sampled-aberration OPD and metadata occupy different physical " *
+        "devices"))
+    return metadata
+end
+
+function _require_sampled_aberration_metadata(metadata, surface)
+    _require_sampled_aberration_surface(surface)
+    throw(PlantDefinitionError(:sampled_aberration,
+        :invalid_surface_metadata,
+        "sampled-aberration metadata must be OpticalPlaneMetadata; got " *
+        "$(typeof(metadata))"))
+end
+
+"""
+    SampledAberrationDefinition(id, surface, metadata;
+        placement, visibility, application, registration=nothing)
+
+Immutable declaration of one native sampled pupil-OPD aberration. `surface`
+must be `NCPA` or `OPDMap`; `metadata` gives its exact metric pupil-plane
+sampling, array backend, and physical device. Placement, path visibility, and
+additive or replacement application are explicit optical semantics.
+
+The declaration retains caller storage. `prepare_plant` makes a defensive
+backend-local OPD copy and prepares each visible path's finite-support
+pupil-footprint coupling before repeated execution.
+"""
+struct SampledAberrationDefinition{
+    S<:Union{NCPA,OPDMap},
+    M<:OpticalPlaneMetadata,
+    P<:AbstractOpticalPlacement,
+    V<:AbstractPathVisibility,
+    A<:DMApplyMode,
+    R,
+}
+    id::SampledAberrationID
+    surface::S
+    metadata::M
+    placement::P
+    visibility::V
+    application::A
+    registration::R
+
+    function SampledAberrationDefinition(
+        id::SampledAberrationID,
+        surface::S,
+        metadata::M,
+        placement::P,
+        visibility::V,
+        application::A,
+        registration::R,
+    ) where {
+        S<:Union{NCPA,OPDMap},
+        M<:OpticalPlaneMetadata,
+        P<:AbstractOpticalPlacement,
+        V<:AbstractPathVisibility,
+        A<:DMApplyMode,
+        R,
+    }
+        _require_sampled_aberration_surface(surface)
+        _require_sampled_aberration_metadata(metadata, surface)
+        _require_sampled_aberration_placement(placement)
+        _require_path_visibility(visibility, :sampled_aberration)
+        _require_sampled_aberration_application(application)
+        _require_sampled_aberration_registration(registration)
+        return new{S,M,P,V,A,R}(id, surface, metadata, placement,
+            visibility, application, registration)
+    end
+end
+
+function SampledAberrationDefinition(id, surface, metadata;
+    placement, visibility, application, registration=nothing)
+    validated_surface = _require_sampled_aberration_surface(surface)
+    validated_metadata =
+        _require_sampled_aberration_metadata(metadata, validated_surface)
+    return SampledAberrationDefinition(
+        _as_sampled_aberration_id(id),
+        validated_surface,
+        validated_metadata,
+        _require_sampled_aberration_placement(placement),
+        _require_path_visibility(visibility, :sampled_aberration),
+        _require_sampled_aberration_application(application),
+        _require_sampled_aberration_registration(registration),
+    )
+end
+
 @inline path_id(path::OpticalPathDefinition) = path.id
 @inline acquisition_id(acquisition::AcquisitionDefinition) = acquisition.id
 @inline controllable_optic_id(optic::ControllableOpticDefinition) = optic.id
+@inline sampled_aberration_id(
+    aberration::SampledAberrationDefinition) = aberration.id
 @inline acquisition_path_id(acquisition::AcquisitionDefinition) =
     acquisition.path
 @inline path_source(path::OpticalPathDefinition) = path.source
@@ -286,6 +453,18 @@ ControllableOpticDefinition(id, optic_model;
     optic.placement
 @inline controllable_optic_visibility(optic::ControllableOpticDefinition) =
     optic.visibility
+@inline sampled_aberration_surface(
+    aberration::SampledAberrationDefinition) = aberration.surface
+@inline sampled_aberration_metadata(
+    aberration::SampledAberrationDefinition) = aberration.metadata
+@inline sampled_aberration_placement(
+    aberration::SampledAberrationDefinition) = aberration.placement
+@inline sampled_aberration_visibility(
+    aberration::SampledAberrationDefinition) = aberration.visibility
+@inline sampled_aberration_application(
+    aberration::SampledAberrationDefinition) = aberration.application
+@inline sampled_aberration_registration(
+    aberration::SampledAberrationDefinition) = aberration.registration
 @inline command_schemas(optic::ControllableOpticDefinition) =
     optic.command_schemas
 @inline command_endpoint_ids(optic::ControllableOpticDefinition) =
@@ -325,6 +504,15 @@ function _require_controllable_optic_definition(value)
         "values; got $(typeof(value))"))
 end
 
+@inline _require_sampled_aberration_definition(
+    ::SampledAberrationDefinition) = nothing
+
+function _require_sampled_aberration_definition(value)
+    throw(PlantDefinitionError(:sampled_aberration, :invalid_definition,
+        "plant sampled aberrations must contain " *
+        "SampledAberrationDefinition values; got $(typeof(value))"))
+end
+
 function _require_named_path_identity(key::Symbol,
     path::OpticalPathDefinition)
     key == path.id.name || throw(PlantDefinitionError(:path,
@@ -348,6 +536,17 @@ function _require_named_controllable_optic_identity(key::Symbol,
         :identity_mismatch,
         "named controllable-optic key $(repr(key)) does not match " *
         "$(optic.id)"))
+    return nothing
+end
+
+function _require_named_sampled_aberration_identity(
+    key::Symbol,
+    aberration::SampledAberrationDefinition,
+)
+    key == aberration.id.name || throw(PlantDefinitionError(
+        :sampled_aberration, :identity_mismatch,
+        "named sampled-aberration key $(repr(key)) does not match " *
+        "$(aberration.id)"))
     return nothing
 end
 
@@ -403,6 +602,26 @@ function _normalize_controllable_optic_definitions(optics)
         "$(typeof(optics))"))
 end
 
+function _normalize_sampled_aberration_definitions(aberrations::Tuple)
+    foreach(_require_sampled_aberration_definition, aberrations)
+    return aberrations
+end
+
+function _normalize_sampled_aberration_definitions(
+    aberrations::NamedTuple)
+    normalized = values(aberrations)
+    foreach(_require_sampled_aberration_definition, normalized)
+    foreach(_require_named_sampled_aberration_identity, keys(aberrations),
+        normalized)
+    return normalized
+end
+
+function _normalize_sampled_aberration_definitions(aberrations)
+    throw(PlantDefinitionError(:sampled_aberration, :invalid_container,
+        "plant sampled aberrations must be a Tuple or NamedTuple; got " *
+        "$(typeof(aberrations))"))
+end
+
 @inline _require_plant_telescope(::AbstractTelescope) = nothing
 
 function _require_plant_telescope(value)
@@ -447,6 +666,17 @@ function _require_unique_controllable_optic_ids(optics::Tuple)
         id = controllable_optic_id(optic)
         id in seen && throw(PlantDefinitionError(:controllable_optic,
             :duplicate_id, "duplicate controllable-optic identity $id"))
+        push!(seen, id)
+    end
+    return nothing
+end
+
+function _require_unique_sampled_aberration_ids(aberrations::Tuple)
+    seen = Set{SampledAberrationID}()
+    for aberration in aberrations
+        id = sampled_aberration_id(aberration)
+        id in seen && throw(PlantDefinitionError(:sampled_aberration,
+            :duplicate_id, "duplicate sampled-aberration identity $id"))
         push!(seen, id)
     end
     return nothing
@@ -524,72 +754,127 @@ function _require_controllable_optic_visibility_paths(
     return nothing
 end
 
+function _require_sampled_aberration_visibility_paths(
+    paths::Tuple, aberrations::Tuple)
+    for aberration in aberrations
+        _require_sampled_aberration_visibility_paths(paths, aberration,
+            sampled_aberration_visibility(aberration))
+    end
+    return nothing
+end
+
+@inline _require_sampled_aberration_visibility_paths(
+    ::Tuple, ::SampledAberrationDefinition, ::AllPathVisibility) = nothing
+
+function _require_sampled_aberration_visibility_paths(
+    paths::Tuple,
+    aberration::SampledAberrationDefinition,
+    visibility::SelectedPathVisibility,
+)
+    for id in selected_path_ids(visibility)
+        _contains_path_id(paths, id) || throw(PlantDefinitionError(
+            :sampled_aberration, :unknown_visible_path,
+            "sampled aberration $(sampled_aberration_id(aberration)) " *
+            "references unknown visible path $id"))
+    end
+    return nothing
+end
+
 """
-    PlantDefinition(telescope, atmosphere, controllable_optics, paths,
-        acquisitions)
+    PlantDefinition(telescope, atmosphere, controllable_optics,
+        sampled_aberrations, paths, acquisitions)
     PlantDefinition(; telescope, atmosphere, controllable_optics=(),
-        paths=(), acquisitions=())
+        sampled_aberrations=(), paths=(), acquisitions=())
 
 Immutable declared topology for one telescope and atmosphere, reusable optical
 paths, independent acquisitions, and independently identified controllable
-optics with versioned semantic command schemas. Tuples and named tuples are
-accepted as cold organization only; every component carries its own stable
-identity. This value is not prepared execution state and owns no mutable
-command state, schedule, queue, transport, RNG stream, or HIL descriptor.
+optics with versioned semantic command schemas. Native sampled aberrations are
+separate immutable optical declarations rather than controllable devices.
+Tuples and named tuples are accepted as cold organization only; every
+component carries its own stable identity. This value is not prepared
+execution state and owns no mutable command state, schedule, queue, transport,
+RNG stream, or HIL descriptor.
 """
-struct PlantDefinition{T,A,O<:Tuple,P<:Tuple,Q<:Tuple}
+struct PlantDefinition{
+    T,
+    A,
+    O<:Tuple,
+    S<:Tuple,
+    P<:Tuple,
+    Q<:Tuple,
+}
     telescope::T
     atmosphere::A
     controllable_optics::O
+    sampled_aberrations::S
     paths::P
     acquisitions::Q
 
     function PlantDefinition(telescope::T, atmosphere::A,
-        controllable_optics::O, paths::P,
-        acquisitions::Q) where {T,A,O<:Tuple,P<:Tuple,Q<:Tuple}
+        controllable_optics::O, sampled_aberrations::S, paths::P,
+        acquisitions::Q) where {
+        T,A,O<:Tuple,S<:Tuple,P<:Tuple,Q<:Tuple,
+    }
         _require_plant_telescope(telescope)
         _require_plant_atmosphere(atmosphere)
         foreach(_require_controllable_optic_definition,
             controllable_optics)
+        foreach(_require_sampled_aberration_definition,
+            sampled_aberrations)
         foreach(_require_path_definition, paths)
         foreach(_require_acquisition_definition, acquisitions)
         _require_unique_controllable_optic_ids(controllable_optics)
+        _require_unique_sampled_aberration_ids(sampled_aberrations)
         _require_unique_command_endpoint_owners(controllable_optics)
         _require_unique_plant_command_schema_ids(controllable_optics)
         _require_unique_path_ids(paths)
         _require_unique_acquisition_ids(acquisitions)
         _require_controllable_optic_visibility_paths(paths,
             controllable_optics)
+        _require_sampled_aberration_visibility_paths(paths,
+            sampled_aberrations)
         _require_acquisition_paths(paths, acquisitions)
-        return new{T,A,O,P,Q}(telescope, atmosphere, controllable_optics,
-            paths, acquisitions)
+        return new{T,A,O,S,P,Q}(telescope, atmosphere,
+            controllable_optics, sampled_aberrations, paths, acquisitions)
     end
 end
 
 function PlantDefinition(; telescope, atmosphere, controllable_optics=(),
-    paths=(), acquisitions=())
+    sampled_aberrations=(), paths=(), acquisitions=())
     normalized_optics =
         _normalize_controllable_optic_definitions(controllable_optics)
+    normalized_aberrations =
+        _normalize_sampled_aberration_definitions(sampled_aberrations)
     normalized_paths = _normalize_path_definitions(paths)
     normalized_acquisitions = _normalize_acquisition_definitions(acquisitions)
     return PlantDefinition(telescope, atmosphere, normalized_optics,
-        normalized_paths, normalized_acquisitions)
+        normalized_aberrations, normalized_paths, normalized_acquisitions)
+end
+
+function PlantDefinition(telescope, atmosphere, controllable_optics,
+    sampled_aberrations, paths, acquisitions)
+    normalized_optics =
+        _normalize_controllable_optic_definitions(controllable_optics)
+    normalized_aberrations =
+        _normalize_sampled_aberration_definitions(sampled_aberrations)
+    normalized_paths = _normalize_path_definitions(paths)
+    normalized_acquisitions = _normalize_acquisition_definitions(acquisitions)
+    return PlantDefinition(telescope, atmosphere, normalized_optics,
+        normalized_aberrations, normalized_paths, normalized_acquisitions)
 end
 
 function PlantDefinition(telescope, atmosphere, controllable_optics, paths,
     acquisitions)
-    normalized_optics =
-        _normalize_controllable_optic_definitions(controllable_optics)
-    normalized_paths = _normalize_path_definitions(paths)
-    normalized_acquisitions = _normalize_acquisition_definitions(acquisitions)
-    return PlantDefinition(telescope, atmosphere, normalized_optics,
-        normalized_paths, normalized_acquisitions)
+    return PlantDefinition(telescope, atmosphere, controllable_optics, (),
+        paths, acquisitions)
 end
 
 @inline plant_telescope(plant::PlantDefinition) = plant.telescope
 @inline plant_atmosphere(plant::PlantDefinition) = plant.atmosphere
 @inline controllable_optic_definitions(plant::PlantDefinition) =
     plant.controllable_optics
+@inline sampled_aberration_definitions(plant::PlantDefinition) =
+    plant.sampled_aberrations
 @inline path_definitions(plant::PlantDefinition) = plant.paths
 @inline acquisition_definitions(plant::PlantDefinition) = plant.acquisitions
 
@@ -618,6 +903,15 @@ function controllable_optic_definition(plant::PlantDefinition, id)
     end
     throw(PlantDefinitionError(:controllable_optic, :unknown_id,
         "plant has no controllable optic $resolved"))
+end
+
+function sampled_aberration_definition(plant::PlantDefinition, id)
+    resolved = _as_sampled_aberration_id(id)
+    for aberration in plant.sampled_aberrations
+        sampled_aberration_id(aberration) == resolved && return aberration
+    end
+    throw(PlantDefinitionError(:sampled_aberration, :unknown_id,
+        "plant has no sampled aberration $resolved"))
 end
 
 function command_endpoint_owner(plant::PlantDefinition, id)

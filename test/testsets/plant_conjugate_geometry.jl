@@ -505,7 +505,7 @@ end
             caught
         end
         @test error isa PlantDefinitionError
-        @test error.component === :controllable_optic
+        @test error.component === :pupil_relay_registration
         @test error.reason === :invalid_pupil_relay_registration
     end
 

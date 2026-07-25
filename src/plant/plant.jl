@@ -28,7 +28,8 @@ import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
     CellIntegratedMeasure, CoherentFieldCombination, Detector,
     DeformableMirror, DeformableMirrorParams, DeformableMirrorState,
     DetectorAcquisitionPlan, DetectorPlane, DimensionlessNormalization,
-    CircularModulation, DirectMeasurementPath, EMCCDSensor, ElectricField,
+    CircularModulation, DirectMeasurementPath, DMAdditive, DMApplyMode,
+    DMReplace, EMCCDSensor, ElectricField,
     ExpandedSourceComposition, ExtendedSource,
     FocalPlane, FrameReadoutProducts, FrameSensorType,
     FrameTransferAcquisition, GlobalResetExposure,
@@ -45,7 +46,7 @@ import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
     PointSampledMeasure, PreparedFocalPlaneModulation,
     PreparedIncoherentDirectImaging,
     PreparedPyramidOpticalBundleFormation, PreparedPyramidOpticalFormation,
-    OpticalPlaneMetadata, PupilFunction, PupilPlane,
+    NCPA, OPDMap, OpticalPlaneMetadata, PupilFunction, PupilPlane,
     RollingExposure, RollingShutter, ScalarCPUStyle, Source,
     SpatialDensityMeasure, SpectralSource, Telescope, UnspecifiedCoherence,
     UnspecifiedNormalization, UnspecifiedSpatialMeasure,
@@ -87,7 +88,7 @@ include("errors.jl")
 include("time.jl")
 include("scheduling.jl")
 include("identities.jl")
-include("optic_placement.jl")
+include("optical_placement.jl")
 include("command_schemas.jl")
 include("command_admission.jl")
 include("command_application.jl")
@@ -105,6 +106,7 @@ include("reduced_order.jl")
 include("controller_routing.jl")
 include("autonomous_periodic_optics.jl")
 include("pupil_footprint_coupling.jl")
+include("sampled_aberrations.jl")
 include("deformable_mirror.jl")
 include("event_composition.jl")
 include("illumination.jl")

@@ -406,6 +406,14 @@ vector, schedule, RNG registry, queue, or transport in model execution owners.
 Preparation may allocate; warmed execution must retain the allocation contract
 of its underlying stages.
 
+Plant invokes a full-optical path executor only after atmosphere
+materialization, prepared native sampled aberrations, controllable surfaces,
+and autonomous path-local optics have formed its caller-owned input. A typed
+external executor may therefore hand that residual pupil or field to
+`Proper.jl` or another optical owner without importing it into core. Do not
+reapply the same native aberration or controllable surface inside that
+executor.
+
 A custom reduced-order provider instead returns qualified
 `AdaptiveOpticsSim.Plant.PreparedAcquisitionProvider(implementation, products)` and
 implements four qualified methods:

@@ -119,10 +119,12 @@ in the root package environment. The archived `cuda` track defaults to
 backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
-The CUDA track has a current manual WSL validation host. Gate 4 candidate
-revision `191751f` passed the maintained `421/421` hardware target on Julia
-1.12.6 with CUDA.jl 6.2.1 and KernelAbstractions.jl 0.9.42, on an RTX 3050 Ti
-with compute capability 8.6, with scalar indexing disabled. The separate
+The CUDA track has a current manual WSL validation host. The Gate 5
+sampled-aberration candidate passed the maintained `438/438` hardware target
+on Julia 1.12.6 with CUDA.jl 6.2.1 and KernelAbstractions.jl 0.9.42, on an RTX
+3050 Ti with compute capability 8.6, with scalar indexing disabled. This
+includes exact device-resident defensive sampled-OPD ownership and identity
+plus transformed replacement. The separate
 [final pre-HIL backend evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)
 archives CPU parity, residency, service-time histograms, and backend-ready,
 host-ready, and transfer-only boundaries. CUDA is still outside the present
@@ -146,11 +148,12 @@ installed in the root package environment. The archived `amdgpu` track defaults
 to backend-only validation by setting
 `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
 
-The Gate 5 native-DM candidate passed `441/441` maintained checks on the local
-gfx1030 AMD Radeon Graphics target with scalar indexing disabled and Julia
-1.12.6. This includes direct device-resident native Plant DM state, staging
-storage, and surface parity; it does not exercise an integrated GPU event
-loop. The maintained AMD latency baseline remains the
+The Gate 5 sampled-aberration candidate passed `448/448` maintained checks on
+the local gfx1030 AMD Radeon Graphics target with scalar indexing disabled and
+Julia 1.12.6. This includes direct device-resident native Plant DM state,
+staging storage, and surface parity plus exact sampled-aberration defensive
+ownership and identity/transformed replacement; it does not exercise an
+integrated GPU event loop. The maintained AMD latency baseline remains the
 [July 14 cross-host artifact](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml).
 A later host-side Julia installation failure prevented retention of a new raw
 histogram and is not treated as package or AMDGPU performance evidence.

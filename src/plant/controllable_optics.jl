@@ -475,11 +475,11 @@ end
     right_optic = optics[Int(right)]
     left_placement = controllable_optic_placement(left_optic)
     right_placement = controllable_optic_placement(right_optic)
-    if _same_optic_placement(left_placement, right_placement)
+    if _same_optical_placement(left_placement, right_placement)
         return String(controllable_optic_id(left_optic.definition).name) <
             String(controllable_optic_id(right_optic.definition).name)
     end
-    return _optic_placement_isless(left_placement, right_placement)
+    return _optical_placement_isless(left_placement, right_placement)
 end
 
 function _visible_prepared_optic_slots(
@@ -488,7 +488,7 @@ function _visible_prepared_optic_slots(
     sizehint!(slots, length(optics))
     @inbounds for slot in eachindex(optics)
         optic = optics[slot]
-        _optic_visible_on_path(controllable_optic_visibility(optic), path) ||
+        _visible_on_path(controllable_optic_visibility(optic), path) ||
             continue
         slot <= typemax(UInt32) || throw(PlantPreparationError(
             :controllable_optic, :capacity,
@@ -516,7 +516,7 @@ function _append_prepared_optic_plane_groups!(
     group_representative = first_slot
     @inbounds for slot in visible_slots
         placement = controllable_optic_placement(optics[Int(slot)])
-        if !_same_optic_placement(previous_placement, placement)
+        if !_same_optical_placement(previous_placement, placement)
             push!(groups, PreparedControllableOpticPlaneGroup(
                 _PREPARED_CONTROLLABLE_OPTIC_PATH_BINDINGS_TOKEN,
                 path_slot, group_representative, group_first,

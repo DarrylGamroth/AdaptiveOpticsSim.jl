@@ -43,12 +43,16 @@ A plant starts from `PlantDefinition`. It may declare:
 - named optical paths
 - independent acquisition endpoints
 - independent controllable optics
+- native sampled `NCPA` or `OPDMap` aberrations with explicit path visibility
 - one or more command schemas per optic
 
 `prepare_plant` requires an explicit run seed and, for every command endpoint,
 a `CommandEndpointConfiguration`. Preparation:
 
 - canonicalizes stable identities
+- makes run-owned same-backend/device sampled-OPD copies
+- resolves bounded path-local sampled-aberration and controllable-optic
+  couplings
 - prepares path and acquisition implementations
 - allocates backend- and device-compatible destinations
 - copies initial and optional safe commands into endpoint-owned storage
@@ -103,6 +107,7 @@ explicit `PlantCommandTransaction` membership does.
 - periodic or delivered-trigger acquisition starts
 - detector lifecycle transitions
 - one shared atmosphere timeline
+- sampled-aberration application
 - controllable-optic application
 
 `step_plant_events!` processes all work at the next canonical
@@ -122,6 +127,12 @@ endpoint retains independent sequence, effective-time, silence, and capacity
 policy. The loop owns plant time only; wall-clock pacing, external timestamp
 mapping, payload leases, transport, and RTC protocol belong to the HIL
 integration layer.
+
+For every due full-optical path, the serial order is atmosphere
+materialization, sampled aberrations, controllable surfaces, autonomous
+path-local optics, and then the typed path executor. Replacement sampled
+aberrations precede canonical placement/identity-ordered additives.
+Preparation rejects more than one replacement visible on a path.
 
 ## Optical Sample Flow
 
