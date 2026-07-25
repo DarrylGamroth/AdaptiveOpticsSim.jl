@@ -179,6 +179,16 @@ struct _PlantEventAction
     owner_slot::UInt32
 end
 
+"""
+One contiguous run of path bindings that share a prepared geometric coupling.
+The run preserves canonical binding order and never combines command state.
+"""
+struct _PreparedControllableOpticPathCouplingGroup
+    first_binding::Int
+    binding_count::Int
+    representative_coupling_slot::UInt32
+end
+
 struct _PreparedPlantEventPath
     id::OpticalPathID
     path::PreparedPathExecutor
@@ -189,6 +199,9 @@ struct _PreparedPlantEventPath
     requires_full_optical::Bool
     optic_binding_start::Int
     optic_binding_stop::Int
+    optic_couplings::Memory{AbstractControllableOpticPathCoupling}
+    optic_coupling_groups::Memory{
+        _PreparedControllableOpticPathCouplingGroup}
 end
 
 struct _PreparedPlantEventAcquisition
@@ -791,49 +804,64 @@ function _event_path_requires_full_optical(id::OpticalPathID, owners)
     return false
 end
 
-@inline function _require_event_path_optic_placement(
-    ::PupilSurfaceExecutionRole,
-    ::PupilPlanePlacement,
-    ::ControllableOpticID,
-    ::OpticalPathID,
-)
-    return nothing
-end
-
-function _require_event_path_optic_placement(
-    ::PupilSurfaceExecutionRole,
-    placement::AtmosphericConjugatePlacement,
+function _require_prepared_event_path_coupling(
+    coupling::AbstractControllableOpticPathCoupling,
     optic::ControllableOpticID,
     path::OpticalPathID,
 )
-    _plant_event_loop_error(:unsupported_conjugate_geometry,
-        "controllable optic $optic on path $path is conjugated to " *
-        "$(conjugate_altitude_m(placement)) m, but atmospheric-conjugate " *
-        "footprint execution is not yet prepared")
+    Base.ismutabletype(typeof(coupling)) && _plant_event_loop_error(
+        :mutable_optic_path_coupling,
+        "controllable optic $optic returned mutable path coupling " *
+        "$(typeof(coupling)) for $path")
+    return coupling
 end
 
-function _require_event_path_optic_placement(
-    ::PupilSurfaceExecutionRole,
-    placement::FocalPlanePlacement,
+function _require_prepared_event_path_coupling(
+    coupling,
     optic::ControllableOpticID,
     path::OpticalPathID,
 )
-    _plant_event_loop_error(:invalid_optic_placement,
-        "pupil-surface controllable optic $optic cannot execute at " *
-        "$(typeof(placement)) on path $path")
+    _plant_event_loop_error(:invalid_optic_path_coupling,
+        "controllable optic $optic must return an " *
+        "AbstractControllableOpticPathCoupling for $path; got " *
+        "$(typeof(coupling))")
 end
 
-@inline function _require_event_path_optic_placement(
+function _prepare_event_path_optic_coupling(
+    ::PupilSurfaceExecutionRole,
+    optic::PreparedControllableOptic,
+    path::PreparedPathExecutor,
+)
+    coupling = prepare_controllable_optic_path_coupling(
+        optic.implementation, optic.definition, path)
+    return _require_prepared_event_path_coupling(
+        coupling,
+        controllable_optic_id(optic.definition),
+        path_id(path.definition),
+    )
+end
+
+@inline function _prepare_event_path_optic_coupling(
     ::AutonomousPathExecutionRole,
+    optic::PreparedControllableOptic,
+    path::PreparedPathExecutor,
+)
+    return _prepare_event_autonomous_path_coupling(
+        controllable_optic_placement(optic),
+        controllable_optic_id(optic.definition),
+        path_id(path.definition),
+    )
+end
+
+@inline function _prepare_event_autonomous_path_coupling(
     ::FocalPlanePlacement,
     ::ControllableOpticID,
     ::OpticalPathID,
 )
-    return nothing
+    return _NoPupilSurfacePathCoupling()
 end
 
-function _require_event_path_optic_placement(
-    ::AutonomousPathExecutionRole,
+function _prepare_event_autonomous_path_coupling(
     placement::AbstractControllableOpticPlacement,
     optic::ControllableOpticID,
     path::OpticalPathID,
@@ -843,35 +871,111 @@ function _require_event_path_optic_placement(
         "FocalPlanePlacement on path $path; got $(typeof(placement))")
 end
 
-function _require_event_path_optic_placement(
-    role,
-    placement::AbstractControllableOpticPlacement,
-    optic::ControllableOpticID,
-    path::OpticalPathID,
+function _prepare_event_path_optic_coupling(
+    role::AbstractControllableOpticExecutionRole,
+    optic::PreparedControllableOptic,
+    path::PreparedPathExecutor,
 )
     _plant_event_loop_error(:unsupported_optic_execution_role,
-        "controllable optic $optic on path $path declares unsupported " *
-        "execution role $(typeof(role)) for $(typeof(placement))")
+        "controllable optic $(controllable_optic_id(optic.definition)) on " *
+        "path $(path_id(path.definition)) declares unsupported execution " *
+        "role $(typeof(role))")
 end
 
-function _require_event_path_optic_placements(
+@inline _coupling_group_member(
+    ::PupilSurfaceExecutionRole) = true
+@inline _coupling_group_member(
+    ::AutonomousPathExecutionRole) = false
+@inline _coupling_group_member(
+    ::AbstractControllableOpticExecutionRole) = false
+
+@inline function _append_event_path_coupling_group!(
+    groups::Vector{_PreparedControllableOpticPathCouplingGroup},
+    first_binding::Int,
+    binding_count::Int,
+    representative_coupling_slot::Int,
+)
+    iszero(binding_count) && return nothing
+    representative_coupling_slot <= typemax(UInt32) ||
+        _plant_event_loop_error(:capacity,
+            "path-local controllable-optic coupling count exceeds UInt32 " *
+            "capacity")
+    push!(groups, _PreparedControllableOpticPathCouplingGroup(
+        first_binding,
+        binding_count,
+        UInt32(representative_coupling_slot),
+    ))
+    return nothing
+end
+
+function _prepare_event_path_optic_couplings(
     plant::PreparedPlant,
-    path::OpticalPathID,
+    path::PreparedPathExecutor,
     bindings::PreparedControllableOpticPathBindings,
     binding_range::UnitRange{Int},
+    requires_full_optical::Bool,
 )
+    coupling_count = requires_full_optical ? length(binding_range) : 0
+    couplings = Memory{AbstractControllableOpticPathCoupling}(
+        undef, coupling_count)
+    groups = _PreparedControllableOpticPathCouplingGroup[]
+    requires_full_optical || return couplings,
+        Memory{_PreparedControllableOpticPathCouplingGroup}(undef, 0)
+
     optics = getfield(plant, :controllable_optics)
-    @inbounds for binding in binding_range
+    group_first_binding = 0
+    group_binding_count = 0
+    group_representative_slot = 0
+    previous_coupling = nothing
+    @inbounds for (coupling_slot, binding) in
+        enumerate(binding_range)
         optic_slot = prepared_controllable_optic_slot(bindings, binding)
         optic = optics[optic_slot]
-        _require_event_path_optic_placement(
-            controllable_optic_execution_role(optic.implementation),
-            controllable_optic_placement(optic),
-            controllable_optic_id(optic.definition),
-            path,
-        )
+        role = controllable_optic_execution_role(optic.implementation)
+        coupling = _prepare_event_path_optic_coupling(role, optic, path)
+        couplings[coupling_slot] = coupling
+        if !_coupling_group_member(role)
+            _append_event_path_coupling_group!(
+                groups,
+                group_first_binding,
+                group_binding_count,
+                group_representative_slot,
+            )
+            group_binding_count = 0
+            previous_coupling = nothing
+            continue
+        end
+        if iszero(group_binding_count)
+            group_first_binding = binding
+            group_binding_count = 1
+            group_representative_slot = coupling_slot
+        elseif _same_pupil_footprint_coupling(
+            previous_coupling, coupling)
+            group_binding_count += 1
+        else
+            _append_event_path_coupling_group!(
+                groups,
+                group_first_binding,
+                group_binding_count,
+                group_representative_slot,
+            )
+            group_first_binding = binding
+            group_binding_count = 1
+            group_representative_slot = coupling_slot
+        end
+        previous_coupling = coupling
     end
-    return nothing
+    _append_event_path_coupling_group!(
+        groups,
+        group_first_binding,
+        group_binding_count,
+        group_representative_slot,
+    )
+    group_memory =
+        Memory{_PreparedControllableOpticPathCouplingGroup}(
+            undef, length(groups))
+    copyto!(group_memory, groups)
+    return couplings, group_memory
 end
 
 @inline _require_linear_reduced_order_provider(
@@ -905,11 +1009,18 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
             bindings, definition.path)
         requires_full_optical =
             _event_path_requires_full_optical(definition.path, owners)
-        requires_full_optical && _require_event_path_optic_placements(
-            plant, definition.path, bindings, binding_range)
+        optic_couplings, optic_coupling_groups =
+            _prepare_event_path_optic_couplings(
+                plant,
+                path,
+                bindings,
+                binding_range,
+                requires_full_optical,
+            )
         paths[index] = _PreparedPlantEventPath(definition.path, path, rngs,
             definition.schedule, definition.origin, handle,
-            requires_full_optical, first(binding_range), last(binding_range))
+            requires_full_optical, first(binding_range), last(binding_range),
+            optic_couplings, optic_coupling_groups)
     end
     return paths
 end
@@ -3369,26 +3480,33 @@ function _apply_due_controllable_optics!(
         path = prepared.paths[path_index]
         path.requires_full_optical || continue
         input = path.path.input
+        coupling_slot = 1
         for binding in path.optic_binding_start:path.optic_binding_stop
             optic_index =
                 prepared_controllable_optic_slot(bindings, binding)
             optic = prepared.optics[optic_index]
+            coupling = path.optic_couplings[coupling_slot]
             _apply_event_controllable_optic_surface!(
                 controllable_optic_execution_role(optic.implementation),
                 input, optic.implementation,
-                state.controllable_optics[optic_index])
+                state.controllable_optics[optic_index],
+                coupling)
+            coupling_slot += 1
         end
     end
     return nothing
 end
 
 @inline function _apply_event_controllable_optic_surface!(
-    ::PupilSurfaceExecutionRole, input, implementation, state)
-    return apply_controllable_optic_surface!(input, implementation, state)
+    ::PupilSurfaceExecutionRole, input, implementation, state,
+    coupling::AbstractControllableOpticPathCoupling)
+    return apply_controllable_optic_surface!(
+        input, implementation, state, coupling)
 end
 
 @inline function _apply_event_controllable_optic_surface!(
-    ::AutonomousPathExecutionRole, input, implementation, state)
+    ::AutonomousPathExecutionRole, input, implementation, state,
+    ::_NoPupilSurfacePathCoupling)
     return nothing
 end
 

@@ -10,6 +10,7 @@ respective package domains and enter through the explicit imports below.
 """
 module Plant
 
+using KernelAbstractions
 using LinearAlgebra
 using Random
 
@@ -17,25 +18,29 @@ import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
     AbstractCombinationPolicy, AbstractEMCCDAcquisitionMode,
     AbstractFrameTimingModel, AbstractOpticalNormalization,
     AbstractOpticalPlaneKind, AbstractPlaneDevice, AbstractSource,
+    AbstractSourceCompositionStyle,
     AbstractSpatialMeasure, AbstractSpectralCoordinate, AbstractTelescope,
     AbstractTimedAtmosphere, AcquiredObservationPath, AdaptiveOpticsSimError,
-    Asterism, AtmosphereEpoch, AtmosphereLayerID, CMOSSensor, CPUBackend,
+    AcceleratorStyle, Asterism, AtmosphereEpoch, AtmosphereLayerID,
+    CMOSSensor, CPUBackend,
     CellIntegratedMeasure, CoherentFieldCombination, Detector,
     DetectorAcquisitionPlan, DetectorPlane, DimensionlessNormalization,
     CircularModulation, DirectMeasurementPath, EMCCDSensor, ElectricField,
-    ExtendedSource,
+    ExpandedSourceComposition, ExtendedSource,
     FocalPlane, FrameReadoutProducts, FrameSensorType,
     FrameTransferAcquisition, GlobalResetExposure,
     HgCdTeAvalancheArraySensor, IncoherentIntensityAddition,
     InfiniteAtmosphereLayer, InfiniteMultiLayerAtmosphere,
     IntegratedSpectralChannel, IntensityMap, InvalidConfiguration, LGSSource,
-    MonochromaticChannel, MovingAtmosphereLayer, MultiLayerAtmosphere,
+    LeafSourceComposition, MetricCoordinates, MonochromaticChannel,
+    MovingAtmosphereLayer,
+    MultiLayerAtmosphere,
     NonCombinableProduct, OpticalProductBundle, PhotonRateNormalization,
     PreparedBundledDirectImaging, PreparedDirectImaging,
     PreparedFocalPlaneModulation, PreparedIncoherentDirectImaging,
     PreparedPyramidOpticalBundleFormation, PreparedPyramidOpticalFormation,
-    PupilFunction, PupilPlane,
-    RollingExposure, RollingShutter, Source,
+    OpticalPlaneMetadata, PupilFunction, PupilPlane,
+    RollingExposure, RollingShutter, ScalarCPUStyle, Source,
     SpatialDensityMeasure, SpectralSource, Telescope, UnspecifiedCoherence,
     UnspecifiedNormalization, UnspecifiedSpatialMeasure,
     UnspecifiedSpectralCoordinate, UpTheRampReadoutProducts,
@@ -49,18 +54,19 @@ import ..AdaptiveOpticsSim: AbstractArrayBackend, AbstractAtmosphere,
     aperture_revision, apply_avalanche_excess_noise!, apply_quantization!,
     atmosphere_identity, atmosphere_timeline, backend, capture!,
     capture_signal_pipeline!, clamp_array!, coordinates_xy_arcsec,
-    direct_imaging_output, ensure_initialized!,
+    direct_imaging_output, ensure_initialized!, execution_style,
     ensure_up_the_ramp_products!, epoch_time, estimate_wfs_measurement!,
     evolve_atmosphere!, evolve_initial_atmosphere!, evolve_layer!,
     finalize_charge_transport!, finalize_incremental_capture!,
     finalize_scheduled_up_the_ramp_readout_products!, form_direct_image!,
     form_wfs_optical_products!, freeze_source, initialize_atmosphere!,
-    is_global_shutter, line_time, output_frame, plane_device,
+    is_global_shutter, launch_kernel!, line_time, output_frame, plane_device,
     prepare_atmosphere_renderer, prepare_detector_acquisition,
     pupil_reflectivity, readout_products, readout_ready, render_atmosphere!,
     resolve_array_backend, runtime_rng, sample_frame_read!,
     sampling_read_time, source_height_m, source_radiometric_value,
-    source_radiometry, splitmix64, subtract_background_map!, topology,
+    source_composition_style, source_radiometry, splitmix64,
+    subtract_background_map!, topology,
     update_cycle_averaged_circular_modulation!,
     update_sensor_persistence!, validate_atmosphere_rendering,
     validate_plane_storage, validate_wfs_acquisition_binding,
@@ -89,6 +95,7 @@ include("preparation.jl")
 include("reduced_order.jl")
 include("controller_routing.jl")
 include("autonomous_periodic_optics.jl")
+include("pupil_footprint_coupling.jl")
 include("event_composition.jl")
 include("illumination.jl")
 include("api.jl")

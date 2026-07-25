@@ -222,6 +222,8 @@ The reduced maintained smoke covers:
 - independent DM and modal/low-order optic formation and application parity
 - prepared controller-output routing with a device-resident view and explicit
   host/backend mismatch rejection
+- prepared same-grid and affine finite-support sampled pupil-surface coupling,
+  with path-local storage remaining device resident
 - dynamic cycle-averaged circular-Pyramid radius/enable updates, disabled-state
   centering, normalized quadrature weights, and device residency
 - curvature-through-atmosphere

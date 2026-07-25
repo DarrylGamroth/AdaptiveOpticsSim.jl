@@ -136,11 +136,12 @@ For each due full-optical path, execution:
    `AcquisitionProducts`
 
 Preparation resolves required optic placement and all-path or selected-path
-visibility into canonical bounded ranges and co-placed groups. Current
-full-optical execution applies only a path's visible pupil-plane surfaces
-additively; atmospheric-conjugate placement fails closed until source-footprint
-geometry is implemented. No packed or composite optic object couples device
-cadence.
+visibility into canonical bounded ranges and compatible path-coupling groups.
+Full-optical execution applies only a path's visible surfaces additively.
+Sampled surface models may bind the same-grid fast path or a finite-support
+NGS/LGS atmospheric-conjugate transform; unsupported model/placement
+combinations fail during preparation. No packed or composite optic object
+couples device cadence.
 
 Native direct science uses `prepare_direct_imaging` and
 `form_direct_image!`. Prepared PROPER integration meets native optics at the

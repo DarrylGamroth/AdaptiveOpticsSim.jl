@@ -22,14 +22,18 @@ latched command endpoint, and provide standalone bounded admission and
 effective-command state owners. The fifth slice prepares every declared optic
 and endpoint, composes physical command publication into the serial event
 loop, and provides explicit all-or-none transactions across distinct optics.
-The first Gate 5 slice now requires every optic to declare its optical
+The first Gate 5 slice requires every optic to declare its optical
 placement and all-path or selected-path visibility. Plant preparation resolves
 those declarations into canonical bounded path bindings and co-placed plane
 groups, and the serial pupil-plane path applies only its prepared visible
-range. Atmospheric-conjugate placement is declarable but fails closed in
-full-optical event preparation until the next slice supplies source-footprint
-geometry. Device-specific dynamics remain model-specific; none of these
-contracts is hidden in an identity or command schema.
+range. The second slice adds an immutable path-local coupling for sampled
+surfaces: it composes NGS direction or finite-height LGS cone geometry,
+conjugate altitude, explicit pupil-relay registration, and both metric sampled
+grids, then applies the result through a same-grid fast path or finite-support
+bilinear interpolation. Native DM Plant integration and complete MCAO/MOAO
+scenarios remain subsequent slices. Device-specific dynamics remain
+model-specific; none of these contracts is hidden in an identity or command
+schema.
 Separating a path from its acquisitions prevents a second camera or readout
 cadence from forcing duplicate propagation.
 
@@ -329,10 +333,11 @@ apply to an explicit caller-owned path product. They do not mutate a shared
 telescope scratch plane. This boundary permits independent paths to share one
 telescope definition and permits co-conjugated optics to remain independent;
 Gate 4 defines independent endpoint command timing and effective-state
-semantics. Gate 5 now declares placement and path visibility and prepares
-bounded bindings; later slices still define atmospheric source-footprint
-execution, sampled-aberration attachment, device dynamics, and boundary
-pacing.
+semantics. Gate 5 now declares placement and path visibility, prepares bounded
+bindings, and provides the generic sampled atmospheric source-footprint
+coupling. Later slices still define native DM integration,
+sampled-aberration attachment, device dynamics, complete MCAO/MOAO scenarios,
+and boundary pacing.
 
 Reusable propagating optics follow the same split. In particular, a spatial
 filter owns its prepared mask definition separately from its single-writer FFT
@@ -791,10 +796,12 @@ operation.
 Co-conjugated additive pupil behavior, NGS, LGS, multiple WFS arms, direct
 science detectors, and the PROPER coronagraph handoff are current foundations.
 Explicit all-path and selected-path optic bindings are now implemented for
-pupil-plane execution. True altitude-conjugated MCAO and geometrically
-corrected MOAO remain target capabilities and must not be described as
-production-supported until their source-footprint geometry, command isolation,
-and hardware paths have maintained evidence.
+pupil-plane execution. A generic sampled-surface fixture now validates
+altitude-conjugated NGS/LGS geometry and independently commanded compatible
+surfaces. Complete native-DM MCAO and geometrically corrected MOAO remain
+target capabilities and must not be described as production-supported until
+their device integration, command isolation, scenarios, and hardware paths
+have maintained evidence.
 
 ## Calibration Illumination Without Instrument Assumptions
 
@@ -1124,7 +1131,10 @@ A controllable optical plane needs two independent definitions:
 For geometric AO propagation, an atmospheric-conjugate mapping applies the
 surface using the source footprint at the conjugate altitude. It must account
 for source angle, finite-height LGS cone scaling, magnification, rotation,
-parity, offsets, and existing misregistration terms.
+parity, metric decenter, and the declared sampled-grid origins and axis
+orientations. These path/relay terms are distinct from actuator
+`Misregistration`, which has already acted while forming a sampled DM surface
+and must not be applied again during path coupling.
 
 For diffractive propagation, conjugate altitude alone is insufficient. The
 relay and transformations between optical planes determine the field. The core
@@ -1145,9 +1155,18 @@ paths by `OpticalPathID`, groups each path's visible optics by declared
 placement, and orders members by `ControllableOpticID`. Each scheduled path
 retains a direct range into this bounded storage, so warmed pupil-plane
 execution neither scans every optic nor performs visibility-set membership.
-The table is not a universal optical graph, and an
-`AtmosphericConjugatePlacement` is intentionally rejected by full-optical
-event preparation until its geometric transform is implemented.
+The table is not a universal optical graph.
+
+The second slice adds `PupilRelayRegistration` and immutable prepared
+pupil-footprint couplings. A sampled-surface model opts into the qualified
+preparation seam, which maps destination pupil samples into its own surface
+grid for one exact source/path. On-axis and off-axis NGS footprints and
+finite-height LGS cone scaling are computed in metric physical coordinates;
+plane metadata supplies grid origin, sampling, axis order, and signs. Samples
+outside the declared finite surface support contribute zero. A wavelength-
+expanded source may share the coupling, but a multi-direction `Asterism` or
+extended source must be decomposed into separate prepared directions at an
+atmospheric conjugate.
 
 Command transport remains independent of plane geometry. The same generic
 time-stamped endpoint can drive a pupil DM, atmospheric-conjugate DM, tip/tilt

@@ -111,6 +111,7 @@ function AOSPlant.apply_controllable_optic_surface!(
     input::AOS.PupilFunction,
     prepared::PreparedCommandPlaneOptic,
     state::CommandPlaneOpticState,
+    ::AOSPlant.PreparedDirectPupilSurfaceCoupling,
 )
     @. input.opd += state.visible * prepared.pattern
     return input

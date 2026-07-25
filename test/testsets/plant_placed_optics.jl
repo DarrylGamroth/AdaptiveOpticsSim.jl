@@ -87,6 +87,7 @@ function Plant.apply_controllable_optic_surface!(
     input::PupilFunction,
     ::PreparedPlacedOpticsTestOptic,
     state::PlacedOpticsTestOpticState,
+    ::PreparedDirectPupilSurfaceCoupling,
 )
     @. input.opd += state.visible
     return input
@@ -640,6 +641,7 @@ end
             ),
         )
     end
-    @test error isa PlantScheduleError
+    @test error isa PlantPreparationError
+    @test error.component === :controllable_optic
     @test error.reason === :unsupported_conjugate_geometry
 end
