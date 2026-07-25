@@ -241,19 +241,14 @@ end
 
 """
 Apply the currently visible physical surface to one already materialized
-optical-path input. Composition calls only the path's prepared visible
-`PupilSurfaceExecutionRole` bindings, grouped by placement and ordered by
-canonical optic identity inside each group. Path-local autonomous devices use
-their separately prepared exact coupling. Atmospheric-conjugate transforms
-are prepared by a later geometry layer.
+optical-path input through its immutable path-local coupling. Composition calls
+only the path's prepared visible `PupilSurfaceExecutionRole` bindings, groups
+compatible contiguous couplings, and preserves canonical optic identity order.
+Path-local autonomous devices use their separately prepared exact coupling.
+
+The four-argument extension seam is defined with the geometric coupling
+implementation after path preparation types are available.
 """
-function apply_controllable_optic_surface!(input, implementation, state)
-    throw(PlantPreparationError(:controllable_optic,
-        :unsupported_surface_application,
-        "prepared controllable-optic implementation " *
-        "$(typeof(implementation)) does not apply to path input " *
-        "$(typeof(input))"))
-end
 
 function _copy_prepared_effective_command(
     endpoint::PreparedCommandEndpoint{<:PlantCommandSchema{T,0}},

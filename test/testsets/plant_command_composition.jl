@@ -186,7 +186,8 @@ end
 function Plant.apply_controllable_optic_surface!(
     input::PupilFunction,
     prepared::PreparedCommandCompositionOptic,
-    state::CommandCompositionOpticState)
+    state::CommandCompositionOpticState,
+    ::PreparedDirectPupilSurfaceCoupling)
     @. input.opd += state.visible * prepared.pattern
     return input
 end
@@ -194,7 +195,8 @@ end
 function Plant.apply_controllable_optic_surface!(
     input::PupilFunction,
     ::PreparedArrayInitialCommandOptic,
-    state::ArrayInitialCommandOpticState)
+    state::ArrayInitialCommandOpticState,
+    ::PreparedDirectPupilSurfaceCoupling)
     offset = sum(state.visible)
     @. input.opd += offset
     return input

@@ -145,13 +145,31 @@ function Plant.commit_controllable_optic_command!(
     return nothing
 end
 
+function Plant.prepare_controllable_optic_path_coupling(
+    plan::MyPreparedOptic,
+    definition::Plant.ControllableOpticDefinition,
+    path::Plant.PreparedPathExecutor,
+)
+    return Plant.prepare_sampled_pupil_footprint_coupling(
+        plan.surface_metadata,
+        plan.surface_prototype,
+        path,
+        Plant.controllable_optic_placement(definition);
+        registration=plan.pupil_relay_registration,
+    )
+end
+
 function Plant.apply_controllable_optic_surface!(
-    input::MyPathInput,
+    input::AdaptiveOpticsSim.PupilFunction,
     plan::MyPreparedOptic,
     state::MyOpticState,
+    coupling::Union{
+        Plant.PreparedIdentityPupilFootprintCoupling,
+        Plant.PreparedPupilFootprintCoupling,
+    },
 )
-    apply_visible_surface!(input, plan, state)
-    return input
+    return Plant.apply_sampled_pupil_surface!(
+        input, state.visible_surface, coupling)
 end
 ```
 
@@ -173,12 +191,27 @@ preserve pending deltas; only absolute commands may select
 The default `controllable_optic_execution_role` is
 `PupilSurfaceExecutionRole`. Preparation resolves the declared path visibility
 into bounded per-path ranges and co-placed groups. The event loop applies only
-the visible `PupilPlanePlacement` members of a due materialized path, in
-canonical optic-identity order within their group. Extend only path-input types
-for which the device has a well-defined surface operation.
-`AtmosphericConjugatePlacement` is a declaration-only contract in the current
-slice and full-optical event preparation rejects it until source-footprint
-geometry is available.
+the visible members of a due materialized path, in canonical optic-identity
+order within their compatible coupling group. Extend only path-input types for
+which the device has a well-defined surface operation.
+
+The default `prepare_controllable_optic_path_coupling` supports a model-owned
+same-grid operation at `PupilPlanePlacement`. A model exposing a sampled OPD
+surface uses `prepare_sampled_pupil_footprint_coupling` to bind that surface's
+metric `PupilPlane` metadata to the exact prepared path input. Preparation
+combines the path source direction, finite-height LGS cone scale, conjugate
+altitude, sampled-grid metadata, and an optional `PupilRelayRegistration`.
+Repeated application then uses the same-grid fast path or finite-support
+bilinear interpolation without host scalar indexing on accelerator arrays.
+Expanded multi-direction sources must be represented by separate prepared
+paths at an atmospheric conjugate; a `SpectralSource` is accepted because its
+wavelength samples share one direction.
+
+`PupilRelayRegistration` is relay/path geometry: magnification, rotation,
+parity, and metric decenter from a geometric source footprint to the sampled
+surface grid. It is not a DM actuator `Misregistration`. Apply actuator
+misregistration while forming the sampled DM surface, then apply the relay
+registration exactly once while coupling that completed surface to a path.
 
 A locally generated path-specific waveform instead returns
 `AutonomousPathExecutionRole` and provides the qualified autonomous-device

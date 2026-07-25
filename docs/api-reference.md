@@ -362,6 +362,18 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `execute_acquisition_selection_at!`. Qualified extension/execution seams are
   `prepare_pupil_opd_materialization`, `materialize_path_input!`,
   `execute_path!`, and `execute_acquisition!`
+- Qualified controllable-optic path coupling:
+  `AbstractControllableOpticPathCoupling`,
+  `PreparedDirectPupilSurfaceCoupling`,
+  `PupilRelayRegistration`,
+  `PreparedIdentityPupilFootprintCoupling`,
+  `PreparedPupilFootprintCoupling`,
+  `prepare_controllable_optic_path_coupling`,
+  `prepare_sampled_pupil_footprint_coupling`,
+  `apply_controllable_optic_surface!`, and
+  `apply_sampled_pupil_surface!`. These values bind an exact prepared path and
+  surface-grid contract; they own no mutable surface, command state, cadence,
+  or transport
 - Calibration-illumination entry boundary:
   `PupilFunctionIlluminationEntry`, `ElectricFieldIlluminationEntry`,
   `IntensityMapIlluminationEntry`, `ExternalOpticsResultIlluminationEntry`,
@@ -492,8 +504,12 @@ effective endpoint value without changing the visible surface. Both staging
 and commit receive the plant-effective timestamp so a time-dependent physical
 model can preserve continuity. After a successful stage,
 `commit_controllable_optic_command!` must be a bounded, nonthrowing publication
-operation. `apply_controllable_optic_surface!` applies the visible physical
-response to an already materialized path input.
+operation. `prepare_controllable_optic_path_coupling` freezes the exact
+path-local optical mapping. `apply_controllable_optic_surface!` receives that
+mapping as its fourth argument and applies the visible physical response to an
+already materialized path input. Sampled OPD models may delegate preparation
+and application to `prepare_sampled_pupil_footprint_coupling` and
+`apply_sampled_pupil_surface!`.
 
 `AutonomousPeriodicOpticDefinition` binds one path-local autonomous optic to a
 full-optical path, immutable fidelity, and `FreeRunningPhaseReference`,
@@ -560,15 +576,15 @@ with `clear_command_dispositions!`.
 
 Plant preparation resolves all-path or selected-path visibility into bounded
 canonical `PreparedControllableOpticPathBindings` and co-placed plane groups.
-Each due full-optical path applies only its direct visible pupil-plane binding
-range; a prepared path-local autonomous role retains its exact focal-plane
-coupling. Atmospheric-conjugate placement is declared and grouped but
-full-optical event preparation rejects it until source-footprint transforms
-are implemented. Device-specific stroke, slew, settling, hysteresis, and
-feedback remain model extensions or later physical-model work. HIL session,
-external-clock, lease, ring, completion-credit, and transport metadata remain
-outside core command values. Execution-clock ingress liveness is distinct from
-replayable plant-time command silence.
+Each due full-optical path applies only its direct visible binding range; a
+prepared path-local autonomous role retains its exact focal-plane coupling.
+Sampled-surface models can prepare identity or affine finite-support
+pupil-footprint couplings for NGS and finite-height LGS paths.
+Device-specific stroke, slew, settling, hysteresis, and feedback remain model
+extensions or later physical-model work. HIL session, external-clock, lease,
+ring, completion-credit, and transport metadata remain outside core command
+values. Execution-clock ingress liveness is distinct from replayable
+plant-time command silence.
 
 Package-emitted disposition reasons are stable nonempty symbols. Admission may
 emit `:endpoint_mismatch`, `:schema_mismatch`,

@@ -151,8 +151,9 @@ Examples:
   placement/visibility declarations resolve into bounded canonical per-path
   ranges and co-placed groups; a due path applies only its visible pupil-plane
   members. `AutonomousPathExecutionRole` retains one exact focal-plane
-  `AutonomousPeriodicOpticDefinition` coupling. Atmospheric-conjugate
-  source-footprint execution remains later Gate 5 work
+  `AutonomousPeriodicOpticDefinition` coupling. Sampled atmospheric-conjugate
+  models prepare an exact NGS/LGS pupil-footprint coupling, while native DM
+  integration and complete MCAO/MOAO scenarios remain later Gate 5 work
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

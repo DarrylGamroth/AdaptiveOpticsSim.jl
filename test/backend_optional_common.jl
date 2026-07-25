@@ -403,6 +403,50 @@ function run_optional_prepared_plant_checks(::Type{B},
         plane_device(acquisition_observation(fast))
     @test acquisition_observation(fast) !== acquisition_observation(slow)
 
+    pupil = path_input(path)
+    surface_host = zeros(T, size(pupil.opd))
+    surface_host[4, 4] = one(T)
+    surface = similar(pupil.opd)
+    copyto!(surface, surface_host)
+    identity_coupling = prepare_sampled_pupil_footprint_coupling(
+        pupil.metadata,
+        surface,
+        path,
+        PupilPlanePlacement(),
+    )
+    @test identity_coupling isa
+        PreparedIdentityPupilFootprintCoupling
+    fill!(pupil.opd, zero(T))
+    @test apply_sampled_pupil_surface!(
+        pupil, surface, identity_coupling) === pupil
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(pupil.opd))
+    @test Array(pupil.opd) == surface_host
+
+    half_sample = (
+        pupil.metadata.sampling[1] / T(2),
+        pupil.metadata.sampling[2] / T(2),
+    )
+    transformed_coupling = prepare_sampled_pupil_footprint_coupling(
+        pupil.metadata,
+        surface,
+        path,
+        PupilPlanePlacement();
+        registration=PupilRelayRegistration(
+            decenter_m=half_sample,
+            T=T,
+        ),
+    )
+    @test transformed_coupling isa PreparedPupilFootprintCoupling
+    fill!(pupil.opd, zero(T))
+    @test apply_sampled_pupil_surface!(
+        pupil, surface, transformed_coupling) === pupil
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(pupil.opd))
+    transformed_expected = zeros(T, size(surface_host))
+    transformed_expected[3:4, 3:4] .= T(0.25)
+    @test Array(pupil.opd) ≈ transformed_expected rtol=zero(T) atol=8eps(T)
+
     selection = prepare_acquisition_selection(plant,
         (:slow_science, :illumination_frame, :fast_science))
     @test @inferred(execute_acquisition_selection_at!(selection,
