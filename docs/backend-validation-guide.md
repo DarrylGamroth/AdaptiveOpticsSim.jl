@@ -195,6 +195,48 @@ HdrHistograms, which supports the reported p99. The load is serial and
 self-paced: it deliberately excludes fixed-rate arrivals, wall-clock pacing,
 queues, overload, external RTC transport, and response latency.
 
+### Gate 5 conjugated optical-placement evidence
+
+Run the focused placement, geometry, MCAO/MOAO, sampled-aberration, and
+integrated closure suites with:
+
+```sh
+julia --threads=1 --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["gate5"])'
+```
+
+The maintained integrated characterization is:
+
+```sh
+julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate5_optical_placement.jl
+```
+
+Its [versioned contract](../benchmarks/contracts/gate5_optical_placement.toml)
+and [clean raw-histogram artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
+compose eight simultaneously due Fraunhofer paths: four WFS directions
+(alternating finite-height LGS and NGS), four science directions, common native
+DMs at the pupil and two atmospheric conjugates, one selected-path MOAO DM per
+science direction, one common replacement OPD, and one science-only NCPA per
+science direction. The exact oracle also checks declaration-order replay and a
+3×3-on-5×5 finite-support replacement.
+
+Prepared storage and product hashes remain fixed through 5,000 post-warmup
+cycles. The warmed eight-path boundary observed 5,632 Julia heap bytes per
+all-path cycle against its declared 8 KiB ceiling. Three 10,000-sample
+self-paced runs recorded 108.159 microseconds median p50, 153.727 microseconds
+worst p99, and 9.149 kcycles/s median throughput. The 4/8/16-path preparation
+matrix preserves exact binding counts and records preparation allocation,
+elapsed time, and prepared-summary size; it deliberately makes no
+production-capacity or bounded-code-generation claim.
+
+This is serial CPU optical-cycle service-cost and numerical evidence. It does
+not qualify fixed arrivals, wall-clock pacing, external RTC transport,
+integrated GPU event-loop execution, parallel workers, detailed external relay
+or coronagraph prescriptions, or NFIRAOS/MORFEO instrument capacity. Direct
+device-resident DM and sampled-surface parity remain covered by the maintained
+CUDA and AMDGPU hardware targets.
+
 ### Optional backend smoke in `Pkg.test()`
 
 These run after the functional testsets and skip cleanly if the backend package

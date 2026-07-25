@@ -86,6 +86,15 @@ Current CPU-supported families:
   and science directions plus target-local MOAO DMs. This is composition
   support, not calibrated device dynamics, tomography fidelity, external
   optical equivalence, fixed-arrival latency, or instrument-scale capacity
+- integrated serial CPU conjugated optical placement across alternating
+  finite-height-LGS/NGS WFS and science paths, with common pupil/multi-altitude
+  DMs, selected-path MOAO, common static OPD, science-only NCPA, exact
+  declaration-order replay, finite-support loss, stable prepared storage, and a
+  bounded warmed allocation window. The maintained
+  [Gate 5 artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
+  characterizes one eight-path low-resolution workload and exact 4/8/16-path
+  binding counts; it is not fixed-arrival, parallel, integrated-GPU,
+  detailed-relay/coronagraph, or production instrument-capacity evidence
 - trigger-relative autonomous circular-Pyramid modulation with bounded
   radius/frequency/phase/enabled setpoints, free-running/source/delivered-reset
   relationships, deterministic branch faults, and an allocation-free
@@ -184,13 +193,18 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The Gate 5 sampled-aberration candidate passed all `448` maintained checks on
-the local gfx1030 target with Julia 1.12.6 and scalar indexing disabled. This
-includes the retained numerical surfaces, prepared controller-output routing,
-dynamic cycle-averaged circular-Pyramid modulation, direct native Plant DM
+The Gate 5 device-resident primitive candidate passed all `448` maintained
+checks on the local gfx1030 AMDGPU target and `438/438` on the WSL RTX 3050 Ti
+CUDA target with Julia 1.12.6 and scalar indexing disabled. This includes the
+retained numerical surfaces, prepared controller-output routing, dynamic
+cycle-averaged circular-Pyramid modulation, direct native Plant DM
 state/staging/surface parity, run-owned sampled-aberration residency, and
-identity/transformed replacement. Gate 5 did not recharacterize AMD latency,
-so the July 14 artifact remains the maintained AMD performance evidence.
+identity/transformed replacement. The separate clean
+[Gate 5 CPU artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
+closes integrated serial optical placement; the GPU targets do not run that
+event loop. Gate 5 did not recharacterize AMD or CUDA accelerator latency, so
+the July 14/18 platform artifacts remain the maintained GPU performance
+evidence.
 
 ### GPU support-boundary rule
 

@@ -77,6 +77,24 @@ Default for `cpu` and `all` archive tracks:
 
 This is the baseline production gate.
 
+For a candidate that changes conjugate placement, path visibility, native
+Plant DMs, sampled aberrations/NCPA, or the serial optical event boundary, also
+run:
+
+```bash
+julia --threads=1 --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["gate5"])'
+julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate5_optical_placement.jl
+```
+
+The benchmark is a serial self-paced CPU characterization. Its maintained
+[contract](../benchmarks/contracts/gate5_optical_placement.toml) and
+[artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
+close the Gate 5 numerical, fixed-storage, bounded-allocation, and bounded
+4/8/16-path topology review without asserting fixed-arrival HIL latency or
+production instrument capacity.
+
 The CPU full suite may be skipped only when `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1` is set explicitly. That mode is intended for backend-host validation runs that are paired with separately archived CPU/full-suite evidence for the same candidate commit or an explicitly identified release ancestor.
 
 ### Apple Silicon / AppleAccelerate
