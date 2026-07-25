@@ -498,6 +498,15 @@ end
     )
 end
 
+@inline function _snapshot_deformable_mirror_topology(
+    topology::TP,
+) where {TP<:AbstractDMTopology}
+    # A topology is structurally immutable but owns mutable coordinate, mask,
+    # index, and possibly metadata storage. Plant preparation must detach that
+    # storage from the caller-owned cold model before publishing runtime params.
+    return deepcopy(topology)::TP
+end
+
 function prepare_controllable_optic(
     model::DeformableMirrorModel{T},
     definition::ControllableOpticDefinition,
@@ -513,9 +522,11 @@ function prepare_controllable_optic(
             "$(eltype(pupil_reflectivity(telescope)))",
         )
     dm = try
+        topology_snapshot =
+            _snapshot_deformable_mirror_topology(model.topology)
         DeformableMirror(
             telescope;
-            topology=model.topology,
+            topology=topology_snapshot,
             influence_model=model.influence_model,
             actuator_model=model.actuator_model,
             T,

@@ -778,6 +778,63 @@ end
     )
 end
 
+@testset "Native DM preparation snapshots cold topology" begin
+    T = Float64
+    telescope = Telescope(
+        resolution=4,
+        diameter=T(4),
+        central_obstruction=zero(T),
+        T=T,
+    )
+    atmosphere = mcao_moao_atmosphere(telescope)
+    metadata_values = T[1]
+    cold_topology = SampledActuatorTopology(
+        zeros(T, 2, 1);
+        metadata=(calibration=metadata_values,),
+        T=T,
+    )
+    model = DeformableMirrorModel(
+        topology=cold_topology,
+        influence_model=DenseInfluenceMatrix(
+            ones(T, telescope.params.resolution^2, 1),
+        ),
+        T=T,
+    )
+    definition = ControllableOpticDefinition(
+        :snapshot_native_dm,
+        model,
+        (mcao_moao_command_schema(:snapshot_native_dm),);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
+    )
+
+    prepared = prepare_controllable_optic(
+        model,
+        definition,
+        telescope,
+        atmosphere,
+    )
+    prepared_topology = prepared.params.topology
+    @test prepared_topology !== cold_topology
+    @test prepared_topology.coords !== cold_topology.coords
+    @test prepared_topology.active_coords !== cold_topology.active_coords
+    @test prepared_topology.valid_actuators !==
+        cold_topology.valid_actuators
+    @test prepared_topology.active_indices !== cold_topology.active_indices
+    @test prepared_topology.metadata.calibration !== metadata_values
+
+    cold_topology.coords[1, 1] = T(0.25)
+    cold_topology.active_coords[2, 1] = T(0.5)
+    cold_topology.valid_actuators[1] = false
+    cold_topology.active_indices[1] = 2
+    metadata_values[1] = T(2)
+    @test iszero(prepared_topology.coords[1, 1])
+    @test iszero(prepared_topology.active_coords[2, 1])
+    @test prepared_topology.valid_actuators == Bool[true]
+    @test prepared_topology.active_indices == [1]
+    @test prepared_topology.metadata.calibration == T[1]
+end
+
 @testset "Native DM preparation rejects incompatible schemas and models" begin
     T = Float64
     resolution = 4
