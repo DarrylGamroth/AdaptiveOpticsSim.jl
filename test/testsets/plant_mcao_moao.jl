@@ -1,5 +1,7 @@
 struct MCAOMOAOPathModel end
 
+struct MCAOMOAOUnconvertibleReal <: Real end
+
 struct MCAOMOAOFrameAcquisitionModel{T<:AbstractFloat}
     exposure_s::T
 end
@@ -688,6 +690,23 @@ end
     @test Base.isexported(Plant, :DeformableMirrorModel)
     @test !Base.isexported(AdaptiveOpticsSim, :DeformableMirrorModel)
 
+    width_model =
+        @inferred DeformableMirrorModel(n_act=2, influence_width=0.25)
+    @test influence_model(width_model).width == 0.25
+    coupling_model =
+        @inferred DeformableMirrorModel(n_act=2, mechanical_coupling=0.25)
+    @test influence_model(coupling_model).coupling == 0.25
+    explicit_width = GaussianInfluenceWidth(0.3)
+    explicit_coupling = GaussianMechanicalCoupling(0.3)
+    @test influence_model(DeformableMirrorModel(
+        n_act=2,
+        influence_model=explicit_width,
+    )) === explicit_width
+    @test influence_model(DeformableMirrorModel(
+        n_act=2,
+        influence_model=explicit_coupling,
+    )) === explicit_coupling
+
     for operation in (
         () -> DeformableMirrorModel(),
         () -> DeformableMirrorModel(n_act=true),
@@ -697,6 +716,15 @@ end
             topology=ActuatorGridTopology(2),
         ),
         () -> DeformableMirrorModel(n_act=2, influence_width=0),
+        () -> DeformableMirrorModel(
+            n_act=2,
+            influence_width=MCAOMOAOUnconvertibleReal(),
+        ),
+        () -> DeformableMirrorModel(n_act=2, mechanical_coupling=0),
+        () -> DeformableMirrorModel(
+            n_act=2,
+            mechanical_coupling=MCAOMOAOUnconvertibleReal(),
+        ),
         () -> DeformableMirrorModel(
             n_act=2,
             influence_width=0.2,
@@ -714,6 +742,12 @@ end
             n_act=2,
             actuator_model=ClippedActuators(1.0, -1.0),
         ),
+        () -> DeformableMirrorModel(n_act=2, actuator_model=:linear),
+        () -> DeformableMirrorModel(n_act=2, misregistration=nothing),
+        () -> DeformableMirrorModel(
+            n_act=2,
+            pupil_relay_registration=nothing,
+        ),
         () -> DeformableMirrorModel(n_act=2, T=AbstractFloat),
     )
         error = try
@@ -725,6 +759,23 @@ end
         @test error isa PlantDefinitionError
         @test error.component === :controllable_optic
     end
+
+    @test _deformable_mirror_error_message(:sentinel) == ":sentinel"
+    definition_error = try
+        _throw_deformable_mirror_definition_failure(
+            :sentinel,
+            :test_definition_failure,
+        )
+        nothing
+    catch caught
+        caught
+    end
+    @test definition_error isa PlantDefinitionError
+    @test definition_error.reason === :test_definition_failure
+    @test_throws InterruptException _throw_deformable_mirror_definition_failure(
+        InterruptException(),
+        :test_definition_interrupt,
+    )
 end
 
 @testset "Native DM preparation rejects incompatible schemas and models" begin
@@ -852,6 +903,141 @@ end
     @test error isa PlantPreparationError
     @test error.component === :controllable_optic
     @test error.reason === :deformable_mirror_preparation
+end
+
+@testset "Native DM separable runtime and structured boundary errors" begin
+    T = Float64
+    telescope = Telescope(
+        resolution=4,
+        diameter=T(4),
+        central_obstruction=zero(T),
+        T=T,
+    )
+    atmosphere = mcao_moao_atmosphere(telescope)
+    model = DeformableMirrorModel(
+        n_act=2,
+        mechanical_coupling=T(0.25),
+        T=T,
+    )
+    schema = mcao_moao_command_schema(
+        :separable_native_dm;
+        T=T,
+        dimensions=(4,),
+    )
+    definition = ControllableOpticDefinition(
+        :separable_native_dm,
+        model,
+        (schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
+    )
+    prepared = prepare_controllable_optic(
+        model,
+        definition,
+        telescope,
+        atmosphere,
+    )
+    endpoint = command_endpoint_id(schema)
+    initial_command = zeros(T, 4)
+    state = prepare_controllable_optic_state(
+        prepared,
+        definition,
+        (endpoint,),
+        (initial_command,),
+    )
+    workspace = prepare_controllable_optic_workspace(prepared)
+    @test state.active.state.coefs_grid !== nothing
+    @test state.active.state.separable_tmp !== nothing
+    @test workspace.staged.state.coefs_grid !== nothing
+    @test workspace.staged.state.separable_tmp !== nothing
+
+    command = T[1e-9, 2e-9, 3e-9, 4e-9]
+    stage_controllable_optic_command!(
+        prepared,
+        state,
+        workspace,
+        endpoint,
+        command,
+        PlantTimestamp(1),
+    )
+    commit_controllable_optic_command!(
+        prepared,
+        state,
+        workspace,
+        endpoint,
+        PlantTimestamp(1),
+    )
+    @test any(!iszero, surface_opd(state.active))
+
+    storage_error = try
+        prepare_controllable_optic_state(
+            prepared,
+            definition,
+            (endpoint,),
+            (zeros(Float32, 4),),
+        )
+        nothing
+    catch caught
+        caught
+    end
+    @test storage_error isa PlantPreparationError
+    @test storage_error.reason === :deformable_mirror_command_storage
+
+    stage_error = try
+        stage_controllable_optic_command!(
+            prepared,
+            state,
+            workspace,
+            endpoint,
+            zeros(Float32, 4),
+            PlantTimestamp(2),
+        )
+        nothing
+    catch caught
+        caught
+    end
+    @test stage_error isa PlantCommandError
+    @test stage_error.stage === :physical_application
+    @test stage_error.reason === :deformable_mirror_command_storage
+
+    incomplete_error = try
+        _deformable_mirror_separable_runtime(
+            zeros(T, 4, 2),
+            nothing,
+            zeros(T, 4),
+            zeros(T, 4, 4),
+        )
+        nothing
+    catch caught
+        caught
+    end
+    @test incomplete_error isa PlantPreparationError
+    @test incomplete_error.reason === :deformable_mirror_preparation
+
+    input_error = try
+        _deformable_mirror_surface_metadata(prepared, zeros(T, 4, 4))
+        nothing
+    catch caught
+        caught
+    end
+    @test input_error isa PlantPreparationError
+    @test input_error.reason === :unsupported_path_input
+
+    preparation_error = try
+        _throw_deformable_mirror_preparation_failure(
+            ArgumentError("test preparation failure"),
+            ControllableOpticID(:separable_native_dm),
+        )
+        nothing
+    catch caught
+        caught
+    end
+    @test preparation_error isa PlantPreparationError
+    @test preparation_error.reason === :deformable_mirror_preparation
+    @test_throws InterruptException _throw_deformable_mirror_preparation_failure(
+        InterruptException(),
+        ControllableOpticID(:separable_native_dm),
+    )
 end
 
 @testset "Native DM staged publication and allocation contract" begin
