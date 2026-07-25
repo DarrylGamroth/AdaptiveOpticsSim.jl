@@ -401,18 +401,45 @@ function _apply_sampled_aberration_bindings!(
     bindings::PreparedSampledAberrationPathBindings,
     binding_range::UnitRange{Int},
 )
+    _apply_sampled_aberration_bindings_noreturn!(
+        input,
+        aberrations,
+        bindings,
+        binding_range,
+    )
+    return input
+end
+
+function _apply_sampled_aberration_bindings_noreturn!(
+    input::PupilFunction,
+    aberrations,
+    bindings::PreparedSampledAberrationPathBindings,
+    binding_range::UnitRange{Int},
+)
     @inbounds for binding in binding_range
         slot = prepared_sampled_aberration_slot(bindings, binding)
         aberration = aberrations[slot]
-        definition = aberration.definition
-        apply_sampled_pupil_surface!(
+        _apply_prepared_sampled_aberration!(
             input,
-            aberration.opd,
+            aberration,
             prepared_sampled_aberration_path_coupling(bindings, binding),
-            sampled_aberration_application(definition),
         )
     end
-    return input
+    return nothing
+end
+
+Base.@noinline function _apply_prepared_sampled_aberration!(
+    input::PupilFunction,
+    aberration::PreparedSampledAberration{D,A},
+    coupling::AbstractPupilSurfacePathCoupling,
+) where {D,A}
+    apply_sampled_pupil_surface!(
+        input,
+        aberration.opd,
+        coupling,
+        sampled_aberration_application(aberration.definition),
+    )
+    return nothing
 end
 
 function _apply_sampled_aberration_bindings!(

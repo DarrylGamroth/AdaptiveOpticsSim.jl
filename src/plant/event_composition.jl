@@ -192,6 +192,10 @@ end
 struct _PreparedPlantEventPath
     id::OpticalPathID
     path::PreparedPathExecutor
+    # Retain the heterogeneous input box created during preparation. The
+    # event-loop barrier reuses it across all visible optics instead of
+    # repeatedly boxing an immutable optical-product wrapper.
+    input::Union{AbstractOpticalProduct,Tuple}
     rngs::PreparedOwnerRNGs
     schedule::PeriodicSchedule
     origin::PlantTimestamp
@@ -1040,8 +1044,14 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
                 binding_range,
                 requires_full_optical,
             )
-        paths[index] = _PreparedPlantEventPath(definition.path, path, rngs,
-            definition.schedule, definition.origin, handle,
+        paths[index] = _PreparedPlantEventPath(
+            definition.path,
+            path,
+            path.input,
+            rngs,
+            definition.schedule,
+            definition.origin,
+            handle,
             requires_full_optical,
             first(sampled_binding_range), last(sampled_binding_range),
             first(binding_range), last(binding_range),
@@ -3324,11 +3334,20 @@ end
 
 function _preflight_event_path(path::_PreparedPlantEventPath,
     atmosphere)
-    path.path.atmosphere === atmosphere || _plant_event_loop_error(
+    _preflight_event_path(path.path, path.rngs, atmosphere)
+    return nothing
+end
+
+Base.@noinline function _preflight_event_path(
+    path::PreparedPathExecutor,
+    rngs::PreparedOwnerRNGs,
+    atmosphere,
+)
+    path.atmosphere === atmosphere || _plant_event_loop_error(
         :prepared_binding,
         "event path does not retain the plant atmosphere")
-    _require_current_path_binding(path.path)
-    _require_rng_owner_binding(path.rngs, path.path)
+    _require_current_path_binding(path)
+    _require_rng_owner_binding(rngs, path)
     return nothing
 end
 
@@ -3339,17 +3358,25 @@ function _preflight_event_acquisition(
     return nothing
 end
 
-@inline function _require_event_lifecycle_binding(
-    prepared::Union{
-        PreparedGlobalShutterAcquisition,
-        PreparedRollingShutterAcquisition,
-        PreparedFrameTransferAcquisition,
-    },
-    state::Union{
-        GlobalShutterAcquisitionState,
-        RollingShutterAcquisitionState,
-        FrameTransferAcquisitionState,
-    })
+@inline _require_event_lifecycle_binding(
+    prepared::PreparedGlobalShutterAcquisition,
+    state::GlobalShutterAcquisitionState,
+) = _require_detector_event_lifecycle_binding(prepared, state)
+
+@inline _require_event_lifecycle_binding(
+    prepared::PreparedRollingShutterAcquisition,
+    state::RollingShutterAcquisitionState,
+) = _require_detector_event_lifecycle_binding(prepared, state)
+
+@inline _require_event_lifecycle_binding(
+    prepared::PreparedFrameTransferAcquisition,
+    state::FrameTransferAcquisitionState,
+) = _require_detector_event_lifecycle_binding(prepared, state)
+
+@inline function _require_detector_event_lifecycle_binding(
+    prepared::P,
+    state::S,
+) where {P,S}
     getfield(state, :binding) === getfield(prepared, :binding) ||
         _plant_event_loop_error(:foreign_state,
             "detector lifecycle state belongs to another prepared acquisition")
@@ -3363,6 +3390,24 @@ end
         _plant_event_loop_error(:prepared_binding,
             "detector lifecycle storage changed after event-loop preparation")
     return nothing
+end
+
+function _require_event_lifecycle_binding(
+    ::Union{
+        PreparedGlobalShutterAcquisition,
+        PreparedRollingShutterAcquisition,
+        PreparedFrameTransferAcquisition,
+    },
+    ::Union{
+        GlobalShutterAcquisitionState,
+        RollingShutterAcquisitionState,
+        FrameTransferAcquisitionState,
+    },
+)
+    _plant_event_loop_error(
+        :prepared_binding,
+        "detector lifecycle state kind changed after preparation",
+    )
 end
 
 @inline function _require_event_lifecycle_binding(
@@ -3512,10 +3557,26 @@ function _validate_due_path_materializations!(
         due_paths[index] || continue
         binding = prepared.paths[index]
         binding.requires_full_optical || continue
-        path = binding.path
-        validate_path_materialization(path.materialization, path.input,
-            atmosphere, epoch)
+        _validate_due_path_materialization!(
+            binding.path,
+            atmosphere,
+            epoch,
+        )
     end
+    return nothing
+end
+
+Base.@noinline function _validate_due_path_materialization!(
+    path::PreparedPathExecutor,
+    atmosphere,
+    epoch,
+)
+    validate_path_materialization(
+        path.materialization,
+        path.input,
+        atmosphere,
+        epoch,
+    )
     return nothing
 end
 
@@ -3525,10 +3586,29 @@ function _materialize_due_paths!(prepared::PreparedPlantEventLoop,
         due_paths[index] || continue
         binding = prepared.paths[index]
         binding.requires_full_optical || continue
-        path = binding.path
-        materialize_path_input_rngs!(path.materialization, path.input,
-            atmosphere, epoch, binding.rngs)
+        _materialize_due_path!(
+            binding.path,
+            atmosphere,
+            epoch,
+            binding.rngs,
+        )
     end
+    return nothing
+end
+
+Base.@noinline function _materialize_due_path!(
+    path::PreparedPathExecutor,
+    atmosphere,
+    epoch,
+    rngs::PreparedOwnerRNGs,
+)
+    materialize_path_input_rngs!(
+        path.materialization,
+        path.input,
+        atmosphere,
+        epoch,
+        rngs,
+    )
     return nothing
 end
 
@@ -3546,13 +3626,28 @@ function _apply_due_sampled_aberrations!(
             path.sampled_aberration_binding_start:
             path.sampled_aberration_binding_stop
         )
-        _apply_sampled_aberration_bindings!(
-            path.path.input,
+        _apply_due_path_sampled_aberrations!(
+            path.path,
             prepared.sampled_aberrations,
             bindings,
             binding_range,
         )
     end
+    return nothing
+end
+
+Base.@noinline function _apply_due_path_sampled_aberrations!(
+    path::PreparedPathExecutor,
+    aberrations,
+    bindings::PreparedSampledAberrationPathBindings,
+    binding_range::UnitRange{Int},
+)
+    _apply_sampled_aberration_bindings_noreturn!(
+        path.input,
+        aberrations,
+        bindings,
+        binding_range,
+    )
     return nothing
 end
 
@@ -3566,29 +3661,66 @@ function _apply_due_controllable_optics!(
         due_paths[path_index] || continue
         path = prepared.paths[path_index]
         path.requires_full_optical || continue
-        input = path.path.input
-        coupling_slot = 1
-        for binding in path.optic_binding_start:path.optic_binding_stop
-            optic_index =
-                prepared_controllable_optic_slot(bindings, binding)
-            optic = prepared.optics[optic_index]
-            coupling = path.optic_couplings[coupling_slot]
-            _apply_event_controllable_optic_surface!(
-                controllable_optic_execution_role(optic.implementation),
-                input, optic.implementation,
-                state.controllable_optics[optic_index],
-                coupling)
-            coupling_slot += 1
-        end
+        _apply_due_path_controllable_optics!(
+            path.input,
+            path.optic_binding_start,
+            path.optic_binding_stop,
+            path.optic_couplings,
+            prepared.optics,
+            state.controllable_optics,
+            bindings,
+        )
     end
+    return nothing
+end
+
+Base.@noinline function _apply_due_path_controllable_optics!(
+    input,
+    binding_start::Int,
+    binding_stop::Int,
+    couplings::Memory{AbstractPupilSurfacePathCoupling},
+    optics::Memory{PreparedControllableOptic},
+    states::Memory{Any},
+    bindings::PreparedControllableOpticPathBindings,
+)
+    Base.@nospecialize input
+    coupling_slot = 1
+    @inbounds for binding in binding_start:binding_stop
+        optic_index = prepared_controllable_optic_slot(bindings, binding)
+        _apply_prepared_event_controllable_optic_surface!(
+            input,
+            optics[optic_index],
+            states[optic_index],
+            couplings[coupling_slot],
+        )
+        coupling_slot += 1
+    end
+    return nothing
+end
+
+@inline function _apply_prepared_event_controllable_optic_surface!(
+    input,
+    optic::PreparedControllableOptic{D,P,S},
+    state,
+    coupling::AbstractPupilSurfacePathCoupling,
+) where {D,P,S}
+    implementation = optic.implementation
+    _apply_event_controllable_optic_surface!(
+        controllable_optic_execution_role(implementation),
+        input,
+        implementation,
+        state,
+        coupling,
+    )
     return nothing
 end
 
 @inline function _apply_event_controllable_optic_surface!(
     ::PupilSurfaceExecutionRole, input, implementation, state,
     coupling::AbstractPupilSurfacePathCoupling)
-    return apply_controllable_optic_surface!(
+    apply_controllable_optic_surface!(
         input, implementation, state, coupling)
+    return nothing
 end
 
 @inline function _apply_event_controllable_optic_surface!(
@@ -3615,8 +3747,16 @@ function _execute_due_paths!(prepared::PreparedPlantEventLoop,
         due_paths[index] || continue
         binding = prepared.paths[index]
         binding.requires_full_optical || continue
-        execute_path!(binding.path, binding.rngs)
+        _execute_due_path!(binding.path, binding.rngs)
     end
+    return nothing
+end
+
+Base.@noinline function _execute_due_path!(
+    path::PreparedPathExecutor,
+    rngs::PreparedOwnerRNGs,
+)
+    execute_path!(path, rngs)
     return nothing
 end
 
