@@ -64,6 +64,7 @@ common_static_opd_m = 5.0e-9
 ncpa_base_m = 10.0e-9
 ncpa_step_m = 1.0e-9
 numerical_atol = 1.0e-20
+output_order_atol = 0.0
 finite_support_atol = 0.0
 run_seed = 34565
 optical_sample_period_ns = 1000000

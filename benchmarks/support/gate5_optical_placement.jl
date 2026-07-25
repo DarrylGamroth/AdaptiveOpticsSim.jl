@@ -246,6 +246,8 @@ function _gate5_common_optics(
         error("Gate 5 workload requires three common DM command values")
     length(altitudes) == 3 ||
         error("Gate 5 workload requires three common DM altitudes")
+    iszero(first(altitudes)) ||
+        error("Gate 5 first common DM altitude must be the pupil at 0 m")
     placements = (
         AOSPlant.PupilPlanePlacement(),
         AOSPlant.AtmosphericConjugatePlacement(altitudes[2]),
@@ -576,15 +578,17 @@ function validate_integrated_oracle(raw::AbstractDict)
                 path_output(reordered, item.id),
         ))
     end
-    tolerance = Float64(raw["numerical_atol"])
-    maximum_error = max(
+    opd_tolerance = Float64(raw["numerical_atol"])
+    output_order_tolerance = Float64(raw["output_order_atol"])
+    maximum_opd_error = max(
         canonical_error.maximum_error,
         reordered_error.maximum_error,
         order_error,
-        output_order_error,
     )
-    maximum_error <= tolerance ||
+    maximum_opd_error <= opd_tolerance ||
         error("Gate 5 integrated numerical oracle exceeded tolerance")
+    output_order_error <= output_order_tolerance ||
+        error("Gate 5 propagated declaration-order oracle exceeded tolerance")
     return Dict{String,Any}(
         "path_count" => length(expected),
         "science_path_count" => science_count,
@@ -599,7 +603,8 @@ function validate_integrated_oracle(raw::AbstractDict)
             canonical_error.science_maximum_error,
         "declaration_order_opd_error_m" => order_error,
         "declaration_order_output_error" => output_order_error,
-        "tolerance" => tolerance,
+        "tolerance" => opd_tolerance,
+        "output_order_tolerance" => output_order_tolerance,
         "passed" => true,
         "path_hashes" => path_hashes(canonical, expected),
     )

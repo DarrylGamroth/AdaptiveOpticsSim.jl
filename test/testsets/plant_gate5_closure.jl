@@ -34,12 +34,13 @@ end
     @test oracle["science_path_count"] == 2
     @test oracle["maximum_opd_error_m"] <= oracle["tolerance"]
     @test oracle["declaration_order_opd_error_m"] <= oracle["tolerance"]
-    @test oracle["declaration_order_output_error"] <= oracle["tolerance"]
+    @test oracle["declaration_order_output_error"] <=
+        oracle["output_order_tolerance"]
     @test length(oracle["path_hashes"]) == 4
 
     finite_support = Gate5Closure.validate_finite_support(workload)
     @test finite_support["passed"]
-    @test finite_support["maximum_error_m"] ==
+    @test finite_support["maximum_error_m"] <=
         finite_support["tolerance"]
     @test finite_support["supported_samples"] == 9
     @test finite_support["zeroed_samples"] == 16
@@ -64,6 +65,12 @@ end
     @test topology["sampled_aberration_binding_count"] ==
         topology["expected_sampled_aberration_binding_count"] == 6
     @test topology["first_cycle_completed"]
+
+    invalid_altitude = deepcopy(workload)
+    invalid_altitude["common_dm_altitudes_m"][1] = 1.0
+    @test_throws ErrorException Gate5Closure.gate5_plant_definition(
+        invalid_altitude,
+    )
 
     operation, expected, _ =
         Gate5Closure.prepare_gate5_operation(workload)
