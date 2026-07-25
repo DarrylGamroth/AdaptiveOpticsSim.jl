@@ -408,6 +408,18 @@ end
     fill!(values, one(T))
     metadata = sampled_aberration_test_metadata(prototype, values)
 
+    registered = SampledAberrationDefinition(
+        :registered,
+        OPDMap(values),
+        metadata;
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
+        application=DMAdditive(),
+        registration=PupilRelayRegistration(),
+    )
+    @test Plant.sampled_aberration_registration(registered) isa
+        PupilRelayRegistration
+
     cases = (
         (
             () -> SampledAberrationDefinition(
@@ -454,6 +466,28 @@ end
             ),
             :invalid_pupil_relay_registration,
         ),
+        (
+            () -> SampledAberrationDefinition(
+                :invalid_metadata,
+                OPDMap(values),
+                :invalid;
+                placement=PupilPlanePlacement(),
+                visibility=AllPathVisibility(),
+                application=DMAdditive(),
+            ),
+            :invalid_surface_metadata,
+        ),
+        (
+            () -> SampledAberrationDefinition(
+                "invalid_id",
+                OPDMap(values),
+                metadata;
+                placement=PupilPlanePlacement(),
+                visibility=AllPathVisibility(),
+                application=DMAdditive(),
+            ),
+            :invalid_id,
+        ),
     )
     for (operation, reason) in cases
         error = sampled_aberration_definition_error(operation)
@@ -472,6 +506,76 @@ end
         visibility=AllPathVisibility(),
         application=DMReplace(),
     )
+    named_definition = PlantDefinition(;
+        telescope,
+        atmosphere,
+        sampled_aberrations=(first_replace=first_replace,),
+        paths=(science=path,),
+    )
+    @test Plant.sampled_aberration_definitions(named_definition) ==
+        (first_replace,)
+
+    topology_cases = (
+        (
+            () -> PlantDefinition(;
+                telescope,
+                atmosphere,
+                sampled_aberrations=(nothing,),
+                paths=(path,),
+            ),
+            :invalid_definition,
+        ),
+        (
+            () -> PlantDefinition(;
+                telescope,
+                atmosphere,
+                sampled_aberrations=[first_replace],
+                paths=(path,),
+            ),
+            :invalid_container,
+        ),
+        (
+            () -> PlantDefinition(;
+                telescope,
+                atmosphere,
+                sampled_aberrations=(wrong=first_replace,),
+                paths=(path,),
+            ),
+            :identity_mismatch,
+        ),
+    )
+    for (operation, reason) in topology_cases
+        topology_error = sampled_aberration_definition_error(operation)
+        @test topology_error isa PlantDefinitionError
+        @test topology_error.component === :sampled_aberration
+        @test topology_error.reason === reason
+    end
+
+    unknown_definition_error = sampled_aberration_definition_error() do
+        Plant.sampled_aberration_definition(named_definition, :missing)
+    end
+    @test unknown_definition_error isa PlantDefinitionError
+    @test unknown_definition_error.component === :sampled_aberration
+    @test unknown_definition_error.reason === :unknown_id
+
+    named_plant = prepare_plant(named_definition; run_seed=0x8702)
+    unknown_prepared_error = sampled_aberration_definition_error() do
+        Plant.prepared_sampled_aberration(named_plant, :missing)
+    end
+    @test unknown_prepared_error isa PlantPreparationError
+    @test unknown_prepared_error.component === :sampled_aberration
+    @test unknown_prepared_error.reason === :unknown_id
+
+    unknown_binding_error = sampled_aberration_definition_error() do
+        Plant.prepared_sampled_aberration_binding_range(
+            Plant.prepared_sampled_aberration_path_bindings(named_plant),
+            :missing,
+        )
+    end
+    @test unknown_binding_error isa PlantPreparationError
+    @test unknown_binding_error.component === :path
+    @test unknown_binding_error.reason === :unknown_id
+
     second_replace = SampledAberrationDefinition(
         :second_replace,
         OPDMap(values),
