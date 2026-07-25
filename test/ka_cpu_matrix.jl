@@ -1165,10 +1165,16 @@ end
             :zernike_phasor_kernel!,
             :zernike_signal_kernel!,
         ])
+        # This kernel backs an accelerator-only dispatch. Sampled pupil
+        # surfaces use the allocation-free scalar implementation on CPU.
+        accelerator_only = Set([
+            :_sampled_pupil_surface_kernel!,
+        ])
         all_kernels = source_kernel_names()
-        classified = union(KA_CPU_EXERCISED_KERNELS, deferred)
+        classified = union(KA_CPU_EXERCISED_KERNELS, deferred, accelerator_only)
         @test isempty(setdiff(KA_CPU_EXERCISED_KERNELS, all_kernels))
         @test isempty(setdiff(deferred, all_kernels))
+        @test isempty(setdiff(accelerator_only, all_kernels))
         @test isempty(setdiff(all_kernels, classified))
         @test length(KA_CPU_EXERCISED_KERNELS) >= 40
     end
