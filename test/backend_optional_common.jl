@@ -523,6 +523,72 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
         T=T, backend=selector)
     dm = DeformableMirror(tel; n_act=2, influence_width=T(0.3), T=T, backend=selector)
     dm_dense = DeformableMirror(tel; n_act=2, influence_model=DenseInfluenceMatrix(Array(dm.state.modes)), T=T, backend=selector)
+    native_model = Plant.DeformableMirrorModel(
+        n_act=2,
+        influence_width=T(0.3),
+        T=T,
+    )
+    native_schema = PlantCommandSchema(
+        T,
+        (4,);
+        id=:optional_native_dm_schema,
+        version=1,
+        endpoint=:optional_native_dm_command,
+        units=:metre,
+        sign_convention=:positive_surface_increases_opd,
+        basis=CommandBasis(:actuator, :optional_native_dm),
+        basis_revision=1,
+        semantics=AbsoluteCommand,
+        bounds=UnboundedCommandValues(),
+        value_policy=CommandValuePolicy(),
+        sequence_policy=CommandSequencePolicy(),
+        effective_time_policy=CommandEffectiveTimePolicy(),
+        silence_policy=CommandSilencePolicy(),
+    )
+    native_definition = ControllableOpticDefinition(
+        :optional_native_dm,
+        native_model,
+        (native_schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
+    )
+    native_implementation = Plant.prepare_controllable_optic(
+        native_model,
+        native_definition,
+        tel,
+        OptionalStaticAtmosphere(tel; T=T, backend=selector),
+    )
+    native_initial = BackendArray(zeros(T, 4))
+    native_state = Plant.prepare_controllable_optic_state(
+        native_implementation,
+        native_definition,
+        (CommandEndpointID(:optional_native_dm_command),),
+        (native_initial,),
+    )
+    native_workspace = Plant.prepare_controllable_optic_workspace(
+        native_implementation,
+    )
+    native_command = BackendArray(T[1, 0, 0, 0])
+    Plant.stage_controllable_optic_command!(
+        native_implementation,
+        native_state,
+        native_workspace,
+        CommandEndpointID(:optional_native_dm_command),
+        native_command,
+        PlantTimestamp(1),
+    )
+    Plant.commit_controllable_optic_command!(
+        native_implementation,
+        native_state,
+        native_workspace,
+        CommandEndpointID(:optional_native_dm_command),
+        PlantTimestamp(1),
+    )
+    set_command!(dm, native_command)
+    update_surface!(dm)
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(surface_opd(native_state.active)),
+    )
     zernike_modal = ModalControllableOptic(tel, ZernikeOpticBasis([2, 3]); T=T, backend=selector)
     cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=T(0.1)); T=T, backend=selector)
     wfs = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive(), T=T, backend=selector)
@@ -545,6 +611,11 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     @test dm_dense.state.coefs isa BackendArray
     @test dm_dense.state.modes isa BackendArray
     @test Array(dm_dense.state.modes) ≈ Array(dm.state.modes) atol=0 rtol=0
+    @test surface_opd(native_state.active) isa BackendArray
+    @test native_state.active.state.coefs isa BackendArray
+    @test native_workspace.staged.state.coefs isa BackendArray
+    @test Array(surface_opd(native_state.active)) ≈
+        Array(surface_opd(dm)) rtol=T(2e-5) atol=T(2e-6)
     @test zernike_modal.state.coefs isa BackendArray
     @test zernike_modal.state.modes isa BackendArray
     @test cartesian_modal.state.coefs isa BackendArray

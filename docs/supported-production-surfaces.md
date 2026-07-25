@@ -73,10 +73,19 @@ Current CPU-supported families:
   parallel placement, or production instrument-scale evidence
 - deterministic linear modal reduced-order direct measurements with explicit
   harmonic disturbance, path, command-response, and sensor operators; exact
-  command-schema binding; periodic or delivered-trigger acquisition timing;
-  matched loop closure; declared residual metric, operating envelope, and
-  omitted effects; and unused full-optical path bypass. Support is limited to
-  the maintained CPU validity envelope in `MV-26`
+  command-schema and path-visible endpoint binding; periodic or
+  delivered-trigger acquisition timing; matched loop closure; declared
+  residual metric, operating envelope, and omitted effects; common versus
+  target-local response isolation; and unused full-optical path bypass.
+  Support is limited to the maintained CPU validity envelope in `MV-26`
+- native Plant deformable mirrors with explicit actuator topology, influence
+  and actuator models, device-internal misregistration, path/relay
+  registration, independent active/staged storage, and allocation-free warmed
+  surface publication/application. Serial CPU composition covers common DMs at
+  the pupil and multiple atmospheric conjugates over NGS, finite-height LGS,
+  and science directions plus target-local MOAO DMs. This is composition
+  support, not calibrated device dynamics, tomography fidelity, external
+  optical equivalence, fixed-arrival latency, or instrument-scale capacity
 - trigger-relative autonomous circular-Pyramid modulation with bounded
   radius/frequency/phase/enabled setpoints, free-running/source/delivered-reset
   relationships, deterministic branch faults, and an allocation-free
@@ -139,6 +148,9 @@ Current AMDGPU-supported scope:
 - accelerator-resident reconstructor and controller storage
 - maintained Shack-Hartmann exported-pixel parity surfaces
 - independent DM and modal/low-order optic application
+- native Plant DM preparation with device-resident active/staged command and
+  surface storage plus direct surface parity; the integrated multi-path event
+  loop remains a serial CPU oracle
 - prepared controller-output routing with device-resident views and exact
   backend/device validation
 - dynamic cycle-averaged circular-Pyramid radius/enable updates with
@@ -172,12 +184,12 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The Gate 4 candidate revision `191751f` passed all `431` maintained checks on
-Julia 1.12.6 with scalar indexing disabled. This directly covers the retained
-numerical surfaces, prepared controller-output routing, and dynamic
-cycle-averaged circular-Pyramid modulation. Gate 4 did not recharacterize AMD
-latency, so the July 14 artifact remains the maintained AMD performance
-evidence.
+The Gate 5 native-DM candidate passed all `441` maintained checks on the local
+gfx1030 target with Julia 1.12.6 and scalar indexing disabled. This includes
+the retained numerical surfaces, prepared controller-output routing, dynamic
+cycle-averaged circular-Pyramid modulation, and direct native Plant DM
+state/staging/surface parity. Gate 5 did not recharacterize AMD latency, so the
+July 14 artifact remains the maintained AMD performance evidence.
 
 ### GPU support-boundary rule
 

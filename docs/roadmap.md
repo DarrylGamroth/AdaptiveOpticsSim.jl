@@ -133,12 +133,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    deterministic fake RTC, and fixed-arrival evidence. The qualified boundary
    remains the serial oracle while worker, GPU, transport-specific, and
    placement-planner capabilities advance through their own gates.
-6. Continue Gate 5 from its implemented placement/visibility and generic
-   sampled-coupling foundation: every optic declares placement and path
-   visibility; preparation derives bounded canonical per-path bindings and
-   compatible coupling groups; and analytic NGS/LGS source-footprint geometry
-   composes explicit pupil-relay registration with metric plane metadata. Add
-   native DM integration, complete MCAO/MOAO execution, and path-specific
+6. Continue Gate 5 from its implemented placement/visibility, sampled-coupling,
+   and native-DM composition foundation: every optic declares placement and
+   path visibility; preparation derives bounded canonical per-path bindings
+   and compatible coupling groups; analytic NGS/LGS source-footprint geometry
+   composes explicit pupil-relay registration with metric plane metadata; and
+   common multi-altitude MCAO plus target-local MOAO paths retain independent
+   command state in full-optical and reduced-order execution. Add path-specific
    sampled NCPA before advancing to prepared CPU execution groups, single-GPU
    direction batching, and physical device identity behind numerical,
    allocation, residency, and fixed-arrival evidence.

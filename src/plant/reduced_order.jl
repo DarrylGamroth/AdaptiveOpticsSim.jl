@@ -172,8 +172,6 @@ function _reduced_order_response_tuple(responses)
 end
 
 function _require_unique_reduced_order_responses(responses::Tuple)
-    isempty(responses) && _reduced_order_error(:empty_responses,
-        "a command-responsive reduced-order model requires at least one command response")
     @inbounds for right in 2:length(responses)
         endpoint = responses[right].endpoint
         for left in 1:(right - 1)
@@ -634,19 +632,41 @@ function _prepare_reduced_order_event_response(
     return _PreparedArrayReducedOrderEventResponse(response, slot)
 end
 
+@inline function _reduced_order_response_visible(
+    endpoint_slot::UInt32,
+    visible_endpoint_slots::Tuple,
+)
+    return endpoint_slot in visible_endpoint_slots
+end
+
 function prepare_linear_reduced_order_event_provider(
-    provider::PreparedLinearReducedOrderProvider, endpoints)
-    length(provider.command_responses) == length(endpoints) ||
+    provider::PreparedLinearReducedOrderProvider,
+    endpoints,
+    visible_endpoint_slots::Tuple,
+)
+    length(provider.command_responses) == length(visible_endpoint_slots) ||
         _reduced_order_error(:path_visibility,
-            "the current all-path visibility contract requires one explicit reduced-order response for every prepared command endpoint")
+            "reduced-order response count must exactly match the command " *
+            "endpoints visible on its optical path")
     responses = map(response ->
         _prepare_reduced_order_event_response(response, endpoints),
         provider.command_responses)
-    @inbounds for endpoint in endpoints
+    @inbounds for response in responses
+        _reduced_order_response_visible(
+            response.endpoint_slot,
+            visible_endpoint_slots,
+        ) || _reduced_order_error(
+            :path_visibility,
+            "reduced-order provider includes hidden endpoint " *
+            "$(response.response.endpoint)",
+        )
+    end
+    @inbounds for slot in visible_endpoint_slots
+        endpoint = endpoints[Int(slot)]
         id = command_endpoint_id(endpoint)
-        any(response -> response.response.endpoint == id, responses) ||
+        any(response -> response.endpoint_slot == slot, responses) ||
             _reduced_order_error(:path_visibility,
-                "reduced-order provider omits currently visible endpoint $id")
+                "reduced-order provider omits visible endpoint $id")
     end
     return PreparedLinearReducedOrderEventProvider(provider, responses)
 end

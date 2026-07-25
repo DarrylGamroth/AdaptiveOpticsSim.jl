@@ -152,8 +152,11 @@ Examples:
   ranges and co-placed groups; a due path applies only its visible pupil-plane
   members. `AutonomousPathExecutionRole` retains one exact focal-plane
   `AutonomousPeriodicOpticDefinition` coupling. Sampled atmospheric-conjugate
-  models prepare an exact NGS/LGS pupil-footprint coupling, while native DM
-  integration and complete MCAO/MOAO scenarios remain later Gate 5 work
+  models prepare an exact NGS/LGS pupil-footprint coupling.
+  `Plant.DeformableMirrorModel` prepares the native DM with distinct
+  active/staged runtimes, and serial common-plane MCAO plus target-local MOAO
+  scenarios exercise the same exact path bindings in full-optical and
+  reduced-order execution. Sampled NCPA attachment remains later Gate 5 work
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

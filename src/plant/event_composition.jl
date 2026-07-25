@@ -1155,6 +1155,32 @@ function _prepare_event_autonomous_optics(definitions, optics, paths,
     return bindings
 end
 
+function _event_path_visible_command_endpoint_slots(
+    plant::PreparedPlant,
+    path::OpticalPathID,
+)
+    bindings = getfield(plant, :controllable_optic_path_bindings)
+    optics = getfield(plant, :controllable_optics)
+    binding_range =
+        prepared_controllable_optic_binding_range(bindings, path)
+    endpoint_slots = UInt32[]
+    @inbounds for binding in binding_range
+        optic_slot =
+            prepared_controllable_optic_slot(bindings, binding)
+        append!(endpoint_slots, optics[optic_slot].endpoint_slots)
+    end
+    sort!(endpoint_slots)
+    @inbounds for index in 2:length(endpoint_slots)
+        endpoint_slots[index - 1] == endpoint_slots[index] &&
+            _plant_event_loop_error(
+                :duplicate_visible_command_endpoint,
+                "optical path $path resolves command endpoint slot " *
+                "$(endpoint_slots[index]) more than once",
+            )
+    end
+    return Tuple(endpoint_slots)
+end
+
 function _prepare_event_acquisition_lifecycle(
     plant::PreparedPlant,
     owner::PreparedAcquisitionOwner,
@@ -1177,8 +1203,16 @@ function _prepare_event_acquisition_lifecycle(
         acquisition_measurement(owner))
     lifecycle = prepare_direct_measurement_acquisition(measurement,
         definition)
+    visible_endpoint_slots =
+        _event_path_visible_command_endpoint_slots(
+            plant,
+            acquisition_path_id(owner.definition),
+        )
     sample_provider = prepare_linear_reduced_order_event_provider(
-        implementation, getfield(plant, :command_endpoints))
+        implementation,
+        getfield(plant, :command_endpoints),
+        visible_endpoint_slots,
+    )
     return lifecycle, measurement, sample_provider
 end
 
