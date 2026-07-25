@@ -2,7 +2,7 @@
 id = "GATE5-OPTICAL-PLACEMENT-CPU-2026-07-25"
 purpose = "Clean-tree Gate 5 NGS/LGS conjugate placement, common MCAO, selected-path MOAO, common static OPD, path-specific NCPA, finite-support, fixed-storage, bounded-allocation, topology-scale, and serial service-cost evidence"
 path = "2026-07-25-optical-placement.toml"
-sha256 = "73b3590c3195f4075aa6fa2225dda735013248f84cb7ce14bf5515f2ca616726"
+sha256 = "7db208294aefe17919006c8b254c95350a9f013c220b95b4e27da1fc2dad9271"
 source_contract = "../../contracts/gate5_optical_placement.toml"
-characterized_source_revision = "15182ff436fe236fb088b0d5014c238a2ab1b866"
+characterized_source_revision = "cf9b90a1049c83bb60e87ccc920f50a320c0bbe0"
 all_gates_passed = true

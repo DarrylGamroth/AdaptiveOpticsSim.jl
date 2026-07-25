@@ -158,7 +158,7 @@ domain in `AdaptiveOpticsSim`; `HIL` means the companion runtime boundary.
 | 3 | Deterministic multi-rate virtual-time event engine | complete |
 | 4 | Independent controllable-optic and meaningful reduced-order command semantics | complete |
 | 4A | Minimal serial CPU HIL vertical slice through canonical ports | complete |
-| 5 | Conjugated and path-specific controllable planes | partial |
+| 5 | Conjugated and path-specific controllable planes | complete |
 | 6 | Prepared CPU execution groups and executor seams | planned |
 | 7 | GPU direction batching and physical device identity | planned |
 | 8 | Hardened lifecycle, ports, failure propagation, buffers, and deployment behavior | planned |

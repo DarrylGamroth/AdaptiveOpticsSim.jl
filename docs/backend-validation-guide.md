@@ -224,8 +224,8 @@ science direction. The exact oracle also checks declaration-order replay and a
 Prepared storage and product hashes remain fixed through 5,000 post-warmup
 cycles. The warmed eight-path boundary observed 5,632 Julia heap bytes per
 all-path cycle against its declared 8 KiB ceiling. Three 10,000-sample
-self-paced runs recorded 108.159 microseconds median p50, 153.727 microseconds
-worst p99, and 9.149 kcycles/s median throughput. The 4/8/16-path preparation
+self-paced runs recorded 107.711 microseconds median p50, 124.287 microseconds
+worst p99, and 9.229 kcycles/s median throughput. The 4/8/16-path preparation
 matrix preserves exact binding counts and records preparation allocation,
 elapsed time, and prepared-summary size; it deliberately makes no
 production-capacity or bounded-code-generation claim.
