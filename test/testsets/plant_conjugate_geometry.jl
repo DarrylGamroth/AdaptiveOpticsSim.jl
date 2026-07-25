@@ -274,8 +274,8 @@ function conjugate_geometry_path(
     source::AbstractSource;
     resolution::Int=5,
     diameter::Real=5.0,
+    T::Type{<:AbstractFloat}=Float64,
 )
-    T = Float64
     telescope = Telescope(
         resolution=resolution,
         diameter=T(diameter),
@@ -301,15 +301,21 @@ end
 function conjugate_surface_metadata(
     prototype::PupilFunction,
     dimensions::NTuple{2,Int};
-    sampling::NTuple{2,Float64}=(1.0, 1.0),
-    origin::NTuple{2,Float64}=centered_grid_origin(dimensions, sampling),
+    sampling=(
+        one(eltype(prototype.opd)),
+        one(eltype(prototype.opd)),
+    ),
+    origin=centered_grid_origin(dimensions, sampling),
     orientation::PlaneAxisOrientation=PlaneAxisOrientation(),
 )
-    values = Matrix{Float64}(undef, dimensions)
+    T = eltype(prototype.opd)
+    sampling_t = (T(sampling[1]), T(sampling[2]))
+    origin_t = (T(origin[1]), T(origin[2]))
+    values = similar(prototype.opd, T, dimensions)
     metadata = OpticalPlaneMetadata(PupilPlane(), values;
         coordinate_domain=MetricCoordinates(),
-        sampling,
-        origin,
+        sampling=sampling_t,
+        origin=origin_t,
         orientation,
         spectral=AchromaticSpectralCoordinate(),
         normalization=DimensionlessNormalization(),
@@ -384,7 +390,7 @@ end
         pupil, surface, coupling)
 end
 
-function conjugate_geometry_event_fixture()
+function conjugate_geometry_event_fixture(; split_couplings::Bool=false)
     T = Float64
     telescope = Telescope(
         resolution=5,
@@ -410,6 +416,9 @@ function conjugate_geometry_event_fixture()
     )
     placement = AtmosphericConjugatePlacement(T(5_000))
     registration = PupilRelayRegistration(T=T)
+    second_registration = split_couplings ?
+        PupilRelayRegistration(decenter_m=(T(0.25), zero(T)), T=T) :
+        registration
     first = ControllableOpticDefinition(
         :first,
         ConjugateGeometryOpticModel(T(1), registration),
@@ -419,7 +428,7 @@ function conjugate_geometry_event_fixture()
     )
     second = ControllableOpticDefinition(
         :second,
-        ConjugateGeometryOpticModel(T(1), registration),
+        ConjugateGeometryOpticModel(T(1), second_registration),
         (conjugate_geometry_schema(:second),);
         placement,
         visibility=AllPathVisibility(),
@@ -484,6 +493,8 @@ end
         () -> PupilRelayRegistration(rotation_deg=NaN),
         () -> PupilRelayRegistration(parity=(1, 0)),
         () -> PupilRelayRegistration(parity=(1, 257)),
+        () -> PupilRelayRegistration(parity=[1, 1]),
+        () -> PupilRelayRegistration(magnification=[1.0, 1.0]),
         () -> PupilRelayRegistration(decenter_m=(0.0, Inf)),
         () -> PupilRelayRegistration(T=AbstractFloat),
     )
@@ -495,6 +506,70 @@ end
         end
         @test error isa PlantDefinitionError
         @test error.component === :controllable_optic
+        @test error.reason === :invalid_pupil_relay_registration
+    end
+
+    source32 = Source(
+        band=:custom,
+        wavelength=Float32(0.8e-6),
+        photon_irradiance=Float32(100),
+        T=Float32,
+    )
+    _, path32 = conjugate_geometry_path(source32; T=Float32)
+    pupil32 = path_input(path32)
+    surface32, metadata32 =
+        conjugate_surface_metadata(pupil32, (5, 5))
+    fill!(surface32, one(Float32))
+    converted = conjugate_geometry_coupling(
+        path32,
+        surface32,
+        metadata32,
+        PupilPlanePlacement();
+        registration=PupilRelayRegistration(
+            magnification=(1.25, 0.75),
+            rotation_deg=15.0,
+            parity=(-1, 1),
+            decenter_m=(0.125, -0.25),
+        ),
+    )
+    @test converted isa PreparedPupilFootprintCoupling
+    @test all(value -> value isa Float32, converted.index_transform)
+    @test all(value -> value isa Float32, converted.index_offset)
+
+    invalid_registration_error = try
+        conjugate_geometry_coupling(
+            path32,
+            surface32,
+            metadata32,
+            PupilPlanePlacement();
+            registration=:invalid,
+        )
+        nothing
+    catch caught
+        caught
+    end
+    @test invalid_registration_error isa PlantPreparationError
+    @test invalid_registration_error.reason ===
+        :invalid_pupil_relay_registration
+
+    for overflowing_registration in (
+        PupilRelayRegistration(magnification=(1e40, 1.0)),
+        PupilRelayRegistration(rotation_deg=1e41),
+        PupilRelayRegistration(decenter_m=(1e40, 0.0)),
+    )
+        error = try
+            conjugate_geometry_coupling(
+                path32,
+                surface32,
+                metadata32,
+                PupilPlanePlacement();
+                registration=overflowing_registration,
+            )
+            nothing
+        catch caught
+            caught
+        end
+        @test error isa PlantPreparationError
         @test error.reason === :invalid_pupil_relay_registration
     end
 end
@@ -795,6 +870,20 @@ end
     @test all(coupling ->
             coupling isa PreparedPupilFootprintCoupling,
         event_path.optic_couplings)
+
+    split_plant, split_event_loop, split_state, split_workspace =
+        conjugate_geometry_event_fixture(split_couplings=true)
+    split_event_path = only(split_event_loop.paths)
+    @test length(split_event_path.optic_coupling_groups) == 2
+    @test map(
+        group -> group.binding_count,
+        split_event_path.optic_coupling_groups,
+    ) == [1, 1]
+    @test step_plant_events!(
+        split_event_loop, split_state, split_workspace) ==
+        PlantTimestamp(0)
+    @test all(==(3.0), path_input(
+        prepared_path(split_plant, :science)).opd)
 
     @test step_plant_events!(event_loop, state, workspace) ==
         PlantTimestamp(0)
