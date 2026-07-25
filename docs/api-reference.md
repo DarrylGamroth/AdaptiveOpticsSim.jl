@@ -283,10 +283,11 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   owns no wall clock, task, queue, port, transport, or RTC protocol
 
 - Stable identities: `AtmosphereLayerID`, `ControllableOpticID`,
-  `CommandEndpointID`, `PlantCommandSchemaID`, `OpticalPathID`,
-  `AcquisitionID`, `RNGOwnerIdentity`
+  `SampledAberrationID`, `CommandEndpointID`, `PlantCommandSchemaID`,
+  `OpticalPathID`, `AcquisitionID`, `RNGOwnerIdentity`
 - RNG derivation and replay: `RNGDerivationVersion`, `rng_replay_metadata`
-- Definitions: `ControllableOpticDefinition`, `PlantCommandSchema`,
+- Definitions: `ControllableOpticDefinition`,
+  `SampledAberrationDefinition`, `PlantCommandSchema`,
   `OpticalPathDefinition`, `AcquisitionDefinition`, `PlantDefinition`
 - Native Plant deformable mirror: `DeformableMirrorModel`, an exported
   `AdaptiveOpticsSim.Plant` cold definition that binds actuator topology,
@@ -294,10 +295,11 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   and `PupilRelayRegistration` without owning live command/surface storage.
   Plant preparation validates one vector actuator endpoint and constructs
   separate active/staged native `DeformableMirror` runtimes
-- Controllable-optic placement and visibility:
+- Optical-component placement and visibility:
   `PupilPlanePlacement`, `AtmosphericConjugatePlacement`,
   `FocalPlanePlacement`, `AllPathVisibility`, `SelectedPathVisibility`;
-  `ControllableOpticDefinition` requires one of each
+  controllable-optic and sampled-aberration definitions require explicit
+  placement and visibility
 - Plant-command value types: `PlantCommandSchemaVersion`,
   `CommandBasisRevision`, `CommandUnit`, `CommandSignConvention`,
   `CommandBasis`, `UnboundedCommandValues`, `UniformCommandBounds`,
@@ -313,6 +315,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
 - Cold-model trait: `plant_model_definition_style`,
   `ColdPlantModelDefinition`
 - Identity and model accessors: `controllable_optic_id`,
+  `sampled_aberration_id`,
   `command_schemas`, `command_endpoint_ids`, `command_schema_id`,
   `command_schema_version`, `command_endpoint_id`, `path_id`, `acquisition_id`,
   `acquisition_path_id`, `controllable_optic_model`, `path_source`,
@@ -359,8 +362,10 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `AdaptiveOpticsSim.Plant.CommandDispositionWorkspace`. These remain explicit
   state/workspace containers rather than exported model types
 - Plant accessors: `plant_telescope`, `plant_atmosphere`,
-  `controllable_optic_definitions`, `path_definitions`,
+  `controllable_optic_definitions`, `sampled_aberration_definitions`,
+  `path_definitions`,
   `acquisition_definitions`, `controllable_optic_definition`,
+  `sampled_aberration_definition`,
   `command_endpoint_owner`, `command_schema`, `plant_command_schema`,
   `path_definition`, `acquisition_definition`
 - Ordinary prepared boundary: `PreparedPlant`, `prepare_plant`,
@@ -368,8 +373,16 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `execute_acquisition_selection_at!`. Qualified extension/execution seams are
   `prepare_pupil_opd_materialization`, `materialize_path_input!`,
   `execute_path!`, and `execute_acquisition!`
+- Qualified sampled-aberration preparation:
+  `PreparedSampledAberration`,
+  `PreparedSampledAberrationPathBindings`,
+  `prepared_sampled_aberrations`,
+  `prepared_sampled_aberration_path_bindings`, and their `sampled_aberration_*`
+  and `prepared_sampled_aberration_*` accessors. Preparation makes a
+  backend-local defensive OPD copy and resolves bounded, canonical
+  path-local couplings before execution
 - Qualified controllable-optic path coupling:
-  `AbstractControllableOpticPathCoupling`,
+  `AbstractPupilSurfacePathCoupling`,
   `PreparedDirectPupilSurfaceCoupling`,
   `PupilRelayRegistration`,
   `PreparedIdentityPupilFootprintCoupling`,
@@ -377,9 +390,10 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `prepare_controllable_optic_path_coupling`,
   `prepare_sampled_pupil_footprint_coupling`,
   `apply_controllable_optic_surface!`, and
-  `apply_sampled_pupil_surface!`. These values bind an exact prepared path and
-  surface-grid contract; they own no mutable surface, command state, cadence,
-  or transport
+  `apply_sampled_pupil_surface!`. The latter accepts `DMAdditive()` or
+  `DMReplace()`; transformed replacement writes zero outside finite sampled
+  support. These values bind an exact prepared path and surface-grid contract;
+  they own no mutable surface, command state, cadence, or transport
 - Calibration-illumination entry boundary:
   `PupilFunctionIlluminationEntry`, `ElectricFieldIlluminationEntry`,
   `IntensityMapIlluminationEntry`, `ExternalOpticsResultIlluminationEntry`,
@@ -473,10 +487,11 @@ gate; unusual source physics extend the qualified evaluator seams described in
 the extension guide. Entry tags do not infer a lamp, relay, instrument, control
 authority, or upstream propagation bypass.
 
-Every controllable optic, command endpoint, path, and acquisition carries an
-explicit typed identity. Tuples and named tuples organize declarations but do
-not define identity; named keys must match the IDs they contain.
-`PlantDefinition` rejects duplicate optic/path/acquisition identities,
+Every controllable optic, sampled aberration, command endpoint, path, and
+acquisition carries an explicit typed identity. Tuples and named tuples
+organize declarations but do not define identity; named keys must match the
+IDs they contain. `PlantDefinition` rejects duplicate
+optic/aberration/path/acquisition identities,
 duplicate active schema identities, command endpoints with more than one optic
 owner, and unknown path references with `PlantDefinitionError`.
 Controllable-optic, optical-path, and acquisition model
@@ -647,9 +662,10 @@ both tuples in stable-ID order independent of declaration and caller-selection
 order. Reduced-order and synthetic/replay providers bypass otherwise unused
 full-optical path execution.
 `execute_acquisition_selection!` preflights every owner and current
-`AtmosphereEpoch` before mutation, materializes all unique path inputs, forms
-each result once, and then runs the selected acquisitions. The `_at!` variant
-first advances the shared atmosphere to an explicit absolute model time.
+`AtmosphereEpoch` before mutation, materializes all unique path inputs, applies
+each prepared sampled-aberration plan, invokes each typed path executor once,
+and then runs the selected acquisitions. The `_at!` variant first advances the
+shared atmosphere to an explicit absolute model time.
 Both methods use exact owner-bound streams retained by the prepared plant; they
 do not accept tuple-position-dependent caller RNGs. Low-level stochastic model
 APIs continue to receive an explicit `AbstractRNG`, while prepared execution
@@ -663,6 +679,13 @@ commands for `execute_acquisition_selection!`. The warmed successful serial
 call is allocation-free on the
 maintained Julia version; cold selection/preparation, metadata construction,
 compilation, and exceptional paths are outside that budget.
+
+In serial event execution the corresponding full-optical order is atmosphere
+materialization, sampled aberrations, controllable surfaces, autonomous
+path-local optics, and then the typed native or external path executor.
+Replacement sampled aberrations precede additives; preparation rejects more
+than one visible replacement on a path because replacement operations do not
+commute.
 
 The qualified reduced-order construction vocabulary is:
 

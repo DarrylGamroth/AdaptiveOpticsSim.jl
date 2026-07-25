@@ -1,6 +1,6 @@
 #
-# Prepared geometric coupling of sampled controllable surfaces to path-local
-# pupil functions.
+# Prepared geometric coupling of sampled OPD surfaces to path-local pupil
+# functions.
 #
 # The cold PupilRelayRegistration describes path/relay geometry. Prepared
 # couplings compose it with source direction, finite-height cone geometry, and
@@ -9,12 +9,12 @@
 # deliberately absent here.
 #
 
-"""Path-local optical coupling prepared for one controllable optic."""
-abstract type AbstractControllableOpticPathCoupling end
+"""Path-local coupling prepared for one sampled pupil-plane OPD surface."""
+abstract type AbstractPupilSurfacePathCoupling end
 
 """Internal marker for an optic executed through another exact path coupling."""
 struct _NoPupilSurfacePathCoupling <:
-       AbstractControllableOpticPathCoupling end
+       AbstractPupilSurfacePathCoupling end
 
 struct _PupilRelayRegistrationToken end
 const _PUPIL_RELAY_REGISTRATION_TOKEN =
@@ -25,7 +25,7 @@ const _PUPIL_RELAY_REGISTRATION_TOKEN =
         parity=(1, 1), decenter_m=(0, 0), T=Float64)
 
 Cold affine registration from geometric source-footprint coordinates to a
-sampled controllable-surface grid. Positive per-axis pupil magnification and
+sampled pupil-surface grid. Positive per-axis pupil magnification and
 parity are applied first, followed by counterclockwise rotation and then a
 metric decenter.
 
@@ -66,7 +66,7 @@ end
 end
 
 function _pupil_relay_pair(values, ::Type{T}) where {T<:AbstractFloat}
-    throw(PlantDefinitionError(:controllable_optic,
+    throw(PlantDefinitionError(:pupil_relay_registration,
         :invalid_pupil_relay_registration,
         "pupil-relay pair values must be a real scalar or a two-value " *
         "real tuple; got $(typeof(values))"))
@@ -75,7 +75,7 @@ end
 @inline function _pupil_relay_parity(
     values::NTuple{2,<:Integer})
     all(value -> value == -1 || value == 1, values) || throw(
-        PlantDefinitionError(:controllable_optic,
+        PlantDefinitionError(:pupil_relay_registration,
             :invalid_pupil_relay_registration,
             "pupil-relay parity values must be -1 or 1; got " *
             repr(values)))
@@ -84,7 +84,7 @@ end
 end
 
 function _pupil_relay_parity(values)
-    throw(PlantDefinitionError(:controllable_optic,
+    throw(PlantDefinitionError(:pupil_relay_registration,
         :invalid_pupil_relay_registration,
         "pupil-relay parity must be a two-value integer tuple; got " *
         "$(typeof(values))"))
@@ -98,24 +98,24 @@ function PupilRelayRegistration(;
     T::Type{<:AbstractFloat}=Float64,
 )
     isconcretetype(T) || throw(PlantDefinitionError(
-        :controllable_optic,
+        :pupil_relay_registration,
         :invalid_pupil_relay_registration,
         "pupil-relay numeric type must be concrete; got $(T)"))
     magnification_t = _pupil_relay_pair(magnification, T)
     all(value -> isfinite(value) && value > zero(T), magnification_t) ||
-        throw(PlantDefinitionError(:controllable_optic,
+        throw(PlantDefinitionError(:pupil_relay_registration,
             :invalid_pupil_relay_registration,
             "pupil-relay magnification must be finite and positive; got " *
             repr(magnification)))
     rotation_rad = T(deg2rad(rotation_deg))
     isfinite(rotation_rad) || throw(PlantDefinitionError(
-        :controllable_optic, :invalid_pupil_relay_registration,
+        :pupil_relay_registration, :invalid_pupil_relay_registration,
         "pupil-relay rotation must be finite; got " *
         repr(rotation_deg)))
     parity_t = _pupil_relay_parity(parity)
     decenter_t = _pupil_relay_pair(decenter_m, T)
     all(isfinite, decenter_t) || throw(PlantDefinitionError(
-        :controllable_optic, :invalid_pupil_relay_registration,
+        :pupil_relay_registration, :invalid_pupil_relay_registration,
         "pupil-relay decenter must be finite; got " *
         repr(decenter_m)))
     sine, cosine = sincos(rotation_rad)
@@ -161,19 +161,19 @@ end
     magnification = ntuple(
         index -> T(registration.magnification[index]), Val(2))
     all(value -> isfinite(value) && value > zero(T), magnification) ||
-        throw(PlantPreparationError(:controllable_optic,
+        throw(PlantPreparationError(:pupil_relay_registration,
             :invalid_pupil_relay_registration,
             "pupil-relay magnification cannot be represented as finite " *
             "positive $(T) values"))
     rotation_rad = T(registration.rotation_rad)
     isfinite(rotation_rad) || throw(PlantPreparationError(
-        :controllable_optic,
+        :pupil_relay_registration,
         :invalid_pupil_relay_registration,
         "pupil-relay rotation cannot be represented finitely as $(T)"))
     decenter_m = ntuple(
         index -> T(registration.decenter_m[index]), Val(2))
     all(isfinite, decenter_m) || throw(PlantPreparationError(
-        :controllable_optic,
+        :pupil_relay_registration,
         :invalid_pupil_relay_registration,
         "pupil-relay decenter cannot be represented finitely as $(T)"))
     sine, cosine = sincos(rotation_rad)
@@ -207,7 +207,7 @@ end
 
 function _resolve_pupil_relay_registration(
     registration, ::Type{<:AbstractFloat})
-    throw(PlantPreparationError(:controllable_optic,
+    throw(PlantPreparationError(:pupil_relay_registration,
         :invalid_pupil_relay_registration,
         "pupil-relay registration must be PupilRelayRegistration or " *
         "nothing; got $(typeof(registration))"))
@@ -230,7 +230,7 @@ const _PREPARED_PUPIL_FOOTPRINT_COUPLING_TOKEN =
     _PreparedPupilFootprintCouplingToken()
 
 struct PreparedDirectPupilSurfaceCoupling{P<:PupilFunction} <:
-       AbstractControllableOpticPathCoupling
+       AbstractPupilSurfacePathCoupling
     destination::P
 
     function PreparedDirectPupilSurfaceCoupling(
@@ -249,7 +249,7 @@ struct PreparedIdentityPupilFootprintCoupling{
     P<:PupilFunction,
     M<:OpticalPlaneMetadata,
 } <:
-       AbstractControllableOpticPathCoupling
+       AbstractPupilSurfacePathCoupling
     destination::P
     surface_metadata::M
 
@@ -264,13 +264,13 @@ end
 
 """
 Finite-support affine mapping from one exact pupil destination's sample indices
-to a sampled controllable-surface grid.
+to a sampled pupil-surface grid.
 """
 struct PreparedPupilFootprintCoupling{
     T<:AbstractFloat,
     P<:PupilFunction,
     M<:OpticalPlaneMetadata,
-} <: AbstractControllableOpticPathCoupling
+} <: AbstractPupilSurfacePathCoupling
     destination::P
     surface_metadata::M
     index_transform::NTuple{4,T}
@@ -300,7 +300,7 @@ end
     orientation, label::AbstractString)
     axes = orientation.axes
     (axes == (:x, :y) || axes == (:y, :x)) || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :unsupported_axis_orientation,
             "$label axis orientation must be (:x, :y) or (:y, :x); " *
             "got $(axes)"))
@@ -310,17 +310,17 @@ end
 function _require_metric_pupil_surface_metadata(
     metadata::OpticalPlaneMetadata, label::AbstractString)
     typeof(metadata.kind) === PupilPlane || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :invalid_surface_plane,
             "$label must be declared on PupilPlane; got " *
             "$(typeof(metadata.kind))"))
     typeof(metadata.coordinate_domain) === MetricCoordinates || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :invalid_surface_coordinates,
             "$label must use MetricCoordinates; got " *
             "$(typeof(metadata.coordinate_domain))"))
     metadata.numeric_type <: AbstractFloat || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :invalid_surface_numeric_type,
             "$label must use real floating-point samples; got " *
             "$(metadata.numeric_type)"))
@@ -335,21 +335,21 @@ end
     destination_metadata = _require_metric_pupil_surface_metadata(
         destination.metadata, "path pupil destination")
     _require_metric_pupil_surface_metadata(
-        surface_metadata, "sampled controllable surface")
+        surface_metadata, "sampled pupil surface")
     surface_metadata.numeric_type === eltype(destination.opd) || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :surface_numeric_type,
-            "sampled controllable surface numeric type " *
+            "sampled pupil-surface numeric type " *
             "$(surface_metadata.numeric_type) does not match path OPD " *
             "$(eltype(destination.opd))"))
     typeof(surface_metadata.backend) ===
         typeof(destination_metadata.backend) || throw(
-        PlantPreparationError(:controllable_optic, :surface_backend,
-            "sampled controllable surface and path pupil use different " *
+        PlantPreparationError(:pupil_surface_coupling, :surface_backend,
+            "sampled pupil surface and path pupil use different " *
             "array backends"))
     surface_metadata.device == destination_metadata.device || throw(
-        PlantPreparationError(:controllable_optic, :surface_device,
-            "sampled controllable surface and path pupil occupy different " *
+        PlantPreparationError(:pupil_surface_coupling, :surface_device,
+            "sampled pupil surface and path pupil occupy different " *
             "physical devices"))
     return destination_metadata
 end
@@ -358,7 +358,7 @@ function _require_sampled_surface_domain(
     destination,
     ::OpticalPlaneMetadata,
 )
-    throw(PlantPreparationError(:controllable_optic,
+    throw(PlantPreparationError(:pupil_surface_coupling,
         :unsupported_path_input,
         "sampled pupil-footprint coupling requires a PupilFunction path " *
         "input; got $(typeof(destination))"))
@@ -423,7 +423,7 @@ function _pupil_plane_footprint_geometry(
     source::AbstractSource,
     ::Type{<:AbstractFloat},
 )
-    throw(PlantPreparationError(:controllable_optic,
+    throw(PlantPreparationError(:pupil_surface_coupling,
         :unsupported_source_geometry,
         "atmospheric-conjugate pupil-footprint coupling requires one " *
         "source direction; $(typeof(source)) expands into multiple " *
@@ -436,7 +436,7 @@ function _pupil_plane_footprint_geometry(
     source::AbstractSource,
     ::Type{<:AbstractFloat},
 )
-    throw(PlantPreparationError(:controllable_optic,
+    throw(PlantPreparationError(:pupil_surface_coupling,
         :unsupported_source_geometry,
         "atmospheric-conjugate pupil-footprint coupling does not support " *
         "source composition style $(typeof(style)) for $(typeof(source))"))
@@ -449,8 +449,8 @@ function _single_pupil_footprint_geometry(
 ) where {T<:AbstractFloat}
     altitude_m = T(conjugate_altitude_m(placement))
     isfinite(altitude_m) || throw(PlantPreparationError(
-        :controllable_optic, :invalid_conjugate_altitude,
-        "controllable-optic conjugate altitude cannot be represented " *
+        :pupil_surface_coupling, :invalid_conjugate_altitude,
+        "optical conjugate altitude cannot be represented " *
         "finitely as $(T)"))
     coordinates_arcsec = coordinates_xy_arcsec(source)
     coordinates_t = (
@@ -458,31 +458,31 @@ function _single_pupil_footprint_geometry(
         T(coordinates_arcsec[2]),
     )
     all(isfinite, coordinates_t) || throw(PlantPreparationError(
-        :controllable_optic, :invalid_source_geometry,
+        :pupil_surface_coupling, :invalid_source_geometry,
         "source angular coordinates must be finite in $(T); got " *
         repr(coordinates_arcsec)))
     source_height = source_height_m(source)
     (isfinite(source_height) || source_height == Inf) || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :invalid_source_geometry,
             "source height must be finite or positive infinity; got " *
             repr(source_height)))
     height_m = T(source_height)
     (isfinite(height_m) || source_height == Inf) || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :invalid_source_geometry,
             "finite source height cannot be represented finitely as $(T); " *
             "got $(source_height)"))
     height_m > zero(T) || throw(PlantPreparationError(
-        :controllable_optic, :invalid_source_geometry,
+        :pupil_surface_coupling, :invalid_source_geometry,
         "source height must be positive; got " *
         repr(source_height)))
     footprint_scale = one(T)
     if isfinite(height_m)
         height_m > altitude_m || throw(PlantPreparationError(
-            :controllable_optic, :source_below_conjugate,
-            "finite source height $(height_m) m must exceed controllable " *
-            "optic conjugate altitude $(altitude_m) m"))
+            :pupil_surface_coupling, :source_below_conjugate,
+            "finite source height $(height_m) m must exceed optical " *
+            "conjugate altitude $(altitude_m) m"))
         footprint_scale = (height_m - altitude_m) / height_m
     end
     arcsec_to_rad = T(pi / (180 * 3600))
@@ -492,11 +492,11 @@ function _single_pupil_footprint_geometry(
 end
 
 function _pupil_plane_footprint_geometry(
-    placement::AbstractControllableOpticPlacement,
+    placement::AbstractOpticalPlacement,
     ::AbstractSource,
     ::Type{<:AbstractFloat},
 )
-    throw(PlantPreparationError(:controllable_optic,
+    throw(PlantPreparationError(:pupil_surface_coupling,
         :unsupported_geometric_placement,
         "sampled pupil-footprint coupling does not support " *
         "$(typeof(placement))"))
@@ -651,13 +651,13 @@ function _prepare_pupil_footprint_index_mapping(
         second_basis[2] - offset[2],
     )
     all(isfinite, transform) && all(isfinite, offset) || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :invalid_pupil_footprint_transform,
             "prepared pupil-footprint sample mapping is not finite"))
     determinant =
         transform[1] * transform[4] - transform[2] * transform[3]
     isfinite(determinant) && !iszero(determinant) || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :singular_pupil_footprint_transform,
             "prepared pupil-footprint sample mapping is singular"))
     return transform, offset
@@ -677,11 +677,11 @@ function prepare_sampled_pupil_footprint_coupling(
     surface_metadata::OpticalPlaneMetadata,
     surface::AbstractMatrix,
     path,
-    placement::AbstractControllableOpticPlacement;
+    placement::AbstractOpticalPlacement;
     registration=nothing,
 )
     validate_plane_storage(
-        surface_metadata, surface; label="sampled controllable surface")
+        surface_metadata, surface; label="sampled pupil surface")
     destination = path_input(path)
     destination_metadata =
         _require_sampled_surface_domain(destination, surface_metadata)
@@ -724,44 +724,45 @@ function _require_sampled_pupil_surface_binding(
     },
 )
     destination === coupling.destination || throw(PlantPreparationError(
-        :controllable_optic, :foreign_pupil_footprint_destination,
+        :pupil_surface_coupling, :foreign_pupil_footprint_destination,
         "pupil-footprint coupling belongs to another path input"))
     metadata = coupling.surface_metadata
     size(surface) == metadata.dimensions || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :surface_dimensions,
-            "sampled controllable surface dimensions $(size(surface)) " *
+            "sampled pupil-surface dimensions $(size(surface)) " *
             "do not match prepared dimensions $(metadata.dimensions)"))
     eltype(surface) === metadata.numeric_type || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :surface_numeric_type,
-            "sampled controllable surface numeric type $(eltype(surface)) " *
+            "sampled pupil-surface numeric type $(eltype(surface)) " *
             "does not match prepared type $(metadata.numeric_type)"))
     typeof(backend(surface)) === typeof(metadata.backend) || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :surface_backend,
-            "sampled controllable surface array backend changed after " *
+            "sampled pupil-surface array backend changed after " *
             "coupling preparation"))
     plane_device(surface) == metadata.device || throw(
-        PlantPreparationError(:controllable_optic,
+        PlantPreparationError(:pupil_surface_coupling,
             :surface_device,
-            "sampled controllable surface physical device changed after " *
+            "sampled pupil-surface physical device changed after " *
             "coupling preparation"))
     return nothing
 end
 
 """
-    apply_sampled_pupil_surface!(destination, surface, coupling)
+    apply_sampled_pupil_surface!(destination, surface, coupling, application)
 
-Add one sampled OPD surface through its exact prepared pupil-footprint
-coupling. The identity path performs a same-grid addition. The transformed path
-uses bilinear interpolation with zero contribution outside the finite sampled
-surface support.
+Apply one sampled OPD surface through its exact prepared pupil-footprint
+coupling. `DMAdditive()` adds the sampled surface to the existing path OPD.
+`DMReplace()` replaces the path OPD, writing zero outside a transformed
+surface's finite support.
 """
 function apply_sampled_pupil_surface!(
     destination::PupilFunction,
     surface::AbstractMatrix,
     coupling::PreparedIdentityPupilFootprintCoupling,
+    ::DMAdditive,
 )
     _require_sampled_pupil_surface_binding(destination, surface, coupling)
     @. destination.opd += surface
@@ -771,7 +772,19 @@ end
 function apply_sampled_pupil_surface!(
     destination::PupilFunction,
     surface::AbstractMatrix,
+    coupling::PreparedIdentityPupilFootprintCoupling,
+    ::DMReplace,
+)
+    _require_sampled_pupil_surface_binding(destination, surface, coupling)
+    copyto!(destination.opd, surface)
+    return destination
+end
+
+function apply_sampled_pupil_surface!(
+    destination::PupilFunction,
+    surface::AbstractMatrix,
     coupling::PreparedPupilFootprintCoupling,
+    application::Union{DMAdditive,DMReplace},
 )
     _require_sampled_pupil_surface_binding(destination, surface, coupling)
     _apply_sampled_pupil_surface!(
@@ -780,9 +793,27 @@ function apply_sampled_pupil_surface!(
         surface,
         coupling.index_transform,
         coupling.index_offset,
+        application,
     )
     return destination
 end
+
+@inline apply_sampled_pupil_surface!(
+    destination::PupilFunction,
+    surface::AbstractMatrix,
+    coupling::Union{
+        PreparedIdentityPupilFootprintCoupling,
+        PreparedPupilFootprintCoupling,
+    },
+) = apply_sampled_pupil_surface!(
+    destination, surface, coupling, DMAdditive())
+
+@inline _combine_sampled_surface_value(
+    current, sampled, ::DMAdditive) = current + sampled
+@inline _combine_sampled_surface_value(
+    current, sampled, ::DMReplace) = sampled
+@inline _outside_sampled_surface_value(current, ::DMAdditive) = current
+@inline _outside_sampled_surface_value(current, ::DMReplace) = zero(current)
 
 function _apply_sampled_pupil_surface!(
     ::ScalarCPUStyle,
@@ -790,6 +821,7 @@ function _apply_sampled_pupil_surface!(
     surface::AbstractMatrix{T},
     transform::NTuple{4,T},
     offset::NTuple{2,T},
+    application::Union{DMAdditive,DMReplace},
 ) where {T<:AbstractFloat}
     Base.require_one_based_indexing(destination, surface)
     source_first_size, source_second_size = size(surface)
@@ -827,11 +859,18 @@ function _apply_sampled_pupil_surface!(
                     surface[first1, second1],
                     first_weight0 * surface[first0, second1],
                 )
-                destination[first, second] += muladd(
+                sampled = muladd(
                     second_fraction,
                     value1,
                     second_weight0 * value0,
                 )
+                destination[first, second] =
+                    _combine_sampled_surface_value(
+                        destination[first, second], sampled, application)
+            else
+                destination[first, second] =
+                    _outside_sampled_surface_value(
+                        destination[first, second], application)
             end
         end
     end
@@ -849,6 +888,7 @@ end
     offset_second,
     source_first_size::Int,
     source_second_size::Int,
+    application,
 )
     first, second = @index(Global, NTuple)
     if first <= size(destination, 1) && second <= size(destination, 2)
@@ -884,12 +924,19 @@ end
                     surface[first1, second1],
                     first_weight0 * surface[first0, second1],
                 )
-                destination[first, second] += muladd(
+                sampled = muladd(
                     second_fraction,
                     value1,
                     second_weight0 * value0,
                 )
+                destination[first, second] =
+                    _combine_sampled_surface_value(
+                        destination[first, second], sampled, application)
             end
+        else
+            @inbounds destination[first, second] =
+                _outside_sampled_surface_value(
+                    destination[first, second], application)
         end
     end
 end
@@ -900,6 +947,7 @@ function _apply_sampled_pupil_surface!(
     surface::AbstractMatrix{T},
     transform::NTuple{4,T},
     offset::NTuple{2,T},
+    application::Union{DMAdditive,DMReplace},
 ) where {T<:AbstractFloat}
     m11, m12, m21, m22 = transform
     launch_kernel!(
@@ -914,7 +962,8 @@ function _apply_sampled_pupil_surface!(
         offset[1],
         offset[2],
         size(surface, 1),
-        size(surface, 2);
+        size(surface, 2),
+        application;
         ndrange=size(destination),
     )
     return destination
@@ -1002,7 +1051,7 @@ end
 
 function _prepare_controllable_optic_path_coupling(
     role::AbstractControllableOpticExecutionRole,
-    placement::AbstractControllableOpticPlacement,
+    placement::AbstractOpticalPlacement,
     implementation,
     definition::ControllableOpticDefinition,
     path,
@@ -1019,7 +1068,7 @@ function apply_controllable_optic_surface!(
     input,
     implementation,
     state,
-    coupling::AbstractControllableOpticPathCoupling,
+    coupling::AbstractPupilSurfacePathCoupling,
 )
     throw(PlantPreparationError(:controllable_optic,
         :unsupported_surface_application,
@@ -1056,6 +1105,6 @@ end
 end
 
 @inline _same_pupil_footprint_coupling(
-    ::AbstractControllableOpticPathCoupling,
-    ::AbstractControllableOpticPathCoupling,
+    ::AbstractPupilSurfacePathCoupling,
+    ::AbstractPupilSurfacePathCoupling,
 ) = false

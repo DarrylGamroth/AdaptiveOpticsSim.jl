@@ -33,8 +33,12 @@ the result through a same-grid fast path or finite-support bilinear
 interpolation. The third slice integrates the native `DeformableMirror`, applies
 common multi-altitude MCAO and target-specific MOAO surfaces through those
 prepared bindings, and requires a reduced-order path to name exactly its
-visible command responses. Device-specific dynamics remain model-specific;
-none of these contracts is hidden in an identity or command schema.
+visible command responses. The fourth slice attaches native sampled `NCPA`
+and `OPDMap` effects to explicit common or selected paths, makes run-owned
+backend-local copies, and forms them before controllable and autonomous optics
+and before the typed path executor. Device-specific dynamics remain
+model-specific; none of these contracts is hidden in an identity or command
+schema.
 Separating a path from its acquisitions prevents a second camera or readout
 cadence from forcing duplicate propagation.
 
@@ -336,8 +340,8 @@ telescope definition and permits co-conjugated optics to remain independent;
 Gate 4 defines independent endpoint command timing and effective-state
 semantics. Gate 5 now declares placement and path visibility, prepares bounded
 bindings and sampled atmospheric source-footprint couplings, and composes
-native DMs into common MCAO and path-specific MOAO execution. Later slices
-still define sampled-aberration attachment, device dynamics, prepared parallel
+native DMs plus common or branch-local sampled OPD into explicit path
+execution. Later slices still define device dynamics, prepared parallel
 execution, and boundary pacing.
 
 Reusable propagating optics follow the same split. In particular, a spatial
@@ -965,12 +969,22 @@ optical planes:
 - explicit path visibility, so a science-only aberration cannot accidentally
   contaminate a WFS path
 
-The current `NCPA` model already synthesizes a static pupil OPD from KL,
-Zernike, or external modal-to-command bases and applies it additively or by
-replacement. It is a path-agnostic optical primitive; applying it to a
-caller-owned `PupilFunction` selects the affected path. A multi-path runtime
-must therefore attach that aberration to the selected science or WFS branch.
-Static sampled maps can also be represented directly with `OPDMap`.
+The `NCPA` model synthesizes a static pupil OPD from KL, Zernike, or external
+modal-to-command bases. Static sampled maps can be represented directly with
+`OPDMap`. `Plant.SampledAberrationDefinition` attaches either primitive to an
+explicit pupil or atmospheric-conjugate placement and all-path or selected-path
+visibility. It also declares additive or replacement application and optional
+pupil-relay registration against exact metric plane metadata. Plant
+preparation makes a same-backend/device defensive OPD copy and prepares one
+finite-support coupling per visible path, so later mutation of caller storage
+cannot alter the run.
+
+For one path, an optional replacement effect is applied first, followed by
+additive effects in canonical placement and stable-identity order. More than
+one visible replacement is rejected before execution because replacements do
+not commute. Atmosphere materialization precedes these static effects;
+controllable surfaces, autonomous path optics, and the native or external
+typed path executor follow them.
 
 Detailed relay and instrument prescriptions remain outside the core. Use
 `Proper.jl` when the required result depends on a sequence of physical planes,
@@ -1190,6 +1204,18 @@ explicit `PlantCommandTransaction` makes publication across several devices
 atomic. The corresponding reduced-order scenario resolves endpoint slots from
 the same prepared path bindings and rejects missing visible or extra hidden
 responses during preparation.
+
+The fourth slice adds `Plant.SampledAberrationDefinition` without pretending a
+static effect is a zero-command controllable device. `prepare_plant` copies
+native `NCPA` or `OPDMap` OPD storage on the declared backend/device, resolves
+the same exact path-local pupil-footprint geometry, and builds a bounded
+canonical binding table. Common effects use `AllPathVisibility`; NCPA normally
+uses `SelectedPathVisibility`. Replacement precedes additive effects and at
+most one replacement may be visible on a path. Schedule-free selections retain
+concrete per-path application tuples for allocation-free warmed execution; the
+serial event loop preserves the same physical order before controllable and
+autonomous optics. The final typed path executor therefore receives the fully
+formed residual pupil and may hand it to `Proper.jl` without a core dependency.
 
 Command transport remains independent of plane geometry. The same generic
 time-stamped endpoint can drive a pupil DM, atmospheric-conjugate DM, tip/tilt

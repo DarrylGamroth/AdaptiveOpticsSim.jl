@@ -1144,11 +1144,13 @@ const _PREPARED_PLANT_TOKEN = _PreparedPlantToken()
 Prepared, schedule-free plant with concrete owners, bounded path-to-optic
 bindings, and RNG streams.
 """
-struct PreparedPlant{D,O<:Tuple,C<:Tuple,P<:Tuple,A<:Tuple,
+struct PreparedPlant{D,O<:Tuple,S<:Tuple,B,C<:Tuple,P<:Tuple,A<:Tuple,
     R<:PreparedPlantRNGs}
     definition::D
     controllable_optics::O
     controllable_optic_path_bindings::PreparedControllableOpticPathBindings
+    sampled_aberrations::S
+    sampled_aberration_path_bindings::B
     command_endpoints::C
     paths::P
     acquisitions::A
@@ -1157,12 +1159,24 @@ struct PreparedPlant{D,O<:Tuple,C<:Tuple,P<:Tuple,A<:Tuple,
     function PreparedPlant(::_PreparedPlantToken, definition::D,
         controllable_optics::O,
         bindings::PreparedControllableOpticPathBindings,
+        sampled_aberrations::S,
+        sampled_bindings::B,
         command_endpoints::C, paths::P,
         acquisitions::A, rngs::R) where {
-        D,O<:Tuple,C<:Tuple,P<:Tuple,A<:Tuple,R<:PreparedPlantRNGs,
+        D,O<:Tuple,S<:Tuple,B,C<:Tuple,P<:Tuple,A<:Tuple,
+        R<:PreparedPlantRNGs,
     }
-        return new{D,O,C,P,A,R}(definition, controllable_optics, bindings,
-            command_endpoints, paths, acquisitions, rngs)
+        return new{D,O,S,B,C,P,A,R}(
+            definition,
+            controllable_optics,
+            bindings,
+            sampled_aberrations,
+            sampled_bindings,
+            command_endpoints,
+            paths,
+            acquisitions,
+            rngs,
+        )
     end
 end
 
@@ -1170,6 +1184,10 @@ end
     plant.controllable_optics
 @inline prepared_controllable_optic_path_bindings(plant::PreparedPlant) =
     plant.controllable_optic_path_bindings
+@inline prepared_sampled_aberrations(plant::PreparedPlant) =
+    plant.sampled_aberrations
+@inline prepared_sampled_aberration_path_bindings(plant::PreparedPlant) =
+    plant.sampled_aberration_path_bindings
 @inline prepared_command_endpoints(plant::PreparedPlant) =
     map(binding -> binding.endpoint, plant.command_endpoints)
 @inline prepared_paths(plant::PreparedPlant) = plant.paths
@@ -1205,6 +1223,15 @@ function prepared_controllable_optic(plant::PreparedPlant, id)
     end
     throw(PlantPreparationError(:controllable_optic, :unknown_id,
         "prepared plant has no controllable optic $resolved"))
+end
+
+function prepared_sampled_aberration(plant::PreparedPlant, id)
+    resolved = _as_sampled_aberration_id(id)
+    for aberration in plant.sampled_aberrations
+        sampled_aberration_id(aberration) == resolved && return aberration
+    end
+    throw(PlantPreparationError(:sampled_aberration, :unknown_id,
+        "prepared plant has no sampled aberration $resolved"))
 end
 
 function prepared_command_endpoint(plant::PreparedPlant, id)
@@ -1424,15 +1451,28 @@ function prepare_plant(definition::PlantDefinition;
         endpoint_configurations, optic_definitions)
     optics = _prepare_controllable_optics(definition, optic_definitions,
         prepared_endpoints)
+    sampled_aberrations = _prepare_sampled_aberrations(definition)
     paths = _prepare_path_executors(path_definitions(definition),
         plant_telescope(definition), plant_atmosphere(definition))
     bindings = _prepare_controllable_optic_path_bindings(optics, paths)
+    sampled_bindings = _prepare_sampled_aberration_path_bindings(
+        sampled_aberrations, paths)
     acquisitions = _prepare_acquisition_owners(
         acquisition_definitions(definition), paths)
     rngs = _prepare_plant_rngs(definition, paths, acquisitions, seed,
         version)
-    return PreparedPlant(_PREPARED_PLANT_TOKEN, definition, optics, bindings,
-        prepared_endpoints, paths, acquisitions, rngs)
+    return PreparedPlant(
+        _PREPARED_PLANT_TOKEN,
+        definition,
+        optics,
+        bindings,
+        sampled_aberrations,
+        sampled_bindings,
+        prepared_endpoints,
+        paths,
+        acquisitions,
+        rngs,
+    )
 end
 
 struct _PreparedAcquisitionSelectionToken end
@@ -1450,10 +1490,11 @@ order. This value owns no schedule or independent RNG state; it retains exact
 references to the selected plant-owned RNG groups.
 """
 struct PreparedAcquisitionSelection{P,S<:Tuple,A<:Tuple,
-    R<:Tuple,Q<:Tuple}
+    B<:Tuple,R<:Tuple,Q<:Tuple}
     plant::P
     paths::S
     acquisitions::A
+    sampled_aberration_path_plans::B
     path_rngs::R
     acquisition_rngs::Q
 
@@ -1462,11 +1503,18 @@ struct PreparedAcquisitionSelection{P,S<:Tuple,A<:Tuple,
         plant::P,
         paths::S,
         acquisitions::A,
+        sampled_aberration_path_plans::B,
         path_rngs::R,
         acquisition_rngs::Q,
-    ) where {P,S<:Tuple,A<:Tuple,R<:Tuple,Q<:Tuple}
-        return new{P,S,A,R,Q}(plant, paths, acquisitions, path_rngs,
-            acquisition_rngs)
+    ) where {P,S<:Tuple,A<:Tuple,B<:Tuple,R<:Tuple,Q<:Tuple}
+        return new{P,S,A,B,R,Q}(
+            plant,
+            paths,
+            acquisitions,
+            sampled_aberration_path_plans,
+            path_rngs,
+            acquisition_rngs,
+        )
     end
 end
 
@@ -1579,15 +1627,36 @@ end
         _selected_acquisition_rngs(plant, Base.tail(acquisitions))...)
 end
 
+@inline _selected_sampled_aberration_path_plans(
+    ::PreparedPlant, ::Tuple{}) = ()
+
+@inline function _selected_sampled_aberration_path_plans(
+    plant::PreparedPlant,
+    paths::Tuple,
+)
+    bindings = plant.sampled_aberration_path_bindings
+    path = first(paths)
+    plan = _prepare_sampled_aberration_path_plan(
+        plant.sampled_aberrations,
+        bindings,
+        path_id(path.definition),
+    )
+    return (plan,
+        _selected_sampled_aberration_path_plans(
+            plant, Base.tail(paths))...)
+end
+
 function _prepare_acquisition_selection(plant::PreparedPlant, ids)
     requested = _requested_acquisition_ids(ids)
     acquisitions = _canonical_selected_acquisitions(plant, requested)
     paths = _canonical_selected_paths(plant, acquisitions)
+    sampled_aberration_path_plans =
+        _selected_sampled_aberration_path_plans(plant, paths)
     path_rngs = _selected_path_rngs(plant, paths)
     acquisition_rngs = _selected_acquisition_rngs(plant, acquisitions)
     return PreparedAcquisitionSelection(
         _PREPARED_ACQUISITION_SELECTION_TOKEN, plant, paths, acquisitions,
-        path_rngs, acquisition_rngs)
+        sampled_aberration_path_plans, path_rngs, acquisition_rngs)
 end
 
 """
@@ -1689,6 +1758,39 @@ end
         atmosphere, epoch)
 end
 
+@inline _apply_selected_sampled_aberrations!(
+    ::Tuple{},
+    ::Tuple{},
+) = nothing
+
+@inline function _apply_selected_sampled_aberrations!(
+    paths::Tuple,
+    plans::Tuple,
+)
+    path = first(paths)
+    _apply_sampled_aberration_path_plan!(path.input, first(plans))
+    return _apply_selected_sampled_aberrations!(
+        Base.tail(paths),
+        Base.tail(plans),
+    )
+end
+
+function _apply_selected_sampled_aberrations!(
+    ::Tuple{},
+    plans::Tuple,
+)
+    throw(PlantPreparationError(:sampled_aberration, :binding_topology,
+        "selected sampled-aberration plans exceed selected paths"))
+end
+
+function _apply_selected_sampled_aberrations!(
+    paths::Tuple,
+    ::Tuple{},
+)
+    throw(PlantPreparationError(:sampled_aberration, :binding_topology,
+        "selected paths exceed sampled-aberration plans"))
+end
+
 @inline _execute_selected_paths!(::Tuple{}, ::Tuple{}) = nothing
 
 @inline function _execute_selected_paths!(paths::Tuple, rngs::Tuple)
@@ -1725,6 +1827,10 @@ function _execute_selected_epoch!(selection::PreparedAcquisitionSelection,
     atmosphere::AbstractTimedAtmosphere, epoch::AtmosphereEpoch)
     _materialize_selected_paths!(selection.paths, selection.path_rngs,
         atmosphere, epoch)
+    _apply_selected_sampled_aberrations!(
+        selection.paths,
+        selection.sampled_aberration_path_plans,
+    )
     _execute_selected_paths!(selection.paths, selection.path_rngs)
     _execute_selected_acquisitions!(selection.acquisitions,
         selection.acquisition_rngs)

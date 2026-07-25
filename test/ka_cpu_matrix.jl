@@ -840,6 +840,7 @@ end
             sampled_surface,
             sampled_transform,
             sampled_offset,
+            DMAdditive(),
         )
         Plant._apply_sampled_pupil_surface!(
             KA_CPU_STYLE,
@@ -847,6 +848,7 @@ end
             sampled_surface,
             sampled_transform,
             sampled_offset,
+            DMAdditive(),
         )
         mark_ka_cpu_kernel!(:_sampled_pupil_surface_kernel!)
         @test ka_cpu_close(ka_sampled, scalar_sampled)

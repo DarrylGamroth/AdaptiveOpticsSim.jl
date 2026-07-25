@@ -370,6 +370,30 @@ function run_optional_prepared_plant_checks(::Type{B},
     )
     source = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=T(3), T=T)
+    sampled_prototype =
+        PupilFunction(telescope; T=T, backend=selector)
+    sampled_opd = similar(sampled_prototype.opd)
+    fill!(sampled_opd, T(0.125))
+    sampled_metadata = OpticalPlaneMetadata(
+        PupilPlane(), sampled_opd;
+        coordinate_domain=MetricCoordinates(),
+        sampling=sampled_prototype.metadata.sampling,
+        origin=sampled_prototype.metadata.origin,
+        centering=sampled_prototype.metadata.centering,
+        orientation=sampled_prototype.metadata.orientation,
+        spectral=AchromaticSpectralCoordinate(),
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=NonCombinableProduct(),
+    )
+    sampled_aberration = SampledAberrationDefinition(
+        :optional_science_static,
+        OPDMap(sampled_opd),
+        sampled_metadata;
+        placement=PupilPlanePlacement(),
+        visibility=SelectedPathVisibility(:science),
+        application=DMAdditive(),
+    )
     path_definition = OpticalPathDefinition(:science, source,
         OptionalPreparedDirectPathModel(2))
     illumination_path_definition = OpticalPathDefinition(:illumination,
@@ -381,6 +405,7 @@ function run_optional_prepared_plant_checks(::Type{B},
     illumination_definition = AcquisitionDefinition(:illumination_frame,
         :illumination, OptionalPreparedFrameAcquisitionModel(T(0.125)))
     definition = PlantDefinition(; telescope, atmosphere,
+        sampled_aberrations=(sampled_aberration,),
         paths=(science=path_definition,
             illumination=illumination_path_definition),
         acquisitions=(fast_science=fast_definition,
@@ -388,6 +413,17 @@ function run_optional_prepared_plant_checks(::Type{B},
             illumination_frame=illumination_definition))
 
     plant = prepare_plant(definition; run_seed=0x6100)
+    prepared_sampled = Plant.prepared_sampled_aberration(
+        plant, :optional_science_static)
+    prepared_sampled_opd =
+        Plant.sampled_aberration_opd(prepared_sampled)
+    @test prepared_sampled_opd isa BackendArray
+    @test plane_device(prepared_sampled_opd) ==
+        sampled_metadata.device
+    fill!(sampled_opd, zero(T))
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(prepared_sampled_opd))
+    @test all(==(T(0.125)), Array(prepared_sampled_opd))
     path = prepared_path(plant, :science)
     illumination_path = prepared_path(plant, :illumination)
     fast = prepared_acquisition(plant, :fast_science)
@@ -422,6 +458,12 @@ function run_optional_prepared_plant_checks(::Type{B},
     AdaptiveOpticsSim.synchronize_backend!(
         AdaptiveOpticsSim.execution_style(pupil.opd))
     @test Array(pupil.opd) == surface_host
+    fill!(pupil.opd, T(7))
+    @test apply_sampled_pupil_surface!(
+        pupil, surface, identity_coupling, DMReplace()) === pupil
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(pupil.opd))
+    @test Array(pupil.opd) == surface_host
 
     half_sample = (
         pupil.metadata.sampling[1] / T(2),
@@ -445,6 +487,12 @@ function run_optional_prepared_plant_checks(::Type{B},
         AdaptiveOpticsSim.execution_style(pupil.opd))
     transformed_expected = zeros(T, size(surface_host))
     transformed_expected[3:4, 3:4] .= T(0.25)
+    @test Array(pupil.opd) ≈ transformed_expected rtol=zero(T) atol=8eps(T)
+    fill!(pupil.opd, T(7))
+    @test apply_sampled_pupil_surface!(
+        pupil, surface, transformed_coupling, DMReplace()) === pupil
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(pupil.opd))
     @test Array(pupil.opd) ≈ transformed_expected rtol=zero(T) atol=8eps(T)
 
     selection = prepare_acquisition_selection(plant,

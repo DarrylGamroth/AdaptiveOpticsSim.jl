@@ -336,6 +336,35 @@ struct DeformableMirrorModel{
     pupil_relay_registration::R
 end
 
+struct _DefaultDeformableMirrorMisregistration end
+struct _DefaultDeformableMirrorPupilRelayRegistration end
+
+const _DEFAULT_DEFORMABLE_MIRROR_MISREGISTRATION =
+    _DefaultDeformableMirrorMisregistration()
+const _DEFAULT_DEFORMABLE_MIRROR_PUPIL_RELAY_REGISTRATION =
+    _DefaultDeformableMirrorPupilRelayRegistration()
+
+@inline _resolve_deformable_mirror_misregistration(
+    ::_DefaultDeformableMirrorMisregistration,
+    ::Type{T},
+) where {T<:AbstractFloat} = Misregistration(T=T)
+
+@inline _resolve_deformable_mirror_misregistration(
+    misregistration,
+    ::Type{T},
+) where {T<:AbstractFloat} =
+    _convert_deformable_mirror_misregistration(misregistration, T)
+
+@inline _resolve_deformable_mirror_registration(
+    ::_DefaultDeformableMirrorPupilRelayRegistration,
+    ::Type{T},
+) where {T<:AbstractFloat} = PupilRelayRegistration(T=T)
+
+@inline _resolve_deformable_mirror_registration(
+    registration,
+    ::Type{<:AbstractFloat},
+) = _require_deformable_mirror_registration(registration)
+
 function DeformableMirrorModel(;
     n_act=nothing,
     topology=nothing,
@@ -344,8 +373,9 @@ function DeformableMirrorModel(;
     influence_model=nothing,
     actuator_model=nothing,
     T::Type{<:AbstractFloat}=Float64,
-    misregistration=Misregistration(T=T),
-    pupil_relay_registration=PupilRelayRegistration(T=T),
+    misregistration=_DEFAULT_DEFORMABLE_MIRROR_MISREGISTRATION,
+    pupil_relay_registration=
+        _DEFAULT_DEFORMABLE_MIRROR_PUPIL_RELAY_REGISTRATION,
 )
     isconcretetype(T) || _deformable_mirror_definition_error(
         :invalid_deformable_mirror_numeric_type,
@@ -368,9 +398,9 @@ function DeformableMirrorModel(;
     resolved_actuator =
         _resolve_deformable_mirror_actuator_model(actuator_model)
     resolved_misregistration =
-        _convert_deformable_mirror_misregistration(misregistration, T)
-    resolved_registration =
-        _require_deformable_mirror_registration(pupil_relay_registration)
+        _resolve_deformable_mirror_misregistration(misregistration, T)
+    resolved_registration = _resolve_deformable_mirror_registration(
+        pupil_relay_registration, T)
     return DeformableMirrorModel{
         T,
         typeof(resolved_topology),

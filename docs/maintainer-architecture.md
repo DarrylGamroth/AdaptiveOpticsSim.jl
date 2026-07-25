@@ -156,7 +156,10 @@ Examples:
   `Plant.DeformableMirrorModel` prepares the native DM with distinct
   active/staged runtimes, and serial common-plane MCAO plus target-local MOAO
   scenarios exercise the same exact path bindings in full-optical and
-  reduced-order execution. Sampled NCPA attachment remains later Gate 5 work
+  reduced-order execution. Native `NCPA` and `OPDMap` declarations likewise
+  prepare run-owned sampled OPD and exact common or selected-path bindings
+  before atmosphere-derived pupil products enter controllable and autonomous
+  optical execution
 - `Telescope` with immutable `TelescopeParams` and a revisioned prepared
   `TelescopeAperture`; it owns spatial geometry and intensity reflectivity but
   no mutable OPD, cadence, or exposure duration

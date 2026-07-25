@@ -197,9 +197,11 @@ struct _PreparedPlantEventPath
     origin::PlantTimestamp
     handle::EventGeneratorHandle
     requires_full_optical::Bool
+    sampled_aberration_binding_start::Int
+    sampled_aberration_binding_stop::Int
     optic_binding_start::Int
     optic_binding_stop::Int
-    optic_couplings::Memory{AbstractControllableOpticPathCoupling}
+    optic_couplings::Memory{AbstractPupilSurfacePathCoupling}
     optic_coupling_groups::Memory{
         _PreparedControllableOpticPathCouplingGroup}
 end
@@ -311,6 +313,9 @@ struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
     actions::Memory{_PlantEventAction}
     optics::Memory{PreparedControllableOptic}
     optic_path_bindings::PreparedControllableOpticPathBindings
+    sampled_aberrations::Memory{PreparedSampledAberration}
+    sampled_aberration_path_bindings::
+        PreparedSampledAberrationPathBindings
     command_endpoints::Memory{_PreparedPlantEventCommandEndpoint}
     paths::Memory{_PreparedPlantEventPath}
     acquisitions::Memory{_PreparedPlantEventAcquisition}
@@ -326,6 +331,9 @@ end
     event_generator_count(prepared.scheduler)
 @inline plant_event_controllable_optic_count(
     prepared::PreparedPlantEventLoop) = length(prepared.optics)
+@inline plant_event_sampled_aberration_count(
+    prepared::PreparedPlantEventLoop) =
+    length(prepared.sampled_aberrations)
 @inline plant_event_command_endpoint_count(
     prepared::PreparedPlantEventLoop) = length(prepared.command_endpoints)
 @inline plant_event_autonomous_optic_count(
@@ -776,6 +784,16 @@ function _prepare_event_controllable_optics(plant::PreparedPlant)
     return optics
 end
 
+function _prepare_event_sampled_aberrations(plant::PreparedPlant)
+    source = getfield(plant, :sampled_aberrations)
+    aberrations = Memory{PreparedSampledAberration}(
+        undef, length(source))
+    @inbounds for index in eachindex(source)
+        aberrations[index] = source[index]
+    end
+    return aberrations
+end
+
 function _prepare_event_command_endpoints(plant::PreparedPlant,
     scheduler::PreparedEventScheduler)
     source = getfield(plant, :command_endpoints)
@@ -805,7 +823,7 @@ function _event_path_requires_full_optical(id::OpticalPathID, owners)
 end
 
 function _require_prepared_event_path_coupling(
-    coupling::AbstractControllableOpticPathCoupling,
+    coupling::AbstractPupilSurfacePathCoupling,
     optic::ControllableOpticID,
     path::OpticalPathID,
 )
@@ -823,7 +841,7 @@ function _require_prepared_event_path_coupling(
 )
     _plant_event_loop_error(:invalid_optic_path_coupling,
         "controllable optic $optic must return an " *
-        "AbstractControllableOpticPathCoupling for $path; got " *
+        "AbstractPupilSurfacePathCoupling for $path; got " *
         "$(typeof(coupling))")
 end
 
@@ -862,7 +880,7 @@ end
 end
 
 function _prepare_event_autonomous_path_coupling(
-    placement::AbstractControllableOpticPlacement,
+    placement::AbstractOpticalPlacement,
     optic::ControllableOpticID,
     path::OpticalPathID,
 )
@@ -916,7 +934,7 @@ function _prepare_event_path_optic_couplings(
     requires_full_optical::Bool,
 )
     coupling_count = requires_full_optical ? length(binding_range) : 0
-    couplings = Memory{AbstractControllableOpticPathCoupling}(
+    couplings = Memory{AbstractPupilSurfacePathCoupling}(
         undef, coupling_count)
     groups = _PreparedControllableOpticPathCouplingGroup[]
     requires_full_optical || return couplings,
@@ -999,6 +1017,8 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
     Base.@nospecialize plant
     paths = Memory{_PreparedPlantEventPath}(undef, length(definitions))
     bindings = getfield(plant, :controllable_optic_path_bindings)
+    sampled_bindings =
+        getfield(plant, :sampled_aberration_path_bindings)
     @inbounds for index in eachindex(definitions)
         definition = definitions[index]
         path = _event_prepared_path(plant, definition.path)
@@ -1007,6 +1027,9 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
         handle = event_generator_handle(scheduler, OpticalSamplePhase, index)
         binding_range = prepared_controllable_optic_binding_range(
             bindings, definition.path)
+        sampled_binding_range =
+            prepared_sampled_aberration_binding_range(
+                sampled_bindings, definition.path)
         requires_full_optical =
             _event_path_requires_full_optical(definition.path, owners)
         optic_couplings, optic_coupling_groups =
@@ -1019,7 +1042,9 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
             )
         paths[index] = _PreparedPlantEventPath(definition.path, path, rngs,
             definition.schedule, definition.origin, handle,
-            requires_full_optical, first(binding_range), last(binding_range),
+            requires_full_optical,
+            first(sampled_binding_range), last(sampled_binding_range),
+            first(binding_range), last(binding_range),
             optic_couplings, optic_coupling_groups)
     end
     return paths
@@ -1338,6 +1363,9 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     optics = _prepare_event_controllable_optics(plant)
     optic_path_bindings =
         getfield(plant, :controllable_optic_path_bindings)
+    sampled_aberrations = _prepare_event_sampled_aberrations(plant)
+    sampled_aberration_path_bindings =
+        getfield(plant, :sampled_aberration_path_bindings)
     command_endpoints = _prepare_event_command_endpoints(plant, scheduler)
     paths = _prepare_event_paths(plant, sample_definitions, owners,
         scheduler)
@@ -1351,6 +1379,7 @@ function prepare_plant_event_loop(plant::PreparedPlant,
         getfield(getfield(plant, :rngs), :atmosphere))
     return PreparedPlantEventLoop(_PlantEventLoopBinding(), atmosphere,
         atmosphere_rng, scheduler, actions, optics, optic_path_bindings,
+        sampled_aberrations, sampled_aberration_path_bindings,
         command_endpoints, paths, acquisitions, autonomous_optics,
         _prepared_trigger_topology(definition.trigger_topology))
 end
@@ -3503,6 +3532,30 @@ function _materialize_due_paths!(prepared::PreparedPlantEventLoop,
     return nothing
 end
 
+function _apply_due_sampled_aberrations!(
+    prepared::PreparedPlantEventLoop,
+    due_paths::Memory{Bool},
+)
+    isempty(prepared.sampled_aberrations) && return nothing
+    bindings = prepared.sampled_aberration_path_bindings
+    @inbounds for path_index in eachindex(prepared.paths)
+        due_paths[path_index] || continue
+        path = prepared.paths[path_index]
+        path.requires_full_optical || continue
+        binding_range = (
+            path.sampled_aberration_binding_start:
+            path.sampled_aberration_binding_stop
+        )
+        _apply_sampled_aberration_bindings!(
+            path.path.input,
+            prepared.sampled_aberrations,
+            bindings,
+            binding_range,
+        )
+    end
+    return nothing
+end
+
 function _apply_due_controllable_optics!(
     prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState,
@@ -3533,7 +3586,7 @@ end
 
 @inline function _apply_event_controllable_optic_surface!(
     ::PupilSurfaceExecutionRole, input, implementation, state,
-    coupling::AbstractControllableOpticPathCoupling)
+    coupling::AbstractPupilSurfacePathCoupling)
     return apply_controllable_optic_surface!(
         input, implementation, state, coupling)
 end
@@ -3653,6 +3706,7 @@ function _process_optical_path_batch!(prepared::PreparedPlantEventLoop,
             workspace.due_paths, atmosphere, epoch)
         _materialize_due_paths!(prepared, workspace.due_paths, atmosphere,
             epoch)
+        _apply_due_sampled_aberrations!(prepared, workspace.due_paths)
         _apply_due_controllable_optics!(prepared, state,
             workspace.due_paths)
         _evaluate_due_autonomous_optics!(prepared, state,

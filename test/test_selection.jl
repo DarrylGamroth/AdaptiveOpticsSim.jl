@@ -49,6 +49,9 @@ const TEST_SUITE_SPECS = (
         "testsets/plant_conjugate_geometry.jl"),
     TestSuiteSpec("plant-mcao-moao",
         "testsets/plant_mcao_moao.jl"),
+    TestSuiteSpec("plant-sampled-aberrations",
+        "testsets/plant_sampled_aberrations.jl";
+        fixtures=("plant_test_fixtures.jl",)),
     TestSuiteSpec("control-primitives", "testsets/control_primitives.jl"),
     TestSuiteSpec(
         "detectors-wfs",
@@ -108,6 +111,7 @@ const TEST_GROUP_SPECS = (
         "plant-placed-optics",
         "plant-conjugate-geometry",
         "plant-mcao-moao",
+        "plant-sampled-aberrations",
         "plant-preparation",
         "plant-providers",
         "plant-rng",
@@ -135,6 +139,7 @@ const TEST_GROUP_SPECS = (
         "plant-placed-optics",
         "plant-conjugate-geometry",
         "plant-mcao-moao",
+        "plant-sampled-aberrations",
     ),
 )
 

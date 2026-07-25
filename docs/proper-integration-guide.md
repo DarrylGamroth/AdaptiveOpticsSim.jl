@@ -101,9 +101,12 @@ already applied the DM, pass the total sampled OPD instead.
 
 Use the native `NCPA` or `OPDMap` model for a static or slowly varying
 aberration that is adequately represented as sampled pupil OPD. Apply it only
-to the branch that contains the aberration. Apply native sampled NCPA to a
-science-local `PupilFunction` or OPD workspace, not to path storage later
-reused by a WFS path.
+to the branch that contains the aberration. In a Plant, wrap it in
+`Plant.SampledAberrationDefinition` with exact pupil-plane metadata, optical
+placement, and `Plant.SelectedPathVisibility` for the affected science path.
+`prepare_plant` makes the run-owned copy and path-local coupling, so do not
+also mutate path storage manually or apply the same OPD inside the external
+prescription.
 
 Keep the NCPA inside the `Proper.jl` prescription when its behavior depends on
 the detailed instrument relay, wavelength-dependent surfaces, amplitude
@@ -115,6 +118,9 @@ A useful HIL compromise is to derive a sampled NCPA surrogate from a detailed
 `Proper.jl` model, validate the surrogate over the required wavelength and
 field range, and use it on a high-rate native path. The full prescription can
 still execute at science cadence or offline without blocking a WFS deadline.
+When a prepared external executor is selected, it receives the pupil after
+atmosphere materialization, native sampled aberrations, controllable surfaces,
+and autonomous path optics; the core does not import or schedule `Proper.jl`.
 
 ## Conventions To Validate
 

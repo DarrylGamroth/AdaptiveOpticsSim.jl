@@ -1,36 +1,36 @@
 #
-# Controllable-optic optical placement and path visibility
+# Optical placement and path visibility
 #
-# These immutable declarations describe where an optic acts and which optical
-# paths contain it. They do not describe command timing, controller routing,
-# transport, or execution-resource placement.
+# These immutable declarations describe where an optical component acts and
+# which paths contain it. They do not describe command timing, controller
+# routing, transport, or execution-resource placement.
 #
 
-"""Optical location declared for one physical controllable optic."""
-abstract type AbstractControllableOpticPlacement end
+"""Optical location declared for one physical plant component."""
+abstract type AbstractOpticalPlacement end
 
-"""A controllable optic located in a pupil plane."""
-struct PupilPlanePlacement <: AbstractControllableOpticPlacement end
+"""An optical component located in a pupil plane."""
+struct PupilPlanePlacement <: AbstractOpticalPlacement end
 
 """
     AtmosphericConjugatePlacement(altitude_m)
 
-A geometric controllable-optic plane conjugate to a finite, nonnegative
+A geometric optical plane conjugate to a finite, nonnegative
 altitude above the entrance pupil, expressed in metres.
 """
 struct AtmosphericConjugatePlacement{T<:AbstractFloat} <:
-       AbstractControllableOpticPlacement
+       AbstractOpticalPlacement
     altitude_m::T
 
     function AtmosphericConjugatePlacement(altitude_m::T) where {
         T<:AbstractFloat,
     }
         isfinite(altitude_m) || throw(PlantDefinitionError(
-            :controllable_optic, :invalid_conjugate_altitude,
+            :optical_placement, :invalid_conjugate_altitude,
             "atmospheric conjugate altitude must be finite; got " *
             repr(altitude_m)))
         altitude_m >= zero(T) || throw(PlantDefinitionError(
-            :controllable_optic, :invalid_conjugate_altitude,
+            :optical_placement, :invalid_conjugate_altitude,
             "atmospheric conjugate altitude must be nonnegative; got " *
             repr(altitude_m)))
         normalized = iszero(altitude_m) ? zero(T) : altitude_m
@@ -53,37 +53,37 @@ Base.hash(placement::AtmosphericConjugatePlacement, seed::UInt) =
     hash(placement.altitude_m,
         hash(AtmosphericConjugatePlacement, seed))
 
-"""A controllable optic located in a physical focus or focal-mask plane."""
-struct FocalPlanePlacement <: AbstractControllableOpticPlacement end
+"""An optical component located in a physical focus or focal-mask plane."""
+struct FocalPlanePlacement <: AbstractOpticalPlacement end
 
-"""Path-selection declaration for one physical controllable optic."""
-abstract type AbstractControllableOpticVisibility end
+"""Path-selection declaration for one physical optical component."""
+abstract type AbstractPathVisibility end
 
-"""The optic is present in every optical path declared by its plant."""
-struct AllPathVisibility <: AbstractControllableOpticVisibility end
+"""The component is present in every optical path declared by its plant."""
+struct AllPathVisibility <: AbstractPathVisibility end
 
 """
     SelectedPathVisibility(paths...)
     SelectedPathVisibility(paths)
 
-The optic is present only in the nonempty, duplicate-free set of explicitly
+The component is present only in the nonempty, duplicate-free set of explicitly
 identified optical paths. Input containers are normalized to an immutable
 tuple of `OpticalPathID` values in stable identity order.
 """
 struct SelectedPathVisibility{P<:Tuple} <:
-       AbstractControllableOpticVisibility
+       AbstractPathVisibility
     paths::P
 
     function SelectedPathVisibility(paths::Tuple)
         converted = map(_as_optical_path_id, paths)
         isempty(converted) && throw(PlantDefinitionError(
-            :controllable_optic, :empty_path_visibility,
+            :path_visibility, :empty_path_visibility,
             "selected-path visibility must name at least one optical path"))
         normalized = _canonical_selected_path_ids(converted)
         @inbounds for index in 2:length(normalized)
             normalized[index - 1] == normalized[index] && throw(
                 PlantDefinitionError(
-                    :controllable_optic, :duplicate_visible_path,
+                    :path_visibility, :duplicate_visible_path,
                     "selected-path visibility names " *
                     "$(normalized[index]) more than once"))
         end
@@ -107,35 +107,44 @@ SelectedPathVisibility(paths...) = SelectedPathVisibility(paths)
 @inline selected_path_ids(visibility::SelectedPathVisibility) =
     visibility.paths
 
-@inline _require_controllable_optic_placement(
+@inline _require_optical_placement(
     placement::Union{
         PupilPlanePlacement,
         AtmosphericConjugatePlacement,
         FocalPlanePlacement,
     },
+    ::Symbol=:controllable_optic,
 ) = placement
 
-function _require_controllable_optic_placement(placement)
-    throw(PlantDefinitionError(:controllable_optic, :invalid_placement,
-        "controllable-optic placement must be PupilPlanePlacement, " *
+function _require_optical_placement(
+    placement,
+    component::Symbol=:controllable_optic,
+)
+    throw(PlantDefinitionError(component, :invalid_placement,
+        "optical placement must be PupilPlanePlacement, " *
         "AtmosphericConjugatePlacement, or FocalPlanePlacement; got " *
         "$(typeof(placement))"))
 end
 
-@inline _require_controllable_optic_visibility(
-    visibility::Union{AllPathVisibility,SelectedPathVisibility}) =
+@inline _require_path_visibility(
+    visibility::Union{AllPathVisibility,SelectedPathVisibility},
+    ::Symbol=:controllable_optic,
+) =
     visibility
 
-function _require_controllable_optic_visibility(visibility)
-    throw(PlantDefinitionError(:controllable_optic, :invalid_path_visibility,
-        "controllable-optic visibility must be AllPathVisibility or " *
+function _require_path_visibility(
+    visibility,
+    component::Symbol=:controllable_optic,
+)
+    throw(PlantDefinitionError(component, :invalid_path_visibility,
+        "path visibility must be AllPathVisibility or " *
         "SelectedPathVisibility; got $(typeof(visibility))"))
 end
 
-@inline _optic_visible_on_path(
+@inline _visible_on_path(
     ::AllPathVisibility, ::OpticalPathID) = true
 
-function _optic_visible_on_path(
+function _visible_on_path(
     visibility::SelectedPathVisibility, path::OpticalPathID)
     @inbounds for selected in visibility.paths
         selected == path && return true
@@ -143,38 +152,38 @@ function _optic_visible_on_path(
     return false
 end
 
-@inline _same_optic_placement(
+@inline _same_optical_placement(
     ::PupilPlanePlacement, ::PupilPlanePlacement) = true
-@inline _same_optic_placement(
+@inline _same_optical_placement(
     ::FocalPlanePlacement, ::FocalPlanePlacement) = true
-@inline _same_optic_placement(
+@inline _same_optical_placement(
     left::AtmosphericConjugatePlacement,
     right::AtmosphericConjugatePlacement,
 ) = left.altitude_m == right.altitude_m
-@inline _same_optic_placement(
-    ::AbstractControllableOpticPlacement,
-    ::AbstractControllableOpticPlacement,
+@inline _same_optical_placement(
+    ::AbstractOpticalPlacement,
+    ::AbstractOpticalPlacement,
 ) = false
 
-@inline _optic_placement_rank(::PupilPlanePlacement) = UInt8(0)
-@inline _optic_placement_rank(::AtmosphericConjugatePlacement) = UInt8(1)
-@inline _optic_placement_rank(::FocalPlanePlacement) = UInt8(2)
+@inline _optical_placement_rank(::PupilPlanePlacement) = UInt8(0)
+@inline _optical_placement_rank(::AtmosphericConjugatePlacement) = UInt8(1)
+@inline _optical_placement_rank(::FocalPlanePlacement) = UInt8(2)
 
-@inline function _optic_placement_isless(
-    left::AbstractControllableOpticPlacement,
-    right::AbstractControllableOpticPlacement,
+@inline function _optical_placement_isless(
+    left::AbstractOpticalPlacement,
+    right::AbstractOpticalPlacement,
 )
-    left_rank = _optic_placement_rank(left)
-    right_rank = _optic_placement_rank(right)
+    left_rank = _optical_placement_rank(left)
+    right_rank = _optical_placement_rank(right)
     left_rank == right_rank || return left_rank < right_rank
-    return _optic_placement_isless_same_rank(left, right)
+    return _optical_placement_isless_same_rank(left, right)
 end
 
-@inline _optic_placement_isless_same_rank(
+@inline _optical_placement_isless_same_rank(
     ::PupilPlanePlacement, ::PupilPlanePlacement) = false
-@inline _optic_placement_isless_same_rank(
+@inline _optical_placement_isless_same_rank(
     ::FocalPlanePlacement, ::FocalPlanePlacement) = false
-@inline _optic_placement_isless_same_rank(
+@inline _optical_placement_isless_same_rank(
     left::AtmosphericConjugatePlacement,
     right::AtmosphericConjugatePlacement,
 ) = left.altitude_m < right.altitude_m

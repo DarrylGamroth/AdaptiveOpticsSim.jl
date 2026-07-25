@@ -184,12 +184,13 @@ Current expectation:
 - if a maintained AMDGPU surface regresses numerically against CPU, that is a
   release-blocking defect for the AMDGPU-supported scope
 
-The Gate 5 native-DM candidate passed all `441` maintained checks on the local
-gfx1030 target with Julia 1.12.6 and scalar indexing disabled. This includes
-the retained numerical surfaces, prepared controller-output routing, dynamic
-cycle-averaged circular-Pyramid modulation, and direct native Plant DM
-state/staging/surface parity. Gate 5 did not recharacterize AMD latency, so the
-July 14 artifact remains the maintained AMD performance evidence.
+The Gate 5 sampled-aberration candidate passed all `448` maintained checks on
+the local gfx1030 target with Julia 1.12.6 and scalar indexing disabled. This
+includes the retained numerical surfaces, prepared controller-output routing,
+dynamic cycle-averaged circular-Pyramid modulation, direct native Plant DM
+state/staging/surface parity, run-owned sampled-aberration residency, and
+identity/transformed replacement. Gate 5 did not recharacterize AMD latency,
+so the July 14 artifact remains the maintained AMD performance evidence.
 
 ### GPU support-boundary rule
 
