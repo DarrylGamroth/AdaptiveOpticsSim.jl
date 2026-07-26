@@ -613,6 +613,17 @@ repeated-run and p99 sample counts, and warmed allocation ceilings. The
 comparison is closed-loop service cost with no absolute or relative performance
 gate; a reported ratio is not a grouped-CPU speedup or HIL-capacity claim.
 
+The clean local
+[`2026-07-25-grouped-cpu.toml`](../benchmarks/results/gate6/2026-07-25-grouped-cpu.toml)
+artifact retains all six raw histograms. On the unpinned Ryzen 7 6800H
+`powersave` run, grouped execution traded a higher median p50
+(1.783 μs versus 1.282 μs) and lower aggregate throughput for a lower median
+p99 (68.031 μs versus 89.023 μs). Both modes allocated 318.688 bytes per
+logical timestamp in the maintained heterogeneous barrier, direct warmed group
+calls stayed at or below 432 bytes, and no measured run collected garbage.
+These mixed results are workload- and host-specific service-cost evidence, not
+a general parallel speedup or external-RTC latency result.
+
 For independent simulation sweeps, run the ensemble scheduler benchmark before
 selecting `ThreadedExecution`, `AcceleratedKernelsExecution`, or
 `DaggerExecution`:

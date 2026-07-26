@@ -303,6 +303,10 @@ workload. Its contract records paired serial/grouped raw histograms, first use,
 GC and allocation observations, exact replay, and the declared thread budget.
 It is a closed-loop service-cost experiment without a speedup gate, affinity
 claim, fixed-arrival load, or external-RTC latency boundary.
+The current clean
+[`Gate 6 grouped CPU artifact`](../../benchmarks/results/gate6/2026-07-25-grouped-cpu.toml)
+shows the expected trade: lower optical-tail service cost but higher cheap-event
+overhead and lower aggregate throughput on the unpinned local laptop CPU.
 
 On large EPYC or Threadripper systems, placement should account for NUMA nodes,
 physical cores, SMT siblings, memory allocation, NIC queues, and interrupts.

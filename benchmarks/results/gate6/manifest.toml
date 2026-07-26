@@ -1,0 +1,8 @@
+[[artifacts]]
+id = "GATE6-GROUPED-CPU-2026-07-25"
+purpose = "Clean-tree Gate 6 four-context fixed-owner CPU exact-replay, task-reuse, allocation, first-use, GC, and paired serial/grouped self-paced service-cost evidence"
+path = "2026-07-25-grouped-cpu.toml"
+sha256 = "294272cb722731aa0a4945b769639f1706f27a065d82ff24ceed127237940f32"
+source_contract = "../../contracts/gate6_grouped_cpu.toml"
+characterized_source_revision = "2000305040f6ac555c9ebfb7c2ec0b3ddd746f10"
+all_gates_passed = true
