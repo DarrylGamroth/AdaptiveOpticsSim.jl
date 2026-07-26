@@ -296,6 +296,14 @@ discrete state, CPU products, and RNG streams with the serial oracle. Its
 `Channel` synchronization is test scaffolding, not the production HIL data
 plane; Gate 8 still owns bounded SPSC completion paths.
 
+The maintained
+[`benchmark_gate6_grouped_cpu.jl`](../../benchmarks/benchmark_gate6_grouped_cpu.jl)
+reuses that fixed-owner policy against the Gate 3 unequal-rate science/NGS/LGS
+workload. Its contract records paired serial/grouped raw histograms, first use,
+GC and allocation observations, exact replay, and the declared thread budget.
+It is a closed-loop service-cost experiment without a speedup gate, affinity
+claim, fixed-arrival load, or external-RTC latency boundary.
+
 On large EPYC or Threadripper systems, placement should account for NUMA nodes,
 physical cores, SMT siblings, memory allocation, NIC queues, and interrupts.
 AcceleratedKernels may remain an evidence-gated option for sufficiently large

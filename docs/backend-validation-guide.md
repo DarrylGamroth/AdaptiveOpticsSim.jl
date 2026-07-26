@@ -598,6 +598,21 @@ The grouped case is an unpaced ownership, exact-replay, and warmed-allocation
 test over test-only long-lived workers. It is not a fixed-arrival HIL latency or
 production `Channel` endorsement.
 
+For paired HdrHistogram service-cost characterization of the same boundary,
+use the benchmark environment:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  julia --threads=4 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate6_grouped_cpu.jl
+```
+
+[`gate6_grouped_cpu.toml`](../benchmarks/contracts/gate6_grouped_cpu.toml)
+predeclares the four-context budget, exact serial/grouped replay oracle,
+repeated-run and p99 sample counts, and warmed allocation ceilings. The
+comparison is closed-loop service cost with no absolute or relative performance
+gate; a reported ratio is not a grouped-CPU speedup or HIL-capacity claim.
+
 For independent simulation sweeps, run the ensemble scheduler benchmark before
 selecting `ThreadedExecution`, `AcceleratedKernelsExecution`, or
 `DaggerExecution`:
