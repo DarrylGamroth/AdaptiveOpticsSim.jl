@@ -95,6 +95,16 @@ Current CPU-supported families:
   characterizes one eight-path low-resolution workload and exact 4/8/16-path
   binding counts; it is not fixed-arrival, parallel, integrated-GPU,
   detailed-relay/coronagraph, or production instrument-capacity evidence
+- prepared CPU path-execution groups with one writer per path/acquisition/RNG
+  owner, independently callable mutating lifecycle seams, explicit
+  Julia/FFT/BLAS execution budgets, a deterministic serial oracle, and
+  topology-size-invariant whole-plant registries. Maintained one- and
+  four-thread tests prove exact grouped/serial replay and actual coarse path
+  overlap; clean artifacts bound direct-call allocation, paired self-paced
+  service cost, preparation, first use, storage, inference, method instances,
+  and native-code growth. This supports the core executor boundary, not a
+  production worker implementation, affinity/pacing policy, fixed-arrival HIL
+  capacity, integrated GPU event loop, or NFIRAOS/MORFEO qualification
 - trigger-relative autonomous circular-Pyramid modulation with bounded
   radius/frequency/phase/enabled setpoints, free-running/source/delivered-reset
   relationships, deterministic branch faults, and an allocation-free
@@ -142,6 +152,8 @@ Primary evidence:
 - [Gate 3 scheduler CPU evidence](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml)
 - [Gate 3 composed multi-rate CPU evidence](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
 - [Gate 4 command-responsive plant CPU evidence](../benchmarks/results/gate4/2026-07-24-command-plant.toml)
+- [Gate 6 grouped CPU evidence](../benchmarks/results/gate6/2026-07-25-grouped-cpu.toml)
+- [Gate 6 topology-growth evidence](../benchmarks/results/gate6/2026-07-25-topology-growth.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-cpu.toml)
 
 ### AMDGPU backend

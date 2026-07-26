@@ -35,6 +35,10 @@ hardware-validated GPU workflows. The core package now has:
   vertical slice with injected execution time, canonical command/outcome and
   complete-product ports, bounded lease ownership, a command-responsive fake
   RTC loop, and qualified fixed-arrival evidence
+- completed Gate 6 prepared CPU path-execution groups with single-writer
+  ownership, explicit Julia/FFT/BLAS budgets, a deterministic serial oracle,
+  bounded whole-plant specialization, and a separately validated
+  `AdaptiveOpticsHIL.jl` pin to the final breaking core revision
 - a canonical `AdaptiveOpticsSim.Plant` owner for HIL-neutral plant time,
   topology, commands, acquisition events, providers, preparation, and event
   composition, with a bounded root export surface and explicit Julia 1.12 API
@@ -146,10 +150,18 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    bounded-allocation evidence. Preserve the completed Gate 6 path-execution
    groups, CPU ownership budgets, deterministic serial fallback, and
    topology-size-invariant whole-plant registries. The clean
+   [Gate 6 grouped CPU artifact](../benchmarks/results/gate6/2026-07-25-grouped-cpu.toml)
+   records exact serial/grouped replay, direct-call allocation bounds, first
+   use, GC, and paired self-paced service cost without claiming a general
+   speedup or fixed-arrival latency. The clean
    [Gate 6 topology-growth artifact](../benchmarks/results/gate6/2026-07-25-topology-growth.toml)
    bounds fresh preparation, first use, storage, method instances, native-code
    size, inference, and warmed allocation over synthetic 4/8/16-path shapes
-   without making an NFIRAOS/MORFEO capacity claim. Advance next to Gate 7;
+   without making an NFIRAOS/MORFEO capacity claim.
+   [AdaptiveOpticsHIL PR #15](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/15)
+   pins both companion environments to core revision `0a38576` and passes the
+   cross-platform package, ownership-stress, coverage, and benchmark-contract
+   matrix at companion revision `9574432`. Advance next to Gate 7;
    single-GPU direction batching and physical device identity remain behind
    their own numerical, allocation, residency, and fixed-arrival evidence.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
