@@ -1,0 +1,2128 @@
+all_gates_passed = true
+benchmark = "gate6_topology_growth_cpu"
+characterized_source_revision = "d95cd1bf5d25d32f3480cb8e18a623aa0c38a9d5"
+configured_fresh_process_repetitions_per_first_use_mode = 3
+configured_service_runs = 3
+configured_service_samples_per_run = 2000
+evidence_class = "fresh-process CPU preparation and generated-code growth characterization"
+maximum_stage_kernel_any_slots = 0
+quick_mode = false
+schema_version = 1
+scope_exclusions = ["package import, dependency resolution, and Julia process startup", "fixed-rate arrivals, wall-clock pacing, queues, overload, and recovery", "external RTC transport, detector publication, and command-response latency", "parallel CPU execution, CPU affinity, NUMA placement, and interrupt isolation", "GPU execution, host-device transfer, and multi-GPU placement", "production instrument fidelity, production capacity, or NFIRAOS/MORFEO qualification"]
+source_contract = "contracts/gate6_topology_growth.toml"
+
+[code_growth.event_entry]
+distinct_native_code_hashes = 18
+maximum_method_instance_count = 2
+maximum_native_code_text_bytes = 4087
+method_instance_count_growth = 0
+minimum_method_instance_count = 2
+minimum_native_code_text_bytes = 4087
+native_code_size_ratio = 1.0
+
+[code_growth.selection_entry]
+distinct_native_code_hashes = 6
+maximum_method_instance_count = 1
+maximum_native_code_text_bytes = 21913
+method_instance_count_growth = 0
+minimum_method_instance_count = 1
+minimum_native_code_text_bytes = 21913
+native_code_size_ratio = 1.0
+
+[contract]
+allocation_gate = "after warmup, the serial all-path optical cycle remains at most 1024 Julia heap bytes per declared path per cycle over a 100-cycle window; this bounds the deliberate heterogeneous-owner dispatch barrier while numerical stage kernels remain allocation-free"
+arrival_model = "the next optical cycle starts only after the prior cycle and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "warmed histograms characterize unpaced service cost and support no fixed-arrival latency claim"
+first_use = "record the first event-loop cycle and first all-acquisition schedule-free selection independently after preparation and before warmup in separate fresh Julia processes"
+generated_code_proxy = "compare exact registry-owner type fingerprints, entry-method specialization counts, and native-code text sizes for the schedule-free selection and serial event-loop entries; concrete representative path and acquisition kernels must contain no exact Any slot or SSA value"
+latency_gate = "only cold preparation, first-invocation, storage, type, method-instance, native-code-size, and allocation ceilings are acceptance gates; warmed histogram percentiles are diagnostic"
+load_model = "fresh-process cold preparation plus closed-loop self-paced warmed serial service-cost characterization; this is not an external-RTC or fixed-arrival HIL latency test"
+preparation_boundary = "construct the synthetic declared plant, prepare all command endpoints, controllable optics, sampled aberrations, optical paths, acquisitions, RNG owners, event definitions, event loop, state, workspace, and all-acquisition schedule-free selection after package loading in a fresh Julia process"
+question = "Across predeclared 4/8/16-path plant shapes, do whole-plant topology registries keep cardinality out of prepared owner types and HIL entry signatures while retaining inferred concrete numerical stage kernels, bounded fresh preparation growth, linear prepared storage, and bounded warmed service allocation?"
+threading = "one Julia thread, one BLAS thread, and one FFT-provider thread"
+topology_labels = "development, nfiraos_like, and morfeo_like are cardinality labels for this synthetic Gate 5 optical-placement fixture only; they make no instrument-model, fidelity, throughput, or capacity claim"
+
+[distinct_registry_type_fingerprints]
+acquisition_registry = 1
+command_endpoint_registry = 1
+controllable_optic_registry = 1
+event_loop = 1
+event_state = 1
+event_workspace = 1
+path_registry = 1
+plant_definition = 1
+prepared_plant = 1
+prepared_rngs = 1
+selection = 1
+selection_acquisition_registry = 1
+selection_path_registry = 1
+
+[environment]
+active_project = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim-gate6-4/benchmarks/Project.toml"
+adaptive_optics_sim_version = "0.1.0"
+architecture = "x86_64"
+blas_threads = 1
+command = "julia --threads=1 --project=benchmarks benchmarks/benchmark_gate6_topology_growth.jl"
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+fft_threads = 1
+git_commit = "d95cd1bf5d25d32f3480cb8e18a623aa0c38a9d5"
+git_dirty = false
+git_status_porcelain = ""
+hdrhistogram_version = "0.4.0"
+julia_threads = 1
+julia_version = "1.12.6"
+logical_cpu_threads = 16
+timestamp_utc = "2026-07-26T06:35:03.932"
+
+[gates]
+exact_topology_counts = true
+first_event_invocation = true
+first_selection_invocation = true
+method_instance_growth = true
+native_code_growth = true
+numerical_oracle = true
+preparation_allocated = true
+preparation_allocation_growth = true
+preparation_elapsed = true
+preparation_time_growth = true
+prepared_storage_growth = true
+prepared_summary = true
+registry_type_cardinality = true
+stage_kernel_inference = true
+warmed_allocation = true
+
+[growth]
+largest_to_small_preparation_allocation_ratio = 1.028572408360544
+largest_to_small_preparation_time_ratio = 1.0522441042977475
+largest_to_small_prepared_storage_ratio = 2.7441954693351343
+
+[histogram]
+highest_ns = 60000000000
+interpretation = "diagnostic closed-loop service-cost distributions"
+lowest_ns = 1
+p99_claim_supported = false
+significant_figures = 3
+
+[[probes]]
+first_invocation_ns = 2917440572
+first_use_mode = "event"
+label = "development"
+path_count = 4
+prepared_summary_bytes = 162886
+repetition = 1
+
+    [probes.allocation]
+    bytes_per_cycle = 2816.16
+    cycles = 100
+    window_bytes = 281616
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "4f388a70227738de51f510b0bec7e6dc55deca72093382c0716df3d120a88d2d"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "9bd1f446c1d1d310be3aa0981ac7e39467def11af3abf69c9be41e46e8e912a6"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 4
+    command_endpoint_count = 5
+    controllable_optic_count = 5
+    passed = true
+    path_count = 4
+    sampled_aberration_count = 3
+
+    [probes.numerical_oracle]
+    maximum_error_m = 0.0
+    passed = true
+    science_maximum_error_m = 0.0
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 883940720
+    elapsed_ns = 10517488018
+    gc_ns = 86840090
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "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"
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 215
+    max_ns = 70207
+    mean_ns = 20128.292
+    min_ns = 19216
+    monotonic_end_ns = 13345239919764950
+    monotonic_start_ns = 13345239879429677
+    p50_ns = 19807
+    p90_ns = 20383
+    p99_9_ns = 39103
+    p99_ns = 26095
+    samples = 2000
+    throughput_hz = 49584.39230100166
+    wall_ns = 40335273
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2935464829
+first_use_mode = "event"
+label = "development"
+path_count = 4
+prepared_summary_bytes = 162886
+repetition = 2
+
+    [probes.allocation]
+    bytes_per_cycle = 2816.16
+    cycles = 100
+    window_bytes = 281616
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "74c181908e6a62cddb96ca1a364b6ac6c68d29489f7a31794e8e6ff00b79d192"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "9bd1f446c1d1d310be3aa0981ac7e39467def11af3abf69c9be41e46e8e912a6"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 4
+    command_endpoint_count = 5
+    controllable_optic_count = 5
+    passed = true
+    path_count = 4
+    sampled_aberration_count = 3
+
+    [probes.numerical_oracle]
+    maximum_error_m = 0.0
+    passed = true
+    science_maximum_error_m = 0.0
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 883878848
+    elapsed_ns = 10575094003
+    gc_ns = 85102467
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "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"
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 157
+    max_ns = 67327
+    mean_ns = 19808.1
+    min_ns = 19056
+    monotonic_end_ns = 13345268874380728
+    monotonic_start_ns = 13345268834685112
+    p50_ns = 19663
+    p90_ns = 20143
+    p99_9_ns = 27327
+    p99_ns = 23535
+    samples = 2000
+    throughput_hz = 50383.397501628395
+    wall_ns = 39695616
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2975592546
+first_use_mode = "event"
+label = "development"
+path_count = 4
+prepared_summary_bytes = 162886
+repetition = 3
+
+    [probes.allocation]
+    bytes_per_cycle = 2816.16
+    cycles = 100
+    window_bytes = 281616
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "ea99645f05b6903069cc291e419c4d47108c6e4fae1c0fb1cee0581ae5efb937"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "9bd1f446c1d1d310be3aa0981ac7e39467def11af3abf69c9be41e46e8e912a6"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 4
+    command_endpoint_count = 5
+    controllable_optic_count = 5
+    passed = true
+    path_count = 4
+    sampled_aberration_count = 3
+
+    [probes.numerical_oracle]
+    maximum_error_m = 0.0
+    passed = true
+    science_maximum_error_m = 0.0
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 883934312
+    elapsed_ns = 10520547296
+    gc_ns = 86321008
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "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"
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 121
+    max_ns = 68287
+    mean_ns = 19804.76
+    min_ns = 19280
+    monotonic_end_ns = 13345297886450498
+    monotonic_start_ns = 13345297846767476
+    p50_ns = 19663
+    p90_ns = 20079
+    p99_9_ns = 31151
+    p99_ns = 22687
+    samples = 2000
+    throughput_hz = 50399.387425685476
+    wall_ns = 39683022
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2120765570
+first_use_mode = "selection"
+label = "development"
+path_count = 4
+prepared_summary_bytes = 162894
+repetition = 1
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "5bb39dcc52c0b539ccfaefb9c085537a47a2f13c81b162238226620fc01e577f"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "b93d85d74327ab5a7ac39ce0474e65a0355b3ff5874c934b75315158a062bbf2"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 4
+    command_endpoint_count = 5
+    controllable_optic_count = 5
+    passed = true
+    path_count = 4
+    sampled_aberration_count = 3
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 883902824
+    elapsed_ns = 10652266266
+    gc_ns = 95862301
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2111282177
+first_use_mode = "selection"
+label = "development"
+path_count = 4
+prepared_summary_bytes = 162894
+repetition = 2
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "4a9a90e3bf304c4eee4179aa720495651052cf12493d419481844347dc908a05"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "b93d85d74327ab5a7ac39ce0474e65a0355b3ff5874c934b75315158a062bbf2"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 4
+    command_endpoint_count = 5
+    controllable_optic_count = 5
+    passed = true
+    path_count = 4
+    sampled_aberration_count = 3
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 883951792
+    elapsed_ns = 10604641871
+    gc_ns = 85196935
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2133639902
+first_use_mode = "selection"
+label = "development"
+path_count = 4
+prepared_summary_bytes = 162894
+repetition = 3
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "3459630c3c93e6ea95e1fb4ec1e4e0e4ec15fe2370eb38d2a94edd05a1c6af7c"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "b93d85d74327ab5a7ac39ce0474e65a0355b3ff5874c934b75315158a062bbf2"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 4
+    command_endpoint_count = 5
+    controllable_optic_count = 5
+    passed = true
+    path_count = 4
+    sampled_aberration_count = 3
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 883909664
+    elapsed_ns = 10607157363
+    gc_ns = 86022309
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2945006843
+first_use_mode = "event"
+label = "nfiraos_like"
+path_count = 8
+prepared_summary_bytes = 257590
+repetition = 1
+
+    [probes.allocation]
+    bytes_per_cycle = 5632.16
+    cycles = 100
+    window_bytes = 563216
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "c205523ba51c1f11d87389eae68307bc52b89187a4339ecee5036d007ae81e20"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "f3aef9f2b7c6e840c3bf1c9bf738fb592240730086182983b93010338764b625"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 8
+    command_endpoint_count = 7
+    controllable_optic_count = 7
+    passed = true
+    path_count = 8
+    sampled_aberration_count = 5
+
+    [probes.numerical_oracle]
+    maximum_error_m = 6.617444900424222e-24
+    passed = true
+    science_maximum_error_m = 6.617444900424222e-24
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 887817360
+    elapsed_ns = 10721462438
+    gc_ns = 86292645
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "AAAAAAAAk78AAAAAAAAAAQAAAAAAAJQ/AAAAAAAAAAIAAAAAAACUXwAAAAAAAAACAAAAAAAAlH8AAAAAAAAAAwAAAAAAAJSfAAAAAAAAAAIAAAAAAACUvwAAAAAAAAAHAAAAAAAAlN8AAAAAAAAACwAAAAAAAJT/AAAAAAAAAAcAAAAAAACVHwAAAAAAAAAFAAAAAAAAlT8AAAAAAAAABQAAAAAAAJVfAAAAAAAAAAoAAAAAAACVfwAAAAAAAAANAAAAAAAAlZ8AAAAAAAAADQAAAAAAAJW/AAAAAAAAABIAAAAAAACV3wAAAAAAAAAfAAAAAAAAlf8AAAAAAAAAGwAAAAAAAJYfAAAAAAAAACcAAAAAAACWPwAAAAAAAAA1AAAAAAAAll8AAAAAAAAAKgAAAAAAAJZ/AAAAAAAAADIAAAAAAACWnwAAAAAAAAA2AAAAAAAAlr8AAAAAAAAAOQAAAAAAAJbfAAAAAAAAAEcAAAAAAACW/wAAAAAAAAA0AAAAAAAAlx8AAAAAAAAALgAAAAAAAJc/AAAAAAAAAD4AAAAAAACXXwAAAAAAAAA4AAAAAAAAl38AAAAAAAAASQAAAAAAAJefAAAAAAAAADoAAAAAAACXvwAAAAAAAABAAAAAAAAAl98AAAAAAAAAPAAAAAAAAJf/AAAAAAAAADAAAAAAAACYHwAAAAAAAAA+AAAAAAAAmD8AAAAAAAAAMAAAAAAAAJhfAAAAAAAAAC4AAAAAAACYfwAAAAAAAAAwAAAAAAAAmJ8AAAAAAAAANQAAAAAAAJi/AAAAAAAAADAAAAAAAACY3wAAAAAAAAAxAAAAAAAAmP8AAAAAAAAAJAAAAAAAAJkfAAAAAAAAABkAAAAAAACZPwAAAAAAAAAfAAAAAAAAmV8AAAAAAAAAKAAAAAAAAJl/AAAAAAAAAB4AAAAAAACZnwAAAAAAAAAWAAAAAAAAmb8AAAAAAAAAGgAAAAAAAJnfAAAAAAAAAA4AAAAAAACZ/wAAAAAAAAASAAAAAAAAmh8AAAAAAAAAEgAAAAAAAJo/AAAAAAAAAAsAAAAAAACaXwAAAAAAAAAPAAAAAAAAmn8AAAAAAAAAEAAAAAAAAJqfAAAAAAAAAAsAAAAAAACavwAAAAAAAAAUAAAAAAAAmt8AAAAAAAAACQAAAAAAAJr/AAAAAAAAAAcAAAAAAACbHwAAAAAAAAAMAAAAAAAAmz8AAAAAAAAABwAAAAAAAJtfAAAAAAAAAAsAAAAAAACbfwAAAAAAAAAFAAAAAAAAm58AAAAAAAAAAgAAAAAAAJu/AAAAAAAAAAYAAAAAAACb3wAAAAAAAAAFAAAAAAAAm/8AAAAAAAAAAwAAAAAAAJwfAAAAAAAAAAYAAAAAAACcPwAAAAAAAAAGAAAAAAAAnF8AAAAAAAAAAQAAAAAAAJx/AAAAAAAAAAUAAAAAAACcnwAAAAAAAAACAAAAAAAAnL8AAAAAAAAAAQAAAAAAAJzfAAAAAAAAAAYAAAAAAACc/wAAAAAAAAAEAAAAAAAAnR8AAAAAAAAAAgAAAAAAAJ0/AAAAAAAAAAEAAAAAAACdXwAAAAAAAAACAAAAAAAAnX8AAAAAAAAAAQAAAAAAAJ2/AAAAAAAAAAEAAAAAAACd3wAAAAAAAAABAAAAAAAAnf8AAAAAAAAAAgAAAAAAAJ4fAAAAAAAAAAIAAAAAAACePwAAAAAAAAABAAAAAAAAnl8AAAAAAAAAAQAAAAAAAJ5/AAAAAAAAAAEAAAAAAACenwAAAAAAAAADAAAAAAAAnt8AAAAAAAAAAgAAAAAAAJ7/AAAAAAAAAAIAAAAAAACfHwAAAAAAAAABAAAAAAAAnz8AAAAAAAAAAwAAAAAAAJ9fAAAAAAAAAAIAAAAAAACfvwAAAAAAAAACAAAAAAAAn98AAAAAAAAAAQAAAAAAAJ//AAAAAAAAAAEAAAAAAACgHwAAAAAAAAADAAAAAAAAoH8AAAAAAAAABAAAAAAAAKCfAAAAAAAAAAIAAAAAAACg3wAAAAAAAAABAAAAAAAAoT8AAAAAAAAAAQAAAAAAAKF/AAAAAAAAAAEAAAAAAAChnwAAAAAAAAABAAAAAAAAod8AAAAAAAAAAQAAAAAAAKH/AAAAAAAAAAMAAAAAAACiXwAAAAAAAAADAAAAAAAAon8AAAAAAAAAAgAAAAAAAKKfAAAAAAAAAAEAAAAAAACivwAAAAAAAAABAAAAAAAAot8AAAAAAAAAAQAAAAAAAKL/AAAAAAAAAAEAAAAAAACjHwAAAAAAAAABAAAAAAAAo58AAAAAAAAAAQAAAAAAAKO/AAAAAAAAAAEAAAAAAACj3wAAAAAAAAACAAAAAAAApB8AAAAAAAAAAgAAAAAAAKQ/AAAAAAAAAAEAAAAAAACk3wAAAAAAAAABAAAAAAAApT8AAAAAAAAAAQAAAAAAAKVfAAAAAAAAAAIAAAAAAAClnwAAAAAAAAADAAAAAAAApf8AAAAAAAAAAwAAAAAAAKYfAAAAAAAAAAEAAAAAAACmfwAAAAAAAAABAAAAAAAApp8AAAAAAAAAAQAAAAAAAKa/AAAAAAAAAAIAAAAAAACm3wAAAAAAAAABAAAAAAAApv8AAAAAAAAAAwAAAAAAAKcfAAAAAAAAAAEAAAAAAACnnwAAAAAAAAACAAAAAAAAp/8AAAAAAAAAAwAAAAAAAKgfAAAAAAAAAAEAAAAAAACoXwAAAAAAAAABAAAAAAAAqP8AAAAAAAAAAQAAAAAAAKk/AAAAAAAAAAEAAAAAAACpXwAAAAAAAAABAAAAAAAAqX8AAAAAAAAAAQAAAAAAAKm/AAAAAAAAAAEAAAAAAACp3wAAAAAAAAABAAAAAAAAqf8AAAAAAAAAAQAAAAAAAKofAAAAAAAAAAEAAAAAAACqfwAAAAAAAAABAAAAAAAAqp8AAAAAAAAAAQAAAAAAAKr/AAAAAAAAAAEAAAAAAACrHwAAAAAAAAABAAAAAAAAqz8AAAAAAAAAAQAAAAAAAKt/AAAAAAAAAAEAAAAAAACr3wAAAAAAAAADAAAAAAAArB8AAAAAAAAAAwAAAAAAAKxfAAAAAAAAAAIAAAAAAACsfwAAAAAAAAABAAAAAAAArL8AAAAAAAAAAQAAAAAAAKz/AAAAAAAAAAMAAAAAAACtHwAAAAAAAAABAAAAAAAArX8AAAAAAAAAAQAAAAAAAK2fAAAAAAAAAAEAAAAAAACtvwAAAAAAAAABAAAAAAAArf8AAAAAAAAAAQAAAAAAAK4fAAAAAAAAAAEAAAAAAACuPwAAAAAAAAABAAAAAAAArl8AAAAAAAAAAgAAAAAAAK5/AAAAAAAAAAEAAAAAAACuvwAAAAAAAAACAAAAAAAArt8AAAAAAAAAAQAAAAAAALBfAAAAAAAAAAEAAAAAAACwfwAAAAAAAAABAAAAAAAAsJ8AAAAAAAAAAQAAAAAAALDfAAAAAAAAAAEAAAAAAACxPwAAAAAAAAAEAAAAAAAAsV8AAAAAAAAAAQAAAAAAALF/AAAAAAAAAAEAAAAAAACx3wAAAAAAAAACAAAAAAAAsj8AAAAAAAAAAQAAAAAAALKfAAAAAAAAAAEAAAAAAACzvwAAAAAAAAABAAAAAAAAtF8AAAAAAAAAAQAAAAAAALVfAAAAAAAAAAEAAAAAAAC1vwAAAAAAAAABAAAAAAAAtt8AAAAAAAAAAQAAAAAAALb/AAAAAAAAAAEAAAAAAAC3HwAAAAAAAAABAAAAAAAAt18AAAAAAAAAAQAAAAAAALefAAAAAAAAAAEAAAAAAAC3/wAAAAAAAAABAAAAAAAAuN8AAAAAAAAAAQAAAAAAALmfAAAAAAAAAAEAAAAAAAC5/wAAAAAAAAABAAAAAAAAuj8AAAAAAAAAAQAAAAAAALp/AAAAAAAAAAEAAAAAAAC7XwAAAAAAAAABAAAAAAAAvB8AAAAAAAAAAQAAAAAAALxfAAAAAAAAAAEAAAAAAAC+fwAAAAAAAAABAAAAAAAAw18AAAAAAAAAAQAAAAAAAMU/AAAAAAAAAAEAAAAAAADUnwAAAAAAAAABAAAAAAAA3N8AAAAAAAAAAQAAAAAAAOqfAAAAAAAAAAEAAAAAAAD0XwAAAAAAAAABAAAAAAABjf8AAAAAAAAAAQ=="
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 196
+    max_ns = 101887
+    mean_ns = 39317.224
+    min_ns = 37792
+    monotonic_end_ns = 13345409291784971
+    monotonic_start_ns = 13345409213066658
+    p50_ns = 38911
+    p90_ns = 39967
+    p99_9_ns = 60063
+    p99_ns = 46847
+    samples = 2000
+    throughput_hz = 25407.048547902697
+    wall_ns = 78718313
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2976805754
+first_use_mode = "event"
+label = "nfiraos_like"
+path_count = 8
+prepared_summary_bytes = 257590
+repetition = 2
+
+    [probes.allocation]
+    bytes_per_cycle = 5632.16
+    cycles = 100
+    window_bytes = 563216
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "fb6144a9f9ef8525e44e480a9196ce559ed73c41c26bca8f962c278c3feedf60"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "f3aef9f2b7c6e840c3bf1c9bf738fb592240730086182983b93010338764b625"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 8
+    command_endpoint_count = 7
+    controllable_optic_count = 7
+    passed = true
+    path_count = 8
+    sampled_aberration_count = 5
+
+    [probes.numerical_oracle]
+    maximum_error_m = 6.617444900424222e-24
+    passed = true
+    science_maximum_error_m = 6.617444900424222e-24
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 887932240
+    elapsed_ns = 10749473185
+    gc_ns = 86432577
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "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"
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 311
+    max_ns = 135167
+    mean_ns = 41961.016
+    min_ns = 38080
+    monotonic_end_ns = 13345438813721139
+    monotonic_start_ns = 13345438729707858
+    p50_ns = 40127
+    p90_ns = 44319
+    p99_9_ns = 98815
+    p99_ns = 76799
+    samples = 2000
+    throughput_hz = 23805.759948834755
+    wall_ns = 84013281
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2983363145
+first_use_mode = "event"
+label = "nfiraos_like"
+path_count = 8
+prepared_summary_bytes = 257590
+repetition = 3
+
+    [probes.allocation]
+    bytes_per_cycle = 5632.16
+    cycles = 100
+    window_bytes = 563216
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "11cda8cb4dbe70759c021fc36904a3121d48e6806703b4280c342e4b55662253"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "f3aef9f2b7c6e840c3bf1c9bf738fb592240730086182983b93010338764b625"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 8
+    command_endpoint_count = 7
+    controllable_optic_count = 7
+    passed = true
+    path_count = 8
+    sampled_aberration_count = 5
+
+    [probes.numerical_oracle]
+    maximum_error_m = 6.617444900424222e-24
+    passed = true
+    science_maximum_error_m = 6.617444900424222e-24
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 887828328
+    elapsed_ns = 10675871271
+    gc_ns = 83536709
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "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"
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 174
+    max_ns = 102719
+    mean_ns = 39205.176
+    min_ns = 37760
+    monotonic_end_ns = 13345468099397206
+    monotonic_start_ns = 13345468020891130
+    p50_ns = 38879
+    p90_ns = 39679
+    p99_9_ns = 60127
+    p99_ns = 45631
+    samples = 2000
+    throughput_hz = 25475.735152015495
+    wall_ns = 78506076
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2133958332
+first_use_mode = "selection"
+label = "nfiraos_like"
+path_count = 8
+prepared_summary_bytes = 257598
+repetition = 1
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "edf88ab3835201294d027fcfcf151d5441c5d0b8575a328cd9e09c6ea3d9fafb"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "3d9143fabe294bdd25f2702ac3af9f591a9c2ddf200cb3e26a684f265fa15a52"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 8
+    command_endpoint_count = 7
+    controllable_optic_count = 7
+    passed = true
+    path_count = 8
+    sampled_aberration_count = 5
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 887805144
+    elapsed_ns = 10797402978
+    gc_ns = 94199099
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2126251403
+first_use_mode = "selection"
+label = "nfiraos_like"
+path_count = 8
+prepared_summary_bytes = 257598
+repetition = 2
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "4b0c3c015d0828c808972dac12694d20ff027505426f4fd56451c4625f544cf9"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "3d9143fabe294bdd25f2702ac3af9f591a9c2ddf200cb3e26a684f265fa15a52"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 8
+    command_endpoint_count = 7
+    controllable_optic_count = 7
+    passed = true
+    path_count = 8
+    sampled_aberration_count = 5
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 887822816
+    elapsed_ns = 10773253856
+    gc_ns = 86994509
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2119672362
+first_use_mode = "selection"
+label = "nfiraos_like"
+path_count = 8
+prepared_summary_bytes = 257598
+repetition = 3
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "382cb3a200dc25c5727687ba27b30ea06e9ac71d96989428e2d3fdb6687d4a4d"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "3d9143fabe294bdd25f2702ac3af9f591a9c2ddf200cb3e26a684f265fa15a52"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 8
+    command_endpoint_count = 7
+    controllable_optic_count = 7
+    passed = true
+    path_count = 8
+    sampled_aberration_count = 5
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 887805160
+    elapsed_ns = 10746484942
+    gc_ns = 85353729
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2971335024
+first_use_mode = "event"
+label = "morfeo_like"
+path_count = 16
+prepared_summary_bytes = 446998
+repetition = 1
+
+    [probes.allocation]
+    bytes_per_cycle = 11264.16
+    cycles = 100
+    window_bytes = 1126416
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "6965b846ad64a5d483867560e1eed64df0df863c7575418b6ad0533565ed3796"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "66e410e966ed1b522623ab36f52d7c6b36f252d1ef3b1b7b03b10fdb4829be5e"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 16
+    command_endpoint_count = 11
+    controllable_optic_count = 11
+    passed = true
+    path_count = 16
+    sampled_aberration_count = 9
+
+    [probes.numerical_oracle]
+    maximum_error_m = 6.617444900424222e-24
+    passed = true
+    science_maximum_error_m = 6.617444900424222e-24
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 909166376
+    elapsed_ns = 11063768428
+    gc_ns = 86863434
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "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"
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 280
+    max_ns = 180479
+    mean_ns = 84795.28
+    min_ns = 78080
+    monotonic_end_ns = 13345580581363693
+    monotonic_start_ns = 13345580411658300
+    p50_ns = 84287
+    p90_ns = 89087
+    p99_9_ns = 116991
+    p99_ns = 101695
+    samples = 2000
+    throughput_hz = 11785.129303462973
+    wall_ns = 169705393
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2997906193
+first_use_mode = "event"
+label = "morfeo_like"
+path_count = 16
+prepared_summary_bytes = 446998
+repetition = 2
+
+    [probes.allocation]
+    bytes_per_cycle = 11264.16
+    cycles = 100
+    window_bytes = 1126416
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "f2ee06da5e8142cab009ffa44c5f58e50ca3f88558ca908075a675b530cbd4f7"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "66e410e966ed1b522623ab36f52d7c6b36f252d1ef3b1b7b03b10fdb4829be5e"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 16
+    command_endpoint_count = 11
+    controllable_optic_count = 11
+    passed = true
+    path_count = 16
+    sampled_aberration_count = 9
+
+    [probes.numerical_oracle]
+    maximum_error_m = 6.617444900424222e-24
+    passed = true
+    science_maximum_error_m = 6.617444900424222e-24
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 909170480
+    elapsed_ns = 11408894922
+    gc_ns = 85363968
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "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"
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 188
+    max_ns = 167807
+    mean_ns = 80627.392
+    min_ns = 77888
+    monotonic_end_ns = 13345613245007698
+    monotonic_start_ns = 13345613083624297
+    p50_ns = 79679
+    p90_ns = 82943
+    p99_9_ns = 133759
+    p99_ns = 95871
+    samples = 2000
+    throughput_hz = 12392.848258291446
+    wall_ns = 161383401
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2949137983
+first_use_mode = "event"
+label = "morfeo_like"
+path_count = 16
+prepared_summary_bytes = 446998
+repetition = 3
+
+    [probes.allocation]
+    bytes_per_cycle = 11264.16
+    cycles = 100
+    window_bytes = 1126416
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "bd52af72fb648e8ef1d486edb501ea53c6eb79029c4b8aeaede2bda9c6c57f06"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "66e410e966ed1b522623ab36f52d7c6b36f252d1ef3b1b7b03b10fdb4829be5e"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 16
+    command_endpoint_count = 11
+    controllable_optic_count = 11
+    passed = true
+    path_count = 16
+    sampled_aberration_count = 9
+
+    [probes.numerical_oracle]
+    maximum_error_m = 6.617444900424222e-24
+    passed = true
+    science_maximum_error_m = 6.617444900424222e-24
+    wfs_maximum_error_m = 0.0
+
+    [probes.preparation]
+    allocated_bytes = 909236280
+    elapsed_ns = 11107291083
+    gc_ns = 83403730
+
+    [probes.service]
+    completed_operations = 2000
+    failed_operations = 0
+    histogram_base64 = "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"
+    histogram_encoding = "AOS HdrHistogram sparse Int64 value/count pairs big-endian base64 v1"
+    histogram_recorded_bins = 205
+    max_ns = 169343
+    mean_ns = 81083.184
+    min_ns = 77568
+    monotonic_end_ns = 13345644783597922
+    monotonic_start_ns = 13345644621314727
+    p50_ns = 80319
+    p90_ns = 84479
+    p99_9_ns = 100159
+    p99_ns = 92031
+    samples = 2000
+    throughput_hz = 12324.134978979186
+    wall_ns = 162283195
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2125881544
+first_use_mode = "selection"
+label = "morfeo_like"
+path_count = 16
+prepared_summary_bytes = 447006
+repetition = 1
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "38a9aeb16292b1d974fb36d3686a09738bdc89b9786b2759d64a9983324aaa81"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "af90631f61f4a0f920643b351dba7407c530b3f796195b505fe692b21d416d7a"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 16
+    command_endpoint_count = 11
+    controllable_optic_count = 11
+    passed = true
+    path_count = 16
+    sampled_aberration_count = 9
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 909170688
+    elapsed_ns = 11178961122
+    gc_ns = 85263600
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2233660063
+first_use_mode = "selection"
+label = "morfeo_like"
+path_count = 16
+prepared_summary_bytes = 447006
+repetition = 2
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "7eeaeedc9a63eb1c35aadeb3bed54e6e683460af4878d963683cdb7c546c987f"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "af90631f61f4a0f920643b351dba7407c530b3f796195b505fe692b21d416d7a"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 16
+    command_endpoint_count = 11
+    controllable_optic_count = 11
+    passed = true
+    path_count = 16
+    sampled_aberration_count = 9
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 909184848
+    elapsed_ns = 11845825131
+    gc_ns = 88388326
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+[[probes]]
+first_invocation_ns = 2078239180
+first_use_mode = "selection"
+label = "morfeo_like"
+path_count = 16
+prepared_summary_bytes = 447006
+repetition = 3
+
+    [probes.allocation]
+
+    [probes.code_proxies.event_entry]
+    method_instance_count = 2
+
+        [probes.code_proxies.event_entry.native_code]
+        sha256 = "22a301356ff8f3a514375c91a240eca3c6ffb8e060693956612f7058a44dfc50"
+        text_bytes = 4087
+
+    [probes.code_proxies.selection_entry]
+    method_instance_count = 1
+
+        [probes.code_proxies.selection_entry.native_code]
+        sha256 = "af90631f61f4a0f920643b351dba7407c530b3f796195b505fe692b21d416d7a"
+        text_bytes = 21913
+
+    [probes.code_proxies.stage_kernels]
+    acquisition_any_slots = 0
+    path_any_slots = 0
+
+    [probes.counts]
+    acquisition_count = 16
+    command_endpoint_count = 11
+    controllable_optic_count = 11
+    passed = true
+    path_count = 16
+    sampled_aberration_count = 9
+
+    [probes.numerical_oracle]
+
+    [probes.preparation]
+    allocated_bytes = 909234648
+    elapsed_ns = 11078236868
+    gc_ns = 85885013
+
+    [probes.service]
+
+    [probes.type_fingerprints.acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.command_endpoint_registry]
+    display_bytes = 61
+    sha256 = "e25aaaf7e9ac58ba247ec9fae912f4424a82e6f763d9d5253c5b07fe733eb0f0"
+
+    [probes.type_fingerprints.controllable_optic_registry]
+    display_bytes = 57
+    sha256 = "edb5efc3f28a690322b2d2404fa0dc0b3c097ed17cb4923b3afb1626f057360b"
+
+    [probes.type_fingerprints.event_loop]
+    display_bytes = 1197
+    sha256 = "6e5eee987dd6004adb37e034ca2b0fc8668f8436e3c48ff4df77956d83eca639"
+
+    [probes.type_fingerprints.event_state]
+    display_bytes = 92
+    sha256 = "11cba079704d5ffd9f03bd9c6371b762154527e65df6f0a77e3c3afe9aa39207"
+
+    [probes.type_fingerprints.event_workspace]
+    display_bytes = 216
+    sha256 = "c964904fe8764a7b529f5b4a20f0893b80b3cfc4fd5d97fb9c7c8736d01e6975"
+
+    [probes.type_fingerprints.path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+    [probes.type_fingerprints.plant_definition]
+    display_bytes = 1054
+    sha256 = "61ffc05c30fee87c9211d32a0a11239f6fd70c93a0aafd8db69afe8c2d14ccb5"
+
+    [probes.type_fingerprints.prepared_plant]
+    display_bytes = 1438
+    sha256 = "404194b846360bfd9889b6ea415faaa46a2ec5a60f546fc8bacfdea1a9dd2e66"
+
+    [probes.type_fingerprints.prepared_rngs]
+    display_bytes = 245
+    sha256 = "fc5211eb4931a1765c576a77a5cfbacea1fafb0609a0f0257b73d7159d3f8b43"
+
+    [probes.type_fingerprints.selection]
+    display_bytes = 1560
+    sha256 = "13c4169a125edcb0d37fce3a8b8535354541fda0cff34bf4b821244e74d7738f"
+
+    [probes.type_fingerprints.selection_acquisition_registry]
+    display_bytes = 56
+    sha256 = "323ea3218fe8ee38835de75e69b16092cdab573b3468c7f07e5a682ee906af05"
+
+    [probes.type_fingerprints.selection_path_registry]
+    display_bytes = 52
+    sha256 = "94d76d528e96302efc83a298fb164acc097562835db2cd25c691a340a9f76893"
+
+[[profile_summaries]]
+label = "development"
+maximum_first_event_invocation_ns = 2975592546
+maximum_first_selection_invocation_ns = 2133639902
+maximum_preparation_allocated_bytes = 883951792
+maximum_preparation_elapsed_ns = 10652266266
+maximum_prepared_summary_bytes = 162894
+maximum_warmed_allocation_bytes_per_cycle = 2816.16
+maximum_warmed_allocation_bytes_per_path_per_cycle = 704.04
+median_first_event_invocation_ns = 2935464829
+median_first_selection_invocation_ns = 2120765570
+median_preparation_allocated_bytes = 883921988
+median_preparation_elapsed_ns = 10589867937
+median_prepared_summary_bytes = 162890
+median_service_p50_ns = 19663
+median_service_p99_ns = 23535
+path_count = 4
+probe_count = 6
+[[profile_summaries]]
+label = "nfiraos_like"
+maximum_first_event_invocation_ns = 2983363145
+maximum_first_selection_invocation_ns = 2133958332
+maximum_preparation_allocated_bytes = 887932240
+maximum_preparation_elapsed_ns = 10797402978
+maximum_prepared_summary_bytes = 257598
+maximum_warmed_allocation_bytes_per_cycle = 5632.16
+maximum_warmed_allocation_bytes_per_path_per_cycle = 704.02
+median_first_event_invocation_ns = 2976805754
+median_first_selection_invocation_ns = 2126251403
+median_preparation_allocated_bytes = 887820088
+median_preparation_elapsed_ns = 10747979064
+median_prepared_summary_bytes = 257594
+median_service_p50_ns = 38911
+median_service_p99_ns = 46847
+path_count = 8
+probe_count = 6
+[[profile_summaries]]
+label = "morfeo_like"
+maximum_first_event_invocation_ns = 2997906193
+maximum_first_selection_invocation_ns = 2233660063
+maximum_preparation_allocated_bytes = 909236280
+maximum_preparation_elapsed_ns = 11845825131
+maximum_prepared_summary_bytes = 447006
+maximum_warmed_allocation_bytes_per_cycle = 11264.16
+maximum_warmed_allocation_bytes_per_path_per_cycle = 704.01
+median_first_event_invocation_ns = 2971335024
+median_first_selection_invocation_ns = 2125881544
+median_preparation_allocated_bytes = 909177768
+median_preparation_elapsed_ns = 11143126102
+median_prepared_summary_bytes = 447002
+median_service_p50_ns = 80319
+median_service_p99_ns = 95871
+path_count = 16
+probe_count = 6
+
+[[topologies]]
+acquisition_count = 4
+command_endpoint_count = 5
+controllable_optic_count = 5
+label = "development"
+path_count = 4
+sampled_aberration_count = 3
+[[topologies]]
+acquisition_count = 8
+command_endpoint_count = 7
+controllable_optic_count = 7
+label = "nfiraos_like"
+path_count = 8
+sampled_aberration_count = 5
+[[topologies]]
+acquisition_count = 16
+command_endpoint_count = 11
+controllable_optic_count = 11
+label = "morfeo_like"
+path_count = 16
+sampled_aberration_count = 9

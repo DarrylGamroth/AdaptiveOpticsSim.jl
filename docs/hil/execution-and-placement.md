@@ -216,6 +216,33 @@ records preparation/compilation latency and generated-code size versus endpoint
 count so low steady-state latency is not purchased with unbounded startup or
 code growth.
 
+The implemented boundary uses fixed-size homogeneous `Memory` registries for
+declared paths, acquisitions, controllable optics, and sampled aberrations;
+prepared command endpoints, optics, paths, acquisitions, and owner RNG groups;
+schedule-free selections; and event-loop execution groups. Per-owner
+`@noinline` barriers recover the concrete path, acquisition, materialization,
+and sampled-aberration pipeline. Small command-schema, path-product,
+acquisition-product, and per-path optical-application tuples remain specialized
+because their cardinality belongs to one bounded owner rather than the whole
+plant. The deliberate heterogeneous-owner barrier has an explicit warmed
+allocation budget; concrete numerical stage kernels retain their stricter
+inference and allocation contracts.
+
+The maintained
+[`benchmark_gate6_topology_growth.jl`](../../benchmarks/benchmark_gate6_topology_growth.jl)
+uses separate fresh Julia processes for event and schedule-free-selection first
+use over predeclared 4-, 8-, and 16-path synthetic shapes. The labels
+`development`, `nfiraos_like`, and `morfeo_like` describe cardinality only and
+make no instrument fidelity, throughput, or capacity claim. The clean
+[`Gate 6 topology-growth artifact`](../../benchmarks/results/gate6/2026-07-25-topology-growth.toml)
+records one type fingerprint for every checked registry and entry type, zero
+method-instance growth, a 1.0 native-code-size ratio, and zero meaningful
+`Any` slots in representative path and acquisition kernels. From 4 to 16
+paths, median fresh preparation time grows by 1.052×, preparation allocation by
+1.029×, and prepared storage by 2.744×; warmed orchestration remains at most
+704.04 Julia heap bytes per path per cycle. The HdrHistogram service-cost
+distributions are diagnostic and establish no fixed-arrival HIL latency claim.
+
 The initial implementation supports two configuration modes with the same
 prepared-plan representation:
 
