@@ -455,14 +455,17 @@ command, optical product, task, queue, execution clock, or wall-clock pacing.
 The HIL-neutral `PreparedPlantEventLoop` now binds its generator handles to
 periodic optical sampling, periodic or delivered-trigger acquisition starts,
 global/rolling/frame-transfer detector transitions, and complete-product
-readiness. At each optical-sample timestamp it first identifies every due path,
-integrates their active detector consumers through that boundary, advances the
-shared atmosphere once, materializes every due path input, and only then forms
-the path results. This preserves one coherent atmosphere epoch and prevents
-declaration order from selecting path state. The composed loop retains fixed
-storage and jumps directly between due timestamps; it still owns no task,
-port, lease, transport, command endpoint, execution clock, or wall-clock
-pacing.
+readiness. At each optical-sample timestamp its explicit bounded batch
+lifecycle identifies and preflights every due path, advances the shared
+atmosphere once, materializes every due path input before sealing the
+atmosphere-read phase, then permits each single-writer path group to integrate
+its consumers and form its next result independently. Completion resolves the
+original sample generators only after every due group finishes. The default
+serial executor invokes those same seams in canonical order, preserving one
+coherent atmosphere epoch and preventing declaration or completion order from
+selecting path state. The composed loop retains fixed storage and jumps
+directly between due timestamps; it still owns no task, port, lease, transport,
+execution clock, or wall-clock pacing.
 
 The scheduler kernel is allocation-free and its maintained CPU
 characterization covers the linear-scan policy from 1 through 256 active
