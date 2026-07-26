@@ -488,9 +488,10 @@ the extension guide. Entry tags do not infer a lamp, relay, instrument, control
 authority, or upstream propagation bypass.
 
 Every controllable optic, sampled aberration, command endpoint, path, and
-acquisition carries an explicit typed identity. Tuples and named tuples
-organize declarations but do not define identity; named keys must match the
-IDs they contain. `PlantDefinition` rejects duplicate
+acquisition carries an explicit typed identity. Tuples, named tuples, and
+vectors organize cold declarations but do not define identity;
+`PlantDefinition` copies them into fixed-size topology registries, and named
+keys must match the IDs they contain. `PlantDefinition` rejects duplicate
 optic/aberration/path/acquisition identities,
 duplicate active schema identities, command endpoints with more than one optic
 owner, and unknown path references with `PlantDefinitionError`.
@@ -658,9 +659,9 @@ derivation does not use Julia's `hash`.
 
 `prepare_acquisition_selection` resolves caller-supplied acquisition IDs once,
 deduplicates only the full-optical paths those providers require, and stores
-both tuples in stable-ID order independent of declaration and caller-selection
-order. Reduced-order and synthetic/replay providers bypass otherwise unused
-full-optical path execution.
+the selected path and acquisition registries in stable-ID order independent of
+declaration and caller-selection order. Reduced-order and synthetic/replay
+providers bypass otherwise unused full-optical path execution.
 `execute_acquisition_selection!` preflights every owner and current
 `AtmosphereEpoch` before mutation, materializes all unique path inputs, applies
 each prepared sampled-aberration plan, invokes each typed path executor once,
