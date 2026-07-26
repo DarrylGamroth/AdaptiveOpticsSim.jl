@@ -37,7 +37,6 @@ struct CPUExecutionBudget{M<:_AbstractCPUExecutionMode}
     group_julia_thread_count::Int
     fft_thread_count::Int
     blas_thread_count::Int
-    mode::M
 
     function CPUExecutionBudget(
         cpu_context_count::Int,
@@ -46,7 +45,7 @@ struct CPUExecutionBudget{M<:_AbstractCPUExecutionMode}
         group_julia_thread_count::Int,
         fft_thread_count::Int,
         blas_thread_count::Int,
-        mode::M,
+        ::M,
         ::_CPUExecutionBudgetToken,
     ) where {M<:_AbstractCPUExecutionMode}
         return new{M}(
@@ -56,7 +55,6 @@ struct CPUExecutionBudget{M<:_AbstractCPUExecutionMode}
             group_julia_thread_count,
             fft_thread_count,
             blas_thread_count,
-            mode,
         )
     end
 end
