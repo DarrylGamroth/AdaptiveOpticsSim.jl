@@ -765,6 +765,18 @@ end
         @test incomplete_error.reason ==
             :incomplete_optical_path_batch_execution
 
+        sealed_epoch = current_epoch(batch_prepared.atmosphere)
+        advanced_epoch = advance_to!(
+            batch_prepared.atmosphere,
+            0.001;
+            rng=Xoshiro(0x7a0f),
+        )
+        @test epoch_sequence(advanced_epoch) >
+            epoch_sequence(sealed_epoch)
+        @test Plant.optical_path_batch_epoch(
+            batch_prepared, batch_state, batch_workspace, claim) ==
+            sealed_epoch
+
         for ordinal in 3:-1:1
             Plant.execute_path_execution_group!(
                 batch_prepared, batch_state, batch_workspace, claim,
