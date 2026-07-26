@@ -163,11 +163,14 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    cross-platform package, ownership-stress, coverage, and benchmark-contract
    matrix at companion revision `9574432`. Gate 7 begins by separating
    semantic backend family from concrete compute-device identity and exposing
-   each prepared path group's immutable backend/device requirements.
-   Single-GPU direction and wavelength batching remains behind its own
-   numerical, allocation, residency, synchronization, and service-cost
-   evidence; fixed-arrival evidence is additionally required before any HIL
-   latency promotion.
+   each prepared path group's immutable backend/device requirements. Finite
+   and infinite multilayer atmospheres now provide homogeneous
+   single-device direction batching with an exact serial CPU oracle,
+   device-resident geometry/output, whole-batch preflight, and explicit
+   completion. Wavelength and downstream optical-product batching, one
+   backend resource owner, and the integrated model/first-use/service-cost
+   matrix remain behind their own evidence; fixed-arrival evidence is
+   additionally required before any HIL latency promotion.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,
    and GC/process-isolation policy. Add explicit or constrained deterministic

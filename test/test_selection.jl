@@ -21,6 +21,11 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("core-optics", "testsets/core_optics.jl"),
     TestSuiteSpec("direct-science", "testsets/direct_science.jl"),
     TestSuiteSpec("atmosphere", "testsets/atmosphere.jl"),
+    TestSuiteSpec(
+        "atmosphere-direction-batch",
+        "testsets/atmosphere_direction_batch.jl",
+        fixtures=("wfs_stage_contract_fixtures.jl",),
+    ),
     TestSuiteSpec("plant-topology", "testsets/plant_topology.jl"),
     TestSuiteSpec(
         "plant-topology-growth",
@@ -103,7 +108,12 @@ const TEST_SUITE_SPECS = (
 )
 
 const TEST_GROUP_SPECS = (
-    "core" => ("core-optics", "direct-science", "atmosphere"),
+    "core" => (
+        "core-optics",
+        "direct-science",
+        "atmosphere",
+        "atmosphere-direction-batch",
+    ),
     "plant" => (
         "plant-topology",
         "plant-topology-growth",

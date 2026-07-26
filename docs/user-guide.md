@@ -182,6 +182,34 @@ bound to one atmosphere and one frozen source direction; it can render the
 current epoch repeatedly without advancing time or consuming RNG. Use
 `prepare_atmosphere_renderers` for an `Asterism` or `ExtendedSource`.
 
+For several compatible directions on one finite or infinite multilayer
+atmosphere, prepare one caller-owned OPD stack instead:
+
+```julia
+directions = Asterism([ngs, lgs, science_source])
+opd_stack = Array{Float64}(
+    undef,
+    tel.params.resolution,
+    tel.params.resolution,
+    length(directions),
+)
+batch = prepare_atmosphere_direction_batch(
+    atm,
+    tel,
+    directions,
+    opd_stack,
+)
+render_atmosphere_directions!(batch, atm, epoch)
+```
+
+The third axis retains the prepared direction order; each slice is atmospheric
+OPD in metres on the shared pupil-plane grid. CPU execution deliberately uses
+the ordinary serial direction algorithm. Accelerator execution retains output,
+pupil support, and direction/layer geometry on one concrete device and submits
+one three-dimensional extraction kernel per atmosphere layer. Preparation
+rejects incompatible grid, numeric type, backend, device, capacity, or
+unsupported atmosphere model rather than silently splitting a batch.
+
 For HIL or RTC export, attach a detector and request the detector image after
 measurement. `bits` defines the quantization depth, `full_well` defines the
 analog-to-digital scaling, and `output_type` defines the Julia array element

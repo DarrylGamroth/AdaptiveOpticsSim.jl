@@ -2995,6 +2995,97 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     return nothing
 end
 
+function optional_atmosphere_direction_batch_allocation_bytes(
+    prepared,
+    atm,
+    epoch,
+)
+    render_atmosphere_directions!(prepared, atm, epoch)
+    validation_bytes = @allocated(
+        AdaptiveOpticsSim.validate_atmosphere_direction_batch(
+            prepared,
+            atm,
+            epoch,
+        ),
+    )
+    completed_render_bytes =
+        @allocated render_atmosphere_directions!(prepared, atm, epoch)
+    return (; validation_bytes, completed_render_bytes)
+end
+
+function run_optional_atmosphere_direction_batch_checks(
+    atm::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    tel::Telescope,
+    sources::Asterism,
+    epoch::AtmosphereEpoch,
+    BackendArray,
+)
+    T = AdaptiveOpticsSim.atmosphere_numeric_type(atm)
+    n = tel.params.resolution
+    output = BackendArray{T}(undef, n, n, length(sources))
+    prepared = prepare_atmosphere_direction_batch(
+        atm,
+        tel,
+        sources,
+        output,
+    )
+    rendered = render_atmosphere_directions!(prepared, atm, epoch)
+    @test rendered === output
+    @test atmosphere_direction_output(prepared) === output
+    @test prepared.workspace.shift_x isa BackendArray
+    @test prepared.workspace.shift_y isa BackendArray
+    @test prepared.workspace.footprint_scale isa BackendArray
+    @test prepared.workspace.pupil isa BackendArray
+    @test compute_device(output) == compute_device(prepared.workspace.shift_x)
+    @test compute_device(output) == compute_device(prepared.workspace.shift_y)
+    @test compute_device(output) ==
+        compute_device(prepared.workspace.footprint_scale)
+    @test compute_device(output) == compute_device(prepared.workspace.pupil)
+    @test prepared.params.layer_count < prepared.params.layer_count *
+        prepared.params.direction_count
+
+    host_output = Array(output)
+    @inbounds for direction in eachindex(prepared.params.sources)
+        pupil = PupilFunction(tel; T=T, backend=backend(tel))
+        renderer = prepare_atmosphere_renderer(
+            atm,
+            tel,
+            prepared.params.sources[direction];
+            T=T,
+        )
+        render_atmosphere!(pupil, renderer, atm, epoch)
+        @test isapprox(
+            @view(host_output[:, :, direction]),
+            Array(pupil.opd);
+            rtol=T(2e-5),
+            atol=T(2e-6),
+        )
+    end
+
+    allocation_bytes =
+        optional_atmosphere_direction_batch_allocation_bytes(
+            prepared,
+            atm,
+            epoch,
+        )
+    @test allocation_bytes.validation_bytes == 0
+    # KernelAbstractions and the owning GPU runtime allocate small host-side
+    # launch descriptors even after kernel compilation. Keep that separately
+    # bounded from the zero-allocation prepared-contract validation and from
+    # device-resident data-plane storage.
+    @test allocation_bytes.completed_render_bytes <= 64 * 1024
+
+    host_destination = fill(T(37), n, n, length(sources))
+    @test_throws InvalidConfiguration prepare_atmosphere_direction_batch(
+        atm,
+        tel,
+        sources,
+        host_destination,
+    )
+    @test all(==(T(37)), host_destination)
+    return nothing
+end
+
 function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     pkg = backend_package_name(B)
     pkg_path = Base.find_package(pkg)
@@ -3063,6 +3154,34 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     render_atmosphere!(atmosphere_output, renderer, atm, epoch)
     @test atm.layers[1].generator.state.opd isa BackendArray
     @test atmosphere_output.opd isa BackendArray
+    direction_sources = Asterism(AdaptiveOpticsSim.AbstractSource[
+        src,
+        Source(
+            band=:I,
+            magnitude=zero(T),
+            coordinates=(T(6), T(35)),
+            T=T,
+        ),
+        LGSSource(
+            magnitude=zero(T),
+            coordinates=(T(-9), T(70)),
+            altitude=T(90_000),
+            T=T,
+        ),
+        Source(
+            band=:K,
+            magnitude=one(T),
+            coordinates=(T(5), T(120)),
+            T=T,
+        ),
+    ])
+    run_optional_atmosphere_direction_batch_checks(
+        atm,
+        tel,
+        direction_sources,
+        epoch,
+        BackendArray,
+    )
     pupil = PupilFunction(tel; T=T, backend=selector)
     copyto!(pupil.opd, atmosphere_output.opd)
 
@@ -3084,6 +3203,13 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         infinite_epoch)
     @test inf_atm.layers[1].screen.state.screen isa BackendArray
     @test atmosphere_output.opd isa BackendArray
+    run_optional_atmosphere_direction_batch_checks(
+        inf_atm,
+        tel,
+        direction_sources,
+        infinite_epoch,
+        BackendArray,
+    )
 
     prop = AtmosphericFieldPropagation(atm, pupil, src;
         model=GeometricAtmosphericPropagation(T=T),

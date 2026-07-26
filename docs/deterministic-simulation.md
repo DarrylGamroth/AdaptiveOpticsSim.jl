@@ -52,7 +52,11 @@ RNG. A zero-duration advance after initialization returns the current epoch
 without changing the RNG stream or epoch sequence. For order-independent
 multi-path replay, prepare one renderer per direction and render the same
 current epoch in any order before that atmosphere advances, or replay from
-separately retained model state.
+separately retained model state. For a homogeneous finite or infinite
+multilayer direction set, `prepare_atmosphere_direction_batch` instead freezes
+the direction axis and `render_atmosphere_directions!` materializes every
+slice from that same current epoch. Its CPU result is exactly the ordered
+single-direction result and repeated rendering consumes no RNG.
 
 For reference-data refreshes:
 

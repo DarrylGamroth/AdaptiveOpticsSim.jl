@@ -742,7 +742,9 @@ RTC transport, port, task, command endpoint, or parallel placement policy.
 - Explicit evolution: `advance_by!`, `advance_to!`
 - Direction preparation: `prepare_atmosphere_renderer`,
   `prepare_atmosphere_renderers`, `direction_renderers`
-- Caller-owned rendering: `render_atmosphere!`
+- Homogeneous direction batching: `prepare_atmosphere_direction_batch`,
+  `render_atmosphere_directions!`, `atmosphere_direction_output`
+- Caller-owned single-direction rendering: `render_atmosphere!`
 - Field execution: `propagate_atmosphere_field!`, `atmospheric_intensity!`
 - Static extension verbs: `advance!`, `propagate!`
 
@@ -753,6 +755,15 @@ single-direction renderer consumes the current epoch, writes a compatible
 caller-owned `PupilFunction`, and neither advances the atmosphere nor consumes RNG. The
 plural preparation API expands an `Asterism` or `ExtendedSource`; the singular
 API rejects multi-direction sources.
+
+`prepare_atmosphere_direction_batch` freezes the direction order and binds a
+caller-owned `(pupil axis 1, pupil axis 2, direction)` atmospheric OPD stack.
+Finite and infinite multilayer models support this capability. The prepared
+contract fixes atmosphere and layer identity, source geometry, pupil grid,
+numeric type, backend, concrete compute device, and capacity. Complete
+validation precedes output mutation. CPU execution remains the serial
+single-direction oracle; accelerator execution uses device-resident geometry
+and establishes an explicit device-ready completion boundary.
 
 Maintained timed atmospheres require prepared renderers and
 `render_atmosphere!`. `propagate!(atmosphere, pupil[, source])` and `advance!`

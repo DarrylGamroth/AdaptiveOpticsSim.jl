@@ -264,6 +264,19 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :advance_by!)
     @test Base.isexported(AdaptiveOpticsSim, :advance_to!)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_atmosphere_renderer)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :prepare_atmosphere_direction_batch)
+    @test Base.isexported(AdaptiveOpticsSim,
+        :render_atmosphere_directions!)
+    @test Base.isexported(AdaptiveOpticsSim, :atmosphere_direction_output)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :PreparedAtmosphereDirectionBatch)
+    @test Base.ispublic(AdaptiveOpticsSim,
+        :PreparedAtmosphereDirectionBatch)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :AbstractAtmosphereDirectionBatchCapability)
+    @test Base.ispublic(AdaptiveOpticsSim,
+        :AbstractAtmosphereDirectionBatchCapability)
     @test Base.isexported(AdaptiveOpticsSim, :render_atmosphere!)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeParams)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeState)
