@@ -128,6 +128,10 @@ for the still-planned addressable multi-device random domain.
 - Use fixed seeds.
 - Run with one Julia thread, one BLAS thread, and one FFT-provider thread when
   strict reproducibility matters.
+- For prepared plant execution, use
+  `Plant.deterministic_cpu_execution_budget()` and validate it against an
+  explicit `Plant.CPUExecutionEnvironment` before the run. Validation records
+  and checks configuration; it does not change process-global thread settings.
 - Use `DeterministicExecution()` for a `SimulationEnsemble`. It rejects a
   multi-threaded Julia process and configures BLAS and the FFT provider for one
   thread before execution.

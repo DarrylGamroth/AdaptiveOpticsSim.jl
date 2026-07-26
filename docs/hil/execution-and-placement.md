@@ -183,6 +183,24 @@ The per-group status array assumes the declared single writer and is inspected
 by the coordinator only after the external completion mechanism establishes
 synchronization; it is not itself a cross-thread completion queue.
 
+`CPUExecutionBudget` is the qualified-public admission contract for one CPU
+path-group execution domain. `deterministic_cpu_execution_budget()` fixes one
+admitted context, Julia thread, group owner, group-local Julia thread,
+FFT-provider thread, and BLAS thread. `grouped_cpu_execution_budget` instead
+declares the admitted CPU contexts, Julia default-pool size, maximum simultaneous
+group owners, group-local Julia parallelism, and total FFT and BLAS threads that
+one owner may use. Construction rejects outer or nested counts whose worst-case
+simultaneous use exceeds the declared Julia pool or admitted contexts.
+
+`CPUExecutionEnvironment` records the caller's observed Julia, FFT-provider, and
+BLAS settings plus the CPU contexts actually admitted by launcher, affinity,
+cgroup, NUMA, and reserved-service policy. `validate_cpu_execution_budget`
+checks the declaration against that observation without changing any
+process-global setting. Core cannot portably infer an FFT provider's configured
+thread count or which host-reported logical CPUs the deployment has reserved, so
+those values remain explicit. The HIL runtime still owns worker construction,
+pinning, and verification of the resulting mapping.
+
 The initial lifecycle has exactly one fixed path-local materialized-product
 slot per prepared group and therefore does not pipeline two timestamps through
 one group. It implements the hold-until-materialized policy, not retained
@@ -271,7 +289,12 @@ CPU HIL execution should use direct calls or long-lived prepared workers with
 static or deadline-aware branch ownership. It should not create a new task graph
 for every acquisition event. Parallelism remains coarse over due paths; FFT,
 BLAS, and Julia worker counts must be configured together to avoid nested
-parallelism and oversubscription.
+parallelism and oversubscription. The maintained four-thread proof uses one
+coordinator plus three fixed, reusable path-group tasks, perturbs group
+submission order over an unequal-rate science/NGS/LGS run, and compares exact
+discrete state, CPU products, and RNG streams with the serial oracle. Its
+`Channel` synchronization is test scaffolding, not the production HIL data
+plane; Gate 8 still owns bounded SPSC completion paths.
 
 On large EPYC or Threadripper systems, placement should account for NUMA nodes,
 physical cores, SMT siblings, memory allocation, NIC queues, and interrupts.
