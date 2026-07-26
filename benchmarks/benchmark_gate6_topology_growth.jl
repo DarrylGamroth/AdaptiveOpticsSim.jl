@@ -581,6 +581,17 @@ function run_gate6_topology_growth_benchmark()
                         directory,
                         "$(label)-$(first_use_mode)-$(repetition).toml",
                     )
+                    println(
+                        "running ",
+                        label,
+                        " ",
+                        first_use_mode,
+                        " probe ",
+                        repetition,
+                        "/",
+                        repetitions,
+                    )
+                    flush(stdout)
                     command = `$(Base.julia_cmd()) --threads=1 --startup-file=no --project=$(@__DIR__) $(@__FILE__) --child $(abspath(GATE6_TOPOLOGY_CONTRACT_PATH)) $label $path_count $first_use_mode $repetition $samples $warmup_cycles $allocation_cycles $output_path`
                     run(command)
                     push!(probes, TOML.parsefile(output_path))
