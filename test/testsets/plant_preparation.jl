@@ -55,10 +55,11 @@ function run_selected_acquisition_materialization_tests()
         [:slow_science, :ngs_frame, :fast_science, :lgs_frame])
 
     @test selection isa Plant.PreparedAcquisitionSelection
-    @test map(path -> path_id(path.definition), prepared_paths(selection)) ==
+    @test Tuple(map(path -> path_id(path.definition),
+        prepared_paths(selection))) ==
         (OpticalPathID(:lgs), OpticalPathID(:ngs), OpticalPathID(:science))
-    @test map(owner -> acquisition_id(owner.definition),
-        prepared_acquisitions(selection)) == (
+    @test Tuple(map(owner -> acquisition_id(owner.definition),
+        prepared_acquisitions(selection))) == (
         AcquisitionID(:fast_science),
         AcquisitionID(:lgs_frame),
         AcquisitionID(:ngs_frame),
@@ -192,8 +193,15 @@ function run_selected_acquisition_materialization_tests()
         @test_skip "selected-execution allocation assertion is disabled under coverage instrumentation"
     else
         allocation_epoch = current_epoch(atmosphere)
-        @test prepared_selection_execution_allocations(selection,
-            allocation_epoch) == 0
+        allocation_bytes = prepared_selection_execution_allocations(
+            selection, allocation_epoch)
+        selected_owner_count = length(prepared_paths(selection)) +
+            length(prepared_acquisitions(selection))
+        # Whole-plant registries cross one heterogeneous dispatch barrier per
+        # owner so topology cardinality does not enter the prepared type.
+        # Concrete path and acquisition kernels remain allocation-free; this
+        # gate bounds only the Julia 1.12 barrier boxing.
+        @test allocation_bytes <= 256 * selected_owner_count
     end
 
     retained_inputs = map(
@@ -576,8 +584,9 @@ end
 
     plant = prepare_plant(definition; run_seed=0x5000)
     @test plant isa PreparedPlant
-    @test prepared_paths(plant) isa Tuple
-    @test prepared_acquisitions(plant) isa Tuple
+    @test prepared_paths(plant) isa Memory{PreparedPathExecutor}
+    @test prepared_acquisitions(plant) isa
+        Memory{PreparedAcquisitionOwner}
     @test length(prepared_paths(plant)) == 2
     @test length(prepared_acquisitions(plant)) == 3
     @test isconcretetype(typeof(prepared_paths(plant)))

@@ -29,6 +29,8 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-topology"])) == ("plant-topology",)
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["plant-topology-growth"])) == ("plant-topology-growth",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-command-schemas"])) == ("plant-command-schemas",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-command-admission"])) == ("plant-command-admission",)
@@ -75,6 +77,7 @@ end
         )
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
         "plant-topology",
+        "plant-topology-growth",
         "plant-command-schemas",
         "plant-command-admission",
         "plant-command-application",
@@ -101,6 +104,7 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant", "plant-topology", "plant"])) == (
         "plant-topology",
+        "plant-topology-growth",
         "plant-command-schemas",
         "plant-command-admission",
         "plant-command-application",
@@ -132,6 +136,7 @@ end
     @test isnothing(print_test_suite_help(listing))
     listing_text = String(take!(listing))
     @test occursin("plant-topology", listing_text)
+    @test occursin("plant-topology-growth", listing_text)
     @test occursin("plant-command-schemas", listing_text)
     @test occursin("plant-command-admission", listing_text)
     @test occursin("plant-command-application", listing_text)

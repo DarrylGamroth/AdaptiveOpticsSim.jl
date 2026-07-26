@@ -648,7 +648,13 @@ end
             rng) == 0
         @test illumination_evaluation_allocations(alpha_entry, T(0.02),
             rng) == 0
-        @test illumination_selection_execution_allocations(native_selection,
-            current_epoch(plant_atmosphere(native_plant.definition))) == 0
+        selection_bytes = illumination_selection_execution_allocations(
+            native_selection,
+            current_epoch(plant_atmosphere(native_plant.definition)),
+        )
+        selected_owner_count =
+            length(prepared_paths(native_selection)) +
+            length(prepared_acquisitions(native_selection))
+        @test selection_bytes <= 256 * selected_owner_count
     end
 end

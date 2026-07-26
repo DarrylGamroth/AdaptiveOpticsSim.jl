@@ -122,12 +122,12 @@ struct PreparedAtmosphereRNGs{B,O<:Tuple,S<:Tuple}
     streams::S
 end
 
-struct PreparedPlantRNGs{A,P<:Tuple,Q<:Tuple}
+struct PreparedPlantRNGs{A}
     run_seed::UInt64
     derivation_version::RNGDerivationVersion
     atmosphere::A
-    paths::P
-    acquisitions::Q
+    paths::Memory{PreparedOwnerRNGs}
+    acquisitions::Memory{PreparedOwnerRNGs}
 end
 
 @inline rng_stream(group::PreparedOwnerRNGs, ::Val{role}) where {role} =
@@ -288,14 +288,7 @@ end
     atmosphere::InfiniteMultiLayerAtmosphere) =
     _multilayer_rng_owner_bindings(atmosphere)
 
-@inline _flatten_rng_binding_groups(::Tuple{}) = ()
-
-@inline function _flatten_rng_binding_groups(groups::Tuple)
-    return (first(groups)...,
-        _flatten_rng_binding_groups(Base.tail(groups))...)
-end
-
-function _require_unique_rng_owner_identities(bindings::Tuple)
+function _require_unique_rng_owner_identities(bindings)
     @inbounds for index in eachindex(bindings)
         identity = bindings[index].identity
         for previous in firstindex(bindings):(index - 1)
@@ -307,7 +300,7 @@ function _require_unique_rng_owner_identities(bindings::Tuple)
     return bindings
 end
 
-function _require_unique_rng_stream_seeds(bindings::Tuple,
+function _require_unique_rng_stream_seeds(bindings,
     run_seed::UInt64, version::RNGDerivationVersion)
     @inbounds for index in eachindex(bindings)
         seed = _derive_rng_stream_seed(run_seed, version,
@@ -332,16 +325,14 @@ function _prepare_owner_rngs(bindings::Tuple, run_seed::UInt64,
         NamedTuple{roles}(streams))
 end
 
-@inline _prepare_owner_rng_groups(::Tuple{}, ::UInt64,
-    ::RNGDerivationVersion) = ()
-
-@inline function _prepare_owner_rng_groups(bindings::Tuple,
+function _prepare_owner_rng_groups(bindings::AbstractVector,
     run_seed::UInt64, version::RNGDerivationVersion)
-    return (
-        _prepare_owner_rngs(first(bindings), run_seed, version),
-        _prepare_owner_rng_groups(Base.tail(bindings), run_seed,
-            version)...,
-    )
+    groups = Memory{PreparedOwnerRNGs}(undef, length(bindings))
+    @inbounds for index in eachindex(bindings)
+        groups[index] = _prepare_owner_rngs(
+            bindings[index], run_seed, version)
+    end
+    return groups
 end
 
 function _prepare_atmosphere_rngs(atmosphere, bindings::Tuple,
@@ -516,13 +507,6 @@ end
 
 @inline _rng_group_streams(group::PreparedOwnerRNGs) = values(group.streams)
 
-@inline _flatten_rng_group_streams(::Tuple{}) = ()
-
-@inline function _flatten_rng_group_streams(groups::Tuple)
-    return (_rng_group_streams(first(groups))...,
-        _flatten_rng_group_streams(Base.tail(groups))...)
-end
-
 @inline function _rng_stream_metadata(stream::PreparedRNGStream)
     identity = stream.identity
     return (
@@ -539,18 +523,31 @@ end
 end
 
 function _rng_replay_metadata(rngs::PreparedPlantRNGs)
-    streams = (
-        rngs.atmosphere.streams...,
-        _flatten_rng_group_streams(rngs.paths)...,
-        _flatten_rng_group_streams(rngs.acquisitions)...,
-    )
-    owners = collect(map(_rng_stream_metadata, streams))
+    owners = NamedTuple[]
+    sizehint!(owners, length(rngs.atmosphere.streams) +
+        sum(group -> length(group.streams), rngs.paths; init=0) +
+        sum(group -> length(group.streams), rngs.acquisitions; init=0))
+    for stream in rngs.atmosphere.streams
+        push!(owners, _rng_stream_metadata(stream))
+    end
+    for group in rngs.paths
+        for stream in _rng_group_streams(group)
+            push!(owners, _rng_stream_metadata(stream))
+        end
+    end
+    for group in rngs.acquisitions
+        for stream in _rng_group_streams(group)
+            push!(owners, _rng_stream_metadata(stream))
+        end
+    end
     sort!(owners; by=_rng_metadata_order)
+    owned = Memory{NamedTuple}(undef, length(owners))
+    copyto!(owned, owners)
     return (
         run_seed=rngs.run_seed,
         derivation_version=rngs.derivation_version.value,
         derivation_algorithm=_RNG_DERIVATION_ALGORITHM,
         stream_algorithm=_RNG_STREAM_ALGORITHM,
-        owners=Tuple(owners),
+        owners=owned,
     )
 end

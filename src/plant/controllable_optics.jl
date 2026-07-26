@@ -336,8 +336,8 @@ function _prepare_plant_command_endpoints(definition::PlantDefinition,
             :configuration_count,
             "plant declares $(length(declared)) command endpoints but " *
             "$(length(configurations)) run configurations were supplied"))
-    endpoints = Any[]
-    sizehint!(endpoints, length(declared))
+    endpoints = Memory{_PreparedPlantCommandEndpoint}(
+        undef, length(declared))
     for (ordinal, (owner, schema)) in enumerate(declared)
         configuration = _command_endpoint_configuration(configurations,
             command_endpoint_id(schema))
@@ -351,10 +351,10 @@ function _prepare_plant_command_endpoints(definition::PlantDefinition,
         safe = _copy_prepared_safe_command(endpoint,
             configuration.safe_command)
         optic_slot = _controllable_optic_slot(optic_definitions, owner)
-        push!(endpoints, _PreparedPlantCommandEndpoint(endpoint,
-            UInt32(optic_slot), initial, safe))
+        endpoints[ordinal] = _PreparedPlantCommandEndpoint(
+            endpoint, UInt32(optic_slot), initial, safe)
     end
-    return Tuple(endpoints)
+    return endpoints
 end
 
 function _prepared_command_endpoint_slot(endpoints,
@@ -370,9 +370,10 @@ function _prepare_controllable_optics(definition::PlantDefinition,
     optic_definitions, endpoints)
     telescope = plant_telescope(definition)
     atmosphere = plant_atmosphere(definition)
-    optics = Any[]
-    sizehint!(optics, length(optic_definitions))
-    for optic_definition in optic_definitions
+    optics = Memory{PreparedControllableOptic}(
+        undef, length(optic_definitions))
+    for index in eachindex(optic_definitions)
+        optic_definition = optic_definitions[index]
         implementation = prepare_controllable_optic(
             controllable_optic_model(optic_definition), optic_definition,
             telescope, atmosphere)
@@ -390,11 +391,11 @@ function _prepare_controllable_optics(definition::PlantDefinition,
             _prepared_command_endpoint_slot(endpoints,
                 command_endpoint_id(schema))
         end
-        push!(optics, PreparedControllableOptic(
+        optics[index] = PreparedControllableOptic(
             _PREPARED_CONTROLLABLE_OPTIC_TOKEN, optic_definition,
-            implementation, slots))
+            implementation, slots)
     end
-    return Tuple(optics)
+    return optics
 end
 
 struct _PreparedControllableOpticPathBindingsToken end
@@ -462,7 +463,7 @@ function _optic_binding_memory(values::Vector{T}) where {T}
     return result
 end
 
-function _canonical_prepared_path_slots(paths::Tuple)
+function _canonical_prepared_path_slots(paths::AbstractVector)
     slots = collect(eachindex(paths))
     sort!(slots; by=slot ->
         String(path_id(paths[slot].definition).name))
@@ -470,7 +471,7 @@ function _canonical_prepared_path_slots(paths::Tuple)
 end
 
 @inline function _optic_binding_slot_isless(left::UInt32, right::UInt32,
-    optics::Tuple)
+    optics::AbstractVector)
     left_optic = optics[Int(left)]
     right_optic = optics[Int(right)]
     left_placement = controllable_optic_placement(left_optic)
@@ -483,7 +484,7 @@ end
 end
 
 function _visible_prepared_optic_slots(
-    optics::Tuple, path::OpticalPathID)
+    optics::AbstractVector, path::OpticalPathID)
     slots = UInt32[]
     sizehint!(slots, length(optics))
     @inbounds for slot in eachindex(optics)
@@ -505,7 +506,7 @@ function _append_prepared_optic_plane_groups!(
     optic_slots::Vector{UInt32},
     visible_slots::Vector{UInt32},
     path_slot::UInt32,
-    optics::Tuple,
+    optics::AbstractVector,
 )
     isempty(visible_slots) && return nothing
     first_binding = length(optic_slots) + 1
@@ -535,7 +536,7 @@ function _append_prepared_optic_plane_groups!(
 end
 
 function _prepare_controllable_optic_path_bindings(
-    optics::Tuple, paths::Tuple)
+    optics::AbstractVector, paths::AbstractVector)
     length(paths) <= typemax(UInt32) || throw(PlantPreparationError(
         :path, :capacity, "prepared path count exceeds UInt32 capacity"))
     canonical_path_slots = _canonical_prepared_path_slots(paths)

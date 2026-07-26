@@ -355,7 +355,7 @@ end
 
     nonoptical_selection = prepare_acquisition_selection(plant,
         (:reduced, :unchanged, :copied, :replay))
-    @test prepared_paths(nonoptical_selection) === ()
+    @test isempty(prepared_paths(nonoptical_selection))
     @test path.execution.executions[] == 0
     @test execute_acquisition_selection_at!(nonoptical_selection,
         T(0.01)) === nonoptical_selection
@@ -395,7 +395,7 @@ end
         T(7) * pixel_count
 
     full_selection = prepare_acquisition_selection(plant, :full)
-    @test prepared_paths(full_selection) == (path,)
+    @test Tuple(prepared_paths(full_selection)) == (path,)
     @test execute_acquisition_selection!(full_selection,
         current_epoch(atmosphere)) === full_selection
     @test path.execution.executions[] == 1

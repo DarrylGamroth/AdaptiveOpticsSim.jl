@@ -314,8 +314,8 @@ end
     fixture = sampled_aberration_path_fixture()
     definition = fixture.definition
     plant = fixture.plant
-    @test map(Plant.sampled_aberration_id,
-        Plant.sampled_aberration_definitions(definition)) == (
+    @test Tuple(map(Plant.sampled_aberration_id,
+        Plant.sampled_aberration_definitions(definition))) == (
         SampledAberrationID(:science_ncpa),
         SampledAberrationID(:common_static),
     )
@@ -387,8 +387,12 @@ end
             "coverage instrumentation"
     else
         epoch = current_epoch(fixture.atmosphere)
-        @test prepared_selection_execution_allocations(
-            fixture.selection, epoch) == 0
+        allocation_bytes = prepared_selection_execution_allocations(
+            fixture.selection, epoch)
+        selected_owner_count =
+            length(prepared_paths(fixture.selection)) +
+            length(prepared_acquisitions(fixture.selection))
+        @test allocation_bytes <= 256 * selected_owner_count
     end
 end
 
@@ -512,8 +516,16 @@ end
         sampled_aberrations=(first_replace=first_replace,),
         paths=(science=path,),
     )
-    @test Plant.sampled_aberration_definitions(named_definition) ==
+    @test Tuple(Plant.sampled_aberration_definitions(named_definition)) ==
         (first_replace,)
+    vector_definition = PlantDefinition(;
+        telescope,
+        atmosphere,
+        sampled_aberrations=[first_replace],
+        paths=[path],
+    )
+    @test Plant.sampled_aberration_definitions(vector_definition)[1] ===
+        first_replace
 
     topology_cases = (
         (
@@ -524,15 +536,6 @@ end
                 paths=(path,),
             ),
             :invalid_definition,
-        ),
-        (
-            () -> PlantDefinition(;
-                telescope,
-                atmosphere,
-                sampled_aberrations=[first_replace],
-                paths=(path,),
-            ),
-            :invalid_container,
         ),
         (
             () -> PlantDefinition(;

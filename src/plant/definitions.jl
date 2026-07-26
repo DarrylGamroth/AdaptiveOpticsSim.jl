@@ -550,67 +550,90 @@ function _require_named_sampled_aberration_identity(
     return nothing
 end
 
-function _normalize_path_definitions(paths::Tuple)
-    foreach(_require_path_definition, paths)
-    return paths
+function _definition_memory(values, ::Type{T}, validator) where {T}
+    memory = Memory{T}(undef, length(values))
+    @inbounds for (index, value) in enumerate(values)
+        validator(value)
+        memory[index] = value
+    end
+    return memory
+end
+
+function _normalize_path_definitions(
+    paths::Union{Tuple,AbstractVector},
+)
+    return _definition_memory(
+        paths, OpticalPathDefinition, _require_path_definition)
 end
 
 function _normalize_path_definitions(paths::NamedTuple)
-    foreach(_require_path_definition, values(paths))
-    foreach(_require_named_path_identity, keys(paths), values(paths))
-    return values(paths)
+    normalized = _definition_memory(
+        values(paths), OpticalPathDefinition, _require_path_definition)
+    foreach(_require_named_path_identity, keys(paths), normalized)
+    return normalized
 end
 
 function _normalize_path_definitions(paths)
     throw(PlantDefinitionError(:path, :invalid_container,
-        "plant paths must be a Tuple or NamedTuple; got $(typeof(paths))"))
+        "plant paths must be a Tuple, NamedTuple, or AbstractVector; got " *
+        "$(typeof(paths))"))
 end
 
-function _normalize_acquisition_definitions(acquisitions::Tuple)
-    foreach(_require_acquisition_definition, acquisitions)
-    return acquisitions
+function _normalize_acquisition_definitions(
+    acquisitions::Union{Tuple,AbstractVector},
+)
+    return _definition_memory(acquisitions, AcquisitionDefinition,
+        _require_acquisition_definition)
 end
 
 function _normalize_acquisition_definitions(acquisitions::NamedTuple)
-    foreach(_require_acquisition_definition, values(acquisitions))
+    normalized = _definition_memory(values(acquisitions),
+        AcquisitionDefinition, _require_acquisition_definition)
     foreach(_require_named_acquisition_identity, keys(acquisitions),
-        values(acquisitions))
-    return values(acquisitions)
+        normalized)
+    return normalized
 end
 
 function _normalize_acquisition_definitions(acquisitions)
     throw(PlantDefinitionError(:acquisition, :invalid_container,
-        "plant acquisitions must be a Tuple or NamedTuple; got " *
-        "$(typeof(acquisitions))"))
+        "plant acquisitions must be a Tuple, NamedTuple, or AbstractVector; " *
+        "got $(typeof(acquisitions))"))
 end
 
-function _normalize_controllable_optic_definitions(optics::Tuple)
-    foreach(_require_controllable_optic_definition, optics)
-    return optics
+function _normalize_controllable_optic_definitions(
+    optics::Union{Tuple,AbstractVector},
+)
+    return _definition_memory(optics, ControllableOpticDefinition,
+        _require_controllable_optic_definition)
 end
 
 function _normalize_controllable_optic_definitions(optics::NamedTuple)
-    foreach(_require_controllable_optic_definition, values(optics))
+    normalized = _definition_memory(values(optics),
+        ControllableOpticDefinition,
+        _require_controllable_optic_definition)
     foreach(_require_named_controllable_optic_identity, keys(optics),
-        values(optics))
-    return values(optics)
+        normalized)
+    return normalized
 end
 
 function _normalize_controllable_optic_definitions(optics)
     throw(PlantDefinitionError(:controllable_optic, :invalid_container,
-        "plant controllable optics must be a Tuple or NamedTuple; got " *
-        "$(typeof(optics))"))
+        "plant controllable optics must be a Tuple, NamedTuple, or " *
+        "AbstractVector; got $(typeof(optics))"))
 end
 
-function _normalize_sampled_aberration_definitions(aberrations::Tuple)
-    foreach(_require_sampled_aberration_definition, aberrations)
-    return aberrations
+function _normalize_sampled_aberration_definitions(
+    aberrations::Union{Tuple,AbstractVector},
+)
+    return _definition_memory(aberrations, SampledAberrationDefinition,
+        _require_sampled_aberration_definition)
 end
 
 function _normalize_sampled_aberration_definitions(
     aberrations::NamedTuple)
-    normalized = values(aberrations)
-    foreach(_require_sampled_aberration_definition, normalized)
+    normalized = _definition_memory(values(aberrations),
+        SampledAberrationDefinition,
+        _require_sampled_aberration_definition)
     foreach(_require_named_sampled_aberration_identity, keys(aberrations),
         normalized)
     return normalized
@@ -618,8 +641,8 @@ end
 
 function _normalize_sampled_aberration_definitions(aberrations)
     throw(PlantDefinitionError(:sampled_aberration, :invalid_container,
-        "plant sampled aberrations must be a Tuple or NamedTuple; got " *
-        "$(typeof(aberrations))"))
+        "plant sampled aberrations must be a Tuple, NamedTuple, or " *
+        "AbstractVector; got $(typeof(aberrations))"))
 end
 
 @inline _require_plant_telescope(::AbstractTelescope) = nothing
@@ -638,7 +661,7 @@ function _require_plant_atmosphere(value)
         "$(typeof(value))"))
 end
 
-function _require_unique_path_ids(paths::Tuple)
+function _require_unique_path_ids(paths::AbstractVector)
     seen = Set{OpticalPathID}()
     for path in paths
         id = path_id(path)
@@ -649,7 +672,7 @@ function _require_unique_path_ids(paths::Tuple)
     return nothing
 end
 
-function _require_unique_acquisition_ids(acquisitions::Tuple)
+function _require_unique_acquisition_ids(acquisitions::AbstractVector)
     seen = Set{AcquisitionID}()
     for acquisition in acquisitions
         id = acquisition_id(acquisition)
@@ -660,7 +683,7 @@ function _require_unique_acquisition_ids(acquisitions::Tuple)
     return nothing
 end
 
-function _require_unique_controllable_optic_ids(optics::Tuple)
+function _require_unique_controllable_optic_ids(optics::AbstractVector)
     seen = Set{ControllableOpticID}()
     for optic in optics
         id = controllable_optic_id(optic)
@@ -671,7 +694,9 @@ function _require_unique_controllable_optic_ids(optics::Tuple)
     return nothing
 end
 
-function _require_unique_sampled_aberration_ids(aberrations::Tuple)
+function _require_unique_sampled_aberration_ids(
+    aberrations::AbstractVector,
+)
     seen = Set{SampledAberrationID}()
     for aberration in aberrations
         id = sampled_aberration_id(aberration)
@@ -682,7 +707,7 @@ function _require_unique_sampled_aberration_ids(aberrations::Tuple)
     return nothing
 end
 
-function _require_unique_command_endpoint_owners(optics::Tuple)
+function _require_unique_command_endpoint_owners(optics::AbstractVector)
     seen = Set{CommandEndpointID}()
     for optic in optics
         for schema in command_schemas(optic)
@@ -697,7 +722,7 @@ function _require_unique_command_endpoint_owners(optics::Tuple)
     return nothing
 end
 
-function _require_unique_plant_command_schema_ids(optics::Tuple)
+function _require_unique_plant_command_schema_ids(optics::AbstractVector)
     seen = Set{PlantCommandSchemaID}()
     for optic in optics
         for schema in command_schemas(optic)
@@ -711,14 +736,17 @@ function _require_unique_plant_command_schema_ids(optics::Tuple)
     return nothing
 end
 
-function _contains_path_id(paths::Tuple, id::OpticalPathID)
+function _contains_path_id(paths::AbstractVector, id::OpticalPathID)
     for path in paths
         path_id(path) == id && return true
     end
     return false
 end
 
-function _require_acquisition_paths(paths::Tuple, acquisitions::Tuple)
+function _require_acquisition_paths(
+    paths::AbstractVector,
+    acquisitions::AbstractVector,
+)
     for acquisition in acquisitions
         id = acquisition_path_id(acquisition)
         _contains_path_id(paths, id) || throw(PlantDefinitionError(
@@ -729,7 +757,7 @@ function _require_acquisition_paths(paths::Tuple, acquisitions::Tuple)
 end
 
 function _require_controllable_optic_visibility_paths(
-    paths::Tuple, optics::Tuple)
+    paths::AbstractVector, optics::AbstractVector)
     for optic in optics
         _require_controllable_optic_visibility_paths(paths, optic,
             controllable_optic_visibility(optic))
@@ -738,10 +766,13 @@ function _require_controllable_optic_visibility_paths(
 end
 
 @inline _require_controllable_optic_visibility_paths(
-    ::Tuple, ::ControllableOpticDefinition, ::AllPathVisibility) = nothing
+    ::AbstractVector,
+    ::ControllableOpticDefinition,
+    ::AllPathVisibility,
+) = nothing
 
 function _require_controllable_optic_visibility_paths(
-    paths::Tuple,
+    paths::AbstractVector,
     optic::ControllableOpticDefinition,
     visibility::SelectedPathVisibility,
 )
@@ -755,7 +786,7 @@ function _require_controllable_optic_visibility_paths(
 end
 
 function _require_sampled_aberration_visibility_paths(
-    paths::Tuple, aberrations::Tuple)
+    paths::AbstractVector, aberrations::AbstractVector)
     for aberration in aberrations
         _require_sampled_aberration_visibility_paths(paths, aberration,
             sampled_aberration_visibility(aberration))
@@ -764,10 +795,13 @@ function _require_sampled_aberration_visibility_paths(
 end
 
 @inline _require_sampled_aberration_visibility_paths(
-    ::Tuple, ::SampledAberrationDefinition, ::AllPathVisibility) = nothing
+    ::AbstractVector,
+    ::SampledAberrationDefinition,
+    ::AllPathVisibility,
+) = nothing
 
 function _require_sampled_aberration_visibility_paths(
-    paths::Tuple,
+    paths::AbstractVector,
     aberration::SampledAberrationDefinition,
     visibility::SelectedPathVisibility,
 )
@@ -790,31 +824,26 @@ Immutable declared topology for one telescope and atmosphere, reusable optical
 paths, independent acquisitions, and independently identified controllable
 optics with versioned semantic command schemas. Native sampled aberrations are
 separate immutable optical declarations rather than controllable devices.
-Tuples and named tuples are accepted as cold organization only; every
-component carries its own stable identity. This value is not prepared
+Tuples, named tuples, and vectors are accepted as cold organization and copied
+into fixed-size homogeneous registries; every component carries its own stable
+identity. This value is not prepared
 execution state and owns no mutable command state, schedule, queue, transport,
 RNG stream, or HIL descriptor.
 """
-struct PlantDefinition{
-    T,
-    A,
-    O<:Tuple,
-    S<:Tuple,
-    P<:Tuple,
-    Q<:Tuple,
-}
+struct PlantDefinition{T,A}
     telescope::T
     atmosphere::A
-    controllable_optics::O
-    sampled_aberrations::S
-    paths::P
-    acquisitions::Q
+    controllable_optics::Memory{ControllableOpticDefinition}
+    sampled_aberrations::Memory{SampledAberrationDefinition}
+    paths::Memory{OpticalPathDefinition}
+    acquisitions::Memory{AcquisitionDefinition}
 
     function PlantDefinition(telescope::T, atmosphere::A,
-        controllable_optics::O, sampled_aberrations::S, paths::P,
-        acquisitions::Q) where {
-        T,A,O<:Tuple,S<:Tuple,P<:Tuple,Q<:Tuple,
-    }
+        controllable_optics::Memory{ControllableOpticDefinition},
+        sampled_aberrations::Memory{SampledAberrationDefinition},
+        paths::Memory{OpticalPathDefinition},
+        acquisitions::Memory{AcquisitionDefinition},
+    ) where {T,A}
         _require_plant_telescope(telescope)
         _require_plant_atmosphere(atmosphere)
         foreach(_require_controllable_optic_definition,
@@ -834,7 +863,7 @@ struct PlantDefinition{
         _require_sampled_aberration_visibility_paths(paths,
             sampled_aberrations)
         _require_acquisition_paths(paths, acquisitions)
-        return new{T,A,O,S,P,Q}(telescope, atmosphere,
+        return new{T,A}(telescope, atmosphere,
             controllable_optics, sampled_aberrations, paths, acquisitions)
     end
 end

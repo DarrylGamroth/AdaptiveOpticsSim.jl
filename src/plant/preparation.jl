@@ -1141,32 +1141,31 @@ struct _PreparedPlantToken end
 const _PREPARED_PLANT_TOKEN = _PreparedPlantToken()
 
 """
-Prepared, schedule-free plant with concrete owners, bounded path-to-optic
-bindings, and RNG streams.
+Prepared, schedule-free plant with concrete owners in fixed-size homogeneous
+registries, bounded path-to-optic bindings, and RNG streams.
 """
-struct PreparedPlant{D,O<:Tuple,S<:Tuple,B,C<:Tuple,P<:Tuple,A<:Tuple,
-    R<:PreparedPlantRNGs}
+struct PreparedPlant{D<:PlantDefinition,S,B,R<:PreparedPlantRNGs}
     definition::D
-    controllable_optics::O
+    controllable_optics::Memory{PreparedControllableOptic}
     controllable_optic_path_bindings::PreparedControllableOpticPathBindings
     sampled_aberrations::S
     sampled_aberration_path_bindings::B
-    command_endpoints::C
-    paths::P
-    acquisitions::A
+    command_endpoints::Memory{_PreparedPlantCommandEndpoint}
+    paths::Memory{PreparedPathExecutor}
+    acquisitions::Memory{PreparedAcquisitionOwner}
     rngs::R
 
     function PreparedPlant(::_PreparedPlantToken, definition::D,
-        controllable_optics::O,
+        controllable_optics::Memory{PreparedControllableOptic},
         bindings::PreparedControllableOpticPathBindings,
         sampled_aberrations::S,
         sampled_bindings::B,
-        command_endpoints::C, paths::P,
-        acquisitions::A, rngs::R) where {
-        D,O<:Tuple,S<:Tuple,B,C<:Tuple,P<:Tuple,A<:Tuple,
-        R<:PreparedPlantRNGs,
-    }
-        return new{D,O,S,B,C,P,A,R}(
+        command_endpoints::Memory{_PreparedPlantCommandEndpoint},
+        paths::Memory{PreparedPathExecutor},
+        acquisitions::Memory{PreparedAcquisitionOwner},
+        rngs::R,
+    ) where {D<:PlantDefinition,S,B,R<:PreparedPlantRNGs}
+        return new{D,S,B,R}(
             definition,
             controllable_optics,
             bindings,
@@ -1344,20 +1343,18 @@ function prepare_acquisition_provider(model,
         "acquisition model $(typeof(model)) does not implement prepare_acquisition_provider"))
 end
 
-@inline _prepare_path_executors(::Tuple{}, telescope, atmosphere) = ()
-
-@inline function _prepare_path_executors(definitions::Tuple, telescope,
+function _prepare_path_executors(definitions::AbstractVector, telescope,
     atmosphere)
-    return (
-        prepare_path_executor(first(definitions), telescope, atmosphere),
-        _prepare_path_executors(Base.tail(definitions), telescope,
-            atmosphere)...,
-    )
+    paths = Memory{PreparedPathExecutor}(undef, length(definitions))
+    @inbounds for index in eachindex(definitions)
+        paths[index] = prepare_path_executor(
+            definitions[index], telescope, atmosphere)
+    end
+    return paths
 end
 
-@inline _prepare_acquisition_owners(::Tuple{}, paths) = ()
-
-@inline function _prepared_path_for_acquisition(definition, paths::Tuple)
+@inline function _prepared_path_for_acquisition(definition,
+    paths::AbstractVector)
     id = acquisition_path_id(definition)
     for path in paths
         path_id(path.definition) == id && return path
@@ -1366,49 +1363,61 @@ end
         "acquisition $(definition.id) references an unprepared path $id"))
 end
 
-@inline function _prepare_acquisition_owners(definitions::Tuple, paths)
-    definition = first(definitions)
-    path = _prepared_path_for_acquisition(definition, paths)
-    return (
-        prepare_acquisition_owner(definition, path),
-        _prepare_acquisition_owners(Base.tail(definitions), paths)...,
-    )
+function _prepare_acquisition_owners(definitions::AbstractVector, paths)
+    acquisitions =
+        Memory{PreparedAcquisitionOwner}(undef, length(definitions))
+    @inbounds for index in eachindex(definitions)
+        definition = definitions[index]
+        path = _prepared_path_for_acquisition(definition, paths)
+        acquisitions[index] = prepare_acquisition_owner(definition, path)
+    end
+    return acquisitions
 end
 
-@inline _path_rng_owner_bindings(::Tuple{}) = ()
-
-@inline function _path_rng_owner_bindings(paths::Tuple)
-    path = first(paths)
-    bindings = _rng_owner_bindings(path, :path,
-        path_id(path.definition).name,
-        _path_rng_owner_roles(path.execution, path.materialization))
-    return (bindings, _path_rng_owner_bindings(Base.tail(paths))...)
+function _path_rng_owner_bindings(paths::AbstractVector)
+    groups = Memory{Tuple}(undef, length(paths))
+    @inbounds for index in eachindex(paths)
+        path = paths[index]
+        groups[index] = _rng_owner_bindings(path, :path,
+            path_id(path.definition).name,
+            _path_rng_owner_roles(path.execution, path.materialization))
+    end
+    return groups
 end
 
-@inline _acquisition_rng_owner_bindings(::Tuple{}) = ()
-
-@inline function _acquisition_rng_owner_bindings(acquisitions::Tuple)
-    acquisition = first(acquisitions)
-    bindings = _rng_owner_bindings(acquisition, :acquisition,
-        acquisition_id(acquisition.definition).name,
-        _acquisition_rng_owner_roles(
-            acquisition.provider.implementation))
-    return (bindings,
-        _acquisition_rng_owner_bindings(Base.tail(acquisitions))...)
+function _acquisition_rng_owner_bindings(acquisitions::AbstractVector)
+    groups = Memory{Tuple}(undef, length(acquisitions))
+    @inbounds for index in eachindex(acquisitions)
+        acquisition = acquisitions[index]
+        groups[index] = _rng_owner_bindings(acquisition, :acquisition,
+            acquisition_id(acquisition.definition).name,
+            _acquisition_rng_owner_roles(
+                acquisition.provider.implementation))
+    end
+    return groups
 end
 
-function _prepare_plant_rngs(definition::PlantDefinition, paths::Tuple,
-    acquisitions::Tuple, run_seed::UInt64,
+function _append_rng_binding_groups!(destination, groups)
+    for group in groups
+        append!(destination, group)
+    end
+    return destination
+end
+
+function _prepare_plant_rngs(definition::PlantDefinition,
+    paths::AbstractVector, acquisitions::AbstractVector, run_seed::UInt64,
     version::RNGDerivationVersion)
     atmosphere = plant_atmosphere(definition)
     atmosphere_bindings = _atmosphere_rng_owner_bindings(atmosphere)
     path_bindings = _path_rng_owner_bindings(paths)
     acquisition_bindings = _acquisition_rng_owner_bindings(acquisitions)
-    all_bindings = (
-        atmosphere_bindings...,
-        _flatten_rng_binding_groups(path_bindings)...,
-        _flatten_rng_binding_groups(acquisition_bindings)...,
-    )
+    all_bindings = RNGOwnerBinding[]
+    sizehint!(all_bindings, length(atmosphere_bindings) +
+        sum(length, path_bindings; init=0) +
+        sum(length, acquisition_bindings; init=0))
+    append!(all_bindings, atmosphere_bindings)
+    _append_rng_binding_groups!(all_bindings, path_bindings)
+    _append_rng_binding_groups!(all_bindings, acquisition_bindings)
     _require_unique_rng_owner_identities(all_bindings)
     _require_unique_rng_stream_seeds(all_bindings, run_seed, version)
     atmosphere_rngs = _prepare_atmosphere_rngs(atmosphere,
@@ -1430,7 +1439,8 @@ acquisitions without scheduling or executing them. Model-specific construction
 dispatches on cold model-definition types. Preparation may allocate and perform
 fallible backend/device/revision validation. It also derives exact stateful RNG
 streams from the required run seed, derivation version, and stable owner
-identities. Repeated execution uses the concrete tuples stored in the result.
+identities. Whole-plant owners are retained in fixed-size homogeneous
+registries; dispatch into each owner recovers its concrete small pipeline.
 Each declared command endpoint requires one separate
 `CommandEndpointConfiguration`; endpoint ordinals and optic order derive from
 stable identities rather than declaration position. Required optic placement
@@ -1489,25 +1499,24 @@ acquisitions use stable-ID order regardless of declaration or caller-selection
 order. This value owns no schedule or independent RNG state; it retains exact
 references to the selected plant-owned RNG groups.
 """
-struct PreparedAcquisitionSelection{P,S<:Tuple,A<:Tuple,
-    B<:Tuple,R<:Tuple,Q<:Tuple}
+struct PreparedAcquisitionSelection{P<:PreparedPlant,B}
     plant::P
-    paths::S
-    acquisitions::A
+    paths::Memory{PreparedPathExecutor}
+    acquisitions::Memory{PreparedAcquisitionOwner}
     sampled_aberration_path_plans::B
-    path_rngs::R
-    acquisition_rngs::Q
+    path_rngs::Memory{PreparedOwnerRNGs}
+    acquisition_rngs::Memory{PreparedOwnerRNGs}
 
     function PreparedAcquisitionSelection(
         ::_PreparedAcquisitionSelectionToken,
         plant::P,
-        paths::S,
-        acquisitions::A,
+        paths::Memory{PreparedPathExecutor},
+        acquisitions::Memory{PreparedAcquisitionOwner},
         sampled_aberration_path_plans::B,
-        path_rngs::R,
-        acquisition_rngs::Q,
-    ) where {P,S<:Tuple,A<:Tuple,B<:Tuple,R<:Tuple,Q<:Tuple}
-        return new{P,S,A,B,R,Q}(
+        path_rngs::Memory{PreparedOwnerRNGs},
+        acquisition_rngs::Memory{PreparedOwnerRNGs},
+    ) where {P<:PreparedPlant,B}
+        return new{P,B}(
             plant,
             paths,
             acquisitions,
@@ -1546,7 +1555,7 @@ function _requested_acquisition_ids(ids)
 end
 
 function _canonical_selected_acquisitions(plant::PreparedPlant, requested)
-    selected = Any[]
+    selected = PreparedAcquisitionOwner[]
     for acquisition in plant.acquisitions
         acquisition_id(acquisition.definition) in requested &&
             push!(selected, acquisition)
@@ -1560,16 +1569,19 @@ function _canonical_selected_acquisitions(plant::PreparedPlant, requested)
     end
     sort!(selected; by=acquisition ->
         acquisition_id(acquisition.definition).name)
-    return Tuple(selected)
+    result = Memory{PreparedAcquisitionOwner}(undef, length(selected))
+    copyto!(result, selected)
+    return result
 end
 
-function _canonical_selected_paths(plant::PreparedPlant, acquisitions::Tuple)
+function _canonical_selected_paths(plant::PreparedPlant,
+    acquisitions::AbstractVector)
     requested = Set{OpticalPathID}()
     for acquisition in acquisitions
         _request_provider_path!(requested, acquisition,
             acquisition_provider_style(acquisition))
     end
-    selected = Any[]
+    selected = PreparedPathExecutor[]
     for path in plant.paths
         path_id(path.definition) in requested && push!(selected, path)
     end
@@ -1577,7 +1589,9 @@ function _canonical_selected_paths(plant::PreparedPlant, acquisitions::Tuple)
         :path, :prepared_binding,
         "selected acquisitions do not resolve to their prepared paths"))
     sort!(selected; by=path -> path_id(path.definition).name)
-    return Tuple(selected)
+    result = Memory{PreparedPathExecutor}(undef, length(selected))
+    copyto!(result, selected)
+    return result
 end
 
 @inline function _request_provider_path!(requested,
@@ -1602,11 +1616,13 @@ function _prepared_path_rngs(plant::PreparedPlant,
         "selected path has no exact prepared RNG owner"))
 end
 
-@inline _selected_path_rngs(plant::PreparedPlant, ::Tuple{}) = ()
-
-@inline function _selected_path_rngs(plant::PreparedPlant, paths::Tuple)
-    return (_prepared_path_rngs(plant, first(paths)),
-        _selected_path_rngs(plant, Base.tail(paths))...)
+function _selected_path_rngs(plant::PreparedPlant,
+    paths::AbstractVector)
+    result = Memory{PreparedOwnerRNGs}(undef, length(paths))
+    @inbounds for index in eachindex(paths)
+        result[index] = _prepared_path_rngs(plant, paths[index])
+    end
+    return result
 end
 
 function _prepared_acquisition_rngs(plant::PreparedPlant,
@@ -1619,31 +1635,31 @@ function _prepared_acquisition_rngs(plant::PreparedPlant,
         "selected acquisition has no exact prepared RNG owner"))
 end
 
-@inline _selected_acquisition_rngs(plant::PreparedPlant, ::Tuple{}) = ()
-
-@inline function _selected_acquisition_rngs(plant::PreparedPlant,
-    acquisitions::Tuple)
-    return (_prepared_acquisition_rngs(plant, first(acquisitions)),
-        _selected_acquisition_rngs(plant, Base.tail(acquisitions))...)
+function _selected_acquisition_rngs(plant::PreparedPlant,
+    acquisitions::AbstractVector)
+    result = Memory{PreparedOwnerRNGs}(undef, length(acquisitions))
+    @inbounds for index in eachindex(acquisitions)
+        result[index] =
+            _prepared_acquisition_rngs(plant, acquisitions[index])
+    end
+    return result
 end
 
-@inline _selected_sampled_aberration_path_plans(
-    ::PreparedPlant, ::Tuple{}) = ()
-
-@inline function _selected_sampled_aberration_path_plans(
+function _selected_sampled_aberration_path_plans(
     plant::PreparedPlant,
-    paths::Tuple,
+    paths::AbstractVector,
 )
     bindings = plant.sampled_aberration_path_bindings
-    path = first(paths)
-    plan = _prepare_sampled_aberration_path_plan(
-        plant.sampled_aberrations,
-        bindings,
-        path_id(path.definition),
-    )
-    return (plan,
-        _selected_sampled_aberration_path_plans(
-            plant, Base.tail(paths))...)
+    plans = Memory{_PreparedSampledAberrationPathPlan}(
+        undef, length(paths))
+    @inbounds for index in eachindex(paths)
+        plans[index] = _prepare_sampled_aberration_path_plan(
+            plant.sampled_aberrations,
+            bindings,
+            path_id(paths[index].definition),
+        )
+    end
+    return plans
 end
 
 function _prepare_acquisition_selection(plant::PreparedPlant, ids)
@@ -1681,25 +1697,35 @@ function prepare_acquisition_selection(plant::PreparedPlant, ids)
         "acquisition selection must be one identity, a Tuple, or an AbstractVector; got $(typeof(ids))"))
 end
 
-@inline _require_selected_path_bindings(::Tuple{}, atmosphere) = nothing
-
-@inline function _require_selected_path_bindings(paths::Tuple, atmosphere)
-    path = first(paths)
+Base.@noinline function _require_selected_path_binding(
+    path::PreparedPathExecutor, atmosphere)
     path.atmosphere === atmosphere || throw(PlantPreparationError(:path,
         :prepared_binding,
         "selected path does not retain the prepared plant atmosphere"))
     _require_current_path_binding(path)
-    return _require_selected_path_bindings(Base.tail(paths), atmosphere)
+    return nothing
 end
 
-@inline _require_selected_acquisition_bindings(::Tuple{}) = nothing
+function _require_selected_path_bindings(paths::AbstractVector, atmosphere)
+    for path in paths
+        _require_selected_path_binding(path, atmosphere)
+    end
+    return nothing
+end
 
-@inline function _require_selected_acquisition_bindings(
-    acquisitions::Tuple)
-    acquisition = first(acquisitions)
+Base.@noinline function _require_selected_acquisition_binding(
+    acquisition::PreparedAcquisitionOwner)
     validate_acquisition_provider_binding(acquisition.provider,
         acquisition.path_result)
-    return _require_selected_acquisition_bindings(Base.tail(acquisitions))
+    return nothing
+end
+
+function _require_selected_acquisition_bindings(
+    acquisitions::AbstractVector)
+    for acquisition in acquisitions
+        _require_selected_acquisition_binding(acquisition)
+    end
+    return nothing
 end
 
 function _require_selection_bindings(selection::PreparedAcquisitionSelection)
@@ -1715,96 +1741,109 @@ function _require_selection_bindings(selection::PreparedAcquisitionSelection)
     return atmosphere
 end
 
-@inline _require_selected_rng_owner_bindings(::Tuple{}, ::Tuple{}) = nothing
-
-@inline function _require_selected_rng_owner_bindings(owners::Tuple,
-    rngs::Tuple)
-    _require_rng_owner_binding(first(rngs), first(owners))
-    return _require_selected_rng_owner_bindings(Base.tail(owners),
-        Base.tail(rngs))
-end
-
-function _require_selected_rng_owner_bindings(::Tuple{}, rngs::Tuple)
-    throw(PlantPreparationError(:rng, :owner_topology,
+function _require_selected_rng_owner_bindings(owners::AbstractVector,
+    rngs::AbstractVector)
+    length(owners) == length(rngs) || throw(PlantPreparationError(
+        :rng, :owner_topology,
         "selected RNG-owner topology does not match selected owners"))
+    @inbounds for index in eachindex(owners)
+        _require_selected_rng_owner_binding(rngs[index], owners[index])
+    end
+    return nothing
 end
 
-function _require_selected_rng_owner_bindings(owners::Tuple, ::Tuple{})
-    throw(PlantPreparationError(:rng, :owner_topology,
-        "selected RNG-owner topology does not match selected owners"))
+Base.@noinline function _require_selected_rng_owner_binding(
+    rngs::PreparedOwnerRNGs, owner)
+    _require_rng_owner_binding(rngs, owner)
+    return nothing
 end
 
-@inline _validate_selected_materializations(
-    ::Tuple{}, atmosphere, epoch) = nothing
-
-@inline function _validate_selected_materializations(paths::Tuple,
-    atmosphere, epoch)
-    path = first(paths)
+Base.@noinline function _validate_selected_materialization(
+    path::PreparedPathExecutor, atmosphere, epoch)
     validate_path_materialization(path.materialization, path.input,
         atmosphere, epoch)
-    return _validate_selected_materializations(Base.tail(paths),
-        atmosphere, epoch)
+    return nothing
 end
 
-@inline _materialize_selected_paths!(::Tuple{}, ::Tuple{}, atmosphere,
-    epoch) = nothing
-
-@inline function _materialize_selected_paths!(paths::Tuple, rngs::Tuple,
+function _validate_selected_materializations(paths::AbstractVector,
     atmosphere, epoch)
-    path = first(paths)
+    for path in paths
+        _validate_selected_materialization(path, atmosphere, epoch)
+    end
+    return nothing
+end
+
+Base.@noinline function _materialize_selected_path!(
+    path::PreparedPathExecutor, rngs::PreparedOwnerRNGs, atmosphere, epoch)
     materialize_path_input_rngs!(path.materialization, path.input,
-        atmosphere, epoch, first(rngs))
-    return _materialize_selected_paths!(Base.tail(paths), Base.tail(rngs),
-        atmosphere, epoch)
+        atmosphere, epoch, rngs)
+    return nothing
 end
 
-@inline _apply_selected_sampled_aberrations!(
-    ::Tuple{},
-    ::Tuple{},
-) = nothing
-
-@inline function _apply_selected_sampled_aberrations!(
-    paths::Tuple,
-    plans::Tuple,
-)
-    path = first(paths)
-    _apply_sampled_aberration_path_plan!(path.input, first(plans))
-    return _apply_selected_sampled_aberrations!(
-        Base.tail(paths),
-        Base.tail(plans),
-    )
+function _materialize_selected_paths!(paths::AbstractVector,
+    rngs::AbstractVector, atmosphere, epoch)
+    length(paths) == length(rngs) || throw(PlantPreparationError(
+        :rng, :owner_topology,
+        "selected path RNG topology does not match selected paths"))
+    @inbounds for index in eachindex(paths)
+        _materialize_selected_path!(
+            paths[index], rngs[index], atmosphere, epoch)
+    end
+    return nothing
 end
 
-function _apply_selected_sampled_aberrations!(
-    ::Tuple{},
-    plans::Tuple,
-)
-    throw(PlantPreparationError(:sampled_aberration, :binding_topology,
-        "selected sampled-aberration plans exceed selected paths"))
+Base.@noinline function _apply_selected_sampled_aberration!(
+    path::PreparedPathExecutor, plan)
+    _apply_sampled_aberration_path_plan!(path.input, plan)
+    return nothing
 end
 
 function _apply_selected_sampled_aberrations!(
-    paths::Tuple,
-    ::Tuple{},
+    paths::AbstractVector,
+    plans::AbstractVector,
 )
-    throw(PlantPreparationError(:sampled_aberration, :binding_topology,
-        "selected paths exceed sampled-aberration plans"))
+    length(paths) == length(plans) || throw(PlantPreparationError(
+        :sampled_aberration, :binding_topology,
+        "selected sampled-aberration plans do not match selected paths"))
+    @inbounds for index in eachindex(paths)
+        _apply_selected_sampled_aberration!(paths[index], plans[index])
+    end
+    return nothing
 end
 
-@inline _execute_selected_paths!(::Tuple{}, ::Tuple{}) = nothing
-
-@inline function _execute_selected_paths!(paths::Tuple, rngs::Tuple)
-    execute_path!(first(paths), first(rngs))
-    return _execute_selected_paths!(Base.tail(paths), Base.tail(rngs))
+Base.@noinline function _execute_selected_path!(
+    path::PreparedPathExecutor, rngs::PreparedOwnerRNGs)
+    execute_path!(path, rngs)
+    return nothing
 end
 
-@inline _execute_selected_acquisitions!(::Tuple{}, ::Tuple{}) = nothing
+function _execute_selected_paths!(paths::AbstractVector,
+    rngs::AbstractVector)
+    length(paths) == length(rngs) || throw(PlantPreparationError(
+        :rng, :owner_topology,
+        "selected path RNG topology does not match selected paths"))
+    @inbounds for index in eachindex(paths)
+        _execute_selected_path!(paths[index], rngs[index])
+    end
+    return nothing
+end
 
-@inline function _execute_selected_acquisitions!(acquisitions::Tuple,
-    rngs::Tuple)
-    execute_acquisition!(first(acquisitions), first(rngs))
-    return _execute_selected_acquisitions!(Base.tail(acquisitions),
-        Base.tail(rngs))
+Base.@noinline function _execute_selected_acquisition!(
+    acquisition::PreparedAcquisitionOwner, rngs::PreparedOwnerRNGs)
+    execute_acquisition!(acquisition, rngs)
+    return nothing
+end
+
+function _execute_selected_acquisitions!(
+    acquisitions::AbstractVector, rngs::AbstractVector)
+    length(acquisitions) == length(rngs) || throw(PlantPreparationError(
+        :rng, :owner_topology,
+        "selected acquisition RNG topology does not match selected owners"))
+    @inbounds for index in eachindex(acquisitions)
+        _execute_selected_acquisition!(
+            acquisitions[index], rngs[index])
+    end
+    return nothing
 end
 
 @inline _require_selection_atmosphere(
@@ -1842,7 +1881,7 @@ end
 
 Materialize every unique selected path from one explicit current atmosphere
 epoch, then form each path exactly once and execute the canonical acquisition
-tuple with the exact owner-derived RNG streams prepared by `prepare_plant`.
+registry with the exact owner-derived RNG streams prepared by `prepare_plant`.
 """
 function execute_acquisition_selection!(
     selection::PreparedAcquisitionSelection,
