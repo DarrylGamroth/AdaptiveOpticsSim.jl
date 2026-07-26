@@ -168,7 +168,8 @@ end
 
 function event_composition_fixture(; reverse_order::Bool=false,
     unbound_trigger_consumer::Bool=false,
-    faulted_trigger_fanout::Bool=false)
+    faulted_trigger_fanout::Bool=false,
+    missing_path_schedule::Bool=false)
     T = Float64
     telescope = Telescope(resolution=4, diameter=T(4),
         central_obstruction=zero(T), T=T)
@@ -272,7 +273,9 @@ function event_composition_fixture(; reverse_order::Bool=false,
             PeriodicAcquisitionStart(PeriodicSchedule(
                 period_ns=350_000_000, phase_ns=25_000_000))),
     )
-    ordered_samples = reverse_order ? reverse(samples) : samples
+    selected_samples = missing_path_schedule ? Base.front(samples) : samples
+    ordered_samples = reverse_order ? reverse(selected_samples) :
+        selected_samples
     ordered_events = reverse_order ? reverse(events) : events
     definition = PlantEventLoopDefinition(ordered_samples, ordered_events;
         trigger_topology)
@@ -290,7 +293,7 @@ function event_composition_storage_signature(prepared, state, workspace)
     return (
         Base.summarysize(prepared.scheduler.definitions),
         Base.summarysize(prepared.actions),
-        Base.summarysize(prepared.paths),
+        Base.summarysize(prepared.path_groups),
         Base.summarysize(prepared.acquisitions),
         Base.summarysize(state.scheduler.cursors),
         Base.summarysize(state.acquisitions),
@@ -514,10 +517,57 @@ end
 @testset "Multi-rate plant event composition" begin
     plant, prepared, state, workspace = event_composition_fixture()
     @test plant_event_path_count(prepared) == 3
+    @test path_execution_group_count(prepared) == 3
     @test plant_event_acquisition_count(prepared) == 5
     @test plant_event_generator_count(prepared) == 1 + 3 + 5 * 5
     @test next_plant_event_timestamp(prepared, state, workspace) ==
         PlantTimestamp(0)
+
+    @test prepared.path_groups isa Memory{PreparedPathExecutionGroup}
+    expected_group_paths = OpticalPathID.((:lgs, :ngs, :science))
+    expected_group_acquisitions = (
+        AcquisitionID.((:lgs_emccd,)),
+        AcquisitionID.((:ngs_saphira,)),
+        AcquisitionID.(
+            (:science_ccd, :science_cmos, :science_rolling)),
+    )
+    for ordinal in 1:path_execution_group_count(prepared)
+        group = @inferred path_execution_group(prepared, ordinal)
+        @test path_execution_group_ordinal(group) == ordinal
+        @test path_execution_group_path_id(group) ==
+            expected_group_paths[ordinal]
+        @test path_execution_group_acquisition_count(group) ==
+            length(expected_group_acquisitions[ordinal])
+        @test Tuple(path_execution_group_acquisition_id(group, index)
+            for index in
+                1:path_execution_group_acquisition_count(group)) ==
+            expected_group_acquisitions[ordinal]
+        @test @inferred(path_execution_group_acquisition_id(group, 1)) ==
+            first(expected_group_acquisitions[ordinal])
+    end
+    @test_throws BoundsError path_execution_group(prepared, 0)
+    @test_throws BoundsError path_execution_group(prepared, 4)
+    @test_throws BoundsError path_execution_group_acquisition_id(
+        path_execution_group(prepared, 1), 2)
+    for name in (
+        :PreparedPathExecutionGroup,
+        :path_execution_group_count,
+        :path_execution_group,
+        :path_execution_group_ordinal,
+        :path_execution_group_path_id,
+        :path_execution_group_acquisition_count,
+        :path_execution_group_acquisition_id,
+    )
+        @test Base.ispublic(Plant, name)
+        @test !Base.isexported(Plant, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+    end
+
+    missing_path_error = event_test_error() do
+        event_composition_fixture(missing_path_schedule=true)
+    end
+    @test missing_path_error isa PlantScheduleError
+    @test missing_path_error.reason == :missing_path_schedule
 
     unbound_error = event_test_error() do
         event_composition_fixture(unbound_trigger_consumer=true)
@@ -582,6 +632,24 @@ end
 
     reordered_plant, reordered, reordered_state, reordered_workspace =
         event_composition_fixture(reverse_order=true)
+    @test path_execution_group_count(reordered) ==
+        path_execution_group_count(prepared)
+    for ordinal in 1:path_execution_group_count(prepared)
+        canonical_group = path_execution_group(prepared, ordinal)
+        reordered_group = path_execution_group(reordered, ordinal)
+        @test path_execution_group_ordinal(reordered_group) ==
+            path_execution_group_ordinal(canonical_group)
+        @test path_execution_group_path_id(reordered_group) ==
+            path_execution_group_path_id(canonical_group)
+        @test Tuple(path_execution_group_acquisition_id(reordered_group,
+            index) for index in
+                1:path_execution_group_acquisition_count(
+                    reordered_group)) ==
+            Tuple(path_execution_group_acquisition_id(canonical_group,
+                index) for index in
+                    1:path_execution_group_acquisition_count(
+                        canonical_group))
+    end
     @test run_plant_events_until!(reordered, reordered_state,
         reordered_workspace, horizon) == timestamp_count
     for id in (:science_cmos, :science_ccd, :science_rolling,

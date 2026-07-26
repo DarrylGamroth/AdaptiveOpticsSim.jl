@@ -11,6 +11,57 @@ HIL critical path from optional offline ensemble scheduling.
 See the [`HIL architecture index`](../hil-package-boundary.md) for adjacent
 subsystem specifications.
 
+## Gate 6 Prepared CPU Requirements
+
+The following clauses refine the Gate 6 requirement rows in the
+[compliance matrix](compliance-matrix.md). They define the required core
+execution surface without assigning worker, affinity, pacing, ring, or
+transport ownership to core.
+
+- **HIL-CPU-001.a:** Preparation MUST derive one canonically ordered path
+  execution group for every scheduled direction-dependent optical path and
+  MUST bind each acquisition consumer to exactly one such group.
+- **HIL-CPU-001.b:** Each group MUST have exactly one execution writer for its
+  path product, numerical workspace, acquisition state, and RNG state.
+  Compatible consumers of one path MUST remain in that group so they can reuse
+  its field or photon-arrival-rate product.
+- **HIL-CPU-001.c:** Core MUST expose independently callable,
+  allocation-bounded mutating group-executor seams. Those seams MUST NOT create
+  tasks, queues, or execution-clock policy.
+- **HIL-CPU-001.d:** The same prepared representation MUST support a canonical
+  serial executor. Deterministic mode MUST use that fallback with one Julia,
+  BLAS, and FFT execution thread.
+- **HIL-CPU-001.e:** A parallel CPU deployment MUST declare outer execution
+  owners and Julia, BLAS, and FFT thread budgets together and MUST reject a
+  configuration that would exceed its admitted execution contexts.
+- **HIL-CPU-001.f:** Core MUST expose stable group identities and resource
+  requirements. CPU affinity, NUMA placement, and verification of the observed
+  mapping belong to HIL deployment policy and MUST NOT occur as a core package
+  import side effect.
+- **HIL-ATM-004.a:** The atmosphere writer MUST remain held while every due
+  same-epoch reader materializes its path input, unless preparation assigns
+  that reader a bounded, model-specific retained atmosphere-state snapshot.
+- **HIL-ATM-004.b:** An atmosphere epoch token MUST identify a publication but
+  MUST NOT be treated as retained layer storage or authorize rendering after
+  the writer advances.
+- **HIL-ATM-004.c:** Downstream group execution MAY overlap only after it
+  consumes caller-owned materialized path products and no longer reads mutable
+  atmosphere layers.
+- **HIL-ATM-004.d:** Every materialized-product or retained-state slot MUST be
+  prepared, capacity-accounted, and reclaimed through an explicit lifecycle.
+  Unsupported retention MUST fail during preparation.
+- **HIL-EXEC-006.a:** Topology-sized path and endpoint registries MUST use a
+  bounded homogeneous representation or prepared executor handles behind
+  function barriers; their container types MUST NOT recursively encode
+  registry cardinality.
+- **HIL-EXEC-006.b:** Small fixed stage pipelines inside one execution group
+  MAY remain concretely specialized when their numerical kernels stay inferred
+  and measured code quality justifies it.
+- **HIL-EXEC-006.c:** Promotion MUST record preparation and first-use latency,
+  prepared storage, and a generated-code or method-instance proxy versus a
+  predeclared topology matrix. Passing warmed service time alone is
+  insufficient.
+
 ## Optical Branch Ownership And Parallelism
 
 Different source directions are the primary coarse-grained parallel unit. They
@@ -78,6 +129,13 @@ direction-dependent optical path and its compatible acquisition consumers. It
 does not ask users to place individual Julia tasks, kernels, or functions.
 Preparation resolves every group to one execution owner and memory domain.
 The resulting plan is immutable for the run.
+
+The initial core topology is `Plant.PreparedPathExecutionGroup`: one canonical
+group per scheduled path, stored in a homogeneous bounded registry, with exact
+acquisition membership. It intentionally contains no worker or placement
+policy. The direct group-executor and placement-plan layers remain separate
+delivery steps, so the existence of this record alone is not a parallel
+execution claim.
 
 Small fixed stage pipelines within one group may remain concretely typed for
 specialization. A large instrument's endpoint and path registry MUST NOT be

@@ -377,7 +377,7 @@ function storage_signature(operation::MultiRatePlantOperation)
     return (
         Base.summarysize(prepared.scheduler.definitions),
         Base.summarysize(prepared.actions),
-        Base.summarysize(prepared.paths),
+        Base.summarysize(prepared.path_groups),
         Base.summarysize(prepared.acquisitions),
         Base.summarysize(prepared.trigger_topology),
         Base.summarysize(state.scheduler.cursors),

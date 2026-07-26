@@ -465,7 +465,7 @@ function storage_signature(operation::CommandPlantOperation)
         Base.summarysize(prepared.actions),
         Base.summarysize(prepared.optics),
         Base.summarysize(prepared.command_endpoints),
-        Base.summarysize(prepared.paths),
+        Base.summarysize(prepared.path_groups),
         Base.summarysize(prepared.acquisitions),
         Base.summarysize(state.scheduler.cursors),
         Base.summarysize(state.command_endpoints),
