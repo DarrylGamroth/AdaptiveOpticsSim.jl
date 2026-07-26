@@ -341,7 +341,7 @@ function require_modulated_wfs_domains(front_end, input, output::IntensityMap)
     typeof(input.metadata.backend) === typeof(backend(storage)) ||
         throw(WFSPreparationError(:optical_formation, :backend,
             "modulated WFS input and propagation backends differ"))
-    input.metadata.device == plane_device(storage) ||
+    input.metadata.device == compute_device(storage) ||
         throw(WFSPreparationError(:optical_formation, :device,
             "modulated WFS input and propagation occupy different devices"))
     return nothing

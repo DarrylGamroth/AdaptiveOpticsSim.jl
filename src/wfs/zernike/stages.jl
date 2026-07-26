@@ -488,7 +488,7 @@ function set_zernike_calibration!(sensor::ZernikeWFS,
     typeof(backend(reference)) === typeof(backend(state.reference_signal_2d)) ||
         throw(InvalidConfiguration(
             "Zernike calibration reference backend differs from the estimator"))
-    plane_device(reference) == plane_device(state.reference_signal_2d) ||
+    compute_device(reference) == compute_device(state.reference_signal_2d) ||
         throw(InvalidConfiguration(
             "Zernike calibration reference occupies another device"))
     all(isfinite, host_array(reference)) || throw(InvalidConfiguration(

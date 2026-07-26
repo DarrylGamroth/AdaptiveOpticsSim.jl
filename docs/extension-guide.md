@@ -330,9 +330,9 @@ which input planes and products it can consume; there is no implicit
 resampling or propagation between entry and execution. `result` is an
 acquisition-facing photon-rate `IntensityMap` or a concrete
 tuple/`OpticalProductBundle` of such maps. The custom telescope must implement
-the aperture revision, reflectivity, backend, and physical-device interfaces
+the aperture revision, reflectivity, backend, and compute-device interfaces
 consumed by those products. Every leaf in a multi-input or multi-result path
-must share that backend and physical device.
+must share that backend and compute device.
 The model and propagation keys must be value-comparable and cover every setting
 that can alter the result. Do not encode IDs, dimensions, rates, timestamps, or
 device ordinals as type parameters. `InstantaneousOpticalSample()` is the
@@ -530,7 +530,7 @@ function AdaptiveOpticsSim.Plant.prepare_illumination_evaluator(
 )
     state = MyIlluminationState(0, zero(eltype(destination.values)))
     return PreparedMyIllumination(definition, state,
-        backend(destination), plane_device(destination.values))
+        backend(destination), compute_device(destination.values))
 end
 
 function AdaptiveOpticsSim.Plant.validate_illumination_evaluator_binding(
@@ -541,7 +541,7 @@ function AdaptiveOpticsSim.Plant.validate_illumination_evaluator_binding(
     typeof(backend(destination)) === typeof(evaluator.backend) ||
         throw(PlantPreparationError(:illumination, :backend,
             "prepared illumination backend changed"))
-    plane_device(destination.values) == evaluator.device ||
+    compute_device(destination.values) == evaluator.device ||
         throw(PlantPreparationError(:illumination, :device,
             "prepared illumination device changed"))
     return nothing
@@ -668,7 +668,7 @@ rather than ordinary exported workflow names.
 
 Prepared types should contain concrete immutable plans/params and separately
 typed single-writer workspace, detector, calibration, and RNG state. Bind exact
-array/state identities, validate physical device as well as semantic backend,
+array/state identities, validate compute device as well as semantic backend,
 and create detector-output aliases or packed views only after detector buffers
 are prepared. Repeated execution must not resize, rebuild metadata, query a
 device, copy to the host, or select stages through an abstract container.
@@ -863,6 +863,24 @@ Extension code should follow the package-wide backend rules:
 - use explicit `!` methods when mutating state
 - centralize RNG ownership in the caller or workspace
 - use multiple dispatch or traits instead of `isa` chains
+
+An accelerator-array extension registers both a semantic backend family and a
+concrete compute-device identifier. Implement
+`array_backend_selector(::Type{<:MyArray})` with a zero-state
+`AbstractArrayBackend` selector and
+`compute_device_identifier(::MyArray)` with a non-`nothing`, allocation-free
+isbits identifier that distinguishes every simultaneously addressable device
+in that backend runtime. `compute_device(array)` combines those two contracts
+into an `AcceleratorComputeDevice`; its methods for supported array views
+preserve the parent identity. Do not use a backend family alone as device zero,
+and do not encode task, stream, or future placement ownership in the
+identifier.
+
+An extension that defines its own `AbstractComputeDevice` subtype instead of
+using `AcceleratorComputeDevice` must also implement
+`compute_device_backend(::MyComputeDevice)`. That accessor returns the
+corresponding semantic `AbstractArrayBackend` selector and must agree with
+`backend(array)` wherever the device is used in prepared Plant contracts.
 
 If an extension needs a new reusable behavior, add a small generic seam and one
 family implementation first. Then add the second implementation when another

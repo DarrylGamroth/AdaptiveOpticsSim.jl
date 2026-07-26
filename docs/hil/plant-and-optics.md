@@ -289,7 +289,7 @@ source geometry, spectral sampling, optical train, optical sampling instant,
 propagation model, and output plane are compatible. Sharing is based on this
 prepared path key, not detector type, object identity, or a common nominal
 frame rate. `PathResultKey` also binds radiometry, telescope/model revisions,
-numeric/output geometry, backend, and physical device. The default
+numeric/output geometry, backend, and compute device. The default
 `InstantaneousOpticalSample` describes a photon-arrival-rate result at one plant
 instant; it is neither a detector exposure nor a cadence. An acquisition calls
 `require_path_result` before constructing destinations when it has stricter
@@ -323,13 +323,13 @@ control owners receive explicit model times or durations instead of reading
 time from the telescope. Optical data products likewise do not own propagation
 plans or temporary arrays. Prepared workspaces own those plans and scratch
 arrays, have one execution writer, and remain fixed in shape, numeric type,
-backend, and physical device for a prepared run.
+backend, and compute device for a prepared run.
 
 Every prepared optical product carries run-immutable compatibility metadata.
 The metadata declares plane kind, coordinate domain, dimensions, sampling,
 origin and centering, axis orientation, wavelength or spectral channel, units or
 normalization, whether samples represent a spatial density or a cell-integrated
-quantity, coherence and combination policy, numeric type, backend, and physical
+quantity, coherence and combination policy, numeric type, backend, and compute
 device where applicable. Preparation rejects incompatible handoffs. Metadata
 is not constructed, interpreted through dynamic dispatch, or wrapped around a
 newly allocated product on every execution.
@@ -1035,7 +1035,7 @@ references; no compatibility adapter is retained.
 named caller-owned controller product to one distinct prepared endpoint.
 Products may be views into a larger controller output and are borrowed without
 packing or copying. Preparation validates exact numeric type, shape, backend,
-and physical device. Each integration layer then constructs an independent
+and compute device. Each integration layer then constructs an independent
 `PlantCommand` with its endpoint-local sequence and requested effective
 timestamp; successful admission is the bounded payload-copy boundary.
 

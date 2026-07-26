@@ -467,7 +467,7 @@ end
 
 @inline _require_test_path(::MismatchedDevice,
     path::PreparedPathExecutor) = require_path_result(path;
-        device=ContractPlaneDevice(404))
+        device=ContractComputeDevice(404))
 
 function Plant.prepare_acquisition_provider(
     model::FramePlantAcquisitionModel,
@@ -604,7 +604,7 @@ end
     @test science_path.key.sampling_contract isa
         Plant.InstantaneousOpticalSample
     @test science_path.key.backend isa CPUBackend
-    @test science_path.key.device == AdaptiveOpticsSim.HostPlaneDevice()
+    @test science_path.key.device == AdaptiveOpticsSim.HostComputeDevice()
     equivalent_key = Plant.PathResultKey(
         science_path.key.source_geometry,
         science_path.key.spectral_sampling,
@@ -712,7 +712,7 @@ end
 
     foreign_values = ContractDeviceArray(
         zeros(Complex{T}, size(science_path.input.opd)),
-        ContractPlaneDevice(17),
+        ContractComputeDevice(17),
     )
     foreign_metadata = OpticalPlaneMetadata(PupilPlane(), foreign_values;
         coordinate_domain=MetricCoordinates(),
@@ -940,7 +940,7 @@ end
         (zeros(T, 1, 1), :shape),
         (zeros(Float32, size(detector_frame)), :numeric_type),
         (ContractDeviceArray(zeros(T, size(detector_frame)),
-            ContractPlaneDevice(18)), :device),
+            ContractComputeDevice(18)), :device),
         (detector_frame, :ownership),
     )
     for (invalid_observation, reason) in invalid_observations

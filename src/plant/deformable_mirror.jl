@@ -657,11 +657,11 @@ function _require_deformable_mirror_command_storage(
             "native deformable-mirror command storage and sampled surface " *
             "use different array backends",
         )
-    plane_device(command) == prepared.surface_metadata.device ||
+    compute_device(command) == prepared.surface_metadata.device ||
         _deformable_mirror_preparation_error(
             :deformable_mirror_command_device,
             "native deformable-mirror command storage and sampled surface " *
-            "occupy different physical devices",
+            "occupy different compute devices",
         )
     return command
 end
@@ -832,11 +832,11 @@ function _deformable_mirror_surface_metadata(
             "native deformable-mirror surface and path pupil use different " *
             "array backends",
         )
-    plane_device(destination.opd) == prepared.surface_metadata.device ||
+    compute_device(destination.opd) == prepared.surface_metadata.device ||
         _deformable_mirror_preparation_error(
             :deformable_mirror_surface_device,
             "native deformable-mirror surface and path pupil occupy different " *
-            "physical devices",
+            "compute devices",
         )
     return prepared.surface_metadata
 end

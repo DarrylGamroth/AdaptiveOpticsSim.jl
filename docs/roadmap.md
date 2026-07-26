@@ -161,9 +161,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    [AdaptiveOpticsHIL PR #15](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/15)
    pins both companion environments to core revision `0a38576` and passes the
    cross-platform package, ownership-stress, coverage, and benchmark-contract
-   matrix at companion revision `9574432`. Advance next to Gate 7;
-   single-GPU direction batching and physical device identity remain behind
-   their own numerical, allocation, residency, and fixed-arrival evidence.
+   matrix at companion revision `9574432`. Gate 7 begins by separating
+   semantic backend family from concrete compute-device identity and exposing
+   each prepared path group's immutable backend/device requirements.
+   Single-GPU direction and wavelength batching remains behind its own
+   numerical, allocation, residency, synchronization, and service-cost
+   evidence; fixed-arrival evidence is additionally required before any HIL
+   latency promotion.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,
    and GC/process-isolation policy. Add explicit or constrained deterministic

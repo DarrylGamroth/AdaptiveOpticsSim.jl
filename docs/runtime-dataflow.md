@@ -88,7 +88,7 @@ routing = prepare_controller_output_routing(
 
 Each named product is borrowed without packing or copying. Preparation requires
 an exact match with its prepared endpoint's numeric type, shape, array backend,
-and physical device. Scalar products use assigned `Ref` storage.
+and compute device. Scalar products use assigned `Ref` storage.
 
 Routing owns no sequence number, effective timestamp, admission, transaction,
 queue, transport, or optical-grouping semantics. Integration code obtains a
@@ -224,7 +224,7 @@ This keeps reusable numerical/control primitives independent of HIL scheduling.
 
 ## Backend And Parallel Execution
 
-Prepared storage is parameterized by numeric type, backend, and physical
+Prepared storage is parameterized by numeric type, backend, and compute
 device. Optical and detector kernels reject implicit host/device mixing and
 avoid GPU scalar indexing. Same-owner stages call directly; future ownership
 boundaries may exchange bounded descriptors.

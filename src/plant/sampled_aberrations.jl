@@ -54,9 +54,9 @@ function _validate_prepared_sampled_aberration_storage(
     typeof(backend(opd)) === typeof(metadata.backend) || throw(
         PlantPreparationError(:sampled_aberration, :surface_backend,
             "prepared sampled-aberration OPD changed array backend"))
-    plane_device(opd) == metadata.device || throw(PlantPreparationError(
+    compute_device(opd) == metadata.device || throw(PlantPreparationError(
         :sampled_aberration, :surface_device,
-        "prepared sampled-aberration OPD changed physical device"))
+        "prepared sampled-aberration OPD changed compute device"))
     return opd
 end
 

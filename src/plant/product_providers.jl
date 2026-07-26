@@ -121,7 +121,7 @@ end
     products.metadata
 
 struct _ArrayProductContract{N,E,B<:AbstractArrayBackend,
-    D<:AbstractPlaneDevice}
+    D<:AbstractComputeDevice}
     dimensions::NTuple{N,Int}
     numeric_type::Type{E}
     backend::B
@@ -180,7 +180,7 @@ end
 
 @inline function _array_product_contract(storage::AbstractArray)
     selector = backend(storage)
-    device = plane_device(storage)
+    device = compute_device(storage)
     return _ArrayProductContract(size(storage), eltype(storage), selector,
         device)
 end
@@ -268,7 +268,7 @@ end
     typeof(backend(storage)) === typeof(contract.backend) || throw(
         PlantPreparationError(:acquisition, :backend,
             "$label backend does not match its prepared product contract"))
-    plane_device(storage) == contract.device || throw(
+    compute_device(storage) == contract.device || throw(
         PlantPreparationError(:acquisition, :device,
             "$label device does not match its prepared product contract"))
     return storage

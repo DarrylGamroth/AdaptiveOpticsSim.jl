@@ -448,7 +448,7 @@ end
     invalid_type = AcquisitionProducts(zeros(Float32, 2, 2);
         metadata=valid_destination.metadata)
     invalid_device = AcquisitionProducts(ContractDeviceArray(
-        zeros(T, 2, 2), ContractPlaneDevice(91));
+        zeros(T, 2, 2), ContractComputeDevice(91));
         metadata=valid_destination.metadata)
     for (source_product, reason) in (
         (invalid_metadata, :metadata),

@@ -62,6 +62,49 @@ transport ownership to core.
   predeclared topology matrix. Passing warmed service time alone is
   insufficient.
 
+## Gate 7 Single-GPU Requirements
+
+The following clauses define the single-device capability gate. They expose
+enough identity and ownership for later placement work without implementing
+the Gate 9A mixed-resource planner or Gate 9B multi-GPU partitioning.
+
+- **HIL-GPU-001.a:** Core MUST represent semantic array-backend family and
+  concrete compute-device identity as separate contracts. A backend family
+  MUST NOT be treated as an implicit accelerator ordinal or compute-device
+  identity.
+- **HIL-GPU-001.b:** Every maintained accelerator array and supported array
+  view MUST report a family-qualified concrete compute device.
+  Same-family/different-device storage MUST compare unequal, and prepared
+  compatibility checks MUST reject it before destination mutation.
+- **HIL-GPU-001.c:** Every prepared path execution group MUST expose immutable
+  requirements containing its backend family, concrete compute device, and
+  full-optical requirement. This description MUST NOT assign a worker, stream,
+  queue, or placement policy.
+- **HIL-GPU-001.d:** Preparation MUST derive batching from an explicit
+  model-owned capability and immutable compatibility signature. Direction or
+  wavelength samples with incompatible geometry, radiometry, numerical type,
+  backend, compute device, FFT plan, or product contract MUST remain separate
+  or fail during preparation; warmed execution MUST NOT regroup them
+  heuristically.
+- **HIL-GPU-001.e:** One prepared owner MUST submit each single-device batch
+  and own its streams, FFT plans, allocator/workspace state, and completion
+  barriers. Core MUST expose bounded mutating executor seams but MUST NOT
+  create the HIL task, ring, pacing, affinity, or transport policy.
+- **HIL-GPU-001.f:** A batch launch MUST NOT be reported complete until its
+  backend completion boundary has been established. Device-ready completion,
+  host observation, and host/device transfer MUST remain distinguishable
+  prepared boundaries.
+- **HIL-GPU-001.g:** Supported path, controllable-optic, sampled-aberration,
+  detector, and acquisition state MUST remain on the declared compute device
+  through its promoted execution boundary. A hidden host mirror or implicit
+  host fallback MUST NOT satisfy device-resident support.
+- **HIL-GPU-001.h:** Promotion MUST validate the declared CUDA and AMDGPU model
+  matrix against the deterministic CPU oracle with scalar indexing disabled.
+  Evidence MUST cover numerical and discrete-state parity, residency,
+  synchronization, warmed allocation, first use, and a launch/submission
+  proxy. Timing becomes HIL latency evidence only under the maintained
+  fixed-arrival absolute-and-relative contract.
+
 ## Optical Branch Ownership And Parallelism
 
 Different source directions are the primary coarse-grained parallel unit. They

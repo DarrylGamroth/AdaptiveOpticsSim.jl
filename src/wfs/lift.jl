@@ -307,7 +307,7 @@ end
 
 struct LiFTObservationMetadata{T<:AbstractFloat,
     C<:LiFTObservationContract,D<:AbstractLiFTObservationDomain,E,
-    B<:AbstractArrayBackend,PD<:AbstractPlaneDevice}
+    B<:AbstractArrayBackend,PD<:AbstractComputeDevice}
     contract::C
     domain::D
     readout_noise_std::T
@@ -501,9 +501,9 @@ function _require_lift_response_array(array::AbstractArray,
     typeof(backend(array)) === typeof(backend(template)) || throw(
         InvalidConfiguration(
             "LiFT response and forward model must use the same array backend"))
-    plane_device(array) == plane_device(template) || throw(
+    compute_device(array) == compute_device(template) || throw(
         InvalidConfiguration(
-            "LiFT response and forward model must occupy the same physical device"))
+            "LiFT response and forward model must occupy the same compute device"))
     return nothing
 end
 
@@ -600,15 +600,15 @@ function prepare_lift_forward_model(tel::Telescope,
     typeof(backend(basis)) === typeof(backend(tel)) || throw(
         InvalidConfiguration(
             "LiFT telescope and basis must use the same array backend"))
-    plane_device(basis) == plane_device(prototype) || throw(
+    compute_device(basis) == compute_device(prototype) || throw(
         InvalidConfiguration(
-            "LiFT telescope and basis must occupy the same physical device"))
+            "LiFT telescope and basis must occupy the same compute device"))
     typeof(backend(diversity_opd)) === typeof(backend(tel)) || throw(
         InvalidConfiguration(
             "LiFT diversity and telescope must use the same array backend"))
-    plane_device(diversity_opd) == plane_device(prototype) || throw(
+    compute_device(diversity_opd) == compute_device(prototype) || throw(
         InvalidConfiguration(
-            "LiFT diversity and telescope must occupy the same physical device"))
+            "LiFT diversity and telescope must occupy the same compute device"))
     _lift_output_dimensions(focal_resolution, mapping)
     _require_lift_mapping_backend(mapping, prototype)
 
@@ -682,9 +682,9 @@ function LiFTObservation(contract::LiFTObservationContract,
     typeof(backend(values)) === typeof(rate_metadata.backend) || throw(
         InvalidConfiguration(
             "LiFT observation and forward model must use the same array backend"))
-    device = plane_device(values)
+    device = compute_device(values)
     device == rate_metadata.device || throw(InvalidConfiguration(
-        "LiFT observation and forward model must occupy the same physical device"))
+        "LiFT observation and forward model must occupy the same compute device"))
     sigma = rate_metadata.numeric_type(readout_noise_std)
     isfinite(sigma) && sigma >= zero(sigma) || throw(InvalidConfiguration(
         "LiFT observation readout noise must be finite and nonnegative"))
@@ -1004,8 +1004,8 @@ function _require_lift_weighting(mode::LiFTWeightMatrix,
     typeof(backend(mode.R_n)) === typeof(metadata.backend) || throw(
         InvalidConfiguration(
             "LiFT observation covariance must use the observation array backend"))
-    plane_device(mode.R_n) == metadata.device || throw(InvalidConfiguration(
-        "LiFT observation covariance must occupy the observation physical device"))
+    compute_device(mode.R_n) == metadata.device || throw(InvalidConfiguration(
+        "LiFT observation covariance must occupy the observation compute device"))
     return nothing
 end
 
@@ -1019,9 +1019,9 @@ function _require_lift_reconstruction(lift::LiFT,
     typeof(backend(coeffs)) === typeof(backend(model_values)) || throw(
         InvalidConfiguration(
             "LiFT coefficient buffer must use the prepared array backend"))
-    plane_device(coeffs) == plane_device(model_values) || throw(
+    compute_device(coeffs) == compute_device(model_values) || throw(
         InvalidConfiguration(
-            "LiFT coefficient buffer must occupy the prepared physical device"))
+            "LiFT coefficient buffer must occupy the prepared compute device"))
     optimize_norm in (:sum, :max, :none) || throw(InvalidConfiguration(
         "LiFT optimize_norm must be :sum, :max, or :none"))
     length(coeffs) >= size(_lift_model(lift).basis, 3) || throw(
@@ -1043,8 +1043,8 @@ function _require_lift_initial_coefficients(dest::AbstractVector{T},
     typeof(backend(initial)) === typeof(backend(dest)) || throw(
         InvalidConfiguration(
             "LiFT initial coefficients must use the coefficient array backend"))
-    plane_device(initial) == plane_device(dest) || throw(InvalidConfiguration(
-        "LiFT initial coefficients must occupy the coefficient physical device"))
+    compute_device(initial) == compute_device(dest) || throw(InvalidConfiguration(
+        "LiFT initial coefficients must occupy the coefficient compute device"))
     return nothing
 end
 
@@ -1653,9 +1653,9 @@ function predict_lift_observation!(dest::AbstractMatrix,
     typeof(backend(dest)) === typeof(backend(forward.output.values)) || throw(
         InvalidConfiguration(
             "LiFT prediction destination must use the prepared array backend"))
-    plane_device(dest) == plane_device(forward.output.values) || throw(
+    compute_device(dest) == compute_device(forward.output.values) || throw(
         InvalidConfiguration(
-            "LiFT prediction destination must occupy the prepared physical device"))
+            "LiFT prediction destination must occupy the prepared compute device"))
     rate = _lift_rate_values_from_opd!(forward, opd)
     T = eltype(rate)
     native_scale = inv(lift_observation_to_rate_scale(domain, T))

@@ -52,7 +52,7 @@ One validated, zero-copy controller-product binding.
 
 The product is borrowed caller storage. Array products may be views into a
 larger controller output, but their exact element type, shape, backend, and
-physical device match the prepared endpoint. Scalar products use an assigned
+compute device match the prepared endpoint. Scalar products use an assigned
 `Ref{T}` and are host-resident.
 """
 struct PreparedControllerOutputRoute{
@@ -188,11 +188,11 @@ function _require_controller_output_product(
             "controller-output product $(repr(name)) backend " *
             "$(typeof(backend(product))) does not match endpoint backend " *
             "$(typeof(backend(binding.endpoint)))"))
-    expected_device = plane_device(binding.initial_command)
-    actual_device = plane_device(product)
+    expected_device = compute_device(binding.initial_command)
+    actual_device = compute_device(product)
     actual_device == expected_device || throw(PlantPreparationError(
-        :controller_output_routing, :physical_device,
-        "controller-output product $(repr(name)) physical device " *
+        :controller_output_routing, :compute_device,
+        "controller-output product $(repr(name)) compute device " *
         "$actual_device does not match endpoint device $expected_device"))
     return product
 end
@@ -266,7 +266,7 @@ end
 Bind every named, caller-owned controller output product to one distinct
 prepared command endpoint. Array products may be views into a flat controller
 buffer; each view must exactly match its endpoint's element type, shape,
-backend, and physical device. Scalar products use assigned `Ref` storage.
+backend, and compute device. Scalar products use assigned `Ref` storage.
 
 The returned routes are canonicalized by endpoint identity. They borrow the
 controller products without copying and add no sequence, effective-time,

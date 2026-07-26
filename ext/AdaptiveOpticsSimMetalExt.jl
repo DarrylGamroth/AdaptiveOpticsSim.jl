@@ -11,5 +11,7 @@ AdaptiveOpticsSim.backend_rand(::Type{AdaptiveOpticsSim.MetalBackendTag}, ::Type
 AdaptiveOpticsSim.backend_randn(::Type{AdaptiveOpticsSim.MetalBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = Metal.randn(T, dims...)
 AdaptiveOpticsSim.backend_zeros(::Type{AdaptiveOpticsSim.MetalBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = Metal.zeros(T, dims...)
 AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.MetalBackendTag}, value, dims::Vararg{Int}) = Metal.fill(value, dims...)
+AdaptiveOpticsSim.compute_device_identifier(array::Metal.MtlArray) =
+    UInt(pointer(Metal.device(array)))
 
 end

@@ -418,7 +418,7 @@ function run_optional_prepared_plant_checks(::Type{B},
     prepared_sampled_opd =
         Plant.sampled_aberration_opd(prepared_sampled)
     @test prepared_sampled_opd isa BackendArray
-    @test plane_device(prepared_sampled_opd) ==
+    @test compute_device(prepared_sampled_opd) ==
         sampled_metadata.device
     fill!(sampled_opd, zero(T))
     AdaptiveOpticsSim.synchronize_backend!(
@@ -436,7 +436,7 @@ function run_optional_prepared_plant_checks(::Type{B},
     @test acquisition_observation(slow) isa BackendArray
     @test acquisition_observation(illumination) isa BackendArray
     @test path_result_key(path).device ==
-        plane_device(acquisition_observation(fast))
+        compute_device(acquisition_observation(fast))
     @test acquisition_observation(fast) !== acquisition_observation(slow)
 
     pupil = path_input(path)
@@ -559,7 +559,7 @@ function run_optional_prepared_plant_checks(::Type{B},
     @test_throws PlantPreparationError Plant.require_path_result(
         path; backend=CPUBackend())
     @test_throws PlantPreparationError Plant.require_path_result(
-        path; device=AdaptiveOpticsSim.HostPlaneDevice())
+        path; device=AdaptiveOpticsSim.HostComputeDevice())
     return nothing
 end
 
@@ -650,6 +650,15 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
         qe=sampled_qe, response_model=sampled_response, T=T,
         backend=selector)
     pupil = PupilFunction(tel; T=T, backend=selector)
+    device = compute_device(pupil.opd)
+    @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
+    @test typeof(AdaptiveOpticsSim.compute_device_backend(device)) ===
+        typeof(selector)
+    @test !isnothing(
+        AdaptiveOpticsSim.compute_device_identifier(device))
+    @test compute_device(pupil.amplitude) == device
+    compute_device(pupil.opd)
+    @test @allocated(compute_device(pupil.opd)) == 0
     @test pupil.opd isa BackendArray
     @test dm.state.coefs isa BackendArray
     @test dm.state.modes isa AdaptiveOpticsSim.GaussianInfluenceOperator
@@ -886,8 +895,8 @@ function run_optional_wfs_stage_contracts(
     @test rate.values isa BackendArray
     @test observation.storage isa BackendArray
     @test measurement.storage isa BackendArray
-    @test observation.metadata.device == plane_device(observation.storage)
-    @test measurement.metadata.device == plane_device(measurement.storage)
+    @test observation.metadata.device == compute_device(observation.storage)
+    @test measurement.metadata.device == compute_device(measurement.storage)
     @test Array(measurement.storage) == Array(observation.storage)
     @test sum(Array(observation.storage)) ≈
         sum(Array(rate.values)) * T(0.4) * T(0.5) rtol=T(2e-6)
@@ -1513,7 +1522,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     @test wavefront.amplitude isa BackendArray
     @test wavefront.opd isa BackendArray
     @test field.values isa BackendArray
-    @test field.metadata.device == plane_device(field.values)
+    @test field.metadata.device == compute_device(field.values)
     field_view = @view field.values[:, :]
     for wrapper in (
         field_view,
@@ -1521,7 +1530,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         transpose(field_view),
         PermutedDimsArray(field_view, (2, 1)),
     )
-        @test plane_device(wrapper) == field.metadata.device
+        @test compute_device(wrapper) == field.metadata.device
     end
 
     wrapped_intensity_parent = similar(wavefront.opd, T, 4, 4)

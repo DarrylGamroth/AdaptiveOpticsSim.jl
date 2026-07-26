@@ -148,7 +148,7 @@ Use this when you care about:
 angular coordinates. Its values are source-scaled, cell-integrated photon
 arrival rates before detector exposure, not an inherently unit-normalized PSF.
 Preparation binds the pupil, work field, output storage, FFT workspace,
-numeric type, backend, and physical device. The `PupilFunction` owns the
+numeric type, backend, and compute device. The `PupilFunction` owns the
 mutable path OPD and amplitude; update that same product with `apply_opd!`,
 `render_atmosphere!`, or `apply_surface!` before calling
 `form_direct_image!` again. `Telescope` owns aperture geometry, not a mutable
@@ -665,7 +665,7 @@ instrument path requires it.
 The acquired Pyramid/BioEdge estimator accepts a real, square
 `:four_pupil_mosaic`, including integer ADU/count frames. It converts samples to
 the estimator's floating-point precision before differential arithmetic, and
-preparation rejects incompatible frame geometry, backend, or physical device.
+preparation rejects incompatible frame geometry, backend, or compute device.
 Reprepare an optical plan after changing the front-end propagation sampling.
 
 A single diffractive Shack–Hartmann, Pyramid, BioEdge, or atmosphere-aware

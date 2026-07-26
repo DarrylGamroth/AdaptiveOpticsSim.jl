@@ -43,7 +43,7 @@ evidence includes:
   spatial-filter mutation
 - prepared plane compatibility checks covering physical sampling,
   centering/orientation, wavelength/channel, units/normalization,
-  coherence/combination policy, backend, and physical device
+  coherence/combination policy, backend, and compute device
 - source-to-optical-to-detector dimensional accounting with non-unit unequal
   durations proving optical outputs remain photon-arrival-rate products and
   acquisition applies elapsed time exactly once

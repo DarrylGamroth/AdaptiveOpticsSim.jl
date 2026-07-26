@@ -857,13 +857,18 @@ end
     @test mismatched_measurement.reason === :shape
 
     first_device_storage = ContractDeviceArray(zeros(2),
-        ContractPlaneDevice(1))
+        ContractComputeDevice(1))
     second_device_storage = ContractDeviceArray(zeros(2),
-        ContractPlaneDevice(2))
+        ContractComputeDevice(2))
     first_device_metadata = WFSObservationMetadata(first_device_storage;
         layout=:device_channels)
     @test WFSObservation(first_device_storage, :adu,
-        first_device_metadata).metadata.device == ContractPlaneDevice(1)
+        first_device_metadata).metadata.device == ContractComputeDevice(1)
+    @test compute_device(@view(first_device_storage[:])) ==
+        ContractComputeDevice(1)
+    @test compute_device(reshape(
+        @view(first_device_storage[:]), 1, :)) ==
+        ContractComputeDevice(1)
     @test typeof(backend(first_device_storage)) ===
         typeof(backend(second_device_storage))
     device_mismatch = try
@@ -1932,7 +1937,7 @@ end
         @test complex_error.reason === :numeric_type
 
         device_observation = WFSObservation(ContractDeviceArray(
-            zeros(T, size(rate.values)), ContractPlaneDevice(1));
+            zeros(T, size(rate.values)), ContractComputeDevice(1));
             units=:electron_count, layout=:four_pupil_mosaic)
         observation_device_error = contract_captured_error() do
             prepare_wfs_estimation(staged, device_observation, measurement)
@@ -1950,7 +1955,7 @@ end
         @test integer_measurement_error.reason === :numeric_type
 
         device_measurement = WFSMeasurement(ContractDeviceArray(
-            zeros(T, length(slopes(staged))), ContractPlaneDevice(1));
+            zeros(T, length(slopes(staged))), ContractComputeDevice(1));
             units=:dimensionless, kind=:differential_slopes)
         measurement_device_error = contract_captured_error() do
             prepare_wfs_estimation(staged, observation, device_measurement)
@@ -2049,7 +2054,7 @@ end
         @test integer_direct_error isa WFSPreparationError
         @test integer_direct_error.reason === :numeric_type
         device_direct = WFSMeasurement(ContractDeviceArray(
-            zeros(T, length(slopes(geometric))), ContractPlaneDevice(1));
+            zeros(T, length(slopes(geometric))), ContractComputeDevice(1));
             units=:metre, kind=:geometric_slopes)
         device_direct_error = contract_captured_error() do
             prepare_wfs_estimation(geometric, pupil, device_direct)

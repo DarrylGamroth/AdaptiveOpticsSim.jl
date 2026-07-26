@@ -361,9 +361,9 @@ function prepare_detector_acquisition(det::Detector, map::IntensityMap;
     typeof(backend(det)) === typeof(metadata.backend) ||
         throw(InvalidConfiguration(
             "detector and intensity map must use the same array backend"))
-    plane_device(det.state.frame) == metadata.device ||
+    compute_device(det.state.frame) == metadata.device ||
         throw(InvalidConfiguration(
-            "detector and intensity map must occupy the same physical device"))
+            "detector and intensity map must occupy the same compute device"))
 
     normalization_scale = _normalization_rate_scale(metadata.normalization,
         normalized_to_photon_rate, T)

@@ -384,7 +384,7 @@ struct PreparedLinearReducedOrderProvider{
     R<:Tuple,
     V<:AbstractVector,
     B<:AbstractArrayBackend,
-    PD<:AbstractPlaneDevice,
+    PD<:AbstractComputeDevice,
     E,
 }
     disturbance::HD
@@ -488,7 +488,7 @@ function prepare_acquisition_provider(
             measurement_values)))
     implementation = PreparedLinearReducedOrderProvider(
         disturbance, state, projection, sensor, responses, residual,
-        command_workspace, selector, plane_device(measurement_values),
+        command_workspace, selector, compute_device(measurement_values),
         model.calibration_revision, deepcopy(model.operating_envelope),
         model.omitted_effects)
     return PreparedAcquisitionProvider(implementation, products)
@@ -509,7 +509,7 @@ function validate_acquisition_provider_binding(
     typeof(backend(storage)) === typeof(implementation.backend) ||
         _reduced_order_error(:backend,
             "reduced-order measurement backend changed after preparation")
-    plane_device(storage) == implementation.device ||
+    compute_device(storage) == implementation.device ||
         _reduced_order_error(:device,
             "reduced-order measurement device changed after preparation")
     size(implementation.path_projection, 2) ==
@@ -624,8 +624,8 @@ function _prepare_reduced_order_event_response(
         typeof(backend(response.operator)) ||
         _reduced_order_error(:command_backend,
             "reduced-order response backend does not match endpoint $(response.endpoint)")
-    plane_device(binding.initial_command) ==
-        plane_device(response.operator) ||
+    compute_device(binding.initial_command) ==
+        compute_device(response.operator) ||
         _reduced_order_error(:command_device,
             "reduced-order response device does not match endpoint $(response.endpoint)")
     _require_reduced_order_schema_semantics(response, schema)

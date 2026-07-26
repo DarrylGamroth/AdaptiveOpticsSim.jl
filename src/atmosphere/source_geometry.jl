@@ -440,8 +440,8 @@ function _validate_atmosphere_destination(dest::AbstractMatrix,
     typeof(backend(dest)) === typeof(metadata.backend) ||
         throw(InvalidConfiguration(
             "atmosphere destination backend does not match prepared output"))
-    plane_device(dest) == metadata.device || throw(InvalidConfiguration(
-        "atmosphere destination is on a different physical device"))
+    compute_device(dest) == metadata.device || throw(InvalidConfiguration(
+        "atmosphere destination is on a different compute device"))
     return dest
 end
 
@@ -475,7 +475,7 @@ function _validate_atmosphere_renderer_binding(
     typeof(backend(renderer.pupil)) === typeof(metadata.backend) || throw(
         AtmosphereEpochError(
             "prepared renderer pupil backend changed after preparation"))
-    plane_device(renderer.pupil) == metadata.device || throw(
+    compute_device(renderer.pupil) == metadata.device || throw(
         AtmosphereEpochError(
             "prepared renderer pupil device changed after preparation"))
     return renderer
@@ -523,7 +523,7 @@ end
     render_atmosphere_opd!(destination, renderer, atmosphere, epoch)
 
 Render one frozen epoch into a caller-owned OPD matrix. Epoch, shape, backend,
-and physical-device compatibility are checked before output mutation.
+and compute-device compatibility are checked before output mutation.
 """
 function render_atmosphere_opd!(dest::AbstractMatrix,
     renderer::AtmosphereDirectionRenderer, atm::AbstractTimedAtmosphere,

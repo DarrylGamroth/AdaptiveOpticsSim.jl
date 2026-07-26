@@ -117,35 +117,6 @@ struct IncoherentIntensityAddition <: AbstractCombinationPolicy end
 """The product must remain separate unless an explicit mapping is prepared."""
 struct NonCombinableProduct <: AbstractCombinationPolicy end
 
-abstract type AbstractPlaneDevice end
-struct HostPlaneDevice <: AbstractPlaneDevice end
-
-struct AcceleratorPlaneDevice{B<:KernelAbstractions.Backend,I} <:
-    AbstractPlaneDevice
-    backend::B
-    identifier::I
-end
-
-@inline plane_device(storage::AbstractArray) =
-    plane_device(execution_style(storage), storage)
-@inline physical_device_identifier(::AbstractArray) = nothing
-@inline physical_device_identifier(storage::SubArray) =
-    physical_device_identifier(parent(storage))
-@inline physical_device_identifier(storage::Base.ReshapedArray) =
-    physical_device_identifier(parent(storage))
-@inline physical_device_identifier(storage::Base.ReinterpretArray) =
-    physical_device_identifier(parent(storage))
-@inline physical_device_identifier(storage::PermutedDimsArray) =
-    physical_device_identifier(parent(storage))
-@inline physical_device_identifier(storage::Transpose) =
-    physical_device_identifier(parent(storage))
-@inline physical_device_identifier(storage::Adjoint) =
-    physical_device_identifier(parent(storage))
-@inline plane_device(::ScalarCPUStyle, ::AbstractArray) = HostPlaneDevice()
-@inline plane_device(style::AcceleratorStyle, storage::AbstractArray) =
-    AcceleratorPlaneDevice(style.backend,
-        physical_device_identifier(storage))
-
 struct OpticalPlaneMetadata{
     T<:AbstractFloat,
     E,
@@ -156,7 +127,7 @@ struct OpticalPlaneMetadata{
     M<:AbstractSpatialMeasure,
     C<:AbstractCombinationPolicy,
     B<:AbstractArrayBackend,
-    D<:AbstractPlaneDevice,
+    D<:AbstractComputeDevice,
 }
     kind::K
     coordinate_domain::Q
@@ -199,7 +170,7 @@ function OpticalPlaneMetadata(kind::AbstractOpticalPlaneKind,
     normalization::AbstractOpticalNormalization=UnspecifiedNormalization(),
     spatial_measure::AbstractSpatialMeasure=UnspecifiedSpatialMeasure(),
     coherence::AbstractCombinationPolicy=UnspecifiedCoherence(),
-    device::AbstractPlaneDevice=plane_device(storage),
+    device::AbstractComputeDevice=compute_device(storage),
 ) where {T<:AbstractFloat,E}
     all(value -> isfinite(value) && value > zero(T), sampling) ||
         throw(InvalidConfiguration(
@@ -240,7 +211,7 @@ function validate_plane_storage(metadata::OpticalPlaneMetadata,
     typeof(backend(storage)) === typeof(metadata.backend) ||
         throw(InvalidConfiguration(
             "$label storage backend does not match declared backend"))
-    plane_device(storage) == metadata.device || throw(InvalidConfiguration(
+    compute_device(storage) == metadata.device || throw(InvalidConfiguration(
         "$label storage device does not match declared device"))
     return metadata
 end
@@ -272,7 +243,7 @@ function require_same_plane_grid(a::OpticalPlaneMetadata,
     typeof(a.backend) === typeof(b.backend) || throw(InvalidConfiguration(
         "$label have incompatible backends"))
     a.device == b.device || throw(InvalidConfiguration(
-        "$label are on different physical devices"))
+        "$label are on different compute devices"))
     return nothing
 end
 
@@ -425,9 +396,9 @@ function _validate_surface_application(pupil::PupilFunction,
         throw(DimensionMismatchError(
             "optical-surface OPD dimensions do not match PupilFunction"))
     require_same_backend(pupil, opd)
-    plane_device(opd) == pupil.metadata.device ||
+    compute_device(opd) == pupil.metadata.device ||
         throw(InvalidConfiguration(
-            "optical surface and PupilFunction occupy different physical devices"))
+            "optical surface and PupilFunction occupy different compute devices"))
     return opd
 end
 
