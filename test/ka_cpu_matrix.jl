@@ -707,6 +707,90 @@ end
         mark_ka_cpu_kernel!(:moving_layer_accumulate_kernel!)
         @test ka_cpu_close(ka_accum, scalar_accum)
 
+        batch_shift_x = [0.25 -0.5; 0.125 0.75]
+        batch_shift_y = [-0.5 0.375; 0.25 -0.125]
+        batch_scale = [1.0 0.8; 0.9 1.0]
+        batch_pupil = trues(4, 4)
+        batch_pupil[1, 1] = false
+        batch_pupil[4, 3] = false
+        batch_output = fill(-99.0, 4, 4, 2)
+        batch_expected = similar(batch_output)
+
+        first_offset_x = 0.2
+        first_offset_y = -0.3
+        first_amplitude = 0.75
+        AdaptiveOpticsSim.launch_kernel!(
+            KA_CPU_STYLE,
+            AdaptiveOpticsSim.atmosphere_direction_layer_batch_kernel!,
+            batch_output,
+            screen,
+            batch_shift_x,
+            batch_shift_y,
+            batch_scale,
+            batch_pupil,
+            first_offset_x,
+            first_offset_y,
+            first_amplitude,
+            1,
+            4,
+            10,
+            2,
+            true;
+            ndrange=size(batch_output),
+        )
+        @inbounds for direction in axes(batch_expected, 3)
+            expected_slice = @view batch_expected[:, :, direction]
+            AdaptiveOpticsSim.extract_shifted_screen!(
+                expected_slice,
+                screen,
+                first_offset_x - batch_shift_x[1, direction],
+                first_offset_y - batch_shift_y[1, direction],
+                first_amplitude,
+                batch_scale[1, direction],
+            )
+            expected_slice .*= batch_pupil
+        end
+        @test ka_cpu_close(batch_output, batch_expected)
+
+        second_offset_x = -0.4
+        second_offset_y = 0.15
+        second_amplitude = 0.25
+        AdaptiveOpticsSim.launch_kernel!(
+            KA_CPU_STYLE,
+            AdaptiveOpticsSim.atmosphere_direction_layer_batch_kernel!,
+            batch_output,
+            screen,
+            batch_shift_x,
+            batch_shift_y,
+            batch_scale,
+            batch_pupil,
+            second_offset_x,
+            second_offset_y,
+            second_amplitude,
+            2,
+            4,
+            10,
+            2,
+            false;
+            ndrange=size(batch_output),
+        )
+        @inbounds for direction in axes(batch_expected, 3)
+            expected_slice = @view batch_expected[:, :, direction]
+            AdaptiveOpticsSim.accumulate_shifted_screen!(
+                expected_slice,
+                screen,
+                second_offset_x - batch_shift_x[2, direction],
+                second_offset_y - batch_shift_y[2, direction],
+                second_amplitude,
+                batch_scale[2, direction],
+            )
+            expected_slice .*= batch_pupil
+        end
+        mark_ka_cpu_kernel!(:atmosphere_direction_layer_batch_kernel!)
+        @test ka_cpu_close(batch_output, batch_expected)
+        @test all(iszero, @view batch_output[1, 1, :])
+        @test all(iszero, @view batch_output[4, 3, :])
+
         scalar_sub = zeros(Float64, 8, 8)
         ka_sub = zeros(Float64, 8, 8)
         AdaptiveOpticsSim._add_subharmonics!(SCALAR_CPU_STYLE, scalar_sub, 0.15, 25.0, 0.2, 1e-10;
@@ -1159,7 +1243,6 @@ end
         deferred = Set([
             :accumulate_selected_block_kernel!,
             :accumulate_selected_block_transpose_kernel!,
-            :atmosphere_direction_layer_batch_kernel!,
             :calibration_ramp_kernel!,
             :covariance_matrix_kernel!,
             :curvature_abs2_stack_kernel!,
