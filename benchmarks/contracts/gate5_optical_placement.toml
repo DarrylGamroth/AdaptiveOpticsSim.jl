@@ -1,0 +1,72 @@
+schema_version = 1
+name = "gate5_optical_placement_cpu"
+evidence_class = "warmed in-process serial CPU conjugated optical-placement cycle service time"
+samples_per_run = 10000
+runs = 3
+warmup_cycles = 1000
+allocation_cycles = 500
+long_run_cycles = 5000
+minimum_samples_for_p99 = 10000
+histogram_lowest_ns = 1
+histogram_highest_ns = 60000000000
+histogram_significant_figures = 3
+max_alloc_bytes_per_cycle = 8192
+topology_path_counts = [4, 8, 16]
+topology_resolution = 8
+
+scope_exclusions = [
+    "package import and dependency resolution",
+    "fixed-rate arrivals, wall-clock pacing, queues, overload, and recovery",
+    "external RTC transport, command arrival, detector publication, and response latency",
+    "parallel workers, GPU event-loop orchestration, and host-device transfer",
+    "CPU affinity, isolation, governor control, NUMA placement, and interrupt placement",
+    "detailed relay or coronagraph prescriptions owned by external path executors",
+    "production instrument fidelity, production topology capacity, or NFIRAOS/MORFEO qualification",
+]
+
+[contract]
+question = "For a representative serial multi-path optical plant, do explicit NGS/LGS conjugate placement, common MCAO, selected-path MOAO, common static OPD, and path-specific NCPA preserve their numerical and visibility oracles, finite-support loss, declaration-order independence, fixed prepared storage, bounded warmed allocation, and reproducible service-cost distributions across a bounded topology matrix?"
+load_model = "closed-loop self-paced serial all-path optical-cycle service-cost characterization; this is not an external RTC or fixed-arrival HIL pacing test"
+arrival_model = "the next all-path optical cycle starts only after the prior cycle and its histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "the benchmark characterizes unpaced service cost and makes no fixed-arrival latency claim"
+timed_boundary = "advance one canonical optical-sample timestamp at which every declared path materializes its pupil, applies the common replacement and selected additive aberrations, applies all visible held DM surfaces through prepared path couplings, executes its prepared Fraunhofer path, and accumulates each result into its already-open global-shutter exposure"
+timer = "time_ns; the final clock read is included, while histogram recording is excluded from per-cycle latency and included in achieved throughput"
+correctness_oracle = "analytic constant-OPD sums by path role; exact WFS/science isolation; declaration-order replay of pupil and propagated outputs; explicit finite-support replacement; fixed prepared storage and deterministic output hashes; exact prepared binding counts over 4, 8, and 16 paths"
+threading = "one Julia thread, one BLAS thread, and one FFT provider thread"
+first_use = "recorded immediately after construction and before correctness validation or warmup; package import and preparation are excluded"
+tail_claim = "p99 is reported with 100 expected observations beyond p99 per 10000-sample run; p99.9 is diagnostic"
+latency_gate = "this run establishes a comparable Gate 5 serial optical-placement baseline; no absolute, fixed-arrival, external-RTC, or production-instrument latency threshold is asserted"
+allocation_gate = "the warmed eight-path materialize/place/propagate boundary may use at most 8192 Julia heap bytes per processed all-path cycle over a 500-cycle window"
+topology_claim = "the 4/8/16-path matrix validates exact bounded binding counts and records preparation/storage characterization; it does not qualify generated-code growth or a production instrument topology"
+
+[workload]
+backend = "CPUBackend"
+numeric_type = "Float64"
+resolution = 16
+path_count = 8
+diameter_m = 8.0
+central_obstruction = 0.0
+r0_m = 0.2
+outer_scale_m = 25.0
+wfs_wavelength_m = 7.0e-7
+science_wavelength_m = 8.0e-7
+photon_irradiance = 100.0
+lgs_altitude_m = 90000.0
+source_radius_arcsec = 8.0
+pupil_relay_magnification = 0.5
+common_dm_altitudes_m = [0.0, 5000.0, 12000.0]
+common_dm_commands_m = [1.0e-9, 2.0e-9, 3.0e-9]
+moao_altitude_m = 5000.0
+moao_command_base_m = 4.0e-9
+moao_command_step_m = 1.0e-9
+common_static_opd_m = 5.0e-9
+ncpa_base_m = 10.0e-9
+ncpa_step_m = 1.0e-9
+numerical_atol = 1.0e-20
+output_order_atol = 0.0
+finite_support_atol = 0.0
+run_seed = 34565
+optical_sample_period_ns = 1000000
+acquisition_period_ns = 2000000000000
+acquisition_duration_ns = 1000000000000

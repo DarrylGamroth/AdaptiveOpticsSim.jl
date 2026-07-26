@@ -133,16 +133,20 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    deterministic fake RTC, and fixed-arrival evidence. The qualified boundary
    remains the serial oracle while worker, GPU, transport-specific, and
    placement-planner capabilities advance through their own gates.
-6. Continue Gate 5 from its implemented placement/visibility, sampled-coupling,
-   and native-DM composition foundation. Every optic and sampled aberration
+6. Preserve the completed Gate 5 placement/visibility, sampled-coupling, and
+   native-DM composition foundation. Every optic and sampled aberration
    declares placement and path visibility; preparation derives bounded
    canonical per-path bindings and compatible couplings; analytic NGS/LGS
    source-footprint geometry composes explicit pupil-relay registration with
    metric plane metadata; common multi-altitude MCAO plus target-local MOAO
    paths retain independent command state; and run-owned native `NCPA` or
-   `OPDMap` effects remain isolated to their declared branches. Complete the
-   Gate 5 hardware/capacity review before advancing to prepared CPU execution
-   groups, single-GPU direction batching, and physical device identity behind
+   `OPDMap` effects remain isolated to their declared branches. The clean
+   [Gate 5 artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
+   closes numerical, declaration-order, finite-support, fixed-storage,
+   bounded-allocation, and bounded 4/8/16-path topology evidence while exposing
+   the 16-path preparation/codegen cost. Advance next to Gate 6 prepared CPU
+   execution groups and bounded generated-code design; single-GPU direction
+   batching and physical device identity remain Gate 7, behind their own
    numerical, allocation, residency, and fixed-arrival evidence.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,
