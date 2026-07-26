@@ -189,7 +189,23 @@ struct _PreparedControllableOpticPathCouplingGroup
     representative_coupling_slot::UInt32
 end
 
-struct _PreparedPlantEventPath
+struct _PreparedPathExecutionGroupAcquisition
+    slot::UInt32
+    id::AcquisitionID
+end
+
+"""
+Run-immutable owner of one prepared direction-dependent optical path and every
+compatible acquisition consumer scheduled on that path.
+
+The group owns path-local mutable products, workspaces, and RNG streams through
+`path`; repeated execution therefore has exactly one writer. `ordinal` and
+`id` are stable for equivalent prepared topologies, while acquisition slots are
+run-local bounded references. The group owns no task, queue, CPU affinity, or
+transport policy.
+"""
+struct PreparedPathExecutionGroup
+    ordinal::UInt32
     id::OpticalPathID
     path::PreparedPathExecutor
     # Retain the heterogeneous input box created during preparation. The
@@ -208,6 +224,7 @@ struct _PreparedPlantEventPath
     optic_couplings::Memory{AbstractPupilSurfacePathCoupling}
     optic_coupling_groups::Memory{
         _PreparedControllableOpticPathCouplingGroup}
+    acquisitions::Memory{_PreparedPathExecutionGroupAcquisition}
 end
 
 struct _PreparedPlantEventAcquisition
@@ -321,14 +338,35 @@ struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
     sampled_aberration_path_bindings::
         PreparedSampledAberrationPathBindings
     command_endpoints::Memory{_PreparedPlantEventCommandEndpoint}
-    paths::Memory{_PreparedPlantEventPath}
+    path_groups::Memory{PreparedPathExecutionGroup}
     acquisitions::Memory{_PreparedPlantEventAcquisition}
     autonomous_optics::Memory{_PreparedAutonomousPeriodicOptic}
     trigger_topology::T
 end
 
 @inline plant_event_path_count(prepared::PreparedPlantEventLoop) =
-    length(prepared.paths)
+    length(prepared.path_groups)
+@inline path_execution_group_count(prepared::PreparedPlantEventLoop) =
+    length(prepared.path_groups)
+
+function path_execution_group(prepared::PreparedPlantEventLoop,
+    ordinal::Integer)
+    checkbounds(prepared.path_groups, ordinal)
+    return @inbounds prepared.path_groups[ordinal]
+end
+
+@inline path_execution_group_ordinal(group::PreparedPathExecutionGroup) =
+    Int(group.ordinal)
+@inline path_execution_group_path_id(group::PreparedPathExecutionGroup) =
+    group.id
+@inline path_execution_group_acquisition_count(
+    group::PreparedPathExecutionGroup) = length(group.acquisitions)
+
+function path_execution_group_acquisition_id(
+    group::PreparedPathExecutionGroup, index::Integer)
+    checkbounds(group.acquisitions, index)
+    return @inbounds group.acquisitions[index].id
+end
 @inline plant_event_acquisition_count(prepared::PreparedPlantEventLoop) =
     length(prepared.acquisitions)
 @inline plant_event_generator_count(prepared::PreparedPlantEventLoop) =
@@ -457,9 +495,9 @@ function _event_prepared_acquisition(plant::PreparedPlant,
         "prepared plant has no acquisition $id")
 end
 
-function _event_path_slot(paths, id::OpticalPathID)
-    @inbounds for index in eachindex(paths)
-        paths[index].id == id && return index
+function _event_path_group_slot(groups, id::OpticalPathID)
+    @inbounds for index in eachindex(groups)
+        groups[index].id == id && return index
     end
     _plant_event_loop_error(:missing_path_schedule,
         "event owner references path $id without an optical sample schedule")
@@ -1016,10 +1054,36 @@ function _require_direct_event_measurement(measurement)
         "linear reduced-order event acquisition requires a WFSMeasurement product; got $(typeof(measurement))")
 end
 
-function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
+function _prepare_path_execution_group_acquisitions(
+    acquisition_definitions,
+    acquisition_path_slots,
+    path_slot::Int,
+)
+    count = 0
+    @inbounds for acquisition_slot in eachindex(acquisition_path_slots)
+        acquisition_path_slots[acquisition_slot] == path_slot &&
+            (count += 1)
+    end
+    acquisitions = Memory{_PreparedPathExecutionGroupAcquisition}(
+        undef, count)
+    member = 1
+    @inbounds for acquisition_slot in eachindex(acquisition_path_slots)
+        acquisition_path_slots[acquisition_slot] == path_slot || continue
+        acquisitions[member] = _PreparedPathExecutionGroupAcquisition(
+            UInt32(acquisition_slot),
+            acquisition_definitions[acquisition_slot].acquisition,
+        )
+        member += 1
+    end
+    return acquisitions
+end
+
+function _prepare_path_execution_groups(
+    plant::PreparedPlant, definitions, owners,
+    acquisition_definitions, acquisition_path_slots,
     scheduler::PreparedEventScheduler)
     Base.@nospecialize plant
-    paths = Memory{_PreparedPlantEventPath}(undef, length(definitions))
+    groups = Memory{PreparedPathExecutionGroup}(undef, length(definitions))
     bindings = getfield(plant, :controllable_optic_path_bindings)
     sampled_bindings =
         getfield(plant, :sampled_aberration_path_bindings)
@@ -1044,7 +1108,14 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
                 binding_range,
                 requires_full_optical,
             )
-        paths[index] = _PreparedPlantEventPath(
+        acquisitions =
+            _prepare_path_execution_group_acquisitions(
+                acquisition_definitions,
+                acquisition_path_slots,
+                index,
+            )
+        groups[index] = PreparedPathExecutionGroup(
+            UInt32(index),
             definition.path,
             path,
             path.input,
@@ -1055,9 +1126,10 @@ function _prepare_event_paths(plant::PreparedPlant, definitions, owners,
             requires_full_optical,
             first(sampled_binding_range), last(sampled_binding_range),
             first(binding_range), last(binding_range),
-            optic_couplings, optic_coupling_groups)
+            optic_couplings, optic_coupling_groups,
+            acquisitions)
     end
-    return paths
+    return groups
 end
 
 function _event_controllable_optic_slot(optics,
@@ -1157,7 +1229,7 @@ function _require_unique_autonomous_optic_couplings(bindings)
     return nothing
 end
 
-function _prepare_event_autonomous_optics(definitions, optics, paths,
+function _prepare_event_autonomous_optics(definitions, optics, path_groups,
     topology)
     bindings = Memory{_PreparedAutonomousPeriodicOptic}(undef,
         length(definitions))
@@ -1173,13 +1245,13 @@ function _prepare_event_autonomous_optics(definitions, optics, paths,
         _require_autonomous_path_visibility(
             controllable_optic_visibility(optic), definition.optic,
             definition.path)
-        path_slot = _event_path_slot(paths, definition.path)
-        path = paths[path_slot]
-        path.requires_full_optical || _plant_event_loop_error(
+        path_slot = _event_path_group_slot(path_groups, definition.path)
+        group = path_groups[path_slot]
+        group.requires_full_optical || _plant_event_loop_error(
             :autonomous_path_without_full_optics,
             "autonomous optic $(definition.optic) targets path $(definition.path) without a full-optical acquisition")
         coupling = prepare_autonomous_periodic_optic(
-            optic.implementation, path.path, definition.fidelity)
+            optic.implementation, group.path, definition.fidelity)
         bindings[index] = _PreparedAutonomousPeriodicOptic(
             definition.optic, definition.path, UInt32(optic_slot),
             UInt32(path_slot), optic.implementation, coupling,
@@ -1377,12 +1449,14 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     sampled_aberration_path_bindings =
         getfield(plant, :sampled_aberration_path_bindings)
     command_endpoints = _prepare_event_command_endpoints(plant, scheduler)
-    paths = _prepare_event_paths(plant, sample_definitions, owners,
-        scheduler)
+    path_groups = _prepare_path_execution_groups(
+        plant, sample_definitions, owners, acquisition_definitions,
+        path_slots, scheduler)
     acquisitions = _prepare_event_acquisitions(acquisition_definitions,
         lifecycles, products, sample_providers, rngs, path_slots, scheduler)
     autonomous_optics = _prepare_event_autonomous_optics(
-        autonomous_definitions, optics, paths, definition.trigger_topology)
+        autonomous_definitions, optics, path_groups,
+        definition.trigger_topology)
     atmosphere = _require_selection_atmosphere(
         plant_atmosphere(getfield(plant, :definition)))
     atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
@@ -1390,7 +1464,7 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     return PreparedPlantEventLoop(_PlantEventLoopBinding(), atmosphere,
         atmosphere_rng, scheduler, actions, optics, optic_path_bindings,
         sampled_aberrations, sampled_aberration_path_bindings,
-        command_endpoints, paths, acquisitions, autonomous_optics,
+        command_endpoints, path_groups, acquisitions, autonomous_optics,
         _prepared_trigger_topology(definition.trigger_topology))
 end
 
@@ -1497,7 +1571,7 @@ function PlantEventLoopState(prepared::PreparedPlantEventLoop)
         acquisition_states[index] = _event_acquisition_state(
             prepared.acquisitions[index].lifecycle)
     end
-    path_sampled = Memory{Bool}(undef, length(prepared.paths))
+    path_sampled = Memory{Bool}(undef, length(prepared.path_groups))
     fill!(path_sampled, false)
     product_sequences = Memory{UInt64}(undef,
         length(prepared.acquisitions))
@@ -1556,7 +1630,7 @@ function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
                 prepared.optics[index].implementation)
     end
     endpoint_count = length(prepared.command_endpoints)
-    due_paths = Memory{Bool}(undef, length(prepared.paths))
+    due_paths = Memory{Bool}(undef, length(prepared.path_groups))
     fill!(due_paths, false)
     return PlantEventLoopWorkspace(prepared.binding,
         EventSchedulerWorkspace(prepared.scheduler), command_endpoints,
@@ -1584,7 +1658,7 @@ end
             length(prepared.command_endpoints) &&
         length(state.controllable_optics) == length(prepared.optics) &&
         length(state.acquisitions) == length(prepared.acquisitions) &&
-        length(state.path_sampled) == length(prepared.paths) &&
+        length(state.path_sampled) == length(prepared.path_groups) &&
         length(state.product_sequences) == length(prepared.acquisitions) &&
         length(state.product_ready_timestamps) ==
             length(prepared.acquisitions) ||
@@ -1612,7 +1686,7 @@ end
             length(prepared.command_endpoints) ||
         _plant_event_loop_error(:prepared_binding,
             "plant event-loop workspace command capacity changed after preparation")
-    length(workspace.due_paths) == length(prepared.paths) ||
+    length(workspace.due_paths) == length(prepared.path_groups) ||
         _plant_event_loop_error(:prepared_binding,
             "plant event-loop workspace capacity changed after preparation")
     return nothing
@@ -2703,13 +2777,13 @@ end
     return @inbounds state.acquisitions[index]
 end
 
-@inline function _event_path_binding(prepared::PreparedPlantEventLoop,
+@inline function _event_path_group(prepared::PreparedPlantEventLoop,
     slot::UInt32)
     index = Int(slot)
-    1 <= index <= length(prepared.paths) ||
+    1 <= index <= length(prepared.path_groups) ||
         _plant_event_loop_error(:invalid_action,
-            "event action contains an invalid optical-path slot")
-    return @inbounds prepared.paths[index]
+            "event action contains an invalid path-execution-group slot")
+    return @inbounds prepared.path_groups[index]
 end
 
 @inline function _require_inactive_event_generator(
@@ -2881,8 +2955,8 @@ end
     timestamp::PlantTimestamp)
     path_slot = Int(acquisition.path_slot)
     @inbounds state.path_sampled[path_slot] && return nothing
-    path = @inbounds prepared.paths[path_slot]
-    _event_generator_due_at(prepared, state, path.handle, timestamp) ||
+    group = @inbounds prepared.path_groups[path_slot]
+    _event_generator_due_at(prepared, state, group.handle, timestamp) ||
         _plant_event_loop_error(:uninitialized_path,
             "acquisition $(acquisition.id) begins before its first optical sample")
     return nothing
@@ -3332,9 +3406,9 @@ function _process_trigger_topology!(
         "trigger action exists without a prepared trigger topology")
 end
 
-function _preflight_event_path(path::_PreparedPlantEventPath,
+function _preflight_event_path(group::PreparedPathExecutionGroup,
     atmosphere)
-    _preflight_event_path(path.path, path.rngs, atmosphere)
+    _preflight_event_path(group.path, group.rngs, atmosphere)
     return nothing
 end
 
@@ -3526,13 +3600,17 @@ end
 function _preflight_due_path_consumers(
     prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
     due_paths::Memory{Bool}, timestamp::PlantTimestamp)
-    @inbounds for index in eachindex(prepared.acquisitions)
-        acquisition = prepared.acquisitions[index]
-        due_paths[Int(acquisition.path_slot)] || continue
-        acquisition_state = state.acquisitions[index]
-        _preflight_event_acquisition(acquisition, acquisition_state)
-        _preflight_event_integration_to(acquisition.lifecycle,
-            acquisition_state, timestamp)
+    @inbounds for path_slot in eachindex(prepared.path_groups)
+        due_paths[path_slot] || continue
+        group = prepared.path_groups[path_slot]
+        for member in group.acquisitions
+            index = Int(member.slot)
+            acquisition = prepared.acquisitions[index]
+            acquisition_state = state.acquisitions[index]
+            _preflight_event_acquisition(acquisition, acquisition_state)
+            _preflight_event_integration_to(acquisition.lifecycle,
+                acquisition_state, timestamp)
+        end
     end
     return nothing
 end
@@ -3540,12 +3618,16 @@ end
 function _integrate_due_path_consumers!(
     prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
     due_paths::Memory{Bool}, timestamp::PlantTimestamp)
-    @inbounds for index in eachindex(prepared.acquisitions)
-        acquisition = prepared.acquisitions[index]
-        due_paths[Int(acquisition.path_slot)] || continue
-        acquisition_state = state.acquisitions[index]
-        _integrate_event_acquisition_to!(acquisition.lifecycle,
-            acquisition_state, timestamp, acquisition.rng)
+    @inbounds for path_slot in eachindex(prepared.path_groups)
+        due_paths[path_slot] || continue
+        group = prepared.path_groups[path_slot]
+        for member in group.acquisitions
+            index = Int(member.slot)
+            acquisition = prepared.acquisitions[index]
+            acquisition_state = state.acquisitions[index]
+            _integrate_event_acquisition_to!(acquisition.lifecycle,
+                acquisition_state, timestamp, acquisition.rng)
+        end
     end
     return nothing
 end
@@ -3553,12 +3635,12 @@ end
 function _validate_due_path_materializations!(
     prepared::PreparedPlantEventLoop, due_paths::Memory{Bool}, atmosphere,
     epoch)
-    @inbounds for index in eachindex(prepared.paths)
+    @inbounds for index in eachindex(prepared.path_groups)
         due_paths[index] || continue
-        binding = prepared.paths[index]
-        binding.requires_full_optical || continue
+        group = prepared.path_groups[index]
+        group.requires_full_optical || continue
         _validate_due_path_materialization!(
-            binding.path,
+            group.path,
             atmosphere,
             epoch,
         )
@@ -3582,15 +3664,15 @@ end
 
 function _materialize_due_paths!(prepared::PreparedPlantEventLoop,
     due_paths::Memory{Bool}, atmosphere, epoch)
-    @inbounds for index in eachindex(prepared.paths)
+    @inbounds for index in eachindex(prepared.path_groups)
         due_paths[index] || continue
-        binding = prepared.paths[index]
-        binding.requires_full_optical || continue
+        group = prepared.path_groups[index]
+        group.requires_full_optical || continue
         _materialize_due_path!(
-            binding.path,
+            group.path,
             atmosphere,
             epoch,
-            binding.rngs,
+            group.rngs,
         )
     end
     return nothing
@@ -3618,16 +3700,16 @@ function _apply_due_sampled_aberrations!(
 )
     isempty(prepared.sampled_aberrations) && return nothing
     bindings = prepared.sampled_aberration_path_bindings
-    @inbounds for path_index in eachindex(prepared.paths)
+    @inbounds for path_index in eachindex(prepared.path_groups)
         due_paths[path_index] || continue
-        path = prepared.paths[path_index]
-        path.requires_full_optical || continue
+        group = prepared.path_groups[path_index]
+        group.requires_full_optical || continue
         binding_range = (
-            path.sampled_aberration_binding_start:
-            path.sampled_aberration_binding_stop
+            group.sampled_aberration_binding_start:
+            group.sampled_aberration_binding_stop
         )
         _apply_due_path_sampled_aberrations!(
-            path.path,
+            group.path,
             prepared.sampled_aberrations,
             bindings,
             binding_range,
@@ -3657,15 +3739,15 @@ function _apply_due_controllable_optics!(
     due_paths::Memory{Bool})
     isempty(prepared.optics) && return nothing
     bindings = prepared.optic_path_bindings
-    @inbounds for path_index in eachindex(prepared.paths)
+    @inbounds for path_index in eachindex(prepared.path_groups)
         due_paths[path_index] || continue
-        path = prepared.paths[path_index]
-        path.requires_full_optical || continue
+        group = prepared.path_groups[path_index]
+        group.requires_full_optical || continue
         _apply_due_path_controllable_optics!(
-            path.input,
-            path.optic_binding_start,
-            path.optic_binding_stop,
-            path.optic_couplings,
+            group.input,
+            group.optic_binding_start,
+            group.optic_binding_stop,
+            group.optic_couplings,
             prepared.optics,
             state.controllable_optics,
             bindings,
@@ -3743,11 +3825,11 @@ end
 
 function _execute_due_paths!(prepared::PreparedPlantEventLoop,
     due_paths::Memory{Bool})
-    @inbounds for index in eachindex(prepared.paths)
+    @inbounds for index in eachindex(prepared.path_groups)
         due_paths[index] || continue
-        binding = prepared.paths[index]
-        binding.requires_full_optical || continue
-        _execute_due_path!(binding.path, binding.rngs)
+        group = prepared.path_groups[index]
+        group.requires_full_optical || continue
+        _execute_due_path!(group.path, group.rngs)
     end
     return nothing
 end
@@ -3778,10 +3860,15 @@ end
 function _evaluate_due_reduced_order_samples!(
     prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
     due_paths::Memory{Bool}, timestamp::PlantTimestamp)
-    @inbounds for acquisition in prepared.acquisitions
-        due_paths[Int(acquisition.path_slot)] || continue
-        _evaluate_event_sample!(acquisition.sample_provider,
-            acquisition.lifecycle, timestamp, state.command_applications)
+    @inbounds for path_slot in eachindex(prepared.path_groups)
+        due_paths[path_slot] || continue
+        group = prepared.path_groups[path_slot]
+        for member in group.acquisitions
+            acquisition = prepared.acquisitions[Int(member.slot)]
+            _evaluate_event_sample!(acquisition.sample_provider,
+                acquisition.lifecycle, timestamp,
+                state.command_applications)
+        end
     end
     return nothing
 end
@@ -3796,9 +3883,9 @@ end
 
 function _due_full_optical_path(
     prepared::PreparedPlantEventLoop, due_paths::Memory{Bool})
-    @inbounds for index in eachindex(prepared.paths)
+    @inbounds for index in eachindex(prepared.path_groups)
         due_paths[index] &&
-            prepared.paths[index].requires_full_optical && return true
+            prepared.path_groups[index].requires_full_optical && return true
     end
     return false
 end
@@ -3819,9 +3906,9 @@ function _resolve_due_path_claims!(prepared::PreparedPlantEventLoop,
         claim === nothing && _plant_event_loop_error(:invalid_action,
             "due optical path disappeared before claim")
         action = _event_action(prepared, claim)
-        path = _event_path_binding(prepared, action.owner_slot)
+        group = _event_path_group(prepared, action.owner_slot)
         reschedule_periodic_event!(prepared.scheduler, state.scheduler,
-            claim, path.schedule; origin=path.origin)
+            claim, group.schedule; origin=group.origin)
     end
 end
 
@@ -3830,9 +3917,9 @@ function _process_optical_path_batch!(prepared::PreparedPlantEventLoop,
     timestamp::PlantTimestamp)
     atmosphere = prepared.atmosphere
     _mark_due_event_paths!(prepared, state, workspace, timestamp)
-    @inbounds for index in eachindex(prepared.paths)
+    @inbounds for index in eachindex(prepared.path_groups)
         workspace.due_paths[index] || continue
-        _preflight_event_path(prepared.paths[index], atmosphere)
+        _preflight_event_path(prepared.path_groups[index], atmosphere)
     end
     _preflight_due_path_consumers(prepared, state, workspace.due_paths,
         timestamp)

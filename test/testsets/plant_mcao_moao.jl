@@ -647,16 +647,16 @@ function mcao_moao_native_runtime_binding(
     end
     optic_slot === nothing &&
         error("test fixture has no prepared optic $optic_id_value")
-    event_path_slot = findfirst(fixture.event_loop.paths) do path
-        path.id == OpticalPathID(path_id_value)
+    event_group_slot = findfirst(fixture.event_loop.path_groups) do group
+        group.id == OpticalPathID(path_id_value)
     end
-    event_path_slot === nothing &&
-        error("test fixture has no event path $path_id_value")
-    event_path = fixture.event_loop.paths[event_path_slot]
+    event_group_slot === nothing &&
+        error("test fixture has no path execution group $path_id_value")
+    event_group = fixture.event_loop.path_groups[event_group_slot]
     binding_slot = nothing
     bindings = fixture.event_loop.optic_path_bindings
     for (coupling_slot, binding) in enumerate(
-        event_path.optic_binding_start:event_path.optic_binding_stop,
+        event_group.optic_binding_start:event_group.optic_binding_stop,
     )
         prepared_controllable_optic_slot(bindings, binding) ==
             optic_slot || continue
@@ -673,8 +673,8 @@ function mcao_moao_native_runtime_binding(
         state=fixture.state.controllable_optics[optic_slot],
         workspace=fixture.workspace.controllable_optics[optic_slot],
         endpoint=endpoint,
-        pupil=event_path.path.input,
-        coupling=event_path.optic_couplings[binding_slot],
+        pupil=event_group.path.input,
+        coupling=event_group.optic_couplings[binding_slot],
     )
 end
 

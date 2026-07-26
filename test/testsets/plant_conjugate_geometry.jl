@@ -864,20 +864,20 @@ end
 @testset "Event composition binds compatible co-conjugated geometry" begin
     plant, event_loop, state, workspace =
         conjugate_geometry_event_fixture()
-    event_path = only(event_loop.paths)
-    @test length(event_path.optic_couplings) == 2
-    @test length(event_path.optic_coupling_groups) == 1
+    event_group = only(event_loop.path_groups)
+    @test length(event_group.optic_couplings) == 2
+    @test length(event_group.optic_coupling_groups) == 1
     @test all(coupling ->
             coupling isa PreparedPupilFootprintCoupling,
-        event_path.optic_couplings)
+        event_group.optic_couplings)
 
     split_plant, split_event_loop, split_state, split_workspace =
         conjugate_geometry_event_fixture(split_couplings=true)
-    split_event_path = only(split_event_loop.paths)
-    @test length(split_event_path.optic_coupling_groups) == 2
+    split_event_group = only(split_event_loop.path_groups)
+    @test length(split_event_group.optic_coupling_groups) == 2
     @test map(
         group -> group.binding_count,
-        split_event_path.optic_coupling_groups,
+        split_event_group.optic_coupling_groups,
     ) == [1, 1]
     @test step_plant_events!(
         split_event_loop, split_state, split_workspace) ==
