@@ -162,6 +162,8 @@ struct _NoTriggerTopologyState end
 struct _NoTriggerTopologyWorkspace end
 
 mutable struct _PlantEventLoopBinding end
+mutable struct _PlantEventLoopStateBinding end
+mutable struct _PlantEventLoopWorkspaceBinding end
 
 @enum _PlantEventActionKind::UInt8 begin
     _TriggerTopologyAction = 0x01
@@ -194,6 +196,92 @@ struct _PreparedPathExecutionGroupAcquisition
     id::AcquisitionID
 end
 
+@enum _OpticalPathBatchPhase::UInt8 begin
+    _OpticalPathBatchIdle = 0x00
+    _OpticalPathBatchMaterializing = 0x01
+    _OpticalPathBatchExecuting = 0x02
+    _OpticalPathBatchFinalizing = 0x03
+end
+
+@enum _OpticalPathBatchGroupStatus::UInt8 begin
+    _OpticalPathBatchGroupNotDue = 0x00
+    _OpticalPathBatchGroupAwaitingMaterialization = 0x01
+    _OpticalPathBatchGroupMaterializing = 0x02
+    _OpticalPathBatchGroupReady = 0x03
+    _OpticalPathBatchGroupExecuting = 0x04
+    _OpticalPathBatchGroupComplete = 0x05
+end
+
+mutable struct _OpticalPathBatchWorkspace{E<:AtmosphereEpoch}
+    binding::_PlantEventLoopWorkspaceBinding
+    state_binding::_PlantEventLoopStateBinding
+    generation::UInt64
+    scheduler_revision::UInt64
+    timestamp::PlantTimestamp
+    epoch::E
+    has_epoch::Bool
+    phase::_OpticalPathBatchPhase
+    due_group_slots::Memory{UInt32}
+    due_group_count::Int
+    group_status::Memory{_OpticalPathBatchGroupStatus}
+end
+
+struct _OpticalPathBatchClaimToken end
+const _OPTICAL_PATH_BATCH_CLAIM_TOKEN = _OpticalPathBatchClaimToken()
+
+"""
+Opaque ownership claim for one same-timestamp optical-path batch.
+
+The claim identifies a prepared event loop, exact state and workspace owners,
+one scheduler revision, one atmosphere epoch, and one bounded due-group set.
+It does not retain atmosphere layer storage.
+"""
+struct OpticalPathBatchClaim
+    plant_binding_id::UInt64
+    state_binding_id::UInt64
+    workspace_binding_id::UInt64
+    generation::UInt64
+    scheduler_revision::UInt64
+    timestamp::PlantTimestamp
+    epoch_sequence::UInt64
+    has_epoch::Bool
+
+    function OpticalPathBatchClaim(
+        plant_binding_id::UInt64,
+        state_binding_id::UInt64,
+        workspace_binding_id::UInt64,
+        generation::UInt64,
+        scheduler_revision::UInt64,
+        timestamp::PlantTimestamp,
+        epoch_sequence::UInt64,
+        has_epoch::Bool,
+        ::_OpticalPathBatchClaimToken,
+    )
+        return new(
+            plant_binding_id,
+            state_binding_id,
+            workspace_binding_id,
+            generation,
+            scheduler_revision,
+            timestamp,
+            epoch_sequence,
+            has_epoch,
+        )
+    end
+end
+
+"""
+Execution-policy seam for one due optical-path batch.
+
+Core supplies the deterministic serial implementation. HIL runtimes may
+subtype this interface to coordinate externally owned execution workers while
+using the same bounded batch lifecycle.
+"""
+abstract type AbstractOpticalPathBatchExecutor end
+
+"""Canonical deterministic serial optical-path batch executor."""
+struct SerialOpticalPathBatchExecutor <: AbstractOpticalPathBatchExecutor end
+
 """
 Run-immutable owner of one prepared direction-dependent optical path and every
 compatible acquisition consumer scheduled on that path.
@@ -225,6 +313,7 @@ struct PreparedPathExecutionGroup
     optic_coupling_groups::Memory{
         _PreparedControllableOpticPathCouplingGroup}
     acquisitions::Memory{_PreparedPathExecutionGroupAcquisition}
+    autonomous_optic_slots::Memory{UInt32}
 end
 
 struct _PreparedPlantEventAcquisition
@@ -367,6 +456,11 @@ function path_execution_group_acquisition_id(
     checkbounds(group.acquisitions, index)
     return @inbounds group.acquisitions[index].id
 end
+
+"""Return the exact canonical plant timestamp owned by a batch claim."""
+@inline optical_path_batch_timestamp(claim::OpticalPathBatchClaim) =
+    claim.timestamp
+
 @inline plant_event_acquisition_count(prepared::PreparedPlantEventLoop) =
     length(prepared.acquisitions)
 @inline plant_event_generator_count(prepared::PreparedPlantEventLoop) =
@@ -1078,9 +1172,32 @@ function _prepare_path_execution_group_acquisitions(
     return acquisitions
 end
 
+function _prepare_path_execution_group_autonomous_optic_slots(
+    definitions,
+    path::OpticalPathID,
+)
+    count = 0
+    @inbounds for definition in definitions
+        definition.path == path && (count += 1)
+    end
+    slots = Memory{UInt32}(undef, count)
+    member = 1
+    @inbounds for index in eachindex(definitions)
+        definitions[index].path == path || continue
+        index <= typemax(UInt32) || _plant_event_loop_error(
+            :capacity,
+            "autonomous-optic registry exceeds UInt32 path-group capacity",
+        )
+        slots[member] = UInt32(index)
+        member += 1
+    end
+    return slots
+end
+
 function _prepare_path_execution_groups(
     plant::PreparedPlant, definitions, owners,
     acquisition_definitions, acquisition_path_slots,
+    autonomous_definitions,
     scheduler::PreparedEventScheduler)
     Base.@nospecialize plant
     groups = Memory{PreparedPathExecutionGroup}(undef, length(definitions))
@@ -1114,6 +1231,11 @@ function _prepare_path_execution_groups(
                 acquisition_path_slots,
                 index,
             )
+        autonomous_optic_slots =
+            _prepare_path_execution_group_autonomous_optic_slots(
+                autonomous_definitions,
+                definition.path,
+            )
         groups[index] = PreparedPathExecutionGroup(
             UInt32(index),
             definition.path,
@@ -1127,7 +1249,7 @@ function _prepare_path_execution_groups(
             first(sampled_binding_range), last(sampled_binding_range),
             first(binding_range), last(binding_range),
             optic_couplings, optic_coupling_groups,
-            acquisitions)
+            acquisitions, autonomous_optic_slots)
     end
     return groups
 end
@@ -1451,7 +1573,7 @@ function prepare_plant_event_loop(plant::PreparedPlant,
     command_endpoints = _prepare_event_command_endpoints(plant, scheduler)
     path_groups = _prepare_path_execution_groups(
         plant, sample_definitions, owners, acquisition_definitions,
-        path_slots, scheduler)
+        path_slots, autonomous_definitions, scheduler)
     acquisitions = _prepare_event_acquisitions(acquisition_definitions,
         lifecycles, products, sample_providers, rngs, path_slots, scheduler)
     autonomous_optics = _prepare_event_autonomous_optics(
@@ -1470,6 +1592,7 @@ end
 
 mutable struct PlantEventLoopState{T}
     binding::_PlantEventLoopBinding
+    state_binding::_PlantEventLoopStateBinding
     scheduler::EventSchedulerState
     command_endpoints::Memory{CommandEndpointState}
     command_applications::Memory{CommandApplicationState}
@@ -1581,6 +1704,7 @@ function PlantEventLoopState(prepared::PreparedPlantEventLoop)
     fill!(product_ready_timestamps, zero(PlantTimestamp))
     trigger = _event_trigger_state(prepared.trigger_topology)
     state = PlantEventLoopState(prepared.binding,
+        _PlantEventLoopStateBinding(),
         scheduler, command_endpoints, command_applications,
         command_shadow_transactions, controllable_optics,
         acquisition_states, path_sampled,
@@ -1592,7 +1716,7 @@ function PlantEventLoopState(prepared::PreparedPlantEventLoop)
     return state
 end
 
-mutable struct PlantEventLoopWorkspace{T}
+mutable struct PlantEventLoopWorkspace{T,B}
     binding::_PlantEventLoopBinding
     scheduler::EventSchedulerWorkspace
     command_endpoints::Memory{CommandDispositionWorkspace}
@@ -1605,6 +1729,7 @@ mutable struct PlantEventLoopWorkspace{T}
     transaction_staged::Memory{_StagedCommandApplication}
     transaction_count::Int
     due_paths::Memory{Bool}
+    optical_path_batch::B
     trigger::T
     delivery::Base.RefValue{TriggerDelivery}
 end
@@ -1613,6 +1738,34 @@ end
     _NoTriggerTopologyWorkspace()
 @inline _event_trigger_workspace(topology::PreparedTriggerTopology) =
     TriggerTopologyWorkspace(topology)
+
+function _optical_path_batch_workspace(
+    prepared::PreparedPlantEventLoop,
+)
+    group_count = length(prepared.path_groups)
+    status = Memory{_OpticalPathBatchGroupStatus}(undef, group_count)
+    fill!(status, _OpticalPathBatchGroupNotDue)
+    atmosphere = prepared.atmosphere
+    timeline = atmosphere_timeline(atmosphere)
+    epoch = AtmosphereEpoch(
+        atmosphere_identity(atmosphere),
+        timeline.model_time,
+        timeline.sequence,
+    )
+    return _OpticalPathBatchWorkspace(
+        _PlantEventLoopWorkspaceBinding(),
+        _PlantEventLoopStateBinding(),
+        UInt64(0),
+        UInt64(0),
+        zero(PlantTimestamp),
+        epoch,
+        false,
+        _OpticalPathBatchIdle,
+        Memory{UInt32}(undef, group_count),
+        0,
+        status,
+    )
+end
 
 function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
     command_endpoints = Memory{CommandDispositionWorkspace}(undef,
@@ -1632,6 +1785,7 @@ function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
     endpoint_count = length(prepared.command_endpoints)
     due_paths = Memory{Bool}(undef, length(prepared.path_groups))
     fill!(due_paths, false)
+    optical_path_batch = _optical_path_batch_workspace(prepared)
     return PlantEventLoopWorkspace(prepared.binding,
         EventSchedulerWorkspace(prepared.scheduler), command_endpoints,
         controllable_optics,
@@ -1640,7 +1794,7 @@ function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
         Memory{_CommandTransactionAdmissionPlan}(undef, endpoint_count),
         Memory{PlantCommandApplicationClaim}(undef, endpoint_count),
         Memory{_StagedCommandApplication}(undef, endpoint_count), 0,
-        due_paths,
+        due_paths, optical_path_batch,
         _event_trigger_workspace(prepared.trigger_topology),
         Ref{TriggerDelivery}())
 end
@@ -1689,6 +1843,11 @@ end
     length(workspace.due_paths) == length(prepared.path_groups) ||
         _plant_event_loop_error(:prepared_binding,
             "plant event-loop workspace capacity changed after preparation")
+    batch = workspace.optical_path_batch
+    length(batch.due_group_slots) == length(prepared.path_groups) &&
+        length(batch.group_status) == length(prepared.path_groups) ||
+        _plant_event_loop_error(:prepared_binding,
+            "optical-path batch workspace capacity changed after preparation")
     return nothing
 end
 
@@ -1982,6 +2141,7 @@ function admit_plant_command!(prepared::PreparedPlantEventLoop,
     command::PlantCommand, timestamp::PlantTimestamp)
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
+    _require_idle_optical_path_batch(workspace)
     _require_empty_event_command_dispositions(workspace)
     _require_routed_command_admission_timestamp(prepared, state, workspace,
         timestamp)
@@ -2269,6 +2429,7 @@ function admit_plant_command_transaction!(
     timestamp::PlantTimestamp)
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
+    _require_idle_optical_path_batch(workspace)
     _require_empty_event_command_dispositions(workspace)
     _require_routed_command_admission_timestamp(prepared, state, workspace,
         timestamp)
@@ -3586,6 +3747,188 @@ function _mark_due_event_paths!(prepared::PreparedPlantEventLoop,
     return nothing
 end
 
+@inline function _require_idle_optical_path_batch(
+    workspace::PlantEventLoopWorkspace,
+)
+    workspace.optical_path_batch.phase == _OpticalPathBatchIdle ||
+        _plant_event_loop_error(
+            :optical_path_batch_active,
+            "complete the active optical-path batch before another event-loop operation",
+        )
+    return nothing
+end
+
+@inline function _next_optical_path_batch_generation(
+    generation::UInt64,
+)
+    generation != typemax(UInt64) || _plant_event_loop_error(
+        :optical_path_batch_generation_overflow,
+        "optical-path batch generation exceeds UInt64 range",
+    )
+    return generation + UInt64(1)
+end
+
+@inline _plant_event_loop_binding_id(prepared::PreparedPlantEventLoop) =
+    UInt64(objectid(prepared.binding))
+@inline _plant_event_loop_state_binding_id(state::PlantEventLoopState) =
+    UInt64(objectid(state.state_binding))
+@inline _plant_event_loop_workspace_binding_id(
+    workspace::PlantEventLoopWorkspace) =
+    UInt64(objectid(workspace.optical_path_batch.binding))
+
+@inline function _require_current_optical_path_batch(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+)
+    _require_plant_event_loop_binding(prepared, state)
+    _require_plant_event_loop_binding(prepared, workspace)
+    batch = workspace.optical_path_batch
+    claim.plant_binding_id == _plant_event_loop_binding_id(prepared) ||
+        _plant_event_loop_error(
+            :foreign_optical_path_batch_claim,
+            "optical-path batch claim belongs to another prepared event loop",
+        )
+    claim.workspace_binding_id ==
+        _plant_event_loop_workspace_binding_id(workspace) ||
+        _plant_event_loop_error(
+            :foreign_optical_path_batch_workspace,
+            "optical-path batch claim belongs to another event-loop workspace",
+        )
+    claim.state_binding_id == _plant_event_loop_state_binding_id(state) &&
+        batch.state_binding === state.state_binding ||
+        _plant_event_loop_error(
+            :foreign_optical_path_batch_state,
+            "optical-path batch claim belongs to another event-loop state",
+        )
+    batch.phase != _OpticalPathBatchIdle &&
+        batch.generation == claim.generation &&
+        batch.scheduler_revision == claim.scheduler_revision &&
+        batch.timestamp == claim.timestamp &&
+        batch.has_epoch == claim.has_epoch &&
+        (!batch.has_epoch ||
+            batch.epoch.sequence == claim.epoch_sequence) ||
+        _plant_event_loop_error(
+            :stale_optical_path_batch_claim,
+            "optical-path batch claim is stale or no longer active",
+        )
+    state.scheduler.revision == claim.scheduler_revision ||
+        _plant_event_loop_error(
+            :optical_path_batch_scheduler_changed,
+            "event scheduler changed while an optical-path batch was active",
+        )
+    return batch
+end
+
+"""
+Return the batch's atmosphere epoch identity token, or `nothing` when no due
+group uses a full optical provider. The active state and workspace are required
+because the compact claim stores only checked owner and epoch identities; the
+token remains in bounded workspace storage and does not retain atmosphere
+layers.
+"""
+function optical_path_batch_epoch(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+)
+    batch = _require_current_optical_path_batch(
+        prepared, state, workspace, claim)
+    return batch.has_epoch ? batch.epoch : nothing
+end
+
+@inline function _require_optical_path_batch_phase(
+    batch::_OpticalPathBatchWorkspace,
+    expected::_OpticalPathBatchPhase,
+    operation::AbstractString,
+)
+    batch.phase == expected || _plant_event_loop_error(
+        :invalid_optical_path_batch_phase,
+        "$operation is invalid in optical-path batch phase $(batch.phase)",
+    )
+    return nothing
+end
+
+@inline function _require_due_path_execution_group(
+    prepared::PreparedPlantEventLoop,
+    batch::_OpticalPathBatchWorkspace,
+    ordinal::Integer,
+)
+    1 <= ordinal <= length(prepared.path_groups) ||
+        _plant_event_loop_error(
+            :invalid_path_execution_group,
+            "path execution-group ordinal must be within the prepared registry",
+        )
+    slot = Int(ordinal)
+    @inbounds batch.group_status[slot] !=
+        _OpticalPathBatchGroupNotDue || _plant_event_loop_error(
+            :path_execution_group_not_due,
+            "path execution group $ordinal is not due in the active optical-path batch",
+        )
+    return slot
+end
+
+@inline _require_due_path_execution_group(
+    ::PreparedPlantEventLoop,
+    ::_OpticalPathBatchWorkspace,
+    ::Bool,
+) = _plant_event_loop_error(
+    :invalid_path_execution_group,
+    "path execution-group ordinal must be an integer count, not Bool",
+)
+
+"""
+    optical_path_batch_due_group_count(prepared, state, workspace, claim)
+
+Return the fixed number of path execution groups due in the active batch.
+"""
+function optical_path_batch_due_group_count(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+)
+    batch = _require_current_optical_path_batch(
+        prepared, state, workspace, claim)
+    return batch.due_group_count
+end
+
+"""
+    optical_path_batch_due_group_ordinal(
+        prepared, state, workspace, claim, index)
+
+Return the canonical prepared-group ordinal at one position in the active
+batch's bounded due-group registry.
+"""
+function optical_path_batch_due_group_ordinal(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+    index::Integer,
+)
+    batch = _require_current_optical_path_batch(
+        prepared, state, workspace, claim)
+    1 <= index <= batch.due_group_count || _plant_event_loop_error(
+        :invalid_due_path_execution_group,
+        "due path execution-group index must be within the active batch",
+    )
+    return Int(@inbounds batch.due_group_slots[Int(index)])
+end
+
+@inline optical_path_batch_due_group_ordinal(
+    ::PreparedPlantEventLoop,
+    ::PlantEventLoopState,
+    ::PlantEventLoopWorkspace,
+    ::OpticalPathBatchClaim,
+    ::Bool,
+) = _plant_event_loop_error(
+    :invalid_due_path_execution_group,
+    "due path execution-group index must be an integer count, not Bool",
+)
+
 function _preflight_atmosphere_time(atmosphere::AbstractTimedAtmosphere,
     timestamp::PlantTimestamp)
     timeline = atmosphere_timeline(atmosphere)
@@ -3610,23 +3953,6 @@ function _preflight_due_path_consumers(
             _preflight_event_acquisition(acquisition, acquisition_state)
             _preflight_event_integration_to(acquisition.lifecycle,
                 acquisition_state, timestamp)
-        end
-    end
-    return nothing
-end
-
-function _integrate_due_path_consumers!(
-    prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
-    due_paths::Memory{Bool}, timestamp::PlantTimestamp)
-    @inbounds for path_slot in eachindex(prepared.path_groups)
-        due_paths[path_slot] || continue
-        group = prepared.path_groups[path_slot]
-        for member in group.acquisitions
-            index = Int(member.slot)
-            acquisition = prepared.acquisitions[index]
-            acquisition_state = state.acquisitions[index]
-            _integrate_event_acquisition_to!(acquisition.lifecycle,
-                acquisition_state, timestamp, acquisition.rng)
         end
     end
     return nothing
@@ -3662,22 +3988,6 @@ Base.@noinline function _validate_due_path_materialization!(
     return nothing
 end
 
-function _materialize_due_paths!(prepared::PreparedPlantEventLoop,
-    due_paths::Memory{Bool}, atmosphere, epoch)
-    @inbounds for index in eachindex(prepared.path_groups)
-        due_paths[index] || continue
-        group = prepared.path_groups[index]
-        group.requires_full_optical || continue
-        _materialize_due_path!(
-            group.path,
-            atmosphere,
-            epoch,
-            group.rngs,
-        )
-    end
-    return nothing
-end
-
 Base.@noinline function _materialize_due_path!(
     path::PreparedPathExecutor,
     atmosphere,
@@ -3694,27 +4004,181 @@ Base.@noinline function _materialize_due_path!(
     return nothing
 end
 
-function _apply_due_sampled_aberrations!(
+@inline function _require_next_optical_path_batch(
     prepared::PreparedPlantEventLoop,
-    due_paths::Memory{Bool},
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
 )
-    isempty(prepared.sampled_aberrations) && return nothing
-    bindings = prepared.sampled_aberration_path_bindings
-    @inbounds for path_index in eachindex(prepared.path_groups)
-        due_paths[path_index] || continue
-        group = prepared.path_groups[path_index]
-        group.requires_full_optical || continue
-        binding_range = (
-            group.sampled_aberration_binding_start:
-            group.sampled_aberration_binding_stop
+    count = scan_due_events!(
+        workspace.scheduler, prepared.scheduler, state.scheduler)
+    iszero(count) && _plant_event_loop_error(
+        :optical_path_batch_not_due,
+        "no plant event is due for optical-path batch execution",
+    )
+    workspace.scheduler.due_timestamp == timestamp ||
+        _plant_event_loop_error(
+            :optical_path_batch_timestamp_mismatch,
+            "next plant event is due at $(workspace.scheduler.due_timestamp), not $timestamp",
         )
-        _apply_due_path_sampled_aberrations!(
-            group.path,
-            prepared.sampled_aberrations,
-            bindings,
-            binding_range,
+    key = due_event_key(
+        workspace.scheduler, prepared.scheduler, state.scheduler, 1)
+    key.phase == OpticalSamplePhase || _plant_event_loop_error(
+        :optical_path_batch_not_due,
+        "process earlier causal phases before beginning the optical-path batch at $timestamp",
+    )
+    return nothing
+end
+
+"""
+    begin_optical_path_batch!(prepared, state, workspace, timestamp)
+
+Open the exact due optical-path batch at `timestamp`. The operation performs a
+mutation-free preflight, advances the shared atmosphere at most once, validates
+every due full-optical materializer against that publication, and returns an
+opaque bounded claim. It does not materialize or execute a path group.
+"""
+function begin_optical_path_batch!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
+    _require_plant_event_loop_binding(prepared, state)
+    _require_plant_event_loop_binding(prepared, workspace)
+    _require_idle_optical_path_batch(workspace)
+    _require_next_optical_path_batch(
+        prepared, state, workspace, timestamp)
+
+    atmosphere = prepared.atmosphere
+    _mark_due_event_paths!(prepared, state, workspace, timestamp)
+    @inbounds for index in eachindex(prepared.path_groups)
+        workspace.due_paths[index] || continue
+        _preflight_event_path(prepared.path_groups[index], atmosphere)
+    end
+    _preflight_due_path_consumers(
+        prepared, state, workspace.due_paths, timestamp)
+
+    batch = workspace.optical_path_batch
+    generation = _next_optical_path_batch_generation(batch.generation)
+    has_epoch = _due_full_optical_path(prepared, workspace.due_paths)
+    epoch = batch.epoch
+    if has_epoch
+        target_time = _preflight_atmosphere_time(atmosphere, timestamp)
+        epoch = advance_to!(
+            atmosphere, target_time, prepared.atmosphere_rng)
+        _validate_due_path_materializations!(
+            prepared, workspace.due_paths, atmosphere, epoch)
+    end
+
+    fill!(batch.group_status, _OpticalPathBatchGroupNotDue)
+    due_group_count = 0
+    @inbounds for index in eachindex(workspace.due_paths)
+        workspace.due_paths[index] || continue
+        due_group_count += 1
+        batch.due_group_slots[due_group_count] = UInt32(index)
+        batch.group_status[index] =
+            _OpticalPathBatchGroupAwaitingMaterialization
+    end
+    batch.state_binding = state.state_binding
+    batch.generation = generation
+    batch.scheduler_revision = state.scheduler.revision
+    batch.timestamp = timestamp
+    batch.epoch = epoch
+    batch.has_epoch = has_epoch
+    batch.due_group_count = due_group_count
+    batch.phase = _OpticalPathBatchMaterializing
+    return OpticalPathBatchClaim(
+        _plant_event_loop_binding_id(prepared),
+        _plant_event_loop_state_binding_id(state),
+        _plant_event_loop_workspace_binding_id(workspace),
+        generation,
+        batch.scheduler_revision,
+        timestamp,
+        has_epoch ? epoch.sequence : UInt64(0),
+        has_epoch,
+        _OPTICAL_PATH_BATCH_CLAIM_TOKEN,
+    )
+end
+
+"""
+    materialize_path_execution_group!(
+        prepared, state, workspace, claim, ordinal)
+
+Materialize one due group's path-local input exactly once against the batch
+epoch. Reduced-order and replay groups cross the same bounded lifecycle without
+reading the atmosphere. The atmosphere writer must remain held until every due
+group has crossed this phase. A model exception after the group enters
+materialization is fail-stop for this run because its product or RNG state may
+already be partially mutated; core does not attempt rollback or retry.
+"""
+function materialize_path_execution_group!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+    ordinal::Integer,
+)
+    batch = _require_current_optical_path_batch(
+        prepared, state, workspace, claim)
+    _require_optical_path_batch_phase(
+        batch, _OpticalPathBatchMaterializing,
+        "path execution-group materialization")
+    slot = _require_due_path_execution_group(prepared, batch, ordinal)
+    status = @inbounds batch.group_status[slot]
+    status == _OpticalPathBatchGroupAwaitingMaterialization || begin
+        reason = status == _OpticalPathBatchGroupMaterializing ?
+            :path_execution_group_materialization_active :
+            :duplicate_path_execution_group_materialization
+        _plant_event_loop_error(
+            reason,
+            "path execution group $slot has already entered materialization",
         )
     end
+    @inbounds batch.group_status[slot] =
+        _OpticalPathBatchGroupMaterializing
+    group = @inbounds prepared.path_groups[slot]
+    if group.requires_full_optical
+        _validate_epoch_identity(
+            atmosphere_identity(prepared.atmosphere),
+            prepared.atmosphere,
+            batch.epoch,
+        )
+        _materialize_due_path!(
+            group.path, prepared.atmosphere, batch.epoch, group.rngs)
+    end
+    @inbounds batch.group_status[slot] = _OpticalPathBatchGroupReady
+    return nothing
+end
+
+"""
+    seal_optical_path_batch_materialization!(
+        prepared, state, workspace, claim)
+
+Close the atmosphere-read phase only after every due group has completed its
+materialization transition. Once sealed, group execution no longer reads
+mutable atmosphere layers.
+"""
+function seal_optical_path_batch_materialization!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+)
+    batch = _require_current_optical_path_batch(
+        prepared, state, workspace, claim)
+    _require_optical_path_batch_phase(
+        batch, _OpticalPathBatchMaterializing,
+        "optical-path materialization sealing")
+    @inbounds for index in 1:batch.due_group_count
+        slot = Int(batch.due_group_slots[index])
+        batch.group_status[slot] == _OpticalPathBatchGroupReady ||
+            _plant_event_loop_error(
+                :incomplete_optical_path_batch_materialization,
+                "path execution group $slot has not completed materialization",
+            )
+    end
+    batch.phase = _OpticalPathBatchExecuting
     return nothing
 end
 
@@ -3730,29 +4194,6 @@ Base.@noinline function _apply_due_path_sampled_aberrations!(
         bindings,
         binding_range,
     )
-    return nothing
-end
-
-function _apply_due_controllable_optics!(
-    prepared::PreparedPlantEventLoop,
-    state::PlantEventLoopState,
-    due_paths::Memory{Bool})
-    isempty(prepared.optics) && return nothing
-    bindings = prepared.optic_path_bindings
-    @inbounds for path_index in eachindex(prepared.path_groups)
-        due_paths[path_index] || continue
-        group = prepared.path_groups[path_index]
-        group.requires_full_optical || continue
-        _apply_due_path_controllable_optics!(
-            group.input,
-            group.optic_binding_start,
-            group.optic_binding_stop,
-            group.optic_couplings,
-            prepared.optics,
-            state.controllable_optics,
-            bindings,
-        )
-    end
     return nothing
 end
 
@@ -3811,34 +4252,75 @@ end
     return nothing
 end
 
-function _evaluate_due_autonomous_optics!(
-    prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
-    due_paths::Memory{Bool}, timestamp::PlantTimestamp)
-    @inbounds for binding in prepared.autonomous_optics
-        due_paths[Int(binding.path_slot)] || continue
-        optic_state = state.controllable_optics[Int(binding.optic_slot)]
-        evaluate_autonomous_periodic_optic!(binding.implementation,
-            optic_state, binding.coupling, timestamp)
-    end
-    return nothing
-end
-
-function _execute_due_paths!(prepared::PreparedPlantEventLoop,
-    due_paths::Memory{Bool})
-    @inbounds for index in eachindex(prepared.path_groups)
-        due_paths[index] || continue
-        group = prepared.path_groups[index]
-        group.requires_full_optical || continue
-        _execute_due_path!(group.path, group.rngs)
-    end
-    return nothing
-end
-
 Base.@noinline function _execute_due_path!(
     path::PreparedPathExecutor,
     rngs::PreparedOwnerRNGs,
 )
     execute_path!(path, rngs)
+    return nothing
+end
+
+Base.@noinline function _execute_materialized_path_execution_group!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    group::PreparedPathExecutionGroup,
+    timestamp::PlantTimestamp,
+)
+    for member in group.acquisitions
+        index = Int(member.slot)
+        acquisition = @inbounds prepared.acquisitions[index]
+        acquisition_state = @inbounds state.acquisitions[index]
+        _integrate_event_acquisition_to!(
+            acquisition.lifecycle,
+            acquisition_state,
+            timestamp,
+            acquisition.rng,
+        )
+    end
+
+    if group.requires_full_optical
+        sampled_binding_range = (
+            group.sampled_aberration_binding_start:
+            group.sampled_aberration_binding_stop
+        )
+        _apply_due_path_sampled_aberrations!(
+            group.path,
+            prepared.sampled_aberrations,
+            prepared.sampled_aberration_path_bindings,
+            sampled_binding_range,
+        )
+        _apply_due_path_controllable_optics!(
+            group.input,
+            group.optic_binding_start,
+            group.optic_binding_stop,
+            group.optic_couplings,
+            prepared.optics,
+            state.controllable_optics,
+            prepared.optic_path_bindings,
+        )
+        @inbounds for binding_slot in group.autonomous_optic_slots
+            binding = prepared.autonomous_optics[Int(binding_slot)]
+            optic_state =
+                state.controllable_optics[Int(binding.optic_slot)]
+            evaluate_autonomous_periodic_optic!(
+                binding.implementation,
+                optic_state,
+                binding.coupling,
+                timestamp,
+            )
+        end
+        _execute_due_path!(group.path, group.rngs)
+    end
+
+    for member in group.acquisitions
+        acquisition = @inbounds prepared.acquisitions[Int(member.slot)]
+        _evaluate_event_sample!(
+            acquisition.sample_provider,
+            acquisition.lifecycle,
+            timestamp,
+            state.command_applications,
+        )
+    end
     return nothing
 end
 
@@ -3855,30 +4337,6 @@ end
     return evaluate_linear_reduced_order_sample!(
         lifecycle.instantaneous_sample, provider, timestamp,
         command_applications)
-end
-
-function _evaluate_due_reduced_order_samples!(
-    prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
-    due_paths::Memory{Bool}, timestamp::PlantTimestamp)
-    @inbounds for path_slot in eachindex(prepared.path_groups)
-        due_paths[path_slot] || continue
-        group = prepared.path_groups[path_slot]
-        for member in group.acquisitions
-            acquisition = prepared.acquisitions[Int(member.slot)]
-            _evaluate_event_sample!(acquisition.sample_provider,
-                acquisition.lifecycle, timestamp,
-                state.command_applications)
-        end
-    end
-    return nothing
-end
-
-function _mark_due_paths_sampled!(state::PlantEventLoopState,
-    due_paths::Memory{Bool})
-    @inbounds for index in eachindex(due_paths)
-        due_paths[index] && (state.path_sampled[index] = true)
-    end
-    return nothing
 end
 
 function _due_full_optical_path(
@@ -3912,39 +4370,136 @@ function _resolve_due_path_claims!(prepared::PreparedPlantEventLoop,
     end
 end
 
-function _process_optical_path_batch!(prepared::PreparedPlantEventLoop,
-    state::PlantEventLoopState, workspace::PlantEventLoopWorkspace,
-    timestamp::PlantTimestamp)
-    atmosphere = prepared.atmosphere
-    _mark_due_event_paths!(prepared, state, workspace, timestamp)
-    @inbounds for index in eachindex(prepared.path_groups)
-        workspace.due_paths[index] || continue
-        _preflight_event_path(prepared.path_groups[index], atmosphere)
+"""
+    execute_path_execution_group!(
+        prepared, state, workspace, claim, ordinal)
+
+Execute one materialized due path group exactly once. The call mutates only
+that group's path-local products, acquisition owners, RNG streams, and
+path-local autonomous-optic state while borrowing held effective commands
+read-only. A model exception after execution begins is fail-stop for this run;
+core does not retry partially mutated products, acquisition state, or RNG
+streams.
+"""
+function execute_path_execution_group!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+    ordinal::Integer,
+)
+    batch = _require_current_optical_path_batch(
+        prepared, state, workspace, claim)
+    _require_optical_path_batch_phase(
+        batch, _OpticalPathBatchExecuting,
+        "path execution-group execution")
+    slot = _require_due_path_execution_group(prepared, batch, ordinal)
+    status = @inbounds batch.group_status[slot]
+    status == _OpticalPathBatchGroupReady || begin
+        reason = status == _OpticalPathBatchGroupComplete ?
+            :duplicate_path_execution_group :
+            status == _OpticalPathBatchGroupExecuting ?
+                :path_execution_group_active :
+                :path_execution_group_not_materialized
+        _plant_event_loop_error(
+            reason,
+            "path execution group $slot is not ready for execution",
+        )
     end
-    _preflight_due_path_consumers(prepared, state, workspace.due_paths,
-        timestamp)
-    _integrate_due_path_consumers!(prepared, state, workspace.due_paths,
-        timestamp)
-    if _due_full_optical_path(prepared, workspace.due_paths)
-        target_time = _preflight_atmosphere_time(atmosphere, timestamp)
-        epoch = advance_to!(atmosphere, target_time,
-            prepared.atmosphere_rng)
-        _validate_due_path_materializations!(prepared,
-            workspace.due_paths, atmosphere, epoch)
-        _materialize_due_paths!(prepared, workspace.due_paths, atmosphere,
-            epoch)
-        _apply_due_sampled_aberrations!(prepared, workspace.due_paths)
-        _apply_due_controllable_optics!(prepared, state,
-            workspace.due_paths)
-        _evaluate_due_autonomous_optics!(prepared, state,
-            workspace.due_paths, timestamp)
-        _execute_due_paths!(prepared, workspace.due_paths)
-    end
-    _evaluate_due_reduced_order_samples!(prepared, state,
-        workspace.due_paths, timestamp)
-    _mark_due_paths_sampled!(state, workspace.due_paths)
-    _resolve_due_path_claims!(prepared, state, workspace, timestamp)
+
+    @inbounds batch.group_status[slot] = _OpticalPathBatchGroupExecuting
+    group = @inbounds prepared.path_groups[slot]
+    _execute_materialized_path_execution_group!(
+        prepared, state, group, claim.timestamp)
+    @inbounds state.path_sampled[slot] = true
+    @inbounds batch.group_status[slot] = _OpticalPathBatchGroupComplete
     return nothing
+end
+
+"""
+    complete_optical_path_batch!(prepared, state, workspace, claim)
+
+Resolve every due optical-sample generator and reclaim the bounded batch
+workspace after all due groups complete. Incomplete or copied stale claims fail
+before scheduler state changes.
+"""
+function complete_optical_path_batch!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+)
+    batch = _require_current_optical_path_batch(
+        prepared, state, workspace, claim)
+    _require_optical_path_batch_phase(
+        batch, _OpticalPathBatchExecuting,
+        "optical-path batch completion")
+    @inbounds for index in 1:batch.due_group_count
+        slot = Int(batch.due_group_slots[index])
+        batch.group_status[slot] == _OpticalPathBatchGroupComplete ||
+            _plant_event_loop_error(
+                :incomplete_optical_path_batch_execution,
+                "path execution group $slot has not completed execution",
+            )
+    end
+
+    batch.phase = _OpticalPathBatchFinalizing
+    _resolve_due_path_claims!(
+        prepared, state, workspace, claim.timestamp)
+    fill!(workspace.due_paths, false)
+    fill!(batch.group_status, _OpticalPathBatchGroupNotDue)
+    batch.due_group_count = 0
+    batch.has_epoch = false
+    batch.scheduler_revision = state.scheduler.revision
+    batch.phase = _OpticalPathBatchIdle
+    return claim.timestamp
+end
+
+function execute_optical_path_batch!(
+    executor::AbstractOpticalPathBatchExecutor,
+    ::PreparedPlantEventLoop,
+    ::PlantEventLoopState,
+    ::PlantEventLoopWorkspace,
+    ::PlantTimestamp,
+)
+    _plant_event_loop_error(
+        :unsupported_optical_path_batch_executor,
+        "optical-path batch executor $(typeof(executor)) does not implement execute_optical_path_batch!",
+    )
+end
+
+"""
+Run one optical-path batch through the canonical serial order using the same
+public materialization, execution, and completion lifecycle available to HIL
+execution policies.
+"""
+function execute_optical_path_batch!(
+    ::SerialOpticalPathBatchExecutor,
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
+    claim = begin_optical_path_batch!(
+        prepared, state, workspace, timestamp)
+    count = optical_path_batch_due_group_count(
+        prepared, state, workspace, claim)
+    @inbounds for index in 1:count
+        ordinal = optical_path_batch_due_group_ordinal(
+            prepared, state, workspace, claim, index)
+        materialize_path_execution_group!(
+            prepared, state, workspace, claim, ordinal)
+    end
+    seal_optical_path_batch_materialization!(
+        prepared, state, workspace, claim)
+    @inbounds for index in 1:count
+        ordinal = optical_path_batch_due_group_ordinal(
+            prepared, state, workspace, claim, index)
+        execute_path_execution_group!(
+            prepared, state, workspace, claim, ordinal)
+    end
+    return complete_optical_path_batch!(
+        prepared, state, workspace, claim)
 end
 
 function _process_ordinary_event!(prepared::PreparedPlantEventLoop,
@@ -3974,6 +4529,7 @@ function next_plant_event_timestamp(prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState, workspace::PlantEventLoopWorkspace)
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
+    _require_idle_optical_path_batch(workspace)
     count = scan_due_events!(workspace.scheduler, prepared.scheduler,
         state.scheduler)
     iszero(count) && return nothing
@@ -3990,8 +4546,31 @@ timestamp, or `nothing` when every generator is inactive.
 """
 function step_plant_events!(prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState, workspace::PlantEventLoopWorkspace)
+    return step_plant_events!(
+        prepared,
+        state,
+        workspace,
+        SerialOpticalPathBatchExecutor(),
+    )
+end
+
+"""
+    step_plant_events!(prepared, state, workspace, batch_executor)
+
+Process the next canonical timestamp using `batch_executor` only for the
+optical-sample phase. The executor must complete the bounded batch before
+returning; all other causal phases remain owned by the serial event
+coordinator.
+"""
+function step_plant_events!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    batch_executor::AbstractOpticalPathBatchExecutor,
+)
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
+    _require_idle_optical_path_batch(workspace)
     timestamp = next_plant_event_timestamp(prepared, state, workspace)
     timestamp === nothing && return nothing
     while true
@@ -4002,8 +4581,9 @@ function step_plant_events!(prepared::PreparedPlantEventLoop,
         key = due_event_key(workspace.scheduler, prepared.scheduler,
             state.scheduler, 1)
         if key.phase == OpticalSamplePhase
-            _process_optical_path_batch!(prepared, state, workspace,
-                timestamp)
+            execute_optical_path_batch!(
+                batch_executor, prepared, state, workspace, timestamp)
+            _require_idle_optical_path_batch(workspace)
             continue
         end
         claim = claim_next_event!(workspace.scheduler, prepared.scheduler,
@@ -4032,13 +4612,35 @@ end
 function run_plant_events_until!(prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState, workspace::PlantEventLoopWorkspace,
     stop::PlantTimestamp; max_timestamps::Integer=typemax(Int))
+    return run_plant_events_until!(
+        prepared,
+        state,
+        workspace,
+        stop,
+        SerialOpticalPathBatchExecutor();
+        max_timestamps,
+    )
+end
+
+"""
+Process a finite plant horizon while delegating every optical-sample batch to
+one explicit execution policy.
+"""
+function run_plant_events_until!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    stop::PlantTimestamp,
+    batch_executor::AbstractOpticalPathBatchExecutor;
+    max_timestamps::Integer=typemax(Int),
+)
     limit = _checked_event_step_limit(max_timestamps)
     count = 0
     while count < limit
         timestamp = next_plant_event_timestamp(prepared, state, workspace)
         timestamp === nothing && break
         timestamp <= stop || break
-        step_plant_events!(prepared, state, workspace)
+        step_plant_events!(prepared, state, workspace, batch_executor)
         count += 1
     end
     return count

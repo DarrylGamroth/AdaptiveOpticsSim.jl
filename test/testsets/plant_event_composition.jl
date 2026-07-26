@@ -169,7 +169,8 @@ end
 function event_composition_fixture(; reverse_order::Bool=false,
     unbound_trigger_consumer::Bool=false,
     faulted_trigger_fanout::Bool=false,
-    missing_path_schedule::Bool=false)
+    missing_path_schedule::Bool=false,
+    aligned_optical_samples::Bool=false)
     T = Float64
     telescope = Telescope(resolution=4, diameter=T(4),
         central_obstruction=zero(T), T=T)
@@ -242,9 +243,11 @@ function event_composition_fixture(; reverse_order::Bool=false,
         OpticalSampleDefinition(:science,
             PeriodicSchedule(period_ns=100_000_000, phase_ns=0)),
         OpticalSampleDefinition(:ngs,
-            PeriodicSchedule(period_ns=125_000_000, phase_ns=50_000_000)),
+            PeriodicSchedule(period_ns=125_000_000,
+                phase_ns=aligned_optical_samples ? 0 : 50_000_000)),
         OpticalSampleDefinition(:lgs,
-            PeriodicSchedule(period_ns=200_000_000, phase_ns=25_000_000)),
+            PeriodicSchedule(period_ns=200_000_000,
+                phase_ns=aligned_optical_samples ? 0 : 25_000_000)),
     )
     events = (
         AcquisitionEventDefinition(:science_cmos,
@@ -254,7 +257,8 @@ function event_composition_fixture(; reverse_order::Bool=false,
             faulted_trigger_fanout ?
                 TriggeredAcquisitionStart(:science_camera) :
                 PeriodicAcquisitionStart(PeriodicSchedule(
-                    period_ns=500_000_000, phase_ns=0))),
+                    period_ns=500_000_000,
+                    phase_ns=aligned_optical_samples ? 1 : 0))),
         AcquisitionEventDefinition(:science_ccd,
             GlobalShutterAcquisitionDefinition(PlantDuration(300_000_000)),
             PeriodicAcquisitionStart(PeriodicSchedule(
@@ -284,6 +288,38 @@ function event_composition_fixture(; reverse_order::Bool=false,
         PlantEventLoopWorkspace(prepared)
 end
 
+struct ReverseOpticalPathBatchExecutor <:
+    Plant.AbstractOpticalPathBatchExecutor end
+
+function Plant.execute_optical_path_batch!(
+    ::ReverseOpticalPathBatchExecutor,
+    prepared::Plant.PreparedPlantEventLoop,
+    state::Plant.PlantEventLoopState,
+    workspace::Plant.PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
+    claim = Plant.begin_optical_path_batch!(
+        prepared, state, workspace, timestamp)
+    count = Plant.optical_path_batch_due_group_count(
+        prepared, state, workspace, claim)
+    @inbounds for index in count:-1:1
+        ordinal = Plant.optical_path_batch_due_group_ordinal(
+            prepared, state, workspace, claim, index)
+        Plant.materialize_path_execution_group!(
+            prepared, state, workspace, claim, ordinal)
+    end
+    Plant.seal_optical_path_batch_materialization!(
+        prepared, state, workspace, claim)
+    @inbounds for index in count:-1:1
+        ordinal = Plant.optical_path_batch_due_group_ordinal(
+            prepared, state, workspace, claim, index)
+        Plant.execute_path_execution_group!(
+            prepared, state, workspace, claim, ordinal)
+    end
+    return Plant.complete_optical_path_batch!(
+        prepared, state, workspace, claim)
+end
+
 @inline function run_event_composition_window!(prepared, state, workspace,
     stop::PlantTimestamp)
     return run_plant_events_until!(prepared, state, workspace, stop)
@@ -302,6 +338,49 @@ function event_composition_storage_signature(prepared, state, workspace)
         Base.summarysize(state.product_ready_timestamps),
         Base.summarysize(workspace.scheduler.due_slots),
         Base.summarysize(workspace.due_paths),
+        Base.summarysize(workspace.optical_path_batch.due_group_slots),
+        Base.summarysize(workspace.optical_path_batch.group_status),
+    )
+end
+
+function optical_path_batch_allocation_signature!(
+    prepared,
+    state,
+    workspace,
+    timestamp::PlantTimestamp,
+)
+    local claim
+    begin_bytes = @allocated claim = Plant.begin_optical_path_batch!(
+        prepared, state, workspace, timestamp)
+    count = Plant.optical_path_batch_due_group_count(
+        prepared, state, workspace, claim)
+    materialization_bytes = 0
+    @inbounds for index in 1:count
+        ordinal = Plant.optical_path_batch_due_group_ordinal(
+            prepared, state, workspace, claim, index)
+        materialization_bytes += @allocated(
+            Plant.materialize_path_execution_group!(
+                prepared, state, workspace, claim, ordinal))
+    end
+    seal_bytes = @allocated(
+        Plant.seal_optical_path_batch_materialization!(
+            prepared, state, workspace, claim))
+    execution_bytes = 0
+    @inbounds for index in 1:count
+        ordinal = Plant.optical_path_batch_due_group_ordinal(
+            prepared, state, workspace, claim, index)
+        execution_bytes += @allocated(
+            Plant.execute_path_execution_group!(
+                prepared, state, workspace, claim, ordinal))
+    end
+    completion_bytes = @allocated Plant.complete_optical_path_batch!(
+        prepared, state, workspace, claim)
+    return (
+        begin_phase=begin_bytes,
+        materialization=materialization_bytes,
+        seal=seal_bytes,
+        execution=execution_bytes,
+        completion=completion_bytes,
     )
 end
 
@@ -557,10 +636,295 @@ end
         :path_execution_group_path_id,
         :path_execution_group_acquisition_count,
         :path_execution_group_acquisition_id,
+        :OpticalPathBatchClaim,
+        :AbstractOpticalPathBatchExecutor,
+        :SerialOpticalPathBatchExecutor,
+        :optical_path_batch_timestamp,
+        :optical_path_batch_epoch,
+        :optical_path_batch_due_group_count,
+        :optical_path_batch_due_group_ordinal,
+        :begin_optical_path_batch!,
+        :materialize_path_execution_group!,
+        :seal_optical_path_batch_materialization!,
+        :execute_path_execution_group!,
+        :complete_optical_path_batch!,
+        :execute_optical_path_batch!,
     )
         @test Base.ispublic(Plant, name)
         @test !Base.isexported(Plant, name)
         @test !Base.isexported(AdaptiveOpticsSim, name)
+    end
+
+    @testset "Optical path batch lifecycle" begin
+        batch_plant, batch_prepared, batch_state, batch_workspace =
+            event_composition_fixture(aligned_optical_samples=true)
+        claim = @inferred Plant.begin_optical_path_batch!(
+            batch_prepared,
+            batch_state,
+            batch_workspace,
+            PlantTimestamp(0),
+        )
+        @test claim isa Plant.OpticalPathBatchClaim
+        @test isbitstype(typeof(claim))
+        @test Plant.optical_path_batch_timestamp(claim) ==
+            PlantTimestamp(0)
+        @test Plant.optical_path_batch_epoch(
+            batch_prepared, batch_state, batch_workspace, claim) ==
+            current_epoch(batch_prepared.atmosphere)
+        @test @inferred(Plant.optical_path_batch_due_group_count(
+            batch_prepared, batch_state, batch_workspace, claim)) == 3
+        @test Tuple(Plant.optical_path_batch_due_group_ordinal(
+            batch_prepared, batch_state, batch_workspace, claim, index)
+            for index in 1:3) == (1, 2, 3)
+
+        active_error = event_test_error() do
+            Plant.begin_optical_path_batch!(
+                batch_prepared,
+                batch_state,
+                batch_workspace,
+                PlantTimestamp(0),
+            )
+        end
+        @test active_error isa PlantScheduleError
+        @test active_error.reason == :optical_path_batch_active
+        active_timestamp_error = event_test_error() do
+            next_plant_event_timestamp(
+                batch_prepared, batch_state, batch_workspace)
+        end
+        @test active_timestamp_error isa PlantScheduleError
+        @test active_timestamp_error.reason == :optical_path_batch_active
+
+        foreign_state = PlantEventLoopState(batch_prepared)
+        foreign_state_error = event_test_error() do
+            Plant.optical_path_batch_due_group_count(
+                batch_prepared, foreign_state, batch_workspace, claim)
+        end
+        @test foreign_state_error isa PlantScheduleError
+        @test foreign_state_error.reason ==
+            :foreign_optical_path_batch_state
+        foreign_workspace = PlantEventLoopWorkspace(batch_prepared)
+        foreign_workspace_error = event_test_error() do
+            Plant.optical_path_batch_due_group_count(
+                batch_prepared, batch_state, foreign_workspace, claim)
+        end
+        @test foreign_workspace_error isa PlantScheduleError
+        @test foreign_workspace_error.reason ==
+            :foreign_optical_path_batch_workspace
+
+        invalid_due_error = event_test_error() do
+            Plant.optical_path_batch_due_group_ordinal(
+                batch_prepared, batch_state, batch_workspace, claim, 4)
+        end
+        @test invalid_due_error isa PlantScheduleError
+        @test invalid_due_error.reason ==
+            :invalid_due_path_execution_group
+        invalid_group_error = event_test_error() do
+            Plant.materialize_path_execution_group!(
+                batch_prepared, batch_state, batch_workspace, claim, 4)
+        end
+        @test invalid_group_error isa PlantScheduleError
+        @test invalid_group_error.reason == :invalid_path_execution_group
+
+        early_execute_error = event_test_error() do
+            Plant.execute_path_execution_group!(
+                batch_prepared, batch_state, batch_workspace, claim, 1)
+        end
+        @test early_execute_error isa PlantScheduleError
+        @test early_execute_error.reason ==
+            :invalid_optical_path_batch_phase
+        early_seal_error = event_test_error() do
+            Plant.seal_optical_path_batch_materialization!(
+                batch_prepared, batch_state, batch_workspace, claim)
+        end
+        @test early_seal_error isa PlantScheduleError
+        @test early_seal_error.reason ==
+            :incomplete_optical_path_batch_materialization
+
+        for ordinal in 3:-1:1
+            Plant.materialize_path_execution_group!(
+                batch_prepared, batch_state, batch_workspace, claim,
+                ordinal)
+            if ordinal == 3
+                duplicate_materialization_error = event_test_error() do
+                    Plant.materialize_path_execution_group!(
+                        batch_prepared, batch_state, batch_workspace, claim,
+                        ordinal)
+                end
+                @test duplicate_materialization_error isa PlantScheduleError
+                @test duplicate_materialization_error.reason ==
+                    :duplicate_path_execution_group_materialization
+            end
+        end
+        Plant.seal_optical_path_batch_materialization!(
+            batch_prepared, batch_state, batch_workspace, claim)
+        incomplete_error = event_test_error() do
+            Plant.complete_optical_path_batch!(
+                batch_prepared, batch_state, batch_workspace, claim)
+        end
+        @test incomplete_error isa PlantScheduleError
+        @test incomplete_error.reason ==
+            :incomplete_optical_path_batch_execution
+
+        sealed_epoch = current_epoch(batch_prepared.atmosphere)
+        advanced_epoch = advance_to!(
+            batch_prepared.atmosphere,
+            0.001;
+            rng=Xoshiro(0x7a0f),
+        )
+        @test epoch_sequence(advanced_epoch) >
+            epoch_sequence(sealed_epoch)
+        @test Plant.optical_path_batch_epoch(
+            batch_prepared, batch_state, batch_workspace, claim) ==
+            sealed_epoch
+
+        for ordinal in 3:-1:1
+            Plant.execute_path_execution_group!(
+                batch_prepared, batch_state, batch_workspace, claim,
+                ordinal)
+            if ordinal == 3
+                duplicate_execution_error = event_test_error() do
+                    Plant.execute_path_execution_group!(
+                        batch_prepared, batch_state, batch_workspace, claim,
+                        ordinal)
+                end
+                @test duplicate_execution_error isa PlantScheduleError
+                @test duplicate_execution_error.reason ==
+                    :duplicate_path_execution_group
+            end
+        end
+        @test Plant.complete_optical_path_batch!(
+            batch_prepared, batch_state, batch_workspace, claim) ==
+            PlantTimestamp(0)
+        @test prepared_path(batch_plant, :science).execution.executions[] ==
+            1
+        @test prepared_path(batch_plant, :ngs).execution.executions[] == 1
+        @test prepared_path(batch_plant, :lgs).execution.executions[] == 1
+        stale_error = event_test_error() do
+            Plant.optical_path_batch_due_group_count(
+                batch_prepared, batch_state, batch_workspace, claim)
+        end
+        @test stale_error isa PlantScheduleError
+        @test stale_error.reason == :stale_optical_path_batch_claim
+
+        _, stale_prepared, stale_state, stale_workspace =
+            event_composition_fixture(aligned_optical_samples=true)
+        stale_epoch_claim = Plant.begin_optical_path_batch!(
+            stale_prepared,
+            stale_state,
+            stale_workspace,
+            PlantTimestamp(0),
+        )
+        foreign_claim_error = event_test_error() do
+            Plant.optical_path_batch_due_group_count(
+                stale_prepared,
+                stale_state,
+                stale_workspace,
+                claim,
+            )
+        end
+        @test foreign_claim_error isa PlantScheduleError
+        @test foreign_claim_error.reason ==
+            :foreign_optical_path_batch_claim
+        advance_to!(
+            stale_prepared.atmosphere,
+            0.001;
+            rng=Xoshiro(0x7a10),
+        )
+        stale_epoch_error = event_test_error() do
+            Plant.materialize_path_execution_group!(
+                stale_prepared,
+                stale_state,
+                stale_workspace,
+                stale_epoch_claim,
+                1,
+            )
+        end
+        @test stale_epoch_error isa AtmosphereEpochError
+        failed_materialization_retry = event_test_error() do
+            Plant.materialize_path_execution_group!(
+                stale_prepared,
+                stale_state,
+                stale_workspace,
+                stale_epoch_claim,
+                1,
+            )
+        end
+        @test failed_materialization_retry isa PlantScheduleError
+        @test failed_materialization_retry.reason ==
+            :path_execution_group_materialization_active
+
+        serial_plant, serial_prepared, serial_state, serial_workspace =
+            event_composition_fixture(aligned_optical_samples=true)
+        reverse_plant, reverse_prepared, reverse_state, reverse_workspace =
+            event_composition_fixture(aligned_optical_samples=true)
+        serial_timestamp = step_plant_events!(
+            serial_prepared,
+            serial_state,
+            serial_workspace,
+        )
+        reverse_timestamp = step_plant_events!(
+            reverse_prepared,
+            reverse_state,
+            reverse_workspace,
+            ReverseOpticalPathBatchExecutor(),
+        )
+        @test reverse_timestamp == serial_timestamp == PlantTimestamp(0)
+        @test epoch_time(current_epoch(reverse_prepared.atmosphere)) ==
+            epoch_time(current_epoch(serial_prepared.atmosphere))
+        @test epoch_sequence(current_epoch(reverse_prepared.atmosphere)) ==
+            epoch_sequence(current_epoch(serial_prepared.atmosphere))
+        for id in (:science, :ngs, :lgs)
+            serial_path = prepared_path(serial_plant, id)
+            reverse_path = prepared_path(reverse_plant, id)
+            @test reverse_path.result.values == serial_path.result.values
+            @test reverse_path.input.opd == serial_path.input.opd
+            @test reverse_path.execution.executions[] ==
+                serial_path.execution.executions[] == 1
+            serial_group = path_execution_group(
+                serial_prepared,
+                findfirst(group ->
+                    path_execution_group_path_id(group) ==
+                        OpticalPathID(id),
+                    serial_prepared.path_groups),
+            )
+            reverse_group = path_execution_group(
+                reverse_prepared,
+                findfirst(group ->
+                    path_execution_group_path_id(group) ==
+                        OpticalPathID(id),
+                    reverse_prepared.path_groups),
+            )
+            @test copy(Plant.rng_stream_state(
+                reverse_group.rngs, Val(:provider))) ==
+                copy(Plant.rng_stream_state(
+                    serial_group.rngs, Val(:provider)))
+        end
+
+        if coverage_instrumented()
+            @test_skip "optical-path batch allocation gate disabled under coverage instrumentation"
+        else
+            _, allocation_prepared, allocation_state,
+                allocation_workspace = event_composition_fixture(
+                    aligned_optical_samples=true)
+            signature = optical_path_batch_allocation_signature!(
+                allocation_prepared,
+                allocation_state,
+                allocation_workspace,
+                PlantTimestamp(0),
+            )
+            # Julia 1.12 warmed contract for three full-optical groups. Cold
+            # preparation, compilation, and exception formatting are outside
+            # the window; current heterogeneous model barriers remain inside.
+            # The batch phase transitions and reclamation themselves are
+            # allocation-free, and the complete bounded orchestration stays
+            # within the existing 2 KiB per-timestamp ceiling.
+            @test signature.begin_phase <= 1_024
+            @test signature.materialization <= 512
+            @test signature.seal == 0
+            @test signature.execution <= 512
+            @test signature.completion == 0
+            @test sum(signature) <= 2_048
+        end
     end
 
     missing_path_error = event_test_error() do

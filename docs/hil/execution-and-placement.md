@@ -92,8 +92,9 @@ remaining event-runtime ownership requirements are:
   rendering
 
 Preparation owns allocation, FFT planning, path grouping, worker placement,
-and cache construction. The warmed event path mutates prepared state without
-heap allocation.
+and cache construction. The warmed event path mutates fixed prepared storage
+within its declared allocation ceiling; individual numerical kernels and
+batch-state transitions may carry stricter zero-allocation contracts.
 
 Each acquisition also binds a prepared product provider: full optical,
 reduced-order, or synthetic/replay. Provider choice changes capability,
@@ -133,9 +134,60 @@ The resulting plan is immutable for the run.
 The initial core topology is `Plant.PreparedPathExecutionGroup`: one canonical
 group per scheduled path, stored in a homogeneous bounded registry, with exact
 acquisition membership. It intentionally contains no worker or placement
-policy. The direct group-executor and placement-plan layers remain separate
-delivery steps, so the existence of this record alone is not a parallel
-execution claim.
+policy.
+
+Core now exposes one explicit same-timestamp lifecycle around those groups:
+
+1. `begin_optical_path_batch!` identifies the canonical due set, preflights
+   every path and acquisition consumer, advances the shared atmosphere at most
+   once, validates every due full-optical materializer, and returns a compact
+   owner-bound `OpticalPathBatchClaim`.
+2. Each due group crosses `materialize_path_execution_group!` exactly once.
+   Full-optical groups write their prepared path-local input from the exact
+   current epoch; reduced-order and replay groups cross the same bounded state
+   machine without reading atmosphere layers.
+3. `seal_optical_path_batch_materialization!` succeeds only after every due
+   group completes that phase. The atmosphere writer may then be released
+   because subsequent group execution reads only materialized path-local
+   products and held command state.
+4. `execute_path_execution_group!` may be called independently and in any
+   completion order, but exactly one owner writes each group. It integrates
+   only the group's acquisition members, applies its visible aberrations and
+   controllable optics, evaluates path-local autonomous optics, executes its
+   model, and marks that path sampled.
+5. `complete_optical_path_batch!` requires every due group to be complete,
+   resolves the original optical-sample generators, and reclaims the fixed
+   due/status storage.
+
+Foreign state or workspace owners, copied stale claims, changed scheduler
+state, premature phase transitions, duplicate group work, incomplete
+finalization, and stale atmosphere publications fail structurally. Event-loop
+stepping and routed command admission reject an active batch, which preserves
+the held effective-command view. Direct calls to a raw atmosphere remain an
+expert model operation rather than an internal lock acquisition: the HIL
+coordinator owns the single writer, and current-epoch validation rejects a
+materializer if that owner advances too early.
+
+Once a group enters materialization or execution, an unexpected model
+exception is fail-stop for that prepared run. Core deliberately provides no
+retry or rollback seam because a path product, acquisition owner, or RNG
+stream may already be partially mutated. Gate 8 operational lifecycle owns
+coordinated stop, fault publication, quiescence, and preparation of a fresh
+run.
+
+`SerialOpticalPathBatchExecutor` drives the same lifecycle in canonical group
+order and remains the default oracle. `AbstractOpticalPathBatchExecutor` is a
+qualified extension seam through which a HIL runtime may coordinate its own
+workers. Core creates no tasks, queues, affinity policy, or completion polling.
+The per-group status array assumes the declared single writer and is inspected
+by the coordinator only after the external completion mechanism establishes
+synchronization; it is not itself a cross-thread completion queue.
+
+The initial lifecycle has exactly one fixed path-local materialized-product
+slot per prepared group and therefore does not pipeline two timestamps through
+one group. It implements the hold-until-materialized policy, not retained
+atmosphere snapshots. Retained-state pools and deeper in-flight overlap remain
+separate model- and capacity-accounted capabilities.
 
 Small fixed stage pipelines within one group may remain concretely typed for
 specialization. A large instrument's endpoint and path registry MUST NOT be
