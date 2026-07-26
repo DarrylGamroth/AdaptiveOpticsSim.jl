@@ -80,12 +80,13 @@ end
 
 function _prepare_sampled_aberrations(definition::PlantDefinition)
     declarations = _canonical_sampled_aberration_definitions(definition)
-    prepared = Any[]
-    sizehint!(prepared, length(declarations))
-    for declaration in declarations
-        push!(prepared, _prepare_sampled_aberration(declaration))
+    prepared = Memory{PreparedSampledAberration}(
+        undef, length(declarations))
+    @inbounds for index in eachindex(declarations)
+        prepared[index] =
+            _prepare_sampled_aberration(declarations[index])
     end
-    return Tuple(prepared)
+    return prepared
 end
 
 struct _PreparedSampledAberrationPathBindingsToken end
@@ -123,7 +124,7 @@ end
 @inline function _sampled_aberration_slot_isless(
     left::UInt32,
     right::UInt32,
-    aberrations::Tuple,
+    aberrations::AbstractVector,
 )
     left_aberration = aberrations[Int(left)]
     right_aberration = aberrations[Int(right)]
@@ -144,7 +145,7 @@ end
 end
 
 function _visible_sampled_aberration_slots(
-    aberrations::Tuple,
+    aberrations::AbstractVector,
     path::OpticalPathID,
 )
     slots = UInt32[]
@@ -229,8 +230,8 @@ function _prepare_sampled_aberration_path_coupling(
 end
 
 function _prepare_sampled_aberration_path_bindings(
-    aberrations::Tuple,
-    paths::Tuple,
+    aberrations::AbstractVector,
+    paths::AbstractVector,
 )
     canonical_path_slots = _canonical_prepared_path_slots(paths)
     path_ids = OpticalPathID[]
@@ -338,7 +339,7 @@ end
 end
 
 function _prepare_sampled_aberration_path_plan(
-    aberrations::Tuple,
+    aberrations::AbstractVector,
     bindings::PreparedSampledAberrationPathBindings,
     path::OpticalPathID,
 )

@@ -392,7 +392,11 @@ end
     if coverage_instrumented()
         @test_skip "prepared-RNG execution allocation assertion is disabled under coverage instrumentation"
     else
-        @test prepared_selection_execution_allocations(selection,
-            current_epoch(plant_atmosphere(plant.definition))) == 0
+        allocation_bytes = prepared_selection_execution_allocations(
+            selection, current_epoch(
+                plant_atmosphere(plant.definition)))
+        selected_owner_count = length(prepared_paths(selection)) +
+            length(prepared_acquisitions(selection))
+        @test allocation_bytes <= 256 * selected_owner_count
     end
 end

@@ -22,6 +22,10 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("direct-science", "testsets/direct_science.jl"),
     TestSuiteSpec("atmosphere", "testsets/atmosphere.jl"),
     TestSuiteSpec("plant-topology", "testsets/plant_topology.jl"),
+    TestSuiteSpec(
+        "plant-topology-growth",
+        "testsets/plant_topology_growth.jl",
+    ),
     TestSuiteSpec("plant-command-schemas",
         "testsets/plant_command_schemas.jl"),
     TestSuiteSpec("plant-command-admission",
@@ -102,6 +106,7 @@ const TEST_GROUP_SPECS = (
     "core" => ("core-optics", "direct-science", "atmosphere"),
     "plant" => (
         "plant-topology",
+        "plant-topology-growth",
         "plant-command-schemas",
         "plant-command-admission",
         "plant-command-application",
@@ -151,6 +156,7 @@ const TEST_GROUP_SPECS = (
         "plant-gate5-closure",
     ),
     "gate6" => (
+        "plant-topology-growth",
         "plant-event-composition",
         "plant-cpu-execution",
     ),

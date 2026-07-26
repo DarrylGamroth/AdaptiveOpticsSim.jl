@@ -403,7 +403,7 @@ function gate5_plant_definition(
 end
 
 function gate5_event_definition(
-    paths::Tuple,
+    paths::AbstractVector,
     raw::AbstractDict;
     reverse_declarations::Bool=false,
 )

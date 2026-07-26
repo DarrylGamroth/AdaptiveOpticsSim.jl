@@ -142,12 +142,16 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    paths retain independent command state; and run-owned native `NCPA` or
    `OPDMap` effects remain isolated to their declared branches. The clean
    [Gate 5 artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
-   closes numerical, declaration-order, finite-support, fixed-storage,
-   bounded-allocation, and bounded 4/8/16-path topology evidence while exposing
-   the 16-path preparation/codegen cost. Advance next to Gate 6 prepared CPU
-   execution groups and bounded generated-code design; single-GPU direction
-   batching and physical device identity remain Gate 7, behind their own
-   numerical, allocation, residency, and fixed-arrival evidence.
+   closes numerical, declaration-order, finite-support, fixed-storage, and
+   bounded-allocation evidence. Preserve the completed Gate 6 path-execution
+   groups, CPU ownership budgets, deterministic serial fallback, and
+   topology-size-invariant whole-plant registries. The clean
+   [Gate 6 topology-growth artifact](../benchmarks/results/gate6/2026-07-25-topology-growth.toml)
+   bounds fresh preparation, first use, storage, method instances, native-code
+   size, inference, and warmed allocation over synthetic 4/8/16-path shapes
+   without making an NFIRAOS/MORFEO capacity claim. Advance next to Gate 7;
+   single-GPU direction batching and physical device identity remain behind
+   their own numerical, allocation, residency, and fixed-arrival evidence.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,
    and GC/process-isolation policy. Add explicit or constrained deterministic

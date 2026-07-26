@@ -246,10 +246,15 @@ end
 
     @test plant_telescope(plant) === telescope
     @test plant_atmosphere(plant) === atmosphere
-    @test controllable_optic_definitions(plant) ===
+    @test controllable_optic_definitions(plant) isa
+        Memory{ControllableOpticDefinition}
+    @test Tuple(controllable_optic_definitions(plant)) ===
         (woofer, tweeter, segmented)
-    @test path_definitions(plant) === (ngs_path, science_path)
-    @test acquisition_definitions(plant) ===
+    @test path_definitions(plant) isa Memory{OpticalPathDefinition}
+    @test Tuple(path_definitions(plant)) === (ngs_path, science_path)
+    @test acquisition_definitions(plant) isa
+        Memory{AcquisitionDefinition}
+    @test Tuple(acquisition_definitions(plant)) ===
         (fast_camera, slow_camera, ngs_wfs, woofer_feedback)
     @test controllable_optic_definition(plant, :woofer) === woofer
     @test controllable_optic_definition(
@@ -303,11 +308,27 @@ end
         (fast_camera=fast_camera, slow_camera=slow_camera, ngs_wfs=ngs_wfs,
             woofer_feedback=woofer_feedback),
     )
-    @test controllable_optic_definitions(named_positional) ===
+    @test Tuple(controllable_optic_definitions(named_positional)) ===
         (woofer, tweeter, segmented)
-    @test path_definitions(named_positional) === (ngs_path, science_path)
-    @test acquisition_definitions(named_positional) ===
+    @test Tuple(path_definitions(named_positional)) ===
+        (ngs_path, science_path)
+    @test Tuple(acquisition_definitions(named_positional)) ===
         (fast_camera, slow_camera, ngs_wfs, woofer_feedback)
+
+    # Mutable caller organization is accepted as cold input but is not
+    # retained as the immutable plant topology registry.
+    optic_vector = [woofer, tweeter, segmented]
+    path_vector = [ngs_path, science_path]
+    acquisition_vector =
+        [fast_camera, slow_camera, ngs_wfs, woofer_feedback]
+    vector_plant = PlantDefinition(telescope, atmosphere, optic_vector,
+        path_vector, acquisition_vector)
+    optic_vector[1] = segmented
+    path_vector[1] = science_path
+    acquisition_vector[1] = slow_camera
+    @test controllable_optic_definitions(vector_plant)[1] === woofer
+    @test path_definitions(vector_plant)[1] === ngs_path
+    @test acquisition_definitions(vector_plant)[1] === fast_camera
 
     empty_plant = PlantDefinition(
         telescope=telescope,
@@ -659,22 +680,6 @@ end
         ),
         :acquisition,
         :identity_mismatch,
-    )
-    assert_plant_definition_error(
-        () -> PlantDefinition(telescope, atmosphere, (), [ngs_path], ()),
-        :path,
-        :invalid_container,
-    )
-    assert_plant_definition_error(
-        () -> PlantDefinition(telescope, atmosphere, (), (ngs_path,),
-            [ngs_wfs]),
-        :acquisition,
-        :invalid_container,
-    )
-    assert_plant_definition_error(
-        () -> PlantDefinition(telescope, atmosphere, [woofer], (), ()),
-        :controllable_optic,
-        :invalid_container,
     )
     assert_plant_definition_error(
         () -> PlantDefinition(telescope, atmosphere, (1,), (), ()),

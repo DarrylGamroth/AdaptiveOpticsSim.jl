@@ -180,11 +180,12 @@ the root scientific API.
 `rng_replay_metadata`, `execute_path!`, and `execute_acquisition!` are the
 corresponding schedule-free prepared boundary.
 A symbol passed as an identity is normalized to the corresponding typed ID. A
-tuple or named tuple is only declaration organization: every definition carries
-its own explicit identity, a named-tuple key must agree with it, and reordering
-cannot change a reference. A named command-schema key must match its target
-endpoint. Every command-endpoint identity and every active schema identity is
-unique in one plant, and each endpoint has exactly one physical optic owner.
+tuple, named tuple, or vector is only cold declaration organization and is
+copied into a fixed-size topology registry: every definition carries its own
+explicit identity, a named-tuple key must agree with it, and reordering cannot
+change a reference. A named command-schema key must match its target endpoint.
+Every command-endpoint identity and every active schema identity is unique in
+one plant, and each endpoint has exactly one physical optic owner.
 One optic may carry several independently latched endpoint schemas, but shared
 optic ownership implies neither packed layout nor atomic application. Multiple
 acquisitions may reference the same path, as the two

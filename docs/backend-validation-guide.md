@@ -624,6 +624,37 @@ calls stayed at or below 432 bytes, and no measured run collected garbage.
 These mixed results are workload- and host-specific service-cost evidence, not
 a general parallel speedup or external-RTC latency result.
 
+For the independent Gate 6 whole-plant specialization-growth gate, run the
+fresh-process topology matrix on one Julia, BLAS, and FFT-provider thread:
+
+```bash
+AOS_GATE6_TOPOLOGY_OUTPUT=benchmarks/results/gate6/topology-growth.toml \
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate6_topology_growth.jl
+```
+
+The benchmark refuses durable output from a dirty tree. Set
+`AOS_GATE6_TOPOLOGY_QUICK=1` and omit the output path for a one-repetition
+development check. The
+[`gate6_topology_growth.toml`](../benchmarks/contracts/gate6_topology_growth.toml)
+contract predeclares separate event and schedule-free-selection first-use
+probes, fresh preparation limits, registry-type and code-growth proxies,
+concrete-kernel inference, prepared storage, numerical parity, and a
+per-path warmed allocation ceiling over synthetic 4/8/16-path shapes.
+
+The clean
+[`2026-07-25-topology-growth.toml`](../benchmarks/results/gate6/2026-07-25-topology-growth.toml)
+artifact passed every gate. From 4 to 16 paths, median fresh preparation time
+grew 1.052×, preparation allocation 1.029×, and prepared storage 2.744×.
+Checked registry and HIL-entry types had one fingerprint, entry native-code
+size had a 1.0 ratio, method-instance growth was zero, and representative path
+and acquisition kernels had no meaningful `Any` slots. Warmed serial
+orchestration used at most 704.04 Julia heap bytes per path per cycle.
+The recorded HdrHistogram distributions are closed-loop service-cost
+diagnostics, not fixed-arrival latency, external-RTC, production-instrument,
+NFIRAOS, or MORFEO capacity evidence.
+
 For independent simulation sweeps, run the ensemble scheduler benchmark before
 selecting `ThreadedExecution`, `AcceleratedKernelsExecution`, or
 `DaggerExecution`:
