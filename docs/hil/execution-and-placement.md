@@ -335,6 +335,16 @@ The current clean
 shows the expected trade: lower optical-tail service cost but higher cheap-event
 overhead and lower aggregate throughput on the unpinned local laptop CPU.
 
+Gate 6 closes at core implementation revision `0a38576`: the grouped and
+topology-growth contracts pass, and
+[AdaptiveOpticsHIL PR #15](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/15)
+pins the companion package and benchmark environments to that revision while
+passing their full cross-platform, ownership-stress, coverage, and
+benchmark-contract checks. This validates the prepared CPU executor boundary
+and the selected hold-until-materialized atmosphere policy. It does not promote
+the test-scaffolding tasks into production workers or add affinity, pacing,
+SPSC completion, transport, or lifecycle behavior; those remain Gate 8.
+
 On large EPYC or Threadripper systems, placement should account for NUMA nodes,
 physical cores, SMT siblings, memory allocation, NIC queues, and interrupts.
 AcceleratedKernels may remain an evidence-gated option for sufficiently large

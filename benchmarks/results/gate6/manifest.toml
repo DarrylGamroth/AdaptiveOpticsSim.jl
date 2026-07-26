@@ -1,3 +1,14 @@
+[closure]
+id = "GATE6-CLOSURE-2026-07-26"
+status = "passed"
+core_implementation_revision = "0a38576aedc556d9230d7d206038e950c51e4c21"
+implementation_pull_requests = [100, 101, 102, 103]
+adaptive_optics_hil_pull_request = 15
+adaptive_optics_hil_revision = "957443240c840e0469e2883599da0712b596bfed"
+requirements = ["HIL-CPU-001", "HIL-ATM-004", "HIL-EXEC-006"]
+artifact_ids = ["GATE6-GROUPED-CPU-2026-07-25", "GATE6-TOPOLOGY-GROWTH-2026-07-25"]
+scope = "Prepared serial and externally scheduled grouped CPU execution; excludes Gate 7 GPU ownership and Gate 8 production workers, pacing, and transport."
+
 [[artifacts]]
 id = "GATE6-GROUPED-CPU-2026-07-25"
 purpose = "Clean-tree Gate 6 four-context fixed-owner CPU exact-replay, task-reuse, allocation, first-use, GC, and paired serial/grouped self-paced service-cost evidence"
