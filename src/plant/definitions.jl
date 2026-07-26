@@ -349,9 +349,9 @@ function _require_sampled_aberration_metadata(
         PlantDefinitionError(:sampled_aberration, :surface_backend,
             "sampled-aberration OPD and metadata use different array " *
             "backends"))
-    plane_device(opd) == metadata.device || throw(PlantDefinitionError(
+    compute_device(opd) == metadata.device || throw(PlantDefinitionError(
         :sampled_aberration, :surface_device,
-        "sampled-aberration OPD and metadata occupy different physical " *
+        "sampled-aberration OPD and metadata occupy different compute " *
         "devices"))
     return metadata
 end
@@ -370,7 +370,7 @@ end
 
 Immutable declaration of one native sampled pupil-OPD aberration. `surface`
 must be `NCPA` or `OPDMap`; `metadata` gives its exact metric pupil-plane
-sampling, array backend, and physical device. Placement, path visibility, and
+sampling, array backend, and compute device. Placement, path visibility, and
 additive or replacement application are explicit optical semantics.
 
 The declaration retains caller storage. `prepare_plant` makes a defensive

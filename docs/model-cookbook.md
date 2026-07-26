@@ -216,7 +216,7 @@ command = PlantCommand(
 )
 ```
 
-Preparation validates exact type, shape, backend, and physical device. The
+Preparation validates exact type, shape, backend, and compute device. The
 route is zero-copy; successful command admission performs the bounded endpoint
 copy. Construct a separate `PlantCommand` for each due endpoint so its sequence
 and requested effective timestamp remain independent.
@@ -266,7 +266,7 @@ pupil_gpu = PupilFunction(tel_gpu; T=Float32, backend=backend)
 
 Use `AMDGPUBackend()` on ROCm hardware. Keep the atmosphere, optics, WFS,
 detectors, reconstruction storage, controller-output products, and command
-endpoints on the same backend and physical device. Copy to host only at a
+endpoints on the same backend and compute device. Copy to host only at a
 deliberate transport or inspection boundary.
 
 For a device-resident offline simulation, synchronize only when a dependency or

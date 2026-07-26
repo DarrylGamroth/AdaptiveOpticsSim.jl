@@ -141,9 +141,9 @@ function prepare_pupil_field(wavefront::PupilFunction, src::AbstractSource,
     typeof(backend(wavefront.support)) === typeof(backend(wavefront)) ||
         throw(InvalidConfiguration(
             "pupil-wavefront support backend must match its optical storage"))
-    plane_device(wavefront.support) == wavefront.metadata.device || throw(
+    compute_device(wavefront.support) == wavefront.metadata.device || throw(
         InvalidConfiguration(
-            "pupil-wavefront support must occupy the same physical device as its optical storage"))
+            "pupil-wavefront support must occupy the same compute device as its optical storage"))
     validate_plane_storage(field.metadata, field.values;
         label="electric field")
     require_centered_plane_geometry(wavefront.metadata;
@@ -165,7 +165,7 @@ function prepare_pupil_field(wavefront::PupilFunction, src::AbstractSource,
             "PupilFunction and ElectricField backends must match"))
     wavefront.metadata.device == field.metadata.device ||
         throw(InvalidConfiguration(
-            "PupilFunction and ElectricField must occupy the same physical device"))
+            "PupilFunction and ElectricField must occupy the same compute device"))
     wavefront.metadata.sampling == field.metadata.sampling ||
         throw(InvalidConfiguration(
             "PupilFunction and ElectricField sampling must match"))

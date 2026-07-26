@@ -839,7 +839,7 @@ generation. Parallel HIL reproducibility additionally requires:
 - tolerance-based rather than bitwise CPU/GPU and cross-device comparison
 
 RNG identities derive from declared physical topology, never tuple position,
-task, thread, ring cursor, completion order, or physical device ordinal.
+task, thread, ring cursor, completion order, or compute-device ordinal.
 Preparation rejects duplicate identities. Reordering independent endpoints or
 moving one prepared group between compatible resources therefore cannot change
 which random values belong to its modeled events. The canonical

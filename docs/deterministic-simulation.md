@@ -103,7 +103,7 @@ The complete target distinguishes two prepared policies:
   owner identity, event or epoch sequence, and element/sample index when work
   may be replicated, batched, reordered, or evaluated on several devices.
 
-A task ID, `Threads.threadid()`, tuple position, physical device ordinal, ring
+A task ID, `Threads.threadid()`, tuple position, compute-device ordinal, ring
 cursor, or completion order is never an RNG identity. Changing static
 placement must not change which random values belong to a physical event.
 The current serial slice implements the single-writer stateful policy. The

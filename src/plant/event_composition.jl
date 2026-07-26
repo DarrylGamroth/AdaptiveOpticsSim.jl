@@ -283,6 +283,35 @@ abstract type AbstractOpticalPathBatchExecutor end
 struct SerialOpticalPathBatchExecutor <: AbstractOpticalPathBatchExecutor end
 
 """
+Immutable compute-domain requirements for one prepared path execution group.
+
+The semantic array `backend` and concrete `compute_device` are intentionally
+separate. `requires_full_optical` distinguishes groups that must materialize
+and execute their prepared optical path from reduced-order or replay groups.
+This contract describes requirements only; it assigns no worker, stream,
+placement, or scheduling policy.
+"""
+struct PathExecutionRequirements
+    backend::AbstractArrayBackend
+    compute_device::AbstractComputeDevice
+    requires_full_optical::Bool
+
+    function PathExecutionRequirements(
+        backend::B,
+        compute_device::D,
+        requires_full_optical::Bool,
+    ) where {B<:AbstractArrayBackend,D<:AbstractComputeDevice}
+        typeof(compute_device_backend(compute_device)) === B || throw(
+            PlantPreparationError(
+                :path_execution_group,
+                :compute_device,
+                "path execution backend and compute-device family differ",
+            ))
+        return new(backend, compute_device, requires_full_optical)
+    end
+end
+
+"""
 Run-immutable owner of one prepared direction-dependent optical path and every
 compatible acquisition consumer scheduled on that path.
 
@@ -295,6 +324,7 @@ transport policy.
 struct PreparedPathExecutionGroup
     ordinal::UInt32
     id::OpticalPathID
+    requirements::PathExecutionRequirements
     path::PreparedPathExecutor
     # Retain the heterogeneous input box created during preparation. The
     # event-loop barrier reuses it across all visible optics instead of
@@ -304,7 +334,6 @@ struct PreparedPathExecutionGroup
     schedule::PeriodicSchedule
     origin::PlantTimestamp
     handle::EventGeneratorHandle
-    requires_full_optical::Bool
     sampled_aberration_binding_start::Int
     sampled_aberration_binding_stop::Int
     optic_binding_start::Int
@@ -448,6 +477,17 @@ end
     Int(group.ordinal)
 @inline path_execution_group_path_id(group::PreparedPathExecutionGroup) =
     group.id
+@inline path_execution_group_requirements(
+    group::PreparedPathExecutionGroup,
+) = group.requirements
+@inline path_execution_backend(requirements::PathExecutionRequirements) =
+    requirements.backend
+@inline path_execution_compute_device(
+    requirements::PathExecutionRequirements,
+) = requirements.compute_device
+@inline path_execution_requires_full_optical(
+    requirements::PathExecutionRequirements,
+) = requirements.requires_full_optical
 @inline path_execution_group_acquisition_count(
     group::PreparedPathExecutionGroup) = length(group.acquisitions)
 
@@ -1239,13 +1279,17 @@ function _prepare_path_execution_groups(
         groups[index] = PreparedPathExecutionGroup(
             UInt32(index),
             definition.path,
+            PathExecutionRequirements(
+                getfield(path.key, :backend),
+                getfield(path.key, :device),
+                requires_full_optical,
+            ),
             path,
             path.input,
             rngs,
             definition.schedule,
             definition.origin,
             handle,
-            requires_full_optical,
             first(sampled_binding_range), last(sampled_binding_range),
             first(binding_range), last(binding_range),
             optic_couplings, optic_coupling_groups,
@@ -1369,7 +1413,7 @@ function _prepare_event_autonomous_optics(definitions, optics, path_groups,
             definition.path)
         path_slot = _event_path_group_slot(path_groups, definition.path)
         group = path_groups[path_slot]
-        group.requires_full_optical || _plant_event_loop_error(
+        group.requirements.requires_full_optical || _plant_event_loop_error(
             :autonomous_path_without_full_optics,
             "autonomous optic $(definition.optic) targets path $(definition.path) without a full-optical acquisition")
         coupling = prepare_autonomous_periodic_optic(
@@ -3657,8 +3701,8 @@ end
             "direct-measurement lifecycle storage changed after event-loop preparation")
     typeof(backend(storage)) ===
         typeof(backend(prepared.instantaneous_sample)) &&
-        plane_device(storage) ==
-            plane_device(prepared.instantaneous_sample) ||
+        compute_device(storage) ==
+            compute_device(prepared.instantaneous_sample) ||
         _plant_event_loop_error(:prepared_binding,
             "direct-measurement lifecycle memory domain changed after preparation")
     return nothing
@@ -3964,7 +4008,7 @@ function _validate_due_path_materializations!(
     @inbounds for index in eachindex(prepared.path_groups)
         due_paths[index] || continue
         group = prepared.path_groups[index]
-        group.requires_full_optical || continue
+        group.requirements.requires_full_optical || continue
         _validate_due_path_materialization!(
             group.path,
             atmosphere,
@@ -4138,7 +4182,7 @@ function materialize_path_execution_group!(
     @inbounds batch.group_status[slot] =
         _OpticalPathBatchGroupMaterializing
     group = @inbounds prepared.path_groups[slot]
-    if group.requires_full_optical
+    if group.requirements.requires_full_optical
         _validate_epoch_identity(
             atmosphere_identity(prepared.atmosphere),
             prepared.atmosphere,
@@ -4278,7 +4322,7 @@ Base.@noinline function _execute_materialized_path_execution_group!(
         )
     end
 
-    if group.requires_full_optical
+    if group.requirements.requires_full_optical
         sampled_binding_range = (
             group.sampled_aberration_binding_start:
             group.sampled_aberration_binding_stop
@@ -4343,7 +4387,8 @@ function _due_full_optical_path(
     prepared::PreparedPlantEventLoop, due_paths::Memory{Bool})
     @inbounds for index in eachindex(prepared.path_groups)
         due_paths[index] &&
-            prepared.path_groups[index].requires_full_optical && return true
+            prepared.path_groups[index].requirements.requires_full_optical &&
+            return true
     end
     return false
 end

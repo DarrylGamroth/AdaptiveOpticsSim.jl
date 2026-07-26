@@ -173,7 +173,7 @@ be mistaken for the final asynchronous scheduling model.
   iceoryx2 adapter belongs at a deliberate process boundary and does not replace
   path-local workspace ownership, current-epoch materialization, or bounded
   retained-state ownership.
-- Core defines backend/device identity, supported execution seams, and prepared
+- Core defines backend-family/compute-device identity, supported execution seams, and prepared
   group requirements; the HIL companion resolves the static placement policy
   and owns CPU and GPU execution agents.
 - Core exposes prepared worker ownership; the HIL companion may apply and

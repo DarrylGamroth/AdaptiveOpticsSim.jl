@@ -270,9 +270,9 @@ function _prepare_direct_imaging(input_plan::AbstractDirectImagingInputPlan,
     eltype(output.values) === real(eltype(field.values)) || throw(
         InvalidConfiguration(
             "direct-imaging field and output real numeric types must match"))
-    plane_device(field.values) == plane_device(output.values) || throw(
+    compute_device(field.values) == compute_device(output.values) || throw(
         InvalidConfiguration(
-            "direct-imaging field and output occupy different physical devices"))
+            "direct-imaging field and output occupy different compute devices"))
     Base.mightalias(field.values, output.values) && throw(
         InvalidConfiguration(
             "direct-imaging field and output storage must not alias"))
@@ -394,7 +394,7 @@ function _require_prepared_direct_workspace(
     eltype(workspace.unshifted_intensity) ===
         plan.output_metadata.numeric_type || throw(InvalidConfiguration(
         "direct-imaging scratch numeric type does not match its prepared plan"))
-    plane_device(workspace.unshifted_intensity) ==
+    compute_device(workspace.unshifted_intensity) ==
         plan.output_metadata.device || throw(InvalidConfiguration(
         "direct-imaging scratch device does not match its prepared plan"))
     return nothing

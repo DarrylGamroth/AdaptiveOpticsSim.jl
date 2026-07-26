@@ -12,7 +12,7 @@ struct WFSObservationMetadata{
     E,
     L,
     B<:AbstractArrayBackend,
-    D<:AbstractPlaneDevice,
+    D<:AbstractComputeDevice,
 }
     dimensions::NTuple{N,Int}
     numeric_type::Type{E}
@@ -27,7 +27,7 @@ struct WFSMeasurementMetadata{
     E,
     K,
     B<:AbstractArrayBackend,
-    D<:AbstractPlaneDevice,
+    D<:AbstractComputeDevice,
 }
     dimensions::NTuple{N,Int}
     numeric_type::Type{E}
@@ -42,8 +42,8 @@ end
 @inline _wfs_storage_numeric_type(::Base.RefValue{T}) where {T} = T
 @inline _wfs_storage_backend(storage::AbstractArray) = backend(storage)
 @inline _wfs_storage_backend(::Base.RefValue) = CPUBackend()
-@inline _wfs_storage_device(storage::AbstractArray) = plane_device(storage)
-@inline _wfs_storage_device(::Base.RefValue) = HostPlaneDevice()
+@inline _wfs_storage_device(storage::AbstractArray) = compute_device(storage)
+@inline _wfs_storage_device(::Base.RefValue) = HostComputeDevice()
 @inline _wfs_storage_length(storage::AbstractArray) = length(storage)
 @inline _wfs_storage_length(::Base.RefValue) = 1
 
@@ -204,7 +204,7 @@ function _require_wfs_storage_domain(stage::Symbol, metadata, storage,
     typeof(metadata.backend) === typeof(backend(storage)) ||
         throw(WFSPreparationError(stage, :backend,
             "$label backend does not match the prepared WFS stage"))
-    metadata.device == plane_device(storage) ||
+    metadata.device == compute_device(storage) ||
         throw(WFSPreparationError(stage, :device,
             "$label device does not match the prepared WFS stage"))
     return nothing
@@ -462,7 +462,7 @@ function prepare_wfs_acquisition(detector::Detector,
     typeof(backend(observation.storage)) === typeof(backend(detector)) ||
         throw(WFSPreparationError(:acquisition, :backend,
             "WFS observation and detector backends differ"))
-    plane_device(observation.storage) == plane_device(output_frame(detector)) ||
+    compute_device(observation.storage) == compute_device(output_frame(detector)) ||
         throw(WFSPreparationError(:acquisition, :device,
             "WFS observation and detector output occupy different devices"))
     return PreparedWFSDetectorAcquisition(detector, plan, observation)
@@ -575,7 +575,7 @@ function prepare_wfs_acquisition(detector::AbstractCountingDetector,
     typeof(backend(detector)) === typeof(backend(input)) || throw(
         WFSPreparationError(:acquisition, :backend,
             "counting detector and WFS rate product backends differ"))
-    plane_device(counting_array(detector)) == plane_device(input) || throw(
+    compute_device(counting_array(detector)) == compute_device(input) || throw(
         WFSPreparationError(:acquisition, :device,
             "counting detector and WFS rate product occupy different devices"))
     ensure_buffers!(detector, size(input))
@@ -589,7 +589,7 @@ function prepare_wfs_acquisition(detector::AbstractCountingDetector,
     typeof(backend(observation.storage)) === typeof(backend(detector)) ||
         throw(WFSPreparationError(:acquisition, :backend,
             "counting WFS observation and detector backends differ"))
-    plane_device(observation.storage) == plane_device(output) || throw(
+    compute_device(observation.storage) == compute_device(output) || throw(
         WFSPreparationError(:acquisition, :device,
             "counting WFS observation and detector output occupy different devices"))
     return PreparedWFSCountingAcquisition(detector, optical_product,

@@ -965,6 +965,12 @@ end
         @test path_execution_group_ordinal(group) == ordinal
         @test path_execution_group_path_id(group) ==
             expected_group_paths[ordinal]
+        requirements =
+            @inferred path_execution_group_requirements(group)
+        @test path_execution_backend(requirements) == CPUBackend()
+        @test path_execution_compute_device(requirements) ==
+            AdaptiveOpticsSim.HostComputeDevice()
+        @test path_execution_requires_full_optical(requirements)
         @test path_execution_group_acquisition_count(group) ==
             length(expected_group_acquisitions[ordinal])
         @test Tuple(path_execution_group_acquisition_id(group, index)
@@ -974,16 +980,43 @@ end
         @test @inferred(path_execution_group_acquisition_id(group, 1)) ==
             first(expected_group_acquisitions[ordinal])
     end
+    first_group = path_execution_group(prepared, 1)
+    first_requirements = path_execution_group_requirements(first_group)
+    path_execution_backend(first_requirements)
+    path_execution_compute_device(first_requirements)
+    path_execution_requires_full_optical(first_requirements)
+    if coverage_instrumented()
+        @test_skip "path-requirements allocation gate disabled under coverage instrumentation"
+    else
+        @test @allocated(path_execution_group_requirements(
+            first_group)) == 0
+        @test @allocated(path_execution_backend(
+            first_requirements)) == 0
+        @test @allocated(path_execution_compute_device(
+            first_requirements)) == 0
+        @test @allocated(path_execution_requires_full_optical(
+            first_requirements)) == 0
+    end
     @test_throws BoundsError path_execution_group(prepared, 0)
     @test_throws BoundsError path_execution_group(prepared, 4)
     @test_throws BoundsError path_execution_group_acquisition_id(
         path_execution_group(prepared, 1), 2)
+    @test_throws PlantPreparationError PathExecutionRequirements(
+        CUDABackend(),
+        AdaptiveOpticsSim.HostComputeDevice(),
+        true,
+    )
     for name in (
         :PreparedPathExecutionGroup,
+        :PathExecutionRequirements,
         :path_execution_group_count,
         :path_execution_group,
         :path_execution_group_ordinal,
         :path_execution_group_path_id,
+        :path_execution_group_requirements,
+        :path_execution_backend,
+        :path_execution_compute_device,
+        :path_execution_requires_full_optical,
         :path_execution_group_acquisition_count,
         :path_execution_group_acquisition_id,
         :OpticalPathBatchClaim,

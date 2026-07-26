@@ -100,6 +100,87 @@ backend(A::AbstractArray) = array_backend_selector(typeof(A))
 @inline backend(A::Adjoint) = backend(parent(A))
 backend_type(x) = typeof(backend(x))
 
+"""
+Concrete compute-device identity for array storage.
+
+This is distinct from `AbstractArrayBackend`, which identifies a software
+backend family rather than one host or accelerator device.
+"""
+abstract type AbstractComputeDevice end
+
+"""The host compute device used by ordinary CPU array storage."""
+struct HostComputeDevice <: AbstractComputeDevice end
+
+@inline _require_accelerator_backend(backend::AbstractArrayBackend) = backend
+function _require_accelerator_backend(::CPUBackend)
+    throw(InvalidConfiguration(
+        "an accelerator compute device cannot use the CPU backend family"))
+end
+
+"""
+One concrete accelerator, qualified by its semantic array-backend family.
+
+`identifier` is supplied by the owning backend extension and is meaningful
+within that backend runtime. It must distinguish simultaneously addressable
+devices in one process.
+"""
+struct AcceleratorComputeDevice{
+    B<:AbstractArrayBackend,I,
+} <: AbstractComputeDevice
+    backend::B
+    identifier::I
+
+    @inline function AcceleratorComputeDevice(
+        backend::B,
+        identifier::I,
+    ) where {B<:AbstractArrayBackend,I}
+        _require_accelerator_backend(backend)
+        isnothing(identifier) && throw(InvalidConfiguration(
+            "an accelerator compute device requires a concrete identifier"))
+        isbitstype(I) || throw(InvalidConfiguration(
+            "an accelerator compute-device identifier must be an isbits value"))
+        return new{B,I}(backend, identifier)
+    end
+end
+
+@inline compute_device(storage::AbstractArray) =
+    compute_device(execution_style(storage), storage)
+@inline compute_device(storage::SubArray) =
+    compute_device(parent(storage))
+@inline compute_device(storage::Base.ReshapedArray) =
+    compute_device(parent(storage))
+@inline compute_device(storage::Base.ReinterpretArray) =
+    compute_device(parent(storage))
+@inline compute_device(storage::PermutedDimsArray) =
+    compute_device(parent(storage))
+@inline compute_device(storage::Transpose) =
+    compute_device(parent(storage))
+@inline compute_device(storage::Adjoint) =
+    compute_device(parent(storage))
+@inline compute_device_identifier(::AbstractArray) = nothing
+@inline compute_device_identifier(storage::SubArray) =
+    compute_device_identifier(parent(storage))
+@inline compute_device_identifier(storage::Base.ReshapedArray) =
+    compute_device_identifier(parent(storage))
+@inline compute_device_identifier(storage::Base.ReinterpretArray) =
+    compute_device_identifier(parent(storage))
+@inline compute_device_identifier(storage::PermutedDimsArray) =
+    compute_device_identifier(parent(storage))
+@inline compute_device_identifier(storage::Transpose) =
+    compute_device_identifier(parent(storage))
+@inline compute_device_identifier(storage::Adjoint) =
+    compute_device_identifier(parent(storage))
+@inline compute_device(::ScalarCPUStyle, ::AbstractArray) = HostComputeDevice()
+@inline compute_device(::AcceleratorStyle, storage::AbstractArray) =
+    AcceleratorComputeDevice(backend(storage),
+        compute_device_identifier(storage))
+@inline compute_device_backend(::HostComputeDevice) = CPUBackend()
+@inline compute_device_backend(device::AcceleratorComputeDevice) =
+    device.backend
+@inline compute_device_identifier(::HostComputeDevice) = nothing
+@inline compute_device_identifier(device::AcceleratorComputeDevice) =
+    device.identifier
+
 @inline function same_backend(x, y)
     return backend_type(x) === backend_type(y)
 end

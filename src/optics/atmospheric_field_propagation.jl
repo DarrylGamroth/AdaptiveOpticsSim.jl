@@ -353,8 +353,8 @@ function _validate_atmospheric_intensity_destination(out::AbstractMatrix{T},
     typeof(backend(out)) === typeof(backend(prepared)) ||
         throw(InvalidConfiguration(
             "atmospheric intensity backend does not match prepared output"))
-    plane_device(out) == plane_device(prepared) || throw(InvalidConfiguration(
-        "atmospheric intensity destination is on a different physical device"))
+    compute_device(out) == compute_device(prepared) || throw(InvalidConfiguration(
+        "atmospheric intensity destination is on a different compute device"))
     return out
 end
 

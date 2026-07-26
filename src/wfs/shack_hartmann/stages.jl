@@ -240,13 +240,13 @@ function _require_sh_stage_domains(front_end::ShackHartmannOpticalFrontEnd,
     typeof(input.metadata.backend) === typeof(backend(propagation_storage)) ||
         throw(WFSPreparationError(:optical_formation, :backend,
             "Shack-Hartmann input and microlens propagation backends differ"))
-    input.metadata.device == plane_device(propagation_storage) ||
+    input.metadata.device == compute_device(propagation_storage) ||
         throw(WFSPreparationError(:optical_formation, :device,
             "Shack-Hartmann input and microlens propagation occupy different devices"))
     typeof(input.metadata.backend) === typeof(backend(front_end.layout.valid_mask)) ||
         throw(WFSPreparationError(:optical_formation, :backend,
             "Shack-Hartmann input and subaperture-layout backends differ"))
-    input.metadata.device == plane_device(front_end.layout.valid_mask) ||
+    input.metadata.device == compute_device(front_end.layout.valid_mask) ||
         throw(WFSPreparationError(:optical_formation, :device,
             "Shack-Hartmann input and subaperture layout occupy different devices"))
     propagation_type = eltype(front_end.propagation.intensity)

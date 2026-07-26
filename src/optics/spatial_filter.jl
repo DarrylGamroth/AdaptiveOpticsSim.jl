@@ -185,7 +185,7 @@ function prepare_spatial_filter(tel::Telescope,
     input.metadata.device == output.metadata.device ||
         throw(InvalidConfiguration(
             "spatial-filter input and output must occupy the same device"))
-    plane_device(spatial_filter.mask_shifted) == input.metadata.device ||
+    compute_device(spatial_filter.mask_shifted) == input.metadata.device ||
         throw(InvalidConfiguration(
             "spatial-filter mask and input must occupy the same device"))
     typeof(selector) === typeof(input.metadata.backend) ||

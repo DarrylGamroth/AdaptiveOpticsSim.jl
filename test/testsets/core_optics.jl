@@ -227,6 +227,13 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :photon_irradiance)
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPlaneMetadata)
+    @test Base.isexported(AdaptiveOpticsSim, :compute_device)
+    @test !Base.isexported(AdaptiveOpticsSim, :AbstractComputeDevice)
+    @test Base.ispublic(AdaptiveOpticsSim, :AbstractComputeDevice)
+    @test Base.ispublic(AdaptiveOpticsSim, :HostComputeDevice)
+    @test Base.ispublic(AdaptiveOpticsSim, :AcceleratorComputeDevice)
+    @test Base.ispublic(AdaptiveOpticsSim, :compute_device_backend)
+    @test Base.ispublic(AdaptiveOpticsSim, :compute_device_identifier)
     @test Base.isexported(AdaptiveOpticsSim, :MetricCoordinates)
     @test Base.isexported(AdaptiveOpticsSim, :AngularCoordinates)
     @test Base.isexported(AdaptiveOpticsSim, :AchromaticSpectralCoordinate)
@@ -295,6 +302,10 @@ end
         :wfs_source,
         :science_source,
         :synchronize_runtime!,
+        :plane_device,
+        :AbstractPlaneDevice,
+        :HostPlaneDevice,
+        :AcceleratorPlaneDevice,
     )
         @test !isdefined(AdaptiveOpticsSim, removed_name)
         @test !Base.isexported(AdaptiveOpticsSim, removed_name)
@@ -336,9 +347,36 @@ end
         PermutedDimsArray(host_view, (2, 1)),
         reinterpret(Float32, host_view),
     )
-    host_device = plane_device(metadata_storage)
+    host_device = compute_device(metadata_storage)
+    @test host_device == AdaptiveOpticsSim.HostComputeDevice()
+    @test AdaptiveOpticsSim.compute_device_backend(host_device) ==
+        CPUBackend()
+    @test isnothing(
+        AdaptiveOpticsSim.compute_device_identifier(host_device))
+    cuda_device_0 = AdaptiveOpticsSim.AcceleratorComputeDevice(
+        CUDABackend(), 0)
+    cuda_device_1 = AdaptiveOpticsSim.AcceleratorComputeDevice(
+        CUDABackend(), 1)
+    amd_device_0 = AdaptiveOpticsSim.AcceleratorComputeDevice(
+        AMDGPUBackend(), 0)
+    @test cuda_device_0 != cuda_device_1
+    @test cuda_device_0 != amd_device_0
+    @test AdaptiveOpticsSim.compute_device_backend(cuda_device_0) ==
+        CUDABackend()
+    @test AdaptiveOpticsSim.compute_device_identifier(cuda_device_0) == 0
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.AcceleratorComputeDevice(CPUBackend(), 0)
+    end
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.AcceleratorComputeDevice(
+            CUDABackend(), nothing)
+    end
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.AcceleratorComputeDevice(
+            CUDABackend(), "device-0")
+    end
     for wrapper in host_wrappers
-        @test plane_device(wrapper) == host_device
+        @test compute_device(wrapper) == host_device
         @test backend(wrapper) isa CPUBackend
         @test AdaptiveOpticsSim.array_backend_selector(typeof(wrapper)) isa
             CPUBackend
@@ -1105,8 +1143,8 @@ end
         coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=field.metadata.spectral,
-        device=AdaptiveOpticsSim.AcceleratorPlaneDevice(
-            KernelAbstractions.CPU(), 1))
+        device=AdaptiveOpticsSim.AcceleratorComputeDevice(
+            CUDABackend(), 1))
     @test_throws InvalidConfiguration ElectricField(
         declared_device_metadata, values)
 end

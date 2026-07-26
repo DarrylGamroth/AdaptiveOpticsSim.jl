@@ -364,6 +364,13 @@ end
         CommandResponsiveReducedOrderProviderStyle
     @test acquisition_provider_payload_work(owner) ===
         :linear_reduced_order_direct_measurement
+    @test path_execution_group_count(first.prepared) == 1
+    requirements = path_execution_group_requirements(
+        path_execution_group(first.prepared, 1))
+    @test path_execution_backend(requirements) == CPUBackend()
+    @test path_execution_compute_device(requirements) ==
+        AdaptiveOpticsSim.HostComputeDevice()
+    @test !path_execution_requires_full_optical(requirements)
     @test Plant.reduced_order_sample_timestamp(owner) ==
         PlantTimestamp(1_000_000)
     @test Plant.reduced_order_residual_rms(owner) >= 0

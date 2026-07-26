@@ -350,7 +350,7 @@ end
     surface_metadata.device == destination_metadata.device || throw(
         PlantPreparationError(:pupil_surface_coupling, :surface_device,
             "sampled pupil surface and path pupil occupy different " *
-            "physical devices"))
+            "compute devices"))
     return destination_metadata
 end
 
@@ -670,7 +670,7 @@ end
 
 Prepare one exact path-local coupling for a sampled OPD surface. The surface
 grid and path pupil must use compatible metric pupil-plane metadata, numeric
-type, array backend, and physical device. `registration=nothing` selects the
+type, array backend, and compute device. `registration=nothing` selects the
 identity pupil-relay registration in the path OPD numeric type.
 """
 function prepare_sampled_pupil_footprint_coupling(
@@ -742,10 +742,10 @@ function _require_sampled_pupil_surface_binding(
             :surface_backend,
             "sampled pupil-surface array backend changed after " *
             "coupling preparation"))
-    plane_device(surface) == metadata.device || throw(
+    compute_device(surface) == metadata.device || throw(
         PlantPreparationError(:pupil_surface_coupling,
             :surface_device,
-            "sampled pupil-surface physical device changed after " *
+            "sampled pupil-surface compute device changed after " *
             "coupling preparation"))
     return nothing
 end

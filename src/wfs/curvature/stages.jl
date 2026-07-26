@@ -624,7 +624,7 @@ function prepare_wfs_acquisition(
     typeof(backend(detector)) === typeof(backend(channels)) || throw(
         WFSPreparationError(:acquisition, :backend,
             "counting detector and packed Curvature channels use different backends"))
-    plane_device(counting_array(detector)) == plane_device(channels) ||
+    compute_device(counting_array(detector)) == compute_device(channels) ||
         throw(WFSPreparationError(:acquisition, :device,
             "counting detector and packed Curvature channels occupy different devices"))
     ensure_buffers!(detector, size(channels))
@@ -638,7 +638,7 @@ function prepare_wfs_acquisition(
     typeof(backend(observation.storage)) === typeof(backend(detector)) ||
         throw(WFSPreparationError(:acquisition, :backend,
             "packed counting Curvature observation and detector backends differ"))
-    plane_device(observation.storage) == plane_device(output) || throw(
+    compute_device(observation.storage) == compute_device(output) || throw(
         WFSPreparationError(:acquisition, :device,
             "packed counting Curvature observation and detector output occupy different devices"))
     return PreparedCurvaturePackedCountingAcquisition(model,
@@ -990,7 +990,7 @@ function set_curvature_calibration!(sensor::CurvatureWFS,
     typeof(backend(reference)) === typeof(backend(state.reference_signal_2d)) ||
         throw(InvalidConfiguration(
             "Curvature calibration reference backend differs from the estimator"))
-    plane_device(reference) == plane_device(state.reference_signal_2d) ||
+    compute_device(reference) == compute_device(state.reference_signal_2d) ||
         throw(InvalidConfiguration(
             "Curvature calibration reference occupies another device"))
     all(isfinite, host_array(reference)) || throw(InvalidConfiguration(

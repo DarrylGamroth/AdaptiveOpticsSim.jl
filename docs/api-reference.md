@@ -117,7 +117,9 @@ incompatible geometry revisions, backends, or devices.
   `ExtendedSource` with `extended_source_asterism` and prepare that `Asterism`
 - Optical products: `PupilFunction`, `ElectricField`, `IntensityMap`,
   `OpticalProductBundle`, `OpticalPlaneMetadata`; coordinates are declared
-  with `MetricCoordinates` or `AngularCoordinates`
+  with `MetricCoordinates` or `AngularCoordinates`. `compute_device(array)`
+  reports the concrete host or accelerator identity independently of its
+  semantic array-backend family
 - Spectral coordinates: `AchromaticSpectralCoordinate`,
   `MonochromaticChannel`, or `IntegratedSpectralChannel`;
   `UnspecifiedSpectralCoordinate` is rejected by prepared intensity
@@ -333,7 +335,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `controller_output_product`, `controller_output_endpoint`,
   `controller_output_schema`, and `controller_output_payload`. Preparation
   binds every named borrowed controller product to one distinct prepared
-  endpoint and validates exact numeric type, shape, backend, and physical
+  endpoint and validates exact numeric type, shape, backend, and compute
   device. Routing adds no command timing, admission, transaction, queue, or
   transport semantics
 - Standalone bounded command admission: `PreparedCommandEndpoint`,
@@ -1106,7 +1108,7 @@ by array index. Install acquired-estimator references with
 `set_pyramid_calibration!` or `set_bioedge_calibration!`. The setters validate
 finite storage and advance a revision, so a prepared estimator must be rebuilt
 after recalibration. Acquired differential estimation requires a real, square
-`:four_pupil_mosaic` on the same backend and physical device as the estimator.
+`:four_pupil_mosaic` on the same backend and compute device as the estimator.
 The detector samples may be floating-point electron counts or integer ADU/count
 values; arithmetic is performed in the floating-point estimator precision so
 unsigned subtraction cannot wrap. Detector sampling and binning may reduce the

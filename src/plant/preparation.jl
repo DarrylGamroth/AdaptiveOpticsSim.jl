@@ -21,11 +21,11 @@ const _PATH_RESULT_KEY_TOKEN = _PathResultKeyToken()
 Run-owned compatibility description for one prepared optical result. The key
 records physical source geometry and radiometry, spectral sampling, optical
 and propagation model identities, the sampling contract, output-plane
-semantics, revisions, backend, and physical device. Acquisitions compare all
+semantics, revisions, backend, and compute device. Acquisitions compare all
 fields during preparation and retain the exact key and result binding.
 """
 struct PathResultKey{G,S,R,M,C,P,O,V,B<:AbstractArrayBackend,
-    D<:AbstractPlaneDevice}
+    D<:AbstractComputeDevice}
     source_geometry::G
     spectral_sampling::S
     radiometry::R
@@ -41,7 +41,7 @@ struct PathResultKey{G,S,R,M,C,P,O,V,B<:AbstractArrayBackend,
         spectral_sampling, radiometry, optical_model, sampling_contract,
         propagation_model, output_plane, revisions,
         backend::B, device::D) where {
-        B<:AbstractArrayBackend,D<:AbstractPlaneDevice,
+        B<:AbstractArrayBackend,D<:AbstractComputeDevice,
     }
         geometry_snapshot = deepcopy(source_geometry)
         spectral_snapshot = deepcopy(spectral_sampling)
@@ -64,7 +64,7 @@ end
 
 function PathResultKey(source_geometry, spectral_sampling, radiometry,
     optical_model, sampling_contract, propagation_model, output_plane,
-    revisions, backend::AbstractArrayBackend, device::AbstractPlaneDevice)
+    revisions, backend::AbstractArrayBackend, device::AbstractComputeDevice)
     return PathResultKey(_PATH_RESULT_KEY_TOKEN, source_geometry,
         spectral_sampling, radiometry, optical_model, sampling_contract,
         propagation_model, output_plane, revisions, backend, device)
@@ -307,31 +307,31 @@ function _first_path_result(::Tuple{})
 end
 
 @inline _require_path_result_domain(::Tuple{}, ::AbstractArrayBackend,
-    ::AbstractPlaneDevice) = nothing
+    ::AbstractComputeDevice) = nothing
 
 @inline function _require_path_result_domain(product::IntensityMap,
-    selector::AbstractArrayBackend, device::AbstractPlaneDevice)
+    selector::AbstractArrayBackend, device::AbstractComputeDevice)
     typeof(backend(product)) === typeof(selector) || throw(
         PlantPreparationError(:path, :backend,
             "prepared path result leaves must use one array backend"))
-    plane_device(product.values) == device || throw(PlantPreparationError(
+    compute_device(product.values) == device || throw(PlantPreparationError(
         :path, :device,
-        "prepared path result leaves must occupy one physical device"))
+        "prepared path result leaves must occupy one compute device"))
     return nothing
 end
 
 @inline _require_path_result_domain(bundle::OpticalProductBundle,
-    selector::AbstractArrayBackend, device::AbstractPlaneDevice) =
+    selector::AbstractArrayBackend, device::AbstractComputeDevice) =
     _require_path_result_domain(bundle.products, selector, device)
 
 @inline function _require_path_result_domain(products::Tuple,
-    selector::AbstractArrayBackend, device::AbstractPlaneDevice)
+    selector::AbstractArrayBackend, device::AbstractComputeDevice)
     _require_path_result_domain(first(products), selector, device)
     return _require_path_result_domain(Base.tail(products), selector, device)
 end
 
 function _require_path_result_domain(products::_FixedOpticalProductVector,
-    selector::AbstractArrayBackend, device::AbstractPlaneDevice)
+    selector::AbstractArrayBackend, device::AbstractComputeDevice)
     @inbounds for product in products
         _require_path_result_domain(product, selector, device)
     end
@@ -389,22 +389,22 @@ end
 @inline function _require_path_input_domain(
     input::Union{PupilFunction,ElectricField,IntensityMap},
     selector::AbstractArrayBackend,
-    device::AbstractPlaneDevice,
+    device::AbstractComputeDevice,
 )
     typeof(backend(input)) === typeof(selector) || throw(
         PlantPreparationError(:path, :backend,
             "prepared path input and result backends differ"))
-    plane_device(_path_input_storage(input)) == device || throw(
+    compute_device(_path_input_storage(input)) == device || throw(
         PlantPreparationError(:path, :device,
-            "prepared path input and result occupy different physical devices"))
+            "prepared path input and result occupy different compute devices"))
     return nothing
 end
 
 @inline _require_path_input_domain(::Tuple{}, ::AbstractArrayBackend,
-    ::AbstractPlaneDevice) = nothing
+    ::AbstractComputeDevice) = nothing
 
 @inline function _require_path_input_domain(inputs::Tuple,
-    selector::AbstractArrayBackend, device::AbstractPlaneDevice)
+    selector::AbstractArrayBackend, device::AbstractComputeDevice)
     _require_path_input_domain(first(inputs), selector, device)
     return _require_path_input_domain(Base.tail(inputs), selector, device)
 end
@@ -612,15 +612,15 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
     output_plane = _path_output_contract(result)
     first_result = _first_path_result(result)
     selector = backend(first_result)
-    device = plane_device(first_result.values)
+    device = compute_device(first_result.values)
     _require_path_result_domain(result, selector, device)
     _require_path_input_domain(input, selector, device)
     typeof(backend(telescope)) === typeof(selector) || throw(
         PlantPreparationError(:path, :backend,
             "prepared path and telescope backends differ"))
-    plane_device(pupil_reflectivity(telescope)) == device || throw(
+    compute_device(pupil_reflectivity(telescope)) == device || throw(
         PlantPreparationError(:path, :device,
-            "prepared path and telescope occupy different physical devices"))
+            "prepared path and telescope occupy different compute devices"))
     revision = aperture_revision(telescope)
     _require_path_input_revisions(input, revision)
     validate_path_materialization_binding(materialization, input,
@@ -835,7 +835,7 @@ function _require_frame_acquisition_observation(detector::Detector,
     typeof(backend(observation)) === typeof(backend(frame)) || throw(
         PlantPreparationError(:acquisition, :backend,
             "acquisition observation and detector output backends differ"))
-    plane_device(observation) == plane_device(frame) || throw(
+    compute_device(observation) == compute_device(frame) || throw(
         PlantPreparationError(:acquisition, :device,
             "acquisition observation and detector output occupy different devices"))
     Base.mightalias(observation, frame) && throw(PlantPreparationError(
@@ -1062,7 +1062,7 @@ function require_path_result(path::PreparedPathExecutor;
     output_plane=getfield(path.key, :output_plane),
     revisions=getfield(path.key, :revisions),
     backend::AbstractArrayBackend=getfield(path.key, :backend),
-    device::AbstractPlaneDevice=getfield(path.key, :device))
+    device::AbstractComputeDevice=getfield(path.key, :device))
     required = PathResultKey(source_geometry, spectral_sampling, radiometry,
         optical_model, sampling_contract, propagation_model, output_plane,
         revisions, backend, device)

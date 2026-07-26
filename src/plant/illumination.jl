@@ -44,7 +44,7 @@ illumination_combination(::Type) = _UnsupportedIlluminationCombination()
     illumination_combination(typeof(evaluator))
 
 struct _IlluminationArrayContract{N,E,B<:AbstractArrayBackend,
-    D<:AbstractPlaneDevice}
+    D<:AbstractComputeDevice}
     dimensions::NTuple{N,Int}
     numeric_type::Type{E}
     backend::B
@@ -66,7 +66,7 @@ end
 
 @inline function _illumination_array_contract(storage::AbstractArray)
     selector = backend(storage)
-    device = plane_device(storage)
+    device = compute_device(storage)
     return _IlluminationArrayContract(size(storage), eltype(storage),
         selector, device)
 end
@@ -79,7 +79,7 @@ end
     typeof(backend(payload.support)) === typeof(payload.metadata.backend) ||
         throw(PlantPreparationError(:illumination, :backend,
             "pupil illumination support backend does not match its metadata"))
-    plane_device(payload.support) == payload.metadata.device || throw(
+    compute_device(payload.support) == payload.metadata.device || throw(
         PlantPreparationError(:illumination, :device,
             "pupil illumination support device does not match its metadata"))
     return payload
@@ -129,7 +129,7 @@ end
     typeof(backend(storage)) === typeof(contract.backend) || throw(
         PlantPreparationError(:illumination, :backend,
             "$label backend does not match its prepared contract"))
-    plane_device(storage) == contract.device || throw(
+    compute_device(storage) == contract.device || throw(
         PlantPreparationError(:illumination, :device,
             "$label device does not match its prepared contract"))
     return storage
@@ -593,7 +593,7 @@ UniformIntensityIllumination(value::Real; combination) =
     UniformIntensityIllumination(value, combination)
 
 struct PreparedUniformIntensityIllumination{
-    T<:AbstractFloat,C,B<:AbstractArrayBackend,D<:AbstractPlaneDevice}
+    T<:AbstractFloat,C,B<:AbstractArrayBackend,D<:AbstractComputeDevice}
     value::T
     combination::C
     backend::B
@@ -613,7 +613,7 @@ function prepare_illumination_evaluator(
         "uniform illumination value is not representable in the destination numeric type"))
     return PreparedUniformIntensityIllumination(value,
         definition.combination, backend(destination),
-        plane_device(destination.values))
+        compute_device(destination.values))
 end
 
 function validate_illumination_evaluator_binding(
@@ -622,7 +622,7 @@ function validate_illumination_evaluator_binding(
     typeof(backend(destination)) === typeof(evaluator.backend) || throw(
         PlantPreparationError(:illumination, :backend,
             "uniform illumination evaluator and destination backends differ"))
-    plane_device(destination.values) == evaluator.device || throw(
+    compute_device(destination.values) == evaluator.device || throw(
         PlantPreparationError(:illumination, :device,
             "uniform illumination evaluator and destination devices differ"))
     return nothing
