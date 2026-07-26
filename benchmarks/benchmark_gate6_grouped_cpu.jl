@@ -441,6 +441,49 @@ function write_gate6_artifact(path::AbstractString, artifact)
     return nothing
 end
 
+function gate6_first_use_probe(mode::AbstractString)
+    contract = TOML.parsefile(GATE6_CPU_CONTRACT_PATH)
+    configure_gate6_cpu!(contract)
+    workload = contract["workload"]
+    if mode == "serial"
+        _, operation = Gate3Plant.prepare_multi_rate_operation(workload)
+        GC.gc()
+        start = time_ns()
+        operation()
+        return Int64(time_ns() - start)
+    elseif mode == "grouped"
+        _, storage = Gate3Plant.prepare_multi_rate_operation(workload)
+        operation = Gate6CPU.GroupedPlantOperation(storage)
+        try
+            GC.gc()
+            start = time_ns()
+            operation()
+            return Int64(time_ns() - start)
+        finally
+            Gate6CPU.close_executor!(operation.executor)
+        end
+    end
+    error("unknown Gate 6 first-use probe mode: $mode")
+end
+
+function gate6_fresh_first_use_ns(mode::AbstractString)
+    command = `$(Base.julia_cmd()) --threads=$(Threads.nthreads()) --project=$(joinpath(@__DIR__)) --startup-file=no $(@__FILE__)`
+    output = readchomp(addenv(
+        command,
+        "AOS_GATE6_FIRST_USE_MODE" => String(mode),
+        "AOS_GATE6_CPU_CONTRACT" => abspath(GATE6_CPU_CONTRACT_PATH),
+        "OPENBLAS_NUM_THREADS" => string(BLAS.get_num_threads()),
+        "OMP_NUM_THREADS" => "1",
+        "MKL_NUM_THREADS" => "1",
+    ))
+    prefix = "GATE6_FIRST_USE_NS="
+    for line in reverse(split(output, '\n'))
+        startswith(line, prefix) || continue
+        return parse(Int64, only(split(line, '='; limit=2)[2:2]))
+    end
+    error("fresh Gate 6 $mode first-use probe returned no timing")
+end
+
 function run_gate6_grouped_cpu_benchmark()
     contract = TOML.parsefile(GATE6_CPU_CONTRACT_PATH)
     budget = configure_gate6_cpu!(contract)
@@ -482,23 +525,8 @@ function run_gate6_grouped_cpu_benchmark()
     println("  runs: ", run_count)
     println("  p99_claim_supported: ", p99_supported)
 
-    _, first_serial =
-        Gate3Plant.prepare_multi_rate_operation(workload)
-    GC.gc()
-    start = time_ns()
-    first_serial()
-    first_serial_ns = Int64(time_ns() - start)
-    _, first_grouped_storage =
-        Gate3Plant.prepare_multi_rate_operation(workload)
-    first_grouped = Gate6CPU.GroupedPlantOperation(first_grouped_storage)
-    first_grouped_ns = try
-        GC.gc()
-        start = time_ns()
-        first_grouped()
-        Int64(time_ns() - start)
-    finally
-        Gate6CPU.close_executor!(first_grouped.executor)
-    end
+    first_serial_ns = gate6_fresh_first_use_ns("serial")
+    first_grouped_ns = gate6_fresh_first_use_ns("grouped")
 
     correctness = validate_serial_grouped(
         workload, contract["correctness_horizon_ns"])
@@ -636,8 +664,10 @@ function run_gate6_grouped_cpu_benchmark()
             significant_figures),
         "environment" => environment,
         "first_use" => Dict(
-            "serial_ns" => first_serial_ns,
-            "grouped_ns" => first_grouped_ns,
+            "fresh_process_serial_ns" => first_serial_ns,
+            "fresh_process_grouped_ns" => first_grouped_ns,
+            "method" =>
+                "each mode measured after preparation in a separate fresh Julia process",
         ),
         "correctness" => correctness,
         "allocation" => allocation,
@@ -655,5 +685,13 @@ function run_gate6_grouped_cpu_benchmark()
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_gate6_grouped_cpu_benchmark()
+    first_use_mode = get(ENV, "AOS_GATE6_FIRST_USE_MODE", "")
+    if isempty(first_use_mode)
+        run_gate6_grouped_cpu_benchmark()
+    else
+        println(
+            "GATE6_FIRST_USE_NS=",
+            gate6_first_use_probe(first_use_mode),
+        )
+    end
 end
