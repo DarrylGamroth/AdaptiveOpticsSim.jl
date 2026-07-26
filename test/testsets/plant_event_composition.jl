@@ -60,14 +60,71 @@ function event_test_error(f)
     return nothing
 end
 
-struct EventCompositionPathModel{R}
-    zero_padding::Int
-    revision::R
+mutable struct EventCompositionConcurrencyProbe
+    expected::Int
+    enabled::Threads.Atomic{Bool}
+    arrivals::Threads.Atomic{Int}
+    release::Threads.Atomic{Bool}
+    thread_ids::Memory{Int}
+    timeout_ns::UInt64
 end
 
-struct EventCompositionPathExecution{E,C}
+function EventCompositionConcurrencyProbe(
+    expected::Integer;
+    timeout_seconds::Real=5,
+)
+    expected > 1 || throw(ArgumentError(
+        "concurrency probe requires at least two arrivals"))
+    timeout_seconds > 0 || throw(ArgumentError(
+        "concurrency probe timeout must be positive"))
+    thread_ids = Memory{Int}(undef, Int(expected))
+    fill!(thread_ids, 0)
+    return EventCompositionConcurrencyProbe(
+        Int(expected),
+        Threads.Atomic{Bool}(true),
+        Threads.Atomic{Int}(0),
+        Threads.Atomic{Bool}(false),
+        thread_ids,
+        UInt64(round(Int, timeout_seconds * 1.0e9)),
+    )
+end
+
+@inline event_composition_execution_probe!(::Nothing) = nothing
+
+function event_composition_execution_probe!(
+    probe::EventCompositionConcurrencyProbe,
+)
+    probe.enabled[] || return nothing
+    slot = Threads.atomic_add!(probe.arrivals, 1) + 1
+    slot <= probe.expected || return nothing
+    @inbounds probe.thread_ids[slot] = Threads.threadid()
+    if slot == probe.expected
+        probe.enabled[] = false
+        probe.release[] = true
+        return nothing
+    end
+    start = time_ns()
+    while !probe.release[]
+        GC.safepoint()
+        time_ns() - start <= probe.timeout_ns || error(
+            "path groups did not overlap within the concurrency-probe timeout")
+    end
+    return nothing
+end
+
+struct EventCompositionPathModel{R,P}
+    zero_padding::Int
+    revision::R
+    execution_probe::P
+end
+
+EventCompositionPathModel(zero_padding::Int, revision) =
+    EventCompositionPathModel(zero_padding, revision, nothing)
+
+struct EventCompositionPathExecution{E,C,P}
     imaging::E
     executions::C
+    execution_probe::P
 end
 
 abstract type EventCompositionSensorKind end
@@ -98,6 +155,7 @@ function Plant.execute_path!(result, input,
     execution::EventCompositionPathExecution)
     Plant.validate_path_execution_binding(execution, input,
         result)
+    event_composition_execution_probe!(execution.execution_probe)
     execution.executions[] += 1
     return Plant.execute_path!(result, input,
         execution.imaging)
@@ -114,7 +172,8 @@ function Plant.prepare_path_executor(
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
     imaging = prepare_direct_imaging(pupil, source;
         zero_padding=model.zero_padding)
-    execution = EventCompositionPathExecution(imaging, Ref(0))
+    execution = EventCompositionPathExecution(
+        imaging, Ref(0), model.execution_probe)
     return PreparedPathExecutor(
         definition,
         source,
@@ -170,7 +229,8 @@ function event_composition_fixture(; reverse_order::Bool=false,
     unbound_trigger_consumer::Bool=false,
     faulted_trigger_fanout::Bool=false,
     missing_path_schedule::Bool=false,
-    aligned_optical_samples::Bool=false)
+    aligned_optical_samples::Bool=false,
+    execution_probe=nothing)
     T = Float64
     telescope = Telescope(resolution=4, diameter=T(4),
         central_obstruction=zero(T), T=T)
@@ -186,11 +246,11 @@ function event_composition_fixture(; reverse_order::Bool=false,
         altitude=T(90_000), T=T)
     paths = (
         OpticalPathDefinition(:science, science_source,
-            EventCompositionPathModel(1, UInt(1))),
+            EventCompositionPathModel(1, UInt(1), execution_probe)),
         OpticalPathDefinition(:ngs, ngs_source,
-            EventCompositionPathModel(1, UInt(2))),
+            EventCompositionPathModel(1, UInt(2), execution_probe)),
         OpticalPathDefinition(:lgs, lgs_source,
-            EventCompositionPathModel(1, UInt(3))),
+            EventCompositionPathModel(1, UInt(3), execution_probe)),
     )
     acquisitions = (
         AcquisitionDefinition(:science_cmos, :science,
@@ -318,6 +378,296 @@ function Plant.execute_optical_path_batch!(
     end
     return Plant.complete_optical_path_batch!(
         prepared, state, workspace, claim)
+end
+
+@enum EventCompositionWorkerPhase::UInt8 begin
+    EventCompositionMaterializationPhase = 0x01
+    EventCompositionExecutionPhase = 0x02
+end
+
+struct EventCompositionWorkerCommand
+    phase::EventCompositionWorkerPhase
+    claim::Plant.OpticalPathBatchClaim
+    measure_allocations::Bool
+end
+
+struct EventCompositionWorkerCompletion
+    phase::EventCompositionWorkerPhase
+    exception::Any
+    allocated_bytes::Int
+    thread_id::Int
+    task_id::UInt
+end
+
+"""
+Test-only fixed-owner executor used to prove that core's independently callable
+group seams can be driven concurrently. The `Channel`s are synchronization for
+this test harness; they are not the bounded SPSC transport proposed for the HIL
+runtime.
+"""
+mutable struct FixedOwnerOpticalPathBatchExecutor{P,S,W} <:
+    Plant.AbstractOpticalPathBatchExecutor
+    prepared::P
+    state::S
+    workspace::W
+    commands::Memory{
+        Channel{Union{Nothing,EventCompositionWorkerCommand}}}
+    completions::Memory{Channel{EventCompositionWorkerCompletion}}
+    tasks::Memory{Task}
+    due_group_ordinals::Memory{Int}
+    task_ids::Memory{UInt}
+    thread_ids::Memory{Int}
+    batch_count::Int
+    forward_phase_count::Int
+    reverse_phase_count::Int
+    materialization_count::Int
+    execution_count::Int
+    measure_allocations::Bool
+    measured_group_call_count::Int
+    measured_group_allocation_bytes::Int
+    maximum_group_allocation_bytes::Int
+    closed::Bool
+end
+
+function execute_event_composition_worker_command!(
+    ordinal::Int,
+    prepared,
+    state,
+    workspace,
+    command::EventCompositionWorkerCommand,
+)
+    if command.phase == EventCompositionMaterializationPhase
+        Plant.materialize_path_execution_group!(
+            prepared, state, workspace, command.claim, ordinal)
+    else
+        Plant.execute_path_execution_group!(
+            prepared, state, workspace, command.claim, ordinal)
+    end
+    return nothing
+end
+
+function event_composition_group_worker!(
+    ordinal::Int,
+    prepared,
+    state,
+    workspace,
+    commands::Channel{Union{Nothing,EventCompositionWorkerCommand}},
+    completions::Channel{EventCompositionWorkerCompletion},
+)
+    task_id = objectid(current_task())
+    while true
+        command = take!(commands)
+        command === nothing && break
+        allocated_bytes = 0
+        exception = try
+            if command.measure_allocations
+                allocated_bytes = @allocated(
+                    execute_event_composition_worker_command!(
+                        ordinal, prepared, state, workspace, command))
+            else
+                execute_event_composition_worker_command!(
+                    ordinal, prepared, state, workspace, command)
+            end
+            nothing
+        catch caught
+            caught
+        end
+        put!(completions, EventCompositionWorkerCompletion(
+            command.phase,
+            exception,
+            allocated_bytes,
+            Threads.threadid(),
+            task_id,
+        ))
+    end
+    return nothing
+end
+
+function FixedOwnerOpticalPathBatchExecutor(
+    prepared::Plant.PreparedPlantEventLoop,
+    state::Plant.PlantEventLoopState,
+    workspace::Plant.PlantEventLoopWorkspace,
+)
+    count = path_execution_group_count(prepared)
+    commands = Memory{
+        Channel{Union{Nothing,EventCompositionWorkerCommand}}}(undef, count)
+    completions = Memory{
+        Channel{EventCompositionWorkerCompletion}}(undef, count)
+    tasks = Memory{Task}(undef, count)
+    @inbounds for ordinal in 1:count
+        command = Channel{
+            Union{Nothing,EventCompositionWorkerCommand}}(1)
+        completion = Channel{EventCompositionWorkerCompletion}(1)
+        commands[ordinal] = command
+        completions[ordinal] = completion
+        tasks[ordinal] = Threads.@spawn event_composition_group_worker!(
+            ordinal,
+            prepared,
+            state,
+            workspace,
+            command,
+            completion,
+        )
+    end
+    task_ids = Memory{UInt}(undef, count)
+    fill!(task_ids, UInt(0))
+    thread_ids = Memory{Int}(undef, count)
+    fill!(thread_ids, 0)
+    return FixedOwnerOpticalPathBatchExecutor(
+        prepared,
+        state,
+        workspace,
+        commands,
+        completions,
+        tasks,
+        Memory{Int}(undef, count),
+        task_ids,
+        thread_ids,
+        0,
+        0,
+        0,
+        0,
+        0,
+        false,
+        0,
+        0,
+        0,
+        false,
+    )
+end
+
+function require_event_composition_executor_owners(
+    executor::FixedOwnerOpticalPathBatchExecutor,
+    prepared,
+    state,
+    workspace,
+)
+    prepared === executor.prepared ||
+        error("fixed-owner executor received a foreign prepared plant")
+    state === executor.state ||
+        error("fixed-owner executor received a foreign state owner")
+    workspace === executor.workspace ||
+        error("fixed-owner executor received a foreign workspace owner")
+    executor.closed &&
+        error("fixed-owner executor cannot be used after close")
+    return nothing
+end
+
+@inline function event_composition_dispatch_index(
+    count::Int,
+    index::Int,
+    reverse_order::Bool,
+)
+    return reverse_order ? count - index + 1 : index
+end
+
+function dispatch_event_composition_group_phase!(
+    executor::FixedOwnerOpticalPathBatchExecutor,
+    claim::Plant.OpticalPathBatchClaim,
+    due_count::Int,
+    phase::EventCompositionWorkerPhase,
+    reverse_order::Bool,
+)
+    @inbounds for index in 1:due_count
+        due_index = event_composition_dispatch_index(
+            due_count, index, reverse_order)
+        ordinal = executor.due_group_ordinals[due_index]
+        put!(executor.commands[ordinal],
+            EventCompositionWorkerCommand(
+                phase, claim, executor.measure_allocations))
+    end
+    @inbounds for index in 1:due_count
+        ordinal = executor.due_group_ordinals[index]
+        completion = take!(executor.completions[ordinal])
+        completion.phase == phase ||
+            error("fixed-owner worker completed the wrong phase")
+        known_task_id = executor.task_ids[ordinal]
+        if iszero(known_task_id)
+            executor.task_ids[ordinal] = completion.task_id
+        else
+            completion.task_id == known_task_id ||
+                error("path group changed task owner")
+        end
+        executor.thread_ids[ordinal] = completion.thread_id
+        completion.exception === nothing ||
+            throw(completion.exception)
+        if executor.measure_allocations
+            executor.measured_group_call_count += 1
+            executor.measured_group_allocation_bytes +=
+                completion.allocated_bytes
+            executor.maximum_group_allocation_bytes = max(
+                executor.maximum_group_allocation_bytes,
+                completion.allocated_bytes,
+            )
+        end
+    end
+    if reverse_order
+        executor.reverse_phase_count += 1
+    else
+        executor.forward_phase_count += 1
+    end
+    if phase == EventCompositionMaterializationPhase
+        executor.materialization_count += due_count
+    else
+        executor.execution_count += due_count
+    end
+    return nothing
+end
+
+function Plant.execute_optical_path_batch!(
+    executor::FixedOwnerOpticalPathBatchExecutor,
+    prepared::Plant.PreparedPlantEventLoop,
+    state::Plant.PlantEventLoopState,
+    workspace::Plant.PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
+    require_event_composition_executor_owners(
+        executor, prepared, state, workspace)
+    claim = Plant.begin_optical_path_batch!(
+        prepared, state, workspace, timestamp)
+    due_count = Plant.optical_path_batch_due_group_count(
+        prepared, state, workspace, claim)
+    @inbounds for index in 1:due_count
+        executor.due_group_ordinals[index] =
+            Plant.optical_path_batch_due_group_ordinal(
+                prepared, state, workspace, claim, index)
+    end
+
+    reverse_materialization = iseven(executor.batch_count)
+    dispatch_event_composition_group_phase!(
+        executor,
+        claim,
+        due_count,
+        EventCompositionMaterializationPhase,
+        reverse_materialization,
+    )
+    Plant.seal_optical_path_batch_materialization!(
+        prepared, state, workspace, claim)
+    dispatch_event_composition_group_phase!(
+        executor,
+        claim,
+        due_count,
+        EventCompositionExecutionPhase,
+        !reverse_materialization,
+    )
+    completed = Plant.complete_optical_path_batch!(
+        prepared, state, workspace, claim)
+    executor.batch_count += 1
+    return completed
+end
+
+function close_event_composition_executor!(
+    executor::FixedOwnerOpticalPathBatchExecutor,
+)
+    executor.closed && return executor
+    @inbounds for command in executor.commands
+        put!(command, nothing)
+    end
+    @inbounds for task in executor.tasks
+        wait(task)
+    end
+    executor.closed = true
+    return executor
 end
 
 @inline function run_event_composition_window!(prepared, state, workspace,
@@ -898,6 +1248,208 @@ end
                 reverse_group.rngs, Val(:provider))) ==
                 copy(Plant.rng_stream_state(
                     serial_group.rngs, Val(:provider)))
+        end
+
+        @testset "Fixed-owner grouped CPU execution" begin
+            if Threads.nthreads() < 4
+                @test_skip "grouped CPU overlap requires one coordinator and three worker threads"
+            elseif BLAS.get_num_threads() != 1
+                @test_skip "grouped CPU overlap requires the declared one-thread BLAS policy"
+            else
+                budget = Plant.grouped_cpu_execution_budget(
+                    cpu_context_count=Threads.nthreads(),
+                    julia_thread_count=Threads.nthreads(),
+                    outer_owner_count=3,
+                    group_julia_thread_count=1,
+                    fft_thread_count=1,
+                    blas_thread_count=1,
+                )
+                environment = Plant.CPUExecutionEnvironment(
+                    available_cpu_context_count=Threads.nthreads(),
+                    fft_thread_count=1,
+                )
+                @test Plant.validate_cpu_execution_budget(
+                    budget, environment) === budget
+
+                serial_grouped_plant,
+                    serial_grouped_prepared,
+                    serial_grouped_state,
+                    serial_grouped_workspace =
+                    event_composition_fixture(
+                        aligned_optical_samples=true)
+                concurrency_probe = EventCompositionConcurrencyProbe(3)
+                grouped_plant,
+                    grouped_prepared,
+                    grouped_state,
+                    grouped_workspace =
+                    event_composition_fixture(
+                        aligned_optical_samples=true,
+                        execution_probe=concurrency_probe)
+                executor = FixedOwnerOpticalPathBatchExecutor(
+                    grouped_prepared,
+                    grouped_state,
+                    grouped_workspace,
+                )
+                horizon = PlantTimestamp(1_500_000_000)
+                warmup_horizon = PlantTimestamp(500_000_000)
+                local serial_timestamp_count
+                local grouped_timestamp_count
+                try
+                    serial_warmup_count = run_plant_events_until!(
+                        serial_grouped_prepared,
+                        serial_grouped_state,
+                        serial_grouped_workspace,
+                        warmup_horizon,
+                    )
+                    grouped_warmup_count = run_plant_events_until!(
+                        grouped_prepared,
+                        grouped_state,
+                        grouped_workspace,
+                        warmup_horizon,
+                        executor,
+                    )
+                    @test grouped_warmup_count == serial_warmup_count
+                    executor.measure_allocations = true
+                    serial_timestamp_count = run_plant_events_until!(
+                        serial_grouped_prepared,
+                        serial_grouped_state,
+                        serial_grouped_workspace,
+                        horizon,
+                    )
+                    grouped_timestamp_count = run_plant_events_until!(
+                        grouped_prepared,
+                        grouped_state,
+                        grouped_workspace,
+                        horizon,
+                        executor,
+                    )
+
+                    @test grouped_timestamp_count ==
+                        serial_timestamp_count
+                    @test scheduler_timestamp(
+                        grouped_state.scheduler) ==
+                        scheduler_timestamp(
+                            serial_grouped_state.scheduler)
+                    @test grouped_state.scheduler.revision ==
+                        serial_grouped_state.scheduler.revision
+                    @test grouped_state.scheduler.cursors ==
+                        serial_grouped_state.scheduler.cursors
+                    @test grouped_state.path_sampled ==
+                        serial_grouped_state.path_sampled
+                    @test grouped_state.product_sequences ==
+                        serial_grouped_state.product_sequences
+                    @test grouped_state.product_ready_timestamps ==
+                        serial_grouped_state.product_ready_timestamps
+
+                    grouped_epoch =
+                        current_epoch(grouped_prepared.atmosphere)
+                    serial_epoch =
+                        current_epoch(serial_grouped_prepared.atmosphere)
+                    @test epoch_time(grouped_epoch) ==
+                        epoch_time(serial_epoch)
+                    @test epoch_sequence(grouped_epoch) ==
+                        epoch_sequence(serial_epoch)
+                    for index in eachindex(
+                        grouped_prepared.atmosphere_rng.streams)
+                        @test copy(grouped_prepared.atmosphere_rng.
+                            streams[index].state) ==
+                            copy(serial_grouped_prepared.atmosphere_rng.
+                                streams[index].state)
+                    end
+
+                    for id in (:science, :ngs, :lgs)
+                        serial_path =
+                            prepared_path(serial_grouped_plant, id)
+                        grouped_path = prepared_path(grouped_plant, id)
+                        @test grouped_path.input.opd ==
+                            serial_path.input.opd
+                        @test grouped_path.result.values ==
+                            serial_path.result.values
+                        @test grouped_path.execution.executions[] ==
+                            serial_path.execution.executions[]
+                    end
+
+                    for ordinal in
+                            1:path_execution_group_count(grouped_prepared)
+                        grouped_group = path_execution_group(
+                            grouped_prepared, ordinal)
+                        serial_group = path_execution_group(
+                            serial_grouped_prepared, ordinal)
+                        @test path_execution_group_path_id(
+                            grouped_group) ==
+                            path_execution_group_path_id(serial_group)
+                        @test copy(Plant.rng_stream_state(
+                            grouped_group.rngs, Val(:provider))) ==
+                            copy(Plant.rng_stream_state(
+                                serial_group.rngs, Val(:provider)))
+                    end
+
+                    acquisition_ids = (
+                        :science_cmos,
+                        :science_ccd,
+                        :science_rolling,
+                        :ngs_saphira,
+                        :lgs_emccd,
+                    )
+                    for id in acquisition_ids
+                        @test acquisition_product_sequence(
+                            grouped_prepared, grouped_state, id) ==
+                            acquisition_product_sequence(
+                                serial_grouped_prepared,
+                                serial_grouped_state,
+                                id,
+                            )
+                        @test acquisition_product_ready_timestamp(
+                            grouped_prepared, grouped_state, id) ==
+                            acquisition_product_ready_timestamp(
+                                serial_grouped_prepared,
+                                serial_grouped_state,
+                                id,
+                            )
+                        @test acquisition_observation(
+                            prepared_acquisition(grouped_plant, id)) ==
+                            acquisition_observation(prepared_acquisition(
+                                serial_grouped_plant, id))
+                    end
+                    for index in eachindex(grouped_prepared.acquisitions)
+                        @test copy(
+                            grouped_prepared.acquisitions[index].rng) ==
+                            copy(serial_grouped_prepared.
+                                acquisitions[index].rng)
+                    end
+
+                    @test executor.batch_count > 1
+                    @test executor.forward_phase_count > 0
+                    @test executor.reverse_phase_count > 0
+                    @test executor.materialization_count ==
+                        executor.execution_count
+                    @test executor.execution_count ==
+                        sum(prepared_path(grouped_plant, id).
+                            execution.executions[] for
+                            id in (:science, :ngs, :lgs))
+                    @test executor.measured_group_call_count > 0
+                    if coverage_instrumented()
+                        @test_skip "grouped worker allocation gate disabled under coverage instrumentation"
+                    else
+                        @test executor.maximum_group_allocation_bytes <= 512
+                        @test executor.measured_group_allocation_bytes <=
+                            512 * executor.measured_group_call_count
+                    end
+                    @test length(executor.tasks) == 3
+                    @test all(task -> !istaskdone(task), executor.tasks)
+                    @test all(id -> !iszero(id), executor.task_ids)
+                    @test length(unique(collect(executor.task_ids))) == 3
+                    @test concurrency_probe.arrivals[] == 3
+                    @test all(
+                        id -> !iszero(id), concurrency_probe.thread_ids)
+                    @test length(unique(collect(
+                        concurrency_probe.thread_ids))) == 3
+                finally
+                    close_event_composition_executor!(executor)
+                end
+                @test executor.closed
+                @test all(istaskdone, executor.tasks)
+            end
         end
 
         if coverage_instrumented()

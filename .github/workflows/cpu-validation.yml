@@ -47,6 +47,33 @@ jobs:
       - name: Run full test suite
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
 
+  grouped-cpu-execution:
+    name: Grouped CPU execution
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JULIA_NUM_THREADS: "4"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Instantiate
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run Gate 6 grouped CPU tests
+        run: julia --threads=4 --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=["gate6"])'
+
   scheduler-extensions:
     name: Optional CPU scheduler extensions
     runs-on: ubuntu-latest

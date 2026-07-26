@@ -1,0 +1,121 @@
+schema_version = 1
+name = "gate6_grouped_cpu"
+evidence_class = "paired warmed in-process serial and fixed-owner grouped CPU logical-timestamp service cost"
+samples_per_run = 10000
+runs = 3
+warmup_timestamps = 2000
+allocation_timestamps = 1000
+minimum_samples_for_p99 = 10000
+histogram_lowest_ns = 1
+histogram_highest_ns = 60000000000
+histogram_significant_figures = 3
+correctness_horizon_ns = 1500000000
+max_serial_alloc_bytes_per_timestamp = 2048
+max_grouped_alloc_bytes_per_timestamp = 2048
+max_alloc_bytes_per_group_call = 512
+
+cpu_contexts = 4
+julia_threads = 4
+outer_group_owners = 3
+group_julia_threads = 1
+fft_threads = 1
+blas_threads = 1
+
+scope_exclusions = [
+    "package import, plant preparation, worker construction, and first-use compilation",
+    "fixed-rate open-loop arrivals, wall-clock pacing, overload, and recovery",
+    "production SPSC rings, affinity, CPU isolation, NUMA placement, and interrupt placement",
+    "external RTC transport, command-response latency, and product publication latency",
+    "GPU execution, host-device transfer, and multi-host execution",
+    "production instrument scale, MORFEO/NFIRAOS qualification, or a grouped-CPU speedup claim",
+]
+
+[contract]
+question = "For one representative unequal-rate science/NGS/LGS plant with recurring simultaneous optical samples, can three long-lived externally owned CPU group tasks drive the public batch lifecycle without per-event task creation, nested numerical threading, ownership races, replay differences, or unbounded warmed allocation, and what paired serial/grouped self-paced service-cost distributions result on this host?"
+load_model = "paired closed-loop self-paced logical-timestamp service cost measured separately for serial and fixed-owner grouped execution, alternating which mode is measured first across runs; this is not an AO control loop or HIL pacing test"
+arrival_model = "the next canonical plant timestamp starts only after the previous timestamp and histogram recording complete"
+coordinated_omission_correction = false
+coordinated_omission_reason = "the benchmark characterizes unpaced service cost and makes no fixed-arrival latency claim"
+timed_boundary = "process every due trigger, detector lifecycle, and optical-path event at one canonical plant timestamp; grouped mode includes benchmark-only command/completion synchronization with already-created workers"
+timer = "time_ns; final clock read is included, per-sample histogram recording is excluded from latency and included in achieved throughput"
+correctness_oracle = "same-seed exact serial/grouped scheduler cursors, atmosphere epoch, acquisition hashes/sequences/readiness, path RNG streams, atmosphere RNG streams, acquisition RNG streams, and fixed task identities"
+threading = "four admitted CPU contexts and Julia threads, three outer path-group owners, one group-local Julia thread, one FFT-provider thread per owner, and one BLAS thread per owner"
+first_use = "each mode is recorded after plant and worker construction but before correctness validation or warmup in its own fresh Julia process; package import and preparation are excluded from the timer"
+tail_claim = "p99 is reported only with at least 100 expected observations beyond p99 per 10000-sample run; p99.9 remains diagnostic"
+latency_gate = "no absolute or relative latency threshold is asserted; serial/grouped ratios are diagnostic until repeated controlled hardware evidence justifies a promotion"
+allocation_gate = "serial and benchmark-only grouped orchestration each remain at most 2048 bytes per timestamp; each warmed direct materialization or execution group call remains at most 512 bytes"
+
+[workload]
+backend = "CPUBackend"
+numeric_type = "Float64"
+resolution = 16
+diameter_m = 8.0
+central_obstruction = 0.14
+r0_m = 0.2
+outer_scale_m = 25.0
+fractional_cn2 = [0.65, 0.35]
+wind_speed_m_per_s = [7.0, 13.0]
+wind_direction_deg = [15.0, 110.0]
+layer_altitude_m = [0.0, 6000.0]
+layer_ids = ["ground", "high"]
+science_wavelength_m = 8.0e-7
+science_photon_irradiance = 3.0
+science_radius_arcsec = 0.2
+science_azimuth_deg = 90.0
+ngs_wavelength_m = 6.5e-7
+ngs_photon_irradiance = 5.0
+ngs_radius_arcsec = 4.0
+ngs_azimuth_deg = 35.0
+lgs_wavelength_m = 5.89e-7
+lgs_photon_irradiance = 6.0
+lgs_radius_arcsec = 8.0
+lgs_azimuth_deg = 120.0
+lgs_altitude_m = 90000.0
+science_zero_padding = 2
+sh_n_lenslets = 4
+sh_n_pix_subap = 4
+pyramid_pupil_samples = 4
+pyramid_modulation_lambda_over_d = 3.0
+pyramid_modulation_points = 4
+quantum_efficiency = 0.8
+run_seed = 34560
+rng_derivation_version = 1
+science_sample_period_ns = 100000000
+science_sample_phase_ns = 0
+ngs_sample_period_ns = 125000000
+ngs_sample_phase_ns = 0
+lgs_sample_period_ns = 200000000
+lgs_sample_phase_ns = 0
+trigger_period_ns = 600000000
+trigger_phase_ns = 50000000
+trigger_in_flight_capacity = 8
+science_trigger_delay_ns = 20000000
+ngs_trigger_delay_ns = 0
+science_cmos_exposure_ns = 200000000
+science_cmos_readout_ns = 20000000
+science_cmos_readiness_ns = 10000000
+science_ccd_exposure_ns = 300000000
+science_ccd_period_ns = 600000000
+science_ccd_phase_ns = 50000000
+science_rolling_exposure_ns = 150000000
+science_rolling_line_ns = 5000000
+science_rolling_row_group_size = 2
+science_rolling_period_ns = 500000000
+science_rolling_phase_ns = 250000000
+ngs_saphira_exposure_ns = 200000000
+ngs_saphira_readout_ns = 10000000
+ngs_saphira_reads = 3
+lgs_emccd_exposure_ns = 200000000
+lgs_emccd_transfer_ns = 20000000
+lgs_emccd_readout_ns = 300000000
+lgs_emccd_period_ns = 350000000
+lgs_emccd_phase_ns = 25000000
+replay_horizon_ns = 1500000000
+fault_horizon_ns = 3000000000
+fault_drop_sequence = 2
+fault_shift_sequence = 3
+fault_phase_step_ns = 20000000
+fault_jitter_ns = 10000000
+fault_label_offset_ns = 7000000
+fault_duplicate_sequence = 4
+fault_duplicate_delay_ns = 250000000

@@ -332,6 +332,9 @@ public direct_measurement_acquisition_sequence
 
 public PreparedPlantEventLoop, PlantEventLoopState, PlantEventLoopWorkspace
 public PreparedPathExecutionGroup
+public CPUExecutionBudget, CPUExecutionEnvironment
+public deterministic_cpu_execution_budget, grouped_cpu_execution_budget
+public is_deterministic_cpu_execution, validate_cpu_execution_budget
 public OpticalPathBatchClaim
 public AbstractOpticalPathBatchExecutor, SerialOpticalPathBatchExecutor
 public path_execution_group_count, path_execution_group

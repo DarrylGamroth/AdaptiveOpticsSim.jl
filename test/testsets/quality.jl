@@ -83,6 +83,7 @@ end
         "plant-triggers",
         "plant-detector-transitions",
         "plant-event-composition",
+        "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
         "plant-reduced-order",
@@ -108,6 +109,7 @@ end
         "plant-triggers",
         "plant-detector-transitions",
         "plant-event-composition",
+        "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
         "plant-reduced-order",
@@ -139,10 +141,12 @@ end
     @test occursin("plant-mcao-moao", listing_text)
     @test occursin("plant-sampled-aberrations", listing_text)
     @test occursin("plant-gate5-closure", listing_text)
+    @test occursin("plant-cpu-execution", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
     @test occursin("gate4 =", listing_text)
     @test occursin("gate5 =", listing_text)
+    @test occursin("gate6 =", listing_text)
 
     actual_testsets = sort!(filter(
         path -> endswith(path, ".jl"),

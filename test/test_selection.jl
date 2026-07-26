@@ -35,6 +35,8 @@ const TEST_SUITE_SPECS = (
         "testsets/plant_detector_transitions.jl"),
     TestSuiteSpec("plant-event-composition",
         "testsets/plant_event_composition.jl"),
+    TestSuiteSpec("plant-cpu-execution",
+        "testsets/plant_cpu_execution.jl"),
     TestSuiteSpec("plant-command-composition",
         "testsets/plant_command_composition.jl"),
     TestSuiteSpec("plant-controller-routing",
@@ -108,6 +110,7 @@ const TEST_GROUP_SPECS = (
         "plant-triggers",
         "plant-detector-transitions",
         "plant-event-composition",
+        "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
         "plant-reduced-order",
@@ -146,6 +149,10 @@ const TEST_GROUP_SPECS = (
         "plant-mcao-moao",
         "plant-sampled-aberrations",
         "plant-gate5-closure",
+    ),
+    "gate6" => (
+        "plant-event-composition",
+        "plant-cpu-execution",
     ),
 )
 

@@ -579,7 +579,50 @@ AOS_FFT_THREADS=4 julia --project=. scripts/profile_ao3k_runtime.jl cpu compact
 ```
 
 Keep FFT, BLAS, and coarse Julia task parallelism from oversubscribing the same
-cores. Deterministic validation continues to use one thread.
+cores. Prepared plant deployments declare those counts together through
+`Plant.CPUExecutionBudget` and validate the observed boundary without changing
+process-global settings. Deterministic validation continues to use one thread.
+
+The focused Gate 6 correctness surface runs the serial fallback on the ordinary
+one-thread matrix and the fixed-owner grouped proof on four Julia threads:
+
+```bash
+julia --threads=1 --project=. -e \
+  'using Pkg; Pkg.test(test_args=["gate6"])'
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  julia --threads=4 --project=. -e \
+  'using Pkg; Pkg.test(test_args=["gate6"])'
+```
+
+The grouped case is an unpaced ownership, exact-replay, and warmed-allocation
+test over test-only long-lived workers. It is not a fixed-arrival HIL latency or
+production `Channel` endorsement.
+
+For paired HdrHistogram service-cost characterization of the same boundary,
+use the benchmark environment:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  julia --threads=4 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate6_grouped_cpu.jl
+```
+
+[`gate6_grouped_cpu.toml`](../benchmarks/contracts/gate6_grouped_cpu.toml)
+predeclares the four-context budget, exact serial/grouped replay oracle,
+repeated-run and p99 sample counts, and warmed allocation ceilings. The
+comparison is closed-loop service cost with no absolute or relative performance
+gate; a reported ratio is not a grouped-CPU speedup or HIL-capacity claim.
+
+The clean local
+[`2026-07-25-grouped-cpu.toml`](../benchmarks/results/gate6/2026-07-25-grouped-cpu.toml)
+artifact retains all six raw histograms. On the unpinned Ryzen 7 6800H
+`powersave` run, grouped execution traded a higher median p50
+(1.463 μs versus 1.312 μs) and lower aggregate throughput for a lower median
+p99 (66.303 μs versus 90.175 μs). Both modes allocated 318.688 bytes per
+logical timestamp in the maintained heterogeneous barrier, direct warmed group
+calls stayed at or below 432 bytes, and no measured run collected garbage.
+These mixed results are workload- and host-specific service-cost evidence, not
+a general parallel speedup or external-RTC latency result.
 
 For independent simulation sweeps, run the ensemble scheduler benchmark before
 selecting `ThreadedExecution`, `AcceleratedKernelsExecution`, or
@@ -644,6 +687,8 @@ Current intent:
   - runs a separate Apple Silicon job that proves backend-neutral normal load,
     then explicitly selects AppleAccelerate BLAS/LAPACK and reruns the full CPU
     suite with supported vDSP FFT plans and FFTW fallback plans
+  - runs the focused Gate 6 fixed-owner CPU proof with four Julia threads and
+    one BLAS/FFT thread per path-group owner
   - runs the isolated AcceleratedKernels/Dagger scheduler extension tests on a
     four-thread Linux job
 - CUDA workflow:
