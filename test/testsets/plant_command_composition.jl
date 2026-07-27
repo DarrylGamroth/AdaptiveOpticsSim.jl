@@ -490,9 +490,18 @@ end
 @testset "Event-loop command failure drain preserves the optic" begin
     _, prepared, state, workspace, first_schema, _ =
         command_composition_fixture()
-    admission = command_composition_submit!(
-        prepared, state, workspace, first_schema,
-        1, 100_000_000, 0.35)
+    @test step_plant_events!(prepared, state, workspace) ==
+        PlantTimestamp(0)
+    admission = admit_plant_command!(
+        prepared,
+        state,
+        workspace,
+        PlantCommand(
+            first_schema,
+            1,
+            PlantTimestamp(100_000_000),
+            0.35),
+        PlantTimestamp(1))
     @test command_admission_status(admission) ==
         CommandAdmittedPending
     @test effective_command(prepared, state, :a_woofer) == 0.0
@@ -509,7 +518,7 @@ end
     @test command_terminal_kind(disposition) == FailedCommand
     @test command_disposition_reason(disposition).name ==
         :hil_ingress_liveness_expired
-    @test command_terminal_timestamp(disposition) == PlantTimestamp(0)
+    @test command_terminal_timestamp(disposition) == PlantTimestamp(1)
     @test effective_command(prepared, state, :a_woofer) == 0.0
 end
 

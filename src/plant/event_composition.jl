@@ -2305,10 +2305,12 @@ end
         prepared, state, workspace, endpoint_id; reason=:endpoint_failure)
 
 Boundedly terminate every unclaimed pending command for one event-loop-owned
-endpoint at the current plant-event coordinate. Terminal dispositions are
-copied into the event loop's bounded ledger and the endpoint's command
-generator is rescheduled without changing its effective command or physical
-optic state.
+endpoint at its current canonical coordinate. An ingress admission may have
+advanced the endpoint beyond the scheduler's last processed plant event, so
+the failure coordinate is the later of those two coordinates. Terminal
+dispositions are copied into the event loop's bounded ledger and the
+endpoint's command generator is rescheduled without changing its effective
+command or physical optic state.
 """
 function fail_pending_plant_commands!(
     prepared::PreparedPlantEventLoop,
@@ -2324,7 +2326,9 @@ function fail_pending_plant_commands!(
     event_endpoint = _event_command_endpoint(prepared, slot)
     endpoint_state = _event_command_endpoint_state(state, slot)
     endpoint_workspace = _event_command_workspace(workspace, slot)
-    timestamp = scheduler_timestamp(state.scheduler)
+    timestamp = max(
+        scheduler_timestamp(state.scheduler),
+        command_endpoint_timestamp(endpoint_state))
     count = fail_pending_plant_commands!(
         endpoint_workspace,
         event_endpoint.binding.endpoint,
