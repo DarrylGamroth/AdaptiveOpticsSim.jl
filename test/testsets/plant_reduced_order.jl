@@ -360,6 +360,8 @@ end
     @test acquisition_product_ready_timestamp(first.prepared, first.state,
         :reduced_wfs) == PlantTimestamp(1_000_000)
     owner = prepared_acquisition(first.plant, :reduced_wfs)
+    @test acquisition_products(first.prepared, :reduced_wfs) ===
+        acquisition_products(owner)
     @test acquisition_provider_style(owner) isa
         CommandResponsiveReducedOrderProviderStyle
     @test acquisition_provider_payload_work(owner) ===

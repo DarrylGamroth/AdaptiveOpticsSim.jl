@@ -348,6 +348,7 @@ end
 struct _PreparedPlantEventAcquisition
     id::AcquisitionID
     lifecycle::_PreparedAcquisitionEventLifecycle
+    products::AcquisitionProducts
     product::Union{AbstractArray,WFSMeasurement}
     sample_provider::Union{Nothing,PreparedLinearReducedOrderEventProvider}
     rng::Xoshiro
@@ -1588,7 +1589,7 @@ function _prepare_event_acquisition_parts(plant::PreparedPlant,
     return owners, lifecycles, products, sample_providers, rngs, path_slots
 end
 
-function _prepare_event_acquisitions(definitions, lifecycles, products,
+function _prepare_event_acquisitions(definitions, owners, lifecycles, products,
     sample_providers, rngs, path_slots,
     scheduler::PreparedEventScheduler)
     acquisitions = Memory{_PreparedPlantEventAcquisition}(undef,
@@ -1597,6 +1598,7 @@ function _prepare_event_acquisitions(definitions, lifecycles, products,
         definition = definitions[index]
         acquisitions[index] = _PreparedPlantEventAcquisition(
             definition.acquisition, lifecycles[index],
+            acquisition_products(owners[index]),
             products[index], sample_providers[index], rngs[index],
             definition.start, UInt32(path_slots[index]),
             event_generator_handle(scheduler, ExposureOpenPhase,
@@ -1658,8 +1660,9 @@ function _prepare_plant_event_loop(
     path_groups = _prepare_path_execution_groups(
         plant, sample_definitions, owners, acquisition_definitions,
         path_slots, autonomous_definitions, scheduler)
-    acquisitions = _prepare_event_acquisitions(acquisition_definitions,
-        lifecycles, products, sample_providers, rngs, path_slots, scheduler)
+    acquisitions = _prepare_event_acquisitions(
+        acquisition_definitions, owners, lifecycles, products,
+        sample_providers, rngs, path_slots, scheduler)
     autonomous_optics = _prepare_event_autonomous_optics(
         autonomous_definitions, optics, path_groups,
         definition.trigger_topology)
@@ -1981,6 +1984,20 @@ end
 
 @inline _event_acquisition_slot(prepared::PreparedPlantEventLoop,
     name::Symbol) = _event_acquisition_slot(prepared, AcquisitionID(name))
+
+"""
+Return the exact run-bound products for one prepared event-loop acquisition.
+
+The returned wrapper and its storage are the same objects used by event-loop
+execution; this cold binding seam does not copy or transfer ownership.
+"""
+function acquisition_products(
+    prepared::PreparedPlantEventLoop,
+    id)
+    slot = _event_acquisition_slot(
+        prepared, _as_acquisition_id(id))
+    return @inbounds prepared.acquisitions[slot].products
+end
 
 function acquisition_product_sequence(prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState, id)
