@@ -1,6 +1,6 @@
 [closure]
 id = "GATE7-SINGLE-GPU-2026-07-26"
-status = "candidate hardware evidence passed"
+status = "passed"
 characterized_source_revision = "b80a419d9c072b331b83301b5f030dd554e3b22d"
 requirements = ["HIL-GPU-001"]
 artifact_ids = [

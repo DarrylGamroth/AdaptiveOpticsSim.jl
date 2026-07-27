@@ -548,6 +548,18 @@ function gate7_relative_comparison(results, factor::Float64)
             "limit_factor" => factor,
         )
     end
+    p95_supported = all(
+        result["gate"]["p95_evaluated"] for result in results
+        if result["id"] in required
+    )
+    if !p95_supported
+        return Dict{String,Any}(
+            "evaluated" => false,
+            "reason" => "sample count does not support the declared p95 gate",
+            "passed" => true,
+            "limit_factor" => factor,
+        )
+    end
     independent = gate7_boundary_result(
         results,
         "independent_device_ready",

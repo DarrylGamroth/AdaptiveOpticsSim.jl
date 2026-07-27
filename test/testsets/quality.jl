@@ -79,7 +79,7 @@ end
     manifest = TOML.parsefile(joinpath(artifact_root, "manifest.toml"))
     closure = manifest["closure"]
     artifacts = manifest["artifacts"]
-    @test closure["status"] == "candidate hardware evidence passed"
+    @test closure["status"] == "passed"
     @test closure["requirements"] == ["HIL-GPU-001"]
     @test length(artifacts) == 3
     @test Set(artifact["backend"] for artifact in artifacts) ==
