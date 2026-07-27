@@ -1,0 +1,45 @@
+[closure]
+id = "GATE7-SINGLE-GPU-2026-07-26"
+status = "passed"
+characterized_source_revision = "b80a419d9c072b331b83301b5f030dd554e3b22d"
+requirements = ["HIL-GPU-001"]
+sha256_canonicalization = "UTF-8 text with CRLF normalized to LF"
+artifact_ids = [
+    "GATE7-SINGLE-GPU-LOCAL-CPU-2026-07-26",
+    "GATE7-SINGLE-GPU-LOCAL-AMDGPU-2026-07-26",
+    "GATE7-SINGLE-GPU-WSL-CUDA-2026-07-26",
+]
+scope = "Paired synchronized closed-loop service cost for two compatible same-device off-axis NGS diffractive Shack-Hartmann paths; excludes fixed-arrival HIL latency, mixed placement, and multi-GPU execution."
+
+[[artifacts]]
+id = "GATE7-SINGLE-GPU-LOCAL-CPU-2026-07-26"
+purpose = "Clean-tree single-thread CPU contextual oracle, first-use, allocation, raw HdrHistogram, and synchronized independent-path service-cost evidence"
+path = "2026-07-26-gate7-local-cpu.toml"
+sha256 = "8d3e6e2a65611992a6db9e019e8d1085df97fda5ba188ed09ab9c41fa74acf25"
+source_contract = "../../contracts/gate7_single_gpu.toml"
+characterized_source_revision = "b80a419d9c072b331b83301b5f030dd554e3b22d"
+placement = "local_cpu"
+backend = "cpu"
+all_gates_passed = true
+
+[[artifacts]]
+id = "GATE7-SINGLE-GPU-LOCAL-AMDGPU-2026-07-26"
+purpose = "Clean-tree gfx1030 AMDGPU parity, residency, submission-proxy, first-use, allocation, raw HdrHistogram, device-ready, host-ready, transfer-only, and paired service-cost evidence"
+path = "2026-07-26-gate7-local-amdgpu.toml"
+sha256 = "903bdc8fb1fd464b97f59dee248ef17b7d1a7e61d72d6cfd5ff40ff2848d6b0f"
+source_contract = "../../contracts/gate7_single_gpu.toml"
+characterized_source_revision = "b80a419d9c072b331b83301b5f030dd554e3b22d"
+placement = "local_amdgpu"
+backend = "amdgpu"
+all_gates_passed = true
+
+[[artifacts]]
+id = "GATE7-SINGLE-GPU-WSL-CUDA-2026-07-26"
+purpose = "Clean-tree RTX 3050 Ti CUDA parity, residency, submission-proxy, first-use, allocation, raw HdrHistogram, device-ready, host-ready, transfer-only, and paired service-cost evidence"
+path = "2026-07-26-gate7-wsl-cuda.toml"
+sha256 = "9ed8722ceb9e743debc1015fcca78293e603a214458a77363e4675cd401b5c04"
+source_contract = "../../contracts/gate7_single_gpu.toml"
+characterized_source_revision = "b80a419d9c072b331b83301b5f030dd554e3b22d"
+placement = "wsl_cuda"
+backend = "cuda"
+all_gates_passed = true

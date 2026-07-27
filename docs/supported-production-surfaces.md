@@ -238,8 +238,16 @@ cover numerical oracles, exact device/context ownership, residency, lifecycle
 rejection, and bounded allocation evidence. The separate clean
 [Gate 5 CPU artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
 remains the integrated serial optical-placement characterization. Gate 7.5
-does not recharacterize accelerator latency, so the July 14/18 platform
-artifacts remain the maintained GPU performance evidence.
+correctness evidence is complemented by the Gate 7.6 predeclared paired
+two-path Shack-Hartmann
+[service-cost catalog](../benchmarks/results/gate7/manifest.toml) on local
+CPU, local gfx1030 AMDGPU, and WSL RTX 3050 Ti CUDA. It records exact parity,
+residency, first use, allocation, raw HdrHistograms, and separate device-ready,
+host-ready, and transfer-only boundaries. Both accelerator-relative p95 gates
+pass. This strengthens the declared single-device execution surface without
+claiming fixed-arrival HIL latency, mixed placement, multi-GPU execution, or
+instrument capacity. CUDA's routine support status remains governed
+separately by the support-boundary rule below.
 
 ### GPU support-boundary rule
 

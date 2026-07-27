@@ -560,11 +560,11 @@ including the shared LiFT matrix, device-resident schedule-free atmosphere
 materialization, direct-science formation, detector fan-out, prepared
 controller-output routing, and dynamic cycle-averaged circular-Pyramid
 modulation. The
-current local AMDGPU latency artifact remains the
-[July 14 cross-host characterization](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml):
-the July 18 timing repetitions completed, but no replacement raw-histogram
-artifact was retained after the host's Julia 1.12.6 installation failed a
-package-independent GC check. This is not promoted into a new latency baseline.
+July 14
+[cross-host characterization](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml)
+remains a historical REVOLT-like workload. It is not equivalent to the later
+Gate 7 paired single-device owner contract and is not used as that contract's
+relative baseline.
 
 The Gate 5 closure validation head `02e5f29` passed `448/448` checks on the
 local gfx1030 AMDGPU target and `438/438` checks on the WSL RTX 3050 Ti CUDA
@@ -739,6 +739,51 @@ conventional-detector checks. On the WSL RTX 3050 Ti with Julia 1.12.6 and
 CUDA.jl 6.2.1, the corresponding focused runs completed the same `212/212` and
 `155/155` checks. These counts are correctness/residency evidence for that
 exact revision and hardware, not a latency or production-capacity benchmark.
+
+Gate 7.6 adds one predeclared paired single-device service-cost contract:
+
+```sh
+julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate7_single_gpu.jl cpu local_cpu
+julia --threads=1 --project=benchmarks/amdgpu --startup-file=no \
+  benchmarks/benchmark_gate7_single_gpu.jl amdgpu local_amdgpu
+julia --threads=1 --project=benchmarks/cuda --startup-file=no \
+  benchmarks/benchmark_gate7_single_gpu.jl cuda wsl_cuda
+```
+
+Set `AOS_GATE7_OUTPUT` to a path outside the clean source tree to retain an
+artifact. Durable runs reject sample-count overrides and dirty source. The
+[contract](../benchmarks/contracts/gate7_single_gpu.toml) fixes a 128-sample
+two-layer atmosphere, two compatible off-axis NGS diffractive
+Shack-Hartmann paths, 50 warmups, and three 200-sample runs per boundary.
+CUDA and AMDGPU disable scalar indexing and separate independent
+device-ready, batched device-ready, batched host-ready, and transfer-only
+completion.
+
+Candidate revision `b80a419` produced the following median-run results:
+
+| Placement and boundary | p50 | p95 | Throughput | Warmed Julia heap |
+|---|---:|---:|---:|---:|
+| Local CPU, independent device-ready | 1.152 ms | 1.194 ms | 864.3 Hz | 1,648 B |
+| Local gfx1030 AMDGPU, independent device-ready | 0.489 ms | 0.544 ms | 1,972.9 Hz | 81,424 B |
+| Local gfx1030 AMDGPU, batched device-ready | 0.527 ms | 0.571 ms | 1,834.1 Hz | 76,208 B |
+| Local gfx1030 AMDGPU, batched host-ready | 0.507 ms | 0.568 ms | 1,906.1 Hz | 74,576 B |
+| Local gfx1030 AMDGPU, transfer-only | 0.028 ms | 0.071 ms | 23,875.2 Hz | 1,104 B |
+| WSL RTX 3050 Ti CUDA, independent device-ready | 1.075 ms | 1.556 ms | 856.2 Hz | 66,160 B |
+| WSL RTX 3050 Ti CUDA, batched device-ready | 1.144 ms | 1.418 ms | 832.4 Hz | 76,384 B |
+| WSL RTX 3050 Ti CUDA, batched host-ready | 1.055 ms | 1.426 ms | 885.6 Hz | 77,712 B |
+| WSL RTX 3050 Ti CUDA, transfer-only | 0.162 ms | 0.290 ms | 5,621.4 Hz | 944 B |
+
+All predeclared absolute, allocation, parity, residency, synchronization, and
+submission-proxy gates passed. Batched-to-independent median p95 was `1.050`
+on AMDGPU and `0.911` on CUDA against the `1.5` ceiling. The owner reduced the
+prepared atmosphere-render proxy from two calls to one while retaining two
+WFS formations. The [artifact catalog](../benchmarks/results/gate7/manifest.toml)
+retains raw HdrHistograms, run dispersion, first use, GC, exact project and
+manifest hashes, package/runtime/driver/device identity, and explicit scope
+exclusions. These are synchronized self-paced service-cost distributions, not
+fixed-arrival HIL latency, overload, mixed-placement, multi-GPU, or instrument
+capacity evidence.
 
 This separation exists so:
 

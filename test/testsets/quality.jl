@@ -1,4 +1,9 @@
 using Aqua
+using SHA
+
+canonical_lf_sha256(text::AbstractString) = bytes2hex(SHA.sha256(
+    codeunits(replace(text, "\r\n" => "\n")),
+))
 
 _rng_family(::Xoshiro) = :xoshiro
 _rng_family(::MersenneTwister) = :mersenne_twister
@@ -19,6 +24,100 @@ _rng_family(::AbstractRNG) = :other
 end
 
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
+
+@testset "Gate 7 benchmark contract" begin
+    root = normpath(joinpath(@__DIR__, "..", ".."))
+    contract_path =
+        joinpath(root, "benchmarks", "contracts", "gate7_single_gpu.toml")
+    harness_path =
+        joinpath(root, "benchmarks", "benchmark_gate7_single_gpu.jl")
+    support_path =
+        joinpath(root, "benchmarks", "support", "gate7_single_gpu.jl")
+    @test isfile(harness_path)
+    @test isfile(support_path)
+
+    contract = TOML.parsefile(contract_path)
+    @test contract["schema_version"] == 1
+    @test contract["name"] == "gate7_single_gpu"
+    @test contract["samples_per_run"] >=
+        contract["minimum_samples_for_p95"]
+    @test contract["runs"] >= 3
+    @test contract["warmup_operations"] > 0
+    @test contract["batched_relative_p95_factor"] >= 1
+    @test canonical_lf_sha256("gate7\r\nartifact\r\n") ==
+        canonical_lf_sha256("gate7\nartifact\n")
+
+    workload = contract["workload"]
+    @test workload["path_count"] == 2
+    @test workload["numeric_type"] == "Float32"
+    @test workload["witness_phase_ns"] > workload["sample_period_ns"]
+
+    independent = contract["submission_proxy"]["independent"]
+    batched = contract["submission_proxy"]["batched"]
+    @test independent["top_level_path_submissions"] == 2
+    @test independent["device_owner_submissions"] == 0
+    @test batched["top_level_path_submissions"] == 0
+    @test batched["device_owner_submissions"] == 1
+    @test batched["atmosphere_direction_render_calls"] <
+        independent["atmosphere_direction_render_calls"]
+    @test batched["wfs_formation_calls"] ==
+        independent["wfs_formation_calls"]
+
+    gpu_boundaries = [
+        "independent_device_ready",
+        "batched_device_ready",
+        "batched_host_ready",
+        "transfer_only",
+    ]
+    placements = contract["placements"]
+    @test placements["local_cpu"]["boundaries"] ==
+        ["independent_device_ready"]
+    @test placements["local_amdgpu"]["boundaries"] == gpu_boundaries
+    @test placements["wsl_cuda"]["boundaries"] == gpu_boundaries
+    @test contract["contract"]["coordinated_omission_correction"] ===
+        false
+    @test any(
+        exclusion -> occursin("HIL latency", exclusion),
+        contract["scope_exclusions"],
+    )
+
+    artifact_root = joinpath(root, "benchmarks", "results", "gate7")
+    manifest = TOML.parsefile(joinpath(artifact_root, "manifest.toml"))
+    closure = manifest["closure"]
+    artifacts = manifest["artifacts"]
+    @test closure["status"] == "passed"
+    @test closure["requirements"] == ["HIL-GPU-001"]
+    @test length(artifacts) == 3
+    @test Set(artifact["backend"] for artifact in artifacts) ==
+        Set(("cpu", "amdgpu", "cuda"))
+
+    for entry in artifacts
+        artifact_path = joinpath(artifact_root, entry["path"])
+        @test isfile(artifact_path)
+        @test canonical_lf_sha256(read(artifact_path, String)) ==
+            entry["sha256"]
+        artifact = TOML.parsefile(artifact_path)
+        @test artifact["all_gates_passed"]
+        @test artifact["p95_supported"]
+        @test artifact["characterized_source_revision"] ==
+            closure["characterized_source_revision"]
+        @test artifact["environment"]["git_dirty"] === false
+        @test artifact["environment"]["backend"] == entry["backend"]
+        @test artifact["correctness"]["passed"]
+        @test artifact["submission_proxy_evidence"]["passed"]
+        @test artifact["relative_comparison"]["passed"]
+        @test all(artifact["boundaries"]) do boundary
+            boundary["passed"] &&
+                length(boundary["runs"]) ==
+                    artifact["configured_runs"] &&
+                all(boundary["runs"]) do run
+                    run["samples"] ==
+                        artifact["configured_samples_per_run"] &&
+                        !isempty(run["histogram_base64"])
+                end
+        end
+    end
+end
 
 @testset "Selective test registry" begin
     @test resolve_test_suites(String[]) === TEST_SUITE_SPECS
