@@ -798,15 +798,34 @@ deterministic validation and faster-than-real-time work.
 
 ## Run Lifecycle
 
-The public names are not committed, but every run has these semantic phases:
+The canonical companion phase type is `AdaptiveOpticsHIL.Lifecycle.RunPhase`.
+Its committed states are `RunConfigured`, `RunPrepared`, `RunArming`,
+`RunArmed`, `RunRunning`, `RunStopped`, and `RunFailed`. The allowed edges are
+exactly:
+
+- `RunConfigured → RunPrepared`
+- `RunPrepared → RunArming`
+- `RunArming → RunArmed` or `RunFailed`
+- `RunArmed → RunRunning`, `RunStopped`, or `RunFailed`
+- `RunRunning → RunStopped` or `RunFailed`
+
+The semantic operations and their obligations are:
 
 | Phase | Allowed work | Required exit condition |
 |---|---|---|
-| Configure | Build immutable parameters and declare capacities, policies, and resources | Configuration validates structurally |
-| Prepare | Allocate pools/workspaces, plan FFTs, resolve schedules and placement, warm required code and devices | No unresolved ownership, capacity, or placement requirement |
-| Arm | Reset sequences/counters, establish the run epoch, execution-clock mapping, trigger topology, and external clock mappings, verify every lease is returned, and publish initial optic state | Ports and pools are ready, every initial realized event is defined, and user orchestration has reported the selected RTC adapter ready |
-| Run | Execute the immutable topology, schedule, capacities, and placement | Stop request, configured terminal event, or explicit failure |
-| Stop/fail | Close new submission and admission, record the cause, perform a bounded drain, reclaim leases, and finalize evidence | Every transferred command has one terminal outcome and every owned buffer is accounted for, or the deficit is reported |
+| Configure (`RunConfigured`) | Build immutable parameters and declare capacities, policies, and resources | Configuration validates structurally |
+| Prepare (`RunPrepared`) | Allocate pools/workspaces, plan FFTs, resolve schedules and placement, warm required code and devices | No unresolved ownership, capacity, or placement requirement |
+| Arm (`RunArming → RunArmed`) | Reset sequences/counters, establish the run epoch, execution-clock mapping, trigger topology, and external clock mappings, verify every lease is returned, and publish initial optic state | Ports and pools are ready, every initial realized event is defined, and user orchestration has reported the selected RTC adapter ready inside the bounded arm window |
+| Run (`RunRunning`) | Execute the immutable topology, schedule, capacities, and placement | Stop request, configured terminal event, or explicit failure |
+| Stop/fail (`RunStopped` or `RunFailed`) | Close new submission and admission, record the cause, perform a bounded drain, reclaim leases, and finalize evidence | Every transferred command has one terminal outcome and every owned buffer is accounted for, or the deficit is reported |
+
+Gate 8.4 implements this phase matrix, same-session adapter readiness observed
+on the execution clock, inclusive modular arm deadlines, immutable termination
+records, and typed stop, terminal, and failure events on the serial companion
+boundary. Long-lived execution owners, coordinated closure, failure
+acknowledgement, bounded drain, and ownership-deficit finalization remain later
+Gate 8 work; a `RunStopped`/`RunFailed` transition alone does not claim those
+operations have completed.
 
 Adapter readiness is an orchestration precondition, not a transport API in the
 HIL package. User code may implement it with a socket handshake, middleware

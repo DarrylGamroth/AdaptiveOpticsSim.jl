@@ -207,10 +207,14 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    accounting, and reserved lease-return credit on the same targets. Gate 8.3
    adds exact prospective external timestamp-domain mappings and hardens
    cached execution-clock ownership and staleness evidence, closing
-   `HIL-TIME-002` without claiming transport synchronization. The affected
-   complete port requirements remain partial until execution-owner and
-   coordinated failure/drain integration; the canonical operational lifecycle
-   is the next ordered boundary.
+   `HIL-TIME-002` without claiming transport synchronization. Gate 8.4 adds
+   the exact configured/prepared/arming/armed/running/stopped/failed phase
+   matrix, same-session readiness and bounded arm windows, immutable active
+   serial topology, and distinct typed clean-stop and failure records. This
+   advances `HIL-LIFE-001` only to partial: prepared nonstructural controls,
+   long-lived execution owners, and coordinated bounded drain remain open.
+   The affected complete port requirements likewise remain partial; long-lived
+   execution owners are the next ordered boundary.
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
