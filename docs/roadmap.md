@@ -201,6 +201,9 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    keep Dagger and dynamic migration outside the HIL deadline path. Gate 8
    delivery is tracked by
    [AdaptiveOpticsHIL issue #17](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/17).
+   Gate 8.1 now qualifies the bounded SPSC layout and publication contract on
+   Linux, Windows, and Apple Silicon; port lifecycle and reserved return credit
+   are the next ordered boundary.
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
