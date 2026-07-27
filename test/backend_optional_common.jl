@@ -1120,6 +1120,86 @@ function run_optional_wfs_device_model_matrix_checks(
             )
         end
 
+        detector_row =
+            device_model_matrix_wfs_detector_row(family, direction)
+        oracle_path = prepared_path(oracle.plant, :wfs_alpha)
+        device_path = prepared_path(device_fixture.plant, :wfs_alpha)
+        oracle_detector_input =
+            device_model_matrix_detector_facing_product(oracle_path.result)
+        device_detector_input =
+            device_model_matrix_detector_facing_product(device_path.result)
+        detector_input_before = Array(device_detector_input.values)
+        oracle_detector = device_model_matrix_execute_detector(
+            detector_row;
+            backend=CPUBackend(),
+            T=Float32,
+            input_map=oracle_detector_input,
+        )
+        device_detector = device_model_matrix_execute_detector(
+            detector_row;
+            backend=selector,
+            T=Float32,
+            input_map=device_detector_input,
+        )
+        detector_device = compute_device(device_detector.output)
+        @test detector_device == device
+        @test device_detector.output isa BackendArray
+        @test device_detector.prepared.plan.input_values ===
+            device_detector_input.values
+        @test optional_detector_response_device_resident(
+            device_detector.detector.params.response_model,
+            device,
+            BackendArray,
+        )
+        @test optional_detector_state_device_resident(
+            device_detector.detector,
+            device,
+            BackendArray,
+        )
+        @test optional_detector_prepared_storage_device_resident(
+            device_detector.prepared,
+            device,
+            BackendArray,
+        )
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(device_detector.output),
+        )
+        expected_detector_output =
+            device_model_matrix_expected_detector_frame(
+                detector_row,
+                device_detector.detector,
+                detector_input_before,
+                Float32,
+            )
+        @test isapprox(
+            Array(device_detector.output),
+            expected_detector_output;
+            rtol=8f-5,
+            atol=8f-5,
+        )
+        @test isapprox(
+            Array(device_detector.output),
+            Array(oracle_detector.output);
+            rtol=8f-5,
+            atol=8f-5,
+        )
+        @test device_detector.status_trace == oracle_detector.status_trace
+        @test device_detector.event_times == oracle_detector.event_times
+        @test device_model_matrix_response_metadata_signature(
+            device_detector.metadata_before,
+        ) == device_model_matrix_response_metadata_signature(
+            device_detector.metadata_after,
+        )
+        @test device_detector.metadata_after.sensor ==
+            device_model_matrix_detector_sensor_symbol(detector_row)
+        detector_allocation_bytes =
+            optional_detector_device_model_matrix_allocation_bytes(
+                detector_row,
+                device_detector,
+            )
+        @test detector_allocation_bytes <= 1024 * 1024
+        @test Array(device_detector_input.values) == detector_input_before
+
         allocation_fixture = device_model_matrix_wfs_fixture(
             family;
             backend=selector,

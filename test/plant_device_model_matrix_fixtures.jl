@@ -483,6 +483,26 @@ struct DeviceModelMatrixM5RollingCMOS <: DeviceModelMatrixDetectorRow end
 struct DeviceModelMatrixM6UpTheRampHgCdTe <:
     DeviceModelMatrixDetectorRow end
 
+@inline device_model_matrix_wfs_detector_row(
+    ::DeviceModelMatrixShackHartmann,
+    ::Val{:ngs},
+) = DeviceModelMatrixM1CCD()
+
+@inline device_model_matrix_wfs_detector_row(
+    ::DeviceModelMatrixShackHartmann,
+    ::Val{:lgs},
+) = DeviceModelMatrixM2FrameTransferEMCCD()
+
+@inline device_model_matrix_wfs_detector_row(
+    ::DeviceModelMatrixPyramid,
+    ::Val{:ngs},
+) = DeviceModelMatrixM3GlobalCMOS()
+
+@inline device_model_matrix_wfs_detector_row(
+    ::DeviceModelMatrixBioEdge,
+    ::Val{:ngs},
+) = DeviceModelMatrixM4GlobalHgCdTe()
+
 @inline device_model_matrix_detector_rows() = (
     DeviceModelMatrixM1CCD(),
     DeviceModelMatrixM2FrameTransferEMCCD(),
@@ -790,11 +810,25 @@ function device_model_matrix_expected_detector_frame(
     ::Type{T},
 ) where {T<:AbstractFloat}
     input = device_model_matrix_detector_rate_host(row, T)
+    return device_model_matrix_expected_detector_frame(
+        row,
+        detector,
+        input,
+        T,
+    )
+end
+
+function device_model_matrix_expected_detector_frame(
+    ::DeviceModelMatrixDetectorRow,
+    detector::Detector,
+    input::AbstractMatrix,
+    ::Type{T},
+) where {T<:AbstractFloat}
     kernel = device_model_matrix_response_kernel(
         detector.params.response_model,
         T,
     )
-    response = device_model_matrix_zero_extended_response(input, kernel)
+    response = device_model_matrix_zero_extended_response(T.(input), kernel)
     return response .* T(0.5)
 end
 
@@ -867,9 +901,11 @@ function device_model_matrix_execute_detector(
         DeviceModelMatrixM4GlobalHgCdTe};
     backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
     T::Type{<:AbstractFloat}=Float64,
+    input_map=nothing,
 )
     detector = device_model_matrix_detector(row; backend, T)
-    map = device_model_matrix_detector_rate_map(row; backend, T)
+    map = isnothing(input_map) ?
+        device_model_matrix_detector_rate_map(row; backend, T) : input_map
     definition = GlobalShutterAcquisitionDefinition(
         PlantDuration(1_000_000_000);
         readout_duration=PlantDuration(200_000_000),
@@ -922,9 +958,11 @@ function device_model_matrix_execute_detector(
     row::DeviceModelMatrixM2FrameTransferEMCCD;
     backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
     T::Type{<:AbstractFloat}=Float64,
+    input_map=nothing,
 )
     detector = device_model_matrix_detector(row; backend, T)
-    map = device_model_matrix_detector_rate_map(row; backend, T)
+    map = isnothing(input_map) ?
+        device_model_matrix_detector_rate_map(row; backend, T) : input_map
     definition = FrameTransferAcquisitionDefinition(
         PlantDuration(1_000_000_000);
         readout_duration=PlantDuration(200_000_000),
@@ -991,6 +1029,14 @@ function device_model_matrix_execute_detector(
         event_times=(; start, close, transfer, readout),
     )
 end
+
+@inline device_model_matrix_detector_facing_product(
+    product::IntensityMap,
+) = product
+
+@inline device_model_matrix_detector_facing_product(
+    bundle::OpticalProductBundle,
+) = bundle[1]
 
 function device_model_matrix_execute_detector(
     row::DeviceModelMatrixM5RollingCMOS;

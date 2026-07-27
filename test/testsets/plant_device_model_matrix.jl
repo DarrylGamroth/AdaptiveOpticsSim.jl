@@ -137,6 +137,39 @@ end
             owned.state.command_applications[1],
         ) == horizon
         compare_device_model_matrix_wfs_runs(oracle, owned)
+
+        detector_row =
+            device_model_matrix_wfs_detector_row(family, direction)
+        oracle_path = prepared_path(oracle.plant, :wfs_alpha)
+        owned_path = prepared_path(owned.plant, :wfs_alpha)
+        oracle_input =
+            device_model_matrix_detector_facing_product(oracle_path.result)
+        owned_input =
+            device_model_matrix_detector_facing_product(owned_path.result)
+        owned_input_before = copy(owned_input.values)
+        oracle_detector = device_model_matrix_execute_detector(
+            detector_row;
+            input_map=oracle_input,
+        )
+        owned_detector = device_model_matrix_execute_detector(
+            detector_row;
+            input_map=owned_input,
+        )
+        @test owned_detector.prepared.plan.input_values === owned_input.values
+        @test owned_detector.status_trace == oracle_detector.status_trace
+        @test owned_detector.event_times == oracle_detector.event_times
+        @test owned_detector.metadata_after.sensor ==
+            device_model_matrix_detector_sensor_symbol(detector_row)
+        @test Array(owned_detector.output) ≈
+            device_model_matrix_expected_detector_frame(
+                detector_row,
+                owned_detector.detector,
+                Array(owned_input.values),
+                Float64,
+            ) atol=2e-12 rtol=2e-12
+        @test Array(owned_detector.output) ≈
+            Array(oracle_detector.output) atol=2e-12 rtol=2e-12
+        @test owned_input.values == owned_input_before
     end
 end
 

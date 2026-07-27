@@ -174,9 +174,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    direct-science paths are now bound to one run-immutable accelerator owner
    that retains its exact device context, atmosphere/direct-imaging batches,
    original path-product handoffs, and completion barrier while preserving the
-   Gate 6 claim lifecycle. The broader WFS/detector model matrix and promoted
-   first-use/service-cost evidence remain behind their own gates; fixed-arrival
-   evidence is additionally required before any HIL latency promotion.
+   Gate 6 claim lifecycle. Gate 7.5 extends that exact owner/context and shared
+   atmosphere-direction boundary to compatible maintained Shack-Hartmann,
+   Pyramid, and BioEdge paths without replacing their domain pipelines, and
+   validates a six-row conventional CCD/EMCCD/CMOS/HgCdTe response/readout
+   matrix on CUDA and AMDGPU. Promoted first-use/service-cost evidence remains
+   Gate 7.6 work; fixed-arrival evidence is additionally required before any
+   HIL latency promotion.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,
    and GC/process-isolation policy. Add explicit or constrained deterministic
