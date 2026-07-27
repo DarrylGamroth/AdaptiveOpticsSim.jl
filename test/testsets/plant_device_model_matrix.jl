@@ -60,6 +60,26 @@ function device_model_matrix_path_group(fixture, id::Symbol)
     )
 end
 
+function device_model_matrix_inferred_owner_validation(owner, prepared)
+    return device_model_matrix_inferred_owner_validation(
+        owner.implementation,
+        owner,
+        prepared,
+    )
+end
+
+function device_model_matrix_inferred_owner_validation(
+    implementation::I,
+    owner,
+    prepared,
+) where {I}
+    return @inferred Plant._validate_device_path_batch_owner_implementation(
+        implementation,
+        owner,
+        prepared,
+    )
+end
+
 @testset "Prepared WFS device path-batch ownership" begin
     for (family, direction, spectral) in device_model_matrix_wfs_rows()
         oracle = device_model_matrix_wfs_fixture(
@@ -89,6 +109,10 @@ end
         owner = device_path_batch_owner(owned.prepared, 1)
         @test owner.implementation isa
             Plant._PreparedWFSDevicePathBatch
+        @test device_model_matrix_inferred_owner_validation(
+            owner,
+            owned.prepared,
+        ) == 1
         @test device_path_batch_group_count(owner) == 2
         retained_context = owner.implementation.context
         retained_plans = ntuple(2) do index
