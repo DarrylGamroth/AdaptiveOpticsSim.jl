@@ -204,9 +204,12 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    Gate 8.1 qualifies the bounded SPSC layout and publication contract on
    Linux, Windows, and Apple Silicon. Gate 8.2 adds typed canonical-port
    lifecycle, resource-specific full policy, exact ownership-deficit
-   accounting, and reserved lease-return credit on the same targets. The
-   affected complete requirements remain partial until execution-owner and
-   coordinated failure/drain integration; versioned timestamp-domain mapping
+   accounting, and reserved lease-return credit on the same targets. Gate 8.3
+   adds exact prospective external timestamp-domain mappings and hardens
+   cached execution-clock ownership and staleness evidence, closing
+   `HIL-TIME-002` without claiming transport synchronization. The affected
+   complete port requirements remain partial until execution-owner and
+   coordinated failure/drain integration; the canonical operational lifecycle
    is the next ordered boundary.
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
