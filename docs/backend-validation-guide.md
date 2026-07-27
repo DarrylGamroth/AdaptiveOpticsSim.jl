@@ -249,11 +249,23 @@ Shared smoke scaffolding lives in:
 
 - [`backend_optional_common.jl`](../test/backend_optional_common.jl)
 
+Use
+[`profile_direct_imaging_batch_submissions.jl`](../scripts/profile_direct_imaging_batch_submissions.jl)
+under a vendor profiler to compare `batch` with `independent` formation for the
+same ordered physical samples. Its positional arguments are backend, execution
+mode, sample count, warmup count, and measured count. The script reports the
+prepared FFT-execution count as an operation-count proxy; it is not a latency,
+throughput, or HIL deadline benchmark.
+
 The reduced maintained smoke covers:
 
 - explicit atmosphere epochs and prepared, device-resident finite/infinite
   direction rendering into caller-owned pupil products
 - atmospheric field propagation
+- prepared native-Fraunhofer direct-science batching for ordered off-axis and
+  spectral physical sources, with one device-resident field/output stack,
+  reusable optical-axis FFT plan, per-sample product views, independent-path
+  parity, detector fan-out, and explicit completed return
 - prepared physical Shack-Hartmann optical formation, detector acquisition,
   and centroid estimation on device-resident arrays
 - same-grid legacy spectral diffractive SH plus prepared native-grid bundle

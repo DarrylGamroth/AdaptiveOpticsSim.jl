@@ -78,6 +78,32 @@ end
     end
 end
 
+@inline function _fraunhofer_output_sampling(field::ElectricField)
+    T = real(eltype(field.values))
+    n = field.metadata.dimensions[1]
+    input_sampling = field.metadata.sampling[1]
+    return T(electric_field_wavelength(field) / (n * input_sampling))
+end
+
+function _fraunhofer_output_metadata(
+    field::ElectricField,
+    storage::AbstractMatrix,
+    output_sampling,
+    coherence::AbstractCombinationPolicy,
+)
+    return OpticalPlaneMetadata(
+        FocalPlane(),
+        storage;
+        coordinate_domain=AngularCoordinates(),
+        sampling=(output_sampling, output_sampling),
+        orientation=field.metadata.orientation,
+        spectral=field.metadata.spectral,
+        normalization=field.metadata.normalization,
+        spatial_measure=field.metadata.spatial_measure,
+        coherence=coherence,
+    )
+end
+
 function FraunhoferPropagation(field::ElectricField)
     require_centered_plane_geometry(field.metadata;
         label="Fraunhofer input ElectricField")
@@ -94,7 +120,7 @@ function FraunhoferPropagation(field::ElectricField)
     scratch = similar(field.values)
     fft_plan = plan_fft_backend!(scratch)
     wavelength_m = electric_field_wavelength(field)
-    output_sampling = T(wavelength_m / (n * input_sampling))
+    output_sampling = _fraunhofer_output_sampling(field)
     params = FraunhoferPropagationParams{T}(
         n,
         wavelength_m,
@@ -102,14 +128,12 @@ function FraunhoferPropagation(field::ElectricField)
         output_sampling,
     )
     state = FraunhoferPropagationState{typeof(scratch), typeof(fft_plan)}(scratch, fft_plan)
-    output_metadata = OpticalPlaneMetadata(FocalPlane(), scratch;
-        coordinate_domain=AngularCoordinates(),
-        sampling=(output_sampling, output_sampling),
-        orientation=field.metadata.orientation,
-        spectral=field.metadata.spectral,
-        normalization=field.metadata.normalization,
-        spatial_measure=field.metadata.spatial_measure,
-        coherence=field.metadata.coherence)
+    output_metadata = _fraunhofer_output_metadata(
+        field,
+        scratch,
+        output_sampling,
+        field.metadata.coherence,
+    )
     return FraunhoferPropagation(params, state, field.metadata,
         output_metadata)
 end

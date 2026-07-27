@@ -97,7 +97,8 @@ path owns its mutable `PupilFunction`; the telescope contains no mutable OPD.
 Prepared propagation and sensing APIs accept that explicit product and reject
 incompatible geometry revisions, backends, or devices.
 
-- Prepared direct imaging: `prepare_direct_imaging`, `form_direct_image!`,
+- Prepared direct imaging: `prepare_direct_imaging`,
+  `prepare_direct_imaging_batch`, `form_direct_image!`,
   `direct_imaging_output`, `direct_imaging_components`, and
   `focal_plane_pixel_scale_arcsec`. `DirectImagingPlan` and
   `DirectImagingWorkspace` bind exact caller-owned pupil/field/output storage
@@ -106,6 +107,17 @@ incompatible geometry revisions, backends, or devices.
   exposure; it is not implicitly a normalized PSF. Off-axis placement uses a
   preparation-time-validated, rounded-sample periodic shift on the prepared
   focal grid and respects its declared `:x`/`:y` axis order and signs
+- Prepared native Fraunhofer batches accept a physical `Source`,
+  same-wavelength ordered `Asterism`, or `SpectralSource{Source}` with one
+  shared `PupilFunction`, or one exact path-local pupil per ordered physical
+  source leaf. Compatible leaves share one concrete source-storage contract,
+  one stacked field allocation, one stacked photon-rate allocation, and one
+  FFT plan over the optical axes. Their public result remains an
+  `OpticalProductBundle` of ordinary wavelength- and direction-specific
+  `IntensityMap` views. Batching does not coherently combine sources, integrate
+  wavelengths, apply detector exposure, copy to host, or regroup paths during
+  warmed execution. The compatibility trait, signature, prepared type, and
+  validation accessors are qualified public API rather than root exports
 - Spectral sources: `SpectralSample`, `SpectralBundle`, `SpectralSource`,
   `with_spectrum`; construct a `SpectralSource` through `with_spectrum` from a
   `Source` or `LGSSource` leaf rather than nesting source expansions. Bundle
@@ -140,7 +152,9 @@ incompatible geometry revisions, backends, or devices.
   incoherent output and exposes its leaf products with
   `direct_imaging_components`. Direct imaging of a `SpectralSource` retains
   wavelength-dependent grids in an `OpticalProductBundle`; there is no
-  implicit resampling or spectral sum
+  implicit resampling or spectral sum. Use `prepare_direct_imaging_batch` when
+  each leaf must remain an independently consumable product while compatible
+  native Fraunhofer work is submitted as one prepared stack
 - Compatible intensity accumulation: `PreparedIncoherentSum`,
   `prepare_incoherent_sum`, `accumulate_intensity!`
 - Fields/propagation: `FraunhoferPropagation`,

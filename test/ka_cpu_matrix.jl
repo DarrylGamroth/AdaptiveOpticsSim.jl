@@ -845,6 +845,50 @@ end
             ka_ef.values)
         mark_ka_cpu_kernel!(:intensity_kernel!)
         @test ka_cpu_close(ka_intensity, scalar_intensity)
+
+        batch_field = reshape(
+            ComplexF64.(collect(1:48), collect(49:96)),
+            4,
+            4,
+            3,
+        )
+        batch_shifts_axis1 = [0, 9, -10]
+        batch_shifts_axis2 = [0, -9, 10]
+        scalar_batch_intensity = zeros(Float64, 4, 4, 3)
+        ka_batch_intensity = similar(scalar_batch_intensity)
+        batch_scale = inv(16.0)
+        @inbounds for sample in axes(batch_field, 3),
+            j in axes(batch_field, 2), i in axes(batch_field, 1)
+            source_i = mod(
+                i - batch_shifts_axis1[sample] - 1,
+                size(batch_field, 1),
+            ) + 1
+            source_j = mod(
+                j - batch_shifts_axis2[sample] - 1,
+                size(batch_field, 2),
+            ) + 1
+            scalar_batch_intensity[i, j, sample] =
+                abs2(batch_field[source_i, source_j, sample]) *
+                batch_scale
+        end
+        batch_kernel = AdaptiveOpticsSim.direct_imaging_batch_intensity_kernel!(
+            KA_CPU_STYLE.backend,
+        )
+        batch_kernel(
+            ka_batch_intensity,
+            batch_field,
+            batch_shifts_axis1,
+            batch_shifts_axis2,
+            batch_scale,
+            4,
+            4,
+            3;
+            ndrange=size(batch_field),
+        )
+        KernelAbstractions.synchronize(KA_CPU_STYLE.backend)
+        mark_ka_cpu_kernel!(:direct_imaging_batch_intensity_kernel!)
+        @test ka_batch_intensity == scalar_batch_intensity
+
         AdaptiveOpticsSim._accumulate_intensity!(SCALAR_CPU_STYLE,
             scalar_intensity, scalar_ef.values)
         AdaptiveOpticsSim._accumulate_intensity!(KA_CPU_STYLE,
