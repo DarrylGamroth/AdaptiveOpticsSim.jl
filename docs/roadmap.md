@@ -219,8 +219,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    budget validation, and nominal lifecycle/accounting integration. This
    advances the lifecycle and complete-resource semantics without claiming
    overload, recovery, affinity, mixed placement, or operational soak
-   evidence. Execution-clock ingress liveness and overload policy are the next
-   ordered boundary.
+   evidence. Gate 8.6 adds the selected per-command-endpoint execution-clock
+   ingress watchdog and mandatory acquisition and execution-owner overload
+   policies, promoting `HIL-LIFE-002` and advancing `HIL-PORT-002` and
+   `HIL-FAIL-001` without claiming a multi-endpoint atomic latch group.
+   Coordinated first-failure publication, deadline-bounded drain,
+   ownership-deficit finalization, and fresh-run recovery are the next ordered
+   Gate 8.7 boundary.
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
