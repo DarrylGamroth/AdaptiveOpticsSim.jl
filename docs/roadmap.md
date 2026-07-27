@@ -167,10 +167,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    and infinite multilayer atmospheres now provide homogeneous
    single-device direction batching with an exact serial CPU oracle,
    device-resident geometry/output, whole-batch preflight, and explicit
-   completion. Wavelength and downstream optical-product batching, one
-   backend resource owner, and the integrated model/first-use/service-cost
-   matrix remain behind their own evidence; fixed-arrival evidence is
-   additionally required before any HIL latency promotion.
+   completion. Compatible physical native-Fraunhofer science directions and
+   spectral samples now also have a fixed prepared stack, one optical-axis FFT
+   plan, ordered per-sample focal products, exact-device validation, and
+   independent detector fan-out. One backend resource owner and the integrated
+   model/first-use/service-cost matrix remain behind their own evidence;
+   fixed-arrival evidence is additionally required before any HIL latency
+   promotion.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,
    and GC/process-isolation policy. Add explicit or constrained deterministic

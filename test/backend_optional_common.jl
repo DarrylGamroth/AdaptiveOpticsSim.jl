@@ -2995,6 +2995,173 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     return nothing
 end
 
+function optional_direct_imaging_batch_allocation_bytes(prepared)
+    form_direct_image!(prepared)
+    validation_bytes = @allocated(
+        AdaptiveOpticsSim.validate_direct_imaging_batch(prepared),
+    )
+    completed_render_bytes = @allocated form_direct_image!(prepared)
+    return (; validation_bytes, completed_render_bytes)
+end
+
+function optional_storage_range_contains(parent, child)
+    parent_start = UInt(pointer(parent))
+    child_start = UInt(pointer(child))
+    parent_stop =
+        parent_start + UInt(sizeof(eltype(parent)) * length(parent))
+    child_stop =
+        child_start + UInt(sizeof(eltype(child)) * length(child))
+    return parent_start <= child_start && child_stop <= parent_stop
+end
+
+function run_optional_direct_imaging_batch_checks(
+    tel::Telescope,
+    selector::AdaptiveOpticsSim.AbstractArrayBackend,
+    BackendArray,
+    ::Type{T},
+) where {T<:AbstractFloat}
+    pupil = PupilFunction(tel; T=T, backend=selector)
+    host_opd = reshape(
+        collect(range(T(-20e-9), T(20e-9); length=length(pupil.opd))),
+        size(pupil.opd),
+    )
+    copyto!(pupil.opd, host_opd)
+
+    wavelengths = T[650e-9, 800e-9, 950e-9]
+    source = Source(
+        band=:custom,
+        wavelength=wavelengths[2],
+        photon_irradiance=T(6),
+        coordinates=(T(0.08), T(90)),
+        T=T,
+    )
+    sources = with_spectrum(
+        source,
+        SpectralBundle(wavelengths, T[1, 2, 3]; T=T),
+    )
+    prepared = prepare_direct_imaging_batch(
+        pupil,
+        sources;
+        zero_padding=2,
+    )
+    products = form_direct_image!(prepared)
+    serial = prepare_direct_imaging(
+        pupil,
+        sources;
+        zero_padding=2,
+    )
+    serial_products = form_direct_image!(serial)
+    device = compute_device(pupil.opd)
+
+    @test products === direct_imaging_output(prepared)
+    @test length(products) == length(wavelengths)
+    @test prepared.workspace.field_stack isa BackendArray
+    @test prepared.workspace.output_stack isa BackendArray
+    @test prepared.workspace.shift_axis1 isa BackendArray
+    @test prepared.workspace.shift_axis2 isa BackendArray
+    @test prepared.workspace.fft_plan ===
+        prepared.workspace_bindings.fft_plan
+    @test prepared.fields === prepared.workspace_bindings.fields
+    @test products === prepared.workspace_bindings.output
+    @test all(
+        index -> optional_storage_range_contains(
+            prepared.workspace.field_stack,
+            prepared.fields[index].values,
+        ),
+        eachindex(wavelengths),
+    )
+    @test all(
+        index -> optional_storage_range_contains(
+            prepared.workspace.output_stack,
+            products[index].values,
+        ),
+        eachindex(wavelengths),
+    )
+    @test all(
+        array -> compute_device(array) == device,
+        (
+            prepared.workspace.field_stack,
+            prepared.workspace.output_stack,
+            prepared.workspace.shift_axis1,
+            prepared.workspace.shift_axis2,
+        ),
+    )
+    @test all(
+        index -> compute_device(products[index].values) == device,
+        eachindex(wavelengths),
+    )
+    @test [
+        products[index].metadata.spectral.wavelength_m
+        for index in eachindex(wavelengths)
+    ] == wavelengths
+
+    for index in eachindex(wavelengths)
+        @test isapprox(
+            Array(products[index].values),
+            Array(serial_products[index].values);
+            rtol=T(5e-5),
+            atol=T(5e-6),
+        )
+        @test products[index].metadata == serial_products[index].metadata
+    end
+
+    selected = products[2]
+    short_detector = Detector(
+        integration_time=T(0.25),
+        noise=NoiseNone(),
+        qe=T(0.5),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=selector,
+    )
+    long_detector = Detector(
+        integration_time=one(T),
+        noise=NoiseNone(),
+        qe=T(0.5),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=selector,
+    )
+    short_acquisition =
+        prepare_detector_acquisition(short_detector, selected)
+    long_acquisition =
+        prepare_detector_acquisition(long_detector, selected)
+    @test short_acquisition.input_values === selected.values
+    @test long_acquisition.input_values === selected.values
+    short_frame = capture!(
+        short_detector,
+        selected,
+        short_acquisition;
+        rng=MersenneTwister(611),
+    )
+    long_frame = capture!(
+        long_detector,
+        selected,
+        long_acquisition;
+        rng=MersenneTwister(612),
+    )
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(long_frame),
+    )
+    @test short_frame isa BackendArray
+    @test long_frame isa BackendArray
+    @test isapprox(
+        Array(long_frame),
+        T(4) .* Array(short_frame);
+        rtol=T(5e-5),
+        atol=T(5e-6),
+    )
+
+    allocation_bytes =
+        optional_direct_imaging_batch_allocation_bytes(prepared)
+    @test allocation_bytes.validation_bytes == 0
+    # The numerical data plane remains device-resident. The owning GPU runtime
+    # may still allocate bounded host-side launch descriptors for the field,
+    # FFT, and intensity submissions.
+    @test allocation_bytes.completed_render_bytes <= 128 * 1024
+    return nothing
+end
+
 function optional_atmosphere_direction_batch_allocation_bytes(
     prepared,
     atm,
@@ -3137,6 +3304,12 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         central_obstruction=0.0f0, T=T, backend=selector)
     src = Source(band=:I, magnitude=0.0, T=T)
     run_optional_plane_product_checks(tel, src, selector, BackendArray, T)
+    run_optional_direct_imaging_batch_checks(
+        tel,
+        selector,
+        BackendArray,
+        T,
+    )
 
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),

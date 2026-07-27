@@ -154,6 +154,39 @@ mutable path OPD and amplitude; update that same product with `apply_opd!`,
 `form_direct_image!` again. `Telescope` owns aperture geometry, not a mutable
 optical path.
 
+For several compatible native Fraunhofer science samples, prepare one fixed
+batch and retain the returned per-sample products:
+
+```julia
+science_sources = Asterism([
+    Source(
+        band=:custom,
+        wavelength=650e-9,
+        photon_irradiance=1.0,
+    ),
+    Source(
+        band=:custom,
+        wavelength=650e-9,
+        photon_irradiance=0.6,
+        coordinates=(0.08, 90.0),
+    ),
+])
+science_batch = prepare_direct_imaging_batch(
+    pupil,
+    science_sources;
+    zero_padding=2,
+)
+science_products = form_direct_image!(science_batch)
+```
+
+`science_products` is an ordered `OpticalProductBundle`; each leaf is an
+ordinary focal-plane photon-arrival-rate `IntensityMap` view that can feed an
+independent detector acquisition. The batch shares stacked storage and one FFT
+plan but does not sum wavelengths or directions. A `SpectralSource{Source}` is
+expanded with the existing photon-number weights in the same way. Unsupported
+propagation models use ordinary independently prepared paths; the batch API
+never copies them to the host or regroups them during execution.
+
 ### Workflow 2: Atmosphere plus one WFS
 
 ```julia

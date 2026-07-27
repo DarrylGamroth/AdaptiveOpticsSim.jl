@@ -90,6 +90,31 @@ end
 @inline source_field_measure(::AbstractSourceRadiometry) =
     CellIntegratedMeasure()
 
+function _pupil_field_metadata(
+    wavefront::PupilFunction,
+    src::AbstractSource,
+    values::AbstractMatrix{Complex{T}},
+    normalization::AbstractOpticalNormalization,
+    spatial_measure::AbstractSpatialMeasure,
+    coherence::AbstractCombinationPolicy,
+) where {T<:AbstractFloat}
+    sampling = (
+        T(wavefront.metadata.sampling[1]),
+        T(wavefront.metadata.sampling[2]),
+    )
+    return OpticalPlaneMetadata(
+        PupilPlane(),
+        values;
+        coordinate_domain=MetricCoordinates(),
+        sampling=sampling,
+        orientation=wavefront.metadata.orientation,
+        spectral=MonochromaticChannel(T(wavelength(src))),
+        normalization=normalization,
+        spatial_measure=spatial_measure,
+        coherence=coherence,
+    )
+end
+
 function ElectricField(wavefront::PupilFunction, src::AbstractSource;
     zero_padding::Int=1,
     T::Type{<:AbstractFloat}=eltype(wavefront.opd),
@@ -105,16 +130,14 @@ function ElectricField(wavefront::PupilFunction, src::AbstractSource;
     n_pad = n * zero_padding
     values = similar(wavefront.opd, Complex{T}, n_pad, n_pad)
     fill!(values, zero(eltype(values)))
-    sampling = (T(wavefront.metadata.sampling[1]),
-        T(wavefront.metadata.sampling[2]))
-    metadata = OpticalPlaneMetadata(PupilPlane(), values;
-        coordinate_domain=MetricCoordinates(),
-        sampling=sampling,
-        orientation=wavefront.metadata.orientation,
-        spectral=MonochromaticChannel(T(wavelength(src))),
-        normalization=normalization,
-        spatial_measure=spatial_measure,
-        coherence=coherence)
+    metadata = _pupil_field_metadata(
+        wavefront,
+        src,
+        values,
+        normalization,
+        spatial_measure,
+        coherence,
+    )
     return ElectricField(metadata, values)
 end
 

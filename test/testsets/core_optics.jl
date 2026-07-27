@@ -258,7 +258,19 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :accumulate_intensity!)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_pupil_field)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_imaging)
+    @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_imaging_batch)
     @test Base.isexported(AdaptiveOpticsSim, :form_direct_image!)
+    for name in (
+        :PreparedDirectImagingBatch,
+        :DirectImagingBatchCompatibilitySignature,
+        :DirectImagingBatchWorkspace,
+        :direct_imaging_batch_capability,
+        :direct_imaging_batch_signature,
+        :validate_direct_imaging_batch,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test Base.ispublic(AdaptiveOpticsSim, name)
+    end
     @test Base.isexported(AdaptiveOpticsSim, :prepare_spatial_filter)
     @test Base.isexported(AdaptiveOpticsSim, :AtmosphereEpoch)
     @test Base.isexported(AdaptiveOpticsSim, :advance_by!)

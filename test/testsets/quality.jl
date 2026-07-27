@@ -167,6 +167,7 @@ end
         if !isempty(spec.fixtures))
     @test fixture_users == (
         "ka-cpu",
+        "direct-imaging-batch",
         "atmosphere-direction-batch",
         "plant-sampled-aberrations",
         "detectors-wfs",

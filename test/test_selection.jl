@@ -20,6 +20,11 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("quality", "testsets/quality.jl"),
     TestSuiteSpec("core-optics", "testsets/core_optics.jl"),
     TestSuiteSpec("direct-science", "testsets/direct_science.jl"),
+    TestSuiteSpec(
+        "direct-imaging-batch",
+        "testsets/direct_imaging_batch.jl",
+        fixtures=("wfs_stage_contract_fixtures.jl",),
+    ),
     TestSuiteSpec("atmosphere", "testsets/atmosphere.jl"),
     TestSuiteSpec(
         "atmosphere-direction-batch",
@@ -111,6 +116,7 @@ const TEST_GROUP_SPECS = (
     "core" => (
         "core-optics",
         "direct-science",
+        "direct-imaging-batch",
         "atmosphere",
         "atmosphere-direction-batch",
     ),

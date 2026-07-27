@@ -181,7 +181,9 @@ Current AMDGPU-supported scope:
 - maintained REVOLT-like production-shaped WFS frame smoke
 - prepared direct imaging with off-axis formation, spectral bundles, explicit
   extended-source expansion, independent detector fan-out, and shared-arm
-  device residency
+  device residency; compatible physical native-Fraunhofer science samples may
+  additionally use one fixed stacked field/output allocation and FFT plan
+  while retaining ordered per-sample product views
 - schedule-free `PreparedPlant` direct-science execution with one device-
   resident optical result shared by independent unequal-exposure acquisitions
 - schedule-free native uniform calibration illumination entering a
