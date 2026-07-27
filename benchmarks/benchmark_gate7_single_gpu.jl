@@ -115,6 +115,26 @@ function gate7_backend_module()
     return nothing
 end
 
+function gate7_nvidia_smi()
+    arguments = (
+        "--query-gpu=name,driver_version,pstate,memory.total",
+        "--format=csv,noheader",
+    )
+    for executable in ("nvidia-smi", "/usr/lib/wsl/lib/nvidia-smi")
+        output = gate7_command_output(`$executable $arguments`)
+        output == "unknown" || return output
+    end
+    return "unknown"
+end
+
+function gate7_hip_driver_version_code()
+    version = Ref{Cint}()
+    status = AMDGPU.HIP.hipDriverGetVersion(version)
+    status == AMDGPU.HIP.hipSuccess ||
+        error("hipDriverGetVersion failed with status $status")
+    return Int(version[])
+end
+
 function gate7_accelerator_environment()
     GATE7_BACKEND_NAME == "cpu" && return Dict{String,Any}(
         "device" => "not applicable",
@@ -127,9 +147,7 @@ function gate7_accelerator_environment()
             "runtime_version" => string(CUDA.runtime_version()),
             "driver_version" => string(CUDA.driver_version()),
             "compiler_version" => string(CUDA.compiler_version()),
-            "nvidia_smi" => gate7_command_output(
-                `nvidia-smi --query-gpu=name,driver_version,pstate,memory.total --format=csv,noheader`,
-            ),
+            "nvidia_smi" => gate7_nvidia_smi(),
         )
     end
     device = AMDGPU.device()
@@ -137,6 +155,7 @@ function gate7_accelerator_environment()
         "device" => AMDGPU.HIP.name(device),
         "gcn_architecture" => AMDGPU.HIP.gcn_arch(device),
         "wavefront_size" => Int(AMDGPU.HIP.wavefrontsize(device)),
+        "hip_driver_version_code" => gate7_hip_driver_version_code(),
         "hip_runtime_version" => string(AMDGPU.HIP.runtime_version()),
     )
 end
