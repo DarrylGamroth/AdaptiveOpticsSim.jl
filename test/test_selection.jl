@@ -54,6 +54,14 @@ const TEST_SUITE_SPECS = (
         "testsets/plant_device_batching.jl";
         fixtures=("plant_device_batching_fixtures.jl",),
     ),
+    TestSuiteSpec(
+        "plant-device-model-matrix",
+        "testsets/plant_device_model_matrix.jl";
+        fixtures=(
+            "plant_device_batching_fixtures.jl",
+            "plant_device_model_matrix_fixtures.jl",
+        ),
+    ),
     TestSuiteSpec("plant-cpu-execution",
         "testsets/plant_cpu_execution.jl"),
     TestSuiteSpec("plant-command-composition",
@@ -116,6 +124,7 @@ const TEST_SUITE_SPECS = (
         fixtures=(
             "wfs_stage_contract_fixtures.jl",
             "plant_device_batching_fixtures.jl",
+            "plant_device_model_matrix_fixtures.jl",
         ),
     ),
 )
@@ -140,6 +149,7 @@ const TEST_GROUP_SPECS = (
         "plant-detector-transitions",
         "plant-event-composition",
         "plant-device-batching",
+        "plant-device-model-matrix",
         "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
@@ -189,6 +199,7 @@ const TEST_GROUP_SPECS = (
         "direct-imaging-batch",
         "atmosphere-direction-batch",
         "plant-device-batching",
+        "plant-device-model-matrix",
         "backend-smoke",
     ),
 )

@@ -825,6 +825,698 @@ function run_optional_device_path_batch_checks(
     return nothing
 end
 
+@inline function optional_wfs_plan_device_resident(
+    plan::AdaptiveOpticsSim.PreparedShackHartmannOpticalFormation,
+    device,
+    BackendArray,
+)
+    propagation = plan.front_end.propagation
+    arrays = (
+        propagation.field,
+        propagation.phasor,
+        propagation.fft_stack,
+        propagation.intensity_stack,
+        propagation.sampled_spot_cube,
+        propagation.spot_cube_accum,
+        propagation.fft_asterism_stack,
+    )
+    return all(
+        array -> array isa BackendArray &&
+            compute_device(array) == device,
+        arrays,
+    )
+end
+
+@inline function optional_wfs_plan_device_resident(
+    plan::Union{
+        AdaptiveOpticsSim.PreparedPyramidOpticalFormation,
+        AdaptiveOpticsSim.PreparedBioEdgeOpticalFormation,
+    },
+    device,
+    BackendArray,
+)
+    front_end = plan.front_end
+    propagation = front_end.propagation
+    arrays = (
+        front_end.modulation.phases,
+        propagation.field,
+        propagation.focal_field,
+        propagation.pupil_field,
+        propagation.phasor,
+        propagation.intensity,
+        propagation.temp,
+        propagation.scratch,
+        propagation.asterism_stack,
+    )
+    return all(
+        array -> array isa BackendArray &&
+            compute_device(array) == device,
+        arrays,
+    )
+end
+
+function optional_wfs_plan_device_resident(
+    plan::Union{
+        AdaptiveOpticsSim.PreparedShackHartmannOpticalBundleFormation,
+        AdaptiveOpticsSim.PreparedPyramidOpticalBundleFormation,
+        AdaptiveOpticsSim.PreparedBioEdgeOpticalBundleFormation,
+    },
+    device,
+    BackendArray,
+)
+    return all(
+        component -> optional_wfs_plan_device_resident(
+            component,
+            device,
+            BackendArray,
+        ),
+        plan.plans,
+    )
+end
+
+@inline function optional_wfs_result_device_resident(
+    result::IntensityMap,
+    device,
+    BackendArray,
+)
+    return result.values isa BackendArray &&
+        compute_device(result.values) == device
+end
+
+function optional_wfs_result_device_resident(
+    result::OpticalProductBundle,
+    device,
+    BackendArray,
+)
+    return all(
+        index -> optional_wfs_result_device_resident(
+            result[index],
+            device,
+            BackendArray,
+        ),
+        1:length(result),
+    )
+end
+
+@inline optional_wfs_products_approx(
+    device::AbstractArray,
+    oracle::AbstractArray,
+) = isapprox(device, oracle; rtol=4f-4, atol=8f-5)
+
+function optional_wfs_products_approx(
+    device::Tuple,
+    oracle::Tuple,
+)
+    length(device) == length(oracle) || return false
+    return all(
+        optional_wfs_products_approx(device[index], oracle[index])
+        for index in eachindex(device)
+    )
+end
+
+function optional_wfs_device_path_batch_allocation_bytes(
+    fixture,
+    ::PreparedDevicePathBatchOwner,
+)
+    run_plant_events_until!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(199_000_000),
+    )
+    completed_timestamp_bytes = @allocated run_plant_events_until!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(200_000_000),
+    )
+    return (; completed_timestamp_bytes)
+end
+
+function run_optional_wfs_device_model_matrix_checks(
+    ::Type{B},
+    BackendArray,
+) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    for (family, direction, spectral) in device_model_matrix_wfs_rows()
+        oracle = device_model_matrix_wfs_fixture(
+            family;
+            backend=CPUBackend(),
+            selection=Val(:none),
+            direction,
+            spectral,
+            T=Float32,
+            r0=2f6,
+        )
+        device_fixture = device_model_matrix_wfs_fixture(
+            family;
+            backend=selector,
+            selection=Val(:all),
+            direction,
+            spectral,
+            T=Float32,
+            r0=2f6,
+        )
+        @test device_path_batch_owner_count(device_fixture.prepared) == 1
+        owner = device_path_batch_owner(device_fixture.prepared, 1)
+        implementation = owner.implementation
+        @test implementation isa Plant._PreparedWFSDevicePathBatch
+        @test device_path_batch_group_count(owner) == 2
+        device = device_path_batch_compute_device(owner)
+        @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
+        @test typeof(device_path_batch_backend(owner)) === typeof(selector)
+        @test atmosphere_direction_output(
+            implementation.atmosphere_batch,
+        ) isa BackendArray
+        @test compute_device(
+            atmosphere_direction_output(implementation.atmosphere_batch),
+        ) == device
+        @test all(
+            input -> input.opd isa BackendArray &&
+                compute_device(input.opd) == device,
+            implementation.path_inputs,
+        )
+        @test all(
+            result -> optional_wfs_result_device_resident(
+                result,
+                device,
+                BackendArray,
+            ),
+            implementation.path_results,
+        )
+        retained_context = implementation.context
+        retained_plans = ntuple(2) do index
+            group_slot = Int(owner.group_slots[index])
+            plan = device_fixture.prepared.path_groups[
+                group_slot].path.execution.plan
+            @test optional_wfs_plan_device_resident(
+                plan,
+                device,
+                BackendArray,
+            )
+            return plan
+        end
+        command = effective_command(
+            device_fixture.prepared,
+            device_fixture.state,
+            :device_batch_dm_command,
+        )
+        optic_surface = surface_opd(
+            only(device_fixture.state.controllable_optics).active,
+        )
+        common_aberration = Plant.sampled_aberration_opd(
+            Plant.prepared_sampled_aberration(
+                device_fixture.plant,
+                :device_batch_static,
+            ),
+        )
+        selected_ncpa = Plant.sampled_aberration_opd(
+            Plant.prepared_sampled_aberration(
+                device_fixture.plant,
+                :device_batch_alpha_ncpa,
+            ),
+        )
+        @test all(
+            storage -> storage isa BackendArray &&
+                compute_device(storage) == device,
+            (
+                command,
+                optic_surface,
+                common_aberration,
+                selected_ncpa,
+            ),
+        )
+        @test command_admission_status(
+            submit_device_batch_test_command!(oracle),
+        ) == CommandAdmittedPending
+        @test command_admission_status(
+            submit_device_batch_test_command!(device_fixture),
+        ) == CommandAdmittedPending
+
+        @test step_plant_events!(
+            device_fixture.prepared,
+            device_fixture.state,
+            device_fixture.workspace,
+        ) == step_plant_events!(
+            oracle.prepared,
+            oracle.state,
+            oracle.workspace,
+        ) == PlantTimestamp(0)
+        device_model_matrix_copy_atmosphere_screens!(
+            device_fixture.prepared.atmosphere,
+            oracle.prepared.atmosphere,
+        )
+        horizon = PlantTimestamp(200_000_000)
+        @test run_plant_events_until!(
+            device_fixture.prepared,
+            device_fixture.state,
+            device_fixture.workspace,
+            horizon,
+        ) == run_plant_events_until!(
+            oracle.prepared,
+            oracle.state,
+            oracle.workspace,
+            horizon,
+        )
+        @test device_fixture.state.scheduler.cursors ==
+            oracle.state.scheduler.cursors
+        @test device_fixture.state.path_sampled ==
+            oracle.state.path_sampled
+        @test device_fixture.state.product_sequences ==
+            oracle.state.product_sequences
+        @test device_fixture.state.product_ready_timestamps ==
+            oracle.state.product_ready_timestamps
+        @test epoch_time(current_epoch(
+            device_fixture.prepared.atmosphere,
+        )) == epoch_time(current_epoch(oracle.prepared.atmosphere))
+        @test epoch_sequence(current_epoch(
+            device_fixture.prepared.atmosphere,
+        )) == epoch_sequence(current_epoch(oracle.prepared.atmosphere))
+        @test implementation.context === retained_context
+        current_plans = ntuple(2) do index
+            group_slot = Int(owner.group_slots[index])
+            device_fixture.prepared.path_groups[
+                group_slot].path.execution.plan
+        end
+        @test current_plans === retained_plans
+        compare_device_batch_test_command_state(
+            oracle,
+            device_fixture;
+            surface_rtol=8eps(Float32),
+            surface_atol=eps(Float32) * 1f-9,
+        )
+        for id in oracle.path_ids
+            oracle_path = prepared_path(oracle.plant, id)
+            device_path = prepared_path(device_fixture.plant, id)
+            @test isapprox(
+                Array(device_path.input.opd),
+                Array(oracle_path.input.opd);
+                rtol=3f-5,
+                atol=4f-6,
+            )
+            @test optional_wfs_products_approx(
+                device_model_matrix_product_host(device_path.result),
+                device_model_matrix_product_host(oracle_path.result),
+            )
+        end
+
+        detector_row =
+            device_model_matrix_wfs_detector_row(family, direction)
+        oracle_path = prepared_path(oracle.plant, :wfs_alpha)
+        device_path = prepared_path(device_fixture.plant, :wfs_alpha)
+        oracle_detector_input =
+            device_model_matrix_detector_facing_product(oracle_path.result)
+        device_detector_input =
+            device_model_matrix_detector_facing_product(device_path.result)
+        detector_input_before = Array(device_detector_input.values)
+        oracle_detector = device_model_matrix_execute_detector(
+            detector_row;
+            backend=CPUBackend(),
+            T=Float32,
+            input_map=oracle_detector_input,
+        )
+        device_detector = device_model_matrix_execute_detector(
+            detector_row;
+            backend=selector,
+            T=Float32,
+            input_map=device_detector_input,
+        )
+        detector_device = compute_device(device_detector.output)
+        @test detector_device == device
+        @test device_detector.output isa BackendArray
+        @test device_detector.prepared.plan.input_values ===
+            device_detector_input.values
+        @test optional_detector_response_device_resident(
+            device_detector.detector.params.response_model,
+            device,
+            BackendArray,
+        )
+        @test optional_detector_state_device_resident(
+            device_detector.detector,
+            device,
+            BackendArray,
+        )
+        @test optional_detector_prepared_storage_device_resident(
+            device_detector.prepared,
+            device,
+            BackendArray,
+        )
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(device_detector.output),
+        )
+        expected_detector_output =
+            device_model_matrix_expected_detector_frame(
+                detector_row,
+                device_detector.detector,
+                detector_input_before,
+                Float32,
+            )
+        @test isapprox(
+            Array(device_detector.output),
+            expected_detector_output;
+            rtol=8f-5,
+            atol=8f-5,
+        )
+        @test isapprox(
+            Array(device_detector.output),
+            Array(oracle_detector.output);
+            rtol=8f-5,
+            atol=8f-5,
+        )
+        @test device_detector.status_trace == oracle_detector.status_trace
+        @test device_detector.event_times == oracle_detector.event_times
+        @test device_model_matrix_response_metadata_signature(
+            device_detector.metadata_before,
+        ) == device_model_matrix_response_metadata_signature(
+            device_detector.metadata_after,
+        )
+        @test device_detector.metadata_after.sensor ==
+            device_model_matrix_detector_sensor_symbol(detector_row)
+        detector_allocation_bytes =
+            optional_detector_device_model_matrix_allocation_bytes(
+                detector_row,
+                device_detector,
+            )
+        @test detector_allocation_bytes <= 1024 * 1024
+        @test Array(device_detector_input.values) == detector_input_before
+
+        allocation_fixture = device_model_matrix_wfs_fixture(
+            family;
+            backend=selector,
+            selection=Val(:all),
+            direction,
+            spectral,
+            T=Float32,
+            r0=2f6,
+        )
+        allocation_owner =
+            device_path_batch_owner(allocation_fixture.prepared, 1)
+        allocation_bytes =
+            optional_wfs_device_path_batch_allocation_bytes(
+                allocation_fixture,
+                allocation_owner,
+            )
+        # This bound includes the co-scheduled ordinary detector witness path
+        # as well as the two-member WFS owner and its completion barrier.
+        @test allocation_bytes.completed_timestamp_bytes <= 1024 * 1024
+    end
+    return nothing
+end
+
+@inline optional_detector_response_device_resident(
+    ::NullFrameResponse,
+    ::Any,
+    ::Any,
+) = true
+
+@inline function optional_detector_response_device_resident(
+    response::GaussianPixelResponse,
+    device,
+    BackendArray,
+)
+    return response.kernel isa BackendArray &&
+        compute_device(response.kernel) == device
+end
+
+@inline function optional_detector_response_device_resident(
+    response::SampledFrameResponse,
+    device,
+    BackendArray,
+)
+    return response.kernel isa BackendArray &&
+        compute_device(response.kernel) == device
+end
+
+@inline function optional_detector_response_device_resident(
+    response::RectangularPixelAperture,
+    device,
+    BackendArray,
+)
+    return response.kernel_x isa BackendArray &&
+        response.kernel_y isa BackendArray &&
+        compute_device(response.kernel_x) == device &&
+        compute_device(response.kernel_y) == device
+end
+
+function optional_detector_readout_products_device_resident(
+    products::FrameReadoutProducts,
+    device,
+    BackendArray,
+)
+    for name in fieldnames(typeof(products))
+        name === :read_times && continue
+        value = getfield(products, name)
+        if value isa AbstractArray
+            value isa BackendArray || return false
+            compute_device(value) == device || return false
+        end
+    end
+    return true
+end
+
+function optional_detector_state_device_resident(
+    detector::Detector,
+    device,
+    BackendArray,
+)
+    state = detector.state
+    arrays = (
+        state.frame,
+        state.presampling_buffer,
+        state.presampling_scratch,
+        state.response_buffer,
+        state.bin_buffer,
+        state.temporal_buffer,
+        state.noise_buffer,
+        state.accum_buffer,
+        state.latent_buffer,
+    )
+    all(
+        array -> array isa BackendArray &&
+            compute_device(array) == device,
+        arrays,
+    ) || return false
+    state.output_buffer === nothing || (
+        state.output_buffer isa BackendArray &&
+        compute_device(state.output_buffer) == device
+    ) || return false
+    state.output_buffer_host === nothing || return false
+    return optional_detector_readout_products_device_resident(
+        detector.state.readout_products,
+        device,
+        BackendArray,
+    )
+end
+
+@inline optional_detector_prepared_storage_device_resident(
+    ::PreparedGlobalShutterAcquisition,
+    ::Any,
+    ::Any,
+) = true
+
+@inline optional_detector_prepared_storage_device_resident(
+    ::PreparedRollingShutterAcquisition,
+    ::Any,
+    ::Any,
+) = true
+
+@inline function optional_detector_prepared_storage_device_resident(
+    prepared::PreparedFrameTransferAcquisition,
+    device,
+    BackendArray,
+)
+    return prepared.storage_frame isa BackendArray &&
+        compute_device(prepared.storage_frame) == device
+end
+
+function optional_detector_device_model_matrix_allocation_bytes(
+    row::DeviceModelMatrixDetectorRow,
+    result,
+)
+    warm_output = device_model_matrix_repeat_detector!(
+        row,
+        result,
+        PlantTimestamp(2_000_000_000),
+    )
+    AdaptiveOpticsSim.synchronize_backend!(
+        AdaptiveOpticsSim.execution_style(warm_output),
+    )
+    return @allocated begin
+        output = device_model_matrix_repeat_detector!(
+            row,
+            result,
+            PlantTimestamp(4_000_000_000),
+        )
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(output),
+        )
+    end
+end
+
+function run_optional_detector_device_model_matrix_checks(
+    ::Type{B},
+    BackendArray,
+) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    for row in device_model_matrix_detector_rows()
+        oracle = device_model_matrix_execute_detector(
+            row;
+            backend=CPUBackend(),
+            T,
+        )
+        device_result = device_model_matrix_execute_detector(
+            row;
+            backend=selector,
+            T,
+        )
+        detector = device_result.detector
+        output = device_result.output
+        device = compute_device(output)
+
+        @test output isa BackendArray
+        @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
+        @test device_result.map.values isa BackendArray
+        @test compute_device(device_result.map.values) == device
+        @test device_result.prepared.plan.input_values ===
+            device_result.map.values
+        @test device_result.prepared.plan.detector_frame ===
+            detector.state.frame
+        @test optional_detector_response_device_resident(
+            detector.params.response_model,
+            device,
+            BackendArray,
+        )
+        @test optional_detector_state_device_resident(
+            detector,
+            device,
+            BackendArray,
+        )
+        @test optional_detector_prepared_storage_device_resident(
+            device_result.prepared,
+            device,
+            BackendArray,
+        )
+
+        AdaptiveOpticsSim.synchronize_backend!(
+            AdaptiveOpticsSim.execution_style(output),
+        )
+        expected = device_model_matrix_expected_detector_frame(
+            row,
+            detector,
+            T,
+        )
+        @test isapprox(
+            Array(output),
+            expected;
+            rtol=8f-6,
+            atol=8f-7,
+        )
+        @test isapprox(
+            Array(output),
+            Array(oracle.output);
+            rtol=8f-6,
+            atol=8f-7,
+        )
+        @test device_result.status_trace == oracle.status_trace
+        @test device_result.event_times == oracle.event_times
+        @test detector_acquisition_sequence(device_result.state) ==
+            detector_acquisition_sequence(oracle.state)
+        @test device_model_matrix_response_metadata_signature(
+            device_result.metadata_before,
+        ) == device_model_matrix_response_metadata_signature(
+            device_result.metadata_after,
+        )
+        @test device_model_matrix_response_metadata_signature(
+            device_result.metadata_after,
+        ) == device_model_matrix_response_metadata_signature(
+            oracle.metadata_after,
+        )
+        @test device_result.metadata_after.sensor ==
+            device_model_matrix_detector_sensor_symbol(row)
+        @test device_result.metadata_after.timing_model ==
+            device_model_matrix_detector_timing_symbol(row)
+        @test device_result.metadata_after.sampling_mode ==
+            device_model_matrix_detector_sampling_symbol(row)
+        @test device_result.metadata_after.acquisition_mode ==
+            device_model_matrix_detector_acquisition_symbol(row)
+
+        frequency_x = T(0.25)
+        frequency_y = T(0.125)
+        @test isapprox(
+            detector_mtf(detector, frequency_x, frequency_y),
+            device_model_matrix_expected_detector_mtf(
+                detector,
+                frequency_x,
+                frequency_y,
+                T,
+            );
+            rtol=8eps(T),
+            atol=8eps(T),
+        )
+
+        if row isa DeviceModelMatrixM2FrameTransferEMCCD
+            @test frame_transfer_product_sequence(device_result.state) ==
+                frame_transfer_product_sequence(oracle.state)
+            @test acquisition_product_ready_timestamp(
+                device_result.state,
+            ) == acquisition_product_ready_timestamp(oracle.state)
+        elseif row isa DeviceModelMatrixM5RollingCMOS
+            @test rolling_opened_band_count(device_result.state) == 3
+            @test rolling_closed_band_count(device_result.state) == 3
+        elseif row isa DeviceModelMatrixM6UpTheRampHgCdTe
+            @test detector_ramp_cube(detector) isa BackendArray
+            @test detector_ramp_slope(detector) isa BackendArray
+            @test detector_ramp_intercept(detector) isa BackendArray
+            @test isapprox(
+                Array(detector_ramp_cube(detector)),
+                Array(detector_ramp_cube(oracle.detector));
+                rtol=8f-6,
+                atol=8f-7,
+            )
+            @test isapprox(
+                Array(detector_ramp_slope(detector)),
+                expected;
+                rtol=8f-6,
+                atol=8f-7,
+            )
+            @test isapprox(
+                Array(detector_ramp_intercept(detector)),
+                -expected ./ T(12);
+                rtol=8f-6,
+                atol=8f-7,
+            )
+            @test detector_ramp_times(detector) ==
+                detector_ramp_times(oracle.detector)
+        end
+
+        retained_arrays = (
+            detector.state.frame,
+            detector.state.presampling_buffer,
+            detector.state.presampling_scratch,
+            detector.state.accum_buffer,
+        )
+        allocation_bytes =
+            optional_detector_device_model_matrix_allocation_bytes(
+                row,
+                device_result,
+            )
+        @test retained_arrays === (
+            detector.state.frame,
+            detector.state.presampling_buffer,
+            detector.state.presampling_scratch,
+            detector.state.accum_buffer,
+        )
+        @test allocation_bytes <= 1024 * 1024
+        @test optional_detector_state_device_resident(
+            detector,
+            device,
+            BackendArray,
+        )
+    end
+    return nothing
+end
+
 function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     selector = backend_selector(B)
     array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
@@ -3541,6 +4233,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_prepared_plant_checks(B, backend)
     run_optional_device_path_batch_checks(B, backend)
+    run_optional_wfs_device_model_matrix_checks(B, backend)
+    run_optional_detector_device_model_matrix_checks(B, backend)
     run_optional_detector_event_checks(B, backend)
     run_optional_command_application_checks(B, backend)
     run_optional_controller_routing_checks(B, backend)

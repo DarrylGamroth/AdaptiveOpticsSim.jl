@@ -304,14 +304,16 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `device_path_batch_group_ordinal`,
   `path_execution_group_device_batch_owner_ordinal`,
   `materialize_device_path_batch!`, and `execute_device_path_batch!`.
-  Event-loop preparation automatically binds only compatible, co-resident
-  accelerator `Source` paths using native Fraunhofer direct imaging, equal
-  optical-sample schedules, and the same product contract. One owner executes
-  the shared atmosphere and optical batches on its retained device context,
-  hands results to the original path-local products without a host transfer,
-  and establishes backend completion before marking any member complete.
-  CPU paths, singletons, unequal-rate paths, LGS/WFS paths, and incompatible
-  models retain the independent Gate 6 lifecycle
+  Event-loop preparation automatically binds compatible, co-resident,
+  equal-schedule accelerator paths into exact capability groups. Native
+  Fraunhofer direct science shares atmosphere and optical batches. Maintained
+  Shack-Hartmann, Pyramid, or BioEdge groups share the retained device context
+  and atmosphere-direction batch while invoking the exact family's existing
+  lenslet/modulation/spectral pipeline in canonical member order. Original
+  path-local products remain device resident, and return establishes backend
+  completion before any member is marked complete. CPU paths, singletons,
+  unequal schedule/origin paths, mixed or unsupported WFS families, and
+  incompatible signatures/products retain the independent Gate 6 lifecycle
 
 - Stable identities: `AtmosphereLayerID`, `ControllableOpticID`,
   `SampledAberrationID`, `CommandEndpointID`, `PlantCommandSchemaID`,
@@ -693,6 +695,11 @@ deduplicates only the full-optical paths those providers require, and stores
 the selected path and acquisition registries in stable-ID order independent of
 declaration and caller-selection order. Reduced-order and synthetic/replay
 providers bypass otherwise unused full-optical path execution.
+In scheduled execution, an explicit `OpticalSampleDefinition` is itself a
+demand for the path's device-ready optical product even when that path has no
+acquisition consumer. A scheduled path bypasses full-optical work only when
+every acquisition consumer bound to it is reduced-order or synthetic/replay;
+an empty consumer set is not an implicit reduced-order declaration.
 `execute_acquisition_selection!` preflights every owner and current
 `AtmosphereEpoch` before mutation, materializes all unique path inputs, applies
 each prepared sampled-aberration plan, invokes each typed path executor once,

@@ -198,11 +198,20 @@ Current AMDGPU-supported scope:
   atmosphere-direction batch and one direct-imaging batch. The owner retains
   the exact compute-device context and stream, preserves path input/result
   identities through same-device handoffs, and synchronizes before reporting
-  completion. CPU, singleton, unequal-rate, finite-height-LGS, WFS,
-  incompatible-model, and cross-device groups continue through their ordinary
-  execution paths. The integrated acquisition evidence is currently limited
-  to the maintained global-shutter CMOS fixture; the broader detector-model
-  matrix remains outside this support claim
+  completion
+- integrated single-device ownership for two or more compatible, equally
+  clocked Shack-Hartmann, Pyramid, or BioEdge WFS paths. The owner shares the
+  exact device context and atmosphere-direction batch, then invokes each
+  family's existing prepared lenslet/modulation/spectral pipeline and preserves
+  the original path-local result. Singleton, unequal-rate/origin, mixed-family,
+  incompatible-signature/product, Zernike, Curvature, and cross-device groups
+  continue through their ordinary execution paths
+- a maintained six-row conventional detector matrix spanning CCD single-read,
+  frame-transfer EMCCD, global- and rolling-shutter CMOS, and global-shutter
+  HgCdTe single-read and scheduled up-the-ramp operation. Tests preserve
+  response/MTF metadata, prove response-before-exposure ordering against an
+  independent zero-extended-convolution oracle, and retain exact
+  transition/readout/storage state on device
 
 Primary evidence:
 
@@ -219,15 +228,18 @@ Current expectation:
 
 Gate 5 closure validation head `02e5f29` passed all `448` maintained checks on
 the local gfx1030 AMDGPU target and `438/438` on the WSL RTX 3050 Ti CUDA
-target with Julia 1.12.6 and scalar indexing disabled. The later Gate 7.4
-hardware target adds integrated same-device path-batch ownership, numerical
-oracle checks, exact device/stream ownership, residency, lifecycle rejection,
-and bounded allocation evidence. The separate clean
+target with Julia 1.12.6 and scalar indexing disabled. Gate 7.4 added
+integrated direct-science same-device path-batch ownership; Gate 7.5 extends
+that ownership boundary to maintained SH/Pyramid/BioEdge paths and adds the
+six-row conventional detector matrix. Focused Gate 7.5 validation completed
+separate `212/212` composed WFS-to-detector and `155/155` standalone detector
+checks on local AMDGPU and the same counts on WSL CUDA.jl 6.2.1. These checks
+cover numerical oracles, exact device/context ownership, residency, lifecycle
+rejection, and bounded allocation evidence. The separate clean
 [Gate 5 CPU artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
-remains the integrated serial optical-placement characterization. Gate 7.4
-does not recharacterize accelerator latency or claim the broader WFS/detector
-matrix, so the July 14/18 platform artifacts remain the maintained GPU
-performance evidence.
+remains the integrated serial optical-placement characterization. Gate 7.5
+does not recharacterize accelerator latency, so the July 14/18 platform
+artifacts remain the maintained GPU performance evidence.
 
 ### GPU support-boundary rule
 

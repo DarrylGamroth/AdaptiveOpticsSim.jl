@@ -271,6 +271,18 @@ The reduced maintained smoke covers:
   shared atmosphere/direct-imaging submission, explicit same-device handoff to
   path-local products, conventional detector lifecycle parity, and completed
   return before path publication
+- Plant-integrated ownership of compatible equal-rate Shack-Hartmann, Pyramid,
+  or BioEdge paths on one concrete accelerator, with one retained device
+  context and atmosphere-direction batch while each exact family keeps its
+  existing prepared lenslet/modulation/spectral pipeline
+- exact fallback for singleton, unequal-rate or unequal-origin, mixed-family,
+  incompatible-signature/product, Zernike, and Curvature path groups
+- a six-row conventional detector matrix spanning CCD single-read,
+  frame-transfer EMCCD, global- and rolling-shutter CMOS, and global-shutter
+  HgCdTe single-read and scheduled up-the-ramp lifecycles; device residency,
+  exact transition/readout sequence, response/MTF metadata, independent
+  response-before-exposure numerics, and bounded warmed host allocation are
+  checked directly
 - prepared physical Shack-Hartmann optical formation, detector acquisition,
   and centroid estimation on device-resident arrays
 - same-grid legacy spectral diffractive SH plus prepared native-grid bundle
@@ -712,6 +724,21 @@ isolated `test/cuda` environment for maintained hardware validation and the
 equivalent `benchmarks/cuda` environment for benchmark-only dependencies.
 Treat comparisons with the native AMD host as whole-system comparisons because
 the CPU, OS, GPU, and power-management paths all differ.
+
+For focused CPU iteration on the Gate 7 device-model matrix, use:
+
+```sh
+julia --project=. --startup-file=no -e \
+  'using Pkg; Pkg.test(test_args=["plant-device-model-matrix"])'
+```
+
+The matrix is also included by the `gate7` selector and both dedicated hardware
+targets. At the Gate 7.5 revision, focused local AMDGPU runs completed
+`212/212` composed WFS-to-detector checks and `155/155` standalone
+conventional-detector checks. On the WSL RTX 3050 Ti with Julia 1.12.6 and
+CUDA.jl 6.2.1, the corresponding focused runs completed the same `212/212` and
+`155/155` checks. These counts are correctness/residency evidence for that
+exact revision and hardware, not a latency or production-capacity benchmark.
 
 This separation exists so:
 

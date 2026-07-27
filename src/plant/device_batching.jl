@@ -1,8 +1,8 @@
 #
 # Prepared single-device Plant path batches
 #
-# This layer binds already prepared Gate 6 path groups to the explicit
-# atmosphere and direct-imaging batch capabilities. It deliberately does not
+# This layer binds already prepared Gate 6 path groups to explicit atmosphere,
+# direct-imaging, and WFS-family batch capabilities. It deliberately does not
 # create a task, queue, clock, affinity policy, transport, or resource planner.
 #
 
@@ -68,6 +68,87 @@ struct _PreparedDirectImagingDevicePathBatch{
     path_inputs::I
     path_results::R
 end
+
+const _PreparedDeviceBatchWFSOpticalPlan = Union{
+    PreparedShackHartmannOpticalFormation,
+    PreparedShackHartmannOpticalBundleFormation,
+    PreparedPyramidOpticalFormation,
+    PreparedPyramidOpticalBundleFormation,
+    PreparedBioEdgeOpticalFormation,
+    PreparedBioEdgeOpticalBundleFormation,
+}
+
+struct _WFSDevicePathBatchKey{
+    B<:AbstractArrayBackend,
+    D<:AbstractComputeDevice,
+    I<:OpticalPlaneMetadata,
+    P,
+    S,
+    G,
+    U,
+    M,
+    E,
+    C,
+}
+    backend::B
+    device::D
+    input_metadata::I
+    product_contract::P
+    source_type::Type{S}
+    geometry_source_type::Type{G}
+    input_type::Type{U}
+    materialization_type::Type{M}
+    execution_type::Type{E}
+    plan_contract::C
+    schedule::PeriodicSchedule
+    origin::PlantTimestamp
+end
+
+@inline function Base.:(==)(
+    left::_WFSDevicePathBatchKey,
+    right::_WFSDevicePathBatchKey,
+)
+    return typeof(left.backend) === typeof(right.backend) &&
+        left.device == right.device &&
+        left.input_metadata == right.input_metadata &&
+        left.product_contract == right.product_contract &&
+        left.source_type === right.source_type &&
+        left.geometry_source_type === right.geometry_source_type &&
+        left.input_type === right.input_type &&
+        left.materialization_type === right.materialization_type &&
+        left.execution_type === right.execution_type &&
+        left.plan_contract == right.plan_contract &&
+        left.schedule == right.schedule &&
+        left.origin == right.origin
+end
+
+@inline Base.isequal(
+    left::_WFSDevicePathBatchKey,
+    right::_WFSDevicePathBatchKey,
+) = left == right
+
+struct _PreparedWFSDevicePathBatch{
+    K<:_WFSDevicePathBatchKey,
+    C,
+    A<:PreparedAtmosphereDirectionBatch,
+    V<:Memory,
+    I<:Memory,
+    R<:Memory,
+    S<:Memory,
+}
+    key::K
+    context::C
+    atmosphere_batch::A
+    atmosphere_outputs::V
+    path_inputs::I
+    path_results::R
+    geometry_sources::S
+end
+
+const _PreparedDevicePathBatchImplementation = Union{
+    _PreparedDirectImagingDevicePathBatch,
+    _PreparedWFSDevicePathBatch,
+}
 
 @inline _device_path_batch_selected(
     ::Val{:accelerator},
@@ -200,6 +281,150 @@ function _device_path_batch_candidate(
         typeof(materialization),
         typeof(propagation),
         padded1 ÷ n1,
+        group.schedule,
+        group.origin,
+    )
+end
+
+@inline _device_path_batch_geometry_source(source::Source) = source
+@inline _device_path_batch_geometry_source(source::LGSSource) = source
+@inline function _device_path_batch_geometry_source(
+    source::SpectralSource,
+)
+    return _device_path_batch_geometry_source(source.source)
+end
+@inline _device_path_batch_geometry_source(::AbstractSource) = nothing
+
+@inline _device_path_batch_product_contract(
+    result::IntensityMap,
+) = result.metadata
+
+function _device_path_batch_product_contract(
+    result::OpticalProductBundle,
+)
+    return ntuple(length(result)) do index
+        product = result[index]
+        return (typeof(product), product.metadata)
+    end
+end
+
+@inline function _require_device_path_batch_result_device(
+    result::IntensityMap,
+    device::AbstractComputeDevice,
+)
+    compute_device(result.values) == device || throw(
+        PlantPreparationError(
+            :device_path_batch,
+            :device,
+            "WFS device-batch result occupies a different compute device",
+        ),
+    )
+    return nothing
+end
+
+function _require_device_path_batch_result_device(
+    result::OpticalProductBundle,
+    device::AbstractComputeDevice,
+)
+    @inbounds for index in 1:length(result)
+        _require_device_path_batch_result_device(result[index], device)
+    end
+    return nothing
+end
+
+@inline function _wfs_device_path_batch_plan_contract(
+    plan::PreparedShackHartmannOpticalFormation,
+)
+    return (typeof(plan), plan.sampling_signature)
+end
+
+function _wfs_device_path_batch_plan_contract(
+    plan::PreparedShackHartmannOpticalBundleFormation,
+)
+    signatures = Tuple(
+        component.sampling_signature for component in plan.plans)
+    return (typeof(plan), signatures)
+end
+
+@inline function _four_pupil_device_path_batch_plan_contract(plan)
+    front_end = plan.front_end
+    propagation = front_end.propagation
+    return (
+        typeof(plan),
+        typeof(plan.lgs_model),
+        plan.propagation_revision,
+        size(propagation.field),
+        size(propagation.intensity),
+        size(front_end.modulation.phases),
+        front_end.pupil_samples,
+        front_end.binning,
+    )
+end
+
+@inline _wfs_device_path_batch_plan_contract(
+    plan::PreparedPyramidOpticalFormation,
+) = _four_pupil_device_path_batch_plan_contract(plan)
+
+@inline _wfs_device_path_batch_plan_contract(
+    plan::PreparedBioEdgeOpticalFormation,
+) = _four_pupil_device_path_batch_plan_contract(plan)
+
+function _wfs_device_path_batch_plan_contract(
+    plan::Union{
+        PreparedPyramidOpticalBundleFormation,
+        PreparedBioEdgeOpticalBundleFormation,
+    },
+)
+    contracts = map(
+        _wfs_device_path_batch_plan_contract,
+        plan.plans,
+    )
+    return (typeof(plan), contracts)
+end
+
+function _device_path_batch_candidate(
+    ::Val,
+    group::PreparedPathExecutionGroup,
+    path::PreparedPathExecutor,
+    input::PupilFunction,
+    result::Union{IntensityMap,OpticalProductBundle},
+    source::Union{Source,LGSSource,SpectralSource},
+    materialization::PreparedPupilOPDMaterialization,
+    execution::WFSOpticalPathExecution{
+        <:_PreparedDeviceBatchWFSOpticalPlan,
+    },
+    ::PhysicalPhotonIrradianceSource,
+    device::AbstractComputeDevice,
+    ::Telescope,
+    ::AbstractTimedAtmosphere,
+)
+    validate_path_execution_binding(execution, input, result)
+    geometry_source = _device_path_batch_geometry_source(source)
+    geometry_source === nothing && return nothing
+    typeof(backend(input)) === typeof(group.requirements.backend) ||
+        throw(PlantPreparationError(
+            :device_path_batch,
+            :backend,
+            "WFS device-batch candidate backend changed after preparation",
+        ))
+    compute_device(input.opd) == device || throw(PlantPreparationError(
+        :device_path_batch,
+        :device,
+        "WFS device-batch input occupies a different compute device",
+    ))
+    _require_device_path_batch_result_device(result, device)
+    plan = execution.plan
+    return _WFSDevicePathBatchKey(
+        group.requirements.backend,
+        device,
+        input.metadata,
+        _device_path_batch_product_contract(result),
+        typeof(source),
+        typeof(geometry_source),
+        typeof(input),
+        typeof(materialization),
+        typeof(execution),
+        _wfs_device_path_batch_plan_contract(plan),
         group.schedule,
         group.origin,
     )
@@ -392,6 +617,135 @@ function _prepare_direct_imaging_device_path_batch_owner(
     )
 end
 
+@inline function _prepare_device_path_batch_owner(
+    event_loop_binding::_PlantEventLoopBinding,
+    groups::Memory{PreparedPathExecutionGroup},
+    candidate_slots,
+    key::_DirectImagingDevicePathBatchKey,
+    atmosphere::AbstractTimedAtmosphere,
+)
+    return _prepare_direct_imaging_device_path_batch_owner(
+        event_loop_binding,
+        groups,
+        candidate_slots,
+        key,
+        atmosphere,
+    )
+end
+
+function _collect_wfs_device_path_batch_members(
+    groups::Memory{PreparedPathExecutionGroup},
+    slots::Memory{UInt32},
+    key::_WFSDevicePathBatchKey,
+    atmosphere::AbstractTimedAtmosphere,
+)
+    first_group = @inbounds groups[Int(first(slots))]
+    first_path = first_group.path
+    first_input = first_path.input
+    first_result = first_path.result
+    first_geometry_source =
+        _device_path_batch_geometry_source(first_path.source)
+    I = typeof(first_input)
+    R = typeof(first_result)
+    G = typeof(first_geometry_source)
+    inputs = Memory{I}(undef, length(slots))
+    results = Memory{R}(undef, length(slots))
+    geometry_sources = Memory{G}(undef, length(slots))
+    @inbounds for member in eachindex(slots)
+        slot = Int(slots[member])
+        group = groups[slot]
+        candidate = _device_path_batch_candidate(Val(:all), group)
+        candidate == key || throw(PlantPreparationError(
+            :device_path_batch,
+            :compatibility,
+            "prepared WFS path group $slot changed device-batch compatibility",
+        ))
+        path = group.path
+        path.atmosphere === atmosphere || throw(PlantPreparationError(
+            :device_path_batch,
+            :prepared_binding,
+            "prepared WFS path group $slot belongs to another atmosphere",
+        ))
+        geometry_source =
+            _device_path_batch_geometry_source(path.source)
+        typeof(path.input) === I &&
+            typeof(path.result) === R &&
+            typeof(geometry_source) === G ||
+            throw(PlantPreparationError(
+                :device_path_batch,
+                :compatibility,
+                "prepared WFS path group $slot has heterogeneous batch storage",
+            ))
+        inputs[member] = path.input
+        results[member] = path.result
+        geometry_sources[member] = geometry_source
+    end
+    return inputs, results, geometry_sources
+end
+
+function _prepare_device_path_batch_owner(
+    event_loop_binding::_PlantEventLoopBinding,
+    groups::Memory{PreparedPathExecutionGroup},
+    candidate_slots,
+    key::_WFSDevicePathBatchKey,
+    atmosphere::AbstractTimedAtmosphere,
+)
+    length(candidate_slots) >= 2 || throw(PlantPreparationError(
+        :device_path_batch,
+        :member_count,
+        "a prepared WFS device path batch requires at least two path groups",
+    ))
+    slots = _copy_device_path_batch_slots(candidate_slots)
+    first_group = @inbounds groups[Int(first(slots))]
+    context = _prepare_device_execution_context(first_group.path.input.opd)
+    _prepared_device_execution_compute_device(context) == key.device ||
+        throw(PlantPreparationError(
+            :device_path_batch,
+            :device,
+            "prepared WFS backend execution context belongs to another " *
+            "compute device",
+        ))
+
+    implementation = _with_prepared_device_execution_context(context) do
+        inputs, results, geometry_sources =
+            _collect_wfs_device_path_batch_members(
+                groups, slots, key, atmosphere)
+        n1, n2 = first(inputs).metadata.dimensions
+        T = eltype(first(inputs).opd)
+        atmosphere_output = similar(
+            first(inputs).opd,
+            T,
+            n1,
+            n2,
+            length(slots),
+        )
+        atmosphere_batch = prepare_atmosphere_direction_batch(
+            atmosphere,
+            first_group.path.telescope,
+            geometry_sources,
+            atmosphere_output,
+        )
+        atmosphere_outputs =
+            _device_path_batch_stack_views(atmosphere_output)
+        return _PreparedWFSDevicePathBatch(
+            key,
+            context,
+            atmosphere_batch,
+            atmosphere_outputs,
+            inputs,
+            results,
+            geometry_sources,
+        )
+    end
+    return PreparedDevicePathBatchOwner(
+        event_loop_binding,
+        key.device,
+        slots,
+        implementation,
+        _PREPARED_DEVICE_PATH_BATCH_OWNER_TOKEN,
+    )
+end
+
 function _prepare_device_path_batch_owners(
     selection::Val,
     event_loop_binding::_PlantEventLoopBinding,
@@ -421,7 +775,7 @@ function _prepare_device_path_batch_owners(
         slots = candidate_groups[key_slot]
         length(slots) >= 2 || continue
         owner_slot += 1
-        owner = _prepare_direct_imaging_device_path_batch_owner(
+        owner = _prepare_device_path_batch_owner(
             event_loop_binding,
             groups,
             slots,
@@ -596,8 +950,88 @@ function _validate_device_path_batch_implementation(
     return implementation
 end
 
+function _validate_device_path_batch_implementation(
+    implementation::_PreparedWFSDevicePathBatch,
+    owner::PreparedDevicePathBatchOwner,
+    prepared::PreparedPlantEventLoop,
+    owner_slot::Int,
+)
+    count = length(owner.group_slots)
+    count >= 2 || _plant_event_loop_error(
+        :prepared_binding,
+        "prepared WFS device path-batch membership is no longer valid",
+    )
+    implementation.key.device == owner.device &&
+        _prepared_device_execution_compute_device(
+            implementation.context) == owner.device ||
+        _plant_event_loop_error(
+            :device_path_batch_device_mismatch,
+            "prepared WFS device path-batch context occupies another " *
+            "compute device",
+        )
+    typeof(implementation.key.backend) ===
+        typeof(compute_device_backend(owner.device)) ||
+        _plant_event_loop_error(
+            :device_path_batch_backend_mismatch,
+            "prepared WFS device path-batch backend and compute device differ",
+        )
+    length(implementation.atmosphere_outputs) == count &&
+        length(implementation.path_inputs) == count &&
+        length(implementation.path_results) == count &&
+        length(implementation.geometry_sources) == count ||
+        _plant_event_loop_error(
+            :prepared_binding,
+            "prepared WFS device path-batch storage membership changed",
+        )
+    @inbounds for member in 1:count
+        group_slot = Int(owner.group_slots[member])
+        prepared.path_device_batch_owner_slots[group_slot] ==
+            UInt32(owner_slot) ||
+            _plant_event_loop_error(
+                :prepared_binding,
+                "WFS path execution group $group_slot changed " *
+                "device-batch ownership",
+            )
+        group = prepared.path_groups[group_slot]
+        group.requirements.compute_device == owner.device ||
+            _plant_event_loop_error(
+                :device_path_batch_device_mismatch,
+                "WFS path execution group $group_slot occupies another " *
+                "compute device",
+            )
+        candidate = _device_path_batch_candidate(Val(:all), group)
+        candidate == implementation.key ||
+            _plant_event_loop_error(
+                :prepared_binding,
+                "WFS path execution group $group_slot changed " *
+                "device-batch compatibility",
+            )
+        path = group.path
+        path.input === implementation.path_inputs[member] &&
+            path.result === implementation.path_results[member] &&
+            implementation.atmosphere_batch.params.sources[member] ==
+                implementation.geometry_sources[member] ||
+            _plant_event_loop_error(
+                :prepared_binding,
+                "WFS path execution group $group_slot changed " *
+                "device-batch storage binding",
+            )
+        compute_device(
+            implementation.atmosphere_outputs[member]) == owner.device ||
+            _plant_event_loop_error(
+                :device_path_batch_device_mismatch,
+                "WFS atmosphere batch output occupies another compute device",
+            )
+        _require_device_path_batch_result_device(
+            implementation.path_results[member],
+            owner.device,
+        )
+    end
+    return implementation
+end
+
 @inline function _validate_device_path_batch_owner_implementation(
-    implementation::_PreparedDirectImagingDevicePathBatch,
+    implementation::_PreparedDevicePathBatchImplementation,
     owner::PreparedDevicePathBatchOwner,
     prepared::PreparedPlantEventLoop,
 )
@@ -648,7 +1082,7 @@ function _mark_device_path_batch_group_status!(
 end
 
 function _validate_device_path_batch_materialization(
-    implementation::_PreparedDirectImagingDevicePathBatch,
+    implementation::_PreparedDevicePathBatchImplementation,
     prepared::PreparedPlantEventLoop,
     epoch::AtmosphereEpoch,
 )
@@ -661,7 +1095,7 @@ function _validate_device_path_batch_materialization(
 end
 
 Base.@noinline function _materialize_device_path_batch!(
-    implementation::_PreparedDirectImagingDevicePathBatch,
+    implementation::_PreparedDevicePathBatchImplementation,
     prepared::PreparedPlantEventLoop,
     epoch::AtmosphereEpoch,
 )
@@ -715,7 +1149,7 @@ function materialize_device_path_batch!(
 end
 
 Base.@noinline function _materialize_prepared_device_path_batch!(
-    implementation::_PreparedDirectImagingDevicePathBatch,
+    implementation::_PreparedDevicePathBatchImplementation,
     owner::PreparedDevicePathBatchOwner,
     prepared::PreparedPlantEventLoop,
     batch::_OpticalPathBatchWorkspace,
@@ -775,15 +1209,38 @@ Base.@noinline function _execute_device_path_batch!(
     return nothing
 end
 
+Base.@noinline function _execute_device_path_batch!(
+    implementation::_PreparedWFSDevicePathBatch,
+    owner::PreparedDevicePathBatchOwner,
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    timestamp::PlantTimestamp,
+)
+    _with_prepared_device_execution_context(implementation.context) do
+        @inbounds for group_slot in owner.group_slots
+            group = prepared.path_groups[Int(group_slot)]
+            _stage_materialized_path_execution_group!(
+                prepared, state, group, timestamp)
+            _execute_due_path!(group.path, group.rngs)
+            _finish_materialized_path_execution_group!(
+                prepared, state, group, timestamp)
+        end
+        _synchronize_prepared_device_execution_context!(
+            implementation.context)
+    end
+    return nothing
+end
+
 """
     execute_device_path_batch!(
         owner, prepared, state, workspace, claim)
 
 Apply every member's path-local acquisition integration, sampled aberrations,
-controllable optics, and autonomous optics in canonical order, execute one
-prepared optical batch, and complete the explicit same-device handoff to the
-original path products. Return establishes the owner's backend completion
-boundary before any member is marked complete.
+controllable optics, and autonomous optics in canonical order. Execute either
+one prepared direct-imaging batch or each compatible WFS family's existing
+prepared lenslet/modulation/spectral pipeline, then complete any explicit
+same-device handoff to the original path products. Return establishes the
+owner's backend completion boundary before any member is marked complete.
 """
 function execute_device_path_batch!(
     owner::PreparedDevicePathBatchOwner,
@@ -809,7 +1266,7 @@ function execute_device_path_batch!(
 end
 
 Base.@noinline function _execute_prepared_device_path_batch!(
-    implementation::_PreparedDirectImagingDevicePathBatch,
+    implementation::_PreparedDevicePathBatchImplementation,
     owner::PreparedDevicePathBatchOwner,
     prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState,

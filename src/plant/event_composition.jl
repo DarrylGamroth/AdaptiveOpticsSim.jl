@@ -1030,12 +1030,17 @@ end
     false
 
 function _event_path_requires_full_optical(id::OpticalPathID, owners)
+    has_acquisition = false
     @inbounds for owner in owners
         acquisition_path_id(owner.definition) == id || continue
+        has_acquisition = true
         _provider_requires_full_optical(acquisition_provider_style(owner)) &&
             return true
     end
-    return false
+    # An explicitly scheduled path with no acquisition consumer is itself the
+    # demand for a device-ready optical product. Reduced-order and replay-only
+    # consumers remain the only reason to bypass that path's optical work.
+    return !has_acquisition
 end
 
 function _require_prepared_event_path_coupling(
@@ -1455,7 +1460,8 @@ function _prepare_event_autonomous_optics(definitions, optics, path_groups,
         group = path_groups[path_slot]
         group.requirements.requires_full_optical || _plant_event_loop_error(
             :autonomous_path_without_full_optics,
-            "autonomous optic $(definition.optic) targets path $(definition.path) without a full-optical acquisition")
+            "autonomous optic $(definition.optic) targets path " *
+            "$(definition.path) without full-optical execution demand")
         coupling = prepare_autonomous_periodic_optic(
             optic.implementation, group.path, definition.fidelity)
         bindings[index] = _PreparedAutonomousPeriodicOptic(

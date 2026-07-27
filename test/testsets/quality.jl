@@ -39,6 +39,9 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-device-batching"])) == ("plant-device-batching",)
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["plant-device-model-matrix"])) ==
+        ("plant-device-model-matrix",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-command-composition"])) == ("plant-command-composition",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-controller-routing"])) == ("plant-controller-routing",)
@@ -82,6 +85,7 @@ end
             "direct-imaging-batch",
             "atmosphere-direction-batch",
             "plant-device-batching",
+            "plant-device-model-matrix",
             "backend-smoke",
         )
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
@@ -96,6 +100,7 @@ end
         "plant-detector-transitions",
         "plant-event-composition",
         "plant-device-batching",
+        "plant-device-model-matrix",
         "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
@@ -124,6 +129,7 @@ end
         "plant-detector-transitions",
         "plant-event-composition",
         "plant-device-batching",
+        "plant-device-model-matrix",
         "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
@@ -174,6 +180,10 @@ end
     @test registered_test_fixture_paths() == sort!(normpath.([
         joinpath(dirname(@__DIR__), "ka_cpu_style_fixture.jl"),
         joinpath(dirname(@__DIR__), "plant_device_batching_fixtures.jl"),
+        joinpath(
+            dirname(@__DIR__),
+            "plant_device_model_matrix_fixtures.jl",
+        ),
         joinpath(dirname(@__DIR__), "plant_test_fixtures.jl"),
         joinpath(dirname(@__DIR__), "wfs_stage_contract_fixtures.jl"),
     ]))
@@ -184,6 +194,7 @@ end
         "direct-imaging-batch",
         "atmosphere-direction-batch",
         "plant-device-batching",
+        "plant-device-model-matrix",
         "plant-sampled-aberrations",
         "detectors-wfs",
         "plant-preparation",
