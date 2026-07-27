@@ -221,19 +221,17 @@ uncertainty, and mapping version belong in run metadata when more than one
 physical timestamp domain participates.
 
 Gate 8 represents one external timestamp-domain mapping as an immutable record
-with stable domain identity \(D\), positive domain-local version \(v\), signed
-integer source anchor \(s_0\), nonnegative `PlantTimestamp` anchor \(p_0\),
-positive reduced integer rate numerator \(n\), positive reduced denominator
-\(d\), nonnegative uncertainty \(u\), and inclusive signed source validity
-interval \([s_{\min}, s_{\max}]\). The rate is plant nanoseconds per source
-tick; \(n/d - 1\) is the represented drift relative to equal-rate nanoseconds.
-For a source timestamp \(s\), the canonical mapping is
+with stable domain identity `D`, positive domain-local version `v`, signed
+integer source anchor `s0`, nonnegative `PlantTimestamp` anchor `p0`, positive
+reduced integer rate numerator `n`, positive reduced denominator `d`,
+nonnegative uncertainty `u`, and inclusive signed source validity interval
+`[s_min, s_max]`. The rate is plant nanoseconds per source tick; `n/d - 1` is
+the represented drift relative to equal-rate nanoseconds. For a source
+timestamp `s`, the canonical mapping is
 
-\[
-p(s) = p_0 +
-\operatorname{round}_{\mathrm{nearest,\ ties\ to\ even}}
-\left(\frac{(s-s_0)n}{d}\right).
-\]
+```text
+p(s) = p0 + round_nearest_ties_to_even(((s - s0) * n) / d)
+```
 
 Construction MUST reject a nonpositive rate, an anchor outside the validity
 interval, an invalid source range, or a validity endpoint that cannot map to a
@@ -247,8 +245,8 @@ The HIL companion MUST own a bounded append-only set of these immutable
 mappings. One logical publisher installs versions that increase strictly
 within each domain. A live ingress may select the latest published version;
 replay may request an exact retained version. Either operation MUST return an
-immutable mapped result carrying \(D\), \(v\), the original source timestamp,
-\(p(s)\), and \(u\). The command-timing boundary MUST accept that validated
+immutable mapped result carrying `D`, `v`, the original source timestamp,
+`p(s)`, and `u`. The command-timing boundary MUST accept that validated
 result rather than an arbitrary caller-supplied mapped plant timestamp.
 Unknown domains or versions, stale/nonincreasing updates, exhausted mapping
 capacity, invalid ranges, and checked-arithmetic failures MUST produce
