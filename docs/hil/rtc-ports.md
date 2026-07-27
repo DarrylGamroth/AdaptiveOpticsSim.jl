@@ -294,6 +294,12 @@ explicit loss policy. Shared gating is introduced only when every consumer is
 declared correctness-critical and slowest-consumer backpressure is part of the
 run contract.
 
+The initial single-host Gate 8 profile selects no command-observation or
+telemetry taps. Independent bounded observer taps remain Gate 10A work and do
+not gate the canonical RTC consumer or participate in its buffer-reclamation
+path. When a later profile selects a tap, the classification and loss-policy
+requirements below apply to it.
+
 ## Capacity And Failure Semantics
 
 ### HIL-PORT-002 and HIL-FAIL-001 — Prepared overload policy
