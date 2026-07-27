@@ -39,6 +39,10 @@ hardware-validated GPU workflows. The core package now has:
   ownership, explicit Julia/FFT/BLAS budgets, a deterministic serial oracle,
   bounded whole-plant specialization, and a separately validated
   `AdaptiveOpticsHIL.jl` pin to the final breaking core revision
+- completed Gate 7 single-device direction and optical batching with explicit
+  compute-device identity, one prepared accelerator owner, retained
+  CPU/AMDGPU/CUDA correctness and service-cost evidence, and a separately
+  validated `AdaptiveOpticsHIL.jl` pin
 - a canonical `AdaptiveOpticsSim.Plant` owner for HIL-neutral plant time,
   topology, commands, acquisition events, providers, preparation, and event
   composition, with a bounded root export surface and explicit Julia 1.12 API
@@ -161,8 +165,8 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    [AdaptiveOpticsHIL PR #15](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/15)
    pins both companion environments to core revision `0a38576` and passes the
    cross-platform package, ownership-stress, coverage, and benchmark-contract
-   matrix at companion revision `9574432`. Gate 7 begins by separating
-   semantic backend family from concrete compute-device identity and exposing
+   matrix at companion revision `9574432`. Gate 7 separated
+   semantic backend family from concrete compute-device identity and exposed
    each prepared path group's immutable backend/device requirements. Finite
    and infinite multilayer atmospheres now provide homogeneous
    single-device direction batching with an exact serial CPU oracle,
@@ -194,7 +198,9 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    and GC/process-isolation policy. Add explicit or constrained deterministic
    mixed CPU/GPU placement, then homogeneous multi-GPU placement. Defer a fully
    automatic cost-model planner until real profiles provide calibration data;
-   keep Dagger and dynamic migration outside the HIL deadline path.
+   keep Dagger and dynamic migration outside the HIL deadline path. Gate 8
+   delivery is tracked by
+   [AdaptiveOpticsHIL issue #17](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/17).
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
