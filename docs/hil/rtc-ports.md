@@ -296,6 +296,43 @@ run contract.
 
 ## Capacity And Failure Semantics
 
+### HIL-PORT-002 and HIL-FAIL-001 — Prepared overload policy
+
+Preparation MUST classify every command endpoint, acquisition endpoint,
+execution owner, payload pool, descriptor path, and observation tap as
+required or optional for the selected run profile. It MUST bind each bounded
+resource to one concrete full/stall action, a maximum permitted lateness when
+the resource has a deadline, and an occupancy recovery threshold lower than
+its overload threshold. These declarations, capacities, selected product
+provider, and provider fidelity are immutable from arm through termination.
+
+After ownership transfer, a required command, WFS, execution-owner,
+outcome-credit, or ownership-return contract that cannot preserve its prepared
+capacity or deadline MUST fail the run; it cannot silently shed work. A
+pre-transfer command submission that finds no ingress or outcome credit still
+returns `full` with producer ownership as specified below. An optional
+acquisition or observation may instead shed the newly completed item when its
+prepared policy permits loss. Such shedding MUST assign or preserve the item
+stream sequence, reclaim only producer-owned storage, increment bounded loss
+accounting, and leave a visible sequence gap. An optional resource whose
+prepared policy does not permit loss also fails the run.
+
+Coalescing is permitted only for a product whose schema explicitly declares
+latest-value semantics and whose preparation reserves separate bounded
+coalescing ownership. Raw WFS frames, science frames, nondestructive samples,
+and command outcomes are not implicitly latest-value products. A producer
+MUST NOT implement coalescing by overwriting an unread SPSC slot, revoking a
+consumer lease, or silently replacing an already admitted command.
+
+Overload state retains bounded current/maximum occupancy, latest/maximum
+lateness, selected decision, loss/rejection count, and whether occupancy has
+returned to the prepared recovery threshold. Crossing that threshold is an
+observable end to an overload episode; it is not permission to restart a
+failed run or evidence that ownership and sequence correctness recovered.
+Runtime code MUST NOT substitute a cheaper product provider or fidelity tier
+in response to overload. A lower-fidelity workload is another configured,
+prepared, and armed run.
+
 Every capacity is justified from the maximum simultaneous burst, maximum
 allowed in-flight work, service-rate evidence, and latency budget. Preparation
 records the rationale and uses `L = λW` as a consistency check; extra capacity
