@@ -443,6 +443,44 @@ struct _CommandTransactionPolicyFailure <: Exception
     error::PlantCommandError
 end
 
+mutable struct _PreparedDevicePathBatchOwnerBinding end
+struct _PreparedDevicePathBatchOwnerToken end
+const _PREPARED_DEVICE_PATH_BATCH_OWNER_TOKEN =
+    _PreparedDevicePathBatchOwnerToken()
+
+"""
+Run-immutable submission owner for one compatible, single-device set of
+prepared path execution groups.
+
+`implementation` is one small model-specific prepared pipeline behind a
+topology-bounded concrete wrapper. It retains numerical plans, workspace,
+backend execution context, and an explicit completion boundary, but no task,
+queue, pacing, affinity, or transport policy.
+"""
+struct PreparedDevicePathBatchOwner
+    binding::_PreparedDevicePathBatchOwnerBinding
+    event_loop_binding::_PlantEventLoopBinding
+    device::AbstractComputeDevice
+    group_slots::Memory{UInt32}
+    implementation::Any
+
+    function PreparedDevicePathBatchOwner(
+        event_loop_binding::_PlantEventLoopBinding,
+        device::AbstractComputeDevice,
+        group_slots::Memory{UInt32},
+        implementation,
+        ::_PreparedDevicePathBatchOwnerToken,
+    )
+        return new(
+            _PreparedDevicePathBatchOwnerBinding(),
+            event_loop_binding,
+            device,
+            group_slots,
+            implementation,
+        )
+    end
+end
+
 """Run-immutable, fixed-capacity deterministic plant-event composition."""
 struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
     binding::_PlantEventLoopBinding
@@ -457,6 +495,8 @@ struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
         PreparedSampledAberrationPathBindings
     command_endpoints::Memory{_PreparedPlantEventCommandEndpoint}
     path_groups::Memory{PreparedPathExecutionGroup}
+    device_path_batch_owners::Memory{PreparedDevicePathBatchOwner}
+    path_device_batch_owner_slots::Memory{UInt32}
     acquisitions::Memory{_PreparedPlantEventAcquisition}
     autonomous_optics::Memory{_PreparedAutonomousPeriodicOptic}
     trigger_topology::T
@@ -1573,17 +1613,11 @@ end
 @inline _prepared_trigger_topology(topology::PreparedTriggerTopology) =
     topology
 
-"""
-    prepare_plant_event_loop(plant, definition)
-
-Bind a prepared plant to a flat deterministic scheduler, exact
-owner-derived RNG streams, bounded detector lifecycle state, and an optional
-prepared trigger topology. Prepared controllable optics and independently
-timed command endpoints join the reserved command phase. Preparation allocates;
-repeated stepping does not grow the registry or materialize future events.
-"""
-function prepare_plant_event_loop(plant::PreparedPlant,
-    definition::PlantEventLoopDefinition)
+function _prepare_plant_event_loop(
+    plant::PreparedPlant,
+    definition::PlantEventLoopDefinition,
+    device_batch_selection::Val,
+)
     Base.@nospecialize plant
     sample_definitions = _sorted_optical_sample_definitions(
         definition.optical_samples)
@@ -1627,11 +1661,42 @@ function prepare_plant_event_loop(plant::PreparedPlant,
         plant_atmosphere(getfield(plant, :definition)))
     atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
         getfield(getfield(plant, :rngs), :atmosphere))
-    return PreparedPlantEventLoop(_PlantEventLoopBinding(), atmosphere,
+    binding = _PlantEventLoopBinding()
+    device_batch_owners, path_device_batch_owner_slots =
+        _prepare_device_path_batch_owners(
+            device_batch_selection,
+            binding,
+            path_groups,
+            atmosphere,
+        )
+    return PreparedPlantEventLoop(binding, atmosphere,
         atmosphere_rng, scheduler, actions, optics, optic_path_bindings,
         sampled_aberrations, sampled_aberration_path_bindings,
-        command_endpoints, path_groups, acquisitions, autonomous_optics,
+        command_endpoints, path_groups, device_batch_owners,
+        path_device_batch_owner_slots, acquisitions, autonomous_optics,
         _prepared_trigger_topology(definition.trigger_topology))
+end
+
+"""
+    prepare_plant_event_loop(plant, definition)
+
+Bind a prepared plant to a flat deterministic scheduler, exact owner-derived
+RNG streams, bounded detector lifecycle state, explicitly compatible
+single-accelerator path batches, and an optional prepared trigger topology.
+Prepared controllable optics and independently timed command endpoints join
+the reserved command phase. Preparation allocates; repeated stepping does not
+grow the registry or materialize future events. Core creates no execution
+task, queue, pacing, affinity, or transport policy.
+"""
+function prepare_plant_event_loop(
+    plant::PreparedPlant,
+    definition::PlantEventLoopDefinition,
+)
+    return _prepare_plant_event_loop(
+        plant,
+        definition,
+        Val(:accelerator),
+    )
 end
 
 mutable struct PlantEventLoopState{T}
@@ -1887,6 +1952,10 @@ end
     length(workspace.due_paths) == length(prepared.path_groups) ||
         _plant_event_loop_error(:prepared_binding,
             "plant event-loop workspace capacity changed after preparation")
+    length(prepared.path_device_batch_owner_slots) ==
+        length(prepared.path_groups) ||
+        _plant_event_loop_error(:prepared_binding,
+            "prepared device path-batch membership changed after preparation")
     batch = workspace.optical_path_batch
     length(batch.due_group_slots) == length(prepared.path_groups) &&
         length(batch.group_status) == length(prepared.path_groups) ||
@@ -4169,6 +4238,7 @@ function materialize_path_execution_group!(
         batch, _OpticalPathBatchMaterializing,
         "path execution-group materialization")
     slot = _require_due_path_execution_group(prepared, batch, ordinal)
+    _require_independent_path_execution_group(prepared, slot)
     status = @inbounds batch.group_status[slot]
     status == _OpticalPathBatchGroupAwaitingMaterialization || begin
         reason = status == _OpticalPathBatchGroupMaterializing ?
@@ -4304,7 +4374,7 @@ Base.@noinline function _execute_due_path!(
     return nothing
 end
 
-Base.@noinline function _execute_materialized_path_execution_group!(
+Base.@noinline function _stage_materialized_path_execution_group!(
     prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState,
     group::PreparedPathExecutionGroup,
@@ -4353,9 +4423,16 @@ Base.@noinline function _execute_materialized_path_execution_group!(
                 timestamp,
             )
         end
-        _execute_due_path!(group.path, group.rngs)
     end
+    return nothing
+end
 
+Base.@noinline function _finish_materialized_path_execution_group!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    group::PreparedPathExecutionGroup,
+    timestamp::PlantTimestamp,
+)
     for member in group.acquisitions
         acquisition = @inbounds prepared.acquisitions[Int(member.slot)]
         _evaluate_event_sample!(
@@ -4365,6 +4442,21 @@ Base.@noinline function _execute_materialized_path_execution_group!(
             state.command_applications,
         )
     end
+    return nothing
+end
+
+Base.@noinline function _execute_materialized_path_execution_group!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    group::PreparedPathExecutionGroup,
+    timestamp::PlantTimestamp,
+)
+    _stage_materialized_path_execution_group!(
+        prepared, state, group, timestamp)
+    group.requirements.requires_full_optical &&
+        _execute_due_path!(group.path, group.rngs)
+    _finish_materialized_path_execution_group!(
+        prepared, state, group, timestamp)
     return nothing
 end
 
@@ -4439,6 +4531,7 @@ function execute_path_execution_group!(
         batch, _OpticalPathBatchExecuting,
         "path execution-group execution")
     slot = _require_due_path_execution_group(prepared, batch, ordinal)
+    _require_independent_path_execution_group(prepared, slot)
     status = @inbounds batch.group_status[slot]
     status == _OpticalPathBatchGroupReady || begin
         reason = status == _OpticalPathBatchGroupComplete ?
@@ -4532,7 +4625,7 @@ function execute_optical_path_batch!(
     @inbounds for index in 1:count
         ordinal = optical_path_batch_due_group_ordinal(
             prepared, state, workspace, claim, index)
-        materialize_path_execution_group!(
+        _materialize_due_path_execution_group!(
             prepared, state, workspace, claim, ordinal)
     end
     seal_optical_path_batch_materialization!(
@@ -4540,7 +4633,7 @@ function execute_optical_path_batch!(
     @inbounds for index in 1:count
         ordinal = optical_path_batch_due_group_ordinal(
             prepared, state, workspace, claim, index)
-        execute_path_execution_group!(
+        _execute_due_path_execution_group!(
             prepared, state, workspace, claim, ordinal)
     end
     return complete_optical_path_batch!(

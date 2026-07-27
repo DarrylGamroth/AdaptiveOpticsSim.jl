@@ -297,6 +297,21 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   composes exact periodic or delivered-trigger acquisition starts with
   independently periodic optical paths and complete acquisition products; it
   owns no wall clock, task, queue, port, transport, or RTC protocol
+- Qualified single-device path batching:
+  `PreparedDevicePathBatchOwner`, `device_path_batch_owner_count`,
+  `device_path_batch_owner`, `device_path_batch_compute_device`,
+  `device_path_batch_backend`, `device_path_batch_group_count`,
+  `device_path_batch_group_ordinal`,
+  `path_execution_group_device_batch_owner_ordinal`,
+  `materialize_device_path_batch!`, and `execute_device_path_batch!`.
+  Event-loop preparation automatically binds only compatible, co-resident
+  accelerator `Source` paths using native Fraunhofer direct imaging, equal
+  optical-sample schedules, and the same product contract. One owner executes
+  the shared atmosphere and optical batches on its retained device context,
+  hands results to the original path-local products without a host transfer,
+  and establishes backend completion before marking any member complete.
+  CPU paths, singletons, unequal-rate paths, LGS/WFS paths, and incompatible
+  models retain the independent Gate 6 lifecycle
 
 - Stable identities: `AtmosphereLayerID`, `ControllableOpticID`,
   `SampledAberrationID`, `CommandEndpointID`, `PlantCommandSchemaID`,

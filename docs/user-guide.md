@@ -115,6 +115,9 @@ The layer provides:
 - schedules, trigger distribution, and detector lifecycle events
 - `prepare_plant_event_loop`, `step_plant_events!`, and
   `run_plant_events_until!`
+- automatic prepared single-device batching for compatible co-resident
+  accelerator direct-science paths, with qualified owner/lifecycle inspection
+  through `AdaptiveOpticsSim.Plant`
 - prepared controller-output routing for named RTC-owned products
 
 Transport, wall-clock pacing, external timestamp mapping, and RTC protocol

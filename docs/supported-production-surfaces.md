@@ -172,8 +172,7 @@ Current AMDGPU-supported scope:
 - maintained Shack-Hartmann exported-pixel parity surfaces
 - independent DM and modal/low-order optic application
 - native Plant DM preparation with device-resident active/staged command and
-  surface storage plus direct surface parity; the integrated multi-path event
-  loop remains a serial CPU oracle
+  surface storage plus direct surface parity
 - prepared controller-output routing with device-resident views and exact
   backend/device validation
 - dynamic cycle-averaged circular-Pyramid radius/enable updates with
@@ -193,8 +192,17 @@ Current AMDGPU-supported scope:
   HgCdTe up-the-ramp snapshots/fitting with device-resident products and scalar
   indexing disabled
 - direct rolling-shutter row-band and frame-transfer image/storage detector
-  lifecycles with device-resident state and scalar indexing disabled; the
-  integrated multi-rate event loop remains a serial CPU oracle
+  lifecycles with device-resident state and scalar indexing disabled
+- integrated single-device ownership for two or more compatible, equally
+  clocked, direct native-Fraunhofer science paths through one shared
+  atmosphere-direction batch and one direct-imaging batch. The owner retains
+  the exact compute-device context and stream, preserves path input/result
+  identities through same-device handoffs, and synchronizes before reporting
+  completion. CPU, singleton, unequal-rate, finite-height-LGS, WFS,
+  incompatible-model, and cross-device groups continue through their ordinary
+  execution paths. The integrated acquisition evidence is currently limited
+  to the maintained global-shutter CMOS fixture; the broader detector-model
+  matrix remains outside this support claim
 
 Primary evidence:
 
@@ -211,16 +219,15 @@ Current expectation:
 
 Gate 5 closure validation head `02e5f29` passed all `448` maintained checks on
 the local gfx1030 AMDGPU target and `438/438` on the WSL RTX 3050 Ti CUDA
-target with Julia 1.12.6 and scalar indexing disabled. This includes the
-retained numerical surfaces, prepared controller-output routing, dynamic
-cycle-averaged circular-Pyramid modulation, direct native Plant DM
-state/staging/surface parity, run-owned sampled-aberration residency, and
-identity/transformed replacement. The separate clean
+target with Julia 1.12.6 and scalar indexing disabled. The later Gate 7.4
+hardware target adds integrated same-device path-batch ownership, numerical
+oracle checks, exact device/stream ownership, residency, lifecycle rejection,
+and bounded allocation evidence. The separate clean
 [Gate 5 CPU artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
-closes integrated serial optical placement; the GPU targets do not run that
-event loop. Gate 5 did not recharacterize AMD or CUDA accelerator latency, so
-the July 14/18 platform artifacts remain the maintained GPU performance
-evidence.
+remains the integrated serial optical-placement characterization. Gate 7.4
+does not recharacterize accelerator latency or claim the broader WFS/detector
+matrix, so the July 14/18 platform artifacts remain the maintained GPU
+performance evidence.
 
 ### GPU support-boundary rule
 

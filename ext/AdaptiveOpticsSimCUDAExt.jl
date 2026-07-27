@@ -17,6 +17,47 @@ AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.CUDABackendTag}, value, 
 AdaptiveOpticsSim.compute_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
 
+struct CUDAPreparedDeviceExecutionContext <:
+    AdaptiveOpticsSim._AbstractPreparedDeviceExecutionContext
+    device::CUDA.CuDevice
+    stream::CUDA.CuStream
+    compute_device::AdaptiveOpticsSim.AcceleratorComputeDevice
+end
+
+function AdaptiveOpticsSim._prepare_device_execution_context(
+    storage::CUDA.CuArray,
+)
+    device = CUDA.device(storage)
+    stream = CUDA.device!(device) do
+        CUDA.CuStream()
+    end
+    return CUDAPreparedDeviceExecutionContext(
+        device,
+        stream,
+        AdaptiveOpticsSim.compute_device(storage),
+    )
+end
+
+@inline AdaptiveOpticsSim._prepared_device_execution_compute_device(
+    context::CUDAPreparedDeviceExecutionContext,
+) = context.compute_device
+
+function AdaptiveOpticsSim._with_prepared_device_execution_context(
+    f::F,
+    context::CUDAPreparedDeviceExecutionContext,
+) where {F}
+    return CUDA.device!(context.device) do
+        CUDA.stream!(f, context.stream)
+    end
+end
+
+@inline function AdaptiveOpticsSim._synchronize_prepared_device_execution_context!(
+    context::CUDAPreparedDeviceExecutionContext,
+)
+    CUDA.synchronize(context.stream)
+    return nothing
+end
+
 function AdaptiveOpticsSim.solve_lift_fallback!(
     diag::AdaptiveOpticsSim.LiFTDiagnostics{T},
     rhs::CUDA.AnyCuVector{T},

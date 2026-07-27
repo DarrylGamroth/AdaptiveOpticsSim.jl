@@ -34,6 +34,48 @@ AdaptiveOpticsSim.backend_zeros(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Ty
 AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, value, dims::Vararg{Int}) = AMDGPU.fill(value, dims...)
 AdaptiveOpticsSim.compute_device_identifier(array::AMDGPU.ROCArray) =
     AMDGPU.device_id(AMDGPU.device(array))
+
+struct AMDGPUPreparedDeviceExecutionContext <:
+    AdaptiveOpticsSim._AbstractPreparedDeviceExecutionContext
+    device::AMDGPU.HIPDevice
+    stream::AMDGPU.HIPStream
+    compute_device::AdaptiveOpticsSim.AcceleratorComputeDevice
+end
+
+function AdaptiveOpticsSim._prepare_device_execution_context(
+    storage::AMDGPU.ROCArray,
+)
+    device = AMDGPU.device(storage)
+    stream = AMDGPU.device!(device) do
+        AMDGPU.HIPStream()
+    end
+    return AMDGPUPreparedDeviceExecutionContext(
+        device,
+        stream,
+        AdaptiveOpticsSim.compute_device(storage),
+    )
+end
+
+@inline AdaptiveOpticsSim._prepared_device_execution_compute_device(
+    context::AMDGPUPreparedDeviceExecutionContext,
+) = context.compute_device
+
+function AdaptiveOpticsSim._with_prepared_device_execution_context(
+    f::F,
+    context::AMDGPUPreparedDeviceExecutionContext,
+) where {F}
+    return AMDGPU.device!(context.device) do
+        AMDGPU.stream!(f, context.stream)
+    end
+end
+
+@inline function AdaptiveOpticsSim._synchronize_prepared_device_execution_context!(
+    context::AMDGPUPreparedDeviceExecutionContext,
+)
+    AMDGPU.synchronize(context.stream)
+    return nothing
+end
+
 function AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AMDGPU.rocFFT.ROCFFTPlan)
     plan * buffer
     AMDGPU.synchronize()

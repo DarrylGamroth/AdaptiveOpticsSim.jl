@@ -37,6 +37,8 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-command-application"])) == ("plant-command-application",)
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["plant-device-batching"])) == ("plant-device-batching",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-command-composition"])) == ("plant-command-composition",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-controller-routing"])) == ("plant-controller-routing",)
@@ -75,6 +77,13 @@ end
             "plant-sampled-aberrations",
             "plant-gate5-closure",
         )
+    @test Tuple(spec.name for spec in resolve_test_suites(["gate7"])) ==
+        (
+            "direct-imaging-batch",
+            "atmosphere-direction-batch",
+            "plant-device-batching",
+            "backend-smoke",
+        )
     @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
         "plant-topology",
         "plant-topology-growth",
@@ -86,6 +95,7 @@ end
         "plant-triggers",
         "plant-detector-transitions",
         "plant-event-composition",
+        "plant-device-batching",
         "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
@@ -113,6 +123,7 @@ end
         "plant-triggers",
         "plant-detector-transitions",
         "plant-event-composition",
+        "plant-device-batching",
         "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
@@ -140,6 +151,7 @@ end
     @test occursin("plant-command-schemas", listing_text)
     @test occursin("plant-command-admission", listing_text)
     @test occursin("plant-command-application", listing_text)
+    @test occursin("plant-device-batching", listing_text)
     @test occursin("plant-autonomous-optics", listing_text)
     @test occursin("plant-placed-optics", listing_text)
     @test occursin("plant-conjugate-geometry", listing_text)
@@ -152,6 +164,7 @@ end
     @test occursin("gate4 =", listing_text)
     @test occursin("gate5 =", listing_text)
     @test occursin("gate6 =", listing_text)
+    @test occursin("gate7 =", listing_text)
 
     actual_testsets = sort!(filter(
         path -> endswith(path, ".jl"),
@@ -160,6 +173,7 @@ end
     @test registered_testset_paths() == normpath.(actual_testsets)
     @test registered_test_fixture_paths() == sort!(normpath.([
         joinpath(dirname(@__DIR__), "ka_cpu_style_fixture.jl"),
+        joinpath(dirname(@__DIR__), "plant_device_batching_fixtures.jl"),
         joinpath(dirname(@__DIR__), "plant_test_fixtures.jl"),
         joinpath(dirname(@__DIR__), "wfs_stage_contract_fixtures.jl"),
     ]))
@@ -169,6 +183,7 @@ end
         "ka-cpu",
         "direct-imaging-batch",
         "atmosphere-direction-batch",
+        "plant-device-batching",
         "plant-sampled-aberrations",
         "detectors-wfs",
         "plant-preparation",

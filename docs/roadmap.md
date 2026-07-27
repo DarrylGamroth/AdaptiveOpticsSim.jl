@@ -170,10 +170,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    completion. Compatible physical native-Fraunhofer science directions and
    spectral samples now also have a fixed prepared stack, one optical-axis FFT
    plan, ordered per-sample focal products, exact-device validation, and
-   independent detector fan-out. One backend resource owner and the integrated
-   model/first-use/service-cost matrix remain behind their own evidence;
-   fixed-arrival evidence is additionally required before any HIL latency
-   promotion.
+   independent detector fan-out. Compatible co-resident equal-rate
+   direct-science paths are now bound to one run-immutable accelerator owner
+   that retains its exact device context, atmosphere/direct-imaging batches,
+   original path-product handoffs, and completion barrier while preserving the
+   Gate 6 claim lifecycle. The broader WFS/detector model matrix and promoted
+   first-use/service-cost evidence remain behind their own gates; fixed-arrival
+   evidence is additionally required before any HIL latency promotion.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,
    and GC/process-isolation policy. Add explicit or constrained deterministic
