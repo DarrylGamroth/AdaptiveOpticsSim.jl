@@ -130,6 +130,20 @@ measurement. Gate 8 does not introduce clock injection again; it hardens
 cached-clock ownership, measured staleness, lifecycle behavior, and versioned
 external-domain mappings without changing this seam.
 
+For a cached execution clock, Gate 8 MUST separate its single-writer refresh
+capability from the read-only clock view distributed to workers. Preparation
+MUST record a stable clock identity, one logical update-owner identity, and a
+positive intended update cadence. A refresh MUST reject the wrong logical
+owner, a regressing monotonic source, or an elapsed interval of at least
+`2^63` nanoseconds before changing the published cache. The elapsed source
+interval from the previous cached publication to the next refresh is the
+observed cache staleness immediately before that refresh; the maximum such
+interval and refresh count MUST be retained as run-facing evidence. This
+measurement does not claim a resolution finer than the source provider or
+prove deployment-level thread placement. Workers MUST NOT receive an API that
+refreshes the cache. A direct `SystemNanoClock` remains appropriate where cache
+age would invalidate the claimed measurement boundary.
+
 The injected `Clocks.jl` source is the **execution clock** used to pace and
 measure the simulator. Simulated trigger generation, trigger distribution, and
 timestamp-label faults are model events evaluated on the canonical plant
@@ -205,6 +219,51 @@ receive time. A command with a source timestamp must be transformed into plant
 time before ordering or latency is computed. Offset, drift, synchronization
 uncertainty, and mapping version belong in run metadata when more than one
 physical timestamp domain participates.
+
+Gate 8 represents one external timestamp-domain mapping as an immutable record
+with stable domain identity \(D\), positive domain-local version \(v\), signed
+integer source anchor \(s_0\), nonnegative `PlantTimestamp` anchor \(p_0\),
+positive reduced integer rate numerator \(n\), positive reduced denominator
+\(d\), nonnegative uncertainty \(u\), and inclusive signed source validity
+interval \([s_{\min}, s_{\max}]\). The rate is plant nanoseconds per source
+tick; \(n/d - 1\) is the represented drift relative to equal-rate nanoseconds.
+For a source timestamp \(s\), the canonical mapping is
+
+\[
+p(s) = p_0 +
+\operatorname{round}_{\mathrm{nearest,\ ties\ to\ even}}
+\left(\frac{(s-s_0)n}{d}\right).
+\]
+
+Construction MUST reject a nonpositive rate, an anchor outside the validity
+interval, an invalid source range, or a validity endpoint that cannot map to a
+representable nonnegative plant timestamp. Conversion MUST use checked exact
+integer or rational arithmetic, MUST NOT use floating-point ordering
+arithmetic, and MUST reject a source timestamp outside the inclusive validity
+interval. Synchronization uncertainty is retained as metadata; it does not
+silently shift the mapped timestamp.
+
+The HIL companion MUST own a bounded append-only set of these immutable
+mappings. One logical publisher installs versions that increase strictly
+within each domain. A live ingress may select the latest published version;
+replay may request an exact retained version. Either operation MUST return an
+immutable mapped result carrying \(D\), \(v\), the original source timestamp,
+\(p(s)\), and \(u\). The command-timing boundary MUST accept that validated
+result rather than an arbitrary caller-supplied mapped plant timestamp.
+Unknown domains or versions, stale/nonincreasing updates, exhausted mapping
+capacity, invalid ranges, and checked-arithmetic failures MUST produce
+structured errors before descriptor ownership transfer or core command
+admission and MUST NOT count as valid ingress for liveness.
+
+Mapping publication is prospective. Publishing any later version MUST NOT
+mutate or retimestamp a mapped result, submitted descriptor, scheduled command,
+or admitted event created with an earlier version. Run metadata MUST expose
+every installed mapping's anchors, exact rate, uncertainty, validity interval,
+and version,
+along with the execution-clock identity and any cached-clock owner, cadence,
+refresh count, and maximum observed staleness. User integration supplies
+synchronization observations; neither the core nor the HIL companion implements
+PTP, NTP, transport timestamping, or a clock-discipline algorithm.
 
 One command-ingress owner feeds each endpoint. User integration submits
 canonical descriptors through a bounded arrival-ordered SPSC port. The HIL
