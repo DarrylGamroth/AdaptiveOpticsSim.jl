@@ -20,6 +20,61 @@ end
 
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
 
+@testset "Gate 7 benchmark contract" begin
+    root = normpath(joinpath(@__DIR__, "..", ".."))
+    contract_path =
+        joinpath(root, "benchmarks", "contracts", "gate7_single_gpu.toml")
+    harness_path =
+        joinpath(root, "benchmarks", "benchmark_gate7_single_gpu.jl")
+    support_path =
+        joinpath(root, "benchmarks", "support", "gate7_single_gpu.jl")
+    @test isfile(harness_path)
+    @test isfile(support_path)
+
+    contract = TOML.parsefile(contract_path)
+    @test contract["schema_version"] == 1
+    @test contract["name"] == "gate7_single_gpu"
+    @test contract["samples_per_run"] >=
+        contract["minimum_samples_for_p95"]
+    @test contract["runs"] >= 3
+    @test contract["warmup_operations"] > 0
+    @test contract["batched_relative_p95_factor"] >= 1
+
+    workload = contract["workload"]
+    @test workload["path_count"] == 2
+    @test workload["numeric_type"] == "Float32"
+    @test workload["witness_phase_ns"] > workload["sample_period_ns"]
+
+    independent = contract["submission_proxy"]["independent"]
+    batched = contract["submission_proxy"]["batched"]
+    @test independent["top_level_path_submissions"] == 2
+    @test independent["device_owner_submissions"] == 0
+    @test batched["top_level_path_submissions"] == 0
+    @test batched["device_owner_submissions"] == 1
+    @test batched["atmosphere_direction_render_calls"] <
+        independent["atmosphere_direction_render_calls"]
+    @test batched["wfs_formation_calls"] ==
+        independent["wfs_formation_calls"]
+
+    gpu_boundaries = [
+        "independent_device_ready",
+        "batched_device_ready",
+        "batched_host_ready",
+        "transfer_only",
+    ]
+    placements = contract["placements"]
+    @test placements["local_cpu"]["boundaries"] ==
+        ["independent_device_ready"]
+    @test placements["local_amdgpu"]["boundaries"] == gpu_boundaries
+    @test placements["wsl_cuda"]["boundaries"] == gpu_boundaries
+    @test contract["contract"]["coordinated_omission_correction"] ===
+        false
+    @test any(
+        exclusion -> occursin("HIL latency", exclusion),
+        contract["scope_exclusions"],
+    )
+end
+
 @testset "Selective test registry" begin
     @test resolve_test_suites(String[]) === TEST_SUITE_SPECS
     @test resolve_test_suites(["all"]) === TEST_SUITE_SPECS
