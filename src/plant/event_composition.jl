@@ -2300,6 +2300,46 @@ function admit_plant_command!(prepared::PreparedPlantEventLoop,
     return admission
 end
 
+"""
+    fail_pending_plant_commands!(
+        prepared, state, workspace, endpoint_id; reason=:endpoint_failure)
+
+Boundedly terminate every unclaimed pending command for one event-loop-owned
+endpoint at its current canonical coordinate. An ingress admission may have
+advanced the endpoint beyond the scheduler's last processed plant event, so
+the failure coordinate is the later of those two coordinates. Terminal
+dispositions are copied into the event loop's bounded ledger and the
+endpoint's command generator is rescheduled without changing its effective
+command or physical optic state.
+"""
+function fail_pending_plant_commands!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    endpoint_id::CommandEndpointID;
+    reason=CommandDispositionReason(:endpoint_failure))
+    _require_plant_event_loop_binding(prepared, state)
+    _require_plant_event_loop_binding(prepared, workspace)
+    _require_idle_optical_path_batch(workspace)
+    _require_empty_event_command_dispositions(workspace)
+    slot = _event_command_endpoint_slot(prepared, endpoint_id)
+    event_endpoint = _event_command_endpoint(prepared, slot)
+    endpoint_state = _event_command_endpoint_state(state, slot)
+    endpoint_workspace = _event_command_workspace(workspace, slot)
+    timestamp = max(
+        scheduler_timestamp(state.scheduler),
+        command_endpoint_timestamp(endpoint_state))
+    count = fail_pending_plant_commands!(
+        endpoint_workspace,
+        event_endpoint.binding.endpoint,
+        endpoint_state,
+        timestamp;
+        reason)
+    _append_event_command_dispositions!(workspace, endpoint_workspace)
+    _schedule_event_command_endpoint!(prepared, state, slot)
+    return count
+end
+
 @inline function _next_command_transaction_sequence(
     state::PlantEventLoopState)
     state.command_transaction_sequence != typemax(UInt64) ||
