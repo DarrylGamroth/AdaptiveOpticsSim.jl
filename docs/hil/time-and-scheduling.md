@@ -868,10 +868,12 @@ and requires empty owner accounting before clean lifecycle completion.
 
 Gate 8.5 also marks owner state failed when arm or start throws, but it does not
 provide the preallocated coordinator-wide first-failure path or the
-deadline-bounded failure drain. Prepared nonstructural controls and
-ownership-deficit finalization likewise remain later Gate 8 work. A
-`RunStopped` or `RunFailed` transition alone still does not claim those
-remaining operations have completed.
+deadline-bounded failure drain. Gate 8.7 removes the companion's empty-only
+parallel control declaration and confirms that model-supported runtime plant
+controls use canonical typed command endpoints. Ownership-deficit
+finalization remains later Gate 8 work. A `RunStopped` or `RunFailed`
+transition alone still does not claim those remaining operations have
+completed.
 
 Adapter readiness is an orchestration precondition, not a transport API in the
 HIL package. User code may implement it with a socket handshake, middleware
@@ -884,14 +886,17 @@ immutable for the initial supported design; changing it requires another
 prepare/arm cycle. Runtime fidelity degradation is deferred until a concrete
 profile justifies the additional state reservation and claim semantics.
 
-Prepared nonstructural control events may enable or disable an acquisition,
-start or stop a trigger source, change a shutter or calibration-source state,
-or enter a declared optic safe/hold mode. Every allowed transition, effective-
-time rule, inactive-state behavior, and required storage exists before arm.
-These events do not add endpoints, mutate schemas or capacities, change
-placement or provider fidelity, or execute arbitrary user callbacks. A
-structural change requires another configure/prepare/arm cycle. A wall-clock
-HIL run cannot pause physical time to recover a missed deadline.
+Model-supported runtime plant-control commands may enable or disable an
+acquisition, start or stop a trigger source, change a shutter or
+calibration-source state, control an autonomous optic, or enter a declared
+safe/hold mode. They use the canonical typed plant-command boundary rather
+than a second HIL control queue. Every supported transition, effective-time
+rule, inactive-state behavior, schema, capacity, and required state exists
+before arm. These commands do not add endpoints, mutate schemas or capacities,
+change placement or provider fidelity, or execute arbitrary user callbacks. A
+control unsupported by the prepared model, or any structural change, requires
+another configure/prepare/arm cycle. A wall-clock HIL run cannot pause physical
+time to recover a missed deadline.
 
 ## Overload, Failure, And Recovery
 

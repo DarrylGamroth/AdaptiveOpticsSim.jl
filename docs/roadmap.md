@@ -211,9 +211,10 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    the exact configured/prepared/arming/armed/running/stopped/failed phase
    matrix, same-session readiness and bounded arm windows, immutable active
    serial topology, and distinct typed clean-stop and failure records. This
-   advances `HIL-LIFE-001` only to partial: prepared nonstructural controls,
+   advances `HIL-LIFE-001` only to partial: runtime-control semantics,
    coordinated first-failure publication, and bounded failure drain remain
-   open. Gate 8.5 instantiates stable long-lived owners for prepared path
+   open at that boundary. Gate 8.5 instantiates stable long-lived owners for
+   prepared path
    groups and compatible Gate 7 device batches, with bounded owner-specific
    due/completion rings, deterministic and threaded execution policies, CPU
    budget validation, and nominal lifecycle/accounting integration. This
@@ -223,9 +224,14 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    ingress watchdog and mandatory acquisition and execution-owner overload
    policies, promoting `HIL-LIFE-002` and advancing `HIL-PORT-002` and
    `HIL-FAIL-001` without claiming a multi-endpoint atomic latch group.
-   Coordinated first-failure publication, deadline-bounded drain,
+   Gate 8.7 removes the empty-only parallel control placeholder, establishes
+   typed plant command endpoints as the sole model-supported runtime-control
+   seam, validates terminal rejection when the bounded future-effective
+   command calendar is full, and explicitly selects zero optional observation
+   taps for the initial profile. Coordinated first-failure publication,
+   deadline-bounded drain,
    ownership-deficit finalization, and fresh-run recovery are the next ordered
-   Gate 8.7 boundary.
+   Gate 8.8 boundary.
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
