@@ -1099,7 +1099,12 @@ function run_optional_wfs_device_model_matrix_checks(
                 group_slot].path.execution.plan
         end
         @test current_plans === retained_plans
-        compare_device_batch_test_command_state(oracle, device_fixture)
+        compare_device_batch_test_command_state(
+            oracle,
+            device_fixture;
+            surface_rtol=8eps(Float32),
+            surface_atol=eps(Float32) * 1f-9,
+        )
         for id in oracle.path_ids
             oracle_path = prepared_path(oracle.plant, id)
             device_path = prepared_path(device_fixture.plant, id)

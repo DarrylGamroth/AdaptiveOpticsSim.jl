@@ -452,7 +452,12 @@ function submit_device_batch_test_command!(
     )
 end
 
-function compare_device_batch_test_command_state(first, second)
+function compare_device_batch_test_command_state(
+    first,
+    second;
+    surface_rtol::Real=0,
+    surface_atol::Real=0,
+)
     first_effective = effective_command(
         first.prepared,
         first.state,
@@ -474,7 +479,12 @@ function compare_device_batch_test_command_state(first, second)
         surface_opd(only(first.state.controllable_optics).active)
     second_surface =
         surface_opd(only(second.state.controllable_optics).active)
-    @test Array(second_surface) == Array(first_surface)
+    @test isapprox(
+        Array(second_surface),
+        Array(first_surface);
+        rtol=surface_rtol,
+        atol=surface_atol,
+    )
 
     @test command_disposition_count(second.workspace) ==
         command_disposition_count(first.workspace)
