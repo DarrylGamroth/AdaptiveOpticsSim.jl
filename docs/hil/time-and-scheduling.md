@@ -661,19 +661,56 @@ admission or effective application rebases it. This is a modeled plant
 transition and is replayable in virtual time. Separately, a HIL
 deployment may declare an execution-clock ingress-liveness deadline that fails
 the run when the external RTC stops delivering commands; that operational
-watchdog does not silently alter optic state. Both clocks, thresholds, safe
-state, and reset/recovery rules are recorded. A modeled transition returns a
+watchdog does not silently alter optic state. A modeled transition returns a
 bounded `PlantCommandSilenceTransition` record and its warmed operation does
 not log, invoke user code, or create an unbounded command burst.
 
 The modeled policy declares whether its age is measured from valid admission
-or effective application; the operational watchdog resets only after semantic
-admission, so malformed traffic cannot keep the run alive. At an equal plant
-timestamp, an admitted command becoming effective at `t` is applied before a
-modeled silence expiration at `t` and resets that expiration when the prepared
-origin is `AgeFromApplication`. A successful admission resets an
-`AgeFromAdmission` deadline. Stable endpoint ordinals order any remaining
-simultaneous transitions.
+or effective application. At an equal plant timestamp, an admitted command
+becoming effective at `t` is applied before a modeled silence expiration at
+`t` and resets that expiration when the prepared origin is
+`AgeFromApplication`. A successful admission resets an `AgeFromAdmission`
+deadline. Stable endpoint ordinals order any remaining simultaneous
+transitions.
+
+#### HIL-LIFE-002 — Execution-clock RTC-ingress liveness
+
+When this optional operational policy is selected, preparation MUST bind each
+watchdog to one command endpoint or one explicitly atomic command-latch group,
+one execution-clock identity, a positive timeout shorter than `2^63`
+nanoseconds, and `RunFailed` expiry disposition. The initial age origin is the
+execution-clock coordinate at which the run enters `RunRunning`. An endpoint
+watchdog resets only after that endpoint returns a successful semantic core
+admission (`CommandAdmittedReady` or `CommandAdmittedPending`). An atomic-group
+watchdog resets only after successful all-member transaction admission; an
+individual member presentation cannot reset it.
+
+Descriptor enqueue, timestamp mapping, boundary validation, payload
+validation, duplicate/stale/reordered rejection, future-calendar or other
+capacity rejection, application, transport keepalive, and transport-health
+traffic MUST NOT reset ingress liveness. A transferred command that does not
+reset the watchdog still receives its correlated terminal outcome under the
+command-port contract.
+
+The reset window is inclusive. Let `o` be the current origin and `T` the
+prepared timeout. A qualifying semantic admission observed at execution-clock
+coordinate `a` may reset the watchdog exactly when the modular elapsed
+interval `a - o` is at most `T`. The first coordinator observation for which
+the elapsed interval is greater than `T` expires the watchdog. A coordinator
+MUST check an already expired watchdog before dequeuing more ingress; when it
+begins command processing no later than the inclusive deadline, it MUST
+evaluate the post-admission observation against the old deadline before
+resetting. A command admitted after that deadline remains admitted and
+accounted for but cannot revive the run.
+
+Expiry MUST transition the operational run to `RunFailed` with the scope,
+clock identity, origin, deadline, and observation retained in bounded state.
+It MUST NOT apply a safe command, change the held effective command, alter a
+physical optic, or manufacture a plant-time command-silence transition. An
+expired watchdog is terminal for that run; recovery requires a fresh
+prepare/arm cycle. This keeps the execution clock, timeout, reset event, exact
+boundary, and recovery rule replayable as operational evidence without
+claiming a transport-health protocol.
 
 After ingress validation, a command's canonical timestamp and mapping version
 are immutable. A later clock-synchronization update must not reorder or
