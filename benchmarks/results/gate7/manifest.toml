@@ -3,6 +3,7 @@ id = "GATE7-SINGLE-GPU-2026-07-26"
 status = "passed"
 characterized_source_revision = "b80a419d9c072b331b83301b5f030dd554e3b22d"
 requirements = ["HIL-GPU-001"]
+sha256_canonicalization = "UTF-8 text with CRLF normalized to LF"
 artifact_ids = [
     "GATE7-SINGLE-GPU-LOCAL-CPU-2026-07-26",
     "GATE7-SINGLE-GPU-LOCAL-AMDGPU-2026-07-26",

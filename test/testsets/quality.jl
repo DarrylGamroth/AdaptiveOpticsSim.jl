@@ -1,6 +1,10 @@
 using Aqua
 using SHA
 
+canonical_lf_sha256(text::AbstractString) = bytes2hex(SHA.sha256(
+    codeunits(replace(text, "\r\n" => "\n")),
+))
+
 _rng_family(::Xoshiro) = :xoshiro
 _rng_family(::MersenneTwister) = :mersenne_twister
 _rng_family(::AbstractRNG) = :other
@@ -40,6 +44,8 @@ end
     @test contract["runs"] >= 3
     @test contract["warmup_operations"] > 0
     @test contract["batched_relative_p95_factor"] >= 1
+    @test canonical_lf_sha256("gate7\r\nartifact\r\n") ==
+        canonical_lf_sha256("gate7\nartifact\n")
 
     workload = contract["workload"]
     @test workload["path_count"] == 2
@@ -88,7 +94,7 @@ end
     for entry in artifacts
         artifact_path = joinpath(artifact_root, entry["path"])
         @test isfile(artifact_path)
-        @test bytes2hex(SHA.sha256(read(artifact_path))) ==
+        @test canonical_lf_sha256(read(artifact_path, String)) ==
             entry["sha256"]
         artifact = TOML.parsefile(artifact_path)
         @test artifact["all_gates_passed"]
