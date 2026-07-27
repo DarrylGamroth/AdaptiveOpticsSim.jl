@@ -373,8 +373,21 @@ parallelism and oversubscription. The maintained four-thread proof uses one
 coordinator plus three fixed, reusable path-group tasks, perturbs group
 submission order over an unequal-rate science/NGS/LGS run, and compares exact
 discrete state, CPU products, and RNG streams with the serial oracle. Its
-`Channel` synchronization is test scaffolding, not the production HIL data
-plane; Gate 8 still owns bounded SPSC completion paths.
+`Channel` synchronization remains core test scaffolding, not the production
+HIL data plane.
+
+AdaptiveOpticsHIL Gate 8.5 implements that production owner layer. Preparation
+binds each path group or compatible Gate 7 device batch to one stable owner
+with one bounded SPSC due-work ring and one owner-specific bounded SPSC
+completion ring. A deterministic policy services the same rings without tasks;
+the threaded policy creates one reusable task per owner during arm and never a
+task graph per event. The coordinator alone advances the plant timeline and
+atmosphere, materializes every current-epoch path input, seals the core claim,
+then releases independently owned downstream work. Exact CPU budget admission
+and nominal close, acknowledgement, join, and accounting are part of this
+boundary. Tasks are not yet pinned, and the evidence does not promote
+fixed-arrival latency, overload/recovery, mixed placement, or a GPU hardware
+runtime claim.
 
 The maintained
 [`benchmark_gate6_grouped_cpu.jl`](../../benchmarks/benchmark_gate6_grouped_cpu.jl)
@@ -396,7 +409,11 @@ passing their full cross-platform, ownership-stress, coverage, and
 benchmark-contract checks. This validates the prepared CPU executor boundary
 and the selected hold-until-materialized atmosphere policy. It does not promote
 the test-scaffolding tasks into production workers or add affinity, pacing,
-SPSC completion, transport, or lifecycle behavior; those remain Gate 8.
+SPSC completion, transport, or lifecycle behavior at Gate 6. AdaptiveOpticsHIL
+[PR #30](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/30) later
+adds the long-lived owner, bounded completion, and nominal lifecycle layer at
+Gate 8.5 while leaving affinity, external pacing, transport, overload, and
+coordinated failure drain open.
 
 On large EPYC or Threadripper systems, placement should account for NUMA nodes,
 physical cores, SMT siblings, memory allocation, NIC queues, and interrupts.

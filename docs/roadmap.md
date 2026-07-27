@@ -212,9 +212,15 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    matrix, same-session readiness and bounded arm windows, immutable active
    serial topology, and distinct typed clean-stop and failure records. This
    advances `HIL-LIFE-001` only to partial: prepared nonstructural controls,
-   long-lived execution owners, and coordinated bounded drain remain open.
-   The affected complete port requirements likewise remain partial; long-lived
-   execution owners are the next ordered boundary.
+   coordinated first-failure publication, and bounded failure drain remain
+   open. Gate 8.5 instantiates stable long-lived owners for prepared path
+   groups and compatible Gate 7 device batches, with bounded owner-specific
+   due/completion rings, deterministic and threaded execution policies, CPU
+   budget validation, and nominal lifecycle/accounting integration. This
+   advances the lifecycle and complete-resource semantics without claiming
+   overload, recovery, affinity, mixed placement, or operational soak
+   evidence. Execution-clock ingress liveness and overload policy are the next
+   ordered boundary.
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic

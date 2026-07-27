@@ -822,10 +822,19 @@ The semantic operations and their obligations are:
 Gate 8.4 implements this phase matrix, same-session adapter readiness observed
 on the execution clock, inclusive modular arm deadlines, immutable termination
 records, and typed stop, terminal, and failure events on the serial companion
-boundary. Long-lived execution owners, coordinated closure, failure
-acknowledgement, bounded drain, and ownership-deficit finalization remain later
-Gate 8 work; a `RunStopped`/`RunFailed` transition alone does not claim those
-operations have completed.
+boundary. Gate 8.5 binds each prepared path group or compatible single-device
+batch to one stable run-local owner with bounded owner-specific due/completion
+paths. Deterministic owners service those paths synchronously; an explicitly
+threaded policy creates one reusable task per owner during arm. Nominal stop
+closes each owner input, collects its acknowledgement, joins threaded tasks,
+and requires empty owner accounting before clean lifecycle completion.
+
+Gate 8.5 also marks owner state failed when arm or start throws, but it does not
+provide the preallocated coordinator-wide first-failure path or the
+deadline-bounded failure drain. Prepared nonstructural controls and
+ownership-deficit finalization likewise remain later Gate 8 work. A
+`RunStopped` or `RunFailed` transition alone still does not claim those
+remaining operations have completed.
 
 Adapter readiness is an orchestration precondition, not a transport API in the
 HIL package. User code may implement it with a socket handshake, middleware
