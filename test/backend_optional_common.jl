@@ -563,6 +563,268 @@ function run_optional_prepared_plant_checks(::Type{B},
     return nothing
 end
 
+function optional_device_path_batch_allocation_bytes(fixture, owner)
+    run_plant_events_until!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(199_000_000),
+    )
+    claim = Plant.begin_optical_path_batch!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(200_000_000),
+    )
+    materialization_bytes = @allocated materialize_device_path_batch!(
+        owner,
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        claim,
+    )
+    Plant.seal_optical_path_batch_materialization!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        claim,
+    )
+    execution_bytes = @allocated execute_device_path_batch!(
+        owner,
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        claim,
+    )
+    Plant.complete_optical_path_batch!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        claim,
+    )
+    return (; materialization_bytes, execution_bytes)
+end
+
+function run_optional_device_path_batch_checks(
+    ::Type{B},
+    BackendArray,
+) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    lifecycle = device_batch_test_fixture(
+        backend=selector,
+        T=Float32,
+        include_unequal_rate=false,
+        include_lgs=false,
+    )
+    @test device_path_batch_owner_count(lifecycle.prepared) == 1
+    owner = device_path_batch_owner(lifecycle.prepared, 1)
+    device = device_path_batch_compute_device(owner)
+    @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
+    @test typeof(device_path_batch_backend(owner)) === typeof(selector)
+    @test device_path_batch_group_count(owner) == 2
+    @test all(
+        index -> path_execution_group_device_batch_owner_ordinal(
+            lifecycle.prepared,
+            device_path_batch_group_ordinal(owner, index),
+        ) == 1,
+        1:device_path_batch_group_count(owner),
+    )
+
+    implementation = owner.implementation
+    retained_context = implementation.context
+    retained_fft_plan = implementation.optical_batch.workspace.fft_plan
+    @test AdaptiveOpticsSim._prepared_device_execution_compute_device(
+        implementation.context,
+    ) == device
+    @test atmosphere_direction_output(
+        implementation.atmosphere_batch,
+    ) isa BackendArray
+    @test implementation.optical_batch.workspace.field_stack isa BackendArray
+    @test implementation.optical_batch.workspace.output_stack isa BackendArray
+    @test all(input -> input.opd isa BackendArray,
+        implementation.path_inputs)
+    @test all(result -> result.values isa BackendArray,
+        implementation.path_results)
+    @test effective_command(
+        lifecycle.prepared,
+        lifecycle.state,
+        :device_batch_dm_command,
+    ) isa BackendArray
+    @test surface_opd(
+        only(lifecycle.state.controllable_optics).active,
+    ) isa BackendArray
+    @test Plant.sampled_aberration_opd(
+        Plant.prepared_sampled_aberration(
+            lifecycle.plant,
+            :device_batch_static,
+        ),
+    ) isa BackendArray
+    @test Plant.sampled_aberration_opd(
+        Plant.prepared_sampled_aberration(
+            lifecycle.plant,
+            :device_batch_alpha_ncpa,
+        ),
+    ) isa BackendArray
+    @test all(
+        storage -> compute_device(storage) == device,
+        (
+            atmosphere_direction_output(implementation.atmosphere_batch),
+            implementation.optical_batch.workspace.field_stack,
+            implementation.optical_batch.workspace.output_stack,
+        ),
+    )
+
+    allocation_bytes =
+        optional_device_path_batch_allocation_bytes(lifecycle, owner)
+    # Backend runtimes retain the data plane on the device but may allocate
+    # bounded host launch descriptors for layer, FFT, copy, and detector
+    # submissions.
+    @test allocation_bytes.materialization_bytes <= 256 * 1024
+    @test allocation_bytes.execution_bytes <= 256 * 1024
+    @test owner.implementation.context === retained_context
+    @test owner.implementation.optical_batch.workspace.fft_plan ===
+        retained_fft_plan
+    @test all(
+        result -> all(isfinite, Array(result.values)),
+        implementation.path_results,
+    )
+
+    same_epoch_oracle = device_batch_test_fixture(
+        backend=selector,
+        T=Float32,
+        selection=Val(:none),
+    )
+    same_epoch_batched = prepare_device_batch_test_event_loop(
+        same_epoch_oracle.plant,
+        same_epoch_oracle.event_definition,
+        Val(:public),
+    )
+    same_epoch_batched_state = PlantEventLoopState(same_epoch_batched)
+    same_epoch_batched_workspace =
+        PlantEventLoopWorkspace(same_epoch_batched)
+    @test step_plant_events!(
+        same_epoch_oracle.prepared,
+        same_epoch_oracle.state,
+        same_epoch_oracle.workspace,
+    ) == PlantTimestamp(0)
+    expected_inputs = [
+        Array(prepared_path(same_epoch_oracle.plant, id).input.opd)
+        for id in same_epoch_oracle.path_ids
+    ]
+    expected_results = [
+        Array(prepared_path(same_epoch_oracle.plant, id).result.values)
+        for id in same_epoch_oracle.path_ids
+    ]
+    @test step_plant_events!(
+        same_epoch_batched,
+        same_epoch_batched_state,
+        same_epoch_batched_workspace,
+    ) == PlantTimestamp(0)
+    for (index, id) in pairs(same_epoch_oracle.path_ids)
+        path = prepared_path(same_epoch_oracle.plant, id)
+        @test isapprox(
+            Array(path.input.opd),
+            expected_inputs[index];
+            rtol=2f-5,
+            atol=2f-6,
+        )
+        @test isapprox(
+            Array(path.result.values),
+            expected_results[index];
+            rtol=2f-4,
+            atol=2f-4,
+        )
+    end
+
+    independent = device_batch_test_fixture(
+        backend=selector,
+        T=Float32,
+        selection=Val(:none),
+    )
+    gpu = device_batch_test_fixture(backend=selector, T=Float32)
+    @test command_admission_status(
+        submit_device_batch_test_command!(independent),
+    ) == CommandAdmittedPending
+    @test command_admission_status(
+        submit_device_batch_test_command!(gpu),
+    ) == CommandAdmittedPending
+    horizon = PlantTimestamp(450_000_000)
+    @test run_plant_events_until!(
+        gpu.prepared,
+        gpu.state,
+        gpu.workspace,
+        horizon,
+    ) == run_plant_events_until!(
+        independent.prepared,
+        independent.state,
+        independent.workspace,
+        horizon,
+    )
+    @test scheduler_timestamp(gpu.state.scheduler) ==
+        scheduler_timestamp(independent.state.scheduler)
+    @test gpu.state.scheduler.revision ==
+        independent.state.scheduler.revision
+    @test gpu.state.scheduler.cursors ==
+        independent.state.scheduler.cursors
+    @test gpu.state.path_sampled == independent.state.path_sampled
+    @test gpu.state.product_sequences ==
+        independent.state.product_sequences
+    @test gpu.state.product_ready_timestamps ==
+        independent.state.product_ready_timestamps
+    @test epoch_time(current_epoch(gpu.prepared.atmosphere)) ==
+        epoch_time(current_epoch(independent.prepared.atmosphere))
+    @test epoch_sequence(current_epoch(gpu.prepared.atmosphere)) ==
+        epoch_sequence(current_epoch(independent.prepared.atmosphere))
+    @test length(gpu.prepared.atmosphere_rng.streams) ==
+        length(independent.prepared.atmosphere_rng.streams)
+    for index in eachindex(gpu.prepared.atmosphere_rng.streams)
+        @test copy(gpu.prepared.atmosphere_rng.streams[index].state) ==
+            copy(independent.prepared.atmosphere_rng.streams[index].state)
+    end
+    compare_device_batch_test_command_state(independent, gpu)
+    for id in independent.path_ids
+        independent_path = prepared_path(independent.plant, id)
+        gpu_path = prepared_path(gpu.plant, id)
+        @test isapprox(
+            sum(Array(gpu_path.result.values)),
+            sum(Array(independent_path.result.values));
+            rtol=3f-4,
+            atol=3f-4,
+        )
+    end
+    for id in independent.acquisition_ids
+        @test acquisition_product_sequence(
+            gpu.prepared,
+            gpu.state,
+            id,
+        ) == acquisition_product_sequence(
+            independent.prepared,
+            independent.state,
+            id,
+        )
+        @test acquisition_product_ready_timestamp(
+            gpu.prepared,
+            gpu.state,
+            id,
+        ) == acquisition_product_ready_timestamp(
+            independent.prepared,
+            independent.state,
+            id,
+        )
+        @test isapprox(
+            sum(Array(acquisition_observation(
+                prepared_acquisition(gpu.plant, id),
+            ))),
+            sum(Array(acquisition_observation(
+                prepared_acquisition(independent.plant, id),
+            )));
+            rtol=3f-4,
+            atol=3f-4,
+        )
+    end
+    return nothing
+end
+
 function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     selector = backend_selector(B)
     array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
@@ -3278,6 +3540,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_zernike_normalization(B, backend)
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_prepared_plant_checks(B, backend)
+    run_optional_device_path_batch_checks(B, backend)
     run_optional_detector_event_checks(B, backend)
     run_optional_command_application_checks(B, backend)
     run_optional_controller_routing_checks(B, backend)

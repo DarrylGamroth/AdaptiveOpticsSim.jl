@@ -29,6 +29,16 @@ struct KernelLaunchPhase{S<:ExecutionStyle}
     style::S
 end
 
+#
+# Prepared single-owner execution contexts
+#
+# These contexts are intentionally internal. They let one prepared Plant
+# device-batch owner retain an exact backend stream without making stream
+# objects, task policy, or accelerator packages part of core's public API.
+# Optional backend extensions provide accelerator-specific implementations.
+#
+abstract type _AbstractPreparedDeviceExecutionContext end
+
 execution_style(A::AbstractArray) = execution_style(KernelAbstractions.get_backend(A))
 execution_style(::KernelAbstractions.CPU) = ScalarCPUStyle()
 execution_style(backend::KernelAbstractions.Backend) = AcceleratorStyle(backend)
@@ -111,6 +121,11 @@ abstract type AbstractComputeDevice end
 """The host compute device used by ordinary CPU array storage."""
 struct HostComputeDevice <: AbstractComputeDevice end
 
+struct _HostPreparedDeviceExecutionContext <:
+    _AbstractPreparedDeviceExecutionContext
+    device::HostComputeDevice
+end
+
 @inline _require_accelerator_backend(backend::AbstractArrayBackend) = backend
 function _require_accelerator_backend(::CPUBackend)
     throw(InvalidConfiguration(
@@ -180,6 +195,42 @@ end
 @inline compute_device_identifier(::HostComputeDevice) = nothing
 @inline compute_device_identifier(device::AcceleratorComputeDevice) =
     device.identifier
+
+@inline function _prepare_device_execution_context(storage::AbstractArray)
+    return _prepare_device_execution_context(execution_style(storage),
+        storage)
+end
+
+@inline function _prepare_device_execution_context(
+    ::ScalarCPUStyle,
+    storage::AbstractArray,
+)
+    return _HostPreparedDeviceExecutionContext(compute_device(storage))
+end
+
+function _prepare_device_execution_context(
+    ::AcceleratorStyle,
+    storage::AbstractArray,
+)
+    throw(InvalidConfiguration(
+        "the accelerator storage type $(typeof(storage)) does not provide " *
+        "a prepared device execution context"))
+end
+
+@inline _prepared_device_execution_compute_device(
+    context::_HostPreparedDeviceExecutionContext,
+) = context.device
+
+@inline function _with_prepared_device_execution_context(
+    f::F,
+    ::_HostPreparedDeviceExecutionContext,
+) where {F}
+    return f()
+end
+
+@inline _synchronize_prepared_device_execution_context!(
+    ::_HostPreparedDeviceExecutionContext,
+) = nothing
 
 @inline function same_backend(x, y)
     return backend_type(x) === backend_type(y)

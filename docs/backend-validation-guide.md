@@ -266,6 +266,11 @@ The reduced maintained smoke covers:
   spectral physical sources, with one device-resident field/output stack,
   reusable optical-axis FFT plan, per-sample product views, independent-path
   parity, detector fan-out, and explicit completed return
+- Plant-integrated ownership of compatible equal-rate direct-science paths on
+  one concrete accelerator, including one retained device execution context,
+  shared atmosphere/direct-imaging submission, explicit same-device handoff to
+  path-local products, conventional detector lifecycle parity, and completed
+  return before path publication
 - prepared physical Shack-Hartmann optical formation, detector acquisition,
   and centroid estimation on device-resident arrays
 - same-grid legacy spectral diffractive SH plus prepared native-grid bundle

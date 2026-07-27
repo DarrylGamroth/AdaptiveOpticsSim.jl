@@ -49,6 +49,11 @@ const TEST_SUITE_SPECS = (
         "testsets/plant_detector_transitions.jl"),
     TestSuiteSpec("plant-event-composition",
         "testsets/plant_event_composition.jl"),
+    TestSuiteSpec(
+        "plant-device-batching",
+        "testsets/plant_device_batching.jl";
+        fixtures=("plant_device_batching_fixtures.jl",),
+    ),
     TestSuiteSpec("plant-cpu-execution",
         "testsets/plant_cpu_execution.jl"),
     TestSuiteSpec("plant-command-composition",
@@ -108,7 +113,10 @@ const TEST_SUITE_SPECS = (
         "backend_optional_common.jl",
         "optional_amdgpu_backends.jl",
         "optional_cuda_backends.jl",
-        fixtures=("wfs_stage_contract_fixtures.jl",),
+        fixtures=(
+            "wfs_stage_contract_fixtures.jl",
+            "plant_device_batching_fixtures.jl",
+        ),
     ),
 )
 
@@ -131,6 +139,7 @@ const TEST_GROUP_SPECS = (
         "plant-triggers",
         "plant-detector-transitions",
         "plant-event-composition",
+        "plant-device-batching",
         "plant-cpu-execution",
         "plant-command-composition",
         "plant-controller-routing",
@@ -175,6 +184,12 @@ const TEST_GROUP_SPECS = (
         "plant-topology-growth",
         "plant-event-composition",
         "plant-cpu-execution",
+    ),
+    "gate7" => (
+        "direct-imaging-batch",
+        "atmosphere-direction-batch",
+        "plant-device-batching",
+        "backend-smoke",
     ),
 )
 

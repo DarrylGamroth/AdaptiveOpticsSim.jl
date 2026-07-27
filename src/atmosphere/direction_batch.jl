@@ -180,6 +180,29 @@ function _freeze_batch_sources(src::AbstractSource)
     return (freeze_source(src),)
 end
 
+function _freeze_batch_sources(
+    sources::AbstractVector{<:AbstractSource},
+)
+    isempty(sources) && throw(InvalidConfiguration(
+        "an atmosphere direction batch requires at least one source"))
+    require_leaf_source(first(sources),
+        "atmosphere direction batch source")
+    first_source = freeze_source(first(sources))
+    S = typeof(first_source)
+    frozen = Vector{S}(undef, length(sources))
+    frozen[1] = first_source
+    @inbounds for direction in 2:length(sources)
+        require_leaf_source(sources[direction],
+            "atmosphere direction batch source")
+        source = freeze_source(sources[direction])
+        typeof(source) === S || throw(InvalidConfiguration(
+            "atmosphere direction batch sources must have one concrete " *
+            "numeric and radiometric storage contract"))
+        frozen[direction] = source
+    end
+    return frozen
+end
+
 function _freeze_batch_sources(ast::Asterism)
     frozen = freeze_source(ast)
     isempty(frozen.sources) && throw(InvalidConfiguration(
@@ -455,18 +478,20 @@ end
 
 """
     prepare_atmosphere_direction_batch(atmosphere, telescope, source, output)
+    prepare_atmosphere_direction_batch(atmosphere, telescope, sources, output)
     prepare_atmosphere_direction_batch(atmosphere, telescope, output)
 
-Freeze one source, an ordered `Asterism`, or an `ExtendedSource` quadrature and
-prepare its homogeneous geometry for repeated current-epoch rendering into the
-caller-owned three-dimensional `output`. The first two axes are the pupil-plane
-grid and the third axis retains source order. The three-argument form prepares
-one on-axis source direction.
+Freeze one source, a homogeneous ordered vector of leaf sources, an ordered
+`Asterism`, or an `ExtendedSource` quadrature and prepare its homogeneous
+geometry for repeated current-epoch rendering into the caller-owned
+three-dimensional `output`. The first two axes are the pupil-plane grid and the
+third axis retains source order. The three-argument form prepares one on-axis
+source direction.
 """
 function prepare_atmosphere_direction_batch(
     atm::AbstractTimedAtmosphere,
     tel::Telescope,
-    src::Union{AbstractSource,Nothing},
+    src::Union{AbstractSource,AbstractVector{<:AbstractSource},Nothing},
     output::AbstractArray,
 )
     capability = atmosphere_direction_batch_capability(typeof(atm))
