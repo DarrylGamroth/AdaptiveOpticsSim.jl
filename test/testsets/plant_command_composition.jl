@@ -10,6 +10,8 @@ struct CommandCompositionAcquisitionModel{T<:AbstractFloat}
 end
 
 struct ArrayInitialCommandOpticModel end
+struct AbandoningCommandCompositionBatchExecutor <:
+    Plant.AbstractOpticalPathBatchExecutor end
 
 struct PreparedCommandCompositionOptic{T<:AbstractFloat,
     A<:AbstractMatrix{T}}
@@ -246,6 +248,19 @@ function Plant.prepare_acquisition_provider(
             units=:detected_electrons,
             geometry=path.result.metadata))
     return prepare_full_optical_provider(execution, products)
+end
+
+function Plant.execute_optical_path_batch!(
+    ::AbandoningCommandCompositionBatchExecutor,
+    prepared::Plant.PreparedPlantEventLoop,
+    state::Plant.PlantEventLoopState,
+    workspace::Plant.PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
+    claim = Plant.begin_optical_path_batch!(
+        prepared, state, workspace, timestamp)
+    return Plant.abandon_optical_path_batch!(
+        prepared, state, workspace, claim)
 end
 
 function command_composition_schema(endpoint::Symbol;
@@ -520,6 +535,67 @@ end
         :hil_ingress_liveness_expired
     @test command_terminal_timestamp(disposition) == PlantTimestamp(1)
     @test effective_command(prepared, state, :a_woofer) == 0.0
+end
+
+@testset "Abandoned optical batch permits terminal command drain only" begin
+    _, prepared, state, workspace, first_schema, _ =
+        command_composition_fixture()
+    admission = admit_plant_command!(
+        prepared,
+        state,
+        workspace,
+        PlantCommand(
+            first_schema,
+            1,
+            PlantTimestamp(100_000_000),
+            0.35),
+        PlantTimestamp(0),
+    )
+    @test command_admission_status(admission) ==
+        CommandAdmittedPending
+
+    abandonment_error = captured_command_composition_error() do
+        step_plant_events!(
+            prepared,
+            state,
+            workspace,
+            AbandoningCommandCompositionBatchExecutor(),
+        )
+    end
+    @test abandonment_error isa PlantScheduleError
+    @test abandonment_error.reason == :optical_path_batch_active
+
+    count = @inferred fail_pending_plant_commands!(
+        prepared,
+        state,
+        workspace,
+        CommandEndpointID(:a_woofer);
+        reason=CommandDispositionReason(:hil_owner_failure),
+    )
+    @test count == 1
+    @test command_disposition_count(workspace) == 1
+    disposition = command_disposition(workspace, 1)
+    @test command_terminal_kind(disposition) == FailedCommand
+    @test command_disposition_reason(disposition).name ==
+        :hil_owner_failure
+    @test command_terminal_timestamp(disposition) == PlantTimestamp(0)
+    @test effective_command(prepared, state, :a_woofer) == 0.0
+
+    admission_error = captured_command_composition_error() do
+        admit_plant_command!(
+            prepared,
+            state,
+            workspace,
+            PlantCommand(
+                first_schema,
+                2,
+                PlantTimestamp(200_000_000),
+                0.5),
+            PlantTimestamp(1),
+        )
+    end
+    @test admission_error isa PlantScheduleError
+    @test admission_error.reason == :optical_path_batch_active
 end
 
 @testset "Prepared configuration and physical-state ownership" begin
