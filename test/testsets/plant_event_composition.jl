@@ -948,6 +948,21 @@ end
     @test plant_event_path_count(prepared) == 3
     @test path_execution_group_count(prepared) == 3
     @test plant_event_acquisition_count(prepared) == 5
+    for id in AcquisitionID.((
+        :lgs_emccd,
+        :ngs_saphira,
+        :science_ccd,
+        :science_cmos,
+        :science_rolling,
+    ))
+        @test acquisition_products(prepared, id) ===
+            acquisition_products(prepared_acquisition(plant, id))
+    end
+    unknown_products = event_test_error() do
+        acquisition_products(prepared, :unknown_acquisition)
+    end
+    @test unknown_products isa PlantScheduleError
+    @test unknown_products.reason == :unknown_acquisition
     @test plant_event_generator_count(prepared) == 1 + 3 + 5 * 5
     @test next_plant_event_timestamp(prepared, state, workspace) ==
         PlantTimestamp(0)
