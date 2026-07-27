@@ -225,9 +225,12 @@ with stable domain identity `D`, positive domain-local version `v`, signed
 integer source anchor `s0`, nonnegative `PlantTimestamp` anchor `p0`, positive
 reduced integer rate numerator `n`, positive reduced denominator `d`,
 nonnegative uncertainty `u`, and inclusive signed source validity interval
-`[s_min, s_max]`. The rate is plant nanoseconds per source tick; `n/d - 1` is
-the represented drift relative to equal-rate nanoseconds. For a source
-timestamp `s`, the canonical mapping is
+`[s_min, s_max]`. The rate `n/d` is plant nanoseconds per source tick and
+therefore includes both the domain's nominal tick scale and any constant
+fractional frequency offset. Only when one source tick is nominally one
+nanosecond does `n/d - 1` equal that fractional offset. Time-varying clock
+drift is represented prospectively by a later mapping version, not by mutating
+an installed coefficient. For a source timestamp `s`, the canonical mapping is
 
 ```text
 p(s) = p0 + round_nearest_ties_to_even(((s - s0) * n) / d)
