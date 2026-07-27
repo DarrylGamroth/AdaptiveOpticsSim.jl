@@ -825,6 +825,282 @@ function run_optional_device_path_batch_checks(
     return nothing
 end
 
+@inline function optional_wfs_plan_device_resident(
+    plan::AdaptiveOpticsSim.PreparedShackHartmannOpticalFormation,
+    device,
+    BackendArray,
+)
+    propagation = plan.front_end.propagation
+    arrays = (
+        propagation.field,
+        propagation.phasor,
+        propagation.fft_stack,
+        propagation.intensity_stack,
+        propagation.sampled_spot_cube,
+        propagation.spot_cube_accum,
+        propagation.fft_asterism_stack,
+    )
+    return all(
+        array -> array isa BackendArray &&
+            compute_device(array) == device,
+        arrays,
+    )
+end
+
+@inline function optional_wfs_plan_device_resident(
+    plan::Union{
+        AdaptiveOpticsSim.PreparedPyramidOpticalFormation,
+        AdaptiveOpticsSim.PreparedBioEdgeOpticalFormation,
+    },
+    device,
+    BackendArray,
+)
+    front_end = plan.front_end
+    propagation = front_end.propagation
+    arrays = (
+        front_end.modulation.phases,
+        propagation.field,
+        propagation.focal_field,
+        propagation.pupil_field,
+        propagation.phasor,
+        propagation.intensity,
+        propagation.temp,
+        propagation.scratch,
+        propagation.asterism_stack,
+    )
+    return all(
+        array -> array isa BackendArray &&
+            compute_device(array) == device,
+        arrays,
+    )
+end
+
+function optional_wfs_plan_device_resident(
+    plan::Union{
+        AdaptiveOpticsSim.PreparedShackHartmannOpticalBundleFormation,
+        AdaptiveOpticsSim.PreparedPyramidOpticalBundleFormation,
+        AdaptiveOpticsSim.PreparedBioEdgeOpticalBundleFormation,
+    },
+    device,
+    BackendArray,
+)
+    return all(
+        component -> optional_wfs_plan_device_resident(
+            component,
+            device,
+            BackendArray,
+        ),
+        plan.plans,
+    )
+end
+
+@inline function optional_wfs_result_device_resident(
+    result::IntensityMap,
+    device,
+    BackendArray,
+)
+    return result.values isa BackendArray &&
+        compute_device(result.values) == device
+end
+
+function optional_wfs_result_device_resident(
+    result::OpticalProductBundle,
+    device,
+    BackendArray,
+)
+    return all(
+        index -> optional_wfs_result_device_resident(
+            result[index],
+            device,
+            BackendArray,
+        ),
+        1:length(result),
+    )
+end
+
+@inline optional_wfs_products_approx(
+    device::AbstractArray,
+    oracle::AbstractArray,
+) = isapprox(device, oracle; rtol=4f-4, atol=8f-5)
+
+function optional_wfs_products_approx(
+    device::Tuple,
+    oracle::Tuple,
+)
+    length(device) == length(oracle) || return false
+    return all(
+        optional_wfs_products_approx(device[index], oracle[index])
+        for index in eachindex(device)
+    )
+end
+
+function optional_wfs_device_path_batch_allocation_bytes(
+    fixture,
+    ::PreparedDevicePathBatchOwner,
+)
+    run_plant_events_until!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(199_000_000),
+    )
+    completed_timestamp_bytes = @allocated run_plant_events_until!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(200_000_000),
+    )
+    return (; completed_timestamp_bytes)
+end
+
+function run_optional_wfs_device_model_matrix_checks(
+    ::Type{B},
+    BackendArray,
+) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    selector = backend_selector(B)
+    for (family, direction, spectral) in device_model_matrix_wfs_rows()
+        oracle = device_model_matrix_wfs_fixture(
+            family;
+            backend=CPUBackend(),
+            selection=Val(:none),
+            direction,
+            spectral,
+            T=Float32,
+            r0=2f6,
+        )
+        device_fixture = device_model_matrix_wfs_fixture(
+            family;
+            backend=selector,
+            selection=Val(:all),
+            direction,
+            spectral,
+            T=Float32,
+            r0=2f6,
+        )
+        @test device_path_batch_owner_count(device_fixture.prepared) == 1
+        owner = device_path_batch_owner(device_fixture.prepared, 1)
+        implementation = owner.implementation
+        @test implementation isa Plant._PreparedWFSDevicePathBatch
+        @test device_path_batch_group_count(owner) == 2
+        device = device_path_batch_compute_device(owner)
+        @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
+        @test typeof(device_path_batch_backend(owner)) === typeof(selector)
+        @test atmosphere_direction_output(
+            implementation.atmosphere_batch,
+        ) isa BackendArray
+        @test compute_device(
+            atmosphere_direction_output(implementation.atmosphere_batch),
+        ) == device
+        @test all(
+            input -> input.opd isa BackendArray &&
+                compute_device(input.opd) == device,
+            implementation.path_inputs,
+        )
+        @test all(
+            result -> optional_wfs_result_device_resident(
+                result,
+                device,
+                BackendArray,
+            ),
+            implementation.path_results,
+        )
+        retained_context = implementation.context
+        retained_plans = ntuple(2) do index
+            group_slot = Int(owner.group_slots[index])
+            plan = device_fixture.prepared.path_groups[
+                group_slot].path.execution.plan
+            @test optional_wfs_plan_device_resident(
+                plan,
+                device,
+                BackendArray,
+            )
+            return plan
+        end
+
+        @test step_plant_events!(
+            device_fixture.prepared,
+            device_fixture.state,
+            device_fixture.workspace,
+        ) == step_plant_events!(
+            oracle.prepared,
+            oracle.state,
+            oracle.workspace,
+        ) == PlantTimestamp(0)
+        device_model_matrix_copy_atmosphere_screens!(
+            device_fixture.prepared.atmosphere,
+            oracle.prepared.atmosphere,
+        )
+        horizon = PlantTimestamp(200_000_000)
+        @test run_plant_events_until!(
+            device_fixture.prepared,
+            device_fixture.state,
+            device_fixture.workspace,
+            horizon,
+        ) == run_plant_events_until!(
+            oracle.prepared,
+            oracle.state,
+            oracle.workspace,
+            horizon,
+        )
+        @test device_fixture.state.scheduler.cursors ==
+            oracle.state.scheduler.cursors
+        @test device_fixture.state.path_sampled ==
+            oracle.state.path_sampled
+        @test device_fixture.state.product_sequences ==
+            oracle.state.product_sequences
+        @test device_fixture.state.product_ready_timestamps ==
+            oracle.state.product_ready_timestamps
+        @test epoch_time(current_epoch(
+            device_fixture.prepared.atmosphere,
+        )) == epoch_time(current_epoch(oracle.prepared.atmosphere))
+        @test epoch_sequence(current_epoch(
+            device_fixture.prepared.atmosphere,
+        )) == epoch_sequence(current_epoch(oracle.prepared.atmosphere))
+        @test implementation.context === retained_context
+        current_plans = ntuple(2) do index
+            group_slot = Int(owner.group_slots[index])
+            device_fixture.prepared.path_groups[
+                group_slot].path.execution.plan
+        end
+        @test current_plans === retained_plans
+        for id in oracle.path_ids
+            oracle_path = prepared_path(oracle.plant, id)
+            device_path = prepared_path(device_fixture.plant, id)
+            @test isapprox(
+                Array(device_path.input.opd),
+                Array(oracle_path.input.opd);
+                rtol=3f-5,
+                atol=4f-6,
+            )
+            @test optional_wfs_products_approx(
+                device_model_matrix_product_host(device_path.result),
+                device_model_matrix_product_host(oracle_path.result),
+            )
+        end
+
+        allocation_fixture = device_model_matrix_wfs_fixture(
+            family;
+            backend=selector,
+            selection=Val(:all),
+            direction,
+            spectral,
+            T=Float32,
+            r0=2f6,
+        )
+        allocation_owner =
+            device_path_batch_owner(allocation_fixture.prepared, 1)
+        allocation_bytes =
+            optional_wfs_device_path_batch_allocation_bytes(
+                allocation_fixture,
+                allocation_owner,
+            )
+        # This bound includes the co-scheduled ordinary detector witness path
+        # as well as the two-member WFS owner and its completion barrier.
+        @test allocation_bytes.completed_timestamp_bytes <= 1024 * 1024
+    end
+    return nothing
+end
+
 function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     selector = backend_selector(B)
     array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
@@ -3541,6 +3817,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_prepared_plant_checks(B, backend)
     run_optional_device_path_batch_checks(B, backend)
+    run_optional_wfs_device_model_matrix_checks(B, backend)
     run_optional_detector_event_checks(B, backend)
     run_optional_command_application_checks(B, backend)
     run_optional_controller_routing_checks(B, backend)

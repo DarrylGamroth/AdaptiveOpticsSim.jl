@@ -15,6 +15,7 @@ for name in names(Plant; all=true)
 end
 
 include("plant_device_batching_fixtures.jl")
+include("plant_device_model_matrix_fixtures.jl")
 include("backend_optional_common.jl")
 include(normpath(joinpath(@__DIR__, "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
 include(normpath(joinpath(@__DIR__, "..", "scripts", "gpu_builder_contract.jl")))
