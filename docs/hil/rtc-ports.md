@@ -301,6 +301,19 @@ allowed in-flight work, service-rate evidence, and latency budget. Preparation
 records the rationale and uses `L = λW` as a consistency check; extra capacity
 is not treated as free because it permits additional residence time.
 
+For each payload pool, the externally quiesced ownership equation is:
+
+```text
+free + producer-owned + queued + consumer-leased + return-queued
+  = prepared pool capacity
+```
+
+The prepared lease-return capacity must cover the maximum legal simultaneous
+consumer-lease set. When every pool slot may become consumer-owned, this means
+the return-ring capacity is at least the pool capacity. A cumulative reclaimed
+counter is evidence of successful owner-side recycling, not another ownership
+state in the equation.
+
 Full behavior is resource-specific:
 
 | Resource | Required full behavior | Ownership/result |
@@ -326,3 +339,11 @@ return `closed` only after that drain ends. The pool owner continues draining
 lease returns until every lease is accounted for or the deficit is reported.
 Recovery evidence includes occupancy, sequence gaps, outcome counts, and
 complete buffer accounting; resuming throughput alone is insufficient.
+
+A pool closes new producer claims before its lease-return path can close.
+Closing claims does not revoke producer-owned, queued, consumer-leased, or
+already return-queued storage. For a completion-bearing port, completion
+publication closes and its published descriptors drain before the paired
+lease-return path closes. Closing either descriptor ring never revokes entries
+already published into that ring; its consumer continues bounded draining to
+empty or reports the remaining ownership deficit.
