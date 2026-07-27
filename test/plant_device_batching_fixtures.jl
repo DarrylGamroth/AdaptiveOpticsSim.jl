@@ -49,6 +49,8 @@ function device_batch_test_physical_definitions(
     telescope::Telescope,
     backend::AdaptiveOpticsSim.AbstractArrayBackend,
     ::Type{T},
+    ;
+    selected_path::Symbol=:alpha,
 ) where {T<:AbstractFloat}
     prototype = PupilFunction(telescope; T, backend)
     static_opd = similar(prototype.opd)
@@ -78,7 +80,7 @@ function device_batch_test_physical_definitions(
         NCPA(ncpa_opd, nothing, nothing),
         ncpa_metadata;
         placement=PupilPlanePlacement(),
-        visibility=SelectedPathVisibility(:alpha),
+        visibility=SelectedPathVisibility(selected_path),
         application=DMAdditive(),
     )
     schema = device_batch_test_command_schema(T)

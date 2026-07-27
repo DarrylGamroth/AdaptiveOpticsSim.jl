@@ -15,6 +15,7 @@ function compare_device_model_matrix_wfs_runs(oracle, owned)
         @test copy(owned.prepared.atmosphere_rng.streams[index].state) ==
             copy(oracle.prepared.atmosphere_rng.streams[index].state)
     end
+    compare_device_batch_test_command_state(oracle, owned)
     for id in oracle.path_ids
         oracle_path = prepared_path(oracle.plant, id)
         owned_path = prepared_path(owned.plant, id)
@@ -49,6 +50,13 @@ function device_model_matrix_products_approx(
     return all(
         device_model_matrix_products_approx(owned[index], oracle[index])
         for index in eachindex(owned)
+    )
+end
+
+function device_model_matrix_path_group(fixture, id::Symbol)
+    return only(
+        group for group in fixture.prepared.path_groups
+        if group.id == OpticalPathID(id)
     )
 end
 
@@ -87,6 +95,19 @@ end
             group_slot = Int(owner.group_slots[index])
             owned.prepared.path_groups[group_slot].path.execution.plan
         end
+        initial_command = Array(effective_command(
+            owned.prepared,
+            owned.state,
+            :device_batch_dm_command,
+        ))
+        @test initial_command ==
+            eltype(initial_command)[1e-9, 0, -5e-10, 0]
+        @test command_admission_status(
+            submit_device_batch_test_command!(oracle),
+        ) == CommandAdmittedPending
+        @test command_admission_status(
+            submit_device_batch_test_command!(owned),
+        ) == CommandAdmittedPending
         horizon = PlantTimestamp(200_000_000)
         @test run_plant_events_until!(
             owned.prepared,
@@ -105,6 +126,284 @@ end
             owned.prepared.path_groups[group_slot].path.execution.plan
         end
         @test current_plans === retained_plans
+        applied_command = Array(effective_command(
+            owned.prepared,
+            owned.state,
+            :device_batch_dm_command,
+        ))
+        @test applied_command ==
+            eltype(applied_command)[-5e-10, 2e-9, 0, 1e-9]
+        @test last_command_application_timestamp(
+            owned.state.command_applications[1],
+        ) == horizon
         compare_device_model_matrix_wfs_runs(oracle, owned)
+    end
+end
+
+@testset "WFS device path-batch fallback matrix" begin
+    singleton = device_model_matrix_wfs_fixture(
+        DeviceModelMatrixShackHartmann();
+        include_second=false,
+    )
+    @test device_path_batch_owner_count(singleton.prepared) == 0
+    @test Plant._device_path_batch_candidate(
+        Val(:all),
+        device_model_matrix_path_group(singleton, :wfs_alpha),
+    ) !== nothing
+
+    unequal_schedule = device_model_matrix_wfs_fixture(
+        DeviceModelMatrixShackHartmann();
+        second_period_ns=150_000_000,
+    )
+    @test device_path_batch_owner_count(unequal_schedule.prepared) == 0
+    schedule_keys = map((:wfs_alpha, :wfs_beta)) do id
+        Plant._device_path_batch_candidate(
+            Val(:all),
+            device_model_matrix_path_group(unequal_schedule, id),
+        )
+    end
+    @test schedule_keys[1].schedule != schedule_keys[2].schedule
+
+    unequal_origin = device_model_matrix_wfs_fixture(
+        DeviceModelMatrixShackHartmann();
+        second_origin=PlantTimestamp(50_000_000),
+    )
+    @test device_path_batch_owner_count(unequal_origin.prepared) == 0
+    origin_keys = map((:wfs_alpha, :wfs_beta)) do id
+        Plant._device_path_batch_candidate(
+            Val(:all),
+            device_model_matrix_path_group(unequal_origin, id),
+        )
+    end
+    @test origin_keys[1].origin != origin_keys[2].origin
+
+    mixed_family = device_model_matrix_wfs_fixture(
+        DeviceModelMatrixShackHartmann();
+        second_family=DeviceModelMatrixPyramid(),
+    )
+    @test device_path_batch_owner_count(mixed_family.prepared) == 0
+    family_keys = map((:wfs_alpha, :wfs_beta)) do id
+        Plant._device_path_batch_candidate(
+            Val(:all),
+            device_model_matrix_path_group(mixed_family, id),
+        )
+    end
+    @test family_keys[1].execution_type !== family_keys[2].execution_type
+
+    mixed_signature = device_model_matrix_wfs_fixture(
+        DeviceModelMatrixShackHartmann();
+        second_variant=1,
+    )
+    @test device_path_batch_owner_count(mixed_signature.prepared) == 0
+    signature_keys = map((:wfs_alpha, :wfs_beta)) do id
+        Plant._device_path_batch_candidate(
+            Val(:all),
+            device_model_matrix_path_group(mixed_signature, id),
+        )
+    end
+    @test signature_keys[1].plan_contract !=
+        signature_keys[2].plan_contract
+
+    mixed_product = device_model_matrix_wfs_fixture(
+        DeviceModelMatrixPyramid();
+        second_spectral=Val(:spectral),
+    )
+    @test device_path_batch_owner_count(mixed_product.prepared) == 0
+    product_keys = map((:wfs_alpha, :wfs_beta)) do id
+        Plant._device_path_batch_candidate(
+            Val(:all),
+            device_model_matrix_path_group(mixed_product, id),
+        )
+    end
+    @test product_keys[1].product_contract !=
+        product_keys[2].product_contract
+
+    for unsupported_family in (
+        DeviceModelMatrixZernike(),
+        DeviceModelMatrixCurvature(),
+    )
+        unsupported = device_model_matrix_wfs_fixture(unsupported_family)
+        @test device_path_batch_owner_count(unsupported.prepared) == 0
+        @test all(
+            id -> Plant._device_path_batch_candidate(
+                Val(:all),
+                device_model_matrix_path_group(unsupported, id),
+            ) === nothing,
+            unsupported.path_ids,
+        )
+    end
+
+    coexistence = device_model_matrix_wfs_fixture(
+        DeviceModelMatrixBioEdge();
+        spectral=Val(:spectral),
+    )
+    @test device_path_batch_owner_count(coexistence.prepared) == 1
+    witness_group = device_model_matrix_path_group(
+        coexistence,
+        :readout_witness,
+    )
+    witness_ordinal = findfirst(
+        group -> group.id == witness_group.id,
+        coexistence.prepared.path_groups,
+    )
+    @test !isnothing(witness_ordinal)
+    @test isnothing(path_execution_group_device_batch_owner_ordinal(
+        coexistence.prepared,
+        something(witness_ordinal),
+    ))
+end
+
+@testset "Conventional detector device-model matrix" begin
+    for row in device_model_matrix_detector_rows()
+        result = device_model_matrix_execute_detector(row)
+        detector = result.detector
+        metadata = result.metadata_after
+        expected = device_model_matrix_expected_detector_frame(
+            row,
+            detector,
+            Float64,
+        )
+        @test Array(result.output) ≈ expected atol=2e-14 rtol=2e-14
+        @test detector_acquisition_sequence(result.state) == UInt64(1)
+        @test metadata.sensor ==
+            device_model_matrix_detector_sensor_symbol(row)
+        @test metadata.frame_response ==
+            device_model_matrix_detector_response_symbol(row)
+        @test metadata.timing_model ==
+            device_model_matrix_detector_timing_symbol(row)
+        @test metadata.sampling_mode ==
+            device_model_matrix_detector_sampling_symbol(row)
+        @test metadata.acquisition_mode ==
+            device_model_matrix_detector_acquisition_symbol(row)
+        @test device_model_matrix_response_metadata_signature(
+            result.metadata_before,
+        ) == device_model_matrix_response_metadata_signature(
+            result.metadata_after,
+        )
+
+        supports_mtf =
+            device_model_matrix_detector_response_symbol(row) != :none
+        @test supports_detector_mtf(detector) == supports_mtf
+        frequency_x = 0.25
+        frequency_y = 0.125
+        @test detector_mtf(detector, frequency_x, frequency_y) ≈
+            device_model_matrix_expected_detector_mtf(
+                detector,
+                frequency_x,
+                frequency_y,
+                Float64,
+            ) atol=2e-14 rtol=2e-14
+
+        if row isa DeviceModelMatrixM2FrameTransferEMCCD
+            @test result.status_trace == (
+                (true, true, false),
+                (false, true, false),
+                (false, true, false),
+                (true, false, true),
+                (true, true, false),
+            )
+            @test result.event_times == (
+                start=PlantTimestamp(100_000_000),
+                close=PlantTimestamp(1_100_000_000),
+                transfer=PlantTimestamp(1_200_000_000),
+                readout=PlantTimestamp(1_400_000_000),
+            )
+            @test frame_transfer_product_sequence(result.state) == UInt64(1)
+            @test acquisition_product_ready_timestamp(result.state) ==
+                result.event_times.readout
+            @test result.prepared.storage_frame !== detector.state.frame
+            @test !Base.mightalias(
+                result.prepared.storage_frame,
+                detector.state.frame,
+            )
+        else
+            @test result.status_trace == (
+                DetectorAcquisitionReady,
+                DetectorExposureActive,
+                DetectorReadoutPending,
+                DetectorReadoutComplete,
+                DetectorAcquisitionReady,
+            )
+            @test detector_acquisition_status(result.state) ==
+                DetectorAcquisitionReady
+        end
+
+        if row isa DeviceModelMatrixM5RollingCMOS
+            @test rolling_band_count(result.prepared) == 3
+            @test rolling_opened_band_count(result.state) == 3
+            @test rolling_closed_band_count(result.state) == 3
+            @test ntuple(
+                index -> rolling_band_open_timestamp(
+                    result.prepared,
+                    result.state,
+                    index,
+                ),
+                3,
+            ) == (
+                PlantTimestamp(100_000_000),
+                PlantTimestamp(200_000_000),
+                PlantTimestamp(300_000_000),
+            )
+            @test ntuple(
+                index -> rolling_band_close_timestamp(
+                    result.prepared,
+                    result.state,
+                    index,
+                ),
+                3,
+            ) == (
+                PlantTimestamp(1_100_000_000),
+                PlantTimestamp(1_200_000_000),
+                PlantTimestamp(1_300_000_000),
+            )
+            @test result.event_times == (
+                start=PlantTimestamp(100_000_000),
+                readout=PlantTimestamp(1_400_000_000),
+                readiness=PlantTimestamp(1_500_000_000),
+            )
+        elseif row isa DeviceModelMatrixM6UpTheRampHgCdTe
+            response = expected
+            expected_cube = cat(
+                zeros(9, 9),
+                response .* 0.25,
+                response;
+                dims=3,
+            )
+            @test nondestructive_read_count(result.prepared) == 3
+            @test ntuple(
+                index -> nondestructive_read_offset(
+                    result.prepared,
+                    index,
+                ),
+                3,
+            ) == (
+                PlantDuration(0),
+                PlantDuration(500_000_000),
+                PlantDuration(1_000_000_000),
+            )
+            @test Array(detector_ramp_cube(detector)) ≈ expected_cube
+            @test Array(detector_ramp_slope(detector)) ≈ response
+            @test Array(detector_ramp_intercept(detector)) ≈
+                -response ./ 12
+            @test detector_ramp_times(detector) == [0.0, 0.5, 1.0]
+            @test result.event_times == (
+                start=PlantTimestamp(100_000_000),
+                middle=PlantTimestamp(600_000_000),
+                close=PlantTimestamp(1_100_000_000),
+                readout=PlantTimestamp(1_300_000_000),
+                readiness=PlantTimestamp(1_400_000_000),
+            )
+        elseif !(row isa DeviceModelMatrixM2FrameTransferEMCCD)
+            @test exposure_start_timestamp(result.state) ==
+                PlantTimestamp(100_000_000)
+            @test integrated_through_timestamp(result.state) ==
+                PlantTimestamp(1_100_000_000)
+            @test result.event_times == (
+                start=PlantTimestamp(100_000_000),
+                close=PlantTimestamp(1_100_000_000),
+                readout=PlantTimestamp(1_300_000_000),
+                readiness=PlantTimestamp(1_400_000_000),
+            )
+        end
     end
 end
