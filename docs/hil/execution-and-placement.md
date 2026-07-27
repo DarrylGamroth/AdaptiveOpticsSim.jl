@@ -105,6 +105,16 @@ the Gate 9A mixed-resource planner or Gate 9B multi-GPU partitioning.
   proxy. Timing becomes HIL latency evidence only under the maintained
   fixed-arrival absolute-and-relative contract.
 
+The maintained Gate 7 envelope implements these clauses for one accelerator
+owner and compatible co-resident direct-science, Shack-Hartmann, Pyramid, and
+BioEdge path families plus the declared conventional-detector matrix. The
+[Gate 7 artifact catalog](../../benchmarks/results/gate7/manifest.toml)
+records paired CPU, AMDGPU, and CUDA evidence for a representative two-path
+diffractive Shack-Hartmann workload. Device-ready, host-ready, and
+transfer-only observations remain distinct. The artifact is a synchronized
+self-paced service-cost characterization; it does not satisfy the later
+fixed-arrival HIL-latency, mixed-placement, or multi-GPU requirements.
+
 ## Optical Branch Ownership And Parallelism
 
 Different source directions are the primary coarse-grained parallel unit. They

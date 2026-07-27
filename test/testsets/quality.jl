@@ -1,4 +1,5 @@
 using Aqua
+using SHA
 
 _rng_family(::Xoshiro) = :xoshiro
 _rng_family(::MersenneTwister) = :mersenne_twister
@@ -73,6 +74,43 @@ end
         exclusion -> occursin("HIL latency", exclusion),
         contract["scope_exclusions"],
     )
+
+    artifact_root = joinpath(root, "benchmarks", "results", "gate7")
+    manifest = TOML.parsefile(joinpath(artifact_root, "manifest.toml"))
+    closure = manifest["closure"]
+    artifacts = manifest["artifacts"]
+    @test closure["status"] == "candidate hardware evidence passed"
+    @test closure["requirements"] == ["HIL-GPU-001"]
+    @test length(artifacts) == 3
+    @test Set(artifact["backend"] for artifact in artifacts) ==
+        Set(("cpu", "amdgpu", "cuda"))
+
+    for entry in artifacts
+        artifact_path = joinpath(artifact_root, entry["path"])
+        @test isfile(artifact_path)
+        @test bytes2hex(SHA.sha256(read(artifact_path))) ==
+            entry["sha256"]
+        artifact = TOML.parsefile(artifact_path)
+        @test artifact["all_gates_passed"]
+        @test artifact["p95_supported"]
+        @test artifact["characterized_source_revision"] ==
+            closure["characterized_source_revision"]
+        @test artifact["environment"]["git_dirty"] === false
+        @test artifact["environment"]["backend"] == entry["backend"]
+        @test artifact["correctness"]["passed"]
+        @test artifact["submission_proxy_evidence"]["passed"]
+        @test artifact["relative_comparison"]["passed"]
+        @test all(artifact["boundaries"]) do boundary
+            boundary["passed"] &&
+                length(boundary["runs"]) ==
+                    artifact["configured_runs"] &&
+                all(boundary["runs"]) do run
+                    run["samples"] ==
+                        artifact["configured_samples_per_run"] &&
+                        !isempty(run["histogram_base64"])
+                end
+        end
+    end
 end
 
 @testset "Selective test registry" begin

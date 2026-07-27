@@ -178,9 +178,17 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    atmosphere-direction boundary to compatible maintained Shack-Hartmann,
    Pyramid, and BioEdge paths without replacing their domain pipelines, and
    validates a six-row conventional CCD/EMCCD/CMOS/HgCdTe response/readout
-   matrix on CUDA and AMDGPU. Promoted first-use/service-cost evidence remains
-   Gate 7.6 work; fixed-arrival evidence is additionally required before any
-   HIL latency promotion.
+   matrix on CUDA and AMDGPU. Gate 7.6 adds a clean-tree paired service-cost
+   contract for two compatible off-axis NGS diffractive Shack-Hartmann paths.
+   The retained CPU, gfx1030 AMDGPU, and WSL RTX 3050 Ti CUDA artifacts record
+   first use, raw HdrHistograms, allocation, exact device residency,
+   independent/device-owner parity, and distinct device-ready, host-ready, and
+   transfer-only boundaries. Both accelerators pass the predeclared `1.5`
+   batched-to-independent median-p95 ceiling while reducing the prepared
+   atmosphere-render proxy from two calls to one. This closes the declared
+   single-device Gate 7 evidence envelope. Fixed-arrival evidence remains
+   required before any HIL latency promotion; mixed placement and multi-GPU
+   execution remain Gates 9A and 9B.
 7. Harden the transport-neutral HIL companion with lifecycle transitions,
    guaranteed lease-return credit, first-failure propagation, replay classes,
    and GC/process-isolation policy. Add explicit or constrained deterministic

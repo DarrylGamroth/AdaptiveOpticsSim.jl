@@ -171,10 +171,38 @@ the local gfx1030 AMD Radeon Graphics target with scalar indexing disabled and
 Julia 1.12.6. This includes direct device-resident native Plant DM state,
 staging storage, and surface parity plus exact sampled-aberration defensive
 ownership and identity/transformed replacement; it does not exercise an
-integrated GPU event loop. The maintained AMD latency baseline remains the
-[July 14 cross-host artifact](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml).
-A later host-side Julia installation failure prevented retention of a new raw
-histogram and is not treated as package or AMDGPU performance evidence.
+integrated GPU event loop. The July 14 REVOLT-like
+[cross-host artifact](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml)
+remains a non-equivalent historical workload. The current paired
+single-device owner characterization is retained in the
+[Gate 7 catalog](../benchmarks/results/gate7/manifest.toml).
+
+### Gate 7 single-GPU closure benchmark
+
+When a release changes compute-device identity, direction batching, WFS device
+owners, synchronization, or explicit host-observation boundaries, rerun the
+predeclared Gate 7 benchmark on the CPU oracle and each maintained accelerator:
+
+```bash
+AOS_GATE7_OUTPUT=/tmp/gate7-local-cpu.toml \
+  julia --threads=1 --project=benchmarks --startup-file=no \
+  benchmarks/benchmark_gate7_single_gpu.jl cpu local_cpu
+AOS_GATE7_OUTPUT=/tmp/gate7-local-amdgpu.toml \
+  julia --threads=1 --project=benchmarks/amdgpu --startup-file=no \
+  benchmarks/benchmark_gate7_single_gpu.jl amdgpu local_amdgpu
+AOS_GATE7_OUTPUT=/tmp/gate7-wsl-cuda.toml \
+  julia --threads=1 --project=benchmarks/cuda --startup-file=no \
+  benchmarks/benchmark_gate7_single_gpu.jl cuda wsl_cuda
+```
+
+Run each command from the same clean candidate revision without sample, run,
+or warmup overrides. The
+[contract](../benchmarks/contracts/gate7_single_gpu.toml) and
+[artifact catalog](../benchmarks/results/gate7/manifest.toml) define the
+retained workload, hashes, hardware identity, gates, and scope. This benchmark
+is required single-device service-cost evidence, but it does not replace the
+dedicated hardware correctness matrices and must not be reported as
+fixed-arrival HIL latency or multi-GPU validation.
 
 ### Core examples
 
