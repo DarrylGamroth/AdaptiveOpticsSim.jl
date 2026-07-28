@@ -228,10 +228,21 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    typed plant command endpoints as the sole model-supported runtime-control
    seam, validates terminal rejection when the bounded future-effective
    command calendar is full, and explicitly selects zero optional observation
-   taps for the initial profile. Coordinated first-failure publication,
-   deadline-bounded drain,
-   ownership-deficit finalization, and fresh-run recovery are the next ordered
-   Gate 8.8 boundary.
+   taps for the initial profile. Gate 8.8 is complete in
+   [AdaptiveOpticsHIL PR #34](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/34)
+   at merge
+   [`d77b8c8`](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/commit/d77b8c87627a816b86a18b457a19ead60980a8f9):
+   it adds preallocated per-owner failure publication and acknowledgement,
+   stable first-observed failure selection, inclusive execution-clock
+   acknowledgement/drain deadlines, ordered ingress closure and correlated
+   command outcomes, explicit ownership deficits, and fresh-run fail-stop
+   recovery. It uses the core optical-batch abandonment prerequisite from
+   [PR #132](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/pull/132)
+   at
+   [`68ef433`](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/commit/68ef4336e4b87cddc4e5b55acfa97c601a9c6421).
+   Gate 8.9 is next: operationally qualify the selected single-host boundary
+   with fixed-arrival, burst/overload, GC/pause, soak, and deployment-manifest
+   evidence before promoting the affected requirements to validated.
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic

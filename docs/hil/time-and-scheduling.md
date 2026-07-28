@@ -866,14 +866,31 @@ threaded policy creates one reusable task per owner during arm. Nominal stop
 closes each owner input, collects its acknowledgement, joins threaded tasks,
 and requires empty owner accounting before clean lifecycle completion.
 
-Gate 8.5 also marks owner state failed when arm or start throws, but it does not
-provide the preallocated coordinator-wide first-failure path or the
-deadline-bounded failure drain. Gate 8.7 removes the companion's empty-only
-parallel control declaration and confirms that model-supported runtime plant
-controls use canonical typed command endpoints. Ownership-deficit
-finalization remains later Gate 8 work. A `RunStopped` or `RunFailed`
-transition alone still does not claim those remaining operations have
-completed.
+Gate 8.7 removes the companion's empty-only parallel control declaration and
+confirms that model-supported runtime plant controls use canonical typed
+command endpoints. Gate 8.8 completes the single-process fail-stop contract:
+every prepared coordinator and path/device owner has one preallocated compact
+failure slot and stop-acknowledgement state; the coordinator freezes the first
+observed failure, closes ingress, stops semantic admission, and drives ordered
+command-outcome, completion, and lease-return drain under inclusive
+execution-clock acknowledgement and ownership deadlines. Final accounting
+identifies any unacknowledged owner, occupied ring, retained lease or credit,
+active command correlation, or retained optical-batch claim. A deadline or
+deficit produces `RunFailed`, and recovery requires a freshly prepared run.
+The core fail-stop seam abandons a safely reclaimable failed optical batch but
+does not roll back partially mutated path, detector, command, or RNG state.
+
+This behavior is implemented by
+[AdaptiveOpticsHIL PR #34](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/34)
+at merge
+[`d77b8c8`](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/commit/d77b8c87627a816b86a18b457a19ead60980a8f9)
+using the prerequisite core fail-stop batch lifecycle from
+[AdaptiveOpticsSim PR #132](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/pull/132)
+at
+[`68ef433`](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/commit/68ef4336e4b87cddc4e5b55acfa97c601a9c6421).
+Gate 8.9 still owns fixed-arrival, burst/overload, GC/pause, soak, and
+operational-manifest qualification; Gate 8.8 therefore does not by itself
+promote the full operational lifecycle to validated production behavior.
 
 Adapter readiness is an orchestration precondition, not a transport API in the
 HIL package. User code may implement it with a socket handshake, middleware
