@@ -91,6 +91,13 @@ end
 
 @inline event_composition_execution_probe!(::Nothing) = nothing
 
+struct EventCompositionFailureProbe
+    error::Exception
+end
+
+event_composition_execution_probe!(
+    probe::EventCompositionFailureProbe) = throw(probe.error)
+
 function event_composition_execution_probe!(
     probe::EventCompositionConcurrencyProbe,
 )
@@ -1046,6 +1053,7 @@ end
         :seal_optical_path_batch_materialization!,
         :execute_path_execution_group!,
         :complete_optical_path_batch!,
+        :abandon_optical_path_batch!,
         :execute_optical_path_batch!,
     )
         @test Base.ispublic(Plant, name)
@@ -1203,6 +1211,91 @@ end
         end
         @test stale_error isa PlantScheduleError
         @test stale_error.reason == :stale_optical_path_batch_claim
+
+        _, abandoned_prepared, abandoned_state, abandoned_workspace =
+            event_composition_fixture(aligned_optical_samples=true)
+        abandoned_claim = Plant.begin_optical_path_batch!(
+            abandoned_prepared,
+            abandoned_state,
+            abandoned_workspace,
+            PlantTimestamp(0),
+        )
+        @test @inferred(Plant.abandon_optical_path_batch!(
+            abandoned_prepared,
+            abandoned_state,
+            abandoned_workspace,
+            abandoned_claim,
+        )) == PlantTimestamp(0)
+        abandoned_claim_error = event_test_error() do
+            Plant.optical_path_batch_due_group_count(
+                abandoned_prepared,
+                abandoned_state,
+                abandoned_workspace,
+                abandoned_claim,
+            )
+        end
+        @test abandoned_claim_error isa PlantScheduleError
+        @test abandoned_claim_error.reason ==
+            :stale_optical_path_batch_claim
+        abandoned_step_error = event_test_error() do
+            step_plant_events!(
+                abandoned_prepared,
+                abandoned_state,
+                abandoned_workspace,
+            )
+        end
+        @test abandoned_step_error isa PlantScheduleError
+        @test abandoned_step_error.reason == :optical_path_batch_active
+        abandoned_timestamp_error = event_test_error() do
+            next_plant_event_timestamp(
+                abandoned_prepared,
+                abandoned_state,
+                abandoned_workspace,
+            )
+        end
+        @test abandoned_timestamp_error isa PlantScheduleError
+        @test abandoned_timestamp_error.reason ==
+            :optical_path_batch_active
+        repeated_abandonment_error = event_test_error() do
+            Plant.abandon_optical_path_batch!(
+                abandoned_prepared,
+                abandoned_state,
+                abandoned_workspace,
+                abandoned_claim,
+            )
+        end
+        @test repeated_abandonment_error isa PlantScheduleError
+        @test repeated_abandonment_error.reason ==
+            :stale_optical_path_batch_claim
+
+        serial_failure = ErrorException(
+            "intentional serial optical-path failure")
+        _, serial_failure_prepared, serial_failure_state,
+            serial_failure_workspace = event_composition_fixture(
+                aligned_optical_samples=true,
+                execution_probe=EventCompositionFailureProbe(
+                    serial_failure),
+            )
+        observed_serial_failure = event_test_error() do
+            step_plant_events!(
+                serial_failure_prepared,
+                serial_failure_state,
+                serial_failure_workspace,
+            )
+        end
+        @test observed_serial_failure === serial_failure
+        @test serial_failure_workspace.optical_path_batch.phase ==
+            Plant._OpticalPathBatchAbandoned
+        serial_failure_step_error = event_test_error() do
+            step_plant_events!(
+                serial_failure_prepared,
+                serial_failure_state,
+                serial_failure_workspace,
+            )
+        end
+        @test serial_failure_step_error isa PlantScheduleError
+        @test serial_failure_step_error.reason ==
+            :optical_path_batch_active
 
         _, stale_prepared, stale_state, stale_workspace =
             event_composition_fixture(aligned_optical_samples=true)
@@ -1524,6 +1617,22 @@ end
             @test signature.execution <= 512
             @test signature.completion == 0
             @test sum(signature) <= 2_048
+
+            _, abandonment_prepared, abandonment_state,
+                abandonment_workspace = event_composition_fixture(
+                    aligned_optical_samples=true)
+            abandonment_claim = Plant.begin_optical_path_batch!(
+                abandonment_prepared,
+                abandonment_state,
+                abandonment_workspace,
+                PlantTimestamp(0),
+            )
+            @test @allocated(Plant.abandon_optical_path_batch!(
+                abandonment_prepared,
+                abandonment_state,
+                abandonment_workspace,
+                abandonment_claim,
+            )) == 0
         end
     end
 

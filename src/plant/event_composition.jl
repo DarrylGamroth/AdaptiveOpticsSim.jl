@@ -201,6 +201,7 @@ end
     _OpticalPathBatchMaterializing = 0x01
     _OpticalPathBatchExecuting = 0x02
     _OpticalPathBatchFinalizing = 0x03
+    _OpticalPathBatchAbandoned = 0x04
 end
 
 @enum _OpticalPathBatchGroupStatus::UInt8 begin
@@ -2320,7 +2321,7 @@ function fail_pending_plant_commands!(
     reason=CommandDispositionReason(:endpoint_failure))
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
-    _require_idle_optical_path_batch(workspace)
+    _require_command_failure_batch_state(workspace)
     _require_empty_event_command_dispositions(workspace)
     slot = _event_command_endpoint_slot(prepared, endpoint_id)
     event_endpoint = _event_command_endpoint(prepared, slot)
@@ -3934,6 +3935,19 @@ end
     return nothing
 end
 
+@inline function _require_command_failure_batch_state(
+    workspace::PlantEventLoopWorkspace)
+    phase = workspace.optical_path_batch.phase
+    phase in (
+        _OpticalPathBatchIdle,
+        _OpticalPathBatchAbandoned,
+    ) || _plant_event_loop_error(
+        :optical_path_batch_active,
+        "complete or explicitly abandon the active optical-path batch before failing pending commands",
+    )
+    return nothing
+end
+
 @inline function _next_optical_path_batch_generation(
     generation::UInt64,
 )
@@ -3979,6 +3993,7 @@ end
             "optical-path batch claim belongs to another event-loop state",
         )
     batch.phase != _OpticalPathBatchIdle &&
+        batch.phase != _OpticalPathBatchAbandoned &&
         batch.generation == claim.generation &&
         batch.scheduler_revision == claim.scheduler_revision &&
         batch.timestamp == claim.timestamp &&
@@ -4656,6 +4671,32 @@ function complete_optical_path_batch!(
     return claim.timestamp
 end
 
+"""
+    abandon_optical_path_batch!(prepared, state, workspace, claim)
+
+Relinquish the coordinator-local ownership of a failed optical-path batch
+without resolving its scheduler claims or attempting to undo any partially
+mutated plant, product, acquisition, atmosphere, or RNG state. The event loop
+is permanently fail-stopped after abandonment: only bounded terminal failure
+of pending commands remains permitted, and further admission or plant
+execution requires a fresh prepared run.
+"""
+function abandon_optical_path_batch!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+)
+    batch = _require_current_optical_path_batch(
+        prepared, state, workspace, claim)
+    fill!(workspace.due_paths, false)
+    fill!(batch.group_status, _OpticalPathBatchGroupNotDue)
+    batch.due_group_count = 0
+    batch.has_epoch = false
+    batch.phase = _OpticalPathBatchAbandoned
+    return claim.timestamp
+end
+
 function execute_optical_path_batch!(
     executor::AbstractOpticalPathBatchExecutor,
     ::PreparedPlantEventLoop,
@@ -4683,21 +4724,27 @@ function execute_optical_path_batch!(
 )
     claim = begin_optical_path_batch!(
         prepared, state, workspace, timestamp)
-    count = optical_path_batch_due_group_count(
-        prepared, state, workspace, claim)
-    @inbounds for index in 1:count
-        ordinal = optical_path_batch_due_group_ordinal(
-            prepared, state, workspace, claim, index)
-        _materialize_due_path_execution_group!(
-            prepared, state, workspace, claim, ordinal)
-    end
-    seal_optical_path_batch_materialization!(
-        prepared, state, workspace, claim)
-    @inbounds for index in 1:count
-        ordinal = optical_path_batch_due_group_ordinal(
-            prepared, state, workspace, claim, index)
-        _execute_due_path_execution_group!(
-            prepared, state, workspace, claim, ordinal)
+    try
+        count = optical_path_batch_due_group_count(
+            prepared, state, workspace, claim)
+        @inbounds for index in 1:count
+            ordinal = optical_path_batch_due_group_ordinal(
+                prepared, state, workspace, claim, index)
+            _materialize_due_path_execution_group!(
+                prepared, state, workspace, claim, ordinal)
+        end
+        seal_optical_path_batch_materialization!(
+            prepared, state, workspace, claim)
+        @inbounds for index in 1:count
+            ordinal = optical_path_batch_due_group_ordinal(
+                prepared, state, workspace, claim, index)
+            _execute_due_path_execution_group!(
+                prepared, state, workspace, claim, ordinal)
+        end
+    catch
+        abandon_optical_path_batch!(
+            prepared, state, workspace, claim)
+        rethrow()
     end
     return complete_optical_path_batch!(
         prepared, state, workspace, claim)

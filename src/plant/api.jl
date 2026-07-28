@@ -357,7 +357,7 @@ public begin_optical_path_batch!, materialize_path_execution_group!
 public materialize_device_path_batch!
 public seal_optical_path_batch_materialization!
 public execute_path_execution_group!, execute_device_path_batch!
-public complete_optical_path_batch!
+public complete_optical_path_batch!, abandon_optical_path_batch!
 public execute_optical_path_batch!
 public AbstractWaveformPhaseReference, AbstractAutonomousOpticFidelity
 public PreparedCircularPyramidModulator
