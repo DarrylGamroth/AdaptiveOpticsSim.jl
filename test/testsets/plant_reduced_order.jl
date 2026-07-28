@@ -604,6 +604,11 @@ end
         @test maximum_allocated >= 0
     else
         @test sample_allocated == 0
-        @test maximum_allocated <= 2048
+        # The prepared heterogeneous acquisition and command registries must
+        # retain their immutable owners across events. This limit leaves
+        # headroom above the measured 128-byte maximum while rejecting the
+        # repeated boxing regression that raised the same fixture to 800
+        # bytes per event.
+        @test maximum_allocated <= 512
     end
 end

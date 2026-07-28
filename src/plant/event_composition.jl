@@ -327,6 +327,10 @@ struct PreparedPathExecutionGroup
     id::OpticalPathID
     requirements::PathExecutionRequirements
     path::PreparedPathExecutor
+    # Retain the exact atmosphere as a prepared heterogeneous owner. This
+    # avoids reboxing the immutable atmosphere when the path preflight crosses
+    # its model-specific function barrier.
+    atmosphere::AbstractTimedAtmosphere
     # Retain the heterogeneous input box created during preparation. The
     # event-loop barrier reuses it across all visible optics instead of
     # repeatedly boxing an immutable optical-product wrapper.
@@ -348,12 +352,16 @@ end
 
 struct _PreparedPlantEventAcquisition
     id::AcquisitionID
-    lifecycle::_PreparedAcquisitionEventLifecycle
+    # The event loop deliberately retains a topology-bounded heterogeneous
+    # registry. Store immutable lifecycle implementations behind their
+    # abstract owner seam so they are boxed once during preparation instead of
+    # being reboxed from an inline union on every event.
+    lifecycle::AbstractPreparedAcquisitionLifecycle
     products::AcquisitionProducts
     product::Union{AbstractArray,WFSMeasurement}
     sample_provider::Union{Nothing,PreparedLinearReducedOrderEventProvider}
     rng::Xoshiro
-    start::_AcquisitionStartDefinition
+    start::AbstractAcquisitionStartDefinition
     path_slot::UInt32
     start_handle::EventGeneratorHandle
     boundary_handle::EventGeneratorHandle
@@ -362,9 +370,10 @@ struct _PreparedPlantEventAcquisition
     readiness_handle::EventGeneratorHandle
 end
 
-struct _PreparedPlantEventCommandEndpoint{
-    B<:_PreparedPlantCommandEndpoint}
-    binding::B
+struct _PreparedPlantEventCommandEndpoint
+    binding::_PreparedPlantCommandEndpoint
+    endpoint::PreparedCommandEndpoint
+    id::CommandEndpointID
     handle::EventGeneratorHandle
 end
 
@@ -1018,7 +1027,9 @@ function _prepare_event_command_endpoints(plant::PreparedPlant,
     endpoints = Memory{_PreparedPlantEventCommandEndpoint}(
         undef, length(source))
     @inbounds for index in eachindex(source)
-        endpoints[index] = _PreparedPlantEventCommandEndpoint(source[index],
+        endpoints[index] = _PreparedPlantEventCommandEndpoint(
+            source[index], source[index].endpoint,
+            command_endpoint_id(source[index]),
             event_generator_handle(scheduler, CommandApplicationPhase,
                 index))
     end
@@ -1332,6 +1343,7 @@ function _prepare_path_execution_groups(
                 requires_full_optical,
             ),
             path,
+            path.atmosphere,
             path.input,
             rngs,
             definition.schedule,
@@ -2018,7 +2030,7 @@ end
 function _event_command_endpoint_slot(prepared::PreparedPlantEventLoop,
     id::CommandEndpointID)
     @inbounds for index in eachindex(prepared.command_endpoints)
-        command_endpoint_id(prepared.command_endpoints[index].binding) == id &&
+        prepared.command_endpoints[index].id == id &&
             return index
     end
     _plant_event_loop_error(:unknown_command_endpoint,
@@ -2182,8 +2194,7 @@ end
 
 function _next_event_command_timestamp(prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState, slot::Integer)
-    binding = _event_command_endpoint(prepared, slot).binding
-    endpoint = binding.endpoint
+    endpoint = _event_command_endpoint(prepared, slot).endpoint
     endpoint_state = _event_command_endpoint_state(state, slot)
     application_state = _event_command_application_state(state, slot)
     key = next_command_order_key(endpoint, endpoint_state)
@@ -2289,7 +2300,7 @@ function admit_plant_command!(prepared::PreparedPlantEventLoop,
     endpoint_workspace = _event_command_workspace(workspace, slot)
     admission = try
         admit_plant_command!(endpoint_workspace,
-            event_endpoint.binding.endpoint,
+            event_endpoint.endpoint,
             endpoint_state, command, timestamp)
     catch
         _append_event_command_dispositions!(workspace, endpoint_workspace)
@@ -3052,8 +3063,7 @@ function _process_command_endpoint!(
     action::_PlantEventAction)
     endpoint_slot = Int(action.owner_slot)
     timestamp = claimed_event_key(claim).timestamp
-    binding = _event_command_endpoint(prepared, endpoint_slot).binding
-    endpoint = binding.endpoint
+    endpoint = _event_command_endpoint(prepared, endpoint_slot).endpoint
     endpoint_state = _event_command_endpoint_state(state, endpoint_slot)
     shadow = state.command_shadow_transactions[endpoint_slot]
     if !iszero(shadow)
@@ -3543,23 +3553,18 @@ end
 @inline _event_product_sequence(
     state::DirectMeasurementAcquisitionState) = state.sequence
 
-function _publish_acquisition_product!(prepared::PreparedPlantEventLoop,
-    state::PlantEventLoopState, slot::UInt32, output)
-    acquisition = _event_acquisition_binding(prepared, slot)
-    product = acquisition.product
+Base.@noinline function _complete_event_acquisition_readout!(
+    product,
+    lifecycle::AbstractPreparedAcquisitionLifecycle,
+    acquisition_state::AbstractAcquisitionLifecycleState,
+    timestamp::PlantTimestamp,
+    rng::AbstractRNG,
+)
+    output = complete_readout!(
+        lifecycle, acquisition_state, timestamp, rng)
     product === output ||
         copy_acquisition_product!(product, output)
-    index = Int(slot)
-    sequence = _event_product_sequence(
-        _event_acquisition_state(state, slot))
-    previous_sequence = @inbounds state.product_sequences[index]
-    sequence > previous_sequence ||
-        _plant_event_loop_error(:product_sequence,
-            "acquisition product sequence did not advance")
-    @inbounds state.product_sequences[index] = sequence
-    @inbounds state.product_ready_timestamps[index] =
-        state.scheduler.current_timestamp
-    return product
+    return nothing
 end
 
 function _process_acquisition_readout!(prepared::PreparedPlantEventLoop,
@@ -3567,9 +3572,22 @@ function _process_acquisition_readout!(prepared::PreparedPlantEventLoop,
     action::_PlantEventAction)
     acquisition = _event_acquisition_binding(prepared, action.owner_slot)
     acquisition_state = _event_acquisition_state(state, action.owner_slot)
-    output = complete_readout!(acquisition.lifecycle, acquisition_state,
-        claim.key.timestamp, acquisition.rng)
-    _publish_acquisition_product!(prepared, state, action.owner_slot, output)
+    _complete_event_acquisition_readout!(
+        acquisition.product,
+        acquisition.lifecycle,
+        acquisition_state,
+        claim.key.timestamp,
+        acquisition.rng,
+    )
+    index = Int(action.owner_slot)
+    sequence = _event_product_sequence(acquisition_state)
+    previous_sequence = @inbounds state.product_sequences[index]
+    sequence > previous_sequence ||
+        _plant_event_loop_error(:product_sequence,
+            "acquisition product sequence did not advance")
+    @inbounds state.product_sequences[index] = sequence
+    @inbounds state.product_ready_timestamps[index] =
+        state.scheduler.current_timestamp
     if _event_requires_readiness(acquisition.lifecycle)
         ready_timestamp = _event_readiness_timestamp(acquisition.lifecycle,
             acquisition_state)
@@ -3744,9 +3762,9 @@ function _process_trigger_topology!(
         "trigger action exists without a prepared trigger topology")
 end
 
-function _preflight_event_path(group::PreparedPathExecutionGroup,
-    atmosphere)
-    _preflight_event_path(group.path, group.rngs, atmosphere)
+function _preflight_event_path(group::PreparedPathExecutionGroup)
+    _preflight_event_path(
+        group.path, group.rngs, group.atmosphere)
     return nothing
 end
 
@@ -4245,7 +4263,7 @@ function begin_optical_path_batch!(
     _mark_due_event_paths!(prepared, state, workspace, timestamp)
     @inbounds for index in eachindex(prepared.path_groups)
         workspace.due_paths[index] || continue
-        _preflight_event_path(prepared.path_groups[index], atmosphere)
+        _preflight_event_path(prepared.path_groups[index])
     end
     _preflight_due_path_consumers(
         prepared, state, workspace.due_paths, timestamp)
