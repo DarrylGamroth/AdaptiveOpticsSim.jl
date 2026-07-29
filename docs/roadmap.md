@@ -35,6 +35,11 @@ hardware-validated GPU workflows. The core package now has:
   vertical slice with injected execution time, canonical command/outcome and
   complete-product ports, bounded lease ownership, a command-responsive fake
   RTC loop, and qualified fixed-arrival evidence
+- a completed Gate 8 `AdaptiveOpticsHIL.jl` operational runtime for the
+  qualified single-host CPU profile: versioned timing, bounded SPSC ownership,
+  long-lived Agent execution owners, typed lifecycle and overload policies,
+  coordinated failure/drain/recovery, and clean fixed-arrival, stress,
+  allocation/GC, and 300 s soak evidence
 - completed Gate 6 prepared CPU path-execution groups with single-writer
   ownership, explicit Julia/FFT/BLAS budgets, a deterministic serial oracle,
   bounded whole-plant specialization, and a separately validated
@@ -240,9 +245,19 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    [PR #132](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/pull/132)
    at
    [`68ef433`](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/commit/68ef4336e4b87cddc4e5b55acfa97c601a9c6421).
-   Gate 8.9 is next: operationally qualify the selected single-host boundary
-   with fixed-arrival, burst/overload, GC/pause, soak, and deployment-manifest
-   evidence before promoting the affected requirements to validated.
+   Gate 8.9 is complete in
+   [AdaptiveOpticsHIL PR #35](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/35).
+   Its immutable
+   [qualification artifact](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/blob/6f10d7fd6d5c7f2891c10ea9100c174c1886154a/benchmarks/results/gate8/2026-07-28-operational-runtime.toml)
+   closes the selected single-host CPU envelope with exact replay, independent
+   fixed-arrival target and stress runs, burst/shedding, explicit overload and
+   fresh recovery, injected failure and named-deficit evidence, bounded warmed
+   allocation/GC, and a 300 s soak. The claim is limited to one Linux process,
+   in-memory canonical ports, a reduced-order `Float64` plant, two Agent
+   execution owners, four physical-core-pinned Julia threads, and
+   `SCHED_FIFO` priority 20; transport/RTC interoperability, mixed or GPU
+   placement, multi-process/host operation, full optics/detectors, and
+   NFIRAOS/MORFEO capacity remain outside it.
 8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
