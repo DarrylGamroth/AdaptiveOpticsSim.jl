@@ -591,7 +591,7 @@ end
         typeof(backend(payloads.pupil)),
     }(payloads.pupil.metadata, malformed_support,
         payloads.pupil.amplitude, payloads.pupil.opd,
-        AdaptiveOpticsSim.aperture_revision(payloads.pupil))
+        AdaptiveOpticsSim.Optics.aperture_revision(payloads.pupil))
     assert_illumination_preparation_error(
         () -> prepare_illumination_entry(
             TestIlluminationDefinition(SingleIllumination()), malformed_pupil,

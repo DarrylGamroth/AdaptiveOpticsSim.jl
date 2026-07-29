@@ -35,6 +35,8 @@ The preferred seam renders the current published atmosphere epoch and visible
 optic surfaces into a caller-owned science-path product before calling Proper:
 
 ```julia
+using AdaptiveOpticsSim.Optics
+
 science_pupil = PupilFunction(sim.tel)
 science_renderer = prepare_atmosphere_renderer(
     sim.atm, sim.tel, science_source(sim))

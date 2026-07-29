@@ -1,6 +1,6 @@
 function contract_rate_map(values::AbstractMatrix{T};
     sampling::NTuple{2,T}=(one(T), one(T)),
-    origin::NTuple{2,T}=AdaptiveOpticsSim.centered_grid_origin(size(values),
+    origin::NTuple{2,T}=AdaptiveOpticsSim.Optics.centered_grid_origin(size(values),
         sampling),
     coordinate_domain::AbstractPlaneCoordinateDomain=AngularCoordinates(),
     spectral::AbstractSpectralCoordinate=MonochromaticChannel(T(0.75e-6)),
@@ -704,7 +704,7 @@ function contract_pupil_function(pupil::PupilFunction;
         spatial_measure=PointSampledMeasure(),
         coherence=CoherentFieldCombination())
     selector = backend(pupil)
-    return AdaptiveOpticsSim.PupilFunction{
+    return AdaptiveOpticsSim.Optics.PupilFunction{
         typeof(metadata),typeof(pupil.support),typeof(pupil.amplitude),
         typeof(pupil.opd),typeof(selector),
     }(metadata, pupil.support, pupil.amplitude, pupil.opd,

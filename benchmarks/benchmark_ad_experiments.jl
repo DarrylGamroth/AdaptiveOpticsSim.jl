@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using BenchmarkTools
 
 function bench_misregistration_wfs_ad_probe()

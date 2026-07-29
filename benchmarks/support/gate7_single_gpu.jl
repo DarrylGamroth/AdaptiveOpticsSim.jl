@@ -1,6 +1,7 @@
 module Gate7SingleGPUBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
 
 const AOS = AdaptiveOpticsSim
@@ -34,7 +35,7 @@ AOSPlant.plant_model_definition_style(
 function AOSPlant.prepare_path_executor(
     model::Gate7ShackHartmannPathModel,
     definition::OpticalPathDefinition,
-    source::AOS.AbstractSource,
+    source::AOS.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
 )
@@ -79,7 +80,7 @@ end
 function AOSPlant.prepare_path_executor(
     model::Gate7WitnessPathModel,
     definition::OpticalPathDefinition,
-    source::AOS.AbstractSource,
+    source::AOS.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
 )

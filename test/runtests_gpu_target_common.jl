@@ -1,5 +1,6 @@
 using Test
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant

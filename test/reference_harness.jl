@@ -309,12 +309,12 @@ native-to-detector grid mapping.
 function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
     pupil::PupilFunction, src::SpectralSource)
     AdaptiveOpticsSim.prepare_sampling!(wfs, pupil,
-        AdaptiveOpticsSim.spectral_reference_source(src))
+        AdaptiveOpticsSim.Optics.spectral_reference_source(src))
     fill!(wfs.front_end.propagation.spot_cube_accum,
         zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
-    total_irradiance = AdaptiveOpticsSim.photon_irradiance(src)
-    @inbounds for sample in AdaptiveOpticsSim.spectral_bundle(src)
-        variant = AdaptiveOpticsSim.source_with_wavelength_and_radiometric_value(
+    total_irradiance = AdaptiveOpticsSim.Optics.photon_irradiance(src)
+    @inbounds for sample in AdaptiveOpticsSim.Optics.spectral_bundle(src)
+        variant = AdaptiveOpticsSim.Optics.source_with_wavelength_and_radiometric_value(
             src, sample.wavelength,
             eltype(slopes(wfs))(total_irradiance * sample.weight))
         AdaptiveOpticsSim.sampled_spots_peak!(
@@ -1584,7 +1584,7 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
         src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         AdaptiveOpticsSim.prepare_sampling!(wfs, PupilFunction(tel),
-            AdaptiveOpticsSim.spectral_reference_source(src))
+            AdaptiveOpticsSim.Optics.spectral_reference_source(src))
         pad = size(wfs.front_end.propagation.fft_stack, 1)
         factor *= pad * pad
     end

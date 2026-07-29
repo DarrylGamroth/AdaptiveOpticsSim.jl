@@ -434,7 +434,7 @@ end
         CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0),
         pupil, mixed_qe_ast, atm, sampled_qe_det)
 
-    mixed_ngs_lgs = Asterism(AdaptiveOpticsSim.AbstractSource[
+    mixed_ngs_lgs = Asterism(AdaptiveOpticsSim.Optics.AbstractSource[
         Source(band=:custom, wavelength=589e-9,
             photon_irradiance=1.0),
         LGSSource(wavelength=589e-9, elongation_factor=1.3,

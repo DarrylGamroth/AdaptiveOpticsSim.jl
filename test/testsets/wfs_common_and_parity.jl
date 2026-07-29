@@ -105,7 +105,7 @@ end
     ngs = Source(wavelength=589e-9, photon_irradiance=1.0)
     lgs = LGSSource(wavelength=589e-9, elongation_factor=1.4,
         photon_irradiance=1.0)
-    heterogeneous = Asterism(AdaptiveOpticsSim.AbstractSource[ngs, lgs])
+    heterogeneous = Asterism(AdaptiveOpticsSim.Optics.AbstractSource[ngs, lgs])
     detector = Detector(noise=NoiseNone(), integration_time=1.0,
         qe=1.0, binning=1)
     sensors = (

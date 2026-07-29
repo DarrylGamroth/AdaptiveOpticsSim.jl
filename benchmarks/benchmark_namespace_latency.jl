@@ -5,26 +5,26 @@ const CONTRACT_PATH =
     joinpath(@__DIR__, "contracts", "namespace_latency.toml")
 
 function representative_namespace_workflow()
-    tel = AdaptiveOpticsSim.Telescope(
+    tel = AdaptiveOpticsSim.Optics.Telescope(
         resolution=16,
         diameter=8.0,
         central_obstruction=0.14,
         T=Float64,
         backend=AdaptiveOpticsSim.Backends.CPUBackend(),
     )
-    src = AdaptiveOpticsSim.Source(
+    src = AdaptiveOpticsSim.Optics.Source(
         band=:custom,
         wavelength=8.0e-7,
         photon_irradiance=2.0,
     )
-    pupil = AdaptiveOpticsSim.PupilFunction(tel)
-    prepared = AdaptiveOpticsSim.prepare_direct_imaging(
+    pupil = AdaptiveOpticsSim.Optics.PupilFunction(tel)
+    prepared = AdaptiveOpticsSim.Optics.prepare_direct_imaging(
         pupil,
         src;
         zero_padding=2,
     )
-    output = AdaptiveOpticsSim.form_direct_image!(prepared)
-    return sum(AdaptiveOpticsSim.intensity_values(output))
+    output = AdaptiveOpticsSim.Optics.form_direct_image!(prepared)
+    return sum(AdaptiveOpticsSim.Optics.intensity_values(output))
 end
 
 function run_probe()

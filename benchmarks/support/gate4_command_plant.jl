@@ -1,6 +1,7 @@
 module Gate4CommandPlantBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
 using SHA
 
@@ -42,11 +43,11 @@ AOSPlant.plant_model_definition_style(
 function AOSPlant.prepare_controllable_optic(
     model::CommandPlaneOpticModel{T},
     definition::AOSPlant.ControllableOpticDefinition,
-    telescope::AOS.Telescope,
+    telescope::AOS.Optics.Telescope,
     ::AOS.AbstractAtmosphere,
 ) where {T}
     endpoint = only(AOSPlant.command_endpoint_ids(definition))
-    resolution = size(AOS.pupil_reflectivity(telescope), 1)
+    resolution = size(AOS.Optics.pupil_reflectivity(telescope), 1)
     pattern = Matrix{T}(undef, resolution, resolution)
     center = T(resolution + 1) / T(2)
     scale = model.gain / T(resolution)
@@ -108,7 +109,7 @@ function AOSPlant.commit_controllable_optic_command!(
 end
 
 function AOSPlant.apply_controllable_optic_surface!(
-    input::AOS.PupilFunction,
+    input::AOS.Optics.PupilFunction,
     prepared::PreparedCommandPlaneOptic,
     state::CommandPlaneOpticState,
     ::AOSPlant.PreparedDirectPupilSurfaceCoupling,
@@ -120,20 +121,20 @@ end
 function AOSPlant.prepare_path_executor(
     ::CommandSciencePathModel,
     definition::AOSPlant.OpticalPathDefinition,
-    source::AOS.AbstractSource,
-    telescope::AOS.Telescope,
+    source::AOS.Optics.AbstractSource,
+    telescope::AOS.Optics.Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
 )
-    T = eltype(AOS.pupil_reflectivity(telescope))
-    pupil = AOS.PupilFunction(telescope; T, backend=AOS.backend(telescope))
-    imaging = AOS.prepare_direct_imaging(pupil, source; zero_padding=1)
+    T = eltype(AOS.Optics.pupil_reflectivity(telescope))
+    pupil = AOS.Optics.PupilFunction(telescope; T, backend=AOS.backend(telescope))
+    imaging = AOS.Optics.prepare_direct_imaging(pupil, source; zero_padding=1)
     return AOSPlant.PreparedPathExecutor(
         definition,
         source,
         telescope,
         atmosphere,
         pupil,
-        AOS.direct_imaging_output(imaging),
+        AOS.Optics.direct_imaging_output(imaging),
         imaging;
         materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
@@ -199,7 +200,7 @@ end
 function command_plant_definition(raw::AbstractDict;
     reverse_declarations::Bool=false)
     T = Float64
-    telescope = AOS.Telescope(
+    telescope = AOS.Optics.Telescope(
         resolution=Int(raw["resolution"]),
         diameter=T(raw["diameter_m"]),
         central_obstruction=T(raw["central_obstruction"]),
@@ -215,7 +216,7 @@ function command_plant_definition(raw::AbstractDict;
         layer_ids=(:ground,),
         T=T,
     )
-    source = AOS.Source(
+    source = AOS.Optics.Source(
         band=:custom,
         wavelength=T(raw["science_wavelength_m"]),
         photon_irradiance=T(raw["science_photon_irradiance"]),

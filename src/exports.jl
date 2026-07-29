@@ -9,76 +9,20 @@ export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
 export AtmosphereTimeError, AtmosphereEpochError
 export WFSPreparationError
-export Backends, Plant
+export Backends, Optics, Plant
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
 
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, default_modal_inverse_policy
-export CircularAperture, AnnularAperture, SpiderMask, RectangularROI, SubapertureGridMask
-export build_mask!, apply_mask!
-
 export AbstractAtmosphere
-export Telescope, Source, LGSSource, Asterism
-export AbstractSourceRadiometry, PhysicalPhotonIrradianceSource
-export NormalizedTestSource, source_radiometry, source_radiometric_value
-export wavelength, photon_irradiance, optical_path, pupil_photon_rate_map
-export reset_opd!, apply_opd!, set_pupil!, set_pupil_reflectivity!
-export pupil_mask, pupil_reflectivity, apply_spiders!
-export focal_plane_pixel_scale_arcsec
-
-export SpectralSample, SpectralBundle, SpectralSource, with_spectrum
-export GaussianDiskSourceModel, PointCloudSourceModel, SampledImageSourceModel
-export with_extended_source, extended_source_asterism
-
-export AbstractOpticalProduct, AbstractOpticalPlaneKind
-export PupilPlane, FocalPlane, IntermediatePlane, DetectorPlane
-export AbstractPlaneCoordinateDomain, MetricCoordinates, AngularCoordinates
-export NormalizedPupilCoordinates
-export PlaneCentering, SampleCentered, InterSampleCentered
-export PlaneAxisOrientation, UnspecifiedSpectralCoordinate
-export AchromaticSpectralCoordinate, MonochromaticChannel
-export IntegratedSpectralChannel
-export AbstractOpticalNormalization, PhotonRateNormalization
-export DimensionlessNormalization
-export AbstractSpatialMeasure, PointSampledMeasure, SpatialDensityMeasure
-export CellIntegratedMeasure
-export AbstractCombinationPolicy, CoherentFieldCombination
-export IncoherentIntensityAddition, NonCombinableProduct
-export UnspecifiedNormalization, UnspecifiedSpatialMeasure, UnspecifiedCoherence
-export OpticalPlaneMetadata, plane_metadata
-export PupilFunction, pupil_support, pupil_amplitude, opd_map
-export surface_opd, update_surface!, apply_surface!
-export ElectricField, field_values, IntensityMap, intensity_values
-export OpticalProductBundle, PreparedIncoherentSum
-export prepare_incoherent_sum, accumulate_intensity!
-export PupilFieldFormationPlan, prepare_pupil_field
-export fill_electric_field!, fill_electric_field_async!
-export FraunhoferPropagation, FresnelPropagation
-export propagation_output, propagate_field!, fraunhofer_intensity_from_field!
-export DirectImagingPlan, DirectImagingWorkspace
-export prepare_direct_imaging, form_direct_image!, direct_imaging_output
-export direct_imaging_components
-export prepare_direct_imaging_batch
-public AbstractDirectImagingBatchCapability
-public StackedFraunhoferDirectImagingBatchCapability
-public UnsupportedDirectImagingBatchCapability
-public DirectImagingBatchSampleParams
-public DirectImagingBatchProductContract
-public DirectImagingBatchCompatibilitySignature
-public DirectImagingBatchWorkspace
-public PreparedDirectImagingBatch
-public direct_imaging_batch_capability, direct_imaging_batch_signature
-public direct_imaging_batch_sources, direct_imaging_batch_inputs
-public direct_imaging_batch_products, direct_imaging_batch_count
-public validate_direct_imaging_batch
 export GeometricAtmosphericPropagation, LayeredFresnelAtmosphericPropagation
 export AtmosphericFieldPropagation
 export propagate_atmosphere_field!, atmospheric_intensity!
 
 export ZernikeBasis, compute_zernike!
-export OPDMap, Misregistration, apply_misregistration
-export NCPA, KLBasis, ZernikeModalBasis
+export Misregistration, apply_misregistration
+export KLBasis, ZernikeModalBasis
 export SpatialFilter, SpatialFilterWorkspace, SpatialFilterPlan
 export CircularFilter, SquareFilter, FoucaultFilter
 export prepare_spatial_filter, filter!
@@ -109,7 +53,7 @@ export mechanical_coupling, n_actuators
 export FunctionModalBasis, MatrixModalBasis, ZernikeOpticBasis, CartesianTiltBasis
 export ModalControllableOptic, TipTiltMirror, FocusStage
 export set_command!
-export DMAdditive, DMReplace
+export update_surface!
 
 export Detector, APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout

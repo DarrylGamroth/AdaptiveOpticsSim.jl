@@ -35,10 +35,12 @@ The owner categories are:
 
 `Backends` has completed its ownership move. Backend extensions add methods to
 `AdaptiveOpticsSim.Backends.name`; no root-package backend generic or
-forwarding method remains part of the supported API. Hooks assigned to later
-domain owners remain at `AdaptiveOpticsSim.name` only until that owner's PR
-moves the generic and every extension method together. The maintained stage is
-recorded in
+forwarding method remains part of the supported API. The implemented `Optics`
+foundation slice likewise owns source, product, and propagation seams under
+`AdaptiveOpticsSim.Optics`; its remaining physical-component slice follows in
+the next gate. Hooks assigned to later domain owners remain at
+`AdaptiveOpticsSim.name` only until that owner's PR moves the generic and every
+extension method together. The maintained stage is recorded in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
 
 ## Source Layout
@@ -128,7 +130,7 @@ const Plant = AdaptiveOpticsSim.Plant
 function Plant.prepare_controllable_optic(
     model::MyOpticDefinition,
     definition::Plant.ControllableOpticDefinition,
-    telescope::AdaptiveOpticsSim.AbstractTelescope,
+    telescope::AdaptiveOpticsSim.Optics.AbstractTelescope,
     atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
 )
     return prepare_my_immutable_optic_plan(
@@ -186,7 +188,7 @@ function Plant.prepare_controllable_optic_path_coupling(
 end
 
 function Plant.apply_controllable_optic_surface!(
-    input::AdaptiveOpticsSim.PupilFunction,
+    input::AdaptiveOpticsSim.Optics.PupilFunction,
     plan::MyPreparedOptic,
     state::MyOpticState,
     coupling::Union{
@@ -310,8 +312,8 @@ and atmosphere, and returns a `PreparedPathExecutor`:
 function AdaptiveOpticsSim.Plant.prepare_path_executor(
     model::MyOpticalModelDefinition,
     definition::AdaptiveOpticsSim.Plant.OpticalPathDefinition,
-    source::AdaptiveOpticsSim.AbstractSource,
-    telescope::AdaptiveOpticsSim.AbstractTelescope,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
+    telescope::AdaptiveOpticsSim.Optics.AbstractTelescope,
     atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
 )
     input, result, execution = prepare_my_optics(
@@ -748,8 +750,8 @@ fallback delegates to it.
 Use `prepare_atmosphere_renderers` for `Asterism` and `ExtendedSource`. The
 singular preparation call rejects them so a multi-direction source cannot be
 silently treated as its reference direction. A custom source that owns mutable
-profile data should specialize the qualified `AdaptiveOpticsSim.freeze_source`
-seam and return a run-owned copy.
+profile data should specialize the qualified
+`AdaptiveOpticsSim.Optics.freeze_source` seam and return a run-owned copy.
 
 Plant preparation freezes mutable source inputs, retains one prepared
 atmosphere renderer per full-optical direction, and preserves explicit path

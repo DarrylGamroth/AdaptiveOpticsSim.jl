@@ -1,6 +1,7 @@
 module Gate2SerialPlantBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
 using SHA
 
@@ -43,12 +44,12 @@ end
 function AOSPlant.prepare_path_executor(
     model::DirectSciencePathModel,
     definition::AOSPlant.OpticalPathDefinition,
-    source::AOS.AbstractSource,
-    telescope::AOS.Telescope,
+    source::AOS.Optics.AbstractSource,
+    telescope::AOS.Optics.Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
 )
-    pupil = AOS.PupilFunction(telescope)
-    imaging = AOS.prepare_direct_imaging(pupil, source;
+    pupil = AOS.Optics.PupilFunction(telescope)
+    imaging = AOS.Optics.prepare_direct_imaging(pupil, source;
         zero_padding=model.zero_padding)
     return AOSPlant.PreparedPathExecutor(
         definition,
@@ -56,7 +57,7 @@ function AOSPlant.prepare_path_executor(
         telescope,
         atmosphere,
         pupil,
-        AOS.direct_imaging_output(imaging),
+        AOS.Optics.direct_imaging_output(imaging),
         imaging;
         materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
@@ -70,12 +71,12 @@ end
 function AOSPlant.prepare_path_executor(
     model::ShackHartmannPathModel,
     definition::AOSPlant.OpticalPathDefinition,
-    source::AOS.AbstractSource,
-    telescope::AOS.Telescope,
+    source::AOS.Optics.AbstractSource,
+    telescope::AOS.Optics.Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
 )
-    T = eltype(AOS.pupil_reflectivity(telescope))
-    pupil = AOS.PupilFunction(telescope; T=T)
+    T = eltype(AOS.Optics.pupil_reflectivity(telescope))
+    pupil = AOS.Optics.PupilFunction(telescope; T=T)
     sensor = AOS.ShackHartmannWFS(telescope;
         n_lenslets=model.n_lenslets,
         n_pix_subap=model.n_pix_subap,
@@ -109,12 +110,12 @@ end
 function AOSPlant.prepare_path_executor(
     model::PyramidPathModel,
     definition::AOSPlant.OpticalPathDefinition,
-    source::AOS.AbstractSource,
-    telescope::AOS.Telescope,
+    source::AOS.Optics.AbstractSource,
+    telescope::AOS.Optics.Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
 )
-    T = eltype(AOS.pupil_reflectivity(telescope))
-    pupil = AOS.PupilFunction(telescope; T=T)
+    T = eltype(AOS.Optics.pupil_reflectivity(telescope))
+    pupil = AOS.Optics.PupilFunction(telescope; T=T)
     sensor = AOS.PyramidWFS(telescope;
         pupil_samples=model.pupil_samples,
         modulation=model.modulation,
@@ -191,7 +192,7 @@ function serial_plant_definition(raw::AbstractDict;
     reverse_declarations::Bool=false)
     T = Float64
     resolution = Int(raw["resolution"])
-    telescope = AOS.Telescope(
+    telescope = AOS.Optics.Telescope(
         resolution=resolution,
         diameter=T(raw["diameter_m"]),
         central_obstruction=T(raw["central_obstruction"]),
@@ -208,7 +209,7 @@ function serial_plant_definition(raw::AbstractDict;
         T=T,
     )
 
-    science_source = AOS.Source(
+    science_source = AOS.Optics.Source(
         band=:custom,
         wavelength=T(raw["science_wavelength_m"]),
         photon_irradiance=T(raw["science_photon_irradiance"]),
@@ -216,7 +217,7 @@ function serial_plant_definition(raw::AbstractDict;
             T(raw["science_azimuth_deg"])),
         T=T,
     )
-    ngs_source = AOS.Source(
+    ngs_source = AOS.Optics.Source(
         band=:custom,
         wavelength=T(raw["ngs_wavelength_m"]),
         photon_irradiance=T(raw["ngs_photon_irradiance"]),
@@ -224,7 +225,7 @@ function serial_plant_definition(raw::AbstractDict;
             T(raw["ngs_azimuth_deg"])),
         T=T,
     )
-    lgs_source = AOS.LGSSource(
+    lgs_source = AOS.Optics.LGSSource(
         wavelength=T(raw["lgs_wavelength_m"]),
         photon_irradiance=T(raw["lgs_photon_irradiance"]),
         coordinates=(T(raw["lgs_radius_arcsec"]),

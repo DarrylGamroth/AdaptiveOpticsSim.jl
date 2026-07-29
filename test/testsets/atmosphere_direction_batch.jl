@@ -39,7 +39,7 @@ end
 function direction_batch_test_sources(::Type{T}=Float64) where {
     T<:AbstractFloat,
 }
-    return Asterism(AdaptiveOpticsSim.AbstractSource[
+    return Asterism(AdaptiveOpticsSim.Optics.AbstractSource[
         Source(
             band=:I,
             magnitude=zero(T),
@@ -68,14 +68,14 @@ function direction_batch_test_sources(::Type{T}=Float64) where {
 end
 
 mutable struct MutableDirectionSource{T<:AbstractFloat} <:
-    AdaptiveOpticsSim.AbstractSource
+    AdaptiveOpticsSim.Optics.AbstractSource
     coordinates_xy_arcsec::NTuple{2,T}
     height_m::T
 end
 
-AdaptiveOpticsSim.coordinates_xy_arcsec(src::MutableDirectionSource) =
+AdaptiveOpticsSim.Optics.coordinates_xy_arcsec(src::MutableDirectionSource) =
     src.coordinates_xy_arcsec
-AdaptiveOpticsSim.source_height_m(src::MutableDirectionSource) = src.height_m
+AdaptiveOpticsSim.Optics.source_height_m(src::MutableDirectionSource) = src.height_m
 
 function serial_atmosphere_direction_stack(
     atm::AbstractTimedAtmosphere,
@@ -455,7 +455,7 @@ end
     @test_throws InvalidConfiguration prepare_atmosphere_direction_batch(
         atm,
         tel,
-        Asterism(AdaptiveOpticsSim.AbstractSource[]),
+        Asterism(AdaptiveOpticsSim.Optics.AbstractSource[]),
         Array{T}(undef, n, n, 0),
     )
 

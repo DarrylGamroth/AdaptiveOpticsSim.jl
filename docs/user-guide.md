@@ -55,6 +55,11 @@ The package is organized around a small set of modeling objects:
 - `AdaptiveOpticsSim.Plant` when you need independent virtual-time commands,
   acquisitions, triggers, and detector lifecycles
 
+Import foundational optical vocabulary with
+`using AdaptiveOpticsSim.Optics`. During the breaking namespace migration,
+detector, WFS, atmosphere, calibration, and control vocabulary remains at the
+root until each canonical owner gate lands.
+
 ## Three Execution Layers
 
 The package exposes three layers on purpose.
@@ -131,6 +136,7 @@ For a compact recipe-first version of this guide, use [model-cookbook.md](model-
 
 ```julia
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)

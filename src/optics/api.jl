@@ -1,0 +1,62 @@
+export CircularAperture, AnnularAperture, SpiderMask
+export RectangularROI, SubapertureGridMask
+export build_mask!, apply_mask!
+
+export Telescope, Source, LGSSource, Asterism
+export AbstractSourceRadiometry, PhysicalPhotonIrradianceSource
+export NormalizedTestSource, source_radiometry, source_radiometric_value
+export wavelength, photon_irradiance, optical_path, pupil_photon_rate_map
+export reset_opd!, apply_opd!, set_pupil!, set_pupil_reflectivity!
+export pupil_mask, pupil_reflectivity, apply_spiders!
+export focal_plane_pixel_scale_arcsec
+
+export SpectralSample, SpectralBundle, SpectralSource, with_spectrum
+export GaussianDiskSourceModel, PointCloudSourceModel, SampledImageSourceModel
+export with_extended_source, extended_source_asterism
+
+export AbstractOpticalProduct, AbstractOpticalPlaneKind
+export PupilPlane, FocalPlane, IntermediatePlane, DetectorPlane
+export AbstractPlaneCoordinateDomain, MetricCoordinates, AngularCoordinates
+export NormalizedPupilCoordinates
+export PlaneCentering, SampleCentered, InterSampleCentered
+export PlaneAxisOrientation, UnspecifiedSpectralCoordinate
+export AchromaticSpectralCoordinate, MonochromaticChannel
+export IntegratedSpectralChannel
+export AbstractOpticalNormalization, PhotonRateNormalization
+export DimensionlessNormalization
+export AbstractSpatialMeasure, PointSampledMeasure, SpatialDensityMeasure
+export CellIntegratedMeasure
+export AbstractCombinationPolicy, CoherentFieldCombination
+export IncoherentIntensityAddition, NonCombinableProduct
+export UnspecifiedNormalization, UnspecifiedSpatialMeasure
+export UnspecifiedCoherence
+export OpticalPlaneMetadata, plane_metadata
+export PupilFunction, pupil_support, pupil_amplitude, opd_map
+export surface_opd, apply_surface!
+export ElectricField, field_values, IntensityMap, intensity_values
+export OpticalProductBundle, PreparedIncoherentSum
+export prepare_incoherent_sum, accumulate_intensity!
+export PupilFieldFormationPlan, prepare_pupil_field
+export fill_electric_field!, fill_electric_field_async!
+export FraunhoferPropagation, FresnelPropagation
+export propagation_output, propagate_field!, fraunhofer_intensity_from_field!
+export DirectImagingPlan, DirectImagingWorkspace
+export prepare_direct_imaging, form_direct_image!, direct_imaging_output
+export direct_imaging_components, prepare_direct_imaging_batch
+
+export OPDMap, NCPA
+export DMAdditive, DMReplace
+
+public AbstractSource
+public AbstractDirectImagingBatchCapability
+public StackedFraunhoferDirectImagingBatchCapability
+public UnsupportedDirectImagingBatchCapability
+public DirectImagingBatchSampleParams
+public DirectImagingBatchProductContract
+public DirectImagingBatchCompatibilitySignature
+public DirectImagingBatchWorkspace
+public PreparedDirectImagingBatch
+public direct_imaging_batch_capability, direct_imaging_batch_signature
+public direct_imaging_batch_sources, direct_imaging_batch_inputs
+public direct_imaging_batch_products, direct_imaging_batch_count
+public validate_direct_imaging_batch
