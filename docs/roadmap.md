@@ -258,12 +258,120 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    `SCHED_FIFO` priority 20; transport/RTC interoperability, mixed or GPU
    placement, multi-process/host operation, full optics/detectors, and
    NFIRAOS/MORFEO capacity remain outside it.
-8. Preserve hardware validation and zero-allocation CPU gates, then use pinned
+8. Complete a bounded `Hsm.jl` proof-of-fit in `AdaptiveOpticsHIL.jl` before
+   beginning another breaking core series. The proof may replace only the
+   lifecycle control plane, not Agent execution ownership or the SPSC data
+   plane, and must record an adopt-or-reject decision against the existing
+   state semantics, failure/drain behavior, type stability, warmed allocation,
+   and latency evidence.
+9. Execute the API namespace refactor described below after that decision and
+   before detector qualification. This is a breaking ownership cleanup with no
+   compatibility aliases. It must preserve numerical results, accelerator
+   extension behavior, prepared ownership, and warmed hot-path budgets.
+10. Begin detector qualification only after the canonical `Detectors`
+    namespace and final companion pin are stable. Split the current broad
+    detector-validity claim by physical family and qualify conventional
+    CCD/EMCCD/CMOS and HgCdTe area detectors before expanding counting-detector
+    claims. Keep named camera profiles outside core; use the resulting evidence
+    to decide whether a sibling detector package is warranted.
+11. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
    variant, a reduced-order closed-loop variant where applicable, and a full
    optical variant while keeping topology, model, timing, and external-
    integration compliance independent.
+
+## API Namespace Refactor Gate
+
+This gate follows the bounded
+[`Hsm.jl` proof-of-fit](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/36)
+in `AdaptiveOpticsHIL.jl`. Either an adopt or reject decision opens the gate;
+adoption is not required. The maintained delivery order, PR checklists, and
+completion state live in the
+[namespace tracker](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/136).
+
+The current package exposes a broad flat root surface. The target is one real
+owner for every supported binding and generic function, small domain-local
+exported surfaces, and an exact root allowlist. The ownership inventory includes
+cross-module internal bindings and extension hooks, not only exported or
+`public` names.
+
+### Ownership target
+
+| Namespace | Canonical responsibility | Explicit boundary |
+|---|---|---|
+| `Backends` | array backends, compute devices, allocation/FFT seams, and accelerator extension protocols | execution placement and scheduling remain outside this module |
+| `Optics` | sources, telescopes, apertures, optical locations and products, fields, propagation, explicit physical NCPA, controllable optics, and physical WFS components | model-derived NCPA synthesis belongs to `Calibration`; detector response is not optics |
+| `Atmospheres` | atmosphere models and state, source-direction geometry, rendering/batching, statistics, and atmosphere-coupled propagation | source radiometry and general optical products remain in `Optics` |
+| `Detectors` | frame and channel detector families, response and MTF, noise, defects, shutter/readout/sampling modes, acquisition plans, and detector products | scheduled acquisition events remain in `Plant`; named camera profiles remain outside core |
+| `WavefrontSensors` | composed WFS models, observations and measurements, detector bindings, estimators, and LiFT | microlens arrays, masks, phase spots, and defocus optics are physical `Optics` components |
+| `Calibration` | interaction matrices, modal bases, fitting and identification workflows, and KL/Zernike/M2C-based NCPA synthesis | it constructs or applies `Optics.NCPA`; runtime controllers do not belong here |
+| `Control` | control reconstructors, controllers, delay lines, and prepared runtime operations | dependency direction is `Control` to `Calibration`; tomography remains separate |
+| `Tomography` | tomography geometry, atmosphere reconstruction, fitting, and DM-command mapping | general controller execution remains in `Control` |
+| `Ensembles` | coarse offline execution policies, sweeps, and optional parallel integrations | this is not an `AdaptiveOpticsHIL.jl` deadline scheduler |
+| `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, placement, providers, and event composition | physical domain models enter through explicit imports |
+
+`AdaptiveOpticsSim` will export the canonical modules plus shared errors,
+fidelity profiles, and deliberately selected cross-domain workflow vocabulary.
+Domain modules export routine vocabulary, mark stable advanced seams `public`,
+and leave implementation details unmarked. A retained root binding is allowed
+only when it is on the exact root allowlist; it is not a migration alias.
+LiFT and control reconstruction remain separate owner-qualified generics.
+
+The dependency and delivery gates are:
+
+```mermaid
+flowchart TD
+    HSM["Hsm proof decision<br/>AdaptiveOpticsHIL #36"]
+    TEST["Test and CI partition<br/>NS-00A"]
+    AUTH["Ownership and baseline<br/>NS-00B"]
+    DOM["Domain owner series<br/>NS-01 through NS-06E"]
+    CAL["Calibration<br/>NS-07A"]
+    CTRL["Control<br/>NS-07B"]
+    CLOSE["Tomography, Ensembles, root closure<br/>NS-08 through NS-10"]
+    HIL["AdaptiveOpticsHIL import migration<br/>#37"]
+    DET["Detector qualification<br/>#155"]
+
+    HSM --> TEST
+    TEST --> AUTH
+    AUTH --> DOM
+    DOM --> CAL
+    CAL --> CTRL
+    CTRL --> CLOSE
+    CLOSE --> HIL
+    HIL --> DET
+```
+
+The core delivery issues are
+[#137 through #154](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/136).
+The WFS slices populate one shallow `WavefrontSensors` module; the common slice
+must be independently buildable and family-specific methods move with their
+families. `Calibration` and `Control` are separate PRs. Core root closure and
+the
+[`AdaptiveOpticsHIL` import migration](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/37)
+are separate cross-repository PRs.
+
+Before ownership moves, the broad detector/WFS and calibration/control test
+groups must be partitioned into bounded, coverage-preserving suites. Every
+owner PR runs its focused suites first and full CPU closure before merge.
+Backend-facing changes run applicable extension and hardware tests; the final
+closure repeats available CUDA and AMDGPU validation. Allocation checks remain
+outside coverage instrumentation where instrumentation changes allocation
+counts.
+
+This gate does not change physical algorithms, promote model-validity claims,
+qualify detectors, add compatibility adapters, integrate `Hsm.jl` into core,
+or redesign HIL transport, placement, or scheduling. The main migration risks
+are circular imports, disconnected extension generics, stale root bindings,
+changed qualified type identities in persisted artifacts, and package-load or
+first-call regressions.
+
+The series is complete only when exact root and domain API assertions pass,
+every supported binding has one canonical owner, numerical characterization
+and hot-path budgets remain within their maintained contracts, superseded root
+bindings are removed, and the companion migration is merged. The blocked
+[detector qualification gate](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/155)
+opens only then.
 
 ## Active Cleanup Themes
 
