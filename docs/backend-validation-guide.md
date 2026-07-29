@@ -33,12 +33,14 @@ Bare `Pkg.test()` runs every registered suite in
 - quality, API, and deterministic RNG policy
 - KernelAbstractions CPU parity and tomography
 - core optics, direct science, and atmosphere
-- control primitives and explicit model compositions
-- detectors and WFS
+- control primitives, reconstruction, and explicit model compositions
+- detector, WFS-common, Shack–Hartmann, Pyramid/BioEdge,
+  Zernike/Curvature, and LiFT suites
 - plant topology, canonical time, deterministic scheduling, trigger
   distribution, detector transitions, preparation, product providers, RNG
   ownership, and calibration illumination
-- calibration and analysis
+- calibration workflows, NCPA, optical analysis, and cross-domain interface
+  conformance
 - reference, tutorial, and Gate 0 regression
 
 These are normal correctness tests, not backend throughput checks.
@@ -67,7 +69,14 @@ julia --project=. --startup-file=no -e \
 
 An unknown selector fails rather than silently running no tests. Selective
 runs are development evidence only: bare `Pkg.test()` remains the complete CPU
-composition and release gate, and CI continues to run it.
+composition and release gate.
+
+The maintained CI partition consists of `ci-foundations`,
+`ci-sensors-control`, `ci-plant-runtime`, and `ci-plant-optics`. Registry
+validation requires their suite membership to be disjoint and complete, so a
+new registered suite cannot silently escape platform or coverage closure.
+These selectors are intended for CI and bounded local diagnosis; owner-focused
+development should normally use the narrower suite or domain-group names.
 
 ### Deterministic event-scheduler evidence
 
@@ -796,14 +805,18 @@ This separation exists so:
 Checked-in CI automation now exists in:
 
 - [../.github/workflows/cpu-validation.yml](../.github/workflows/cpu-validation.yml)
+- [../.github/workflows/coverage.yml](../.github/workflows/coverage.yml)
 - [../.github/workflows/cuda-backend-validation.yml](../.github/workflows/cuda-backend-validation.yml)
 - [../.github/workflows/amdgpu-backend-validation.yml](../.github/workflows/amdgpu-backend-validation.yml)
 
 Current intent:
 
 - CPU workflow:
-  - runs the normal `Pkg.test()` suite on Linux, Apple Silicon macOS, and
-    Windows hosted runners
+  - runs bare `Pkg.test()` as the authoritative full composition on Linux
+  - runs the four bounded shards on Ubuntu for fast feedback; these duplicate
+    the Linux composition deliberately but do not close the merge gate alone
+  - runs the exact four-shard partition on hosted macOS and Windows, so every
+    registered suite remains mandatory on all three hosted operating systems
   - runs a separate Apple Silicon job that proves backend-neutral normal load,
     then explicitly selects AppleAccelerate BLAS/LAPACK and reruns the full CPU
     suite with supported vDSP FFT plans and FFTW fallback plans
@@ -811,6 +824,13 @@ Current intent:
     one BLAS/FFT thread per path-group owner
   - runs the isolated AcceleratedKernels/Dagger scheduler extension tests on a
     four-thread Linux job
+- Coverage workflow:
+  - runs the same exact four-shard partition under Julia coverage
+    instrumentation
+  - keeps allocation-byte assertions disabled through
+    `ADAPTIVEOPTICS_TEST_COVERAGE` and Julia's coverage option
+  - uploads one flagged report per shard; Codecov merges the reports and waits
+    for all four CPU uploads before publishing project status or the PR comment
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - instantiates [`test/cuda`](../test/cuda)

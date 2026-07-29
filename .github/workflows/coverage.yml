@@ -12,10 +12,20 @@ permissions:
 
 jobs:
   coverage:
+    name: Coverage / ${{ matrix.shard }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - ci-foundations
+          - ci-sensors-control
+          - ci-plant-runtime
+          - ci-plant-optics
     env:
       ADAPTIVEOPTICS_TEST_COVERAGE: "true"
+      ADAPTIVEOPTICS_TEST_SHARD: ${{ matrix.shard }}
       JULIA_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
       OMP_NUM_THREADS: "1"
@@ -35,22 +45,20 @@ jobs:
       - name: Instantiate
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 
-      - name: Run test suite with coverage
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(coverage=true)'
+      - name: Run bounded test shard with coverage
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(coverage=true, test_args=[ENV["ADAPTIVEOPTICS_TEST_SHARD"]])'
 
-      - name: Run KA CPU matrix with coverage
-        run: julia --project=. --startup-file=no --code-coverage=user test/ka_cpu_runtests.jl
-
-      - name: Process combined Julia coverage
+      - name: Process shard Julia coverage
         uses: julia-actions/julia-processcoverage@v1
         with:
           directories: src,ext
 
-      - name: Upload combined coverage to Codecov
+      - name: Upload shard coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
           files: lcov.info
           disable_search: true
           fail_ci_if_error: true
-          name: adaptiveopticssim-combined
+          flags: ${{ matrix.shard }}
+          name: adaptiveopticssim-${{ matrix.shard }}
           use_oidc: true

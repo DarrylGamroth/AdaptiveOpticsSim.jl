@@ -10,20 +10,10 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Julia ${{ matrix.julia-version }} / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+  full-composition:
+    name: Full composition / Linux
+    runs-on: ubuntu-latest
     timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            julia-version: "1.12"
-          - os: macos-latest
-            julia-version: "1.12"
-          - os: windows-latest
-            julia-version: "1.12"
     env:
       JULIA_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
@@ -36,7 +26,7 @@ jobs:
       - name: Setup Julia
         uses: julia-actions/setup-julia@v3
         with:
-          version: ${{ matrix.julia-version }}
+          version: "1.12"
 
       - name: Cache Julia artifacts
         uses: julia-actions/cache@v3
@@ -46,6 +36,81 @@ jobs:
 
       - name: Run full test suite
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
+
+  fast-feedback:
+    name: Fast feedback / ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - ci-foundations
+          - ci-sensors-control
+          - ci-plant-runtime
+          - ci-plant-optics
+    env:
+      ADAPTIVEOPTICS_TEST_SHARD: ${{ matrix.shard }}
+      JULIA_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Instantiate
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run bounded Linux shard
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=[ENV["ADAPTIVEOPTICS_TEST_SHARD"]])'
+
+  platform-closure:
+    name: Platform closure / ${{ matrix.os }} / ${{ matrix.shard }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+        shard:
+          - ci-foundations
+          - ci-sensors-control
+          - ci-plant-runtime
+          - ci-plant-optics
+    env:
+      ADAPTIVEOPTICS_TEST_SHARD: ${{ matrix.shard }}
+      JULIA_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Instantiate
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run cross-platform closure shard
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=[ENV["ADAPTIVEOPTICS_TEST_SHARD"]])'
 
   grouped-cpu-execution:
     name: Grouped CPU execution

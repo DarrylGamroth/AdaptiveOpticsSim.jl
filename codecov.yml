@@ -1,0 +1,9 @@
+# The four CPU coverage shards upload independently for one commit. Codecov
+# merges their reports; delay project status and PR-comment publication until
+# the complete CPU partition is present.
+codecov:
+  notify:
+    after_n_builds: 4
+
+comment:
+  after_n_builds: 4
