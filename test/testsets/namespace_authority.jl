@@ -407,6 +407,7 @@ end
         latency_index["artifact"],
     ))
     @test artifact["correctness_passed"]
+    @test !artifact["repository_dirty"]
     @test !artifact["package_source_dirty"]
     @test artifact["fresh_process_runs"] ==
         latency_contract["fresh_process_runs"]
@@ -418,4 +419,16 @@ end
         @test length(artifact[key]) == artifact["fresh_process_runs"]
         @test all(>(0), artifact[key])
     end
+
+    latency_manifest = TOML.parsefile(joinpath(
+        REPOSITORY_ROOT,
+        latency_index["manifest"],
+    ))
+    @test latency_manifest["closure"]["status"] == "characterized"
+    latency_entry = only(latency_manifest["artifacts"])
+    @test latency_entry["correctness_passed"]
+    @test latency_entry["sha256"] ==
+        file_sha256(joinpath(REPOSITORY_ROOT, latency_index["artifact"]))
+    @test latency_entry["authority_revision"] ==
+        artifact["repository_head"]
 end
