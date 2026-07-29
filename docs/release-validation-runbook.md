@@ -120,6 +120,20 @@ Applications opt in by depending on and loading AppleAccelerate themselves;
 AdaptiveOpticsSim declares only a weak dependency and does not auto-load it or
 include it in the root environment.
 
+### Metal extension load
+
+The hosted Apple Silicon job also runs a bounded Metal extension owner-surface
+check. This proves that Metal.jl activates the AdaptiveOpticsSim weak-dependency
+extension and that backend discovery dispatches through `Backends`; it does not
+replace the CUDA/AMDGPU numerical hardware matrices.
+
+To reproduce the load check on an Apple Silicon host:
+
+```bash
+julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+julia --project=test/metal --startup-file=no test/metal/runtests.jl
+```
+
 ### CUDA
 
 Enabled with:

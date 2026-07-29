@@ -280,6 +280,17 @@ end
         @test ka_randn_a == ka_randn_b
         @test all(isfinite, ka_randn_a)
 
+        sync_rng1 = MersenneTwister(17)
+        sync_rng2 = MersenneTwister(17)
+        ka_sync_randn_a = zeros(Float64, 8)
+        ka_sync_randn_b = zeros(Float64, 8)
+        AdaptiveOpticsSim.Backends._randn_backend!(
+            KA_CPU_STYLE, sync_rng1, ka_sync_randn_a)
+        AdaptiveOpticsSim.Backends._randn_backend!(
+            KA_CPU_STYLE, sync_rng2, ka_sync_randn_b)
+        @test ka_sync_randn_a == ka_sync_randn_b
+        @test all(isfinite, ka_sync_randn_a)
+
         uniform_rng1 = MersenneTwister(13)
         uniform_rng2 = MersenneTwister(13)
         ka_uniform_a = zeros(Float64, 8)
@@ -294,15 +305,29 @@ end
 
         rng3 = MersenneTwister(12)
         rng4 = MersenneTwister(12)
-        ka_poisson_a = fill(4.0, 8)
-        ka_poisson_b = fill(4.0, 8)
+        ka_poisson_a = [0.0, 4.0, 40.0, 0.0, 4.0, 40.0, 4.0, 40.0]
+        ka_poisson_b = copy(ka_poisson_a)
         AdaptiveOpticsSim.Backends.poisson_noise_async!(KA_CPU_STYLE, rng3, ka_poisson_a)
         KernelAbstractions.synchronize(KA_CPU_STYLE.backend)
         AdaptiveOpticsSim.Backends.poisson_noise_async!(KA_CPU_STYLE, rng4, ka_poisson_b)
         KernelAbstractions.synchronize(KA_CPU_STYLE.backend)
         mark_ka_cpu_kernel!(:poisson_noise_kernel!)
         @test ka_poisson_a == ka_poisson_b
+        @test iszero(ka_poisson_a[1])
+        @test iszero(ka_poisson_a[4])
         @test all(x -> x >= 0, ka_poisson_a)
+        @test all(x -> x == floor(x), ka_poisson_a)
+
+        sync_poisson_rng1 = MersenneTwister(19)
+        sync_poisson_rng2 = MersenneTwister(19)
+        ka_sync_poisson_a = fill(4.0, 8)
+        ka_sync_poisson_b = copy(ka_sync_poisson_a)
+        AdaptiveOpticsSim.Backends._poisson_noise!(
+            KA_CPU_STYLE, sync_poisson_rng1, ka_sync_poisson_a)
+        AdaptiveOpticsSim.Backends._poisson_noise!(
+            KA_CPU_STYLE, sync_poisson_rng2, ka_sync_poisson_b)
+        @test ka_sync_poisson_a == ka_sync_poisson_b
+        @test all(x -> x >= 0, ka_sync_poisson_a)
     end
 
     @testset "Telescope and pupil kernels" begin

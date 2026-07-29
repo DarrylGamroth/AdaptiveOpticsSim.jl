@@ -208,16 +208,22 @@ jobs:
           ADAPTIVEOPTICS_APPLE_FOCUSED_ONLY: "true"
         run: julia --project=test/appleaccelerate --startup-file=no --code-coverage=user test/appleaccelerate/runtests.jl
 
-      - name: Process Apple FFT coverage
+      - name: Instantiate Metal extension test environment
+        run: julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
+
+      - name: Run Metal extension load coverage
+        run: julia --project=test/metal --startup-file=no --code-coverage=user test/metal/runtests.jl
+
+      - name: Process Apple platform extension coverage
         uses: julia-actions/julia-processcoverage@v1
         with:
           directories: ext
 
-      - name: Upload Apple FFT coverage to Codecov
+      - name: Upload Apple platform extension coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
           files: lcov.info
           disable_search: true
           fail_ci_if_error: true
-          name: adaptiveopticssim-apple-accelerate
+          name: adaptiveopticssim-apple-platform
           use_oidc: true

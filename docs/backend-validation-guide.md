@@ -355,7 +355,10 @@ projects under
 [`test/amdgpu`](../test/amdgpu) and [`test/cuda`](../test/cuda) declare the root
 package as a path source, keeping accelerator packages out of normal
 `Pkg.test()` while still resolving the full checkout dependency graph in a
-clean environment.
+clean environment. Their maintained workflows preserve the ordinary
+non-coverage hardware target, including allocation assertions, then run a
+bounded extension-owner coverage probe. They do not duplicate the full hardware
+matrix.
 
 ### Apple Silicon BLAS/LAPACK selection
 
@@ -381,6 +384,12 @@ repeated optical propagation. It selects FFTW for partial-dimension,
 arbitrary-size, and three-or-more-dimensional CPU transforms. Loading the
 package therefore improves the supported Apple Silicon path without narrowing
 the existing CPU FFT shape boundary or weakening hot-path allocation contracts.
+
+The same Apple Silicon job separately instantiates [`test/metal`](../test/metal)
+and loads Metal.jl with AdaptiveOpticsSim. That bounded smoke proves that the
+Metal weak-dependency extension loads and that its backend discovery generics
+extend `Backends`. It is an extension ownership/load check, not a claim of the
+full CUDA/AMDGPU numerical hardware matrix on Metal.
 
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector/export surface that previously regressed on CUDA:
@@ -820,6 +829,8 @@ Current intent:
   - runs a separate Apple Silicon job that proves backend-neutral normal load,
     then explicitly selects AppleAccelerate BLAS/LAPACK and reruns the full CPU
     suite with supported vDSP FFT plans and FFTW fallback plans
+  - loads the Metal extension in a separate bounded test environment on that
+    Apple Silicon job and verifies its canonical Backends owner surface
   - runs the focused Gate 6 fixed-owner CPU proof with four Julia threads and
     one BLAS/FFT thread per path-group owner
   - runs the isolated AcceleratedKernels/Dagger scheduler extension tests on a
@@ -834,9 +845,9 @@ Current intent:
     processes discover different compiler-attributed coverable lines
   - runs one baseline-comparable full-composition coverage process plus the
     focused KernelAbstractions CPU matrix for the authoritative project metric;
-    Codecov combines that report with the separate AppleAccelerate extension
-    report and waits for both uploads before publishing project status or the
-    PR comment
+    Codecov combines that report with the Apple platform extension report,
+    which contains the AppleAccelerate and Metal focused targets, and waits for
+    both uploads before publishing project status or the PR comment
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - instantiates [`test/cuda`](../test/cuda)
@@ -846,6 +857,9 @@ Current intent:
   - exercises the optional numerical/backend matrix, independent optic
     application, prepared Plant controller routing, GPU builder, and
     REVOLT-like production-shaped WFS smoke
+  - uploads a bounded extension-owner coverage probe so CUDA-only methods
+    contribute evidence when this workflow is dispatched, without rerunning the
+    full matrix or disabling its allocation checks
 - AMDGPU workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `amdgpu`
   - instantiates [`test/amdgpu`](../test/amdgpu)
@@ -853,6 +867,9 @@ Current intent:
   - exercises the same optional numerical/backend matrix, independent optic
     application, prepared Plant controller routing, GPU builder, and
     REVOLT-like production-shaped WFS smoke
+  - uploads a bounded extension-owner coverage probe so AMDGPU-only methods
+    contribute evidence without rerunning the full matrix or disabling its
+    allocation checks
 
 The CPU and AMDGPU workflows are the continuously available validation paths.
 The CUDA workflow and manual WSL target exercise the same fail-fast hardware
