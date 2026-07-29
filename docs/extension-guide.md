@@ -36,9 +36,9 @@ The owner categories are:
 `Backends` has completed its ownership move. Backend extensions add methods to
 `AdaptiveOpticsSim.Backends.name`; no root-package backend generic or
 forwarding method remains part of the supported API. The implemented `Optics`
-foundation slice likewise owns source, product, and propagation seams under
-`AdaptiveOpticsSim.Optics`; its remaining physical-component slice follows in
-the next gate. Hooks assigned to later domain owners remain at
+namespace likewise owns source, product, propagation, controllable-optic, and
+reusable physical-WFS-component seams under `AdaptiveOpticsSim.Optics`. Hooks
+assigned to later domain owners remain at
 `AdaptiveOpticsSim.name` only until that owner's PR moves the generic and every
 extension method together. The maintained stage is recorded in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).

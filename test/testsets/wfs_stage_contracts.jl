@@ -1778,9 +1778,9 @@ end
         [(T(0), T(0)), (T(1), T(1))]; weights=T[0, 0], T=T)
     @test_throws InvalidConfiguration CircularModulation(T(-1);
         samples=4, T=T)
-    circular_prepared = AdaptiveOpticsSim.prepare_focal_plane_modulation(
+    circular_prepared = AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
         circular, 16, pupil.opd, T)
-    sampled_prepared = AdaptiveOpticsSim.prepare_focal_plane_modulation(
+    sampled_prepared = AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
         sampled, 16, pupil.opd, T)
     @test sum(abs2, circular_prepared.amplitude_weights) ≈ one(T)
     @test abs2.(sampled_prepared.amplitude_weights) ≈ sampled.weights

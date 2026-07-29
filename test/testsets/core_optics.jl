@@ -93,7 +93,7 @@ end
     # The root package exposes the domain module, while the domain itself
     # distinguishes routine unqualified vocabulary from stable qualified API.
     @test length(root_exported) <= 500
-    @test length(optics_exported) <= 150
+    @test length(optics_exported) <= 160
     @test length(plant_exported) <= 100
     @test Base.isexported(AdaptiveOpticsSim, :Backends)
     @test Base.isexported(AdaptiveOpticsSim, :Optics)
@@ -171,9 +171,30 @@ end
     @test Plant.advance_to! === AdaptiveOpticsSim.advance_to!
     @test Plant.backend === AdaptiveOpticsSim.Backends.backend
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
-    @test Base.isexported(AdaptiveOpticsSim, :MicrolensArray)
-    @test Base.isexported(AdaptiveOpticsSim, :microlens_array)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_microlens_propagation)
+    for name in (
+        :ZernikeBasis,
+        :Misregistration,
+        :SpatialFilter,
+        :prepare_spatial_filter,
+        :DeformableMirror,
+        :influence_model,
+        :ModalControllableOptic,
+        :CircularModulation,
+        :SampledModulation,
+        :MicrolensArray,
+        :microlens_array,
+        :prepare_microlens_propagation,
+        :PyramidPhaseMask,
+        :BioEdgeAmplitudeMask,
+        :ZernikePhaseSpot,
+        :CurvatureDefocusPair,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test Base.isexported(Optics, name)
+        @test Base.ispublic(Optics, name)
+        @test parentmodule(getfield(Optics, name)) === Optics
+    end
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedMicrolensPropagation)
     @test Base.isexported(AdaptiveOpticsSim,
@@ -182,9 +203,7 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :shack_hartmann_rate_map)
     @test Base.isexported(AdaptiveOpticsSim, :PyramidOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :BioEdgeOpticalFrontEnd)
-    @test Base.isexported(AdaptiveOpticsSim, :ZernikePhaseSpot)
     @test Base.isexported(AdaptiveOpticsSim, :ZernikeOpticalFrontEnd)
-    @test Base.isexported(AdaptiveOpticsSim, :CurvatureDefocusPair)
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :CurvaturePackedAcquisition)
     @test Base.isexported(AdaptiveOpticsSim, :PreparedLiFTForwardModel)
@@ -201,8 +220,6 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :lift_forward_output)
     @test Base.isexported(AdaptiveOpticsSim, :lift_observation_contract)
     @test Base.isexported(AdaptiveOpticsSim, :diagnostics)
-    @test Base.isexported(AdaptiveOpticsSim, :CircularModulation)
-    @test Base.isexported(AdaptiveOpticsSim, :SampledModulation)
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedFocalPlaneModulation)
     @test Base.isexported(AdaptiveOpticsSim,
@@ -225,12 +242,10 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :DeterministicExecution)
     @test Base.isexported(AdaptiveOpticsSim, :AcceleratedKernelsExecution)
     @test Base.isexported(AdaptiveOpticsSim, :DaggerExecution)
-    @test Base.isexported(AdaptiveOpticsSim, :DeformableMirror)
     @test Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
     @test Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
     @test Base.isexported(AdaptiveOpticsSim, :ZernikeWFS)
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
-    @test Base.isexported(AdaptiveOpticsSim, :influence_model)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
     @test !Base.isexported(AdaptiveOpticsSim, :compute_device)
@@ -290,7 +305,6 @@ end
         @test !Base.isexported(Optics, name)
         @test Base.ispublic(Optics, name)
     end
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_spatial_filter)
     @test Base.isexported(AdaptiveOpticsSim, :AtmosphereEpoch)
     @test Base.isexported(AdaptiveOpticsSim, :advance_by!)
     @test Base.isexported(AdaptiveOpticsSim, :advance_to!)

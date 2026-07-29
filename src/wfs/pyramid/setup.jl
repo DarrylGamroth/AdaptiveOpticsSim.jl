@@ -101,18 +101,6 @@ end
     end
 end
 
-"""Immutable physical definition of a pyramid focal-plane phase mask."""
-struct PyramidPhaseMask{T<:AbstractFloat}
-    old_mask::Bool
-    rooftop::T
-    theta_rotation::T
-    mask_scale::T
-    diffraction_padding::Int
-    psf_centering::Bool
-    n_pix_separation::Union{Int,Nothing}
-    n_pix_edge::Union{Int,Nothing}
-end
-
 """Immutable differential-estimator configuration."""
 struct PyramidEstimatorParams{T<:AbstractFloat,N<:WFSNormalization}
     pupil_samples::Int

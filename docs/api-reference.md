@@ -20,13 +20,12 @@ enter the caller's ordinary namespace. The root package exports the
 `Backends`, `Optics`, and `Plant` modules, not compatibility exports for their
 contents.
 
-The breaking namespace migration is in progress. `Backends` is complete.
-`Optics` currently owns the foundation slice: apertures, telescopes, sources,
-optical products and metadata, pupil/field formation, backend-portable
-Fraunhofer and Fresnel propagation, direct imaging, sampled OPD, and physical
-NCPA. Controllable optics, deformable mirrors, and reusable physical WFS
-components remain at the root until the next `Optics` slice lands; bindings
-assigned to other domain owners likewise remain at the root until their owner
+The breaking namespace migration is in progress. `Backends` and `Optics` are
+complete. `Optics` owns apertures, telescopes, sources, optical products and
+metadata, pupil/field formation, backend-portable Fraunhofer and Fresnel
+propagation, direct imaging, sampled OPD, physical NCPA, controllable optics,
+deformable mirrors, spatial filtering, and reusable physical WFS components.
+Bindings assigned to later domain owners remain at the root until their owner
 PR lands. The exact final root and domain allowlists are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
 The maintained implementation stage is recorded in
@@ -39,7 +38,7 @@ Root exported and qualified-public names are curated in
 curated separately in [`../src/plant/api.jl`](../src/plant/api.jl), and the
 canonical backend surface in
 [`../src/backends/api.jl`](../src/backends/api.jl). The currently implemented
-optical-foundation surface is curated in
+optical surface is curated in
 [`../src/optics/api.jl`](../src/optics/api.jl). Each owner PR must converge on
 the exact domain allowlists without root forwarding aliases or compatibility
 adapters.
@@ -234,11 +233,20 @@ incompatible geometry revisions, backends, or devices.
   KL/Zernike/M2C basis selection, coefficient generation, and atmosphere- or
   DM-derived synthesis are calibration policy; synthesis returns an
   `Optics.NCPA` but the physical optic does not retain calibration provenance
-- Still at the root during the namespace migration: `ZernikeBasis`,
-  `compute_zernike!`, `Misregistration`, `apply_misregistration`, `KLBasis`,
-  and `ZernikeModalBasis`
+- Optical bases and registration: `ZernikeBasis`, `compute_zernike!`,
+  `Misregistration`, and `apply_misregistration`. Calibration-owned `KLBasis`
+  and `ZernikeModalBasis` remain at the root until the `Calibration` gate
 - Spatial filtering: `SpatialFilter`, `CircularFilter`, `SquareFilter`,
-  `FoucaultFilter`, `filter!`
+  `FoucaultFilter`, `prepare_spatial_filter`, and `filter!`. Because Base also
+  exports an unrelated collection operation named `filter!`, call
+  `Optics.filter!` or explicitly
+  `import AdaptiveOpticsSim.Optics: filter!`
+- Controllable optics: `DeformableMirror`, `ModalControllableOptic`,
+  `TipTiltMirror`, `FocusStage`, `set_command!`, and `update_surface!`
+- Reusable WFS optics: focal-plane modulation models, `MicrolensArray`,
+  `PyramidPhaseMask`, `BioEdgeAmplitudeMask`, `ZernikePhaseSpot`, and
+  `CurvatureDefocusPair`. Composed WFS front ends, detector acquisition, and
+  estimators remain outside `Optics`
 
 Known photometric bands use physical photon-irradiance radiometry by default.
 A custom-band source is a normalized test source unless it supplies
@@ -1096,6 +1104,12 @@ the default. Neither acquisition policy changes the presampling response or its
 derived MTF, QE, charge multiplication, or detector noise.
 
 ## Wavefront Sensors
+
+Reusable physical components in this section—modulation models, microlens
+arrays, masks, phase spots, and defocus pairs—are imported from
+`AdaptiveOpticsSim.Optics`. Composed front ends, detector acquisition,
+observations, measurements, and estimators remain in the current WFS surface
+until the `WavefrontSensors` namespace gate.
 
 - Sensing modes: `Diffractive`, `Geometric`
 - Prepared products: `WFSObservationMetadata`, `WFSMeasurementMetadata`,

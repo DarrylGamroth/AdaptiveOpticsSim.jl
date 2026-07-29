@@ -32,7 +32,7 @@ export UnspecifiedNormalization, UnspecifiedSpatialMeasure
 export UnspecifiedCoherence
 export OpticalPlaneMetadata, plane_metadata
 export PupilFunction, pupil_support, pupil_amplitude, opd_map
-export surface_opd, apply_surface!
+export surface_opd, update_surface!, apply_surface!
 export ElectricField, field_values, IntensityMap, intensity_values
 export OpticalProductBundle, PreparedIncoherentSum
 export prepare_incoherent_sum, accumulate_intensity!
@@ -44,8 +44,37 @@ export DirectImagingPlan, DirectImagingWorkspace
 export prepare_direct_imaging, form_direct_image!, direct_imaging_output
 export direct_imaging_components, prepare_direct_imaging_batch
 
-export OPDMap, NCPA
+export ZernikeBasis, compute_zernike!
+export OPDMap
+export Misregistration, apply_misregistration
+export NCPA
+
+export SpatialFilter, SpatialFilterWorkspace, SpatialFilterPlan
+export CircularFilter, SquareFilter, FoucaultFilter
+export prepare_spatial_filter, filter!
+
+export ActuatorGridTopology, SampledActuatorTopology
+export GaussianInfluenceWidth, GaussianMechanicalCoupling
+export DenseInfluenceMatrix, MeasuredInfluenceFunctions
+export ClippedActuators, ActuatorHealthMap, CompositeDMActuatorModel
+export DeformableMirror
+export influence_model, influence_width, mechanical_coupling, n_actuators
+
+export FunctionModalBasis, MatrixModalBasis, ZernikeOpticBasis
+export CartesianTiltBasis
+export ModalControllableOptic, TipTiltMirror, FocusStage
+export set_command!
+
 export DMAdditive, DMReplace
+
+export AbstractFocalPlaneModulation, NoModulation, CircularModulation
+export SampledModulation
+
+export MicrolensArrayParams, MicrolensArray
+export microlens_array, prepare_microlens_propagation
+
+export PyramidPhaseMask, BioEdgeAmplitudeMask
+export ZernikePhaseSpot, CurvatureDefocusPair
 
 public AbstractSource
 public AbstractDirectImagingBatchCapability

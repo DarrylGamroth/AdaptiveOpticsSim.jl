@@ -1,6 +1,7 @@
 using Test
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+import AdaptiveOpticsSim.Optics: filter!
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant

@@ -197,12 +197,6 @@ struct CurvatureWFSParams{T<:AbstractFloat,R<:CurvatureReadoutModel,B<:Curvature
     branch_response::B
 end
 
-"""Immutable equal-and-opposite defocus pair used by a Curvature WFS."""
-struct CurvatureDefocusPair{T<:AbstractFloat}
-    rms_nm::T
-    diffraction_padding::Int
-end
-
 """Single-writer two-branch diffraction and sampling workspace."""
 mutable struct PreparedCurvaturePropagation{
     T<:AbstractFloat,

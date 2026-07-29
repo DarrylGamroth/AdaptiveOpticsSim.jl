@@ -10,7 +10,8 @@ end
         central_obstruction=0.0,
     )
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    @test dm.state.modes isa AdaptiveOpticsSim.GaussianInfluenceOperator
+    @test dm.state.modes isa
+        AdaptiveOpticsSim.Optics.GaussianInfluenceOperator
     @test Base.summarysize(dm.state.modes) <
         prod(size(dm.state.modes)) * sizeof(eltype(dm.state.modes)) ÷ 10
 
