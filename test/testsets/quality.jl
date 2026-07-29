@@ -161,6 +161,33 @@ end
         ("plant-gate5-closure",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-time"])) == ("plant-time",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["detectors"])) == ("detectors",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["wfs-common"])) == ("wfs-common",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["wfs-shack-hartmann"])) == ("wfs-shack-hartmann",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["wfs-pyramid-bioedge"])) == ("wfs-pyramid-bioedge",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["wfs-zernike-curvature"])) ==
+        ("wfs-zernike-curvature",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["wfs-lift"])) == ("wfs-lift",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["calibration"])) == ("calibration-workflows",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["control"])) ==
+        ("control-primitives", "control-reconstruction")
+    @test Tuple(spec.name for spec in resolve_test_suites(
+        ["sensors"])) == (
+            "detectors",
+            "wfs-common",
+            "wfs-shack-hartmann",
+            "wfs-pyramid-bioedge",
+            "wfs-zernike-curvature",
+            "wfs-lift",
+        )
     @test Tuple(spec.name for spec in resolve_test_suites(["gate4"])) == (
         "plant-command-schemas",
         "plant-command-admission",
@@ -247,6 +274,58 @@ end
     @test_throws ArgumentError resolve_test_suites(["unknown"])
     @test_throws ArgumentError resolve_test_suites(["all", "quality"])
     @test_throws ArgumentError resolve_test_suites(["--list", "quality"])
+    @test isnothing(validate_test_suite_registry())
+
+    duplicate_name_specs = (
+        TEST_SUITE_SPECS...,
+        TestSuiteSpec("quality", "testsets/quality.jl"),
+    )
+    @test_throws ArgumentError validate_test_suite_registry(
+        duplicate_name_specs, ())
+    duplicate_path_specs = (
+        TEST_SUITE_SPECS...,
+        TestSuiteSpec("duplicate-path", "testsets/quality.jl"),
+    )
+    @test_throws ArgumentError validate_test_suite_registry(
+        duplicate_path_specs, ())
+    missing_path_specs = (
+        TestSuiteSpec("missing-path", "testsets/not_present.jl"),
+    )
+    @test_throws ArgumentError validate_test_suite_registry(
+        missing_path_specs, ())
+    minimal_specs = (
+        TestSuiteSpec("quality-only", "testsets/quality.jl"),
+    )
+    @test isnothing(validate_test_suite_registry(minimal_specs, ()))
+    incomplete_specs = Tuple(
+        spec for spec in TEST_SUITE_SPECS
+        if spec.name != "quality")
+    @test_throws ArgumentError validate_test_suite_registry(
+        incomplete_specs, (); require_complete=true)
+
+    duplicated_ci_shards = (
+        "ci-first" => test_suite_names(),
+        "ci-second" => ("quality",),
+    )
+    @test_throws ArgumentError validate_test_suite_registry(
+        TEST_SUITE_SPECS,
+        duplicated_ci_shards;
+        ci_shard_specs=duplicated_ci_shards,
+    )
+    incomplete_ci_shards = (
+        "ci-incomplete" => Base.front(test_suite_names()),
+    )
+    @test_throws ArgumentError validate_test_suite_registry(
+        TEST_SUITE_SPECS,
+        incomplete_ci_shards;
+        ci_shard_specs=incomplete_ci_shards,
+    )
+    ci_members = Tuple(
+        member
+        for (_, members) in TEST_CI_SHARD_SPECS
+        for member in members)
+    @test length(ci_members) == length(test_suite_names())
+    @test Set(ci_members) == Set(test_suite_names())
 
     listing = IOBuffer()
     @test isnothing(print_test_suite_help(listing))
@@ -266,6 +345,12 @@ end
     @test occursin("plant-cpu-execution", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
+    @test occursin("sensors =", listing_text)
+    @test occursin("calibration =", listing_text)
+    @test occursin("ci-foundations =", listing_text)
+    @test occursin("ci-sensors-control =", listing_text)
+    @test occursin("ci-plant-runtime =", listing_text)
+    @test occursin("ci-plant-optics =", listing_text)
     @test occursin("gate4 =", listing_text)
     @test occursin("gate5 =", listing_text)
     @test occursin("gate6 =", listing_text)
@@ -295,7 +380,10 @@ end
         "plant-device-batching",
         "plant-device-model-matrix",
         "plant-sampled-aberrations",
-        "detectors-wfs",
+        "wfs-common",
+        "wfs-shack-hartmann",
+        "wfs-pyramid-bioedge",
+        "wfs-zernike-curvature",
         "plant-preparation",
         "plant-providers",
         "plant-rng",

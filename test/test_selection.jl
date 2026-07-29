@@ -87,17 +87,32 @@ const TEST_SUITE_SPECS = (
     ),
     TestSuiteSpec("control-primitives", "testsets/control_primitives.jl"),
     TestSuiteSpec(
-        "detectors-wfs",
-        "testsets/detectors.jl",
-        "testsets/wfs_stage_contracts.jl",
-        "testsets/shack_hartmann_and_sources.jl",
-        "testsets/pyramid_bioedge_and_lgs.jl",
-        "testsets/zernike_and_curvature.jl",
-        fixtures=(
-            "ka_cpu_style_fixture.jl",
-            "wfs_stage_contract_fixtures.jl",
-        ),
+        "control-reconstruction",
+        "testsets/control_reconstruction.jl",
     ),
+    TestSuiteSpec("detectors", "testsets/detectors.jl"),
+    TestSuiteSpec(
+        "wfs-common",
+        "testsets/wfs_common_and_parity.jl",
+        "testsets/wfs_stage_contracts.jl",
+        fixtures=("wfs_stage_contract_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "wfs-shack-hartmann",
+        "testsets/shack_hartmann_and_sources.jl",
+        fixtures=("ka_cpu_style_fixture.jl",),
+    ),
+    TestSuiteSpec(
+        "wfs-pyramid-bioedge",
+        "testsets/pyramid_bioedge_and_lgs.jl",
+        fixtures=("ka_cpu_style_fixture.jl",),
+    ),
+    TestSuiteSpec(
+        "wfs-zernike-curvature",
+        "testsets/zernike_and_curvature.jl",
+        fixtures=("ka_cpu_style_fixture.jl",),
+    ),
+    TestSuiteSpec("wfs-lift", "testsets/wfs_lift.jl"),
     TestSuiteSpec("plant-preparation", "testsets/plant_preparation.jl";
         fixtures=("plant_test_fixtures.jl",
             "wfs_stage_contract_fixtures.jl")),
@@ -108,8 +123,14 @@ const TEST_SUITE_SPECS = (
         fixtures=("plant_test_fixtures.jl",)),
     TestSuiteSpec("plant-illumination", "testsets/plant_illumination.jl"),
     TestSuiteSpec(
-        "calibration-analysis",
-        "testsets/calibration_and_analysis.jl",
+        "calibration-workflows",
+        "testsets/calibration_workflows.jl",
+    ),
+    TestSuiteSpec("optics-ncpa", "testsets/optics_ncpa.jl"),
+    TestSuiteSpec("optical-analysis", "testsets/optical_analysis.jl"),
+    TestSuiteSpec(
+        "interface-conformance",
+        "testsets/interface_conformance.jl",
     ),
     TestSuiteSpec(
         "reference-tutorials",
@@ -165,12 +186,16 @@ const TEST_GROUP_SPECS = (
         "plant-rng",
         "plant-illumination",
     ),
-    "control" => (
-        "tomography",
-        "control-primitives",
-        "calibration-analysis",
+    "control" => ("control-primitives", "control-reconstruction"),
+    "calibration" => ("calibration-workflows",),
+    "sensors" => (
+        "detectors",
+        "wfs-common",
+        "wfs-shack-hartmann",
+        "wfs-pyramid-bioedge",
+        "wfs-zernike-curvature",
+        "wfs-lift",
     ),
-    "sensors" => ("detectors-wfs",),
     "references" => ("reference-tutorials", "gate0"),
     "backends" => ("ka-cpu", "backend-smoke"),
     "gate4" => (
@@ -204,8 +229,75 @@ const TEST_GROUP_SPECS = (
     ),
 )
 
-test_suite_names() = Tuple(spec.name for spec in TEST_SUITE_SPECS)
-test_group_names() = Tuple(first(group) for group in TEST_GROUP_SPECS)
+const TEST_CI_SHARD_SPECS = (
+    "ci-foundations" => (
+        "ka-cpu",
+        "tomography",
+        "quality",
+        "core-optics",
+        "direct-science",
+        "direct-imaging-batch",
+        "atmosphere",
+        "atmosphere-direction-batch",
+        "optics-ncpa",
+        "optical-analysis",
+        "reference-tutorials",
+        "gate0",
+        "backend-smoke",
+    ),
+    "ci-sensors-control" => (
+        "control-primitives",
+        "control-reconstruction",
+        "detectors",
+        "wfs-common",
+        "wfs-shack-hartmann",
+        "wfs-pyramid-bioedge",
+        "wfs-zernike-curvature",
+        "wfs-lift",
+        "calibration-workflows",
+        "interface-conformance",
+    ),
+    "ci-plant-runtime" => (
+        "plant-topology",
+        "plant-topology-growth",
+        "plant-command-schemas",
+        "plant-command-admission",
+        "plant-command-application",
+        "plant-time",
+        "plant-scheduler",
+        "plant-triggers",
+        "plant-detector-transitions",
+        "plant-event-composition",
+        "plant-device-batching",
+        "plant-device-model-matrix",
+        "plant-cpu-execution",
+    ),
+    "ci-plant-optics" => (
+        "plant-command-composition",
+        "plant-controller-routing",
+        "plant-reduced-order",
+        "plant-autonomous-optics",
+        "plant-placed-optics",
+        "plant-conjugate-geometry",
+        "plant-mcao-moao",
+        "plant-sampled-aberrations",
+        "plant-gate5-closure",
+        "plant-preparation",
+        "plant-providers",
+        "plant-rng",
+        "plant-illumination",
+    ),
+)
+
+const TEST_GROUP_SPECS_WITH_CI = (
+    TEST_GROUP_SPECS...,
+    TEST_CI_SHARD_SPECS...,
+)
+
+test_suite_names(specs=TEST_SUITE_SPECS) =
+    Tuple(spec.name for spec in specs)
+test_group_names(specs=TEST_GROUP_SPECS_WITH_CI) =
+    Tuple(first(group) for group in specs)
 
 function _test_suite_spec(name::AbstractString)
     for spec in TEST_SUITE_SPECS
@@ -215,18 +307,40 @@ function _test_suite_spec(name::AbstractString)
 end
 
 function _test_group_members(name::AbstractString)
-    for (group_name, members) in TEST_GROUP_SPECS
+    for (group_name, members) in TEST_GROUP_SPECS_WITH_CI
         group_name == name && return members
     end
     return nothing
 end
 
-function validate_test_suite_registry()
-    suite_names = test_suite_names()
+function _registered_testset_paths(specs)
+    paths = String[]
+    for spec in specs, path in spec.paths
+        startswith(path, "testsets/") || continue
+        push!(paths, normpath(joinpath(@__DIR__, path)))
+    end
+    return sort!(paths)
+end
+
+function _discovered_testset_paths()
+    root = joinpath(@__DIR__, "testsets")
+    return sort!(normpath.(filter(
+        path -> endswith(path, ".jl"),
+        readdir(root; join=true),
+    )))
+end
+
+function validate_test_suite_registry(
+    suite_specs,
+    group_specs;
+    ci_shard_specs=(),
+    require_complete::Bool=false,
+)
+    suite_names = test_suite_names(suite_specs)
     length(unique(suite_names)) == length(suite_names) ||
         throw(ArgumentError("test suite names must be unique"))
 
-    group_names = test_group_names()
+    group_names = test_group_names(group_specs)
     length(unique(group_names)) == length(group_names) ||
         throw(ArgumentError("test group names must be unique"))
     isempty(intersect(Set(suite_names), Set(group_names))) || throw(
@@ -235,11 +349,15 @@ function validate_test_suite_registry()
 
     registered_paths = String[]
     registered_fixtures = String[]
-    for spec in TEST_SUITE_SPECS
+    for spec in suite_specs
         isempty(spec.paths) && throw(ArgumentError(
             "test suite '$(spec.name)' must register at least one path"))
         append!(registered_paths, spec.paths)
         append!(registered_fixtures, spec.fixtures)
+        for path in spec.paths
+            isfile(joinpath(@__DIR__, path)) || throw(ArgumentError(
+                "registered test path '$path' does not exist"))
+        end
     end
     length(unique(registered_paths)) == length(registered_paths) ||
         throw(ArgumentError("test paths must belong to exactly one suite"))
@@ -252,7 +370,7 @@ function validate_test_suite_registry()
     end
 
     known_suites = Set(suite_names)
-    for (group_name, members) in TEST_GROUP_SPECS
+    for (group_name, members) in group_specs
         isempty(members) && throw(ArgumentError(
             "test group '$group_name' must contain at least one suite"))
         for member in members
@@ -260,8 +378,37 @@ function validate_test_suite_registry()
                 "test group '$group_name' names unknown suite '$member'"))
         end
     end
+
+    if !isempty(ci_shard_specs)
+        shard_members = String[]
+        for (shard_name, members) in ci_shard_specs
+            shard_name in group_names || throw(ArgumentError(
+                "CI shard '$shard_name' is not a registered test group"))
+            append!(shard_members, members)
+        end
+        length(unique(shard_members)) == length(shard_members) ||
+            throw(ArgumentError(
+                "CI closure shards must not contain duplicate suites"))
+        Set(shard_members) == known_suites || throw(ArgumentError(
+            "CI closure shards must include every suite exactly once"))
+    end
+
+    if require_complete
+        registered_testsets = _registered_testset_paths(suite_specs)
+        discovered_testsets = _discovered_testset_paths()
+        registered_testsets == discovered_testsets ||
+            throw(ArgumentError(
+                "testsets directory and suite registry must match exactly"))
+    end
     return nothing
 end
+
+validate_test_suite_registry() = validate_test_suite_registry(
+    TEST_SUITE_SPECS,
+    TEST_GROUP_SPECS_WITH_CI;
+    ci_shard_specs=TEST_CI_SHARD_SPECS,
+    require_complete=true,
+)
 
 validate_test_suite_registry()
 
@@ -316,7 +463,7 @@ function print_test_suite_help(io::IO=stdout)
         println(io, "  ", spec.name)
     end
     println(io, "Test groups:")
-    for (name, members) in TEST_GROUP_SPECS
+    for (name, members) in TEST_GROUP_SPECS_WITH_CI
         println(io, "  ", name, " = ", join(members, ", "))
     end
     println(io, "Special selectors: all, --list")
@@ -324,12 +471,7 @@ function print_test_suite_help(io::IO=stdout)
 end
 
 function registered_testset_paths()
-    paths = String[]
-    for spec in TEST_SUITE_SPECS, path in spec.paths
-        startswith(path, "testsets/") || continue
-        push!(paths, normpath(joinpath(@__DIR__, path)))
-    end
-    return sort!(paths)
+    return _registered_testset_paths(TEST_SUITE_SPECS)
 end
 
 function registered_test_fixture_paths()
