@@ -20,8 +20,9 @@ function declared_surface(path::AbstractString)
     return (exports=exported, public=qualified_public)
 end
 
-file_sha256(path::AbstractString) =
-    bytes2hex(SHA.sha256(read(path)))
+file_sha256(path::AbstractString) = bytes2hex(SHA.sha256(codeunits(
+    replace(read(path, String), "\r\n" => "\n"),
+)))
 
 function runtime_surface(mod::Module)
     bindings = names(mod; all=true, imported=false)
