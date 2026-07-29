@@ -832,10 +832,11 @@ Current intent:
   - retains the shard runs as bounded instrumentation/allocation-policy gates
     without uploading their partial reports, because independent Julia coverage
     processes discover different compiler-attributed coverable lines
-  - runs one baseline-comparable full-composition coverage process for the
-    authoritative project metric; Codecov combines it with the separate
-    AppleAccelerate extension report and waits for both uploads before
-    publishing project status or the PR comment
+  - runs one baseline-comparable full-composition coverage process plus the
+    focused KernelAbstractions CPU matrix for the authoritative project metric;
+    Codecov combines that report with the separate AppleAccelerate extension
+    report and waits for both uploads before publishing project status or the
+    PR comment
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - instantiates [`test/cuda`](../test/cuda)

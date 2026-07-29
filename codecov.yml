@@ -1,6 +1,7 @@
-# The baseline-comparable full-composition report and the AppleAccelerate
-# extension report upload independently. Diagnostic shard coverage runs do not
-# upload partial reports because they change Julia's attributed line universe.
+# The baseline-comparable full-composition plus focused KA CPU report and the
+# AppleAccelerate extension report upload independently. Diagnostic shard
+# coverage runs do not upload partial reports because they change Julia's
+# attributed line universe.
 codecov:
   notify:
     after_n_builds: 2
