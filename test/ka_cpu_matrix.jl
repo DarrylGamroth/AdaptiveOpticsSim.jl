@@ -208,10 +208,12 @@ end
         modal_one = zeros(4)
         modal_two = zeros(4)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.modal_opd_one_kernel!, modal_one, modal_modes,
+            AdaptiveOpticsSim.Optics.modal_opd_one_kernel!, modal_one,
+            modal_modes,
             modal_coefs, 4; ndrange=4)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.modal_opd_two_kernel!, modal_two, modal_modes,
+            AdaptiveOpticsSim.Optics.modal_opd_two_kernel!, modal_two,
+            modal_modes,
             modal_coefs, 4; ndrange=4)
         mark_ka_cpu_kernel!(:modal_opd_one_kernel!, :modal_opd_two_kernel!)
         @test modal_one == modal_modes[:, 1] .* modal_coefs[1]
@@ -969,19 +971,20 @@ end
         dm_ka = DeformableMirror(tel; n_act=3, influence_width=0.3)
         scalar_modes = Matrix{Float64}(undef, size(dm_scalar.state.modes))
         ka_modes = similar(scalar_modes)
-        AdaptiveOpticsSim._materialize_gaussian_influence!(
+        AdaptiveOpticsSim.Optics._materialize_gaussian_influence!(
             SCALAR_CPU_STYLE, scalar_modes, dm_scalar.state.modes)
-        AdaptiveOpticsSim._materialize_gaussian_influence!(
+        AdaptiveOpticsSim.Optics._materialize_gaussian_influence!(
             KA_CPU_STYLE, ka_modes, dm_ka.state.modes)
         mark_ka_cpu_kernel!(:dm_materialize_gaussian_kernel!)
         @test ka_cpu_close(ka_modes, scalar_modes)
 
         dm_scalar.state.coefs .= collect(range(-0.1, 0.1; length=length(dm_scalar.state.coefs)))
         dm_ka.state.coefs .= dm_scalar.state.coefs
-        AdaptiveOpticsSim.prepare_actuator_commands!(dm_scalar)
-        AdaptiveOpticsSim.prepare_actuator_commands!(dm_ka)
-        AdaptiveOpticsSim._apply_opd_separable!(SCALAR_CPU_STYLE, dm_scalar)
-        AdaptiveOpticsSim._apply_opd_separable!(KA_CPU_STYLE, dm_ka)
+        AdaptiveOpticsSim.Optics.prepare_actuator_commands!(dm_scalar)
+        AdaptiveOpticsSim.Optics.prepare_actuator_commands!(dm_ka)
+        AdaptiveOpticsSim.Optics._apply_opd_separable!(
+            SCALAR_CPU_STYLE, dm_scalar)
+        AdaptiveOpticsSim.Optics._apply_opd_separable!(KA_CPU_STYLE, dm_ka)
         mark_ka_cpu_kernel!(:dm_apply_pupil_kernel!)
         @test ka_cpu_close(dm_ka.state.opd, dm_scalar.state.opd)
 
@@ -1188,14 +1191,14 @@ end
         modulation_policy = CircularModulation(2.0;
             samples=5, phase_offset=0.3)
         scalar_modulation =
-            AdaptiveOpticsSim.prepare_focal_plane_modulation(
+            AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
                 modulation_policy, 8, zeros(8, 8), Float64)
         ka_modulation =
-            AdaptiveOpticsSim.prepare_focal_plane_modulation(
+            AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
                 modulation_policy, 8, zeros(8, 8), Float64)
-        AdaptiveOpticsSim._update_cycle_averaged_circular_modulation!(
+        AdaptiveOpticsSim.Optics._update_cycle_averaged_circular_modulation!(
             SCALAR_CPU_STYLE, scalar_modulation, 1.5, 0.3)
-        AdaptiveOpticsSim._update_cycle_averaged_circular_modulation!(
+        AdaptiveOpticsSim.Optics._update_cycle_averaged_circular_modulation!(
             KA_CPU_STYLE, ka_modulation, 1.5, 0.3)
         mark_ka_cpu_kernel!(:circular_modulation_phases_kernel!)
         @test ka_cpu_close(

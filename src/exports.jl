@@ -20,12 +20,7 @@ export GeometricAtmosphericPropagation, LayeredFresnelAtmosphericPropagation
 export AtmosphericFieldPropagation
 export propagate_atmosphere_field!, atmospheric_intensity!
 
-export ZernikeBasis, compute_zernike!
-export Misregistration, apply_misregistration
 export KLBasis, ZernikeModalBasis
-export SpatialFilter, SpatialFilterWorkspace, SpatialFilterPlan
-export CircularFilter, SquareFilter, FoucaultFilter
-export prepare_spatial_filter, filter!
 
 export KolmogorovAtmosphere, MultiLayerAtmosphere, InfinitePhaseScreen, InfiniteMultiLayerAtmosphere
 export AtmosphereLayerID
@@ -43,17 +38,6 @@ public atmosphere_direction_count, atmosphere_direction_capacity
 public atmosphere_direction_metadata, validate_atmosphere_direction_batch
 export advance!, advance_by!, advance_to!, propagate!
 export render_atmosphere!
-
-export ActuatorGridTopology, SampledActuatorTopology
-export GaussianInfluenceWidth, GaussianMechanicalCoupling, DenseInfluenceMatrix, MeasuredInfluenceFunctions
-export ClippedActuators, ActuatorHealthMap, CompositeDMActuatorModel
-export DeformableMirror
-export influence_model, influence_width
-export mechanical_coupling, n_actuators
-export FunctionModalBasis, MatrixModalBasis, ZernikeOpticBasis, CartesianTiltBasis
-export ModalControllableOptic, TipTiltMirror, FocusStage
-export set_command!
-export update_surface!
 
 export Detector, APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
@@ -97,17 +81,13 @@ export prepare_wfs_acquisition, acquire_wfs_observation!
 export prepare_wfs_estimation, estimate_wfs_measurement!
 export AbstractWFSMeasurementPath, AcquiredObservationPath
 export DirectMeasurementPath, wfs_measurement_path
-export AbstractFocalPlaneModulation, NoModulation, CircularModulation
-export SampledModulation
-export MicrolensArrayParams, MicrolensArray
-export microlens_array, prepare_microlens_propagation
 export ShackHartmannDirectFrontEnd, ShackHartmannOpticalFrontEnd
 export shack_hartmann_rate_map
-export PyramidPhaseMask, PyramidOpticalFrontEnd, pyramid_rate_map
-export BioEdgeAmplitudeMask, BioEdgeOpticalFrontEnd, bioedge_rate_map
+export PyramidOpticalFrontEnd, pyramid_rate_map
+export BioEdgeOpticalFrontEnd, bioedge_rate_map
 export set_pyramid_calibration!, set_bioedge_calibration!
-export ZernikePhaseSpot, ZernikeOpticalFrontEnd, zernike_rate_map
-export CurvatureDefocusPair, CurvatureOpticalFrontEnd, curvature_rate_maps
+export ZernikeOpticalFrontEnd, zernike_rate_map
+export CurvatureOpticalFrontEnd, curvature_rate_maps
 export CurvaturePackedAcquisition
 export set_zernike_calibration!, set_curvature_calibration!
 export ShackHartmannWFS, PyramidWFS, BioEdgeWFS, ZernikeWFS, CurvatureWFS

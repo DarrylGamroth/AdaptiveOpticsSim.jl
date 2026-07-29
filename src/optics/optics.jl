@@ -2,13 +2,13 @@
     Optics
 
 Canonical owner of foundational optical locations, coordinates, products,
-sources, telescope/aperture models, backend-portable propagation, and explicit
-sampled NCPA. Reusable controllable and WFS optical components complete their
-move in the following namespace gate.
+sources, telescope/aperture models, backend-portable propagation, explicit
+sampled NCPA, controllable optics, and reusable physical WFS components.
 """
 module Optics
 
 using KernelAbstractions
+using LinearAlgebra
 using Statistics
 
 import ..AdaptiveOpticsSim:
@@ -17,16 +17,19 @@ import ..AdaptiveOpticsSim:
     UnsupportedAlgorithm,
     circshift2d!,
     config_value,
-    fftfreq!
+    fftfreq!,
+    fftshift2d!
 
 import ..Backends:
     AbstractArrayBackend,
     AbstractComputeDevice,
     AcceleratorStyle,
     CPUBackend,
+    ExecutionStyle,
     ScalarCPUStyle,
     _resolve_array_backend,
     _resolve_backend_selector,
+    allocate_array,
     backend,
     begin_kernel_phase,
     compute_device,
@@ -53,8 +56,21 @@ include("asterism.jl")
 include("extended_source.jl")
 include("direct_imaging.jl")
 include("direct_imaging_batch.jl")
+include("zernike.jl")
 include("opd_map.jl")
+include("misregistration.jl")
 include("ncpa.jl")
+include("controllable_optics.jl")
+include("deformable_mirror.jl")
+
+# Canonical Optics-owned operation; do not extend Base.filter! because this
+# contract transforms optical products rather than filtering a collection.
+function filter! end
+
+include("spatial_filter.jl")
+include("focal_plane_modulation.jl")
+include("microlens_array.jl")
+include("wfs_components.jl")
 include("api.jl")
 
 end # module Optics

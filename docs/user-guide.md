@@ -55,7 +55,7 @@ The package is organized around a small set of modeling objects:
 - `AdaptiveOpticsSim.Plant` when you need independent virtual-time commands,
   acquisitions, triggers, and detector lifecycles
 
-Import foundational optical vocabulary with
+Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Optics`. During the breaking namespace migration,
 detector, WFS, atmosphere, calibration, and control vocabulary remains at the
 root until each canonical owner gate lands.

@@ -1,5 +1,6 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+import AdaptiveOpticsSim.Optics: filter!
 using Logging
 using Random
 using Statistics

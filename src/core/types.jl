@@ -27,9 +27,3 @@ end
 
 """Detectors implement capture!(det, psf; rng)."""
 abstract type AbstractDetector <: AbstractOpticalElement end
-
-"""Controllable optics form surfaces that are applied to explicit pupil paths."""
-abstract type AbstractControllableOptic <: AbstractOpticalElement end
-
-"""Deformable mirrors implement prepared influence functions and surface formation."""
-abstract type AbstractDeformableMirror <: AbstractControllableOptic end

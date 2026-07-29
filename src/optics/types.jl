@@ -7,6 +7,12 @@ abstract type AbstractTelescope <: AbstractOpticalElement end
 """Sources provide wavelength, direction, and declared radiometry."""
 abstract type AbstractSource <: AbstractOpticalElement end
 
+"""Controllable optics form surfaces that are applied to explicit pupil paths."""
+abstract type AbstractControllableOptic <: AbstractOpticalElement end
+
+"""Deformable mirrors implement prepared influence functions and surface formation."""
+abstract type AbstractDeformableMirror <: AbstractControllableOptic end
+
 """Application policy for an already formed sampled optical surface."""
 abstract type DMApplyMode end
 

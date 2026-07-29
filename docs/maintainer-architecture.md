@@ -79,13 +79,13 @@ function rather than introducing a second root function identity.
 ### Namespace Authority
 
 The package is transitioning from the original flat root surface to real
-domain modules alongside the existing `Plant` module. `Backends` is complete.
-The first `Optics` slice now owns apertures, telescopes, sources, optical
+domain modules alongside the existing `Plant` module. `Backends` and `Optics`
+are complete. `Optics` owns apertures, telescopes, sources, optical
 location/product metadata, pupil and field formation, general Fraunhofer and
-Fresnel propagation, direct imaging, sampled OPD, and physical NCPA.
-Controllable optics and reusable physical WFS components complete `Optics` in
-the next slice; `Atmospheres`, `Detectors`, `WavefrontSensors`, `Calibration`,
-`Control`, `Tomography`, and `Ensembles` follow in dependency order. The
+Fresnel propagation, direct imaging, sampled OPD, physical NCPA, controllable
+optics, and reusable physical WFS components. `Atmospheres`, `Detectors`,
+`WavefrontSensors`, `Calibration`, `Control`, `Tomography`, and `Ensembles`
+follow in dependency order. The
 authoritative pre-migration inventory, final exact API allowlists,
 extension-hook owners, and cross-module imports are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
@@ -109,8 +109,8 @@ Physical NCPA is owned by `Optics`; its runtime value stores an explicit
 sampled OPD map rather than a calibration basis or coefficient history.
 KL-, Zernike-, and M2C-based synthesis belongs to `Calibration`, while path
 visibility belongs to `Plant`. Microlens arrays, focal-plane modulation,
-phase/amplitude masks, phase spots, and defocus optics are physical `Optics`
-components scheduled for the next optics slice. Composed WFS front ends,
+phase/amplitude masks, phase spots, and defocus optics are implemented physical
+`Optics` components. Composed WFS front ends,
 observations, measurements, detector bindings, and estimators belong to
 `WavefrontSensors`.
 

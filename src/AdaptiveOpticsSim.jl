@@ -12,8 +12,6 @@ using SparseArrays
 using SpecialFunctions
 using Statistics
 
-import Base: filter!
-
 """
 AdaptiveOpticsSim.jl
 
@@ -136,6 +134,11 @@ include("optics/optics.jl")
 # are not root exports or qualified-public compatibility bindings.
 using .Optics
 import .Optics:
+    AbstractControllableOptic,
+    AbstractDeformableMirror,
+    AbstractDMActuatorModel,
+    AbstractDMInfluenceModel,
+    AbstractDMTopology,
     AbstractOpticalElement,
     AbstractPropagationModel,
     AbstractSource,
@@ -143,16 +146,22 @@ import .Optics:
     AbstractSpectralCoordinate,
     AbstractTelescope,
     DMApplyMode,
+    DeformableMirrorParams,
+    DeformableMirrorState,
     ExpandedSourceComposition,
     ExtendedSource,
     LeafSourceComposition,
     NCPA,
+    LinearStaticActuators,
+    PreparedFocalPlaneModulation,
+    PreparedMicrolensPropagation,
     PreparedBundledDirectImaging,
     PreparedDirectImaging,
     PreparedIncoherentDirectImaging,
     LGSProfileNaProfile,
     LGSProfileNone,
     _FixedOpticalProductVector,
+    _prepare_microlens_propagation,
     _accumulate_field_intensity!,
     _accumulate_field_intensity_async!,
     _converted_nonnegative_finite,
@@ -163,6 +172,9 @@ import .Optics:
     _pupil_resolution,
     _require_physical_photon_irradiance,
     aperture_revision,
+    actuator_coordinates,
+    actuator_model,
+    anamorphosis_angle_deg,
     apply_centering_phase!,
     apply_phase_async!,
     axis_centering,
@@ -180,6 +192,10 @@ import .Optics:
     photon_irradiance,
     pixel_mask_grid,
     plane_metadata,
+    modulation_point_count,
+    microlens_array,
+    misregistration_component,
+    prepare_focal_plane_modulation,
     require_leaf_source,
     require_metric_coordinates,
     require_same_plane_grid,
@@ -189,7 +205,15 @@ import .Optics:
     source_height_m,
     source_with_wavelength_and_radiometric_value,
     spectral_bundle,
+    sampled_influence_matrix,
+    rotation_deg,
+    supports_dm_misregistration_identification,
     surface_opd,
+    topology,
+    topology_axis_count,
+    topology_command_count,
+    update_cycle_averaged_circular_modulation!,
+    validate_dm_actuator_model,
     wavelength,
     validate_plane_storage
 
@@ -200,12 +224,7 @@ include("core/workspace.jl")
 include("core/parallel.jl")
 include("core/telemetry.jl")
 
-include("optics/zernike.jl")
-include("optics/misregistration.jl")
-include("optics/controllable_optics.jl")
-include("optics/deformable_mirror.jl")
 include("detectors/detector.jl")
-include("optics/spatial_filter.jl")
 include("atmosphere/source_geometry.jl")
 include("atmosphere/kolmogorov.jl")
 include("atmosphere/infinite_screen_math.jl")

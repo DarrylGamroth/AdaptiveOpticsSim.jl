@@ -87,13 +87,6 @@ struct ZernikeWFSParams{T<:AbstractFloat,N<:WFSNormalization}
     binning::Int
 end
 
-"""Immutable focal-plane phase-shifting spot for a Zernike WFS."""
-struct ZernikePhaseSpot{T<:AbstractFloat}
-    phase_shift_pi::T
-    radius_lambda_over_d::T
-    diffraction_padding::Int
-end
-
 """Single-writer FFT and pupil-relay workspace."""
 mutable struct PreparedZernikePropagation{
     T<:AbstractFloat,

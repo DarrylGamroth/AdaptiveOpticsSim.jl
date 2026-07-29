@@ -74,16 +74,6 @@ end
     end
 end
 
-"""Immutable physical definition of the four BioEdge amplitude masks."""
-struct BioEdgeAmplitudeMask{T<:AbstractFloat}
-    grey_width::T
-    grey_length::Union{Bool,T}
-    diffraction_padding::Int
-    psf_centering::Bool
-    n_pix_separation::Union{Int,Nothing}
-    n_pix_edge::Union{Int,Nothing}
-end
-
 """Immutable differential-estimator configuration."""
 struct BioEdgeEstimatorParams{T<:AbstractFloat,N<:WFSNormalization}
     pupil_samples::Int

@@ -150,15 +150,15 @@ function run_optional_cycle_averaged_modulation_checks(::Type{B},
     T = Float32
     policy = CircularModulation(T(2);
         samples=5, phase_offset=T(0.3), T=T)
-    cpu = AdaptiveOpticsSim.prepare_focal_plane_modulation(
+    cpu = AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
         policy, 8, zeros(T, 8, 8), T)
-    device = AdaptiveOpticsSim.prepare_focal_plane_modulation(
+    device = AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
         policy, 8, BackendArray(zeros(T, 8, 8)), T)
     weights = copy(device.amplitude_weights)
 
-    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+    AdaptiveOpticsSim.Optics.update_cycle_averaged_circular_modulation!(
         cpu, T(1.5))
-    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+    AdaptiveOpticsSim.Optics.update_cycle_averaged_circular_modulation!(
         device, T(1.5))
     @test device.phases isa BackendArray
     @test device.amplitude_weights == weights
@@ -167,7 +167,7 @@ function run_optional_cycle_averaged_modulation_checks(::Type{B},
     @test isapprox(Array(device.phases), cpu.phases;
         rtol=8eps(T), atol=8eps(T))
 
-    AdaptiveOpticsSim.update_cycle_averaged_circular_modulation!(
+    AdaptiveOpticsSim.Optics.update_cycle_averaged_circular_modulation!(
         device, T(1.5); enabled=false)
     @test Array(device.phases) == ones(Complex{T}, 8, 8, 5)
     @test device.amplitude_weights == weights
@@ -1615,10 +1615,12 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     @test @allocated(compute_device(pupil.opd)) == 0
     @test pupil.opd isa BackendArray
     @test dm.state.coefs isa BackendArray
-    @test dm.state.modes isa AdaptiveOpticsSim.GaussianInfluenceOperator
+    @test dm.state.modes isa
+        AdaptiveOpticsSim.Optics.GaussianInfluenceOperator
     @test typeof(backend(dm.state.modes)) === typeof(selector)
     @test similar(dm.state.modes, T, 2, 2) isa BackendArray
-    @test AdaptiveOpticsSim.materialize_influence_matrix(dm) isa BackendArray
+    @test AdaptiveOpticsSim.Optics.materialize_influence_matrix(dm) isa
+        BackendArray
     @test dm_dense.state.coefs isa BackendArray
     @test dm_dense.state.modes isa BackendArray
     @test Array(dm_dense.state.modes) ≈ Array(dm.state.modes) atol=0 rtol=0
@@ -2926,9 +2928,9 @@ function _optional_independent_optics_snapshot!(prepared,
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(output_frame(prepared.detector)))
     return (
-        low_order_command=copy(AdaptiveOpticsSim.command_storage(
+        low_order_command=copy(AdaptiveOpticsSim.Optics.command_storage(
             prepared.low_order)),
-        dm_command=copy(AdaptiveOpticsSim.command_storage(prepared.dm)),
+        dm_command=copy(AdaptiveOpticsSim.Optics.command_storage(prepared.dm)),
         slopes=copy(slopes(prepared.wfs)),
         frame=copy(output_frame(prepared.detector)),
     )
@@ -4397,7 +4399,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         atm,
         epoch,
     )
-    fill!(AdaptiveOpticsSim.command_storage(split_dm), T(1e-8))
+    fill!(AdaptiveOpticsSim.Optics.command_storage(split_dm), T(1e-8))
     update_surface!(split_dm)
     apply_surface!(science_pupil, split_dm, DMAdditive())
     science_imaging = prepare_direct_imaging(
