@@ -10,7 +10,7 @@ function representative_namespace_workflow()
         diameter=8.0,
         central_obstruction=0.14,
         T=Float64,
-        backend=AdaptiveOpticsSim.CPUBackend(),
+        backend=AdaptiveOpticsSim.Backends.CPUBackend(),
     )
     src = AdaptiveOpticsSim.Source(
         band=:custom,
@@ -35,7 +35,7 @@ function run_probe()
 
     @eval using LinearAlgebra
     Core.eval(Main, :(LinearAlgebra.BLAS.set_num_threads(1)))
-    Core.eval(Main, :(AdaptiveOpticsSim.set_fft_provider_threads!(1)))
+    Core.eval(Main, :(AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)))
 
     GC.gc()
     first_start = time_ns()

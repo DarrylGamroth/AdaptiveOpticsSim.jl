@@ -77,7 +77,7 @@ end
     @test_throws MethodError LiFT(tel, src, basis, det;
         diversity_opd=diversity)
     @test_throws MethodError reconstruct(lift, psf)
-    @test AdaptiveOpticsSim.effective_solve_mode(AdaptiveOpticsSim.ScalarCPUStyle(), LiFTSolveAuto()) isa LiFTSolveQR
+    @test AdaptiveOpticsSim.effective_solve_mode(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), LiFTSolveAuto()) isa LiFTSolveQR
     diag = diagnostics(lift)
     @test diag.used_qr isa Bool
     @test isfinite(diag.residual_norm)
@@ -197,7 +197,7 @@ end
         response_forward, diversity)))
     expected_response_rate = copy(unmapped_model_rate)
     response_scratch = similar(expected_response_rate)
-    AdaptiveOpticsSim.apply_response!(AdaptiveOpticsSim.ScalarCPUStyle(),
+    AdaptiveOpticsSim.apply_response!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
         lift_response, expected_response_rate, response_scratch)
     @test response_model_rate ≈ expected_response_rate rtol=1e-12 atol=1e-8
     @test supports_detector_mtf(lift_response)

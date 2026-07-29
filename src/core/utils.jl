@@ -347,24 +347,6 @@ function _fftfreq!(style::AcceleratorStyle, dest::AbstractVector, n::Int, d::Rea
     return dest
 end
 
-function poisson_sample(rng::AbstractRNG, λ::Real)
-    if λ <= 0
-        return 0
-    elseif λ < 30
-        L = exp(-float(λ))
-        k = 0
-        p = 1.0
-        while p > L
-            k += 1
-            p *= rand(rng)
-        end
-        return k - 1
-    else
-        return max(0, round(Int, float(λ) + sqrt(float(λ)) * randn(rng)))
-    end
-end
-
-
 function set_valid_subapertures!(valid_mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool}, threshold::Real)
     build_mask!(valid_mask, SubapertureGridMask(threshold), pupil)
     return valid_mask

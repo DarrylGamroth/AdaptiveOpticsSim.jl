@@ -1,5 +1,6 @@
 using AcceleratedKernels
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Dagger
 using LinearAlgebra
 using Random
@@ -8,7 +9,7 @@ using Statistics
 include(joinpath(@__DIR__, "support", "closed_loop_workload.jl"))
 
 BLAS.set_num_threads(1)
-AdaptiveOpticsSim.set_fft_provider_threads!(1)
+AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
 
 function make_workload(seed::Integer, resolution::Int)
     n_act = max(2, resolution ÷ 4)

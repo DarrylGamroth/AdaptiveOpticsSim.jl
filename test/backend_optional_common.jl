@@ -1,21 +1,21 @@
-backend_package_name(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "CUDA"
-backend_package_name(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "AMDGPU"
+backend_package_name(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = "CUDA"
+backend_package_name(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = "AMDGPU"
 
-backend_label(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "CUDA"
-backend_label(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "AMDGPU"
+backend_label(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = "CUDA"
+backend_label(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = "AMDGPU"
 
-backend_full_smoke_env(::Type{AdaptiveOpticsSim.CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
-backend_full_smoke_env(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
+backend_full_smoke_env(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
+backend_full_smoke_env(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
 
 if !isdefined(@__MODULE__, :ContractRateModel)
     include(joinpath(@__DIR__, "wfs_stage_contract_fixtures.jl"))
 end
 
-backend_selector(::Type{AdaptiveOpticsSim.CUDABackendTag}) = AdaptiveOpticsSim.CUDABackend()
-backend_selector(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AdaptiveOpticsSim.AMDGPUBackend()
+backend_selector(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = AdaptiveOpticsSim.Backends.CUDABackend()
+backend_selector(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = AdaptiveOpticsSim.Backends.AMDGPUBackend()
 
 function run_optional_command_application_checks(::Type{B}, BackendArray) where {
-    B<:AdaptiveOpticsSim.GPUBackendTag}
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
     schema = PlantCommandSchema(
@@ -82,7 +82,7 @@ Plant.prepare_controllable_optic(
 ) = OptionalPreparedControllerRoutingModel()
 
 function run_optional_controller_routing_checks(::Type{B},
-    BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
     telescope = Telescope(resolution=8, diameter=T(4),
@@ -146,7 +146,7 @@ function run_optional_controller_routing_checks(::Type{B},
 end
 
 function run_optional_cycle_averaged_modulation_checks(::Type{B},
-    BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     policy = CircularModulation(T(2);
         samples=5, phase_offset=T(0.3), T=T)
@@ -324,7 +324,7 @@ function Plant.prepare_acquisition_provider(
     return prepare_full_optical_provider(execution, products)
 end
 
-AdaptiveOpticsSim.backend(::OptionalStaticAtmosphere{<:Any,B}) where {B} = B()
+AdaptiveOpticsSim.Backends.backend(::OptionalStaticAtmosphere{<:Any,B}) where {B} = B()
 AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
 AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
 
@@ -342,8 +342,8 @@ function AdaptiveOpticsSim.propagate!(atm::OptionalStaticAtmosphere,
 end
 
 function OptionalStaticAtmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float32, backend::AbstractArrayBackend=backend(tel))
-    selector = AdaptiveOpticsSim.require_same_backend(tel, AdaptiveOpticsSim._resolve_backend_selector(backend))
-    array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
+    selector = AdaptiveOpticsSim.Backends.require_same_backend(tel, AdaptiveOpticsSim.Backends._resolve_backend_selector(backend))
+    array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(selector)
     host = zeros(T, tel.params.resolution, tel.params.resolution)
     host .*= Array(pupil_mask(tel))
     screen = array_backend{T}(undef, size(host)...)
@@ -352,7 +352,7 @@ function OptionalStaticAtmosphere(tel::Telescope; T::Type{<:AbstractFloat}=Float
 end
 
 function run_optional_prepared_plant_checks(::Type{B},
-    BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     T = Float32
     telescope = Telescope(resolution=8, diameter=T(4),
@@ -421,8 +421,8 @@ function run_optional_prepared_plant_checks(::Type{B},
     @test compute_device(prepared_sampled_opd) ==
         sampled_metadata.device
     fill!(sampled_opd, zero(T))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(prepared_sampled_opd))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(prepared_sampled_opd))
     @test all(==(T(0.125)), Array(prepared_sampled_opd))
     path = prepared_path(plant, :science)
     illumination_path = prepared_path(plant, :illumination)
@@ -455,14 +455,14 @@ function run_optional_prepared_plant_checks(::Type{B},
     fill!(pupil.opd, zero(T))
     @test apply_sampled_pupil_surface!(
         pupil, surface, identity_coupling) === pupil
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(pupil.opd))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(pupil.opd))
     @test Array(pupil.opd) == surface_host
     fill!(pupil.opd, T(7))
     @test apply_sampled_pupil_surface!(
         pupil, surface, identity_coupling, DMReplace()) === pupil
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(pupil.opd))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(pupil.opd))
     @test Array(pupil.opd) == surface_host
 
     half_sample = (
@@ -483,16 +483,16 @@ function run_optional_prepared_plant_checks(::Type{B},
     fill!(pupil.opd, zero(T))
     @test apply_sampled_pupil_surface!(
         pupil, surface, transformed_coupling) === pupil
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(pupil.opd))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(pupil.opd))
     transformed_expected = zeros(T, size(surface_host))
     transformed_expected[3:4, 3:4] .= T(0.25)
     @test Array(pupil.opd) ≈ transformed_expected rtol=zero(T) atol=8eps(T)
     fill!(pupil.opd, T(7))
     @test apply_sampled_pupil_surface!(
         pupil, surface, transformed_coupling, DMReplace()) === pupil
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(pupil.opd))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(pupil.opd))
     @test Array(pupil.opd) ≈ transformed_expected rtol=zero(T) atol=8eps(T)
 
     selection = prepare_acquisition_selection(plant,
@@ -503,8 +503,8 @@ function run_optional_prepared_plant_checks(::Type{B},
     slow_products = acquisition_products(slow)
     @test epoch_time(current_epoch(atmosphere)) == T(1e-3)
     @test path_input(path).opd isa BackendArray
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(path_result(path).values))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(path_result(path).values))
     @test fast_products === acquisition_products(fast)
     @test slow_products === acquisition_products(slow)
     fast_host = Array(acquisition_observation(fast))
@@ -546,20 +546,20 @@ function run_optional_prepared_plant_checks(::Type{B},
         (replay_first, replay_second))
     @test Plant.execute_acquisition_provider!(replay_provider,
         path_result(path), Xoshiro(0x6111)) === replay_destination
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(copied_destination.observation))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(copied_destination.observation))
     @test all(==(T(9)), Array(copied_destination.observation))
     @test all(==(T(10)), Array(replay_destination.observation))
     Plant.execute_acquisition_provider!(replay_provider,
         path_result(path), Xoshiro(0x6112))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(replay_destination.observation))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(replay_destination.observation))
     @test all(==(T(11)), Array(replay_destination.observation))
 
     @test_throws PlantPreparationError Plant.require_path_result(
         path; backend=CPUBackend())
     @test_throws PlantPreparationError Plant.require_path_result(
-        path; device=AdaptiveOpticsSim.HostComputeDevice())
+        path; device=AdaptiveOpticsSim.Backends.HostComputeDevice())
     return nothing
 end
 
@@ -608,7 +608,7 @@ end
 function run_optional_device_path_batch_checks(
     ::Type{B},
     BackendArray,
-) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     lifecycle = device_batch_test_fixture(
         backend=selector,
@@ -619,7 +619,7 @@ function run_optional_device_path_batch_checks(
     @test device_path_batch_owner_count(lifecycle.prepared) == 1
     owner = device_path_batch_owner(lifecycle.prepared, 1)
     device = device_path_batch_compute_device(owner)
-    @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
+    @test device isa AdaptiveOpticsSim.Backends.AcceleratorComputeDevice
     @test typeof(device_path_batch_backend(owner)) === typeof(selector)
     @test device_path_batch_group_count(owner) == 2
     @test all(
@@ -633,7 +633,7 @@ function run_optional_device_path_batch_checks(
     implementation = owner.implementation
     retained_context = implementation.context
     retained_fft_plan = implementation.optical_batch.workspace.fft_plan
-    @test AdaptiveOpticsSim._prepared_device_execution_compute_device(
+    @test AdaptiveOpticsSim.Backends._prepared_device_execution_compute_device(
         implementation.context,
     ) == device
     @test atmosphere_direction_output(
@@ -956,7 +956,7 @@ end
 function run_optional_wfs_device_model_matrix_checks(
     ::Type{B},
     BackendArray,
-) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     for (family, direction, spectral) in device_model_matrix_wfs_rows()
         oracle = device_model_matrix_wfs_fixture(
@@ -983,7 +983,7 @@ function run_optional_wfs_device_model_matrix_checks(
         @test implementation isa Plant._PreparedWFSDevicePathBatch
         @test device_path_batch_group_count(owner) == 2
         device = device_path_batch_compute_device(owner)
-        @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
+        @test device isa AdaptiveOpticsSim.Backends.AcceleratorComputeDevice
         @test typeof(device_path_batch_backend(owner)) === typeof(selector)
         @test atmosphere_direction_output(
             implementation.atmosphere_batch,
@@ -1161,8 +1161,8 @@ function run_optional_wfs_device_model_matrix_checks(
             device,
             BackendArray,
         )
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(device_detector.output),
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(device_detector.output),
         )
         expected_detector_output =
             device_model_matrix_expected_detector_frame(
@@ -1338,8 +1338,8 @@ function optional_detector_device_model_matrix_allocation_bytes(
         result,
         PlantTimestamp(2_000_000_000),
     )
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(warm_output),
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(warm_output),
     )
     return @allocated begin
         output = device_model_matrix_repeat_detector!(
@@ -1347,8 +1347,8 @@ function optional_detector_device_model_matrix_allocation_bytes(
             result,
             PlantTimestamp(4_000_000_000),
         )
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(output),
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(output),
         )
     end
 end
@@ -1356,7 +1356,7 @@ end
 function run_optional_detector_device_model_matrix_checks(
     ::Type{B},
     BackendArray,
-) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
     for row in device_model_matrix_detector_rows()
@@ -1375,7 +1375,7 @@ function run_optional_detector_device_model_matrix_checks(
         device = compute_device(output)
 
         @test output isa BackendArray
-        @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
+        @test device isa AdaptiveOpticsSim.Backends.AcceleratorComputeDevice
         @test device_result.map.values isa BackendArray
         @test compute_device(device_result.map.values) == device
         @test device_result.prepared.plan.input_values ===
@@ -1398,8 +1398,8 @@ function run_optional_detector_device_model_matrix_checks(
             BackendArray,
         )
 
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(output),
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(output),
         )
         expected = device_model_matrix_expected_detector_frame(
             row,
@@ -1517,9 +1517,9 @@ function run_optional_detector_device_model_matrix_checks(
     return nothing
 end
 
-function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
-    array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
+    array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(selector)
     T = Float32
     tel = Telescope(resolution=8, diameter=T(1), central_obstruction=T(0),
         T=T, backend=selector)
@@ -1588,8 +1588,8 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     )
     set_command!(dm, native_command)
     update_surface!(dm)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(surface_opd(native_state.active)),
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(surface_opd(native_state.active)),
     )
     zernike_modal = ModalControllableOptic(tel, ZernikeOpticBasis([2, 3]); T=T, backend=selector)
     cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=T(0.1)); T=T, backend=selector)
@@ -1605,11 +1605,11 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
         backend=selector)
     pupil = PupilFunction(tel; T=T, backend=selector)
     device = compute_device(pupil.opd)
-    @test device isa AdaptiveOpticsSim.AcceleratorComputeDevice
-    @test typeof(AdaptiveOpticsSim.compute_device_backend(device)) ===
+    @test device isa AdaptiveOpticsSim.Backends.AcceleratorComputeDevice
+    @test typeof(AdaptiveOpticsSim.Backends.compute_device_backend(device)) ===
         typeof(selector)
     @test !isnothing(
-        AdaptiveOpticsSim.compute_device_identifier(device))
+        AdaptiveOpticsSim.Backends.compute_device_identifier(device))
     @test compute_device(pupil.amplitude) == device
     compute_device(pupil.opd)
     @test @allocated(compute_device(pupil.opd)) == 0
@@ -1671,9 +1671,9 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     return nothing
 end
 
-function run_optional_lgs_convolution_normalization(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function run_optional_lgs_convolution_normalization(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
-    array_backend = AdaptiveOpticsSim._resolve_array_backend(selector)
+    array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(selector)
     T = Float32
     n = 8
     expected = reshape(collect(range(T(0.25), T(2); length=n * n)), n, n)
@@ -1681,8 +1681,8 @@ function run_optional_lgs_convolution_normalization(::Type{B}) where {B<:Adaptiv
     intensity_stack = array_backend(copy(expected_stack))
     kernel_fft = array_backend(ones(Complex{T}, n, n, 2))
     fft_stack = array_backend(zeros(Complex{T}, n, n, 2))
-    fft_plan = AdaptiveOpticsSim.plan_fft_backend!(fft_stack, (1, 2))
-    ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(fft_stack, (1, 2))
+    fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(fft_stack, (1, 2))
+    ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(fft_stack, (1, 2))
 
     AdaptiveOpticsSim.apply_lgs_convolution_stack!(
         intensity_stack, kernel_fft, fft_stack, fft_plan, ifft_plan)
@@ -1694,7 +1694,7 @@ function run_optional_lgs_convolution_normalization(::Type{B}) where {B<:Adaptiv
 end
 
 function run_optional_sodium_profile_wfs(::Type{B},
-    BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     T = Float32
     tel = Telescope(resolution=16, diameter=T(8),
@@ -1722,8 +1722,8 @@ function run_optional_sodium_profile_wfs(::Type{B},
         original_kernel = Array(propagation.lgs_kernel_fft)
         @test all(isfinite, original_kernel)
         slopes = measure!(wfs, pupil, src)
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(slopes))
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(slopes))
         @test slopes isa BackendArray
         @test all(isfinite, Array(slopes))
 
@@ -1737,7 +1737,7 @@ function run_optional_sodium_profile_wfs(::Type{B},
 end
 
 function run_optional_zernike_normalization(
-    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     T = Float32
     cpu_tel = Telescope(resolution=16, diameter=T(8),
@@ -1774,8 +1774,8 @@ function run_optional_zernike_normalization(
             cpu_pupil, frame_host, src, normalization_scale))
         actual = AdaptiveOpticsSim.zernike_signal!(gpu_wfs, gpu_pupil,
             frame, src, normalization_scale)
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(actual))
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(actual))
         @test gpu_wfs.estimator.state.normalization_sum isa BackendArray
         @test actual isa BackendArray
         @test Array(actual) ≈ expected rtol=T(2e-5) atol=T(2e-6)
@@ -1789,15 +1789,15 @@ function run_optional_zernike_normalization(
     fill!(zero_wfs.estimator.state.reference_signal_2d, zero(T))
     zero_slopes = AdaptiveOpticsSim.zernike_signal!(zero_wfs, gpu_pupil,
         BackendArray(copy(frame_host)), zero_src, one(T))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(zero_slopes))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(zero_slopes))
     @test all(iszero, Array(zero_slopes))
     @test all(isfinite, Array(zero_slopes))
     return nothing
 end
 
 function run_optional_wfs_stage_contracts(
-    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     T = Float32
     tel = Telescope(resolution=4, diameter=T(2),
@@ -1844,8 +1844,8 @@ function run_optional_wfs_stage_contracts(
         acquisition_plan, rng)) === observation
     @test @inferred(estimate_wfs_measurement!(measurement, observation,
         estimator_plan)) === measurement
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(measurement.storage))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(measurement.storage))
     @test rate.values isa BackendArray
     @test observation.storage isa BackendArray
     @test measurement.storage isa BackendArray
@@ -1864,8 +1864,8 @@ function run_optional_wfs_stage_contracts(
     @test wfs_measurement_path(direct_plan) isa DirectMeasurementPath
     @test @inferred(estimate_wfs_measurement!(direct_measurement, field,
         direct_plan)) === direct_measurement
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(direct_measurement.storage))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(direct_measurement.storage))
     @test direct_measurement.storage isa BackendArray
     @test Array(direct_measurement.storage) ≈ abs2.(Array(field.values))
 
@@ -1896,8 +1896,8 @@ function run_optional_wfs_stage_contracts(
         bundle, observations)
     @test @inferred(acquire_wfs_observation!(observations, bundle,
         multi_acquisition, (Xoshiro(1), Xoshiro(2)))) === observations
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(second_binding.observation.storage))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(second_binding.observation.storage))
     @test first_binding.observation.storage isa BackendArray
     @test second_binding.observation.storage isa BackendArray
     @test first_binding.observation.metadata.device ==
@@ -1911,8 +1911,8 @@ function run_optional_wfs_stage_contracts(
         ContractPackedAcquisition(regions, T(0.2)), bundle, packed)
     @test @inferred(acquire_wfs_observation!(packed, bundle, packed_plan,
         Xoshiro(3))) === packed
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(packed.storage))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(packed.storage))
     @test packed.storage isa BackendArray
     packed_host = Array(packed.storage)
     @test packed_host[1:4, :] ≈ Array(rate.values) .* T(0.2)
@@ -1940,8 +1940,8 @@ function run_optional_wfs_stage_contracts(
         physical_field_rate)
     form_wfs_optical_products!(physical_field_rate, field,
         physical_field_plan)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(physical_field_rate.values))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(physical_field_rate.values))
     @test physical_field_rate.values isa BackendArray
     @test isapprox(Array(physical_field_rate.values),
         Array(physical_rate.values); rtol=T(2e-5), atol=T(2e-5))
@@ -1961,8 +1961,8 @@ function run_optional_wfs_stage_contracts(
             physical_asterism), pupil, physical_asterism_rate)
     form_wfs_optical_products!(physical_asterism_rate, pupil,
         physical_asterism_plan)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(physical_asterism_rate.values))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(physical_asterism_rate.values))
     @test physical_asterism_rate.values isa BackendArray
     @test isapprox(Array(physical_asterism_rate.values),
         Array(physical_rate.values); rtol=T(2e-5), atol=T(2e-5))
@@ -2017,8 +2017,8 @@ function run_optional_wfs_stage_contracts(
         physical_observation, physical_measurement)
     estimate_wfs_measurement!(physical_measurement, physical_observation,
         physical_estimator)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(physical_measurement.storage))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(physical_measurement.storage))
     @test physical_measurement.storage isa BackendArray
     @test all(isfinite, Array(physical_measurement.storage))
 
@@ -2055,8 +2055,8 @@ function run_optional_wfs_stage_contracts(
             gpu_rate)
         form_wfs_optical_products!(cpu_rate, four_pupil_cpu, cpu_plan)
         form_wfs_optical_products!(gpu_rate, pupil, gpu_plan)
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(gpu_rate.values))
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(gpu_rate.values))
         @test gpu_rate.values isa BackendArray
         @test isapprox(Array(gpu_rate.values), cpu_rate.values;
             rtol=T(3e-5), atol=T(3e-5))
@@ -2075,8 +2075,8 @@ function run_optional_wfs_stage_contracts(
         field_plan = prepare_wfs_optical_formation(field_front_end, field,
             field_rate)
         form_wfs_optical_products!(field_rate, field, field_plan)
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(field_rate.values))
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(field_rate.values))
         @test field_rate.values isa BackendArray
         @test isapprox(Array(field_rate.values), Array(gpu_rate.values);
             rtol=T(3e-5), atol=T(3e-5))
@@ -2090,8 +2090,8 @@ function run_optional_wfs_stage_contracts(
             four_pupil_detector, gpu_rate, four_pupil_observation)
         acquire_wfs_observation!(four_pupil_observation, gpu_rate,
             four_pupil_acquisition, Xoshiro(0x5042))
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(
                 four_pupil_observation.storage))
         @test four_pupil_observation.storage isa BackendArray
         @test isapprox(Array(four_pupil_observation.storage),
@@ -2139,8 +2139,8 @@ function run_optional_wfs_stage_contracts(
             four_pupil_observation, four_pupil_measurement)
         estimate_wfs_measurement!(four_pupil_measurement,
             four_pupil_observation, four_pupil_estimator)
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(
                 four_pupil_measurement.storage))
         @test four_pupil_measurement.storage isa BackendArray
         @test all(isfinite, Array(four_pupil_measurement.storage))
@@ -2157,8 +2157,8 @@ function run_optional_wfs_stage_contracts(
             quantized_observation, quantized_measurement)
         estimate_wfs_measurement!(quantized_measurement,
             quantized_observation, quantized_estimator)
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(quantized_measurement.storage))
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(quantized_measurement.storage))
 
         cpu_reference = zeros(T,
             size(cpu_sensor.estimator.state.reference_signal_2d))
@@ -2192,8 +2192,8 @@ function run_optional_wfs_stage_contracts(
             geometric_measurement)
         estimate_wfs_measurement!(geometric_measurement, pupil,
             geometric_plan)
-        AdaptiveOpticsSim.synchronize_backend!(
-            AdaptiveOpticsSim.execution_style(
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(
                 geometric_measurement.storage))
         @test geometric_measurement.storage isa BackendArray
         @test all(isfinite, Array(geometric_measurement.storage))
@@ -2272,8 +2272,8 @@ function run_optional_wfs_stage_contracts(
             form_wfs_optical_products!(cpu_lgs_rate, four_pupil_cpu,
                 cpu_lgs_plan)
             form_wfs_optical_products!(gpu_lgs_rate, pupil, gpu_lgs_plan)
-            AdaptiveOpticsSim.synchronize_backend!(
-                AdaptiveOpticsSim.execution_style(gpu_lgs_rate.values))
+            AdaptiveOpticsSim.Backends.synchronize_backend!(
+                AdaptiveOpticsSim.Backends.execution_style(gpu_lgs_rate.values))
             @test isapprox(Array(gpu_lgs_rate.values), cpu_lgs_rate.values;
                 rtol=T(5e-5), atol=T(5e-5))
         end
@@ -2296,7 +2296,7 @@ function run_optional_wfs_stage_contracts(
 end
 
 function run_optional_zernike_curvature_stages(
-    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     T = Float32
     cpu_tel = Telescope(resolution=8, diameter=T(4),
@@ -2328,8 +2328,8 @@ function run_optional_zernike_curvature_stages(
         cpu_zernike_plan)
     form_wfs_optical_products!(gpu_zernike_rate, gpu_pupil,
         gpu_zernike_plan)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(gpu_zernike_rate.values))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(gpu_zernike_rate.values))
     @test gpu_zernike_rate.values isa BackendArray
     @test isapprox(Array(gpu_zernike_rate.values),
         cpu_zernike_rate.values; rtol=T(4e-5), atol=T(4e-5))
@@ -2353,8 +2353,8 @@ function run_optional_zernike_curvature_stages(
         zernike_observation, zernike_measurement; source=source)
     estimate_wfs_measurement!(zernike_measurement, zernike_observation,
         zernike_estimator)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(zernike_measurement.storage))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(zernike_measurement.storage))
     @test zernike_observation.storage isa BackendArray
     @test zernike_measurement.storage isa BackendArray
     @test all(isfinite, Array(zernike_measurement.storage))
@@ -2374,8 +2374,8 @@ function run_optional_zernike_curvature_stages(
         gpu_rates)
     form_wfs_optical_products!(cpu_rates, cpu_pupil, cpu_curvature_plan)
     form_wfs_optical_products!(gpu_rates, gpu_pupil, gpu_curvature_plan)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(gpu_rates[1].values))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(gpu_rates[1].values))
     @test all(rate -> rate.values isa BackendArray, gpu_rates)
     @test isapprox(Array(gpu_rates[1].values), cpu_rates[1].values;
         rtol=T(5e-5), atol=T(5e-5))
@@ -2456,8 +2456,8 @@ function run_optional_zernike_curvature_stages(
         branch_rate_scales=(T(8), T(8)))
     estimate_wfs_measurement!(packed_measurement, packed_observation,
         packed_estimator)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(curvature_measurement.storage))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(curvature_measurement.storage))
     @test curvature_measurement.storage isa BackendArray
     @test packed_measurement.storage isa BackendArray
     @test isapprox(Array(curvature_measurement.storage),
@@ -2467,7 +2467,7 @@ end
 
 function run_optional_plane_product_checks(tel::Telescope,
     src::AdaptiveOpticsSim.AbstractSource,
-    selector::AdaptiveOpticsSim.AbstractArrayBackend, BackendArray,
+    selector::AdaptiveOpticsSim.Backends.AbstractArrayBackend, BackendArray,
     ::Type{T}) where {T<:AbstractFloat}
     wavefront = PupilFunction(tel; T=T, backend=selector)
     field = ElectricField(wavefront, src; zero_padding=2, T=T)
@@ -2497,7 +2497,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         PermutedDimsArray(wrapped_intensity_view, (2, 1)),
     )
         @test typeof(backend(wrapper)) === typeof(selector)
-        @test typeof(AdaptiveOpticsSim.array_backend_selector(
+        @test typeof(AdaptiveOpticsSim.Backends.array_backend_selector(
             typeof(wrapper))) === typeof(selector)
         wrapper_metadata = OpticalPlaneMetadata(FocalPlane(), wrapper;
             coordinate_domain=AngularCoordinates(),
@@ -2584,8 +2584,8 @@ function run_optional_plane_product_checks(tel::Telescope,
         second_sum_input)
     accumulate_intensity!(sum_output,
         (first_sum_input, second_sum_input), sum_plan)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(sum_output.values))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(sum_output.values))
     @test sum_output.values isa BackendArray
     @test Array(sum_output.values) == fill(T(3), size(sum_output.values))
 
@@ -2595,8 +2595,8 @@ function run_optional_plane_product_checks(tel::Telescope,
     acquisition = prepare_detector_acquisition(detector, prepared.output)
     detector_frame = capture!(detector, prepared.output, acquisition;
         rng=MersenneTwister(301))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(detector_frame))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(detector_frame))
     @test detector_frame isa BackendArray
     @test sum(Array(detector_frame)) ≈
         sum(Array(prepared.output.values)) * T(0.25) atol=T(2e-5) rtol=T(2e-5)
@@ -2618,8 +2618,8 @@ function run_optional_plane_product_checks(tel::Telescope,
     short_snapshot = copy(Array(detector_frame))
     long_frame = capture!(long_detector, prepared.output,
         long_acquisition; rng=MersenneTwister(307))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(long_frame))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(long_frame))
     @test Array(long_frame) ≈ 2 .* short_snapshot atol=T(2e-5) rtol=T(2e-5)
 
     incremental_detector = Detector(integration_time=T(0.5),
@@ -2634,8 +2634,8 @@ function run_optional_plane_product_checks(tel::Telescope,
     incremental_frame = capture!(incremental_detector, prepared.output,
         incremental_acquisition; rng=MersenneTwister(306),
         integration_duration=T(0.3))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(incremental_frame))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(incremental_frame))
     @test incremental_frame isa BackendArray
     @test readout_ready(incremental_detector)
     @test sum(Array(incremental_frame)) ≈
@@ -2667,8 +2667,8 @@ function run_optional_plane_product_checks(tel::Telescope,
         density_map)
     response_frame = capture!(response_detector, density_map,
         response_acquisition; rng=MersenneTwister(302))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(response_frame))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(response_frame))
     manual_response = zeros(T, 9, 9)
     manual_response[3, 5] = T(4.8)
     manual_response[2, 5] = T(0.8)
@@ -2696,8 +2696,8 @@ function run_optional_plane_product_checks(tel::Telescope,
     edge_acquisition = prepare_detector_acquisition(edge_detector, edge_map)
     edge_frame = capture!(edge_detector, edge_map, edge_acquisition;
         rng=MersenneTwister(303))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(edge_frame))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(edge_frame))
     @test sum(Array(edge_frame)) ≈ T(0.9) atol=T(2e-6) rtol=T(2e-6)
     @test sum(Array(edge_frame)) <= sum(edge_host) + T(2e-6)
 
@@ -2708,8 +2708,8 @@ function run_optional_plane_product_checks(tel::Telescope,
     edge_scratch = similar(edge_cube)
     edge_stack = AdaptiveOpticsSim.capture_stack!(edge_detector, edge_cube,
         edge_scratch; rng=MersenneTwister(304))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(edge_stack))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(edge_stack))
     edge_stack_host = Array(edge_stack)
     @test sum(@view(edge_stack_host[1, :, :])) ≈ T(0.9) atol=T(2e-6) rtol=T(2e-6)
     @test sum(@view(edge_stack_host[2, :, :])) ≈ T(0.3) atol=T(2e-6) rtol=T(2e-6)
@@ -2768,8 +2768,8 @@ function run_optional_scalable_reconstructor_checks(::Type{T}, selector,
     factorized_out = BackendArray(zeros(T, n_commands))
     reconstruct!(dense_out, dense, input)
     reconstruct!(factorized_out, factorized, input)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(factorized_out))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(factorized_out))
     @test Array(factorized_out) ≈ Array(dense_out) atol=T(2e-4) rtol=T(2e-4)
     @test AdaptiveOpticsSim.factorized_rank(factorized) == n_commands
     @test all(storage -> storage isa BackendArray,
@@ -2786,8 +2786,8 @@ function run_optional_scalable_reconstructor_checks(::Type{T}, selector,
         gain=T(0.7), tau=T(0.01), T=T, backend=selector)
     controlled = ControlledReconstructor(factorized, controller; dt=T(1e-3))
     reconstruct!(factorized_out, controlled, input)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(factorized_out))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(factorized_out))
     @test all(isfinite, Array(factorized_out))
     @test all(storage -> storage isa BackendArray,
         AdaptiveOpticsSim.runtime_reconstructor_storage(controlled))
@@ -2921,10 +2921,10 @@ function _optional_independent_optics_snapshot!(prepared,
         prepared.detector;
         rng=MersenneTwister(91),
     )
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(slopes(prepared.wfs)))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(output_frame(prepared.detector)))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(slopes(prepared.wfs)))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(output_frame(prepared.detector)))
     return (
         low_order_command=copy(AdaptiveOpticsSim.command_storage(
             prepared.low_order)),
@@ -2936,7 +2936,7 @@ end
 
 function _run_optional_independent_optics_case(::Type{B}, case::Val{K},
     wfs_case::Val{W}=Val(:sh)) where {
-    B<:AdaptiveOpticsSim.GPUBackendTag,K,W,
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag,K,W,
 }
     T = Float32
     cpu = _build_optional_independent_optics_case(
@@ -3009,7 +3009,7 @@ end
 function run_optional_independent_optics_parity(
     ::Type{B},
     BackendArray,
-) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     _run_optional_independent_optics_case(B, Val(:tiptilt), Val(:sh))
     _run_optional_independent_optics_case(B, Val(:tiptilt), Val(:pyr))
     _run_optional_independent_optics_case(B, Val(:tiptilt), Val(:bio))
@@ -3018,7 +3018,7 @@ function run_optional_independent_optics_parity(
     return nothing
 end
 
-function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
     correlation = ChannelCrosstalkModel(T(0.4))
@@ -3050,7 +3050,7 @@ function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B
     input[3, 3] = T(10)
     cpu_output = capture!(cpu, input, MersenneTwister(19))
     gpu_output = capture!(gpu, BackendArray(input), MersenneTwister(19))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(gpu_output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(gpu_output))
     @test gpu_output isa BackendArray
     @test isapprox(Array(gpu_output), cpu_output; rtol=1f-6, atol=1f-6)
     @test isapprox(sum(Array(gpu_output)), sum(cpu_output); rtol=1f-6, atol=1f-6)
@@ -3059,18 +3059,18 @@ function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B
     outside_band = Source(band=:custom, wavelength=T(0.55e-6), T=T)
     gpu_inside = capture!(gpu, BackendArray(fill(T(2), 2, 2)), inside_band,
         MersenneTwister(20))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(gpu_inside))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(gpu_inside))
     inside_host = Array(gpu_inside)
     gpu_outside = capture!(gpu, BackendArray(fill(T(2), 2, 2)), outside_band,
         MersenneTwister(20))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(gpu_outside))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(gpu_outside))
     outside_host = Array(gpu_outside)
     @test inside_host == fill(T(2), 2, 2)
     @test outside_host == zeros(T, 2, 2)
     return nothing
 end
 
-function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
     input = BackendArray(fill(one(T), 128, 128))
@@ -3080,8 +3080,8 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
             threshold=T(5), detection_efficiency=T(0.5)), T=T),
         response_model=NullFrameResponse(), T=T, backend=selector)
     pc_output = capture!(pc_detector, input; rng=MersenneTwister(2026))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(pc_output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(pc_output))
     pc_host = Array(pc_output)
     @test all(x -> x == zero(T) || x == one(T), pc_host)
     @test T(0.47) <= sum(pc_host) / length(pc_host) <= T(0.53)
@@ -3093,8 +3093,8 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
     stochastic_input = BackendArray(fill(T(50), 128, 128))
     stochastic_output = capture!(stochastic_detector, stochastic_input;
         rng=MersenneTwister(2027))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(stochastic_output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(stochastic_output))
     stochastic_host = Array(stochastic_output)
     @test all(x -> x >= zero(T), stochastic_host)
     @test isapprox(sum(stochastic_host) / length(stochastic_host), T(250);
@@ -3107,8 +3107,8 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
         response_model=NullFrameResponse(), T=T, backend=selector)
     ramp_output = capture!(ramp_detector,
         BackendArray(fill(T(3), 32, 32)); rng=MersenneTwister(2028))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(ramp_output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(ramp_output))
     @test Array(ramp_output) == fill(T(6), 32, 32)
     @test Array(detector_ramp_slope(ramp_detector)) == fill(T(3), 32, 32)
     @test maximum(abs, Array(detector_ramp_intercept(ramp_detector))) <= eps(T)
@@ -3120,8 +3120,8 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
         conversion_gain=T(2), noise=NoiseNone(), T=T, backend=selector)
     linear_output = capture!(linear_apd, BackendArray(fill(T(10), 4));
         rng=MersenneTwister(2029))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(linear_output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(linear_output))
     @test linear_output isa BackendArray
     @test Array(linear_output) == fill(T(20), 4)
     return nothing
@@ -3140,7 +3140,7 @@ function optional_detector_event_map(
 end
 
 function run_optional_detector_event_checks(::Type{B}, BackendArray) where
-    {B<:AdaptiveOpticsSim.GPUBackendTag}
+    {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
     definition = Plant.GlobalShutterAcquisitionDefinition(
@@ -3166,8 +3166,8 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
     Plant.close_exposure!(prepared, state, close)
     output = Plant.complete_readout!(prepared, state, close, rng)
     Plant.mark_acquisition_ready!(prepared, state, close)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(output))
     @test output isa BackendArray
     @test Array(output) == fill(one(T), 8, 8)
 
@@ -3202,8 +3202,8 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
         ramp_state, close, rng)
     Plant.mark_acquisition_ready!(ramp_prepared, ramp_state,
         close)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(ramp_output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(ramp_output))
     @test ramp_output isa BackendArray
     @test detector_ramp_cube(ramp_detector) isa BackendArray
     @test Array(detector_ramp_cube(ramp_detector)) == cat(
@@ -3257,8 +3257,8 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
     Plant.mark_acquisition_ready!(rolling_prepared,
         rolling_state,
         Plant.acquisition_readiness_timestamp(rolling_state))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(rolling_output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(rolling_output))
     @test rolling_output isa BackendArray
     @test Array(rolling_output) == fill(T(2), 8, 8)
 
@@ -3292,33 +3292,33 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
         transfer_state)
     transfer_output = Plant.complete_readout!(transfer_prepared,
         transfer_state, transfer_readout, rng)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(transfer_output))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(transfer_output))
     @test transfer_prepared.storage_frame isa BackendArray
     @test transfer_output isa BackendArray
     @test Array(transfer_output) == fill(T(3), 8, 8)
     return nothing
 end
 
-function import_backend_package!(::Type{AdaptiveOpticsSim.CUDABackendTag})
+function import_backend_package!(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag})
     @eval import CUDA
     return nothing
 end
 
-function import_backend_package!(::Type{AdaptiveOpticsSim.AMDGPUBackendTag})
+function import_backend_package!(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag})
     @eval import AMDGPU
     return nothing
 end
 
-function backend_functional(::Type{AdaptiveOpticsSim.CUDABackendTag})
+function backend_functional(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag})
     return Base.invokelatest(getproperty(getfield(Main, :CUDA), :functional))
 end
 
-function backend_functional(::Type{AdaptiveOpticsSim.AMDGPUBackendTag})
+function backend_functional(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag})
     return Base.invokelatest(getproperty(getfield(Main, :AMDGPU), :functional))
 end
 
-run_optional_backend_plan_checks(::Type{<:AdaptiveOpticsSim.GPUBackendTag}, tel, backend) = nothing
+run_optional_backend_plan_checks(::Type{<:AdaptiveOpticsSim.Backends.GPUBackendTag}, tel, backend) = nothing
 
 function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:AbstractFloat}
     H_host = T[1 0; 0 2; 1 1]
@@ -3342,7 +3342,7 @@ function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:Ab
 end
 
 function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
-    ::Type{T}) where {B<:AdaptiveOpticsSim.GPUBackendTag,T<:AbstractFloat}
+    ::Type{T}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag,T<:AbstractFloat}
     selector = backend_selector(B)
     lift_src = Source(band=:I, magnitude=zero(T), T=T)
     cpu_tel = Telescope(resolution=8, diameter=T(8),
@@ -3487,9 +3487,9 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     return nothing
 end
 
-function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, tel, backend)
+function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}, tel, backend)
     T = Float32
-    array_backend = AdaptiveOpticsSim._resolve_array_backend(backend)
+    array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     sh_large = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
@@ -3517,25 +3517,25 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
-    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.GroupedStaged2DPlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.GroupedStaged2DPlan
     @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
-        AdaptiveOpticsSim.execution_style(slopes(sh)), sh)) ===
+        AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh)) ===
         AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
     @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
-        AdaptiveOpticsSim.execution_style(slopes(sh_large)), sh_large)) ===
+        AdaptiveOpticsSim.Backends.execution_style(slopes(sh_large)), sh_large)) ===
         AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
     AdaptiveOpticsSim.prepare_sampling!(sh, pupil, src)
     sh_sub = div(tel.params.resolution, AdaptiveOpticsSim.n_lenslets(sh))
     sh_pad = size(sh.front_end.propagation.field, 1)
     sh_offset = div(sh_pad - sh_sub, 2)
     safe_intensity = AdaptiveOpticsSim.compute_intensity_safe!(
-        AdaptiveOpticsSim.execution_style(sh.front_end.propagation.intensity),
+        AdaptiveOpticsSim.Backends.execution_style(sh.front_end.propagation.intensity),
         sh, pupil, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset,
         sh_sub)
     @test safe_intensity === sh.front_end.propagation.intensity
     @test all(isfinite, Array(safe_intensity))
-    @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
+    @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorHostMirrorPlan
     capture_psf = array_backend{T}(undef, 4, 4)
     fill!(capture_psf, T(10))
     captured = capture!(det_capture, capture_psf; rng=MersenneTwister(2))
@@ -3562,17 +3562,17 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         ),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(poisson_method.file))
-    @test AdaptiveOpticsSim.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.HostMirrorReductionPlan
-    @test AdaptiveOpticsSim.backend_sum_value(capture_psf) == T(160)
+    @test AdaptiveOpticsSim.Backends.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.HostMirrorReductionPlan
+    @test AdaptiveOpticsSim.Backends.backend_sum_value(capture_psf) == T(160)
 
     phase_freqs = T[-0.2, -0.1, 0.1, 0.2]
     cpu_phase_psd = zeros(T, 4, 4)
     gpu_phase_freqs = array_backend(phase_freqs)
     gpu_phase_psd = array_backend(zeros(T, 4, 4))
     phase_args = (T(0.02), T(4pi^2), T(0.01), T(-11 / 6), zero(T), 4)
-    AdaptiveOpticsSim._fill_phase_psd!(AdaptiveOpticsSim.ScalarCPUStyle(),
+    AdaptiveOpticsSim._fill_phase_psd!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
         cpu_phase_psd, phase_freqs, phase_args...)
-    phase_style = AdaptiveOpticsSim.execution_style(gpu_phase_psd)
+    phase_style = AdaptiveOpticsSim.Backends.execution_style(gpu_phase_psd)
     AdaptiveOpticsSim._fill_phase_psd!(phase_style, gpu_phase_psd,
         gpu_phase_freqs, phase_args...)
     @test isapprox(Array(gpu_phase_psd), cpu_phase_psd; rtol=1f-6, atol=1f-7)
@@ -3595,7 +3595,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
         rtol=1f-6, atol=1f-8)
     geometric_method = which(
         AdaptiveOpticsSim._geometric_slopes!,
-        (typeof(AdaptiveOpticsSim.execution_style(gpu_geometric_slopes)),
+        (typeof(AdaptiveOpticsSim.Backends.execution_style(gpu_geometric_slopes)),
             typeof(gpu_geometric_slopes), typeof(gpu_opd), typeof(gpu_valid),
             Int, Int, Int),
     )
@@ -3611,11 +3611,11 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(randn_method.file))
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.values),
+        AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
     ) isa AdaptiveOpticsSim.GeometricFieldAsyncPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.values),
+        AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
     correction_models = (
@@ -3747,9 +3747,9 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.AMDGPUBackend
     return nothing
 end
 
-function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTag}, tel, backend)
+function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}, tel, backend)
     T = Float32
-    array_backend = AdaptiveOpticsSim._resolve_array_backend(backend)
+    array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     bio = BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
@@ -3774,17 +3774,17 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
-    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
-    @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.execution_style(slopes(sh)), sh) isa AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan
-    @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorDirectPlan
-    @test AdaptiveOpticsSim.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.DirectReductionPlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test AdaptiveOpticsSim.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.GroupedStackReducePlan
+    @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh) isa AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan
+    @test AdaptiveOpticsSim.detector_execution_plan(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.DetectorDirectPlan
+    @test AdaptiveOpticsSim.Backends.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.values),
+        AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
     ) isa AdaptiveOpticsSim.GeometricFieldAsyncPlan
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.values),
+        AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
     cpu_tel = Telescope(resolution=16, diameter=8.0f0,
@@ -3823,7 +3823,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.CUDABackendTa
     gpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(gpu_sh_stats.acquisition.spot_cube)
     gpu_cutoff = AdaptiveOpticsSim.centroid_threshold(gpu_sh_stats) * gpu_peak
     AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(
-        AdaptiveOpticsSim.execution_style(slopes(gpu_sh_stats)),
+        AdaptiveOpticsSim.Backends.execution_style(slopes(gpu_sh_stats)),
         gpu_sh_stats,
         gpu_cutoff,
     )
@@ -3970,7 +3970,7 @@ end
 
 function run_optional_direct_imaging_batch_checks(
     tel::Telescope,
-    selector::AdaptiveOpticsSim.AbstractArrayBackend,
+    selector::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     BackendArray,
     ::Type{T},
 ) where {T<:AbstractFloat}
@@ -4094,8 +4094,8 @@ function run_optional_direct_imaging_batch_checks(
         long_acquisition;
         rng=MersenneTwister(612),
     )
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(long_frame),
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(long_frame),
     )
     @test short_frame isa BackendArray
     @test long_frame isa BackendArray
@@ -4207,7 +4207,7 @@ function run_optional_atmosphere_direction_batch_checks(
     return nothing
 end
 
-function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     pkg = backend_package_name(B)
     pkg_path = Base.find_package(pkg)
     if pkg_path === nothing
@@ -4223,8 +4223,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         return nothing
     end
 
-    AdaptiveOpticsSim.disable_scalar_backend!(B)
-    backend = AdaptiveOpticsSim.gpu_backend_array_type(B)
+    AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
+    backend = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     @test backend !== nothing
     run_optional_backend_selector_smoke(B, backend)
     run_optional_lgs_convolution_normalization(B)
@@ -4413,8 +4413,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         split_acquisition;
         rng=MersenneTwister(17),
     )
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(split_frame))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(split_frame))
     @test split_frame isa BackendArray
     @test all(isfinite, Array(split_frame))
 
@@ -4438,10 +4438,10 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBa
         shared_acquisition_b;
         rng=MersenneTwister(18),
     )
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(shared_frame_a))
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(shared_frame_b))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(shared_frame_a))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(shared_frame_b))
     @test shared_frame_a isa BackendArray
     @test shared_frame_b isa BackendArray
     @test Array(shared_frame_a) ≈ Array(shared_frame_b) atol=0 rtol=0

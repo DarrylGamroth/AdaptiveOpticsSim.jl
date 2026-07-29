@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using BenchmarkTools
 using Random
 
@@ -11,6 +12,14 @@ for name in names(AdaptiveOpticsSim; all=true)
     end
 end
 
+for name in names(Backends; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Backends, $(QuoteNode(name)))
+    end
+end
+
 abstract type BenchmarkExecutionTarget end
 struct CPUBenchmarkTarget <: BenchmarkExecutionTarget end
 struct GPUBenchmarkTarget{B<:GPUBackendTag} <: BenchmarkExecutionTarget end
@@ -18,7 +27,7 @@ struct GPUBenchmarkTarget{B<:GPUBackendTag} <: BenchmarkExecutionTarget end
 _sync_target!(::CPUBenchmarkTarget, _) = nothing
 
 function _sync_target!(::GPUBenchmarkTarget, A)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(A))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(A))
     return nothing
 end
 
@@ -27,11 +36,11 @@ _gpu_target_type(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} = B
 
 _benchmark_policy(::CPUBenchmarkTarget) = SplitGPUPrecision(Float32, Float32)
 _benchmark_policy(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} =
-    AdaptiveOpticsSim.default_gpu_precision_policy(B)
+    AdaptiveOpticsSim.Backends.default_gpu_precision_policy(B)
 
 _high_accuracy_policy(::CPUBenchmarkTarget) = SplitGPUPrecision(Float32, Float64)
 _high_accuracy_policy(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} =
-    AdaptiveOpticsSim.high_accuracy_gpu_precision_policy(B)
+    AdaptiveOpticsSim.Backends.high_accuracy_gpu_precision_policy(B)
 
 _benchmark_backend_array(::CPUBenchmarkTarget) = CPUBackend()
 
@@ -42,8 +51,8 @@ _benchmark_backend_array(::GPUBenchmarkTarget{AMDGPUBackendTag}) = AMDGPUBackend
 _require_benchmark_gpu_backend(::CPUBenchmarkTarget) = nothing
 
 function _require_benchmark_gpu_backend(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag}
-    AdaptiveOpticsSim.disable_scalar_backend!(B)
-    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
+    AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
     return BackendArray
 end
@@ -53,7 +62,7 @@ _build_backend(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} = GPUArrayBuild
 
 _backend_name(::CPUBenchmarkTarget) = "cpu"
 _backend_name(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} =
-    string(something(AdaptiveOpticsSim.gpu_backend_name(B), B))
+    string(something(AdaptiveOpticsSim.Backends.gpu_backend_name(B), B))
 
 function _configure_benchmarks!()
     BenchmarkTools.DEFAULT_PARAMETERS.seconds = 2.0
@@ -67,7 +76,7 @@ end
 function _closed_loop_case(target::BenchmarkExecutionTarget;
     resolution::Int, n_lenslets::Int, n_act::Int)
     policy = _benchmark_policy(target)
-    T = AdaptiveOpticsSim.gpu_runtime_type(policy)
+    T = AdaptiveOpticsSim.Backends.gpu_runtime_type(policy)
     backend = _benchmark_backend_array(target)
     _require_benchmark_gpu_backend(target)
     workload = prepare_closed_loop_workload(
@@ -85,8 +94,8 @@ end
 function _tomography_case_params(target::BenchmarkExecutionTarget; n_lenslet::Int, n_lgs::Int, n_fit_src::Int, n_dm::Int)
     policy = _benchmark_policy(target)
     high_accuracy = _high_accuracy_policy(target)
-    TB = AdaptiveOpticsSim.gpu_build_type(policy)
-    TH = AdaptiveOpticsSim.gpu_build_type(high_accuracy)
+    TB = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
+    TH = AdaptiveOpticsSim.Backends.gpu_build_type(high_accuracy)
     build_backend = _build_backend(target)
     lgswfs = LGSWFSParams(
         diameter=TB(8.0),
@@ -226,7 +235,7 @@ function _builder_benchmarks(target::BenchmarkExecutionTarget, p)
             $(p.lgswfs_hi),
             $(p.tomo_hi),
             $(p.tdm_hi);
-            noise_model=RelativeSignalNoise($(AdaptiveOpticsSim.gpu_build_type(p.high_accuracy))(0.1)),
+            noise_model=RelativeSignalNoise($(AdaptiveOpticsSim.Backends.gpu_build_type(p.high_accuracy))(0.1)),
             build_backend=$(p.build_backend),
         )
         _sync_target!($target, recon_local.reconstructor)

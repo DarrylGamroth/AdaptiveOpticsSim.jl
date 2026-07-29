@@ -10,6 +10,7 @@ using TOML
 end
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 import FFTW
 
 @testset "Backend-neutral package load" begin
@@ -26,6 +27,6 @@ import FFTW
         :AdaptiveOpticsSimAppleAccelerateExt) === nothing
 
     buffer = zeros(ComplexF64, 8, 8)
-    plan = AdaptiveOpticsSim.plan_fft_backend!(buffer)
+    plan = Backends.plan_fft_backend!(buffer)
     @test parentmodule(typeof(plan)) === FFTW
 end

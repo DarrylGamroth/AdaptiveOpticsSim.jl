@@ -1,30 +1,31 @@
 module AdaptiveOpticsSimCUDAExt
 
-using AdaptiveOpticsSim
+import AdaptiveOpticsSim
+import AdaptiveOpticsSim: Backends
 using CUDA
 using LinearAlgebra
 
-AdaptiveOpticsSim.gpu_backend_loaded(::Type{AdaptiveOpticsSim.CUDABackendTag}) = true
-AdaptiveOpticsSim.gpu_backend_array_type(::Type{AdaptiveOpticsSim.CUDABackendTag}) = CUDA.CuArray
-AdaptiveOpticsSim.gpu_backend_name(::Type{AdaptiveOpticsSim.CUDABackendTag}) = :cuda
-AdaptiveOpticsSim.gpu_backend_name(::Type{<:CUDA.CuArray}) = :cuda
-AdaptiveOpticsSim.array_backend_selector(::Type{<:CUDA.CuArray}) = AdaptiveOpticsSim.CUDABackend()
-AdaptiveOpticsSim.disable_scalar_backend!(::Type{AdaptiveOpticsSim.CUDABackendTag}) = CUDA.allowscalar(false)
-AdaptiveOpticsSim.backend_rand(::Type{AdaptiveOpticsSim.CUDABackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = CUDA.rand(T, dims...)
-AdaptiveOpticsSim.backend_randn(::Type{AdaptiveOpticsSim.CUDABackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = CUDA.randn(T, dims...)
-AdaptiveOpticsSim.backend_zeros(::Type{AdaptiveOpticsSim.CUDABackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = CUDA.zeros(T, dims...)
-AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.CUDABackendTag}, value, dims::Vararg{Int}) = CUDA.fill(value, dims...)
-AdaptiveOpticsSim.compute_device_identifier(array::CUDA.CuArray) =
+Backends.gpu_backend_loaded(::Type{Backends.CUDABackendTag}) = true
+Backends.gpu_backend_array_type(::Type{Backends.CUDABackendTag}) = CUDA.CuArray
+Backends.gpu_backend_name(::Type{Backends.CUDABackendTag}) = :cuda
+Backends.gpu_backend_name(::Type{<:CUDA.CuArray}) = :cuda
+Backends.array_backend_selector(::Type{<:CUDA.CuArray}) = Backends.CUDABackend()
+Backends.disable_scalar_backend!(::Type{Backends.CUDABackendTag}) = CUDA.allowscalar(false)
+Backends.backend_rand(::Type{Backends.CUDABackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = CUDA.rand(T, dims...)
+Backends.backend_randn(::Type{Backends.CUDABackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = CUDA.randn(T, dims...)
+Backends.backend_zeros(::Type{Backends.CUDABackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = CUDA.zeros(T, dims...)
+Backends.backend_fill(::Type{Backends.CUDABackendTag}, value, dims::Vararg{Int}) = CUDA.fill(value, dims...)
+Backends.compute_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
 
 struct CUDAPreparedDeviceExecutionContext <:
-    AdaptiveOpticsSim._AbstractPreparedDeviceExecutionContext
+    Backends._AbstractPreparedDeviceExecutionContext
     device::CUDA.CuDevice
     stream::CUDA.CuStream
-    compute_device::AdaptiveOpticsSim.AcceleratorComputeDevice
+    compute_device::Backends.AcceleratorComputeDevice
 end
 
-function AdaptiveOpticsSim._prepare_device_execution_context(
+function Backends._prepare_device_execution_context(
     storage::CUDA.CuArray,
 )
     device = CUDA.device(storage)
@@ -34,15 +35,15 @@ function AdaptiveOpticsSim._prepare_device_execution_context(
     return CUDAPreparedDeviceExecutionContext(
         device,
         stream,
-        AdaptiveOpticsSim.compute_device(storage),
+        Backends.compute_device(storage),
     )
 end
 
-@inline AdaptiveOpticsSim._prepared_device_execution_compute_device(
+@inline Backends._prepared_device_execution_compute_device(
     context::CUDAPreparedDeviceExecutionContext,
 ) = context.compute_device
 
-function AdaptiveOpticsSim._with_prepared_device_execution_context(
+function Backends._with_prepared_device_execution_context(
     f::F,
     context::CUDAPreparedDeviceExecutionContext,
 ) where {F}
@@ -51,7 +52,7 @@ function AdaptiveOpticsSim._with_prepared_device_execution_context(
     end
 end
 
-@inline function AdaptiveOpticsSim._synchronize_prepared_device_execution_context!(
+@inline function Backends._synchronize_prepared_device_execution_context!(
     context::CUDAPreparedDeviceExecutionContext,
 )
     CUDA.synchronize(context.stream)

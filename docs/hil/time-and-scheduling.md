@@ -615,8 +615,9 @@ or incremental semantics, value/range policy, and duplicate/reordering policy.
 Its cold `validate_plant_command_payload` operation checks only presentation
 compatibility. `prepare_command_endpoint` binds that schema to positive active
 capacity, a positive accepted-sequence window, one stable ordering ordinal, and
-a payload-storage backend. Scalar payload slots require `CPUBackend()` and
-remain host-resident; fixed-shape array slots use the selected array backend.
+a payload-storage backend. Scalar payload slots require
+`Backends.CPUBackend()` and remain host-resident; fixed-shape array slots use
+the selected array backend.
 Its separate single-writer state owns fixed payload slots, compact metadata,
 and a sorted future calendar; caller-owned fixed disposition storage cannot be
 overwritten until it is explicitly cleared.

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Base64
 using Dates
 using HdrHistogram
@@ -333,7 +334,7 @@ function configure_gate0_benchmark!()
     Threads.nthreads() == 1 || error(
         "Gate 0 latency cards require one Julia thread")
     BLAS.set_num_threads(1)
-    AdaptiveOpticsSim.set_fft_provider_threads!(1)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
     return nothing
 end
 

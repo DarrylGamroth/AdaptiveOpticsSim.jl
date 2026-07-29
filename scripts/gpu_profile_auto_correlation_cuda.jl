@@ -7,7 +7,7 @@ catch err
 end
 
 function _sync_backend!(x)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(x))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(x))
     return x
 end
 
@@ -18,13 +18,13 @@ function _time_phase(f)
     return value, dt
 end
 
-function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.disable_scalar_backend!(B)
-    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
+function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
-    policy = AdaptiveOpticsSim.default_gpu_precision_policy(B)
-    T = AdaptiveOpticsSim.gpu_build_type(policy)
+    policy = AdaptiveOpticsSim.Backends.default_gpu_precision_policy(B)
+    T = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
     backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
     n_lenslet = 3
@@ -78,7 +78,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     fill!(result, zero(T))
     valid_positions_native = AdaptiveOpticsSim._backend_array(B, Int, length(valid_positions))
     copyto!(valid_positions_native, valid_positions)
-    style = AdaptiveOpticsSim.execution_style(result)
+    style = AdaptiveOpticsSim.Backends.execution_style(result)
 
     guide_xy, t_guides = _time_phase() do
         gx, gy = AdaptiveOpticsSim._guide_star_grids(
@@ -118,7 +118,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     for jgs in 1:n_lgs
         for igs in 1:jgs
             _, dt_selected = _time_phase() do
-                AdaptiveOpticsSim.launch_kernel_async!(
+                AdaptiveOpticsSim.Backends.launch_kernel_async!(
                     style,
                     AdaptiveOpticsSim.selected_covariance_block_kernel!,
                     block,
@@ -152,7 +152,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     end
 
     println("GPU auto_correlation phase profile")
-    println("  backend: ", string(something(AdaptiveOpticsSim.gpu_backend_name(B), B)))
+    println("  backend: ", string(something(AdaptiveOpticsSim.Backends.gpu_backend_name(B), B)))
     println("  case: medium")
     println("  guide_grids_ns: ", t_guides)
     println("  scaled_shifted_coords_ns: ", t_shift)
@@ -163,4 +163,4 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
     return nothing
 end
 
-_profile_case(AdaptiveOpticsSim.CUDABackendTag)
+_profile_case(AdaptiveOpticsSim.Backends.CUDABackendTag)

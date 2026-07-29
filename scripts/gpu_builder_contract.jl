@@ -1,15 +1,15 @@
 using AdaptiveOpticsSim
 using LinearAlgebra
 
-function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.disable_scalar_backend!(B)
-    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
+function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
     T = Float32
     build_backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
-    A = AdaptiveOpticsSim.backend_rand(B, T, 8, 4)
+    A = AdaptiveOpticsSim.Backends.backend_rand(B, T, 8, 4)
     imat = InteractionMatrix(A, T(0.1))
     cpu_A = Array(A)
     control_matrix = ControlMatrix(A; build_backend=build_backend)

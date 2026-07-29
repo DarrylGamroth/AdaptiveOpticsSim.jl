@@ -1,5 +1,6 @@
 using Test
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using LinearAlgebra
@@ -10,7 +11,7 @@ using Tables
 using TOML
 
 BLAS.set_num_threads(1)
-AdaptiveOpticsSim.set_fft_provider_threads!(1)
+Backends.set_fft_provider_threads!(1)
 
 const TEST_ATMOSPHERE_STEP = 1e-3
 
@@ -31,6 +32,14 @@ for name in names(AdaptiveOpticsSim; all=true)
     s = String(name)
     if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(AdaptiveOpticsSim, $(QuoteNode(name)))
+    end
+end
+
+for name in names(Backends; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Backends, $(QuoteNode(name)))
     end
 end
 

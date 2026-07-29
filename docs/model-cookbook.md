@@ -252,6 +252,7 @@ Choose the backend when constructing every owner:
 
 ```julia
 import CUDA
+using AdaptiveOpticsSim.Backends
 
 backend = CUDABackend()
 tel_gpu = Telescope(
@@ -264,10 +265,11 @@ tel_gpu = Telescope(
 pupil_gpu = PupilFunction(tel_gpu; T=Float32, backend=backend)
 ```
 
-Use `AMDGPUBackend()` on ROCm hardware. Keep the atmosphere, optics, WFS,
-detectors, reconstruction storage, controller-output products, and command
-endpoints on the same backend and compute device. Copy to host only at a
-deliberate transport or inspection boundary.
+Use `Backends.AMDGPUBackend()` on ROCm hardware when working with qualified
+names. Keep the atmosphere, optics, WFS, detectors, reconstruction storage,
+controller-output products, and command endpoints on the same backend and
+compute device. Copy to host only at a deliberate transport or inspection
+boundary.
 
 For a device-resident offline simulation, synchronize only when a dependency or
 measurement requires it. For CPU-paced HIL, measure host-ready and device-ready

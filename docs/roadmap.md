@@ -304,6 +304,9 @@ and indexes the preserved numerical, allocation, extension, package-load, and
 first-call evidence in
 [`namespace_characterization.toml`](../test/contracts/namespace_characterization.toml).
 These contracts contain no implementation binding moves.
+The maintained implementation stage lives in
+[`namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml);
+`Backends` is the first completed owner.
 
 ### Ownership target
 

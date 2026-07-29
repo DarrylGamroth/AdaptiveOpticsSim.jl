@@ -19,7 +19,7 @@ const CPU_HOTPATH_CARDS = (
 
 function configure_cpu_hotpath_benchmarks!()
     BLAS.set_num_threads(1)
-    AdaptiveOpticsSim.set_fft_provider_threads!(1)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
     BenchmarkTools.DEFAULT_PARAMETERS.seconds = 1.0
     BenchmarkTools.DEFAULT_PARAMETERS.samples = 20
     BenchmarkTools.DEFAULT_PARAMETERS.evals = 1
@@ -93,7 +93,7 @@ function sampled_frame_response_probe()
     frame = rand(Float32, 96, 96)
     scratch = similar(frame)
     return () -> AdaptiveOpticsSim.apply_response!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), model, frame, scratch)
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), model, frame, scratch)
 end
 
 function batched_sampled_frame_response_probe()
@@ -105,14 +105,14 @@ function batched_sampled_frame_response_probe()
     cube = rand(Float32, 256, 4, 4)
     scratch = similar(cube)
     return () -> AdaptiveOpticsSim._batched_apply_response!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), model, cube, scratch)
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), model, cube, scratch)
 end
 
 function detector_binning_probe()
     input = rand(Float32, 512, 512)
     output = similar(input, 256, 256)
     return () -> AdaptiveOpticsSim._bin2d!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), output, input, 2)
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), output, input, 2)
 end
 
 function gaussian_frame_response_probe()
@@ -120,7 +120,7 @@ function gaussian_frame_response_probe()
     frame = rand(Float32, 96, 96)
     scratch = similar(frame)
     return () -> AdaptiveOpticsSim.apply_response!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), model, frame, scratch)
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), model, frame, scratch)
 end
 
 function batched_emccd_capture_probe()

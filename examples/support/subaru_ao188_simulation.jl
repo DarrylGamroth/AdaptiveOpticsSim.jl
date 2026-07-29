@@ -1,14 +1,15 @@
 module SubaruAO188Simulation
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using LinearAlgebra
 using Random
 using Statistics
 
 import AdaptiveOpticsSim: runtime_timing, convert_noise, validate_noise, materialize_build,
-    execution_style, synchronize_backend!, bin2d!, prepare_sampling!,
-    ensure_sh_calibration!, wfs_output_frame, prepare_runtime_wfs!,
-    wfs_output_metadata, init_execution_state
+    bin2d!, prepare_sampling!, ensure_sh_calibration!, wfs_output_frame,
+    prepare_runtime_wfs!, wfs_output_metadata, init_execution_state
+import AdaptiveOpticsSim.Backends: execution_style, synchronize_backend!
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
 export SubaruHighOrderWFSModel, OperationalShackHartmannWFSModel, AO188CurvatureModel
@@ -577,9 +578,9 @@ end
 
 function _auto_build_backend(backend::AbstractArrayBackend)
     backend isa CPUBackend && return AdaptiveOpticsSim.NativeBuildBackend()
-    backend isa CUDABackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.CUDABackendTag)
-    backend isa MetalBackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.MetalBackendTag)
-    backend isa AMDGPUBackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.AMDGPUBackendTag)
+    backend isa CUDABackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.CUDABackendTag)
+    backend isa MetalBackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.MetalBackendTag)
+    backend isa AMDGPUBackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
     return AdaptiveOpticsSim.NativeBuildBackend()
 end
 

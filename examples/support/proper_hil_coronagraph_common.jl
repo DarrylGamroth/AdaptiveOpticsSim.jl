@@ -1,6 +1,7 @@
 module ProperHILCoronagraphCommon
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Proper
 using Random
 
@@ -44,19 +45,19 @@ end
 function resolve_hil_backend(name::AbstractString)
     lowered = lowercase(name)
     if lowered == "cpu"
-        return AdaptiveOpticsSim.CPUBackend()
+        return AdaptiveOpticsSim.Backends.CPUBackend()
     elseif lowered == "cuda"
         Base.find_package("CUDA") === nothing &&
             error("CUDA.jl is not available. Install it in the active environment before running the CUDA Proper HIL example.")
         @eval using CUDA
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        return AdaptiveOpticsSim.CUDABackend()
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.CUDABackendTag)
+        return AdaptiveOpticsSim.Backends.CUDABackend()
     elseif lowered == "amdgpu"
         Base.find_package("AMDGPU") === nothing &&
             error("AMDGPU.jl is not available. Install it in the active environment before running the AMDGPU Proper HIL example.")
         @eval using AMDGPU
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        return AdaptiveOpticsSim.AMDGPUBackend()
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+        return AdaptiveOpticsSim.Backends.AMDGPUBackend()
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -88,7 +89,7 @@ function _build_wfs(tel::Telescope; T::Type{<:AbstractFloat}, backend::AbstractA
 end
 
 function build_proper_hil_context(;
-    backend::AbstractArrayBackend=AdaptiveOpticsSim.CPUBackend(),
+    backend::AbstractArrayBackend=AdaptiveOpticsSim.Backends.CPUBackend(),
     T::Type{<:AbstractFloat}=Float32,
     resolution::Int=128,
     diameter::Real=8.0,

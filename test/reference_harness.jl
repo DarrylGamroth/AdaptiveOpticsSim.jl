@@ -318,7 +318,7 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
             src, sample.wavelength,
             eltype(slopes(wfs))(total_irradiance * sample.weight))
         AdaptiveOpticsSim.sampled_spots_peak!(
-            AdaptiveOpticsSim.ScalarCPUStyle(), wfs, pupil, variant)
+            AdaptiveOpticsSim.Backends.ScalarCPUStyle(), wfs, pupil, variant)
         wfs.front_end.propagation.spot_cube_accum .+= wfs.acquisition.spot_cube
     end
     copyto!(wfs.acquisition.spot_cube,
@@ -791,8 +791,8 @@ end
 
 function reference_fft(values::AbstractMatrix{T}) where {T<:AbstractFloat}
     buffer = Complex{T}.(values)
-    plan = AdaptiveOpticsSim.plan_fft_backend!(buffer)
-    return AdaptiveOpticsSim.execute_fft_plan!(buffer, plan)
+    plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(buffer)
+    return AdaptiveOpticsSim.Backends.execute_fft_plan!(buffer, plan)
 end
 
 function strehl_ratio(psf::AbstractMatrix{T}, psf_ref::AbstractMatrix{T}) where {T<:AbstractFloat}
@@ -1242,7 +1242,7 @@ function compute_reference_actual(case::ReferenceCase)
         intensity = AdaptiveOpticsSim.pyramid_propagation(wfs).intensity
         if src isa SpectralSource
             AdaptiveOpticsSim.accumulate_pyramid_spectral_intensity!(
-                AdaptiveOpticsSim.execution_style(intensity), wfs, pupil,
+                AdaptiveOpticsSim.Backends.execution_style(intensity), wfs, pupil,
                 src)
         else
             AdaptiveOpticsSim.pyramid_intensity!(intensity, wfs, pupil, src)
@@ -1502,7 +1502,7 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
         slopes = similar(AdaptiveOpticsSim.slopes(wfs))
-        style = AdaptiveOpticsSim.AcceleratorStyle(KernelAbstractions.CPU())
+        style = AdaptiveOpticsSim.Backends.AcceleratorStyle(KernelAbstractions.CPU())
         AdaptiveOpticsSim._geometric_slopes!(style, slopes, pupil.opd,
             AdaptiveOpticsSim.valid_subaperture_mask(wfs), sub, n_sub,
             offset)

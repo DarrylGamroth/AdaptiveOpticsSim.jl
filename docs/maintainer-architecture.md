@@ -78,14 +78,17 @@ function rather than introducing a second root function identity.
 
 ### Namespace Authority
 
-The package is transitioning from the current flat root surface to real
-`Backends`, `Optics`, `Atmospheres`, `Detectors`, `WavefrontSensors`,
-`Calibration`, `Control`, `Tomography`, and `Ensembles` modules alongside the
-existing `Plant` module. The authoritative pre-migration inventory, final exact
-API allowlists, extension-hook owners, and cross-module imports are frozen in
+The package is transitioning from the original flat root surface to real
+domain modules alongside the existing `Plant` module. `Backends` is the first
+completed owner; `Optics`, `Atmospheres`, `Detectors`, `WavefrontSensors`,
+`Calibration`, `Control`, `Tomography`, and `Ensembles` follow in dependency
+order. The authoritative pre-migration inventory, final exact API allowlists,
+extension-hook owners, and cross-module imports are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
-This file is the equality contract for the migration; documentation summaries
-do not override it.
+The maintained implementation stage is recorded separately in
+[`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
+These files are the equality contract for the migration; documentation
+summaries do not override them.
 
 The owner dependency graph is acyclic:
 

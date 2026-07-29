@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Random
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
@@ -25,13 +26,13 @@ function _resolve_backend(name::AbstractString)
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_pixel_output_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_pixel_output_runtime.jl requires a functional CUDA driver/device")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.CUDABackendTag)
+        return CUDABackend(), AdaptiveOpticsSim.Backends.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_pixel_output_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_pixel_output_runtime.jl requires a functional ROCm installation and GPU")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+        return AMDGPUBackend(), AdaptiveOpticsSim.Backends.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -53,8 +54,8 @@ end
 
 _sync_runtime!(::Nothing, runtime) = nothing
 
-function _sync_runtime!(::Type{B}, runtime) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(runtime.command))
+function _sync_runtime!(::Type{B}, runtime) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(runtime.command))
     return nothing
 end
 
@@ -124,7 +125,7 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     replay_name::AbstractString="direct", scale_name::AbstractString="medium",
     fft_threads::Int=1, samples::Union{Int,Nothing}=nothing, warmup::Union{Int,Nothing}=nothing)
     fft_threads > 0 || error("fft_threads must be positive")
-    AdaptiveOpticsSim.set_fft_provider_threads!(fft_threads)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(fft_threads)
     backend, backend_tag, label = _resolve_backend(backend_name)
     branch_mode = _resolve_branch_mode(branch_name)
     replay_mode = _resolve_replay_mode(replay_name)

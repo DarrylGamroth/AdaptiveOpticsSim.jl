@@ -604,7 +604,7 @@ end
     @test science_path.key.sampling_contract isa
         Plant.InstantaneousOpticalSample
     @test science_path.key.backend isa CPUBackend
-    @test science_path.key.device == AdaptiveOpticsSim.HostComputeDevice()
+    @test science_path.key.device == AdaptiveOpticsSim.Backends.HostComputeDevice()
     equivalent_key = Plant.PathResultKey(
         science_path.key.source_geometry,
         science_path.key.spectral_sampling,

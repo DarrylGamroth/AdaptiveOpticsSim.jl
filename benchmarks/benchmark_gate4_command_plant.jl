@@ -23,7 +23,7 @@ function configure_gate4_command_benchmark!()
     Threads.nthreads() == 1 ||
         error("Gate 4 command evidence requires one Julia thread")
     BLAS.set_num_threads(1)
-    AdaptiveOpticsSim.set_fft_provider_threads!(1)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
     return nothing
 end
 

@@ -1,7 +1,8 @@
 module AdaptiveOpticsSimAppleAccelerateExt
 
 using AbstractFFTs
-using AdaptiveOpticsSim
+import AdaptiveOpticsSim
+import AdaptiveOpticsSim: Backends
 using AppleAccelerate
 using LinearAlgebra
 
@@ -45,14 +46,14 @@ end
 @inline function _fallback_plan(
     ::Type{AppleFFTForward}, buffer::Array{Complex{T},N}, dims,
 ) where {T,N}
-    return AdaptiveOpticsSim._plan_fftw_fft!(buffer, dims)
+    return Backends._plan_fftw_fft!(buffer, dims)
 end
 
 @inline function _fallback_plan(
     ::Type{AppleFFTInverse}, buffer::Array{Complex{T},N}, dims,
 ) where {T,N}
-    scale = one(T) / AdaptiveOpticsSim._fft_region_length(buffer, dims)
-    return scale * AdaptiveOpticsSim._plan_fftw_bfft!(buffer, dims)
+    scale = one(T) / Backends._fft_region_length(buffer, dims)
+    return scale * Backends._plan_fftw_bfft!(buffer, dims)
 end
 
 function _prepare_apple_fft_plan(
@@ -91,49 +92,49 @@ function _plan_inverse(buffer::Array{Complex{T},N}, dims) where {
     return _prepare_apple_fft_plan(AppleFFTInverse, buffer, dims, false)
 end
 
-function AdaptiveOpticsSim.plan_fft_backend!(
+function Backends.plan_fft_backend!(
     buffer::Vector{Complex{T}},
 ) where {T<:Union{Float32,Float64}}
     return _plan_forward(buffer, (1,))
 end
 
-function AdaptiveOpticsSim.plan_fft_backend!(
+function Backends.plan_fft_backend!(
     buffer::Matrix{Complex{T}},
 ) where {T<:Union{Float32,Float64}}
     return _plan_forward(buffer, (1, 2))
 end
 
-function AdaptiveOpticsSim.plan_fft_backend!(
+function Backends.plan_fft_backend!(
     buffer::Vector{Complex{T}}, dims,
 ) where {T<:Union{Float32,Float64}}
     return _plan_forward(buffer, dims)
 end
 
-function AdaptiveOpticsSim.plan_fft_backend!(
+function Backends.plan_fft_backend!(
     buffer::Matrix{Complex{T}}, dims,
 ) where {T<:Union{Float32,Float64}}
     return _plan_forward(buffer, dims)
 end
 
-function AdaptiveOpticsSim.plan_ifft_backend!(
+function Backends.plan_ifft_backend!(
     buffer::Vector{Complex{T}},
 ) where {T<:Union{Float32,Float64}}
     return _plan_inverse(buffer, (1,))
 end
 
-function AdaptiveOpticsSim.plan_ifft_backend!(
+function Backends.plan_ifft_backend!(
     buffer::Matrix{Complex{T}},
 ) where {T<:Union{Float32,Float64}}
     return _plan_inverse(buffer, (1, 2))
 end
 
-function AdaptiveOpticsSim.plan_ifft_backend!(
+function Backends.plan_ifft_backend!(
     buffer::Vector{Complex{T}}, dims,
 ) where {T<:Union{Float32,Float64}}
     return _plan_inverse(buffer, dims)
 end
 
-function AdaptiveOpticsSim.plan_ifft_backend!(
+function Backends.plan_ifft_backend!(
     buffer::Matrix{Complex{T}}, dims,
 ) where {T<:Union{Float32,Float64}}
     return _plan_inverse(buffer, dims)
@@ -251,14 +252,14 @@ end
         fallback_plan = plan.fftw_plan
         isnothing(fallback_plan) && throw(ArgumentError(
             "Apple FFT plan has neither a vDSP setup nor an FFTW fallback"))
-        return AdaptiveOpticsSim.execute_fft_plan!(buffer, fallback_plan)
+        return Backends.execute_fft_plan!(buffer, fallback_plan)
     end
     _load_split_buffers!(plan, buffer)
     _execute_vdsp!(plan)
     return _store_split_buffers!(buffer, plan)
 end
 
-function AdaptiveOpticsSim.execute_fft_plan!(
+function Backends.execute_fft_plan!(
     buffer::Array{Complex{T},N}, plan::AdaptiveOpticsAppleFFTPlan{T,N},
 ) where {T,N}
     return _execute_plan!(buffer, plan)

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Random
 using DelimitedFiles
 using SparseArrays
@@ -39,16 +40,16 @@ function revolt_profile_backend(name::AbstractString)
         isdefined(Main, :CUDA) || error("load CUDA.jl before selecting the CUDA HIL backend")
         Base.invokelatest(getproperty(getfield(Main, :CUDA), :functional)) ||
             error("REVOLT-like HIL profiling requires a functional CUDA driver/device")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        array_backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.CUDABackendTag)
+        array_backend = AdaptiveOpticsSim.Backends.gpu_backend_array_type(AdaptiveOpticsSim.Backends.CUDABackendTag)
         array_backend === nothing && error("CUDA backend array type is unavailable")
         return (; selector=CUDABackend(), array_backend, label="cuda")
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("load AMDGPU.jl before selecting the AMDGPU HIL backend")
         Base.invokelatest(getproperty(getfield(Main, :AMDGPU), :functional)) ||
             error("REVOLT-like HIL profiling requires a functional ROCm installation and GPU")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        array_backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+        array_backend = AdaptiveOpticsSim.Backends.gpu_backend_array_type(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
         array_backend === nothing && error("AMDGPU backend array type is unavailable")
         return (; selector=AMDGPUBackend(), array_backend, label="amdgpu")
     end
@@ -102,11 +103,11 @@ end
 
 function revolt_scatter_active_command!(full_command::AbstractVector{T},
     active_command::AbstractVector{T}, active_indices_backend::AbstractVector{Int}) where {T<:AbstractFloat}
-    revolt_scatter_active_command!(AdaptiveOpticsSim.execution_style(full_command), full_command, active_command, active_indices_backend)
+    revolt_scatter_active_command!(AdaptiveOpticsSim.Backends.execution_style(full_command), full_command, active_command, active_indices_backend)
     return full_command
 end
 
-function revolt_scatter_active_command!(::AdaptiveOpticsSim.ScalarCPUStyle, full_command::AbstractVector{T},
+function revolt_scatter_active_command!(::AdaptiveOpticsSim.Backends.ScalarCPUStyle, full_command::AbstractVector{T},
     active_command::AbstractVector{T}, active_indices_backend::AbstractVector{Int}) where {T<:AbstractFloat}
     fill!(full_command, zero(T))
     @inbounds for i in eachindex(active_command)
@@ -115,10 +116,10 @@ function revolt_scatter_active_command!(::AdaptiveOpticsSim.ScalarCPUStyle, full
     return full_command
 end
 
-function revolt_scatter_active_command!(style::AdaptiveOpticsSim.AcceleratorStyle, full_command::AbstractVector{T},
+function revolt_scatter_active_command!(style::AdaptiveOpticsSim.Backends.AcceleratorStyle, full_command::AbstractVector{T},
     active_command::AbstractVector{T}, active_indices_backend::AbstractVector{Int}) where {T<:AbstractFloat}
     fill!(full_command, zero(T))
-    AdaptiveOpticsSim.launch_kernel!(style, revolt_scatter_active_command_kernel!,
+    AdaptiveOpticsSim.Backends.launch_kernel!(style, revolt_scatter_active_command_kernel!,
         full_command, active_command, active_indices_backend, length(active_command);
         ndrange=length(active_command))
     return full_command
@@ -171,7 +172,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     tiled_frame = backend_cfg.array_backend{T}(undef, resolution, resolution)
 
     AdaptiveOpticsSim.ensure_sh_calibration!(wfs, pupil, src)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs)))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(wfs)))
 
     return RevoltLikeHILContext(
         tel,
@@ -195,7 +196,7 @@ function revolt_like_command_map!(ctx::RevoltLikeHILContext)
     reset_opd!(ctx.pupil)
     mul!(ctx.extrapolated_command, ctx.extrapolation_backend, ctx.active_command)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.dm.state.coefs))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.dm.state.coefs))
     return nothing
 end
 
@@ -204,7 +205,7 @@ function revolt_like_dm_apply!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.pupil.opd))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.pupil.opd))
     return nothing
 end
 
@@ -214,7 +215,7 @@ function revolt_like_sense!(ctx::RevoltLikeHILContext)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.acquisition.spot_cube))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.wfs.acquisition.spot_cube))
     return nothing
 end
 
@@ -225,7 +226,7 @@ function revolt_like_mosaic!(ctx::RevoltLikeHILContext)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
     revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.acquisition.spot_cube, ctx.n_lenslets, ctx.roi)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.tiled_frame))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
     return nothing
 end
 
@@ -237,9 +238,9 @@ function revolt_like_step!(ctx::RevoltLikeHILContext)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
     revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.acquisition.spot_cube, ctx.n_lenslets, ctx.roi)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.dm.state.coefs))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.wfs.acquisition.spot_cube))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(ctx.tiled_frame))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.dm.state.coefs))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.wfs.acquisition.spot_cube))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
     return nothing
 end
 

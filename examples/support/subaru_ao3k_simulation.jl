@@ -3,6 +3,7 @@ module SubaruAO3kSimulation
 include(joinpath(dirname(@__FILE__), "subaru_ao188_simulation.jl"))
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using .SubaruAO188Simulation
 
 export AO3kNIRPyramidModel, AO3kSimulationParams, subaru_ao3k_simulation

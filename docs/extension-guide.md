@@ -33,11 +33,13 @@ The owner categories are:
 - `Ensembles` for optional coarse scheduler execution
 - the root package only for cross-domain config and telemetry serialization
 
-While the flat source layout is being migrated, in-tree extensions still add
-methods to `AdaptiveOpticsSim.name`. The owning PR must update each extension
-to the new qualified generic in the same change. Do not leave a second root
-generic, import a similarly named helper from another domain, or add a
-forwarding method.
+`Backends` has completed its ownership move. Backend extensions add methods to
+`AdaptiveOpticsSim.Backends.name`; no root-package backend generic or
+forwarding method remains part of the supported API. Hooks assigned to later
+domain owners remain at `AdaptiveOpticsSim.name` only until that owner's PR
+moves the generic and every extension method together. The maintained stage is
+recorded in
+[`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
 
 ## Source Layout
 
@@ -88,9 +90,9 @@ that belongs to the later boundary contract.
 
 `prepare_command_endpoint` now binds one exact schema to fixed payload-slot,
 accepted-sequence-window, future-calendar, ordinal, and payload-storage
-capacity. Scalar payload slots require `CPUBackend()` and remain host-resident;
-fixed-shape array slots use the selected array backend. Its separately owned,
-qualified public `CommandEndpointState` and
+capacity. Scalar payload slots require `Backends.CPUBackend()` and remain
+host-resident; fixed-shape array slots use the selected array backend. Its
+separately owned, qualified public `CommandEndpointState` and
 `CommandDispositionWorkspace` support warmed `admit_plant_command!`, one
 outstanding application-ready claim, and explicit applied/failed/pending-drain
 completion without callbacks or run-length storage. Admission copies caller
@@ -554,7 +556,8 @@ function AdaptiveOpticsSim.Plant.prepare_illumination_evaluator(
 )
     state = MyIlluminationState(0, zero(eltype(destination.values)))
     return PreparedMyIllumination(definition, state,
-        backend(destination), compute_device(destination.values))
+        AdaptiveOpticsSim.Backends.backend(destination),
+        AdaptiveOpticsSim.Backends.compute_device(destination.values))
 end
 
 function AdaptiveOpticsSim.Plant.validate_illumination_evaluator_binding(
@@ -562,10 +565,12 @@ function AdaptiveOpticsSim.Plant.validate_illumination_evaluator_binding(
     destination::IntensityMap,
     ::DetectorInputIlluminationEntry,
 )
-    typeof(backend(destination)) === typeof(evaluator.backend) ||
+    typeof(AdaptiveOpticsSim.Backends.backend(destination)) ===
+            typeof(evaluator.backend) ||
         throw(PlantPreparationError(:illumination, :backend,
             "prepared illumination backend changed"))
-    compute_device(destination.values) == evaluator.device ||
+    AdaptiveOpticsSim.Backends.compute_device(destination.values) ==
+            evaluator.device ||
         throw(PlantPreparationError(:illumination, :device,
             "prepared illumination device changed"))
     return nothing
@@ -890,21 +895,25 @@ Extension code should follow the package-wide backend rules:
 
 An accelerator-array extension registers both a semantic backend family and a
 concrete compute-device identifier. Implement
-`array_backend_selector(::Type{<:MyArray})` with a zero-state
-`AbstractArrayBackend` selector and
-`compute_device_identifier(::MyArray)` with a non-`nothing`, allocation-free
-isbits identifier that distinguishes every simultaneously addressable device
-in that backend runtime. `compute_device(array)` combines those two contracts
-into an `AcceleratorComputeDevice`; its methods for supported array views
-preserve the parent identity. Do not use a backend family alone as device zero,
-and do not encode task, stream, or future placement ownership in the
-identifier.
+`AdaptiveOpticsSim.Backends.array_backend_selector(::Type{<:MyArray})` with a
+zero-state `AdaptiveOpticsSim.Backends.AbstractArrayBackend` selector and
+`AdaptiveOpticsSim.Backends.compute_device_identifier(::MyArray)` with a
+non-`nothing`, allocation-free isbits identifier that distinguishes every
+simultaneously addressable device in that backend runtime.
+`AdaptiveOpticsSim.Backends.compute_device(array)` combines those two
+contracts into an `AdaptiveOpticsSim.Backends.AcceleratorComputeDevice`; its
+methods for supported array views preserve the parent identity. Do not use a
+backend family alone as device zero, and do not encode task, stream, or future
+placement ownership in the identifier.
 
-An extension that defines its own `AbstractComputeDevice` subtype instead of
-using `AcceleratorComputeDevice` must also implement
-`compute_device_backend(::MyComputeDevice)`. That accessor returns the
-corresponding semantic `AbstractArrayBackend` selector and must agree with
-`backend(array)` wherever the device is used in prepared Plant contracts.
+An extension that defines its own
+`AdaptiveOpticsSim.Backends.AbstractComputeDevice` subtype instead of using
+`AdaptiveOpticsSim.Backends.AcceleratorComputeDevice` must also implement
+`AdaptiveOpticsSim.Backends.compute_device_backend(::MyComputeDevice)`. That
+accessor returns the corresponding semantic
+`AdaptiveOpticsSim.Backends.AbstractArrayBackend` selector and must agree with
+`AdaptiveOpticsSim.Backends.backend(array)` wherever the device is used in
+prepared Plant contracts.
 
 If an extension needs a new reusable behavior, add a small generic seam and one
 family implementation first. Then add the second implementation when another

@@ -3,7 +3,7 @@ using LinearAlgebra
 using Random
 using Statistics
 
-AdaptiveOpticsSim.set_fft_provider_threads!(1)
+AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
 BLAS.set_num_threads(parse(Int, get(ENV, "AOS_CONTROL_BLAS_THREADS", "1")))
 
 function measure_operation!(f!; warmup::Int, samples::Int, trials::Int)

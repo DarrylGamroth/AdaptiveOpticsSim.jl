@@ -1,5 +1,6 @@
 using Test
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using FFTW
@@ -9,7 +10,7 @@ using SpecialFunctions
 using TOML
 
 BLAS.set_num_threads(1)
-AdaptiveOpticsSim.set_fft_provider_threads!(1)
+Backends.set_fft_provider_threads!(1)
 
 # The package exports only the user-facing API. This standalone coverage target
 # shares reference helpers with the full test suite, so make internal test-only
@@ -21,6 +22,13 @@ for name in names(AdaptiveOpticsSim; all=true)
     end
 end
 
+for name in names(Backends; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Backends, $(QuoteNode(name)))
+    end
+end
 
 for name in names(Plant; all=true)
     s = String(name)

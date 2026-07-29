@@ -40,12 +40,12 @@ mutable struct DirectImagingCountingFFTPlan{P}
     submissions::Int
 end
 
-function AdaptiveOpticsSim.execute_fft_plan!(
+function AdaptiveOpticsSim.Backends.execute_fft_plan!(
     buffer,
     plan::DirectImagingCountingFFTPlan,
 )
     plan.submissions += 1
-    return AdaptiveOpticsSim.execute_fft_plan!(buffer, plan.plan)
+    return AdaptiveOpticsSim.Backends.execute_fft_plan!(buffer, plan.plan)
 end
 
 @testset "Prepared direct-imaging batch parity and signature" begin
@@ -130,7 +130,7 @@ end
         (n * zero_padding, n * zero_padding)
     @test signature.numeric_type === T
     @test signature.backend isa CPUBackend
-    @test signature.device == AdaptiveOpticsSim.HostComputeDevice()
+    @test signature.device == AdaptiveOpticsSim.Backends.HostComputeDevice()
     @test signature.radiometry isa PhysicalPhotonIrradianceSource
     @test signature.product_contract.kind isa FocalPlane
     @test signature.product_contract.coordinate_domain isa AngularCoordinates
@@ -147,7 +147,7 @@ end
     @test parent(prepared.output[2].values) ===
         prepared.workspace.output_stack
     @test compute_device(prepared.output[1].values) ==
-        AdaptiveOpticsSim.HostComputeDevice()
+        AdaptiveOpticsSim.Backends.HostComputeDevice()
 
     formed = @inferred form_direct_image!(prepared)
     @test formed === prepared.output

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Random
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
@@ -32,13 +33,13 @@ function _resolve_backend(name::AbstractString)
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_ao3k_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_ao3k_runtime.jl requires a functional CUDA driver/device")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.CUDABackendTag)
+        return CUDABackend(), AdaptiveOpticsSim.Backends.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_ao3k_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_ao3k_runtime.jl requires a functional ROCm installation and GPU")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+        return AMDGPUBackend(), AdaptiveOpticsSim.Backends.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
@@ -47,13 +48,13 @@ function _sync_simulation!(::Nothing, simulation)
     return nothing
 end
 
-function _sync_simulation!(::Type{B}, simulation) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(simulation.command))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(simulation.high_wfs)))
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(simulation.low_wfs)))
+function _sync_simulation!(::Type{B}, simulation) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(simulation.command))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(simulation.high_wfs)))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(simulation.low_wfs)))
     high_frame, low_frame = readout(simulation).wfs_frames
-    isnothing(high_frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(high_frame))
-    isnothing(low_frame) || AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(low_frame))
+    isnothing(high_frame) || AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(high_frame))
+    isnothing(low_frame) || AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(low_frame))
     return nothing
 end
 
@@ -171,7 +172,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     samples::Union{Int,Nothing}=nothing,
     warmup::Union{Int,Nothing}=nothing)
     fft_threads > 0 || error("fft_threads must be positive")
-    AdaptiveOpticsSim.set_fft_provider_threads!(fft_threads)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(fft_threads)
     backend, backend_tag, backend_label = _resolve_backend(backend_name)
     response_model, response_label = _resolve_response(response_name)
     sensor, sampling_label = _resolve_sampling(sampling_name, Float32)

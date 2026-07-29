@@ -1,6 +1,7 @@
 module AdaptiveOpticsSimAMDGPUExt
 
-using AdaptiveOpticsSim
+import AdaptiveOpticsSim
+import AdaptiveOpticsSim: Backends
 using AMDGPU
 using AbstractFFTs
 using KernelAbstractions
@@ -22,27 +23,27 @@ using Random
 # execution is specialized to rocBLAS / rocSOLVER / rocFFT where that improves
 # performance or avoids host fallback.
 #
-AdaptiveOpticsSim.gpu_backend_loaded(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = true
-AdaptiveOpticsSim.gpu_backend_array_type(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AMDGPU.ROCArray
-AdaptiveOpticsSim.gpu_backend_name(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = :amdgpu
-AdaptiveOpticsSim.gpu_backend_name(::Type{<:AMDGPU.ROCArray}) = :amdgpu
-AdaptiveOpticsSim.array_backend_selector(::Type{<:AMDGPU.ROCArray}) = AdaptiveOpticsSim.AMDGPUBackend()
-AdaptiveOpticsSim.disable_scalar_backend!(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = AMDGPU.allowscalar(false)
-AdaptiveOpticsSim.backend_rand(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.rand(T, dims...)
-AdaptiveOpticsSim.backend_randn(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.randn(T, dims...)
-AdaptiveOpticsSim.backend_zeros(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.zeros(T, dims...)
-AdaptiveOpticsSim.backend_fill(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}, value, dims::Vararg{Int}) = AMDGPU.fill(value, dims...)
-AdaptiveOpticsSim.compute_device_identifier(array::AMDGPU.ROCArray) =
+Backends.gpu_backend_loaded(::Type{Backends.AMDGPUBackendTag}) = true
+Backends.gpu_backend_array_type(::Type{Backends.AMDGPUBackendTag}) = AMDGPU.ROCArray
+Backends.gpu_backend_name(::Type{Backends.AMDGPUBackendTag}) = :amdgpu
+Backends.gpu_backend_name(::Type{<:AMDGPU.ROCArray}) = :amdgpu
+Backends.array_backend_selector(::Type{<:AMDGPU.ROCArray}) = Backends.AMDGPUBackend()
+Backends.disable_scalar_backend!(::Type{Backends.AMDGPUBackendTag}) = AMDGPU.allowscalar(false)
+Backends.backend_rand(::Type{Backends.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.rand(T, dims...)
+Backends.backend_randn(::Type{Backends.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.randn(T, dims...)
+Backends.backend_zeros(::Type{Backends.AMDGPUBackendTag}, ::Type{T}, dims::Vararg{Int}) where {T} = AMDGPU.zeros(T, dims...)
+Backends.backend_fill(::Type{Backends.AMDGPUBackendTag}, value, dims::Vararg{Int}) = AMDGPU.fill(value, dims...)
+Backends.compute_device_identifier(array::AMDGPU.ROCArray) =
     AMDGPU.device_id(AMDGPU.device(array))
 
 struct AMDGPUPreparedDeviceExecutionContext <:
-    AdaptiveOpticsSim._AbstractPreparedDeviceExecutionContext
+    Backends._AbstractPreparedDeviceExecutionContext
     device::AMDGPU.HIPDevice
     stream::AMDGPU.HIPStream
-    compute_device::AdaptiveOpticsSim.AcceleratorComputeDevice
+    compute_device::Backends.AcceleratorComputeDevice
 end
 
-function AdaptiveOpticsSim._prepare_device_execution_context(
+function Backends._prepare_device_execution_context(
     storage::AMDGPU.ROCArray,
 )
     device = AMDGPU.device(storage)
@@ -52,15 +53,15 @@ function AdaptiveOpticsSim._prepare_device_execution_context(
     return AMDGPUPreparedDeviceExecutionContext(
         device,
         stream,
-        AdaptiveOpticsSim.compute_device(storage),
+        Backends.compute_device(storage),
     )
 end
 
-@inline AdaptiveOpticsSim._prepared_device_execution_compute_device(
+@inline Backends._prepared_device_execution_compute_device(
     context::AMDGPUPreparedDeviceExecutionContext,
 ) = context.compute_device
 
-function AdaptiveOpticsSim._with_prepared_device_execution_context(
+function Backends._with_prepared_device_execution_context(
     f::F,
     context::AMDGPUPreparedDeviceExecutionContext,
 ) where {F}
@@ -69,70 +70,70 @@ function AdaptiveOpticsSim._with_prepared_device_execution_context(
     end
 end
 
-@inline function AdaptiveOpticsSim._synchronize_prepared_device_execution_context!(
+@inline function Backends._synchronize_prepared_device_execution_context!(
     context::AMDGPUPreparedDeviceExecutionContext,
 )
     AMDGPU.synchronize(context.stream)
     return nothing
 end
 
-function AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AMDGPU.rocFFT.ROCFFTPlan)
+function Backends.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AMDGPU.rocFFT.ROCFFTPlan)
     plan * buffer
     AMDGPU.synchronize()
     return buffer
 end
-function AdaptiveOpticsSim.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.ScaledPlan)
+function Backends.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.ScaledPlan)
     plan * buffer
     AMDGPU.synchronize()
     return buffer
 end
-AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.AMDGPUBackendTag)
-AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
+AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(Backends.AMDGPUBackendTag)
+AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
 AdaptiveOpticsSim.grouped_accumulation_plan(
-    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.PyramidWFS},
 ) = AdaptiveOpticsSim.GroupedStaged2DPlan()
 AdaptiveOpticsSim.grouped_accumulation_plan(
-    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
 ) = AdaptiveOpticsSim.GroupedStaged2DPlan()
 function AdaptiveOpticsSim.sh_sensing_execution_plan(
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::AdaptiveOpticsSim.ShackHartmannWFS,
 )
     return AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan()
 end
 
 AdaptiveOpticsSim.detector_execution_plan(
-    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.Detector},
 ) = AdaptiveOpticsSim.DetectorHostMirrorPlan()
 AdaptiveOpticsSim._detector_value_plan(
     plan::AdaptiveOpticsSim.DetectorHostMirrorPlan,
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
 ) = plan
 AdaptiveOpticsSim.can_apply_device_readout_correction(
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::AdaptiveOpticsSim.FrameReadoutCorrectionModel,
 ) = false
 AdaptiveOpticsSim.counting_output_execution_plan(
-    ::Type{<:AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend}},
+    ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.AbstractCountingDetector},
     ::Type{<:AMDGPU.ROCArray{T,2}},
 ) where {T<:Integer} = AdaptiveOpticsSim.DetectorHostMirrorPlan()
-AdaptiveOpticsSim.reduction_execution_plan(
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+Backends.reduction_execution_plan(
+    ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::AMDGPU.ROCArray,
-) = AdaptiveOpticsSim.HostMirrorReductionPlan()
-AdaptiveOpticsSim.randn_backend_async!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
-AdaptiveOpticsSim._randn_backend!(::AdaptiveOpticsSim.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
+) = Backends.HostMirrorReductionPlan()
+Backends.randn_backend_async!(::Backends.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
+Backends._randn_backend!(::Backends.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 function AdaptiveOpticsSim._randn_frame_noise!(
     ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
     det::AdaptiveOpticsSim.Detector,
     rng::AbstractRNG,
     out::AMDGPU.ROCArray{T,2},
 ) where {T<:AbstractFloat}
-    AdaptiveOpticsSim.randn_backend!(rng, out)
+    Backends.randn_backend!(rng, out)
     return out
 end
 function AdaptiveOpticsSim._randn_frame_noise!(
@@ -141,7 +142,7 @@ function AdaptiveOpticsSim._randn_frame_noise!(
     rng::AbstractRNG,
     cube::AMDGPU.ROCArray{T,3},
 ) where {T<:AbstractFloat}
-    AdaptiveOpticsSim.randn_backend!(rng, cube)
+    Backends.randn_backend!(rng, cube)
     return cube
 end
 function AdaptiveOpticsSim._poisson_noise_frame!(
@@ -151,7 +152,7 @@ function AdaptiveOpticsSim._poisson_noise_frame!(
     img::AMDGPU.ROCArray{T,2},
 ) where {T<:AbstractFloat}
     host = AdaptiveOpticsSim.detector_host_frame!(det, img)
-    AdaptiveOpticsSim._poisson_noise!(AdaptiveOpticsSim.ScalarCPUStyle(), rng, host)
+    Backends._poisson_noise!(Backends.ScalarCPUStyle(), rng, host)
     copyto!(img, host)
     return img
 end
@@ -162,7 +163,7 @@ function AdaptiveOpticsSim._poisson_noise_frame!(
     cube::AMDGPU.ROCArray{T,3},
 ) where {T<:AbstractFloat}
     host = AdaptiveOpticsSim.detector_host_cube!(det, cube)
-    AdaptiveOpticsSim._poisson_noise!(AdaptiveOpticsSim.ScalarCPUStyle(), rng, host)
+    Backends._poisson_noise!(Backends.ScalarCPUStyle(), rng, host)
     copyto!(cube, host)
     return cube
 end
@@ -175,7 +176,7 @@ function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCA
     return host
 end
 function AdaptiveOpticsSim._fill_phase_psd!(
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     psd::AMDGPU.ROCArray{T,2},
     freqs::AMDGPU.ROCArray{T,1},
     coeff::T,
@@ -186,7 +187,7 @@ function AdaptiveOpticsSim._fill_phase_psd!(
     n::Int,
 ) where {T<:AbstractFloat}
     host_psd = Matrix{T}(undef, size(psd))
-    AdaptiveOpticsSim._fill_phase_psd!(AdaptiveOpticsSim.ScalarCPUStyle(), host_psd,
+    AdaptiveOpticsSim._fill_phase_psd!(Backends.ScalarCPUStyle(), host_psd,
         Array(freqs), coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n)
     copyto!(psd, host_psd)
     return psd
@@ -196,7 +197,7 @@ end
 # KernelAbstractions slope kernels on gfx1030. Keep these backend-specific
 # fallbacks explicit so other accelerator backends retain the device kernels.
 function AdaptiveOpticsSim._geometric_slopes!(
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     slopes::AMDGPU.ROCArray{T,1},
     opd::AMDGPU.ROCArray{T,2},
     valid_mask::AMDGPU.ROCArray{Bool,2},
@@ -205,14 +206,14 @@ function AdaptiveOpticsSim._geometric_slopes!(
     offset::Int,
 ) where {T<:AbstractFloat}
     host_slopes = Vector{T}(undef, length(slopes))
-    AdaptiveOpticsSim._geometric_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(),
+    AdaptiveOpticsSim._geometric_slopes!(Backends.ScalarCPUStyle(),
         host_slopes, Array(opd), Array(valid_mask), sub, n_sub, offset)
     copyto!(slopes, host_slopes)
     return slopes
 end
 
 function AdaptiveOpticsSim._edge_geometric_slopes!(
-    ::AdaptiveOpticsSim.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     slopes::AMDGPU.ROCArray{T,1},
     opd::AMDGPU.ROCArray{T,2},
     valid_mask::AMDGPU.ROCArray{Bool,2},
@@ -222,16 +223,16 @@ function AdaptiveOpticsSim._edge_geometric_slopes!(
     offset::Int,
 ) where {T<:AbstractFloat}
     host_slopes = Vector{T}(undef, length(slopes))
-    AdaptiveOpticsSim._edge_geometric_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(),
+    AdaptiveOpticsSim._edge_geometric_slopes!(Backends.ScalarCPUStyle(),
         host_slopes, Array(opd), Array(valid_mask), Array(edge_mask), sub,
         n_sub, offset)
     copyto!(slopes, host_slopes)
     return slopes
 end
 
-AdaptiveOpticsSim.backend_matmul(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
+Backends.backend_matmul(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
     AMDGPU.rocBLAS.gemm('N', 'N', A, B)
-AdaptiveOpticsSim.backend_matmul_transpose_right(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
+Backends.backend_matmul_transpose_right(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat} =
     AMDGPU.rocBLAS.gemm('N', 'T', A, B)
 
 function dense_copy_to_roc(A::AbstractMatrix{T}) where {T<:AbstractFloat}
@@ -299,7 +300,7 @@ SVD factors.
 `rocSOLVER.gesvd!` returns `Vt`, so the final matrix product is expressed with
 transpose flags rather than materialized transposes.
 """
-function pseudoinverse_from_roc_svd(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+function pseudoinverse_from_roc_svd(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     U::AMDGPU.ROCArray{T,2}, S::AMDGPU.ROCArray{T,1}, Vt::AMDGPU.ROCArray{T,2},
     inv_s_host::AbstractVector{T}) where {T<:AbstractFloat}
     inv_s = AdaptiveOpticsSim.materialize_build(backend, S, inv_s_host)
@@ -350,7 +351,7 @@ function inverse_scaling_and_stats(policy::AdaptiveOpticsSim.TikhonovInverse, s_
 end
 
 function roc_inverse_operator(
-    backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+    backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     A::AMDGPU.ROCArray{T,2},
     policy::AdaptiveOpticsSim.InversePolicy,
 ) where {T<:AbstractFloat}
@@ -364,17 +365,17 @@ function roc_inverse_operator(
     return M, stats
 end
 
-function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     A::AMDGPU.ROCArray{T,2}, ::AdaptiveOpticsSim.ExactPseudoInverse) where {T<:AbstractFloat}
     return roc_inverse_operator(backend, A, AdaptiveOpticsSim.ExactPseudoInverse())
 end
 
-function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     A::AMDGPU.ROCArray{T,2}, policy::AdaptiveOpticsSim.TSVDInverse) where {T<:AbstractFloat}
     return roc_inverse_operator(backend, A, policy)
 end
 
-function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     A::AMDGPU.ROCArray{T,2}, policy::AdaptiveOpticsSim.TikhonovInverse) where {T<:AbstractFloat}
     return roc_inverse_operator(backend, A, policy)
 end
@@ -390,7 +391,7 @@ implementation falls back to LU so the higher-level algorithm remains robust on
 ill-conditioned runtime/calibration cases.
 """
 function AdaptiveOpticsSim.stable_hermitian_right_division(
-    _backend::AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.AMDGPUBackendTag},
+    _backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     rhs::AMDGPU.ROCArray{T,2},
     gram::AMDGPU.ROCArray{T,2},
 ) where {T<:AbstractFloat}

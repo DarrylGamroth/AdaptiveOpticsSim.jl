@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 
 const BACKEND_NAME = length(ARGS) >= 1 ? lowercase(ARGS[1]) : "cpu"
 const EXECUTION_MODE = length(ARGS) >= 2 ? lowercase(ARGS[2]) : "batch"
@@ -25,14 +26,14 @@ function profile_backend(name::AbstractString)
         return CPUBackend()
     elseif name == "cuda"
         CUDA.functional() || error("CUDA is not functional")
-        AdaptiveOpticsSim.disable_scalar_backend!(
-            AdaptiveOpticsSim.CUDABackendTag,
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(
+            AdaptiveOpticsSim.Backends.CUDABackendTag,
         )
         return CUDABackend()
     end
     AMDGPU.functional() || error("AMDGPU is not functional")
-    AdaptiveOpticsSim.disable_scalar_backend!(
-        AdaptiveOpticsSim.AMDGPUBackendTag,
+    AdaptiveOpticsSim.Backends.disable_scalar_backend!(
+        AdaptiveOpticsSim.Backends.AMDGPUBackendTag,
     )
     return AMDGPUBackend()
 end
@@ -54,8 +55,8 @@ end
 
 function synchronize_products!(products)
     first_product = first(products)
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(first_product.values),
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(first_product.values),
     )
     return products
 end
@@ -88,8 +89,8 @@ function run_profile()
             @inbounds for index in eachindex(prepared)
                 form_direct_image!(prepared[index])
             end
-            AdaptiveOpticsSim.synchronize_backend!(
-                AdaptiveOpticsSim.execution_style(
+            AdaptiveOpticsSim.Backends.synchronize_backend!(
+                AdaptiveOpticsSim.Backends.execution_style(
                     direct_imaging_output(first(prepared)).values,
                 ),
             )

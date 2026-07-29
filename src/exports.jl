@@ -9,15 +9,12 @@ export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
 export AtmosphereTimeError, AtmosphereEpochError
 export WFSPreparationError
-export Plant
+export Backends, Plant
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
 
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, default_modal_inverse_policy
-export CPUBackend, CUDABackend, AMDGPUBackend, MetalBackend
-export AbstractArrayBackend, backend
-
 export CircularAperture, AnnularAperture, SpiderMask, RectangularROI, SubapertureGridMask
 export build_mask!, apply_mask!
 
@@ -49,9 +46,7 @@ export CellIntegratedMeasure
 export AbstractCombinationPolicy, CoherentFieldCombination
 export IncoherentIntensityAddition, NonCombinableProduct
 export UnspecifiedNormalization, UnspecifiedSpatialMeasure, UnspecifiedCoherence
-export OpticalPlaneMetadata, plane_metadata, compute_device
-public AbstractComputeDevice, HostComputeDevice, AcceleratorComputeDevice
-public compute_device_backend, compute_device_identifier
+export OpticalPlaneMetadata, plane_metadata
 export PupilFunction, pupil_support, pupil_amplitude, opd_map
 export surface_opd, update_surface!, apply_surface!
 export ElectricField, field_values, IntensityMap, intensity_values

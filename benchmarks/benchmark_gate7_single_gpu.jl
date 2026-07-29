@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Dates
 using HdrHistogram
 import KernelAbstractions
@@ -86,7 +87,7 @@ function configure_gate7_benchmark!()
     Threads.nthreads() == 1 ||
         error("Gate 7 benchmark requires exactly one Julia thread")
     BLAS.set_num_threads(1)
-    AdaptiveOpticsSim.set_fft_provider_threads!(1)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
     return nothing
 end
 
@@ -96,15 +97,15 @@ function gate7_backend_selector()
     elseif GATE7_BACKEND_NAME == "cuda"
         CUDA.functional() ||
             error("Gate 7 CUDA benchmark requires a functional device")
-        AdaptiveOpticsSim.disable_scalar_backend!(
-            AdaptiveOpticsSim.CUDABackendTag,
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(
+            AdaptiveOpticsSim.Backends.CUDABackendTag,
         )
         return CUDABackend()
     end
     AMDGPU.functional() ||
         error("Gate 7 AMDGPU benchmark requires a functional device")
-    AdaptiveOpticsSim.disable_scalar_backend!(
-        AdaptiveOpticsSim.AMDGPUBackendTag,
+    AdaptiveOpticsSim.Backends.disable_scalar_backend!(
+        AdaptiveOpticsSim.Backends.AMDGPUBackendTag,
     )
     return AMDGPUBackend()
 end

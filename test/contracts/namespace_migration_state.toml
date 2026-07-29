@@ -1,0 +1,23 @@
+schema_version = 1
+name = "namespace_migration_state"
+status = "maintained"
+authority = "namespace_authority.toml"
+current_gate = "NS-01"
+implemented_owners = ["Backends"]
+
+[owner_sources]
+Backends = "src/backends/api.jl"
+
+[baseline_divergence]
+root_surface = "src/exports.jl"
+extension_sources = [
+    "ext/AdaptiveOpticsSimAMDGPUExt.jl",
+    "ext/AdaptiveOpticsSimAppleAccelerateExt.jl",
+    "ext/AdaptiveOpticsSimCUDAExt.jl",
+    "ext/AdaptiveOpticsSimMetalExt.jl",
+]
+extension_tests = [
+    "test/appleaccelerate/backend_neutral.jl",
+    "test/optional_amdgpu_backends.jl",
+    "test/optional_cuda_backends.jl",
+]

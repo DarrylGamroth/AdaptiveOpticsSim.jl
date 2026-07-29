@@ -1,7 +1,7 @@
 # Test-only concrete implementations of the public prepared WFS stage protocol.
 # These fixtures intentionally contain no production WFS-family behavior.
 
-struct ContractComputeDevice <: AdaptiveOpticsSim.AbstractComputeDevice
+struct ContractComputeDevice <: AdaptiveOpticsSim.Backends.AbstractComputeDevice
     identifier::Int
 end
 
@@ -16,9 +16,9 @@ Base.getindex(storage::ContractDeviceArray, indices...) =
 Base.setindex!(storage::ContractDeviceArray, value, indices...) =
     setindex!(storage.storage, value, indices...)
 Base.IndexStyle(::Type{<:ContractDeviceArray}) = IndexLinear()
-AdaptiveOpticsSim.array_backend_selector(::Type{<:ContractDeviceArray}) =
+AdaptiveOpticsSim.Backends.array_backend_selector(::Type{<:ContractDeviceArray}) =
     CPUBackend()
-AdaptiveOpticsSim.compute_device(storage::ContractDeviceArray) = storage.device
+AdaptiveOpticsSim.Backends.compute_device(storage::ContractDeviceArray) = storage.device
 
 struct ContractRateModel{T<:AbstractFloat,M}
     scale::T
@@ -475,7 +475,7 @@ function _contract_require_cpu_reduction(measurement::WFSMeasurement)
     typeof(measurement.metadata.backend) === CPUBackend ||
         throw(WFSPreparationError(:estimation, :backend,
             "contract reduction estimators are CPU-only"))
-    measurement.metadata.device == AdaptiveOpticsSim.HostComputeDevice() ||
+    measurement.metadata.device == AdaptiveOpticsSim.Backends.HostComputeDevice() ||
         throw(WFSPreparationError(:estimation, :device,
             "contract reduction estimators require host storage"))
     return nothing

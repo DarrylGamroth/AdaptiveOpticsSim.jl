@@ -4,8 +4,8 @@
     identity_kernel_fft = ones(ComplexF64, n, n)
 
     fft_buffer = zeros(ComplexF64, n, n)
-    fft_plan = AdaptiveOpticsSim.plan_fft_backend!(fft_buffer)
-    ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(fft_buffer)
+    fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(fft_buffer)
+    ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(fft_buffer)
     same_buffer = copy(expected)
     AdaptiveOpticsSim.apply_lgs_convolution!(
         same_buffer, identity_kernel_fft, fft_buffer, fft_plan, ifft_plan)
@@ -14,8 +14,8 @@
 
     split_fft_buffer = zeros(ComplexF64, n, n)
     split_ifft_buffer = similar(split_fft_buffer)
-    split_fft_plan = AdaptiveOpticsSim.plan_fft_backend!(split_fft_buffer)
-    split_ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(split_ifft_buffer)
+    split_fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(split_fft_buffer)
+    split_ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(split_ifft_buffer)
     split_buffer = copy(expected)
     AdaptiveOpticsSim.apply_lgs_convolution!(split_buffer, identity_kernel_fft,
         split_fft_buffer, split_fft_plan, split_ifft_buffer, split_ifft_plan)
@@ -26,8 +26,8 @@
     identity_kernel_stack_fft = ones(ComplexF64, n, n, 2)
 
     scalar_fft_stack = zeros(ComplexF64, n, n, 2)
-    scalar_fft_plan = AdaptiveOpticsSim.plan_fft_backend!(scalar_fft_stack, (1, 2))
-    scalar_ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(scalar_fft_stack, (1, 2))
+    scalar_fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(scalar_fft_stack, (1, 2))
+    scalar_ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(scalar_fft_stack, (1, 2))
     scalar_stack = copy(expected_stack)
     AdaptiveOpticsSim.apply_lgs_convolution_stack!(scalar_stack,
         identity_kernel_stack_fft, scalar_fft_stack, scalar_fft_plan, scalar_ifft_plan)
@@ -35,8 +35,8 @@
     @test vec(sum(scalar_stack; dims=(1, 2))) ≈ vec(sum(expected_stack; dims=(1, 2))) rtol=1e-12
 
     accelerator_fft_stack = zeros(ComplexF64, n, n, 2)
-    accelerator_fft_plan = AdaptiveOpticsSim.plan_fft_backend!(accelerator_fft_stack, (1, 2))
-    accelerator_ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(accelerator_fft_stack, (1, 2))
+    accelerator_fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(accelerator_fft_stack, (1, 2))
+    accelerator_ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(accelerator_fft_stack, (1, 2))
     accelerator_stack = copy(expected_stack)
     AdaptiveOpticsSim._apply_lgs_convolution_stack!(KA_CPU_STYLE, accelerator_stack,
         identity_kernel_stack_fft, accelerator_fft_stack, accelerator_fft_plan, accelerator_ifft_plan)
@@ -259,11 +259,11 @@ end
         separated_slopes
 
     zero_slopes = fill(1.0, 8)
-    AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), zero_slopes, zeros(4, 4), trues(2, 2),
+    AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), zero_slopes, zeros(4, 4), trues(2, 2),
         2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, (0, 0, 0, 0), (0, 0, 0, 0))
     @test all(iszero, zero_slopes)
     invalid_slopes = fill(1.0, 8)
-    AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), invalid_slopes, ones(4, 4), falses(2, 2),
+    AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), invalid_slopes, ones(4, 4), falses(2, 2),
         2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, (0, 0, 0, 0), (0, 0, 0, 0))
     @test all(iszero, invalid_slopes)
     AdaptiveOpticsSim.apply_shift_wfs!(pyr_direct; sx=1.2, sy=-1.8)
@@ -363,7 +363,7 @@ end
         bio_incidence, pupil, nothing, 3, 10.0) == 1.0
     bio_flux_select = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
     @test AdaptiveOpticsSim.select_bioedge_valid_i4q!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), bio_flux_select, pupil,
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), bio_flux_select, pupil,
         ngs) === bio_flux_select
     @test bio_flux_select.estimator.state.valid_signal_count > 0
     bio_flux_select_accel = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
