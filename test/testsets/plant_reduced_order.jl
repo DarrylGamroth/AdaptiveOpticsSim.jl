@@ -371,7 +371,7 @@ end
         path_execution_group(first.prepared, 1))
     @test path_execution_backend(requirements) == CPUBackend()
     @test path_execution_compute_device(requirements) ==
-        AdaptiveOpticsSim.HostComputeDevice()
+        AdaptiveOpticsSim.Backends.HostComputeDevice()
     @test !path_execution_requires_full_optical(requirements)
     @test Plant.reduced_order_sample_timestamp(owner) ==
         PlantTimestamp(1_000_000)

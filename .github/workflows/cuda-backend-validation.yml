@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   cuda:
@@ -32,3 +33,22 @@ jobs:
 
       - name: Run retained CUDA hardware target
         run: julia --project=test/cuda --startup-file=no test/runtests_cuda.jl
+
+      - name: Run focused CUDA extension coverage
+        env:
+          ADAPTIVEOPTICS_TEST_COVERAGE: "true"
+        run: julia --project=test/cuda --startup-file=no --code-coverage=user test/cuda/extension_coverage.jl
+
+      - name: Process CUDA coverage
+        uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: src/backends,ext
+
+      - name: Upload CUDA coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: lcov.info
+          disable_search: true
+          fail_ci_if_error: true
+          name: adaptiveopticssim-cuda
+          use_oidc: true

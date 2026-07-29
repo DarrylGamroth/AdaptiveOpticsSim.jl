@@ -1,3 +1,4 @@
+# Array-backend, compute-device, FFT, and kernel-execution implementation.
 abstract type ExecutionStyle end
 
 abstract type AbstractArrayBackend end

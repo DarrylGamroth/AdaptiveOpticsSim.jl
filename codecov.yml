@@ -1,10 +1,28 @@
 # The baseline-comparable full-composition plus focused KA CPU report and the
-# AppleAccelerate extension report upload independently. Diagnostic shard
+# Apple platform extension report upload independently. Diagnostic shard
 # coverage runs do not upload partial reports because they change Julia's
 # attributed line universe.
+#
+# Core source patch coverage is merge-blocking. Optional extensions are
+# target-specific, so their patch status is informational; native hardware
+# validation is the authoritative extension gate. Project coverage continues
+# to include both core source and extensions.
 codecov:
   notify:
     after_n_builds: 2
 
 comment:
   after_n_builds: 2
+
+coverage:
+  status:
+    patch:
+      default:
+        target: auto
+        paths:
+          - "src"
+      extensions:
+        target: auto
+        informational: true
+        paths:
+          - "ext"

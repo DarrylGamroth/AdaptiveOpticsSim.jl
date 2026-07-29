@@ -1,5 +1,5 @@
 function _sync_backend!(x)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(x))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(x))
     return x
 end
 
@@ -10,13 +10,13 @@ function _time_phase(f)
     return value, dt
 end
 
-function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.disable_scalar_backend!(B)
-    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
+function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
-    policy = AdaptiveOpticsSim.default_gpu_precision_policy(B)
-    TB = AdaptiveOpticsSim.gpu_build_type(policy)
+    policy = AdaptiveOpticsSim.Backends.default_gpu_precision_policy(B)
+    TB = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
     build_backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
     n_lenslet = 3
@@ -145,7 +145,7 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
                t_cnz + t_css + t_rhs + t_recstat + t_recon
 
     println("GPU model tomography phase profile")
-    println("  backend: ", string(something(AdaptiveOpticsSim.gpu_backend_name(B), B)))
+    println("  backend: ", string(something(AdaptiveOpticsSim.Backends.gpu_backend_name(B), B)))
     println("  case: medium")
     println("  gamma_single_ns: ", t_gamma_single)
     println("  gamma_blockdiag_ns: ", t_blockdiag)

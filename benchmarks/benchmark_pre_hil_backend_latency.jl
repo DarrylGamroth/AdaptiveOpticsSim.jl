@@ -77,7 +77,7 @@ function configure_pre_hil_benchmark!()
     Threads.nthreads() == 1 || error(
         "pre-HIL backend latency evidence requires one Julia thread")
     BLAS.set_num_threads(1)
-    AdaptiveOpticsSim.set_fft_provider_threads!(1)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
     return nothing
 end
 

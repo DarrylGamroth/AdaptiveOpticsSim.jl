@@ -11,27 +11,30 @@ Related guides:
 - [`runtime-dataflow.md`](runtime-dataflow.md)
 
 This document describes the currently implemented ordinary package API
-imported by `using AdaptiveOpticsSim`, the routine plant workflow imported by
-`using AdaptiveOpticsSim.Plant`, and the stable qualified APIs addressed as
-`AdaptiveOpticsSim.name` or `AdaptiveOpticsSim.Plant.name`. Qualified public
-names are maintained but do not enter the caller's ordinary namespace. The
-root package exports the `Plant` module, not compatibility bindings for its
-contents.
+imported by `using AdaptiveOpticsSim`, backend vocabulary imported by
+`using AdaptiveOpticsSim.Backends`, the routine plant workflow imported by
+`using AdaptiveOpticsSim.Plant`, and stable qualified APIs addressed through
+their canonical modules. Qualified public names are maintained but do not
+enter the caller's ordinary namespace. The root package exports the `Backends`
+and `Plant` modules, not compatibility bindings for their contents.
 
-The breaking namespace migration has not moved these bindings yet. Its exact
-final root and domain allowlists are frozen in
+The breaking namespace migration is in progress. `Backends` is the first
+completed owner; bindings assigned to later domain owners remain at the root
+until their owner PR lands. The exact final root and domain allowlists are
+frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
-That contract, rather than the current flat locations shown below, determines
-the canonical owner after migration.
+The maintained implementation stage is recorded in
+[`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
 
 ## Public API Policy
 
 Root exported and qualified-public names are curated in
 [`../src/exports.jl`](../src/exports.jl); the canonical plant surface is
-curated separately in [`../src/plant/api.jl`](../src/plant/api.jl).
-During the namespace migration, `src/exports.jl` is the current-state
-inventory. Each owner PR must converge on the exact domain allowlists without
-root forwarding aliases or compatibility adapters.
+curated separately in [`../src/plant/api.jl`](../src/plant/api.jl), and the
+canonical backend surface in
+[`../src/backends/api.jl`](../src/backends/api.jl). Each owner PR must converge
+on the exact domain allowlists without root forwarding aliases or
+compatibility adapters.
 Export a name only when it is one of these:
 
 - a normal user-facing constructor or workflow function
@@ -81,10 +84,27 @@ binding is never retained merely for migration compatibility.
   `AtmosphereTimeError`, `AtmosphereEpochError`, and `WFSPreparationError`
 - Profiles and RNG: `FidelityProfile`, `ScientificProfile`, `FastProfile`,
   `default_fidelity_profile`, `runtime_rng`, `deterministic_reference_rng`
-- Backend selectors: `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
-  `MetalBackend`, `AbstractArrayBackend`, `backend`
 - Inverse policies: `InversePolicy`, `ExactPseudoInverse`, `TSVDInverse`,
   `TikhonovInverse`, `default_modal_inverse_policy`
+
+## Backends
+
+Import routine backend vocabulary explicitly:
+
+```julia
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
+
+backend = CPUBackend()
+```
+
+`Backends` exports `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
+`MetalBackend`, `AbstractArrayBackend`, `backend`, and `compute_device`.
+`AbstractComputeDevice`, `HostComputeDevice`, `AcceleratorComputeDevice`,
+`compute_device_backend`, and `compute_device_identifier` are stable
+qualified-public names, such as `Backends.HostComputeDevice()`. Backend launch,
+allocation, FFT, reduction, and registration helpers are developer or
+extension seams unless the exact owner allowlist promotes them.
 
 ## Masks And Apertures
 
@@ -154,9 +174,9 @@ incompatible geometry revisions, backends, or devices.
   `ExtendedSource` with `extended_source_asterism` and prepare that `Asterism`
 - Optical products: `PupilFunction`, `ElectricField`, `IntensityMap`,
   `OpticalProductBundle`, `OpticalPlaneMetadata`; coordinates are declared
-  with `MetricCoordinates` or `AngularCoordinates`. `compute_device(array)`
-  reports the concrete host or accelerator identity independently of its
-  semantic array-backend family
+  with `MetricCoordinates` or `AngularCoordinates`.
+  `Backends.compute_device(array)` reports the concrete host or accelerator
+  identity independently of its semantic array-backend family
 - Spectral coordinates: `AchromaticSpectralCoordinate`,
   `MonochromaticChannel`, or `IntegratedSpectralChannel`;
   `UnspecifiedSpectralCoordinate` is rejected by prepared intensity

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Random
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
@@ -18,21 +19,21 @@ function _resolve_backend(name::AbstractString)
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_mixed_sh_asterism_runtime.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_mixed_sh_asterism_runtime.jl requires a functional CUDA driver/device")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.CUDABackendTag)
+        return CUDABackend(), AdaptiveOpticsSim.Backends.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_mixed_sh_asterism_runtime.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_mixed_sh_asterism_runtime.jl requires a functional ROCm installation and GPU")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+        return AMDGPUBackend(), AdaptiveOpticsSim.Backends.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
 
 _sync_wfs!(::Nothing, _) = nothing
 
-function _sync_wfs!(::Type{B}, wfs) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(slopes(wfs)))
+function _sync_wfs!(::Type{B}, wfs) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(wfs)))
     return nothing
 end
 
@@ -82,7 +83,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     pupil = PupilFunction(tel; T=T, backend=backend)
 
     rng = runtime_rng(1)
-    AdaptiveOpticsSim.randn_backend!(rng, pupil.opd)
+    AdaptiveOpticsSim.Backends.randn_backend!(rng, pupil.opd)
     pupil.opd .*= T(5e-8)
 
     t0 = time_ns()

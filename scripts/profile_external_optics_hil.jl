@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Statistics: mean
 using KernelAbstractions: @kernel, @index
 
@@ -33,25 +34,25 @@ function _resolve_backend(name::AbstractString)
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("profile_external_optics_hil.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("profile_external_optics_hil.jl requires a functional CUDA driver/device")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag)
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.CUDABackendTag)
+        backend = AdaptiveOpticsSim.Backends.gpu_backend_array_type(AdaptiveOpticsSim.Backends.CUDABackendTag)
         backend === nothing && error("CUDA backend array type is unavailable")
-        return CUDABackend(), backend, AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        return CUDABackend(), backend, AdaptiveOpticsSim.Backends.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("profile_external_optics_hil.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("profile_external_optics_hil.jl requires a functional ROCm installation and GPU")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        backend = AdaptiveOpticsSim.gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag)
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+        backend = AdaptiveOpticsSim.Backends.gpu_backend_array_type(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
         backend === nothing && error("AMDGPU backend array type is unavailable")
-        return AMDGPUBackend(), backend, AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        return AMDGPUBackend(), backend, AdaptiveOpticsSim.Backends.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
 
 _sync_backend!(::Nothing, _) = nothing
 
-function _sync_backend!(::Type{B}, array) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(array))
+function _sync_backend!(::Type{B}, array) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(array))
     return nothing
 end
 
@@ -107,13 +108,13 @@ end
 function _scatter_active_command!(full_command::AbstractVector{T}, active_command::AbstractVector{T},
     active_indices_backend::AbstractVector{Int}) where {T<:AbstractFloat}
     fill!(full_command, zero(T))
-    style = AdaptiveOpticsSim.execution_style(full_command)
+    style = AdaptiveOpticsSim.Backends.execution_style(full_command)
     if full_command isa Array
         @inbounds for i in eachindex(active_command)
             full_command[active_indices_backend[i]] = active_command[i]
         end
     else
-        AdaptiveOpticsSim.launch_kernel!(style, scatter_active_command_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(style, scatter_active_command_kernel!,
             full_command, active_command, active_indices_backend, length(active_command);
             ndrange=length(active_command))
     end
@@ -122,11 +123,11 @@ end
 
 function _export_phase_crop!(dest::AbstractMatrix{T}, src::AbstractMatrix{T}) where {T<:AbstractFloat}
     col_offset = div(size(src, 2) - size(dest, 2), 2)
-    style = AdaptiveOpticsSim.execution_style(dest)
+    style = AdaptiveOpticsSim.Backends.execution_style(dest)
     if dest isa Array
         copyto!(dest, @view(src[:, col_offset + 1:col_offset + size(dest, 2)]))
     else
-        AdaptiveOpticsSim.launch_kernel!(style, export_phase_crop_kernel!, dest, src, col_offset;
+        AdaptiveOpticsSim.Backends.launch_kernel!(style, export_phase_crop_kernel!, dest, src, col_offset;
             ndrange=size(dest))
     end
     return dest

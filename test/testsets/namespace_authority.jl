@@ -60,17 +60,35 @@ function assert_acyclic_owner_graph(graph)
     @test length(permanent) == length(dependencies)
 end
 
-function plant_import_surface(path::AbstractString)
-    text = replace(read(path, String), "\r\n" => "\n")
-    block = split(split(
-        text,
-        "import ..AdaptiveOpticsSim:";
-        limit=2,
-    )[2], "\n\ninclude("; limit=2)[1]
-    return unique!(strip.(filter(
-        !isempty,
-        split(replace(block, '\n' => ' '), ','),
-    )))
+function relative_import_surfaces(path::AbstractString)
+    imports = Dict{String,Vector{String}}()
+    provider = nothing
+    for line in eachline(path)
+        stripped = strip(line)
+        if startswith(stripped, "import ..")
+            declaration = split(stripped, ':'; limit=2)
+            length(declaration) == 2 || continue
+            provider = String(chop(
+                declaration[1];
+                head=length("import .."),
+                tail=0,
+            ))
+            imports[provider] = String[]
+            append!(imports[provider], strip.(filter(
+                !isempty,
+                split(declaration[2], ','),
+            )))
+        elseif !isnothing(provider) && isempty(stripped)
+            provider = nothing
+        elseif !isnothing(provider)
+            append!(imports[provider], strip.(filter(
+                !isempty,
+                split(stripped, ','),
+            )))
+        end
+    end
+    foreach(unique!, values(imports))
+    return imports
 end
 
 function binding_occurs(text::AbstractString, binding::AbstractString)
@@ -82,10 +100,22 @@ function binding_occurs(text::AbstractString, binding::AbstractString)
 end
 
 function adaptive_optics_sim_extension_hooks(path::AbstractString)
-    pattern = r"(?m)^(?:@inline\s+)?(?:function\s+)?AdaptiveOpticsSim\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()"
-    return sort!(unique!(String[
-        match.captures[1] for match in eachmatch(pattern, read(path, String))
-    ]))
+    text = read(path, String)
+    patterns = (
+        "Root" =>
+            r"(?m)^(?:@inline\s+)?(?:function\s+)?AdaptiveOpticsSim\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()",
+        "Backends" =>
+            r"(?m)^(?:@inline\s+)?(?:function\s+)?(?:AdaptiveOpticsSim\.)?Backends\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()",
+    )
+    owners = Dict{String,String}()
+    for (owner, pattern) in patterns
+        for matched in eachmatch(pattern, text)
+            hook = String(matched.captures[1])
+            @test get(owners, hook, owner) == owner
+            owners[hook] = owner
+        end
+    end
+    return owners
 end
 
 function recursive_key_values(value, sought::Set{String}, found=Pair{String,Any}[])
@@ -124,24 +154,30 @@ end
     authority_path =
         joinpath(NAMESPACE_CONTRACT_ROOT, "namespace_authority.toml")
     authority = TOML.parsefile(authority_path)
+    migration_state = TOML.parsefile(joinpath(
+        NAMESPACE_CONTRACT_ROOT,
+        "namespace_migration_state.toml",
+    ))
     @test authority["schema_version"] == 1
     @test authority["name"] == "namespace_authority"
     @test authority["status"] == "authoritative"
     @test authority["implementation_phase"] == "pre_namespace_refactor"
     @test authority["semantics"]["compatibility"] ==
         "no root forwarding aliases, property forwarding, state views, or compatibility adapters"
+    @test migration_state["schema_version"] == 1
+    @test migration_state["name"] == "namespace_migration_state"
+    @test migration_state["status"] == "maintained"
+    @test migration_state["authority"] == basename(authority_path)
 
     current = authority["current_root"]
     current_path = joinpath(REPOSITORY_ROOT, current["source"])
-    @test file_sha256(current_path) == current["sha256"]
-    declared = declared_surface(current_path)
-    @test declared.exports == current["exports"]
-    @test declared.public == current["public"]
-
-    runtime = runtime_surface(AdaptiveOpticsSim)
-    @test Set(runtime.exports) ==
-        Set([current["exports"]; "AdaptiveOpticsSim"])
-    @test Set(runtime.public) == Set(current["public"])
+    @test isfile(current_path)
+    @test length(current["sha256"]) == 64
+    @test length(current["exports"]) == length(unique(current["exports"]))
+    @test length(current["public"]) == length(unique(current["public"]))
+    baseline_divergence = migration_state["baseline_divergence"]
+    @test baseline_divergence["root_surface"] == current["source"]
+    @test file_sha256(current_path) != current["sha256"]
 
     canonical_owners = Set((
         "Root",
@@ -159,6 +195,13 @@ end
     allowlists = authority["api_allowlists"]
     @test Set(String(entry["owner"]) for entry in allowlists) ==
         canonical_owners
+    implemented_owners =
+        Set(String.(migration_state["implemented_owners"]))
+    @test implemented_owners ⊆ canonical_owners
+    @test "Root" ∉ implemented_owners
+    @test "Plant" ∉ implemented_owners
+    @test Set(keys(migration_state["owner_sources"])) ==
+        implemented_owners
 
     owner_by_binding = Dict{String,Tuple{String,String}}()
     for entry in allowlists
@@ -199,6 +242,59 @@ end
     @test all(binding -> owner_by_binding[binding][2] == "public",
         current["public"])
 
+    implemented_exports = Set{String}()
+    implemented_public = Set{String}()
+    for owner in implemented_owners
+        allowlist = only(entry for entry in allowlists
+            if entry["owner"] == owner)
+        union!(implemented_exports, String.(allowlist["exports"]))
+        union!(implemented_public, String.(allowlist["public"]))
+    end
+    expected_root_exports = Set(
+        binding for binding in current["exports"]
+        if binding ∉ implemented_exports
+    )
+    union!(expected_root_exports,
+        intersect(introduced_root, implemented_owners))
+    expected_root_public = Set(
+        binding for binding in current["public"]
+        if binding ∉ implemented_public
+    )
+
+    declared_root = declared_surface(current_path)
+    @test Set(declared_root.exports) == expected_root_exports
+    @test Set(declared_root.public) == expected_root_public
+    root_runtime = runtime_surface(AdaptiveOpticsSim)
+    @test Set(root_runtime.exports) ==
+        union(expected_root_exports, Set(("AdaptiveOpticsSim",)))
+    @test Set(root_runtime.public) == expected_root_public
+
+    for owner in implemented_owners
+        allowlist = only(entry for entry in allowlists
+            if entry["owner"] == owner)
+        source = joinpath(
+            REPOSITORY_ROOT,
+            migration_state["owner_sources"][owner],
+        )
+        declared_owner = declared_surface(source)
+        @test declared_owner.exports == allowlist["exports"]
+        @test declared_owner.public == allowlist["public"]
+
+        owner_module = getfield(AdaptiveOpticsSim, Symbol(owner))
+        owner_runtime = runtime_surface(owner_module)
+        @test Set(owner_runtime.exports) ==
+            Set([allowlist["exports"]; owner])
+        @test Set(owner_runtime.public) == Set(allowlist["public"])
+        for visibility in ("exports", "public")
+            for binding in allowlist[visibility]
+                value = getfield(owner_module, Symbol(binding))
+                @test parentmodule(value) === owner_module
+                @test binding ∉ root_runtime.exports
+                @test binding ∉ root_runtime.public
+            end
+        end
+    end
+
     graph = authority["owner_graph"]
     @test Set(String(node["name"]) for node in graph) ==
         setdiff(canonical_owners, Set(("Root",)))
@@ -236,6 +332,7 @@ end
 
     import_contracts = authority["cross_module_imports"]
     imported_bindings = String[]
+    expected_imports = Dict{String,Set{String}}()
     plant_body = join(
         read(path, String) for path in readdir(
             joinpath(REPOSITORY_ROOT, "src", "plant");
@@ -250,27 +347,37 @@ end
         if entry["action"] == "retain"
             @test all(binding -> binding_occurs(plant_body, binding),
                 entry["bindings"])
+            provider = entry["provider"] in implemented_owners ?
+                String(entry["provider"]) : "AdaptiveOpticsSim"
+            union!(
+                get!(expected_imports, provider, Set{String}()),
+                String.(entry["bindings"]),
+            )
         else
             @test all(binding -> !binding_occurs(plant_body, binding),
                 entry["bindings"])
         end
     end
     @test length(imported_bindings) == length(unique(imported_bindings))
-    @test Set(imported_bindings) ==
-        Set(plant_import_surface(joinpath(
-            REPOSITORY_ROOT,
-            "src",
-            "plant",
-            "plant.jl",
-        )))
+    actual_imports = relative_import_surfaces(joinpath(
+        REPOSITORY_ROOT,
+        "src",
+        "plant",
+        "plant.jl",
+    ))
+    @test Set(keys(actual_imports)) == Set(keys(expected_imports))
+    for (provider, bindings) in expected_imports
+        @test Set(actual_imports[provider]) == bindings
+    end
 
     extension_files = authority["extension_files"]
     observed_hooks = Set{String}()
     for entry in extension_files
         path = joinpath(REPOSITORY_ROOT, entry["path"])
         hooks = adaptive_optics_sim_extension_hooks(path)
-        @test hooks == sort!(String.(entry["adaptive_optics_sim_hooks"]))
-        union!(observed_hooks, hooks)
+        @test Set(keys(hooks)) ==
+            Set(String.(entry["adaptive_optics_sim_hooks"]))
+        union!(observed_hooks, keys(hooks))
     end
     hook_owners = Dict{String,String}()
     for entry in authority["extension_hook_owners"]
@@ -281,6 +388,21 @@ end
     end
     @test Set(keys(hook_owners)) == observed_hooks
     @test all(owner -> owner in canonical_owners, values(hook_owners))
+    migrated_extension_sources = Set{String}()
+    for entry in extension_files
+        path = joinpath(REPOSITORY_ROOT, entry["path"])
+        hooks = adaptive_optics_sim_extension_hooks(path)
+        for (hook, actual_owner) in hooks
+            canonical_owner = hook_owners[hook]
+            expected_owner = canonical_owner in implemented_owners ?
+                canonical_owner : "Root"
+            @test actual_owner == expected_owner
+            actual_owner == "Root" ||
+                push!(migrated_extension_sources, entry["path"])
+        end
+    end
+    @test migrated_extension_sources ==
+        Set(String.(baseline_divergence["extension_sources"]))
 end
 
 @testset "NS-00B AdaptiveOpticsHIL import inventory" begin
@@ -348,8 +470,15 @@ end
         NAMESPACE_CONTRACT_ROOT,
         "namespace_characterization.toml",
     ))
+    migration_state = TOML.parsefile(joinpath(
+        NAMESPACE_CONTRACT_ROOT,
+        "namespace_migration_state.toml",
+    ))
     @test characterization["schema_version"] == 1
     @test characterization["status"] == "frozen_baseline_index"
+    migrated_extension_tests = Set(String.(
+        migration_state["baseline_divergence"]["extension_tests"],
+    ))
 
     for fixture in characterization["numerical_fixtures"]
         path = joinpath(REPOSITORY_ROOT, fixture["manifest"])
@@ -388,8 +517,15 @@ end
     for baseline in characterization["extension_baselines"]
         path = joinpath(REPOSITORY_ROOT, baseline["path"])
         @test isfile(path)
-        @test file_sha256(path) == baseline["sha256"]
+        if baseline["path"] in migrated_extension_tests
+            @test file_sha256(path) != baseline["sha256"]
+        else
+            @test file_sha256(path) == baseline["sha256"]
+        end
     end
+    @test migrated_extension_tests ⊆ Set(String(
+        baseline["path"]) for baseline in
+        characterization["extension_baselines"])
 
     latency_index = characterization["package_latency"]
     latency_contract = TOML.parsefile(joinpath(

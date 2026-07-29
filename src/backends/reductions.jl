@@ -1,3 +1,4 @@
+# Backend-owned reduction plans and kernels.
 @kernel function masked_sum2d_kernel!(out, values_parent, valid_mask, row_offset::Int, col_offset::Int, n_rows::Int, n_cols::Int)
     i, j = @index(Global, NTuple)
     if i <= n_rows && j <= n_cols && @inbounds(valid_mask[i, j])

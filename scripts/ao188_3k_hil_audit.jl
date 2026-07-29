@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using Random
 
 include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))
@@ -21,21 +22,21 @@ function _resolve_backend(name::AbstractString)
     elseif lowered == "cuda"
         isdefined(Main, :CUDA) || error("ao188_3k_hil_audit.jl requires CUDA.jl for backend=cuda")
         CUDA.functional() || error("ao188_3k_hil_audit.jl requires a functional CUDA driver/device")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.CUDABackendTag)
-        return CUDABackend(), AdaptiveOpticsSim.CUDABackendTag, "cuda"
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.CUDABackendTag)
+        return CUDABackend(), AdaptiveOpticsSim.Backends.CUDABackendTag, "cuda"
     elseif lowered == "amdgpu"
         isdefined(Main, :AMDGPU) || error("ao188_3k_hil_audit.jl requires AMDGPU.jl for backend=amdgpu")
         AMDGPU.functional() || error("ao188_3k_hil_audit.jl requires a functional ROCm installation and GPU")
-        AdaptiveOpticsSim.disable_scalar_backend!(AdaptiveOpticsSim.AMDGPUBackendTag)
-        return AMDGPUBackend(), AdaptiveOpticsSim.AMDGPUBackendTag, "amdgpu"
+        AdaptiveOpticsSim.Backends.disable_scalar_backend!(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+        return AMDGPUBackend(), AdaptiveOpticsSim.Backends.AMDGPUBackendTag, "amdgpu"
     end
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
 
 _sync_runtime!(::Nothing, runtime) = nothing
 
-function _sync_runtime!(::Type{B}, runtime) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(runtime.command))
+function _sync_runtime!(::Type{B}, runtime) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(runtime.command))
     return nothing
 end
 

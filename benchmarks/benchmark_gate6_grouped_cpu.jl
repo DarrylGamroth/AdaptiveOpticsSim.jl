@@ -28,7 +28,7 @@ function configure_gate6_cpu!(contract)
     Threads.nthreads() == expected_threads || error(
         "Gate 6 grouped CPU evidence requires $expected_threads Julia threads")
     BLAS.set_num_threads(Int(contract["blas_threads"]))
-    AdaptiveOpticsSim.set_fft_provider_threads!(
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(
         Int(contract["fft_threads"]))
     budget = AOSPlant.grouped_cpu_execution_budget(
         cpu_context_count=Int(contract["cpu_contexts"]),

@@ -25,17 +25,17 @@ TestAbstractFFTs.plan_ifft!(::TestBackendFFTArray) = :backend_ifft
 TestAbstractFFTs.plan_ifft!(::TestBackendFFTArray, dims) = (:backend_ifft, dims)
 
 @testset "GPU backend registry" begin
-    @test !gpu_backend_loaded(AdaptiveOpticsSim.CUDABackendTag)
-    @test !gpu_backend_loaded(AdaptiveOpticsSim.MetalBackendTag)
-    @test !gpu_backend_loaded(AdaptiveOpticsSim.AMDGPUBackendTag)
-    @test gpu_backend_array_type(AdaptiveOpticsSim.CUDABackendTag) === nothing
-    @test gpu_backend_array_type(AdaptiveOpticsSim.MetalBackendTag) === nothing
-    @test gpu_backend_array_type(AdaptiveOpticsSim.AMDGPUBackendTag) === nothing
+    @test !gpu_backend_loaded(AdaptiveOpticsSim.Backends.CUDABackendTag)
+    @test !gpu_backend_loaded(AdaptiveOpticsSim.Backends.MetalBackendTag)
+    @test !gpu_backend_loaded(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+    @test gpu_backend_array_type(AdaptiveOpticsSim.Backends.CUDABackendTag) === nothing
+    @test gpu_backend_array_type(AdaptiveOpticsSim.Backends.MetalBackendTag) === nothing
+    @test gpu_backend_array_type(AdaptiveOpticsSim.Backends.AMDGPUBackendTag) === nothing
     @test gpu_backend_name(Matrix{Float64}) === nothing
     @test backend(zeros(2, 2)) isa CPUBackend
     @test backend(zeros(2)) isa CPUBackend
     @test available_gpu_backends() == ()
-    @test AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.CUDABackendTag}
+    @test AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.Backends.CUDABackendTag}
 end
 
 @testset "CPU FFT provider dispatch" begin
@@ -43,30 +43,30 @@ end
         original = T.(reshape(1:64, 8, 8))
 
         full = copy(original)
-        full_fft = AdaptiveOpticsSim.plan_fft_backend!(full)
-        full_ifft = AdaptiveOpticsSim.plan_ifft_backend!(full)
+        full_fft = AdaptiveOpticsSim.Backends.plan_fft_backend!(full)
+        full_ifft = AdaptiveOpticsSim.Backends.plan_ifft_backend!(full)
         @test full_fft isa TestAbstractFFTs.Plan
         @test full_ifft isa TestAbstractFFTs.Plan
-        AdaptiveOpticsSim.execute_fft_plan!(full, full_fft)
-        AdaptiveOpticsSim.execute_fft_plan!(full, full_ifft)
+        AdaptiveOpticsSim.Backends.execute_fft_plan!(full, full_fft)
+        AdaptiveOpticsSim.Backends.execute_fft_plan!(full, full_ifft)
         @test full ≈ original
 
         first_dimension = copy(original)
-        dim_fft = AdaptiveOpticsSim.plan_fft_backend!(first_dimension, 1)
-        dim_ifft = AdaptiveOpticsSim.plan_ifft_backend!(first_dimension, 1)
+        dim_fft = AdaptiveOpticsSim.Backends.plan_fft_backend!(first_dimension, 1)
+        dim_ifft = AdaptiveOpticsSim.Backends.plan_ifft_backend!(first_dimension, 1)
         @test dim_fft isa TestAbstractFFTs.Plan
         @test dim_ifft isa TestAbstractFFTs.Plan
-        AdaptiveOpticsSim.execute_fft_plan!(first_dimension, dim_fft)
-        AdaptiveOpticsSim.execute_fft_plan!(first_dimension, dim_ifft)
+        AdaptiveOpticsSim.Backends.execute_fft_plan!(first_dimension, dim_fft)
+        AdaptiveOpticsSim.Backends.execute_fft_plan!(first_dimension, dim_ifft)
         @test first_dimension ≈ original
     end
 
     backend_array = TestBackendFFTArray(zeros(ComplexF32, 4, 4))
-    @test AdaptiveOpticsSim.plan_fft_backend!(backend_array) === :backend_fft
-    @test AdaptiveOpticsSim.plan_ifft_backend!(backend_array) === :backend_ifft
-    @test AdaptiveOpticsSim.plan_fft_backend!(backend_array, (1, 2)) ==
+    @test AdaptiveOpticsSim.Backends.plan_fft_backend!(backend_array) === :backend_fft
+    @test AdaptiveOpticsSim.Backends.plan_ifft_backend!(backend_array) === :backend_ifft
+    @test AdaptiveOpticsSim.Backends.plan_fft_backend!(backend_array, (1, 2)) ==
         (:backend_fft, (1, 2))
-    @test AdaptiveOpticsSim.plan_ifft_backend!(backend_array, (1, 2)) ==
+    @test AdaptiveOpticsSim.Backends.plan_ifft_backend!(backend_array, (1, 2)) ==
         (:backend_ifft, (1, 2))
 end
 
@@ -93,8 +93,11 @@ end
     @test length(root_exported) <= 500
     @test length(plant_exported) <= 100
     @test Base.isexported(AdaptiveOpticsSim, :Telescope)
+    @test Base.isexported(AdaptiveOpticsSim, :Backends)
     @test Base.isexported(AdaptiveOpticsSim, :Plant)
+    @test Base.ispublic(AdaptiveOpticsSim, :Backends)
     @test Base.ispublic(AdaptiveOpticsSim, :Plant)
+    @test AdaptiveOpticsSim.Backends === Backends
     @test AdaptiveOpticsSim.Plant === Plant
 
     # Every supported Plant-owned binding has one canonical owner. The root
@@ -161,7 +164,7 @@ end
     @test parentmodule(Plant.PlantTimestamp) === Plant
     @test parentmodule(Plant.PlantDefinitionError) === Plant
     @test Plant.advance_to! === AdaptiveOpticsSim.advance_to!
-    @test Plant.backend === AdaptiveOpticsSim.backend
+    @test Plant.backend === AdaptiveOpticsSim.Backends.backend
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(AdaptiveOpticsSim, :MicrolensArray)
     @test Base.isexported(AdaptiveOpticsSim, :microlens_array)
@@ -227,13 +230,14 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :photon_irradiance)
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
     @test Base.isexported(AdaptiveOpticsSim, :OpticalPlaneMetadata)
-    @test Base.isexported(AdaptiveOpticsSim, :compute_device)
-    @test !Base.isexported(AdaptiveOpticsSim, :AbstractComputeDevice)
-    @test Base.ispublic(AdaptiveOpticsSim, :AbstractComputeDevice)
-    @test Base.ispublic(AdaptiveOpticsSim, :HostComputeDevice)
-    @test Base.ispublic(AdaptiveOpticsSim, :AcceleratorComputeDevice)
-    @test Base.ispublic(AdaptiveOpticsSim, :compute_device_backend)
-    @test Base.ispublic(AdaptiveOpticsSim, :compute_device_identifier)
+    @test !Base.isexported(AdaptiveOpticsSim, :compute_device)
+    @test !Base.ispublic(AdaptiveOpticsSim, :AbstractComputeDevice)
+    @test Base.isexported(Backends, :compute_device)
+    @test Base.ispublic(Backends, :AbstractComputeDevice)
+    @test Base.ispublic(Backends, :HostComputeDevice)
+    @test Base.ispublic(Backends, :AcceleratorComputeDevice)
+    @test Base.ispublic(Backends, :compute_device_backend)
+    @test Base.ispublic(Backends, :compute_device_identifier)
     @test Base.isexported(AdaptiveOpticsSim, :MetricCoordinates)
     @test Base.isexported(AdaptiveOpticsSim, :AngularCoordinates)
     @test Base.isexported(AdaptiveOpticsSim, :AchromaticSpectralCoordinate)
@@ -373,37 +377,37 @@ end
         reinterpret(Float32, host_view),
     )
     host_device = compute_device(metadata_storage)
-    @test host_device == AdaptiveOpticsSim.HostComputeDevice()
-    @test AdaptiveOpticsSim.compute_device_backend(host_device) ==
+    @test host_device == AdaptiveOpticsSim.Backends.HostComputeDevice()
+    @test AdaptiveOpticsSim.Backends.compute_device_backend(host_device) ==
         CPUBackend()
     @test isnothing(
-        AdaptiveOpticsSim.compute_device_identifier(host_device))
-    cuda_device_0 = AdaptiveOpticsSim.AcceleratorComputeDevice(
+        AdaptiveOpticsSim.Backends.compute_device_identifier(host_device))
+    cuda_device_0 = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
         CUDABackend(), 0)
-    cuda_device_1 = AdaptiveOpticsSim.AcceleratorComputeDevice(
+    cuda_device_1 = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
         CUDABackend(), 1)
-    amd_device_0 = AdaptiveOpticsSim.AcceleratorComputeDevice(
+    amd_device_0 = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
         AMDGPUBackend(), 0)
     @test cuda_device_0 != cuda_device_1
     @test cuda_device_0 != amd_device_0
-    @test AdaptiveOpticsSim.compute_device_backend(cuda_device_0) ==
+    @test AdaptiveOpticsSim.Backends.compute_device_backend(cuda_device_0) ==
         CUDABackend()
-    @test AdaptiveOpticsSim.compute_device_identifier(cuda_device_0) == 0
+    @test AdaptiveOpticsSim.Backends.compute_device_identifier(cuda_device_0) == 0
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim.AcceleratorComputeDevice(CPUBackend(), 0)
+        AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(CPUBackend(), 0)
     end
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim.AcceleratorComputeDevice(
+        AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
             CUDABackend(), nothing)
     end
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim.AcceleratorComputeDevice(
+        AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
             CUDABackend(), "device-0")
     end
     for wrapper in host_wrappers
         @test compute_device(wrapper) == host_device
         @test backend(wrapper) isa CPUBackend
-        @test AdaptiveOpticsSim.array_backend_selector(typeof(wrapper)) isa
+        @test AdaptiveOpticsSim.Backends.array_backend_selector(typeof(wrapper)) isa
             CPUBackend
         wrapper_metadata = OpticalPlaneMetadata(FocalPlane(), wrapper;
             coordinate_domain=AngularCoordinates(), sampling=(1.0, 1.0),
@@ -914,7 +918,7 @@ end
         zero_padding=1,
         T=Float64)
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(geom_prop.state.slices).field.values),
+        AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
     ) isa AdaptiveOpticsSim.GeometricFieldSynchronousPlan
     geom_field = propagate_atmosphere_field!(geom_prop, atm,
@@ -945,7 +949,7 @@ end
         zero_padding=1,
         T=Float64)
     @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
-        AdaptiveOpticsSim.execution_style(first(fresnel_prop.state.slices).field.values),
+        AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.LayeredFresnelFieldSynchronousPlan
     fresnel_field = propagate_atmosphere_field!(fresnel_prop, fresnel_atm,
@@ -1168,7 +1172,7 @@ end
         coordinate_domain=field.metadata.coordinate_domain,
         sampling=field.metadata.sampling, origin=field.metadata.origin,
         spectral=field.metadata.spectral,
-        device=AdaptiveOpticsSim.AcceleratorComputeDevice(
+        device=AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
             CUDABackend(), 1))
     @test_throws InvalidConfiguration ElectricField(
         declared_device_metadata, values)

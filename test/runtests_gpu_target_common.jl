@@ -1,5 +1,6 @@
 using Test
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using LinearAlgebra
@@ -7,6 +8,14 @@ using Random
 
 # Hardware targets exercise qualified-public and internal plant contracts in
 # addition to the routine exported workflow.
+for name in names(Backends; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Backends, $(QuoteNode(name)))
+    end
+end
+
 for name in names(Plant; all=true)
     s = String(name)
     if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
@@ -21,22 +30,24 @@ include(normpath(joinpath(@__DIR__, "..", "benchmarks", "support", "revolt_like_
 include(normpath(joinpath(@__DIR__, "..", "scripts", "gpu_builder_contract.jl")))
 
 BLAS.set_num_threads(1)
-AdaptiveOpticsSim.set_fft_provider_threads!(1)
+Backends.set_fft_provider_threads!(1)
 
-backend_target_branch_mode(::Type{AdaptiveOpticsSim.CUDABackendTag}) = BackendStreamExecution()
-backend_target_branch_mode(::Type{AdaptiveOpticsSim.AMDGPUBackendTag}) = SequentialExecution()
+backend_target_branch_mode(::Type{Backends.CUDABackendTag}) =
+    BackendStreamExecution()
+backend_target_branch_mode(::Type{Backends.AMDGPUBackendTag}) =
+    SequentialExecution()
 
-function require_backend_target!(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function require_backend_target!(::Type{B}) where {B<:Backends.GPUBackendTag}
     pkg = backend_package_name(B)
     pkg_path = Base.find_package(pkg)
     pkg_path === nothing && error("$(backend_label(B)) target requires $(pkg).jl in the active environment")
     import_backend_package!(B)
     backend_functional(B) || error("$(backend_label(B)) target requires a functional backend/device on this host")
-    AdaptiveOpticsSim.disable_scalar_backend!(B)
+    Backends.disable_scalar_backend!(B)
     return nothing
 end
 
-function run_gpu_backend_target(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     require_backend_target!(B)
     @testset "$(backend_label(B)) hardware target" begin
         run_optional_backend_smoke(B)
@@ -46,7 +57,9 @@ function run_gpu_backend_target(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBacken
     return nothing
 end
 
-function run_revolt_like_hil_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function run_revolt_like_hil_backend_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
     config_dir = normpath(joinpath(@__DIR__, "..", "benchmarks", "assets", "revolt_like"))
     backend_name = lowercase(backend_label(B))
     cpu_ctx = build_revolt_like_hil_context(;

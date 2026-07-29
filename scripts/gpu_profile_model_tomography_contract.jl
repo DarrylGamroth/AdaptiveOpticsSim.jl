@@ -2,19 +2,19 @@ using AdaptiveOpticsSim
 using Profile
 
 function _sync_backend_array!(A)
-    AdaptiveOpticsSim.synchronize_backend!(AdaptiveOpticsSim.execution_style(A))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(A))
     return nothing
 end
 
-function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
-    AdaptiveOpticsSim.disable_scalar_backend!(B)
-    BackendArray = AdaptiveOpticsSim.gpu_backend_array_type(B)
+function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
+    BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
 
-    policy = AdaptiveOpticsSim.default_gpu_precision_policy(B)
-    high_accuracy = AdaptiveOpticsSim.high_accuracy_gpu_precision_policy(B)
-    TB = AdaptiveOpticsSim.gpu_build_type(policy)
-    TH = AdaptiveOpticsSim.gpu_build_type(high_accuracy)
+    policy = AdaptiveOpticsSim.Backends.default_gpu_precision_policy(B)
+    high_accuracy = AdaptiveOpticsSim.Backends.high_accuracy_gpu_precision_policy(B)
+    TB = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
+    TH = AdaptiveOpticsSim.Backends.gpu_build_type(high_accuracy)
     build_backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
 
     n_lenslet = 3
@@ -154,7 +154,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
     end
 
     println("GPU model tomography profile")
-    println("  backend: ", string(something(AdaptiveOpticsSim.gpu_backend_name(B), B)))
+    println("  backend: ", string(something(AdaptiveOpticsSim.Backends.gpu_backend_name(B), B)))
     println("  case: medium")
     println("  default_build_ns: ", dt_default)
     println("  default_build_alloc_bytes: ", alloc_default)

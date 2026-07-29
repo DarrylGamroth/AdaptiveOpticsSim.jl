@@ -290,7 +290,7 @@ end
 
 function device_model_matrix_wfs_fixture(
     family::DeviceModelMatrixWFSFamily;
-    backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend=CPUBackend(),
     selection::Val=Val(:all),
     direction::Val=Val(:ngs),
     spectral::Val=Val(:monochromatic),
@@ -464,8 +464,8 @@ function device_model_matrix_copy_atmosphere_screens!(
             source.layers[index].generator.state.opd,
         )
     end
-    AdaptiveOpticsSim.synchronize_backend!(
-        AdaptiveOpticsSim.execution_style(
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(
             first(destination.layers).generator.state.opd,
         ),
     )
@@ -588,7 +588,7 @@ struct DeviceModelMatrixM6UpTheRampHgCdTe <:
 
 function device_model_matrix_detector_response(
     ::DeviceModelMatrixM1CCD,
-    backend::AdaptiveOpticsSim.AbstractArrayBackend,
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat}
     return RectangularPixelAperture(
@@ -604,7 +604,7 @@ end
 
 function device_model_matrix_detector_response(
     ::DeviceModelMatrixM2FrameTransferEMCCD,
-    backend::AdaptiveOpticsSim.AbstractArrayBackend,
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat}
     return GaussianPixelResponse(
@@ -617,13 +617,13 @@ end
 
 @inline device_model_matrix_detector_response(
     ::Union{DeviceModelMatrixM3GlobalCMOS,DeviceModelMatrixM4GlobalHgCdTe},
-    ::AdaptiveOpticsSim.AbstractArrayBackend,
+    ::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{<:AbstractFloat},
 ) = NullFrameResponse()
 
 function device_model_matrix_detector_response(
     ::DeviceModelMatrixM5RollingCMOS,
-    backend::AdaptiveOpticsSim.AbstractArrayBackend,
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat}
     return SampledFrameResponse(
@@ -635,7 +635,7 @@ end
 
 function device_model_matrix_detector_response(
     ::DeviceModelMatrixM6UpTheRampHgCdTe,
-    backend::AdaptiveOpticsSim.AbstractArrayBackend,
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat}
     return RectangularPixelAperture(
@@ -651,7 +651,7 @@ end
 
 @inline device_model_matrix_detector_sensor(
     ::DeviceModelMatrixM1CCD,
-    ::AdaptiveOpticsSim.AbstractArrayBackend,
+    ::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat} = CCDSensor(
     sampling_mode=SingleRead(),
@@ -660,7 +660,7 @@ end
 
 @inline device_model_matrix_detector_sensor(
     ::DeviceModelMatrixM2FrameTransferEMCCD,
-    ::AdaptiveOpticsSim.AbstractArrayBackend,
+    ::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat} = EMCCDSensor(
     excess_noise_factor=one(T),
@@ -670,7 +670,7 @@ end
 
 @inline device_model_matrix_detector_sensor(
     ::DeviceModelMatrixM3GlobalCMOS,
-    backend::AdaptiveOpticsSim.AbstractArrayBackend,
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat} = CMOSSensor(
     timing_model=GlobalShutter(),
@@ -680,7 +680,7 @@ end
 
 @inline device_model_matrix_detector_sensor(
     ::DeviceModelMatrixM4GlobalHgCdTe,
-    ::AdaptiveOpticsSim.AbstractArrayBackend,
+    ::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat} = HgCdTeAvalancheArraySensor(
     sampling_mode=SingleRead(),
@@ -689,7 +689,7 @@ end
 
 @inline device_model_matrix_detector_sensor(
     ::DeviceModelMatrixM5RollingCMOS,
-    backend::AdaptiveOpticsSim.AbstractArrayBackend,
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat} = CMOSSensor(
     timing_model=RollingShutter(T(0.1); row_group_size=3),
@@ -699,7 +699,7 @@ end
 
 @inline device_model_matrix_detector_sensor(
     ::DeviceModelMatrixM6UpTheRampHgCdTe,
-    ::AdaptiveOpticsSim.AbstractArrayBackend,
+    ::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat} = HgCdTeAvalancheArraySensor(
     read_time=zero(T),
@@ -709,7 +709,7 @@ end
 
 function device_model_matrix_detector(
     row::DeviceModelMatrixDetectorRow;
-    backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend=CPUBackend(),
     T::Type{<:AbstractFloat}=Float64,
 )
     return Detector(
@@ -736,11 +736,11 @@ end
 
 function device_model_matrix_detector_rate_map(
     row::DeviceModelMatrixDetectorRow;
-    backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend=CPUBackend(),
     T::Type{<:AbstractFloat}=Float64,
 )
     host = device_model_matrix_detector_rate_host(row, T)
-    array_backend = AdaptiveOpticsSim._resolve_array_backend(backend)
+    array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
     values = array_backend{T}(undef, size(host)...)
     copyto!(values, host)
     metadata = OpticalPlaneMetadata(
@@ -899,7 +899,7 @@ end
 function device_model_matrix_execute_detector(
     row::Union{DeviceModelMatrixM1CCD,DeviceModelMatrixM3GlobalCMOS,
         DeviceModelMatrixM4GlobalHgCdTe};
-    backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend=CPUBackend(),
     T::Type{<:AbstractFloat}=Float64,
     input_map=nothing,
 )
@@ -956,7 +956,7 @@ end
 
 function device_model_matrix_execute_detector(
     row::DeviceModelMatrixM2FrameTransferEMCCD;
-    backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend=CPUBackend(),
     T::Type{<:AbstractFloat}=Float64,
     input_map=nothing,
 )
@@ -1040,7 +1040,7 @@ end
 
 function device_model_matrix_execute_detector(
     row::DeviceModelMatrixM5RollingCMOS;
-    backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend=CPUBackend(),
     T::Type{<:AbstractFloat}=Float64,
 )
     detector = device_model_matrix_detector(row; backend, T)
@@ -1090,7 +1090,7 @@ end
 
 function device_model_matrix_execute_detector(
     row::DeviceModelMatrixM6UpTheRampHgCdTe;
-    backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend=CPUBackend(),
     T::Type{<:AbstractFloat}=Float64,
 )
     detector = device_model_matrix_detector(row; backend, T)

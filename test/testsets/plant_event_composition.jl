@@ -991,7 +991,7 @@ end
             @inferred path_execution_group_requirements(group)
         @test path_execution_backend(requirements) == CPUBackend()
         @test path_execution_compute_device(requirements) ==
-            AdaptiveOpticsSim.HostComputeDevice()
+            AdaptiveOpticsSim.Backends.HostComputeDevice()
         @test path_execution_requires_full_optical(requirements)
         @test path_execution_group_acquisition_count(group) ==
             length(expected_group_acquisitions[ordinal])
@@ -1025,7 +1025,7 @@ end
         path_execution_group(prepared, 1), 2)
     @test_throws PlantPreparationError PathExecutionRequirements(
         CUDABackend(),
-        AdaptiveOpticsSim.HostComputeDevice(),
+        AdaptiveOpticsSim.Backends.HostComputeDevice(),
         true,
     )
     for name in (

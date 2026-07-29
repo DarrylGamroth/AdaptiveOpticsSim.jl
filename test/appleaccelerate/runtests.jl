@@ -2,6 +2,7 @@ using Test
 using LinearAlgebra
 using AppleAccelerate
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 import FFTW
 
 const APPLE_ACCELERATE_COVERAGE = Base.JLOptions().code_coverage != 0
@@ -13,8 +14,8 @@ function accelerate_backing_library(symbol::AbstractString)
 end
 
 function apple_fft_cycle!(buffer, fft_plan, ifft_plan)
-    AdaptiveOpticsSim.execute_fft_plan!(buffer, fft_plan)
-    AdaptiveOpticsSim.execute_fft_plan!(buffer, ifft_plan)
+    Backends.execute_fft_plan!(buffer, fft_plan)
+    Backends.execute_fft_plan!(buffer, ifft_plan)
     return buffer
 end
 
@@ -36,12 +37,12 @@ function validate_apple_fft_case(
     original = deterministic_fft_input(T, shape)
     reference = copy(original)
     dims = ntuple(identity, N)
-    reference_plan = AdaptiveOpticsSim._plan_fftw_fft!(reference, dims)
-    AdaptiveOpticsSim.execute_fft_plan!(reference, reference_plan)
+    reference_plan = Backends._plan_fftw_fft!(reference, dims)
+    Backends.execute_fft_plan!(reference, reference_plan)
 
     transformed = copy(original)
-    fft_plan = AdaptiveOpticsSim.plan_fft_backend!(transformed)
-    ifft_plan = AdaptiveOpticsSim.plan_ifft_backend!(transformed)
+    fft_plan = Backends.plan_fft_backend!(transformed)
+    ifft_plan = Backends.plan_ifft_backend!(transformed)
     @test parentmodule(typeof(fft_plan)) === apple_fft_extension
     @test occursin("AdaptiveOpticsAppleFFTPlan", string(typeof(fft_plan)))
     @test occursin("AppleFFTForward", string(typeof(fft_plan)))
@@ -49,10 +50,10 @@ function validate_apple_fft_case(
     @test fft_plan.setup !== nothing
     @test ifft_plan.setup !== nothing
 
-    AdaptiveOpticsSim.execute_fft_plan!(transformed, fft_plan)
+    Backends.execute_fft_plan!(transformed, fft_plan)
     @test isapprox(transformed, reference;
         rtol=fft_rtol(T), atol=fft_rtol(T))
-    AdaptiveOpticsSim.execute_fft_plan!(transformed, ifft_plan)
+    Backends.execute_fft_plan!(transformed, ifft_plan)
     @test isapprox(transformed, original;
         rtol=fft_rtol(T), atol=fft_rtol(T))
 
@@ -108,26 +109,26 @@ end
     arbitrary_original = deterministic_fft_input(Float64, (6, 8))
     arbitrary_size = copy(arbitrary_original)
     higher_dimensional = zeros(ComplexF64, 4, 4, 2)
-    supported_plan = AdaptiveOpticsSim.plan_fft_backend!(supported_size)
-    arbitrary_plan = AdaptiveOpticsSim.plan_fft_backend!(arbitrary_size)
-    arbitrary_inverse_plan = AdaptiveOpticsSim.plan_ifft_backend!(arbitrary_size)
+    supported_plan = Backends.plan_fft_backend!(supported_size)
+    arbitrary_plan = Backends.plan_fft_backend!(arbitrary_size)
+    arbitrary_inverse_plan = Backends.plan_ifft_backend!(arbitrary_size)
     @test typeof(supported_plan) === typeof(arbitrary_plan)
     @test supported_plan.setup !== nothing
     @test arbitrary_plan.setup === nothing
     @test arbitrary_inverse_plan.setup === nothing
     @test parentmodule(typeof(arbitrary_plan.fftw_plan)) === FFTW
     @test parentmodule(typeof(
-        AdaptiveOpticsSim.plan_fft_backend!(higher_dimensional))) === FFTW
+        Backends.plan_fft_backend!(higher_dimensional))) === FFTW
 
     arbitrary_reference = copy(arbitrary_original)
-    arbitrary_reference_plan = AdaptiveOpticsSim._plan_fftw_fft!(
+    arbitrary_reference_plan = Backends._plan_fftw_fft!(
         arbitrary_reference, (1, 2))
-    AdaptiveOpticsSim.execute_fft_plan!(
+    Backends.execute_fft_plan!(
         arbitrary_reference, arbitrary_reference_plan)
-    AdaptiveOpticsSim.execute_fft_plan!(arbitrary_size, arbitrary_plan)
+    Backends.execute_fft_plan!(arbitrary_size, arbitrary_plan)
     @test isapprox(arbitrary_size, arbitrary_reference;
         rtol=fft_rtol(Float64), atol=fft_rtol(Float64))
-    AdaptiveOpticsSim.execute_fft_plan!(
+    Backends.execute_fft_plan!(
         arbitrary_size, arbitrary_inverse_plan)
     @test isapprox(arbitrary_size, arbitrary_original;
         rtol=fft_rtol(Float64), atol=fft_rtol(Float64))
@@ -143,8 +144,8 @@ end
 
     partial_original = deterministic_fft_input(Float64, (8, 8))
     partial_size = copy(partial_original)
-    partial_plan = AdaptiveOpticsSim.plan_fft_backend!(partial_size, (1,))
-    partial_inverse_plan = AdaptiveOpticsSim.plan_ifft_backend!(partial_size, (1,))
+    partial_plan = Backends.plan_fft_backend!(partial_size, (1,))
+    partial_inverse_plan = Backends.plan_ifft_backend!(partial_size, (1,))
     @test partial_plan.setup === nothing
     @test partial_inverse_plan.setup === nothing
     apple_fft_cycle!(partial_size, partial_plan, partial_inverse_plan)
@@ -152,27 +153,27 @@ end
         rtol=fft_rtol(Float64), atol=fft_rtol(Float64))
 
     vector_buffer = deterministic_fft_input(Float64, (16,))
-    @test AdaptiveOpticsSim.plan_fft_backend!(vector_buffer, 1).setup !== nothing
+    @test Backends.plan_fft_backend!(vector_buffer, 1).setup !== nothing
 
     source = deterministic_fft_input(Float64, (8, 8))
     destination = similar(source)
     expected = copy(source)
-    expected_plan = AdaptiveOpticsSim._plan_fftw_fft!(expected, (1, 2))
-    AdaptiveOpticsSim.execute_fft_plan!(expected, expected_plan)
+    expected_plan = Backends._plan_fftw_fft!(expected, (1, 2))
+    Backends.execute_fft_plan!(expected, expected_plan)
     mul!(destination, supported_plan, source)
     @test isapprox(destination, expected;
         rtol=fft_rtol(Float64), atol=fft_rtol(Float64))
     @test source != destination
 
     wrong_shape = zeros(ComplexF64, 4, 8)
-    @test_throws DimensionMismatch AdaptiveOpticsSim.execute_fft_plan!(
+    @test_throws DimensionMismatch Backends.execute_fft_plan!(
         wrong_shape, supported_plan)
     @test_throws DimensionMismatch mul!(destination, supported_plan, wrong_shape)
 
     empty_real = Array{Float64}(undef, 0, 0)
     invalid_plan = typeof(supported_plan)(
         nothing, empty_real, similar(empty_real), nothing, size(supported_plan))
-    @test_throws ArgumentError AdaptiveOpticsSim.execute_fft_plan!(
+    @test_throws ArgumentError Backends.execute_fft_plan!(
         source, invalid_plan)
 
     println("AppleAccelerate version: ", Base.pkgversion(AppleAccelerate))

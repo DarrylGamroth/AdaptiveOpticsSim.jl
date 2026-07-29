@@ -1731,7 +1731,7 @@ end
         mode=Diffractive(), n_pix_subap=4, T=T)
     prepare_sampling!(native_asterism, pupil, first(asterism.sources))
     AdaptiveOpticsSim.sampled_spots_peak_asterism_stacked!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), native_asterism, pupil, asterism)
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), native_asterism, pupil, asterism)
     expected_asterism = shack_hartmann_detector_image(
         native_asterism.acquisition.spot_cube, 4)
     staged_asterism = ShackHartmannWFS(tel; n_lenslets=4,

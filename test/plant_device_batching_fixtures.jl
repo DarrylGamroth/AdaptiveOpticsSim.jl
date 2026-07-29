@@ -47,7 +47,7 @@ end
 
 function device_batch_test_physical_definitions(
     telescope::Telescope,
-    backend::AdaptiveOpticsSim.AbstractArrayBackend,
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
     ;
     selected_path::Symbol=:alpha,
@@ -211,7 +211,7 @@ end
 end
 
 function device_batch_test_fixture(;
-    backend::AdaptiveOpticsSim.AbstractArrayBackend=CPUBackend(),
+    backend::AdaptiveOpticsSim.Backends.AbstractArrayBackend=CPUBackend(),
     selection::Val=Val(:public),
     T::Type{<:AbstractFloat}=Float64,
     include_beta::Bool=true,

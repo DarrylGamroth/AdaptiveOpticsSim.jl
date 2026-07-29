@@ -34,7 +34,7 @@ function configure_detector_hil_benchmark!()
     Threads.nthreads() == 1 || error(
         "detector HIL latency cards require one Julia thread")
     BLAS.set_num_threads(1)
-    AdaptiveOpticsSim.set_fft_provider_threads!(1)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
     DETECTOR_HIL_SAMPLES > 0 || error("AOS_DETECTOR_HIL_SAMPLES must be > 0")
     DETECTOR_HIL_WARMUP >= 0 || error("AOS_DETECTOR_HIL_WARMUP must be >= 0")
     DETECTOR_HIL_RUNS > 0 || error("AOS_DETECTOR_HIL_RUNS must be > 0")

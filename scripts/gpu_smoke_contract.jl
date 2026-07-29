@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends
 using LinearAlgebra
 using Random
 using Statistics
@@ -9,6 +10,14 @@ for name in names(AdaptiveOpticsSim; all=true)
     text = String(name)
     if Base.isidentifier(text) && !startswith(text, "#") && !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(AdaptiveOpticsSim, $(QuoteNode(name)))
+    end
+end
+
+for name in names(Backends; all=true)
+    text = String(name)
+    if Base.isidentifier(text) && !startswith(text, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Backends, $(QuoteNode(name)))
     end
 end
 
@@ -39,7 +48,7 @@ function gpu_direct_image(tel::Telescope, src::AbstractSource;
     return form_direct_image!(prepared)
 end
 
-function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendTag}
+function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     disable_scalar_backend!(B)
     failures = String[]
     rng = MersenneTwister(1)
@@ -47,7 +56,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.GPUBackendT
     atmosphere_step = T(1e-3)
     BackendArray = gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
-    backend = AdaptiveOpticsSim.array_backend_selector(BackendArray)
+    backend = AdaptiveOpticsSim.Backends.array_backend_selector(BackendArray)
 
     tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)

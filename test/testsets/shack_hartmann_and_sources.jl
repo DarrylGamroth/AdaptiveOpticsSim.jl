@@ -43,38 +43,38 @@ end
     src = Source(band=:I, magnitude=0.0)
 
     zero_intensity = zeros(Float64, 3, 3)
-    @test AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), zero_intensity, 0.1) ==
+    @test AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), zero_intensity, 0.1) ==
           (0.0, 0.0, 0.0)
 
     centroid_input = [1.0 0.0 0.0; 0.0 4.0 0.0; 0.0 0.0 9.0]
     total, sx, sy = AdaptiveOpticsSim.centroid_from_intensity_cutoff!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
     @test total == 13.0
     @test sx ≈ 22 / 13
     @test sy ≈ 22 / 13
     @test AdaptiveOpticsSim.centroid_from_intensity!(copy(centroid_input), 0.25) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
+          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
     @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(copy(centroid_input), 3.0) ==
-          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
     @test AdaptiveOpticsSim.centroid_from_intensity!(KA_CPU_STYLE, copy(centroid_input), 0.25) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
+          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
     @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(KA_CPU_STYLE, copy(centroid_input), 3.0) ==
-          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
     @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), fill(1.0, 2, 2), 2.0) == (0.0, 0.0, 0.0)
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), fill(1.0, 2, 2), 2.0) == (0.0, 0.0, 0.0)
 
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4, threshold_cog=0.2)
     @test AdaptiveOpticsSim.centroid_from_spot!(sh, copy(centroid_input), 0.25) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
+          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
     @test AdaptiveOpticsSim.centroid_from_spot!(sh, copy(centroid_input)) ==
           AdaptiveOpticsSim.centroid_from_intensity!(
-              AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), AdaptiveOpticsSim.centroid_threshold(sh))
+              AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), AdaptiveOpticsSim.centroid_threshold(sh))
     @test AdaptiveOpticsSim.centroid_from_spot_cutoff!(sh, copy(centroid_input), 3.0) ==
-          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
     @test AdaptiveOpticsSim.centroid_from_spot!(KA_CPU_STYLE, sh, copy(centroid_input), 0.25) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 0.25)
+          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
     @test AdaptiveOpticsSim.centroid_from_spot_cutoff!(KA_CPU_STYLE, sh, copy(centroid_input), 3.0) ==
-          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.ScalarCPUStyle(), copy(centroid_input), 3.0)
+          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
     spot_view = @view centroid_input[:, :]
     @test AdaptiveOpticsSim.sync_sh_staged_spot!(KA_CPU_STYLE, centroid_input) === centroid_input
     @test AdaptiveOpticsSim.sync_sh_staged_view!(KA_CPU_STYLE, spot_view) === spot_view
@@ -89,7 +89,7 @@ end
     sh.acquisition.spot_cube[2, 1, 1] = 0.1
     sh.acquisition.spot_cube[4, 4, 1] = 8.0
 
-    scalar_slopes = AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.ScalarCPUStyle(), sh, 0.5)
+    scalar_slopes = AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh, 0.5)
     n_lenslets = microlens_array(sh.front_end).params.n_lenslets
     offset = n_lenslets * n_lenslets
     @test scalar_slopes[1] == 1.0
@@ -114,7 +114,7 @@ end
     sh.calibration.centroid_response = 2.0
     fill!(sh.acquisition.spot_cube, 0.0)
     sh.acquisition.spot_cube[1, 2, 3] = 10.0
-    calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(AdaptiveOpticsSim.ScalarCPUStyle(), sh, 0.5))
+    calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh, 0.5))
     reference = vec(sh.calibration.reference_signal_2d)
     @test calibrated[1] ≈ (1.0 - reference[1]) / 2
     @test calibrated[offset + 1] ≈ (2.0 - reference[offset + 1]) / 2
@@ -135,7 +135,7 @@ end
     @test accel_calibrated[offset + 1] ≈ (2.0 - 0.25) / 2
 
     slopes_for_invalid = ones(Float64, 2 * offset)
-    AdaptiveOpticsSim.zero_invalid_sh_slopes!(AdaptiveOpticsSim.ScalarCPUStyle(), slopes_for_invalid, sh.front_end.layout.valid_mask)
+    AdaptiveOpticsSim.zero_invalid_sh_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), slopes_for_invalid, sh.front_end.layout.valid_mask)
     @test slopes_for_invalid[invalid_index] == 0.0
     @test slopes_for_invalid[offset + invalid_index] == 0.0
     @test slopes_for_invalid[1] == 1.0
@@ -146,7 +146,7 @@ end
     @test slopes_for_invalid_accel[1] == 1.0
 
     cube_for_invalid = ones(Float64, offset, 2, 2)
-    AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(AdaptiveOpticsSim.ScalarCPUStyle(), cube_for_invalid, sh.front_end.layout.valid_mask)
+    AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), cube_for_invalid, sh.front_end.layout.valid_mask)
     @test all(iszero, cube_for_invalid[invalid_index, :, :])
     @test all(==(1.0), cube_for_invalid[1, :, :])
     cube_for_invalid_accel = ones(Float64, offset, 2, 2)
@@ -156,13 +156,13 @@ end
 
     mean_signal = collect(1.0:(2 * offset))
     @test AdaptiveOpticsSim.mean_valid_signal(mean_signal, sh.front_end.layout.valid_mask) ≈
-          AdaptiveOpticsSim.packed_valid_pair_mean(AdaptiveOpticsSim.ScalarCPUStyle(), mean_signal, sh.front_end.layout.valid_mask)
+          AdaptiveOpticsSim.Backends.packed_valid_pair_mean(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), mean_signal, sh.front_end.layout.valid_mask)
     @test AdaptiveOpticsSim.mean_valid_signal(KA_CPU_STYLE, mean_signal, sh.front_end.layout.valid_mask) ≈
           AdaptiveOpticsSim.mean_valid_signal(mean_signal, sh.front_end.layout.valid_mask)
 
     scalar_ramp = zeros(Float64, 8, 8)
     ka_ramp = similar(scalar_ramp)
-    AdaptiveOpticsSim.fill_calibration_ramp!(AdaptiveOpticsSim.ScalarCPUStyle(), scalar_ramp, 1e-3, 8)
+    AdaptiveOpticsSim.fill_calibration_ramp!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), scalar_ramp, 1e-3, 8)
     AdaptiveOpticsSim.fill_calibration_ramp!(KA_CPU_STYLE, ka_ramp, 1e-3, 8)
     @test ka_ramp ≈ scalar_ramp
 
@@ -174,7 +174,7 @@ end
         wfs.acquisition.spot_cube[1, 2, 3] = 10.0
         wfs.acquisition.spot_cube[4, 4, 1] = 8.0
     end
-    scalar_device_reference = copy(AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.ScalarCPUStyle(), sh_scalar, 0.5))
+    scalar_device_reference = copy(AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_scalar, 0.5))
     ka_device_stats = copy(AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
     @test ka_device_stats ≈ scalar_device_reference
 
@@ -187,7 +187,7 @@ end
     sh_scalar.acquisition.spot_cube[1, 2, 3] = 10.0
     sh_ka.acquisition.spot_cube[1, 2, 3] = 10.0
     scalar_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), sh_scalar, 0.5))
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_scalar, 0.5))
     ka_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
     @test ka_calibrated ≈ scalar_calibrated
 
@@ -214,7 +214,7 @@ end
         sh_distinct, pupil, distinct_spectral, det, MersenneTwister(22))
     AdaptiveOpticsSim.prepare_sampling!(sh_distinct, pupil, src)
     @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
-        AdaptiveOpticsSim.ScalarCPUStyle(), sh_distinct, pupil,
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_distinct, pupil,
         distinct_spectral, det, MersenneTwister(22))
     @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
         KA_CPU_STYLE, sh_distinct, pupil, distinct_spectral, det,

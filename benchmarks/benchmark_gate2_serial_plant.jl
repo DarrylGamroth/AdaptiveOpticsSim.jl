@@ -19,7 +19,7 @@ function configure_gate2_benchmark!()
     Threads.nthreads() == 1 || error(
         "Gate 2 serial-plant evidence requires one Julia thread")
     BLAS.set_num_threads(1)
-    AdaptiveOpticsSim.set_fft_provider_threads!(1)
+    AdaptiveOpticsSim.Backends.set_fft_provider_threads!(1)
     return nothing
 end
 
