@@ -1,0 +1,35 @@
+schema_version = 1
+name = "namespace_package_latency"
+evidence_class = "warm-cache fresh-process package-load and representative first-call characterization"
+source_revision = "64b7371c6bd35ddd34777baa7d273f1581202990"
+fresh_process_runs = 5
+artifact_path = "benchmarks/results/namespace/2026-07-29-namespace-latency.toml"
+
+scope_exclusions = [
+    "Julia process startup and loading the TOML benchmark harness",
+    "dependency resolution, registry updates, package installation, and precompilation",
+    "cold filesystem cache and deleted compiled caches",
+    "accelerator package load, context creation, kernel compilation, and transfer",
+    "external RTC transport, pacing, response time, and publication",
+]
+
+[contract]
+process = "one Julia 1.12 process per observation with --startup-file=no, --history-file=no, one Julia thread, one BLAS thread, and one FFT-provider thread"
+cache_state = "ordinary warm compiled-package and filesystem caches; caches are not deleted between observations"
+package_load_boundary = "time @eval using AdaptiveOpticsSim after the TOML harness has loaded"
+first_call_boundary = "construct one 16-sample Float64 telescope, one physical photon-irradiance source, one pupil function, prepare a two-times-padded direct-imaging path, form its image, and reduce the output"
+warmed_call_boundary = "repeat the exact first-call function in the same process after an explicit garbage collection"
+timer = "Base.time_ns around each boundary; process launch and result serialization are excluded"
+correctness_oracle = "the representative result is finite, positive, and exactly equal between first and warmed calls in each process"
+interpretation = "descriptive regression baseline only; absolute values are host- and cache-dependent and are not HIL deadlines"
+
+[workload]
+backend = "CPUBackend"
+numeric_type = "Float64"
+resolution = 16
+diameter_m = 8.0
+central_obstruction = 0.14
+wavelength_m = 8.0e-7
+photon_irradiance = 2.0
+zero_padding = 2
+seed_policy = "no random operation occurs"

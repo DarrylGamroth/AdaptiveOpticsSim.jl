@@ -10,19 +10,28 @@ Related guides:
 - [`extension-guide.md`](extension-guide.md)
 - [`runtime-dataflow.md`](runtime-dataflow.md)
 
-This document describes the ordinary package API imported by
-`using AdaptiveOpticsSim`, the routine plant workflow imported by
+This document describes the currently implemented ordinary package API
+imported by `using AdaptiveOpticsSim`, the routine plant workflow imported by
 `using AdaptiveOpticsSim.Plant`, and the stable qualified APIs addressed as
 `AdaptiveOpticsSim.name` or `AdaptiveOpticsSim.Plant.name`. Qualified public
 names are maintained but do not enter the caller's ordinary namespace. The
 root package exports the `Plant` module, not compatibility bindings for its
 contents.
 
+The breaking namespace migration has not moved these bindings yet. Its exact
+final root and domain allowlists are frozen in
+[`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
+That contract, rather than the current flat locations shown below, determines
+the canonical owner after migration.
+
 ## Public API Policy
 
 Root exported and qualified-public names are curated in
 [`../src/exports.jl`](../src/exports.jl); the canonical plant surface is
 curated separately in [`../src/plant/api.jl`](../src/plant/api.jl).
+During the namespace migration, `src/exports.jl` is the current-state
+inventory. Each owner PR must converge on the exact domain allowlists without
+root forwarding aliases or compatibility adapters.
 Export a name only when it is one of these:
 
 - a normal user-facing constructor or workflow function
@@ -48,6 +57,22 @@ The package intentionally distinguishes three tiers:
   qualified.
 - **Developer support API:** available for package internals, tests, and
   validation tooling, but not promised as the normal user surface.
+
+The final root allowlist is deliberately small:
+
+- canonical modules: `Backends`, `Optics`, `Atmospheres`, `Detectors`,
+  `WavefrontSensors`, `Calibration`, `Control`, `Tomography`, `Ensembles`, and
+  `Plant`
+- shared errors: `AdaptiveOpticsSimError`, `InvalidConfiguration`,
+  `DimensionMismatchError`, `UnsupportedAlgorithm`, and
+  `NumericalConditionError`
+- fidelity and RNG services: `FidelityProfile`, `ScientificProfile`,
+  `FastProfile`, `default_fidelity_profile`, `runtime_rng`, and
+  `deterministic_reference_rng`
+- shared timing vocabulary: `runtime_timing`
+
+All other supported bindings are owned by a domain module or removed. A root
+binding is never retained merely for migration compatibility.
 
 ## Core
 

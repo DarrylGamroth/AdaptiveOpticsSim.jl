@@ -1,0 +1,171 @@
+schema_version = 1
+name = "namespace_characterization"
+status = "frozen_baseline_index"
+source_revision = "64b7371c6bd35ddd34777baa7d273f1581202990"
+
+[policy]
+numerical = "reference cases retain their exact fixture, tolerance, and RNG policy across namespace-only moves"
+allocation = "the listed benchmark contracts retain their explicit warmed allocation budgets; coverage runs remain exempt only where the existing test policy says so"
+timing = "package load, first call, and warmed call use fresh processes; established service-time contracts retain their declared timer and boundary"
+extensions = "representative CPU, AMDGPU, CUDA, AppleAccelerate, AcceleratedKernels, and Dagger evidence remains discoverable"
+
+[[numerical_fixtures]]
+id = "oopao"
+manifest = "test/reference_data/manifest.toml"
+sha256 = "5562b34127d13bbda7a7526c882d3a1c388354f2bd11be638d999ffc3be9966a"
+case_count = 24
+tolerance_fields = ["atol", "rtol"]
+seed_policy = "no case invokes a random operation"
+seed_assignments = []
+
+[[numerical_fixtures]]
+id = "pre_hil_gate0"
+manifest = "test/reference_data_gate0/manifest.toml"
+sha256 = "bd7a3ea21edbbeda5e440eef1c8b113f54717cc53671bead2b3b318d0fa75653"
+case_count = 10
+tolerance_fields = ["atol", "rtol"]
+seed_policy = "fixed MersenneTwister seeds at the listed fixture paths"
+seed_assignments = [
+    "cases.radiometric_chain.compute.seed=41",
+    "cases.atmosphere_short.atmosphere.advance_seed=71",
+    "cases.atmosphere_long.atmosphere.advance_seed=71",
+]
+
+[[numerical_fixtures]]
+id = "specula"
+manifest = "test/reference_data_specula/manifest.toml"
+sha256 = "65a725a56cbbe1216ee7841848716160cfccd69f9eed775bfcb38d0f76dc5863"
+case_count = 9
+tolerance_fields = ["atol", "rtol"]
+seed_policy = "fixed MersenneTwister seeds for atmosphere cases; remaining cases invoke no random operation"
+seed_assignments = [
+    "cases.atmospheric_chromatic_intensity.atmosphere.advance_seed=19",
+    "cases.atmospheric_fresnel_intensity.atmosphere.advance_seed=11",
+    "cases.atmospheric_geometric_intensity.atmosphere.advance_seed=7",
+]
+
+[[allocation_baselines]]
+id = "gate0"
+contract = "benchmarks/contracts/pre_hil_gate0.toml"
+sha256 = "dcf21dee28e301b391ef71a72f2e96a725e478adfea7c381aa76565125624d68"
+allocation_budget_keys = ["max_alloc_bytes"]
+seed_keys = ["rng_seed", "rng_seed_a", "rng_seed_b"]
+timer_key = "contract.timer"
+
+[[allocation_baselines]]
+id = "gate2"
+contract = "benchmarks/contracts/gate2_serial_plant.toml"
+sha256 = "a972cd0be9ea568b071a0d38b1620439f5c8c2106514a53f399fd4a9a5405ffa"
+allocation_budget_keys = ["max_alloc_bytes"]
+seed_keys = ["run_seed"]
+timer_key = "contract.timer"
+
+[[allocation_baselines]]
+id = "gate3_scheduler"
+contract = "benchmarks/contracts/gate3_event_scheduler.toml"
+sha256 = "8a8a8df4e0d1842e0a53e81c50e4ac0c7a718c672f19b4003ed9e6dd12fa42ea"
+allocation_budget_keys = ["max_alloc_bytes"]
+seed_keys = []
+timer_key = "contract.timer"
+
+[[allocation_baselines]]
+id = "gate3_multi_rate"
+contract = "benchmarks/contracts/gate3_multi_rate_plant.toml"
+sha256 = "38c915cd4be26a8b23a0d4c0114f7360f0e04178520c4aa80e799f916ccb850c"
+allocation_budget_keys = ["max_alloc_bytes_per_timestamp"]
+seed_keys = ["run_seed"]
+timer_key = "contract.timer"
+
+[[allocation_baselines]]
+id = "gate4"
+contract = "benchmarks/contracts/gate4_command_plant.toml"
+sha256 = "79e3310b1f8d99dc918ddb60159b27c6f5d04cb345078f4b845ee7cc26e27887"
+allocation_budget_keys = ["max_alloc_bytes_per_cycle"]
+seed_keys = ["run_seed"]
+timer_key = "contract.timer"
+
+[[allocation_baselines]]
+id = "gate5"
+contract = "benchmarks/contracts/gate5_optical_placement.toml"
+sha256 = "8a5fac5ecd2658f0f62a6ee2fffe2861553e73231caf23ec7023273ee9b0b2ae"
+allocation_budget_keys = ["max_alloc_bytes_per_cycle"]
+seed_keys = ["run_seed"]
+timer_key = "contract.timer"
+
+[[allocation_baselines]]
+id = "gate6_grouped_cpu"
+contract = "benchmarks/contracts/gate6_grouped_cpu.toml"
+sha256 = "1111ef931ebe40abc42b452d82ec4677ed016a3ba6581ff9d169c57e62b6409a"
+allocation_budget_keys = [
+    "max_serial_alloc_bytes_per_timestamp",
+    "max_grouped_alloc_bytes_per_timestamp",
+    "max_alloc_bytes_per_group_call",
+]
+seed_keys = ["run_seed"]
+timer_key = "contract.timer"
+
+[[allocation_baselines]]
+id = "gate6_topology_growth"
+contract = "benchmarks/contracts/gate6_topology_growth.toml"
+sha256 = "c95434a7196f9126867b42da4676c74f00f58861e990db15f44a9b4c5afda30a"
+allocation_budget_keys = [
+    "max_preparation_allocated_bytes",
+    "max_warmed_alloc_bytes_per_path_per_cycle",
+]
+seed_keys = []
+timer_key = "contract.preparation_boundary + contract.first_use; benchmark harness uses Base.time_ns"
+
+[[allocation_baselines]]
+id = "gate7"
+contract = "benchmarks/contracts/gate7_single_gpu.toml"
+sha256 = "8bbe810518a8dc34a8a62506b55740241f776ee0654ea5bf07b64b0d16fe2eb4"
+allocation_budget_keys = ["max_alloc_bytes"]
+seed_keys = ["run_seed"]
+timer_key = "contract.timer"
+
+[[extension_baselines]]
+integration = "AMDGPU"
+kind = "test"
+path = "test/optional_amdgpu_backends.jl"
+sha256 = "137298f54791b21ceec1eeea143826206569589f3e04122af1430b5d0a29ed0d"
+
+[[extension_baselines]]
+integration = "CUDA"
+kind = "test"
+path = "test/optional_cuda_backends.jl"
+sha256 = "e9e7b0dd5bb40b78090c4d8d4acc1765b7357c98e370e7d72a0d23a2905d88e3"
+
+[[extension_baselines]]
+integration = "AppleAccelerate"
+kind = "test"
+path = "test/appleaccelerate/backend_neutral.jl"
+sha256 = "223dd95e5c80300d8b02a3c4f56c2e62651775f3e7c47d68955361bee42d6df7"
+
+[[extension_baselines]]
+integration = "AcceleratedKernels + Dagger"
+kind = "test"
+path = "test/schedulers/runtests.jl"
+sha256 = "593aad14578ba222c385b5e8800168dac30f7cc484873a705b018088213be608"
+
+[[extension_baselines]]
+integration = "CPU"
+kind = "artifact"
+path = "benchmarks/results/gate7/2026-07-26-gate7-local-cpu.toml"
+sha256 = "8d3e6e2a65611992a6db9e019e8d1085df97fda5ba188ed09ab9c41fa74acf25"
+
+[[extension_baselines]]
+integration = "AMDGPU"
+kind = "artifact"
+path = "benchmarks/results/gate7/2026-07-26-gate7-local-amdgpu.toml"
+sha256 = "903bdc8fb1fd464b97f59dee248ef17b7d1a7e61d72d6cfd5ff40ff2848d6b0f"
+
+[[extension_baselines]]
+integration = "CUDA"
+kind = "artifact"
+path = "benchmarks/results/gate7/2026-07-26-gate7-wsl-cuda.toml"
+sha256 = "9ed8722ceb9e743debc1015fcca78293e603a214458a77363e4675cd401b5c04"
+
+[package_latency]
+contract = "benchmarks/contracts/namespace_latency.toml"
+harness = "benchmarks/benchmark_namespace_latency.jl"
+artifact = "benchmarks/results/namespace/2026-07-29-namespace-latency.toml"

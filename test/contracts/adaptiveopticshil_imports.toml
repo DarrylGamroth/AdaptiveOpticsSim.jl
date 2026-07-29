@@ -1,0 +1,405 @@
+schema_version = 1
+name = "adaptive_optics_hil_import_inventory"
+status = "frozen_source_snapshot"
+repository = "https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl.git"
+source_revision = "8bec37b7f88a787152abffc0a1bcb9281a73d997"
+adaptive_optics_sim_pin = "5bf180341faad9350622f9c660147205aebf33dc"
+scope = ["src", "test", "benchmarks"]
+broad_import_marker = "*"
+policy = "explicit and qualified symbols are mapped to target owners; wildcard imports are retained as explicit migration work rather than guessed"
+
+[project_files]
+package = "Project.toml"
+package_sha256 = "add9c7b2ffde65396c384c18000bdc83ff673a72c2c5cb5a289db3ed9769a8fe"
+benchmarks = "benchmarks/Project.toml"
+benchmarks_sha256 = "08a9f80b1c45e71549a35df192a2a48bea069cda649352a64ce8afb640372919"
+
+[[import_files]]
+scope = "src"
+path = "src/execution.jl"
+access = [
+    "plant_import_module",
+    "plant_using_explicit",
+    "root_using_explicit",
+]
+root_explicit = [
+    "AbstractArrayBackend",
+    "AbstractComputeDevice",
+    "CPUBackend",
+]
+root_qualified = []
+plant_explicit = [
+    "AbstractOpticalPathBatchExecutor",
+    "CPUExecutionBudget",
+    "CPUExecutionEnvironment",
+    "OpticalPathBatchClaim",
+    "PlantEventLoopState",
+    "PlantEventLoopWorkspace",
+    "PlantTimestamp",
+    "PreparedPlantEventLoop",
+    "SerialOpticalPathBatchExecutor",
+    "abandon_optical_path_batch!",
+    "begin_optical_path_batch!",
+    "complete_optical_path_batch!",
+    "device_path_batch_backend",
+    "device_path_batch_compute_device",
+    "device_path_batch_group_count",
+    "device_path_batch_group_ordinal",
+    "device_path_batch_owner",
+    "execute_device_path_batch!",
+    "execute_path_execution_group!",
+    "materialize_device_path_batch!",
+    "materialize_path_execution_group!",
+    "optical_path_batch_due_group_count",
+    "optical_path_batch_due_group_ordinal",
+    "path_execution_backend",
+    "path_execution_compute_device",
+    "path_execution_group",
+    "path_execution_group_count",
+    "path_execution_group_device_batch_owner_ordinal",
+    "path_execution_group_requirements",
+    "seal_optical_path_batch_materialization!",
+    "validate_cpu_execution_budget",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "src"
+path = "src/lifecycle.jl"
+access = [
+    "plant_using_explicit",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = [
+    "CommandEndpointID",
+    "PlantTimestamp",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "src"
+path = "src/ports.jl"
+access = [
+    "plant_import_explicit",
+    "plant_using_explicit",
+    "root_using_explicit",
+]
+root_explicit = [
+    "IntensityMap",
+    "WFSMeasurement",
+    "WFSObservation",
+    "backend",
+    "intensity_values",
+    "measurement_storage",
+    "observation_storage",
+]
+root_qualified = []
+plant_explicit = [
+    "AcquisitionID",
+    "AcquisitionProductContract",
+    "AcquisitionProducts",
+    "CommandAdmittedPending",
+    "CommandAdmittedReady",
+    "CommandBasis",
+    "CommandBasisRevision",
+    "CommandDispositionReason",
+    "CommandDispositionWorkspace",
+    "CommandEndpointID",
+    "CommandEndpointState",
+    "CommandPresentationID",
+    "CommandTerminalKind",
+    "CommandTerminatedOnAdmission",
+    "PlantCommand",
+    "PlantCommandAdmission",
+    "PlantCommandDisposition",
+    "PlantCommandSchemaID",
+    "PlantCommandSchemaVersion",
+    "PlantCommandSequence",
+    "PlantDuration",
+    "PlantEventLoopState",
+    "PlantEventLoopWorkspace",
+    "PlantTimestamp",
+    "PreparedCommandEndpoint",
+    "PreparedPlantEventLoop",
+    "acquisition_product_contract",
+    "admit_plant_command!",
+    "clear_command_dispositions!",
+    "command_admission_status",
+    "command_basis",
+    "command_basis_revision",
+    "command_dimensions",
+    "command_disposition",
+    "command_disposition_count",
+    "command_disposition_reason",
+    "command_endpoint_id",
+    "command_lateness",
+    "command_numeric_type",
+    "command_presentation_id",
+    "command_requested_effective_timestamp",
+    "command_schema",
+    "command_schema_id",
+    "command_schema_version",
+    "command_sequence",
+    "command_terminal_kind",
+    "command_terminal_timestamp",
+    "effective_command",
+    "fail_pending_plant_commands!",
+    "plant_nanoseconds",
+    "superseding_command_presentation_id",
+    "validate_acquisition_product_contract",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "src"
+path = "src/serial.jl"
+access = [
+    "plant_using_explicit",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = [
+    "AbstractOpticalPathBatchExecutor",
+    "AcquisitionID",
+    "AcquisitionProducts",
+    "CommandDispositionReason",
+    "PlantTimestamp",
+    "PreparedPlantEventLoop",
+    "acquisition_product_ready_timestamp",
+    "acquisition_product_sequence",
+    "acquisition_products",
+    "command_disposition_count",
+    "copy_acquisition_product!",
+    "next_plant_event_timestamp",
+    "step_plant_events!",
+    "validate_acquisition_product_contract",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "src"
+path = "src/timing.jl"
+access = [
+    "plant_using_explicit",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = [
+    "PlantDuration",
+    "PlantTimestamp",
+    "plant_nanoseconds",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "test"
+path = "test/execution.jl"
+access = [
+    "plant_using_explicit",
+    "plant_using_wildcard",
+    "root_using_wildcard",
+]
+root_explicit = []
+root_qualified = [
+    "AbstractSource",
+    "AbstractTimedAtmosphere",
+    "CUDABackend",
+]
+plant_explicit = [
+    "ColdPlantModelDefinition",
+    "PreparedPathExecutor",
+    "prepare_pupil_opd_materialization",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "test"
+path = "test/hsm_lifecycle_proof.jl"
+access = [
+    "plant_using_explicit",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = [
+    "PlantTimestamp",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "test"
+path = "test/lifecycle.jl"
+access = [
+    "plant_using_explicit",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = [
+    "CommandEndpointID",
+    "PlantTimestamp",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "test"
+path = "test/ownership_concurrency.jl"
+access = [
+    "plant_using_explicit",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = [
+    "PlantTimestamp",
+    "plant_nanoseconds",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "test"
+path = "test/ports.jl"
+access = [
+    "root_import_module",
+]
+root_explicit = []
+root_qualified = [
+    "DetectorPlane",
+    "IntensityMap",
+    "MetricCoordinates",
+    "OpticalPlaneMetadata",
+    "WFSMeasurement",
+    "WFSObservation",
+]
+plant_explicit = []
+plant_qualified = []
+
+[[import_files]]
+scope = "test"
+path = "test/serial.jl"
+access = [
+    "plant_using_explicit",
+    "plant_using_wildcard",
+    "root_using_wildcard",
+]
+root_explicit = []
+root_qualified = [
+    "AbstractAtmosphere",
+    "AbstractSource",
+    "AbstractTimedAtmosphere",
+    "HostComputeDevice",
+]
+plant_explicit = [
+    "AbsoluteCommand",
+    "AllPathVisibility",
+    "ClipInvalidCommand",
+    "ColdPlantModelDefinition",
+    "CommandEffectiveTimePolicy",
+    "CommandSequencePolicy",
+    "CommandSilencePolicy",
+    "CommandValuePolicy",
+    "EnforceOnApplication",
+    "PlantEventLoopState",
+    "PreparedPathExecutor",
+    "PreservePendingCommands",
+    "PupilPlanePlacement",
+    "UniformCommandBounds",
+    "acquisition_products",
+    "command_basis",
+    "command_basis_revision",
+    "command_dimensions",
+    "command_endpoint_id",
+    "command_schemas",
+    "command_sign_convention",
+    "command_units",
+    "prepare_pupil_opd_materialization",
+    "prepared_acquisition",
+    "prepared_command_endpoint",
+]
+plant_qualified = [
+    "AbstractOpticalPathBatchExecutor",
+    "PlantEventLoopState",
+    "PlantEventLoopWorkspace",
+    "PreparedPlantEventLoop",
+]
+
+[[import_files]]
+scope = "test"
+path = "test/timing.jl"
+access = [
+    "plant_using_explicit",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = [
+    "PlantDuration",
+    "PlantTimestamp",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "benchmarks"
+path = "benchmarks/support/gate4a_boundary_harness.jl"
+access = [
+    "plant_using_explicit",
+    "plant_using_wildcard",
+    "root_using_wildcard",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = [
+    "AppliedCommand",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "benchmarks"
+path = "benchmarks/support/gate4a_serial_workload.jl"
+access = [
+    "plant_using_explicit",
+    "plant_using_wildcard",
+    "root_using_wildcard",
+]
+root_explicit = []
+root_qualified = [
+    "AbstractAtmosphere",
+    "AbstractSource",
+    "AbstractTimedAtmosphere",
+]
+plant_explicit = [
+    "AbsoluteCommand",
+    "AllPathVisibility",
+    "ClipInvalidCommand",
+    "ColdPlantModelDefinition",
+    "CommandEffectiveTimePolicy",
+    "CommandSequencePolicy",
+    "CommandSilencePolicy",
+    "CommandValuePolicy",
+    "EnforceOnApplication",
+    "PreparedPathExecutor",
+    "PreservePendingCommands",
+    "PupilPlanePlacement",
+    "UniformCommandBounds",
+    "acquisition_product_sequence",
+    "acquisition_products",
+    "command_basis",
+    "command_basis_revision",
+    "command_dimensions",
+    "command_endpoint_id",
+    "command_schemas",
+    "command_sign_convention",
+    "command_units",
+    "prepare_pupil_opd_materialization",
+    "prepared_acquisition",
+    "prepared_command_endpoint",
+]
+plant_qualified = []
+
+[[import_files]]
+scope = "benchmarks"
+path = "benchmarks/support/gate8_operational_harness.jl"
+access = [
+    "root_import_module",
+]
+root_explicit = []
+root_qualified = []
+plant_explicit = []
+plant_qualified = []

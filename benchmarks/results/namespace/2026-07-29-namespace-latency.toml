@@ -1,0 +1,64 @@
+characterized_source_revision = "64b7371c6bd35ddd34777baa7d273f1581202990"
+correctness_passed = true
+first_call_samples_ns = [1765375606, 1869705898, 1782965753, 1824523966, 1819126620]
+fresh_process_runs = 5
+julia_version = "1.12.6"
+load_samples_ns = [520461843, 511665452, 526252841, 522821153, 510025623]
+name = "namespace_package_latency"
+package_source_dirty = false
+repository_dirty = true
+repository_head = "64b7371c6bd35ddd34777baa7d273f1581202990"
+schema_version = 1
+source_contract = "benchmarks/contracts/namespace_latency.toml"
+warmed_call_samples_ns = [106038, 100888, 106008, 110798, 105127]
+
+[first_call_summary]
+maximum_ns = 1869705898
+median_ns = 1819126620
+minimum_ns = 1765375606
+
+[load_summary]
+maximum_ns = 526252841
+median_ns = 520461843
+minimum_ns = 510025623
+
+[[results]]
+correctness_passed = true
+first_call_ns = 0x69397e76
+first_result = 102.00000000000007
+load_ns = 0x1f059e13
+warmed_call_ns = 0x019e36
+warmed_result = 102.00000000000007
+[[results]]
+correctness_passed = true
+first_call_ns = 0x6f7172aa
+first_result = 102.00000000000007
+load_ns = 0x1e7f652c
+warmed_call_ns = 0x018a18
+warmed_result = 102.00000000000007
+[[results]]
+correctness_passed = true
+first_call_ns = 0x6a45e5f9
+first_result = 102.00000000000007
+load_ns = 0x1f5dfb29
+warmed_call_ns = 0x019e18
+warmed_result = 102.00000000000007
+[[results]]
+correctness_passed = true
+first_call_ns = 0x6cc006be
+first_result = 102.00000000000007
+load_ns = 0x1f299e21
+warmed_call_ns = 0x01b0ce
+warmed_result = 102.00000000000007
+[[results]]
+correctness_passed = true
+first_call_ns = 0x6c6dab5c
+first_result = 102.00000000000007
+load_ns = 0x1e665f97
+warmed_call_ns = 0x019aa7
+warmed_result = 102.00000000000007
+
+[warmed_call_summary]
+maximum_ns = 110798
+median_ns = 106008
+minimum_ns = 100888
