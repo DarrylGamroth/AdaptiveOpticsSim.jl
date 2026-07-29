@@ -48,21 +48,6 @@ jobs:
       - name: Run bounded test shard with coverage
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(coverage=true, test_args=[ENV["ADAPTIVEOPTICS_TEST_SHARD"]])'
 
-      - name: Process shard Julia coverage
-        uses: julia-actions/julia-processcoverage@v1
-        with:
-          directories: src,ext
-
-      - name: Upload shard coverage to Codecov
-        uses: codecov/codecov-action@v6
-        with:
-          files: lcov.info
-          disable_search: true
-          fail_ci_if_error: true
-          flags: ${{ matrix.shard }}
-          name: adaptiveopticssim-${{ matrix.shard }}
-          use_oidc: true
-
   project-coverage:
     name: Project coverage / full composition
     runs-on: ubuntu-latest

@@ -1,22 +1,9 @@
-# The four diagnostic shard reports, the baseline-comparable full-composition
-# report, and the AppleAccelerate extension report upload independently.
-# Wait for the complete six-report set before publishing project status.
+# The baseline-comparable full-composition report and the AppleAccelerate
+# extension report upload independently. Diagnostic shard coverage runs do not
+# upload partial reports because they change Julia's attributed line universe.
 codecov:
   notify:
-    after_n_builds: 6
+    after_n_builds: 2
 
 comment:
-  after_n_builds: 6
-
-# Separate Julia coverage processes discover different compiler-attributed
-# coverable lines. Keep shard reports available for diagnosis without joining
-# them into the baseline-comparable project metric.
-flags:
-  ci-foundations:
-    joined: false
-  ci-sensors-control:
-    joined: false
-  ci-plant-runtime:
-    joined: false
-  ci-plant-optics:
-    joined: false
+  after_n_builds: 2
