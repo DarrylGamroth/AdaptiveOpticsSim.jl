@@ -1,9 +1,22 @@
-# The four CPU coverage shards upload independently for one commit. Codecov
-# merges their reports; delay project status and PR-comment publication until
-# the complete CPU partition is present.
+# The four diagnostic shard reports, the baseline-comparable full-composition
+# report, and the AppleAccelerate extension report upload independently.
+# Wait for the complete six-report set before publishing project status.
 codecov:
   notify:
-    after_n_builds: 4
+    after_n_builds: 6
 
 comment:
-  after_n_builds: 4
+  after_n_builds: 6
+
+# Separate Julia coverage processes discover different compiler-attributed
+# coverable lines. Keep shard reports available for diagnosis without joining
+# them into the baseline-comparable project metric.
+flags:
+  ci-foundations:
+    joined: false
+  ci-sensors-control:
+    joined: false
+  ci-plant-runtime:
+    joined: false
+  ci-plant-optics:
+    joined: false

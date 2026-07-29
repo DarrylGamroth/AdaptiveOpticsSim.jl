@@ -11,8 +11,8 @@ permissions:
   id-token: write
 
 jobs:
-  coverage:
-    name: Coverage / ${{ matrix.shard }}
+  shard-coverage:
+    name: Shard coverage / ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -61,4 +61,46 @@ jobs:
           fail_ci_if_error: true
           flags: ${{ matrix.shard }}
           name: adaptiveopticssim-${{ matrix.shard }}
+          use_oidc: true
+
+  project-coverage:
+    name: Project coverage / full composition
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ADAPTIVEOPTICS_TEST_COVERAGE: "true"
+      JULIA_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Instantiate
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run full composition with coverage
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(coverage=true)'
+
+      - name: Process project Julia coverage
+        uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: src,ext
+
+      - name: Upload project coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: lcov.info
+          disable_search: true
+          fail_ci_if_error: true
+          name: adaptiveopticssim-project
           use_oidc: true

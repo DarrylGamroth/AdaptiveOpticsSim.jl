@@ -829,8 +829,13 @@ Current intent:
     instrumentation
   - keeps allocation-byte assertions disabled through
     `ADAPTIVEOPTICS_TEST_COVERAGE` and Julia's coverage option
-  - uploads one flagged report per shard; Codecov merges the reports and waits
-    for all four CPU uploads before publishing project status or the PR comment
+  - uploads one diagnostic report per shard without joining those reports into
+    the project metric, because independent Julia coverage processes discover
+    different compiler-attributed coverable lines
+  - runs one baseline-comparable full-composition coverage process for the
+    authoritative project metric; Codecov waits for the four shards, the full
+    composition, and the separate AppleAccelerate extension report before
+    publishing project status or the PR comment
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - instantiates [`test/cuda`](../test/cuda)
