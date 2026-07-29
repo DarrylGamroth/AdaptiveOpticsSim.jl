@@ -14,8 +14,22 @@
     basis_default = AdaptiveOpticsSim.ncpa_basis(KLBasis(), tel, dm, atm; n_modes=2)
     basis_hht = AdaptiveOpticsSim.ncpa_basis(KLBasis(KLHHtPSD()), tel, dm, atm; n_modes=2)
     basis_dm = AdaptiveOpticsSim.ncpa_basis(KLBasis(KLDMModes()), tel, dm, atm; n_modes=2)
+    basis_dm_without_atmosphere =
+        AdaptiveOpticsSim.ncpa_basis(KLBasis(KLDMModes()), tel, dm; n_modes=2)
     @test basis_default ≈ basis_hht
     @test sum(abs.(basis_default .- basis_dm)) > 0
+    @test basis_dm_without_atmosphere ≈ basis_dm
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.ncpa_basis(
+        KLBasis(KLHHtPSD()), tel, dm; n_modes=2)
+
+    modal_to_command, _ =
+        kl_modal_basis(KLDMModes(), dm, tel; n_modes=2)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.ncpa_basis(
+        M2CBasis(), tel, dm; n_modes=2)
+    external_basis = AdaptiveOpticsSim.ncpa_basis(
+        M2CBasis(), tel, dm, atm; n_modes=2, M2C=modal_to_command)
+    @test external_basis ≈
+        basis_from_m2c(dm, tel, modal_to_command)
 
     coeffs = [1e-9, 2e-9]
     ncpa_default_kl = NCPA(tel, dm, atm; basis=KLBasis(), coefficients=coeffs)
@@ -26,6 +40,20 @@
     @test all(iszero, ncpa_zero.opd)
     @test ncpa_default_kl.opd ≈ ncpa_hht.opd
     @test sum(abs.(ncpa_default_kl.opd .- ncpa_dm.opd)) > 0
+
+    amplitude = 2e-9
+    random_ncpa = NCPA(tel, dm, atm;
+        basis=KLBasis(KLDMModes()),
+        f2=(amplitude, 1, 2, 1.0),
+        seed=17)
+    repeated_random_ncpa = NCPA(tel, dm, atm;
+        basis=KLBasis(KLDMModes()),
+        f2=(amplitude, 1, 2, 1.0),
+        seed=17)
+    @test random_ncpa.opd == repeated_random_ncpa.opd
+    @test std(random_ncpa.opd[pupil_mask(tel)]) ≈ amplitude
+    @test_throws InvalidConfiguration NCPA(tel, dm, atm;
+        f2=(amplitude, 1, 2))
 
     ncpa = NCPA(tel, dm, atm; basis=ZernikeModalBasis(), coefficients=[0.0, 1e-9, 2e-9])
     @test size(ncpa.opd) == (8, 8)

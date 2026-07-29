@@ -959,6 +959,12 @@ end
         mark_ka_cpu_kernel!(:combine_basis_kernel!)
         @test ka_cpu_close(ka_opd, scalar_opd)
 
+        fill!(ka_opd, 1.0)
+        empty_basis = Array{Float64}(undef, 4, 4, 0)
+        AdaptiveOpticsSim.combine_basis!(
+            KA_CPU_STYLE, ka_opd, empty_basis, Float64[], pupil)
+        @test all(iszero, ka_opd)
+
         dm_scalar = DeformableMirror(tel; n_act=3, influence_width=0.3)
         dm_ka = DeformableMirror(tel; n_act=3, influence_width=0.3)
         scalar_modes = Matrix{Float64}(undef, size(dm_scalar.state.modes))
