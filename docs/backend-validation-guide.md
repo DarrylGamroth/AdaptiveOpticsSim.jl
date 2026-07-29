@@ -848,6 +848,10 @@ Current intent:
     Codecov combines that report with the Apple platform extension report,
     which contains the AppleAccelerate and Metal focused targets, and waits for
     both uploads before publishing project status or the PR comment
+  - keeps project coverage over both `src/` and `ext/`; patch coverage for
+    executable core `src/` is merge-blocking, while target-specific `ext/`
+    patch coverage is reported separately as informational because native
+    hardware validation is the authoritative extension gate
 - CUDA workflow:
   - targets a self-hosted runner labeled `self-hosted`, `linux`, `cuda`
   - instantiates [`test/cuda`](../test/cuda)
