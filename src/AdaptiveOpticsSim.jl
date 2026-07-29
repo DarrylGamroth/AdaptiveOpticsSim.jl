@@ -22,7 +22,6 @@ Julia adaptive optics simulation toolkit (in development).
 const PROJECT_STATUS = :in_development
 
 include("core/errors.jl")
-include("core/types.jl")
 include("core/profiles.jl")
 include("core/random_services.jl")
 include("backends/backends.jl")
@@ -123,30 +122,89 @@ import .Backends:
     write_integer_output!
 
 include("core/inverse_policies.jl")
-include("core/config.jl")
 include("core/utils.jl")
+
+# Configuration serialization remains a root-owned cross-domain seam. Declare
+# its generic before domain modules add methods, then install the shared
+# fallbacks after the first physical owner has loaded.
+function config_value end
+
+include("optics/optics.jl")
+
+# The remaining flat source files are migrated owner by owner. Routine Optics
+# vocabulary is imported for package-internal composition only; these imports
+# are not root exports or qualified-public compatibility bindings.
+using .Optics
+import .Optics:
+    AbstractOpticalElement,
+    AbstractPropagationModel,
+    AbstractSource,
+    AbstractSourceCompositionStyle,
+    AbstractSpectralCoordinate,
+    AbstractTelescope,
+    DMApplyMode,
+    ExpandedSourceComposition,
+    ExtendedSource,
+    LeafSourceComposition,
+    NCPA,
+    PreparedBundledDirectImaging,
+    PreparedDirectImaging,
+    PreparedIncoherentDirectImaging,
+    LGSProfileNaProfile,
+    LGSProfileNone,
+    _FixedOpticalProductVector,
+    _accumulate_field_intensity!,
+    _accumulate_field_intensity_async!,
+    _converted_nonnegative_finite,
+    _converted_positive_finite,
+    _direct_imaging_batch_product_contract,
+    _pupil_cell_area,
+    _pupil_diameter_m,
+    _pupil_resolution,
+    _require_physical_photon_irradiance,
+    aperture_revision,
+    apply_centering_phase!,
+    apply_phase_async!,
+    axis_centering,
+    centered_grid_origin,
+    coordinates_xy_arcsec,
+    electric_field_wavelength,
+    field_embedding_offsets,
+    freeze_source,
+    fraunhofer_intensity_stack!,
+    intensity!,
+    is_leaf_source,
+    is_lgs_source,
+    lgs_elongation_factor,
+    lgs_profile,
+    photon_irradiance,
+    pixel_mask_grid,
+    plane_metadata,
+    require_leaf_source,
+    require_metric_coordinates,
+    require_same_plane_grid,
+    require_centered_plane_geometry,
+    source_measurement_signature,
+    source_composition_style,
+    source_height_m,
+    source_with_wavelength_and_radiometric_value,
+    spectral_bundle,
+    surface_opd,
+    wavelength,
+    validate_plane_storage
+
+include("core/types.jl")
+include("core/config.jl")
 include("core/kv56.jl")
 include("core/workspace.jl")
 include("core/parallel.jl")
 include("core/telemetry.jl")
 
-include("optics/aperture_masks.jl")
-include("optics/telescope.jl")
-include("optics/source.jl")
-include("optics/spectrum.jl")
-include("optics/planes.jl")
-include("optics/electric_field.jl")
-include("optics/propagation.jl")
 include("optics/zernike.jl")
 include("optics/misregistration.jl")
 include("optics/controllable_optics.jl")
 include("optics/deformable_mirror.jl")
 include("detectors/detector.jl")
-include("optics/asterism.jl")
-include("optics/extended_source.jl")
-include("optics/direct_imaging.jl")
-include("optics/direct_imaging_batch.jl")
-include("optics/opd_map.jl")
 include("optics/spatial_filter.jl")
 include("atmosphere/source_geometry.jl")
 include("atmosphere/kolmogorov.jl")
@@ -157,7 +215,7 @@ include("atmosphere/direction_batch.jl")
 include("atmosphere/phase_stats.jl")
 include("optics/atmospheric_field_propagation.jl")
 include("calibration/modal_basis.jl")
-include("optics/ncpa.jl")
+include("calibration/ncpa.jl")
 include("wfs/sensing_modes.jl")
 include("wfs/stage_contracts.jl")
 include("wfs/grouped.jl")

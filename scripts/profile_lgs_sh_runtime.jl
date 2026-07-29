@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using Random
 
@@ -131,7 +132,7 @@ function run_profile(; backend_name::AbstractString="cpu", profile_name::Abstrac
     println("  measure_p95_ns: ", timing.p95_ns)
     println("  frame_rate_hz: ", 1.0e9 / timing.mean_ns)
     println("  spot_cube_shape: ", size(wfs.acquisition.spot_cube))
-    println("  has_na_profile: ", AdaptiveOpticsSim.lgs_has_profile(src))
+    println("  has_na_profile: ", AdaptiveOpticsSim.Optics.lgs_has_profile(src))
     return nothing
 end
 

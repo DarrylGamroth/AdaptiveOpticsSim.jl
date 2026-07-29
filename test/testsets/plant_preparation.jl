@@ -795,7 +795,7 @@ end
     end
 
 
-    source_products = AdaptiveOpticsSim.AbstractOpticalProduct[
+    source_products = AdaptiveOpticsSim.Optics.AbstractOpticalProduct[
         science_path.result]
     vector_bundle = OpticalProductBundle(source_products)
     source_products[1] = density_integrated_result

@@ -1,12 +1,12 @@
 const TestAbstractFFTs = AdaptiveOpticsSim.AbstractFFTs
 
-struct TestExpandedSourceWrapper{S<:AdaptiveOpticsSim.AbstractSource} <:
-    AdaptiveOpticsSim.AbstractSource
+struct TestExpandedSourceWrapper{S<:AdaptiveOpticsSim.Optics.AbstractSource} <:
+    AdaptiveOpticsSim.Optics.AbstractSource
     source::S
 end
 
-AdaptiveOpticsSim.source_composition_style(::TestExpandedSourceWrapper) =
-    AdaptiveOpticsSim.ExpandedSourceComposition()
+AdaptiveOpticsSim.Optics.source_composition_style(::TestExpandedSourceWrapper) =
+    AdaptiveOpticsSim.Optics.ExpandedSourceComposition()
 
 # DenseArray is deliberately broad enough to reproduce the dispatch category
 # used by accelerator array packages without depending on a GPU runtime.
@@ -85,19 +85,24 @@ end
 @testset "API export curation" begin
     root_exported = filter(name -> Base.isexported(AdaptiveOpticsSim, name),
         names(AdaptiveOpticsSim))
+    optics_exported = filter(name -> Base.isexported(Optics, name),
+        names(Optics))
     plant_exported = filter(name -> Base.isexported(Plant, name),
         names(Plant))
 
     # The root package exposes the domain module, while the domain itself
     # distinguishes routine unqualified vocabulary from stable qualified API.
     @test length(root_exported) <= 500
+    @test length(optics_exported) <= 150
     @test length(plant_exported) <= 100
-    @test Base.isexported(AdaptiveOpticsSim, :Telescope)
     @test Base.isexported(AdaptiveOpticsSim, :Backends)
+    @test Base.isexported(AdaptiveOpticsSim, :Optics)
     @test Base.isexported(AdaptiveOpticsSim, :Plant)
     @test Base.ispublic(AdaptiveOpticsSim, :Backends)
+    @test Base.ispublic(AdaptiveOpticsSim, :Optics)
     @test Base.ispublic(AdaptiveOpticsSim, :Plant)
     @test AdaptiveOpticsSim.Backends === Backends
+    @test AdaptiveOpticsSim.Optics === Optics
     @test AdaptiveOpticsSim.Plant === Plant
 
     # Every supported Plant-owned binding has one canonical owner. The root
@@ -227,9 +232,7 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
     @test Base.isexported(AdaptiveOpticsSim, :influence_model)
     @test Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
-    @test Base.isexported(AdaptiveOpticsSim, :photon_irradiance)
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
-    @test Base.isexported(AdaptiveOpticsSim, :OpticalPlaneMetadata)
     @test !Base.isexported(AdaptiveOpticsSim, :compute_device)
     @test !Base.ispublic(AdaptiveOpticsSim, :AbstractComputeDevice)
     @test Base.isexported(Backends, :compute_device)
@@ -238,32 +241,42 @@ end
     @test Base.ispublic(Backends, :AcceleratorComputeDevice)
     @test Base.ispublic(Backends, :compute_device_backend)
     @test Base.ispublic(Backends, :compute_device_identifier)
-    @test Base.isexported(AdaptiveOpticsSim, :MetricCoordinates)
-    @test Base.isexported(AdaptiveOpticsSim, :AngularCoordinates)
-    @test Base.isexported(AdaptiveOpticsSim, :AchromaticSpectralCoordinate)
-    @test Base.isexported(AdaptiveOpticsSim, :MonochromaticChannel)
-    @test Base.isexported(AdaptiveOpticsSim, :IntegratedSpectralChannel)
-    @test Base.isexported(AdaptiveOpticsSim, :PupilFunction)
-    @test Base.isexported(AdaptiveOpticsSim, :ElectricField)
-    @test Base.isexported(AdaptiveOpticsSim, :IntensityMap)
-    @test Base.isexported(AdaptiveOpticsSim, :PhotonRateNormalization)
-    @test Base.isexported(AdaptiveOpticsSim, :DimensionlessNormalization)
-    @test Base.isexported(AdaptiveOpticsSim, :PointSampledMeasure)
-    @test Base.isexported(AdaptiveOpticsSim, :SpatialDensityMeasure)
-    @test Base.isexported(AdaptiveOpticsSim, :CellIntegratedMeasure)
-    @test Base.isexported(AdaptiveOpticsSim, :CoherentFieldCombination)
-    @test Base.isexported(AdaptiveOpticsSim, :IncoherentIntensityAddition)
-    @test Base.isexported(AdaptiveOpticsSim, :NonCombinableProduct)
-    @test Base.isexported(AdaptiveOpticsSim, :PhysicalPhotonIrradianceSource)
-    @test Base.isexported(AdaptiveOpticsSim, :NormalizedTestSource)
-    @test Base.isexported(AdaptiveOpticsSim, :source_radiometry)
-    @test Base.isexported(AdaptiveOpticsSim, :OpticalProductBundle)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_incoherent_sum)
-    @test Base.isexported(AdaptiveOpticsSim, :accumulate_intensity!)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_pupil_field)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_imaging)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_direct_imaging_batch)
-    @test Base.isexported(AdaptiveOpticsSim, :form_direct_image!)
+    for name in (
+        :Telescope,
+        :photon_irradiance,
+        :OpticalPlaneMetadata,
+        :MetricCoordinates,
+        :AngularCoordinates,
+        :AchromaticSpectralCoordinate,
+        :MonochromaticChannel,
+        :IntegratedSpectralChannel,
+        :PupilFunction,
+        :ElectricField,
+        :IntensityMap,
+        :PhotonRateNormalization,
+        :DimensionlessNormalization,
+        :PointSampledMeasure,
+        :SpatialDensityMeasure,
+        :CellIntegratedMeasure,
+        :CoherentFieldCombination,
+        :IncoherentIntensityAddition,
+        :NonCombinableProduct,
+        :PhysicalPhotonIrradianceSource,
+        :NormalizedTestSource,
+        :source_radiometry,
+        :OpticalProductBundle,
+        :prepare_incoherent_sum,
+        :accumulate_intensity!,
+        :prepare_pupil_field,
+        :prepare_direct_imaging,
+        :prepare_direct_imaging_batch,
+        :form_direct_image!,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test Base.isexported(Optics, name)
+        @test Base.ispublic(Optics, name)
+    end
     for name in (
         :PreparedDirectImagingBatch,
         :DirectImagingBatchCompatibilitySignature,
@@ -273,7 +286,9 @@ end
         :validate_direct_imaging_batch,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test Base.ispublic(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !Base.isexported(Optics, name)
+        @test Base.ispublic(Optics, name)
     end
     @test Base.isexported(AdaptiveOpticsSim, :prepare_spatial_filter)
     @test Base.isexported(AdaptiveOpticsSim, :AtmosphereEpoch)
@@ -485,7 +500,7 @@ end
         source_bundle)
     @test_throws UnsupportedAlgorithm Asterism([third_party_expansion])
     @test_throws UnsupportedAlgorithm Asterism(
-        AdaptiveOpticsSim.AbstractSource[
+        AdaptiveOpticsSim.Optics.AbstractSource[
             physical_source,
             third_party_expansion,
         ])
@@ -1018,7 +1033,7 @@ end
     @test path_a.opd == static_map.opd
     @test all(iszero, path_b.opd)
 
-    ncpa = NCPA(fill(3e-9, 16, 16), nothing, nothing)
+    ncpa = NCPA(fill(3e-9, 16, 16))
     apply_surface!(path_b, ncpa, DMReplace())
     @test path_b.opd == ncpa.opd
 

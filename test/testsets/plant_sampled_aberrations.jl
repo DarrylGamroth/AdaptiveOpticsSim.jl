@@ -24,7 +24,7 @@ function Plant.validate_path_materialization_binding(
     materialization::SampledZeroPupilMaterialization,
     input::PupilFunction,
     ::AdaptiveOpticsSim.AbstractAtmosphere,
-    ::AdaptiveOpticsSim.AbstractSource,
+    ::AdaptiveOpticsSim.Optics.AbstractSource,
 )
     materialization.destination === input || throw(
         PlantPreparationError(:path, :prepared_binding,
@@ -81,7 +81,7 @@ end
 function Plant.prepare_path_executor(
     ::SampledAberrationHandoffPathModel,
     definition::OpticalPathDefinition,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
 )
@@ -257,7 +257,7 @@ function sampled_aberration_path_fixture()
     )
     science = SampledAberrationDefinition(
         :science_ncpa,
-        NCPA(science_opd, nothing, nothing),
+        NCPA(science_opd),
         science_metadata;
         placement=PupilPlanePlacement(),
         visibility=SelectedPathVisibility(:science),

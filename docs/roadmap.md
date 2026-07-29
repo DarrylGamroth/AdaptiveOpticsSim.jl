@@ -306,7 +306,11 @@ first-call evidence in
 These contracts contain no implementation binding moves.
 The maintained implementation stage lives in
 [`namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml);
-`Backends` is the first completed owner.
+`Backends` is complete and the NS-02 `Optics` foundation slice is the active
+partial owner. That slice moves apertures, telescopes, sources, optical
+locations/products, fields, general propagation, direct imaging, sampled OPD,
+and physical NCPA. NS-03 completes controllable optics and reusable physical
+WFS components without changing the frozen final ownership target.
 
 ### Ownership target
 

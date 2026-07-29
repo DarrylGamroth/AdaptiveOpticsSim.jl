@@ -223,7 +223,7 @@ end
 function Plant.prepare_path_executor(
     model::OptionalPreparedDirectPathModel,
     definition::OpticalPathDefinition,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
 )
@@ -251,7 +251,7 @@ end
 function Plant.prepare_path_executor(
     model::OptionalPreparedIlluminationPathModel,
     definition::OpticalPathDefinition,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
 )
@@ -293,14 +293,14 @@ end
 @inline optional_path_materialization(
     ::OptionalStaticAtmosphere,
     ::Telescope,
-    ::AdaptiveOpticsSim.AbstractSource,
+    ::AdaptiveOpticsSim.Optics.AbstractSource,
     ::PupilFunction,
 ) = Plant.AtmosphereIndependentPath()
 
 @inline optional_path_materialization(
     atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
     telescope::Telescope,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     pupil::PupilFunction,
 ) = prepare_pupil_opd_materialization(atmosphere, telescope, source, pupil)
 
@@ -2466,7 +2466,7 @@ function run_optional_zernike_curvature_stages(
 end
 
 function run_optional_plane_product_checks(tel::Telescope,
-    src::AdaptiveOpticsSim.AbstractSource,
+    src::AdaptiveOpticsSim.Optics.AbstractSource,
     selector::AdaptiveOpticsSim.Backends.AbstractArrayBackend, BackendArray,
     ::Type{T}) where {T<:AbstractFloat}
     wavefront = PupilFunction(tel; T=T, backend=selector)
@@ -2654,9 +2654,9 @@ function run_optional_plane_product_checks(tel::Telescope,
     density_metadata = OpticalPlaneMetadata(FocalPlane(), density_values;
         coordinate_domain=AngularCoordinates(), sampling=(T(0.5), T(0.25)),
         spectral=MonochromaticChannel(T(wavelength(src))),
-        normalization=AdaptiveOpticsSim.PhotonRateNormalization(),
-        spatial_measure=AdaptiveOpticsSim.SpatialDensityMeasure(),
-        coherence=AdaptiveOpticsSim.IncoherentIntensityAddition())
+        normalization=AdaptiveOpticsSim.Optics.PhotonRateNormalization(),
+        spatial_measure=AdaptiveOpticsSim.Optics.SpatialDensityMeasure(),
+        coherence=AdaptiveOpticsSim.Optics.IncoherentIntensityAddition())
     density_map = IntensityMap(density_metadata, density_values)
     response_kernel = T[0 0.1 0; 0.1 0.6 0.1; 0 0.1 0]
     response_detector = Detector(integration_time=T(2), noise=NoiseNone(),
@@ -2686,9 +2686,9 @@ function run_optional_plane_product_checks(tel::Telescope,
     edge_metadata = OpticalPlaneMetadata(FocalPlane(), edge_values;
         coordinate_domain=AngularCoordinates(), sampling=(one(T), one(T)),
         spectral=MonochromaticChannel(T(wavelength(src))),
-        normalization=AdaptiveOpticsSim.PhotonRateNormalization(),
-        spatial_measure=AdaptiveOpticsSim.CellIntegratedMeasure(),
-        coherence=AdaptiveOpticsSim.IncoherentIntensityAddition())
+        normalization=AdaptiveOpticsSim.Optics.PhotonRateNormalization(),
+        spatial_measure=AdaptiveOpticsSim.Optics.CellIntegratedMeasure(),
+        coherence=AdaptiveOpticsSim.Optics.IncoherentIntensityAddition())
     edge_map = IntensityMap(edge_metadata, edge_values)
     edge_detector = Detector(integration_time=one(T), noise=NoiseNone(),
         qe=one(T), response_model=SampledFrameResponse(asymmetric_kernel; T=T),
@@ -3952,7 +3952,7 @@ end
 function optional_direct_imaging_batch_allocation_bytes(prepared)
     form_direct_image!(prepared)
     validation_bytes = @allocated(
-        AdaptiveOpticsSim.validate_direct_imaging_batch(prepared),
+        AdaptiveOpticsSim.Optics.validate_direct_imaging_batch(prepared),
     )
     completed_render_bytes = @allocated form_direct_image!(prepared)
     return (; validation_bytes, completed_render_bytes)
@@ -4284,7 +4284,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     render_atmosphere!(atmosphere_output, renderer, atm, epoch)
     @test atm.layers[1].generator.state.opd isa BackendArray
     @test atmosphere_output.opd isa BackendArray
-    direction_sources = Asterism(AdaptiveOpticsSim.AbstractSource[
+    direction_sources = Asterism(AdaptiveOpticsSim.Optics.AbstractSource[
         src,
         Source(
             band=:I,

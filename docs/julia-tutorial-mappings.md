@@ -51,6 +51,13 @@ Each script exposes a `main()` function and logs a short completion summary with
 
 ## Representative translations
 
+The snippets below assume:
+
+```julia
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
+```
+
 ### Image formation
 
 ```julia

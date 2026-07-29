@@ -1,6 +1,6 @@
 function rendered_atmosphere_opd(atm::AbstractTimedAtmosphere,
     tel::Telescope,
-    src::Union{AdaptiveOpticsSim.AbstractSource,Nothing}=nothing)
+    src::Union{AdaptiveOpticsSim.Optics.AbstractSource,Nothing}=nothing)
     renderer = prepare_atmosphere_renderer(atm, tel, src)
     pupil = PupilFunction(tel)
     render_atmosphere!(pupil, renderer, atm, current_epoch(atm))

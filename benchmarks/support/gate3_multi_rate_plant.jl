@@ -1,6 +1,7 @@
 module Gate3MultiRatePlantBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
 using SHA
 
@@ -120,7 +121,7 @@ end
 function multi_rate_plant_definition(raw::AbstractDict;
     reverse_declarations::Bool=false)
     T = Float64
-    telescope = AOS.Telescope(
+    telescope = AOS.Optics.Telescope(
         resolution=Int(raw["resolution"]),
         diameter=T(raw["diameter_m"]),
         central_obstruction=T(raw["central_obstruction"]),
@@ -136,7 +137,7 @@ function multi_rate_plant_definition(raw::AbstractDict;
         layer_ids=Tuple(Symbol.(raw["layer_ids"])),
         T=T,
     )
-    science_source = AOS.Source(
+    science_source = AOS.Optics.Source(
         band=:custom,
         wavelength=T(raw["science_wavelength_m"]),
         photon_irradiance=T(raw["science_photon_irradiance"]),
@@ -144,7 +145,7 @@ function multi_rate_plant_definition(raw::AbstractDict;
             T(raw["science_azimuth_deg"])),
         T=T,
     )
-    ngs_source = AOS.Source(
+    ngs_source = AOS.Optics.Source(
         band=:custom,
         wavelength=T(raw["ngs_wavelength_m"]),
         photon_irradiance=T(raw["ngs_photon_irradiance"]),
@@ -152,7 +153,7 @@ function multi_rate_plant_definition(raw::AbstractDict;
             T(raw["ngs_azimuth_deg"])),
         T=T,
     )
-    lgs_source = AOS.LGSSource(
+    lgs_source = AOS.Optics.LGSSource(
         wavelength=T(raw["lgs_wavelength_m"]),
         photon_irradiance=T(raw["lgs_photon_irradiance"]),
         coordinates=(T(raw["lgs_radius_arcsec"]),

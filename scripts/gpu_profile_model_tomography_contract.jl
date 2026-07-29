@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using Profile
 
 function _sync_backend_array!(A)

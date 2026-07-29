@@ -1,6 +1,7 @@
 module SubaruAO188Simulation
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using LinearAlgebra
 using Random

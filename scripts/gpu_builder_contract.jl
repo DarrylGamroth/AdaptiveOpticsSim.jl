@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using LinearAlgebra
 
 function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}

@@ -77,7 +77,7 @@ function device_batch_test_physical_definitions(
         device_batch_test_aberration_metadata(prototype, ncpa_opd)
     alpha_ncpa = SampledAberrationDefinition(
         :device_batch_alpha_ncpa,
-        NCPA(ncpa_opd, nothing, nothing),
+        NCPA(ncpa_opd),
         ncpa_metadata;
         placement=PupilPlanePlacement(),
         visibility=SelectedPathVisibility(selected_path),
@@ -121,7 +121,7 @@ Plant.plant_model_definition_style(
 function Plant.prepare_path_executor(
     model::DeviceBatchTestPathModel,
     definition::OpticalPathDefinition,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
 )

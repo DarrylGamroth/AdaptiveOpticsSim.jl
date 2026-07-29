@@ -17,7 +17,7 @@ end
 function direct_imaging_batch_allocation_bytes(prepared)
     form_direct_image!(prepared)
     validation_bytes = @allocated(
-        AdaptiveOpticsSim.validate_direct_imaging_batch(prepared),
+        AdaptiveOpticsSim.Optics.validate_direct_imaging_batch(prepared),
     )
     render_bytes = @allocated form_direct_image!(prepared)
     return (; validation_bytes, render_bytes)
@@ -94,35 +94,35 @@ end
         zero_padding=zero_padding,
     )
 
-    @test prepared isa AdaptiveOpticsSim.PreparedDirectImagingBatch
+    @test prepared isa AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch
     @test direct_imaging_output(prepared) === prepared.output
-    @test AdaptiveOpticsSim.direct_imaging_batch_products(prepared) ===
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_products(prepared) ===
         prepared.output
-    @test AdaptiveOpticsSim.direct_imaging_batch_count(prepared) == 2
-    @test AdaptiveOpticsSim.direct_imaging_batch_inputs(prepared)[1] ===
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_count(prepared) == 2
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_inputs(prepared)[1] ===
         first_pupil
-    @test AdaptiveOpticsSim.direct_imaging_batch_inputs(prepared)[2] ===
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_inputs(prepared)[2] ===
         second_pupil
-    @test AdaptiveOpticsSim.direct_imaging_batch_sources(prepared)[1] ===
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared)[1] ===
         on_axis
     copied_membership =
-        AdaptiveOpticsSim.direct_imaging_batch_sources(prepared)._storage
+        AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared)._storage
     copied_membership[1] = off_axis
-    @test AdaptiveOpticsSim.direct_imaging_batch_sources(prepared)[1] ===
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared)[1] ===
         on_axis
     copied_sources =
-        copy(AdaptiveOpticsSim.direct_imaging_batch_sources(prepared))
+        copy(AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared))
     copied_sources[1] = off_axis
-    @test AdaptiveOpticsSim.direct_imaging_batch_sources(prepared)[1] ===
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared)[1] ===
         on_axis
-    @test AdaptiveOpticsSim.direct_imaging_batch_capability(
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_capability(
         FraunhoferPropagation,
-    ) isa AdaptiveOpticsSim.StackedFraunhoferDirectImagingBatchCapability
-    @test AdaptiveOpticsSim.direct_imaging_batch_capability(
+    ) isa AdaptiveOpticsSim.Optics.StackedFraunhoferDirectImagingBatchCapability
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_capability(
         FresnelPropagation,
-    ) isa AdaptiveOpticsSim.UnsupportedDirectImagingBatchCapability
+    ) isa AdaptiveOpticsSim.Optics.UnsupportedDirectImagingBatchCapability
 
-    signature = AdaptiveOpticsSim.direct_imaging_batch_signature(prepared)
+    signature = AdaptiveOpticsSim.Optics.direct_imaging_batch_signature(prepared)
     @test signature.model_type === FraunhoferPropagation
     @test signature.sample_count == 2
     @test signature.fft_dimensions == (1, 2)
@@ -173,7 +173,7 @@ end
         prepared.workspace.fft_plan,
         0,
     )
-    counted_workspace = AdaptiveOpticsSim.DirectImagingBatchWorkspace(
+    counted_workspace = AdaptiveOpticsSim.Optics.DirectImagingBatchWorkspace(
         prepared.workspace.field_stack,
         prepared.workspace.output_stack,
         prepared.workspace.shift_axis1,
@@ -181,7 +181,7 @@ end
         counting_plan,
     )
     counted_bindings =
-        AdaptiveOpticsSim.DirectImagingBatchWorkspaceBindings(
+        AdaptiveOpticsSim.Optics.DirectImagingBatchWorkspaceBindings(
             counted_workspace.field_stack,
             counted_workspace.output_stack,
             counted_workspace.shift_axis1,
@@ -190,7 +190,7 @@ end
             prepared.fields,
             prepared.output,
         )
-    counted = AdaptiveOpticsSim.PreparedDirectImagingBatch(
+    counted = AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch(
         prepared.signature,
         prepared.sources,
         prepared.inputs,
@@ -235,9 +235,9 @@ end
         Asterism(sources);
         zero_padding=zero_padding,
     )
-    @test AdaptiveOpticsSim.direct_imaging_batch_inputs(shared)[1] ===
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_inputs(shared)[1] ===
         first_pupil
-    @test AdaptiveOpticsSim.direct_imaging_batch_inputs(shared)[2] ===
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_inputs(shared)[2] ===
         first_pupil
     form_direct_image!(shared)
     _, shared_references = direct_imaging_batch_reference(
@@ -259,9 +259,9 @@ end
         on_axis;
         zero_padding=zero_padding,
     )
-    @test AdaptiveOpticsSim.direct_imaging_batch_count(single) == 1
+    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_count(single) == 1
     @test typeof(signature.samples) ===
-        typeof(AdaptiveOpticsSim.direct_imaging_batch_signature(single).samples)
+        typeof(AdaptiveOpticsSim.Optics.direct_imaging_batch_signature(single).samples)
     form_direct_image!(single)
     single_reference = prepare_direct_imaging(
         first_pupil,
@@ -388,7 +388,7 @@ end
     )
     prepared = prepare_direct_imaging_batch(pupil, source)
     form_direct_image!(prepared)
-    @test AdaptiveOpticsSim.validate_direct_imaging_batch(prepared) ===
+    @test AdaptiveOpticsSim.Optics.validate_direct_imaging_batch(prepared) ===
         prepared
 
     fill!(prepared.workspace.output_stack, T(37))
@@ -402,7 +402,7 @@ end
         fill(T(41), size(prepared.workspace.output_stack)),
         ContractComputeDevice(7),
     )
-    foreign_workspace = AdaptiveOpticsSim.DirectImagingBatchWorkspace(
+    foreign_workspace = AdaptiveOpticsSim.Optics.DirectImagingBatchWorkspace(
         prepared.workspace.field_stack,
         foreign_output,
         prepared.workspace.shift_axis1,
@@ -410,7 +410,7 @@ end
         prepared.workspace.fft_plan,
     )
     foreign_bindings =
-        AdaptiveOpticsSim.DirectImagingBatchWorkspaceBindings(
+        AdaptiveOpticsSim.Optics.DirectImagingBatchWorkspaceBindings(
             prepared.workspace.field_stack,
             foreign_output,
             prepared.workspace.shift_axis1,
@@ -419,7 +419,7 @@ end
             prepared.fields,
             prepared.output,
         )
-    foreign_prepared = AdaptiveOpticsSim.PreparedDirectImagingBatch(
+    foreign_prepared = AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch(
         prepared.signature,
         prepared.sources,
         prepared.inputs,
@@ -433,7 +433,7 @@ end
     @test all(==(T(41)), foreign_output.storage)
 
     incompatible_fft_signature =
-        AdaptiveOpticsSim.DirectImagingBatchCompatibilitySignature(
+        AdaptiveOpticsSim.Optics.DirectImagingBatchCompatibilitySignature(
             prepared.signature.model_type,
             prepared.signature.capability,
             prepared.signature.input_metadata,
@@ -448,7 +448,7 @@ end
             prepared.signature.sample_count,
         )
     incompatible_fft_prepared =
-        AdaptiveOpticsSim.PreparedDirectImagingBatch(
+        AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch(
             incompatible_fft_signature,
             prepared.sources,
             prepared.inputs,
@@ -465,7 +465,7 @@ end
     @test all(==(T(43)), prepared.workspace.output_stack)
 
     incompatible_model_signature =
-        AdaptiveOpticsSim.DirectImagingBatchCompatibilitySignature(
+        AdaptiveOpticsSim.Optics.DirectImagingBatchCompatibilitySignature(
             FresnelPropagation,
             prepared.signature.capability,
             prepared.signature.input_metadata,
@@ -480,7 +480,7 @@ end
             prepared.signature.sample_count,
         )
     incompatible_model_prepared =
-        AdaptiveOpticsSim.PreparedDirectImagingBatch(
+        AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch(
             incompatible_model_signature,
             prepared.sources,
             prepared.inputs,
@@ -541,7 +541,7 @@ end
     )
     @test_throws UnsupportedAlgorithm prepare_direct_imaging_batch(
         pupil,
-        Asterism(AdaptiveOpticsSim.AbstractSource[lgs]),
+        Asterism(AdaptiveOpticsSim.Optics.AbstractSource[lgs]),
     )
     @test_throws UnsupportedAlgorithm prepare_direct_imaging_batch(
         pupil,
@@ -572,7 +572,7 @@ end
     mixed_inputs = PupilFunction[pupil, float32_pupil]
     @test_throws InvalidConfiguration prepare_direct_imaging_batch(
         mixed_inputs,
-        AdaptiveOpticsSim.AbstractSource[source, source],
+        AdaptiveOpticsSim.Optics.AbstractSource[source, source],
     )
     float32_source = Source(
         band=:custom,
@@ -582,6 +582,6 @@ end
     )
     @test_throws InvalidConfiguration prepare_direct_imaging_batch(
         [pupil, pupil],
-        AdaptiveOpticsSim.AbstractSource[source, float32_source],
+        AdaptiveOpticsSim.Optics.AbstractSource[source, float32_source],
     )
 end

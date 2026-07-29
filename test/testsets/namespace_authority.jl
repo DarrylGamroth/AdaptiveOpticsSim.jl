@@ -37,6 +37,9 @@ function runtime_surface(mod::Module)
     return (exports=exported, public=qualified_public)
 end
 
+binding_parentmodule(value::Enum) = parentmodule(typeof(value))
+binding_parentmodule(value) = parentmodule(value)
+
 function assert_acyclic_owner_graph(graph)
     dependencies = Dict(
         String(node["name"]) => String.(node["dependencies"])
@@ -197,11 +200,49 @@ end
         canonical_owners
     implemented_owners =
         Set(String.(migration_state["implemented_owners"]))
+    partial_owners =
+        Set(String.(get(migration_state, "partial_owners", String[])))
     @test implemented_owners ⊆ canonical_owners
+    @test partial_owners ⊆ canonical_owners
+    @test isdisjoint(implemented_owners, partial_owners)
     @test "Root" ∉ implemented_owners
+    @test "Root" ∉ partial_owners
     @test "Plant" ∉ implemented_owners
+    @test "Plant" ∉ partial_owners
     @test Set(keys(migration_state["owner_sources"])) ==
         implemented_owners
+    @test Set(keys(get(
+        migration_state, "partial_owner_sources", Dict{String,Any}()))) ==
+        partial_owners
+    @test Set(keys(get(
+        migration_state, "partial_owner_bindings", Dict{String,Any}()))) ==
+        partial_owners
+
+    partial_bindings = Dict{String,Dict{String,Set{String}}}()
+    for owner in partial_owners
+        stage = migration_state["partial_owner_bindings"][owner]
+        @test Set(keys(stage)) == Set(("exports", "public", "internal"))
+        bindings = Dict(
+            visibility => Set(String.(stage[visibility]))
+            for visibility in ("exports", "public", "internal")
+        )
+        @test all(visibility -> length(bindings[visibility]) ==
+            length(stage[visibility]), keys(bindings))
+        @test isdisjoint(bindings["exports"], bindings["public"])
+        @test isdisjoint(bindings["exports"], bindings["internal"])
+        @test isdisjoint(bindings["public"], bindings["internal"])
+        partial_bindings[owner] = bindings
+    end
+
+    function binding_is_migrated(owner::AbstractString,
+        binding::AbstractString)
+        owner in implemented_owners && return true
+        owner in partial_owners || return false
+        return any(
+            binding in partial_bindings[owner][visibility]
+            for visibility in ("exports", "public", "internal")
+        )
+    end
 
     owner_by_binding = Dict{String,Tuple{String,String}}()
     for entry in allowlists
@@ -250,12 +291,23 @@ end
         union!(implemented_exports, String.(allowlist["exports"]))
         union!(implemented_public, String.(allowlist["public"]))
     end
+    for owner in partial_owners
+        allowlist = only(entry for entry in allowlists
+            if entry["owner"] == owner)
+        @test partial_bindings[owner]["exports"] ⊆
+            Set(String.(allowlist["exports"]))
+        @test partial_bindings[owner]["public"] ⊆
+            Set(String.(allowlist["public"]))
+        union!(implemented_exports, partial_bindings[owner]["exports"])
+        union!(implemented_public, partial_bindings[owner]["public"])
+    end
     expected_root_exports = Set(
         binding for binding in current["exports"]
         if binding ∉ implemented_exports
     )
     union!(expected_root_exports,
-        intersect(introduced_root, implemented_owners))
+        intersect(introduced_root,
+            union(implemented_owners, partial_owners)))
     expected_root_public = Set(
         binding for binding in current["public"]
         if binding ∉ implemented_public
@@ -288,7 +340,33 @@ end
         for visibility in ("exports", "public")
             for binding in allowlist[visibility]
                 value = getfield(owner_module, Symbol(binding))
-                @test parentmodule(value) === owner_module
+                @test binding_parentmodule(value) === owner_module
+                @test binding ∉ root_runtime.exports
+                @test binding ∉ root_runtime.public
+            end
+        end
+    end
+    for owner in partial_owners
+        source = joinpath(
+            REPOSITORY_ROOT,
+            migration_state["partial_owner_sources"][owner],
+        )
+        declared_owner = declared_surface(source)
+        @test Set(declared_owner.exports) ==
+            partial_bindings[owner]["exports"]
+        @test Set(declared_owner.public) ==
+            partial_bindings[owner]["public"]
+
+        owner_module = getfield(AdaptiveOpticsSim, Symbol(owner))
+        owner_runtime = runtime_surface(owner_module)
+        @test Set(owner_runtime.exports) ==
+            union(partial_bindings[owner]["exports"], Set((owner,)))
+        @test Set(owner_runtime.public) ==
+            partial_bindings[owner]["public"]
+        for visibility in ("exports", "public", "internal")
+            for binding in partial_bindings[owner][visibility]
+                value = getfield(owner_module, Symbol(binding))
+                @test binding_parentmodule(value) === owner_module
                 @test binding ∉ root_runtime.exports
                 @test binding ∉ root_runtime.public
             end
@@ -347,12 +425,13 @@ end
         if entry["action"] == "retain"
             @test all(binding -> binding_occurs(plant_body, binding),
                 entry["bindings"])
-            provider = entry["provider"] in implemented_owners ?
-                String(entry["provider"]) : "AdaptiveOpticsSim"
-            union!(
-                get!(expected_imports, provider, Set{String}()),
-                String.(entry["bindings"]),
-            )
+            for binding in String.(entry["bindings"])
+                provider = binding_is_migrated(
+                    String(entry["provider"]), binding) ?
+                    String(entry["provider"]) : "AdaptiveOpticsSim"
+                push!(get!(expected_imports, provider, Set{String}()),
+                    binding)
+            end
         else
             @test all(binding -> !binding_occurs(plant_body, binding),
                 entry["bindings"])
@@ -394,7 +473,7 @@ end
         hooks = adaptive_optics_sim_extension_hooks(path)
         for (hook, actual_owner) in hooks
             canonical_owner = hook_owners[hook]
-            expected_owner = canonical_owner in implemented_owners ?
+            expected_owner = binding_is_migrated(canonical_owner, hook) ?
                 canonical_owner : "Root"
             @test actual_owner == expected_owner
             actual_owner == "Root" ||

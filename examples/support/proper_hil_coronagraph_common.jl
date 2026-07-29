@@ -1,6 +1,7 @@
 module ProperHILCoronagraphCommon
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using Proper
 using Random

@@ -1,5 +1,6 @@
 using Test
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
@@ -40,6 +41,14 @@ for name in names(Backends; all=true)
     if Base.isidentifier(s) && !startswith(s, "#") &&
             !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(Backends, $(QuoteNode(name)))
+    end
+end
+
+for name in names(Optics; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Optics, $(QuoteNode(name)))
     end
 end
 

@@ -517,7 +517,7 @@ end
         PointCloudSourceModel([(0.0, 0.0), (0.1, 0.0)], [0.5, 0.5]))
     for nested in (spectral, extended, ast)
         @test_throws UnsupportedAlgorithm Asterism([nested])
-        heterogeneous = AdaptiveOpticsSim.AbstractSource[src1, nested]
+        heterogeneous = AdaptiveOpticsSim.Optics.AbstractSource[src1, nested]
         @test_throws UnsupportedAlgorithm Asterism(heterogeneous)
     end
 end
@@ -890,8 +890,8 @@ end
     @test length(image_ast) == 5
     @test extended_source_asterism(ext_image) === image_ast
     @test @allocated(extended_source_asterism(ext_image)) == 0
-    @test AdaptiveOpticsSim.photon_irradiance(point_ast.sources[1]) ≈ AdaptiveOpticsSim.photon_irradiance(src)
-    @test sum(AdaptiveOpticsSim.photon_irradiance(sample) for sample in image_ast.sources) ≈ AdaptiveOpticsSim.photon_irradiance(src)
+    @test AdaptiveOpticsSim.Optics.photon_irradiance(point_ast.sources[1]) ≈ AdaptiveOpticsSim.Optics.photon_irradiance(src)
+    @test sum(AdaptiveOpticsSim.Optics.photon_irradiance(sample) for sample in image_ast.sources) ≈ AdaptiveOpticsSim.Optics.photon_irradiance(src)
     frozen_coords = coordinates_xy_arcsec(image_ast.sources[1])
     old_offset = image_model.offsets_xy_arcsec[1]
     image_model.offsets_xy_arcsec[1] = (old_offset[1] + 0.1, old_offset[2])
@@ -960,28 +960,28 @@ end
 
 @testset "Pupil masks and misregistration" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    revision = AdaptiveOpticsSim.aperture_revision(tel)
+    revision = AdaptiveOpticsSim.Optics.aperture_revision(tel)
     base_sum = sum(pupil_mask(tel))
     apply_spiders!(tel; thickness=0.5, angles=[0.0, 90.0])
     @test sum(pupil_mask(tel)) < base_sum
-    @test AdaptiveOpticsSim.aperture_revision(tel) == revision + 1
-    revision = AdaptiveOpticsSim.aperture_revision(tel)
+    @test AdaptiveOpticsSim.Optics.aperture_revision(tel) == revision + 1
+    revision = AdaptiveOpticsSim.Optics.aperture_revision(tel)
 
     custom = trues(16, 16)
     custom[:, 9:end] .= false
     set_pupil!(tel, custom)
     @test sum(pupil_mask(tel)) == sum(custom)
     @test pupil_reflectivity(tel) == Float64.(custom)
-    @test AdaptiveOpticsSim.aperture_revision(tel) == revision + 1
+    @test AdaptiveOpticsSim.Optics.aperture_revision(tel) == revision + 1
     custom[1, 1] = false
     @test pupil_mask(tel)[1, 1]
-    revision = AdaptiveOpticsSim.aperture_revision(tel)
+    revision = AdaptiveOpticsSim.Optics.aperture_revision(tel)
 
     reflectivity = fill(0.5, 16, 16)
     set_pupil_reflectivity!(tel, reflectivity)
     @test pupil_reflectivity(tel)[:, 1:8] == fill(0.5, 16, 8)
     @test pupil_reflectivity(tel)[:, 9:end] == fill(0.0, 16, 8)
-    @test AdaptiveOpticsSim.aperture_revision(tel) == revision + 1
+    @test AdaptiveOpticsSim.Optics.aperture_revision(tel) == revision + 1
     reflectivity[1, 1] = 0.25
     @test pupil_reflectivity(tel)[1, 1] == 0.5
 
@@ -1025,9 +1025,9 @@ end
     for wfs in sensors
         fill!(reference_signal(wfs), NaN)
     end
-    initial_revision = AdaptiveOpticsSim.aperture_revision(tel)
+    initial_revision = AdaptiveOpticsSim.Optics.aperture_revision(tel)
     set_pupil_reflectivity!(tel, 0.7)
-    @test AdaptiveOpticsSim.aperture_revision(tel) == initial_revision + 1
+    @test AdaptiveOpticsSim.Optics.aperture_revision(tel) == initial_revision + 1
     pupil = PupilFunction(tel)
     ensure_sh_calibration!(sh, pupil, src)
     ensure_pyramid_calibration!(pyramid, pupil, src)

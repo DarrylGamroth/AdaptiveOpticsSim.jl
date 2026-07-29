@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 
 const BACKEND_NAME = length(ARGS) >= 1 ? lowercase(ARGS[1]) : "cpu"

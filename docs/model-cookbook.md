@@ -11,6 +11,7 @@ AdaptiveOpticsSim.jl script. Start with one recipe, then move to the
 
 ```julia
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
@@ -33,6 +34,7 @@ Update the path-owned pupil with `apply_opd!`, `render_atmosphere!`, or
 
 ```julia
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
@@ -126,6 +128,7 @@ without HIL scheduling:
 
 ```julia
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 interaction = interaction_matrix(
@@ -253,6 +256,7 @@ Choose the backend when constructing every owner:
 ```julia
 import CUDA
 using AdaptiveOpticsSim.Backends
+using AdaptiveOpticsSim.Optics
 
 backend = CUDABackend()
 tel_gpu = Telescope(

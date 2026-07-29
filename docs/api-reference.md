@@ -11,17 +11,23 @@ Related guides:
 - [`runtime-dataflow.md`](runtime-dataflow.md)
 
 This document describes the currently implemented ordinary package API
-imported by `using AdaptiveOpticsSim`, backend vocabulary imported by
+imported by `using AdaptiveOpticsSim`, optical-foundation vocabulary imported
+by `using AdaptiveOpticsSim.Optics`, backend vocabulary imported by
 `using AdaptiveOpticsSim.Backends`, the routine plant workflow imported by
 `using AdaptiveOpticsSim.Plant`, and stable qualified APIs addressed through
 their canonical modules. Qualified public names are maintained but do not
-enter the caller's ordinary namespace. The root package exports the `Backends`
-and `Plant` modules, not compatibility bindings for their contents.
+enter the caller's ordinary namespace. The root package exports the
+`Backends`, `Optics`, and `Plant` modules, not compatibility exports for their
+contents.
 
-The breaking namespace migration is in progress. `Backends` is the first
-completed owner; bindings assigned to later domain owners remain at the root
-until their owner PR lands. The exact final root and domain allowlists are
-frozen in
+The breaking namespace migration is in progress. `Backends` is complete.
+`Optics` currently owns the foundation slice: apertures, telescopes, sources,
+optical products and metadata, pupil/field formation, backend-portable
+Fraunhofer and Fresnel propagation, direct imaging, sampled OPD, and physical
+NCPA. Controllable optics, deformable mirrors, and reusable physical WFS
+components remain at the root until the next `Optics` slice lands; bindings
+assigned to other domain owners likewise remain at the root until their owner
+PR lands. The exact final root and domain allowlists are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
 The maintained implementation stage is recorded in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
@@ -32,9 +38,11 @@ Root exported and qualified-public names are curated in
 [`../src/exports.jl`](../src/exports.jl); the canonical plant surface is
 curated separately in [`../src/plant/api.jl`](../src/plant/api.jl), and the
 canonical backend surface in
-[`../src/backends/api.jl`](../src/backends/api.jl). Each owner PR must converge
-on the exact domain allowlists without root forwarding aliases or
-compatibility adapters.
+[`../src/backends/api.jl`](../src/backends/api.jl). The currently implemented
+optical-foundation surface is curated in
+[`../src/optics/api.jl`](../src/optics/api.jl). Each owner PR must converge on
+the exact domain allowlists without root forwarding aliases or compatibility
+adapters.
 Export a name only when it is one of these:
 
 - a normal user-facing constructor or workflow function
@@ -106,7 +114,23 @@ qualified-public names, such as `Backends.HostComputeDevice()`. Backend launch,
 allocation, FFT, reduction, and registration helpers are developer or
 extension seams unless the exact owner allowlist promotes them.
 
-## Masks And Apertures
+## `AdaptiveOpticsSim.Optics` Foundations
+
+Import routine optical-foundation vocabulary explicitly:
+
+```julia
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
+
+tel = Telescope(resolution=32, diameter=8.0)
+src = Source(band=:I, magnitude=8.0)
+```
+
+`AbstractSource` is a stable qualified-public extension seam and is addressed
+as `Optics.AbstractSource`; it is not exported into an ordinary caller
+namespace.
+
+### Masks And Apertures
 
 - `CircularAperture`
 - `AnnularAperture`
@@ -116,7 +140,7 @@ extension seams unless the exact owner allowlist promotes them.
 - `build_mask!`
 - `apply_mask!`
 
-## Optical Models
+### Optical Models
 
 - Telescope/source: `Telescope`, `Source`, `LGSSource`, `Asterism`;
   source radiometry is declared with `PhysicalPhotonIrradianceSource` or
@@ -202,12 +226,17 @@ incompatible geometry revisions, backends, or devices.
   native Fraunhofer work is submitted as one prepared stack
 - Compatible intensity accumulation: `PreparedIncoherentSum`,
   `prepare_incoherent_sum`, `accumulate_intensity!`
-- Fields/propagation: `FraunhoferPropagation`,
-  `FresnelPropagation`, `GeometricAtmosphericPropagation`,
-  `LayeredFresnelAtmosphericPropagation`, `AtmosphericFieldPropagation`
-- Zernike/OPD/NCPA: `ZernikeBasis`, `compute_zernike!`, `OPDMap`,
-  `Misregistration`, `apply_misregistration`, `NCPA`, `KLBasis`,
-  `ZernikeModalBasis`
+- Fields and general propagation: `FraunhoferPropagation` and
+  `FresnelPropagation`. Atmosphere-coupled propagation remains at the root
+  until the `Atmospheres` owner gate
+- Sampled OPD and physical NCPA: `OPDMap` and `NCPA`. `NCPA(opd)` stores only
+  the explicit backend-resident optical-path-difference map in metres.
+  KL/Zernike/M2C basis selection, coefficient generation, and atmosphere- or
+  DM-derived synthesis are calibration policy; synthesis returns an
+  `Optics.NCPA` but the physical optic does not retain calibration provenance
+- Still at the root during the namespace migration: `ZernikeBasis`,
+  `compute_zernike!`, `Misregistration`, `apply_misregistration`, `KLBasis`,
+  and `ZernikeModalBasis`
 - Spatial filtering: `SpatialFilter`, `CircularFilter`, `SquareFilter`,
   `FoucaultFilter`, `filter!`
 

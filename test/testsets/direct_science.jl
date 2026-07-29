@@ -189,7 +189,7 @@ end
 
     mixed_lgs = LGSSource(wavelength=wavelength_m,
         photon_irradiance=0.5, coordinates=(one_pixel_arcsec, 90.0))
-    mixed_sources = AdaptiveOpticsSim.AbstractSource[on_axis, mixed_lgs]
+    mixed_sources = AdaptiveOpticsSim.Optics.AbstractSource[on_axis, mixed_lgs]
     mixed = prepare_direct_imaging(pupil, Asterism(mixed_sources);
         zero_padding=2)
     @test mixed.components isa Vector

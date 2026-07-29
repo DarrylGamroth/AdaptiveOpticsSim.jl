@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using BenchmarkTools
 using LinearAlgebra
 

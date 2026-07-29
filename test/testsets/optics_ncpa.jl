@@ -6,6 +6,10 @@
     pupil = PupilFunction(tel)
     apply_surface!(pupil, map, DMReplace())
     @test sum(pupil.opd) ≈ 64.0
+    sampled_opd = fill(3e-9, 8, 8)
+    physical_ncpa = NCPA(sampled_opd)
+    @test surface_opd(physical_ncpa) === sampled_opd
+    @test fieldnames(typeof(physical_ncpa)) == (:opd,)
 
     basis_default = AdaptiveOpticsSim.ncpa_basis(KLBasis(), tel, dm, atm; n_modes=2)
     basis_hht = AdaptiveOpticsSim.ncpa_basis(KLBasis(KLHHtPSD()), tel, dm, atm; n_modes=2)
@@ -17,6 +21,9 @@
     ncpa_default_kl = NCPA(tel, dm, atm; basis=KLBasis(), coefficients=coeffs)
     ncpa_hht = NCPA(tel, dm, atm; basis=KLBasis(KLHHtPSD()), coefficients=coeffs)
     ncpa_dm = NCPA(tel, dm, atm; basis=KLBasis(KLDMModes()), coefficients=coeffs)
+    ncpa_zero = NCPA(tel, dm, atm)
+    @test eltype(ncpa_zero.opd) == eltype(pupil_reflectivity(tel))
+    @test all(iszero, ncpa_zero.opd)
     @test ncpa_default_kl.opd ≈ ncpa_hht.opd
     @test sum(abs.(ncpa_default_kl.opd .- ncpa_dm.opd)) > 0
 

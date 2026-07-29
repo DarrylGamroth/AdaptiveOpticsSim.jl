@@ -1,6 +1,7 @@
 module Gate5OpticalPlacementBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
 using SHA
 
@@ -25,9 +26,9 @@ AOSPlant.plant_model_definition_style(
 
 function AOSPlant.validate_path_materialization_binding(
     materialization::ZeroPupilMaterialization,
-    input::AOS.PupilFunction,
+    input::AOS.Optics.PupilFunction,
     ::AOS.AbstractAtmosphere,
-    ::AOS.AbstractSource,
+    ::AOS.Optics.AbstractSource,
 )
     materialization.destination === input || throw(
         AOSPlant.PlantPreparationError(
@@ -41,7 +42,7 @@ end
 
 function AOSPlant.validate_path_materialization(
     materialization::ZeroPupilMaterialization,
-    input::AOS.PupilFunction,
+    input::AOS.Optics.PupilFunction,
     ::AOS.AbstractAtmosphere,
     ::AOS.AtmosphereEpoch,
 )
@@ -57,7 +58,7 @@ end
 
 function AOSPlant.materialize_path_input!(
     materialization::ZeroPupilMaterialization,
-    input::AOS.PupilFunction,
+    input::AOS.Optics.PupilFunction,
     ::AOS.AbstractAtmosphere,
     ::AOS.AtmosphereEpoch,
 )
@@ -75,24 +76,24 @@ end
 function AOSPlant.prepare_path_executor(
     ::Gate5PathModel,
     definition::AOSPlant.OpticalPathDefinition,
-    source::AOS.AbstractSource,
-    telescope::AOS.Telescope,
+    source::AOS.Optics.AbstractSource,
+    telescope::AOS.Optics.Telescope,
     atmosphere::AOS.AbstractTimedAtmosphere,
 )
-    T = eltype(AOS.pupil_reflectivity(telescope))
-    pupil = AOS.PupilFunction(
+    T = eltype(AOS.Optics.pupil_reflectivity(telescope))
+    pupil = AOS.Optics.PupilFunction(
         telescope;
         T,
         backend=AOS.backend(telescope),
     )
-    imaging = AOS.prepare_direct_imaging(pupil, source; zero_padding=1)
+    imaging = AOS.Optics.prepare_direct_imaging(pupil, source; zero_padding=1)
     return AOSPlant.PreparedPathExecutor(
         definition,
         source,
         telescope,
         atmosphere,
         pupil,
-        AOS.direct_imaging_output(imaging),
+        AOS.Optics.direct_imaging_output(imaging),
         imaging;
         materialization=ZeroPupilMaterialization(pupil),
         optical_model=:gate5_conjugated_optical_placement,
@@ -152,19 +153,19 @@ function command_schema(endpoint::Symbol)
 end
 
 function sampled_surface_metadata(
-    prototype::AOS.PupilFunction,
+    prototype::AOS.Optics.PupilFunction,
     surface::AbstractMatrix,
 )
-    return AOS.OpticalPlaneMetadata(
-        AOS.PupilPlane(),
+    return AOS.Optics.OpticalPlaneMetadata(
+        AOS.Optics.PupilPlane(),
         surface;
-        coordinate_domain=AOS.MetricCoordinates(),
+        coordinate_domain=AOS.Optics.MetricCoordinates(),
         sampling=prototype.metadata.sampling,
         orientation=prototype.metadata.orientation,
-        spectral=AOS.AchromaticSpectralCoordinate(),
-        normalization=AOS.DimensionlessNormalization(),
-        spatial_measure=AOS.PointSampledMeasure(),
-        coherence=AOS.NonCombinableProduct(),
+        spectral=AOS.Optics.AchromaticSpectralCoordinate(),
+        normalization=AOS.Optics.DimensionlessNormalization(),
+        spatial_measure=AOS.Optics.PointSampledMeasure(),
+        coherence=AOS.Optics.NonCombinableProduct(),
     )
 end
 
@@ -185,7 +186,7 @@ function gate5_source(
     azimuth_deg = 360.0 * (index - 1) / path_count
     coordinates = (radius_arcsec, azimuth_deg)
     if index <= wfs_count && isodd(index)
-        return AOS.LGSSource(
+        return AOS.Optics.LGSSource(
             coordinates=coordinates,
             altitude=Float64(raw["lgs_altitude_m"]),
             photon_irradiance=Float64(raw["photon_irradiance"]),
@@ -194,7 +195,7 @@ function gate5_source(
     wavelength = index <= wfs_count ?
         Float64(raw["wfs_wavelength_m"]) :
         Float64(raw["science_wavelength_m"])
-    return AOS.Source(
+    return AOS.Optics.Source(
         band=:custom,
         wavelength=wavelength,
         coordinates=coordinates,
@@ -278,7 +279,7 @@ function gate5_plant_definition(
         error("Gate 5 resolution must be at least five")
     wfs_count = path_count ÷ 2
     science_count = path_count - wfs_count
-    telescope = AOS.Telescope(
+    telescope = AOS.Optics.Telescope(
         resolution=resolution,
         diameter=Float64(raw["diameter_m"]),
         central_obstruction=Float64(raw["central_obstruction"]),
@@ -333,16 +334,16 @@ function gate5_plant_definition(
     configurations =
         (common_configurations..., moao_configurations...)
 
-    prototype = AOS.PupilFunction(telescope)
+    prototype = AOS.Optics.PupilFunction(telescope)
     common_static_value = Float64(raw["common_static_opd_m"])
     common_static_opd = fill(common_static_value, size(prototype.opd))
     common_static = AOSPlant.SampledAberrationDefinition(
         :common_static,
-        AOS.OPDMap(common_static_opd),
+        AOS.Optics.OPDMap(common_static_opd),
         sampled_surface_metadata(prototype, common_static_opd);
         placement=AOSPlant.PupilPlanePlacement(),
         visibility=AOSPlant.AllPathVisibility(),
-        application=AOS.DMReplace(),
+        application=AOS.Optics.DMReplace(),
     )
     ncpa_base = Float64(raw["ncpa_base_m"])
     ncpa_step = Float64(raw["ncpa_step_m"])
@@ -351,11 +352,11 @@ function gate5_plant_definition(
         opd = fill(value, size(prototype.opd))
         AOSPlant.SampledAberrationDefinition(
             Symbol(path_id, :_ncpa),
-            AOS.NCPA(opd, nothing, nothing),
+            AOS.Optics.NCPA(opd),
             sampled_surface_metadata(prototype, opd);
             placement=AOSPlant.PupilPlanePlacement(),
             visibility=AOSPlant.SelectedPathVisibility(path_id),
-            application=AOS.DMAdditive(),
+            application=AOS.Optics.DMAdditive(),
             registration,
         )
     end
@@ -611,7 +612,7 @@ function validate_integrated_oracle(raw::AbstractDict)
 end
 
 function validate_finite_support(raw::AbstractDict)
-    telescope = AOS.Telescope(
+    telescope = AOS.Optics.Telescope(
         resolution=5,
         diameter=5.0,
         central_obstruction=0.0,
@@ -626,7 +627,7 @@ function validate_finite_support(raw::AbstractDict)
         altitude=[0.0],
         layer_ids=(:ground,),
     )
-    source = AOS.Source(
+    source = AOS.Optics.Source(
         band=:custom,
         wavelength=Float64(raw["science_wavelength_m"]),
         photon_irradiance=Float64(raw["photon_irradiance"]),
@@ -657,7 +658,7 @@ function validate_finite_support(raw::AbstractDict)
         pupil,
         surface,
         coupling,
-        AOS.DMReplace(),
+        AOS.Optics.DMReplace(),
     )
     expected = zeros(5, 5)
     expected[2:4, 2:4] .= 2.0
@@ -686,8 +687,8 @@ function storage_signature(operation::Gate5OpticalOperation)
         operation.workspace.controllable_optics,
     ) do state, workspace
         (
-            objectid(AOS.surface_opd(state.active)),
-            objectid(AOS.surface_opd(workspace.staged)),
+            objectid(AOS.Optics.surface_opd(state.active)),
+            objectid(AOS.Optics.surface_opd(workspace.staged)),
         )
     end
     return (

@@ -34,6 +34,7 @@ If you are working on validation, production support, or backend work, then use:
 
 ```julia
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)

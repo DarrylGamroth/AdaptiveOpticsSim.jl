@@ -59,7 +59,7 @@ Plant.plant_model_definition_style(
 function device_model_matrix_front_end(
     ::DeviceModelMatrixShackHartmann,
     telescope::Telescope,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     ::Type{T},
     variant::Int=0,
 ) where {T<:AbstractFloat}
@@ -77,7 +77,7 @@ end
 function device_model_matrix_front_end(
     ::DeviceModelMatrixPyramid,
     telescope::Telescope,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     ::Type{T},
     ::Int=0,
 ) where {T<:AbstractFloat}
@@ -97,7 +97,7 @@ end
 function device_model_matrix_front_end(
     ::DeviceModelMatrixBioEdge,
     telescope::Telescope,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     ::Type{T},
     ::Int=0,
 ) where {T<:AbstractFloat}
@@ -117,7 +117,7 @@ end
 function device_model_matrix_front_end(
     ::DeviceModelMatrixZernike,
     telescope::Telescope,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     ::Type{T},
     ::Int=0,
 ) where {T<:AbstractFloat}
@@ -133,7 +133,7 @@ end
 function device_model_matrix_front_end(
     ::DeviceModelMatrixCurvature,
     telescope::Telescope,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     ::Type{T},
     ::Int=0,
 ) where {T<:AbstractFloat}
@@ -157,41 +157,41 @@ end
     ::DeviceModelMatrixShackHartmann,
     front_end::ShackHartmannOpticalFrontEnd,
     pupil::PupilFunction,
-    ::AdaptiveOpticsSim.AbstractSource,
+    ::AdaptiveOpticsSim.Optics.AbstractSource,
 ) = shack_hartmann_rate_map(front_end, pupil)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixPyramid,
     front_end::PyramidOpticalFrontEnd,
     pupil::PupilFunction,
-    ::AdaptiveOpticsSim.AbstractSource,
+    ::AdaptiveOpticsSim.Optics.AbstractSource,
 ) = pyramid_rate_map(front_end, pupil)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixBioEdge,
     front_end::BioEdgeOpticalFrontEnd,
     pupil::PupilFunction,
-    ::AdaptiveOpticsSim.AbstractSource,
+    ::AdaptiveOpticsSim.Optics.AbstractSource,
 ) = bioedge_rate_map(front_end, pupil)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixZernike,
     front_end::ZernikeOpticalFrontEnd,
     pupil::PupilFunction,
-    ::AdaptiveOpticsSim.AbstractSource,
+    ::AdaptiveOpticsSim.Optics.AbstractSource,
 ) = zernike_rate_map(front_end, pupil)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixCurvature,
     front_end::CurvatureOpticalFrontEnd,
     pupil::PupilFunction,
-    ::AdaptiveOpticsSim.AbstractSource,
+    ::AdaptiveOpticsSim.Optics.AbstractSource,
 ) = curvature_rate_maps(front_end, pupil)
 
 function Plant.prepare_path_executor(
     model::DeviceModelMatrixWFSPathModel,
     definition::OpticalPathDefinition,
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
 )
@@ -267,13 +267,13 @@ end
 ) where {T<:AbstractFloat} = T(589e-9)
 
 @inline device_model_matrix_spectrum(
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     ::Val{:monochromatic},
     ::Type{T},
 ) where {T<:AbstractFloat} = source
 
 function device_model_matrix_spectrum(
-    source::AdaptiveOpticsSim.AbstractSource,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
     ::Val{:spectral},
     ::Type{T},
 ) where {T<:AbstractFloat}

@@ -334,24 +334,24 @@ end
         params = TelescopeParams{Float64}(16, 8.0, 0.15, 0.0)
         scalar_pupil = Matrix{Bool}(undef, 16, 16)
         ka_pupil = similar(scalar_pupil)
-        AdaptiveOpticsSim._generate_pupil!(SCALAR_CPU_STYLE, scalar_pupil, params)
-        AdaptiveOpticsSim._generate_pupil!(KA_CPU_STYLE, ka_pupil, params)
+        AdaptiveOpticsSim.Optics._generate_pupil!(SCALAR_CPU_STYLE, scalar_pupil, params)
+        AdaptiveOpticsSim.Optics._generate_pupil!(KA_CPU_STYLE, ka_pupil, params)
         mark_ka_cpu_kernel!(:radial_mask_kernel!)
         @test ka_pupil == scalar_pupil
 
         scalar_spiders = copy(scalar_pupil)
         ka_spiders = copy(ka_pupil)
         angles = [0.0, 45.0, 90.0]
-        AdaptiveOpticsSim._apply_spiders!(SCALAR_CPU_STYLE, scalar_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
-        AdaptiveOpticsSim._apply_spiders!(KA_CPU_STYLE, ka_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
+        AdaptiveOpticsSim.Optics._apply_spiders!(SCALAR_CPU_STYLE, scalar_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
+        AdaptiveOpticsSim.Optics._apply_spiders!(KA_CPU_STYLE, ka_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
         mark_ka_cpu_kernel!(:spider_mask_kernel!)
         @test ka_spiders == scalar_spiders
 
         scalar_roi = falses(8, 8)
         ka_roi = similar(scalar_roi)
-        roi = AdaptiveOpticsSim.RectangularROI(2:6, 3:7)
-        AdaptiveOpticsSim._build_rectangular_roi!(SCALAR_CPU_STYLE, scalar_roi, roi, true, false)
-        AdaptiveOpticsSim._build_rectangular_roi!(KA_CPU_STYLE, ka_roi, roi, true, false)
+        roi = AdaptiveOpticsSim.Optics.RectangularROI(2:6, 3:7)
+        AdaptiveOpticsSim.Optics._build_rectangular_roi!(SCALAR_CPU_STYLE, scalar_roi, roi, true, false)
+        AdaptiveOpticsSim.Optics._build_rectangular_roi!(KA_CPU_STYLE, ka_roi, roi, true, false)
         mark_ka_cpu_kernel!(:rectangular_roi_kernel!)
         @test ka_roi == scalar_roi
     end
@@ -833,9 +833,9 @@ end
         scalar_ef = ElectricField(wavefront, src; zero_padding=2)
         ka_ef = ElectricField(wavefront, src; zero_padding=2)
         formation = prepare_pupil_field(wavefront, src, scalar_ef)
-        AdaptiveOpticsSim._fill_electric_field!(SCALAR_CPU_STYLE,
+        AdaptiveOpticsSim.Optics._fill_electric_field!(SCALAR_CPU_STYLE,
             scalar_ef, wavefront, formation)
-        AdaptiveOpticsSim._fill_electric_field!(KA_CPU_STYLE, ka_ef,
+        AdaptiveOpticsSim.Optics._fill_electric_field!(KA_CPU_STYLE, ka_ef,
             wavefront, formation)
         mark_ka_cpu_kernel!(:fill_pupil_field_kernel!)
         @test ka_cpu_close(ka_ef.values, scalar_ef.values)
@@ -843,30 +843,30 @@ end
         opd = reshape(collect(range(0.0, 1e-8; length=64)), 8, 8)
         phase = reshape(collect(range(0.0, 0.1; length=64)), 8, 8)
         amp = reshape(collect(range(0.9, 1.1; length=64)), 8, 8)
-        AdaptiveOpticsSim._apply_phase!(SCALAR_CPU_STYLE, scalar_ef, opd,
+        AdaptiveOpticsSim.Optics._apply_phase!(SCALAR_CPU_STYLE, scalar_ef, opd,
             :opd, formation)
-        AdaptiveOpticsSim._apply_phase!(KA_CPU_STYLE, ka_ef, opd, :opd,
+        AdaptiveOpticsSim.Optics._apply_phase!(KA_CPU_STYLE, ka_ef, opd, :opd,
             formation)
         mark_ka_cpu_kernel!(:apply_phase_opd_kernel!)
         @test ka_cpu_close(ka_ef.values, scalar_ef.values)
-        AdaptiveOpticsSim._apply_phase!(SCALAR_CPU_STYLE, scalar_ef, phase,
+        AdaptiveOpticsSim.Optics._apply_phase!(SCALAR_CPU_STYLE, scalar_ef, phase,
             :phase, formation)
-        AdaptiveOpticsSim._apply_phase!(KA_CPU_STYLE, ka_ef, phase, :phase,
+        AdaptiveOpticsSim.Optics._apply_phase!(KA_CPU_STYLE, ka_ef, phase, :phase,
             formation)
         mark_ka_cpu_kernel!(:apply_phase_rad_kernel!)
         @test ka_cpu_close(ka_ef.values, scalar_ef.values)
-        AdaptiveOpticsSim._apply_amplitude!(SCALAR_CPU_STYLE, scalar_ef,
+        AdaptiveOpticsSim.Optics._apply_amplitude!(SCALAR_CPU_STYLE, scalar_ef,
             amp, formation)
-        AdaptiveOpticsSim._apply_amplitude!(KA_CPU_STYLE, ka_ef, amp,
+        AdaptiveOpticsSim.Optics._apply_amplitude!(KA_CPU_STYLE, ka_ef, amp,
             formation)
         mark_ka_cpu_kernel!(:apply_amplitude_kernel!)
         @test ka_cpu_close(ka_ef.values, scalar_ef.values)
 
         scalar_intensity = similar(scalar_ef.values, Float64)
         ka_intensity = similar(ka_ef.values, Float64)
-        AdaptiveOpticsSim._intensity!(SCALAR_CPU_STYLE, scalar_intensity,
+        AdaptiveOpticsSim.Optics._intensity!(SCALAR_CPU_STYLE, scalar_intensity,
             scalar_ef.values)
-        AdaptiveOpticsSim._intensity!(KA_CPU_STYLE, ka_intensity,
+        AdaptiveOpticsSim.Optics._intensity!(KA_CPU_STYLE, ka_intensity,
             ka_ef.values)
         mark_ka_cpu_kernel!(:intensity_kernel!)
         @test ka_cpu_close(ka_intensity, scalar_intensity)
@@ -896,7 +896,7 @@ end
                 abs2(batch_field[source_i, source_j, sample]) *
                 batch_scale
         end
-        batch_kernel = AdaptiveOpticsSim.direct_imaging_batch_intensity_kernel!(
+        batch_kernel = AdaptiveOpticsSim.Optics.direct_imaging_batch_intensity_kernel!(
             KA_CPU_STYLE.backend,
         )
         batch_kernel(
@@ -914,38 +914,38 @@ end
         mark_ka_cpu_kernel!(:direct_imaging_batch_intensity_kernel!)
         @test ka_batch_intensity == scalar_batch_intensity
 
-        AdaptiveOpticsSim._accumulate_intensity!(SCALAR_CPU_STYLE,
+        AdaptiveOpticsSim.Optics._accumulate_intensity!(SCALAR_CPU_STYLE,
             scalar_intensity, scalar_ef.values)
-        AdaptiveOpticsSim._accumulate_intensity!(KA_CPU_STYLE,
+        AdaptiveOpticsSim.Optics._accumulate_intensity!(KA_CPU_STYLE,
             ka_intensity, ka_ef.values)
         mark_ka_cpu_kernel!(:accumulate_abs2_kernel!)
         @test ka_cpu_close(ka_intensity, scalar_intensity)
 
         scalar_centered = copy(scalar_field)
         ka_centered = copy(scalar_field)
-        AdaptiveOpticsSim.apply_centering_phase!(SCALAR_CPU_STYLE, scalar_centered, 0.2)
-        AdaptiveOpticsSim.apply_centering_phase!(KA_CPU_STYLE, ka_centered, 0.2)
+        AdaptiveOpticsSim.Optics.apply_centering_phase!(SCALAR_CPU_STYLE, scalar_centered, 0.2)
+        AdaptiveOpticsSim.Optics.apply_centering_phase!(KA_CPU_STYLE, ka_centered, 0.2)
         mark_ka_cpu_kernel!(:apply_centering_phase_kernel!)
         @test ka_cpu_close(ka_centered, scalar_centered)
 
         input = reshape(ComplexF64.(collect(1:16), collect(17:32)), 4, 4)
         scalar_copy = similar(input)
         ka_copy = similar(input)
-        AdaptiveOpticsSim._complex_scale_copy!(SCALAR_CPU_STYLE, scalar_copy, input, 0.25)
-        AdaptiveOpticsSim._complex_scale_copy!(KA_CPU_STYLE, ka_copy, input, 0.25)
+        AdaptiveOpticsSim.Optics._complex_scale_copy!(SCALAR_CPU_STYLE, scalar_copy, input, 0.25)
+        AdaptiveOpticsSim.Optics._complex_scale_copy!(KA_CPU_STYLE, ka_copy, input, 0.25)
         mark_ka_cpu_kernel!(:complex_scale_copy_kernel!)
         @test ka_copy == scalar_copy
         weights = fill(2.0 + 0.5im, 4, 4)
-        AdaptiveOpticsSim._complex_hadamard!(SCALAR_CPU_STYLE, scalar_copy, weights)
-        AdaptiveOpticsSim._complex_hadamard!(KA_CPU_STYLE, ka_copy, weights)
+        AdaptiveOpticsSim.Optics._complex_hadamard!(SCALAR_CPU_STYLE, scalar_copy, weights)
+        AdaptiveOpticsSim.Optics._complex_hadamard!(KA_CPU_STYLE, ka_copy, weights)
         mark_ka_cpu_kernel!(:complex_hadamard_kernel!)
         @test ka_copy == scalar_copy
 
         freqs = collect(range(0.0, 1.0; length=4))
         scalar_transfer = similar(input)
         ka_transfer = similar(input)
-        AdaptiveOpticsSim.build_fresnel_transfer!(SCALAR_CPU_STYLE, scalar_transfer, freqs, -0.1)
-        AdaptiveOpticsSim.build_fresnel_transfer!(KA_CPU_STYLE, ka_transfer, freqs, -0.1)
+        AdaptiveOpticsSim.Optics.build_fresnel_transfer!(SCALAR_CPU_STYLE, scalar_transfer, freqs, -0.1)
+        AdaptiveOpticsSim.Optics.build_fresnel_transfer!(KA_CPU_STYLE, ka_transfer, freqs, -0.1)
         mark_ka_cpu_kernel!(:fresnel_transfer_kernel!)
         @test ka_cpu_close(ka_transfer, scalar_transfer)
 
