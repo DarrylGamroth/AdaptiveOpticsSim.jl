@@ -61,7 +61,7 @@ function assert_acyclic_owner_graph(graph)
 end
 
 function plant_import_surface(path::AbstractString)
-    text = read(path, String)
+    text = replace(read(path, String), "\r\n" => "\n")
     block = split(split(
         text,
         "import ..AdaptiveOpticsSim:";
