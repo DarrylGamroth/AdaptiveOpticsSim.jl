@@ -21,6 +21,15 @@ defined here before they become public API.
   when the values are wavefront gradients or calibrated centroid-equivalent
   slopes.
 
+Package-architecture terms are used consistently as follows:
+
+| Term | Project meaning |
+|---|---|
+| Canonical owner | The one Julia module that defines and maintains a supported binding or generic-function identity. Other modules import that identity and add methods where appropriate; they do not create parallel generics or root forwarding aliases. |
+| API allowlist | The exact exported and qualified-`public` bindings maintained by one canonical owner. An allowlist is an equality contract, not a maximum-size budget or a representative sample. |
+| Extension hook | A generic function intentionally extended by an optional package extension. The hook retains one canonical owner even when methods are supplied for several optional dependencies. |
+| Cross-module import | An explicit import of a binding from its canonical owner for package-internal composition. It does not transfer ownership or make the binding public. |
+
 ## Optical Planes, Coordinates, And Products
 
 | Term | Project meaning |
@@ -208,6 +217,8 @@ a channel detector and is not forced into an area-frame API.
 | Focal-plane modulation | A prepared optical quadrature over focal-plane tip/tilt offsets in units of λ/D. `NoModulation`, `CircularModulation`, and `SampledModulation` describe the path; normalized weights average instantaneous intensities over a modulation cycle and do not represent exposure duration, trigger-relative device phase, or an RTC waveform. The circular policy's `phase_offset` fixes the numerical quadrature origin; it is distinct from the analytic phase of an autonomous waveform generator. |
 | Pyramid phase mask | The physical focal-plane phase-ramp optic of a Pyramid WFS, represented by `PyramidPhaseMask`. It is distinct from modulation and from the re-imaged-pupil differential estimator. |
 | BioEdge amplitude mask | The physical family of complementary focal-plane amplitude filters of a BioEdge WFS, represented by `BioEdgeAmplitudeMask`. It is not a Pyramid phase mask even when both families reuse prepared modulation and propagation helpers. |
+| Zernike phase spot | The physical focal-plane phase-shifting spot of a Zernike WFS, represented by `ZernikePhaseSpot`. It is an optical component, not the detector acquisition or downstream estimator. |
+| Curvature defocus pair | The ordered positive- and negative-defocus optical branches of a Curvature WFS, represented by `CurvatureDefocusPair`. It defines optical propagation on each side of focus, not detector packing, exposure, or estimation. |
 | Four-pupil mosaic | A detector-plane arrangement of four re-imaged pupil intensities used by Pyramid and BioEdge differential estimation. Its photon-arrival-rate values remain optical products until a detector acquisition applies response, QE, and exposure. |
 | Curvature branch rate planes | The ordered positive- then negative-defocus detector-facing photon-arrival-rate products formed by a Curvature optical front end. They remain separate optical products until independent detectors or one explicit packed mapping acquire them. |
 | Packed Curvature observation | One detector observation containing both compatible Curvature branches as spatial regions (`:curvature_branch_regions`) or counting channels (`:curvature_branch_channels`). Both branches share that detector's exposure; unequal exposures require separate detector acquisitions. |

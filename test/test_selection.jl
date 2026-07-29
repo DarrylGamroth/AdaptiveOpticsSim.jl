@@ -18,6 +18,8 @@ const TEST_SUITE_SPECS = (
         fixtures=("ka_cpu_style_fixture.jl",)),
     TestSuiteSpec("tomography", "tomography.jl"),
     TestSuiteSpec("quality", "testsets/quality.jl"),
+    TestSuiteSpec("namespace-authority",
+        "testsets/namespace_authority.jl"),
     TestSuiteSpec("core-optics", "testsets/core_optics.jl"),
     TestSuiteSpec("direct-science", "testsets/direct_science.jl"),
     TestSuiteSpec(
@@ -234,6 +236,7 @@ const TEST_CI_SHARD_SPECS = (
         "ka-cpu",
         "tomography",
         "quality",
+        "namespace-authority",
         "core-optics",
         "direct-science",
         "direct-imaging-batch",

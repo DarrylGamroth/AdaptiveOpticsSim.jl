@@ -296,6 +296,15 @@ exported surfaces, and an exact root allowlist. The ownership inventory includes
 cross-module internal bindings and extension hooks, not only exported or
 `public` names.
 
+NS-00B freezes that authority in the machine-readable
+[`namespace_authority.toml`](../test/contracts/namespace_authority.toml),
+records the pinned companion import surface in
+[`adaptiveopticshil_imports.toml`](../test/contracts/adaptiveopticshil_imports.toml),
+and indexes the preserved numerical, allocation, extension, package-load, and
+first-call evidence in
+[`namespace_characterization.toml`](../test/contracts/namespace_characterization.toml).
+These contracts contain no implementation binding moves.
+
 ### Ownership target
 
 | Namespace | Canonical responsibility | Explicit boundary |

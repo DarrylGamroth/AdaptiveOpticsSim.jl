@@ -15,6 +15,30 @@ method. Routine plant constructors may be imported with
 `using AdaptiveOpticsSim.Plant`, while the advanced seams below remain
 qualified deliberately.
 
+## Canonical Generic Ownership
+
+Every extension hook has one canonical module owner. The exact method inventory
+and owner mapping is frozen in
+[`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
+The owner categories are:
+
+- `Backends` for array allocation, random generation, FFT planning/execution,
+  reduction, compute-device identity, and accelerator registration
+- `Atmospheres` for phase-PSD and phase-noise generation
+- `Detectors` for detector execution plans, frame noise, counting output, and
+  device readout correction
+- `WavefrontSensors` for grouped/geometric sensing and LiFT solver fallbacks
+- `Calibration` for inverse-operator construction
+- `Tomography` for tomography-specific Hermitian solves
+- `Ensembles` for optional coarse scheduler execution
+- the root package only for cross-domain config and telemetry serialization
+
+While the flat source layout is being migrated, in-tree extensions still add
+methods to `AdaptiveOpticsSim.name`. The owning PR must update each extension
+to the new qualified generic in the same change. Do not leave a second root
+generic, import a similarly named helper from another domain, or add a
+forwarding method.
+
 ## Source Layout
 
 Use lower-case directory names for new source-tree locations. Julia type names

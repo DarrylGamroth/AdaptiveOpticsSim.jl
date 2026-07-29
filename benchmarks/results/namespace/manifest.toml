@@ -1,0 +1,17 @@
+[closure]
+id = "NS-00B-NAMESPACE-LATENCY-2026-07-29"
+status = "characterized"
+characterized_source_revision = "64b7371c6bd35ddd34777baa7d273f1581202990"
+authority_revision = "3e66a0879ef342d8025b11205af37377d226ed9f"
+sha256_canonicalization = "UTF-8 text with CRLF normalized to LF"
+scope = "Warm-cache fresh-process package-load, representative first-call, and same-process warmed-call characterization; no HIL deadline or cross-host portability claim."
+
+[[artifacts]]
+id = "NS-00B-NAMESPACE-LATENCY-LOCAL-CPU-2026-07-29"
+purpose = "Clean-tree Julia 1.12.6 package-load and direct-imaging first/warmed-call baseline"
+path = "2026-07-29-namespace-latency.toml"
+sha256 = "3d28b819632ed3fe06c5f561d3ac7c599a717f00e46190ffdccd2e975f3eab92"
+source_contract = "../../contracts/namespace_latency.toml"
+characterized_source_revision = "64b7371c6bd35ddd34777baa7d273f1581202990"
+authority_revision = "3e66a0879ef342d8025b11205af37377d226ed9f"
+correctness_passed = true

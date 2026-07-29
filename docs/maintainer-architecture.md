@@ -76,6 +76,41 @@ accessors `public`, and leaves underscore-prefixed implementation machinery
 unmarked. Extensions add methods to the canonical `AdaptiveOpticsSim.Plant`
 function rather than introducing a second root function identity.
 
+### Namespace Authority
+
+The package is transitioning from the current flat root surface to real
+`Backends`, `Optics`, `Atmospheres`, `Detectors`, `WavefrontSensors`,
+`Calibration`, `Control`, `Tomography`, and `Ensembles` modules alongside the
+existing `Plant` module. The authoritative pre-migration inventory, final exact
+API allowlists, extension-hook owners, and cross-module imports are frozen in
+[`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
+This file is the equality contract for the migration; documentation summaries
+do not override it.
+
+The owner dependency graph is acyclic:
+
+- `Optics` depends on `Backends`
+- `Atmospheres` and `Detectors` depend on `Backends` and `Optics`
+- `WavefrontSensors` depends on `Backends`, `Optics`, and `Detectors`
+- `Plant` depends on those five physical/runtime foundations
+- `Calibration` may additionally compose atmosphere, detector, and WFS models
+- `Control` depends on `Backends` and `Calibration`
+- `Tomography` depends on the physical domains and `Calibration`
+- `Ensembles` depends only on `Backends`
+
+Physical NCPA remains owned by `Optics`; KL-, Zernike-, and M2C-based synthesis
+belongs to `Calibration`, while path visibility belongs to `Plant`. Microlens
+arrays, focal-plane modulation, phase/amplitude masks, phase spots, and
+defocus optics are physical `Optics` components. Composed WFS front ends,
+observations, measurements, detector bindings, and estimators belong to
+`WavefrontSensors`.
+
+The final root surface contains only the canonical modules, shared generic
+errors, fidelity profiles, RNG services, and `runtime_timing`. It provides no
+compatibility aliases. `AbstractSource` and `AbstractTimedAtmosphere` become
+qualified-public seams under `Optics` and `Atmospheres`, respectively, because
+the companion HIL package implements test models against those interfaces.
+
 ## Main Data Model
 
 The dominant pattern is:
