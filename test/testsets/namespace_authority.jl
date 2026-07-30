@@ -135,6 +135,26 @@ function adaptive_optics_sim_extension_hooks(path::AbstractString)
     return owners
 end
 
+function adaptive_optics_sim_root_references(path::AbstractString)
+    text = read(path, String)
+    aliases = ["AdaptiveOpticsSim"]
+    append!(aliases, String(matched.captures[1]) for matched in eachmatch(
+        r"(?m)^\s*const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*AdaptiveOpticsSim\s*(?:#.*)?$",
+        text,
+    ))
+    references = Pair{String,String}[]
+    for alias in unique(aliases)
+        pattern = Regex(
+            "(?<![A-Za-z0-9_])" * alias *
+            raw"\.([A-Za-z_][A-Za-z0-9_!]*)",
+        )
+        append!(references,
+            alias => String(matched.captures[1])
+            for matched in eachmatch(pattern, text))
+    end
+    return unique(references)
+end
+
 function recursive_key_values(value, sought::Set{String}, found=Pair{String,Any}[])
     if value isa AbstractDict
         for (key, child) in value
@@ -183,7 +203,7 @@ end
         "no root forwarding aliases, property forwarding, state views, or compatibility adapters"
     @test migration_state["schema_version"] == 1
     @test migration_state["name"] == "namespace_migration_state"
-    @test migration_state["status"] == "maintained"
+    @test migration_state["status"] == "complete"
     @test migration_state["authority"] == basename(authority_path)
 
     current = authority["current_root"]
@@ -216,13 +236,11 @@ end
         Set(String.(migration_state["implemented_owners"]))
     partial_owners =
         Set(String.(get(migration_state, "partial_owners", String[])))
-    @test implemented_owners ⊆ canonical_owners
-    @test partial_owners ⊆ canonical_owners
+    @test implemented_owners == setdiff(canonical_owners, Set(("Root",)))
+    @test isempty(partial_owners)
     @test isdisjoint(implemented_owners, partial_owners)
     @test "Root" ∉ implemented_owners
     @test "Root" ∉ partial_owners
-    @test "Plant" ∉ implemented_owners
-    @test "Plant" ∉ partial_owners
     @test Set(keys(migration_state["owner_sources"])) ==
         implemented_owners
     @test Set(keys(get(
@@ -334,6 +352,36 @@ end
     @test Set(root_runtime.exports) ==
         union(expected_root_exports, Set(("AdaptiveOpticsSim",)))
     @test Set(root_runtime.public) == expected_root_public
+    domain_modules = Set(
+        getfield(AdaptiveOpticsSim, Symbol(owner))
+        for owner in setdiff(canonical_owners, Set(("Root",)))
+    )
+    root_domain_aliases = Symbol[]
+    for binding in names(AdaptiveOpticsSim; all=true, imported=true)
+        isdefined(AdaptiveOpticsSim, binding) || continue
+        value = getfield(AdaptiveOpticsSim, binding)
+        value_owner = try
+            binding_parentmodule(value)
+        catch
+            AdaptiveOpticsSim
+        end
+        value_owner in domain_modules &&
+            push!(root_domain_aliases, binding)
+    end
+    @test isempty(root_domain_aliases)
+
+    benchmark_paths = String[]
+    for (directory, _, files) in walkdir(
+        joinpath(REPOSITORY_ROOT, "benchmarks"))
+        append!(benchmark_paths,
+            joinpath(directory, file)
+            for file in files if endswith(file, ".jl"))
+    end
+    for path in benchmark_paths
+        for (alias, binding) in adaptive_optics_sim_root_references(path)
+            @test isdefined(AdaptiveOpticsSim, Symbol(binding))
+        end
+    end
 
     for owner in implemented_owners
         allowlist = only(entry for entry in allowlists

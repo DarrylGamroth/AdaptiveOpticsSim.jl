@@ -24,11 +24,7 @@ import ..AdaptiveOpticsSim:
     bin2d_abs2!,
     bin2d_abs2_kernel!,
     center_resize2d!,
-    edge_geometric_slopes!,
-    ensure_psf_buffers!,
-    geometric_slopes!,
-    geometric_wavefront_slopes!,
-    set_valid_subapertures!
+    ensure_psf_buffers!
 
 import ..Backends:
     AbstractArrayBackend,
@@ -237,6 +233,7 @@ import ..Detectors:
     validate_frame_response_model,
     validate_up_the_ramp_schedule
 
+include("geometric_slopes.jl")
 include("abstract_wfs.jl")
 include("sensing_modes.jl")
 include("stage_contracts.jl")

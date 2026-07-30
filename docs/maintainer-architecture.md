@@ -78,11 +78,11 @@ function rather than introducing a second root function identity.
 
 ### Namespace Authority
 
-The package is transitioning from the original flat root surface to real
-domain modules alongside the existing `Plant` module. `Backends`, `Optics`,
-`Atmospheres`, `Detectors`, and `Calibration` are complete. The common `WavefrontSensors`
-contracts are established; concrete WFS families are moving through their
-remaining ordered gates. `Atmospheres` owns atmosphere models and state,
+The package completed its transition from the original flat root surface to
+real domain modules alongside `Plant`. `Backends`, `Optics`, `Atmospheres`,
+`Detectors`, `WavefrontSensors`, `Calibration`, `Control`, `Tomography`, and
+`Ensembles` are canonical owners with exact API allowlists. `Atmospheres` owns
+atmosphere models and state,
 source-direction rendering and batching, and
 atmosphere-coupled propagation. `Detectors` is the canonical owner of both
 conventional frame/area and counting/channel detector models and acquisition,
@@ -99,7 +99,7 @@ sweeps, and optional scheduler integrations. The
 authoritative pre-migration inventory, final exact API allowlists,
 extension-hook owners, and cross-module imports are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
-The maintained implementation stage is recorded separately in
+The completed implementation state is recorded separately in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
 These files are the equality contract for the migration; documentation
 summaries do not override them.

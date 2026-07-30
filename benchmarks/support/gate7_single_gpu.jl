@@ -179,7 +179,7 @@ end
 @inline gate7_path_ids() = (:wfs_alpha, :wfs_beta)
 
 function prepare_gate7_operation(
-    selector::AOS.AbstractArrayBackend,
+    selector::AOS.Backends.AbstractArrayBackend,
     workload::AbstractDict,
     mode::Val,
 )
@@ -317,7 +317,8 @@ end
 function synchronize_gate7_outputs!(operation::Gate7Operation)
     @inbounds for id in gate7_path_ids()
         values = _gate7_path(operation, id).result.values
-        AOS.synchronize_backend!(AOS.execution_style(values))
+        AOS.Backends.synchronize_backend!(
+            AOS.Backends.execution_style(values))
     end
     return operation
 end
@@ -385,7 +386,7 @@ end
 
 function prepare_gate7_boundary(
     id::AbstractString,
-    selector::AOS.AbstractArrayBackend,
+    selector::AOS.Backends.AbstractArrayBackend,
     workload::AbstractDict,
 )
     if id == "independent_device_ready"

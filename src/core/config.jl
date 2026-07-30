@@ -3,7 +3,7 @@ config_value(x::AbstractArray) = [config_value(v) for v in x]
 config_value(x::Tuple) = [config_value(v) for v in x]
 config_value(x::NamedTuple) = Dict(string(k) => config_value(v) for (k, v) in pairs(x))
 config_value(x::AbstractDict) = Dict(string(k) => config_value(v) for (k, v) in pairs(x))
-config_value(x::AbstractOpticalElement) = config_dict(x)
+config_value(x::Optics.AbstractOpticalElement) = config_dict(x)
 config_value(x::Nothing) = nothing
 config_value(x) = x
 

@@ -96,7 +96,7 @@ function sampled_frame_response_probe()
     ]; T=Float32)
     frame = rand(Float32, 96, 96)
     scratch = similar(frame)
-    return () -> AdaptiveOpticsSim.apply_response!(
+    return () -> AdaptiveOpticsSim.Detectors.apply_response!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), model, frame, scratch)
 end
 
@@ -108,7 +108,7 @@ function batched_sampled_frame_response_probe()
     ]; T=Float32)
     cube = rand(Float32, 256, 4, 4)
     scratch = similar(cube)
-    return () -> AdaptiveOpticsSim._batched_apply_response!(
+    return () -> AdaptiveOpticsSim.Detectors._batched_apply_response!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), model, cube, scratch)
 end
 
@@ -123,7 +123,7 @@ function gaussian_frame_response_probe()
     model = GaussianPixelResponse(response_width_px=1.5, T=Float32)
     frame = rand(Float32, 96, 96)
     scratch = similar(frame)
-    return () -> AdaptiveOpticsSim.apply_response!(
+    return () -> AdaptiveOpticsSim.Detectors.apply_response!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), model, frame, scratch)
 end
 
@@ -139,7 +139,8 @@ function batched_emccd_capture_probe()
     rng = runtime_rng(17)
     return function ()
         fill!(cube, Float32(10))
-        return AdaptiveOpticsSim.capture_stack!(detector, cube, scratch, rng)
+        return AdaptiveOpticsSim.Detectors.capture_stack!(
+            detector, cube, scratch, rng)
     end
 end
 

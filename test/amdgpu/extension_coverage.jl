@@ -66,7 +66,7 @@ AMDGPU.functional() ||
     edge_mask = AMDGPU.ROCArray(trues(4, 4))
     geometric_slopes = AMDGPU.zeros(Float32, 8)
     edge_slopes = AMDGPU.zeros(Float32, 8)
-    AdaptiveOpticsSim._geometric_slopes!(
+    AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!(
         Backends.execution_style(geometric_slopes),
         geometric_slopes,
         opd,
@@ -75,7 +75,7 @@ AMDGPU.functional() ||
         2,
         4,
     )
-    AdaptiveOpticsSim._edge_geometric_slopes!(
+    AdaptiveOpticsSim.WavefrontSensors._edge_geometric_slopes!(
         Backends.execution_style(edge_slopes),
         edge_slopes,
         opd,

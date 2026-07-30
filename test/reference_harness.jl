@@ -1503,7 +1503,8 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
         offset = n_sub * n_sub
         slopes = similar(AdaptiveOpticsSim.WavefrontSensors.slopes(wfs))
         style = AdaptiveOpticsSim.Backends.AcceleratorStyle(KernelAbstractions.CPU())
-        AdaptiveOpticsSim._geometric_slopes!(style, slopes, pupil.opd,
+        AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!(
+            style, slopes, pupil.opd,
             AdaptiveOpticsSim.WavefrontSensors.valid_subaperture_mask(wfs),
             sub, n_sub,
             offset)

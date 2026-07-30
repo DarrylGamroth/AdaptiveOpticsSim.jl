@@ -86,7 +86,7 @@ function AOSPlant.prepare_path_executor(
     pupil = AOS.Optics.PupilFunction(
         telescope;
         T,
-        backend=AOS.backend(telescope),
+        backend=AOS.Backends.backend(telescope),
     )
     imaging = AOS.Optics.prepare_direct_imaging(pupil, source; zero_padding=1)
     return AOSPlant.PreparedPathExecutor(
@@ -111,13 +111,14 @@ function AOSPlant.prepare_acquisition_provider(
 )
     AOSPlant.require_path_result(path)
     T = eltype(path.result.values)
-    detector = AOS.Detector(
+    detector = AOS.Detectors.Detector(
         integration_time=T(model.exposure_s),
-        noise=AOS.NoiseNone(),
+        noise=AOS.Detectors.NoiseNone(),
         qe=one(T),
         gain=one(T),
-        response_model=AOS.NullFrameResponse(),
-        sensor=AOS.CMOSSensor(timing_model=AOS.GlobalShutter(), T=T),
+        response_model=AOS.Detectors.NullFrameResponse(),
+        sensor=AOS.Detectors.CMOSSensor(
+            timing_model=AOS.Detectors.GlobalShutter(), T=T),
         T=T,
         backend=path.key.backend,
     )
@@ -214,8 +215,8 @@ function deformable_mirror_definition(
     registration::AOSPlant.PupilRelayRegistration,
 )
     endpoint = Symbol(id, :_command)
-    topology = AOS.SampledActuatorTopology(zeros(Float64, 2, 1))
-    influence = AOS.DenseInfluenceMatrix(
+    topology = AOS.Optics.SampledActuatorTopology(zeros(Float64, 2, 1))
+    influence = AOS.Optics.DenseInfluenceMatrix(
         fill(1.0, Int(resolution)^2, 1),
     )
     model = AOSPlant.DeformableMirrorModel(

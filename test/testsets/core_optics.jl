@@ -1426,7 +1426,8 @@ end
     build_mask!(valid, SubapertureGridMask(threshold=0.5), pupil)
     @test valid == Bool[true false; false true]
     valid2 = similar(valid)
-    AdaptiveOpticsSim.set_valid_subapertures!(valid2, pupil, 0.5)
+    AdaptiveOpticsSim.WavefrontSensors.set_valid_subapertures!(
+        valid2, pupil, 0.5)
     @test valid2 == valid
 end
 

@@ -1,2 +1,2 @@
 """Detectors implement capture!(det, psf; rng)."""
-abstract type AbstractDetector <: AbstractOpticalElement end
+abstract type AbstractDetector <: Optics.AbstractOpticalElement end

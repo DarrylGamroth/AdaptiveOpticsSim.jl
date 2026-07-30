@@ -7,7 +7,7 @@
     fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(fft_buffer)
     ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(fft_buffer)
     same_buffer = copy(expected)
-    AdaptiveOpticsSim.apply_lgs_convolution!(
+    AdaptiveOpticsSim.WavefrontSensors.apply_lgs_convolution!(
         same_buffer, identity_kernel_fft, fft_buffer, fft_plan, ifft_plan)
     @test same_buffer ≈ expected rtol=1e-12 atol=1e-12
     @test sum(same_buffer) ≈ sum(expected) rtol=1e-12
@@ -17,7 +17,7 @@
     split_fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(split_fft_buffer)
     split_ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(split_ifft_buffer)
     split_buffer = copy(expected)
-    AdaptiveOpticsSim.apply_lgs_convolution!(split_buffer, identity_kernel_fft,
+    AdaptiveOpticsSim.WavefrontSensors.apply_lgs_convolution!(split_buffer, identity_kernel_fft,
         split_fft_buffer, split_fft_plan, split_ifft_buffer, split_ifft_plan)
     @test split_buffer ≈ expected rtol=1e-12 atol=1e-12
     @test sum(split_buffer) ≈ sum(expected) rtol=1e-12
@@ -56,27 +56,27 @@ end
         photon_irradiance=1.0,
     )
     signature_args = (pupil, signature_source, 16, 4, 0.1, Float64)
-    base_signature = AdaptiveOpticsSim.lgs_kernel_signature(
+    base_signature = AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         signature_args...; model=:subaperture_average)
-    @test AdaptiveOpticsSim.lgs_kernel_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         signature_args...; model=:per_subaperture) != base_signature
-    @test AdaptiveOpticsSim.lgs_kernel_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         signature_args...; model=:per_subaperture,
-        threshold=0.2) != AdaptiveOpticsSim.lgs_kernel_signature(
+        threshold=0.2) != AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         signature_args...; model=:per_subaperture, threshold=0.1)
-    @test AdaptiveOpticsSim.lgs_kernel_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         pupil, signature_source, 32, 4, 0.1, Float64;
         model=:subaperture_average) != base_signature
-    @test AdaptiveOpticsSim.lgs_kernel_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         pupil, signature_source, 16, 8, 0.1, Float64;
         model=:subaperture_average) != base_signature
-    @test AdaptiveOpticsSim.lgs_kernel_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         pupil, signature_source, 16, 4, 0.2, Float64;
         model=:subaperture_average) != base_signature
-    @test AdaptiveOpticsSim.lgs_kernel_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         pupil, signature_source, 16, 4, 0.1, Float32;
         model=:subaperture_average) != base_signature
-    @test AdaptiveOpticsSim.lgs_kernel_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         PupilFunction(Telescope(resolution=16, diameter=10.0)), signature_source,
         16, 4, 0.1, Float64;
         model=:subaperture_average) != base_signature
@@ -87,7 +87,7 @@ end
         fwhm_spot_up=signature_source.params.fwhm_spot_up,
         photon_irradiance=1.0,
     )
-    @test AdaptiveOpticsSim.lgs_kernel_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.lgs_kernel_signature(
         pupil, changed_wavelength, 16, 4, 0.1, Float64;
         model=:subaperture_average) != base_signature
 

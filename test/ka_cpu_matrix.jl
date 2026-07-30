@@ -384,16 +384,20 @@ end
         threshold = 0.4
         scalar_valid = Matrix{Bool}(undef, 2, 2)
         ka_valid = similar(scalar_valid)
-        AdaptiveOpticsSim._set_valid_subapertures!(SCALAR_CPU_STYLE, scalar_valid, pupil, threshold, 4, 2)
-        AdaptiveOpticsSim._set_valid_subapertures!(KA_CPU_STYLE, ka_valid, pupil, threshold, 4, 2)
+        AdaptiveOpticsSim.WavefrontSensors._set_valid_subapertures!(
+            SCALAR_CPU_STYLE, scalar_valid, pupil, threshold, 4, 2)
+        AdaptiveOpticsSim.WavefrontSensors._set_valid_subapertures!(
+            KA_CPU_STYLE, ka_valid, pupil, threshold, 4, 2)
         mark_ka_cpu_kernel!(:subaperture_grid_mask_kernel!)
         @test ka_valid == scalar_valid
 
         opd = reshape(collect(1.0:64.0), 8, 8)
         scalar_slopes = Vector{Float64}(undef, 8)
         ka_slopes = similar(scalar_slopes)
-        AdaptiveOpticsSim._geometric_slopes!(SCALAR_CPU_STYLE, scalar_slopes, opd, scalar_valid, 4, 2, 4)
-        AdaptiveOpticsSim._geometric_slopes!(KA_CPU_STYLE, ka_slopes, opd, ka_valid, 4, 2, 4)
+        AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!(
+            SCALAR_CPU_STYLE, scalar_slopes, opd, scalar_valid, 4, 2, 4)
+        AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!(
+            KA_CPU_STYLE, ka_slopes, opd, ka_valid, 4, 2, 4)
         mark_ka_cpu_kernel!(:geometric_slopes_kernel!)
         @test ka_slopes == scalar_slopes
 
@@ -404,8 +408,11 @@ end
         edge_mask[end, :] .= true
         scalar_edge_slopes = Vector{Float64}(undef, 8)
         ka_edge_slopes = similar(scalar_edge_slopes)
-        AdaptiveOpticsSim._edge_geometric_slopes!(SCALAR_CPU_STYLE, scalar_edge_slopes, opd, scalar_valid, edge_mask, 4, 2, 4)
-        AdaptiveOpticsSim._edge_geometric_slopes!(KA_CPU_STYLE, ka_edge_slopes, opd, ka_valid, edge_mask, 4, 2, 4)
+        AdaptiveOpticsSim.WavefrontSensors._edge_geometric_slopes!(
+            SCALAR_CPU_STYLE, scalar_edge_slopes, opd, scalar_valid,
+            edge_mask, 4, 2, 4)
+        AdaptiveOpticsSim.WavefrontSensors._edge_geometric_slopes!(
+            KA_CPU_STYLE, ka_edge_slopes, opd, ka_valid, edge_mask, 4, 2, 4)
         mark_ka_cpu_kernel!(:edge_geometric_slopes_kernel!)
         @test ka_edge_slopes == scalar_edge_slopes
 

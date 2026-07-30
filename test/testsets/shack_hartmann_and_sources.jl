@@ -333,22 +333,22 @@ end
         laser_coordinates=(0.0, 0.0), fwhm_spot_up=0.8,
         elongation_factor=1.2, photon_irradiance=1.0)
 
-    base_signature = AdaptiveOpticsSim.calibration_signature(base)
+    base_signature = AdaptiveOpticsSim.WavefrontSensors.calibration_signature(base)
     for changed_source in (changed_elongation, changed_launch,
         changed_uplink_width, changed_profile, reshaped_profile)
-        @test AdaptiveOpticsSim.calibration_signature(changed_source) !=
+        @test AdaptiveOpticsSim.WavefrontSensors.calibration_signature(changed_source) !=
             base_signature
     end
     altitude_base = LGSSource(altitude=90000.0, elongation_factor=1.2,
         photon_irradiance=1.0)
     altitude_changed = LGSSource(altitude=95000.0, elongation_factor=1.2,
         photon_irradiance=1.0)
-    @test AdaptiveOpticsSim.calibration_signature(altitude_base) !=
-        AdaptiveOpticsSim.calibration_signature(altitude_changed)
+    @test AdaptiveOpticsSim.WavefrontSensors.calibration_signature(altitude_base) !=
+        AdaptiveOpticsSim.WavefrontSensors.calibration_signature(altitude_changed)
 
     signatures = map((base, changed_geometry, changed_profile)) do src
-        AdaptiveOpticsSim.pupil_aperture_calibration_signature(pupil,
-            AdaptiveOpticsSim.calibration_signature(src))
+        AdaptiveOpticsSim.WavefrontSensors.pupil_aperture_calibration_signature(pupil,
+            AdaptiveOpticsSim.WavefrontSensors.calibration_signature(src))
     end
 
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),

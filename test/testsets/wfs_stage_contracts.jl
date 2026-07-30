@@ -1162,7 +1162,8 @@ end
     @test all(isfinite, direct_measurement.storage)
     @test any(!iszero, direct_measurement.storage)
     raw_geometric = similar(direct_measurement.storage)
-    AdaptiveOpticsSim.geometric_slopes!(raw_geometric, pupil.opd,
+    AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
+        raw_geometric, pupil.opd,
         geometric.front_end.layout.valid_mask)
     n_geometric = length(raw_geometric) ÷ 2
     valid_geometric = vec(Array(geometric.front_end.layout.valid_mask))

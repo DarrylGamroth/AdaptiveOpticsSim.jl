@@ -168,7 +168,7 @@ AdaptiveOpticsSim.Detectors.validate_frame_response_model(
     unkeyed_response = Detector(noise=NoiseNone(),
         response_model=UnkeyedCalibrationFrameResponse(0.25))
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim.detector_calibration_signature(
+        AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(
             unkeyed_response, UInt(0))
     end
 
@@ -185,7 +185,7 @@ AdaptiveOpticsSim.Detectors.validate_frame_response_model(
     impulse[3, 3] = 1.0
     before = copy(capture!(detector, impulse, src;
         rng=MersenneTwister(2301)))
-    signature_before = AdaptiveOpticsSim.detector_calibration_signature(
+    signature_before = AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(
         detector, UInt(7))
 
     sampled_response.kernel[2, 2] = 0.2
@@ -193,7 +193,7 @@ AdaptiveOpticsSim.Detectors.validate_frame_response_model(
     after = copy(capture!(detector, impulse, src;
         rng=MersenneTwister(2301)))
     @test after == before
-    @test AdaptiveOpticsSim.detector_calibration_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(
         detector, UInt(7)) == signature_before
 
     raw_gain_map = [1.0 0.8; 0.9 1.1]
@@ -231,7 +231,7 @@ AdaptiveOpticsSim.Detectors.validate_frame_response_model(
 
     defect_detector = Detector(noise=NoiseNone(), sensor=CMOSSensor(),
         defect_model=composite_defects)
-    defect_signature = AdaptiveOpticsSim.detector_calibration_signature(
+    defect_signature = AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(
         defect_detector, UInt(8))
     @test defect_detector.params.defect_model.stages[1].gain_map !==
         prnu.gain_map
@@ -241,14 +241,14 @@ AdaptiveOpticsSim.Detectors.validate_frame_response_model(
     bad_pixels.mask[2, 2] = true
     @test composite_defects.stages[1].gain_map[1, 1] == 1.0
     @test !composite_defects.stages[2].mask[2, 2]
-    @test AdaptiveOpticsSim.detector_calibration_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(
         defect_detector, UInt(8)) == defect_signature
 
     replacement_detector = Detector(noise=NoiseNone(), sensor=CMOSSensor(),
         defect_model=CompositeDetectorDefectModel(
             PixelResponseNonuniformity([0.7 0.8; 0.9 1.1]),
             BadPixelMask(Bool[false true; true false]; throughput=0.0)))
-    @test AdaptiveOpticsSim.detector_calibration_signature(
+    @test AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(
         replacement_detector, UInt(8)) != defect_signature
 end
 
@@ -1885,7 +1885,7 @@ end
         sensor=calibration_sensor, response_model=NullFrameResponse(),
         correction_model=calibration_correction)
     deterministic_reference = copy(
-        AdaptiveOpticsSim.detector_calibration_frame!(
+        AdaptiveOpticsSim.WavefrontSensors.detector_calibration_frame!(
             calibration_detector, calibration_input, 1.0))
     noiseless_cds = copy(capture!(capture_detector, calibration_input;
         rng=MersenneTwister(1901)))
@@ -1906,7 +1906,7 @@ end
         sensor=ramp_calibration_sensor, response_model=NullFrameResponse(),
         correction_model=calibration_correction)
     ramp_reference = copy(
-        AdaptiveOpticsSim.detector_calibration_frame!(
+        AdaptiveOpticsSim.WavefrontSensors.detector_calibration_frame!(
             ramp_calibration_detector, calibration_input, 1.0))
     noiseless_ramp = copy(capture!(ramp_capture_detector,
         calibration_input; rng=MersenneTwister(1902)))
@@ -1922,11 +1922,11 @@ end
         response_model=NullFrameResponse(),
         correction_model=calibration_correction)
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim.detector_calibration_signature(
+        AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(
             invalid_ramp_calibration, UInt(0))
     end
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim.detector_calibration_frame!(
+        AdaptiveOpticsSim.WavefrontSensors.detector_calibration_frame!(
             invalid_ramp_calibration, calibration_input, 1.0)
     end
 

@@ -290,11 +290,11 @@ adoption is not required. The maintained delivery order, PR checklists, and
 completion state live in the
 [namespace tracker](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/136).
 
-The current package exposes a broad flat root surface. The target is one real
-owner for every supported binding and generic function, small domain-local
-exported surfaces, and an exact root allowlist. The ownership inventory includes
-cross-module internal bindings and extension hooks, not only exported or
-`public` names.
+The core namespace migration is complete through NS-10. Every supported
+binding and generic function has one real owner, domain-local exported surfaces
+are exact, and the root contains only its reviewed allowlist. The closure audit
+also removed transitional non-public root imports and moved geometric WFS
+kernel ownership into `WavefrontSensors`.
 
 NS-00B freezes that authority in the machine-readable
 [`namespace_authority.toml`](../test/contracts/namespace_authority.toml),
@@ -303,12 +303,12 @@ records the pinned companion import surface in
 and indexes the preserved numerical, allocation, extension, package-load, and
 first-call evidence in
 [`namespace_characterization.toml`](../test/contracts/namespace_characterization.toml).
-These contracts contain no implementation binding moves.
-The maintained implementation stage lives in
+The authority and characterization contracts preserve the reviewed baseline;
+the completed implementation state lives in
 [`namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml);
 `Backends`, `Optics`, `Atmospheres`, `Detectors`, `WavefrontSensors`,
 `Calibration`, `Control`, `Tomography`, and `Ensembles` are complete through
-NS-09.
+NS-10. `Plant` remains its established canonical owner.
 `Atmospheres` owns atmosphere models and state, direction rendering and
 batching, and atmosphere-coupled propagation.
 `Detectors` owns both conventional frame/area and counting/channel APIs.
@@ -338,7 +338,7 @@ parallel scheduler integrations.
 | `Ensembles` | coarse offline execution policies, sweeps, and optional parallel integrations | this is not an `AdaptiveOpticsHIL.jl` deadline scheduler |
 | `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, placement, providers, and event composition | physical domain models enter through explicit imports |
 
-`AdaptiveOpticsSim` will export the canonical modules plus shared errors,
+`AdaptiveOpticsSim` exports the canonical modules plus shared errors,
 fidelity profiles, and deliberately selected cross-domain workflow vocabulary.
 Domain modules export routine vocabulary, mark stable advanced seams `public`,
 and leave implementation details unmarked. A retained root binding is allowed
@@ -378,13 +378,11 @@ the
 [`AdaptiveOpticsHIL` import migration](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/37)
 are separate cross-repository PRs.
 
-Before ownership moves, the broad detector/WFS and calibration/control test
-groups must be partitioned into bounded, coverage-preserving suites. Every
-owner PR runs its focused suites first and full CPU closure before merge.
-Backend-facing changes run applicable extension and hardware tests; the final
-closure repeats available CUDA and AMDGPU validation. Allocation checks remain
-outside coverage instrumentation where instrumentation changes allocation
-counts.
+The delivery partitioned broad detector/WFS and calibration/control tests into
+bounded, coverage-preserving suites. Owner changes run focused suites before
+full CPU closure; backend-facing changes run applicable extension and hardware
+tests. Allocation checks remain outside coverage instrumentation where
+instrumentation changes allocation counts.
 
 This gate does not change physical algorithms, promote model-validity claims,
 qualify detectors, add compatibility adapters, integrate `Hsm.jl` into core,

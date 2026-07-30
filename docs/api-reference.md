@@ -25,9 +25,10 @@ their canonical modules. Qualified public names are maintained but do not
 enter the caller's ordinary namespace. The root package exports the canonical
 modules, not compatibility exports for their moved contents.
 
-The breaking namespace migration is in progress. `Backends`, `Optics`,
-`Atmospheres`, `Detectors`, `Calibration`, `Control`, `Tomography`, and
-`Ensembles` are complete. `Atmospheres` owns atmosphere
+The breaking namespace migration is complete. `Backends`, `Optics`,
+`Atmospheres`, `Detectors`, `WavefrontSensors`, `Plant`, `Calibration`,
+`Control`, `Tomography`, and `Ensembles` are canonical owners. `Atmospheres`
+owns atmosphere
 models and state, source-direction rendering and batching, and
 atmosphere-coupled propagation. `Detectors` owns both conventional frame/area
 and counting/channel sensor APIs. `Optics` owns
@@ -35,10 +36,11 @@ apertures, telescopes, sources, optical products and
 metadata, pupil/field formation, backend-portable Fraunhofer and Fresnel
 propagation, direct imaging, sampled OPD, physical NCPA, controllable optics,
 deformable mirrors, spatial filtering, and reusable physical WFS components.
-`Calibration` owns inverse policies, interaction and control matrices, modal
-bases, model-derived NCPA synthesis, fitting, and calibration workflows.
-Bindings assigned to later domain owners remain at the root until their owner
-PR lands. The exact final root and domain allowlists are frozen in
+`WavefrontSensors` owns composed sensing, estimation, and its geometric slope
+kernels. `Calibration` owns inverse policies, interaction and control
+matrices, modal bases, model-derived NCPA synthesis, fitting, and calibration
+workflows. The root provides no compatibility bindings for domain-owned
+contents. The exact final root and domain allowlists are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
 The maintained implementation stage is recorded in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
