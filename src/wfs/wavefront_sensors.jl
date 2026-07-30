@@ -19,6 +19,8 @@ import ..AdaptiveOpticsSim:
     InvalidConfiguration,
     UnsupportedAlgorithm,
     bin2d!,
+    bin2d_abs2!,
+    bin2d_abs2_kernel!,
     center_resize2d!,
     edge_geometric_slopes!,
     geometric_slopes!,
@@ -32,6 +34,7 @@ import ..Backends:
     CPUBackend,
     ExecutionStyle,
     HostComputeDevice,
+    KernelLaunchPhase,
     ScalarCPUStyle,
     _resolve_array_backend,
     _resolve_backend_selector,
@@ -44,6 +47,7 @@ import ..Backends:
     execution_style,
     finish_kernel_phase!,
     gpu_backend_name,
+    host_array,
     launch_kernel!,
     launch_kernel_async!,
     masked_sum2d,
@@ -101,10 +105,14 @@ import ..Optics:
     SampledModulation,
     Telescope,
     BioEdgeAmplitudeMask,
+    CurvatureDefocusPair,
     PyramidPhaseMask,
+    ZernikePhaseSpot,
     _prepare_microlens_propagation,
+    _pupil_cell_area,
     _pupil_diameter_m,
     _pupil_resolution,
+    _require_physical_photon_irradiance,
     aperture_revision,
     axis_centering,
     build_mask!,
@@ -113,6 +121,7 @@ import ..Optics:
     fraunhofer_intensity_stack!,
     lgs_elongation_factor,
     lgs_profile,
+    is_leaf_source,
     is_lgs_source,
     microlens_array,
     modulation_point_count,
@@ -127,6 +136,14 @@ import ..Optics:
     spectral_bundle,
     validate_plane_storage,
     wavelength
+
+import ..Atmospheres:
+    AbstractAtmosphere,
+    AbstractAtmosphericFieldModel,
+    AtmosphericFieldPropagation,
+    LayeredFresnelAtmosphericPropagation,
+    current_epoch,
+    propagate_atmosphere_field!
 
 import ..Detectors:
     AbstractChargeCouplingModel,
@@ -144,6 +161,7 @@ import ..Detectors:
     CompositeFrameReadoutCorrection,
     ConventionalOutput,
     CorrelatedDoubleSampling,
+    CountingReadoutMetadata,
     DarkSignalNonuniformity,
     Detector,
     EMCCDSensor,
@@ -182,6 +200,7 @@ import ..Detectors:
     counting_array,
     counting_exposure_time,
     counting_fill_factor,
+    counting_integration_time,
     counting_post_gain,
     counting_qe,
     counting_source_throughput,
@@ -215,6 +234,8 @@ include("shack_hartmann.jl")
 include("focal_plane_modulation.jl")
 include("pyramid.jl")
 include("bioedge.jl")
+include("zernike.jl")
+include("curvature.jl")
 include("api.jl")
 
 end # module WavefrontSensors
