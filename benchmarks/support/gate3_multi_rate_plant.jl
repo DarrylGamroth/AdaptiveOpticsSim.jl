@@ -36,31 +36,34 @@ AOSPlant.plant_model_definition_style(::Type{<:MultiRateAcquisitionModel}) =
 
 @inline function multi_rate_sensor(model::MultiRateAcquisitionModel{
     T,<:GlobalCMOSKind}) where {T}
-    return AOS.CMOSSensor(timing_model=AOS.GlobalShutter(), T=T)
+    return AOS.Detectors.CMOSSensor(
+        timing_model=AOS.Detectors.GlobalShutter(), T=T)
 end
 
 @inline function multi_rate_sensor(model::MultiRateAcquisitionModel{
     T,<:RollingCMOSKind}) where {T}
-    return AOS.CMOSSensor(timing_model=AOS.RollingShutter(
+    return AOS.Detectors.CMOSSensor(timing_model=AOS.Detectors.RollingShutter(
         model.rolling_line_s;
         row_group_size=model.rolling_row_group_size), T=T)
 end
 
 @inline function multi_rate_sensor(model::MultiRateAcquisitionModel{
     T,<:CCDKind}) where {T}
-    return AOS.CCDSensor(T=T)
+    return AOS.Detectors.CCDSensor(T=T)
 end
 
 @inline function multi_rate_sensor(model::MultiRateAcquisitionModel{
     T,<:FrameTransferEMCCDKind}) where {T}
-    return AOS.EMCCDSensor(acquisition_mode=AOS.FrameTransferAcquisition(
+    return AOS.Detectors.EMCCDSensor(
+        acquisition_mode=AOS.Detectors.FrameTransferAcquisition(
         transfer_time=model.transfer_s, T=T), T=T)
 end
 
 @inline function multi_rate_sensor(model::MultiRateAcquisitionModel{
     T,<:HgCdTeRampKind}) where {T}
-    return AOS.HgCdTeAvalancheArraySensor(
-        sampling_mode=AOS.UpTheRampSampling(model.nondestructive_reads),
+    return AOS.Detectors.HgCdTeAvalancheArraySensor(
+        sampling_mode=AOS.Detectors.UpTheRampSampling(
+            model.nondestructive_reads),
         read_time=zero(T), T=T)
 end
 
@@ -71,12 +74,12 @@ function AOSPlant.prepare_acquisition_provider(
 )
     AOSPlant.require_path_result(path)
     T = eltype(AOSPlant._first_path_result(path.result).values)
-    detector = AOS.Detector(
+    detector = AOS.Detectors.Detector(
         integration_time=T(model.exposure_s),
-        noise=AOS.NoiseNone(),
+        noise=AOS.Detectors.NoiseNone(),
         qe=T(model.quantum_efficiency),
         gain=one(T),
-        response_model=AOS.NullFrameResponse(),
+        response_model=AOS.Detectors.NullFrameResponse(),
         sensor=multi_rate_sensor(model),
         T=T,
         backend=path.key.backend,
@@ -86,7 +89,7 @@ function AOSPlant.prepare_acquisition_provider(
         kind=:gate3_multi_rate_frame,
         units=:detected_electrons,
         geometry=path.result.metadata,
-        detector=AOS.detector_export_metadata(detector),
+        detector=AOS.Detectors.detector_export_metadata(detector),
         semantics=:complete_acquisition,
     )
     products = AOSPlant.AcquisitionProducts(execution.observation; metadata)
@@ -345,7 +348,8 @@ const ACQUISITION_IDS = (
 function observation_array(plant, id::Symbol)
     observation = AOSPlant.acquisition_observation(
         AOSPlant.prepared_acquisition(plant, id))
-    values = observation isa AOS.WFSObservation ? observation.storage :
+    values = observation isa AOS.WavefrontSensors.WFSObservation ?
+        observation.storage :
         observation
     return Array(values)
 end

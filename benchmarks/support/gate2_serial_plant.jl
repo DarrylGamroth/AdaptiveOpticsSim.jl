@@ -80,16 +80,19 @@ function AOSPlant.prepare_path_executor(
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(telescope; T=T)
-    sensor = AOS.ShackHartmannWFS(telescope;
+    sensor = AOS.WavefrontSensors.ShackHartmannWFS(telescope;
         n_lenslets=model.n_lenslets,
         n_pix_subap=model.n_pix_subap,
-        mode=AOS.Diffractive(),
+        mode=AOS.WavefrontSensors.Diffractive(),
         T=T,
-        backend=AOS.backend(telescope),
+        backend=AOS.Backends.backend(telescope),
     )
-    front_end = AOS.ShackHartmannOpticalFrontEnd(sensor.front_end, source)
-    result = AOS.shack_hartmann_rate_map(front_end, pupil)
-    plan = AOS.prepare_wfs_optical_formation(front_end, pupil, result)
+    front_end =
+        AOS.WavefrontSensors.ShackHartmannOpticalFrontEnd(
+            sensor.front_end, source)
+    result = AOS.WavefrontSensors.shack_hartmann_rate_map(front_end, pupil)
+    plan = AOS.WavefrontSensors.prepare_wfs_optical_formation(
+        front_end, pupil, result)
     execution = AOSPlant.WFSOpticalPathExecution(plan)
     return AOSPlant.PreparedPathExecutor(
         definition,
@@ -106,7 +109,8 @@ function AOSPlant.prepare_path_executor(
             n_pix_subap=model.n_pix_subap),
         propagation_model=:microlens_fraunhofer,
         model_revisions=(definition=model.revision,
-            layout=AOS.subaperture_layout_revision(front_end.layout)),
+            layout=AOS.WavefrontSensors.subaperture_layout_revision(
+                front_end.layout)),
     )
 end
 
@@ -119,17 +123,18 @@ function AOSPlant.prepare_path_executor(
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(telescope; T=T)
-    sensor = AOS.PyramidWFS(telescope;
+    sensor = AOS.WavefrontSensors.PyramidWFS(telescope;
         pupil_samples=model.pupil_samples,
         modulation=model.modulation,
         modulation_points=model.modulation_points,
-        mode=AOS.Diffractive(),
+        mode=AOS.WavefrontSensors.Diffractive(),
         T=T,
-        backend=AOS.backend(telescope),
+        backend=AOS.Backends.backend(telescope),
     )
-    front_end = AOS.PyramidOpticalFrontEnd(sensor, source)
-    result = AOS.pyramid_rate_map(front_end, pupil)
-    plan = AOS.prepare_wfs_optical_formation(front_end, pupil, result)
+    front_end = AOS.WavefrontSensors.PyramidOpticalFrontEnd(sensor, source)
+    result = AOS.WavefrontSensors.pyramid_rate_map(front_end, pupil)
+    plan = AOS.WavefrontSensors.prepare_wfs_optical_formation(
+        front_end, pupil, result)
     execution = AOSPlant.WFSOpticalPathExecution(plan)
     return AOSPlant.PreparedPathExecutor(
         definition,
@@ -157,11 +162,11 @@ function AOSPlant.prepare_acquisition_provider(
 )
     AOSPlant.require_path_result(path)
     T = eltype(AOSPlant._first_path_result(path.result).values)
-    detector = AOS.Detector(
+    detector = AOS.Detectors.Detector(
         integration_time=T(model.exposure_s),
-        noise=AOS.NoiseNone(),
+        noise=AOS.Detectors.NoiseNone(),
         qe=T(model.quantum_efficiency),
-        response_model=AOS.NullFrameResponse(),
+        response_model=AOS.Detectors.NullFrameResponse(),
         T=T,
         backend=path.key.backend,
     )
@@ -170,7 +175,7 @@ function AOSPlant.prepare_acquisition_provider(
         kind=:detector_frame,
         units=:detected_electrons,
         geometry=path.result.metadata,
-        detector=AOS.detector_export_metadata(detector),
+        detector=AOS.Detectors.detector_export_metadata(detector),
         semantics=:complete_acquisition,
     )
     products = AOSPlant.AcquisitionProducts(execution.observation; metadata)
@@ -284,7 +289,8 @@ function prepare_serial_plant_operation(raw::AbstractDict;
 end
 
 @inline observation_values(values::AbstractArray) = values
-@inline observation_values(observation::AOS.WFSObservation) =
+@inline observation_values(
+    observation::AOS.WavefrontSensors.WFSObservation) =
     observation.storage
 
 function observation_snapshot(operation::SerialPlantOperation)

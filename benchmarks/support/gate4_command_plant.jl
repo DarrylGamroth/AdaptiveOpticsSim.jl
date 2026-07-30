@@ -128,7 +128,8 @@ function AOSPlant.prepare_path_executor(
     atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
-    pupil = AOS.Optics.PupilFunction(telescope; T, backend=AOS.backend(telescope))
+    pupil = AOS.Optics.PupilFunction(
+        telescope; T, backend=AOS.Backends.backend(telescope))
     imaging = AOS.Optics.prepare_direct_imaging(pupil, source; zero_padding=1)
     return AOSPlant.PreparedPathExecutor(
         definition,
@@ -153,13 +154,14 @@ function AOSPlant.prepare_acquisition_provider(
 )
     AOSPlant.require_path_result(path)
     T = eltype(path.result.values)
-    detector = AOS.Detector(
+    detector = AOS.Detectors.Detector(
         integration_time=T(model.exposure_s),
-        noise=AOS.NoiseNone(),
+        noise=AOS.Detectors.NoiseNone(),
         qe=one(T),
         gain=one(T),
-        response_model=AOS.NullFrameResponse(),
-        sensor=AOS.CMOSSensor(timing_model=AOS.GlobalShutter(), T=T),
+        response_model=AOS.Detectors.NullFrameResponse(),
+        sensor=AOS.Detectors.CMOSSensor(
+            timing_model=AOS.Detectors.GlobalShutter(), T=T),
         T=T,
         backend=path.key.backend,
     )

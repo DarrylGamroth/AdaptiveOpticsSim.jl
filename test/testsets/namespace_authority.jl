@@ -135,6 +135,26 @@ function adaptive_optics_sim_extension_hooks(path::AbstractString)
     return owners
 end
 
+function adaptive_optics_sim_root_references(path::AbstractString)
+    text = read(path, String)
+    aliases = ["AdaptiveOpticsSim"]
+    append!(aliases, String(matched.captures[1]) for matched in eachmatch(
+        r"(?m)^\s*const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*AdaptiveOpticsSim\s*(?:#.*)?$",
+        text,
+    ))
+    references = Pair{String,String}[]
+    for alias in unique(aliases)
+        pattern = Regex(
+            "(?<![A-Za-z0-9_])" * alias *
+            raw"\.([A-Za-z_][A-Za-z0-9_!]*)",
+        )
+        append!(references,
+            alias => String(matched.captures[1])
+            for matched in eachmatch(pattern, text))
+    end
+    return unique(references)
+end
+
 function recursive_key_values(value, sought::Set{String}, found=Pair{String,Any}[])
     if value isa AbstractDict
         for (key, child) in value
@@ -349,6 +369,19 @@ end
             push!(root_domain_aliases, binding)
     end
     @test isempty(root_domain_aliases)
+
+    benchmark_paths = String[]
+    for (directory, _, files) in walkdir(
+        joinpath(REPOSITORY_ROOT, "benchmarks"))
+        append!(benchmark_paths,
+            joinpath(directory, file)
+            for file in files if endswith(file, ".jl"))
+    end
+    for path in benchmark_paths
+        for (alias, binding) in adaptive_optics_sim_root_references(path)
+            @test isdefined(AdaptiveOpticsSim, Symbol(binding))
+        end
+    end
 
     for owner in implemented_owners
         allowlist = only(entry for entry in allowlists
