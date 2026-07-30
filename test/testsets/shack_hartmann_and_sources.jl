@@ -364,7 +364,7 @@ end
     bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     for (src, signature) in zip(
         (base, changed_geometry, changed_profile), signatures)
-        AdaptiveOpticsSim.ensure_bioedge_calibration!(bioedge, pupil, src)
+        WavefrontSensors.ensure_bioedge_calibration!(bioedge, pupil, src)
         @test bioedge.estimator.state.calibration_signature == signature
         @test bioedge.estimator.state.calibrated
     end

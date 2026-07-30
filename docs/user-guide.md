@@ -58,8 +58,9 @@ The package is organized around a small set of modeling objects:
 Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
 `using AdaptiveOpticsSim.WavefrontSensors`. The common WFS contracts and the
-complete Shack–Hartmann family already live in `WavefrontSensors`; other WFS,
-calibration, and control vocabulary moves as its ordered owner gate lands.
+complete Shack–Hartmann, Pyramid, and BioEdge families already live in
+`WavefrontSensors`; other WFS, calibration, and control vocabulary moves as
+its ordered owner gate lands.
 
 ## Three Execution Layers
 
@@ -774,11 +775,15 @@ calibrated WFS paths.
     must be scheduled independently
 - `PyramidWFS`
   - pyramid sensing and modulation studies
+  - owned by `AdaptiveOpticsSim.WavefrontSensors`; its physical
+    `PyramidPhaseMask` remains in `AdaptiveOpticsSim.Optics`
   - use `PyramidOpticalFrontEnd`, `pyramid_rate_map`, and
     `set_pyramid_calibration!` when optical formation, acquisition, and
     differential estimation must be scheduled independently
 - `BioEdgeWFS`
   - BioEdge variants
+  - owned by `AdaptiveOpticsSim.WavefrontSensors`; its physical
+    `BioEdgeAmplitudeMask` remains in `AdaptiveOpticsSim.Optics`
   - use `BioEdgeOpticalFrontEnd`, `bioedge_rate_map`, and
     `set_bioedge_calibration!` for the corresponding staged path
 - `CurvatureWFS`

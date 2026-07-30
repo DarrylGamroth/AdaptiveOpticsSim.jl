@@ -22,6 +22,11 @@ export subaperture_layout, subaperture_calibration, slope_extraction_model
 export set_subaperture_calibration!, valid_subaperture_indices
 export shack_hartmann_detector_image, shack_hartmann_detector_image!
 export n_valid_subapertures
+export PyramidWFS, BioEdgeWFS
+export PyramidOpticalFrontEnd, BioEdgeOpticalFrontEnd
+export pyramid_rate_map, bioedge_rate_map
+export set_pyramid_calibration!, set_bioedge_calibration!
+export pyramid_modulation_frame, pyramid_modulation_frame!
 
 public supports_prepared_runtime, supports_detector_output
 public supports_stacked_sources, supports_grouped_execution

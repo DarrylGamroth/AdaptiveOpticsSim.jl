@@ -203,16 +203,16 @@ import ..Atmospheres:
 import ..AdaptiveOpticsSim:
     AdaptiveOpticsSimError,
     InvalidConfiguration,
-    PreparedBioEdgeOpticalBundleFormation,
-    PreparedBioEdgeOpticalFormation,
-    PreparedPyramidOpticalBundleFormation,
-    PreparedPyramidOpticalFormation,
     runtime_rng,
     splitmix64
 
 import ..WavefrontSensors:
     AcquiredObservationPath,
     DirectMeasurementPath,
+    PreparedBioEdgeOpticalBundleFormation,
+    PreparedBioEdgeOpticalFormation,
+    PreparedPyramidOpticalBundleFormation,
+    PreparedPyramidOpticalFormation,
     PreparedShackHartmannOpticalBundleFormation,
     PreparedShackHartmannOpticalFormation,
     WFSMeasurement,

@@ -742,15 +742,15 @@ end
     bioedge_rate_map(front_end, input)
 
 @inline contract_four_pupil_factor(::Val{:pyramid}, front_end, resolution) =
-    AdaptiveOpticsSim.pyramid_output_sampling_factor(front_end, resolution)
+    WavefrontSensors.pyramid_output_sampling_factor(front_end, resolution)
 @inline contract_four_pupil_factor(::Val{:bioedge}, front_end, resolution) =
-    AdaptiveOpticsSim.bioedge_output_sampling_factor(front_end, resolution)
+    WavefrontSensors.bioedge_output_sampling_factor(front_end, resolution)
 
 @inline contract_four_pupil_native!(::Val{:pyramid}, output, sensor, pupil,
-    source) = AdaptiveOpticsSim.pyramid_intensity!(output, sensor, pupil,
+    source) = WavefrontSensors.pyramid_intensity!(output, sensor, pupil,
     source)
 @inline contract_four_pupil_native!(::Val{:bioedge}, output, sensor, pupil,
-    source) = AdaptiveOpticsSim.bioedge_intensity!(output, sensor, pupil,
+    source) = WavefrontSensors.bioedge_intensity!(output, sensor, pupil,
     source)
 
 @inline contract_four_pupil_set_calibration!(::Val{:pyramid}, sensor,
@@ -773,10 +773,10 @@ end
 end
 
 @inline contract_four_pupil_prepare_sampling!(::Val{:pyramid}, sensor,
-    pupil) = AdaptiveOpticsSim.prepare_pyramid_sampling!(sensor, pupil)
+    pupil) = WavefrontSensors.prepare_pyramid_sampling!(sensor, pupil)
 
 @inline contract_four_pupil_prepare_sampling!(::Val{:bioedge}, sensor,
-    pupil) = AdaptiveOpticsSim.prepare_bioedge_sampling!(sensor, pupil)
+    pupil) = WavefrontSensors.prepare_bioedge_sampling!(sensor, pupil)
 
 @testset "Prepared WFS stage products and protocols" begin
     @test !Base.isexported(AdaptiveOpticsSim, :WFSObservation)

@@ -1,5 +1,6 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.WavefrontSensors
 using Logging
 using Random
 using TOML

@@ -112,7 +112,7 @@ end
         end
         ensure_kernel! = family === :shack_hartmann ?
             WavefrontSensors.ensure_lgs_kernels! :
-            AdaptiveOpticsSim.ensure_lgs_kernel!
+            WavefrontSensors.ensure_lgs_kernel!
         kernel_state = family === :shack_hartmann ?
             wfs.front_end.propagation : wfs.front_end.propagation
 
@@ -159,37 +159,37 @@ end
 
     pyr_direct = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
     pyr_direct.acquisition.state.nominal_detector_resolution = 4
-    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_direct, 4)
+    WavefrontSensors.resize_pyramid_signal_buffers!(pyr_direct, 4)
     pyr_direct.estimator.state.valid_i4q .= Bool[1 0; 1 1]
-    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_direct)
+    WavefrontSensors.update_pyramid_valid_signal!(pyr_direct)
     pyr_direct.estimator.state.valid_signal_indices = Int[]
     pyr_direct.estimator.state.valid_signal_indices_host = Int[]
-    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_direct) == 3
-    AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_direct)
+    @test WavefrontSensors.update_pyramid_valid_signal_indices!(pyr_direct) == 3
+    WavefrontSensors.resize_pyramid_slope_buffers!(pyr_direct)
     fill!(pyr_direct.estimator.state.reference_signal_2d, 0.0)
     pyr_frame = [4.0 4.0 1.0 1.0;
                  4.0 4.0 1.0 1.0;
                  3.0 3.0 2.0 2.0;
                  3.0 3.0 2.0 2.0]
-    pyr_direct_slopes = AdaptiveOpticsSim.pyramid_signal!(pyr_direct,
+    pyr_direct_slopes = WavefrontSensors.pyramid_signal!(pyr_direct,
         pupil, pyr_frame)
     @test length(pyr_direct_slopes) == 6
     @test pyr_direct_slopes[1:3] ≈ fill(0.4, 3)
     @test pyr_direct_slopes[4:6] ≈ zeros(3)
     copyto!(pyr_direct.acquisition.state.camera_frame, pyr_frame)
-    @test AdaptiveOpticsSim.pyramid_slopes!(pyr_direct, pupil) ≈
+    @test WavefrontSensors.pyramid_slopes!(pyr_direct, pupil) ≈
         pyr_direct_slopes
-    @test AdaptiveOpticsSim.pyramid_slopes!(pyr_direct, pupil,
+    @test WavefrontSensors.pyramid_slopes!(pyr_direct, pupil,
         pyr_frame) ≈ pyr_direct_slopes
     pyr_direct_accel = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
     pyr_direct_accel.acquisition.state.nominal_detector_resolution = 4
-    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_direct_accel, 4)
+    WavefrontSensors.resize_pyramid_signal_buffers!(pyr_direct_accel, 4)
     pyr_direct_accel.estimator.state.valid_i4q .= pyr_direct.estimator.state.valid_i4q
-    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_direct_accel)
-    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_direct_accel) == 3
-    AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_direct_accel)
+    WavefrontSensors.update_pyramid_valid_signal!(pyr_direct_accel)
+    @test WavefrontSensors.update_pyramid_valid_signal_indices!(pyr_direct_accel) == 3
+    WavefrontSensors.resize_pyramid_slope_buffers!(pyr_direct_accel)
     fill!(pyr_direct_accel.estimator.state.reference_signal_2d, 0.0)
-    @test AdaptiveOpticsSim.pyramid_signal!(KA_CPU_STYLE,
+    @test WavefrontSensors.pyramid_signal!(KA_CPU_STYLE,
         pyr_direct_accel, pupil, pyr_frame, nothing) ≈ pyr_direct_slopes
 
     pyr_unit_mask = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
@@ -219,17 +219,17 @@ end
     pyr_separated = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
         modulation=0.0, n_pix_separation=2, n_pix_edge=1)
     pyr_separated.acquisition.state.nominal_detector_resolution = 8
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.resize_pyramid_signal_buffers!(
+    @test_throws InvalidConfiguration WavefrontSensors.resize_pyramid_signal_buffers!(
         pyr_separated, 0)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.resize_pyramid_signal_buffers!(
+    @test_throws InvalidConfiguration WavefrontSensors.resize_pyramid_signal_buffers!(
         pyr_separated, 4)
-    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_separated, 8)
-    @test_throws DimensionMismatchError AdaptiveOpticsSim.pyramid_signal!(
+    WavefrontSensors.resize_pyramid_signal_buffers!(pyr_separated, 8)
+    @test_throws DimensionMismatchError WavefrontSensors.pyramid_signal!(
         pyr_separated, pupil, zeros(0, 0))
     fill!(pyr_separated.estimator.state.valid_i4q, true)
-    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_separated)
-    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_separated) == 4
-    AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_separated)
+    WavefrontSensors.update_pyramid_valid_signal!(pyr_separated)
+    @test WavefrontSensors.update_pyramid_valid_signal_indices!(pyr_separated) == 4
+    WavefrontSensors.resize_pyramid_slope_buffers!(pyr_separated)
     fill!(pyr_separated.estimator.state.reference_signal_2d, 0.0)
     separated_frame = zeros(8, 8)
     separated_frame[[1, 8], :] .= 100.0
@@ -238,7 +238,7 @@ end
     separated_frame[2:3, 6:7] .= 1.0
     separated_frame[6:7, 6:7] .= 2.0
     separated_frame[6:7, 2:3] .= 3.0
-    separated_slopes = AdaptiveOpticsSim.pyramid_signal!(
+    separated_slopes = WavefrontSensors.pyramid_signal!(
         pyr_separated, pupil, separated_frame)
     @test separated_slopes[1:4] ≈ fill(0.4, 4)
     @test separated_slopes[5:8] ≈ zeros(4)
@@ -247,77 +247,77 @@ end
         mode=Diffractive(), modulation=0.0, n_pix_separation=2,
         n_pix_edge=1)
     pyr_separated_accel.acquisition.state.nominal_detector_resolution = 8
-    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_separated_accel, 8)
+    WavefrontSensors.resize_pyramid_signal_buffers!(pyr_separated_accel, 8)
     fill!(pyr_separated_accel.estimator.state.valid_i4q, true)
-    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_separated_accel)
-    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(
+    WavefrontSensors.update_pyramid_valid_signal!(pyr_separated_accel)
+    @test WavefrontSensors.update_pyramid_valid_signal_indices!(
         pyr_separated_accel) == 4
-    AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_separated_accel)
+    WavefrontSensors.resize_pyramid_slope_buffers!(pyr_separated_accel)
     fill!(pyr_separated_accel.estimator.state.reference_signal_2d, 0.0)
-    @test AdaptiveOpticsSim.pyramid_signal!(KA_CPU_STYLE,
+    @test WavefrontSensors.pyramid_signal!(KA_CPU_STYLE,
         pyr_separated_accel, pupil, separated_frame, nothing) ≈
         separated_slopes
 
     zero_slopes = fill(1.0, 8)
-    AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), zero_slopes, zeros(4, 4), trues(2, 2),
+    WavefrontSensors._pyramid_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), zero_slopes, zeros(4, 4), trues(2, 2),
         2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, (0, 0, 0, 0), (0, 0, 0, 0))
     @test all(iszero, zero_slopes)
     invalid_slopes = fill(1.0, 8)
-    AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), invalid_slopes, ones(4, 4), falses(2, 2),
+    WavefrontSensors._pyramid_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), invalid_slopes, ones(4, 4), falses(2, 2),
         2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, (0, 0, 0, 0), (0, 0, 0, 0))
     @test all(iszero, invalid_slopes)
     AdaptiveOpticsSim.WavefrontSensors.apply_shift_wfs!(
         pyr_direct; sx=1.2, sy=-1.8)
     @test pyr_direct.estimator.state.shift_x == (1, 1, 1, 1)
     @test pyr_direct.estimator.state.shift_y == (-2, -2, -2, -2)
-    shift_x, shift_y = AdaptiveOpticsSim.pyramid_shift_components([0, 1, 2, 3], [3, 2, 1, 0])
+    shift_x, shift_y = WavefrontSensors.pyramid_shift_components([0, 1, 2, 3], [3, 2, 1, 0])
     @test shift_x == (0, 1, 2, 3)
     @test shift_y == (3, 2, 1, 0)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.pyramid_shift_components([1, 2, 3], [1, 2, 3, 4])
-    AdaptiveOpticsSim.set_optical_gain!(pyr_direct, 2.0)
+    @test_throws InvalidConfiguration WavefrontSensors.pyramid_shift_components([1, 2, 3], [1, 2, 3, 4])
+    WavefrontSensors.set_optical_gain!(pyr_direct, 2.0)
     @test all(==(2.0), pyr_direct.estimator.state.optical_gain)
-    AdaptiveOpticsSim.set_optical_gain!(pyr_direct, collect(1.0:length(pyr_direct.estimator.state.optical_gain)))
+    WavefrontSensors.set_optical_gain!(pyr_direct, collect(1.0:length(pyr_direct.estimator.state.optical_gain)))
     @test pyr_direct.estimator.state.optical_gain[end] == length(pyr_direct.estimator.state.optical_gain)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.set_optical_gain!(pyr_direct, [1.0])
+    @test_throws InvalidConfiguration WavefrontSensors.set_optical_gain!(pyr_direct, [1.0])
 
     pyr_invalid = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
     pyr_invalid.acquisition.state.nominal_detector_resolution = 4
-    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_invalid, 4)
+    WavefrontSensors.resize_pyramid_signal_buffers!(pyr_invalid, 4)
     fill!(pyr_invalid.estimator.state.valid_i4q, false)
-    AdaptiveOpticsSim.update_pyramid_valid_signal!(pyr_invalid)
-    @test AdaptiveOpticsSim.update_pyramid_valid_signal_indices!(pyr_invalid) == 0
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.resize_pyramid_slope_buffers!(pyr_invalid)
+    WavefrontSensors.update_pyramid_valid_signal!(pyr_invalid)
+    @test WavefrontSensors.update_pyramid_valid_signal_indices!(pyr_invalid) == 0
+    @test_throws InvalidConfiguration WavefrontSensors.resize_pyramid_slope_buffers!(pyr_invalid)
 
     pyr_incidence = PyramidWFS(tel; pupil_samples=2, mode=Diffractive(), modulation=0.0,
         normalization=IncidenceFluxNormalization())
     expected_pyr_norm = AdaptiveOpticsSim.Optics.photon_irradiance(ngs) *
                         (tel.params.diameter /
                          pyr_incidence.estimator.params.pupil_samples)^2
-    @test AdaptiveOpticsSim.pyramid_normalization(
+    @test WavefrontSensors.pyramid_normalization(
         pyr_incidence.estimator.params.normalization,
         pyr_incidence, pupil, ngs, 3, 10.0) ≈ expected_pyr_norm
-    @test AdaptiveOpticsSim.pyramid_normalization(
+    @test WavefrontSensors.pyramid_normalization(
         pyr_incidence.estimator.params.normalization,
         pyr_incidence, pupil, nothing, 3, 10.0) == 1.0
 
     bio_direct = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     bio_direct.acquisition.state.nominal_detector_resolution = 4
-    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_direct, 4)
+    WavefrontSensors.resize_bioedge_signal_buffers!(bio_direct, 4)
     bio_direct.estimator.state.valid_i4q .= Bool[1 0; 1 1]
-    AdaptiveOpticsSim.update_bioedge_valid_signal!(bio_direct)
+    WavefrontSensors.update_bioedge_valid_signal!(bio_direct)
     bio_direct.estimator.state.valid_signal_indices = Int[]
     bio_direct.estimator.state.valid_signal_indices_host = Int[]
-    @test AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(bio_direct) == 3
-    AdaptiveOpticsSim.resize_bioedge_slope_buffers!(bio_direct)
+    @test WavefrontSensors.update_bioedge_valid_signal_indices!(bio_direct) == 3
+    WavefrontSensors.resize_bioedge_slope_buffers!(bio_direct)
     fill!(bio_direct.estimator.state.reference_signal_2d, 0.0)
     fill!(bio_direct.estimator.state.optical_gain, 2.0)
     bio_frame = copy(pyr_frame)
-    bio_direct_slopes = AdaptiveOpticsSim.bioedge_signal!(bio_direct,
+    bio_direct_slopes = WavefrontSensors.bioedge_signal!(bio_direct,
         pupil, bio_frame)
     @test length(bio_direct_slopes) == 6
     @test bio_direct_slopes[1:3] ≈ fill(0.8, 3)
     @test bio_direct_slopes[4:6] ≈ zeros(3)
-    @test AdaptiveOpticsSim.bioedge_slopes_intensity!(bio_direct, pupil,
+    @test WavefrontSensors.bioedge_slopes_intensity!(bio_direct, pupil,
         bio_frame) ≈ bio_direct_slopes
     bio_phase = reshape(collect(range(0.0, 1.0; length=32 * 32)), 32, 32)
     bio_edge_mask = falses(32, 32)
@@ -325,50 +325,50 @@ end
     bio_edge_mask[end, :] .= true
     bio_edge_mask[:, 1] .= true
     bio_edge_mask[:, end] .= true
-    @test length(AdaptiveOpticsSim.bioedge_slopes!(bio, bio_phase, bio_edge_mask)) == 2 * 4 * 4
+    @test length(WavefrontSensors.bioedge_slopes!(bio, bio_phase, bio_edge_mask)) == 2 * 4 * 4
     bio_direct_accel = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     bio_direct_accel.acquisition.state.nominal_detector_resolution = 4
-    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_direct_accel, 4)
+    WavefrontSensors.resize_bioedge_signal_buffers!(bio_direct_accel, 4)
     bio_direct_accel.estimator.state.valid_i4q .= bio_direct.estimator.state.valid_i4q
-    AdaptiveOpticsSim.update_bioedge_valid_signal!(bio_direct_accel)
-    @test AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(bio_direct_accel) == 3
-    AdaptiveOpticsSim.resize_bioedge_slope_buffers!(bio_direct_accel)
+    WavefrontSensors.update_bioedge_valid_signal!(bio_direct_accel)
+    @test WavefrontSensors.update_bioedge_valid_signal_indices!(bio_direct_accel) == 3
+    WavefrontSensors.resize_bioedge_slope_buffers!(bio_direct_accel)
     fill!(bio_direct_accel.estimator.state.reference_signal_2d, 0.0)
     fill!(bio_direct_accel.estimator.state.optical_gain, 2.0)
-    @test AdaptiveOpticsSim.bioedge_signal!(KA_CPU_STYLE,
+    @test WavefrontSensors.bioedge_signal!(KA_CPU_STYLE,
         bio_direct_accel, pupil, bio_frame, nothing) ≈ bio_direct_slopes
-    AdaptiveOpticsSim.set_optical_gain!(bio_direct, 3.0)
+    WavefrontSensors.set_optical_gain!(bio_direct, 3.0)
     @test all(==(3.0), bio_direct.estimator.state.optical_gain)
-    AdaptiveOpticsSim.set_optical_gain!(bio_direct, collect(1.0:length(bio_direct.estimator.state.optical_gain)))
+    WavefrontSensors.set_optical_gain!(bio_direct, collect(1.0:length(bio_direct.estimator.state.optical_gain)))
     @test bio_direct.estimator.state.optical_gain[end] == length(bio_direct.estimator.state.optical_gain)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.set_optical_gain!(bio_direct, [1.0])
+    @test_throws InvalidConfiguration WavefrontSensors.set_optical_gain!(bio_direct, [1.0])
 
     bio_invalid = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     bio_invalid.acquisition.state.nominal_detector_resolution = 4
-    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_invalid, 4)
+    WavefrontSensors.resize_bioedge_signal_buffers!(bio_invalid, 4)
     fill!(bio_invalid.estimator.state.valid_i4q, false)
-    AdaptiveOpticsSim.update_bioedge_valid_signal!(bio_invalid)
-    @test AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(bio_invalid) == 0
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.resize_bioedge_slope_buffers!(bio_invalid)
+    WavefrontSensors.update_bioedge_valid_signal!(bio_invalid)
+    @test WavefrontSensors.update_bioedge_valid_signal_indices!(bio_invalid) == 0
+    @test_throws InvalidConfiguration WavefrontSensors.resize_bioedge_slope_buffers!(bio_invalid)
 
     bio_incidence = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
         normalization=IncidenceFluxNormalization())
     expected_bio_norm = AdaptiveOpticsSim.Optics.photon_irradiance(ngs) *
                         (tel.params.diameter /
                          bio_incidence.estimator.params.pupil_samples)^2
-    @test AdaptiveOpticsSim.bioedge_normalization(
+    @test WavefrontSensors.bioedge_normalization(
         bio_incidence.estimator.params.normalization,
         bio_incidence, pupil, ngs, 3, 10.0) ≈ expected_bio_norm
-    @test AdaptiveOpticsSim.bioedge_normalization(
+    @test WavefrontSensors.bioedge_normalization(
         bio_incidence.estimator.params.normalization,
         bio_incidence, pupil, nothing, 3, 10.0) == 1.0
     bio_flux_select = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
-    @test AdaptiveOpticsSim.select_bioedge_valid_i4q!(
+    @test WavefrontSensors.select_bioedge_valid_i4q!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), bio_flux_select, pupil,
         ngs) === bio_flux_select
     @test bio_flux_select.estimator.state.valid_signal_count > 0
     bio_flux_select_accel = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
-    @test AdaptiveOpticsSim.select_bioedge_valid_i4q!(
+    @test WavefrontSensors.select_bioedge_valid_i4q!(
         KA_CPU_STYLE, bio_flux_select_accel, pupil,
         ngs) === bio_flux_select_accel
     @test bio_flux_select_accel.estimator.state.valid_signal_count > 0
@@ -381,15 +381,15 @@ end
     @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
 
     bio_lgs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    @test AdaptiveOpticsSim.ensure_lgs_kernel!(bio_lgs, pupil, lgs) ===
+    @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs, pupil, lgs) ===
         bio_lgs
     na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
     lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
     bio_lgs_profile = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    @test AdaptiveOpticsSim.ensure_lgs_kernel!(bio_lgs_profile, pupil,
+    @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs_profile, pupil,
         lgs_profile) === bio_lgs_profile
     cached_tag = bio_lgs_profile.front_end.propagation.lgs_kernel_tag
-    @test AdaptiveOpticsSim.ensure_lgs_kernel!(bio_lgs_profile, pupil,
+    @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs_profile, pupil,
         lgs_profile) === bio_lgs_profile
     @test bio_lgs_profile.front_end.propagation.lgs_kernel_tag == cached_tag
 end
@@ -430,7 +430,7 @@ end
         Float64.(1:length(pyr_sampled.front_end.propagation.intensity)),
         size(pyr_sampled.front_end.propagation.intensity),
     )
-    pyr_frame = copy(AdaptiveOpticsSim.sample_pyramid_intensity!(
+    pyr_frame = copy(WavefrontSensors.sample_pyramid_intensity!(
         pyr_sampled, pupil, pyr_intensity))
     pyr_camera = zeros(Float64, 16, 16)
     pyr_manual = zeros(Float64, 8, 8)
@@ -442,7 +442,7 @@ end
     bio_sampled_slopes = measure!(bio_sampled, pupil, ngs)
     @test length(bio_sampled_slopes) == 2 * count(bio_sampled.estimator.state.valid_i4q)
     bio_intensity = reshape(Float64.(1:length(pupil.opd)), size(pupil.opd))
-    bio_frame = copy(AdaptiveOpticsSim.sample_bioedge_intensity!(
+    bio_frame = copy(WavefrontSensors.sample_bioedge_intensity!(
         bio_sampled, pupil, bio_intensity))
     bio_camera = zeros(Float64, 4, 4)
     bio_manual = similar(bio_frame)
@@ -518,18 +518,18 @@ end
     pyr_ast_slopes = copy(measure!(pyr_ast, pupil, ast))
     @test length(pyr_ast_slopes) == 2 * 4 * 4
     pyr_ast_serial = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
-    AdaptiveOpticsSim.ensure_pyramid_calibration!(pyr_ast_serial, pupil,
+    WavefrontSensors.ensure_pyramid_calibration!(pyr_ast_serial, pupil,
         ast.sources[1])
-    pyr_ast_stack = @view AdaptiveOpticsSim.ensure_pyramid_asterism_stack!(pyr_ast_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
+    pyr_ast_stack = @view WavefrontSensors.ensure_pyramid_asterism_stack!(pyr_ast_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
     fill!(pyr_ast_serial.front_end.propagation.intensity, zero(eltype(pyr_ast_serial.front_end.propagation.intensity)))
     for (src_idx, src) in pairs(ast.sources)
-        AdaptiveOpticsSim.pyramid_intensity!(
+        WavefrontSensors.pyramid_intensity!(
             @view(pyr_ast_stack[:, :, src_idx]), pyr_ast_serial, pupil, src)
         pyr_ast_serial.front_end.propagation.intensity .+= @view(pyr_ast_stack[:, :, src_idx])
     end
-    pyr_ast_intensity = AdaptiveOpticsSim.sample_pyramid_intensity!(
+    pyr_ast_intensity = WavefrontSensors.sample_pyramid_intensity!(
         pyr_ast_serial, pupil, pyr_ast_serial.front_end.propagation.intensity)
-    AdaptiveOpticsSim.pyramid_signal!(pyr_ast_serial, pupil,
+    WavefrontSensors.pyramid_signal!(pyr_ast_serial, pupil,
         pyr_ast_intensity)
     slopes(pyr_ast_serial) .*= pyr_ast_serial.estimator.state.optical_gain
     @test pyr_ast_slopes ≈ slopes(pyr_ast_serial)
@@ -537,42 +537,42 @@ end
     bio_ast_slopes = copy(measure!(bio_ast, pupil, ast))
     @test length(bio_ast_slopes) == 2 * 4 * 4
     bio_ast_serial = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    AdaptiveOpticsSim.ensure_bioedge_calibration!(bio_ast_serial, pupil,
+    WavefrontSensors.ensure_bioedge_calibration!(bio_ast_serial, pupil,
         ast.sources[1])
     fill!(bio_ast_serial.acquisition.state.binned_intensity, zero(eltype(bio_ast_serial.acquisition.state.binned_intensity)))
     for src in ast.sources
-        AdaptiveOpticsSim.bioedge_intensity!(
+        WavefrontSensors.bioedge_intensity!(
             bio_ast_serial.front_end.propagation.intensity,
             bio_ast_serial, pupil, src)
         bio_ast_serial.acquisition.state.binned_intensity .+= bio_ast_serial.front_end.propagation.intensity
     end
-    bio_ast_intensity = AdaptiveOpticsSim.sample_bioedge_intensity!(
+    bio_ast_intensity = WavefrontSensors.sample_bioedge_intensity!(
         bio_ast_serial, pupil,
         bio_ast_serial.acquisition.state.binned_intensity)
-    AdaptiveOpticsSim.bioedge_signal!(bio_ast_serial, pupil,
+    WavefrontSensors.bioedge_signal!(bio_ast_serial, pupil,
         bio_ast_intensity)
     @test bio_ast_slopes ≈ slopes(bio_ast_serial)
 
     pyr_ast_det = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_ast_det_slopes = copy(measure!(pyr_ast_det, pupil, ast, det))
     pyr_ast_det_serial = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
-    AdaptiveOpticsSim.ensure_pyramid_calibration!(pyr_ast_det_serial, pupil,
+    WavefrontSensors.ensure_pyramid_calibration!(pyr_ast_det_serial, pupil,
         ast.sources[1])
-    pyr_ast_det_stack = @view AdaptiveOpticsSim.ensure_pyramid_asterism_stack!(pyr_ast_det_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
+    pyr_ast_det_stack = @view WavefrontSensors.ensure_pyramid_asterism_stack!(pyr_ast_det_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
     fill!(pyr_ast_det_serial.front_end.propagation.intensity, zero(eltype(pyr_ast_det_serial.front_end.propagation.intensity)))
     for (src_idx, src) in pairs(ast.sources)
-        AdaptiveOpticsSim.pyramid_intensity!(
+        WavefrontSensors.pyramid_intensity!(
             @view(pyr_ast_det_stack[:, :, src_idx]), pyr_ast_det_serial,
             pupil, src)
         pyr_ast_det_serial.front_end.propagation.intensity .+= @view(pyr_ast_det_stack[:, :, src_idx])
     end
-    pyr_ast_det_intensity = AdaptiveOpticsSim.sample_pyramid_intensity!(
+    pyr_ast_det_intensity = WavefrontSensors.sample_pyramid_intensity!(
         pyr_ast_det_serial, pupil,
         pyr_ast_det_serial.front_end.propagation.intensity)
     pyr_ast_det_frame = capture!(det, pyr_ast_det_intensity,
         first(ast.sources); rng=MersenneTwister(12))
-    AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyr_ast_det_serial, size(pyr_ast_det_frame, 1))
-    AdaptiveOpticsSim.pyramid_signal!(pyr_ast_det_serial, pupil,
+    WavefrontSensors.resize_pyramid_signal_buffers!(pyr_ast_det_serial, size(pyr_ast_det_frame, 1))
+    WavefrontSensors.pyramid_signal!(pyr_ast_det_serial, pupil,
         pyr_ast_det_frame)
     slopes(pyr_ast_det_serial) .*= pyr_ast_det_serial.estimator.state.optical_gain
     @test pyr_ast_det_slopes ≈ slopes(pyr_ast_det_serial)
@@ -581,22 +581,22 @@ end
     bio_ast_det_slopes = copy(measure!(bio_ast_det, pupil, ast, det;
         rng=MersenneTwister(13)))
     bio_ast_det_serial = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    AdaptiveOpticsSim.ensure_bioedge_calibration!(bio_ast_det_serial, pupil,
+    WavefrontSensors.ensure_bioedge_calibration!(bio_ast_det_serial, pupil,
         ast.sources[1])
     fill!(bio_ast_det_serial.acquisition.state.binned_intensity, zero(eltype(bio_ast_det_serial.acquisition.state.binned_intensity)))
     for src in ast.sources
-        AdaptiveOpticsSim.bioedge_intensity!(
+        WavefrontSensors.bioedge_intensity!(
             bio_ast_det_serial.front_end.propagation.intensity,
             bio_ast_det_serial, pupil, src)
         bio_ast_det_serial.acquisition.state.binned_intensity .+= bio_ast_det_serial.front_end.propagation.intensity
     end
-    bio_ast_det_intensity = AdaptiveOpticsSim.sample_bioedge_intensity!(
+    bio_ast_det_intensity = WavefrontSensors.sample_bioedge_intensity!(
         bio_ast_det_serial, pupil,
         bio_ast_det_serial.acquisition.state.binned_intensity)
     bio_ast_det_frame = capture!(det, bio_ast_det_intensity,
         first(ast.sources); rng=MersenneTwister(13))
-    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
-    AdaptiveOpticsSim.bioedge_signal!(bio_ast_det_serial, pupil,
+    WavefrontSensors.resize_bioedge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
+    WavefrontSensors.bioedge_signal!(bio_ast_det_serial, pupil,
         bio_ast_det_frame)
     @test bio_ast_det_slopes ≈ slopes(bio_ast_det_serial)
 

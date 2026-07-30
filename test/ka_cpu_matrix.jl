@@ -1176,21 +1176,21 @@ end
     @testset "Pyramid kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, modulation_points=3, mode=Diffractive())
-        propagation = AdaptiveOpticsSim.pyramid_propagation(wfs)
+        propagation = WavefrontSensors.pyramid_propagation(wfs)
 
         scalar_phasor = similar(propagation.phasor)
         ka_phasor = similar(propagation.phasor)
-        AdaptiveOpticsSim._build_pyramid_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
-        AdaptiveOpticsSim._build_pyramid_phasor!(KA_CPU_STYLE, ka_phasor)
+        WavefrontSensors._build_pyramid_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
+        WavefrontSensors._build_pyramid_phasor!(KA_CPU_STYLE, ka_phasor)
         mark_ka_cpu_kernel!(:pyramid_phasor_kernel!)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
         scalar_mask = similar(propagation.pyramid_mask)
         ka_mask = similar(propagation.pyramid_mask)
         pupil = PupilFunction(tel)
-        AdaptiveOpticsSim._build_pyramid_mask!(SCALAR_CPU_STYLE,
+        WavefrontSensors._build_pyramid_mask!(SCALAR_CPU_STYLE,
             scalar_mask, wfs, pupil)
-        AdaptiveOpticsSim._build_pyramid_mask!(KA_CPU_STYLE, ka_mask, wfs,
+        WavefrontSensors._build_pyramid_mask!(KA_CPU_STYLE, ka_mask, wfs,
             pupil)
         mark_ka_cpu_kernel!(:pyramid_mask_kernel!)
         @test ka_cpu_close(ka_mask, scalar_mask)
@@ -1215,9 +1215,9 @@ end
         scalar_slopes = similar(slopes(wfs))
         ka_slopes = similar(slopes(wfs))
         valid_mask = trues(4, 4)
-        AdaptiveOpticsSim._pyramid_slopes!(SCALAR_CPU_STYLE, scalar_slopes, intensity, valid_mask, 2, 4, 16, 16,
+        WavefrontSensors._pyramid_slopes!(SCALAR_CPU_STYLE, scalar_slopes, intensity, valid_mask, 2, 4, 16, 16,
             0, 0, 0, 8, 8, 0, 8, 8, (0, 0, 0, 0), (0, 0, 0, 0))
-        AdaptiveOpticsSim._pyramid_slopes!(KA_CPU_STYLE, ka_slopes, intensity, valid_mask, 2, 4, 16, 16,
+        WavefrontSensors._pyramid_slopes!(KA_CPU_STYLE, ka_slopes, intensity, valid_mask, 2, 4, 16, 16,
             0, 0, 0, 8, 8, 0, 8, 8, (0, 0, 0, 0), (0, 0, 0, 0))
         mark_ka_cpu_kernel!(:pyramid_slopes_kernel!)
         @test ka_slopes == scalar_slopes
@@ -1226,26 +1226,26 @@ end
     @testset "BioEdge kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-        propagation = AdaptiveOpticsSim.bioedge_propagation(wfs)
+        propagation = WavefrontSensors.bioedge_propagation(wfs)
 
         scalar_edge_mask = similar(wfs.estimator.state.edge_mask)
         ka_edge_mask = similar(wfs.estimator.state.edge_mask)
-        AdaptiveOpticsSim._update_edge_mask!(SCALAR_CPU_STYLE, scalar_edge_mask, pupil_mask(tel), tel.params.resolution)
-        AdaptiveOpticsSim._update_edge_mask!(KA_CPU_STYLE, ka_edge_mask, pupil_mask(tel), tel.params.resolution)
+        WavefrontSensors._update_edge_mask!(SCALAR_CPU_STYLE, scalar_edge_mask, pupil_mask(tel), tel.params.resolution)
+        WavefrontSensors._update_edge_mask!(KA_CPU_STYLE, ka_edge_mask, pupil_mask(tel), tel.params.resolution)
         mark_ka_cpu_kernel!(:edge_mask_kernel!)
         @test ka_edge_mask == scalar_edge_mask
 
         scalar_phasor = similar(propagation.phasor)
         ka_phasor = similar(propagation.phasor)
-        AdaptiveOpticsSim._build_bioedge_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
-        AdaptiveOpticsSim._build_bioedge_phasor!(KA_CPU_STYLE, ka_phasor)
+        WavefrontSensors._build_bioedge_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
+        WavefrontSensors._build_bioedge_phasor!(KA_CPU_STYLE, ka_phasor)
         mark_ka_cpu_kernel!(:bioedge_phasor_kernel!)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
         scalar_masks = similar(propagation.bioedge_masks)
         ka_masks = similar(propagation.bioedge_masks)
-        AdaptiveOpticsSim._build_bioedge_masks!(SCALAR_CPU_STYLE, scalar_masks, Float64)
-        AdaptiveOpticsSim._build_bioedge_masks!(KA_CPU_STYLE, ka_masks, Float64)
+        WavefrontSensors._build_bioedge_masks!(SCALAR_CPU_STYLE, scalar_masks, Float64)
+        WavefrontSensors._build_bioedge_masks!(KA_CPU_STYLE, ka_masks, Float64)
         mark_ka_cpu_kernel!(:bioedge_masks_kernel!)
         @test ka_cpu_close(ka_masks, scalar_masks)
 
@@ -1253,8 +1253,8 @@ end
         mask[1:2:end, :] .= true
         scalar_binned = Matrix{Bool}(undef, 4, 4)
         ka_binned = similar(scalar_binned)
-        AdaptiveOpticsSim._bin_edge_mask!(SCALAR_CPU_STYLE, scalar_binned, mask, 2, 4, 4)
-        AdaptiveOpticsSim._bin_edge_mask!(KA_CPU_STYLE, ka_binned, mask, 2, 4, 4)
+        WavefrontSensors._bin_edge_mask!(SCALAR_CPU_STYLE, scalar_binned, mask, 2, 4, 4)
+        WavefrontSensors._bin_edge_mask!(KA_CPU_STYLE, ka_binned, mask, 2, 4, 4)
         mark_ka_cpu_kernel!(:bin_edge_mask_kernel!)
         @test ka_binned == scalar_binned
     end

@@ -10,6 +10,7 @@ module WavefrontSensors
 
 using KernelAbstractions
 using Random
+using Statistics
 
 import ..AdaptiveOpticsSim:
     AdaptiveOpticsSimError,
@@ -19,8 +20,10 @@ import ..AdaptiveOpticsSim:
     UnsupportedAlgorithm,
     bin2d!,
     center_resize2d!,
+    edge_geometric_slopes!,
     geometric_slopes!,
-    geometric_wavefront_slopes!
+    geometric_wavefront_slopes!,
+    set_valid_subapertures!
 
 import ..Backends:
     AbstractArrayBackend,
@@ -40,8 +43,10 @@ import ..Backends:
     execute_fft_plan!,
     execution_style,
     finish_kernel_phase!,
+    gpu_backend_name,
     launch_kernel!,
     launch_kernel_async!,
+    masked_sum2d,
     packed_valid_pair_mean,
     plan_fft_backend!,
     plan_ifft_backend!,
@@ -63,6 +68,7 @@ import ..Optics:
     AngularCoordinates,
     Asterism,
     CellIntegratedMeasure,
+    CircularModulation,
     CoherentFieldCombination,
     DetectorPlane,
     DimensionlessNormalization,
@@ -77,11 +83,14 @@ import ..Optics:
     MetricCoordinates,
     MicrolensArray,
     MonochromaticChannel,
+    NoModulation,
+    NormalizedPupilCoordinates,
     OpticalPlaneMetadata,
     OpticalProductBundle,
     PlaneAxisOrientation,
     PhotonRateNormalization,
     PointSampledMeasure,
+    PreparedFocalPlaneModulation,
     PreparedMicrolensPropagation,
     PupilFunction,
     PupilPlane,
@@ -89,7 +98,10 @@ import ..Optics:
     SpectralSample,
     SpectralSource,
     SubapertureGridMask,
+    SampledModulation,
     Telescope,
+    BioEdgeAmplitudeMask,
+    PyramidPhaseMask,
     _prepare_microlens_propagation,
     _pupil_diameter_m,
     _pupil_resolution,
@@ -103,7 +115,9 @@ import ..Optics:
     lgs_profile,
     is_lgs_source,
     microlens_array,
+    modulation_point_count,
     photon_irradiance,
+    prepare_focal_plane_modulation,
     pupil_mask,
     pupil_reflectivity,
     require_leaf_source,
@@ -198,6 +212,9 @@ include("calibration.jl")
 include("elongation.jl")
 include("subapertures.jl")
 include("shack_hartmann.jl")
+include("focal_plane_modulation.jl")
+include("pyramid.jl")
+include("bioedge.jl")
 include("api.jl")
 
 end # module WavefrontSensors
