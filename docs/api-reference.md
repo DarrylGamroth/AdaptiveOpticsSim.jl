@@ -16,14 +16,15 @@ by `using AdaptiveOpticsSim.Optics`, backend vocabulary imported by
 `using AdaptiveOpticsSim.Backends`, conventional detector vocabulary imported
 by `using AdaptiveOpticsSim.Detectors`, atmosphere vocabulary imported by
 `using AdaptiveOpticsSim.Atmospheres`, calibration vocabulary imported by
-`using AdaptiveOpticsSim.Calibration`, the routine plant workflow imported by
+`using AdaptiveOpticsSim.Calibration`, control vocabulary imported by
+`using AdaptiveOpticsSim.Control`, the routine plant workflow imported by
 `using AdaptiveOpticsSim.Plant`, and stable qualified APIs addressed through
 their canonical modules. Qualified public names are maintained but do not
 enter the caller's ordinary namespace. The root package exports the canonical
 modules, not compatibility exports for their moved contents.
 
 The breaking namespace migration is in progress. `Backends`, `Optics`,
-`Atmospheres`, `Detectors`, and `Calibration` are complete. `Atmospheres` owns atmosphere
+`Atmospheres`, `Detectors`, `Calibration`, and `Control` are complete. `Atmospheres` owns atmosphere
 models and state, source-direction rendering and batching, and
 atmosphere-coupled propagation. `Detectors` owns both conventional frame/area
 and counting/channel sensor APIs. `Optics` owns
@@ -1348,7 +1349,7 @@ measurements remain mutable between repeated executions of a compatible plan.
 centroiding. Supplying a window is rejected rather than silently ignored;
 windowed, correlation, and matched-filter estimators remain future policies.
 
-## Calibration And Reconstruction
+## Calibration
 
 Import the maintained calibration surface explicitly:
 
@@ -1373,6 +1374,15 @@ using AdaptiveOpticsSim.Calibration
   finite-difference validation steps, and ordered parameter names
 - Structured configuration snapshots use qualified
   `AdaptiveOpticsSim.config_dict` and `AdaptiveOpticsSim.snapshot_config`
+
+## Control
+
+Import the maintained control surface explicitly:
+
+```julia
+using AdaptiveOpticsSim.Control
+```
+
 - Reconstructors: `NullReconstructor`, `ModalReconstructor`,
   `FactorizedReconstructor`, `MappedReconstructor`,
   `ControlledReconstructor`, `reconstruct!`, `reconstruct`
@@ -1392,8 +1402,9 @@ the canonical representation of these results.
 - HIL-neutral orchestration: the `AdaptiveOpticsSim.Plant` definitions,
   prepared owners, command lifecycle, triggers, detector lifecycles, and event
   loop documented above
-- Independent control primitives: `VectorDelayLine`, `shift_delay!`,
-  `DiscreteIntegratorController`, `reconstruct!`, and `set_command!`
+- Independent `AdaptiveOpticsSim.Control` primitives: `VectorDelayLine`,
+  `shift_delay!`, `DiscreteIntegratorController`, and `reconstruct!`; command
+  application remains the `AdaptiveOpticsSim.Optics.set_command!` operation
 - WFS preparation helper: `prepare_runtime_wfs!` prepares the retained WFS
   family-specific scratch required by explicit model loops
 - Generic timing helper: `runtime_timing`

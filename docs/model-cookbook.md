@@ -135,6 +135,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
+using AdaptiveOpticsSim.Control
 
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 interaction = interaction_matrix(
@@ -163,7 +164,8 @@ Model packages may wrap a fixed composition in model-specific `prepare!`,
 `step!`, and `readout` functions. The Subaru AO188/AO3k example modules use
 that pattern.
 
-Use `VectorDelayLine`, `DiscreteIntegratorController`, or a custom controller
+Use `AdaptiveOpticsSim.Control.VectorDelayLine`,
+`AdaptiveOpticsSim.Control.DiscreteIntegratorController`, or a custom controller
 between reconstruction and `set_command!` when the numerical experiment needs
 latency or control dynamics.
 

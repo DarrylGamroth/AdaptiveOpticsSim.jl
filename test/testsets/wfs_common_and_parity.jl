@@ -56,8 +56,8 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     @test isdefined(WavefrontSensors, :reconstruct)
     @test !Base.isexported(WavefrontSensors, :reconstruct!)
     @test !Base.isexported(WavefrontSensors, :reconstruct)
-    @test WavefrontSensors.reconstruct! !== AdaptiveOpticsSim.reconstruct!
-    @test WavefrontSensors.reconstruct !== AdaptiveOpticsSim.reconstruct
+    @test WavefrontSensors.reconstruct! !== Control.reconstruct!
+    @test WavefrontSensors.reconstruct !== Control.reconstruct
     for name in (
         :ShackHartmannWFS,
         :ShackHartmannDirectFrontEnd,

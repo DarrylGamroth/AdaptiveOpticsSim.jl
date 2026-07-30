@@ -3,6 +3,7 @@ using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
+using AdaptiveOpticsSim.Control
 using Random
 using Logging
 

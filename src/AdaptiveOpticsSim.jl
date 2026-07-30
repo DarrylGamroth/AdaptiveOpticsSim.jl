@@ -422,32 +422,20 @@ import .WavefrontSensors:
 include("plant/plant.jl")
 include("calibration/calibration.jl")
 
-# Control and tomography still await their own namespace gates. Import only
-# the calibration identities their flat implementations consume; these are
-# package-internal composition bindings, not root exports or public API.
+# Tomography still awaits its namespace gate. Import only the calibration
+# identities its flat implementation consumes; these are package-internal
+# composition bindings, not root exports or public API.
 import .Calibration:
     BuildBackend,
     CPUBuildBackend,
     GPUArrayBuildBackend,
     InteractionMatrix,
-    InversePolicy,
     NativeBuildBackend,
     default_build_backend,
-    default_modal_inverse_policy,
-    default_runtime_calibration_build_backend,
-    condition_number,
-    effective_rank,
-    inverse_factorization,
-    inverse_operator,
-    inverse_policy,
     materialize_build,
-    materialize_runtime_build_result,
-    prepare_build_matrix,
-    singular_values,
-    truncation_count
+    prepare_build_matrix
 
-include("control/controller.jl")
-include("control/reconstructors.jl")
+include("control/control.jl")
 include("control/ensemble.jl")
 include("tomography/parameters.jl")
 include("tomography/geometry.jl")

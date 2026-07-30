@@ -76,6 +76,7 @@ slopes = measure!(wfs, pupil, src)
 
 ```julia
 using AdaptiveOpticsSim.Calibration
+using AdaptiveOpticsSim.Control
 
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 imat = interaction_matrix(dm, wfs, PupilFunction(tel), src; amplitude=0.1)
