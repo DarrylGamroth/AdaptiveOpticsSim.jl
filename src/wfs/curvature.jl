@@ -1031,6 +1031,8 @@ end
     wfs.estimator.state.reference_signal_2d
 @inline camera_frame(wfs::CurvatureWFS) =
     wfs.acquisition.state.camera_frame
+@inline wfs_calibration_signature(wfs::CurvatureWFS) =
+    wfs.estimator.state.calibration_signature
 
 @inline wfs_output_frame(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
 @inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)

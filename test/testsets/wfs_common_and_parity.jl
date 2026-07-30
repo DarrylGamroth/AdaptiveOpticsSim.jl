@@ -1,3 +1,73 @@
+struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
+
+@testset "Common WavefrontSensors ownership" begin
+    for name in (
+        :WFSPreparationError,
+        :Diffractive,
+        :Geometric,
+        :WFSObservation,
+        :WFSMeasurement,
+        :prepare_wfs_optical_formation,
+        :form_wfs_optical_products!,
+        :prepare_wfs_acquisition,
+        :acquire_wfs_observation!,
+        :prepare_wfs_estimation,
+        :estimate_wfs_measurement!,
+        :measure!,
+        :slopes,
+    )
+        @test parentmodule(getfield(WavefrontSensors, name)) ===
+            WavefrontSensors
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test getfield(AdaptiveOpticsSim, name) ===
+            getfield(WavefrontSensors, name)
+    end
+
+    for family in (
+        :ShackHartmannWFS,
+        :PyramidWFS,
+        :BioEdgeWFS,
+        :ZernikeWFS,
+        :CurvatureWFS,
+        :LiFT,
+    )
+        @test !isdefined(WavefrontSensors, family)
+    end
+
+    sensor = CommonContractWFS()
+    @test @inferred(WavefrontSensors.sensing_mode(sensor)) isa Diffractive
+    @test !(@inferred supports_prepared_runtime(sensor, nothing))
+    @test !(@inferred supports_stacked_sources(sensor, nothing))
+    @test !(@inferred supports_grouped_execution(sensor, nothing))
+    @test @inferred(valid_subaperture_mask(sensor)) === nothing
+    @test @inferred(camera_frame(sensor)) === nothing
+
+    observation = @inferred WFSObservation(zeros(Float32, 2, 3);
+        units=:electron_count, layout=:detector_frame)
+    measurement = @inferred WFSMeasurement(zeros(Float32, 4);
+        units=:radian, kind=:slope)
+    @test observation_metadata(observation).dimensions == (2, 3)
+    @test measurement_metadata(measurement).dimensions == (4,)
+    observation_storage(observation)
+    measurement_storage(measurement)
+    @test @allocated(observation_storage(observation)) == 0
+    @test @allocated(measurement_storage(measurement)) == 0
+
+    common_entry = read(joinpath(dirname(pathof(AdaptiveOpticsSim)), "wfs",
+        "wavefront_sensors.jl"), String)
+    for family_source in (
+        "shack_hartmann.jl",
+        "pyramid.jl",
+        "bioedge.jl",
+        "zernike.jl",
+        "curvature.jl",
+        "lift.jl",
+    )
+        @test !occursin("include(\"$family_source\")", common_entry)
+    end
+end
+
 @testset "OOPAO parity knobs" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)

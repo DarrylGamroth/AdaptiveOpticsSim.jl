@@ -2,15 +2,105 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-05"
+current_gate = "NS-06A"
 implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres"]
-partial_owners = []
+partial_owners = ["WavefrontSensors"]
 
 [owner_sources]
 Backends = "src/backends/api.jl"
 Optics = "src/optics/api.jl"
 Detectors = "src/detectors/api.jl"
 Atmospheres = "src/atmosphere/api.jl"
+
+[partial_owner_sources]
+WavefrontSensors = "src/wfs/api.jl"
+
+[partial_owner_bindings.WavefrontSensors]
+exports = [
+    "WFSPreparationError",
+    "Diffractive",
+    "Geometric",
+    "WFSObservationMetadata",
+    "WFSMeasurementMetadata",
+    "WFSObservation",
+    "WFSMeasurement",
+    "observation_storage",
+    "observation_units",
+    "observation_metadata",
+    "measurement_storage",
+    "measurement_units",
+    "measurement_metadata",
+    "prepare_wfs_optical_formation",
+    "form_wfs_optical_products!",
+    "prepare_wfs_acquisition",
+    "acquire_wfs_observation!",
+    "prepare_wfs_estimation",
+    "estimate_wfs_measurement!",
+    "AbstractWFSMeasurementPath",
+    "AcquiredObservationPath",
+    "DirectMeasurementPath",
+    "wfs_measurement_path",
+    "MeanValidFluxNormalization",
+    "IncidenceFluxNormalization",
+    "measure!",
+    "valid_subaperture_mask",
+    "camera_frame",
+    "wfs_detector_image",
+    "slopes",
+    "wfs_calibration_signature",
+    "prepare_runtime_wfs!",
+]
+public = [
+    "supports_prepared_runtime",
+    "supports_detector_output",
+    "supports_stacked_sources",
+    "supports_grouped_execution",
+]
+internal = [
+    "AbstractWFS",
+    "SensingMode",
+    "WFSNormalization",
+    "sensing_mode",
+    "apply_shift_wfs!",
+    "reference_signal",
+    "supports_valid_subaperture_mask",
+    "supports_reference_signal",
+    "supports_camera_frame",
+    "wfs_output_frame",
+    "wfs_output_frame_prototype",
+    "wfs_output_metadata",
+    "wfs_incident_photon_irradiance",
+    "wfs_detector_incidence_scale",
+    "deterministic_frame_readout_gain",
+    "usable_wfs_normalization",
+    "validate_wfs_observation",
+    "validate_wfs_observations",
+    "validate_wfs_measurement",
+    "validate_wfs_optical_input",
+    "validate_wfs_optical_products",
+    "validate_wfs_optical_formation_binding",
+    "validate_wfs_acquisition_binding",
+    "validate_wfs_estimation_binding",
+    "PreparedWFSDetectorAcquisition",
+    "PreparedWFSCountingAcquisition",
+    "PreparedWFSMultipleDetectorAcquisition",
+    "_require_declared_wfs_units",
+    "_require_wfs_storage_domain",
+    "_require_real_square_wfs_observation",
+    "_require_counting_wfs_source",
+    "_require_counting_wfs_spectral_match",
+    "_capture_counting_wfs!",
+    "AbstractGroupedAccumulationPlan",
+    "GroupedStackReducePlan",
+    "GroupedDirectAccumulatePlan",
+    "GroupedStaged2DPlan",
+    "grouped_accumulation_plan",
+    "accumulate_grouped_sources!",
+    "grouped_stack_view",
+    "grouped_staging_buffer",
+    "reduce_grouped_stack!",
+    "reduce_grouped_blocks_kernel!",
+]
 
 [baseline_divergence]
 root_surface = "src/exports.jl"

@@ -7,8 +7,7 @@
 
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
-export WFSPreparationError
-export Backends, Optics, Detectors, Atmospheres, Plant
+export Backends, Optics, Detectors, Atmospheres, WavefrontSensors, Plant
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
@@ -16,16 +15,6 @@ export runtime_rng, deterministic_reference_rng
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, default_modal_inverse_policy
 export KLBasis, ZernikeModalBasis
 
-export Diffractive, Geometric
-export WFSObservationMetadata, WFSMeasurementMetadata
-export WFSObservation, WFSMeasurement
-export observation_storage, observation_units, observation_metadata
-export measurement_storage, measurement_units, measurement_metadata
-export prepare_wfs_optical_formation, form_wfs_optical_products!
-export prepare_wfs_acquisition, acquire_wfs_observation!
-export prepare_wfs_estimation, estimate_wfs_measurement!
-export AbstractWFSMeasurementPath, AcquiredObservationPath
-export DirectMeasurementPath, wfs_measurement_path
 export ShackHartmannDirectFrontEnd, ShackHartmannOpticalFrontEnd
 export shack_hartmann_rate_map
 export PyramidOpticalFrontEnd, pyramid_rate_map
@@ -44,11 +33,7 @@ export SubapertureLayout, SubapertureCalibration
 export subaperture_layout, subaperture_calibration, slope_extraction_model
 export set_subaperture_calibration!
 export valid_subaperture_indices
-export MeanValidFluxNormalization, IncidenceFluxNormalization
-export measure!, pyramid_modulation_frame, pyramid_modulation_frame!
-export valid_subaperture_mask, camera_frame, wfs_detector_image
-export slopes, wfs_calibration_signature
-export prepare_runtime_wfs!
+export pyramid_modulation_frame, pyramid_modulation_frame!
 export shack_hartmann_detector_image, shack_hartmann_detector_image!
 export n_valid_subapertures
 export LiFT, PreparedLiFTForwardModel, LiFTObservation
@@ -82,8 +67,6 @@ export runtime_timing
 public controller_output, reset_controller!, supports_controller_reset
 public run_ensemble!, ensemble_members, execution_policy
 public ensemble_ownership_roots, init_ensemble_scheduler, execute_ensemble!
-public supports_prepared_runtime, supports_detector_output
-public supports_stacked_sources, supports_grouped_execution
 public init_execution_state
 
 export TomographyAtmosphereParams, LGSAsterismParams, LGSWFSParams

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim.Atmospheres
+using AdaptiveOpticsSim.WavefrontSensors
 
 mutable struct ClosedLoopWorkload{
     S,A,R,P,O,W,C,V,RNG,T,

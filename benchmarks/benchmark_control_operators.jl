@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.WavefrontSensors
 using LinearAlgebra
 using Random
 using Statistics

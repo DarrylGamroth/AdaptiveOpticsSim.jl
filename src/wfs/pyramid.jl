@@ -17,6 +17,8 @@ include("pyramid/stages.jl")
 @inline camera_frame(wfs::PyramidWFS{<:Diffractive}) =
     wfs.acquisition.state.camera_frame
 @inline camera_frame(::PyramidWFS{<:Geometric}) = nothing
+@inline wfs_calibration_signature(wfs::PyramidWFS) =
+    wfs.estimator.state.calibration_signature
 
 @inline wfs_output_frame_prototype(wfs::PyramidWFS{<:Diffractive},
     ::Nothing) = camera_frame(wfs)

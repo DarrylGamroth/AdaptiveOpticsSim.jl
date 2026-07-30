@@ -1,7 +1,7 @@
 module AdaptiveOpticsSimAMDGPUExt
 
 import AdaptiveOpticsSim
-import AdaptiveOpticsSim: Backends
+import AdaptiveOpticsSim: Backends, WavefrontSensors
 using AMDGPU
 using AbstractFFTs
 using KernelAbstractions
@@ -89,14 +89,14 @@ function Backends.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.
 end
 AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(Backends.AMDGPUBackendTag)
 AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
-AdaptiveOpticsSim.grouped_accumulation_plan(
+WavefrontSensors.grouped_accumulation_plan(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.PyramidWFS},
-) = AdaptiveOpticsSim.GroupedStaged2DPlan()
-AdaptiveOpticsSim.grouped_accumulation_plan(
+) = WavefrontSensors.GroupedStaged2DPlan()
+WavefrontSensors.grouped_accumulation_plan(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
-) = AdaptiveOpticsSim.GroupedStaged2DPlan()
+) = WavefrontSensors.GroupedStaged2DPlan()
 function AdaptiveOpticsSim.sh_sensing_execution_plan(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::AdaptiveOpticsSim.ShackHartmannWFS,

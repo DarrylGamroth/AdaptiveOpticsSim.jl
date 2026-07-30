@@ -11,12 +11,20 @@
 
 Return the current exported 1-D signal vector for a wavefront sensor.
 
-For geometric and centroid-based sensors this is the slope vector. For sensors
-such as `ZernikeWFS` and `CurvatureWFS`, the maintained runtime contract still
-uses the `slopes` name even though the stored values represent normalized
-signal samples rather than geometric slopes.
+For geometric and centroid-based sensors this is the slope vector. Other
+families may use the maintained `slopes` contract for normalized signal
+samples that are not geometric slopes.
 """
 function slopes end
+
+"""
+    measure!(wfs, pupil[, source][, detector]; rng)
+
+Update `wfs` from a pupil-plane input and return its maintained measurement
+product. Concrete wavefront-sensor families define the supported source and
+detector combinations.
+"""
+function measure! end
 
 """
     valid_subaperture_mask(wfs::AbstractWFS)
@@ -43,16 +51,7 @@ Return the optical calibration signature currently bound to a wavefront
 sensor. This accessor intentionally hides the family-specific ownership of
 calibration state.
 """
-@inline wfs_calibration_signature(wfs::ShackHartmannWFS) =
-    wfs.calibration.signature
-@inline wfs_calibration_signature(wfs::PyramidWFS) =
-    wfs.estimator.state.calibration_signature
-@inline wfs_calibration_signature(wfs::BioEdgeWFS) =
-    wfs.estimator.state.calibration_signature
-@inline wfs_calibration_signature(wfs::ZernikeWFS) =
-    wfs.estimator.state.calibration_signature
-@inline wfs_calibration_signature(wfs::CurvatureWFS) =
-    wfs.estimator.state.calibration_signature
+function wfs_calibration_signature end
 
 """
     camera_frame(wfs::AbstractWFS)

@@ -4,6 +4,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
+using AdaptiveOpticsSim.WavefrontSensors
 using Proper
 using Random
 

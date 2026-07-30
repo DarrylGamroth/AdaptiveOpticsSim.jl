@@ -278,7 +278,11 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
     @test Base.isexported(AdaptiveOpticsSim, :ZernikeWFS)
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
+    @test !Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
+    @test !Base.ispublic(AdaptiveOpticsSim, :prepare_runtime_wfs!)
+    @test Base.isexported(WavefrontSensors, :prepare_runtime_wfs!)
+    @test parentmodule(WavefrontSensors.prepare_runtime_wfs!) ===
+        WavefrontSensors
     @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
     @test !Base.isexported(AdaptiveOpticsSim, :compute_device)
     @test !Base.ispublic(AdaptiveOpticsSim, :AbstractComputeDevice)

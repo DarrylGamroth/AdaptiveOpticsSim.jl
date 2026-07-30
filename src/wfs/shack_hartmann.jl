@@ -16,6 +16,8 @@ include("shack_hartmann/stages.jl")
 @inline valid_subaperture_mask(wfs::ShackHartmannWFS) =
     wfs.front_end.layout.valid_mask
 @inline reference_signal(wfs::ShackHartmannWFS) = wfs.calibration.reference_signal_2d
+@inline wfs_calibration_signature(wfs::ShackHartmannWFS) =
+    wfs.calibration.signature
 
 @kernel function shack_hartmann_detector_image_kernel!(image, spot_cube,
     n_sub::Int, n_axis_1::Int, n_axis_2::Int, gap::Int, gap_value)

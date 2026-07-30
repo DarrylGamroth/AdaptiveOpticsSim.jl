@@ -779,11 +779,18 @@ end
     pupil) = AdaptiveOpticsSim.prepare_bioedge_sampling!(sensor, pupil)
 
 @testset "Prepared WFS stage products and protocols" begin
-    @test Base.isexported(AdaptiveOpticsSim, :WFSObservation)
-    @test Base.isexported(AdaptiveOpticsSim, :WFSMeasurement)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_wfs_optical_formation)
-    @test Base.isexported(AdaptiveOpticsSim, :acquire_wfs_observation!)
-    @test Base.isexported(AdaptiveOpticsSim, :DirectMeasurementPath)
+    @test !Base.isexported(AdaptiveOpticsSim, :WFSObservation)
+    @test !Base.isexported(AdaptiveOpticsSim, :WFSMeasurement)
+    @test !Base.isexported(AdaptiveOpticsSim, :prepare_wfs_optical_formation)
+    @test !Base.isexported(AdaptiveOpticsSim, :acquire_wfs_observation!)
+    @test !Base.isexported(AdaptiveOpticsSim, :DirectMeasurementPath)
+    @test Base.isexported(WavefrontSensors, :WFSObservation)
+    @test Base.isexported(WavefrontSensors, :WFSMeasurement)
+    @test Base.isexported(
+        WavefrontSensors, :prepare_wfs_optical_formation)
+    @test Base.isexported(
+        WavefrontSensors, :acquire_wfs_observation!)
+    @test Base.isexported(WavefrontSensors, :DirectMeasurementPath)
 
     scalar_observation = WFSObservation(Ref(1.0); units=:electron_count,
         layout=:scalar_channel)

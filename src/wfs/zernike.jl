@@ -791,6 +791,8 @@ end
     wfs.estimator.state.reference_signal_2d
 @inline camera_frame(wfs::ZernikeWFS) =
     wfs.acquisition.state.camera_frame
+@inline wfs_calibration_signature(wfs::ZernikeWFS) =
+    wfs.estimator.state.calibration_signature
 
 @inline wfs_output_frame(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
 @inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)

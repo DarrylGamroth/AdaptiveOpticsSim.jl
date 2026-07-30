@@ -1,6 +1,7 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.WavefrontSensors
 import AdaptiveOpticsSim.Optics: filter!
 using Logging
 using Random

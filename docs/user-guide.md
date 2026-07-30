@@ -137,6 +137,7 @@ For a compact recipe-first version of this guide, use [model-cookbook.md](model-
 ```julia
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.WavefrontSensors
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
