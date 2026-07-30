@@ -8,12 +8,13 @@ using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
+using AdaptiveOpticsSim.Ensembles
 using LinearAlgebra
 using Random
 using Statistics
 
-import AdaptiveOpticsSim: runtime_timing,
-    bin2d!, init_execution_state
+import AdaptiveOpticsSim: runtime_timing, bin2d!
+import AdaptiveOpticsSim.Ensembles: init_execution_state
 import AdaptiveOpticsSim.Calibration: BuildBackend, CPUBuildBackend,
     GPUArrayBuildBackend, NativeBuildBackend, materialize_build
 import AdaptiveOpticsSim.Backends: execution_style, synchronize_backend!

@@ -220,9 +220,9 @@ include("core/types.jl")
 include("core/config.jl")
 include("core/kv56.jl")
 include("core/workspace.jl")
-include("core/parallel.jl")
 include("core/telemetry.jl")
 
+include("ensembles/ensembles.jl")
 include("atmosphere/atmospheres.jl")
 
 # Atmosphere implementations have one authoritative owner. Root composition
@@ -423,7 +423,6 @@ include("plant/plant.jl")
 include("calibration/calibration.jl")
 
 include("control/control.jl")
-include("control/ensemble.jl")
 include("tomography/tomography.jl")
 
 include("exports.jl")

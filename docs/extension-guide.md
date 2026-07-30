@@ -33,21 +33,23 @@ The owner categories are:
 - `Ensembles` for optional coarse scheduler execution
 - the root package only for cross-domain config and telemetry serialization
 
-Implemented domain owners, including `Backends`, `Optics`, and `Tomography`,
-receive extension methods at `AdaptiveOpticsSim.Owner.name`; no root-package
-forwarding generic remains part of the supported API. In particular,
+Implemented domain owners, including `Backends`, `Optics`, `Tomography`, and
+`Ensembles`, receive extension methods at `AdaptiveOpticsSim.Owner.name`; no
+root-package forwarding generic remains part of the supported API. In particular,
 tomography-specific Hermitian solvers extend
-`AdaptiveOpticsSim.Tomography.stable_hermitian_right_division`. Hooks assigned
-to later domain owners remain at
-`AdaptiveOpticsSim.name` only until that owner's PR moves the generic and every
-extension method together. The maintained stage is recorded in
+`AdaptiveOpticsSim.Tomography.stable_hermitian_right_division`. Scheduler
+extensions likewise extend
+`AdaptiveOpticsSim.Ensembles.init_ensemble_scheduler` and
+`AdaptiveOpticsSim.Ensembles.execute_ensemble!`. The maintained stage is
+recorded in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
 
 ## Source Layout
 
 Use lower-case directory names for new source-tree locations. Julia type names
 may use CamelCase, but package directories should remain lower-case subsystem
-names such as `src/wfs`, `src/detectors`, `src/optics`, or `src/control`.
+names such as `src/wfs`, `src/detectors`, `src/optics`, `src/control`, or
+`src/ensembles`.
 
 ## Plant Model Definitions
 
@@ -852,6 +854,8 @@ roots by default.
 
 ## Ensemble Scheduling
 
+Import this domain with `using AdaptiveOpticsSim.Ensembles`.
+
 `SimulationEnsemble` schedules independent model boundaries at coarse
 granularity. Keep it outside an external-RTC HIL loop: the Plant event loop and
 its single-writer owners must not acquire task-creation or task-graph jitter.
@@ -878,7 +882,8 @@ outweigh gains on small local workloads.
 
 Ensemble construction rejects shared mutable ownership. A mutable member owns
 itself by default. An immutable or mutable wrapper around shared state should
-implement `AdaptiveOpticsSim.ensemble_ownership_roots(wrapper)` and return the
+implement
+`AdaptiveOpticsSim.Ensembles.ensemble_ownership_roots(wrapper)` and return the
 mutable plant/state objects that cannot safely be updated by another member at
 the same time. Immutable values with no mutable owners, such as scalar sweep
 points, require no extension. The scheduler operation passed to

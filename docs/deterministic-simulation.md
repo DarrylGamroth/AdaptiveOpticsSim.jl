@@ -136,7 +136,8 @@ for the still-planned addressable multi-device random domain.
   `Plant.deterministic_cpu_execution_budget()` and validate it against an
   explicit `Plant.CPUExecutionEnvironment` before the run. Validation records
   and checks configuration; it does not change process-global thread settings.
-- Use `DeterministicExecution()` for a `SimulationEnsemble`. It rejects a
+- Import `AdaptiveOpticsSim.Ensembles`, then use
+  `DeterministicExecution()` for a `SimulationEnsemble`. It rejects a
   multi-threaded Julia process and configures BLAS and the FFT provider for one
   thread before execution.
 - Keep detector noise disabled for deterministic baseline comparisons unless

@@ -345,11 +345,13 @@ struct ImmutableEnsembleMember
     owner::Base.RefValue{Int}
 end
 
+struct EnsembleMemberError <: Exception end
+
 EnsembleCounter(value::Int=0) = EnsembleCounter(value, Ref(value))
 
-AdaptiveOpticsSim.ensemble_ownership_roots(counter::EnsembleCounter) =
+Ensembles.ensemble_ownership_roots(counter::EnsembleCounter) =
     (counter.owner,)
-AdaptiveOpticsSim.ensemble_ownership_roots(member::ImmutableEnsembleMember) =
+Ensembles.ensemble_ownership_roots(member::ImmutableEnsembleMember) =
     (member.owner,)
 
 function increment_counter!(counter::EnsembleCounter)
@@ -360,15 +362,42 @@ end
 @testset "Generic coarse ensembles" begin
     first_counter = EnsembleCounter()
     second_counter = EnsembleCounter(10)
-    ensemble = SimulationEnsemble(first_counter, second_counter)
-    @test ensemble_members(ensemble) ===
+    ensemble = @inferred SimulationEnsemble(first_counter, second_counter)
+    @test @inferred(ensemble_members(ensemble)) ===
         (first_counter, second_counter)
-    @test execution_policy(ensemble) isa SequentialExecution
-    @test AdaptiveOpticsSim.run_ensemble!(
+    @test @inferred(execution_policy(ensemble)) isa SequentialExecution
+    @test @inferred(Ensembles.run_ensemble!(
         increment_counter!,
         ensemble,
-    ) === ensemble
+    )) === ensemble
     @test (first_counter.value, second_counter.value) == (1, 11)
+    if !coverage_instrumented()
+        @test @allocated(Ensembles.run_ensemble!(
+            increment_counter!, ensemble)) == 0
+    end
+
+    visit_order = Int[]
+    ordered = SimulationEnsemble(
+        EnsembleCounter(1),
+        EnsembleCounter(2),
+        EnsembleCounter(3),
+    )
+    Ensembles.run_ensemble!(
+        member -> (push!(visit_order, member.value); member),
+        ordered,
+    )
+    @test visit_order == [1, 2, 3]
+
+    failing = SimulationEnsemble(
+        EnsembleCounter(1),
+        EnsembleCounter(2),
+        EnsembleCounter(3),
+    )
+    @test_throws EnsembleMemberError Ensembles.run_ensemble!(
+        member -> (member.value == 2 && throw(EnsembleMemberError()); member),
+        failing,
+    )
+    @test map(member -> member.value, ensemble_members(failing)) == (1, 2, 3)
 
     immutable_values = SimulationEnsemble(1, 1)
     @test ensemble_members(immutable_values) === (1, 1)
@@ -378,7 +407,7 @@ end
         EnsembleCounter();
         policy=ThreadedExecution(),
     )
-    AdaptiveOpticsSim.run_ensemble!(increment_counter!, threaded)
+    Ensembles.run_ensemble!(increment_counter!, threaded)
     @test all(counter -> counter.value == 1, ensemble_members(threaded))
 
     shared_owner = Ref(0)
@@ -403,7 +432,7 @@ end
             EnsembleCounter();
             policy=policy,
         )
-        @test_throws UnsupportedAlgorithm AdaptiveOpticsSim.run_ensemble!(
+        @test_throws UnsupportedAlgorithm Ensembles.run_ensemble!(
             increment_counter!,
             unsupported,
         )
@@ -414,7 +443,7 @@ end
             EnsembleCounter();
             policy=DeterministicExecution(),
         )
-        AdaptiveOpticsSim.run_ensemble!(
+        Ensembles.run_ensemble!(
             increment_counter!,
             deterministic,
         )

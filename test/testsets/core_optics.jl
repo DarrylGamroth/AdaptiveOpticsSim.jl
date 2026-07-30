@@ -304,12 +304,8 @@ end
         @test Base.ispublic(Detectors, name)
         @test parentmodule(getfield(Detectors, name)) === Detectors
     end
-    @test Base.isexported(AdaptiveOpticsSim, :SimulationEnsemble)
     @test Base.isexported(Control, :FactorizedReconstructor)
     @test Base.isexported(Control, :ControlledReconstructor)
-    @test Base.isexported(AdaptiveOpticsSim, :DeterministicExecution)
-    @test Base.isexported(AdaptiveOpticsSim, :AcceleratedKernelsExecution)
-    @test Base.isexported(AdaptiveOpticsSim, :DaggerExecution)
     @test !Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
     @test !Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
     @test Base.isexported(WavefrontSensors, :PyramidWFS)
@@ -487,8 +483,39 @@ end
         @test Base.ispublic(Tomography, name)
         @test parentmodule(getfield(Tomography, name)) === Tomography
     end
-    @test !Base.isexported(AdaptiveOpticsSim, :ensemble_ownership_roots)
-    @test !Base.isexported(AdaptiveOpticsSim, :run_ensemble!)
+    for name in (
+        :AbstractExecutionPolicy,
+        :SequentialExecution,
+        :ThreadedExecution,
+        :BackendStreamExecution,
+        :DeterministicExecution,
+        :AcceleratedKernelsExecution,
+        :DaggerExecution,
+        :SimulationEnsemble,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
+        @test Base.isexported(Ensembles, name)
+        @test Base.ispublic(Ensembles, name)
+        @test parentmodule(getfield(Ensembles, name)) === Ensembles
+    end
+    for name in (
+        :run_ensemble!,
+        :ensemble_members,
+        :execution_policy,
+        :ensemble_ownership_roots,
+        :init_ensemble_scheduler,
+        :execute_ensemble!,
+        :init_execution_state,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
+        @test !Base.isexported(Ensembles, name)
+        @test Base.ispublic(Ensembles, name)
+        @test parentmodule(getfield(Ensembles, name)) === Ensembles
+    end
     @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)

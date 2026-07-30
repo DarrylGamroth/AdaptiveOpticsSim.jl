@@ -1,3 +1,4 @@
+# Coarse independent simulation ensembles.
 """
     SimulationEnsemble(members...; policy=SequentialExecution())
 

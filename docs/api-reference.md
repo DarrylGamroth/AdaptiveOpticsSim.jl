@@ -18,15 +18,16 @@ by `using AdaptiveOpticsSim.Detectors`, atmosphere vocabulary imported by
 `using AdaptiveOpticsSim.Atmospheres`, calibration vocabulary imported by
 `using AdaptiveOpticsSim.Calibration`, control vocabulary imported by
 `using AdaptiveOpticsSim.Control`, tomography vocabulary imported by
-`using AdaptiveOpticsSim.Tomography`, the routine plant workflow imported by
-`using AdaptiveOpticsSim.Plant`, and stable qualified APIs addressed through
+`using AdaptiveOpticsSim.Tomography`, coarse offline execution vocabulary
+imported by `using AdaptiveOpticsSim.Ensembles`, the routine plant workflow
+imported by `using AdaptiveOpticsSim.Plant`, and stable qualified APIs addressed through
 their canonical modules. Qualified public names are maintained but do not
 enter the caller's ordinary namespace. The root package exports the canonical
 modules, not compatibility exports for their moved contents.
 
 The breaking namespace migration is in progress. `Backends`, `Optics`,
-`Atmospheres`, `Detectors`, `Calibration`, `Control`, and `Tomography` are
-complete. `Atmospheres` owns atmosphere
+`Atmospheres`, `Detectors`, `Calibration`, `Control`, `Tomography`, and
+`Ensembles` are complete. `Atmospheres` owns atmosphere
 models and state, source-direction rendering and batching, and
 atmosphere-coupled propagation. `Detectors` owns both conventional frame/area
 and counting/channel sensor APIs. `Optics` owns
@@ -1410,11 +1411,13 @@ the canonical representation of these results.
 - WFS preparation helper: `prepare_runtime_wfs!` prepares the retained WFS
   family-specific scratch required by explicit model loops
 - Generic timing helper: `runtime_timing`
+- Coarse offline execution is imported explicitly with
+  `using AdaptiveOpticsSim.Ensembles`
 - Execution policies: `AbstractExecutionPolicy`, `SequentialExecution`,
   `ThreadedExecution`, `BackendStreamExecution`, `DeterministicExecution`,
   `AcceleratedKernelsExecution`, and `DaggerExecution`
 - Coarse independent work: `SimulationEnsemble`; qualified access through
-  `AdaptiveOpticsSim.run_ensemble!`, `ensemble_members`,
+  `Ensembles.run_ensemble!`, `ensemble_members`,
   `execution_policy`, `ensemble_ownership_roots`,
   `init_ensemble_scheduler`, and `execute_ensemble!`
 
