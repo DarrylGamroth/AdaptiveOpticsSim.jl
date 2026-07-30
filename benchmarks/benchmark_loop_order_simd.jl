@@ -135,13 +135,15 @@ function main()
     legacy_conv = similar(src_conv)
     candidate_conv = similar(src_conv)
     legacy_conv2d_same!(legacy_conv, src_conv, kernel2d)
-    AdaptiveOpticsSim.conv2d_same!(candidate_conv, src_conv, kernel2d)
+    AdaptiveOpticsSim.WavefrontSensors.conv2d_same!(
+        candidate_conv, src_conv, kernel2d)
     conv_exact = legacy_conv == candidate_conv
     legacy_conv_result = measure_operation!(
         () -> legacy_conv2d_same!(legacy_conv, src_conv, kernel2d);
         samples=40)
     candidate_conv_result = measure_operation!(
-        () -> AdaptiveOpticsSim.conv2d_same!(candidate_conv, src_conv,
+        () -> AdaptiveOpticsSim.WavefrontSensors.conv2d_same!(
+            candidate_conv, src_conv,
             kernel2d);
         samples=40)
 
@@ -152,14 +154,16 @@ function main()
     candidate_tmp = similar(src_sep)
     legacy_conv2d_same_separable!(legacy_sep, legacy_tmp, src_sep,
         row_kernel, col_kernel)
-    AdaptiveOpticsSim.conv2d_same_separable!(candidate_sep, candidate_tmp,
+    AdaptiveOpticsSim.WavefrontSensors.conv2d_same_separable!(
+        candidate_sep, candidate_tmp,
         src_sep, row_kernel, col_kernel)
     sep_exact = legacy_sep == candidate_sep
     legacy_sep_result = measure_operation!(
         () -> legacy_conv2d_same_separable!(legacy_sep, legacy_tmp,
             src_sep, row_kernel, col_kernel))
     candidate_sep_result = measure_operation!(
-        () -> AdaptiveOpticsSim.conv2d_same_separable!(candidate_sep,
+        () -> AdaptiveOpticsSim.WavefrontSensors.conv2d_same_separable!(
+            candidate_sep,
             candidate_tmp, src_sep, row_kernel, col_kernel))
 
     src_elongation = rand(rng, T, 256, 256)

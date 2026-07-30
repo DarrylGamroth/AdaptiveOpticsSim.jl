@@ -198,7 +198,7 @@ end
     psf_in = reference_direct_image(tel, src; zero_padding=1)
     lift_observation = LiFTObservation(lift_forward, copy(psf_in))
     coeffs = zeros(eltype(psf_in), 2)
-    reconstruct!(coeffs, lift, lift_observation;
+    WavefrontSensors.reconstruct!(coeffs, lift, lift_observation;
         check_convergence=false)
     @test length(coeffs) == 2
     @test diagnostics(lift).residual_norm >= 0

@@ -15,15 +15,6 @@ export runtime_rng, deterministic_reference_rng
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, default_modal_inverse_policy
 export KLBasis, ZernikeModalBasis
 
-export LiFT, PreparedLiFTForwardModel, LiFTObservation
-export LiFTIdentityMapping, LiFTFrameMapping
-export LiFTPhotonRate, LiFTExpectedCounts, LiFTNormalizedIntensity
-export prepare_lift_forward_model, evaluate_lift_forward!
-export predict_lift_observation!, lift_forward_output
-export lift_observation_contract, diagnostics
-export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
-export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
-
 export InteractionMatrix, interaction_matrix
 export ControlMatrix
 export ModalBasis, KLDMModes, KLHHtPSD

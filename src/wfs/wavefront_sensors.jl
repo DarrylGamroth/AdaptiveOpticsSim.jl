@@ -9,6 +9,7 @@ detector response and acquisition physics remain owned by `Detectors`.
 module WavefrontSensors
 
 using KernelAbstractions
+using LinearAlgebra
 using Random
 using Statistics
 
@@ -18,11 +19,14 @@ import ..AdaptiveOpticsSim:
     DimensionMismatchError,
     InvalidConfiguration,
     UnsupportedAlgorithm,
+    Workspace,
     bin2d!,
     bin2d_abs2!,
     bin2d_abs2_kernel!,
     center_resize2d!,
+    combine_basis!,
     edge_geometric_slopes!,
+    ensure_psf_buffers!,
     geometric_slopes!,
     geometric_wavefront_slopes!,
     set_valid_subapertures!
@@ -32,8 +36,10 @@ import ..Backends:
     AbstractComputeDevice,
     AcceleratorStyle,
     CPUBackend,
+    DirectReductionPlan,
     ExecutionStyle,
     HostComputeDevice,
+    HostMirrorReductionPlan,
     KernelLaunchPhase,
     ScalarCPUStyle,
     _resolve_array_backend,
@@ -55,6 +61,9 @@ import ..Backends:
     plan_fft_backend!,
     plan_ifft_backend!,
     queue_kernel!,
+    reduction_execution_plan,
+    reduction_host_view,
+    reduction_parent_source,
     require_same_backend,
     synchronize_backend!
 
@@ -78,6 +87,7 @@ import ..Optics:
     DimensionlessNormalization,
     ElectricField,
     ExtendedSource,
+    FocalPlane,
     IncoherentIntensityAddition,
     IntegratedSpectralChannel,
     IntensityMap,
@@ -103,6 +113,7 @@ import ..Optics:
     SpectralSource,
     SubapertureGridMask,
     SampledModulation,
+    Source,
     Telescope,
     BioEdgeAmplitudeMask,
     CurvatureDefocusPair,
@@ -114,11 +125,13 @@ import ..Optics:
     _pupil_resolution,
     _require_physical_photon_irradiance,
     aperture_revision,
+    apply_centering_phase!,
     axis_centering,
     build_mask!,
     centered_grid_origin,
     extended_source_asterism,
     fraunhofer_intensity_stack!,
+    intensity_values,
     lgs_elongation_factor,
     lgs_profile,
     is_leaf_source,
@@ -128,6 +141,7 @@ import ..Optics:
     photon_irradiance,
     prepare_focal_plane_modulation,
     pupil_mask,
+    pupil_amplitude,
     pupil_reflectivity,
     require_leaf_source,
     reset_opd!,
@@ -191,6 +205,8 @@ import ..Detectors:
     SingleRead,
     SkipperSampling,
     UpTheRampSampling,
+    _require_finite_nonnegative_intensity,
+    _require_prepared_response_sampling,
     apply_readout_correction!,
     apply_response!,
     capture!,
@@ -236,6 +252,7 @@ include("pyramid.jl")
 include("bioedge.jl")
 include("zernike.jl")
 include("curvature.jl")
+include("lift.jl")
 include("api.jl")
 
 end # module WavefrontSensors

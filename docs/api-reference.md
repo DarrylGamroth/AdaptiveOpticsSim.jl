@@ -1205,7 +1205,9 @@ components. Migrated bindings are not forwarded through the root.
   `LiFTObservation`, `lift_observation_contract`,
   `LiFTIdentityMapping`, `LiFTFrameMapping`, `LiFTPhotonRate`,
   `LiFTExpectedCounts`, and `LiFTNormalizedIntensity`
-- LiFT estimation: `LiFT`, `reconstruct!`, `reconstruct`, `diagnostics`,
+- LiFT estimation: `LiFT`, the qualified-only
+  `WavefrontSensors.reconstruct!` and `WavefrontSensors.reconstruct`
+  generics, `diagnostics`,
   `LiFTSolveAuto`, `LiFTSolveQR`, `LiFTSolveNormalEquations`,
   `LiFTLevenbergMarquardt`, and `LiFTAdaptiveLevenbergMarquardt`
 
@@ -1235,7 +1237,9 @@ fictitious rate plane, observation, or detector workspace. Shack-Hartmann,
 Pyramid, BioEdge, Zernike, and Curvature implement the generic contract. LiFT
 intentionally remains outside the ordinary `AbstractWFS` hierarchy: prepare
 its focal-plane model independently, bind caller-owned acquired values with
-`LiFTObservation`, and then run `reconstruct!`. Modal selection is a cold-path
+`LiFTObservation`, and then run `WavefrontSensors.reconstruct!`. This generic
+is deliberately distinct from the control-reconstruction generic exported at
+the package root. Modal selection is a cold-path
 `LiFT(...; mode_ids=...)` choice rather than a per-frame argument. The forward
 output is a cell-integrated photon-arrival rate; count or normalized
 observations require an explicit observation-domain conversion. Neither

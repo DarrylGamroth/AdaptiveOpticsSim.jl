@@ -92,7 +92,8 @@ function bench_lift(numerical::Bool)
     lift = LiFT(forward; iterations=1, mode_ids=1:3,
         numerical=numerical)
     coeffs = zeros(6)
-    return @benchmark AdaptiveOpticsSim.lift_interaction_matrix($lift, $coeffs)
+    return @benchmark AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix(
+        $lift, $coeffs)
 end
 
 function bench_lift_inplace(numerical::Bool)
@@ -106,7 +107,8 @@ function bench_lift_inplace(numerical::Bool)
         numerical=numerical)
     coeffs = zeros(6)
     H = lift.state.H_buffer
-    return @benchmark AdaptiveOpticsSim.lift_interaction_matrix!($H, $lift, $coeffs)
+    return @benchmark AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
+        $H, $lift, $coeffs)
 end
 
 function alloc_checks()
@@ -125,10 +127,14 @@ function alloc_checks()
     coeffs = zeros(6)
     H_a = lift_a.state.H_buffer
     H_n = lift_n.state.H_buffer
-    AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs)
-    AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs)
-    alloc_lift_a = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_a, lift_a, coeffs)
-    alloc_lift_n = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(H_n, lift_n, coeffs)
+    AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
+        H_a, lift_a, coeffs)
+    AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
+        H_n, lift_n, coeffs)
+    alloc_lift_a = @allocated AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
+        H_a, lift_a, coeffs)
+    alloc_lift_n = @allocated AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
+        H_n, lift_n, coeffs)
 
     tel_r = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel_r; n_act=4)

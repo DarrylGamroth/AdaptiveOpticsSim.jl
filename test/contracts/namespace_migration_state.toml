@@ -2,7 +2,7 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-06D"
+current_gate = "NS-06E"
 implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres"]
 partial_owners = ["WavefrontSensors"]
 
@@ -89,6 +89,25 @@ exports = [
     "CurvatureFrameReadout",
     "CurvatureCountingReadout",
     "CurvatureBranchResponse",
+    "LiFT",
+    "PreparedLiFTForwardModel",
+    "LiFTObservation",
+    "LiFTIdentityMapping",
+    "LiFTFrameMapping",
+    "LiFTPhotonRate",
+    "LiFTExpectedCounts",
+    "LiFTNormalizedIntensity",
+    "prepare_lift_forward_model",
+    "evaluate_lift_forward!",
+    "predict_lift_observation!",
+    "lift_forward_output",
+    "lift_observation_contract",
+    "diagnostics",
+    "LiFTSolveAuto",
+    "LiFTSolveQR",
+    "LiFTSolveNormalEquations",
+    "LiFTLevenbergMarquardt",
+    "LiFTAdaptiveLevenbergMarquardt",
 ]
 public = [
     "supports_prepared_runtime",
@@ -195,6 +214,25 @@ internal = [
     "CurvatureImagePairMapping",
     "CurvatureChannelPairMapping",
     "PreparedCurvatureEstimator",
+    "LiFTMode",
+    "LiFTAnalytic",
+    "LiFTNumerical",
+    "LiFTSolveMode",
+    "LiFTDampingMode",
+    "LiFTDampingNone",
+    "AbstractLiFTObservationMapping",
+    "AbstractLiFTObservationDomain",
+    "LiFTObservationContract",
+    "LiFTObservationMetadata",
+    "LiFTParams",
+    "LiFTDenseObjectKernel",
+    "LiFTSeparableObjectKernel",
+    "LiFTDiagnostics",
+    "LiFTForwardModel",
+    "LiFTForwardWorkspace",
+    "LiFTState",
+    "solve_lift_fallback!",
+    "solve_normal_system!",
 ]
 
 [baseline_divergence]

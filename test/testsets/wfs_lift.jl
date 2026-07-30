@@ -1,12 +1,13 @@
 function lift_hot_path_allocation_bytes!(H, coefficients, lift,
     observation)
-    AdaptiveOpticsSim.lift_interaction_matrix!(H, lift, coefficients)
-    interaction_bytes = @allocated AdaptiveOpticsSim.lift_interaction_matrix!(
+    WavefrontSensors.lift_interaction_matrix!(H, lift, coefficients)
+    interaction_bytes = @allocated WavefrontSensors.lift_interaction_matrix!(
         H, lift, coefficients)
-    reconstruct!(coefficients, lift, observation;
+    WavefrontSensors.reconstruct!(coefficients, lift, observation;
         optimize_norm=:none, check_convergence=false)
-    reconstruction_bytes = @allocated reconstruct!(coefficients, lift,
-        observation; optimize_norm=:none, check_convergence=false)
+    reconstruction_bytes = @allocated WavefrontSensors.reconstruct!(
+        coefficients, lift, observation; optimize_norm=:none,
+        check_convergence=false)
     return interaction_bytes, reconstruction_bytes
 end
 
@@ -24,21 +25,21 @@ end
     @test adaptive_damping isa LiFTAdaptiveLevenbergMarquardt{Float64}
     @test adaptive_damping.lambda0 == Float64(Float32(1e-4))
     @test adaptive_damping.min_lambda == Float64(Float32(1e-8))
-    @test AdaptiveOpticsSim.effective_damping(adaptive_damping, 1f-4) isa
+    @test WavefrontSensors.effective_damping(adaptive_damping, 1f-4) isa
         LiFTLevenbergMarquardt{Float64}
 
     fallback_H = [1.0 0.0; 0.0 2.0; 1.0 1.0]
     fallback_residual = [2.0, -1.0, 0.5]
     fallback_policy = LiFTLevenbergMarquardt(
         lambda0=0.1, growth=10.0, condition_rtol=1e-6)
-    fallback_lambda = AdaptiveOpticsSim.damping_lambda(
+    fallback_lambda = WavefrontSensors.damping_lambda(
         fallback_policy, transpose(fallback_H) * fallback_H)
     expected_fallback = (transpose(fallback_H) * fallback_H +
         fallback_lambda * I) \ (transpose(fallback_H) * fallback_residual)
     fallback_rhs = zeros(2)
-    fallback_diagnostics = AdaptiveOpticsSim.LiFTDiagnostics(
+    fallback_diagnostics = WavefrontSensors.LiFTDiagnostics(
         NaN, NaN, NaN, NaN, 0.0, false, false)
-    AdaptiveOpticsSim.solve_lift_fallback!(fallback_diagnostics,
+    WavefrontSensors.solve_lift_fallback!(fallback_diagnostics,
         fallback_rhs, fallback_H, fallback_residual, fallback_policy)
     @test fallback_rhs ≈ expected_fallback rtol=1e-12 atol=1e-12
     @test fallback_diagnostics.regularization == fallback_lambda
@@ -64,7 +65,7 @@ end
     @test size(H_analytic) == (64, 2)
     psf = reference_direct_image(tel, src; zero_padding=1)
     observation = LiFTObservation(forward, copy(psf))
-    coeffs = reconstruct(lift, observation)
+    coeffs = WavefrontSensors.reconstruct(lift, observation)
     @test length(coeffs) == 2
     @test fieldnames(typeof(lift)) == (:forward, :params, :state)
     @test !hasfield(typeof(lift), :detector)
@@ -76,8 +77,10 @@ end
     @test_throws DimensionMismatchError LiFT(forward; mode_ids=(1, 4))
     @test_throws MethodError LiFT(tel, src, basis, det;
         diversity_opd=diversity)
-    @test_throws MethodError reconstruct(lift, psf)
-    @test AdaptiveOpticsSim.effective_solve_mode(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), LiFTSolveAuto()) isa LiFTSolveQR
+    @test_throws MethodError WavefrontSensors.reconstruct(lift, psf)
+    @test WavefrontSensors.effective_solve_mode(
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), LiFTSolveAuto()) isa
+        LiFTSolveQR
     diag = diagnostics(lift)
     @test diag.used_qr isa Bool
     @test isfinite(diag.residual_norm)
@@ -87,7 +90,7 @@ end
     lift_normal = LiFT(forward; iterations=2, numerical=true,
         mode_ids=(1, 2),
         solve_mode=LiFTSolveNormalEquations())
-    coeffs_normal = reconstruct(lift_normal, observation)
+    coeffs_normal = WavefrontSensors.reconstruct(lift_normal, observation)
     @test length(coeffs_normal) == 2
     @test all(isfinite, coeffs_normal)
     @test !diagnostics(lift_normal).used_qr
@@ -99,6 +102,10 @@ end
         numerical=false, solve_mode=LiFTSolveNormalEquations())
     allocation_coefficients = zeros(3)
     allocation_H = allocation_lift.state.H_buffer
+    @test (@inferred WavefrontSensors.reconstruct!(
+        allocation_coefficients, allocation_lift, allocation_observation;
+        optimize_norm=:none, check_convergence=false)) ===
+        allocation_coefficients
     if coverage_instrumented()
         @test_skip "LiFT allocation assertions are disabled under coverage instrumentation"
     else
@@ -122,21 +129,22 @@ end
         solve_mode=LiFTSolveNormalEquations())
     psf32 = reference_direct_image(tel32, src32; zero_padding=1)
     observation32 = LiFTObservation(forward32, copy(psf32))
-    coeffs_normal32 = reconstruct(lift_normal32, observation32)
+    coeffs_normal32 = WavefrontSensors.reconstruct(
+        lift_normal32, observation32)
     @test all(isfinite, coeffs_normal32)
     @test all(isfinite, @view(lift_normal32.state.normal_buffer[1:2, 1:2]))
 
     lift_damped = LiFT(forward; iterations=2, numerical=true,
         mode_ids=(1, 2),
         damping=LiFTLevenbergMarquardt())
-    coeffs_damped = reconstruct(lift_damped, observation)
+    coeffs_damped = WavefrontSensors.reconstruct(lift_damped, observation)
     @test length(coeffs_damped) == 2
     @test all(isfinite, coeffs_damped)
     @test diagnostics(lift_damped).regularization >= 0
     lift_adaptive = LiFT(forward; iterations=2, numerical=true,
         mode_ids=(1, 2),
         damping=LiFTAdaptiveLevenbergMarquardt())
-    coeffs_adaptive = reconstruct(lift_adaptive, observation)
+    coeffs_adaptive = WavefrontSensors.reconstruct(lift_adaptive, observation)
     @test length(coeffs_adaptive) == 2
     @test all(isfinite, coeffs_adaptive)
     @test diagnostics(lift_adaptive).regularization >= 0
@@ -158,7 +166,7 @@ end
         adaptive_forward, adaptive_truth_opd)))
     adaptive_observation = LiFTObservation(adaptive_forward,
         adaptive_target)
-    adaptive_estimate = reconstruct(lift_adaptive_truth,
+    adaptive_estimate = WavefrontSensors.reconstruct(lift_adaptive_truth,
         adaptive_observation; check_convergence=false)
     @test adaptive_estimate ≈ adaptive_truth rtol=2e-3 atol=eps(Float64)
 
@@ -174,7 +182,8 @@ end
         copy(frame_binned); domain=LiFTExpectedCounts(
             det_binned.params.integration_time;
             quantum_efficiency=det_binned.params.qe))
-    coeffs_binned = reconstruct(lift_binned, binned_observation)
+    coeffs_binned = WavefrontSensors.reconstruct(
+        lift_binned, binned_observation)
     @test length(coeffs_binned) == 2
     @test all(isfinite, coeffs_binned)
     @test lift_observation_contract(binned_forward).rate_metadata.sampling ==
@@ -208,7 +217,8 @@ end
         mode_ids=(1, 2), numerical=true)
     readout_observation = LiFTObservation(forward, copy(psf);
         readout_noise_std=det_readout.noise.sigma)
-    coeffs_readout = reconstruct(lift_readout, readout_observation)
+    coeffs_readout = WavefrontSensors.reconstruct(
+        lift_readout, readout_observation)
     @test length(coeffs_readout) == 2
     @test all(isfinite, coeffs_readout)
 
@@ -218,7 +228,8 @@ end
         forward, diversity)))
     initial_model .*= sum(psf) / sum(initial_model)
     expected_weights = sqrt.(inv.(max.(initial_model .+ 1e-6, eps(Float64))))
-    reconstruct(lift_weighted, readout_observation; R_n=:model,
+    WavefrontSensors.reconstruct(lift_weighted, readout_observation;
+        R_n=:model,
         check_convergence=false)
     @test lift_weighted.state.weight_buffer ≈ vec(expected_weights)
 
@@ -238,9 +249,11 @@ end
         solve_mode=LiFTSolveNormalEquations())
     count_estimator = LiFT(adaptive_forward; iterations=3,
         solve_mode=LiFTSolveNormalEquations())
-    rate_estimate = reconstruct(rate_estimator, rate_observation;
+    rate_estimate = WavefrontSensors.reconstruct(
+        rate_estimator, rate_observation;
         optimize_norm=:none, check_convergence=false)
-    count_estimate = reconstruct(count_estimator, count_observation;
+    count_estimate = WavefrontSensors.reconstruct(
+        count_estimator, count_observation;
         optimize_norm=:none, check_convergence=false)
     @test count_estimate ≈ rate_estimate rtol=1e-11 atol=1e-18
 
@@ -260,10 +273,11 @@ end
         focal_resolution=8)
     wavelength_observation = LiFTObservation(wavelength_mismatch,
         copy(psf))
-    @test_throws InvalidConfiguration reconstruct(lift,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct(lift,
         wavelength_observation)
     unchanged_coefficients = fill(1.0, 3)
-    @test_throws InvalidConfiguration reconstruct!(unchanged_coefficients,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
+        unchanged_coefficients,
         lift, wavelength_observation)
     @test unchanged_coefficients == fill(1.0, 3)
     preprocessing_mismatch = prepare_lift_forward_model(tel, src, basis;
@@ -271,22 +285,27 @@ end
         mapping=LiFTFrameMapping())
     preprocessing_observation = LiFTObservation(preprocessing_mismatch,
         copy(psf))
-    @test_throws InvalidConfiguration reconstruct(lift,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct(lift,
         preprocessing_observation)
-    @test_throws DimensionMismatchError reconstruct!(unchanged_coefficients,
+    @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
+        unchanged_coefficients,
         lift, observation; R_n=zeros(7, 8))
     @test unchanged_coefficients == fill(1.0, 3)
-    @test_throws InvalidConfiguration reconstruct!(unchanged_coefficients,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
+        unchanged_coefficients,
         lift, observation; R_n=zeros(Float32, 8, 8))
     @test unchanged_coefficients == fill(1.0, 3)
     mismatched_coefficients = fill(1.0f0, 3)
-    @test_throws InvalidConfiguration reconstruct!(mismatched_coefficients,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
+        mismatched_coefficients,
         lift, observation)
     @test mismatched_coefficients == fill(1.0f0, 3)
-    @test_throws DimensionMismatchError reconstruct!(unchanged_coefficients,
+    @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
+        unchanged_coefficients,
         lift, observation; coeffs0=zeros(2))
     @test unchanged_coefficients == fill(1.0, 3)
-    @test_throws InvalidConfiguration reconstruct!(unchanged_coefficients,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
+        unchanged_coefficients,
         lift, observation; coeffs0=zeros(Float32, 3))
     @test unchanged_coefficients == fill(1.0, 3)
     @test_throws DimensionMismatchError LiFTObservation(
@@ -313,12 +332,12 @@ end
         object_kernel=sep_kernel)
     lift_sep = LiFT(sep_forward; iterations=2, numerical=false)
     @test sep_forward.model.object_kernel isa
-        AdaptiveOpticsSim.LiFTSeparableObjectKernel
+        WavefrontSensors.LiFTSeparableObjectKernel
     dense_conv = similar(psf)
     sep_conv = similar(psf)
     tmp_conv = similar(psf)
-    AdaptiveOpticsSim.conv2d_same!(dense_conv, psf, sep_kernel)
-    AdaptiveOpticsSim.conv2d_same_separable!(
+    WavefrontSensors.conv2d_same!(dense_conv, psf, sep_kernel)
+    WavefrontSensors.conv2d_same_separable!(
         sep_conv,
         tmp_conv,
         psf,
@@ -327,7 +346,7 @@ end
     )
     @test isapprox(sep_conv, dense_conv; rtol=1e-6, atol=1e-6)
     single_pixel_convolution = zeros(1, 1)
-    AdaptiveOpticsSim.conv2d_same!(single_pixel_convolution,
+    WavefrontSensors.conv2d_same!(single_pixel_convolution,
         fill(2.0, 1, 1), sep_kernel)
     @test single_pixel_convolution == fill(2.0, 1, 1)
 end

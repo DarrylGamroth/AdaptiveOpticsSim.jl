@@ -3331,11 +3331,11 @@ function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:Ab
     damping = LiFTLevenbergMarquardt(lambda0=T(0.1),
         growth=T(10), condition_rtol=T(1e-3))
     normal = transpose(H_host) * H_host
-    λ = AdaptiveOpticsSim.damping_lambda(damping, normal)
+    λ = AdaptiveOpticsSim.WavefrontSensors.damping_lambda(damping, normal)
     expected = (normal + λ * I) \ (transpose(H_host) * residual_host)
-    diag = AdaptiveOpticsSim.LiFTDiagnostics(
+    diag = AdaptiveOpticsSim.WavefrontSensors.LiFTDiagnostics(
         T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
-    AdaptiveOpticsSim.solve_lift_fallback!(
+    AdaptiveOpticsSim.WavefrontSensors.solve_lift_fallback!(
         diag, rhs, H, residual, damping)
     @test Array(rhs) ≈ expected rtol=T(1e-4) atol=T(1e-5)
     @test diag.regularization == λ
@@ -3412,12 +3412,14 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
         normalized_estimator = LiFT(lift_forward; iterations=2,
             mode_ids=(1, 2), numerical,
             solve_mode=LiFTSolveNormalEquations())
-        rate_coefficients = reconstruct(rate_estimator, rate_observation;
+        rate_coefficients = WavefrontSensors.reconstruct(
+            rate_estimator, rate_observation;
             optimize_norm=:none, check_convergence=false)
-        count_coefficients = reconstruct(count_estimator,
+        count_coefficients = WavefrontSensors.reconstruct(count_estimator,
             count_observation; optimize_norm=:none,
             check_convergence=false)
-        normalized_coefficients = reconstruct(normalized_estimator,
+        normalized_coefficients = WavefrontSensors.reconstruct(
+            normalized_estimator,
             normalized_observation; optimize_norm=:none,
             check_convergence=false)
         @test rate_coefficients isa array_backend
@@ -3432,9 +3434,11 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
         solve_mode=LiFTSolveNormalEquations())
     gpu_analytic = LiFT(lift_forward; iterations=2, mode_ids=(1, 2),
         solve_mode=LiFTSolveNormalEquations())
-    cpu_H = AdaptiveOpticsSim.lift_interaction_matrix(cpu_analytic,
+    cpu_H = AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix(
+        cpu_analytic,
         zeros(T, 3))
-    gpu_H = AdaptiveOpticsSim.lift_interaction_matrix(gpu_analytic,
+    gpu_H = AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix(
+        gpu_analytic,
         array_backend(zeros(T, 3)))
     @test Array(gpu_H) ≈ cpu_H rtol=T(5e-4) atol=T(1e3)
 
@@ -3448,15 +3452,18 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     @test_throws InvalidConfiguration prepare_lift_forward_model(lift_tel,
         lift_src, basis_host; diversity_opd=lift_diversity,
         focal_resolution=8)
-    @test_throws InvalidConfiguration reconstruct(gpu_analytic,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct(
+        gpu_analytic,
         rate_observation; R_n=ones(T, 8, 8))
     host_lift_coefficients = zeros(T, 3)
-    @test_throws InvalidConfiguration reconstruct!(host_lift_coefficients,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
+        host_lift_coefficients,
         gpu_analytic, rate_observation)
     @test host_lift_coefficients == zeros(T, 3)
     device_lift_coefficients = similar(lift_basis, T, 3)
     fill!(device_lift_coefficients, zero(T))
-    @test_throws InvalidConfiguration reconstruct!(device_lift_coefficients,
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
+        device_lift_coefficients,
         gpu_analytic, rate_observation; coeffs0=zeros(T, 3))
     @test Array(device_lift_coefficients) == zeros(T, 3)
 
@@ -3464,9 +3471,9 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     convolution_source = array_backend(convolution_source_host)
     dense_convolution = similar(convolution_source)
     dense_expected = similar(convolution_source_host)
-    AdaptiveOpticsSim.conv2d_same!(dense_convolution,
+    AdaptiveOpticsSim.WavefrontSensors.conv2d_same!(dense_convolution,
         convolution_source, lift_object_kernel)
-    AdaptiveOpticsSim.conv2d_same!(dense_expected,
+    AdaptiveOpticsSim.WavefrontSensors.conv2d_same!(dense_expected,
         convolution_source_host, lift_object_kernel_host)
     @test Array(dense_convolution) ≈ dense_expected rtol=T(1e-5) atol=T(1e-5)
 
@@ -3478,9 +3485,11 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     separable_scratch = similar(convolution_source)
     separable_expected = similar(convolution_source_host)
     separable_expected_scratch = similar(convolution_source_host)
-    AdaptiveOpticsSim.conv2d_same_separable!(separable_convolution,
+    AdaptiveOpticsSim.WavefrontSensors.conv2d_same_separable!(
+        separable_convolution,
         separable_scratch, convolution_source, row_kernel, col_kernel)
-    AdaptiveOpticsSim.conv2d_same_separable!(separable_expected,
+    AdaptiveOpticsSim.WavefrontSensors.conv2d_same_separable!(
+        separable_expected,
         separable_expected_scratch, convolution_source_host,
         row_kernel_host, col_kernel_host)
     @test isapprox(Array(separable_convolution), separable_expected;

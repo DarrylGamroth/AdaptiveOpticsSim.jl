@@ -17,7 +17,7 @@ function main(; resolution::Int=24, zero_padding::Int=2)
         diversity_opd=diversity, zero_padding=zero_padding)
     lift = LiFT(forward; iterations=3, numerical=false)
     observation = LiFTObservation(forward, image)
-    coeffs_fit = AdaptiveOpticsSim.reconstruct(lift, observation;
+    coeffs_fit = WavefrontSensors.reconstruct(lift, observation;
         coeffs0=zeros(4))
 
     @info "LiFT tutorial complete" n_modes=length(coeffs_true)

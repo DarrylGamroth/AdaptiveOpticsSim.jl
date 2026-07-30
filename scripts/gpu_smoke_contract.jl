@@ -694,7 +694,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         rate_map = gpu_direct_image(lift_tel, lift_src;
             zero_padding=2, T=T)
         observation = LiFTObservation(forward, rate_map.values)
-        coeffs = reconstruct(lift, observation)
+        coeffs = WavefrontSensors.reconstruct(lift, observation)
         @assert coeffs isa BackendArray
         return coeffs
     end

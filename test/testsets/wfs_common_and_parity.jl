@@ -24,9 +24,40 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
             getfield(WavefrontSensors, name)
     end
 
-    for family in (:LiFT,)
-        @test !isdefined(WavefrontSensors, family)
+    for name in (
+        :LiFT,
+        :PreparedLiFTForwardModel,
+        :LiFTObservation,
+        :LiFTIdentityMapping,
+        :LiFTFrameMapping,
+        :LiFTPhotonRate,
+        :LiFTExpectedCounts,
+        :LiFTNormalizedIntensity,
+        :prepare_lift_forward_model,
+        :evaluate_lift_forward!,
+        :predict_lift_observation!,
+        :lift_forward_output,
+        :lift_observation_contract,
+        :diagnostics,
+        :LiFTSolveAuto,
+        :LiFTSolveQR,
+        :LiFTSolveNormalEquations,
+        :LiFTLevenbergMarquardt,
+        :LiFTAdaptiveLevenbergMarquardt,
+    )
+        @test parentmodule(getfield(WavefrontSensors, name)) ===
+            WavefrontSensors
+        @test Base.isexported(WavefrontSensors, name)
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
     end
+    @test isdefined(WavefrontSensors, :reconstruct!)
+    @test isdefined(WavefrontSensors, :reconstruct)
+    @test !Base.isexported(WavefrontSensors, :reconstruct!)
+    @test !Base.isexported(WavefrontSensors, :reconstruct)
+    @test WavefrontSensors.reconstruct! !== AdaptiveOpticsSim.reconstruct!
+    @test WavefrontSensors.reconstruct !== AdaptiveOpticsSim.reconstruct
     for name in (
         :ShackHartmannWFS,
         :ShackHartmannDirectFrontEnd,
@@ -96,7 +127,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     @test occursin("include(\"bioedge.jl\")", common_entry)
     @test occursin("include(\"zernike.jl\")", common_entry)
     @test occursin("include(\"curvature.jl\")", common_entry)
-    @test !occursin("include(\"lift.jl\")", common_entry)
+    @test occursin("include(\"lift.jl\")", common_entry)
 end
 
 @testset "OOPAO parity knobs" begin
