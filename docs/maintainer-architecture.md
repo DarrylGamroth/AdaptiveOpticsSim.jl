@@ -93,8 +93,8 @@ optics, and reusable physical WFS components. `Calibration` owns inverse
 policy, interaction/control matrices, modal basis construction, model-derived
 NCPA synthesis, fitting, optical-gain calibration, and registration
 identification. `Control` owns reconstruction and controller composition;
-`Tomography` and `Ensembles` follow in dependency
-order. The
+`Tomography` owns guide-star geometry, atmospheric reconstruction, fitting,
+and DM-command projection; `Ensembles` follows in dependency order. The
 authoritative pre-migration inventory, final exact API allowlists,
 extension-hook owners, and cross-module imports are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).

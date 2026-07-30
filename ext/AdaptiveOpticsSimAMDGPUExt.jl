@@ -1,7 +1,7 @@
 module AdaptiveOpticsSimAMDGPUExt
 
 import AdaptiveOpticsSim
-import AdaptiveOpticsSim: Backends, Calibration, WavefrontSensors
+import AdaptiveOpticsSim: Backends, Calibration, Tomography, WavefrontSensors
 using AMDGPU
 using AbstractFFTs
 using KernelAbstractions
@@ -394,7 +394,7 @@ The preferred path is Cholesky on the Hermitian Gram matrix. If that fails, the
 implementation falls back to LU so the higher-level algorithm remains robust on
 ill-conditioned runtime/calibration cases.
 """
-function AdaptiveOpticsSim.stable_hermitian_right_division(
+function Tomography.stable_hermitian_right_division(
     _backend::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     rhs::AMDGPU.ROCArray{T,2},
     gram::AMDGPU.ROCArray{T,2},

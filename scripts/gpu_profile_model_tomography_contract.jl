@@ -1,5 +1,6 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.Tomography
 using Profile
 
 function _sync_backend_array!(A)
@@ -61,7 +62,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
         n_actuators=fill(grid_side, n_dm),
         valid_actuators=trues(grid_side, grid_side),
     )
-    noise_model = AdaptiveOpticsSim.RelativeSignalNoise(TB(0.1))
+    noise_model = AdaptiveOpticsSim.Tomography.RelativeSignalNoise(TB(0.1))
 
     function build_model()
         recon = build_reconstructor(
@@ -124,7 +125,8 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
             lgswfs_hi,
             tomo_hi,
             tdm_hi;
-            noise_model=AdaptiveOpticsSim.RelativeSignalNoise(TH(0.1)),
+            noise_model=AdaptiveOpticsSim.Tomography.RelativeSignalNoise(
+                TH(0.1)),
             build_backend=build_backend,
         )
         _sync_backend_array!(recon.reconstructor)

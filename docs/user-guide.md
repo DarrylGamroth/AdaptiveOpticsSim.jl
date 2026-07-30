@@ -59,7 +59,8 @@ Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
 `using AdaptiveOpticsSim.WavefrontSensors`; import calibration vocabulary with
 `using AdaptiveOpticsSim.Calibration`; import control vocabulary with
-`using AdaptiveOpticsSim.Control`. The common WFS contracts and the
+`using AdaptiveOpticsSim.Control`; import tomography vocabulary with
+`using AdaptiveOpticsSim.Tomography`. The common WFS contracts and the
 complete Shack–Hartmann, Pyramid, BioEdge, Zernike, and Curvature families
 live in `WavefrontSensors`; inverse policy, interaction/control matrices,
 modal bases, and model-derived NCPA synthesis live in `Calibration`.

@@ -112,7 +112,7 @@ AMDGPU.functional() ||
     end
 
     gram_host = Float32[2 0; 0 4]
-    division = AdaptiveOpticsSim.stable_hermitian_right_division(
+    division = AdaptiveOpticsSim.Tomography.stable_hermitian_right_division(
         build_backend,
         AMDGPU.ROCArray(left_host),
         AMDGPU.ROCArray(gram_host),

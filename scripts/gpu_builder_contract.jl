@@ -2,6 +2,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
+using AdaptiveOpticsSim.Tomography
 using LinearAlgebra
 
 function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
@@ -71,7 +72,7 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
     imat_t = Calibration.materialize_build(build_backend,
         reshape(T[1.0, 0.5], 2, 1))
     imat_t_cpu = reshape(T[1.0, 0.5], 2, 1)
-    noise = AdaptiveOpticsSim.RelativeSignalNoise(T(0.1))
+    noise = AdaptiveOpticsSim.Tomography.RelativeSignalNoise(T(0.1))
 
     tr = build_reconstructor(
         InteractionMatrixTomography(),
@@ -105,8 +106,10 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
     slopes_tomo_tr_gpu = Calibration.materialize_build(build_backend,
         convert.(eltype(tr.reconstructor), slopes_tomo))
     @assert isapprox(
-        Array(AdaptiveOpticsSim.reconstruct_wavefront(tr, slopes_tomo_tr_gpu)),
-        AdaptiveOpticsSim.reconstruct_wavefront(tr_cpu, slopes_tomo);
+        Array(AdaptiveOpticsSim.Tomography.reconstruct_wavefront(
+            tr, slopes_tomo_tr_gpu)),
+        AdaptiveOpticsSim.Tomography.reconstruct_wavefront(
+            tr_cpu, slopes_tomo);
         rtol=1f-5,
         atol=1f-6,
     )
@@ -145,8 +148,10 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
     slopes_tomo_mr_gpu = Calibration.materialize_build(build_backend,
         slopes_tomo_mr)
     @assert isapprox(
-        Array(AdaptiveOpticsSim.reconstruct_wavefront(mr, slopes_tomo_mr_gpu)),
-        AdaptiveOpticsSim.reconstruct_wavefront(mr_cpu, slopes_tomo_mr);
+        Array(AdaptiveOpticsSim.Tomography.reconstruct_wavefront(
+            mr, slopes_tomo_mr_gpu)),
+        AdaptiveOpticsSim.Tomography.reconstruct_wavefront(
+            mr_cpu, slopes_tomo_mr);
         rtol=1f-5,
         atol=1f-6,
     )
