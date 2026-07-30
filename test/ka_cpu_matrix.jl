@@ -392,19 +392,19 @@ end
         spot_cube = reshape(collect(1.0:36.0), 4, 3, 3)
         scalar_image = Matrix{Float64}(undef, 7, 7)
         ka_image = similar(scalar_image)
-        AdaptiveOpticsSim._shack_hartmann_detector_image!(
+        WavefrontSensors._shack_hartmann_detector_image!(
             SCALAR_CPU_STYLE, SCALAR_CPU_STYLE, scalar_image, spot_cube, 2, 3, 3, 1, -1.0)
-        AdaptiveOpticsSim._shack_hartmann_detector_image!(
+        WavefrontSensors._shack_hartmann_detector_image!(
             KA_CPU_STYLE, KA_CPU_STYLE, ka_image, spot_cube, 2, 3, 3, 1, -1.0)
         mark_ka_cpu_kernel!(:shack_hartmann_detector_image_copy_kernel!)
         @test ka_image == scalar_image
 
         scalar_converted_image = Matrix{Float32}(undef, 7, 7)
         ka_converted_image = similar(scalar_converted_image)
-        AdaptiveOpticsSim._shack_hartmann_detector_image!(
+        WavefrontSensors._shack_hartmann_detector_image!(
             SCALAR_CPU_STYLE, SCALAR_CPU_STYLE, scalar_converted_image, spot_cube,
             2, 3, 3, 1, -1.0)
-        AdaptiveOpticsSim._shack_hartmann_detector_image!(
+        WavefrontSensors._shack_hartmann_detector_image!(
             KA_CPU_STYLE, KA_CPU_STYLE, ka_converted_image, spot_cube,
             2, 3, 3, 1, -1.0)
         mark_ka_cpu_kernel!(:shack_hartmann_detector_image_kernel!)
@@ -517,7 +517,7 @@ end
         opd = zeros(Float64, n, n)
         phasor = ones(ComplexF64, pad, pad)
         fft_stack = fill(99.0 + 0.0im, pad, pad, n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_field_stack_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_field_stack_kernel!,
             fft_stack, valid_mask, pupil, opd, phasor, 2.0, 0.0, n_sub, sub, ox, oy, n, pad;
             ndrange=(pad, pad, n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_field_stack_kernel!)
@@ -527,8 +527,8 @@ end
         @test fft_stack[1, 1, 1] == 0.0 + 0.0im
 
         intensity_stack = zeros(Float64, pad, pad, n_spots)
-        intensity_scale = AdaptiveOpticsSim.sh_fft_intensity_scale(Float64, pad)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.complex_abs2_stack_kernel!,
+        intensity_scale = WavefrontSensors.sh_fft_intensity_scale(Float64, pad)
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.complex_abs2_stack_kernel!,
             intensity_stack, fft_stack, intensity_scale, pad, n_spots;
             ndrange=size(intensity_stack))
         mark_ka_cpu_kernel!(:complex_abs2_stack_kernel!)
@@ -538,7 +538,7 @@ end
         amp_scales = [2.0, 3.0]
         opd_to_cycles = [0.0, 0.0]
         fft_ast = fill(99.0 + 0.0im, pad, pad, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_field_asterism_stack_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_field_asterism_stack_kernel!,
             fft_ast, valid_mask, pupil, opd, phasor, amp_scales, opd_to_cycles, n_sub, sub, ox, oy, n, pad,
             n_spots, length(amp_scales); ndrange=(pad, pad, length(amp_scales), n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_field_asterism_stack_kernel!)
@@ -550,7 +550,7 @@ end
         explicit_fft_ast = fill(99.0 + 0.0im, pad, pad,
             2 * n_spots)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.sh_explicit_pupil_asterism_stack_kernel!,
+            WavefrontSensors.sh_explicit_pupil_asterism_stack_kernel!,
             explicit_fft_ast, valid_mask, explicit_amplitude, opd, phasor,
             amp_scales, opd_to_cycles, n_sub, sub, ox, oy, n, pad,
             n_spots, length(amp_scales);
@@ -562,7 +562,7 @@ end
 
         explicit_pupil_fft = fill(99.0 + 0.0im, pad, pad, n_spots)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.sh_explicit_pupil_stack_kernel!,
+            WavefrontSensors.sh_explicit_pupil_stack_kernel!,
             explicit_pupil_fft, valid_mask, explicit_amplitude, opd, phasor,
             2.0, 0.0, n_sub, sub, ox, oy, n, pad;
             ndrange=(pad, pad, n_sub, n_sub))
@@ -575,7 +575,7 @@ end
         pupil_field = fill(0.25 + 0.5im, n, n)
         explicit_field_fft = fill(99.0 + 0.0im, pad, pad, n_spots)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.sh_explicit_field_stack_kernel!,
+            WavefrontSensors.sh_explicit_field_stack_kernel!,
             explicit_field_fft, valid_mask, pupil_field, phasor, n_sub, sub,
             ox, oy, n, pad; ndrange=(pad, pad, n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_explicit_field_stack_kernel!)
@@ -587,7 +587,7 @@ end
         mosaic = reshape(collect(1.0:16.0), 4, 4)
         unpacked = fill(-1.0, n_spots, sub, sub)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.sh_unpack_mosaic_kernel!, unpacked, mosaic,
+            WavefrontSensors.sh_unpack_mosaic_kernel!, unpacked, mosaic,
             n_sub, sub; ndrange=(n_sub, n_sub, sub, sub))
         mark_ka_cpu_kernel!(:sh_unpack_mosaic_kernel!)
         @test unpacked[1, :, :] == mosaic[1:2, 1:2]
@@ -597,7 +597,7 @@ end
 
         sample_input = reshape(collect(1.0:64.0), 4, 4, n_spots)
         sampled = fill(-1.0, n_spots, 2, 2)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_sample_spot_stack_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_sample_spot_stack_kernel!,
             sampled, sample_input, valid_mask, 2, n_sub, 2, 2, 0, 0;
             ndrange=(n_sub, n_sub, 2, 2))
         mark_ka_cpu_kernel!(:sh_sample_spot_stack_kernel!)
@@ -611,7 +611,7 @@ end
         spot_cube[3, 3, 1] = 5.0
         spot_cube[4, 2, 2] = 4.0
         stats = zeros(Float64, 3 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_spot_centroid_stats_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_spot_centroid_stats_kernel!,
             stats, spot_cube, valid_mask, 0.5, n_sub, 3, 3; ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_spot_centroid_stats_kernel!)
         @test stats[1] == 10.0
@@ -620,14 +620,14 @@ end
         @test stats[4:6] == zeros(3)
 
         accum = ones(Float64, 3 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.accumulate_spot_stats_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.accumulate_spot_stats_kernel!,
             accum, stats, n_spots; ndrange=3 * n_spots)
         mark_ka_cpu_kernel!(:accumulate_spot_stats_kernel!)
         @test accum == stats .+ 1.0
 
         slopes = fill(-1.0, 2 * n_spots)
         reference = zeros(Float64, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_finalize_asterism_slopes_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_finalize_asterism_slopes_kernel!,
             slopes, accum, reference, valid_mask, 2.0, 2, n_sub, n_spots;
             ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_finalize_asterism_slopes_kernel!)
@@ -638,7 +638,7 @@ end
 
         centroid_slopes = fill(-1.0, 2 * n_spots)
         centroid_cube = copy(spot_cube)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_spot_centroid_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_spot_centroid_kernel!,
             centroid_slopes, centroid_cube, valid_mask, 2.0, n_sub, n_spots, 3, 3;
             ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_spot_centroid_kernel!)
@@ -649,7 +649,7 @@ end
 
         ref_scaled_slopes = fill(-1.0, 2 * n_spots)
         reference .= 0.5
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_spot_centroid_reference_scale_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_spot_centroid_reference_scale_kernel!,
             ref_scaled_slopes, copy(spot_cube), reference, valid_mask, 2.0, 2.0, n_sub, n_spots, 3, 3;
             ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_spot_centroid_reference_scale_kernel!)
@@ -658,14 +658,14 @@ end
         @test ref_scaled_slopes[3] == 0.0
 
         cutoff_stats = zeros(Float64, 3 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_spot_cutoff_stats_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_spot_cutoff_stats_kernel!,
             cutoff_stats, spot_cube, valid_mask, 2.0, n_sub, 3, 3;
             ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_spot_cutoff_stats_kernel!)
         @test cutoff_stats[1:3] == [10.0, 10.0, 20.0]
 
         simple_slopes = fill(-1.0, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_finalize_spot_slopes_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_finalize_spot_slopes_kernel!,
             simple_slopes, cutoff_stats, valid_mask, n_sub, n_spots;
             ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_finalize_spot_slopes_kernel!)
@@ -673,7 +673,7 @@ end
         @test simple_slopes[n_spots + 1] == 2.0
 
         scaled_slopes = fill(-1.0, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.sh_finalize_spot_slopes_reference_scale_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_finalize_spot_slopes_reference_scale_kernel!,
             scaled_slopes, cutoff_stats, reference, valid_mask, 2.0, n_sub, n_spots;
             ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:sh_finalize_spot_slopes_reference_scale_kernel!)
@@ -681,14 +681,14 @@ end
         @test scaled_slopes[n_spots + 1] == (2.0 - 0.5) / 2
 
         invalid_cube = ones(Float64, n_spots, 2, 2)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.zero_invalid_spots_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.zero_invalid_spots_kernel!,
             invalid_cube, valid_mask, n_sub, 2, 2; ndrange=(n_sub, n_sub, 2, 2))
         mark_ka_cpu_kernel!(:zero_invalid_spots_kernel!)
         @test all(iszero, invalid_cube[3, :, :])
         @test all(==(1.0), invalid_cube[1, :, :])
 
         invalid_slopes = ones(Float64, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, AdaptiveOpticsSim.zero_invalid_sh_slopes_kernel!,
+        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.zero_invalid_sh_slopes_kernel!,
             invalid_slopes, valid_mask, n_sub, n_spots; ndrange=(n_sub, n_sub))
         mark_ka_cpu_kernel!(:zero_invalid_sh_slopes_kernel!)
         @test invalid_slopes[3] == 0.0
@@ -1267,13 +1267,13 @@ end
         ka_tmp = similar(intensity)
         scalar_kernel = Vector{Float64}(undef, 1)
         ka_kernel = similar(scalar_kernel)
-        AdaptiveOpticsSim._apply_elongation!(SCALAR_CPU_STYLE, scalar_intensity, scalar_tmp,
-            AdaptiveOpticsSim.apply_elongation!(scalar_intensity, 1.6, scalar_tmp, scalar_kernel), 1, 8, 8)
-        ka_kernel = AdaptiveOpticsSim.apply_elongation!(ka_intensity, 1.6, ka_tmp, ka_kernel)
+        WavefrontSensors._apply_elongation!(SCALAR_CPU_STYLE, scalar_intensity, scalar_tmp,
+            WavefrontSensors.apply_elongation!(scalar_intensity, 1.6, scalar_tmp, scalar_kernel), 1, 8, 8)
+        ka_kernel = WavefrontSensors.apply_elongation!(ka_intensity, 1.6, ka_tmp, ka_kernel)
         scalar_baseline = copy(scalar_intensity)
         ka_probe = copy(intensity)
         ka_tmp2 = similar(ka_probe)
-        AdaptiveOpticsSim._apply_elongation!(KA_CPU_STYLE, ka_probe, ka_tmp2, ka_kernel, 1, 8, 8)
+        WavefrontSensors._apply_elongation!(KA_CPU_STYLE, ka_probe, ka_tmp2, ka_kernel, 1, 8, 8)
         copyto!(ka_probe, ka_tmp2)
         mark_ka_cpu_kernel!(:elongation_apply_kernel!)
         @test ka_cpu_close(ka_probe, scalar_baseline)
@@ -1283,8 +1283,8 @@ end
         ka_stack = copy(intensity_stack)
         scalar_stack_tmp = similar(intensity_stack)
         ka_stack_tmp = similar(intensity_stack)
-        AdaptiveOpticsSim._apply_elongation_stack!(SCALAR_CPU_STYLE, scalar_stack, scalar_stack_tmp, ka_kernel, 1, 2, 8, 8)
-        AdaptiveOpticsSim._apply_elongation_stack!(KA_CPU_STYLE, ka_stack, ka_stack_tmp, ka_kernel, 1, 2, 8, 8)
+        WavefrontSensors._apply_elongation_stack!(SCALAR_CPU_STYLE, scalar_stack, scalar_stack_tmp, ka_kernel, 1, 2, 8, 8)
+        WavefrontSensors._apply_elongation_stack!(KA_CPU_STYLE, ka_stack, ka_stack_tmp, ka_kernel, 1, 2, 8, 8)
         copyto!(scalar_stack, scalar_stack_tmp)
         copyto!(ka_stack, ka_stack_tmp)
         mark_ka_cpu_kernel!(:elongation_apply_stack_kernel!)
@@ -1298,7 +1298,7 @@ end
         scalar_lgs_buffer = zeros(ComplexF64, n, n, 2)
         scalar_fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(scalar_lgs_buffer, (1, 2))
         scalar_ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(scalar_lgs_buffer, (1, 2))
-        AdaptiveOpticsSim._apply_lgs_convolution_stack!(SCALAR_CPU_STYLE,
+        WavefrontSensors._apply_lgs_convolution_stack!(SCALAR_CPU_STYLE,
             scalar_lgs_stack, identity_kernel_fft, scalar_lgs_buffer,
             scalar_fft_plan, scalar_ifft_plan)
 
@@ -1306,7 +1306,7 @@ end
         ka_lgs_buffer = zeros(ComplexF64, n, n, 2)
         ka_fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(ka_lgs_buffer, (1, 2))
         ka_ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(ka_lgs_buffer, (1, 2))
-        AdaptiveOpticsSim._apply_lgs_convolution_stack!(KA_CPU_STYLE,
+        WavefrontSensors._apply_lgs_convolution_stack!(KA_CPU_STYLE,
             ka_lgs_stack, identity_kernel_fft, ka_lgs_buffer,
             ka_fft_plan, ka_ifft_plan)
         mark_ka_cpu_kernel!(

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.WavefrontSensors
 using Random
 using Statistics
 
@@ -165,28 +166,28 @@ function main()
     legacy_elongation = similar(src_elongation)
     candidate_elongation = similar(src_elongation)
     legacy_elongation!(legacy_elongation, src_elongation, row_kernel)
-    AdaptiveOpticsSim._apply_elongation!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), src_elongation,
+    WavefrontSensors._apply_elongation!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), src_elongation,
         candidate_elongation, row_kernel, 4, 256, 256)
     elongation_exact = legacy_elongation == candidate_elongation
     legacy_elongation_result = measure_operation!(
         () -> legacy_elongation!(legacy_elongation, src_elongation,
             row_kernel))
     candidate_elongation_result = measure_operation!(
-        () -> AdaptiveOpticsSim._apply_elongation!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
+        () -> WavefrontSensors._apply_elongation!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
             src_elongation, candidate_elongation, row_kernel, 4, 256, 256))
 
     src_stack = rand(rng, T, 32, 32, 256)
     legacy_stack = similar(src_stack)
     candidate_stack = similar(src_stack)
     legacy_elongation_stack!(legacy_stack, src_stack, row_kernel)
-    AdaptiveOpticsSim._apply_elongation_stack!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), src_stack,
+    WavefrontSensors._apply_elongation_stack!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), src_stack,
         candidate_stack, row_kernel, 4, 32, 32, 256)
     stack_exact = legacy_stack == candidate_stack
     legacy_stack_result = measure_operation!(
         () -> legacy_elongation_stack!(legacy_stack, src_stack, row_kernel);
         samples=30)
     candidate_stack_result = measure_operation!(
-        () -> AdaptiveOpticsSim._apply_elongation_stack!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
+        () -> WavefrontSensors._apply_elongation_stack!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
             src_stack, candidate_stack, row_kernel, 4, 32, 32, 256);
         samples=30)
 

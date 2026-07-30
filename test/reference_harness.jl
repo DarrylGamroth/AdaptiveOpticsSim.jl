@@ -308,7 +308,7 @@ native-to-detector grid mapping.
 """
 function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
     pupil::PupilFunction, src::SpectralSource)
-    AdaptiveOpticsSim.prepare_sampling!(wfs, pupil,
+    WavefrontSensors.prepare_sampling!(wfs, pupil,
         AdaptiveOpticsSim.Optics.spectral_reference_source(src))
     fill!(wfs.front_end.propagation.spot_cube_accum,
         zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
@@ -317,7 +317,7 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
         variant = AdaptiveOpticsSim.Optics.source_with_wavelength_and_radiometric_value(
             src, sample.wavelength,
             eltype(slopes(wfs))(total_irradiance * sample.weight))
-        AdaptiveOpticsSim.sampled_spots_peak!(
+        WavefrontSensors.sampled_spots_peak!(
             AdaptiveOpticsSim.Backends.ScalarCPUStyle(), wfs, pupil, variant)
         wfs.front_end.propagation.spot_cube_accum .+= wfs.acquisition.spot_cube
     end
@@ -1227,8 +1227,8 @@ function compute_reference_actual(case::ReferenceCase)
         if src isa SpectralSource && uses_legacy_sh_index_grid_reference(case)
             legacy_reference_sh_index_grid_frame!(wfs, pupil, src)
         else
-            AdaptiveOpticsSim.prepare_sampling!(wfs, pupil, src)
-            AdaptiveOpticsSim.sampled_spots_peak!(wfs, pupil, src)
+            WavefrontSensors.prepare_sampling!(wfs, pupil, src)
+            WavefrontSensors.sampled_spots_peak!(wfs, pupil, src)
         end
         @views return copy(wfs.acquisition.spot_cube[1, :, :])
     elseif case.kind === :pyramid_frame
@@ -1584,7 +1584,7 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
         tel = build_reference_telescope(case.config["telescope"])
         src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
-        AdaptiveOpticsSim.prepare_sampling!(wfs, PupilFunction(tel),
+        WavefrontSensors.prepare_sampling!(wfs, PupilFunction(tel),
             AdaptiveOpticsSim.Optics.spectral_reference_source(src))
         pad = size(wfs.front_end.propagation.fft_stack, 1)
         factor *= pad * pad

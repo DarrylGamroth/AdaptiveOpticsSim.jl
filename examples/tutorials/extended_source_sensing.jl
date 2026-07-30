@@ -15,8 +15,8 @@ function main(; resolution::Int=24)
 
     sh_point = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
     sh_ext = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
-    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, pupil, src)
-    ext_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext, pupil, ext)
+    point_peak = WavefrontSensors.sampled_spots_peak!(sh_point, pupil, src)
+    ext_peak = WavefrontSensors.sampled_spots_peak!(sh_ext, pupil, ext)
     point_slopes = copy(measure!(sh_point, pupil, src))
     ext_slopes = copy(measure!(sh_ext, pupil, ext))
 

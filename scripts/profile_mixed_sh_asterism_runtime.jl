@@ -2,6 +2,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
+using AdaptiveOpticsSim.WavefrontSensors
 using Random
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])

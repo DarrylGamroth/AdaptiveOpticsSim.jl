@@ -25,7 +25,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     end
 
     for family in (
-        :ShackHartmannWFS,
         :PyramidWFS,
         :BioEdgeWFS,
         :ZernikeWFS,
@@ -34,6 +33,23 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     )
         @test !isdefined(WavefrontSensors, family)
     end
+    for name in (
+        :ShackHartmannWFS,
+        :ShackHartmannDirectFrontEnd,
+        :ShackHartmannOpticalFrontEnd,
+        :SubapertureLayout,
+        :SubapertureCalibration,
+        :shack_hartmann_detector_image,
+    )
+        @test parentmodule(getfield(WavefrontSensors, name)) ===
+            WavefrontSensors
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
+    end
+    @test parentmodule(MicrolensArray) === Optics
+    @test MicrolensArray(; n_lenslets=2, n_pix_subap=2) isa
+        MicrolensArray
 
     sensor = CommonContractWFS()
     @test @inferred(WavefrontSensors.sensing_mode(sensor)) isa Diffractive
@@ -56,8 +72,8 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
 
     common_entry = read(joinpath(dirname(pathof(AdaptiveOpticsSim)), "wfs",
         "wavefront_sensors.jl"), String)
+    @test occursin("include(\"shack_hartmann.jl\")", common_entry)
     for family_source in (
-        "shack_hartmann.jl",
         "pyramid.jl",
         "bioedge.jl",
         "zernike.jl",

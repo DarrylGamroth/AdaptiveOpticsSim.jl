@@ -49,7 +49,7 @@ function sh_reference_probe()
     wfs.calibration.centroid_response = 2.0
     return function ()
         fill!(slopes(wfs), 1.0)
-        AdaptiveOpticsSim.subtract_reference_and_scale!(wfs)
+        WavefrontSensors.subtract_reference_and_scale!(wfs)
         return slopes(wfs)
     end
 end
@@ -58,12 +58,12 @@ function subaperture_layout_probes()
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     layout = subaperture_layout(wfs.front_end)
-    geometry_policy = AdaptiveOpticsSim.GeometryValidSubapertures(threshold=0.1)
+    geometry_policy = WavefrontSensors.GeometryValidSubapertures(threshold=0.1)
     flux_policy = FluxThresholdValidSubapertures(light_ratio=0.5)
     support = Float64.(pupil_mask(tel))
-    geometry_probe = () -> AdaptiveOpticsSim.update_subaperture_layout!(
+    geometry_probe = () -> WavefrontSensors.update_subaperture_layout!(
         layout, pupil_mask(tel), geometry_policy)
-    flux_probe = () -> AdaptiveOpticsSim.update_subaperture_layout!(
+    flux_probe = () -> WavefrontSensors.update_subaperture_layout!(
         layout, support, flux_policy)
     return geometry_probe, flux_probe
 end

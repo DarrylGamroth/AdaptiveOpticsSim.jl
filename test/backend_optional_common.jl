@@ -826,7 +826,7 @@ function run_optional_device_path_batch_checks(
 end
 
 @inline function optional_wfs_plan_device_resident(
-    plan::AdaptiveOpticsSim.PreparedShackHartmannOpticalFormation,
+    plan::WavefrontSensors.PreparedShackHartmannOpticalFormation,
     device,
     BackendArray,
 )
@@ -877,7 +877,7 @@ end
 
 function optional_wfs_plan_device_resident(
     plan::Union{
-        AdaptiveOpticsSim.PreparedShackHartmannOpticalBundleFormation,
+        WavefrontSensors.PreparedShackHartmannOpticalBundleFormation,
         AdaptiveOpticsSim.PreparedPyramidOpticalBundleFormation,
         AdaptiveOpticsSim.PreparedBioEdgeOpticalBundleFormation,
     },
@@ -1686,7 +1686,7 @@ function run_optional_lgs_convolution_normalization(::Type{B}) where {B<:Adaptiv
     fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(fft_stack, (1, 2))
     ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(fft_stack, (1, 2))
 
-    AdaptiveOpticsSim.apply_lgs_convolution_stack!(
+    WavefrontSensors.apply_lgs_convolution_stack!(
         intensity_stack, kernel_fft, fft_stack, fft_plan, ifft_plan)
     actual = Array(intensity_stack)
     @test actual ≈ expected_stack rtol=T(1e-5) atol=T(1e-6)
@@ -3521,17 +3521,17 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         T=T)
     @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DPlan
     @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DPlan
-    @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
+    @test typeof(WavefrontSensors.sh_sensing_execution_plan(
         AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh)) ===
-        AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
-    @test typeof(AdaptiveOpticsSim.sh_sensing_execution_plan(
+        WavefrontSensors.ShackHartmannWFSRocmHostStatsPlan
+    @test typeof(WavefrontSensors.sh_sensing_execution_plan(
         AdaptiveOpticsSim.Backends.execution_style(slopes(sh_large)), sh_large)) ===
-        AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan
-    AdaptiveOpticsSim.prepare_sampling!(sh, pupil, src)
-    sh_sub = div(tel.params.resolution, AdaptiveOpticsSim.n_lenslets(sh))
+        WavefrontSensors.ShackHartmannWFSRocmHostStatsPlan
+    WavefrontSensors.prepare_sampling!(sh, pupil, src)
+    sh_sub = div(tel.params.resolution, WavefrontSensors.n_lenslets(sh))
     sh_pad = size(sh.front_end.propagation.field, 1)
     sh_offset = div(sh_pad - sh_sub, 2)
-    safe_intensity = AdaptiveOpticsSim.compute_intensity_safe!(
+    safe_intensity = WavefrontSensors.compute_intensity_safe!(
         AdaptiveOpticsSim.Backends.execution_style(sh.front_end.propagation.intensity),
         sh, pupil, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset,
         sh_sub)
@@ -3778,7 +3778,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         T=T)
     @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan
     @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan
-    @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh) isa AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan
+    @test WavefrontSensors.sh_sensing_execution_plan(AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh) isa WavefrontSensors.ShackHartmannWFSBatchedPlan
     @test AdaptiveOpticsSim.Detectors.detector_execution_plan(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorDirectPlan
     @test AdaptiveOpticsSim.Backends.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionPlan
     @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
@@ -3805,8 +3805,8 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     gpu_pupil = PupilFunction(gpu_tel; T=T, backend=backend)
     measure!(cpu_sh, cpu_pupil, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
-    cpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(cpu_sh))
-    gpu_export = Array(AdaptiveOpticsSim.sh_exported_spot_cube(gpu_sh))
+    cpu_export = Array(WavefrontSensors.sh_exported_spot_cube(cpu_sh))
+    gpu_export = Array(WavefrontSensors.sh_exported_spot_cube(gpu_sh))
     cpu_frame = Array(AdaptiveOpticsSim.WavefrontSensors.wfs_output_frame(cpu_sh, cpu_det))
     gpu_frame = Array(AdaptiveOpticsSim.WavefrontSensors.wfs_output_frame(gpu_sh, gpu_det))
     @test size(gpu_export) == size(cpu_export)
@@ -3819,12 +3819,12 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     measure!(cpu_sh_stats, cpu_pupil, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh_stats, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
-    cpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(cpu_sh_stats.acquisition.spot_cube)
-    cpu_cutoff = AdaptiveOpticsSim.centroid_threshold(cpu_sh_stats) * cpu_peak
-    AdaptiveOpticsSim.sh_signal_from_spots!(cpu_sh_stats, cpu_cutoff)
-    gpu_peak = AdaptiveOpticsSim.sh_safe_peak_value(gpu_sh_stats.acquisition.spot_cube)
-    gpu_cutoff = AdaptiveOpticsSim.centroid_threshold(gpu_sh_stats) * gpu_peak
-    AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(
+    cpu_peak = WavefrontSensors.sh_safe_peak_value(cpu_sh_stats.acquisition.spot_cube)
+    cpu_cutoff = WavefrontSensors.centroid_threshold(cpu_sh_stats) * cpu_peak
+    WavefrontSensors.sh_signal_from_spots!(cpu_sh_stats, cpu_cutoff)
+    gpu_peak = WavefrontSensors.sh_safe_peak_value(gpu_sh_stats.acquisition.spot_cube)
+    gpu_cutoff = WavefrontSensors.centroid_threshold(gpu_sh_stats) * gpu_peak
+    WavefrontSensors.sh_signal_from_spots_device_stats!(
         AdaptiveOpticsSim.Backends.execution_style(slopes(gpu_sh_stats)),
         gpu_sh_stats,
         gpu_cutoff,
@@ -4360,7 +4360,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
 
     spectral_optical_sh = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), T=T, backend=selector)
-    AdaptiveOpticsSim.sampled_spots_peak!(spectral_optical_sh, pupil, poly)
+    WavefrontSensors.sampled_spots_peak!(spectral_optical_sh, pupil, poly)
     spectral_optical_spots = Array(spectral_optical_sh.acquisition.spot_cube)
     spectral_qe = AdaptiveOpticsSim.Detectors.SampledQuantumEfficiency(
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.2, 0.8])
@@ -4370,7 +4370,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         response_model=NullFrameResponse(), T=T, backend=selector)
     spectral_detector_sh = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), T=T, backend=selector)
-    AdaptiveOpticsSim.sampled_spots_peak!(spectral_detector_sh, pupil, poly,
+    WavefrontSensors.sampled_spots_peak!(spectral_detector_sh, pupil, poly,
         spectral_detector, MersenneTwister(149))
     expected_spectral_scale = spectral_exposure *
         T(AdaptiveOpticsSim.Detectors.qe_at(spectral_qe, wavelength(src)))

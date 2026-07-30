@@ -1173,10 +1173,10 @@ end
         raw_geometric[n_geometric+1:end][valid_geometric] ./
         pupil.metadata.sampling[2]
     direct_layout_revision =
-        AdaptiveOpticsSim.subaperture_layout_revision(geometric.front_end.layout)
-    AdaptiveOpticsSim.update_subaperture_layout!(geometric.front_end.layout,
+        WavefrontSensors.subaperture_layout_revision(geometric.front_end.layout)
+    WavefrontSensors.update_subaperture_layout!(geometric.front_end.layout,
         pupil.amplitude .> zero(T))
-    @test AdaptiveOpticsSim.subaperture_layout_revision(geometric.front_end.layout) ==
+    @test WavefrontSensors.subaperture_layout_revision(geometric.front_end.layout) ==
         direct_layout_revision + UInt(1)
     @test_throws WFSPreparationError estimate_wfs_measurement!(
         direct_measurement, pupil, direct_plan)
@@ -1263,7 +1263,7 @@ end
     prepare_sampling!(native, pupil, src)
     sampled_spots_peak!(native, pupil, src)
     expected_rate = shack_hartmann_detector_image(
-        AdaptiveOpticsSim.sh_sampled_spot_cube(native), 4)
+        WavefrontSensors.sh_sampled_spot_cube(native), 4)
     ordering_cube = reshape(T.(1:16), 16, 1, 1)
     @test shack_hartmann_detector_image(ordering_cube, 4) ==
         reshape(T.(1:16), 4, 4)
@@ -1353,18 +1353,18 @@ end
         T(0.1), fill(false, 4, 4), fill(false, 4, 4))
     @test_throws InvalidConfiguration SubapertureLayout(4, 16, T(8),
         T(1.1), fill(false, 4, 4), fill(false, 4, 4))
-    @test_throws DimensionMismatchError AdaptiveOpticsSim.update_subaperture_layout!(
+    @test_throws DimensionMismatchError WavefrontSensors.update_subaperture_layout!(
         independent_layout, ones(T, 15, 16),
         GeometryValidSubapertures(T=T))
-    @test_throws DimensionMismatchError AdaptiveOpticsSim.update_subaperture_layout_from_amplitude!(
+    @test_throws DimensionMismatchError WavefrontSensors.update_subaperture_layout_from_amplitude!(
         independent_layout, ones(T, 16, 15),
         FluxThresholdValidSubapertures(T=T))
     flux_amplitude = zeros(T, 16, 16)
     flux_amplitude[1:4, 1:4] .= one(T)
     flux_amplitude[5:8, 1:4] .= T(0.5)
-    flux_revision = AdaptiveOpticsSim.subaperture_layout_revision(
+    flux_revision = WavefrontSensors.subaperture_layout_revision(
         independent_layout)
-    @test AdaptiveOpticsSim.update_subaperture_layout_from_amplitude!(
+    @test WavefrontSensors.update_subaperture_layout_from_amplitude!(
         independent_layout, flux_amplitude,
         FluxThresholdValidSubapertures(light_ratio=T(0.5), T=T)) ===
         independent_layout
@@ -1374,9 +1374,9 @@ end
     @test independent_layout.valid_mask_host == expected_flux_mask
     @test valid_subaperture_indices(independent_layout) ==
         CartesianIndex{2}[CartesianIndex(1, 1)]
-    @test AdaptiveOpticsSim.subaperture_layout_revision(independent_layout) ==
+    @test WavefrontSensors.subaperture_layout_revision(independent_layout) ==
         flux_revision + UInt(1)
-    AdaptiveOpticsSim.update_subaperture_layout!(independent_layout,
+    WavefrontSensors.update_subaperture_layout!(independent_layout,
         pupil.amplitude .> zero(T), GeometryValidSubapertures(
             threshold=T(0.1), T=T))
     independent_front_end = ShackHartmannOpticalFrontEnd(independent_mla,
@@ -1388,7 +1388,7 @@ end
     form_wfs_optical_products!(independent_rate, pupil, independent_plan)
     @test independent_rate.values == rate.values
     independent_rate_before_layout_update = copy(independent_rate.values)
-    AdaptiveOpticsSim.update_subaperture_layout!(independent_layout,
+    WavefrontSensors.update_subaperture_layout!(independent_layout,
         pupil.amplitude .> zero(T))
     @test_throws WFSPreparationError form_wfs_optical_products!(
         independent_rate, pupil, independent_plan)
@@ -1415,14 +1415,14 @@ end
         nonfinite_reference, zeros(T, 32))
     replacement_reference = fill(T(0.25), 16, 2)
     reference_revision = independent_calibration.revision
-    @test AdaptiveOpticsSim.set_reference_signal!(independent_calibration,
+    @test WavefrontSensors.set_reference_signal!(independent_calibration,
         replacement_reference) === independent_calibration
     @test independent_calibration.reference_signal_2d == replacement_reference
     @test independent_calibration.reference_signal_host ==
         vec(replacement_reference)
     @test !independent_calibration.calibrated
     @test independent_calibration.revision == reference_revision + UInt(1)
-    @test_throws DimensionMismatchError AdaptiveOpticsSim.set_reference_signal!(
+    @test_throws DimensionMismatchError WavefrontSensors.set_reference_signal!(
         independent_calibration, zeros(T, 15, 2))
     if coverage_enabled
         @test_skip "optical-stage allocation assertion is disabled under coverage instrumentation"
@@ -1593,10 +1593,10 @@ end
     end
 
     estimator_layout_revision =
-        AdaptiveOpticsSim.subaperture_layout_revision(staged.front_end.layout)
-    AdaptiveOpticsSim.update_subaperture_layout!(staged.front_end.layout,
+        WavefrontSensors.subaperture_layout_revision(staged.front_end.layout)
+    WavefrontSensors.update_subaperture_layout!(staged.front_end.layout,
         pupil.amplitude .> zero(T))
-    @test AdaptiveOpticsSim.subaperture_layout_revision(staged.front_end.layout) ==
+    @test WavefrontSensors.subaperture_layout_revision(staged.front_end.layout) ==
         estimator_layout_revision + UInt(1)
     measurement_before_layout_update = copy(measurement.storage)
     @test_throws WFSPreparationError estimate_wfs_measurement!(measurement,
@@ -1697,7 +1697,7 @@ end
     native_lgs = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     prepare_sampling!(native_lgs, pupil, lgs)
-    AdaptiveOpticsSim.sampled_spots_peak!(native_lgs, pupil, lgs)
+    WavefrontSensors.sampled_spots_peak!(native_lgs, pupil, lgs)
     expected_lgs = shack_hartmann_detector_image(
         native_lgs.acquisition.spot_cube, 4)
     staged_lgs = ShackHartmannWFS(tel; n_lenslets=4,
@@ -1716,7 +1716,7 @@ end
     native_sodium = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     prepare_sampling!(native_sodium, pupil, sodium_lgs)
-    AdaptiveOpticsSim.sampled_spots_peak!(native_sodium, pupil, sodium_lgs)
+    WavefrontSensors.sampled_spots_peak!(native_sodium, pupil, sodium_lgs)
     expected_sodium = shack_hartmann_detector_image(
         native_sodium.acquisition.spot_cube, 4)
     staged_sodium = ShackHartmannWFS(tel; n_lenslets=4,
@@ -1737,7 +1737,7 @@ end
     native_asterism = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     prepare_sampling!(native_asterism, pupil, first(asterism.sources))
-    AdaptiveOpticsSim.sampled_spots_peak_asterism_stacked!(
+    WavefrontSensors.sampled_spots_peak_asterism_stacked!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), native_asterism, pupil, asterism)
     expected_asterism = shack_hartmann_detector_image(
         native_asterism.acquisition.spot_cube, 4)

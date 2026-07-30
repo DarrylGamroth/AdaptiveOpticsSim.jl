@@ -174,7 +174,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     revolt_fill_active_command!(active_command)
     tiled_frame = backend_cfg.array_backend{T}(undef, resolution, resolution)
 
-    AdaptiveOpticsSim.ensure_sh_calibration!(wfs, pupil, src)
+    WavefrontSensors.ensure_sh_calibration!(wfs, pupil, src)
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(wfs)))
 
     return RevoltLikeHILContext(

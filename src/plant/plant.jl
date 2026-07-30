@@ -207,14 +207,14 @@ import ..AdaptiveOpticsSim:
     PreparedBioEdgeOpticalFormation,
     PreparedPyramidOpticalBundleFormation,
     PreparedPyramidOpticalFormation,
-    PreparedShackHartmannOpticalBundleFormation,
-    PreparedShackHartmannOpticalFormation,
     runtime_rng,
     splitmix64
 
 import ..WavefrontSensors:
     AcquiredObservationPath,
     DirectMeasurementPath,
+    PreparedShackHartmannOpticalBundleFormation,
+    PreparedShackHartmannOpticalFormation,
     WFSMeasurement,
     WFSObservation,
     acquire_wfs_observation!,

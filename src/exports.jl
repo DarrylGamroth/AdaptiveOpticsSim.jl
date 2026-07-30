@@ -15,8 +15,6 @@ export runtime_rng, deterministic_reference_rng
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, default_modal_inverse_policy
 export KLBasis, ZernikeModalBasis
 
-export ShackHartmannDirectFrontEnd, ShackHartmannOpticalFrontEnd
-export shack_hartmann_rate_map
 export PyramidOpticalFrontEnd, pyramid_rate_map
 export BioEdgeOpticalFrontEnd, bioedge_rate_map
 export set_pyramid_calibration!, set_bioedge_calibration!
@@ -24,18 +22,10 @@ export ZernikeOpticalFrontEnd, zernike_rate_map
 export CurvatureOpticalFrontEnd, curvature_rate_maps
 export CurvaturePackedAcquisition
 export set_zernike_calibration!, set_curvature_calibration!
-export ShackHartmannWFS, PyramidWFS, BioEdgeWFS, ZernikeWFS, CurvatureWFS
+export PyramidWFS, BioEdgeWFS, ZernikeWFS, CurvatureWFS
 export CurvatureReadoutModel, CurvatureFrameReadout
 export CurvatureCountingReadout, CurvatureBranchResponse
-export FluxThresholdValidSubapertures
-export AbstractSlopeExtractionModel, CenterOfGravityExtraction
-export SubapertureLayout, SubapertureCalibration
-export subaperture_layout, subaperture_calibration, slope_extraction_model
-export set_subaperture_calibration!
-export valid_subaperture_indices
 export pyramid_modulation_frame, pyramid_modulation_frame!
-export shack_hartmann_detector_image, shack_hartmann_detector_image!
-export n_valid_subapertures
 export LiFT, PreparedLiFTForwardModel, LiFTObservation
 export LiFTIdentityMapping, LiFTFrameMapping
 export LiFTPhotonRate, LiFTExpectedCounts, LiFTNormalizedIntensity

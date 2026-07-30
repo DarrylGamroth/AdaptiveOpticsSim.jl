@@ -5,6 +5,7 @@ using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
+using AdaptiveOpticsSim.WavefrontSensors
 using SHA
 
 const AOS = AdaptiveOpticsSim

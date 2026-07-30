@@ -97,11 +97,11 @@ WavefrontSensors.grouped_accumulation_plan(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
 ) = WavefrontSensors.GroupedStaged2DPlan()
-function AdaptiveOpticsSim.sh_sensing_execution_plan(
+function WavefrontSensors.sh_sensing_execution_plan(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    ::AdaptiveOpticsSim.ShackHartmannWFS,
+    ::WavefrontSensors.ShackHartmannWFS,
 )
-    return AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan()
+    return WavefrontSensors.ShackHartmannWFSRocmHostStatsPlan()
 end
 
 AdaptiveOpticsSim.Detectors.detector_execution_plan(

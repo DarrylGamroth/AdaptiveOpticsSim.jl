@@ -3,10 +3,9 @@
 # coverage runs do not upload partial reports because they change Julia's
 # attributed line universe.
 #
-# Core source patch coverage is merge-blocking. Optional extensions are
-# target-specific, so their patch status is informational; native hardware
-# validation is the authoritative extension gate. Project coverage continues
-# to include both core source and extensions.
+# Core source project and patch coverage are merge-blocking. Optional
+# extensions are target-specific, so their patch status is informational;
+# native hardware validation is the authoritative extension gate.
 codecov:
   notify:
     after_n_builds: 2
@@ -16,6 +15,12 @@ comment:
 
 coverage:
   status:
+    project:
+      default:
+        target: auto
+        threshold: 0.05%
+        paths:
+          - "src"
     patch:
       default:
         target: auto
