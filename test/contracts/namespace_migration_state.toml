@@ -2,7 +2,7 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-06B"
+current_gate = "NS-06C"
 implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres"]
 partial_owners = ["WavefrontSensors"]
 
@@ -66,6 +66,16 @@ exports = [
     "shack_hartmann_detector_image",
     "shack_hartmann_detector_image!",
     "n_valid_subapertures",
+    "PyramidWFS",
+    "BioEdgeWFS",
+    "PyramidOpticalFrontEnd",
+    "BioEdgeOpticalFrontEnd",
+    "pyramid_rate_map",
+    "bioedge_rate_map",
+    "set_pyramid_calibration!",
+    "set_bioedge_calibration!",
+    "pyramid_modulation_frame",
+    "pyramid_modulation_frame!",
 ]
 public = [
     "supports_prepared_runtime",
@@ -138,6 +148,15 @@ internal = [
     "save_zero_opd!",
     "store_reference_signal!",
     "update_valid_mask!",
+    "PreparedPyramidOpticalFormation",
+    "PreparedPyramidOpticalBundleFormation",
+    "PreparedBioEdgeOpticalFormation",
+    "PreparedBioEdgeOpticalBundleFormation",
+    "modulated_input_wavelength",
+    "modulated_wfs_propagation_storage",
+    "require_modulated_wfs_domains",
+    "require_modulated_wfs_input",
+    "_modulated_input_storage",
 ]
 
 [baseline_divergence]

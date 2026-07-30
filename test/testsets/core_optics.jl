@@ -220,8 +220,21 @@ end
         :ShackHartmannOpticalFrontEnd)
     @test !Base.isexported(AdaptiveOpticsSim, :shack_hartmann_rate_map)
     @test Base.isexported(WavefrontSensors, :shack_hartmann_rate_map)
-    @test Base.isexported(AdaptiveOpticsSim, :PyramidOpticalFrontEnd)
-    @test Base.isexported(AdaptiveOpticsSim, :BioEdgeOpticalFrontEnd)
+    for name in (
+        :PyramidWFS,
+        :BioEdgeWFS,
+        :PyramidOpticalFrontEnd,
+        :BioEdgeOpticalFrontEnd,
+        :pyramid_rate_map,
+        :bioedge_rate_map,
+        :set_pyramid_calibration!,
+        :set_bioedge_calibration!,
+        :pyramid_modulation_frame,
+        :pyramid_modulation_frame!,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test Base.isexported(WavefrontSensors, name)
+    end
     @test Base.isexported(AdaptiveOpticsSim, :ZernikeOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :CurvaturePackedAcquisition)
@@ -283,8 +296,10 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :DeterministicExecution)
     @test Base.isexported(AdaptiveOpticsSim, :AcceleratedKernelsExecution)
     @test Base.isexported(AdaptiveOpticsSim, :DaggerExecution)
-    @test Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
-    @test Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
+    @test !Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
+    @test !Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
+    @test Base.isexported(WavefrontSensors, :PyramidWFS)
+    @test Base.isexported(WavefrontSensors, :BioEdgeWFS)
     @test Base.isexported(AdaptiveOpticsSim, :ZernikeWFS)
     @test Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
     @test !Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)

@@ -25,8 +25,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     end
 
     for family in (
-        :PyramidWFS,
-        :BioEdgeWFS,
         :ZernikeWFS,
         :CurvatureWFS,
         :LiFT,
@@ -40,6 +38,16 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :SubapertureLayout,
         :SubapertureCalibration,
         :shack_hartmann_detector_image,
+        :PyramidWFS,
+        :BioEdgeWFS,
+        :PyramidOpticalFrontEnd,
+        :BioEdgeOpticalFrontEnd,
+        :pyramid_rate_map,
+        :bioedge_rate_map,
+        :set_pyramid_calibration!,
+        :set_bioedge_calibration!,
+        :pyramid_modulation_frame,
+        :pyramid_modulation_frame!,
     )
         @test parentmodule(getfield(WavefrontSensors, name)) ===
             WavefrontSensors
@@ -48,6 +56,8 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         @test !isdefined(AdaptiveOpticsSim, name)
     end
     @test parentmodule(MicrolensArray) === Optics
+    @test parentmodule(PyramidPhaseMask) === Optics
+    @test parentmodule(BioEdgeAmplitudeMask) === Optics
     @test MicrolensArray(; n_lenslets=2, n_pix_subap=2) isa
         MicrolensArray
 
@@ -73,9 +83,9 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     common_entry = read(joinpath(dirname(pathof(AdaptiveOpticsSim)), "wfs",
         "wavefront_sensors.jl"), String)
     @test occursin("include(\"shack_hartmann.jl\")", common_entry)
+    @test occursin("include(\"pyramid.jl\")", common_entry)
+    @test occursin("include(\"bioedge.jl\")", common_entry)
     for family_source in (
-        "pyramid.jl",
-        "bioedge.jl",
         "zernike.jl",
         "curvature.jl",
         "lift.jl",
@@ -142,50 +152,50 @@ end
 
     pyramid = PyramidWFS(tel; pupil_samples=4,
         diffraction_padding=3, mode=Diffractive())
-    AdaptiveOpticsSim.prepare_pyramid_sampling!(pyramid, pupil)
+    WavefrontSensors.prepare_pyramid_sampling!(pyramid, pupil)
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim.resize_pyramid_signal_buffers!(pyramid, 3)
+        WavefrontSensors.resize_pyramid_signal_buffers!(pyramid, 3)
     end
     @test_throws DimensionMismatchError begin
-        AdaptiveOpticsSim.pyramid_signal!(pyramid, pupil, zeros(8, 6))
+        WavefrontSensors.pyramid_signal!(pyramid, pupil, zeros(8, 6))
     end
 
     bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim.resize_bioedge_signal_buffers!(bioedge, 7, 1)
+        WavefrontSensors.resize_bioedge_signal_buffers!(bioedge, 7, 1)
     end
     @test_throws DimensionMismatchError begin
-        AdaptiveOpticsSim.bioedge_signal!(bioedge, pupil, zeros(8, 6))
+        WavefrontSensors.bioedge_signal!(bioedge, pupil, zeros(8, 6))
     end
 
     compact_bioedge = BioEdgeWFS(tel; pupil_samples=2,
         mode=Diffractive())
     compact_bioedge.acquisition.state.nominal_detector_resolution = 4
-    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(compact_bioedge, 4)
+    WavefrontSensors.resize_bioedge_signal_buffers!(compact_bioedge, 4)
     fill!(compact_bioedge.estimator.state.valid_i4q, true)
-    AdaptiveOpticsSim.update_bioedge_valid_signal!(compact_bioedge)
-    AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(compact_bioedge)
-    AdaptiveOpticsSim.resize_bioedge_slope_buffers!(compact_bioedge)
+    WavefrontSensors.update_bioedge_valid_signal!(compact_bioedge)
+    WavefrontSensors.update_bioedge_valid_signal_indices!(compact_bioedge)
+    WavefrontSensors.resize_bioedge_slope_buffers!(compact_bioedge)
     fill!(compact_bioedge.estimator.state.reference_signal_2d, 0.0)
     compact_frame = [4.0 4.0 1.0 1.0;
                      4.0 4.0 1.0 1.0;
                      3.0 3.0 2.0 2.0;
                      3.0 3.0 2.0 2.0]
-    compact_slopes = copy(AdaptiveOpticsSim.bioedge_signal!(
+    compact_slopes = copy(WavefrontSensors.bioedge_signal!(
         compact_bioedge, pupil, compact_frame))
 
     padded_bioedge = BioEdgeWFS(tel; pupil_samples=2,
         mode=Diffractive())
     padded_bioedge.acquisition.state.nominal_detector_resolution = 4
-    AdaptiveOpticsSim.resize_bioedge_signal_buffers!(padded_bioedge, 8)
+    WavefrontSensors.resize_bioedge_signal_buffers!(padded_bioedge, 8)
     fill!(padded_bioedge.estimator.state.valid_i4q, true)
-    AdaptiveOpticsSim.update_bioedge_valid_signal!(padded_bioedge)
-    AdaptiveOpticsSim.update_bioedge_valid_signal_indices!(padded_bioedge)
-    AdaptiveOpticsSim.resize_bioedge_slope_buffers!(padded_bioedge)
+    WavefrontSensors.update_bioedge_valid_signal!(padded_bioedge)
+    WavefrontSensors.update_bioedge_valid_signal_indices!(padded_bioedge)
+    WavefrontSensors.resize_bioedge_slope_buffers!(padded_bioedge)
     fill!(padded_bioedge.estimator.state.reference_signal_2d, 0.0)
     padded_frame = zeros(8, 8)
     @views padded_frame[3:6, 3:6] .= compact_frame
-    @test AdaptiveOpticsSim.bioedge_signal!(padded_bioedge, pupil,
+    @test WavefrontSensors.bioedge_signal!(padded_bioedge, pupil,
         padded_frame) ≈ compact_slopes
 
     ngs = Source(wavelength=589e-9, photon_irradiance=1.0)

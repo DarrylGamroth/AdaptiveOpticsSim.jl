@@ -341,6 +341,7 @@ import .WavefrontSensors:
     WFSObservation,
     WFSObservationMetadata,
     WFSPreparationError,
+    _modulated_input_storage,
     _capture_counting_wfs!,
     _apply_elongation!,
     _require_counting_wfs_source,
@@ -373,6 +374,8 @@ import .WavefrontSensors:
     lgs_average_kernel_fft,
     lgs_kernel_signature,
     lgs_pixel_scale,
+    modulated_input_wavelength,
+    modulated_wfs_propagation_storage,
     n_valid_subapertures,
     observation_metadata,
     observation_storage,
@@ -385,6 +388,8 @@ import .WavefrontSensors:
     reference_signal,
     reduce_grouped_blocks_kernel!,
     reduce_grouped_stack!,
+    require_modulated_wfs_domains,
+    require_modulated_wfs_input,
     restore_opd!,
     save_zero_opd!,
     sensing_mode,
@@ -417,9 +422,6 @@ import .WavefrontSensors:
     wfs_output_frame_prototype,
     wfs_output_metadata
 
-include("wfs/focal_plane_modulation.jl")
-include("wfs/pyramid.jl")
-include("wfs/bioedge.jl")
 include("wfs/zernike.jl")
 include("wfs/curvature.jl")
 include("wfs/lift.jl")

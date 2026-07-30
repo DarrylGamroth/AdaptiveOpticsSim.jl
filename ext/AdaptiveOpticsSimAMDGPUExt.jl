@@ -91,11 +91,11 @@ AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.G
 AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
 WavefrontSensors.grouped_accumulation_plan(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
-    ::Type{<:AdaptiveOpticsSim.PyramidWFS},
+    ::Type{<:WavefrontSensors.PyramidWFS},
 ) = WavefrontSensors.GroupedStaged2DPlan()
 WavefrontSensors.grouped_accumulation_plan(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
-    ::Type{<:AdaptiveOpticsSim.BioEdgeWFS},
+    ::Type{<:WavefrontSensors.BioEdgeWFS},
 ) = WavefrontSensors.GroupedStaged2DPlan()
 function WavefrontSensors.sh_sensing_execution_plan(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},

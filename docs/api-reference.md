@@ -1135,11 +1135,11 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 ```
 
-`WavefrontSensors` owns the complete Shack–Hartmann family as well as the
-common contracts. `MicrolensArray` remains an independent `Optics` component.
-The other concrete WFS family bindings remain on the root surface only until
-their ordered namespace gates; migrated bindings are not forwarded through
-the root.
+`WavefrontSensors` owns the complete Shack–Hartmann, Pyramid, and BioEdge
+families as well as the common contracts. `MicrolensArray`, `PyramidPhaseMask`,
+and `BioEdgeAmplitudeMask` remain independent `Optics` components. The other
+concrete WFS family bindings remain on the root surface only until their
+ordered namespace gates; migrated bindings are not forwarded through the root.
 
 - Sensing modes: `Diffractive`, `Geometric`
 - Prepared products: `WFSObservationMetadata`, `WFSMeasurementMetadata`,
@@ -1157,9 +1157,8 @@ the root.
 - Contract failure: `WFSPreparationError`, whose `stage` and open
   extension-defined `reason` fields identify rejected preparation contracts or
   execution-time prepared-binding violations before mutation
-- Module-owned WFS family: `ShackHartmannWFS`
-- WFS families awaiting their owner gates: `PyramidWFS`, `BioEdgeWFS`,
-  `ZernikeWFS`, `CurvatureWFS`
+- Module-owned WFS families: `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`
+- WFS families awaiting their owner gates: `ZernikeWFS`, `CurvatureWFS`
 - Zernike optical composition: `ZernikePhaseSpot`,
   `ZernikeOpticalFrontEnd`, `zernike_rate_map`, and
   `set_zernike_calibration!`

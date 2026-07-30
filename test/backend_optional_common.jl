@@ -849,8 +849,8 @@ end
 
 @inline function optional_wfs_plan_device_resident(
     plan::Union{
-        AdaptiveOpticsSim.PreparedPyramidOpticalFormation,
-        AdaptiveOpticsSim.PreparedBioEdgeOpticalFormation,
+        WavefrontSensors.PreparedPyramidOpticalFormation,
+        WavefrontSensors.PreparedBioEdgeOpticalFormation,
     },
     device,
     BackendArray,
@@ -878,8 +878,8 @@ end
 function optional_wfs_plan_device_resident(
     plan::Union{
         WavefrontSensors.PreparedShackHartmannOpticalBundleFormation,
-        AdaptiveOpticsSim.PreparedPyramidOpticalBundleFormation,
-        AdaptiveOpticsSim.PreparedBioEdgeOpticalBundleFormation,
+        WavefrontSensors.PreparedPyramidOpticalBundleFormation,
+        WavefrontSensors.PreparedBioEdgeOpticalBundleFormation,
     },
     device,
     BackendArray,
@@ -1717,7 +1717,7 @@ function run_optional_sodium_profile_wfs(::Type{B},
             BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=zero(T), T=T, backend=selector)
 
-        AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, pupil, src)
+        WavefrontSensors.ensure_lgs_kernel!(wfs, pupil, src)
         propagation = wfs.front_end.propagation
         @test propagation.lgs_kernel_fft isa BackendArray
         original_tag = propagation.lgs_kernel_tag
@@ -1730,7 +1730,7 @@ function run_optional_sodium_profile_wfs(::Type{B},
         @test all(isfinite, Array(slopes))
 
         src.params.na_profile[2, :] .= T[0.8, 0.1, 0.1]
-        AdaptiveOpticsSim.ensure_lgs_kernel!(wfs, pupil, src)
+        WavefrontSensors.ensure_lgs_kernel!(wfs, pupil, src)
         @test propagation.lgs_kernel_tag != original_tag
         @test !isapprox(Array(propagation.lgs_kernel_fft), original_kernel;
             rtol=T(1e-5), atol=T(1e-6))

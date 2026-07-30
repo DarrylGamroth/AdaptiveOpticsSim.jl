@@ -269,12 +269,15 @@ removed and callers are migrated directly; synthetic property forwarding,
 state views, deprecated aliases, and permanent compatibility adapters are not
 part of the maintained architecture.
 
-Pyramid and BioEdge use separate `PyramidPhaseMask` and
-`BioEdgeAmplitudeMask` physical front ends. They share prepared focal-plane
-modulation only where the optical quadrature is identical; its normalized
-weights average intensity and never integrate detector time. Each front end
-writes a normalized-pupil-coordinate, cell-integrated photon-arrival-rate
-four-pupil mosaic or a typed spectral/path-local bundle. Generic detector
+`WavefrontSensors.PyramidWFS` and `WavefrontSensors.BioEdgeWFS` own their
+composition, acquisition, calibration, and estimation implementations.
+`Optics` independently owns their `PyramidPhaseMask` and
+`BioEdgeAmplitudeMask` physical components. The sensor families share prepared
+focal-plane modulation only where the optical quadrature is identical; its
+normalized weights average intensity and never integrate detector time. Each
+front end writes a normalized-pupil-coordinate, cell-integrated
+photon-arrival-rate four-pupil mosaic or a typed spectral/path-local bundle.
+Generic detector
 acquisition applies response, QE, and duration afterward. Their differential
 estimators own valid support, normalization, reference subtraction, optical
 gain, and a calibration revision that invalidates stale prepared plans.

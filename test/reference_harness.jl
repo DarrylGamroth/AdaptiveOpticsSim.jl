@@ -1239,15 +1239,15 @@ function compute_reference_actual(case::ReferenceCase)
         if haskey(case.config, "opd")
             apply_reference_opd!(pupil, case.config["opd"])
         end
-        intensity = AdaptiveOpticsSim.pyramid_propagation(wfs).intensity
+        intensity = WavefrontSensors.pyramid_propagation(wfs).intensity
         if src isa SpectralSource
-            AdaptiveOpticsSim.accumulate_pyramid_spectral_intensity!(
+            WavefrontSensors.accumulate_pyramid_spectral_intensity!(
                 AdaptiveOpticsSim.Backends.execution_style(intensity), wfs, pupil,
                 src)
         else
-            AdaptiveOpticsSim.pyramid_intensity!(intensity, wfs, pupil, src)
+            WavefrontSensors.pyramid_intensity!(intensity, wfs, pupil, src)
         end
-        return copy(AdaptiveOpticsSim.sample_pyramid_intensity!(wfs, pupil,
+        return copy(WavefrontSensors.sample_pyramid_intensity!(wfs, pupil,
             intensity))
     elseif case.kind === :atmospheric_intensity
         tel = build_reference_telescope(case.config["telescope"])
@@ -1301,7 +1301,7 @@ function compute_reference_actual(case::ReferenceCase)
         elseif haskey(case.config, "opd")
             apply_reference_opd!(pupil, case.config["opd"], basis)
         end
-        frame = similar(AdaptiveOpticsSim.pyramid_propagation(wfs).intensity)
+        frame = similar(WavefrontSensors.pyramid_propagation(wfs).intensity)
         pyramid_modulation_frame!(frame, wfs, pupil, src)
         return copy(frame)
     elseif case.kind === :transfer_function_rejection
