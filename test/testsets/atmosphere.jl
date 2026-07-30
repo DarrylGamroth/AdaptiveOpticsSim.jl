@@ -11,7 +11,7 @@ function unmasked_atmosphere_opd(atm::AbstractTimedAtmosphere,
     tel::Telescope)
     renderer = prepare_atmosphere_renderer(atm, tel)
     output = similar(pupil_reflectivity(tel))
-    AdaptiveOpticsSim.accumulate_rendered_layers!(output, atm.layers,
+    AdaptiveOpticsSim.Atmospheres.accumulate_rendered_layers!(output, atm.layers,
         renderer.shift_x, renderer.shift_y, renderer.footprint_scale)
     return output
 end
@@ -192,10 +192,10 @@ end
 
 @testset "Infinite atmosphere boundary math" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    @test AdaptiveOpticsSim.default_infinite_screen_resolution(tel.params.resolution) == 3 * tel.params.resolution
-    @test AdaptiveOpticsSim.default_infinite_stencil_size(tel.params.resolution) >= 257
+    @test AdaptiveOpticsSim.Atmospheres.default_infinite_screen_resolution(tel.params.resolution) == 3 * tel.params.resolution
+    @test AdaptiveOpticsSim.Atmospheres.default_infinite_stencil_size(tel.params.resolution) >= 257
 
-    stencil = AdaptiveOpticsSim.infinite_boundary_stencil(4, 0.25;
+    stencil = AdaptiveOpticsSim.Atmospheres.infinite_boundary_stencil(4, 0.25;
         stencil_size=9,
         orientation=:column,
         side=:positive,
@@ -206,7 +206,7 @@ end
     @test size(stencil.stencil_positions, 2) == 2
     @test all(stencil.boundary_coords[:, 1] .== 0)
 
-    row_stencil = AdaptiveOpticsSim.infinite_boundary_stencil(4, 0.25;
+    row_stencil = AdaptiveOpticsSim.Atmospheres.infinite_boundary_stencil(4, 0.25;
         stencil_size=9,
         orientation=:row,
         side=:negative,
@@ -215,7 +215,7 @@ end
     )
     @test all(row_stencil.boundary_coords[:, 2] .== 10)
 
-    op = AdaptiveOpticsSim.boundary_injection_operator(stencil, 0.2, 25.0)
+    op = AdaptiveOpticsSim.Atmospheres.boundary_injection_operator(stencil, 0.2, 25.0)
     @test size(op.predictor, 1) == size(stencil.boundary_coords, 1)
     @test size(op.predictor, 2) == size(stencil.stencil_coords, 1)
     @test size(op.residual_factor, 1) == size(stencil.boundary_coords, 1)
@@ -229,7 +229,7 @@ end
     samples = Matrix{Float64}(undef, size(op.predictor, 1), nsamp)
     expected_mean = op.predictor * stencil_data
     for i in 1:nsamp
-        samples[:, i] = AdaptiveOpticsSim.sample_boundary_line(op, stencil_data, rng)
+        samples[:, i] = AdaptiveOpticsSim.Atmospheres.sample_boundary_line(op, stencil_data, rng)
     end
     empirical_mean = vec(mean(samples; dims=2))
     centered = samples .- empirical_mean
@@ -267,12 +267,12 @@ end
     @test size(rendered) == (32, 32)
     @test pupil.opd == rendered
 
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.infinite_boundary_stencil(4, 0.25;
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Atmospheres.infinite_boundary_stencil(4, 0.25;
         stencil_size=8,
         orientation=:column,
         side=:positive,
     )
-    @test_throws NumericalConditionError AdaptiveOpticsSim.boundary_injection_operator(stencil, 0.2, 25.0; conditioning_tol=1.0)
+    @test_throws NumericalConditionError AdaptiveOpticsSim.Atmospheres.boundary_injection_operator(stencil, 0.2, 25.0; conditioning_tol=1.0)
 end
 
 @testset "Infinite atmosphere stepping regressions" begin
@@ -431,7 +431,7 @@ end
     advance_by!(infinite, TEST_ATMOSPHERE_STEP; rng=infinite_rng)
     finite_snapshot = rendered_atmosphere_opd(finite, tel)
     infinite_snapshot = rendered_atmosphere_opd(infinite, tel)
-    period = AdaptiveOpticsSim.moving_layer_screen_resolution(tel.params.resolution)
+    period = AdaptiveOpticsSim.Atmospheres.moving_layer_screen_resolution(tel.params.resolution)
     for _ in 1:period
         advance_by!(finite, TEST_ATMOSPHERE_STEP; rng=finite_rng)
         advance_by!(infinite, TEST_ATMOSPHERE_STEP; rng=infinite_rng)
@@ -454,8 +454,8 @@ end
     offaxis = Source(band=:I, magnitude=0.0, coordinates=(100.0, 0.0))
     lgs = LGSSource(magnitude=0.0, coordinates=(100.0, 0.0), altitude=10_000.0)
 
-    shift_x_ngs, shift_y_ngs, footprint_ngs = AdaptiveOpticsSim.layer_source_geometry(offaxis, 5000.0, tel, Float64)
-    shift_x_lgs, shift_y_lgs, footprint_lgs = AdaptiveOpticsSim.layer_source_geometry(lgs, 5000.0, tel, Float64)
+    shift_x_ngs, shift_y_ngs, footprint_ngs = AdaptiveOpticsSim.Atmospheres.layer_source_geometry(offaxis, 5000.0, tel, Float64)
+    shift_x_lgs, shift_y_lgs, footprint_lgs = AdaptiveOpticsSim.Atmospheres.layer_source_geometry(lgs, 5000.0, tel, Float64)
     @test shift_x_ngs ≈ shift_x_lgs
     @test shift_y_ngs ≈ shift_y_lgs
     @test shift_y_ngs ≈ 0.0
@@ -582,8 +582,8 @@ end
     phs_sh = ft_sh_phase_screen(atm, 32, delta; rng=rng, ws=ws, subharmonics=true,
         mode=FidelitySubharmonics())
     @test sum(abs.(phs_sh .- phs_base)) > 0
-    @test AdaptiveOpticsSim.resolve_subharmonic_levels(25.0, 8.0) == 4
-    @test AdaptiveOpticsSim.resolve_subharmonic_levels(200.0, 8.0) > 4
+    @test AdaptiveOpticsSim.Atmospheres.resolve_subharmonic_levels(25.0, 8.0) == 4
+    @test AdaptiveOpticsSim.Atmospheres.resolve_subharmonic_levels(200.0, 8.0) > 4
 
     atm_large = KolmogorovAtmosphere(tel; r0=0.2, L0=200.0)
     rng = MersenneTwister(11)

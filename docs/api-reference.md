@@ -14,16 +14,19 @@ This document describes the currently implemented ordinary package API
 imported by `using AdaptiveOpticsSim`, optical-foundation vocabulary imported
 by `using AdaptiveOpticsSim.Optics`, backend vocabulary imported by
 `using AdaptiveOpticsSim.Backends`, conventional detector vocabulary imported
-by `using AdaptiveOpticsSim.Detectors`, the routine plant workflow imported by
+by `using AdaptiveOpticsSim.Detectors`, atmosphere vocabulary imported by
+`using AdaptiveOpticsSim.Atmospheres`, the routine plant workflow imported by
 `using AdaptiveOpticsSim.Plant`, and stable qualified APIs addressed through
 their canonical modules. Qualified public names are maintained but do not
 enter the caller's ordinary namespace. The root package exports the
-`Backends`, `Optics`, `Detectors`, and `Plant` modules, not compatibility
-exports for their moved contents.
+`Backends`, `Optics`, `Atmospheres`, `Detectors`, and `Plant` modules, not
+compatibility exports for their moved contents.
 
-The breaking namespace migration is in progress. `Backends`, `Optics`, and
-`Detectors` are complete. `Detectors` owns both conventional frame/area and
-counting/channel sensor APIs. `Optics` owns
+The breaking namespace migration is in progress. `Backends`, `Optics`,
+`Atmospheres`, and `Detectors` are complete. `Atmospheres` owns atmosphere
+models and state, source-direction rendering and batching, and
+atmosphere-coupled propagation. `Detectors` owns both conventional frame/area
+and counting/channel sensor APIs. `Optics` owns
 apertures, telescopes, sources, optical products and
 metadata, pupil/field formation, backend-portable Fraunhofer and Fresnel
 propagation, direct imaging, sampled OPD, physical NCPA, controllable optics,
@@ -44,7 +47,8 @@ conventional detector surface in
 canonical backend surface in
 [`../src/backends/api.jl`](../src/backends/api.jl). The currently implemented
 optical surface is curated in
-[`../src/optics/api.jl`](../src/optics/api.jl). Each owner PR must converge on
+[`../src/optics/api.jl`](../src/optics/api.jl), and the atmosphere surface in
+[`../src/atmosphere/api.jl`](../src/atmosphere/api.jl). Each owner PR must converge on
 the exact domain allowlists without root forwarding aliases or compatibility
 adapters.
 Export a name only when it is one of these:
@@ -855,6 +859,10 @@ the deterministic serial virtual-time oracle; they do not expose a wall clock,
 RTC transport, port, task, command endpoint, or parallel placement policy.
 
 ## Atmosphere
+
+Import this vocabulary with `using AdaptiveOpticsSim.Atmospheres`.
+`AdaptiveOpticsSim` exports the `Atmospheres` module itself and provides no
+root forwarding bindings for atmosphere-owned names.
 
 - `AbstractAtmosphere`
 - `KolmogorovAtmosphere`

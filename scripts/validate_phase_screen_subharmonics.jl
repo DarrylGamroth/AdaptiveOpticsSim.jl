@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 using LinearAlgebra
 using Random
@@ -70,7 +71,7 @@ function main()
                     n_levels=3, radius=1)),
             ("fidelity", (subharmonics=true, mode=FidelitySubharmonics()),
                 subharmonic_theory_variance(atm.params.r0, atm.params.L0, tel.params.diameter, 1e-10;
-                    n_levels=AdaptiveOpticsSim.resolve_subharmonic_levels(atm.params.L0, tel.params.diameter), radius=2)),
+                    n_levels=AdaptiveOpticsSim.Atmospheres.resolve_subharmonic_levels(atm.params.L0, tel.params.diameter), radius=2)),
         )
             m = subharmonic_metrics(atm, tel.params.diameter; kwargs...)
             ratio = theory === nothing ? "NA" : string(m.added_variance / theory)

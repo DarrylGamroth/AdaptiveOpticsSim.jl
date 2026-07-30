@@ -1,4 +1,4 @@
-struct PlantTopologyTestAtmosphere <: AdaptiveOpticsSim.AbstractAtmosphere end
+struct PlantTopologyTestAtmosphere <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere end
 
 struct PlantTopologyTestOpticalModel
     label::Symbol

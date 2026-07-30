@@ -48,7 +48,7 @@ AMDGPU.functional() ||
 
     frequencies = AMDGPU.ROCArray(Float32[-0.2, -0.1, 0.1, 0.2])
     phase_psd = AMDGPU.zeros(Float32, 4, 4)
-    AdaptiveOpticsSim._fill_phase_psd!(
+    AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(
         Backends.execution_style(phase_psd),
         phase_psd,
         frequencies,

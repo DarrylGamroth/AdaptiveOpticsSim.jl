@@ -2,14 +2,15 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-04B"
-implemented_owners = ["Backends", "Optics", "Detectors"]
+current_gate = "NS-05"
+implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres"]
 partial_owners = []
 
 [owner_sources]
 Backends = "src/backends/api.jl"
 Optics = "src/optics/api.jl"
 Detectors = "src/detectors/api.jl"
+Atmospheres = "src/atmosphere/api.jl"
 
 [baseline_divergence]
 root_surface = "src/exports.jl"

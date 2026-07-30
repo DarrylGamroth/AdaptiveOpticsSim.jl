@@ -80,14 +80,16 @@ function rather than introducing a second root function identity.
 
 The package is transitioning from the original flat root surface to real
 domain modules alongside the existing `Plant` module. `Backends`, `Optics`,
-and `Detectors` are complete. `Detectors` is the canonical owner of both
+`Atmospheres`, and `Detectors` are complete. `Atmospheres` owns atmosphere
+models and state, source-direction rendering and batching, and
+atmosphere-coupled propagation. `Detectors` is the canonical owner of both
 conventional frame/area and counting/channel detector models and acquisition,
 with one shared detector type graph. `Optics` owns apertures, telescopes, sources, optical
 location/product metadata, pupil and field formation, general Fraunhofer and
 Fresnel propagation, direct imaging, sampled OPD, physical NCPA, controllable
-optics, and reusable physical WFS components. `Atmospheres`, `Detectors`,
-`WavefrontSensors`, `Calibration`, `Control`, `Tomography`, and `Ensembles`
-follow in dependency order. The
+optics, and reusable physical WFS components. `WavefrontSensors`,
+`Calibration`, `Control`, `Tomography`, and `Ensembles` follow in dependency
+order. The
 authoritative pre-migration inventory, final exact API allowlists,
 extension-hook owners, and cross-module imports are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).

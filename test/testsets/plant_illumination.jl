@@ -203,7 +203,7 @@ function Plant.prepare_path_executor(
     model::NativeDetectorIlluminationPathModel,
     definition::OpticalPathDefinition, source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere)
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere)
     destination = illumination_detector_input(telescope, source)
     entry = prepare_illumination_entry(
         UniformIntensityIllumination(model.rate;
@@ -225,7 +225,7 @@ function Plant.prepare_path_executor(
     model::TimedPupilIlluminationPathModel,
     definition::OpticalPathDefinition, source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere)
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere)
     pupil = PupilFunction(telescope; backend=backend(telescope))
     visibility = Dict{Symbol,Any}(
         :downstream_path => path_id(definition).name,

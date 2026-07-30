@@ -1,4 +1,4 @@
-struct CommandSchemaTestAtmosphere <: AdaptiveOpticsSim.AbstractAtmosphere end
+struct CommandSchemaTestAtmosphere <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere end
 
 struct CommandSchemaTestOpticModel
     name::Symbol

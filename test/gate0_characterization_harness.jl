@@ -210,7 +210,7 @@ function gate0_atmosphere_directions(case::ReferenceCase)
     shifts = zeros(T, length(atmosphere.layers))
     scales = ones(T, length(atmosphere.layers))
     epoch_device = similar(pupil.opd)
-    AdaptiveOpticsSim.accumulate_rendered_layers!(epoch_device,
+    AdaptiveOpticsSim.Atmospheres.accumulate_rendered_layers!(epoch_device,
         atmosphere.layers, shifts, shifts, scales)
     epoch = copy(Array(epoch_device))
     onaxis = build_reference_source(case.config["onaxis_source"])

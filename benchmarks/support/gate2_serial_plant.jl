@@ -1,6 +1,7 @@
 module Gate2SerialPlantBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant

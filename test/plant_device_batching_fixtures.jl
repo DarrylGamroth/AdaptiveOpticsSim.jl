@@ -123,7 +123,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))

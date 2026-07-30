@@ -167,7 +167,7 @@ function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
     copyto!(cube, host)
     return cube
 end
-function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}
+function AdaptiveOpticsSim.Atmospheres.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}
     if size(host) != size(out)
         host = Matrix{T}(undef, size(out)...)
     end
@@ -175,7 +175,7 @@ function AdaptiveOpticsSim.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCA
     copyto!(out, host)
     return host
 end
-function AdaptiveOpticsSim._fill_phase_psd!(
+function AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     psd::AMDGPU.ROCArray{T,2},
     freqs::AMDGPU.ROCArray{T,1},
@@ -187,7 +187,7 @@ function AdaptiveOpticsSim._fill_phase_psd!(
     n::Int,
 ) where {T<:AbstractFloat}
     host_psd = Matrix{T}(undef, size(psd))
-    AdaptiveOpticsSim._fill_phase_psd!(Backends.ScalarCPUStyle(), host_psd,
+    AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(Backends.ScalarCPUStyle(), host_psd,
         Array(freqs), coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n)
     copyto!(psd, host_psd)
     return psd

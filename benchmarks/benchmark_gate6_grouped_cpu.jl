@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Plant
 using Base64
 using Dates

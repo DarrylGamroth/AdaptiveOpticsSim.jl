@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 using LinearAlgebra
 using Random
@@ -96,7 +97,7 @@ function periodicity_metrics()
         infinite_epoch)
     finite_snapshot = copy(Array(opd_map(finite_output)))
     infinite_snapshot = copy(Array(opd_map(infinite_output)))
-    period = AdaptiveOpticsSim.moving_layer_screen_resolution(tel.params.resolution)
+    period = AdaptiveOpticsSim.Atmospheres.moving_layer_screen_resolution(tel.params.resolution)
     for _ in 1:period
         finite_epoch = advance_by!(finite, atmosphere_step; rng=finite_rng)
         infinite_epoch = advance_by!(infinite, atmosphere_step;

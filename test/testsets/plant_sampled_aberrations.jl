@@ -23,7 +23,7 @@ Plant.plant_model_definition_style(
 function Plant.validate_path_materialization_binding(
     materialization::SampledZeroPupilMaterialization,
     input::PupilFunction,
-    ::AdaptiveOpticsSim.AbstractAtmosphere,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
     ::AdaptiveOpticsSim.Optics.AbstractSource,
 )
     materialization.destination === input || throw(
@@ -35,7 +35,7 @@ end
 function Plant.validate_path_materialization(
     materialization::SampledZeroPupilMaterialization,
     input::PupilFunction,
-    ::AdaptiveOpticsSim.AbstractAtmosphere,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
     ::AtmosphereEpoch,
 )
     materialization.destination === input || throw(
@@ -47,7 +47,7 @@ end
 function Plant.materialize_path_input!(
     materialization::SampledZeroPupilMaterialization,
     input::PupilFunction,
-    ::AdaptiveOpticsSim.AbstractAtmosphere,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
     ::AtmosphereEpoch,
 )
     materialization.destination === input || throw(
@@ -83,7 +83,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
