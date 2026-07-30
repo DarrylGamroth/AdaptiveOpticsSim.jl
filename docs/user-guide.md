@@ -110,8 +110,8 @@ Model-specific `prepare!`, `step!`, and `readout` methods are appropriate when
 the composition is stable, as in the Subaru AO188/AO3k example modules. They do
 not define a second generic package runtime.
 
-`SimulationEnsemble` may schedule several independent model instances for
-coarse offline work.
+After `using AdaptiveOpticsSim.Ensembles`, `SimulationEnsemble` may schedule
+several independent model instances for coarse offline work.
 
 ### 3. Plant execution layer
 

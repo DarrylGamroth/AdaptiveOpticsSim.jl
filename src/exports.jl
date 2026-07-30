@@ -8,17 +8,9 @@
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
 export Backends, Optics, Detectors, Atmospheres, WavefrontSensors, Calibration
-export Control, Tomography, Plant
+export Control, Tomography, Ensembles, Plant
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
 
-export AbstractExecutionPolicy
-export SequentialExecution, ThreadedExecution, BackendStreamExecution
-export DeterministicExecution, AcceleratedKernelsExecution, DaggerExecution
-export SimulationEnsemble
 export runtime_timing
-
-public run_ensemble!, ensemble_members, execution_policy
-public ensemble_ownership_roots, init_ensemble_scheduler, execute_ensemble!
-public init_execution_state

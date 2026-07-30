@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim.Backends
 using Random
 

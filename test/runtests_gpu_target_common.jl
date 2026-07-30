@@ -9,6 +9,7 @@ using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
+using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using LinearAlgebra

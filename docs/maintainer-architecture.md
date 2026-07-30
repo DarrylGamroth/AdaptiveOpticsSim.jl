@@ -94,7 +94,8 @@ policy, interaction/control matrices, modal basis construction, model-derived
 NCPA synthesis, fitting, optical-gain calibration, and registration
 identification. `Control` owns reconstruction and controller composition;
 `Tomography` owns guide-star geometry, atmospheric reconstruction, fitting,
-and DM-command projection; `Ensembles` follows in dependency order. The
+and DM-command projection. `Ensembles` owns coarse offline execution policies,
+sweeps, and optional scheduler integrations. The
 authoritative pre-migration inventory, final exact API allowlists,
 extension-hook owners, and cross-module imports are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).

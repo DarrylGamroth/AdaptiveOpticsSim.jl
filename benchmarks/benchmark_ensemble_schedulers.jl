@@ -1,5 +1,6 @@
 using AcceleratedKernels
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim.Backends
 using Dagger
 using LinearAlgebra
@@ -35,7 +36,7 @@ function measure_scheduler(policy, members::Int, resolution::Int;
     warmup::Int, samples::Int)
     ensemble = make_ensemble(policy, members, resolution)
     for _ in 1:warmup
-        AdaptiveOpticsSim.run_ensemble!(
+        Ensembles.run_ensemble!(
             step_closed_loop_workload!,
             ensemble,
         )
@@ -44,13 +45,13 @@ function measure_scheduler(policy, members::Int, resolution::Int;
     latencies_ns = Vector{UInt64}(undef, samples)
     @inbounds for i in eachindex(latencies_ns)
         start_ns = time_ns()
-        AdaptiveOpticsSim.run_ensemble!(
+        Ensembles.run_ensemble!(
             step_closed_loop_workload!,
             ensemble,
         )
         latencies_ns[i] = time_ns() - start_ns
     end
-    allocated_bytes = @allocated AdaptiveOpticsSim.run_ensemble!(
+    allocated_bytes = @allocated Ensembles.run_ensemble!(
         step_closed_loop_workload!,
         ensemble,
     )

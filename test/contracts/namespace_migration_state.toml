@@ -2,8 +2,8 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-08"
-implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres", "Calibration", "Control", "Tomography"]
+current_gate = "NS-09"
+implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres", "Calibration", "Control", "Tomography", "Ensembles"]
 partial_owners = ["WavefrontSensors"]
 
 [owner_sources]
@@ -14,6 +14,7 @@ Atmospheres = "src/atmosphere/api.jl"
 Calibration = "src/calibration/api.jl"
 Control = "src/control/api.jl"
 Tomography = "src/tomography/api.jl"
+Ensembles = "src/ensembles/api.jl"
 
 [partial_owner_sources]
 WavefrontSensors = "src/wfs/api.jl"
@@ -241,13 +242,16 @@ internal = [
 [baseline_divergence]
 root_surface = "src/exports.jl"
 extension_sources = [
+    "ext/AdaptiveOpticsSimAcceleratedKernelsExt.jl",
     "ext/AdaptiveOpticsSimAMDGPUExt.jl",
     "ext/AdaptiveOpticsSimAppleAccelerateExt.jl",
     "ext/AdaptiveOpticsSimCUDAExt.jl",
+    "ext/AdaptiveOpticsSimDaggerExt.jl",
     "ext/AdaptiveOpticsSimMetalExt.jl",
 ]
 extension_tests = [
     "test/appleaccelerate/backend_neutral.jl",
     "test/optional_amdgpu_backends.jl",
     "test/optional_cuda_backends.jl",
+    "test/schedulers/runtests.jl",
 ]

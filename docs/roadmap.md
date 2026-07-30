@@ -307,7 +307,8 @@ These contracts contain no implementation binding moves.
 The maintained implementation stage lives in
 [`namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml);
 `Backends`, `Optics`, `Atmospheres`, `Detectors`, `WavefrontSensors`,
-`Calibration`, `Control`, and `Tomography` are complete through NS-08.
+`Calibration`, `Control`, `Tomography`, and `Ensembles` are complete through
+NS-09.
 `Atmospheres` owns atmosphere models and state, direction rendering and
 batching, and atmosphere-coupled propagation.
 `Detectors` owns both conventional frame/area and counting/channel APIs.
@@ -319,7 +320,8 @@ physical WFS components without changing the frozen final ownership target.
 model-derived calibration products and synthesis, and `Control` owns
 slopes-to-command reconstruction and controller composition. `Tomography`
 owns guide-star geometry, atmospheric reconstruction, fitting, and DM-command
-projection.
+projection. `Ensembles` owns coarse offline execution policies and optional
+parallel scheduler integrations.
 
 ### Ownership target
 
