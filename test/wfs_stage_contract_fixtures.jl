@@ -167,8 +167,9 @@ function WavefrontSensors.validate_wfs_optical_formation_binding(
         :optical_formation, :prepared_binding,
         "contract fixture optical bundle does not match its prepared leaves"))
     @inbounds for index in eachindex(plan.plans)
-        component_input = AdaptiveOpticsSim.four_pupil_bundle_input(input,
-            index)
+        component_input =
+            AdaptiveOpticsSim.WavefrontSensors.four_pupil_bundle_input(
+                input, index)
         WavefrontSensors.validate_wfs_optical_formation_binding(
             output[index], component_input, plan.plans[index])
     end

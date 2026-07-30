@@ -1,46 +1,96 @@
 export WFSPreparationError
-export Diffractive, Geometric
-export WFSObservationMetadata, WFSMeasurementMetadata
-export WFSObservation, WFSMeasurement
-export observation_storage, observation_units, observation_metadata
-export measurement_storage, measurement_units, measurement_metadata
-export prepare_wfs_optical_formation, form_wfs_optical_products!
-export prepare_wfs_acquisition, acquire_wfs_observation!
-export prepare_wfs_estimation, estimate_wfs_measurement!
-export AbstractWFSMeasurementPath, AcquiredObservationPath
-export DirectMeasurementPath, wfs_measurement_path
-export MeanValidFluxNormalization, IncidenceFluxNormalization
-export measure!, valid_subaperture_mask, camera_frame, wfs_detector_image
-export slopes, wfs_calibration_signature, prepare_runtime_wfs!
-export ShackHartmannWFS
-export ShackHartmannDirectFrontEnd, ShackHartmannOpticalFrontEnd
+export Diffractive
+export Geometric
+export WFSObservationMetadata
+export WFSMeasurementMetadata
+export WFSObservation
+export WFSMeasurement
+export observation_storage
+export observation_units
+export observation_metadata
+export measurement_storage
+export measurement_units
+export measurement_metadata
+export prepare_wfs_optical_formation
+export form_wfs_optical_products!
+export prepare_wfs_acquisition
+export acquire_wfs_observation!
+export prepare_wfs_estimation
+export estimate_wfs_measurement!
+export AbstractWFSMeasurementPath
+export AcquiredObservationPath
+export DirectMeasurementPath
+export wfs_measurement_path
+export ShackHartmannDirectFrontEnd
+export ShackHartmannOpticalFrontEnd
 export shack_hartmann_rate_map
-export AbstractSlopeExtractionModel, CenterOfGravityExtraction
+export PyramidOpticalFrontEnd
+export pyramid_rate_map
+export BioEdgeOpticalFrontEnd
+export bioedge_rate_map
+export set_pyramid_calibration!
+export set_bioedge_calibration!
+export ZernikeOpticalFrontEnd
+export zernike_rate_map
+export CurvatureOpticalFrontEnd
+export curvature_rate_maps
+export CurvaturePackedAcquisition
+export set_zernike_calibration!
+export set_curvature_calibration!
+export ShackHartmannWFS
+export PyramidWFS
+export BioEdgeWFS
+export ZernikeWFS
+export CurvatureWFS
+export CurvatureReadoutModel
+export CurvatureFrameReadout
+export CurvatureCountingReadout
+export CurvatureBranchResponse
 export FluxThresholdValidSubapertures
-export SubapertureLayout, SubapertureCalibration
-export subaperture_layout, subaperture_calibration, slope_extraction_model
-export set_subaperture_calibration!, valid_subaperture_indices
-export shack_hartmann_detector_image, shack_hartmann_detector_image!
+export AbstractSlopeExtractionModel
+export CenterOfGravityExtraction
+export SubapertureLayout
+export SubapertureCalibration
+export subaperture_layout
+export subaperture_calibration
+export slope_extraction_model
+export set_subaperture_calibration!
+export valid_subaperture_indices
+export MeanValidFluxNormalization
+export IncidenceFluxNormalization
+export measure!
+export pyramid_modulation_frame
+export pyramid_modulation_frame!
+export valid_subaperture_mask
+export camera_frame
+export wfs_detector_image
+export slopes
+export wfs_calibration_signature
+export prepare_runtime_wfs!
+export shack_hartmann_detector_image
+export shack_hartmann_detector_image!
 export n_valid_subapertures
-export PyramidWFS, BioEdgeWFS
-export PyramidOpticalFrontEnd, BioEdgeOpticalFrontEnd
-export pyramid_rate_map, bioedge_rate_map
-export set_pyramid_calibration!, set_bioedge_calibration!
-export pyramid_modulation_frame, pyramid_modulation_frame!
-export ZernikeWFS, ZernikeOpticalFrontEnd
-export zernike_rate_map, set_zernike_calibration!
-export CurvatureWFS, CurvatureOpticalFrontEnd, curvature_rate_maps
-export CurvaturePackedAcquisition, set_curvature_calibration!
-export CurvatureReadoutModel, CurvatureFrameReadout
-export CurvatureCountingReadout, CurvatureBranchResponse
-export LiFT, PreparedLiFTForwardModel, LiFTObservation
-export LiFTIdentityMapping, LiFTFrameMapping
-export LiFTPhotonRate, LiFTExpectedCounts, LiFTNormalizedIntensity
-export prepare_lift_forward_model, evaluate_lift_forward!
-export predict_lift_observation!, lift_forward_output
-export lift_observation_contract, diagnostics
-export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
-export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
+export LiFT
+export PreparedLiFTForwardModel
+export LiFTObservation
+export LiFTIdentityMapping
+export LiFTFrameMapping
+export LiFTPhotonRate
+export LiFTExpectedCounts
+export LiFTNormalizedIntensity
+export prepare_lift_forward_model
+export evaluate_lift_forward!
+export predict_lift_observation!
+export lift_forward_output
+export lift_observation_contract
+export diagnostics
+export LiFTSolveAuto
+export LiFTSolveQR
+export LiFTSolveNormalEquations
+export LiFTLevenbergMarquardt
+export LiFTAdaptiveLevenbergMarquardt
 
-public supports_prepared_runtime, supports_detector_output
-public supports_stacked_sources, supports_grouped_execution
+public supports_prepared_runtime
+public supports_detector_output
+public supports_stacked_sources
+public supports_grouped_execution

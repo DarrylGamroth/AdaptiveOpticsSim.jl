@@ -133,7 +133,7 @@ function Plant.prepare_controllable_optic(
     model::MyOpticDefinition,
     definition::Plant.ControllableOpticDefinition,
     telescope::AdaptiveOpticsSim.Optics.AbstractTelescope,
-    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 )
     return prepare_my_immutable_optic_plan(
         model, definition, telescope, atmosphere)
@@ -316,7 +316,7 @@ function AdaptiveOpticsSim.Plant.prepare_path_executor(
     definition::AdaptiveOpticsSim.Plant.OpticalPathDefinition,
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::AdaptiveOpticsSim.Optics.AbstractTelescope,
-    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 )
     input, result, execution = prepare_my_optics(
         model, source, telescope, atmosphere)
@@ -644,7 +644,7 @@ families, put it in a shared layer instead of copying it into each sensor.
 A custom frame-response model is not automatically eligible for
 detector-coupled WFS reference calibration. Its extension must provide an
 instance-complete
-`AdaptiveOpticsSim.detector_response_calibration_signature(model, seed)`
+`AdaptiveOpticsSim.WavefrontSensors.detector_response_calibration_signature(model, seed)`
 method covering every parameter that can change the deterministic response.
 Without that method, WFS calibration fails closed rather than caching a
 reference by response type alone.
@@ -739,7 +739,7 @@ wall time, or a renderer to determine elapsed time. Rendering must not evolve
 the atmosphere or consume RNG. A stale epoch, renderer from another atmosphere,
 or incompatible output must fail before output mutation.
 
-`AdaptiveOpticsSim.AbstractTimedAtmosphere` and its model hooks are an advanced
+`AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere` and its model hooks are an advanced
 qualified extension seam. A concrete implementation owns an atmosphere
 identity and timeline, implements `initialize_atmosphere!` and
 `evolve_atmosphere!`, declares its layer-storage element type through

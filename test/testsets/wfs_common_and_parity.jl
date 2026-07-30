@@ -20,8 +20,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
             WavefrontSensors
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)
-        @test getfield(AdaptiveOpticsSim, name) ===
-            getfield(WavefrontSensors, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
     end
 
     for name in (
@@ -261,6 +260,6 @@ end
         LGSSource(wavelength=589e-9, elongation_factor=1.4,
             coordinates=(3.0, 90.0), photon_irradiance=2.0),
     ])
-    @test AdaptiveOpticsSim.common_wfs_calibration_source(
+    @test AdaptiveOpticsSim.WavefrontSensors.common_wfs_calibration_source(
         common_lgs, "test WFS") === first(common_lgs.sources)
 end

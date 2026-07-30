@@ -330,8 +330,8 @@ AdaptiveOpticsSim.Atmospheres.advance!(atm::OptionalStaticAtmosphere, tel::Teles
 
 function optional_detector_calibration_signature_allocation_bytes(
     det, seed::UInt)
-    AdaptiveOpticsSim.detector_calibration_signature(det, seed)
-    return @allocated AdaptiveOpticsSim.detector_calibration_signature(
+    AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(det, seed)
+    return @allocated AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(
         det, seed)
 end
 
@@ -1637,7 +1637,7 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     @test det.state.frame isa BackendArray
     @test calibration_det.params.response_model.kernel isa BackendArray
     seed = UInt(0x51a7)
-    AdaptiveOpticsSim.detector_calibration_signature(calibration_det, seed)
+    AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(calibration_det, seed)
     optional_detector_calibration_signature_allocation_bytes(
         calibration_det, seed)
     @test optional_detector_calibration_signature_allocation_bytes(
@@ -1653,7 +1653,7 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
             BadPixelMask(bad_mask; T=T, backend=selector)),
         T=T, backend=selector)
     photon_rate = array_backend(fill(T(2), 4, 4))
-    calibration_frame = AdaptiveOpticsSim.detector_calibration_frame!(
+    calibration_frame = AdaptiveOpticsSim.WavefrontSensors.detector_calibration_frame!(
         defect_det, photon_rate, one(T))
     expected_frame = T(2) .* gain_map
     expected_frame[2, 3] = zero(T)
@@ -3600,12 +3600,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     gpu_geometric_slopes = array_backend(zeros(T, 32))
     gpu_opd = array_backend(host_opd)
     gpu_valid = array_backend(host_valid)
-    AdaptiveOpticsSim.geometric_slopes!(cpu_geometric_slopes, host_opd, host_valid)
-    AdaptiveOpticsSim.geometric_slopes!(gpu_geometric_slopes, gpu_opd, gpu_valid)
+    AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
+        cpu_geometric_slopes, host_opd, host_valid)
+    AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
+        gpu_geometric_slopes, gpu_opd, gpu_valid)
     @test isapprox(Array(gpu_geometric_slopes), cpu_geometric_slopes;
         rtol=1f-6, atol=1f-8)
     geometric_method = which(
-        AdaptiveOpticsSim._geometric_slopes!,
+        AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!,
         (typeof(AdaptiveOpticsSim.Backends.execution_style(gpu_geometric_slopes)),
             typeof(gpu_geometric_slopes), typeof(gpu_opd), typeof(gpu_valid),
             Int, Int, Int),

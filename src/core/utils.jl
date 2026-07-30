@@ -51,72 +51,6 @@ end
     end
 end
 
-@kernel function geometric_slopes_kernel!(slopes, opd, valid_mask,
-    sub::Int, n_sub::Int, offset::Int, scale_x, scale_y)
-    i, j = @index(Global, NTuple)
-    if i <= n_sub && j <= n_sub
-        idx = i + (j - 1) * n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = xs + sub - 1
-        ye = ys + sub - 1
-        sx = zero(eltype(slopes))
-        sy = zero(eltype(slopes))
-        count_x = 0
-        count_y = 0
-        if @inbounds valid_mask[i, j]
-            @inbounds for y in ys:ye, x in xs:(xe - 1)
-                sx += opd[x + 1, y] - opd[x, y]
-                count_x += 1
-            end
-            @inbounds for y in ys:(ye - 1), x in xs:xe
-                sy += opd[x, y + 1] - opd[x, y]
-                count_y += 1
-            end
-            slopes[idx] = scale_x * sx / max(count_x, 1)
-            slopes[idx + offset] = scale_y * sy / max(count_y, 1)
-        else
-            slopes[idx] = zero(eltype(slopes))
-            slopes[idx + offset] = zero(eltype(slopes))
-        end
-    end
-end
-
-@kernel function edge_geometric_slopes_kernel!(slopes, opd, valid_mask, edge_mask, sub::Int, n_sub::Int, offset::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n_sub && j <= n_sub
-        idx = i + (j - 1) * n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = xs + sub - 1
-        ye = ys + sub - 1
-        sx = zero(eltype(slopes))
-        sy = zero(eltype(slopes))
-        count_x = 0
-        count_y = 0
-        if @inbounds valid_mask[i, j]
-            @inbounds for y in ys:ye, x in xs:(xe - 1)
-                if edge_mask[x, y]
-                    sx += opd[x + 1, y] - opd[x, y]
-                    count_x += 1
-                end
-            end
-            @inbounds for y in ys:(ye - 1), x in xs:xe
-                if edge_mask[x, y]
-                    sy += opd[x, y + 1] - opd[x, y]
-                    count_y += 1
-                end
-            end
-            slopes[idx] = sx / max(count_x, 1)
-            slopes[idx + offset] = sy / max(count_y, 1)
-        else
-            slopes[idx] = zero(eltype(slopes))
-            slopes[idx + offset] = zero(eltype(slopes))
-        end
-    end
-end
-
-
 function pad_center!(dest::AbstractMatrix, src::AbstractMatrix)
     Base.require_one_based_indexing(dest, src)
     fill!(dest, zero(eltype(dest)))
@@ -162,11 +96,12 @@ function fftshift2d!(dest::AbstractMatrix, src::AbstractMatrix)
         copyto!(dest, tmp)
         return dest
     end
-    _fftshift2d!(execution_style(dest), dest, src)
+    _fftshift2d!(Backends.execution_style(dest), dest, src)
     return dest
 end
 
-function _fftshift2d!(::ScalarCPUStyle, dest::AbstractMatrix, src::AbstractMatrix)
+function _fftshift2d!(::Backends.ScalarCPUStyle, dest::AbstractMatrix,
+    src::AbstractMatrix)
     n, m = size(src)
     sx = n ÷ 2
     sy = m ÷ 2
@@ -179,8 +114,10 @@ function _fftshift2d!(::ScalarCPUStyle, dest::AbstractMatrix, src::AbstractMatri
     return dest
 end
 
-function _fftshift2d!(style::AcceleratorStyle, dest::AbstractMatrix, src::AbstractMatrix)
-    launch_kernel!(style, fftshift2d_kernel!, dest, src, size(src, 1) ÷ 2, size(src, 2) ÷ 2, size(src, 1), size(src, 2);
+function _fftshift2d!(style::Backends.AcceleratorStyle,
+    dest::AbstractMatrix, src::AbstractMatrix)
+    Backends.launch_kernel!(style, fftshift2d_kernel!, dest, src,
+        size(src, 1) ÷ 2, size(src, 2) ÷ 2, size(src, 1), size(src, 2);
         ndrange=size(dest))
     return dest
 end
@@ -196,11 +133,12 @@ function circshift2d!(dest::AbstractMatrix, src::AbstractMatrix, shifts::NTuple{
         copyto!(dest, tmp)
         return dest
     end
-    _circshift2d!(execution_style(dest), dest, src, shifts)
+    _circshift2d!(Backends.execution_style(dest), dest, src, shifts)
     return dest
 end
 
-function _circshift2d!(::ScalarCPUStyle, dest::AbstractMatrix, src::AbstractMatrix, shifts::NTuple{2,Int})
+function _circshift2d!(::Backends.ScalarCPUStyle, dest::AbstractMatrix,
+    src::AbstractMatrix, shifts::NTuple{2,Int})
     isempty(src) && return dest
     n, m = size(src)
     shift_i = mod(shifts[1], n)
@@ -217,8 +155,10 @@ function _circshift2d!(::ScalarCPUStyle, dest::AbstractMatrix, src::AbstractMatr
     return dest
 end
 
-function _circshift2d!(style::AcceleratorStyle, dest::AbstractMatrix, src::AbstractMatrix, shifts::NTuple{2,Int})
-    launch_kernel!(style, circshift2d_kernel!, dest, src, shifts[1], shifts[2], size(src, 1), size(src, 2);
+function _circshift2d!(style::Backends.AcceleratorStyle,
+    dest::AbstractMatrix, src::AbstractMatrix, shifts::NTuple{2,Int})
+    Backends.launch_kernel!(style, circshift2d_kernel!, dest, src,
+        shifts[1], shifts[2], size(src, 1), size(src, 2);
         ndrange=size(dest))
     return dest
 end
@@ -262,11 +202,12 @@ function bin2d!(out::AbstractMatrix, input::AbstractMatrix, binning::Int)
     if size(out) != (n_out, m_out)
         throw(DimensionMismatchError("output size does not match binned dimensions"))
     end
-    _bin2d!(execution_style(out), out, input, binning)
+    _bin2d!(Backends.execution_style(out), out, input, binning)
     return out
 end
 
-function _bin2d!(::ScalarCPUStyle, out::AbstractMatrix, input::AbstractMatrix, binning::Int)
+function _bin2d!(::Backends.ScalarCPUStyle, out::AbstractMatrix,
+    input::AbstractMatrix, binning::Int)
     n_out, m_out = size(out)
     fill!(out, zero(eltype(out)))
     @inbounds for ii in 1:binning, jj in 1:binning
@@ -277,8 +218,10 @@ function _bin2d!(::ScalarCPUStyle, out::AbstractMatrix, input::AbstractMatrix, b
     return out
 end
 
-function _bin2d!(style::AcceleratorStyle, out::AbstractMatrix, input::AbstractMatrix, binning::Int)
-    launch_kernel!(style, bin2d_kernel!, out, input, binning, size(out, 1), size(out, 2); ndrange=size(out))
+function _bin2d!(style::Backends.AcceleratorStyle, out::AbstractMatrix,
+    input::AbstractMatrix, binning::Int)
+    Backends.launch_kernel!(style, bin2d_kernel!, out, input, binning,
+        size(out, 1), size(out, 2); ndrange=size(out))
     return out
 end
 
@@ -290,11 +233,11 @@ function bin2d_abs2!(out::AbstractMatrix, input::AbstractMatrix,
     m_out = div(size(input, 2), binning)
     size(out) == (n_out, m_out) || throw(DimensionMismatchError(
         "output size does not match binned dimensions"))
-    _bin2d_abs2!(execution_style(out), out, input, binning)
+    _bin2d_abs2!(Backends.execution_style(out), out, input, binning)
     return out
 end
 
-function _bin2d_abs2!(::ScalarCPUStyle, out::AbstractMatrix,
+function _bin2d_abs2!(::Backends.ScalarCPUStyle, out::AbstractMatrix,
     input::AbstractMatrix, binning::Int)
     n_out, m_out = size(out)
     fill!(out, zero(eltype(out)))
@@ -308,9 +251,9 @@ function _bin2d_abs2!(::ScalarCPUStyle, out::AbstractMatrix,
 end
 
 
-function _bin2d_abs2!(style::AcceleratorStyle, out::AbstractMatrix,
+function _bin2d_abs2!(style::Backends.AcceleratorStyle, out::AbstractMatrix,
     input::AbstractMatrix, binning::Int)
-    launch_kernel!(style, bin2d_abs2_kernel!, out, input, binning,
+    Backends.launch_kernel!(style, bin2d_abs2_kernel!, out, input, binning,
         size(out, 1), size(out, 2); ndrange=size(out))
     return out
 end
@@ -320,11 +263,12 @@ function fftfreq!(dest::AbstractVector, n::Int; d::Real=1, offset::Real=0)
     if length(dest) != n
         throw(DimensionMismatchError("fftfreq! destination length must match n"))
     end
-    _fftfreq!(execution_style(dest), dest, n, d, offset)
+    _fftfreq!(Backends.execution_style(dest), dest, n, d, offset)
     return dest
 end
 
-function _fftfreq!(::ScalarCPUStyle, dest::AbstractVector, n::Int, d::Real, offset::Real)
+function _fftfreq!(::Backends.ScalarCPUStyle, dest::AbstractVector,
+    n::Int, d::Real, offset::Real)
     val = 1 / (n * d)
     @inbounds for i in 1:n
         k = i - 1
@@ -340,196 +284,11 @@ function _fftfreq!(::ScalarCPUStyle, dest::AbstractVector, n::Int, d::Real, offs
     return dest
 end
 
-function _fftfreq!(style::AcceleratorStyle, dest::AbstractVector, n::Int, d::Real, offset::Real)
+function _fftfreq!(style::Backends.AcceleratorStyle,
+    dest::AbstractVector, n::Int, d::Real, offset::Real)
     val = eltype(dest)(1 / (n * d))
     offset_t = eltype(dest)(offset)
-    launch_kernel!(style, fftfreq_kernel!, dest, n, val, offset_t; ndrange=length(dest))
+    Backends.launch_kernel!(
+        style, fftfreq_kernel!, dest, n, val, offset_t; ndrange=length(dest))
     return dest
-end
-
-function set_valid_subapertures!(valid_mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool}, threshold::Real)
-    build_mask!(valid_mask, SubapertureGridMask(threshold), pupil)
-    return valid_mask
-end
-
-function _set_valid_subapertures!(::ScalarCPUStyle, valid_mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool},
-    threshold::Real, sub::Int, n_sub::Int)
-    build_mask!(valid_mask, SubapertureGridMask(threshold), pupil)
-    return valid_mask
-end
-
-function _set_valid_subapertures!(::AcceleratorStyle, valid_mask::AbstractMatrix{Bool}, pupil::AbstractMatrix{Bool},
-    threshold::Real, sub::Int, n_sub::Int)
-    build_mask!(valid_mask, SubapertureGridMask(threshold), pupil)
-    return valid_mask
-end
-
-function geometric_slopes!(slopes::AbstractVector, opd::AbstractMatrix, valid_mask::AbstractMatrix{Bool})
-    Base.require_one_based_indexing(opd, valid_mask)
-    n = size(opd, 1)
-    n_sub = size(valid_mask, 1)
-    if n % n_sub != 0
-        throw(DimensionMismatchError("OPD size must be divisible by valid_mask size"))
-    end
-    if length(slopes) != 2 * n_sub * n_sub
-        throw(DimensionMismatchError("slope vector length does not match valid_mask"))
-    end
-    sub = div(n, n_sub)
-    offset = n_sub * n_sub
-    unit_scale = one(eltype(slopes))
-    _geometric_slopes!(execution_style(slopes), slopes, opd, valid_mask,
-        sub, n_sub, offset, unit_scale, unit_scale)
-    return slopes
-end
-
-"""
-    geometric_wavefront_slopes!(slopes, opd, valid_mask, sampling_m)
-
-Average the sampled OPD gradient over each valid subaperture. `opd` and
-`sampling_m` are in metres, so the result is a dimensionless paraxial
-wavefront angle conventionally reported in radians.
-"""
-function geometric_wavefront_slopes!(slopes::AbstractVector,
-    opd::AbstractMatrix, valid_mask::AbstractMatrix{Bool},
-    sampling_m::NTuple{2,<:Real})
-    Base.require_one_based_indexing(opd, valid_mask)
-    all(value -> isfinite(value) && value > zero(value), sampling_m) ||
-        throw(InvalidConfiguration(
-            "geometric wavefront sampling must be finite and positive"))
-    n = size(opd, 1)
-    n_sub = size(valid_mask, 1)
-    size(opd, 2) == n || throw(DimensionMismatchError(
-        "geometric wavefront OPD must be square"))
-    size(valid_mask, 2) == n_sub || throw(DimensionMismatchError(
-        "geometric wavefront valid_mask must be square"))
-    n % n_sub == 0 || throw(DimensionMismatchError(
-        "OPD size must be divisible by valid_mask size"))
-    length(slopes) == 2 * n_sub * n_sub ||
-        throw(DimensionMismatchError(
-            "slope vector length does not match valid_mask"))
-    sub = div(n, n_sub)
-    offset = n_sub * n_sub
-    T = eltype(slopes)
-    scale_x = inv(T(sampling_m[1]))
-    scale_y = inv(T(sampling_m[2]))
-    _geometric_slopes!(execution_style(slopes), slopes, opd, valid_mask,
-        sub, n_sub, offset, scale_x, scale_y)
-    return slopes
-end
-
-function _geometric_slopes!(::ScalarCPUStyle, slopes::AbstractVector, opd::AbstractMatrix, valid_mask::AbstractMatrix{Bool},
-    sub::Int, n_sub::Int, offset::Int)
-    unit_scale = one(eltype(slopes))
-    return _geometric_slopes!(ScalarCPUStyle(), slopes, opd, valid_mask,
-        sub, n_sub, offset, unit_scale, unit_scale)
-end
-
-function _geometric_slopes!(::ScalarCPUStyle, slopes::AbstractVector,
-    opd::AbstractMatrix, valid_mask::AbstractMatrix{Bool}, sub::Int,
-    n_sub::Int, offset::Int, scale_x, scale_y)
-    idx = 1
-    @inbounds for j in 1:n_sub, i in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = xs + sub - 1
-        ye = ys + sub - 1
-        if valid_mask[i, j]
-            sx = zero(eltype(slopes))
-            sy = zero(eltype(slopes))
-            count_x = 0
-            count_y = 0
-            for y in ys:ye, x in xs:(xe - 1)
-                sx += opd[x + 1, y] - opd[x, y]
-                count_x += 1
-            end
-            for y in ys:(ye - 1), x in xs:xe
-                sy += opd[x, y + 1] - opd[x, y]
-                count_y += 1
-            end
-            slopes[idx] = scale_x * sx / max(count_x, 1)
-            slopes[idx + offset] = scale_y * sy / max(count_y, 1)
-        else
-            slopes[idx] = zero(eltype(slopes))
-            slopes[idx + offset] = zero(eltype(slopes))
-        end
-        idx += 1
-    end
-    return slopes
-end
-
-function _geometric_slopes!(style::AcceleratorStyle, slopes::AbstractVector, opd::AbstractMatrix, valid_mask::AbstractMatrix{Bool},
-    sub::Int, n_sub::Int, offset::Int)
-    unit_scale = one(eltype(slopes))
-    return _geometric_slopes!(style, slopes, opd, valid_mask, sub, n_sub,
-        offset, unit_scale, unit_scale)
-end
-
-function _geometric_slopes!(style::AcceleratorStyle,
-    slopes::AbstractVector, opd::AbstractMatrix,
-    valid_mask::AbstractMatrix{Bool}, sub::Int, n_sub::Int, offset::Int,
-    scale_x, scale_y)
-    launch_kernel!(style, geometric_slopes_kernel!, slopes, opd, valid_mask,
-        sub, n_sub, offset, scale_x, scale_y; ndrange=(n_sub, n_sub))
-    return slopes
-end
-
-function edge_geometric_slopes!(slopes::AbstractVector, opd::AbstractMatrix, valid_mask::AbstractMatrix{Bool}, edge_mask::AbstractMatrix{Bool})
-    Base.require_one_based_indexing(opd, valid_mask, edge_mask)
-    n = size(opd, 1)
-    n_sub = size(valid_mask, 1)
-    if n % n_sub != 0
-        throw(DimensionMismatchError("OPD size must be divisible by valid_mask size"))
-    end
-    if size(edge_mask) != size(opd)
-        throw(DimensionMismatchError("edge_mask size must match OPD"))
-    end
-    if length(slopes) != 2 * n_sub * n_sub
-        throw(DimensionMismatchError("slope vector length does not match valid_mask"))
-    end
-    sub = div(n, n_sub)
-    offset = n_sub * n_sub
-    _edge_geometric_slopes!(execution_style(slopes), slopes, opd, valid_mask, edge_mask, sub, n_sub, offset)
-    return slopes
-end
-
-function _edge_geometric_slopes!(::ScalarCPUStyle, slopes::AbstractVector, opd::AbstractMatrix, valid_mask::AbstractMatrix{Bool},
-    edge_mask::AbstractMatrix{Bool}, sub::Int, n_sub::Int, offset::Int)
-    idx = 1
-    @inbounds for j in 1:n_sub, i in 1:n_sub
-        xs = (i - 1) * sub + 1
-        ys = (j - 1) * sub + 1
-        xe = xs + sub - 1
-        ye = ys + sub - 1
-        if valid_mask[i, j]
-            sx = zero(eltype(slopes))
-            sy = zero(eltype(slopes))
-            count_x = 0
-            count_y = 0
-            for y in ys:ye, x in xs:(xe - 1)
-                if edge_mask[x, y]
-                    sx += opd[x + 1, y] - opd[x, y]
-                    count_x += 1
-                end
-            end
-            for y in ys:(ye - 1), x in xs:xe
-                if edge_mask[x, y]
-                    sy += opd[x, y + 1] - opd[x, y]
-                    count_y += 1
-                end
-            end
-            slopes[idx] = sx / max(count_x, 1)
-            slopes[idx + offset] = sy / max(count_y, 1)
-        else
-            slopes[idx] = zero(eltype(slopes))
-            slopes[idx + offset] = zero(eltype(slopes))
-        end
-        idx += 1
-    end
-    return slopes
-end
-
-function _edge_geometric_slopes!(style::AcceleratorStyle, slopes::AbstractVector, opd::AbstractMatrix, valid_mask::AbstractMatrix{Bool},
-    edge_mask::AbstractMatrix{Bool}, sub::Int, n_sub::Int, offset::Int)
-    launch_kernel!(style, edge_geometric_slopes_kernel!, slopes, opd, valid_mask, edge_mask, sub, n_sub, offset; ndrange=(n_sub, n_sub))
-    return slopes
 end

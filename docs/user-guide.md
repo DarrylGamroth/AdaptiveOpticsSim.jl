@@ -406,7 +406,7 @@ conventional output, and photon-counting operating modes. Treat it as a design
 and validation helper, not a replacement for a calibrated camera model.
 `clock_induced_charge_per_frame` is explicitly per frame and is not scaled by
 integration time. The default excess-noise model is the fast moment
-approximation. `AdaptiveOpticsSim.StochasticMultiplicationRegister` uses a
+approximation. `AdaptiveOpticsSim.Detectors.StochasticMultiplicationRegister` uses a
 conditional Gamma model on CPU and a nonnegative moment approximation on
 accelerators. Camera-specific parameter packs belong in a companion profiles
 package.

@@ -200,7 +200,7 @@ end
 # AMDGPU 2.7/GPUCompiler currently fails IR validation for the variable-trip
 # KernelAbstractions slope kernels on gfx1030. Keep these backend-specific
 # fallbacks explicit so other accelerator backends retain the device kernels.
-function AdaptiveOpticsSim._geometric_slopes!(
+function WavefrontSensors._geometric_slopes!(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     slopes::AMDGPU.ROCArray{T,1},
     opd::AMDGPU.ROCArray{T,2},
@@ -210,13 +210,13 @@ function AdaptiveOpticsSim._geometric_slopes!(
     offset::Int,
 ) where {T<:AbstractFloat}
     host_slopes = Vector{T}(undef, length(slopes))
-    AdaptiveOpticsSim._geometric_slopes!(Backends.ScalarCPUStyle(),
+    WavefrontSensors._geometric_slopes!(Backends.ScalarCPUStyle(),
         host_slopes, Array(opd), Array(valid_mask), sub, n_sub, offset)
     copyto!(slopes, host_slopes)
     return slopes
 end
 
-function AdaptiveOpticsSim._edge_geometric_slopes!(
+function WavefrontSensors._edge_geometric_slopes!(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     slopes::AMDGPU.ROCArray{T,1},
     opd::AMDGPU.ROCArray{T,2},
@@ -227,7 +227,7 @@ function AdaptiveOpticsSim._edge_geometric_slopes!(
     offset::Int,
 ) where {T<:AbstractFloat}
     host_slopes = Vector{T}(undef, length(slopes))
-    AdaptiveOpticsSim._edge_geometric_slopes!(Backends.ScalarCPUStyle(),
+    WavefrontSensors._edge_geometric_slopes!(Backends.ScalarCPUStyle(),
         host_slopes, Array(opd), Array(valid_mask), Array(edge_mask), sub,
         n_sub, offset)
     copyto!(slopes, host_slopes)

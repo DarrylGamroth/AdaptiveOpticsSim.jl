@@ -43,8 +43,10 @@ function legacy_conv2d_same!(dest, src, kernel)
     @inbounds for i in 1:n, j in 1:m
         acc = zero(T)
         for ki in 1:kh, kj in 1:kw
-            ii = AdaptiveOpticsSim.symm_index(i + ki - cx - 1, n)
-            jj = AdaptiveOpticsSim.symm_index(j + kj - cy - 1, m)
+            ii = AdaptiveOpticsSim.WavefrontSensors.symm_index(
+                i + ki - cx - 1, n)
+            jj = AdaptiveOpticsSim.WavefrontSensors.symm_index(
+                j + kj - cy - 1, m)
             acc += src[ii, jj] * kernel[ki, kj]
         end
         dest[i, j] = acc * inv_norm
@@ -64,7 +66,8 @@ function legacy_conv2d_same_separable!(dest, tmp, src, row_kernel,
     @inbounds for i in 1:n, j in 1:m
         acc = zero(T)
         for ki in 1:kr
-            ii = AdaptiveOpticsSim.symm_index(i + ki - cx - 1, n)
+            ii = AdaptiveOpticsSim.WavefrontSensors.symm_index(
+                i + ki - cx - 1, n)
             acc += src[ii, j] * row_kernel[ki]
         end
         tmp[i, j] = acc
@@ -72,7 +75,8 @@ function legacy_conv2d_same_separable!(dest, tmp, src, row_kernel,
     @inbounds for i in 1:n, j in 1:m
         acc = zero(T)
         for kj in 1:kc
-            jj = AdaptiveOpticsSim.symm_index(j + kj - cy - 1, m)
+            jj = AdaptiveOpticsSim.WavefrontSensors.symm_index(
+                j + kj - cy - 1, m)
             acc += tmp[i, jj] * col_kernel[kj]
         end
         dest[i, j] = acc * inv_norm
