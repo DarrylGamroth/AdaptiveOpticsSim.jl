@@ -119,7 +119,6 @@ import .Backends:
     use_host_build_algebra,
     write_integer_output!
 
-include("core/inverse_policies.jl")
 include("core/utils.jl")
 
 # Configuration serialization remains a root-owned cross-domain seam. Declare
@@ -314,8 +313,6 @@ import .Detectors:
     validate_frame_response_model,
     validate_up_the_ramp_schedule,
     write_output!
-include("calibration/modal_basis.jl")
-include("calibration/ncpa.jl")
 include("wfs/wavefront_sensors.jl")
 
 # WFS families move through ordered namespace gates. Import common identities
@@ -423,15 +420,34 @@ import .WavefrontSensors:
     wfs_output_metadata
 
 include("plant/plant.jl")
-include("calibration/interaction_matrix.jl")
+include("calibration/calibration.jl")
+
+# Control and tomography still await their own namespace gates. Import only
+# the calibration identities their flat implementations consume; these are
+# package-internal composition bindings, not root exports or public API.
+import .Calibration:
+    BuildBackend,
+    CPUBuildBackend,
+    GPUArrayBuildBackend,
+    InteractionMatrix,
+    InversePolicy,
+    NativeBuildBackend,
+    default_build_backend,
+    default_modal_inverse_policy,
+    default_runtime_calibration_build_backend,
+    condition_number,
+    effective_rank,
+    inverse_factorization,
+    inverse_operator,
+    inverse_policy,
+    materialize_build,
+    materialize_runtime_build_result,
+    prepare_build_matrix,
+    singular_values,
+    truncation_count
+
 include("control/controller.jl")
 include("control/reconstructors.jl")
-include("calibration/control_matrix.jl")
-include("calibration/fitting_error.jl")
-include("calibration/ao_calibration.jl")
-include("calibration/gain_sensing_camera.jl")
-include("calibration/misregistration_identification.jl")
-include("calibration/ad_sensitivities.jl")
 include("control/ensemble.jl")
 include("tomography/parameters.jl")
 include("tomography/geometry.jl")

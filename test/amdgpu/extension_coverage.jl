@@ -16,9 +16,9 @@ AMDGPU.functional() ||
     Backends.execute_fft_plan!(fft_buffer, inverse_plan)
     @test Array(fft_buffer) ≈ original rtol=2f-5 atol=2f-5
 
-    build_backend = AdaptiveOpticsSim.default_build_backend(fft_buffer)
+    build_backend = Calibration.default_build_backend(fft_buffer)
     build_input = Float32[1 2; 3 4]
-    @test AdaptiveOpticsSim.prepare_build_matrix(
+    @test Calibration.prepare_build_matrix(
         build_backend, build_input) == build_input
     @test Backends.reduction_execution_plan(
         fft_buffer) isa Backends.HostMirrorReductionPlan
@@ -100,11 +100,11 @@ AMDGPU.functional() ||
     inverse_host = Float32[2 0; 0 1]
     inverse_input = AMDGPU.ROCArray(inverse_host)
     for policy in (
-        AdaptiveOpticsSim.ExactPseudoInverse(),
-        AdaptiveOpticsSim.TSVDInverse(rtol=1.0f-6),
-        AdaptiveOpticsSim.TikhonovInverse(0.1f0),
+        Calibration.ExactPseudoInverse(),
+        Calibration.TSVDInverse(rtol=1.0f-6),
+        Calibration.TikhonovInverse(0.1f0),
     )
-        inverse, stats = AdaptiveOpticsSim.inverse_operator(
+        inverse, stats = Calibration.inverse_operator(
             build_backend, inverse_input, policy)
         @test size(inverse) == reverse(size(inverse_host))
         @test all(isfinite, Array(inverse))

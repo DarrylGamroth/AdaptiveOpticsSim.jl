@@ -57,10 +57,11 @@ The package is organized around a small set of modeling objects:
 
 Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
-`using AdaptiveOpticsSim.WavefrontSensors`. The common WFS contracts and the
+`using AdaptiveOpticsSim.WavefrontSensors`; import calibration vocabulary with
+`using AdaptiveOpticsSim.Calibration`. The common WFS contracts and the
 complete Shack–Hartmann, Pyramid, BioEdge, Zernike, and Curvature families
-live in `WavefrontSensors`; calibration and control vocabulary moves as its
-ordered owner gate lands.
+live in `WavefrontSensors`; inverse policy, interaction/control matrices,
+modal bases, and model-derived NCPA synthesis live in `Calibration`.
 
 ## Three Execution Layers
 
@@ -612,6 +613,8 @@ Use this when you care about:
 ### Workflow 3: Closed-loop AO simulation
 
 ```julia
+using AdaptiveOpticsSim.Calibration
+
 rng = runtime_rng(0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 calibration_pupil = PupilFunction(tel)
@@ -833,13 +836,14 @@ helpers, use namespaced access. Examples:
 pupil = PupilFunction(tel)
 ws = AdaptiveOpticsSim.Workspace(pupil.opd, size(pupil.opd, 1);
     rng=deterministic_reference_rng(0))
-sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis)
+sprint = AdaptiveOpticsSim.Calibration.SPRINT(tel, dm, wfs, basis)
 ```
 
-On CPU, SPRINT uses ForwardDiff-backed DM misregistration sensitivity by
-default for grid-backed Gaussian mirrors. Use `sensitivity=:finite_difference`
-for validation runs, supported WFS-misregistration finite differences, or
-accelerator-backed arrays.
+SPRINT is currently an experimental, owner-qualified calibration workflow
+rather than marked stable public API. On CPU it uses ForwardDiff-backed DM
+misregistration sensitivity by default for grid-backed Gaussian mirrors. Use
+`sensitivity=:finite_difference` for validation runs, supported
+WFS-misregistration finite differences, or accelerator-backed arrays.
 
 `compute_meta_sensitivity_matrix` returns a structured `MetaSensitivity`, and
 `snapshot_config` returns an ordinary string-keyed dictionary. Core neither

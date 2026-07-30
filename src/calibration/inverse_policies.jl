@@ -1,3 +1,4 @@
+# Calibration-time inverse construction policies and backend materialization.
 abstract type InversePolicy end
 abstract type BuildBackend end
 

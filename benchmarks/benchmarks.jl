@@ -2,6 +2,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsSim.Calibration
 using BenchmarkTools
 using Random
 

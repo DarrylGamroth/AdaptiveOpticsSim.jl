@@ -7,8 +7,8 @@
 # - externally supplied modal-to-command bases (`M2C`)
 #
 # The physical `NCPA` representation and explicit surface application are
-# owned by `Optics`. This file retains model-derived KL/Zernike/M2C
-# construction until the `Calibration` namespace migration moves the policy.
+# owned by `Optics`. `Calibration` owns this model-derived KL/Zernike/M2C
+# construction policy and adds synthesis constructors to the physical type.
 #
 abstract type NCPABasis end
 struct KLBasis{M<:KLBasisMethod} <: NCPABasis

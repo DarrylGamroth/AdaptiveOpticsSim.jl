@@ -6,12 +6,15 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsSim.Calibration
 using LinearAlgebra
 using Random
 using Statistics
 
-import AdaptiveOpticsSim: runtime_timing, materialize_build,
+import AdaptiveOpticsSim: runtime_timing,
     bin2d!, init_execution_state
+import AdaptiveOpticsSim.Calibration: BuildBackend, CPUBuildBackend,
+    GPUArrayBuildBackend, NativeBuildBackend, materialize_build
 import AdaptiveOpticsSim.Backends: execution_style, synchronize_backend!
 import AdaptiveOpticsSim.Detectors: convert_noise, validate_noise
 import AdaptiveOpticsSim.WavefrontSensors: prepare_sampling!,
@@ -570,8 +573,8 @@ function _low_order_command_basis(dm::DeformableMirror, tel::Telescope, active_m
 end
 
 function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::InteractionMatrix{T};
-    gain::Real, policy::InversePolicy, inverse_build_backend::AdaptiveOpticsSim.BuildBackend,
-    materialize_backend::AdaptiveOpticsSim.BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
+    gain::Real, policy::InversePolicy, inverse_build_backend::BuildBackend,
+    materialize_backend::BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
     return MappedReconstructor(
         M2C_host,
         imat;
@@ -584,11 +587,11 @@ function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::Interact
 end
 
 function _auto_build_backend(backend::AbstractArrayBackend)
-    backend isa CPUBackend && return AdaptiveOpticsSim.NativeBuildBackend()
-    backend isa CUDABackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.CUDABackendTag)
-    backend isa MetalBackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.MetalBackendTag)
-    backend isa AMDGPUBackend && return AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
-    return AdaptiveOpticsSim.NativeBuildBackend()
+    backend isa CPUBackend && return NativeBuildBackend()
+    backend isa CUDABackend && return GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.CUDABackendTag)
+    backend isa MetalBackend && return GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.MetalBackendTag)
+    backend isa AMDGPUBackend && return GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
+    return NativeBuildBackend()
 end
 
 function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:AbstractFloat}
@@ -686,9 +689,9 @@ function prepare_replay!(simulation::AO188Simulation)
 end
 
 function subaru_ao188_simulation(; params::AO188SimulationParams=AO188SimulationParams(),
-    backend::AbstractArrayBackend=CPUBackend(), build_backend::Union{Nothing,AdaptiveOpticsSim.BuildBackend}=nothing, rng=runtime_rng())
+    backend::AbstractArrayBackend=CPUBackend(), build_backend::Union{Nothing,BuildBackend}=nothing, rng=runtime_rng())
     resolved_materialize_backend = isnothing(build_backend) ? _auto_build_backend(backend) : build_backend
-    resolved_calibration_backend = isnothing(build_backend) && !(backend isa CPUBackend) ? AdaptiveOpticsSim.CPUBuildBackend() : resolved_materialize_backend
+    resolved_calibration_backend = isnothing(build_backend) && !(backend isa CPUBackend) ? CPUBuildBackend() : resolved_materialize_backend
     T = typeof(params.diameter)
     if params.resolution % params.low_order_resolution != 0
         throw(InvalidConfiguration("low_order_resolution must evenly divide the main telescope resolution"))
@@ -729,7 +732,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     calibration_low_dm = low_dm
     calibration_high_wfs = high_wfs
     calibration_low_wfs = low_wfs
-    if resolved_calibration_backend isa AdaptiveOpticsSim.CPUBuildBackend && !(backend isa CPUBackend)
+    if resolved_calibration_backend isa CPUBuildBackend && !(backend isa CPUBackend)
         calibration_tel, calibration_low_tel, calibration_src,
         calibration_dm, calibration_low_dm, calibration_high_wfs, calibration_low_wfs =
             _ao188_calibration_objects(params)

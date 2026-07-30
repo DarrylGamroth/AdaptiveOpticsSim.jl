@@ -17,7 +17,7 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
 
     policy = AdaptiveOpticsSim.Backends.default_gpu_precision_policy(B)
     TB = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
-    build_backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
+    build_backend = AdaptiveOpticsSim.Calibration.GPUArrayBuildBackend(B)
 
     n_lenslet = 3
     n_lgs = 2
@@ -95,19 +95,23 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
     end
 
     gamma_native, t_gamma_native = _time_phase() do
-        value = AdaptiveOpticsSim.materialize_build(build_backend, gamma, gamma)
+        value = AdaptiveOpticsSim.Calibration.materialize_build(
+            build_backend, gamma, gamma)
         _sync_backend!(value)
     end
     cxx_native, t_cxx_native = _time_phase() do
-        value = AdaptiveOpticsSim.materialize_build(build_backend, gamma_native, cxx)
+        value = AdaptiveOpticsSim.Calibration.materialize_build(
+            build_backend, gamma_native, cxx)
         _sync_backend!(value)
     end
     cox_native, t_cox_native = _time_phase() do
-        value = AdaptiveOpticsSim.materialize_build(build_backend, gamma_native, cox)
+        value = AdaptiveOpticsSim.Calibration.materialize_build(
+            build_backend, gamma_native, cox)
         _sync_backend!(value)
     end
     native_mask, t_mask_native = _time_phase() do
-        value = AdaptiveOpticsSim.materialize_build(build_backend, gamma_native, grid_mask)
+        value = AdaptiveOpticsSim.Calibration.materialize_build(
+            build_backend, gamma_native, grid_mask)
         _sync_backend!(value)
     end
 

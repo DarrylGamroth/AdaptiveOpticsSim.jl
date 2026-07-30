@@ -6,6 +6,7 @@ using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using LinearAlgebra
@@ -78,6 +79,14 @@ for name in names(WavefrontSensors; all=true)
             !isdefined(@__MODULE__, name)
         @eval const $(name) =
             getfield(WavefrontSensors, $(QuoteNode(name)))
+    end
+end
+
+for name in names(Calibration; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Calibration, $(QuoteNode(name)))
     end
 end
 
@@ -256,7 +265,8 @@ function assert_ao_calibration_contract(calib::AOCalibration, n_commands::Int, n
     @test calib.calibration isa ControlMatrix
 end
 
-function assert_meta_sensitivity_contract(meta::AdaptiveOpticsSim.MetaSensitivity, n_fields::Int)
+function assert_meta_sensitivity_contract(meta::Calibration.MetaSensitivity,
+    n_fields::Int)
     @test meta.calib0 isa ControlMatrix
     @test meta.meta isa ControlMatrix
     @test length(meta.field_order) == n_fields

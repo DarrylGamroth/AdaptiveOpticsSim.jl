@@ -1,3 +1,13 @@
+@inline function _copy_atmosphere_state!(out::AbstractArray, data::AbstractArray)
+    copyto!(out, data)
+    return out
+end
+
+@inline function _copy_atmosphere_state(ref::AbstractArray, data::AbstractArray)
+    out = similar(ref, eltype(data), size(data)...)
+    return _copy_atmosphere_state!(out, data)
+end
+
 @kernel function gather_stencil_data_kernel!(dest, screen, coords, n::Int)
     k = @index(Global, Linear)
     if k <= n
@@ -509,7 +519,6 @@ function InfinitePhaseScreen(tel::Telescope;
     screen = backend_array{T}(undef, stencil_size, stencil_size)
     screen_scratch = backend_array{T}(undef, stencil_size, stencil_size)
     extract_buffer = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
-    build_backend = default_build_backend(screen)
     fill!(screen, zero(T))
     fill!(screen_scratch, zero(T))
     fill!(extract_buffer, zero(T))
@@ -517,19 +526,19 @@ function InfinitePhaseScreen(tel::Telescope;
         screen,
         screen_scratch,
         extract_buffer,
-        materialize_build(build_backend, backend_array{T}(undef, size(column_positive.operator.predictor, 2)),
+        _copy_atmosphere_state!(backend_array{T}(undef, size(column_positive.operator.predictor, 2)),
             Vector{T}(undef, size(column_positive.operator.predictor, 2))),
-        materialize_build(build_backend, backend_array{T}(undef, size(column_positive.operator.predictor, 1)),
+        _copy_atmosphere_state!(backend_array{T}(undef, size(column_positive.operator.predictor, 1)),
             Vector{T}(undef, size(column_positive.operator.predictor, 1))),
-        materialize_build(build_backend, backend_array{T}(undef, size(column_positive.operator.residual_factor, 2)),
+        _copy_atmosphere_state!(backend_array{T}(undef, size(column_positive.operator.residual_factor, 2)),
             Vector{T}(undef, size(column_positive.operator.residual_factor, 2))),
-        materialize_build(build_backend, backend_array{Int}(undef, size(column_positive.stencil.stencil_coords)...),
+        _copy_atmosphere_state!(backend_array{Int}(undef, size(column_positive.stencil.stencil_coords)...),
             column_positive.stencil.stencil_coords),
-        materialize_build(build_backend, backend_array{Int}(undef, size(column_negative.stencil.stencil_coords)...),
+        _copy_atmosphere_state!(backend_array{Int}(undef, size(column_negative.stencil.stencil_coords)...),
             column_negative.stencil.stencil_coords),
-        materialize_build(build_backend, backend_array{Int}(undef, size(row_positive.stencil.stencil_coords)...),
+        _copy_atmosphere_state!(backend_array{Int}(undef, size(row_positive.stencil.stencil_coords)...),
             row_positive.stencil.stencil_coords),
-        materialize_build(build_backend, backend_array{Int}(undef, size(row_negative.stencil.stencil_coords)...),
+        _copy_atmosphere_state!(backend_array{Int}(undef, size(row_negative.stencil.stencil_coords)...),
             row_negative.stencil.stencil_coords),
         InfiniteBoundaryModel(
             InfiniteBoundaryStencil(
@@ -541,15 +550,14 @@ function InfinitePhaseScreen(tel::Telescope;
                 column_positive.stencil.side,
             ),
             InfiniteBoundaryOperator(
-                materialize_build(build_backend, screen, column_positive.operator.predictor),
-                materialize_build(build_backend, screen, column_positive.operator.residual_factor),
-                materialize_build(build_backend, screen, column_positive.operator.cov_zz),
-                materialize_build(build_backend, screen, column_positive.operator.cov_xx),
-                materialize_build(build_backend, screen, column_positive.operator.cov_xz),
-                materialize_build(build_backend, screen, column_positive.operator.cov_zx),
-                materialize_build(build_backend, screen, column_positive.operator.residual_covariance),
-                materialize_build(build_backend, Vector{T}(undef, length(column_positive.operator.singular_values)),
-                    column_positive.operator.singular_values),
+                _copy_atmosphere_state(screen, column_positive.operator.predictor),
+                _copy_atmosphere_state(screen, column_positive.operator.residual_factor),
+                _copy_atmosphere_state(screen, column_positive.operator.cov_zz),
+                _copy_atmosphere_state(screen, column_positive.operator.cov_xx),
+                _copy_atmosphere_state(screen, column_positive.operator.cov_xz),
+                _copy_atmosphere_state(screen, column_positive.operator.cov_zx),
+                _copy_atmosphere_state(screen, column_positive.operator.residual_covariance),
+                _copy_atmosphere_state(screen, column_positive.operator.singular_values),
                 T(column_positive.operator.condition_ratio),
                 column_positive.operator.orientation,
                 column_positive.operator.side,
@@ -565,15 +573,14 @@ function InfinitePhaseScreen(tel::Telescope;
                 column_negative.stencil.side,
             ),
             InfiniteBoundaryOperator(
-                materialize_build(build_backend, screen, column_negative.operator.predictor),
-                materialize_build(build_backend, screen, column_negative.operator.residual_factor),
-                materialize_build(build_backend, screen, column_negative.operator.cov_zz),
-                materialize_build(build_backend, screen, column_negative.operator.cov_xx),
-                materialize_build(build_backend, screen, column_negative.operator.cov_xz),
-                materialize_build(build_backend, screen, column_negative.operator.cov_zx),
-                materialize_build(build_backend, screen, column_negative.operator.residual_covariance),
-                materialize_build(build_backend, Vector{T}(undef, length(column_negative.operator.singular_values)),
-                    column_negative.operator.singular_values),
+                _copy_atmosphere_state(screen, column_negative.operator.predictor),
+                _copy_atmosphere_state(screen, column_negative.operator.residual_factor),
+                _copy_atmosphere_state(screen, column_negative.operator.cov_zz),
+                _copy_atmosphere_state(screen, column_negative.operator.cov_xx),
+                _copy_atmosphere_state(screen, column_negative.operator.cov_xz),
+                _copy_atmosphere_state(screen, column_negative.operator.cov_zx),
+                _copy_atmosphere_state(screen, column_negative.operator.residual_covariance),
+                _copy_atmosphere_state(screen, column_negative.operator.singular_values),
                 T(column_negative.operator.condition_ratio),
                 column_negative.operator.orientation,
                 column_negative.operator.side,
@@ -589,15 +596,14 @@ function InfinitePhaseScreen(tel::Telescope;
                 row_positive.stencil.side,
             ),
             InfiniteBoundaryOperator(
-                materialize_build(build_backend, screen, row_positive.operator.predictor),
-                materialize_build(build_backend, screen, row_positive.operator.residual_factor),
-                materialize_build(build_backend, screen, row_positive.operator.cov_zz),
-                materialize_build(build_backend, screen, row_positive.operator.cov_xx),
-                materialize_build(build_backend, screen, row_positive.operator.cov_xz),
-                materialize_build(build_backend, screen, row_positive.operator.cov_zx),
-                materialize_build(build_backend, screen, row_positive.operator.residual_covariance),
-                materialize_build(build_backend, Vector{T}(undef, length(row_positive.operator.singular_values)),
-                    row_positive.operator.singular_values),
+                _copy_atmosphere_state(screen, row_positive.operator.predictor),
+                _copy_atmosphere_state(screen, row_positive.operator.residual_factor),
+                _copy_atmosphere_state(screen, row_positive.operator.cov_zz),
+                _copy_atmosphere_state(screen, row_positive.operator.cov_xx),
+                _copy_atmosphere_state(screen, row_positive.operator.cov_xz),
+                _copy_atmosphere_state(screen, row_positive.operator.cov_zx),
+                _copy_atmosphere_state(screen, row_positive.operator.residual_covariance),
+                _copy_atmosphere_state(screen, row_positive.operator.singular_values),
                 T(row_positive.operator.condition_ratio),
                 row_positive.operator.orientation,
                 row_positive.operator.side,
@@ -613,15 +619,14 @@ function InfinitePhaseScreen(tel::Telescope;
                 row_negative.stencil.side,
             ),
             InfiniteBoundaryOperator(
-                materialize_build(build_backend, screen, row_negative.operator.predictor),
-                materialize_build(build_backend, screen, row_negative.operator.residual_factor),
-                materialize_build(build_backend, screen, row_negative.operator.cov_zz),
-                materialize_build(build_backend, screen, row_negative.operator.cov_xx),
-                materialize_build(build_backend, screen, row_negative.operator.cov_xz),
-                materialize_build(build_backend, screen, row_negative.operator.cov_zx),
-                materialize_build(build_backend, screen, row_negative.operator.residual_covariance),
-                materialize_build(build_backend, Vector{T}(undef, length(row_negative.operator.singular_values)),
-                    row_negative.operator.singular_values),
+                _copy_atmosphere_state(screen, row_negative.operator.predictor),
+                _copy_atmosphere_state(screen, row_negative.operator.residual_factor),
+                _copy_atmosphere_state(screen, row_negative.operator.cov_zz),
+                _copy_atmosphere_state(screen, row_negative.operator.cov_xx),
+                _copy_atmosphere_state(screen, row_negative.operator.cov_xz),
+                _copy_atmosphere_state(screen, row_negative.operator.cov_zx),
+                _copy_atmosphere_state(screen, row_negative.operator.residual_covariance),
+                _copy_atmosphere_state(screen, row_negative.operator.singular_values),
                 T(row_negative.operator.condition_ratio),
                 row_negative.operator.orientation,
                 row_negative.operator.side,

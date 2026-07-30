@@ -26,20 +26,20 @@ end
     calibrate!(gsc, frame)
     og = compute_optical_gains!(gsc, frame)
     @test length(og) == 3
-    @test length(AdaptiveOpticsSim.weak_mode_mask(gsc)) == 3
+    @test length(Calibration.weak_mode_mask(gsc)) == 3
     @test all(isfinite, og)
-    @test AdaptiveOpticsSim.detector_metadata(gsc) === nothing
+    @test Calibration.detector_metadata(gsc) === nothing
 
     weak_gsc = GainSensingCamera(mask, zeros(8, 8, 2); sensitivity_floor=1e-6)
     calibrate!(weak_gsc, frame)
     weak_og = compute_optical_gains!(weak_gsc, frame)
-    @test all(AdaptiveOpticsSim.weak_mode_mask(weak_gsc))
+    @test all(Calibration.weak_mode_mask(weak_gsc))
     @test weak_og == ones(2)
 
     det = Detector(noise=NoiseReadout(1e-3), integration_time=2.0, qe=0.8, psf_sampling=2, binning=4)
     gsc_with_det = GainSensingCamera(mask, basis; detector=det)
-    metadata = AdaptiveOpticsSim.detector_metadata(gsc_with_det)
-    @test metadata isa AdaptiveOpticsSim.GSCDetectorMetadata
+    metadata = Calibration.detector_metadata(gsc_with_det)
+    @test metadata isa Calibration.GSCDetectorMetadata
     @test metadata.integration_time == 2.0
     @test metadata.qe == 0.8
     @test metadata.psf_sampling == 2
@@ -48,10 +48,11 @@ end
     @test metadata.readout_sigma == 1e-3
     @test occursin("psf_sampling=2", sprint(show, MIME"text/plain"(), gsc_with_det))
 
-    AdaptiveOpticsSim.detach_detector!(gsc_with_det)
-    @test AdaptiveOpticsSim.detector_metadata(gsc_with_det) === nothing
-    AdaptiveOpticsSim.attach_detector!(gsc_with_det, det)
-    @test AdaptiveOpticsSim.detector_metadata(gsc_with_det) isa AdaptiveOpticsSim.GSCDetectorMetadata
+    Calibration.detach_detector!(gsc_with_det)
+    @test Calibration.detector_metadata(gsc_with_det) === nothing
+    Calibration.attach_detector!(gsc_with_det, det)
+    @test Calibration.detector_metadata(gsc_with_det) isa
+        Calibration.GSCDetectorMetadata
 end
 
 @testset "Phase statistics" begin

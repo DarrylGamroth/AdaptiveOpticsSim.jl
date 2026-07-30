@@ -1,7 +1,7 @@
 module AdaptiveOpticsSimAMDGPUExt
 
 import AdaptiveOpticsSim
-import AdaptiveOpticsSim: Backends, WavefrontSensors
+import AdaptiveOpticsSim: Backends, Calibration, WavefrontSensors
 using AMDGPU
 using AbstractFFTs
 using KernelAbstractions
@@ -87,8 +87,12 @@ function Backends.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.
     AMDGPU.synchronize()
     return buffer
 end
-AdaptiveOpticsSim.default_build_backend(::AMDGPU.ROCArray) = AdaptiveOpticsSim.GPUArrayBuildBackend(Backends.AMDGPUBackendTag)
-AdaptiveOpticsSim.prepare_build_matrix(::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag}, A::AbstractMatrix) = Matrix(A)
+Calibration.default_build_backend(::AMDGPU.ROCArray) =
+    Calibration.GPUArrayBuildBackend(Backends.AMDGPUBackendTag)
+Calibration.prepare_build_matrix(
+    ::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
+    A::AbstractMatrix,
+) = Matrix(A)
 WavefrontSensors.grouped_accumulation_plan(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:WavefrontSensors.PyramidWFS},
@@ -257,7 +261,7 @@ copy_dense_to_roc!(dest::AMDGPU.ROCArray, src::AbstractMatrix) = copyto!(dest, s
 function roc_svd(A::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
     F = copy(A)
     U, S, Vt = AMDGPU.rocSOLVER.gesvd!('S', 'S', F)
-    return (; U, S, Vt, s_host=AdaptiveOpticsSim.singular_values_host(S))
+    return (; U, S, Vt, s_host=Calibration.singular_values_host(S))
 end
 
 function roc_lu_solve!(A::AMDGPU.ROCArray{T,2}, B::AMDGPU.ROCArray{T,2}) where {T<:AbstractFloat}
@@ -300,10 +304,10 @@ SVD factors.
 `rocSOLVER.gesvd!` returns `Vt`, so the final matrix product is expressed with
 transpose flags rather than materialized transposes.
 """
-function pseudoinverse_from_roc_svd(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
+function pseudoinverse_from_roc_svd(backend::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     U::AMDGPU.ROCArray{T,2}, S::AMDGPU.ROCArray{T,1}, Vt::AMDGPU.ROCArray{T,2},
     inv_s_host::AbstractVector{T}) where {T<:AbstractFloat}
-    inv_s = AdaptiveOpticsSim.materialize_build(backend, S, inv_s_host)
+    inv_s = Calibration.materialize_build(backend, S, inv_s_host)
     U_scaled = copy(U)
     U_scaled .*= reshape(inv_s, 1, :)
     # Mathematically this is V * U_scaled', but rocSOLVER returns Vt and the
@@ -311,20 +315,20 @@ function pseudoinverse_from_roc_svd(backend::AdaptiveOpticsSim.GPUArrayBuildBack
     return AMDGPU.rocBLAS.gemm('T', 'T', Vt, U_scaled)
 end
 
-function inverse_scaling_and_stats(::AdaptiveOpticsSim.ExactPseudoInverse, s_host::AbstractVector{T}) where {T<:AbstractFloat}
+function inverse_scaling_and_stats(::Calibration.ExactPseudoInverse, s_host::AbstractVector{T}) where {T<:AbstractFloat}
     inv_s_host = similar(s_host)
     @inbounds for i in eachindex(s_host)
         inv_s_host[i] = iszero(s_host[i]) ? zero(T) : inv(s_host[i])
     end
     effective_rank = count(!iszero, s_host)
     cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
-    return inv_s_host, AdaptiveOpticsSim.InverseStats(s_host, cond, effective_rank, 0)
+    return inv_s_host, Calibration.InverseStats(s_host, cond, effective_rank, 0)
 end
 
-function inverse_scaling_and_stats(policy::AdaptiveOpticsSim.TSVDInverse, s_host::AbstractVector{T}) where {T<:AbstractFloat}
+function inverse_scaling_and_stats(policy::Calibration.TSVDInverse, s_host::AbstractVector{T}) where {T<:AbstractFloat}
     policy.n_trunc >= 0 || throw(AdaptiveOpticsSim.InvalidConfiguration("TSVD n_trunc must be >= 0"))
-    isempty(s_host) && return similar(s_host), AdaptiveOpticsSim.InverseStats(s_host, T(Inf), 0, 0)
-    cutoff = AdaptiveOpticsSim._inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
+    isempty(s_host) && return similar(s_host), Calibration.InverseStats(s_host, T(Inf), 0, 0)
+    cutoff = Calibration._inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
     rank_by_tol = count(>(cutoff), s_host)
     effective_rank = max(rank_by_tol - policy.n_trunc, 0)
     inv_s_host = similar(s_host)
@@ -333,50 +337,50 @@ function inverse_scaling_and_stats(policy::AdaptiveOpticsSim.TSVDInverse, s_host
         inv_s_host[i] = inv(s_host[i])
     end
     cond = effective_rank == 0 ? T(Inf) : s_host[begin] / s_host[effective_rank]
-    return inv_s_host, AdaptiveOpticsSim.InverseStats(s_host, cond, effective_rank, length(s_host) - effective_rank)
+    return inv_s_host, Calibration.InverseStats(s_host, cond, effective_rank, length(s_host) - effective_rank)
 end
 
-function inverse_scaling_and_stats(policy::AdaptiveOpticsSim.TikhonovInverse, s_host::AbstractVector{T}) where {T<:AbstractFloat}
+function inverse_scaling_and_stats(policy::Calibration.TikhonovInverse, s_host::AbstractVector{T}) where {T<:AbstractFloat}
     policy.lambda >= 0 || throw(AdaptiveOpticsSim.InvalidConfiguration("Tikhonov lambda must be >= 0"))
     inv_s_host = similar(s_host)
     λ2 = T(policy.lambda)^2
     @inbounds for i in eachindex(s_host)
         inv_s_host[i] = s_host[i] / (s_host[i]^2 + λ2)
     end
-    cutoff = AdaptiveOpticsSim._inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
+    cutoff = Calibration._inverse_cutoff(s_host, T(policy.rtol), T(policy.atol))
     effective_rank = count(>(cutoff), s_host)
     denom = max(isempty(s_host) ? zero(T) : s_host[end], T(policy.lambda))
     cond = (isempty(s_host) || iszero(denom)) ? T(Inf) : s_host[begin] / denom
-    return inv_s_host, AdaptiveOpticsSim.InverseStats(s_host, cond, effective_rank, 0)
+    return inv_s_host, Calibration.InverseStats(s_host, cond, effective_rank, 0)
 end
 
 function roc_inverse_operator(
-    backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
+    backend::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     A::AMDGPU.ROCArray{T,2},
-    policy::AdaptiveOpticsSim.InversePolicy,
+    policy::Calibration.InversePolicy,
 ) where {T<:AbstractFloat}
     svd_parts = roc_svd(A)
     inv_s_host, stats = inverse_scaling_and_stats(policy, svd_parts.s_host)
     if isempty(svd_parts.s_host)
-        empty_inverse = AdaptiveOpticsSim.materialize_build(backend, similar(A, T, size(A, 2), size(A, 1)))
+        empty_inverse = Calibration.materialize_build(backend, similar(A, T, size(A, 2), size(A, 1)))
         return empty_inverse, stats
     end
     M = pseudoinverse_from_roc_svd(backend, svd_parts.U, svd_parts.S, svd_parts.Vt, inv_s_host)
     return M, stats
 end
 
-function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
-    A::AMDGPU.ROCArray{T,2}, ::AdaptiveOpticsSim.ExactPseudoInverse) where {T<:AbstractFloat}
-    return roc_inverse_operator(backend, A, AdaptiveOpticsSim.ExactPseudoInverse())
+function Calibration.inverse_operator(backend::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
+    A::AMDGPU.ROCArray{T,2}, ::Calibration.ExactPseudoInverse) where {T<:AbstractFloat}
+    return roc_inverse_operator(backend, A, Calibration.ExactPseudoInverse())
 end
 
-function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
-    A::AMDGPU.ROCArray{T,2}, policy::AdaptiveOpticsSim.TSVDInverse) where {T<:AbstractFloat}
+function Calibration.inverse_operator(backend::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
+    A::AMDGPU.ROCArray{T,2}, policy::Calibration.TSVDInverse) where {T<:AbstractFloat}
     return roc_inverse_operator(backend, A, policy)
 end
 
-function AdaptiveOpticsSim.inverse_operator(backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
-    A::AMDGPU.ROCArray{T,2}, policy::AdaptiveOpticsSim.TikhonovInverse) where {T<:AbstractFloat}
+function Calibration.inverse_operator(backend::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
+    A::AMDGPU.ROCArray{T,2}, policy::Calibration.TikhonovInverse) where {T<:AbstractFloat}
     return roc_inverse_operator(backend, A, policy)
 end
 
@@ -391,7 +395,7 @@ implementation falls back to LU so the higher-level algorithm remains robust on
 ill-conditioned runtime/calibration cases.
 """
 function AdaptiveOpticsSim.stable_hermitian_right_division(
-    _backend::AdaptiveOpticsSim.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
+    _backend::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     rhs::AMDGPU.ROCArray{T,2},
     gram::AMDGPU.ROCArray{T,2},
 ) where {T<:AbstractFloat}

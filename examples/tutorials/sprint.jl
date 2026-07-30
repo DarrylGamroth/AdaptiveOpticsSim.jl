@@ -5,7 +5,7 @@ function main(; resolution::Int=16)
     dm = DeformableMirror(tel; n_act=3, influence_width=0.35)
     wfs = ShackHartmannWFS(tel; n_lenslets=2, mode=Geometric())
     basis = modal_basis(dm, tel; n_modes=3).M2C
-    sprint = AdaptiveOpticsSim.SPRINT(tel, dm, wfs, basis;
+    sprint = Calibration.SPRINT(tel, dm, wfs, basis;
         n_mis_reg=2, field_order=[:shift_x, :shift_y])
 
     injected = Misregistration(shift_x=5e-4, shift_y=-5e-4, T=Float64)
@@ -13,7 +13,7 @@ function main(; resolution::Int=16)
         misregistration=injected)
     calib_in = interaction_matrix(dm_in, wfs, PupilFunction(tel), basis;
         amplitude=1e-9).matrix
-    estimate = AdaptiveOpticsSim.estimate!(sprint, calib_in; precision=4)
+    estimate = Calibration.estimate!(sprint, calib_in; precision=4)
 
     @info "SPRINT tutorial complete" shift_x=estimate.shift_x shift_y=estimate.shift_y
     return (

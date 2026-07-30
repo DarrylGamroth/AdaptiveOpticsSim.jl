@@ -26,7 +26,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
 
     policy = AdaptiveOpticsSim.Backends.default_gpu_precision_policy(B)
     T = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
-    backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
+    backend = AdaptiveOpticsSim.Calibration.GPUArrayBuildBackend(B)
 
     n_lenslet = 3
     n_lgs = 2
@@ -111,7 +111,8 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
 
     cst, var_term, inv_L0 = AdaptiveOpticsSim._covariance_constants(r0, atmosphere.L0)
     block = AdaptiveOpticsSim._backend_array(B, T, n_valid, n_valid)
-    fractional_cn2_native = AdaptiveOpticsSim.materialize_build(backend, atmosphere.fractional_cn2)
+    fractional_cn2_native = AdaptiveOpticsSim.Calibration.materialize_build(
+        backend, atmosphere.fractional_cn2)
 
     t_selected = 0
     t_scatter = 0

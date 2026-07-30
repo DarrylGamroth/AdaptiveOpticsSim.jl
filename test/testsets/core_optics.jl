@@ -35,7 +35,8 @@ TestAbstractFFTs.plan_ifft!(::TestBackendFFTArray, dims) = (:backend_ifft, dims)
     @test backend(zeros(2, 2)) isa CPUBackend
     @test backend(zeros(2)) isa CPUBackend
     @test available_gpu_backends() == ()
-    @test AdaptiveOpticsSim.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.CUDABackendTag) isa AdaptiveOpticsSim.GPUArrayBuildBackend{AdaptiveOpticsSim.Backends.CUDABackendTag}
+    @test Calibration.GPUArrayBuildBackend(AdaptiveOpticsSim.Backends.CUDABackendTag) isa
+        Calibration.GPUArrayBuildBackend{AdaptiveOpticsSim.Backends.CUDABackendTag}
 end
 
 @testset "CPU FFT provider dispatch" begin
@@ -461,7 +462,7 @@ end
         @test !isdefined(AdaptiveOpticsSim, removed_name)
         @test !Base.isexported(AdaptiveOpticsSim, removed_name)
     end
-    @test AdaptiveOpticsSim.CPUBuildBackend() isa AdaptiveOpticsSim.BuildBackend
+    @test Calibration.CPUBuildBackend() isa Calibration.BuildBackend
 end
 
 @testset "Optical radiometry and combination contracts" begin

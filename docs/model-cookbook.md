@@ -134,6 +134,7 @@ without HIL scheduling:
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsSim.Calibration
 
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 interaction = interaction_matrix(
