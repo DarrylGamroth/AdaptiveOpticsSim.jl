@@ -2,7 +2,7 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-06A"
+current_gate = "NS-06B"
 implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres"]
 partial_owners = ["WavefrontSensors"]
 
@@ -49,6 +49,23 @@ exports = [
     "slopes",
     "wfs_calibration_signature",
     "prepare_runtime_wfs!",
+    "ShackHartmannWFS",
+    "ShackHartmannDirectFrontEnd",
+    "ShackHartmannOpticalFrontEnd",
+    "shack_hartmann_rate_map",
+    "AbstractSlopeExtractionModel",
+    "CenterOfGravityExtraction",
+    "FluxThresholdValidSubapertures",
+    "SubapertureLayout",
+    "SubapertureCalibration",
+    "subaperture_layout",
+    "subaperture_calibration",
+    "slope_extraction_model",
+    "set_subaperture_calibration!",
+    "valid_subaperture_indices",
+    "shack_hartmann_detector_image",
+    "shack_hartmann_detector_image!",
+    "n_valid_subapertures",
 ]
 public = [
     "supports_prepared_runtime",
@@ -100,6 +117,27 @@ internal = [
     "grouped_staging_buffer",
     "reduce_grouped_stack!",
     "reduce_grouped_blocks_kernel!",
+    "GeometryValidSubapertures",
+    "PreparedShackHartmannOpticalFormation",
+    "PreparedShackHartmannOpticalBundleFormation",
+    "sh_sensing_execution_plan",
+    "_apply_elongation!",
+    "apply_elongation!",
+    "apply_lgs_convolution!",
+    "calibration_matches",
+    "calibration_signature",
+    "calibration_wavelength",
+    "common_wfs_calibration_source",
+    "detector_calibration_frame!",
+    "detector_calibration_signature",
+    "lgs_average_kernel_fft",
+    "lgs_kernel_signature",
+    "lgs_pixel_scale",
+    "pupil_aperture_calibration_signature",
+    "restore_opd!",
+    "save_zero_opd!",
+    "store_reference_signal!",
+    "update_valid_mask!",
 ]
 
 [baseline_divergence]

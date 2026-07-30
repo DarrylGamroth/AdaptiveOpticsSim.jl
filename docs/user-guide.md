@@ -56,9 +56,10 @@ The package is organized around a small set of modeling objects:
   acquisitions, triggers, and detector lifecycles
 
 Import optical vocabulary and reusable physical components with
-`using AdaptiveOpticsSim.Optics`. During the breaking namespace migration,
-detector, WFS, atmosphere, calibration, and control vocabulary remains at the
-root until each canonical owner gate lands.
+`using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
+`using AdaptiveOpticsSim.WavefrontSensors`. The common WFS contracts and the
+complete Shack–Hartmann family already live in `WavefrontSensors`; other WFS,
+calibration, and control vocabulary moves as its ordered owner gate lands.
 
 ## Three Execution Layers
 
@@ -764,6 +765,8 @@ calibrated WFS paths.
 
 - `ShackHartmannWFS`
   - general SH studies and HIL-style RTC surfaces
+  - owned by `AdaptiveOpticsSim.WavefrontSensors`; it is not forwarded through
+    the package root
   - composes an independent `MicrolensArray`, prepared optical workspace,
     layout/calibration, detector acquisition, and estimator state
   - use `ShackHartmannOpticalFrontEnd` and `shack_hartmann_rate_map` with the

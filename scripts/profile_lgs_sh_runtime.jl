@@ -2,6 +2,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
+using AdaptiveOpticsSim.WavefrontSensors
 using Random
 
 include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulation.jl"))

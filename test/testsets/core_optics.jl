@@ -182,7 +182,8 @@ end
     @test parentmodule(Plant.PlantDefinitionError) === Plant
     @test Plant.advance_to! === AdaptiveOpticsSim.Atmospheres.advance_to!
     @test Plant.backend === AdaptiveOpticsSim.Backends.backend
-    @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
+    @test !Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
+    @test Base.isexported(WavefrontSensors, :ShackHartmannWFS)
     for name in (
         :ZernikeBasis,
         :Misregistration,
@@ -209,10 +210,16 @@ end
     end
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedMicrolensPropagation)
-    @test Base.isexported(AdaptiveOpticsSim,
+    @test !Base.isexported(AdaptiveOpticsSim,
         :ShackHartmannDirectFrontEnd)
-    @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannOpticalFrontEnd)
-    @test Base.isexported(AdaptiveOpticsSim, :shack_hartmann_rate_map)
+    @test Base.isexported(WavefrontSensors,
+        :ShackHartmannDirectFrontEnd)
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :ShackHartmannOpticalFrontEnd)
+    @test Base.isexported(WavefrontSensors,
+        :ShackHartmannOpticalFrontEnd)
+    @test !Base.isexported(AdaptiveOpticsSim, :shack_hartmann_rate_map)
+    @test Base.isexported(WavefrontSensors, :shack_hartmann_rate_map)
     @test Base.isexported(AdaptiveOpticsSim, :PyramidOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :BioEdgeOpticalFrontEnd)
     @test Base.isexported(AdaptiveOpticsSim, :ZernikeOpticalFrontEnd)
@@ -234,7 +241,9 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :diagnostics)
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedFocalPlaneModulation)
-    @test Base.isexported(AdaptiveOpticsSim,
+    @test !Base.isexported(AdaptiveOpticsSim,
+        :set_subaperture_calibration!)
+    @test Base.isexported(WavefrontSensors,
         :set_subaperture_calibration!)
     for name in (
         :Detector,
@@ -283,7 +292,8 @@ end
     @test Base.isexported(WavefrontSensors, :prepare_runtime_wfs!)
     @test parentmodule(WavefrontSensors.prepare_runtime_wfs!) ===
         WavefrontSensors
-    @test Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
+    @test !Base.isexported(AdaptiveOpticsSim, :subaperture_layout)
+    @test Base.isexported(WavefrontSensors, :subaperture_layout)
     @test !Base.isexported(AdaptiveOpticsSim, :compute_device)
     @test !Base.ispublic(AdaptiveOpticsSim, :AbstractComputeDevice)
     @test Base.isexported(Backends, :compute_device)

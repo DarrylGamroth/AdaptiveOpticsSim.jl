@@ -11,10 +11,12 @@ using Random
 using Statistics
 
 import AdaptiveOpticsSim: runtime_timing, materialize_build,
-    bin2d!, prepare_sampling!, ensure_sh_calibration!, wfs_output_frame,
-    prepare_runtime_wfs!, wfs_output_metadata, init_execution_state
+    bin2d!, init_execution_state
 import AdaptiveOpticsSim.Backends: execution_style, synchronize_backend!
 import AdaptiveOpticsSim.Detectors: convert_noise, validate_noise
+import AdaptiveOpticsSim.WavefrontSensors: prepare_sampling!,
+    ensure_sh_calibration!, wfs_output_frame, prepare_runtime_wfs!,
+    wfs_output_metadata
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
 export SubaruHighOrderWFSModel, OperationalShackHartmannWFSModel, AO188CurvatureModel

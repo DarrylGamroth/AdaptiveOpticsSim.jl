@@ -440,7 +440,7 @@ function Plant.prepare_path_executor(
             n_pix_subap=model.n_pix_subap),
         propagation_model=:microlens_fraunhofer,
         model_revisions=(definition=model.revision,
-            layout=AdaptiveOpticsSim.subaperture_layout_revision(
+            layout=WavefrontSensors.subaperture_layout_revision(
                 front_end.layout)),
     )
 end

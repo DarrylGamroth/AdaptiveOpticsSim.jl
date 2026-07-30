@@ -29,7 +29,7 @@
     scalar_fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(scalar_fft_stack, (1, 2))
     scalar_ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(scalar_fft_stack, (1, 2))
     scalar_stack = copy(expected_stack)
-    AdaptiveOpticsSim.apply_lgs_convolution_stack!(scalar_stack,
+    WavefrontSensors.apply_lgs_convolution_stack!(scalar_stack,
         identity_kernel_stack_fft, scalar_fft_stack, scalar_fft_plan, scalar_ifft_plan)
     @test scalar_stack ≈ expected_stack rtol=1e-12 atol=1e-12
     @test vec(sum(scalar_stack; dims=(1, 2))) ≈ vec(sum(expected_stack; dims=(1, 2))) rtol=1e-12
@@ -38,7 +38,7 @@
     accelerator_fft_plan = AdaptiveOpticsSim.Backends.plan_fft_backend!(accelerator_fft_stack, (1, 2))
     accelerator_ifft_plan = AdaptiveOpticsSim.Backends.plan_ifft_backend!(accelerator_fft_stack, (1, 2))
     accelerator_stack = copy(expected_stack)
-    AdaptiveOpticsSim._apply_lgs_convolution_stack!(KA_CPU_STYLE, accelerator_stack,
+    WavefrontSensors._apply_lgs_convolution_stack!(KA_CPU_STYLE, accelerator_stack,
         identity_kernel_stack_fft, accelerator_fft_stack, accelerator_fft_plan, accelerator_ifft_plan)
     @test accelerator_stack ≈ scalar_stack rtol=1e-12 atol=1e-12
     @test vec(sum(accelerator_stack; dims=(1, 2))) ≈
@@ -111,7 +111,7 @@ end
                 modulation=0.0)
         end
         ensure_kernel! = family === :shack_hartmann ?
-            AdaptiveOpticsSim.ensure_lgs_kernels! :
+            WavefrontSensors.ensure_lgs_kernels! :
             AdaptiveOpticsSim.ensure_lgs_kernel!
         kernel_state = family === :shack_hartmann ?
             wfs.front_end.propagation : wfs.front_end.propagation
@@ -494,18 +494,18 @@ end
     sh_ast_slopes = copy(measure!(sh_ast, pupil, ast))
     @test length(sh_ast_slopes) == 2 * 4 * 4
     sh_ast_serial = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    AdaptiveOpticsSim.prepare_sampling!(sh_ast_serial, pupil, ast.sources[1])
-    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_serial, pupil,
+    WavefrontSensors.prepare_sampling!(sh_ast_serial, pupil, ast.sources[1])
+    WavefrontSensors.ensure_sh_calibration!(sh_ast_serial, pupil,
         ast.sources[1])
     fill!(sh_ast_serial.acquisition.detector_noise_cube, zero(eltype(sh_ast_serial.acquisition.detector_noise_cube)))
     for src in ast.sources
-        AdaptiveOpticsSim.sampled_spots_peak!(sh_ast_serial, pupil, src)
+        WavefrontSensors.sampled_spots_peak!(sh_ast_serial, pupil, src)
         sh_ast_serial.acquisition.detector_noise_cube .+= sh_ast_serial.acquisition.spot_cube
     end
     copyto!(sh_ast_serial.acquisition.spot_cube, sh_ast_serial.acquisition.detector_noise_cube)
     sh_ast_serial_peak = maximum(sh_ast_serial.acquisition.spot_cube)
-    AdaptiveOpticsSim.sh_signal_from_spots!(sh_ast_serial, sh_ast_serial_peak, slope_extraction_model(sh_ast_serial))
-    AdaptiveOpticsSim.subtract_reference_and_scale!(sh_ast_serial)
+    WavefrontSensors.sh_signal_from_spots!(sh_ast_serial, sh_ast_serial_peak, slope_extraction_model(sh_ast_serial))
+    WavefrontSensors.subtract_reference_and_scale!(sh_ast_serial)
     sh_ast_serial_slopes = copy(slopes(sh_ast_serial))
     @test norm(sh_ast_slopes - sh_ast_serial_slopes) / norm(sh_ast_slopes) < 0.07
     mixed_ngs = Source(wavelength=wavelength(lgs_profile), magnitude=0.0, coordinates=(0.0, 0.0))

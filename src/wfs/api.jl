@@ -12,6 +12,16 @@ export DirectMeasurementPath, wfs_measurement_path
 export MeanValidFluxNormalization, IncidenceFluxNormalization
 export measure!, valid_subaperture_mask, camera_frame, wfs_detector_image
 export slopes, wfs_calibration_signature, prepare_runtime_wfs!
+export ShackHartmannWFS
+export ShackHartmannDirectFrontEnd, ShackHartmannOpticalFrontEnd
+export shack_hartmann_rate_map
+export AbstractSlopeExtractionModel, CenterOfGravityExtraction
+export FluxThresholdValidSubapertures
+export SubapertureLayout, SubapertureCalibration
+export subaperture_layout, subaperture_calibration, slope_extraction_model
+export set_subaperture_calibration!, valid_subaperture_indices
+export shack_hartmann_detector_image, shack_hartmann_detector_image!
+export n_valid_subapertures
 
 public supports_prepared_runtime, supports_detector_output
 public supports_stacked_sources, supports_grouped_execution

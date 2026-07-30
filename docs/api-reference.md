@@ -1135,8 +1135,11 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 ```
 
-The concrete WFS family bindings remain on the root surface only during their
-ordered namespace gates. Common contracts are not forwarded through the root.
+`WavefrontSensors` owns the complete Shack–Hartmann family as well as the
+common contracts. `MicrolensArray` remains an independent `Optics` component.
+The other concrete WFS family bindings remain on the root surface only until
+their ordered namespace gates; migrated bindings are not forwarded through
+the root.
 
 - Sensing modes: `Diffractive`, `Geometric`
 - Prepared products: `WFSObservationMetadata`, `WFSMeasurementMetadata`,
@@ -1154,15 +1157,16 @@ ordered namespace gates. Common contracts are not forwarded through the root.
 - Contract failure: `WFSPreparationError`, whose `stage` and open
   extension-defined `reason` fields identify rejected preparation contracts or
   execution-time prepared-binding violations before mutation
-- WFS families: `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`,
+- Module-owned WFS family: `ShackHartmannWFS`
+- WFS families awaiting their owner gates: `PyramidWFS`, `BioEdgeWFS`,
   `ZernikeWFS`, `CurvatureWFS`
 - Zernike optical composition: `ZernikePhaseSpot`,
   `ZernikeOpticalFrontEnd`, `zernike_rate_map`, and
   `set_zernike_calibration!`
-- Shack-Hartmann optical composition: `MicrolensArrayParams`,
-  `MicrolensArray`, `prepare_microlens_propagation`, `microlens_array`,
-  `ShackHartmannDirectFrontEnd`, `ShackHartmannOpticalFrontEnd`, and
-  `shack_hartmann_rate_map`. The
+- Shack-Hartmann optical composition: `Optics` owns `MicrolensArrayParams`,
+  `MicrolensArray`, `prepare_microlens_propagation`, and `microlens_array`;
+  `WavefrontSensors` owns `ShackHartmannDirectFrontEnd`,
+  `ShackHartmannOpticalFrontEnd`, and `shack_hartmann_rate_map`. The
   microlens array is the immutable regular-array model and its numerical
   sampling policy; prepared propagation holds only the backend/grid-bound FFT
   plans and reusable optical scratch. A diffractive front end can be assembled

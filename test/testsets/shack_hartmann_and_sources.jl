@@ -1,6 +1,6 @@
 function sh_spectral_grid_guard_allocation_bytes(wfs, src)
-    AdaptiveOpticsSim.require_sh_common_spectral_grid(wfs, src)
-    return @allocated AdaptiveOpticsSim.require_sh_common_spectral_grid(
+    WavefrontSensors.require_sh_common_spectral_grid(wfs, src)
+    return @allocated WavefrontSensors.require_sh_common_spectral_grid(
         wfs, src)
 end
 
@@ -34,7 +34,7 @@ end
     measure!(sh, pupil, src)
     image = wfs_detector_image(sh)
     @test size(image) == (128, 128)
-    @test size(AdaptiveOpticsSim.sh_exported_spot_cube(sh)) == (16 * 16, 8, 8)
+    @test size(WavefrontSensors.sh_exported_spot_cube(sh)) == (16 * 16, 8, 8)
 end
 
 @testset "Shack-Hartmann signal extraction branches" begin
@@ -43,41 +43,41 @@ end
     src = Source(band=:I, magnitude=0.0)
 
     zero_intensity = zeros(Float64, 3, 3)
-    @test AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), zero_intensity, 0.1) ==
+    @test WavefrontSensors.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), zero_intensity, 0.1) ==
           (0.0, 0.0, 0.0)
 
     centroid_input = [1.0 0.0 0.0; 0.0 4.0 0.0; 0.0 0.0 9.0]
-    total, sx, sy = AdaptiveOpticsSim.centroid_from_intensity_cutoff!(
+    total, sx, sy = WavefrontSensors.centroid_from_intensity_cutoff!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
     @test total == 13.0
     @test sx ≈ 22 / 13
     @test sy ≈ 22 / 13
-    @test AdaptiveOpticsSim.centroid_from_intensity!(copy(centroid_input), 0.25) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
-    @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(copy(centroid_input), 3.0) ==
-          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
-    @test AdaptiveOpticsSim.centroid_from_intensity!(KA_CPU_STYLE, copy(centroid_input), 0.25) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
-    @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(KA_CPU_STYLE, copy(centroid_input), 3.0) ==
-          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
-    @test AdaptiveOpticsSim.centroid_from_intensity_cutoff!(
+    @test WavefrontSensors.centroid_from_intensity!(copy(centroid_input), 0.25) ==
+          WavefrontSensors.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
+    @test WavefrontSensors.centroid_from_intensity_cutoff!(copy(centroid_input), 3.0) ==
+          WavefrontSensors.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    @test WavefrontSensors.centroid_from_intensity!(KA_CPU_STYLE, copy(centroid_input), 0.25) ==
+          WavefrontSensors.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
+    @test WavefrontSensors.centroid_from_intensity_cutoff!(KA_CPU_STYLE, copy(centroid_input), 3.0) ==
+          WavefrontSensors.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    @test WavefrontSensors.centroid_from_intensity_cutoff!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), fill(1.0, 2, 2), 2.0) == (0.0, 0.0, 0.0)
 
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4, threshold_cog=0.2)
-    @test AdaptiveOpticsSim.centroid_from_spot!(sh, copy(centroid_input), 0.25) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
-    @test AdaptiveOpticsSim.centroid_from_spot!(sh, copy(centroid_input)) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(
-              AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), AdaptiveOpticsSim.centroid_threshold(sh))
-    @test AdaptiveOpticsSim.centroid_from_spot_cutoff!(sh, copy(centroid_input), 3.0) ==
-          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
-    @test AdaptiveOpticsSim.centroid_from_spot!(KA_CPU_STYLE, sh, copy(centroid_input), 0.25) ==
-          AdaptiveOpticsSim.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
-    @test AdaptiveOpticsSim.centroid_from_spot_cutoff!(KA_CPU_STYLE, sh, copy(centroid_input), 3.0) ==
-          AdaptiveOpticsSim.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    @test WavefrontSensors.centroid_from_spot!(sh, copy(centroid_input), 0.25) ==
+          WavefrontSensors.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
+    @test WavefrontSensors.centroid_from_spot!(sh, copy(centroid_input)) ==
+          WavefrontSensors.centroid_from_intensity!(
+              AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), WavefrontSensors.centroid_threshold(sh))
+    @test WavefrontSensors.centroid_from_spot_cutoff!(sh, copy(centroid_input), 3.0) ==
+          WavefrontSensors.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
+    @test WavefrontSensors.centroid_from_spot!(KA_CPU_STYLE, sh, copy(centroid_input), 0.25) ==
+          WavefrontSensors.centroid_from_intensity!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 0.25)
+    @test WavefrontSensors.centroid_from_spot_cutoff!(KA_CPU_STYLE, sh, copy(centroid_input), 3.0) ==
+          WavefrontSensors.centroid_from_intensity_cutoff!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), copy(centroid_input), 3.0)
     spot_view = @view centroid_input[:, :]
-    @test AdaptiveOpticsSim.sync_sh_staged_spot!(KA_CPU_STYLE, centroid_input) === centroid_input
-    @test AdaptiveOpticsSim.sync_sh_staged_view!(KA_CPU_STYLE, spot_view) === spot_view
+    @test WavefrontSensors.sync_sh_staged_spot!(KA_CPU_STYLE, centroid_input) === centroid_input
+    @test WavefrontSensors.sync_sh_staged_view!(KA_CPU_STYLE, spot_view) === spot_view
 
     fill!(sh.front_end.layout.valid_mask, true)
     fill!(sh.front_end.layout.valid_mask_host, true)
@@ -89,7 +89,7 @@ end
     sh.acquisition.spot_cube[2, 1, 1] = 0.1
     sh.acquisition.spot_cube[4, 4, 1] = 8.0
 
-    scalar_slopes = AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh, 0.5)
+    scalar_slopes = WavefrontSensors.sh_signal_from_spots!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh, 0.5)
     n_lenslets = microlens_array(sh.front_end).params.n_lenslets
     offset = n_lenslets * n_lenslets
     @test scalar_slopes[1] == 1.0
@@ -98,14 +98,14 @@ end
     @test scalar_slopes[offset + 2] == 0.0
     @test scalar_slopes[invalid_index] == 0.0
     @test scalar_slopes[offset + invalid_index] == 0.0
-    @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, 0.05)[1] == 1.0
-    @test AdaptiveOpticsSim.sh_signal_from_spots!(sh, 10.0, slope_extraction_model(sh))[1] == 1.0
+    @test WavefrontSensors.sh_signal_from_spots!(sh, 10.0, 0.05)[1] == 1.0
+    @test WavefrontSensors.sh_signal_from_spots!(sh, 10.0, slope_extraction_model(sh))[1] == 1.0
 
     sh_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     fill!(sh_accel.front_end.layout.valid_mask, true)
     fill!(sh_accel.acquisition.spot_cube, 0.0)
     sh_accel.acquisition.spot_cube[1, 2, 3] = 10.0
-    accel_slopes = copy(AdaptiveOpticsSim.sh_signal_from_spots!(KA_CPU_STYLE, sh_accel, 0.5))
+    accel_slopes = copy(WavefrontSensors.sh_signal_from_spots!(KA_CPU_STYLE, sh_accel, 0.5))
     @test accel_slopes[1] == 1.0
     @test accel_slopes[offset + 1] == 2.0
 
@@ -114,56 +114,56 @@ end
     sh.calibration.centroid_response = 2.0
     fill!(sh.acquisition.spot_cube, 0.0)
     sh.acquisition.spot_cube[1, 2, 3] = 10.0
-    calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh, 0.5))
+    calibrated = copy(WavefrontSensors.sh_signal_from_spots_calibrated!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh, 0.5))
     reference = vec(sh.calibration.reference_signal_2d)
     @test calibrated[1] ≈ (1.0 - reference[1]) / 2
     @test calibrated[offset + 1] ≈ (2.0 - reference[offset + 1]) / 2
     @test calibrated[invalid_index] ≈ -reference[invalid_index] / 2
     @test calibrated[offset + invalid_index] ≈
         -reference[offset + invalid_index] / 2
-    @test AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(sh, 10.0, 0.05)[1] ≈
+    @test WavefrontSensors.sh_signal_from_spots_calibrated!(sh, 10.0, 0.05)[1] ≈
           (1.0 - reference[1]) / 2
-    @test AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(sh, 10.0, slope_extraction_model(sh))[1] ≈
+    @test WavefrontSensors.sh_signal_from_spots_calibrated!(sh, 10.0, slope_extraction_model(sh))[1] ≈
           (1.0 - reference[1]) / 2
 
     sh_accel.calibration.reference_signal_2d .= 0.25
     sh_accel.calibration.centroid_response = 2.0
     fill!(sh_accel.acquisition.spot_cube, 0.0)
     sh_accel.acquisition.spot_cube[1, 2, 3] = 10.0
-    accel_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(KA_CPU_STYLE, sh_accel, 0.5))
+    accel_calibrated = copy(WavefrontSensors.sh_signal_from_spots_calibrated!(KA_CPU_STYLE, sh_accel, 0.5))
     @test accel_calibrated[1] ≈ (1.0 - 0.25) / 2
     @test accel_calibrated[offset + 1] ≈ (2.0 - 0.25) / 2
 
     slopes_for_invalid = ones(Float64, 2 * offset)
-    AdaptiveOpticsSim.zero_invalid_sh_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), slopes_for_invalid, sh.front_end.layout.valid_mask)
+    WavefrontSensors.zero_invalid_sh_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), slopes_for_invalid, sh.front_end.layout.valid_mask)
     @test slopes_for_invalid[invalid_index] == 0.0
     @test slopes_for_invalid[offset + invalid_index] == 0.0
     @test slopes_for_invalid[1] == 1.0
     slopes_for_invalid_accel = ones(Float64, 2 * offset)
-    AdaptiveOpticsSim.zero_invalid_sh_slopes!(KA_CPU_STYLE, slopes_for_invalid_accel, sh.front_end.layout.valid_mask)
+    WavefrontSensors.zero_invalid_sh_slopes!(KA_CPU_STYLE, slopes_for_invalid_accel, sh.front_end.layout.valid_mask)
     @test slopes_for_invalid_accel[invalid_index] == 0.0
     @test slopes_for_invalid_accel[offset + invalid_index] == 0.0
     @test slopes_for_invalid_accel[1] == 1.0
 
     cube_for_invalid = ones(Float64, offset, 2, 2)
-    AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), cube_for_invalid, sh.front_end.layout.valid_mask)
+    WavefrontSensors.zero_invalid_sh_spot_cube!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), cube_for_invalid, sh.front_end.layout.valid_mask)
     @test all(iszero, cube_for_invalid[invalid_index, :, :])
     @test all(==(1.0), cube_for_invalid[1, :, :])
     cube_for_invalid_accel = ones(Float64, offset, 2, 2)
-    AdaptiveOpticsSim.zero_invalid_sh_spot_cube!(KA_CPU_STYLE, cube_for_invalid_accel, sh.front_end.layout.valid_mask)
+    WavefrontSensors.zero_invalid_sh_spot_cube!(KA_CPU_STYLE, cube_for_invalid_accel, sh.front_end.layout.valid_mask)
     @test all(iszero, cube_for_invalid_accel[invalid_index, :, :])
     @test all(==(1.0), cube_for_invalid_accel[1, :, :])
 
     mean_signal = collect(1.0:(2 * offset))
-    @test AdaptiveOpticsSim.mean_valid_signal(mean_signal, sh.front_end.layout.valid_mask) ≈
+    @test WavefrontSensors.mean_valid_signal(mean_signal, sh.front_end.layout.valid_mask) ≈
           AdaptiveOpticsSim.Backends.packed_valid_pair_mean(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), mean_signal, sh.front_end.layout.valid_mask)
-    @test AdaptiveOpticsSim.mean_valid_signal(KA_CPU_STYLE, mean_signal, sh.front_end.layout.valid_mask) ≈
-          AdaptiveOpticsSim.mean_valid_signal(mean_signal, sh.front_end.layout.valid_mask)
+    @test WavefrontSensors.mean_valid_signal(KA_CPU_STYLE, mean_signal, sh.front_end.layout.valid_mask) ≈
+          WavefrontSensors.mean_valid_signal(mean_signal, sh.front_end.layout.valid_mask)
 
     scalar_ramp = zeros(Float64, 8, 8)
     ka_ramp = similar(scalar_ramp)
-    AdaptiveOpticsSim.fill_calibration_ramp!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), scalar_ramp, 1e-3, 8)
-    AdaptiveOpticsSim.fill_calibration_ramp!(KA_CPU_STYLE, ka_ramp, 1e-3, 8)
+    WavefrontSensors.fill_calibration_ramp!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), scalar_ramp, 1e-3, 8)
+    WavefrontSensors.fill_calibration_ramp!(KA_CPU_STYLE, ka_ramp, 1e-3, 8)
     @test ka_ramp ≈ scalar_ramp
 
     sh_scalar = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
@@ -174,8 +174,8 @@ end
         wfs.acquisition.spot_cube[1, 2, 3] = 10.0
         wfs.acquisition.spot_cube[4, 4, 1] = 8.0
     end
-    scalar_device_reference = copy(AdaptiveOpticsSim.sh_signal_from_spots!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_scalar, 0.5))
-    ka_device_stats = copy(AdaptiveOpticsSim.sh_signal_from_spots_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
+    scalar_device_reference = copy(WavefrontSensors.sh_signal_from_spots!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_scalar, 0.5))
+    ka_device_stats = copy(WavefrontSensors.sh_signal_from_spots_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
     @test ka_device_stats ≈ scalar_device_reference
 
     sh_scalar.calibration.reference_signal_2d .= 0.25
@@ -186,21 +186,21 @@ end
     fill!(sh_ka.acquisition.spot_cube, 0.0)
     sh_scalar.acquisition.spot_cube[1, 2, 3] = 10.0
     sh_ka.acquisition.spot_cube[1, 2, 3] = 10.0
-    scalar_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated!(
+    scalar_calibrated = copy(WavefrontSensors.sh_signal_from_spots_calibrated!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_scalar, 0.5))
-    ka_calibrated = copy(AdaptiveOpticsSim.sh_signal_from_spots_calibrated_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
+    ka_calibrated = copy(WavefrontSensors.sh_signal_from_spots_calibrated_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
     @test ka_calibrated ≈ scalar_calibrated
 
     det = Detector(noise=NoiseNone(), binning=1)
     sh_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_det, pupil,
+    point_peak = WavefrontSensors.sampled_spots_peak!(sh_det, pupil,
         src, det, MersenneTwister(21))
     point_spots = copy(sh_det.acquisition.spot_cube)
     @test isfinite(point_peak)
     @test point_peak > 0
     sh_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_det_accel, pupil, src)
-    point_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE,
+    WavefrontSensors.prepare_sampling!(sh_det_accel, pupil, src)
+    point_peak_accel = WavefrontSensors.sampled_spots_peak!(KA_CPU_STYLE,
         sh_det_accel, pupil, src, det, MersenneTwister(21))
     @test point_peak_accel ≈ point_peak
 
@@ -210,13 +210,13 @@ end
     ]))
     sh_distinct = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
+    @test_throws InvalidConfiguration WavefrontSensors.sampled_spots_peak!(
         sh_distinct, pupil, distinct_spectral, det, MersenneTwister(22))
-    AdaptiveOpticsSim.prepare_sampling!(sh_distinct, pupil, src)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
+    WavefrontSensors.prepare_sampling!(sh_distinct, pupil, src)
+    @test_throws InvalidConfiguration WavefrontSensors.sampled_spots_peak!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_distinct, pupil,
         distinct_spectral, det, MersenneTwister(22))
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.sampled_spots_peak!(
+    @test_throws InvalidConfiguration WavefrontSensors.sampled_spots_peak!(
         KA_CPU_STYLE, sh_distinct, pupil, distinct_spectral, det,
         MersenneTwister(22))
 
@@ -226,7 +226,7 @@ end
     ]))
     sh_spectral = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4)
-    spectral_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_spectral, pupil,
+    spectral_peak = WavefrontSensors.sampled_spots_peak!(sh_spectral, pupil,
         common_spectral, det, MersenneTwister(22))
     spectral_spots = copy(sh_spectral.acquisition.spot_cube)
     @test isfinite(spectral_peak)
@@ -235,9 +235,9 @@ end
     @test spectral_spots ≈ point_spots
     sh_spectral_accel = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_spectral_accel, pupil,
+    WavefrontSensors.prepare_sampling!(sh_spectral_accel, pupil,
         common_spectral)
-    spectral_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(
+    spectral_peak_accel = WavefrontSensors.sampled_spots_peak!(
         KA_CPU_STYLE, sh_spectral_accel, pupil, common_spectral, det,
         MersenneTwister(22))
     @test spectral_peak_accel ≈ spectral_peak
@@ -245,13 +245,13 @@ end
 
     ext_single = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0)], [1.0]))
     sh_ext_single = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    ext_single_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext_single,
+    ext_single_peak = WavefrontSensors.sampled_spots_peak!(sh_ext_single,
         pupil, ext_single, det, MersenneTwister(23))
     @test ext_single_peak ≈ point_peak atol=1e-8 rtol=1e-8
     ext_double = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0), (0.1, 0.0)], [0.5, 0.5]))
     sh_ext_double_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_ext_double_accel, pupil, src)
-    ext_double_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(
+    WavefrontSensors.prepare_sampling!(sh_ext_double_accel, pupil, src)
+    ext_double_peak_accel = WavefrontSensors.sampled_spots_peak!(
         KA_CPU_STYLE, sh_ext_double_accel, pupil, ext_double, det,
         MersenneTwister(23))
     @test isfinite(ext_double_peak_accel)
@@ -259,16 +259,16 @@ end
 
     ast_batched = Asterism([src, Source(band=:I, magnitude=0.0, coordinates=(0.1, 0.0))])
     sh_ast_batched = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched, pupil, src)
-    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched, pupil, src)
-    ast_batched_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(
+    WavefrontSensors.prepare_sampling!(sh_ast_batched, pupil, src)
+    WavefrontSensors.ensure_sh_calibration!(sh_ast_batched, pupil, src)
+    ast_batched_slopes = WavefrontSensors.measure_sh_asterism_batched!(
         KA_CPU_STYLE, sh_ast_batched, pupil, ast_batched)
     @test length(ast_batched_slopes) == 2 * 4 * 4
     @test all(isfinite, ast_batched_slopes)
     sh_ast_batched_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_ast_batched_det, pupil, src)
-    AdaptiveOpticsSim.ensure_sh_calibration!(sh_ast_batched_det, pupil, src)
-    ast_batched_det_slopes = AdaptiveOpticsSim.measure_sh_asterism_batched!(
+    WavefrontSensors.prepare_sampling!(sh_ast_batched_det, pupil, src)
+    WavefrontSensors.ensure_sh_calibration!(sh_ast_batched_det, pupil, src)
+    ast_batched_det_slopes = WavefrontSensors.measure_sh_asterism_batched!(
         KA_CPU_STYLE, sh_ast_batched_det, pupil, ast_batched, det,
         MersenneTwister(26))
     @test length(ast_batched_det_slopes) == 2 * 4 * 4
@@ -276,13 +276,13 @@ end
 
     lgs = LGSSource(elongation_factor=1.3, photon_irradiance=1.0)
     sh_lgs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    lgs_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_lgs, pupil, lgs,
+    lgs_peak = WavefrontSensors.sampled_spots_peak!(sh_lgs, pupil, lgs,
         det, MersenneTwister(24))
     @test isfinite(lgs_peak)
     @test lgs_peak >= 0
     sh_lgs_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_accel, pupil, lgs)
-    lgs_peak_accel = AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE,
+    WavefrontSensors.prepare_sampling!(sh_lgs_accel, pupil, lgs)
+    lgs_peak_accel = WavefrontSensors.sampled_spots_peak!(KA_CPU_STYLE,
         sh_lgs_accel, pupil, lgs, det, MersenneTwister(24))
     @test isfinite(lgs_peak_accel)
     @test lgs_peak_accel >= 0
@@ -291,14 +291,14 @@ end
     lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile,
         fwhm_spot_up=1.0, photon_irradiance=1.0)
     sh_lgs_profile_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_accel, pupil,
+    WavefrontSensors.prepare_sampling!(sh_lgs_profile_accel, pupil,
         lgs_profile)
-    @test AdaptiveOpticsSim.sampled_spots_peak!(KA_CPU_STYLE,
+    @test WavefrontSensors.sampled_spots_peak!(KA_CPU_STYLE,
         sh_lgs_profile_accel, pupil, lgs_profile) >= 0
     sh_lgs_profile_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(sh_lgs_profile_det_accel, pupil,
+    WavefrontSensors.prepare_sampling!(sh_lgs_profile_det_accel, pupil,
         lgs_profile)
-    @test AdaptiveOpticsSim.sampled_spots_peak!(
+    @test WavefrontSensors.sampled_spots_peak!(
         KA_CPU_STYLE, sh_lgs_profile_det_accel, pupil, lgs_profile, det,
         MersenneTwister(25)) >= 0
 end
@@ -353,10 +353,10 @@ end
 
     wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
         n_pix_subap=4)
-    AdaptiveOpticsSim.prepare_sampling!(wfs, pupil, base)
+    WavefrontSensors.prepare_sampling!(wfs, pupil, base)
     for (src, signature) in zip(
         (base, changed_geometry, changed_profile), signatures)
-        AdaptiveOpticsSim.ensure_sh_calibration!(wfs, pupil, src)
+        WavefrontSensors.ensure_sh_calibration!(wfs, pupil, src)
         @test wfs.calibration.signature == signature
         @test wfs.calibration.calibrated
     end
@@ -458,7 +458,7 @@ end
         prepare_sampling!(mixed_wfs, pupil,
             first(mixed_wavelength.sources))
         @test_throws InvalidConfiguration begin
-            AdaptiveOpticsSim.sampled_spots_peak_asterism_stacked!(
+            WavefrontSensors.sampled_spots_peak_asterism_stacked!(
                 style, mixed_wfs, pupil, mixed_wavelength)
         end
     end
@@ -586,9 +586,9 @@ end
         sum(sh_shifted_mono.acquisition.spot_cube) atol=1e-8 rtol=1e-12
     @test sh_shifted_single.calibration.wavelength == λshift
     @test sh_common.calibration.wavelength == λshift
-    @test AdaptiveOpticsSim.sh_has_common_spectral_grid(sh_common,
+    @test WavefrontSensors.sh_has_common_spectral_grid(sh_common,
         poly_common)
-    @test !AdaptiveOpticsSim.sh_has_common_spectral_grid(sh_broad,
+    @test !WavefrontSensors.sh_has_common_spectral_grid(sh_broad,
         poly_broad)
     @test sh_spectral_grid_guard_allocation_bytes(sh_common,
         poly_common) == 0
@@ -668,7 +668,7 @@ end
         mode=Diffractive(), T=Float32)
     mixed_ka_wfs = ShackHartmannWFS(tel; n_lenslets=8,
         mode=Diffractive(), T=Float32)
-    @test AdaptiveOpticsSim.sh_has_common_spectral_grid(mixed_scalar_wfs,
+    @test WavefrontSensors.sh_has_common_spectral_grid(mixed_scalar_wfs,
         mixed_source)
     prepare_sampling!(mixed_scalar_wfs, pupil, mixed_source)
     prepare_sampling!(mixed_ka_wfs, pupil, mixed_source)
@@ -908,9 +908,9 @@ end
     sh_ext = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive())
     point_slopes = copy(measure!(sh_point, pupil, src))
     ext_point_slopes = copy(measure!(sh_ext_point, pupil, ext_point))
-    point_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_point, pupil, src)
+    point_peak = WavefrontSensors.sampled_spots_peak!(sh_point, pupil, src)
     point_spots = copy(sh_point.acquisition.spot_cube)
-    ext_peak = AdaptiveOpticsSim.sampled_spots_peak!(sh_ext, pupil,
+    ext_peak = WavefrontSensors.sampled_spots_peak!(sh_ext, pupil,
         ext_gauss)
     extended_spots = copy(sh_ext.acquisition.spot_cube)
     ext_slopes_1 = copy(measure!(sh_ext, pupil, ext_gauss))

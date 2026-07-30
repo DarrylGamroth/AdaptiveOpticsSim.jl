@@ -217,7 +217,9 @@ Examples:
   spatial-measure, and coherent/incoherent combination policy. A
   `PupilFunction` snapshots aperture support and field amplitude and owns the
   mutable OPD for exactly one optical path
-- `ShackHartmannWFS` composed through one explicit `front_end`, separate
+- `WavefrontSensors.ShackHartmannWFS`, owned with its calibration, acquisition,
+  and estimation implementation by the canonical WFS module, composed through
+  one explicit `front_end` and separate
   calibration, acquisition, and estimator owners. The front end is a
   propagation-free `ShackHartmannDirectFrontEnd` for geometric sensing or a
   `ShackHartmannOpticalFrontEnd` containing the immutable `MicrolensArray`,

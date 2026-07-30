@@ -318,9 +318,9 @@ include("calibration/modal_basis.jl")
 include("calibration/ncpa.jl")
 include("wfs/wavefront_sensors.jl")
 
-# Concrete WFS families remain flat only until their ordered namespace gates.
-# Import the common owner's identities explicitly so every later method extends
-# one authoritative generic rather than creating a root-owned duplicate.
+# WFS families move through ordered namespace gates. Import common identities
+# and the shared calibration/elongation seams still consumed by the remaining
+# flat families so every method extends one authoritative owner.
 import .WavefrontSensors:
     AbstractGroupedAccumulationPlan,
     AbstractWFS,
@@ -342,6 +342,7 @@ import .WavefrontSensors:
     WFSObservationMetadata,
     WFSPreparationError,
     _capture_counting_wfs!,
+    _apply_elongation!,
     _require_counting_wfs_source,
     _require_counting_wfs_spectral_match,
     _require_declared_wfs_units,
@@ -349,8 +350,16 @@ import .WavefrontSensors:
     _require_wfs_storage_domain,
     acquire_wfs_observation!,
     accumulate_grouped_sources!,
+    apply_elongation!,
+    apply_lgs_convolution!,
     apply_shift_wfs!,
     camera_frame,
+    calibration_matches,
+    calibration_signature,
+    calibration_wavelength,
+    common_wfs_calibration_source,
+    detector_calibration_signature,
+    detector_calibration_frame!,
     deterministic_frame_readout_gain,
     estimate_wfs_measurement!,
     form_wfs_optical_products!,
@@ -361,6 +370,10 @@ import .WavefrontSensors:
     measurement_metadata,
     measurement_storage,
     measurement_units,
+    lgs_average_kernel_fft,
+    lgs_kernel_signature,
+    lgs_pixel_scale,
+    n_valid_subapertures,
     observation_metadata,
     observation_storage,
     observation_units,
@@ -368,9 +381,12 @@ import .WavefrontSensors:
     prepare_wfs_acquisition,
     prepare_wfs_estimation,
     prepare_wfs_optical_formation,
+    pupil_aperture_calibration_signature,
     reference_signal,
     reduce_grouped_blocks_kernel!,
     reduce_grouped_stack!,
+    restore_opd!,
+    save_zero_opd!,
     sensing_mode,
     slopes,
     supports_camera_frame,
@@ -380,6 +396,8 @@ import .WavefrontSensors:
     supports_reference_signal,
     supports_stacked_sources,
     supports_valid_subaperture_mask,
+    store_reference_signal!,
+    update_valid_mask!,
     usable_wfs_normalization,
     validate_wfs_acquisition_binding,
     validate_wfs_estimation_binding,
@@ -399,11 +417,7 @@ import .WavefrontSensors:
     wfs_output_frame_prototype,
     wfs_output_metadata
 
-include("wfs/calibration.jl")
-include("wfs/elongation.jl")
-include("wfs/subapertures.jl")
 include("wfs/focal_plane_modulation.jl")
-include("wfs/shack_hartmann.jl")
 include("wfs/pyramid.jl")
 include("wfs/bioedge.jl")
 include("wfs/zernike.jl")
