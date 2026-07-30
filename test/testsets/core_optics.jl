@@ -245,20 +245,26 @@ end
         @test !isdefined(AdaptiveOpticsSim, name)
         @test Base.isexported(WavefrontSensors, name)
     end
-    @test Base.isexported(AdaptiveOpticsSim, :PreparedLiFTForwardModel)
-    @test Base.isexported(AdaptiveOpticsSim, :LiFTObservation)
-    @test Base.isexported(AdaptiveOpticsSim, :LiFTIdentityMapping)
-    @test Base.isexported(AdaptiveOpticsSim, :LiFTFrameMapping)
-    @test Base.isexported(AdaptiveOpticsSim, :LiFTPhotonRate)
-    @test Base.isexported(AdaptiveOpticsSim, :LiFTExpectedCounts)
-    @test Base.isexported(AdaptiveOpticsSim, :LiFTNormalizedIntensity)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :prepare_lift_forward_model)
-    @test Base.isexported(AdaptiveOpticsSim, :evaluate_lift_forward!)
-    @test Base.isexported(AdaptiveOpticsSim, :predict_lift_observation!)
-    @test Base.isexported(AdaptiveOpticsSim, :lift_forward_output)
-    @test Base.isexported(AdaptiveOpticsSim, :lift_observation_contract)
-    @test Base.isexported(AdaptiveOpticsSim, :diagnostics)
+    for name in (
+        :PreparedLiFTForwardModel,
+        :LiFTObservation,
+        :LiFTIdentityMapping,
+        :LiFTFrameMapping,
+        :LiFTPhotonRate,
+        :LiFTExpectedCounts,
+        :LiFTNormalizedIntensity,
+        :prepare_lift_forward_model,
+        :evaluate_lift_forward!,
+        :predict_lift_observation!,
+        :lift_forward_output,
+        :lift_observation_contract,
+        :diagnostics,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
+        @test Base.isexported(WavefrontSensors, name)
+    end
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedFocalPlaneModulation)
     @test !Base.isexported(AdaptiveOpticsSim,

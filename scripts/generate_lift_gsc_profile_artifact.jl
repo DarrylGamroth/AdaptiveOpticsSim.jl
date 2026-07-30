@@ -73,12 +73,14 @@ function lift_profile()
 
     observation = LiFTObservation(forward, psf)
     coeffs_fit = zeros(Float64, length(coeffs_true))
-    reconstruct!(coeffs_fit, lift, observation;
+    WavefrontSensors.reconstruct!(coeffs_fit, lift, observation;
         coeffs0=nothing, check_convergence=true)
-    timing = runtime_timing(() -> reconstruct!(coeffs_fit, lift, observation;
+    timing = runtime_timing(() -> WavefrontSensors.reconstruct!(
+            coeffs_fit, lift, observation;
             coeffs0=nothing, check_convergence=true);
         warmup=3, samples=20, gc_before=false)
-    alloc_bytes = _alloc_bytes(() -> reconstruct!(coeffs_fit, lift,
+    alloc_bytes = _alloc_bytes(() -> WavefrontSensors.reconstruct!(
+        coeffs_fit, lift,
         observation;
         coeffs0=nothing, check_convergence=true))
     coeff_error = maximum(abs.(coeffs_fit .- coeffs_true))

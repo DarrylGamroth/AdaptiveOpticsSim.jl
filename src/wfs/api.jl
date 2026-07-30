@@ -33,6 +33,14 @@ export CurvatureWFS, CurvatureOpticalFrontEnd, curvature_rate_maps
 export CurvaturePackedAcquisition, set_curvature_calibration!
 export CurvatureReadoutModel, CurvatureFrameReadout
 export CurvatureCountingReadout, CurvatureBranchResponse
+export LiFT, PreparedLiFTForwardModel, LiFTObservation
+export LiFTIdentityMapping, LiFTFrameMapping
+export LiFTPhotonRate, LiFTExpectedCounts, LiFTNormalizedIntensity
+export prepare_lift_forward_model, evaluate_lift_forward!
+export predict_lift_observation!, lift_forward_output
+export lift_observation_contract, diagnostics
+export LiFTSolveAuto, LiFTSolveQR, LiFTSolveNormalEquations
+export LiFTLevenbergMarquardt, LiFTAdaptiveLevenbergMarquardt
 
 public supports_prepared_runtime, supports_detector_output
 public supports_stacked_sources, supports_grouped_execution

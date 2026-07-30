@@ -1421,7 +1421,7 @@ function compute_reference_actual(case::ReferenceCase)
             iterations=Int(get(compute_cfg, "iterations", 3)),
             mode_ids=mode_ids,
             numerical=numerical)
-        H = lift_interaction_matrix(lift, coeffs;
+        H = WavefrontSensors.lift_interaction_matrix(lift, coeffs;
             rate_scale=rate_scale)
         stack = Array{Float64}(undef, img_resolution, img_resolution, length(mode_ids))
         for (idx, _) in pairs(mode_ids)

@@ -406,12 +406,12 @@ function AdaptiveOpticsSim.stable_hermitian_right_division(
     return permutedims(rhs_t, (2, 1))
 end
 
-function AdaptiveOpticsSim.solve_lift_fallback!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T},
+function WavefrontSensors.solve_lift_fallback!(diag::WavefrontSensors.LiFTDiagnostics{T},
     rhs::AMDGPU.ROCArray{T,1}, H::AbstractMatrix{T}, residual::AbstractVector{T},
-    damping::AdaptiveOpticsSim.LiFTDampingMode) where {T<:AbstractFloat}
+    damping::WavefrontSensors.LiFTDampingMode) where {T<:AbstractFloat}
     H_mat = dense_copy_to_roc(H)
     svd_parts = roc_svd(H_mat)
-    λ = AdaptiveOpticsSim.fallback_damping_lambda(damping, T, H_mat)
+    λ = WavefrontSensors.fallback_damping_lambda(damping, T, H_mat)
     work = AMDGPU.ROCArray{T}(undef, length(svd_parts.S))
     mul!(work, transpose(svd_parts.U), residual)
     @. work = ifelse(iszero(svd_parts.S^2 + λ), zero(T), (svd_parts.S * work) / (svd_parts.S^2 + λ))
@@ -434,15 +434,15 @@ loading from the damping policy. If repeated factorization attempts fail, the
 code falls back to the SVD-based Levenberg-Marquardt solve to preserve the same
 robustness guarantees as the CPU implementation.
 """
-function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
+function WavefrontSensors.solve_normal_system!(diag::WavefrontSensors.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
-    ::AdaptiveOpticsSim.LiFTDampingNone) where {T<:AbstractFloat}
+    ::WavefrontSensors.LiFTDampingNone) where {T<:AbstractFloat}
     factor_mat = roc_factor_matrix(factor)
     copy_dense_to_roc!(factor_mat, normal)
     _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
     λ = zero(T)
     if !issuccess(chol)
-        λ = AdaptiveOpticsSim.regularization_load(normal)
+        λ = WavefrontSensors.regularization_load(normal)
         @views factor_mat[diagind(factor_mat)] .+= λ
         _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
         if !issuccess(chol)
@@ -450,8 +450,8 @@ function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiag
             @views factor_mat[diagind(factor_mat)] .+= λ
             _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
             if !issuccess(chol)
-                return AdaptiveOpticsSim.solve_lift_fallback!(diag, rhs, H, residual,
-                    AdaptiveOpticsSim.LiFTLevenbergMarquardt(lambda0=λ))
+                return WavefrontSensors.solve_lift_fallback!(diag, rhs, H, residual,
+                    WavefrontSensors.LiFTLevenbergMarquardt(lambda0=λ))
             end
         end
     end
@@ -459,23 +459,23 @@ function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiag
     return rhs
 end
 
-function AdaptiveOpticsSim.solve_normal_system!(diag::AdaptiveOpticsSim.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
+function WavefrontSensors.solve_normal_system!(diag::WavefrontSensors.LiFTDiagnostics{T}, rhs::AMDGPU.ROCArray{T,1},
     factor::AbstractMatrix{T}, normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
-    damping::AdaptiveOpticsSim.LiFTLevenbergMarquardt) where {T<:AbstractFloat}
+    damping::WavefrontSensors.LiFTLevenbergMarquardt) where {T<:AbstractFloat}
     factor_mat = roc_factor_matrix(factor)
     copy_dense_to_roc!(factor_mat, normal)
-    λ = AdaptiveOpticsSim.damping_lambda(damping, normal)
+    λ = WavefrontSensors.damping_lambda(damping, normal)
     if λ > zero(T)
         @views factor_mat[diagind(factor_mat)] .+= λ
     end
     _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
     while !issuccess(chol)
-        λ = max(λ * T(damping.growth), AdaptiveOpticsSim.regularization_load(normal))
+        λ = max(λ * T(damping.growth), WavefrontSensors.regularization_load(normal))
         copy_dense_to_roc!(factor_mat, normal)
         @views factor_mat[diagind(factor_mat)] .+= λ
         _, chol = roc_cholesky_solve!(factor_mat, rhs; check=false)
         if λ > T(1e12)
-            return AdaptiveOpticsSim.solve_lift_fallback!(diag, rhs, H, residual, damping)
+            return WavefrontSensors.solve_lift_fallback!(diag, rhs, H, residual, damping)
         end
     end
     diag.regularization = λ

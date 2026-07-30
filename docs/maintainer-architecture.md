@@ -295,7 +295,9 @@ synthetic state view or monolithic optical-owner adapter is retained.
 LiFT separately owns a prepared focal-plane forward model, caller-provided
 `LiFTObservation`, and iterative estimator state. Its prepared modal subset and
 observation contract are cold-path bindings; repeated estimation neither owns
-nor triggers detector acquisition.
+nor triggers detector acquisition. LiFT reconstruction is the qualified-only
+`WavefrontSensors.reconstruct!`/`WavefrontSensors.reconstruct` generic, not the
+control-reconstruction generic.
 
 ## Execution Layers
 

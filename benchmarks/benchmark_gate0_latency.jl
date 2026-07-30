@@ -323,7 +323,8 @@ function make_gate0_card(raw::AbstractDict)
         coefficients = zeros(n_modes)
         let coefficients=coefficients, estimator=estimator,
             observation=observation
-            () -> reconstruct!(coefficients, estimator, observation;
+            () -> WavefrontSensors.reconstruct!(
+                coefficients, estimator, observation;
                 optimize_norm=:none, check_convergence=false)
         end
     else

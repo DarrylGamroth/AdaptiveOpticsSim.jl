@@ -1,7 +1,7 @@
 module AdaptiveOpticsSimCUDAExt
 
 import AdaptiveOpticsSim
-import AdaptiveOpticsSim: Backends
+import AdaptiveOpticsSim: Backends, WavefrontSensors
 using CUDA
 using LinearAlgebra
 
@@ -59,16 +59,16 @@ end
     return nothing
 end
 
-function AdaptiveOpticsSim.solve_lift_fallback!(
-    diag::AdaptiveOpticsSim.LiFTDiagnostics{T},
+function WavefrontSensors.solve_lift_fallback!(
+    diag::WavefrontSensors.LiFTDiagnostics{T},
     rhs::CUDA.AnyCuVector{T},
     H::CUDA.AnyCuMatrix{T},
     residual::CUDA.AnyCuVector{T},
-    damping::AdaptiveOpticsSim.LiFTDampingMode,
+    damping::WavefrontSensors.LiFTDampingMode,
 ) where {T<:AbstractFloat}
     # CUSOLVER's SVD requires a dense CuMatrix rather than a wrapped view.
     F = svd(CUDA.CuArray(H); full=false)
-    λ = AdaptiveOpticsSim.fallback_damping_lambda(damping, T, H)
+    λ = WavefrontSensors.fallback_damping_lambda(damping, T, H)
     work = CUDA.CuArray{T}(undef, length(F.S))
     mul!(work, transpose(F.U), residual)
     @. work = ifelse(iszero(F.S^2 + λ), zero(T), (F.S * work) / (F.S^2 + λ))
