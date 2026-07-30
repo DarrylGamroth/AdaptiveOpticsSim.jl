@@ -982,16 +982,25 @@ end
         coeffs = [0.25, -0.5]
         scalar_opd = Matrix{Float64}(undef, 4, 4)
         ka_opd = similar(scalar_opd)
-        AdaptiveOpticsSim.combine_basis!(SCALAR_CPU_STYLE, scalar_opd, basis, coeffs, pupil)
-        AdaptiveOpticsSim.combine_basis!(KA_CPU_STYLE, ka_opd, basis, coeffs, pupil)
+        AdaptiveOpticsSim.Calibration.combine_basis!(
+            SCALAR_CPU_STYLE, scalar_opd, basis, coeffs, pupil)
+        AdaptiveOpticsSim.Calibration.combine_basis!(
+            KA_CPU_STYLE, ka_opd, basis, coeffs, pupil)
         mark_ka_cpu_kernel!(:combine_basis_kernel!)
         @test ka_cpu_close(ka_opd, scalar_opd)
 
         fill!(ka_opd, 1.0)
         empty_basis = Array{Float64}(undef, 4, 4, 0)
-        AdaptiveOpticsSim.combine_basis!(
+        AdaptiveOpticsSim.Calibration.combine_basis!(
             KA_CPU_STYLE, ka_opd, empty_basis, Float64[], pupil)
         @test all(iszero, ka_opd)
+
+        WavefrontSensors.lift_basis_expansion!(
+            SCALAR_CPU_STYLE, scalar_opd, basis, coeffs, pupil)
+        WavefrontSensors.lift_basis_expansion!(
+            KA_CPU_STYLE, ka_opd, basis, coeffs, pupil)
+        mark_ka_cpu_kernel!(:lift_basis_expansion_kernel!)
+        @test ka_cpu_close(ka_opd, scalar_opd)
 
         dm_scalar = DeformableMirror(tel; n_act=3, influence_width=0.3)
         dm_ka = DeformableMirror(tel; n_act=3, influence_width=0.3)

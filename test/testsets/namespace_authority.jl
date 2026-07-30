@@ -115,6 +115,8 @@ function adaptive_optics_sim_extension_hooks(path::AbstractString)
             r"(?m)^(?:@inline\s+)?(?:function\s+)?(?:AdaptiveOpticsSim\.)?Atmospheres\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()",
         "WavefrontSensors" =>
             r"(?m)^(?:@inline\s+)?(?:function\s+)?(?:AdaptiveOpticsSim\.)?WavefrontSensors\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()",
+        "Calibration" =>
+            r"(?m)^(?:@inline\s+)?(?:function\s+)?(?:AdaptiveOpticsSim\.)?Calibration\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()",
     )
     owners = Dict{String,String}()
     for (owner, pattern) in patterns

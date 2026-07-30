@@ -80,7 +80,7 @@ function rather than introducing a second root function identity.
 
 The package is transitioning from the original flat root surface to real
 domain modules alongside the existing `Plant` module. `Backends`, `Optics`,
-`Atmospheres`, and `Detectors` are complete. The common `WavefrontSensors`
+`Atmospheres`, `Detectors`, and `Calibration` are complete. The common `WavefrontSensors`
 contracts are established; concrete WFS families are moving through their
 remaining ordered gates. `Atmospheres` owns atmosphere models and state,
 source-direction rendering and batching, and
@@ -89,8 +89,11 @@ conventional frame/area and counting/channel detector models and acquisition,
 with one shared detector type graph. `Optics` owns apertures, telescopes, sources, optical
 location/product metadata, pupil and field formation, general Fraunhofer and
 Fresnel propagation, direct imaging, sampled OPD, physical NCPA, controllable
-optics, and reusable physical WFS components. `Calibration`, `Control`,
-`Tomography`, and `Ensembles` follow in dependency order. The
+optics, and reusable physical WFS components. `Calibration` owns inverse
+policy, interaction/control matrices, modal basis construction, model-derived
+NCPA synthesis, fitting, optical-gain calibration, and registration
+identification. `Control`, `Tomography`, and `Ensembles` follow in dependency
+order. The
 authoritative pre-migration inventory, final exact API allowlists,
 extension-hook owners, and cross-module imports are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).

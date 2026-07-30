@@ -15,15 +15,15 @@ imported by `using AdaptiveOpticsSim`, optical-foundation vocabulary imported
 by `using AdaptiveOpticsSim.Optics`, backend vocabulary imported by
 `using AdaptiveOpticsSim.Backends`, conventional detector vocabulary imported
 by `using AdaptiveOpticsSim.Detectors`, atmosphere vocabulary imported by
-`using AdaptiveOpticsSim.Atmospheres`, the routine plant workflow imported by
+`using AdaptiveOpticsSim.Atmospheres`, calibration vocabulary imported by
+`using AdaptiveOpticsSim.Calibration`, the routine plant workflow imported by
 `using AdaptiveOpticsSim.Plant`, and stable qualified APIs addressed through
 their canonical modules. Qualified public names are maintained but do not
-enter the caller's ordinary namespace. The root package exports the
-`Backends`, `Optics`, `Atmospheres`, `Detectors`, and `Plant` modules, not
-compatibility exports for their moved contents.
+enter the caller's ordinary namespace. The root package exports the canonical
+modules, not compatibility exports for their moved contents.
 
 The breaking namespace migration is in progress. `Backends`, `Optics`,
-`Atmospheres`, and `Detectors` are complete. `Atmospheres` owns atmosphere
+`Atmospheres`, `Detectors`, and `Calibration` are complete. `Atmospheres` owns atmosphere
 models and state, source-direction rendering and batching, and
 atmosphere-coupled propagation. `Detectors` owns both conventional frame/area
 and counting/channel sensor APIs. `Optics` owns
@@ -31,6 +31,8 @@ apertures, telescopes, sources, optical products and
 metadata, pupil/field formation, backend-portable Fraunhofer and Fresnel
 propagation, direct imaging, sampled OPD, physical NCPA, controllable optics,
 deformable mirrors, spatial filtering, and reusable physical WFS components.
+`Calibration` owns inverse policies, interaction and control matrices, modal
+bases, model-derived NCPA synthesis, fitting, and calibration workflows.
 Bindings assigned to later domain owners remain at the root until their owner
 PR lands. The exact final root and domain allowlists are frozen in
 [`../test/contracts/namespace_authority.toml`](../test/contracts/namespace_authority.toml).
@@ -45,7 +47,8 @@ curated separately in [`../src/plant/api.jl`](../src/plant/api.jl), the
 conventional detector surface in
 [`../src/detectors/api.jl`](../src/detectors/api.jl), and the
 canonical backend surface in
-[`../src/backends/api.jl`](../src/backends/api.jl). The currently implemented
+[`../src/backends/api.jl`](../src/backends/api.jl). The calibration surface is
+curated in [`../src/calibration/api.jl`](../src/calibration/api.jl). The currently implemented
 optical surface is curated in
 [`../src/optics/api.jl`](../src/optics/api.jl), and the atmosphere surface in
 [`../src/atmosphere/api.jl`](../src/atmosphere/api.jl). Each owner PR must converge on
@@ -235,16 +238,16 @@ incompatible geometry revisions, backends, or devices.
 - Compatible intensity accumulation: `PreparedIncoherentSum`,
   `prepare_incoherent_sum`, `accumulate_intensity!`
 - Fields and general propagation: `FraunhoferPropagation` and
-  `FresnelPropagation`. Atmosphere-coupled propagation remains at the root
-  until the `Atmospheres` owner gate
+  `FresnelPropagation`. Atmosphere-coupled propagation is owned by
+  `AdaptiveOpticsSim.Atmospheres`
 - Sampled OPD and physical NCPA: `OPDMap` and `NCPA`. `NCPA(opd)` stores only
   the explicit backend-resident optical-path-difference map in metres.
   KL/Zernike/M2C basis selection, coefficient generation, and atmosphere- or
   DM-derived synthesis are calibration policy; synthesis returns an
   `Optics.NCPA` but the physical optic does not retain calibration provenance
 - Optical bases and registration: `ZernikeBasis`, `compute_zernike!`,
-  `Misregistration`, and `apply_misregistration`. Calibration-owned `KLBasis`
-  and `ZernikeModalBasis` remain at the root until the `Calibration` gate
+  `Misregistration`, and `apply_misregistration`. Import calibration-owned
+  `KLBasis` and `ZernikeModalBasis` from `AdaptiveOpticsSim.Calibration`
 - Spatial filtering: `SpatialFilter`, `CircularFilter`, `SquareFilter`,
   `FoucaultFilter`, `prepare_spatial_filter`, and `filter!`. Because Base also
   exports an unrelated collection operation named `filter!`, call
@@ -1347,19 +1350,25 @@ windowed, correlation, and matched-filter estimators remain future policies.
 
 ## Calibration And Reconstruction
 
+Import the maintained calibration surface explicitly:
+
+```julia
+using AdaptiveOpticsSim.Calibration
+```
+
 - Interaction/control matrices: `InteractionMatrix`, `interaction_matrix`,
-  `ControlMatrix`. Caller-owned calibration storage is available through the
-  qualified `AdaptiveOpticsSim.interaction_matrix!` API.
+  `ControlMatrix`. The caller-owned in-place seam is currently internal and
+  available as `AdaptiveOpticsSim.Calibration.interaction_matrix!`.
 - Modal bases: `ModalBasis`, `KLDMModes`, `KLHHtPSD`,
   `kl_modal_basis`, `modal_basis`, `basis_from_m2c`
 - AO calibration: `AOCalibration`, `ao_calibration`, `control_matrix`
 - Error and optical-gain calibration: `fitting_error`, `GainSensingCamera`,
   `calibrate!`, `compute_optical_gains!`
-- Misregistration identification uses the qualified
-  `AdaptiveOpticsSim.MetaSensitivity`,
-  `AdaptiveOpticsSim.compute_meta_sensitivity_matrix`,
-  `AdaptiveOpticsSim.estimate_misregistration`, `AdaptiveOpticsSim.SPRINT`,
-  and `AdaptiveOpticsSim.estimate!` APIs. `MetaSensitivity` is the structured
+- Misregistration identification is an experimental qualified workflow under
+  `AdaptiveOpticsSim.Calibration`, including `MetaSensitivity`,
+  `compute_meta_sensitivity_matrix`, `estimate_misregistration`, `SPRINT`,
+  and `estimate!`. These names are not yet marked as stable public API.
+  `MetaSensitivity` is the structured
   result: it retains the reference interaction matrix, sensitivity operator,
   finite-difference validation steps, and ordered parameter names
 - Structured configuration snapshots use qualified

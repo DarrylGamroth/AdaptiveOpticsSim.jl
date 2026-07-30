@@ -1,6 +1,7 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsSim.Calibration
 using BenchmarkTools
 
 function bench_misregistration_wfs_ad_probe()
@@ -10,23 +11,23 @@ function bench_misregistration_wfs_ad_probe()
     basis = modal_basis(dm, tel; n_modes=2).M2C[:, 1:2]
     fields = [:shift_x, :shift_y, :rotation_deg]
 
-    fd = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+    fd = Calibration.compute_meta_sensitivity_matrix(
         tel, dm, wfs, basis; n_mis_reg=length(fields), field_order=fields,
         sensitivity=:finite_difference)
-    ad = AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+    ad = Calibration.compute_meta_sensitivity_matrix(
         tel, dm, wfs, basis; n_mis_reg=length(fields), field_order=fields)
     max_abs_error = maximum(abs, ad.meta.D .- fd.meta.D)
     @assert isapprox(ad.meta.D, fd.meta.D; rtol=2e-3, atol=1e-9)
 
-    AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+    Calibration.compute_meta_sensitivity_matrix(
         tel, dm, wfs, basis; n_mis_reg=length(fields), field_order=fields,
         sensitivity=:finite_difference)
-    AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+    Calibration.compute_meta_sensitivity_matrix(
         tel, dm, wfs, basis; n_mis_reg=length(fields), field_order=fields)
-    alloc_fd = @allocated AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+    alloc_fd = @allocated Calibration.compute_meta_sensitivity_matrix(
         tel, dm, wfs, basis; n_mis_reg=length(fields), field_order=fields,
         sensitivity=:finite_difference)
-    alloc_ad = @allocated AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+    alloc_ad = @allocated Calibration.compute_meta_sensitivity_matrix(
         tel, dm, wfs, basis; n_mis_reg=length(fields), field_order=fields)
 
     println("Misregistration WFS-path default AD")
@@ -35,10 +36,10 @@ function bench_misregistration_wfs_ad_probe()
     println("  AD allocations after warmup: $(alloc_ad) bytes")
     println("  FD allocations after warmup: $(alloc_fd) bytes")
     println("  AD benchmark:")
-    display(@benchmark AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+    display(@benchmark Calibration.compute_meta_sensitivity_matrix(
         $tel, $dm, $wfs, $basis; n_mis_reg=$(length(fields)), field_order=$fields))
     println("  finite-difference benchmark:")
-    display(@benchmark AdaptiveOpticsSim.compute_meta_sensitivity_matrix(
+    display(@benchmark Calibration.compute_meta_sensitivity_matrix(
         $tel, $dm, $wfs, $basis; n_mis_reg=$(length(fields)), field_order=$fields,
         sensitivity=:finite_difference))
 end

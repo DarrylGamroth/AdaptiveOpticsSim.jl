@@ -23,10 +23,8 @@ import ..AdaptiveOpticsSim:
     UnsupportedAlgorithm,
     _scaled_kv56_scalar,
     atmosphere_profile,
-    default_build_backend,
     default_fidelity_profile,
-    fftfreq!,
-    materialize_build
+    fftfreq!
 
 import ..Backends:
     AbstractArrayBackend,

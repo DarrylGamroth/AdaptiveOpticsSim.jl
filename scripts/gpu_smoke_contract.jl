@@ -4,6 +4,7 @@ using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsSim.Calibration
 using LinearAlgebra
 using Random
 using Statistics
@@ -36,7 +37,7 @@ function record_gpu_smoke!(f::Function, failures::Vector{String}, name::Abstract
     return nothing
 end
 
-function prepared_gpu_field(tel::Telescope, src::AbstractSource;
+function prepared_gpu_field(tel::Telescope, src;
     zero_padding::Int, T::Type{<:AbstractFloat})
     wavefront = PupilFunction(tel; T=T)
     field = ElectricField(wavefront, src; zero_padding=zero_padding, T=T)
@@ -45,7 +46,7 @@ function prepared_gpu_field(tel::Telescope, src::AbstractSource;
     return (; wavefront, field, plan)
 end
 
-function gpu_direct_image(tel::Telescope, src::AbstractSource;
+function gpu_direct_image(tel::Telescope, src;
     zero_padding::Int, T::Type{<:AbstractFloat})
     pupil = PupilFunction(tel; T=T)
     prepared = prepare_direct_imaging(pupil, src; zero_padding=zero_padding)
@@ -101,14 +102,14 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         field = prepared.field
         @assert field.values isa BackendArray
         intensity = similar(field.values, T)
-        intensity!(intensity, field)
+        Optics.intensity!(intensity, field)
         @assert intensity isa BackendArray
 
         amplitude = similar(prepared.wavefront.opd, T,
             tel.params.resolution, tel.params.resolution)
         fill!(amplitude, T(0.5))
-        apply_amplitude!(field, amplitude, prepared.plan)
-        intensity!(intensity, field)
+        Optics.apply_amplitude!(field, amplitude, prepared.plan)
+        Optics.intensity!(intensity, field)
         @assert intensity isa BackendArray
 
         prepared2 = prepared_gpu_field(tel, src; zero_padding=2, T=T)
@@ -172,9 +173,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         support = BackendArray{Bool}(undef, 16, 16)
         weighted = BackendArray{Complex{T}}(undef, 16, 16)
         valid = BackendArray{Bool}(undef, 4, 4)
-        build_mask!(support, AnnularAperture(inner_radius=T(0.2), outer_radius=T(1), T=T); grid=default_mask_grid(support; T=T))
-        apply_mask!(support, SpiderMask(thickness=T(0.1), angle_rad=T(pi / 4), T=T); grid=default_mask_grid(support; T=T))
-        build_mask!(weighted, CircularAperture(radius=T(4), T=T); grid=pixel_mask_grid(weighted; T=T), inside=complex(T(inv(sqrt(2))), T(inv(sqrt(2)))))
+        build_mask!(support, AnnularAperture(inner_radius=T(0.2), outer_radius=T(1), T=T); grid=Optics.default_mask_grid(support; T=T))
+        apply_mask!(support, SpiderMask(thickness=T(0.1), angle_rad=T(pi / 4), T=T); grid=Optics.default_mask_grid(support; T=T))
+        build_mask!(weighted, CircularAperture(radius=T(4), T=T); grid=Optics.pixel_mask_grid(weighted; T=T), inside=complex(T(inv(sqrt(2))), T(inv(sqrt(2)))))
         build_mask!(valid, SubapertureGridMask(threshold=T(0.1), T=T), support)
         @assert support isa BackendArray
         @assert weighted isa BackendArray
@@ -389,21 +390,21 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "atmosphere_phase_helpers") do
         atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
-        ws = PhaseStatsWorkspace(tel.params.resolution; T=T, backend=backend)
-        screen, psd = ft_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
+        ws = Atmospheres.PhaseStatsWorkspace(tel.params.resolution; T=T, backend=backend)
+        screen, psd = Atmospheres.ft_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
             rng=rng, ws=ws, return_psd=true)
-        sh_screen = ft_sh_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
+        sh_screen = Atmospheres.ft_sh_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
             rng=rng, ws=ws, subharmonics=true, n_levels=2, subharmonic_radius=1)
         rho = similar(atm.state.opd, T, 4, 4)
         copyto!(rho, reshape(T[0.0, 0.02, 0.05, 0.1, 0.15, 0.25, 0.4, 0.8, 1.2, 1.6, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0], 4, 4))
-        cov = phase_covariance(rho, atm)
+        cov = Atmospheres.phase_covariance(rho, atm)
         freqs = similar(atm.state.freqs, T, 4)
         copyto!(freqs, T[0.1, 0.2, 0.3, 0.4])
-        covmat = covariance_matrix(freqs, freqs, atm)
-        spectrum = phase_spectrum(freqs, atm)
+        covmat = Atmospheres.covariance_matrix(freqs, freqs, atm)
+        spectrum = Atmospheres.phase_spectrum(freqs, atm)
         freq_grid = similar(atm.state.opd, T, 2, 2)
         copyto!(freq_grid, reshape(T[0.1, 0.2, 0.3, 0.4], 2, 2))
-        spectrum_grid = phase_spectrum(freq_grid, atm)
+        spectrum_grid = Atmospheres.phase_spectrum(freq_grid, atm)
         @assert screen isa BackendArray
         @assert psd isa BackendArray
         @assert sh_screen isa BackendArray
@@ -411,8 +412,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         @assert covmat isa BackendArray
         @assert spectrum isa BackendArray
         @assert spectrum_grid isa BackendArray
-        cov_ref = phase_covariance(Array(rho), atm)
-        covmat_ref = covariance_matrix(Array(freqs), Array(freqs), atm)
+        cov_ref = Atmospheres.phase_covariance(Array(rho), atm)
+        covmat_ref = Atmospheres.covariance_matrix(Array(freqs), Array(freqs), atm)
         cov_rel = maximum(abs.(Array(cov) .- cov_ref)) / maximum(abs.(cov_ref))
         covmat_rel = maximum(abs.(Array(covmat) .- covmat_ref)) / maximum(abs.(covmat_ref))
         @assert cov_rel < 5e-4

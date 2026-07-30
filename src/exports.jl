@@ -7,21 +7,10 @@
 
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
-export Backends, Optics, Detectors, Atmospheres, WavefrontSensors, Plant
+export Backends, Optics, Detectors, Atmospheres, WavefrontSensors, Calibration, Plant
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
-
-export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, default_modal_inverse_policy
-export KLBasis, ZernikeModalBasis
-
-export InteractionMatrix, interaction_matrix
-export ControlMatrix
-export ModalBasis, KLDMModes, KLHHtPSD
-export kl_modal_basis, modal_basis, basis_from_m2c
-export AOCalibration, ao_calibration, control_matrix
-export fitting_error
-export GainSensingCamera, calibrate!, compute_optical_gains!
 
 export NullReconstructor, ModalReconstructor, FactorizedReconstructor, MappedReconstructor
 export ControlledReconstructor

@@ -57,6 +57,7 @@ The snippets below assume:
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsSim.Calibration
 ```
 
 ### Image formation

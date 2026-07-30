@@ -818,7 +818,8 @@ per-step control path.
 
 For large calibration/control surfaces:
 
-- use `AdaptiveOpticsSim.interaction_matrix!` with caller-owned storage when
+- use `AdaptiveOpticsSim.Calibration.interaction_matrix!` with caller-owned
+  storage when
   the calibration matrix should live in a memory map, shared buffer, or
   backend-native allocation
 - use `FactorizedReconstructor` when a validated truncated SVD rank can bound

@@ -75,6 +75,8 @@ slopes = measure!(wfs, pupil, src)
 ### 3. Build a closed-loop AO model
 
 ```julia
+using AdaptiveOpticsSim.Calibration
+
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 imat = interaction_matrix(dm, wfs, PupilFunction(tel), src; amplitude=0.1)
 recon = ModalReconstructor(imat; gain=0.5)

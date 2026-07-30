@@ -16,7 +16,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
     high_accuracy = AdaptiveOpticsSim.Backends.high_accuracy_gpu_precision_policy(B)
     TB = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
     TH = AdaptiveOpticsSim.Backends.gpu_build_type(high_accuracy)
-    build_backend = AdaptiveOpticsSim.GPUArrayBuildBackend(B)
+    build_backend = AdaptiveOpticsSim.Calibration.GPUArrayBuildBackend(B)
 
     n_lenslet = 3
     n_lgs = 2

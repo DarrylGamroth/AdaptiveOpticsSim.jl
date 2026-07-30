@@ -24,7 +24,6 @@ import ..AdaptiveOpticsSim:
     bin2d_abs2!,
     bin2d_abs2_kernel!,
     center_resize2d!,
-    combine_basis!,
     edge_geometric_slopes!,
     ensure_psf_buffers!,
     geometric_slopes!,
