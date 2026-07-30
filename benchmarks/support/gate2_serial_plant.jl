@@ -48,7 +48,7 @@ function AOSPlant.prepare_path_executor(
     definition::AOSPlant.OpticalPathDefinition,
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
-    atmosphere::AOS.AbstractTimedAtmosphere,
+    atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
 )
     pupil = AOS.Optics.PupilFunction(telescope)
     imaging = AOS.Optics.prepare_direct_imaging(pupil, source;
@@ -75,7 +75,7 @@ function AOSPlant.prepare_path_executor(
     definition::AOSPlant.OpticalPathDefinition,
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
-    atmosphere::AOS.AbstractTimedAtmosphere,
+    atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(telescope; T=T)
@@ -114,7 +114,7 @@ function AOSPlant.prepare_path_executor(
     definition::AOSPlant.OpticalPathDefinition,
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
-    atmosphere::AOS.AbstractTimedAtmosphere,
+    atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(telescope; T=T)
@@ -200,7 +200,7 @@ function serial_plant_definition(raw::AbstractDict;
         central_obstruction=T(raw["central_obstruction"]),
         T=T,
     )
-    atmosphere = AOS.MultiLayerAtmosphere(telescope;
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(telescope;
         r0=T(raw["r0_m"]),
         L0=T(raw["outer_scale_m"]),
         fractional_cn2=T.(raw["fractional_cn2"]),
@@ -347,9 +347,9 @@ function final_observation_summary(operation::SerialPlantOperation)
     acquisitions = AOSPlant.prepared_acquisitions(operation.selection)
     atmosphere = AOSPlant.plant_atmosphere(operation.selection.plant.definition)
     return Dict{String,Any}(
-        "model_time_s" => AOS.epoch_time(AOS.current_epoch(atmosphere)),
-        "epoch_sequence" => Int(AOS.epoch_sequence(
-            AOS.current_epoch(atmosphere))),
+        "model_time_s" => AOS.Atmospheres.epoch_time(AOS.Atmospheres.current_epoch(atmosphere)),
+        "epoch_sequence" => Int(AOS.Atmospheres.epoch_sequence(
+            AOS.Atmospheres.current_epoch(atmosphere))),
         "acquisitions" => collect(map(acquisitions) do owner
             values = Array(observation_values(
                 AOSPlant.acquisition_observation(owner)))

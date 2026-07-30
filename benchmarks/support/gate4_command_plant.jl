@@ -46,7 +46,7 @@ function AOSPlant.prepare_controllable_optic(
     model::CommandPlaneOpticModel{T},
     definition::AOSPlant.ControllableOpticDefinition,
     telescope::AOS.Optics.Telescope,
-    ::AOS.AbstractAtmosphere,
+    ::AOS.Atmospheres.AbstractAtmosphere,
 ) where {T}
     endpoint = only(AOSPlant.command_endpoint_ids(definition))
     resolution = size(AOS.Optics.pupil_reflectivity(telescope), 1)
@@ -125,7 +125,7 @@ function AOSPlant.prepare_path_executor(
     definition::AOSPlant.OpticalPathDefinition,
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
-    atmosphere::AOS.AbstractTimedAtmosphere,
+    atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(telescope; T, backend=AOS.backend(telescope))
@@ -208,7 +208,7 @@ function command_plant_definition(raw::AbstractDict;
         central_obstruction=T(raw["central_obstruction"]),
         T=T,
     )
-    atmosphere = AOS.MultiLayerAtmosphere(telescope;
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(telescope;
         r0=T(raw["r0_m"]),
         L0=T(raw["outer_scale_m"]),
         fractional_cn2=T[1],

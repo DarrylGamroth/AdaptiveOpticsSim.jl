@@ -129,7 +129,7 @@ function multi_rate_plant_definition(raw::AbstractDict;
         central_obstruction=T(raw["central_obstruction"]),
         T=T,
     )
-    atmosphere = AOS.MultiLayerAtmosphere(telescope;
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(telescope;
         r0=T(raw["r0_m"]),
         L0=T(raw["outer_scale_m"]),
         fractional_cn2=T.(raw["fractional_cn2"]),
@@ -458,11 +458,11 @@ function validate_replay_and_reordering(raw::AbstractDict)
         end, canonical_snapshot) || error(
         "Gate 3 representative plant produced an invalid product")
 
-    epoch = AOS.current_epoch(canonical.prepared.atmosphere)
-    reordered_epoch = AOS.current_epoch(reordered.prepared.atmosphere)
-    AOS.epoch_time(epoch) == AOS.epoch_time(reordered_epoch) || error(
+    epoch = AOS.Atmospheres.current_epoch(canonical.prepared.atmosphere)
+    reordered_epoch = AOS.Atmospheres.current_epoch(reordered.prepared.atmosphere)
+    AOS.Atmospheres.epoch_time(epoch) == AOS.Atmospheres.epoch_time(reordered_epoch) || error(
         "Gate 3 replay atmosphere times differ")
-    AOS.epoch_sequence(epoch) == AOS.epoch_sequence(reordered_epoch) ||
+    AOS.Atmospheres.epoch_sequence(epoch) == AOS.Atmospheres.epoch_sequence(reordered_epoch) ||
         error("Gate 3 replay atmosphere sequences differ")
 
     return Dict{String,Any}(
@@ -474,8 +474,8 @@ function validate_replay_and_reordering(raw::AbstractDict)
         "generator_count" => AOSPlant.plant_event_generator_count(
             canonical.prepared),
         "science_path_reused" => true,
-        "atmosphere_model_time_s" => AOS.epoch_time(epoch),
-        "atmosphere_epoch_sequence" => Int64(AOS.epoch_sequence(epoch)),
+        "atmosphere_model_time_s" => AOS.Atmospheres.epoch_time(epoch),
+        "atmosphere_epoch_sequence" => Int64(AOS.Atmospheres.epoch_sequence(epoch)),
         "products" => snapshot_dict(canonical_snapshot),
     )
 end
