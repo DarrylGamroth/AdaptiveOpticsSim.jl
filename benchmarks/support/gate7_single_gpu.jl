@@ -1,6 +1,7 @@
 module Gate7SingleGPUBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
@@ -38,7 +39,7 @@ function AOSPlant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AOS.Optics.AbstractSource,
     telescope::Telescope,
-    atmosphere::AOS.AbstractTimedAtmosphere,
+    atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
@@ -83,7 +84,7 @@ function AOSPlant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AOS.Optics.AbstractSource,
     telescope::Telescope,
-    atmosphere::AOS.AbstractTimedAtmosphere,
+    atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))

@@ -54,7 +54,7 @@ function Plant.prepare_controllable_optic(
     model::CommandCompositionOpticModel{T},
     definition::ControllableOpticDefinition,
     telescope::Telescope,
-    ::AdaptiveOpticsSim.AbstractAtmosphere,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 ) where {T}
     endpoint = only(command_endpoint_ids(definition))
     n = size(pupil_reflectivity(telescope), 1)
@@ -80,7 +80,7 @@ function Plant.prepare_controllable_optic(
     ::ArrayInitialCommandOpticModel,
     definition::ControllableOpticDefinition,
     ::Telescope,
-    ::AdaptiveOpticsSim.AbstractAtmosphere,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 )
     schema = only(command_schemas(definition))
     T = command_numeric_type(schema)
@@ -209,7 +209,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))

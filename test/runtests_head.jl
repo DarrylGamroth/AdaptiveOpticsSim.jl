@@ -4,6 +4,7 @@ using AdaptiveOpticsSim.Optics
 import AdaptiveOpticsSim.Optics: filter!
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.Detectors
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using LinearAlgebra
@@ -62,6 +63,14 @@ for name in names(Detectors; all=true)
     end
 end
 
+for name in names(Atmospheres; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Atmospheres, $(QuoteNode(name)))
+    end
+end
+
 for name in names(Plant; all=true)
     s = String(name)
     if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
@@ -104,23 +113,23 @@ end
 
 function assert_atmosphere_layer_interface(layer, tel, rng, src)
     pupil = PupilFunction(tel)
-    @test layer isa AdaptiveOpticsSim.AbstractAtmosphereLayer
-    @test applicable(AdaptiveOpticsSim.render_layer!, similar(pupil.opd),
+    @test layer isa AdaptiveOpticsSim.Atmospheres.AbstractAtmosphereLayer
+    @test applicable(AdaptiveOpticsSim.Atmospheres.render_layer!, similar(pupil.opd),
         layer, zero(eltype(pupil.opd)), zero(eltype(pupil.opd)),
         one(eltype(pupil.opd)))
-    @test applicable(AdaptiveOpticsSim.render_layer_accumulate!,
+    @test applicable(AdaptiveOpticsSim.Atmospheres.render_layer_accumulate!,
         similar(pupil.opd), layer, zero(eltype(pupil.opd)),
         zero(eltype(pupil.opd)), one(eltype(pupil.opd)))
-    altitude = AdaptiveOpticsSim.layer_altitude(layer)
+    altitude = AdaptiveOpticsSim.Atmospheres.layer_altitude(layer)
     shift_x, shift_y, footprint_scale =
-        AdaptiveOpticsSim.layer_source_geometry(src, altitude, tel,
+        AdaptiveOpticsSim.Atmospheres.layer_source_geometry(src, altitude, tel,
             eltype(pupil.opd))
     sample = similar(pupil.opd)
     fill!(sample, zero(eltype(sample)))
-    AdaptiveOpticsSim.render_layer!(sample, layer, shift_x, shift_y, footprint_scale)
+    AdaptiveOpticsSim.Atmospheres.render_layer!(sample, layer, shift_x, shift_y, footprint_scale)
     @test size(sample) == size(pupil.opd)
     fill!(sample, zero(eltype(sample)))
-    AdaptiveOpticsSim.render_layer_accumulate!(sample, layer, shift_x, shift_y, footprint_scale)
+    AdaptiveOpticsSim.Atmospheres.render_layer_accumulate!(sample, layer, shift_x, shift_y, footprint_scale)
     @test size(sample) == size(pupil.opd)
 end
 

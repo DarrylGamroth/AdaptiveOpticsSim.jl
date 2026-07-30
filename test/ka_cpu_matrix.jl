@@ -693,44 +693,44 @@ end
         freqs = collect(range(0.0, 1.0; length=8))
         scalar_psd = Matrix{Float64}(undef, 8, 8)
         ka_psd = similar(scalar_psd)
-        AdaptiveOpticsSim.update_psd!(SCALAR_CPU_STYLE, scalar_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 8)
-        AdaptiveOpticsSim.update_psd!(KA_CPU_STYLE, ka_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 8)
+        AdaptiveOpticsSim.Atmospheres.update_psd!(SCALAR_CPU_STYLE, scalar_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 8)
+        AdaptiveOpticsSim.Atmospheres.update_psd!(KA_CPU_STYLE, ka_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 8)
         mark_ka_cpu_kernel!(:kolmogorov_psd_kernel!)
         @test ka_cpu_close(ka_psd, scalar_psd)
 
         scalar_phase_psd = similar(scalar_psd)
         ka_phase_psd = similar(scalar_psd)
-        AdaptiveOpticsSim._fill_phase_psd!(SCALAR_CPU_STYLE, scalar_phase_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 0.0, 8)
-        AdaptiveOpticsSim._fill_phase_psd!(KA_CPU_STYLE, ka_phase_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 0.0, 8)
+        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(SCALAR_CPU_STYLE, scalar_phase_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 0.0, 8)
+        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(KA_CPU_STYLE, ka_phase_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 0.0, 8)
         mark_ka_cpu_kernel!(:phase_screen_psd_kernel!)
         @test ka_cpu_close(ka_phase_psd, scalar_phase_psd)
 
-        scalar_spectrum = AdaptiveOpticsSim.phase_spectrum(freqs, 0.15, 25.0)
+        scalar_spectrum = AdaptiveOpticsSim.Atmospheres.phase_spectrum(freqs, 0.15, 25.0)
         ka_spectrum_out = similar(freqs)
         T = eltype(freqs)
         coeff = T(0.023) * T(0.15)^(-T(5) / T(3))
-        AdaptiveOpticsSim._phase_spectrum!(KA_CPU_STYLE, ka_spectrum_out, freqs, coeff, T(2pi)^2, inv(T(25.0))^2, -T(11) / T(6))
+        AdaptiveOpticsSim.Atmospheres._phase_spectrum!(KA_CPU_STYLE, ka_spectrum_out, freqs, coeff, T(2pi)^2, inv(T(25.0))^2, -T(11) / T(6))
         mark_ka_cpu_kernel!(:phase_spectrum_kernel!)
         @test ka_cpu_close(ka_spectrum_out, scalar_spectrum)
 
         rho = reshape(collect(range(0.0, 1.0; length=16)), 4, 4)
-        scalar_cov = AdaptiveOpticsSim.phase_covariance(rho, 0.15, 25.0)
-        ka_cov = AdaptiveOpticsSim._phase_covariance(KA_CPU_STYLE, rho, 0.15, 25.0)
+        scalar_cov = AdaptiveOpticsSim.Atmospheres.phase_covariance(rho, 0.15, 25.0)
+        ka_cov = AdaptiveOpticsSim.Atmospheres._phase_covariance(KA_CPU_STYLE, rho, 0.15, 25.0)
         mark_ka_cpu_kernel!(:phase_covariance_kernel!)
         @test ka_cpu_close(ka_cov, scalar_cov; rtol=1e-8, atol=1e-8)
 
         screen = reshape(collect(1.0:100.0), 10, 10)
         scalar_extract = Matrix{Float64}(undef, 4, 4)
         ka_extract = similar(scalar_extract)
-        AdaptiveOpticsSim.extract_shifted_screen!(scalar_extract, screen, 0.25, -0.5, 0.75, 1.0)
-        AdaptiveOpticsSim._extract_shifted_screen!(KA_CPU_STYLE, ka_extract, screen, 3.75, 4.5, 1.0, 0.75, 4, 10)
+        AdaptiveOpticsSim.Atmospheres.extract_shifted_screen!(scalar_extract, screen, 0.25, -0.5, 0.75, 1.0)
+        AdaptiveOpticsSim.Atmospheres._extract_shifted_screen!(KA_CPU_STYLE, ka_extract, screen, 3.75, 4.5, 1.0, 0.75, 4, 10)
         mark_ka_cpu_kernel!(:moving_layer_extract_kernel!)
         @test ka_cpu_close(ka_extract, scalar_extract)
 
         scalar_accum = fill(2.0, 4, 4)
         ka_accum = fill(2.0, 4, 4)
-        AdaptiveOpticsSim.accumulate_shifted_screen!(scalar_accum, screen, 0.25, -0.5, 0.75, 1.0)
-        AdaptiveOpticsSim._accumulate_shifted_screen!(KA_CPU_STYLE, ka_accum, screen, 3.75, 4.5, 1.0, 0.75, 4, 10)
+        AdaptiveOpticsSim.Atmospheres.accumulate_shifted_screen!(scalar_accum, screen, 0.25, -0.5, 0.75, 1.0)
+        AdaptiveOpticsSim.Atmospheres._accumulate_shifted_screen!(KA_CPU_STYLE, ka_accum, screen, 3.75, 4.5, 1.0, 0.75, 4, 10)
         mark_ka_cpu_kernel!(:moving_layer_accumulate_kernel!)
         @test ka_cpu_close(ka_accum, scalar_accum)
 
@@ -748,7 +748,7 @@ end
         first_amplitude = 0.75
         AdaptiveOpticsSim.Backends.launch_kernel!(
             KA_CPU_STYLE,
-            AdaptiveOpticsSim.atmosphere_direction_layer_batch_kernel!,
+            AdaptiveOpticsSim.Atmospheres.atmosphere_direction_layer_batch_kernel!,
             batch_output,
             screen,
             batch_shift_x,
@@ -767,7 +767,7 @@ end
         )
         @inbounds for direction in axes(batch_expected, 3)
             expected_slice = @view batch_expected[:, :, direction]
-            AdaptiveOpticsSim.extract_shifted_screen!(
+            AdaptiveOpticsSim.Atmospheres.extract_shifted_screen!(
                 expected_slice,
                 screen,
                 first_offset_x - batch_shift_x[1, direction],
@@ -784,7 +784,7 @@ end
         second_amplitude = 0.25
         AdaptiveOpticsSim.Backends.launch_kernel!(
             KA_CPU_STYLE,
-            AdaptiveOpticsSim.atmosphere_direction_layer_batch_kernel!,
+            AdaptiveOpticsSim.Atmospheres.atmosphere_direction_layer_batch_kernel!,
             batch_output,
             screen,
             batch_shift_x,
@@ -803,7 +803,7 @@ end
         )
         @inbounds for direction in axes(batch_expected, 3)
             expected_slice = @view batch_expected[:, :, direction]
-            AdaptiveOpticsSim.accumulate_shifted_screen!(
+            AdaptiveOpticsSim.Atmospheres.accumulate_shifted_screen!(
                 expected_slice,
                 screen,
                 second_offset_x - batch_shift_x[2, direction],
@@ -820,9 +820,9 @@ end
 
         scalar_sub = zeros(Float64, 8, 8)
         ka_sub = zeros(Float64, 8, 8)
-        AdaptiveOpticsSim._add_subharmonics!(SCALAR_CPU_STYLE, scalar_sub, 0.15, 25.0, 0.2, 1e-10;
+        AdaptiveOpticsSim.Atmospheres._add_subharmonics!(SCALAR_CPU_STYLE, scalar_sub, 0.15, 25.0, 0.2, 1e-10;
             rng=MersenneTwister(2), n_levels=1, radius=1)
-        AdaptiveOpticsSim._add_subharmonics!(KA_CPU_STYLE, ka_sub, 0.15, 25.0, 0.2, 1e-10;
+        AdaptiveOpticsSim.Atmospheres._add_subharmonics!(KA_CPU_STYLE, ka_sub, 0.15, 25.0, 0.2, 1e-10;
             rng=MersenneTwister(2), n_levels=1, radius=1)
         mark_ka_cpu_kernel!(:add_subharmonics_kernel!)
         @test ka_cpu_close(ka_sub, scalar_sub; rtol=1e-10, atol=1e-10)

@@ -224,6 +224,15 @@ include("core/workspace.jl")
 include("core/parallel.jl")
 include("core/telemetry.jl")
 
+include("atmosphere/atmospheres.jl")
+
+# Atmosphere implementations have one authoritative owner. Root composition
+# imports the module's routine surface for domains awaiting their own namespace
+# migrations; advanced internal seams are imported explicitly below as needed.
+using .Atmospheres
+import .Atmospheres:
+    AbstractAtmosphericFieldModel
+
 include("detectors/detectors.jl")
 
 # Detector implementations have one authoritative type and generic-function
@@ -305,14 +314,6 @@ import .Detectors:
     validate_frame_response_model,
     validate_up_the_ramp_schedule,
     write_output!
-include("atmosphere/source_geometry.jl")
-include("atmosphere/kolmogorov.jl")
-include("atmosphere/infinite_screen_math.jl")
-include("atmosphere/infinite_screen.jl")
-include("atmosphere/multilayer.jl")
-include("atmosphere/direction_batch.jl")
-include("atmosphere/phase_stats.jl")
-include("optics/atmospheric_field_propagation.jl")
 include("calibration/modal_basis.jl")
 include("calibration/ncpa.jl")
 include("wfs/sensing_modes.jl")

@@ -306,7 +306,10 @@ first-call evidence in
 These contracts contain no implementation binding moves.
 The maintained implementation stage lives in
 [`namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml);
-`Backends`, `Optics`, and `Detectors` are complete through NS-04B.
+`Backends`, `Optics`, `Atmospheres`, and `Detectors` are complete through
+NS-05.
+`Atmospheres` owns atmosphere models and state, direction rendering and
+batching, and atmosphere-coupled propagation.
 `Detectors` owns both conventional frame/area and counting/channel APIs.
 `Optics` owns apertures,
 telescopes, sources, optical locations/products, fields, general propagation,

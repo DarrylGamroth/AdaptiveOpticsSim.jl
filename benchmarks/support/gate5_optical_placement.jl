@@ -1,6 +1,7 @@
 module Gate5OpticalPlacementBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
@@ -28,7 +29,7 @@ AOSPlant.plant_model_definition_style(
 function AOSPlant.validate_path_materialization_binding(
     materialization::ZeroPupilMaterialization,
     input::AOS.Optics.PupilFunction,
-    ::AOS.AbstractAtmosphere,
+    ::AOS.Atmospheres.AbstractAtmosphere,
     ::AOS.Optics.AbstractSource,
 )
     materialization.destination === input || throw(
@@ -44,8 +45,8 @@ end
 function AOSPlant.validate_path_materialization(
     materialization::ZeroPupilMaterialization,
     input::AOS.Optics.PupilFunction,
-    ::AOS.AbstractAtmosphere,
-    ::AOS.AtmosphereEpoch,
+    ::AOS.Atmospheres.AbstractAtmosphere,
+    ::AOS.Atmospheres.AtmosphereEpoch,
 )
     materialization.destination === input || throw(
         AOSPlant.PlantPreparationError(
@@ -60,8 +61,8 @@ end
 function AOSPlant.materialize_path_input!(
     materialization::ZeroPupilMaterialization,
     input::AOS.Optics.PupilFunction,
-    ::AOS.AbstractAtmosphere,
-    ::AOS.AtmosphereEpoch,
+    ::AOS.Atmospheres.AbstractAtmosphere,
+    ::AOS.Atmospheres.AtmosphereEpoch,
 )
     materialization.destination === input || throw(
         AOSPlant.PlantPreparationError(
@@ -79,7 +80,7 @@ function AOSPlant.prepare_path_executor(
     definition::AOSPlant.OpticalPathDefinition,
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
-    atmosphere::AOS.AbstractTimedAtmosphere,
+    atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(
@@ -285,7 +286,7 @@ function gate5_plant_definition(
         diameter=Float64(raw["diameter_m"]),
         central_obstruction=Float64(raw["central_obstruction"]),
     )
-    atmosphere = AOS.MultiLayerAtmosphere(
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(
         telescope;
         r0=Float64(raw["r0_m"]),
         L0=Float64(raw["outer_scale_m"]),
@@ -618,7 +619,7 @@ function validate_finite_support(raw::AbstractDict)
         diameter=5.0,
         central_obstruction=0.0,
     )
-    atmosphere = AOS.MultiLayerAtmosphere(
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(
         telescope;
         r0=0.2,
         L0=25.0,

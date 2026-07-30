@@ -78,7 +78,7 @@ Plant.prepare_controllable_optic(
     ::OptionalControllerRoutingModel,
     ::ControllableOpticDefinition,
     ::Telescope,
-    ::AdaptiveOpticsSim.AbstractAtmosphere,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 ) = OptionalPreparedControllerRoutingModel()
 
 function run_optional_controller_routing_checks(::Type{B},
@@ -174,7 +174,7 @@ function run_optional_cycle_averaged_modulation_checks(::Type{B},
     return nothing
 end
 
-struct OptionalStaticAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.AbstractAtmosphere
+struct OptionalStaticAtmosphere{A,B<:AbstractArrayBackend} <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere
     screen::A
 end
 
@@ -225,7 +225,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -253,7 +253,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     values = similar(pupil_reflectivity(telescope), T,
@@ -298,7 +298,7 @@ end
 ) = Plant.AtmosphereIndependentPath()
 
 @inline optional_path_materialization(
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
     telescope::Telescope,
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     pupil::PupilFunction,
@@ -325,8 +325,8 @@ function Plant.prepare_acquisition_provider(
 end
 
 AdaptiveOpticsSim.Backends.backend(::OptionalStaticAtmosphere{<:Any,B}) where {B} = B()
-AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
-AdaptiveOpticsSim.advance!(atm::OptionalStaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
+AdaptiveOpticsSim.Atmospheres.advance!(atm::OptionalStaticAtmosphere, tel::Telescope, rng::AbstractRNG) = atm
+AdaptiveOpticsSim.Atmospheres.advance!(atm::OptionalStaticAtmosphere, tel::Telescope; rng::AbstractRNG=Random.default_rng()) = atm
 
 function optional_detector_calibration_signature_allocation_bytes(
     det, seed::UInt)
@@ -335,7 +335,7 @@ function optional_detector_calibration_signature_allocation_bytes(
         det, seed)
 end
 
-function AdaptiveOpticsSim.propagate!(atm::OptionalStaticAtmosphere,
+function AdaptiveOpticsSim.Atmospheres.propagate!(atm::OptionalStaticAtmosphere,
     pupil::PupilFunction)
     copyto!(pupil.opd, atm.screen)
     return pupil
@@ -3572,14 +3572,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     gpu_phase_freqs = array_backend(phase_freqs)
     gpu_phase_psd = array_backend(zeros(T, 4, 4))
     phase_args = (T(0.02), T(4pi^2), T(0.01), T(-11 / 6), zero(T), 4)
-    AdaptiveOpticsSim._fill_phase_psd!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
+    AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
         cpu_phase_psd, phase_freqs, phase_args...)
     phase_style = AdaptiveOpticsSim.Backends.execution_style(gpu_phase_psd)
-    AdaptiveOpticsSim._fill_phase_psd!(phase_style, gpu_phase_psd,
+    AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(phase_style, gpu_phase_psd,
         gpu_phase_freqs, phase_args...)
     @test isapprox(Array(gpu_phase_psd), cpu_phase_psd; rtol=1f-6, atol=1f-7)
     phase_method = which(
-        AdaptiveOpticsSim._fill_phase_psd!,
+        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!,
         (typeof(phase_style), typeof(gpu_phase_psd), typeof(gpu_phase_freqs),
             T, T, T, T, T, Int),
     )
@@ -3612,14 +3612,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         ),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(randn_method.file))
-    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
-    ) isa AdaptiveOpticsSim.GeometricFieldAsyncPlan
-    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldAsyncPlan
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
-    ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
+    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldAsyncPlan
     correction_models = (
         ReferencePixelCommonModeCorrection(1, 1),
         ReferenceRowCommonModeCorrection(1),
@@ -3781,14 +3781,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     @test AdaptiveOpticsSim.sh_sensing_execution_plan(AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh) isa AdaptiveOpticsSim.ShackHartmannWFSBatchedPlan
     @test AdaptiveOpticsSim.Detectors.detector_execution_plan(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorDirectPlan
     @test AdaptiveOpticsSim.Backends.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionPlan
-    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
-    ) isa AdaptiveOpticsSim.GeometricFieldAsyncPlan
-    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldAsyncPlan
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
-    ) isa AdaptiveOpticsSim.LayeredFresnelFieldAsyncPlan
+    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldAsyncPlan
     cpu_tel = Telescope(resolution=16, diameter=8.0f0,
         central_obstruction=0.0f0, T=T, backend=CPUBackend())
     gpu_tel = Telescope(resolution=16, diameter=8.0f0,
@@ -4125,7 +4125,7 @@ function optional_atmosphere_direction_batch_allocation_bytes(
 )
     render_atmosphere_directions!(prepared, atm, epoch)
     validation_bytes = @allocated(
-        AdaptiveOpticsSim.validate_atmosphere_direction_batch(
+        AdaptiveOpticsSim.Atmospheres.validate_atmosphere_direction_batch(
             prepared,
             atm,
             epoch,
@@ -4137,13 +4137,13 @@ function optional_atmosphere_direction_batch_allocation_bytes(
 end
 
 function run_optional_atmosphere_direction_batch_checks(
-    atm::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    atm::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
     tel::Telescope,
     sources::Asterism,
     epoch::AtmosphereEpoch,
     BackendArray,
 )
-    T = AdaptiveOpticsSim.atmosphere_numeric_type(atm)
+    T = AdaptiveOpticsSim.Atmospheres.atmosphere_numeric_type(atm)
     n = tel.params.resolution
     output = BackendArray{T}(undef, n, n, length(sources))
     prepared = prepare_atmosphere_direction_batch(

@@ -7,37 +7,14 @@
 
 export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
-export AtmosphereTimeError, AtmosphereEpochError
 export WFSPreparationError
-export Backends, Optics, Detectors, Plant
+export Backends, Optics, Detectors, Atmospheres, Plant
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng
 
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, default_modal_inverse_policy
-export AbstractAtmosphere
-export GeometricAtmosphericPropagation, LayeredFresnelAtmosphericPropagation
-export AtmosphericFieldPropagation
-export propagate_atmosphere_field!, atmospheric_intensity!
-
 export KLBasis, ZernikeModalBasis
-
-export KolmogorovAtmosphere, MultiLayerAtmosphere, InfinitePhaseScreen, InfiniteMultiLayerAtmosphere
-export AtmosphereLayerID
-export AtmosphereEpoch, epoch_time, epoch_sequence, current_epoch
-export prepare_atmosphere_renderer, prepare_atmosphere_renderers, direction_renderers
-export prepare_atmosphere_direction_batch, render_atmosphere_directions!
-export atmosphere_direction_output
-public AbstractAtmosphereDirectionBatchCapability
-public ExtractedScreenDirectionBatchCapability
-public UnsupportedAtmosphereDirectionBatchCapability
-public AtmosphereDirectionBatchParams, AtmosphereDirectionBatchWorkspace
-public PreparedAtmosphereDirectionBatch
-public atmosphere_direction_batch_capability
-public atmosphere_direction_count, atmosphere_direction_capacity
-public atmosphere_direction_metadata, validate_atmosphere_direction_batch
-export advance!, advance_by!, advance_to!, propagate!
-export render_atmosphere!
 
 export Diffractive, Geometric
 export WFSObservationMetadata, WFSMeasurementMetadata

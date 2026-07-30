@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 import AdaptiveOpticsSim.Optics: filter!
 using Logging

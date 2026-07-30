@@ -1,16 +1,3 @@
-"""Base type for atmospheric models."""
-abstract type AbstractAtmosphere <: AbstractOpticalElement end
-
-"""
-Atmospheres whose shared evolution is advanced with explicit model time and
-published as immutable current-state epoch identity tokens.
-"""
-abstract type AbstractTimedAtmosphere <: AbstractAtmosphere end
-
-# Extension seam retained for untimed/static test atmospheres and user models.
-# Maintained stochastic atmospheres use `advance_by!` / `advance_to!` instead.
-function advance! end
-
 """
 Wavefront sensors implement `measure!(wfs, pupil[, src])` and
 `update_valid_mask!(wfs, pupil)`.

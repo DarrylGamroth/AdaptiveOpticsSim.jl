@@ -89,6 +89,8 @@ end
         names(Optics))
     detectors_exported = filter(name -> Base.isexported(Detectors, name),
         names(Detectors))
+    atmospheres_exported = filter(name -> Base.isexported(Atmospheres, name),
+        names(Atmospheres))
     plant_exported = filter(name -> Base.isexported(Plant, name),
         names(Plant))
 
@@ -97,18 +99,22 @@ end
     @test length(root_exported) <= 500
     @test length(optics_exported) <= 160
     @test length(detectors_exported) <= 105
+    @test length(atmospheres_exported) <= 35
     @test length(plant_exported) <= 100
     @test Base.isexported(AdaptiveOpticsSim, :Backends)
     @test Base.isexported(AdaptiveOpticsSim, :Optics)
     @test Base.isexported(AdaptiveOpticsSim, :Detectors)
+    @test Base.isexported(AdaptiveOpticsSim, :Atmospheres)
     @test Base.isexported(AdaptiveOpticsSim, :Plant)
     @test Base.ispublic(AdaptiveOpticsSim, :Backends)
     @test Base.ispublic(AdaptiveOpticsSim, :Optics)
     @test Base.ispublic(AdaptiveOpticsSim, :Detectors)
+    @test Base.ispublic(AdaptiveOpticsSim, :Atmospheres)
     @test Base.ispublic(AdaptiveOpticsSim, :Plant)
     @test AdaptiveOpticsSim.Backends === Backends
     @test AdaptiveOpticsSim.Optics === Optics
     @test AdaptiveOpticsSim.Detectors === Detectors
+    @test AdaptiveOpticsSim.Atmospheres === Atmospheres
     @test AdaptiveOpticsSim.Plant === Plant
 
     # Every supported Plant-owned binding has one canonical owner. The root
@@ -174,7 +180,7 @@ end
     @test parentmodule(Plant.PlantCommand) === Plant
     @test parentmodule(Plant.PlantTimestamp) === Plant
     @test parentmodule(Plant.PlantDefinitionError) === Plant
-    @test Plant.advance_to! === AdaptiveOpticsSim.advance_to!
+    @test Plant.advance_to! === AdaptiveOpticsSim.Atmospheres.advance_to!
     @test Plant.backend === AdaptiveOpticsSim.Backends.backend
     @test Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     for name in (
@@ -331,24 +337,39 @@ end
         @test !Base.isexported(Optics, name)
         @test Base.ispublic(Optics, name)
     end
-    @test Base.isexported(AdaptiveOpticsSim, :AtmosphereEpoch)
-    @test Base.isexported(AdaptiveOpticsSim, :advance_by!)
-    @test Base.isexported(AdaptiveOpticsSim, :advance_to!)
-    @test Base.isexported(AdaptiveOpticsSim, :prepare_atmosphere_renderer)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :prepare_atmosphere_direction_batch)
-    @test Base.isexported(AdaptiveOpticsSim,
-        :render_atmosphere_directions!)
-    @test Base.isexported(AdaptiveOpticsSim, :atmosphere_direction_output)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :PreparedAtmosphereDirectionBatch)
-    @test Base.ispublic(AdaptiveOpticsSim,
-        :PreparedAtmosphereDirectionBatch)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :AbstractAtmosphereDirectionBatchCapability)
-    @test Base.ispublic(AdaptiveOpticsSim,
-        :AbstractAtmosphereDirectionBatchCapability)
-    @test Base.isexported(AdaptiveOpticsSim, :render_atmosphere!)
+    for name in (
+        :AbstractAtmosphere,
+        :AtmosphereEpoch,
+        :KolmogorovAtmosphere,
+        :MultiLayerAtmosphere,
+        :InfinitePhaseScreen,
+        :AtmosphericFieldPropagation,
+        :advance_by!,
+        :advance_to!,
+        :prepare_atmosphere_renderer,
+        :prepare_atmosphere_direction_batch,
+        :render_atmosphere_directions!,
+        :atmosphere_direction_output,
+        :render_atmosphere!,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test Base.isexported(Atmospheres, name)
+        @test Base.ispublic(Atmospheres, name)
+        @test parentmodule(getfield(Atmospheres, name)) === Atmospheres
+    end
+    for name in (
+        :AbstractTimedAtmosphere,
+        :PreparedAtmosphereDirectionBatch,
+        :AbstractAtmosphereDirectionBatchCapability,
+        :validate_atmosphere_direction_batch,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !Base.isexported(Atmospheres, name)
+        @test Base.ispublic(Atmospheres, name)
+        @test parentmodule(getfield(Atmospheres, name)) === Atmospheres
+    end
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeParams)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeState)
     @test !Base.isexported(AdaptiveOpticsSim, :DetectorParams)
@@ -972,10 +993,10 @@ end
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
-    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
-    ) isa AdaptiveOpticsSim.GeometricFieldSynchronousPlan
+    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldSynchronousPlan
     geom_field = propagate_atmosphere_field!(geom_prop, atm,
         current_epoch(atm))
     tel_geom = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
@@ -1003,10 +1024,10 @@ end
         model=LayeredFresnelAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
-    @test AdaptiveOpticsSim.atmospheric_field_execution_plan(
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
         AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
-    ) isa AdaptiveOpticsSim.LayeredFresnelFieldSynchronousPlan
+    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldSynchronousPlan
     fresnel_field = propagate_atmosphere_field!(fresnel_prop, fresnel_atm,
         current_epoch(fresnel_atm))
     geom_single = AtmosphericFieldPropagation(fresnel_atm, atm_pupil,

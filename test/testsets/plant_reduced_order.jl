@@ -41,7 +41,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere)
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere)
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
     imaging = prepare_direct_imaging(pupil, source; zero_padding=1)
@@ -66,7 +66,7 @@ function Plant.prepare_controllable_optic(
     ::ReducedOrderTestOpticModel,
     definition::ControllableOpticDefinition,
     ::Telescope,
-    ::AdaptiveOpticsSim.AbstractAtmosphere)
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere)
     schema = only(command_schemas(definition))
     dimensions = command_dimensions(schema)
     length(dimensions) == 1 || throw(PlantPreparationError(

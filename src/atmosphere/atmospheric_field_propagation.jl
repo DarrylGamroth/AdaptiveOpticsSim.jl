@@ -1,3 +1,4 @@
+"""Internal model trait for atmosphere-coupled complex-field propagation."""
 abstract type AbstractAtmosphericFieldModel end
 abstract type AbstractAtmosphericFieldExecutionPlan end
 

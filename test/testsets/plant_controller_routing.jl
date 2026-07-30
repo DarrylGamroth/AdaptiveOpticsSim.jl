@@ -1,4 +1,4 @@
-struct ControllerRoutingTestAtmosphere <: AdaptiveOpticsSim.AbstractAtmosphere end
+struct ControllerRoutingTestAtmosphere <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere end
 struct ControllerRoutingTestOpticModel end
 struct PreparedControllerRoutingTestOptic end
 
@@ -9,7 +9,7 @@ Plant.prepare_controllable_optic(
     ::ControllerRoutingTestOpticModel,
     ::ControllableOpticDefinition,
     ::Telescope,
-    ::AdaptiveOpticsSim.AbstractAtmosphere,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 ) = PreparedControllerRoutingTestOptic()
 
 function controller_routing_schema(::Type{T}, endpoint::Symbol,

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using Random
@@ -163,7 +164,7 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
     else
         () -> begin
             epoch = advance_by!(atm, atmosphere_step; rng=rng)
-            field = AdaptiveOpticsSim.propagate_atmosphere_field!(prop, atm,
+            field = AdaptiveOpticsSim.Atmospheres.propagate_atmosphere_field!(prop, atm,
                 epoch)
             _sync_array!(backend_tag, field.values)
             return field.values

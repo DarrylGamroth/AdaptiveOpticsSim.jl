@@ -1,4 +1,4 @@
-struct PlantPreparationTestAtmosphere <: AdaptiveOpticsSim.AbstractAtmosphere end
+struct PlantPreparationTestAtmosphere <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere end
 
 struct DirectSciencePathModel{R}
     zero_padding::Int
@@ -326,7 +326,7 @@ end
 ) = Plant.AtmosphereIndependentPath()
 
 @inline plant_test_path_materialization(
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
     telescope::Telescope,
     source::AbstractSource,
     pupil::PupilFunction,
@@ -355,7 +355,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 )
     pupil = PupilFunction(telescope)
     imaging = prepare_direct_imaging(pupil, source;
@@ -383,7 +383,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractTimedAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
 )
     pupil = PupilFunction(telescope)
     imaging = prepare_direct_imaging(pupil, source;
@@ -411,7 +411,7 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.AbstractAtmosphere,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T)

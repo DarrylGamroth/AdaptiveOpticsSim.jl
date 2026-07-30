@@ -17,16 +17,6 @@ struct NumericalConditionError <: AdaptiveOpticsSimError
     msg::String
 end
 
-"""Invalid or non-monotonic explicit atmosphere model time."""
-struct AtmosphereTimeError <: AdaptiveOpticsSimError
-    msg::String
-end
-
-"""Missing, stale, or incompatible atmosphere epoch identity."""
-struct AtmosphereEpochError <: AdaptiveOpticsSimError
-    msg::String
-end
-
 """Prepared-contract violation at one semantic wavefront-sensor stage."""
 struct WFSPreparationError <: AdaptiveOpticsSimError
     stage::Symbol
