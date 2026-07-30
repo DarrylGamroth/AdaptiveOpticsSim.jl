@@ -21,9 +21,9 @@ enter the caller's ordinary namespace. The root package exports the
 `Backends`, `Optics`, `Detectors`, and `Plant` modules, not compatibility
 exports for their moved contents.
 
-The breaking namespace migration is in progress. `Backends` and `Optics` are
-complete; `Detectors` owns the conventional frame/area surface, while
-counting/channel names remain at the root until NS-04B. `Optics` owns
+The breaking namespace migration is in progress. `Backends`, `Optics`, and
+`Detectors` are complete. `Detectors` owns both conventional frame/area and
+counting/channel sensor APIs. `Optics` owns
 apertures, telescopes, sources, optical products and
 metadata, pupil/field formation, backend-portable Fraunhofer and Fresnel
 propagation, direct imaging, sampled OPD, physical NCPA, controllable optics,
@@ -929,18 +929,17 @@ influence basis already includes the print-through structure.
 
 Import conventional frame and area-detector vocabulary with
 `using AdaptiveOpticsSim.Detectors`. The root exports the `Detectors` module,
-not these moved bindings. Counting/channel detector names remain on the root
-surface until the NS-04B ownership gate.
+not the moved detector bindings.
 
 - Conventional frame/area detector: `Detectors.Detector`
-- Counting/channel detectors (root-owned until NS-04B): `LinearAPDDetector`,
-  `APDDetector`, `SPADArrayDetector`, and `MKIDArrayDetector`
+- Counting/channel detectors: `LinearAPDDetector`, `APDDetector`,
+  `SPADArrayDetector`, and `MKIDArrayDetector`
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
 - Conventional sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`,
   `EMCCDSensor`, `InGaAsSensor`, and `HgCdTeAvalancheArraySensor`
-- Counting sensor families (root-owned until NS-04B): `APDSensor`,
-  `SPADArraySensor`, and `MKIDArraySensor`
+- Counting sensor families: `APDSensor`, `SPADArraySensor`, and
+  `MKIDArraySensor`
 - EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,
   `EMOutput`, `ConventionalOutput`, `emccd_snr`
 - Linear APD topology: `SingleElementAPD`, `APDChannelBank`; analog APD output

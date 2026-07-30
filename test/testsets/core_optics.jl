@@ -96,7 +96,7 @@ end
     # distinguishes routine unqualified vocabulary from stable qualified API.
     @test length(root_exported) <= 500
     @test length(optics_exported) <= 160
-    @test length(detectors_exported) <= 85
+    @test length(detectors_exported) <= 105
     @test length(plant_exported) <= 100
     @test Base.isexported(AdaptiveOpticsSim, :Backends)
     @test Base.isexported(AdaptiveOpticsSim, :Optics)
@@ -242,6 +242,19 @@ end
         :detector_ramp_cube,
         :detector_ramp_times,
         :InterpixelCapacitance,
+        :APDDetector,
+        :LinearAPDDetector,
+        :SPADArrayDetector,
+        :MKIDArrayDetector,
+        :APDSensor,
+        :SPADArraySensor,
+        :MKIDArraySensor,
+        :SingleElementAPD,
+        :APDChannelBank,
+        :CountingDeadTimeModel,
+        :DutyCycleGate,
+        :ChannelCrosstalkModel,
+        :channel_output,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)
@@ -249,7 +262,6 @@ end
         @test Base.ispublic(Detectors, name)
         @test parentmodule(getfield(Detectors, name)) === Detectors
     end
-    @test Base.isexported(AdaptiveOpticsSim, :MKIDArrayDetector)
     @test Base.isexported(AdaptiveOpticsSim, :SimulationEnsemble)
     @test Base.isexported(AdaptiveOpticsSim, :FactorizedReconstructor)
     @test Base.isexported(AdaptiveOpticsSim, :ControlledReconstructor)

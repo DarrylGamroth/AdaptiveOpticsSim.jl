@@ -1,10 +1,13 @@
 export Detector
+export APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
 export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput
 export emccd_snr
 export SequentialAcquisition, FrameTransferAcquisition
 export HgCdTeAvalancheArraySensor
+export APDSensor, SPADArraySensor, MKIDArraySensor
+export SingleElementAPD, APDChannelBank
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse
 export SampledFrameResponse, RectangularPixelAperture
 export CMOSReadNoiseMap, InterpixelCapacitance, detector_mtf
@@ -26,7 +29,10 @@ export SaturatingFrameNonlinearity, ExponentialPersistence
 export AbstractDetectorThermalModel, NullDetectorThermalModel
 export FixedTemperature, FirstOrderThermalModel
 export ArrheniusRateLaw, LinearTemperatureLaw, ExponentialTemperatureLaw
-export capture!, output_frame, detector_export_metadata
+export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime
+export ParalyzableDeadTime, DutyCycleGate, AfterpulsingModel
+export ChannelCrosstalkModel, CompositeCountingCorrelation
+export capture!, output_frame, channel_output, detector_export_metadata
 export DetectorAcquisitionPlan, prepare_detector_acquisition
 export detector_ramp_slope, detector_ramp_intercept
 export detector_ramp_cube, detector_ramp_times
