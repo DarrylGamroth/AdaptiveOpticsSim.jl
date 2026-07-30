@@ -161,9 +161,10 @@ end
     @test command_storage(dm) == command_before
     @test opd_map(pupil) == opd_before
 
-    reconstructor = FactorizedReconstructor(imat; gain=1.0)
+    reconstructor = @inferred FactorizedReconstructor(imat; gain=1.0)
     command = similar(command_storage(dm))
-    reconstruct!(command, reconstructor, slopes(wfs))
+    @test @inferred(reconstruct!(command, reconstructor, slopes(wfs))) ===
+        command
     @test length(command) == n_control_dofs(dm)
 
     delay = VectorDelayLine(command, 2)
@@ -182,12 +183,12 @@ end
     zero_delay = VectorDelayLine(command, 0)
     @test shift_delay!(zero_delay, command) == command
 
-    controller = DiscreteIntegratorController(
+    controller = @inferred DiscreteIntegratorController(
         length(command);
         gain=0.1,
         tau=0.02,
     )
-    output = update!(controller, command, 0.01)
+    output = @inferred update!(controller, command, 0.01)
     @test output === controller_output(controller)
     @test reset_controller!(controller) === controller
     @test all(iszero, controller_output(controller))
@@ -207,7 +208,8 @@ end
         );
         dt=1e-3,
     )
-    reconstruct!(command, controlled, slopes(wfs))
+    @test @inferred(reconstruct!(command, controlled, slopes(wfs))) ===
+        command
     reconstruct!(command, controlled, slopes(wfs))
     @test all(isfinite, command)
     if coverage_instrumented()

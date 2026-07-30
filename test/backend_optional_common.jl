@@ -2773,16 +2773,16 @@ function run_optional_scalable_reconstructor_checks(::Type{T}, selector,
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(factorized_out))
     @test Array(factorized_out) ≈ Array(dense_out) atol=T(2e-4) rtol=T(2e-4)
-    @test AdaptiveOpticsSim.factorized_rank(factorized) == n_commands
+    @test Control.factorized_rank(factorized) == n_commands
     @test all(storage -> storage isa BackendArray,
-        AdaptiveOpticsSim.runtime_reconstructor_storage(factorized))
+        Control.runtime_reconstructor_storage(factorized))
 
     compact = FactorizedReconstructor(interaction; gain=T(0.5), max_rank=3)
-    @test AdaptiveOpticsSim.factorized_rank(compact) == 3
+    @test Control.factorized_rank(compact) == 3
     @test sum(length,
-        AdaptiveOpticsSim.runtime_reconstructor_storage(compact)) <
+        Control.runtime_reconstructor_storage(compact)) <
         sum(length,
-            AdaptiveOpticsSim.runtime_reconstructor_storage(factorized))
+            Control.runtime_reconstructor_storage(factorized))
 
     controller = DiscreteIntegratorController(n_commands;
         gain=T(0.7), tau=T(0.01), T=T, backend=selector)
@@ -2792,7 +2792,7 @@ function run_optional_scalable_reconstructor_checks(::Type{T}, selector,
         AdaptiveOpticsSim.Backends.execution_style(factorized_out))
     @test all(isfinite, Array(factorized_out))
     @test all(storage -> storage isa BackendArray,
-        AdaptiveOpticsSim.runtime_reconstructor_storage(controlled))
+        Control.runtime_reconstructor_storage(controlled))
     @test AdaptiveOpticsSim.reset_controller!(controlled) === controlled
     @test_throws InvalidConfiguration ControlledReconstructor(
         factorized,

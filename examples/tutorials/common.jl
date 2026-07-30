@@ -3,6 +3,7 @@ using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
+using AdaptiveOpticsSim.Control
 import AdaptiveOpticsSim.Optics: filter!
 using Logging
 using Random

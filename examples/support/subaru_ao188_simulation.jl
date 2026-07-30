@@ -7,6 +7,7 @@ using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
+using AdaptiveOpticsSim.Control
 using LinearAlgebra
 using Random
 using Statistics

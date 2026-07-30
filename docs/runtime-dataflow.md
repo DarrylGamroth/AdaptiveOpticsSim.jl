@@ -217,8 +217,9 @@ generic runtime API. A simple closed loop can likewise compose:
 - `advance_by!` and `render_atmosphere!`
 - `set_command!` and `apply!`
 - the three WFS stages
-- `reconstruct!`
-- `VectorDelayLine` and `DiscreteIntegratorController`
+- `AdaptiveOpticsSim.Control.reconstruct!`
+- `AdaptiveOpticsSim.Control.VectorDelayLine` and
+  `AdaptiveOpticsSim.Control.DiscreteIntegratorController`
 
 This keeps reusable numerical/control primitives independent of HIL scheduling.
 

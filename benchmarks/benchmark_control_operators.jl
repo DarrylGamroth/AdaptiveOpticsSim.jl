@@ -1,6 +1,7 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
+using AdaptiveOpticsSim.Control
 using LinearAlgebra
 using Random
 using Statistics
@@ -40,7 +41,7 @@ end
 
 operator_storage_bytes(operator) = sum(
     Base.summarysize,
-    AdaptiveOpticsSim.runtime_reconstructor_storage(operator),
+    Control.runtime_reconstructor_storage(operator),
 )
 
 function print_result(label, result, storage_bytes)

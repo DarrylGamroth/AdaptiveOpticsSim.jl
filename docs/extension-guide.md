@@ -804,6 +804,8 @@ co-conjugated surfaces add on the same path.
 Controllers own temporal behavior. Reconstructors own measurement-to-command
 operators.
 
+Import the maintained surface with `using AdaptiveOpticsSim.Control`.
+
 Use this split:
 
 - reconstructors expose the command operator and any diagnostics needed by
@@ -832,7 +834,7 @@ truncation is not evidence that discarded modes are acceptable for a real
 plant. The dense `ModalReconstructor` remains the full-rank accuracy baseline.
 
 Accelerator reconstructors must implement
-`AdaptiveOpticsSim.runtime_reconstructor_storage(reconstructor)` and return a tuple containing
+`AdaptiveOpticsSim.Control.runtime_reconstructor_storage(reconstructor)` and return a tuple containing
 their hot-path control matrices and workspaces. A model or Plant extension uses
 this contract to reject mixed host/device control paths during preparation.
 Return `()` only for a truly backend-agnostic operator. Synchronize at an
@@ -840,10 +842,11 @@ explicit observation, transport, or measurement boundary rather than inside an
 otherwise device-resident chain.
 
 Stateful reconstructors should additionally implement
-`AdaptiveOpticsSim.runtime_reconstructor_ownership_roots(reconstructor)` and
+`AdaptiveOpticsSim.Control.runtime_reconstructor_ownership_roots(reconstructor)` and
 return their mutable workspaces. This prevents two threaded ensemble members
 from sharing operator scratch state. Stateful controllers used inside
-`ControlledReconstructor` implement `runtime_controller_storage` for backend
+`ControlledReconstructor` implement
+`AdaptiveOpticsSim.Control.runtime_controller_storage` for backend
 residency; controller objects are conservatively treated as mutable ownership
 roots by default.
 

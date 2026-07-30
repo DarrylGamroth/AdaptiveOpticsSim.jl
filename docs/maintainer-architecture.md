@@ -92,7 +92,8 @@ Fresnel propagation, direct imaging, sampled OPD, physical NCPA, controllable
 optics, and reusable physical WFS components. `Calibration` owns inverse
 policy, interaction/control matrices, modal basis construction, model-derived
 NCPA synthesis, fitting, optical-gain calibration, and registration
-identification. `Control`, `Tomography`, and `Ensembles` follow in dependency
+identification. `Control` owns reconstruction and controller composition;
+`Tomography` and `Ensembles` follow in dependency
 order. The
 authoritative pre-migration inventory, final exact API allowlists,
 extension-hook owners, and cross-module imports are frozen in
@@ -299,8 +300,8 @@ LiFT separately owns a prepared focal-plane forward model, caller-provided
 `LiFTObservation`, and iterative estimator state. Its prepared modal subset and
 observation contract are cold-path bindings; repeated estimation neither owns
 nor triggers detector acquisition. LiFT reconstruction is the qualified-only
-`WavefrontSensors.reconstruct!`/`WavefrontSensors.reconstruct` generic, not the
-control-reconstruction generic.
+`WavefrontSensors.reconstruct!`/`WavefrontSensors.reconstruct` generic, not
+`Control.reconstruct!`/`Control.reconstruct`.
 
 ## Execution Layers
 

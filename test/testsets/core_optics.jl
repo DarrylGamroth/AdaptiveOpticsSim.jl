@@ -305,8 +305,8 @@ end
         @test parentmodule(getfield(Detectors, name)) === Detectors
     end
     @test Base.isexported(AdaptiveOpticsSim, :SimulationEnsemble)
-    @test Base.isexported(AdaptiveOpticsSim, :FactorizedReconstructor)
-    @test Base.isexported(AdaptiveOpticsSim, :ControlledReconstructor)
+    @test Base.isexported(Control, :FactorizedReconstructor)
+    @test Base.isexported(Control, :ControlledReconstructor)
     @test Base.isexported(AdaptiveOpticsSim, :DeterministicExecution)
     @test Base.isexported(AdaptiveOpticsSim, :AcceleratedKernelsExecution)
     @test Base.isexported(AdaptiveOpticsSim, :DaggerExecution)
@@ -433,6 +433,35 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :GPUBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AbstractRuntimeExecutionPlan)
     @test !Base.isexported(AdaptiveOpticsSim, :runtime_reconstructor_storage)
+    for name in (
+        :NullReconstructor,
+        :ModalReconstructor,
+        :FactorizedReconstructor,
+        :MappedReconstructor,
+        :ControlledReconstructor,
+        :reconstruct!,
+        :reconstruct,
+        :DiscreteIntegratorController,
+        :VectorDelayLine,
+        :shift_delay!,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test Base.isexported(Control, name)
+        @test Base.ispublic(Control, name)
+        @test parentmodule(getfield(Control, name)) === Control
+    end
+    for name in (
+        :controller_output,
+        :reset_controller!,
+        :supports_controller_reset,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !Base.isexported(Control, name)
+        @test Base.ispublic(Control, name)
+        @test parentmodule(getfield(Control, name)) === Control
+    end
     @test !Base.isexported(AdaptiveOpticsSim, :ensemble_ownership_roots)
     @test !Base.isexported(AdaptiveOpticsSim, :run_ensemble!)
     @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)
