@@ -2,7 +2,7 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-06C"
+current_gate = "NS-06D"
 implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres"]
 partial_owners = ["WavefrontSensors"]
 
@@ -76,6 +76,19 @@ exports = [
     "set_bioedge_calibration!",
     "pyramid_modulation_frame",
     "pyramid_modulation_frame!",
+    "ZernikeWFS",
+    "ZernikeOpticalFrontEnd",
+    "zernike_rate_map",
+    "set_zernike_calibration!",
+    "CurvatureWFS",
+    "CurvatureOpticalFrontEnd",
+    "curvature_rate_maps",
+    "CurvaturePackedAcquisition",
+    "set_curvature_calibration!",
+    "CurvatureReadoutModel",
+    "CurvatureFrameReadout",
+    "CurvatureCountingReadout",
+    "CurvatureBranchResponse",
 ]
 public = [
     "supports_prepared_runtime",
@@ -157,6 +170,31 @@ internal = [
     "require_modulated_wfs_domains",
     "require_modulated_wfs_input",
     "_modulated_input_storage",
+    "ZernikeWFSParams",
+    "PreparedZernikePropagation",
+    "ZernikeAcquisitionState",
+    "ZernikeDetectorAcquisition",
+    "ZernikeEstimatorState",
+    "ZernikePupilEstimator",
+    "ZernikePropagationBinding",
+    "PreparedZernikeOpticalFormation",
+    "ZernikeCalibrationBinding",
+    "PreparedZernikeEstimator",
+    "CurvatureWFSParams",
+    "PreparedCurvaturePropagation",
+    "CurvatureAcquisitionState",
+    "CurvatureDetectorAcquisition",
+    "CurvatureEstimatorState",
+    "CurvatureDifferentialEstimator",
+    "CurvaturePropagationBinding",
+    "PreparedCurvatureOpticalFormation",
+    "PreparedCurvaturePackedFrameAcquisition",
+    "PreparedCurvaturePackedCountingAcquisition",
+    "CurvatureCalibrationBinding",
+    "AbstractPreparedCurvatureObservationMapping",
+    "CurvatureImagePairMapping",
+    "CurvatureChannelPairMapping",
+    "PreparedCurvatureEstimator",
 ]
 
 [baseline_divergence]

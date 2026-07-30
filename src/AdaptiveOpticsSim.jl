@@ -422,8 +422,6 @@ import .WavefrontSensors:
     wfs_output_frame_prototype,
     wfs_output_metadata
 
-include("wfs/zernike.jl")
-include("wfs/curvature.jl")
 include("wfs/lift.jl")
 include("plant/plant.jl")
 include("calibration/interaction_matrix.jl")

@@ -1764,17 +1764,17 @@ function run_optional_zernike_normalization(
         fill!(gpu_wfs.estimator.state.reference_signal_2d, zero(T))
         frame = BackendArray(copy(frame_host))
 
-        expected_normalization = AdaptiveOpticsSim.zernike_normalization(
+        expected_normalization = AdaptiveOpticsSim.WavefrontSensors.zernike_normalization(
             normalization, cpu_wfs, cpu_pupil, src, frame_host,
             normalization_scale)
-        actual_normalization = AdaptiveOpticsSim.zernike_normalization(
+        actual_normalization = AdaptiveOpticsSim.WavefrontSensors.zernike_normalization(
             normalization, gpu_wfs, gpu_pupil, src, frame,
             normalization_scale)
         @test actual_normalization ≈ expected_normalization rtol=T(2e-5)
 
-        expected = copy(AdaptiveOpticsSim.zernike_signal!(cpu_wfs,
+        expected = copy(AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(cpu_wfs,
             cpu_pupil, frame_host, src, normalization_scale))
-        actual = AdaptiveOpticsSim.zernike_signal!(gpu_wfs, gpu_pupil,
+        actual = AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(gpu_wfs, gpu_pupil,
             frame, src, normalization_scale)
         AdaptiveOpticsSim.Backends.synchronize_backend!(
             AdaptiveOpticsSim.Backends.execution_style(actual))
@@ -1789,7 +1789,7 @@ function run_optional_zernike_normalization(
         normalization=IncidenceFluxNormalization(), T=T,
         backend=selector)
     fill!(zero_wfs.estimator.state.reference_signal_2d, zero(T))
-    zero_slopes = AdaptiveOpticsSim.zernike_signal!(zero_wfs, gpu_pupil,
+    zero_slopes = AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(zero_wfs, gpu_pupil,
         BackendArray(copy(frame_host)), zero_src, one(T))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(zero_slopes))

@@ -15,13 +15,6 @@ export runtime_rng, deterministic_reference_rng
 export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse, default_modal_inverse_policy
 export KLBasis, ZernikeModalBasis
 
-export ZernikeOpticalFrontEnd, zernike_rate_map
-export CurvatureOpticalFrontEnd, curvature_rate_maps
-export CurvaturePackedAcquisition
-export set_zernike_calibration!, set_curvature_calibration!
-export ZernikeWFS, CurvatureWFS
-export CurvatureReadoutModel, CurvatureFrameReadout
-export CurvatureCountingReadout, CurvatureBranchResponse
 export LiFT, PreparedLiFTForwardModel, LiFTObservation
 export LiFTIdentityMapping, LiFTFrameMapping
 export LiFTPhotonRate, LiFTExpectedCounts, LiFTNormalizedIntensity

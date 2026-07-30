@@ -58,9 +58,9 @@ The package is organized around a small set of modeling objects:
 Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
 `using AdaptiveOpticsSim.WavefrontSensors`. The common WFS contracts and the
-complete Shack–Hartmann, Pyramid, and BioEdge families already live in
-`WavefrontSensors`; other WFS, calibration, and control vocabulary moves as
-its ordered owner gate lands.
+complete Shack–Hartmann, Pyramid, BioEdge, Zernike, and Curvature families
+live in `WavefrontSensors`; calibration and control vocabulary moves as its
+ordered owner gate lands.
 
 ## Three Execution Layers
 

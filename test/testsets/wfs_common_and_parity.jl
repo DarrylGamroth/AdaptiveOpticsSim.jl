@@ -24,11 +24,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
             getfield(WavefrontSensors, name)
     end
 
-    for family in (
-        :ZernikeWFS,
-        :CurvatureWFS,
-        :LiFT,
-    )
+    for family in (:LiFT,)
         @test !isdefined(WavefrontSensors, family)
     end
     for name in (
@@ -48,6 +44,19 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :set_bioedge_calibration!,
         :pyramid_modulation_frame,
         :pyramid_modulation_frame!,
+        :ZernikeWFS,
+        :ZernikeOpticalFrontEnd,
+        :zernike_rate_map,
+        :set_zernike_calibration!,
+        :CurvatureWFS,
+        :CurvatureOpticalFrontEnd,
+        :curvature_rate_maps,
+        :CurvaturePackedAcquisition,
+        :set_curvature_calibration!,
+        :CurvatureReadoutModel,
+        :CurvatureFrameReadout,
+        :CurvatureCountingReadout,
+        :CurvatureBranchResponse,
     )
         @test parentmodule(getfield(WavefrontSensors, name)) ===
             WavefrontSensors
@@ -85,13 +94,9 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     @test occursin("include(\"shack_hartmann.jl\")", common_entry)
     @test occursin("include(\"pyramid.jl\")", common_entry)
     @test occursin("include(\"bioedge.jl\")", common_entry)
-    for family_source in (
-        "zernike.jl",
-        "curvature.jl",
-        "lift.jl",
-    )
-        @test !occursin("include(\"$family_source\")", common_entry)
-    end
+    @test occursin("include(\"zernike.jl\")", common_entry)
+    @test occursin("include(\"curvature.jl\")", common_entry)
+    @test !occursin("include(\"lift.jl\")", common_entry)
 end
 
 @testset "OOPAO parity knobs" begin

@@ -100,8 +100,8 @@ end
     form_wfs_optical_products!(rate, pupil, optical_plan)
     @test pupil.opd == pupil_before
 
-    AdaptiveOpticsSim.zernike_pupil_intensity!(sensor, pupil, source)
-    AdaptiveOpticsSim.sample_zernike_frame!(sensor.acquisition.state.camera_frame,
+    AdaptiveOpticsSim.WavefrontSensors.zernike_pupil_intensity!(sensor, pupil, source)
+    AdaptiveOpticsSim.WavefrontSensors.sample_zernike_frame!(sensor.acquisition.state.camera_frame,
         sensor.front_end.propagation.nominal_frame, sensor,
         sensor.front_end.propagation.pupil_intensity,
         pupil)
@@ -147,7 +147,7 @@ end
     estimator_plan = prepare_wfs_estimation(sensor, observation,
         measurement; source=source)
     @test wfs_measurement_path(estimator_plan) isa AcquiredObservationPath
-    expected_signal = copy(AdaptiveOpticsSim.zernike_signal!(sensor, pupil,
+    expected_signal = copy(AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(sensor, pupil,
         observation.storage, source))
     estimate_wfs_measurement!(measurement, observation, estimator_plan)
     @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
@@ -281,7 +281,7 @@ end
     form_wfs_optical_products!(rates, pupil, optical_plan)
     @test pupil.opd == pupil_before
 
-    AdaptiveOpticsSim.curvature_intensity!(sensor, pupil, source)
+    AdaptiveOpticsSim.WavefrontSensors.curvature_intensity!(sensor, pupil, source)
     @test rates[1].values ≈ sensor.front_end.propagation.frame_plus rtol=T(2e-12) atol=T(2e-12)
     @test rates[2].values ≈ sensor.front_end.propagation.frame_minus rtol=T(2e-12) atol=T(2e-12)
 
@@ -405,7 +405,7 @@ end
     copyto!(sensor.estimator.state.reduced_plus, rates[1].values)
     copyto!(sensor.estimator.state.reduced_minus, rates[2].values)
     expected_signal = copy(
-        AdaptiveOpticsSim.curvature_signal_from_planes!(sensor))
+        AdaptiveOpticsSim.WavefrontSensors.curvature_signal_from_planes!(sensor))
     measurement = WFSMeasurement(similar(slopes(sensor));
         units=:dimensionless, kind=:curvature_signal)
     estimator_plan = prepare_wfs_estimation(sensor, observations,

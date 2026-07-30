@@ -27,6 +27,12 @@ export PyramidOpticalFrontEnd, BioEdgeOpticalFrontEnd
 export pyramid_rate_map, bioedge_rate_map
 export set_pyramid_calibration!, set_bioedge_calibration!
 export pyramid_modulation_frame, pyramid_modulation_frame!
+export ZernikeWFS, ZernikeOpticalFrontEnd
+export zernike_rate_map, set_zernike_calibration!
+export CurvatureWFS, CurvatureOpticalFrontEnd, curvature_rate_maps
+export CurvaturePackedAcquisition, set_curvature_calibration!
+export CurvatureReadoutModel, CurvatureFrameReadout
+export CurvatureCountingReadout, CurvatureBranchResponse
 
 public supports_prepared_runtime, supports_detector_output
 public supports_stacked_sources, supports_grouped_execution

@@ -223,7 +223,7 @@ end
         curvature_plus = zeros(2, 2)
         curvature_minus = zeros(2, 2)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.curvature_frame_unpack_kernel!, curvature_plus,
+            AdaptiveOpticsSim.WavefrontSensors.curvature_frame_unpack_kernel!, curvature_plus,
             curvature_minus, curvature_camera, 2; ndrange=(2, 2))
         mark_ka_cpu_kernel!(:curvature_frame_unpack_kernel!)
         @test curvature_plus == curvature_camera[1:2, :]
@@ -235,7 +235,7 @@ end
         defocus_stack = ones(ComplexF64, 4, 4, 2)
         curvature_phasor = ones(ComplexF64, 4, 4)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.curvature_branch_field_from_pupil_kernel!,
+            AdaptiveOpticsSim.WavefrontSensors.curvature_branch_field_from_pupil_kernel!,
             branch_fields, pupil_amplitude, pupil_opd, defocus_stack,
             curvature_phasor, 2.0, 1.0, 1, 1, 2, 4;
             ndrange=size(branch_fields))
@@ -248,7 +248,7 @@ end
         reduced_plus = zeros(2, 2)
         reduced_minus = zeros(2, 2)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.curvature_reduce_observation_pair_kernel!,
+            AdaptiveOpticsSim.WavefrontSensors.curvature_reduce_observation_pair_kernel!,
             reduced_plus, reduced_minus, plus_input, minus_input, 2, 2,
             0.5, 0.25, 2; ndrange=(2, 2))
         mark_ka_cpu_kernel!(:curvature_reduce_observation_pair_kernel!)
@@ -263,7 +263,7 @@ end
         channel_plus = zeros(2, 2)
         channel_minus = zeros(2, 2)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.curvature_unpack_channel_pair_kernel!,
+            AdaptiveOpticsSim.WavefrontSensors.curvature_unpack_channel_pair_kernel!,
             channel_plus, channel_minus, channel_pair, 2.0, 3.0, 2;
             ndrange=(2, 2))
         mark_ka_cpu_kernel!(:curvature_unpack_channel_pair_kernel!)
@@ -486,11 +486,11 @@ end
         normalization_partials = zeros(Float64, size(values, 1))
         normalization_sum = zeros(Float64, 1)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.zernike_masked_row_sum_kernel!,
+            AdaptiveOpticsSim.WavefrontSensors.zernike_masked_row_sum_kernel!,
             normalization_partials, values, mask, size(values, 1),
             size(values, 2); ndrange=size(values, 1))
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.zernike_finalize_normalization_sum_kernel!,
+            AdaptiveOpticsSim.WavefrontSensors.zernike_finalize_normalization_sum_kernel!,
             normalization_sum, normalization_partials,
             length(normalization_partials); ndrange=1)
         mark_ka_cpu_kernel!(

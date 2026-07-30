@@ -235,9 +235,16 @@ end
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test Base.isexported(WavefrontSensors, name)
     end
-    @test Base.isexported(AdaptiveOpticsSim, :ZernikeOpticalFrontEnd)
-    @test Base.isexported(AdaptiveOpticsSim, :CurvatureOpticalFrontEnd)
-    @test Base.isexported(AdaptiveOpticsSim, :CurvaturePackedAcquisition)
+    for name in (
+        :ZernikeOpticalFrontEnd,
+        :CurvatureOpticalFrontEnd,
+        :CurvaturePackedAcquisition,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
+        @test Base.isexported(WavefrontSensors, name)
+    end
     @test Base.isexported(AdaptiveOpticsSim, :PreparedLiFTForwardModel)
     @test Base.isexported(AdaptiveOpticsSim, :LiFTObservation)
     @test Base.isexported(AdaptiveOpticsSim, :LiFTIdentityMapping)
@@ -300,8 +307,12 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
     @test Base.isexported(WavefrontSensors, :PyramidWFS)
     @test Base.isexported(WavefrontSensors, :BioEdgeWFS)
-    @test Base.isexported(AdaptiveOpticsSim, :ZernikeWFS)
-    @test Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
+    @test !Base.isexported(AdaptiveOpticsSim, :ZernikeWFS)
+    @test !Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
+    @test !isdefined(AdaptiveOpticsSim, :ZernikeWFS)
+    @test !isdefined(AdaptiveOpticsSim, :CurvatureWFS)
+    @test Base.isexported(WavefrontSensors, :ZernikeWFS)
+    @test Base.isexported(WavefrontSensors, :CurvatureWFS)
     @test !Base.isexported(AdaptiveOpticsSim, :prepare_runtime_wfs!)
     @test !Base.ispublic(AdaptiveOpticsSim, :prepare_runtime_wfs!)
     @test Base.isexported(WavefrontSensors, :prepare_runtime_wfs!)
