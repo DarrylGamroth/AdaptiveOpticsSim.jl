@@ -226,14 +226,11 @@ include("core/telemetry.jl")
 
 include("detectors/detectors.jl")
 
-# Counting/channel detector APIs remain root-owned until NS-04B. Their
-# implementation shares the Detectors type graph so there is still exactly one
-# detector trait identity while the public surface migrates in bounded gates.
+# Detector implementations have one authoritative type and generic-function
+# owner. Root composition imports only the internal seams still required by
+# domains that have not yet completed their namespace migrations.
 using .Detectors
 import .Detectors:
-    APDChannelBank,
-    APDDetector,
-    APDSensor,
     AbstractChargeCouplingModel,
     AbstractCountingDetector,
     AbstractCountingCorrelationModel,
@@ -248,28 +245,14 @@ import .Detectors:
     AbstractQuantumEfficiencyModel,
     BackgroundModel,
     CountingReadoutMetadata,
-    CountingDeadTimeModel,
     CountingSensorType,
     FrameSamplingMode,
     FrameSensorType,
-    DutyCycleGate,
-    AfterpulsingModel,
-    ChannelCrosstalkModel,
-    CompositeCountingCorrelation,
-    LinearAPDDetector,
-    MKIDArrayDetector,
-    MKIDArraySensor,
     NoBackground,
-    NoDeadTime,
-    NonParalyzableDeadTime,
     NullChargeCoupling,
     NullDetectorDefectModel,
-    ParalyzableDeadTime,
     SampledQuantumEfficiency,
     ScalarQuantumEfficiency,
-    SPADArrayDetector,
-    SPADArraySensor,
-    SingleElementAPD,
     _copy_windowed_sampling_plane!,
     _raw_sampling_sigma,
     _require_finite_nonnegative_intensity,
@@ -285,7 +268,6 @@ import .Detectors:
     capture_stack!,
     capture_stack_with_quantum_efficiency!,
     capture_with_quantum_efficiency!,
-    channel_output,
     counting_array,
     counting_exposure_time,
     counting_fill_factor,

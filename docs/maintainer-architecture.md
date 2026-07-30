@@ -79,11 +79,10 @@ function rather than introducing a second root function identity.
 ### Namespace Authority
 
 The package is transitioning from the original flat root surface to real
-domain modules alongside the existing `Plant` module. `Backends` and `Optics`
-are complete, and NS-04A makes `Detectors` the canonical owner of conventional
-frame/area detector models and acquisition. Counting/channel APIs remain on
-the root surface until NS-04B, while sharing the same internal detector type
-graph. `Optics` owns apertures, telescopes, sources, optical
+domain modules alongside the existing `Plant` module. `Backends`, `Optics`,
+and `Detectors` are complete. `Detectors` is the canonical owner of both
+conventional frame/area and counting/channel detector models and acquisition,
+with one shared detector type graph. `Optics` owns apertures, telescopes, sources, optical
 location/product metadata, pupil and field formation, general Fraunhofer and
 Fresnel propagation, direct imaging, sampled OPD, physical NCPA, controllable
 optics, and reusable physical WFS components. `Atmospheres`, `Detectors`,

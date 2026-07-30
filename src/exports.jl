@@ -39,13 +39,6 @@ public atmosphere_direction_metadata, validate_atmosphere_direction_batch
 export advance!, advance_by!, advance_to!, propagate!
 export render_atmosphere!
 
-export APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
-export APDSensor, SPADArraySensor, MKIDArraySensor
-export SingleElementAPD, APDChannelBank
-export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime, ParalyzableDeadTime
-export DutyCycleGate, AfterpulsingModel, ChannelCrosstalkModel, CompositeCountingCorrelation
-export channel_output
-
 export Diffractive, Geometric
 export WFSObservationMetadata, WFSMeasurementMetadata
 export WFSObservation, WFSMeasurement
