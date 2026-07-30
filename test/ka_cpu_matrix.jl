@@ -415,18 +415,21 @@ end
         stack = reshape(collect(1.0:48.0), 4, 4, 3)
         scalar_group = Matrix{Float64}(undef, 4, 4)
         ka_group = similar(scalar_group)
-        AdaptiveOpticsSim.reduce_grouped_stack!(SCALAR_CPU_STYLE, scalar_group, stack, 3)
-        AdaptiveOpticsSim.reduce_grouped_stack!(KA_CPU_STYLE, ka_group, stack, 3)
+        AdaptiveOpticsSim.WavefrontSensors.reduce_grouped_stack!(
+            SCALAR_CPU_STYLE, scalar_group, stack, 3)
+        AdaptiveOpticsSim.WavefrontSensors.reduce_grouped_stack!(
+            KA_CPU_STYLE, ka_group, stack, 3)
         mark_ka_cpu_kernel!(:reduce_grouped_stack_kernel!)
         @test ka_group == scalar_group
 
         block_stack = reshape(collect(1.0:128.0), 4, 4, 8)
         block_out = zeros(Float64, 4, 4, 4)
-        AdaptiveOpticsSim.reduce_grouped_blocks!(KA_CPU_STYLE, block_out, block_stack, 4, 2)
+        AdaptiveOpticsSim.WavefrontSensors.reduce_grouped_blocks!(
+            KA_CPU_STYLE, block_out, block_stack, 4, 2)
         mark_ka_cpu_kernel!(:reduce_grouped_blocks_kernel!)
         @test block_out == block_stack[:, :, 1:4] .+ block_stack[:, :, 5:8]
 
-        @test size(AdaptiveOpticsSim.grouped_stack_view(stack, 2), 3) == 2
+        @test size(AdaptiveOpticsSim.WavefrontSensors.grouped_stack_view(stack, 2), 3) == 2
         grouped_tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
         grouped_wfs = ShackHartmannWFS(grouped_tel; n_lenslets=2, mode=Diffractive(), n_pix_subap=2)
         grouped_sources = [1.0, 2.0, 3.0]
@@ -436,33 +439,37 @@ end
         end
         scalar_accum = zeros(Float64, 2, 2)
         scalar_stack = zeros(Float64, 2, 2, length(grouped_sources))
-        AdaptiveOpticsSim.accumulate_grouped_sources!(
-            AdaptiveOpticsSim.GroupedStackReducePlan(), SCALAR_CPU_STYLE, grouped_wfs,
+        AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan(),
+            SCALAR_CPU_STYLE, grouped_wfs,
             scalar_accum, scalar_stack, grouped_sources, fill_grouped_stage!, 2.0)
         @test scalar_accum == fill(12.0, 2, 2)
         ka_accum = zeros(Float64, 2, 2)
         ka_stack = zeros(Float64, 2, 2, length(grouped_sources))
-        AdaptiveOpticsSim.accumulate_grouped_sources!(
-            AdaptiveOpticsSim.GroupedStackReducePlan(), KA_CPU_STYLE, grouped_wfs,
+        AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan(),
+            KA_CPU_STYLE, grouped_wfs,
             ka_accum, ka_stack, grouped_sources, fill_grouped_stage!, 2.0)
         @test ka_accum == scalar_accum
         staged_scalar = zeros(Float64, 2, 2)
         staged_scalar_stack = zeros(Float64, 2, 2, length(grouped_sources))
-        AdaptiveOpticsSim.accumulate_grouped_sources!(
-            AdaptiveOpticsSim.GroupedStaged2DPlan(), SCALAR_CPU_STYLE, grouped_wfs,
+        AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DPlan(),
+            SCALAR_CPU_STYLE, grouped_wfs,
             staged_scalar, staged_scalar_stack, grouped_sources, fill_grouped_stage!, 3.0)
         @test staged_scalar == fill(18.0, 2, 2)
         staged_ka = zeros(Float64, 2, 2)
         staged_ka_stack = zeros(Float64, 2, 2, length(grouped_sources))
-        AdaptiveOpticsSim.accumulate_grouped_sources!(
-            AdaptiveOpticsSim.GroupedStaged2DPlan(), KA_CPU_STYLE, grouped_wfs,
+        AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DPlan(),
+            KA_CPU_STYLE, grouped_wfs,
             staged_ka, staged_ka_stack, grouped_sources, fill_grouped_stage!, 3.0)
         @test staged_ka == staged_scalar
         dispatch_accum = zeros(Float64, 2, 2)
         dispatch_stack = zeros(Float64, 2, 2, length(grouped_sources))
-        @test AdaptiveOpticsSim.grouped_accumulation_plan(KA_CPU_STYLE, grouped_wfs) isa
-              AdaptiveOpticsSim.GroupedStackReducePlan
-        AdaptiveOpticsSim.accumulate_grouped_sources!(
+        @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(KA_CPU_STYLE, grouped_wfs) isa
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan
+        AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
             KA_CPU_STYLE, grouped_wfs, dispatch_accum, dispatch_stack,
             grouped_sources, fill_grouped_stage!, 1.0)
         @test dispatch_accum == fill(6.0, 2, 2)

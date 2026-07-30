@@ -34,7 +34,9 @@ Update the path-owned pupil with `apply_opd!`, `render_atmosphere!`, or
 
 ```julia
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.WavefrontSensors
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
 src = Source(band=:I, magnitude=8.0)
@@ -72,6 +74,8 @@ stages.
 
 ```julia
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Detectors
+using AdaptiveOpticsSim.WavefrontSensors
 
 detector = Detector(
     noise=NoiseReadout(1.0),
@@ -129,6 +133,7 @@ without HIL scheduling:
 ```julia
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.WavefrontSensors
 
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 interaction = interaction_matrix(

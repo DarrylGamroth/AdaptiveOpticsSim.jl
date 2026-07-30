@@ -266,7 +266,8 @@ end
     AdaptiveOpticsSim._pyramid_slopes!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), invalid_slopes, ones(4, 4), falses(2, 2),
         2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, (0, 0, 0, 0), (0, 0, 0, 0))
     @test all(iszero, invalid_slopes)
-    AdaptiveOpticsSim.apply_shift_wfs!(pyr_direct; sx=1.2, sy=-1.8)
+    AdaptiveOpticsSim.WavefrontSensors.apply_shift_wfs!(
+        pyr_direct; sx=1.2, sy=-1.8)
     @test pyr_direct.estimator.state.shift_x == (1, 1, 1, 1)
     @test pyr_direct.estimator.state.shift_y == (-2, -2, -2, -2)
     shift_x, shift_y = AdaptiveOpticsSim.pyramid_shift_components([0, 1, 2, 3], [3, 2, 1, 0])
@@ -1119,13 +1120,14 @@ end
 
     slopes = measure!(sh, pupil, src)
     @test all(isfinite, slopes)
-    meta = AdaptiveOpticsSim.wfs_output_metadata(sh)
+    meta = AdaptiveOpticsSim.WavefrontSensors.wfs_output_metadata(sh)
     @test meta.n_valid_subap == n_valid_subapertures(layout)
     @test meta.subap_pixels == layout.subap_pixels
     @test meta.calibrated
 
     dm = DeformableMirror(tel; n_act=5)
     imat = interaction_matrix(dm, sh, pupil, src; amplitude=1e-8)
-    @test size(imat.matrix, 1) == length(AdaptiveOpticsSim.slopes(sh))
+    @test size(imat.matrix, 1) ==
+        length(AdaptiveOpticsSim.WavefrontSensors.slopes(sh))
     @test size(imat.matrix, 2) == length(dm.state.coefs)
 end

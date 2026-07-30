@@ -2,6 +2,7 @@ Base.find_package("Proper") === nothing &&
     error("Proper.jl is not available in the active environment. Install it with `using Pkg; Pkg.add(\"Proper\")`, or use `Pkg.develop(path=\"../proper.jl\")` for a sibling checkout, before running this example.")
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.WavefrontSensors
 using Proper
 
 include(joinpath(@__DIR__, "..", "support", "proper_hil_coronagraph_common.jl"))

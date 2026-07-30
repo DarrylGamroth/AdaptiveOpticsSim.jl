@@ -6,6 +6,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.Detectors
+using AdaptiveOpticsSim.WavefrontSensors
 using .SubaruAO188Simulation
 
 export AO3kNIRPyramidModel, AO3kSimulationParams, subaru_ao3k_simulation

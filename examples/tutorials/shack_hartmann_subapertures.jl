@@ -15,7 +15,7 @@ function main(; resolution::Int=24)
 
     layout = subaperture_layout(sh.front_end)
     calibration = subaperture_calibration(sh)
-    metadata = AdaptiveOpticsSim.wfs_output_metadata(sh)
+    metadata = AdaptiveOpticsSim.WavefrontSensors.wfs_output_metadata(sh)
 
     @info "Shack-Hartmann subaperture tutorial complete" n_valid=n_valid_subapertures(layout) pitch_m=layout.pitch_m centroid_response=calibration.centroid_response
     return (

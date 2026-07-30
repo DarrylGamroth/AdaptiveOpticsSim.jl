@@ -16,6 +16,8 @@ include("bioedge/stages.jl")
 @inline camera_frame(wfs::BioEdgeWFS{<:Diffractive}) =
     wfs.acquisition.state.camera_frame
 @inline camera_frame(::BioEdgeWFS{<:Geometric}) = nothing
+@inline wfs_calibration_signature(wfs::BioEdgeWFS) =
+    wfs.estimator.state.calibration_signature
 
 @inline wfs_output_frame_prototype(wfs::BioEdgeWFS{<:Diffractive},
     ::Nothing) = camera_frame(wfs)

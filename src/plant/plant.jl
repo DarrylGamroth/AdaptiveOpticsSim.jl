@@ -201,9 +201,7 @@ import ..Atmospheres:
     validate_atmosphere_rendering
 
 import ..AdaptiveOpticsSim:
-    AcquiredObservationPath,
     AdaptiveOpticsSimError,
-    DirectMeasurementPath,
     InvalidConfiguration,
     PreparedBioEdgeOpticalBundleFormation,
     PreparedBioEdgeOpticalFormation,
@@ -211,14 +209,18 @@ import ..AdaptiveOpticsSim:
     PreparedPyramidOpticalFormation,
     PreparedShackHartmannOpticalBundleFormation,
     PreparedShackHartmannOpticalFormation,
+    runtime_rng,
+    splitmix64
+
+import ..WavefrontSensors:
+    AcquiredObservationPath,
+    DirectMeasurementPath,
     WFSMeasurement,
     WFSObservation,
     acquire_wfs_observation!,
     estimate_wfs_measurement!,
     form_wfs_optical_products!,
     measurement_storage,
-    runtime_rng,
-    splitmix64,
     validate_wfs_acquisition_binding,
     validate_wfs_estimation_binding,
     validate_wfs_measurement,

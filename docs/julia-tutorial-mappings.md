@@ -56,6 +56,7 @@ The snippets below assume:
 ```julia
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.WavefrontSensors
 ```
 
 ### Image formation

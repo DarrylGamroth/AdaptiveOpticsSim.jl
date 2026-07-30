@@ -1501,10 +1501,11 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
         n_sub = n_lenslets(wfs.front_end)
         sub = div(tel.params.resolution, n_sub)
         offset = n_sub * n_sub
-        slopes = similar(AdaptiveOpticsSim.slopes(wfs))
+        slopes = similar(AdaptiveOpticsSim.WavefrontSensors.slopes(wfs))
         style = AdaptiveOpticsSim.Backends.AcceleratorStyle(KernelAbstractions.CPU())
         AdaptiveOpticsSim._geometric_slopes!(style, slopes, pupil.opd,
-            AdaptiveOpticsSim.valid_subaperture_mask(wfs), sub, n_sub,
+            AdaptiveOpticsSim.WavefrontSensors.valid_subaperture_mask(wfs),
+            sub, n_sub,
             offset)
         return slopes
     end

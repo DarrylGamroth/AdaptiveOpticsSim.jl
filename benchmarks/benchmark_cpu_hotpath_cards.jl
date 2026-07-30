@@ -1,6 +1,7 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.WavefrontSensors
 using BenchmarkTools
 using LinearAlgebra
 

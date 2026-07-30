@@ -1126,9 +1126,17 @@ derived MTF, QE, charge multiplication, or detector noise.
 
 Reusable physical components in this section—modulation models, microlens
 arrays, masks, phase spots, and defocus pairs—are imported from
-`AdaptiveOpticsSim.Optics`. Composed front ends, detector acquisition,
-observations, measurements, and estimators remain in the current WFS surface
-until the `WavefrontSensors` namespace gate.
+`AdaptiveOpticsSim.Optics`. Import the common sensing, product, prepared-stage,
+and capability vocabulary from its canonical owner:
+
+```julia
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.WavefrontSensors
+```
+
+The concrete WFS family bindings remain on the root surface only during their
+ordered namespace gates. Common contracts are not forwarded through the root.
 
 - Sensing modes: `Diffractive`, `Geometric`
 - Prepared products: `WFSObservationMetadata`, `WFSMeasurementMetadata`,

@@ -5,6 +5,7 @@ using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.Detectors
+using AdaptiveOpticsSim.WavefrontSensors
 using LinearAlgebra
 using Random
 using Statistics

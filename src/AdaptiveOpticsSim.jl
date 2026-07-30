@@ -316,9 +316,89 @@ import .Detectors:
     write_output!
 include("calibration/modal_basis.jl")
 include("calibration/ncpa.jl")
-include("wfs/sensing_modes.jl")
-include("wfs/stage_contracts.jl")
-include("wfs/grouped.jl")
+include("wfs/wavefront_sensors.jl")
+
+# Concrete WFS families remain flat only until their ordered namespace gates.
+# Import the common owner's identities explicitly so every later method extends
+# one authoritative generic rather than creating a root-owned duplicate.
+import .WavefrontSensors:
+    AbstractGroupedAccumulationPlan,
+    AbstractWFS,
+    AbstractWFSMeasurementPath,
+    AcquiredObservationPath,
+    Diffractive,
+    DirectMeasurementPath,
+    Geometric,
+    GroupedDirectAccumulatePlan,
+    GroupedStackReducePlan,
+    GroupedStaged2DPlan,
+    IncidenceFluxNormalization,
+    MeanValidFluxNormalization,
+    SensingMode,
+    WFSMeasurement,
+    WFSMeasurementMetadata,
+    WFSNormalization,
+    WFSObservation,
+    WFSObservationMetadata,
+    WFSPreparationError,
+    _capture_counting_wfs!,
+    _require_counting_wfs_source,
+    _require_counting_wfs_spectral_match,
+    _require_declared_wfs_units,
+    _require_real_square_wfs_observation,
+    _require_wfs_storage_domain,
+    acquire_wfs_observation!,
+    accumulate_grouped_sources!,
+    apply_shift_wfs!,
+    camera_frame,
+    deterministic_frame_readout_gain,
+    estimate_wfs_measurement!,
+    form_wfs_optical_products!,
+    grouped_accumulation_plan,
+    grouped_stack_view,
+    grouped_staging_buffer,
+    measure!,
+    measurement_metadata,
+    measurement_storage,
+    measurement_units,
+    observation_metadata,
+    observation_storage,
+    observation_units,
+    prepare_runtime_wfs!,
+    prepare_wfs_acquisition,
+    prepare_wfs_estimation,
+    prepare_wfs_optical_formation,
+    reference_signal,
+    reduce_grouped_blocks_kernel!,
+    reduce_grouped_stack!,
+    sensing_mode,
+    slopes,
+    supports_camera_frame,
+    supports_detector_output,
+    supports_grouped_execution,
+    supports_prepared_runtime,
+    supports_reference_signal,
+    supports_stacked_sources,
+    supports_valid_subaperture_mask,
+    usable_wfs_normalization,
+    validate_wfs_acquisition_binding,
+    validate_wfs_estimation_binding,
+    validate_wfs_measurement,
+    validate_wfs_observation,
+    validate_wfs_observations,
+    validate_wfs_optical_formation_binding,
+    validate_wfs_optical_input,
+    validate_wfs_optical_products,
+    valid_subaperture_mask,
+    wfs_calibration_signature,
+    wfs_detector_image,
+    wfs_detector_incidence_scale,
+    wfs_incident_photon_irradiance,
+    wfs_measurement_path,
+    wfs_output_frame,
+    wfs_output_frame_prototype,
+    wfs_output_metadata
+
 include("wfs/calibration.jl")
 include("wfs/elongation.jl")
 include("wfs/subapertures.jl")
@@ -328,7 +408,6 @@ include("wfs/pyramid.jl")
 include("wfs/bioedge.jl")
 include("wfs/zernike.jl")
 include("wfs/curvature.jl")
-include("wfs/interface.jl")
 include("wfs/lift.jl")
 include("plant/plant.jl")
 include("calibration/interaction_matrix.jl")

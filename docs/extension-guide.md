@@ -652,8 +652,9 @@ returned at a HIL/RTC boundary.
 
 ## Wavefront Sensors
 
-WFS families live in `src/wfs/`. Family-specific implementation should stay
-near the family, usually in the corresponding directory under `src/wfs/`.
+`WavefrontSensors` owns the common WFS contracts. Family-specific
+implementation stays near the family, usually in the corresponding directory
+under `src/wfs/`, and extends generics imported explicitly from that owner.
 
 New physical WFS work should first implement the prepared semantic stages:
 
@@ -681,17 +682,17 @@ owned by its product leaves remain mutable destinations for prepared optical
 formation.
 
 Extensions should call the qualified validation seams
-`AdaptiveOpticsSim.validate_wfs_optical_input`,
-`AdaptiveOpticsSim.validate_wfs_optical_products`,
-`AdaptiveOpticsSim.validate_wfs_observation` or
-`AdaptiveOpticsSim.validate_wfs_observations`, and
-`AdaptiveOpticsSim.validate_wfs_measurement` as applicable before returning a
-prepared plan. Every new prepared plan also implements its corresponding exact
-binding validator:
+`AdaptiveOpticsSim.WavefrontSensors.validate_wfs_optical_input`,
+`AdaptiveOpticsSim.WavefrontSensors.validate_wfs_optical_products`,
+`AdaptiveOpticsSim.WavefrontSensors.validate_wfs_observation` or
+`AdaptiveOpticsSim.WavefrontSensors.validate_wfs_observations`, and
+`AdaptiveOpticsSim.WavefrontSensors.validate_wfs_measurement` as applicable
+before returning a prepared plan. Every new prepared plan also implements its
+corresponding exact binding validator:
 
-- `AdaptiveOpticsSim.validate_wfs_optical_formation_binding`
-- `AdaptiveOpticsSim.validate_wfs_acquisition_binding`
-- `AdaptiveOpticsSim.validate_wfs_estimation_binding`
+- `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_optical_formation_binding`
+- `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_acquisition_binding`
+- `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_estimation_binding`
 
 The containing plant owner calls these validators during construction, and the
 stage calls them again before mutation. They remain qualified extension APIs
