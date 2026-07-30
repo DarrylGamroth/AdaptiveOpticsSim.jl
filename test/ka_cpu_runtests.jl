@@ -1,7 +1,9 @@
 using Test
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+import AdaptiveOpticsSim.Optics: filter!
 using AdaptiveOpticsSim.Backends
+using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using FFTW
@@ -36,6 +38,14 @@ for name in names(Optics; all=true)
     if Base.isidentifier(s) && !startswith(s, "#") &&
             !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(Optics, $(QuoteNode(name)))
+    end
+end
+
+for name in names(Detectors; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Detectors, $(QuoteNode(name)))
     end
 end
 

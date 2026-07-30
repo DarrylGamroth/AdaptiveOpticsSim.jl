@@ -5,6 +5,7 @@ include(joinpath(dirname(@__FILE__), "subaru_ao188_simulation.jl"))
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
+using AdaptiveOpticsSim.Detectors
 using .SubaruAO188Simulation
 
 export AO3kNIRPyramidModel, AO3kSimulationParams, subaru_ao3k_simulation

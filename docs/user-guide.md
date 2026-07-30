@@ -258,6 +258,8 @@ analog-to-digital scaling, and `output_type` defines the Julia array element
 type used for the exported frame:
 
 ```julia
+using AdaptiveOpticsSim.Detectors
+
 det = Detector(noise=NoiseNone(), full_well=30_000.0, bits=12, output_type=UInt16)
 rng = runtime_rng(0)
 measure!(wfs, pupil, src, det; rng=rng)
@@ -274,7 +276,9 @@ Detector QE may be a scalar or a sampled QE curve. Scalar QE is the simplest
 and fastest path. Use a sampled curve when the source spectrum matters:
 
 ```julia
-qe = AdaptiveOpticsSim.SampledQuantumEfficiency(
+using AdaptiveOpticsSim.Detectors
+
+qe = AdaptiveOpticsSim.Detectors.SampledQuantumEfficiency(
     [0.50e-6, 0.60e-6, 0.70e-6],
     [0.35, 0.85, 0.60],
 )

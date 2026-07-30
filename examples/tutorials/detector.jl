@@ -1,4 +1,5 @@
 include(joinpath(@__DIR__, "common.jl"))
+using AdaptiveOpticsSim.Detectors
 
 function main(; resolution::Int=24, zero_padding::Int=2)
     tel = base_telescope(resolution=resolution)

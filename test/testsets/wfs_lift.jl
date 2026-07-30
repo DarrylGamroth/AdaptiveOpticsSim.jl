@@ -197,7 +197,7 @@ end
         response_forward, diversity)))
     expected_response_rate = copy(unmapped_model_rate)
     response_scratch = similar(expected_response_rate)
-    AdaptiveOpticsSim.apply_response!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
+    AdaptiveOpticsSim.Detectors.apply_response!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
         lift_response, expected_response_rate, response_scratch)
     @test response_model_rate ≈ expected_response_rate rtol=1e-12 atol=1e-8
     @test supports_detector_mtf(lift_response)

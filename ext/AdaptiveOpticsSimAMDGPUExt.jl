@@ -104,65 +104,65 @@ function AdaptiveOpticsSim.sh_sensing_execution_plan(
     return AdaptiveOpticsSim.ShackHartmannWFSRocmHostStatsPlan()
 end
 
-AdaptiveOpticsSim.detector_execution_plan(
+AdaptiveOpticsSim.Detectors.detector_execution_plan(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
-    ::Type{<:AdaptiveOpticsSim.Detector},
-) = AdaptiveOpticsSim.DetectorHostMirrorPlan()
-AdaptiveOpticsSim._detector_value_plan(
-    plan::AdaptiveOpticsSim.DetectorHostMirrorPlan,
+    ::Type{<:AdaptiveOpticsSim.Detectors.Detector},
+) = AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan()
+AdaptiveOpticsSim.Detectors._detector_value_plan(
+    plan::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
 ) = plan
-AdaptiveOpticsSim.can_apply_device_readout_correction(
+AdaptiveOpticsSim.Detectors.can_apply_device_readout_correction(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    ::AdaptiveOpticsSim.FrameReadoutCorrectionModel,
+    ::AdaptiveOpticsSim.Detectors.FrameReadoutCorrectionModel,
 ) = false
-AdaptiveOpticsSim.counting_output_execution_plan(
+AdaptiveOpticsSim.Detectors.counting_output_execution_plan(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
-    ::Type{<:AdaptiveOpticsSim.AbstractCountingDetector},
+    ::Type{<:AdaptiveOpticsSim.Detectors.AbstractCountingDetector},
     ::Type{<:AMDGPU.ROCArray{T,2}},
-) where {T<:Integer} = AdaptiveOpticsSim.DetectorHostMirrorPlan()
+) where {T<:Integer} = AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan()
 Backends.reduction_execution_plan(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::AMDGPU.ROCArray,
 ) = Backends.HostMirrorReductionPlan()
 Backends.randn_backend_async!(::Backends.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 Backends._randn_backend!(::Backends.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
-function AdaptiveOpticsSim._randn_frame_noise!(
-    ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
-    det::AdaptiveOpticsSim.Detector,
+function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+    det::AdaptiveOpticsSim.Detectors.Detector,
     rng::AbstractRNG,
     out::AMDGPU.ROCArray{T,2},
 ) where {T<:AbstractFloat}
     Backends.randn_backend!(rng, out)
     return out
 end
-function AdaptiveOpticsSim._randn_frame_noise!(
-    ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
-    det::AdaptiveOpticsSim.Detector,
+function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+    det::AdaptiveOpticsSim.Detectors.Detector,
     rng::AbstractRNG,
     cube::AMDGPU.ROCArray{T,3},
 ) where {T<:AbstractFloat}
     Backends.randn_backend!(rng, cube)
     return cube
 end
-function AdaptiveOpticsSim._poisson_noise_frame!(
-    ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
-    det::AdaptiveOpticsSim.Detector,
+function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+    det::AdaptiveOpticsSim.Detectors.Detector,
     rng::AbstractRNG,
     img::AMDGPU.ROCArray{T,2},
 ) where {T<:AbstractFloat}
-    host = AdaptiveOpticsSim.detector_host_frame!(det, img)
+    host = AdaptiveOpticsSim.Detectors.detector_host_frame!(det, img)
     Backends._poisson_noise!(Backends.ScalarCPUStyle(), rng, host)
     copyto!(img, host)
     return img
 end
-function AdaptiveOpticsSim._poisson_noise_frame!(
-    ::AdaptiveOpticsSim.DetectorHostMirrorPlan,
-    det::AdaptiveOpticsSim.Detector,
+function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+    det::AdaptiveOpticsSim.Detectors.Detector,
     rng::AbstractRNG,
     cube::AMDGPU.ROCArray{T,3},
 ) where {T<:AbstractFloat}
-    host = AdaptiveOpticsSim.detector_host_cube!(det, cube)
+    host = AdaptiveOpticsSim.Detectors.detector_host_cube!(det, cube)
     Backends._poisson_noise!(Backends.ScalarCPUStyle(), rng, host)
     copyto!(cube, host)
     return cube

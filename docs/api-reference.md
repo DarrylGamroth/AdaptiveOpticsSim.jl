@@ -13,15 +13,18 @@ Related guides:
 This document describes the currently implemented ordinary package API
 imported by `using AdaptiveOpticsSim`, optical-foundation vocabulary imported
 by `using AdaptiveOpticsSim.Optics`, backend vocabulary imported by
-`using AdaptiveOpticsSim.Backends`, the routine plant workflow imported by
+`using AdaptiveOpticsSim.Backends`, conventional detector vocabulary imported
+by `using AdaptiveOpticsSim.Detectors`, the routine plant workflow imported by
 `using AdaptiveOpticsSim.Plant`, and stable qualified APIs addressed through
 their canonical modules. Qualified public names are maintained but do not
 enter the caller's ordinary namespace. The root package exports the
-`Backends`, `Optics`, and `Plant` modules, not compatibility exports for their
-contents.
+`Backends`, `Optics`, `Detectors`, and `Plant` modules, not compatibility
+exports for their moved contents.
 
 The breaking namespace migration is in progress. `Backends` and `Optics` are
-complete. `Optics` owns apertures, telescopes, sources, optical products and
+complete; `Detectors` owns the conventional frame/area surface, while
+counting/channel names remain at the root until NS-04B. `Optics` owns
+apertures, telescopes, sources, optical products and
 metadata, pupil/field formation, backend-portable Fraunhofer and Fresnel
 propagation, direct imaging, sampled OPD, physical NCPA, controllable optics,
 deformable mirrors, spatial filtering, and reusable physical WFS components.
@@ -35,7 +38,9 @@ The maintained implementation stage is recorded in
 
 Root exported and qualified-public names are curated in
 [`../src/exports.jl`](../src/exports.jl); the canonical plant surface is
-curated separately in [`../src/plant/api.jl`](../src/plant/api.jl), and the
+curated separately in [`../src/plant/api.jl`](../src/plant/api.jl), the
+conventional detector surface in
+[`../src/detectors/api.jl`](../src/detectors/api.jl), and the
 canonical backend surface in
 [`../src/backends/api.jl`](../src/backends/api.jl). The currently implemented
 optical surface is curated in
@@ -922,13 +927,20 @@ influence basis already includes the print-through structure.
 
 ## Detectors
 
-- Detector types: `Detector`, `LinearAPDDetector`, `APDDetector`,
-  `SPADArrayDetector`, `MKIDArrayDetector`
+Import conventional frame and area-detector vocabulary with
+`using AdaptiveOpticsSim.Detectors`. The root exports the `Detectors` module,
+not these moved bindings. Counting/channel detector names remain on the root
+surface until the NS-04B ownership gate.
+
+- Conventional frame/area detector: `Detectors.Detector`
+- Counting/channel detectors (root-owned until NS-04B): `LinearAPDDetector`,
+  `APDDetector`, `SPADArrayDetector`, and `MKIDArrayDetector`
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
-- Sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`, `EMCCDSensor`,
-  `InGaAsSensor`, `HgCdTeAvalancheArraySensor`, `APDSensor`, `SPADArraySensor`,
-  `MKIDArraySensor`
+- Conventional sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`,
+  `EMCCDSensor`, `InGaAsSensor`, and `HgCdTeAvalancheArraySensor`
+- Counting sensor families (root-owned until NS-04B): `APDSensor`,
+  `SPADArraySensor`, and `MKIDArraySensor`
 - EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,
   `EMOutput`, `ConventionalOutput`, `emccd_snr`
 - Linear APD topology: `SingleElementAPD`, `APDChannelBank`; analog APD output
@@ -941,13 +953,13 @@ influence basis already includes the print-through structure.
   and `RectangularPixelAperture`. These are spatial-domain presampling response
   models. Evaluate the normalized interior, infinite-grid transfer magnitude
   of the realized discrete acquisition kernel with
-  `AdaptiveOpticsSim.detector_mtf(model, fx, fy)`, where frequency is in cycles
+  `AdaptiveOpticsSim.Detectors.detector_mtf(model, fx, fy)`, where frequency is in cycles
   per detector pixel. Finite frames use zero extension and therefore have
   boundary-dependent response. This diagnostic is not a continuous
   subpixel-aperture MTF; such a model requires an explicitly prepared
   oversampled optical grid.
-- Post-collection coupling: `AdaptiveOpticsSim.NullChargeCoupling` and
-  `AdaptiveOpticsSim.InterpixelCapacitance`. Configure these with
+- Post-collection coupling: `AdaptiveOpticsSim.Detectors.NullChargeCoupling` and
+  `AdaptiveOpticsSim.Detectors.InterpixelCapacitance`. Configure these with
   `Detector(...; charge_coupling_model=...)`; this stage runs after photon and
   generated-charge statistics rather than as a pre-shot image blur.
 - Defects: `PixelResponseNonuniformity`, `DarkSignalNonuniformity`,
@@ -1000,7 +1012,7 @@ ADC model and is rejected.
 
 `Detector(...; qe=...)` accepts either a scalar quantum efficiency or a
 qualified QE model such as
-`AdaptiveOpticsSim.SampledQuantumEfficiency(wavelengths, values)`. Matrix-only
+`AdaptiveOpticsSim.Detectors.SampledQuantumEfficiency(wavelengths, values)`. Matrix-only
 capture uses the scalar `params.qe` value, which is the supplied scalar or the
 peak sampled QE. Source-aware capture, `capture!(det, image, src; rng=...)`,
 evaluates the QE model at `wavelength(src)`. For `SpectralSource`, it uses the

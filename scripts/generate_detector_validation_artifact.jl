@@ -1,10 +1,11 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using Random
 using Statistics
 using TOML
 
-import AdaptiveOpticsSim: AveragedNonDestructiveReads, FrameWindow,
+import AdaptiveOpticsSim.Detectors: AveragedNonDestructiveReads, FrameWindow,
     StaticCMOSOutputPattern, detector_combined_frame, detector_read_cube,
     detector_read_times, detector_reference_cube, detector_reference_frame,
     detector_signal_cube, detector_signal_frame, readout_products

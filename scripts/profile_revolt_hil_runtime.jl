@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Detectors
 using Statistics: mean
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])

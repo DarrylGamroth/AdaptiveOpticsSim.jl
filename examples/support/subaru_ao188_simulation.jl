@@ -3,14 +3,16 @@ module SubaruAO188Simulation
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
+using AdaptiveOpticsSim.Detectors
 using LinearAlgebra
 using Random
 using Statistics
 
-import AdaptiveOpticsSim: runtime_timing, convert_noise, validate_noise, materialize_build,
+import AdaptiveOpticsSim: runtime_timing, materialize_build,
     bin2d!, prepare_sampling!, ensure_sh_calibration!, wfs_output_frame,
     prepare_runtime_wfs!, wfs_output_metadata, init_execution_state
 import AdaptiveOpticsSim.Backends: execution_style, synchronize_backend!
+import AdaptiveOpticsSim.Detectors: convert_noise, validate_noise
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
 export SubaruHighOrderWFSModel, OperationalShackHartmannWFSModel, AO188CurvatureModel

@@ -1,6 +1,7 @@
 module Gate7SingleGPUBenchmark
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Plant
 
