@@ -224,13 +224,13 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     high_frame, low_frame = simulation_output.wfs_frames
     high_slopes, low_slopes = simulation_output.signals
     high_detector = simulation.high_detector
-    high_reference_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_reference_frame(high_detector)
-    high_signal_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_signal_frame(high_detector)
-    high_combined_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_combined_frame(high_detector)
-    high_reference_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_reference_cube(high_detector)
-    high_signal_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_signal_cube(high_detector)
-    high_read_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_read_cube(high_detector)
-    high_read_times = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.detector_read_times(high_detector)
+    high_reference_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_reference_frame(high_detector)
+    high_signal_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_signal_frame(high_detector)
+    high_combined_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_combined_frame(high_detector)
+    high_reference_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_reference_cube(high_detector)
+    high_signal_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_signal_cube(high_detector)
+    high_read_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_read_cube(high_detector)
+    high_read_times = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_read_times(high_detector)
 
     println("ao3k_runtime_profile")
     println("  backend: ", backend_label)

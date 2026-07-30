@@ -31,17 +31,17 @@ AMDGPU.functional() ||
         style, MersenneTwister(32), noise)
     @test all(isfinite, Array(noise))
 
-    detector = AdaptiveOpticsSim.Detector(
-        noise=AdaptiveOpticsSim.NoiseNone(),
+    detector = AdaptiveOpticsSim.Detectors.Detector(
+        noise=AdaptiveOpticsSim.Detectors.NoiseNone(),
         T=Float32,
         backend=Backends.AMDGPUBackend(),
     )
     frame_noise = AMDGPU.zeros(Float32, 2, 2)
     cube_noise = AMDGPU.zeros(Float32, 2, 2, 2)
-    host_plan = AdaptiveOpticsSim.DetectorHostMirrorPlan()
-    AdaptiveOpticsSim._randn_frame_noise!(
+    host_plan = AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan()
+    AdaptiveOpticsSim.Detectors._randn_frame_noise!(
         host_plan, detector, MersenneTwister(33), frame_noise)
-    AdaptiveOpticsSim._randn_frame_noise!(
+    AdaptiveOpticsSim.Detectors._randn_frame_noise!(
         host_plan, detector, MersenneTwister(34), cube_noise)
     @test all(isfinite, Array(frame_noise))
     @test all(isfinite, Array(cube_noise))

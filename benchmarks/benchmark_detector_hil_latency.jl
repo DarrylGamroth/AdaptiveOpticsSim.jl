@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Detectors
 using Dates
 using HdrHistogram
 using LinearAlgebra

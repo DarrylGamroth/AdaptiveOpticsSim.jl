@@ -87,6 +87,8 @@ end
         names(AdaptiveOpticsSim))
     optics_exported = filter(name -> Base.isexported(Optics, name),
         names(Optics))
+    detectors_exported = filter(name -> Base.isexported(Detectors, name),
+        names(Detectors))
     plant_exported = filter(name -> Base.isexported(Plant, name),
         names(Plant))
 
@@ -94,15 +96,19 @@ end
     # distinguishes routine unqualified vocabulary from stable qualified API.
     @test length(root_exported) <= 500
     @test length(optics_exported) <= 160
+    @test length(detectors_exported) <= 85
     @test length(plant_exported) <= 100
     @test Base.isexported(AdaptiveOpticsSim, :Backends)
     @test Base.isexported(AdaptiveOpticsSim, :Optics)
+    @test Base.isexported(AdaptiveOpticsSim, :Detectors)
     @test Base.isexported(AdaptiveOpticsSim, :Plant)
     @test Base.ispublic(AdaptiveOpticsSim, :Backends)
     @test Base.ispublic(AdaptiveOpticsSim, :Optics)
+    @test Base.ispublic(AdaptiveOpticsSim, :Detectors)
     @test Base.ispublic(AdaptiveOpticsSim, :Plant)
     @test AdaptiveOpticsSim.Backends === Backends
     @test AdaptiveOpticsSim.Optics === Optics
+    @test AdaptiveOpticsSim.Detectors === Detectors
     @test AdaptiveOpticsSim.Plant === Plant
 
     # Every supported Plant-owned binding has one canonical owner. The root
@@ -224,18 +230,26 @@ end
         :PreparedFocalPlaneModulation)
     @test Base.isexported(AdaptiveOpticsSim,
         :set_subaperture_calibration!)
-    @test Base.isexported(AdaptiveOpticsSim, :Detector)
+    for name in (
+        :Detector,
+        :CMOSReadNoiseMap,
+        :SkipperSampling,
+        :GlobalShutter,
+        :SingleRead,
+        :AveragedNonDestructiveReads,
+        :UpTheRampSampling,
+        :FrameTransferAcquisition,
+        :detector_ramp_cube,
+        :detector_ramp_times,
+        :InterpixelCapacitance,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test Base.isexported(Detectors, name)
+        @test Base.ispublic(Detectors, name)
+        @test parentmodule(getfield(Detectors, name)) === Detectors
+    end
     @test Base.isexported(AdaptiveOpticsSim, :MKIDArrayDetector)
-    @test Base.isexported(AdaptiveOpticsSim, :CMOSReadNoiseMap)
-    @test Base.isexported(AdaptiveOpticsSim, :SkipperSampling)
-    @test Base.isexported(AdaptiveOpticsSim, :GlobalShutter)
-    @test Base.isexported(AdaptiveOpticsSim, :SingleRead)
-    @test Base.isexported(AdaptiveOpticsSim, :AveragedNonDestructiveReads)
-    @test Base.isexported(AdaptiveOpticsSim, :UpTheRampSampling)
-    @test Base.isexported(AdaptiveOpticsSim, :FrameTransferAcquisition)
-    @test Base.isexported(AdaptiveOpticsSim, :detector_ramp_cube)
-    @test Base.isexported(AdaptiveOpticsSim, :detector_ramp_times)
-    @test Base.isexported(AdaptiveOpticsSim, :InterpixelCapacitance)
     @test Base.isexported(AdaptiveOpticsSim, :SimulationEnsemble)
     @test Base.isexported(AdaptiveOpticsSim, :FactorizedReconstructor)
     @test Base.isexported(AdaptiveOpticsSim, :ControlledReconstructor)

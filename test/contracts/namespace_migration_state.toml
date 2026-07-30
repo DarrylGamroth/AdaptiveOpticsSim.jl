@@ -2,13 +2,131 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-03"
+current_gate = "NS-04A"
 implemented_owners = ["Backends", "Optics"]
-partial_owners = []
+partial_owners = ["Detectors"]
 
 [owner_sources]
 Backends = "src/backends/api.jl"
 Optics = "src/optics/api.jl"
+
+[partial_owner_sources]
+Detectors = "src/detectors/api.jl"
+
+[partial_owner_bindings.Detectors]
+exports = [
+    "Detector",
+    "NoiseModel",
+    "NoiseNone",
+    "NoisePhoton",
+    "NoiseReadout",
+    "NoisePhotonReadout",
+    "SensorType",
+    "CCDSensor",
+    "CMOSSensor",
+    "EMCCDSensor",
+    "InGaAsSensor",
+    "LinearEMMode",
+    "PhotonCountingEMMode",
+    "EMOutput",
+    "ConventionalOutput",
+    "emccd_snr",
+    "SequentialAcquisition",
+    "FrameTransferAcquisition",
+    "HgCdTeAvalancheArraySensor",
+    "FrameResponseModel",
+    "NullFrameResponse",
+    "GaussianPixelResponse",
+    "SampledFrameResponse",
+    "RectangularPixelAperture",
+    "CMOSReadNoiseMap",
+    "InterpixelCapacitance",
+    "detector_mtf",
+    "PixelResponseNonuniformity",
+    "DarkSignalNonuniformity",
+    "BadPixelMask",
+    "CompositeDetectorDefectModel",
+    "GlobalShutter",
+    "RollingShutter",
+    "RollingExposure",
+    "GlobalResetExposure",
+    "SingleRead",
+    "AveragedNonDestructiveReads",
+    "CorrelatedDoubleSampling",
+    "FowlerSampling",
+    "UpTheRampSampling",
+    "SkipperSampling",
+    "FunctionFrameSource",
+    "InPlaceFrameSource",
+    "FunctionExposureFrameSource",
+    "InPlaceExposureFrameSource",
+    "FrameReadoutCorrectionModel",
+    "NullFrameReadoutCorrection",
+    "ReferencePixelCommonModeCorrection",
+    "ReferenceRowCommonModeCorrection",
+    "ReferenceColumnCommonModeCorrection",
+    "ReferenceOutputCommonModeCorrection",
+    "CompositeFrameReadoutCorrection",
+    "FrameReadoutProducts",
+    "NoFrameReadoutProducts",
+    "MultiReadFrameReadoutProducts",
+    "UpTheRampReadoutProducts",
+    "SkipperReadoutProducts",
+    "HgCdTeReadoutProducts",
+    "SaturatingFrameNonlinearity",
+    "ExponentialPersistence",
+    "AbstractDetectorThermalModel",
+    "NullDetectorThermalModel",
+    "FixedTemperature",
+    "FirstOrderThermalModel",
+    "ArrheniusRateLaw",
+    "LinearTemperatureLaw",
+    "ExponentialTemperatureLaw",
+    "capture!",
+    "output_frame",
+    "detector_export_metadata",
+    "DetectorAcquisitionPlan",
+    "prepare_detector_acquisition",
+    "detector_ramp_slope",
+    "detector_ramp_intercept",
+    "detector_ramp_cube",
+    "detector_ramp_times",
+    "readout_ready",
+    "reset_integration!",
+    "thermal_model",
+]
+public = []
+internal = [
+    "AbstractEMCCDAcquisitionMode",
+    "AbstractFrameTimingModel",
+    "FrameSensorType",
+    "_copy_windowed_sampling_plane!",
+    "_raw_sampling_sigma",
+    "_require_prepared_acquisition",
+    "accumulate_incremental_charge_generation!",
+    "advance_thermal!",
+    "apply_avalanche_excess_noise!",
+    "apply_quantization!",
+    "capture_signal_pipeline!",
+    "ensure_up_the_ramp_products!",
+    "finalize_charge_transport!",
+    "finalize_incremental_capture!",
+    "finalize_scheduled_up_the_ramp_readout_products!",
+    "is_global_shutter",
+    "line_time",
+    "readout_products",
+    "sample_frame_read!",
+    "sampling_read_time",
+    "subtract_background_map!",
+    "update_sensor_persistence!",
+    "write_output!",
+    "_detector_value_plan",
+    "_poisson_noise_frame!",
+    "_randn_frame_noise!",
+    "can_apply_device_readout_correction",
+    "counting_output_execution_plan",
+    "detector_execution_plan",
+]
 
 [baseline_divergence]
 root_surface = "src/exports.jl"

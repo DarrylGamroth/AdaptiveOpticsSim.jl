@@ -1024,16 +1024,16 @@ end
         scalar_scratch = similar(frame)
         ka_scratch = similar(frame)
         gaussian = GaussianPixelResponse(response_width_px=0.5)
-        AdaptiveOpticsSim.apply_response!(SCALAR_CPU_STYLE, gaussian, scalar_frame, scalar_scratch)
-        AdaptiveOpticsSim.apply_response!(KA_CPU_STYLE, gaussian, ka_frame, ka_scratch)
+        AdaptiveOpticsSim.Detectors.apply_response!(SCALAR_CPU_STYLE, gaussian, scalar_frame, scalar_scratch)
+        AdaptiveOpticsSim.Detectors.apply_response!(KA_CPU_STYLE, gaussian, ka_frame, ka_scratch)
         mark_ka_cpu_kernel!(:separable_response_rows_kernel!, :separable_response_cols_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
 
         sampled = SampledFrameResponse([0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0])
         scalar_frame .= frame
         ka_frame .= frame
-        AdaptiveOpticsSim.apply_response!(SCALAR_CPU_STYLE, sampled, scalar_frame, scalar_scratch)
-        AdaptiveOpticsSim.apply_response!(KA_CPU_STYLE, sampled, ka_frame, ka_scratch)
+        AdaptiveOpticsSim.Detectors.apply_response!(SCALAR_CPU_STYLE, sampled, scalar_frame, scalar_scratch)
+        AdaptiveOpticsSim.Detectors.apply_response!(KA_CPU_STYLE, sampled, ka_frame, ka_scratch)
         mark_ka_cpu_kernel!(:sampled_response_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
 
@@ -1043,9 +1043,9 @@ end
         fill!(ka_frame, 0.0)
         scalar_frame[3, end] = 1.0
         ka_frame[3, end] = 1.0
-        AdaptiveOpticsSim.apply_response!(SCALAR_CPU_STYLE, asymmetric,
+        AdaptiveOpticsSim.Detectors.apply_response!(SCALAR_CPU_STYLE, asymmetric,
             scalar_frame, scalar_scratch)
-        AdaptiveOpticsSim.apply_response!(KA_CPU_STYLE, asymmetric, ka_frame,
+        AdaptiveOpticsSim.Detectors.apply_response!(KA_CPU_STYLE, asymmetric, ka_frame,
             ka_scratch)
         @test ka_cpu_close(ka_frame, scalar_frame)
         @test sum(ka_frame) ≈ 0.9
@@ -1061,10 +1061,10 @@ end
         ka_ramp_integrated = similar(frame)
         ka_ramp_slope = similar(frame)
         ka_ramp_intercept = similar(frame)
-        AdaptiveOpticsSim._fit_up_the_ramp!(SCALAR_CPU_STYLE,
+        AdaptiveOpticsSim.Detectors._fit_up_the_ramp!(SCALAR_CPU_STYLE,
             scalar_ramp_integrated, scalar_ramp_slope,
             scalar_ramp_intercept, ramp_cube, 2.0)
-        AdaptiveOpticsSim._fit_up_the_ramp!(KA_CPU_STYLE,
+        AdaptiveOpticsSim.Detectors._fit_up_the_ramp!(KA_CPU_STYLE,
             ka_ramp_integrated, ka_ramp_slope, ka_ramp_intercept,
             ramp_cube, 2.0)
         mark_ka_cpu_kernel!(:fit_up_the_ramp_kernel!)
@@ -1080,15 +1080,15 @@ end
         ka_cube = copy(cube)
         scalar_cube_scratch = similar(cube)
         ka_cube_scratch = similar(cube)
-        AdaptiveOpticsSim._batched_apply_response!(SCALAR_CPU_STYLE, gaussian, scalar_cube, scalar_cube_scratch)
-        AdaptiveOpticsSim._batched_apply_response!(KA_CPU_STYLE, gaussian, ka_cube, ka_cube_scratch)
+        AdaptiveOpticsSim.Detectors._batched_apply_response!(SCALAR_CPU_STYLE, gaussian, scalar_cube, scalar_cube_scratch)
+        AdaptiveOpticsSim.Detectors._batched_apply_response!(KA_CPU_STYLE, gaussian, ka_cube, ka_cube_scratch)
         mark_ka_cpu_kernel!(:separable_response_stack_rows_kernel!, :separable_response_stack_cols_kernel!)
         @test ka_cpu_close(ka_cube, scalar_cube)
 
         scalar_cube .= cube
         ka_cube .= cube
-        AdaptiveOpticsSim._batched_apply_response!(SCALAR_CPU_STYLE, sampled, scalar_cube, scalar_cube_scratch)
-        AdaptiveOpticsSim._batched_apply_response!(KA_CPU_STYLE, sampled, ka_cube, ka_cube_scratch)
+        AdaptiveOpticsSim.Detectors._batched_apply_response!(SCALAR_CPU_STYLE, sampled, scalar_cube, scalar_cube_scratch)
+        AdaptiveOpticsSim.Detectors._batched_apply_response!(KA_CPU_STYLE, sampled, ka_cube, ka_cube_scratch)
         mark_ka_cpu_kernel!(:sampled_response_stack_kernel!)
         @test ka_cpu_close(ka_cube, scalar_cube)
 
@@ -1097,9 +1097,9 @@ end
         scalar_cube[1, 3, end] = 1.0
         scalar_cube[2, 3, 1] = 1.0
         ka_cube .= scalar_cube
-        AdaptiveOpticsSim._batched_apply_response!(SCALAR_CPU_STYLE,
+        AdaptiveOpticsSim.Detectors._batched_apply_response!(SCALAR_CPU_STYLE,
             asymmetric, scalar_cube, scalar_cube_scratch)
-        AdaptiveOpticsSim._batched_apply_response!(KA_CPU_STYLE, asymmetric,
+        AdaptiveOpticsSim.Detectors._batched_apply_response!(KA_CPU_STYLE, asymmetric,
             ka_cube, ka_cube_scratch)
         @test ka_cpu_close(ka_cube, scalar_cube)
         @test sum(@view(ka_cube[1, :, :])) ≈ 0.9
@@ -1108,24 +1108,24 @@ end
         noise = reshape(collect(range(-0.2, 0.2; length=25)), 5, 5)
         scalar_frame .= frame
         ka_frame .= frame
-        AdaptiveOpticsSim.apply_column_noise!(SCALAR_CPU_STYLE, scalar_frame, noise, 0.5)
-        AdaptiveOpticsSim.apply_column_noise!(KA_CPU_STYLE, ka_frame, noise, 0.5)
+        AdaptiveOpticsSim.Detectors.apply_column_noise!(SCALAR_CPU_STYLE, scalar_frame, noise, 0.5)
+        AdaptiveOpticsSim.Detectors.apply_column_noise!(KA_CPU_STYLE, ka_frame, noise, 0.5)
         mark_ka_cpu_kernel!(:add_column_noise_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
 
         scalar_frame .= frame
         ka_frame .= frame
-        AdaptiveOpticsSim.apply_row_noise!(SCALAR_CPU_STYLE, scalar_frame,
+        AdaptiveOpticsSim.Detectors.apply_row_noise!(SCALAR_CPU_STYLE, scalar_frame,
             noise, 0.5)
-        AdaptiveOpticsSim.apply_row_noise!(KA_CPU_STYLE, ka_frame, noise, 0.5)
+        AdaptiveOpticsSim.Detectors.apply_row_noise!(KA_CPU_STYLE, ka_frame, noise, 0.5)
         mark_ka_cpu_kernel!(:add_row_noise_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
 
         output_model = StaticCMOSOutputPattern(2, [1.0, 1.1, 1.2], [0.0, 0.5, 1.0])
         scalar_frame .= frame
         ka_frame .= frame
-        AdaptiveOpticsSim.apply_output_model!(SCALAR_CPU_STYLE, output_model, scalar_frame)
-        AdaptiveOpticsSim.apply_output_model!(KA_CPU_STYLE, output_model, ka_frame)
+        AdaptiveOpticsSim.Detectors.apply_output_model!(SCALAR_CPU_STYLE, output_model, scalar_frame)
+        AdaptiveOpticsSim.Detectors.apply_output_model!(KA_CPU_STYLE, output_model, ka_frame)
         mark_ka_cpu_kernel!(:apply_cmos_output_pattern_kernel!)
         @test ka_cpu_close(ka_frame, scalar_frame)
 
@@ -1133,9 +1133,9 @@ end
         counting_input[3, 3] = 10.0
         scalar_counting = similar(counting_input)
         ka_counting = similar(counting_input)
-        AdaptiveOpticsSim._apply_counting_channel_crosstalk!(
+        AdaptiveOpticsSim.Detectors._apply_counting_channel_crosstalk!(
             SCALAR_CPU_STYLE, scalar_counting, counting_input, 0.4)
-        AdaptiveOpticsSim._apply_counting_channel_crosstalk!(
+        AdaptiveOpticsSim.Detectors._apply_counting_channel_crosstalk!(
             KA_CPU_STYLE, ka_counting, counting_input, 0.4)
         mark_ka_cpu_kernel!(:counting_channel_crosstalk_kernel!)
         @test ka_cpu_close(ka_counting, scalar_counting)
@@ -1151,8 +1151,8 @@ end
             ka_cube .= cube
             fill!(scalar_cube_scratch, 0.0)
             fill!(ka_cube_scratch, 0.0)
-            AdaptiveOpticsSim._batched_apply_readout_correction!(SCALAR_CPU_STYLE, model, scalar_cube, scalar_cube_scratch)
-            AdaptiveOpticsSim._batched_apply_readout_correction!(KA_CPU_STYLE, model, ka_cube, ka_cube_scratch)
+            AdaptiveOpticsSim.Detectors._batched_apply_readout_correction!(SCALAR_CPU_STYLE, model, scalar_cube, scalar_cube_scratch)
+            AdaptiveOpticsSim.Detectors._batched_apply_readout_correction!(KA_CPU_STYLE, model, ka_cube, ka_cube_scratch)
             @test ka_cpu_close(ka_cube, scalar_cube)
         end
         mark_ka_cpu_kernel!(

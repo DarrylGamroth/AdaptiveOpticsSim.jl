@@ -64,9 +64,9 @@
     @test !supports_readout_correction(EMCCDSensor())
     @test supports_readout_correction(HgCdTeAvalancheArraySensor())
     @test supports_read_cube(HgCdTeAvalancheArraySensor())
-    @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceRowCommonModeCorrection()) == :reference_row_common_mode
-    @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceColumnCommonModeCorrection()) == :reference_column_common_mode
-    @test AdaptiveOpticsSim.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode
+    @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceRowCommonModeCorrection()) == :reference_row_common_mode
+    @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceColumnCommonModeCorrection()) == :reference_column_common_mode
+    @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode
     @test APDSensor <: CountingSensorType
     @test SPADArraySensorType <: CountingSensorType
     @test MKIDArraySensorType <: CountingSensorType

@@ -306,7 +306,9 @@ first-call evidence in
 These contracts contain no implementation binding moves.
 The maintained implementation stage lives in
 [`namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml);
-`Backends` and `Optics` are complete through NS-03. `Optics` owns apertures,
+`Backends` and `Optics` are complete through NS-03. NS-04A establishes the
+conventional frame/area surface under `Detectors`; counting/channel APIs remain
+on the root surface until NS-04B. `Optics` owns apertures,
 telescopes, sources, optical locations/products, fields, general propagation,
 direct imaging, sampled OPD, physical NCPA, controllable optics, and reusable
 physical WFS components without changing the frozen final ownership target.

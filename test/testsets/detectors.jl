@@ -24,17 +24,17 @@ function detector_state_matches_snapshot(det::Detector, snapshot::NamedTuple)
 end
 
 struct UnkeyedCalibrationFrameResponse{T<:AbstractFloat} <:
-    AdaptiveOpticsSim.AbstractFrameResponse
+    AdaptiveOpticsSim.Detectors.AbstractFrameResponse
     alpha::T
 end
 
-function AdaptiveOpticsSim.convert_frame_response_model(
+function AdaptiveOpticsSim.Detectors.convert_frame_response_model(
     model::UnkeyedCalibrationFrameResponse, ::Type{T}, backend) where
     {T<:AbstractFloat}
     return UnkeyedCalibrationFrameResponse{T}(T(model.alpha))
 end
 
-AdaptiveOpticsSim.validate_frame_response_model(
+AdaptiveOpticsSim.Detectors.validate_frame_response_model(
     model::UnkeyedCalibrationFrameResponse) = model
 
 @testset "Sampled detector parameter ownership" begin
@@ -79,7 +79,7 @@ AdaptiveOpticsSim.validate_frame_response_model(
 
     typed_wavelengths = copy(wavelength_snapshot)
     typed_values = copy(qe_snapshot)
-    typed_qe = AdaptiveOpticsSim.SampledQuantumEfficiency{
+    typed_qe = AdaptiveOpticsSim.Detectors.SampledQuantumEfficiency{
         Float64,typeof(typed_wavelengths)}(
             typed_wavelengths, typed_values, 0.0)
     typed_wavelengths[1] = 0.4e-6
@@ -258,8 +258,8 @@ function prepared_detector_capture_allocations(det, map, plan, rng)
 end
 
 function prepared_detector_readiness_allocations(det, map, plan)
-    AdaptiveOpticsSim._require_prepared_whole_acquisition(det, map, plan)
-    return @allocated AdaptiveOpticsSim._require_prepared_whole_acquisition(
+    AdaptiveOpticsSim.Detectors._require_prepared_whole_acquisition(det, map, plan)
+    return @allocated AdaptiveOpticsSim.Detectors._require_prepared_whole_acquisition(
         det, map, plan)
 end
 
@@ -307,9 +307,9 @@ function prepared_first_incremental_capture_allocations(det, map, plan, rng,
 end
 
 function fixed_stack_capture_allocations(det, cube, scratch, rng)
-    AdaptiveOpticsSim.capture_stack!(det, cube, scratch, rng)
+    AdaptiveOpticsSim.Detectors.capture_stack!(det, cube, scratch, rng)
     fill!(cube, one(eltype(cube)))
-    return @allocated AdaptiveOpticsSim.capture_stack!(det, cube, scratch,
+    return @allocated AdaptiveOpticsSim.Detectors.capture_stack!(det, cube, scratch,
         rng)
 end
 
@@ -535,7 +535,7 @@ end
     busy_integrated_time = busy_prepared_detector.state.integrated_time
     busy_accumulation = copy(busy_prepared_detector.state.accum_buffer)
     @test_throws InvalidConfiguration begin
-        AdaptiveOpticsSim._require_prepared_whole_acquisition(
+        AdaptiveOpticsSim.Detectors._require_prepared_whole_acquisition(
             busy_prepared_detector, shared_rate, busy_prepared_plan)
     end
     @test busy_prepared_detector.state.integrated_time == busy_integrated_time
@@ -782,12 +782,12 @@ end
         transition_detector, transition_values, 0.25,
         MersenneTwister(213))
     pending_stack = fill(3.0, 1, 2, 2)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Detectors.capture_stack!(
         transition_detector, pending_stack, similar(pending_stack);
         rng=MersenneTwister(213))
     pending_generalized_output = fill(UInt8(7), 1, 2, 2)
     pending_generalized_input = fill(3.0, 1, 2, 2)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Detectors.capture_stack!(
         transition_detector, pending_generalized_output,
         pending_generalized_input; rng=MersenneTwister(213))
     @test all(==(UInt8(7)), pending_generalized_output)
@@ -872,7 +872,7 @@ end
         response_model=NullFrameResponse())
     generalized_qe_input = ones(2, 4, 4)
     generalized_qe_output = zeros(2, 2, 2)
-    AdaptiveOpticsSim.capture_stack!(generalized_qe_detector,
+    AdaptiveOpticsSim.Detectors.capture_stack!(generalized_qe_detector,
         generalized_qe_output, generalized_qe_input, src_qe;
         rng=MersenneTwister(31))
     @test generalized_qe_output ≈ fill(2.0, 2, 2, 2)
@@ -889,7 +889,7 @@ end
     det_tuple = Detector(integration_time=1.0, noise=(NoisePhoton(), NoiseReadout(0.5)),
         qe=1.0, binning=1)
     @test det_tuple.noise isa NoisePhotonReadout
-    @test AdaptiveOpticsSim.detector_execution_plan(AdaptiveOpticsSim.Backends.execution_style(det_tuple.state.frame), det_tuple) isa AdaptiveOpticsSim.DetectorDirectPlan
+    @test AdaptiveOpticsSim.Detectors.detector_execution_plan(AdaptiveOpticsSim.Backends.execution_style(det_tuple.state.frame), det_tuple) isa AdaptiveOpticsSim.Detectors.DetectorDirectPlan
 
     det_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, full_well=5.0)
     frame_sat = capture!(det_sat, fill(10.0, 4, 4); rng=MersenneTwister(2))
@@ -928,7 +928,7 @@ end
         )))
     adc_window_in = reshape(collect(1.0:96.0), 2, 6, 8)
     adc_window_out = Array{UInt16}(undef, 2, 4, 5)
-    generalized_adc_window = AdaptiveOpticsSim.capture_stack!(det_adc_window_corr, adc_window_out, copy(adc_window_in);
+    generalized_adc_window = AdaptiveOpticsSim.Detectors.capture_stack!(det_adc_window_corr, adc_window_out, copy(adc_window_in);
         rng=MersenneTwister(10))
     @test size(generalized_adc_window) == (2, 4, 5)
     @test generalized_adc_window[1, :, :] == capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
@@ -1076,7 +1076,7 @@ end
         gain=5.0, sensor=EMCCDSensor(register_full_well=100.0))
     @test maximum(capture!(det_emccd_sat, fill(50.0, 4, 4); rng=MersenneTwister(126))) == 100.0
     emccd_saturated_stack = fill(50.0, 2, 4, 4)
-    AdaptiveOpticsSim.capture_stack!(det_emccd_sat, emccd_saturated_stack,
+    AdaptiveOpticsSim.Detectors.capture_stack!(det_emccd_sat, emccd_saturated_stack,
         similar(emccd_saturated_stack); rng=MersenneTwister(126))
     @test all(==(100.0), emccd_saturated_stack)
     @test_throws InvalidConfiguration EMCCDSensor(
@@ -1457,7 +1457,7 @@ end
         qe=1.0, response_model=NullFrameResponse(),
         thermal_model=dynamic_model, sensor=CCDSensor())
     dynamic_stack_cube = zeros(2, 2, 2)
-    AdaptiveOpticsSim.capture_stack!(dynamic_stack_det, dynamic_stack_cube,
+    AdaptiveOpticsSim.Detectors.capture_stack!(dynamic_stack_det, dynamic_stack_cube,
         similar(dynamic_stack_cube); rng=MersenneTwister(24))
     expected_stack_temperature = 120.0 + 180.0 * exp(-0.5)
     @test detector_temperature(dynamic_stack_det) ≈ expected_stack_temperature
@@ -1469,7 +1469,7 @@ end
         sensor=CCDSensor())
     dynamic_generalized_input = zeros(2, 4, 4)
     dynamic_generalized_output = zeros(2, 2, 2)
-    AdaptiveOpticsSim.capture_stack!(dynamic_generalized_det,
+    AdaptiveOpticsSim.Detectors.capture_stack!(dynamic_generalized_det,
         dynamic_generalized_output, dynamic_generalized_input;
         rng=MersenneTwister(24))
     @test detector_temperature(dynamic_generalized_det) ≈
@@ -1610,7 +1610,7 @@ end
     frame_saphira_sat = copy(capture!(det_saphira_sat, uniform_signal; rng=MersenneTwister(15)))
     @test maximum(frame_saphira_sat) == 100.0
     saphira_saturated_stack = fill(50.0, 2, 8, 8)
-    AdaptiveOpticsSim.capture_stack!(det_saphira_sat,
+    AdaptiveOpticsSim.Detectors.capture_stack!(det_saphira_sat,
         saphira_saturated_stack, similar(saphira_saturated_stack);
         rng=MersenneTwister(15))
     @test all(==(100.0), saphira_saturated_stack)
@@ -1635,8 +1635,8 @@ end
         signal_frame::A
         read_times::V
     end
-    AdaptiveOpticsSim.detector_signal_frame(products::DummyReadoutProducts) = products.signal_frame
-    AdaptiveOpticsSim.detector_read_times(products::DummyReadoutProducts) = products.read_times
+    AdaptiveOpticsSim.Detectors.detector_signal_frame(products::DummyReadoutProducts) = products.signal_frame
+    AdaptiveOpticsSim.Detectors.detector_read_times(products::DummyReadoutProducts) = products.read_times
 
     dummy_products = DummyReadoutProducts(fill(3.0, 2, 2), [0.25, 0.5])
     @test detector_reference_frame(dummy_products) === nothing
@@ -2317,14 +2317,14 @@ end
     cube_mtf[1, :, :] .= impulse
     cube_mtf[2, :, :] .= impulse
     scratch_mtf = similar(cube_mtf)
-    stack_mtf = AdaptiveOpticsSim.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
+    stack_mtf = AdaptiveOpticsSim.Detectors.capture_stack!(det_mtf, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
     @test size(stack_mtf) == size(cube_mtf)
     @test all(isfinite, stack_mtf)
     cube_sampled = Array{Float64}(undef, 2, size(impulse, 1), size(impulse, 2))
     cube_sampled[1, :, :] .= impulse
     cube_sampled[2, :, :] .= impulse
     scratch_sampled = similar(cube_sampled)
-    stack_sampled = AdaptiveOpticsSim.capture_stack!(sampled_det, cube_sampled, scratch_sampled; rng=MersenneTwister(10))
+    stack_sampled = AdaptiveOpticsSim.Detectors.capture_stack!(sampled_det, cube_sampled, scratch_sampled; rng=MersenneTwister(10))
     @test size(stack_sampled) == size(cube_sampled)
     @test all(isfinite, stack_sampled)
     @test stack_sampled[1, :, :] ≈ sampled_frame atol=1e-6
@@ -2332,7 +2332,7 @@ end
     det_stack_adc = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         bits=8, full_well=10.0, output_type=UInt16)
     cube_stack_adc = fill(10.0, 2, 4, 4)
-    stack_adc = AdaptiveOpticsSim.capture_stack!(det_stack_adc, cube_stack_adc, similar(cube_stack_adc);
+    stack_adc = AdaptiveOpticsSim.Detectors.capture_stack!(det_stack_adc, cube_stack_adc, similar(cube_stack_adc);
         rng=MersenneTwister(10))
     @test stack_adc === cube_stack_adc
     @test all(stack_adc .== 255.0)
@@ -2362,8 +2362,8 @@ end
     @test unit_rectangular.kernel_y == half_fill_rectangular.kernel_y
     @test detector_mtf(unit_rectangular, 0.5, 0.0) ==
         detector_mtf(half_fill_rectangular, 0.5, 0.0)
-    @test !AdaptiveOpticsSim.supports_subpixel_geometry(unit_rectangular)
-    @test !AdaptiveOpticsSim.supports_subpixel_geometry(
+    @test !AdaptiveOpticsSim.Detectors.supports_subpixel_geometry(unit_rectangular)
+    @test !AdaptiveOpticsSim.Detectors.supports_subpixel_geometry(
         half_fill_rectangular)
 
     @test_throws InvalidConfiguration RectangularPixelAperture(fill_factor_x=0.0)
@@ -2394,10 +2394,10 @@ end
     cube_window[1, :, :] .= impulse
     cube_window[2, :, :] .= impulse
     scratch_window = similar(cube_window)
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_window_stack, cube_window, scratch_window; rng=MersenneTwister(10))
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Detectors.capture_stack!(det_window_stack, cube_window, scratch_window; rng=MersenneTwister(10))
     input_window_stack = copy(cube_window)
     output_window_stack = Array{Float64}(undef, 2, 7, 7)
-    generalized_window = AdaptiveOpticsSim.capture_stack!(det_window_stack, output_window_stack, input_window_stack; rng=MersenneTwister(10))
+    generalized_window = AdaptiveOpticsSim.Detectors.capture_stack!(det_window_stack, output_window_stack, input_window_stack; rng=MersenneTwister(10))
     @test size(generalized_window) == (2, 7, 7)
     @test generalized_window[1, :, :] ≈ capture!(det_window_stack, impulse; rng=MersenneTwister(10))
 
@@ -2419,7 +2419,7 @@ end
         corrected_stack_in[1, :, :] .= reshape(collect(1.0:25.0), 5, 5)
         corrected_stack_in[2, :, :] .= reshape(collect(26.0:50.0), 5, 5)
         corrected_stack_ref = copy(corrected_stack_in)
-        corrected_stack = AdaptiveOpticsSim.capture_stack!(corrected_stack_det, corrected_stack_in,
+        corrected_stack = AdaptiveOpticsSim.Detectors.capture_stack!(corrected_stack_det, corrected_stack_in,
             similar(corrected_stack_in); rng=MersenneTwister(10))
         @test size(corrected_stack) == size(corrected_stack_in)
         corrected_frame_1 = capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
@@ -2436,7 +2436,7 @@ end
 
     det_cmos_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))
-    @test_throws InvalidConfiguration AdaptiveOpticsSim.capture_stack!(det_cmos_batched, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Detectors.capture_stack!(det_cmos_batched, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
 
     det_generalized = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2,
         bits=8, full_well=10.0, output_type=UInt8)
@@ -2444,7 +2444,7 @@ end
     input_generalized[1, 4, 4] = 10.0
     input_generalized[2, 5, 5] = 10.0
     output_generalized = Array{UInt8}(undef, 2, 2, 2)
-    generalized_stack = AdaptiveOpticsSim.capture_stack!(det_generalized, output_generalized, input_generalized; rng=MersenneTwister(10))
+    generalized_stack = AdaptiveOpticsSim.Detectors.capture_stack!(det_generalized, output_generalized, input_generalized; rng=MersenneTwister(10))
     @test size(generalized_stack) == (2, 2, 2)
     @test readout_ready(det_generalized)
     @test iszero(det_generalized.state.integrated_time)
@@ -2556,7 +2556,7 @@ end
     cube[2, :, :] .= fill(2.0, 4, 4)
     scratch = similar(cube)
     det_stack = Detector(integration_time=1.0, noise=NoiseNone(), qe=0.5, binning=1)
-    AdaptiveOpticsSim.capture_stack!(det_stack, cube, scratch; rng=MersenneTwister(10))
+    AdaptiveOpticsSim.Detectors.capture_stack!(det_stack, cube, scratch; rng=MersenneTwister(10))
     @test cube[1, :, :] ≈ fill(0.5, 4, 4)
     @test cube[2, :, :] ≈ fill(1.0, 4, 4)
 
@@ -2569,7 +2569,7 @@ end
 
     psf = reshape(Float64.(1:256), 16, 16)
     det_fused = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
-    frame_fused = copy(AdaptiveOpticsSim.fill_frame!(det_fused, psf, 1.0))
+    frame_fused = copy(AdaptiveOpticsSim.Detectors.fill_frame!(det_fused, psf, 1.0))
     manual_mid = zeros(Float64, 8, 8)
     manual_out = zeros(Float64, 4, 4)
     AdaptiveOpticsSim.bin2d!(manual_mid, psf, 2)

@@ -1,0 +1,33 @@
+export Detector
+export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
+export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
+export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput
+export emccd_snr
+export SequentialAcquisition, FrameTransferAcquisition
+export HgCdTeAvalancheArraySensor
+export FrameResponseModel, NullFrameResponse, GaussianPixelResponse
+export SampledFrameResponse, RectangularPixelAperture
+export CMOSReadNoiseMap, InterpixelCapacitance, detector_mtf
+export PixelResponseNonuniformity, DarkSignalNonuniformity, BadPixelMask
+export CompositeDetectorDefectModel
+export GlobalShutter, RollingShutter, RollingExposure, GlobalResetExposure
+export SingleRead, AveragedNonDestructiveReads, CorrelatedDoubleSampling
+export FowlerSampling, UpTheRampSampling, SkipperSampling
+export FunctionFrameSource, InPlaceFrameSource
+export FunctionExposureFrameSource, InPlaceExposureFrameSource
+export FrameReadoutCorrectionModel, NullFrameReadoutCorrection
+export ReferencePixelCommonModeCorrection, ReferenceRowCommonModeCorrection
+export ReferenceColumnCommonModeCorrection, ReferenceOutputCommonModeCorrection
+export CompositeFrameReadoutCorrection
+export FrameReadoutProducts, NoFrameReadoutProducts
+export MultiReadFrameReadoutProducts, UpTheRampReadoutProducts
+export SkipperReadoutProducts, HgCdTeReadoutProducts
+export SaturatingFrameNonlinearity, ExponentialPersistence
+export AbstractDetectorThermalModel, NullDetectorThermalModel
+export FixedTemperature, FirstOrderThermalModel
+export ArrheniusRateLaw, LinearTemperatureLaw, ExponentialTemperatureLaw
+export capture!, output_frame, detector_export_metadata
+export DetectorAcquisitionPlan, prepare_detector_acquisition
+export detector_ramp_slope, detector_ramp_intercept
+export detector_ramp_cube, detector_ramp_times
+export readout_ready, reset_integration!, thermal_model

@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Detectors
 using Statistics: mean
 
 const _backend_arg = isempty(ARGS) ? "cuda" : lowercase(ARGS[1])

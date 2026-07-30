@@ -1,4 +1,5 @@
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Detectors
 using Base64
 using Dates
 using HdrHistogram
