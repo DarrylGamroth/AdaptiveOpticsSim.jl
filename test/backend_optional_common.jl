@@ -2793,7 +2793,7 @@ function run_optional_scalable_reconstructor_checks(::Type{T}, selector,
     @test all(isfinite, Array(factorized_out))
     @test all(storage -> storage isa BackendArray,
         Control.runtime_reconstructor_storage(controlled))
-    @test AdaptiveOpticsSim.reset_controller!(controlled) === controlled
+    @test Control.reset_controller!(controlled) === controlled
     @test_throws InvalidConfiguration ControlledReconstructor(
         factorized,
         DiscreteIntegratorController(n_commands; T=T, backend=CPUBackend());

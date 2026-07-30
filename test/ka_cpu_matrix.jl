@@ -91,7 +91,8 @@ end
         diagonal_input = reshape(collect(1.0:16.0), 4, 4)
         diagonal_output = zeros(4)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.extract_diagonal_kernel!, diagonal_output,
+            AdaptiveOpticsSim.Tomography.extract_diagonal_kernel!,
+            diagonal_output,
             diagonal_input, 4; ndrange=4)
         mark_ka_cpu_kernel!(:extract_diagonal_kernel!)
         @test diagonal_output == diag(diagonal_input)

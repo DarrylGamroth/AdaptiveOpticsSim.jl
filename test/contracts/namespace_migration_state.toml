@@ -2,8 +2,8 @@ schema_version = 1
 name = "namespace_migration_state"
 status = "maintained"
 authority = "namespace_authority.toml"
-current_gate = "NS-07B"
-implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres", "Calibration", "Control"]
+current_gate = "NS-08"
+implemented_owners = ["Backends", "Optics", "Detectors", "Atmospheres", "Calibration", "Control", "Tomography"]
 partial_owners = ["WavefrontSensors"]
 
 [owner_sources]
@@ -13,6 +13,7 @@ Detectors = "src/detectors/api.jl"
 Atmospheres = "src/atmosphere/api.jl"
 Calibration = "src/calibration/api.jl"
 Control = "src/control/api.jl"
+Tomography = "src/tomography/api.jl"
 
 [partial_owner_sources]
 WavefrontSensors = "src/wfs/api.jl"

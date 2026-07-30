@@ -6,6 +6,7 @@ using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using FFTW
@@ -65,6 +66,14 @@ for name in names(WavefrontSensors; all=true)
             !isdefined(@__MODULE__, name)
         @eval const $(name) =
             getfield(WavefrontSensors, $(QuoteNode(name)))
+    end
+end
+
+for name in names(Tomography; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Tomography, $(QuoteNode(name)))
     end
 end
 

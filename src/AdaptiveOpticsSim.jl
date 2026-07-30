@@ -422,25 +422,9 @@ import .WavefrontSensors:
 include("plant/plant.jl")
 include("calibration/calibration.jl")
 
-# Tomography still awaits its namespace gate. Import only the calibration
-# identities its flat implementation consumes; these are package-internal
-# composition bindings, not root exports or public API.
-import .Calibration:
-    BuildBackend,
-    CPUBuildBackend,
-    GPUArrayBuildBackend,
-    InteractionMatrix,
-    NativeBuildBackend,
-    default_build_backend,
-    materialize_build,
-    prepare_build_matrix
-
 include("control/control.jl")
 include("control/ensemble.jl")
-include("tomography/parameters.jl")
-include("tomography/geometry.jl")
-include("tomography/fitting.jl")
-include("tomography/reconstructors.jl")
+include("tomography/tomography.jl")
 
 include("exports.jl")
 

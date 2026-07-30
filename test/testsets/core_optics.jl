@@ -462,6 +462,31 @@ end
         @test Base.ispublic(Control, name)
         @test parentmodule(getfield(Control, name)) === Control
     end
+    for name in (
+        :TomographyAtmosphereParams,
+        :LGSAsterismParams,
+        :LGSWFSParams,
+        :TomographyParams,
+        :TomographyDMParams,
+        :ModelBasedTomography,
+        :InteractionMatrixTomography,
+        :SimulationSlopes,
+        :InterleavedSlopes,
+        :InvertedSlopes,
+        :build_reconstructor,
+        :assemble_reconstructor_and_fitting,
+        :zenith_angle_deg,
+        :wind_direction_deg,
+        :reconstruct_wavefront_map,
+        :dm_commands,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
+        @test Base.isexported(Tomography, name)
+        @test Base.ispublic(Tomography, name)
+        @test parentmodule(getfield(Tomography, name)) === Tomography
+    end
     @test !Base.isexported(AdaptiveOpticsSim, :ensemble_ownership_roots)
     @test !Base.isexported(AdaptiveOpticsSim, :run_ensemble!)
     @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)

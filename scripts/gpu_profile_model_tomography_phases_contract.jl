@@ -1,3 +1,5 @@
+using AdaptiveOpticsSim.Tomography
+
 function _sync_backend!(x)
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(x))
     return x
@@ -62,10 +64,12 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
         n_actuators=fill(grid_side, n_dm),
         valid_actuators=trues(grid_side, grid_side),
     )
-    noise_model = AdaptiveOpticsSim.RelativeSignalNoise(TB(0.1))
+    noise_model = AdaptiveOpticsSim.Tomography.RelativeSignalNoise(TB(0.1))
 
     gamma_single, t_gamma_single = _time_phase() do
-        AdaptiveOpticsSim.sparse_gradient_matrix(AdaptiveOpticsSim.valid_lenslet_support(wfs); over_sampling=2)
+        AdaptiveOpticsSim.Tomography.sparse_gradient_matrix(
+            AdaptiveOpticsSim.Tomography.valid_lenslet_support(wfs);
+            over_sampling=2)
     end
     gamma_base, grid_mask = gamma_single
     gamma, t_blockdiag = _time_phase() do
@@ -73,24 +77,29 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
     end
 
     cxx, t_cxx = _time_phase() do
-        value = AdaptiveOpticsSim.auto_correlation(build_backend, atmosphere, asterism, wfs, grid_mask)
+        value = AdaptiveOpticsSim.Tomography.auto_correlation(
+            build_backend, atmosphere, asterism, wfs, grid_mask)
         _sync_backend!(value)
     end
     cross, t_cross = _time_phase() do
-        value = AdaptiveOpticsSim.cross_correlation(build_backend, atmosphere, asterism, wfs, tomography)
+        value = AdaptiveOpticsSim.Tomography.cross_correlation(
+            build_backend, atmosphere, asterism, wfs, tomography)
         _sync_backend!(value)
     end
 
-    weights = AdaptiveOpticsSim._equal_fit_source_weights(tomography)
+    weights = AdaptiveOpticsSim.Tomography._equal_fit_source_weights(
+        tomography)
     cox_full, t_fit_average = _time_phase() do
-        value = AdaptiveOpticsSim._fit_source_average(cross, weights)
+        value = AdaptiveOpticsSim.Tomography._fit_source_average(
+            cross, weights)
         _sync_backend!(value)
     end
 
     row_positions = findall(vec(grid_mask))
     col_positions = findall(repeat(vec(grid_mask), asterism.n_lgs))
     cox, t_extract = _time_phase() do
-        value = AdaptiveOpticsSim._extract_submatrix(cox_full, row_positions, col_positions, build_backend)
+        value = AdaptiveOpticsSim.Tomography._extract_submatrix(
+            cox_full, row_positions, col_positions, build_backend)
         _sync_backend!(value)
     end
 
@@ -120,7 +129,8 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
         _sync_backend!(value)
     end
     cnz, t_cnz = _time_phase() do
-        value = AdaptiveOpticsSim.tomography_noise_covariance(build_backend, noise_model, diag(css_signal))
+        value = AdaptiveOpticsSim.Tomography.tomography_noise_covariance(
+            build_backend, noise_model, diag(css_signal))
         _sync_backend!(value)
     end
     css, t_css = _time_phase() do
@@ -133,11 +143,14 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
         _sync_backend!(value)
     end
     recstat, t_recstat = _time_phase() do
-        value = AdaptiveOpticsSim.stable_hermitian_right_division(build_backend, rhs, css)
+        value =
+            AdaptiveOpticsSim.Tomography.stable_hermitian_right_division(
+                build_backend, rhs, css)
         _sync_backend!(value)
     end
 
-    d = AdaptiveOpticsSim.support_diameter(wfs) / size(AdaptiveOpticsSim.valid_lenslet_support(wfs), 1)
+    d = AdaptiveOpticsSim.Tomography.support_diameter(wfs) /
+        size(AdaptiveOpticsSim.Tomography.valid_lenslet_support(wfs), 1)
     wavefront_to_meter = asterism.wavelength / d / 2
     recon, t_recon = _time_phase() do
         value = d * wavefront_to_meter .* recstat

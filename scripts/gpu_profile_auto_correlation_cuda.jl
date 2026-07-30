@@ -1,5 +1,6 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.Tomography
 
 try
     using CUDA
@@ -57,32 +58,39 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
         lenslet_offset=zeros(T, 2, n_lenslet^2),
     )
 
-    _, grid_mask = AdaptiveOpticsSim.sparse_gradient_matrix(AdaptiveOpticsSim.valid_lenslet_support(wfs); over_sampling=2)
+    _, grid_mask = AdaptiveOpticsSim.Tomography.sparse_gradient_matrix(
+        AdaptiveOpticsSim.Tomography.valid_lenslet_support(wfs);
+        over_sampling=2)
     sampling = size(grid_mask, 1)
     mask_vec = vec(grid_mask)
     valid_positions = findall(mask_vec)
     n_valid = count(mask_vec)
-    altitude = AdaptiveOpticsSim.layer_altitude_m(atmosphere)
-    r0 = AdaptiveOpticsSim._fried_parameter(atmosphere)
-    support_d = AdaptiveOpticsSim.support_diameter(wfs)
-    lgs_dir = AdaptiveOpticsSim.lgs_directions(asterism)
-    directions = AdaptiveOpticsSim.direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
-    source_height = AdaptiveOpticsSim.lgs_height_m(asterism, atmosphere)
-    rotations, offsets_x, offsets_y = AdaptiveOpticsSim._active_guide_grid_params(
+    altitude = AdaptiveOpticsSim.Tomography.layer_altitude_m(atmosphere)
+    r0 = AdaptiveOpticsSim.Tomography._fried_parameter(atmosphere)
+    support_d = AdaptiveOpticsSim.Tomography.support_diameter(wfs)
+    lgs_dir = AdaptiveOpticsSim.Tomography.lgs_directions(asterism)
+    directions = AdaptiveOpticsSim.Tomography.direction_vectors(
+        view(lgs_dir, :, 1), view(lgs_dir, :, 2))
+    source_height =
+        AdaptiveOpticsSim.Tomography.lgs_height_m(asterism, atmosphere)
+    rotations, offsets_x, offsets_y =
+        AdaptiveOpticsSim.Tomography._active_guide_grid_params(
         wfs.lenslet_rotation_rad,
         view(wfs.lenslet_offset, 1, :),
         view(wfs.lenslet_offset, 2, :),
         n_lgs,
     )
 
-    result = AdaptiveOpticsSim._backend_array(B, T, n_lgs * n_valid, n_lgs * n_valid)
+    result = AdaptiveOpticsSim.Calibration._backend_array(
+        B, T, n_lgs * n_valid, n_lgs * n_valid)
     fill!(result, zero(T))
-    valid_positions_native = AdaptiveOpticsSim._backend_array(B, Int, length(valid_positions))
+    valid_positions_native = AdaptiveOpticsSim.Calibration._backend_array(
+        B, Int, length(valid_positions))
     copyto!(valid_positions_native, valid_positions)
     style = AdaptiveOpticsSim.Backends.execution_style(result)
 
     guide_xy, t_guides = _time_phase() do
-        gx, gy = AdaptiveOpticsSim._guide_star_grids(
+        gx, gy = AdaptiveOpticsSim.Tomography._guide_star_grids(
             backend,
             sampling,
             support_d,
@@ -97,7 +105,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
     guide_x, guide_y = guide_xy
 
     shifted, t_shift = _time_phase() do
-        value = AdaptiveOpticsSim._scaled_shifted_coord_stack(
+        value = AdaptiveOpticsSim.Tomography._scaled_shifted_coord_stack(
             backend,
             guide_x,
             guide_y,
@@ -109,8 +117,11 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
     end
     shifted_flat = reshape(shifted, :, n_lgs, length(altitude))
 
-    cst, var_term, inv_L0 = AdaptiveOpticsSim._covariance_constants(r0, atmosphere.L0)
-    block = AdaptiveOpticsSim._backend_array(B, T, n_valid, n_valid)
+    cst, var_term, inv_L0 =
+        AdaptiveOpticsSim.Tomography._covariance_constants(
+            r0, atmosphere.L0)
+    block = AdaptiveOpticsSim.Calibration._backend_array(
+        B, T, n_valid, n_valid)
     fractional_cn2_native = AdaptiveOpticsSim.Calibration.materialize_build(
         backend, atmosphere.fractional_cn2)
 
@@ -122,7 +133,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
             _, dt_selected = _time_phase() do
                 AdaptiveOpticsSim.Backends.launch_kernel_async!(
                     style,
-                    AdaptiveOpticsSim.selected_covariance_block_kernel!,
+                    AdaptiveOpticsSim.Tomography.selected_covariance_block_kernel!,
                     block,
                     shifted_flat,
                     valid_positions_native,

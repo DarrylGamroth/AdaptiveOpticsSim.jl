@@ -59,6 +59,7 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
+using AdaptiveOpticsSim.Tomography
 ```
 
 ### Image formation

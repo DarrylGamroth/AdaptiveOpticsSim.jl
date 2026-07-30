@@ -8,6 +8,7 @@ using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
+using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using LinearAlgebra
@@ -96,6 +97,14 @@ for name in names(Control; all=true)
     if Base.isidentifier(s) && !startswith(s, "#") &&
             !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(Control, $(QuoteNode(name)))
+    end
+end
+
+for name in names(Tomography; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(Tomography, $(QuoteNode(name)))
     end
 end
 

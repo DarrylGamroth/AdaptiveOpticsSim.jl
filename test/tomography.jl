@@ -132,8 +132,11 @@ end
     expected = (recon.operators.cox * transpose(imat)) / Matrix(imat * recon.operators.cxx * transpose(imat) .+ recon.operators.cnz) * slopes
     @test reconstruct_wavefront(recon, slopes) ≈ expected
     out = zeros(1)
-    reconstruct_wavefront!(out, recon, slopes)
+    @test @inferred(reconstruct_wavefront!(out, recon, slopes)) === out
     @test out ≈ expected
+    if !coverage_instrumented()
+        @test @allocated(reconstruct_wavefront!(out, recon, slopes)) == 0
+    end
     mapped = reconstruct_wavefront_map(recon, slopes)
     @test size(mapped) == (1, 1)
     @test mapped[1, 1] ≈ expected[1]
@@ -305,6 +308,14 @@ end
     @test cmd_recon_cpu.matrix isa Matrix
     commands = dm_commands(cmd_recon, [0.1, -0.2])
     @test length(commands) == count(dm.valid_actuators)
+    command_out = similar(commands)
+    command_input = [0.1, -0.2]
+    @test @inferred(dm_commands!(command_out, cmd_recon, command_input)) ===
+        command_out
+    if !coverage_instrumented()
+        @test @allocated(dm_commands!(
+            command_out, cmd_recon, command_input)) == 0
+    end
     original = copy(cmd_recon.matrix)
     mask_actuators!(cmd_recon, 1)
     @test all(iszero, @view cmd_recon.matrix[1, :])

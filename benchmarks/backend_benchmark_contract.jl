@@ -1,6 +1,7 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
+using AdaptiveOpticsSim.Tomography
 using BenchmarkTools
 using Random
 
@@ -138,7 +139,7 @@ function _tomography_case_params(target::BenchmarkExecutionTarget; n_lenslet::In
         n_actuators=fill(grid_side, n_dm),
         valid_actuators=valid,
     )
-    noise_model = RelativeSignalNoise(TB(0.1))
+    noise_model = Tomography.RelativeSignalNoise(TB(0.1))
     imat_rows = 2 * n_lenslet^2 * n_lgs
     grid_mask = trues(grid_side, grid_side)
     imat_cols = n_lgs * count(grid_mask)
@@ -236,7 +237,7 @@ function _builder_benchmarks(target::BenchmarkExecutionTarget, p)
             $(p.lgswfs_hi),
             $(p.tomo_hi),
             $(p.tdm_hi);
-            noise_model=RelativeSignalNoise($(AdaptiveOpticsSim.Backends.gpu_build_type(p.high_accuracy))(0.1)),
+            noise_model=Tomography.RelativeSignalNoise($(AdaptiveOpticsSim.Backends.gpu_build_type(p.high_accuracy))(0.1)),
             build_backend=$(p.build_backend),
         )
         _sync_target!($target, recon_local.reconstructor)

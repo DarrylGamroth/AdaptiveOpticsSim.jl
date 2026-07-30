@@ -33,12 +33,12 @@ The owner categories are:
 - `Ensembles` for optional coarse scheduler execution
 - the root package only for cross-domain config and telemetry serialization
 
-`Backends` has completed its ownership move. Backend extensions add methods to
-`AdaptiveOpticsSim.Backends.name`; no root-package backend generic or
-forwarding method remains part of the supported API. The implemented `Optics`
-namespace likewise owns source, product, propagation, controllable-optic, and
-reusable physical-WFS-component seams under `AdaptiveOpticsSim.Optics`. Hooks
-assigned to later domain owners remain at
+Implemented domain owners, including `Backends`, `Optics`, and `Tomography`,
+receive extension methods at `AdaptiveOpticsSim.Owner.name`; no root-package
+forwarding generic remains part of the supported API. In particular,
+tomography-specific Hermitian solvers extend
+`AdaptiveOpticsSim.Tomography.stable_hermitian_right_division`. Hooks assigned
+to later domain owners remain at
 `AdaptiveOpticsSim.name` only until that owner's PR moves the generic and every
 extension method together. The maintained stage is recorded in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
