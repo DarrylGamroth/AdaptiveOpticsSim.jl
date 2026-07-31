@@ -225,10 +225,31 @@ function _copy_sampling_plane!(::ScalarCPUStyle, target::AbstractArray{T,3},
     return target
 end
 
-function _copy_sampling_plane!(::AcceleratorStyle, target::AbstractArray{T,3},
-    target_index::Int, source::AbstractArray{T,3}, source_index::Int) where {T}
-    @views copyto!(target[:, :, target_index], source[:, :, source_index])
+@kernel function copy_sampling_plane_kernel!(target, target_index,
+    source, source_index, row_first, col_first, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        @inbounds target[i, j, target_index] =
+            source[row_first + i - 1, col_first + j - 1, source_index]
+    end
+end
+
+function _launch_copy_sampling_plane!(style::AcceleratorStyle,
+    target::AbstractArray{T,3}, target_index::Int,
+    source::AbstractArray{T,3}, source_index::Int,
+    row_first::Int, col_first::Int) where {T}
+    n, m = size(target, 1), size(target, 2)
+    launch_kernel!(style, copy_sampling_plane_kernel!, target, target_index,
+        source, source_index, row_first, col_first, n, m;
+        ndrange=(n, m))
     return target
+end
+
+function _copy_sampling_plane!(style::AcceleratorStyle,
+    target::AbstractArray{T,3},
+    target_index::Int, source::AbstractArray{T,3}, source_index::Int) where {T}
+    return _launch_copy_sampling_plane!(style, target,
+        target_index, source, source_index, 1, 1)
 end
 
 function _copy_windowed_sampling_plane!(target::AbstractArray{T,3},
@@ -270,13 +291,13 @@ function _copy_windowed_sampling_plane!(::AcceleratorStyle,
         source, source_index)
 end
 
-function _copy_windowed_sampling_plane!(::AcceleratorStyle,
+function _copy_windowed_sampling_plane!(style::AcceleratorStyle,
     target::AbstractArray{T,3}, target_index::Int,
     source::AbstractArray{T,3}, source_index::Int,
     window::FrameWindow) where {T}
-    @views copyto!(target[:, :, target_index],
-        source[window.rows, window.cols, source_index])
-    return target
+    return _launch_copy_sampling_plane!(style, target,
+        target_index, source, source_index,
+        first(window.rows), first(window.cols))
 end
 
 function _sampling_read_cube!(cube::AbstractArray{T,3}, ::FrameSensorType,
@@ -415,9 +436,24 @@ end
 _up_the_ramp_products_ready(::FrameReadoutProducts, det::Detector,
     n_reads::Int) = false
 
-function ensure_up_the_ramp_products!(det::Detector, n_reads::Int)
+function _ramp_acquisition_kind(acquisition::Symbol)
+    acquisition === :synthesized_final_charge &&
+        return SynthesizedFinalChargeRamp
+    acquisition === :scheduled_evolving_charge &&
+        return ScheduledEvolvingChargeRamp
+    throw(InvalidConfiguration(
+        "ramp acquisition must be :synthesized_final_charge or " *
+        ":scheduled_evolving_charge"))
+end
+
+function ensure_up_the_ramp_products!(det::Detector, n_reads::Int;
+    acquisition::Symbol=:synthesized_final_charge)
     current = readout_products(det)
-    _up_the_ramp_products_ready(current, det, n_reads) && return current
+    acquisition_kind = _ramp_acquisition_kind(acquisition)
+    if _up_the_ramp_products_ready(current, det, n_reads)
+        current.acquisition_kind = acquisition_kind
+        return current
+    end
 
     frame = det.state.frame
     output_shape = readout_product_shape(det)
@@ -442,7 +478,8 @@ function ensure_up_the_ramp_products!(det::Detector, n_reads::Int)
 
     products = UpTheRampReadoutProducts(slope_frame, intercept_frame,
         integrated_frame, read_cube, read_times, workspace_slope,
-        workspace_intercept, workspace_integrated, workspace_cube)
+        workspace_intercept, workspace_integrated, workspace_cube,
+        acquisition_kind)
     fill!(slope_frame, zero(eltype(slope_frame)))
     fill!(intercept_frame, zero(eltype(intercept_frame)))
     fill!(integrated_frame, zero(eltype(integrated_frame)))

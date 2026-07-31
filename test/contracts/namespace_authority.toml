@@ -226,6 +226,7 @@ exports = [
     "CMOSSensor",
     "EMCCDSensor",
     "InGaAsSensor",
+    "HgCdTeSensor",
     "LinearEMMode",
     "PhotonCountingEMMode",
     "EMOutput",
@@ -531,6 +532,8 @@ new_domain_public = [
     "Detectors.ConditionalGammaMultiplication",
     "Detectors.FrameWindow",
     "Detectors.StaticCMOSOutputPattern",
+    "Detectors.HgCdTeReadout",
+    "Detectors.detector_ramp_acquisition",
 ]
 removed_exports = []
 removed_public = []
@@ -940,6 +943,7 @@ exports = [
     "CMOSSensor",
     "EMCCDSensor",
     "InGaAsSensor",
+    "HgCdTeSensor",
     "LinearEMMode",
     "PhotonCountingEMMode",
     "EMOutput",
@@ -1029,6 +1033,8 @@ public = [
     "ConditionalGammaMultiplication",
     "FrameWindow",
     "StaticCMOSOutputPattern",
+    "HgCdTeReadout",
+    "detector_ramp_acquisition",
 ]
 
 [[api_allowlists]]
@@ -2067,9 +2073,11 @@ bindings = [
     "DetectorAcquisitionPlan",
     "EMCCDSensor",
     "FrameReadoutProducts",
+    "FrameSamplingMode",
     "FrameSensorType",
     "FrameTransferAcquisition",
     "GlobalResetExposure",
+    "HgCdTeSensorType",
     "HgCdTeAvalancheArraySensor",
     "RollingExposure",
     "RollingShutter",
@@ -2090,6 +2098,7 @@ bindings = [
     "finalize_scheduled_up_the_ramp_readout_products!",
     "is_global_shutter",
     "line_time",
+    "multi_read_sampling_mode",
     "output_frame",
     "prepare_detector_acquisition",
     "readout_products",

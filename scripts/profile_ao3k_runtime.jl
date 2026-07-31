@@ -74,11 +74,11 @@ end
 
 function _resolve_sampling(name::AbstractString, T::Type{<:AbstractFloat})
     lowered = lowercase(name)
-    lowered == "default" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
-    lowered == "single" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=SingleRead(), T=T), "single"
-    lowered == "ndr4" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=AveragedNonDestructiveReads(4), T=T), "ndr4"
-    lowered == "cds" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
-    lowered == "fowler8" && return HgCdTeAvalancheArraySensor(read_time=T(2.5e-4), sampling_mode=FowlerSampling(8), T=T), "fowler8"
+    lowered == "default" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
+    lowered == "single" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=SingleRead(), T=T), "single"
+    lowered == "ndr4" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=AveragedNonDestructiveReads(4), T=T), "ndr4"
+    lowered == "cds" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
+    lowered == "fowler8" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=FowlerSampling(8), T=T), "fowler8"
     error("unsupported sampling mode '$name'; use default, single, ndr4, cds, or fowler8")
 end
 
@@ -191,12 +191,11 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         gain=1.0,
         dark_current=0.02,
         noise=NoiseReadout(0.1),
-        sensor=HgCdTeAvalancheArraySensor(
+        sensor=HgCdTeSensor(
             glow_rate=T(0.02),
-            read_time=sensor.read_time,
-            sampling_mode=sensor.sampling_mode,
-            avalanche_gain=sensor.avalanche_gain,
-            excess_noise_factor=sensor.excess_noise_factor,
+            read_time=sensor.readout.read_time,
+            sampling_mode=sensor.readout.sampling_mode,
+            persistence_model=sensor.readout.persistence_model,
             T=T),
         response_model=response_model,
         correction_model=correction_model,

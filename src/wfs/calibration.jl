@@ -147,12 +147,27 @@ function detector_sensor_calibration_signature(sensor::CCDSensor,
     return detector_sampling_calibration_signature(sensor.sampling_mode, sig)
 end
 
+function detector_hgcdte_readout_calibration_signature(
+    sensor::HgCdTeSensorType, sig::UInt)
+    readout = hgcdte_readout(sensor)
+    sig = hash(readout.read_time, sig)
+    sig = hash(readout.persistence_model, sig)
+    return detector_sampling_calibration_signature(
+        readout.sampling_mode, sig)
+end
+
+function detector_sensor_calibration_signature(
+    sensor::HgCdTeSensor, sig::UInt)
+    sig = hash(typeof(sensor), sig)
+    return detector_hgcdte_readout_calibration_signature(sensor, sig)
+end
+
 function detector_sensor_calibration_signature(
     sensor::HgCdTeAvalancheArraySensor, sig::UInt)
     sig = hash(typeof(sensor), sig)
     sig = hash(sensor.avalanche_gain, sig)
-    sig = hash(sensor.read_time, sig)
-    return detector_sampling_calibration_signature(sensor.sampling_mode, sig)
+    sig = hash(sensor.excess_noise_factor, sig)
+    return detector_hgcdte_readout_calibration_signature(sensor, sig)
 end
 
 function detector_readout_correction_calibration_signature(
@@ -307,36 +322,37 @@ function require_wfs_calibration_sensor(sensor::CMOSSensor)
 end
 
 @inline require_wfs_hgcdte_sampling(::SingleRead,
-    ::HgCdTeAvalancheArraySensor, ::Detector) = nothing
+    ::HgCdTeSensorType, ::Detector) = nothing
 @inline require_wfs_hgcdte_sampling(::AveragedNonDestructiveReads,
-    ::HgCdTeAvalancheArraySensor, ::Detector) = nothing
+    ::HgCdTeSensorType, ::Detector) = nothing
 @inline require_wfs_hgcdte_sampling(::CorrelatedDoubleSampling,
-    ::HgCdTeAvalancheArraySensor, ::Detector) = nothing
+    ::HgCdTeSensorType, ::Detector) = nothing
 @inline require_wfs_hgcdte_sampling(::FowlerSampling,
-    ::HgCdTeAvalancheArraySensor, ::Detector) = nothing
+    ::HgCdTeSensorType, ::Detector) = nothing
 
 @inline function require_wfs_hgcdte_sampling(mode::UpTheRampSampling,
-    sensor::HgCdTeAvalancheArraySensor, det::Detector)
+    sensor::HgCdTeSensorType, det::Detector)
     validate_up_the_ramp_schedule(sensor, det, mode,
         det.params.integration_time)
     return nothing
 end
 
 function require_wfs_hgcdte_sampling(::FrameSamplingMode,
-    ::HgCdTeAvalancheArraySensor, ::Detector)
+    ::HgCdTeSensorType, ::Detector)
     throw(InvalidConfiguration(
         "detector-coupled WFS calibration does not support this HgCdTe sampling mode"))
 end
 
 @inline require_wfs_calibration_sensor(
-    ::HgCdTeAvalancheArraySensor) = nothing
+    ::HgCdTeSensorType) = nothing
 
 @inline require_wfs_calibration_schedule(::FrameSensorType,
     ::Detector) = nothing
 
 @inline function require_wfs_calibration_schedule(
-    sensor::HgCdTeAvalancheArraySensor, det::Detector)
-    require_wfs_hgcdte_sampling(sensor.sampling_mode, sensor, det)
+    sensor::HgCdTeSensorType, det::Detector)
+    require_wfs_hgcdte_sampling(
+        multi_read_sampling_mode(sensor), sensor, det)
     return nothing
 end
 

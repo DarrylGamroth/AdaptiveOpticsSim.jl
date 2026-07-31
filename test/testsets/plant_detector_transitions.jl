@@ -92,7 +92,7 @@ end
     @test rolling_error.reason == :unsupported_timing
     @test size(rolling.state.frame) == (1, 1)
 
-    quantized_sensor = HgCdTeAvalancheArraySensor(
+    quantized_sensor = HgCdTeSensor(
         sampling_mode=UpTheRampSampling(4), read_time=0.0)
     quantized_detector = Detector(integration_time=1e-8,
         noise=NoiseNone(), sensor=quantized_sensor)
@@ -113,7 +113,7 @@ end
         [0.0, 3e-9, 6e-9, 1e-8]
 
     spacing_detector = Detector(integration_time=1e-9, noise=NoiseNone(),
-        sensor=HgCdTeAvalancheArraySensor(
+        sensor=HgCdTeSensor(
             sampling_mode=UpTheRampSampling(3), read_time=0.0))
     spacing_error = caught_detector_acquisition_error() do
         prepare_global_shutter_acquisition(spacing_detector,
@@ -124,7 +124,7 @@ end
     @test spacing_error.reason == :unrepresentable_read_schedule
 
     read_time_detector = Detector(integration_time=1.0, noise=NoiseNone(),
-        sensor=HgCdTeAvalancheArraySensor(
+        sensor=HgCdTeSensor(
             sampling_mode=UpTheRampSampling(3), read_time=0.1))
     readout_error = caught_detector_acquisition_error() do
         prepare_global_shutter_acquisition(read_time_detector,
@@ -276,7 +276,7 @@ end
     map = plant_detector_intensity_map(values)
     detector = Detector(integration_time=1.0, qe=1.0,
         noise=NoiseNone(),
-        sensor=HgCdTeAvalancheArraySensor(
+        sensor=HgCdTeSensor(
             sampling_mode=UpTheRampSampling(3), read_time=0.0),
         readout_window=FrameWindow(2:3, 2:3))
     definition = GlobalShutterAcquisitionDefinition(
@@ -284,6 +284,8 @@ end
         readout_duration=PlantDuration(100),
         readiness_delay=PlantDuration(200))
     prepared = prepare_global_shutter_acquisition(detector, map, definition)
+    @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(detector) ==
+        :scheduled_evolving_charge
     state = GlobalShutterAcquisitionState(prepared)
     rng = Xoshiro(501)
     start = PlantTimestamp(5_000)
@@ -418,7 +420,7 @@ end
     end
 
     ramp_detector = Detector(integration_time=1.0, noise=NoiseNone(),
-        sensor=HgCdTeAvalancheArraySensor(
+        sensor=HgCdTeSensor(
             sampling_mode=UpTheRampSampling(3), read_time=0.0))
     ramp_map = plant_detector_intensity_map(fill(1.0, 8, 8))
     ramp_prepared = prepare_global_shutter_acquisition(ramp_detector,

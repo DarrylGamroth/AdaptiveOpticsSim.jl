@@ -188,7 +188,7 @@
 
     det_adc_window_corr = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
-        sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+        sensor=HgCdTeSensor(sampling_mode=SingleRead()),
         response_model=NullFrameResponse(),
         correction_model=CompositeFrameReadoutCorrection((
             ReferenceRowCommonModeCorrection(1),
@@ -201,7 +201,7 @@
     @test size(generalized_adc_window) == (2, 4, 5)
     @test generalized_adc_window[1, :, :] == capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
             bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
-            sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+            sensor=HgCdTeSensor(sampling_mode=SingleRead()),
             response_model=NullFrameResponse(),
             correction_model=CompositeFrameReadoutCorrection((
                 ReferenceRowCommonModeCorrection(1),
@@ -210,7 +210,7 @@
         @view(adc_window_in[1, :, :]); rng=MersenneTwister(10))
     @test generalized_adc_window[2, :, :] == capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
             bits=8, full_well=100.0, readout_window=FrameWindow(2:5, 3:7), output_type=UInt16,
-            sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+            sensor=HgCdTeSensor(sampling_mode=SingleRead()),
             response_model=NullFrameResponse(),
             correction_model=CompositeFrameReadoutCorrection((
                 ReferenceRowCommonModeCorrection(1),

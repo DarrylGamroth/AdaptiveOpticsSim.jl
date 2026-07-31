@@ -456,9 +456,10 @@ gain, and noise pipeline. In a scheduled HIL plant,
 and product-readiness durations; the sensor-side pixel-rate calculation is a
 direct-capture timing estimate, not a replacement for that Plant contract.
 
-HgCdTe avalanche arrays likewise have no implicit optical blur or interpixel
-coupling. Configure presampling detector response and post-collection IPC as
-separate effects. `detector_mtf` reports the normalized discrete-space transfer
+Conventional and linear-avalanche HgCdTe arrays have no implicit optical blur
+or interpixel coupling. Configure presampling detector response and
+post-collection IPC as separate effects. `detector_mtf` reports the normalized
+discrete-space transfer
 magnitude of the realized response kernel on its shift-invariant interior.
 Finite frames use zero extension, so edge response is boundary-dependent and
 can lose signal outside detector support. The diagnostic does not substitute
@@ -481,15 +482,14 @@ continuous apertures can collapse to the same discrete kernel. Prepare an
 explicitly oversampled optical mapping when those differences must affect the
 image or MTF.
 
-Conventional gain-one HgCdTe arrays and avalanche/SAPHIRA-style arrays support
-up-the-ramp fitting:
+Conventional HgCdTe arrays and explicitly configured linear-avalanche arrays
+support up-the-ramp fitting through the shared readout contract:
 
 ```julia
 ramp_detector = Detector(
     integration_time=1.0,
     noise=NoisePhotonReadout(8.0),
-    sensor=HgCdTeAvalancheArraySensor(
-        avalanche_gain=1.0,
+    sensor=HgCdTeSensor(
         read_time=20e-3,
         sampling_mode=UpTheRampSampling(16),
     ),
@@ -500,6 +500,7 @@ slope = detector_ramp_slope(ramp_detector)
 intercept = detector_ramp_intercept(ramp_detector)
 read_cube = detector_ramp_cube(ramp_detector)
 read_times = detector_ramp_times(ramp_detector)
+kind = AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(ramp_detector)
 ```
 
 This direct `capture!` workflow is the lower-fidelity post-exposure convenience:
@@ -521,8 +522,7 @@ rng = runtime_rng(6)
 event_ramp_detector = Detector(
     integration_time=1.0,
     noise=NoisePhotonReadout(8.0),
-    sensor=HgCdTeAvalancheArraySensor(
-        avalanche_gain=1.0,
+    sensor=HgCdTeSensor(
         read_time=20e-3,
         sampling_mode=UpTheRampSampling(3),
     ),

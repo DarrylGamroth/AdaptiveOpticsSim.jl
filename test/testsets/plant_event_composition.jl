@@ -209,7 +209,7 @@ end
     acquisition_mode=FrameTransferAcquisition(transfer_time=T(0.02), T=T),
     T=T)
 @inline event_composition_sensor(::EventHgCdTeRamp, ::Type{T}) where {T} =
-    HgCdTeAvalancheArraySensor(sampling_mode=UpTheRampSampling(3),
+    HgCdTeSensor(sampling_mode=UpTheRampSampling(3),
         read_time=zero(T), T=T)
 
 function Plant.prepare_acquisition_provider(

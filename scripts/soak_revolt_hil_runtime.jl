@@ -25,7 +25,7 @@ function _resolve_sensor(name::AbstractString)
     lowered == "cmos" && return CMOSSensor(), :cmos
     lowered == "emccd" && return EMCCDSensor(), :emccd
     lowered == "ingaas" && return InGaAsSensor(), :ingaas
-    lowered == "hgcdte" && return HgCdTeAvalancheArraySensor(), :hgcdte_avalanche_array
+    lowered == "hgcdte" && return HgCdTeSensor(), :hgcdte
     error("unsupported sensor '$name'; use ccd, cmos, emccd, ingaas, or hgcdte")
 end
 
@@ -46,7 +46,8 @@ function _resolve_thermal_model(name::AbstractString, sensor_label::Symbol, T::T
         return FixedTemperature(
             temperature_K=120.0,
             dark_current_law=dark_law,
-            glow_rate_law=(sensor_label in (:ingaas, :hgcdte_avalanche_array) ? glow_law : NullTemperatureLaw()),
+            glow_rate_law=(sensor_label in (:ingaas, :hgcdte) ?
+                glow_law : NullTemperatureLaw()),
             cic_per_frame_law=(sensor_label == :emccd ? cic_law :
                 NullTemperatureLaw()),
             T=T), :fixed120
@@ -59,7 +60,8 @@ function _resolve_thermal_model(name::AbstractString, sensor_label::Symbol, T::T
             min_temperature_K=100.0,
             max_temperature_K=300.0,
             dark_current_law=dark_law,
-            glow_rate_law=(sensor_label in (:ingaas, :hgcdte_avalanche_array) ? glow_law : NullTemperatureLaw()),
+            glow_rate_law=(sensor_label in (:ingaas, :hgcdte) ?
+                glow_law : NullTemperatureLaw()),
             cic_per_frame_law=(sensor_label == :emccd ? cic_law :
                 NullTemperatureLaw()),
             T=T), :dynamic120
@@ -83,13 +85,13 @@ _thermalized_sensor(sensor::EMCCDSensor, enabled::Bool, ::Type{T}) where {T<:Abs
         T=T) : sensor
 _thermalized_sensor(sensor::InGaAsSensor, enabled::Bool, ::Type{T}) where {T<:AbstractFloat} =
     enabled ? InGaAsSensor(glow_rate=T(0.02), persistence_model=sensor.persistence_model, T=T) : sensor
-_thermalized_sensor(sensor::HgCdTeAvalancheArraySensor, enabled::Bool, ::Type{T}) where {T<:AbstractFloat} =
-    enabled ? HgCdTeAvalancheArraySensor(
-        avalanche_gain=sensor.avalanche_gain,
-        excess_noise_factor=sensor.excess_noise_factor,
+_thermalized_sensor(sensor::HgCdTeSensor, enabled::Bool,
+    ::Type{T}) where {T<:AbstractFloat} =
+    enabled ? HgCdTeSensor(
         glow_rate=T(0.02),
-        read_time=sensor.read_time,
-        sampling_mode=sensor.sampling_mode,
+        read_time=sensor.readout.read_time,
+        sampling_mode=sensor.readout.sampling_mode,
+        persistence_model=sensor.readout.persistence_model,
         T=T) : sensor
 
 function _gc_counter_delta(before, after)

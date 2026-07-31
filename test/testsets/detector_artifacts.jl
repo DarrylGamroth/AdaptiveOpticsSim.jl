@@ -146,4 +146,47 @@
         "allocation_gate_passed",
     ))
     @test cmos_deterministic["steady_alloc_bytes"] == 0
+
+    hgcdte_entry = detector_entries["DET-HGCDTE-QUAL-2026-07-30"]
+    @test hgcdte_entry["status"] == "active"
+    hgcdte_path = joinpath(dirname(detector_artifact_path),
+        hgcdte_entry["path"])
+    @test isfile(hgcdte_path)
+    hgcdte = TOML.parsefile(hgcdte_path)
+    @test hgcdte["schema_version"] == 1
+    @test hgcdte["family"] == "conventional_hgcdte"
+    @test hgcdte["all_gates_passed"]
+    @test !hgcdte["environment"]["source_dirty"]
+    hgcdte_qualification = hgcdte["qualification"]
+    @test hgcdte_qualification["samples_per_case"] == 16_384
+    @test hgcdte_qualification["sigma_limit"] == 6.0
+    moment_cases = hgcdte_qualification["moment_cases"]
+    @test Set(case["id"] for case in moment_cases) == Set((
+        "single_read_noise",
+        "averaged_ndr4_noise",
+        "correlated_double_sampling_noise",
+        "fowler8_noise",
+        "up_the_ramp16_noise",
+        "dark_current",
+        "readout_glow",
+    ))
+    @test all(case -> case["mean_passed"] && case["variance_passed"],
+        moment_cases)
+    hgcdte_deterministic = hgcdte_qualification["deterministic"]
+    @test all(hgcdte_deterministic[key] for key in (
+        "architecture_separated",
+        "single_ndr_cds_fowler_passed",
+        "direct_synthesized_ramp_passed",
+        "irregular_scheduled_ramp_passed",
+        "window_preserves_full_frame_timing",
+        "configured_mtf_preserved",
+        "configured_ipc_passed",
+        "reference_correction_passed",
+        "saturation_passed",
+        "nonlinearity_passed",
+        "persistence_passed",
+        "deterministic_replay_passed",
+        "allocation_gate_passed",
+    ))
+    @test hgcdte_deterministic["steady_alloc_bytes"] == 0
 end

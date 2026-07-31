@@ -3261,7 +3261,7 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
 
     ramp_detector = Detector(integration_time=T(2), noise=NoiseNone(),
         qe=one(T), gain=one(T),
-        sensor=HgCdTeAvalancheArraySensor(read_time=zero(T),
+        sensor=HgCdTeSensor(read_time=zero(T),
             sampling_mode=UpTheRampSampling(5), T=T),
         response_model=NullFrameResponse(), T=T, backend=selector)
     ramp_output = capture!(ramp_detector,
@@ -3273,6 +3273,8 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
     @test maximum(abs, Array(detector_ramp_intercept(ramp_detector))) <= eps(T)
     @test size(detector_ramp_cube(ramp_detector)) == (32, 32, 5)
     @test detector_ramp_times(ramp_detector) == T[0, 0.5, 1, 1.5, 2]
+    @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(
+        ramp_detector) == :synthesized_final_charge
 
     linear_apd = LinearAPDDetector(topology=APDChannelBank(4),
         integration_time=T(0.5), qe=T(0.5), avalanche_gain=T(4),
@@ -3334,7 +3336,7 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
     ramp_map = optional_detector_event_map(ramp_values)
     ramp_detector = Detector(integration_time=one(T), qe=one(T),
         noise=NoiseNone(),
-        sensor=HgCdTeAvalancheArraySensor(read_time=zero(T),
+        sensor=HgCdTeSensor(read_time=zero(T),
             sampling_mode=UpTheRampSampling(3), T=T),
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3), T=T,
@@ -3370,6 +3372,8 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
         dims=3)
     @test Array(detector_ramp_slope(ramp_detector)) == fill(T(2), 2, 2)
     @test Array(ramp_output) == fill(T(2), 2, 2)
+    @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(
+        ramp_detector) == :scheduled_evolving_charge
 
     rolling_values = BackendArray(fill(T(2), 8, 8))
     rolling_map = optional_detector_event_map(rolling_values)
@@ -3662,7 +3666,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     sh_large = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     bio = BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
-    det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeAvalancheArraySensor(T=T), T=T, backend=backend)
+    det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
     det_capture = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, bits=12, full_well=T(100),
         sensor=CMOSSensor(T=T), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
@@ -3813,13 +3817,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
 
     for correction_model in correction_models
         cpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-            sensor=HgCdTeAvalancheArraySensor(T=T),
+            sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
             backend=CPUBackend())
         gpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-            sensor=HgCdTeAvalancheArraySensor(T=T),
+            sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
@@ -3831,13 +3835,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         @test isapprox(Array(gpu_frame), cpu_frame; rtol=1f-5, atol=1f-4)
 
         cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-            sensor=HgCdTeAvalancheArraySensor(T=T),
+            sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
             backend=CPUBackend())
         gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-            sensor=HgCdTeAvalancheArraySensor(T=T),
+            sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
@@ -3858,14 +3862,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     ))
     cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
-        sensor=HgCdTeAvalancheArraySensor(T=T),
+        sensor=HgCdTeSensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
         backend=CPUBackend())
     gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
-        sensor=HgCdTeAvalancheArraySensor(T=T),
+        sensor=HgCdTeSensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
@@ -3881,14 +3885,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
 
     cpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
-        sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
+        sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3),
         T=T,
         backend=CPUBackend())
     gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
-        sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
+        sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3),
         T=T,
@@ -3923,7 +3927,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     bio = BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
-    det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeAvalancheArraySensor(T=T), T=T, backend=backend)
+    det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     pupil = PupilFunction(tel; T=T, backend=backend)
     atm = MultiLayerAtmosphere(tel;
@@ -4024,13 +4028,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
 
     for correction_model in correction_models
         cpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-            sensor=HgCdTeAvalancheArraySensor(T=T),
+            sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
             backend=CPUBackend())
         gpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-            sensor=HgCdTeAvalancheArraySensor(T=T),
+            sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
@@ -4042,13 +4046,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         @test isapprox(Array(gpu_frame), cpu_frame; rtol=1f-5, atol=1f-4)
 
         cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-            sensor=HgCdTeAvalancheArraySensor(T=T),
+            sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
             backend=CPUBackend())
         gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
-            sensor=HgCdTeAvalancheArraySensor(T=T),
+            sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
@@ -4069,14 +4073,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     ))
     cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
-        sensor=HgCdTeAvalancheArraySensor(T=T),
+        sensor=HgCdTeSensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
         backend=CPUBackend())
     gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
-        sensor=HgCdTeAvalancheArraySensor(T=T),
+        sensor=HgCdTeSensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
@@ -4092,14 +4096,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
 
     cpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
-        sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
+        sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3),
         T=T,
         backend=CPUBackend())
     gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
-        sensor=HgCdTeAvalancheArraySensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
+        sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3),
         T=T,

@@ -954,7 +954,11 @@ not the moved detector bindings.
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
 - Conventional sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`,
-  `EMCCDSensor`, `InGaAsSensor`, and `HgCdTeAvalancheArraySensor`
+  `EMCCDSensor`, `InGaAsSensor`, and `HgCdTeSensor`
+- Linear-avalanche area sensor: `HgCdTeAvalancheArraySensor`; its avalanche
+  parameters remain distinct from the qualified-public
+  `Detectors.HgCdTeReadout` sampling configuration shared with
+  `HgCdTeSensor`
 - Counting sensor families: `APDSensor`, `SPADArraySensor`, and
   `MKIDArraySensor`
 - EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,
@@ -1138,12 +1142,15 @@ current model assumes independent read samples. Configure CCD clock-induced
 charge with `clock_induced_charge_per_frame`; unlike dark current, it is not
 scaled by integration time.
 
-`UpTheRampSampling(n)` is available on `HgCdTeAvalancheArraySensor`, including
-the conventional gain-one configuration. It retains `n` evenly spaced
+`UpTheRampSampling(n)` is available on `HgCdTeSensor` and on the
+linear-avalanche HgCdTe sensor. It retains `n` evenly spaced
 nondestructive reads, fits an intercept and slope, and returns
 `slope * integration_time` so ordinary `capture!` output units do not change.
 Use `detector_ramp_slope(det)`, `detector_ramp_intercept(det)`,
 `detector_ramp_cube(det)`, and `detector_ramp_times(det)` for diagnostics.
+`Detectors.detector_ramp_acquisition(det)` returns
+`:synthesized_final_charge` for this direct convenience or
+`:scheduled_evolving_charge` for a Plant event acquisition.
 Reads start at exposure time zero and end at the configured integration time;
 `read_time` must fit within the resulting cadence. Full-frame and windowed
 repeated capture reuse
@@ -1153,9 +1160,10 @@ The current ramp model assumes linear accumulation and independent per-read
 Gaussian read noise. It shares the exposure's photon/dark realization across
 the ramp by synthesizing fractional reads from the completed frame. It is a
 post-exposure lower-fidelity convenience, not a time-resolved simulation of an
-evolving charge ramp. The scheduled detector path will instead record actual
-nondestructive-read events. The current model also does not provide cosmic-ray
-segmentation, saturation-aware fitting, or correlated 1/f-noise estimation.
+evolving charge ramp. The scheduled detector path instead records actual
+nondestructive-read events at its prepared, possibly nanosecond-quantized
+timestamps. The current model also does not provide cosmic-ray segmentation,
+saturation-aware fitting, or correlated 1/f-noise estimation.
 
 `EMCCDSensor(...; acquisition_mode=FrameTransferAcquisition(...))` models frame
 transfer as timing only. With `readout_rate_hz` configured, metadata reports

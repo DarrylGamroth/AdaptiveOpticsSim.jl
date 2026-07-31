@@ -2,6 +2,7 @@ export Detector
 export APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
+export HgCdTeSensor
 export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput
 export emccd_snr
 export SequentialAcquisition, FrameTransferAcquisition
@@ -43,3 +44,5 @@ public ClippedGaussianMultiplicationApproximation
 public ConditionalGammaMultiplication
 public FrameWindow
 public StaticCMOSOutputPattern
+public HgCdTeReadout
+public detector_ramp_acquisition

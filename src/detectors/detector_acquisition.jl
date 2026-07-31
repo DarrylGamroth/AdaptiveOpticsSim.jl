@@ -300,19 +300,20 @@ end
     ::Type{<:AbstractFloat}) = nothing
 
 @inline function _require_sensor_sampling_configuration(
-    sensor::HgCdTeAvalancheArraySensor, frame_shape::Tuple{Int,Int},
+    sensor::HgCdTeSensorType, frame_shape::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, exposure_time::Real,
     ::Type{T}) where {T<:AbstractFloat}
-    return _require_hgcdte_sampling_configuration(sensor.sampling_mode,
+    return _require_hgcdte_sampling_configuration(
+        multi_read_sampling_mode(sensor),
         sensor, frame_shape, window, exposure_time, T)
 end
 
 @inline _require_hgcdte_sampling_configuration(::FrameSamplingMode,
-    ::HgCdTeAvalancheArraySensor, ::Tuple{Int,Int},
+    ::HgCdTeSensorType, ::Tuple{Int,Int},
     ::Union{Nothing,FrameWindow}, ::Real, ::Type{<:AbstractFloat}) = nothing
 
 @inline function _require_hgcdte_sampling_configuration(
-    mode::UpTheRampSampling, sensor::HgCdTeAvalancheArraySensor,
+    mode::UpTheRampSampling, sensor::HgCdTeSensorType,
     frame_shape::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
     exposure_time::Real, ::Type{T}) where {T<:AbstractFloat}
     validate_up_the_ramp_schedule(sensor, frame_shape, window, mode,

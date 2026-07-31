@@ -54,8 +54,11 @@ struct _ScheduledUpTheRampReadout <: _DetectorEventReadoutStyle end
 @inline _detector_event_readout_style(::FrameSensorType) =
     _PostExposureDetectorReadout()
 
-@inline _detector_event_readout_style(
-    ::HgCdTeAvalancheArraySensor{<:AbstractFloat,<:UpTheRampSampling}) =
+@inline _detector_event_readout_style(sensor::HgCdTeSensorType) =
+    _hgcdte_detector_event_readout_style(multi_read_sampling_mode(sensor))
+@inline _hgcdte_detector_event_readout_style(::FrameSamplingMode) =
+    _PostExposureDetectorReadout()
+@inline _hgcdte_detector_event_readout_style(::UpTheRampSampling) =
     _ScheduledUpTheRampReadout()
 
 mutable struct _GlobalShutterAcquisitionBinding end
@@ -208,9 +211,9 @@ end
 end
 
 function _prepare_detector_read_offsets(::_ScheduledUpTheRampReadout,
-    sensor::HgCdTeAvalancheArraySensor, det::Detector,
+    sensor::HgCdTeSensorType, det::Detector,
     definition::GlobalShutterAcquisitionDefinition)
-    mode = sensor.sampling_mode
+    mode = multi_read_sampling_mode(sensor)
     offsets = _even_detector_read_offsets(definition.exposure_duration,
         mode.n_reads)
     T = eltype(det.state.frame)
@@ -249,7 +252,8 @@ function _prepare_detector_event_products!(::_ScheduledUpTheRampReadout,
     det::Detector, offsets::Memory{PlantDuration},
     ::Type{T}) where {T<:AbstractFloat}
     products = _require_up_the_ramp_products(
-        ensure_up_the_ramp_products!(det, length(offsets)))
+        ensure_up_the_ramp_products!(det, length(offsets);
+            acquisition=:scheduled_evolving_charge))
     @inbounds for read_index in eachindex(offsets)
         products.read_times[read_index] =
             plant_duration_seconds(offsets[read_index], T)
@@ -437,7 +441,17 @@ end
 
 @inline function _apply_detector_event_interval_statistics!(
     ::_ScheduledUpTheRampReadout, det::Detector, rng::AbstractRNG)
-    sensor = det.params.sensor
+    return _apply_scheduled_hgcdte_interval_statistics!(
+        det.params.sensor, det, rng)
+end
+
+@inline function _apply_scheduled_hgcdte_interval_statistics!(
+    ::HgCdTeSensorType, det::Detector, ::AbstractRNG)
+    return det.state.frame
+end
+
+@inline function _apply_scheduled_hgcdte_interval_statistics!(
+    sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
     return apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
 end
 

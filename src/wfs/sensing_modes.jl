@@ -45,6 +45,8 @@ end
     ::Type{T}) where {T<:AbstractFloat} = T(gain)
 @inline deterministic_frame_readout_gain(::EMCCDSensor, gain,
     ::Type{T}) where {T<:AbstractFloat} = one(T)
+@inline deterministic_frame_readout_gain(::HgCdTeSensorType, gain,
+    ::Type{T}) where {T<:AbstractFloat} = T(gain)
 @inline deterministic_frame_readout_gain(
     sensor::HgCdTeAvalancheArraySensor, gain,
     ::Type{T}) where {T<:AbstractFloat} =

@@ -543,7 +543,7 @@ struct DeviceModelMatrixM6UpTheRampHgCdTe <:
 @inline device_model_matrix_detector_sensor_symbol(
     ::Union{DeviceModelMatrixM4GlobalHgCdTe,
         DeviceModelMatrixM6UpTheRampHgCdTe},
-) = :hgcdte_avalanche_array
+) = :hgcdte
 
 @inline device_model_matrix_detector_response_symbol(
     ::DeviceModelMatrixM1CCD,
@@ -682,7 +682,7 @@ end
     ::DeviceModelMatrixM4GlobalHgCdTe,
     ::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
-) where {T<:AbstractFloat} = HgCdTeAvalancheArraySensor(
+) where {T<:AbstractFloat} = HgCdTeSensor(
     sampling_mode=SingleRead(),
     T=T,
 )
@@ -701,7 +701,7 @@ end
     ::DeviceModelMatrixM6UpTheRampHgCdTe,
     ::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
-) where {T<:AbstractFloat} = HgCdTeAvalancheArraySensor(
+) where {T<:AbstractFloat} = HgCdTeSensor(
     read_time=zero(T),
     sampling_mode=UpTheRampSampling(3),
     T=T,
