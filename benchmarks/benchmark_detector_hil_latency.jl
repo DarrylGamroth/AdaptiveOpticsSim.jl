@@ -394,7 +394,7 @@ end
 
 function detector_hil_contract()
     return Dict{String,Any}(
-        "boundary" => "input detector frame available to converted output frame ready",
+        "boundary" => "input photon-arrival-rate frame available to detector output storage ready",
         "load_model" => "warmed serial self-paced service time",
         "arrival_model" => "next capture starts after the previous capture completes",
         "coordinated_omission_correction" => false,
