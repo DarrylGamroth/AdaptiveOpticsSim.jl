@@ -185,12 +185,14 @@ function validate_cmos_output_model(model::StaticCMOSOutputPattern)
     length(model.gains) > 0 || throw(InvalidConfiguration("StaticCMOSOutputPattern gains must not be empty"))
     length(model.gains) == length(model.offsets) ||
         throw(InvalidConfiguration("StaticCMOSOutputPattern gains and offsets must have matching length"))
-    minimum(model.gains) >= zero(eltype(model.gains)) ||
+    host_gains = Array(model.gains)
+    host_offsets = Array(model.offsets)
+    minimum(host_gains) >= zero(eltype(host_gains)) ||
         throw(InvalidConfiguration("StaticCMOSOutputPattern gains must be >= 0"))
-    all(isfinite, Array(model.gains)) ||
+    all(isfinite, host_gains) ||
         throw(InvalidConfiguration(
             "StaticCMOSOutputPattern gains must be finite"))
-    all(isfinite, Array(model.offsets)) ||
+    all(isfinite, host_offsets) ||
         throw(InvalidConfiguration(
             "StaticCMOSOutputPattern offsets must be finite"))
     return model
