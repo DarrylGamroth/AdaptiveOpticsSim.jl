@@ -33,6 +33,13 @@ function test_emccd_cdf(samples, threshold, expected_probability;
         sigma_limit * probability_se
 end
 
+struct TestUnsupportedEMGainModel <: AbstractEMGainModel end
+struct TestUnsupportedEMCCDOperatingMode <:
+    AbstractEMCCDOperatingMode end
+struct TestUnsupportedEMCCDOutputPath <: AbstractEMCCDOutputPath end
+struct TestUnsupportedEMCCDAcquisitionMode <:
+    AbstractEMCCDAcquisitionMode end
+
 @testset "EMCCD detector" begin
     zero_psf = zeros(4, 4)
     rng_ccd = MersenneTwister(7)
@@ -215,6 +222,35 @@ end
         minimum_conditional_noise_factor=Inf)
     @test_throws InvalidConfiguration ConditionalGammaMultiplication(
         minimum_conditional_noise_factor=NaN)
+    approximate_model = ClippedGaussianMultiplicationApproximation()
+    conditional_model = ConditionalGammaMultiplication()
+    @test is_approximate_em_gain_model(approximate_model)
+    @test !is_approximate_em_gain_model(conditional_model)
+    @test em_gain_model_symbol(approximate_model) ==
+        :clipped_gaussian_approximation
+    @test em_gain_model_symbol(conditional_model) == :conditional_gamma
+    @test supports_photon_counting(EMCCDSensor(
+        operating_mode=PhotonCountingEMMode(threshold=1.0)))
+    @test !supports_photon_counting(CCDSensor())
+
+    unsupported_gain = TestUnsupportedEMGainModel()
+    unsupported_mode = TestUnsupportedEMCCDOperatingMode()
+    unsupported_output = TestUnsupportedEMCCDOutputPath()
+    unsupported_acquisition = TestUnsupportedEMCCDAcquisitionMode()
+    @test convert_em_gain_model(unsupported_gain, Float32) ===
+        unsupported_gain
+    @test convert_emccd_operating_mode(unsupported_mode, Float32) ===
+        unsupported_mode
+    @test convert_emccd_acquisition_mode(unsupported_acquisition,
+        Float32) === unsupported_acquisition
+    @test_throws InvalidConfiguration validate_em_gain_model(
+        unsupported_gain)
+    @test_throws InvalidConfiguration validate_emccd_operating_mode(
+        unsupported_mode)
+    @test_throws InvalidConfiguration validate_emccd_output_path(
+        unsupported_output)
+    @test_throws InvalidConfiguration validate_emccd_acquisition_mode(
+        unsupported_acquisition)
 
     sensor32 = EMCCDSensor(
         multiplication_model=ConditionalGammaMultiplication(
@@ -241,6 +277,16 @@ end
             ConventionalOutput(),
             detector32.params.sensor.multiplication_model,
             CUDABackend()))
+    @test_throws InvalidConfiguration begin
+        _apply_conditional_gamma_multiplication!(
+            AcceleratorStyle(KernelAbstractions.CPU()),
+            detector32.params.sensor.multiplication_model,
+            detector32.params.sensor,
+            zeros(Float32, 2, 2),
+            zeros(Float32, 2, 2),
+            detector32.params.gain,
+            Xoshiro(3300))
+    end
 
     input_limited = Detector(integration_time=1.0, qe=1.0,
         noise=NoiseNone(), gain=5.0, full_well=10.0,
@@ -262,6 +308,17 @@ end
             em_gain_range=(1.0, 2.0)))
     @test capture!(conventional, fill(50.0, 4, 4),
         Xoshiro(3303)) == fill(10.0, 4, 4)
+
+    batched_gamma = Detector(integration_time=1.0, qe=1.0,
+        noise=NoiseNone(), gain=5.0,
+        response_model=NullFrameResponse(),
+        sensor=EMCCDSensor(excess_noise_factor=sqrt(2.0),
+            multiplication_model=ConditionalGammaMultiplication()))
+    gamma_cube = fill(8.0, 2, 4, 4)
+    capture_stack!(batched_gamma, gamma_cube, similar(gamma_cube),
+        Xoshiro(3304))
+    @test all(isfinite, gamma_cube)
+    @test all(>(0.0), gamma_cube)
 end
 
 @testset "EMCCD multiplication qualification" begin
