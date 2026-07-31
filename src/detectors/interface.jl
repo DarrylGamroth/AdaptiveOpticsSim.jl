@@ -27,7 +27,8 @@ abstract type AbstractQuantumEfficiencyModel end
 abstract type AbstractTemporalFrameSource end
 abstract type AbstractRollingShutterExposureMode end
 abstract type AvalancheFrameSensorType <: FrameSensorType end
-abstract type HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType end
+abstract type HgCdTeSensorType <: FrameSensorType end
+abstract type HgCdTeAvalancheArraySensorType <: HgCdTeSensorType end
 abstract type SPADArraySensorType <: CountingSensorType end
 abstract type MKIDArraySensorType <: CountingSensorType end
 
@@ -48,6 +49,7 @@ supports_clock_induced_charge(::FrameSensorType) = false
 supports_column_readout_noise(::FrameSensorType) = false
 supports_avalanche_gain(::FrameSensorType) = false
 supports_avalanche_gain(::AvalancheFrameSensorType) = true
+supports_avalanche_gain(::HgCdTeAvalancheArraySensorType) = true
 supports_sensor_glow(::FrameSensorType) = false
 supports_detector_defect_maps(::FrameSensorType) = false
 supports_detector_persistence(::FrameSensorType) = false
@@ -908,7 +910,16 @@ multiplied by the integration time and therefore matches ordinary detector
 output units. The `workspace_*` arrays are detector-owned full-frame storage;
 the public products may be windowed views copied into reusable arrays.
 """
-struct UpTheRampReadoutProducts{A<:AbstractMatrix,C<:AbstractArray,V<:AbstractVector} <:
+@enum RampAcquisitionKind::UInt8 begin
+    SynthesizedFinalChargeRamp
+    ScheduledEvolvingChargeRamp
+end
+
+mutable struct UpTheRampReadoutProducts{
+    A<:AbstractMatrix,
+    C<:AbstractArray,
+    V<:AbstractVector,
+} <:
     FrameReadoutProducts
     slope_frame::A
     intercept_frame::A
@@ -919,6 +930,7 @@ struct UpTheRampReadoutProducts{A<:AbstractMatrix,C<:AbstractArray,V<:AbstractVe
     workspace_intercept::A
     workspace_integrated::A
     workspace_cube::C
+    acquisition_kind::RampAcquisitionKind
 end
 
 @inline function _multi_read_cube_param(reference_cube, signal_cube, read_cube)

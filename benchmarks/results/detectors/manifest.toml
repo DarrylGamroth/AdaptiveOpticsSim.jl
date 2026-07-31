@@ -38,3 +38,8 @@ purpose = "parameterized CMOS-family spatial-noise, shutter-timing, and readout 
 status = "active"
 id = "DET-CMOS-QUAL-2026-07-30"
 path = "2026-07-30-cmos-family-qualification.toml"
+[[artifacts]]
+purpose = "conventional HgCdTe nondestructive-read and clean-ramp qualification"
+status = "active"
+id = "DET-HGCDTE-QUAL-2026-07-30"
+path = "2026-07-30-conventional-hgcdte-qualification.toml"

@@ -13,6 +13,8 @@ detector_ramp_slope(det::Detector) = detector_ramp_slope(det.state.readout_produ
 detector_ramp_intercept(det::Detector) = detector_ramp_intercept(det.state.readout_products)
 detector_ramp_cube(det::Detector) = detector_ramp_cube(det.state.readout_products)
 detector_ramp_times(det::Detector) = detector_ramp_times(det.state.readout_products)
+detector_ramp_acquisition(det::Detector) =
+    detector_ramp_acquisition(det.state.readout_products)
 
 @inline detector_output_value(::Nothing, value) = value
 @inline detector_output_value(::Type{T}, value) where {T<:Integer} =
@@ -30,6 +32,7 @@ detector_ramp_slope(::FrameReadoutProducts) = nothing
 detector_ramp_intercept(::FrameReadoutProducts) = nothing
 detector_ramp_cube(::FrameReadoutProducts) = nothing
 detector_ramp_times(::FrameReadoutProducts) = nothing
+detector_ramp_acquisition(::FrameReadoutProducts) = nothing
 detector_reference_frame(products::SampledFrameReadoutProducts) = products.reference_frame
 detector_signal_frame(products::SampledFrameReadoutProducts) = products.signal_frame
 detector_combined_frame(::SampledFrameReadoutProducts) = nothing
@@ -55,6 +58,16 @@ detector_ramp_slope(products::UpTheRampReadoutProducts) = products.slope_frame
 detector_ramp_intercept(products::UpTheRampReadoutProducts) = products.intercept_frame
 detector_ramp_cube(products::UpTheRampReadoutProducts) = products.read_cube
 detector_ramp_times(products::UpTheRampReadoutProducts) = products.read_times
+detector_ramp_acquisition(products::UpTheRampReadoutProducts) =
+    ramp_acquisition_symbol(products.acquisition_kind)
+
+function ramp_acquisition_symbol(kind::RampAcquisitionKind)
+    kind === SynthesizedFinalChargeRamp &&
+        return :synthesized_final_charge
+    kind === ScheduledEvolvingChargeRamp &&
+        return :scheduled_evolving_charge
+    throw(InvalidConfiguration("unsupported ramp acquisition kind"))
+end
 
 thermal_model(det::Detector) = det.params.thermal_model
 thermal_state(det::Detector) = det.state.thermal_state

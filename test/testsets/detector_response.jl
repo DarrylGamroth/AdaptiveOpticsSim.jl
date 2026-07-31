@@ -194,7 +194,7 @@
     )
     for correction_model in corrected_stack_models
         corrected_stack_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-            sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+            sensor=HgCdTeSensor(sampling_mode=SingleRead()),
             correction_model=correction_model)
         corrected_stack_in = Array{Float64}(undef, 2, 5, 5)
         corrected_stack_in[1, :, :] .= reshape(collect(1.0:25.0), 5, 5)
@@ -204,11 +204,11 @@
             similar(corrected_stack_in); rng=MersenneTwister(10))
         @test size(corrected_stack) == size(corrected_stack_in)
         corrected_frame_1 = capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-                sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+                sensor=HgCdTeSensor(sampling_mode=SingleRead()),
                 correction_model=correction_model),
             @view(corrected_stack_ref[1, :, :]); rng=MersenneTwister(10))
         corrected_frame_2 = capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-                sensor=HgCdTeAvalancheArraySensor(sampling_mode=SingleRead()),
+                sensor=HgCdTeSensor(sampling_mode=SingleRead()),
                 correction_model=correction_model),
             @view(corrected_stack_ref[2, :, :]); rng=MersenneTwister(10))
         @test corrected_stack[1, :, :] ≈ corrected_frame_1 atol=1e-12 rtol=1e-12

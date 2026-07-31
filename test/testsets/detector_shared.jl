@@ -236,26 +236,26 @@
             sensor=CCDSensor(sampling_mode=SkipperSampling(4)))),
         :hgcdte_single => (() -> Detector(integration_time=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-            sensor=HgCdTeAvalancheArraySensor())),
+            sensor=HgCdTeSensor())),
         :hgcdte_ndr => (() -> Detector(integration_time=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-            sensor=HgCdTeAvalancheArraySensor(
+            sensor=HgCdTeSensor(
                 sampling_mode=AveragedNonDestructiveReads(4)))),
         :hgcdte_cds => (() -> Detector(integration_time=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-            sensor=HgCdTeAvalancheArraySensor(
+            sensor=HgCdTeSensor(
                 sampling_mode=CorrelatedDoubleSampling()))),
         :hgcdte_fowler => (() -> Detector(integration_time=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-            sensor=HgCdTeAvalancheArraySensor(
+            sensor=HgCdTeSensor(
                 sampling_mode=FowlerSampling(2)))),
         :hgcdte_ramp => (() -> Detector(integration_time=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-            sensor=HgCdTeAvalancheArraySensor(read_time=0.1,
+            sensor=HgCdTeSensor(read_time=0.1,
                 sampling_mode=UpTheRampSampling(5)))),
         :hgcdte_windowed_cds => (() -> Detector(integration_time=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-            sensor=HgCdTeAvalancheArraySensor(
+            sensor=HgCdTeSensor(
                 sampling_mode=CorrelatedDoubleSampling()),
             readout_window=FrameWindow(2:3, 2:3))),
     )
@@ -339,7 +339,7 @@
 
     invalid_prepared_ramp = Detector(integration_time=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-        sensor=HgCdTeAvalancheArraySensor(read_time=0.3,
+        sensor=HgCdTeSensor(read_time=0.3,
             sampling_mode=UpTheRampSampling(5)))
     invalid_prepared_ramp_state = detector_state_snapshot(
         invalid_prepared_ramp)
@@ -350,12 +350,12 @@
 
     full_cds = Detector(integration_time=2.0, noise=NoiseReadout(2.0),
         qe=1.0, response_model=NullFrameResponse(),
-        sensor=HgCdTeAvalancheArraySensor(read_time=0.1,
+        sensor=HgCdTeSensor(read_time=0.1,
             sampling_mode=CorrelatedDoubleSampling()))
     windowed_cds = Detector(integration_time=2.0,
         noise=NoiseReadout(2.0), qe=1.0,
         response_model=NullFrameResponse(),
-        sensor=HgCdTeAvalancheArraySensor(read_time=0.1,
+        sensor=HgCdTeSensor(read_time=0.1,
             sampling_mode=CorrelatedDoubleSampling()),
         readout_window=FrameWindow(2:3, 2:3))
     full_cds_plan = prepare_detector_acquisition(full_cds,
@@ -382,7 +382,7 @@
 
     binned_ndr = Detector(integration_time=1.0, noise=NoiseNone(),
         qe=1.0, binning=2, response_model=NullFrameResponse(),
-        sensor=HgCdTeAvalancheArraySensor(
+        sensor=HgCdTeSensor(
             sampling_mode=AveragedNonDestructiveReads(4)))
     binned_ndr_plan = prepare_detector_acquisition(binned_ndr,
         prepared_readout_rate)

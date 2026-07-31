@@ -162,7 +162,7 @@
         incremental_rate_input; rng=MersenneTwister(32), integration_duration=0.5))
     @test mean(dynamic_glow_frame) ≈ dynamic_split_expected rtol=0.01
 
-    hgcdte_glow_sensor = HgCdTeAvalancheArraySensor(glow_rate=60.0,
+    hgcdte_glow_sensor = HgCdTeSensor(glow_rate=60.0,
         read_time=0.1, sampling_mode=CorrelatedDoubleSampling())
     hgcdte_glow_whole = Detector(integration_time=1.0, noise=NoiseNone(),
         qe=1.0, dark_current=40.0, response_model=NullFrameResponse(),

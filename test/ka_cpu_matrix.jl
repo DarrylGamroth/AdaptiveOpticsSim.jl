@@ -1118,6 +1118,49 @@ end
         @test ka_cpu_close(ka_ramp_slope, frame ./ 2)
         @test ka_cpu_close(ka_ramp_intercept, zeros(5, 5))
 
+        full_frame = reshape(collect(1.0:30.0), 5, 6)
+        window = AdaptiveOpticsSim.Detectors.FrameWindow(2:4, 3:5)
+        scalar_windowed_frame = zeros(3, 3)
+        ka_windowed_frame = similar(scalar_windowed_frame)
+        AdaptiveOpticsSim.Detectors._copy_windowed_frame!(
+            SCALAR_CPU_STYLE, scalar_windowed_frame, full_frame, window)
+        AdaptiveOpticsSim.Detectors._copy_windowed_frame!(
+            KA_CPU_STYLE, ka_windowed_frame, full_frame, window)
+        mark_ka_cpu_kernel!(:copy_windowed_frame_kernel!)
+        @test ka_windowed_frame == scalar_windowed_frame == full_frame[2:4, 3:5]
+
+        full_cube = reshape(collect(1.0:90.0), 5, 6, 3)
+        scalar_windowed_cube = zeros(3, 3, 3)
+        ka_windowed_cube = similar(scalar_windowed_cube)
+        AdaptiveOpticsSim.Detectors._copy_windowed_cube!(
+            SCALAR_CPU_STYLE, scalar_windowed_cube, full_cube, window)
+        AdaptiveOpticsSim.Detectors._copy_windowed_cube!(
+            KA_CPU_STYLE, ka_windowed_cube, full_cube, window)
+        mark_ka_cpu_kernel!(:copy_windowed_cube_kernel!)
+        @test ka_windowed_cube == scalar_windowed_cube == full_cube[2:4, 3:5, :]
+
+        scalar_sampling_cube = zeros(5, 6, 2)
+        ka_sampling_cube = zeros(5, 6, 2)
+        AdaptiveOpticsSim.Detectors._copy_sampling_plane!(
+            SCALAR_CPU_STYLE, scalar_sampling_cube, 2, full_cube, 3)
+        AdaptiveOpticsSim.Detectors._copy_sampling_plane!(
+            KA_CPU_STYLE, ka_sampling_cube, 2, full_cube, 3)
+        mark_ka_cpu_kernel!(:copy_sampling_plane_kernel!)
+        @test ka_sampling_cube == scalar_sampling_cube
+        @test ka_sampling_cube[:, :, 2] == full_cube[:, :, 3]
+
+        scalar_windowed_sampling_cube = zeros(3, 3, 2)
+        ka_windowed_sampling_cube = zeros(3, 3, 2)
+        AdaptiveOpticsSim.Detectors._copy_windowed_sampling_plane!(
+            SCALAR_CPU_STYLE, scalar_windowed_sampling_cube, 2,
+            full_cube, 3, window)
+        AdaptiveOpticsSim.Detectors._copy_windowed_sampling_plane!(
+            KA_CPU_STYLE, ka_windowed_sampling_cube, 2,
+            full_cube, 3, window)
+        @test ka_windowed_sampling_cube == scalar_windowed_sampling_cube
+        @test ka_windowed_sampling_cube[:, :, 2] ==
+            full_cube[window.rows, window.cols, 3]
+
         cube = reshape(collect(1.0:50.0), 2, 5, 5)
         scalar_cube = copy(cube)
         ka_cube = copy(cube)

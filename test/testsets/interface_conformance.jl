@@ -41,9 +41,11 @@
     @test CCDSensor <: FrameSensorType
     @test CMOSSensor <: FrameSensorType
     @test AvalancheFrameSensorType <: FrameSensorType
-    @test HgCdTeAvalancheArraySensorType <: AvalancheFrameSensorType
+    @test HgCdTeSensorType <: FrameSensorType
+    @test HgCdTeAvalancheArraySensorType <: HgCdTeSensorType
     @test EMCCDSensor <: AvalancheFrameSensorType
     @test InGaAsSensor <: FrameSensorType
+    @test HgCdTeSensor <: HgCdTeSensorType
     @test HgCdTeAvalancheArraySensor <: HgCdTeAvalancheArraySensorType
     @test !supports_avalanche_gain(CCDSensor())
     @test !supports_sensor_glow(CMOSSensor())
@@ -58,12 +60,12 @@
     @test !supports_nondestructive_reads(CCDSensor())
     @test supports_nondestructive_reads(
         CCDSensor(sampling_mode=SkipperSampling(4)))
-    @test supports_nondestructive_reads(HgCdTeAvalancheArraySensor())
+    @test supports_nondestructive_reads(HgCdTeSensor())
     @test !supports_reference_read_subtraction(EMCCDSensor())
-    @test supports_reference_read_subtraction(HgCdTeAvalancheArraySensor())
+    @test supports_reference_read_subtraction(HgCdTeSensor())
     @test !supports_readout_correction(EMCCDSensor())
-    @test supports_readout_correction(HgCdTeAvalancheArraySensor())
-    @test supports_read_cube(HgCdTeAvalancheArraySensor())
+    @test supports_readout_correction(HgCdTeSensor())
+    @test supports_read_cube(HgCdTeSensor())
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceRowCommonModeCorrection()) == :reference_row_common_mode
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceColumnCommonModeCorrection()) == :reference_column_common_mode
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode

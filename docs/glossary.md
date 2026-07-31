@@ -118,6 +118,10 @@ International Lighting Vocabulary.
 | Half-open exposure | An exposure interval `[start, close)`: optical samples at `start` are included, while a sample timestamped exactly at `close` is excluded. Integer `PlantTimestamp` boundaries, rather than floating accumulated-time tolerance, determine membership and completion. |
 | Integration duration | The positive duration in seconds over which one detector-facing photon-arrival-rate sample contributes to an exposure. The current incremental convenience API names this `integration_duration`; it is neither an absolute sample timestamp nor the sample period between consecutive samples. A virtual-time scheduler owns the interval boundaries. |
 | Nondestructive read | A detector read that observes accumulated charge without ending or resetting the active integration. A scheduled up-the-ramp model records the charge state at each declared read event; a post-exposure cube synthesized from one final frame is a lower-fidelity convenience, not a time-resolved nondestructive-read simulation. |
+| Conventional HgCdTe array | An area detector using mercury-cadmium-telluride photosensitive material without avalanche multiplication in the modeled signal path. `HgCdTeSensor` composes the product-neutral `HgCdTeReadout` configuration for single, averaged nondestructive, correlated-double, Fowler, or up-the-ramp sampling. |
+| HgCdTe linear-avalanche photodiode array | An HgCdTe area detector operated with linear avalanche multiplication. `HgCdTeAvalancheArraySensor` adds explicit avalanche gain and excess-noise parameters to the shared HgCdTe readout contract; it is distinct from a Geiger-mode SPAD/counting detector. |
+| Synthesized final-charge ramp | The lower-fidelity direct-`capture!` up-the-ramp product labeled `:synthesized_final_charge`. It scales one completed charge realization to evenly spaced read times before fitting and cannot represent intra-exposure optical changes. |
+| Scheduled evolving-charge ramp | The Plant event product labeled `:scheduled_evolving_charge`. Each nondestructive-read event snapshots charge accumulated through its actual prepared timestamp, including nanosecond-quantized irregular spacing. |
 | Rolling-shutter row band | One contiguous prepared group of detector rows sharing open and close timestamps. `RollingShutterAcquisitionState` retains only bounded opened- and closed-band cursors. In rolling exposure, bands open and close in sequence with equal nominal exposure; in global reset exposure, every band opens together and later bands close later. |
 | Frame output window | `FrameWindow`: the rectangular region copied from a completed full detector frame into the reusable output product. It does not change exposed sensor geometry, row-band timestamps, or acquisition duration. Model a physically cropped sensor region with the corresponding detector frame dimensions. |
 | CMOS shared row and column noise | Independent zero-mean Gaussian readout offsets drawn once per row or once per column for each completed frame, then shared by every pixel in that row or column. Their spatial covariance differs from both uniform independent read noise and the heteroscedastic independent `CMOSReadNoiseMap`; temporally correlated 1/f and random-telegraph noise are separate, unimplemented models. |
@@ -135,11 +139,12 @@ International Lighting Vocabulary.
 | EMCCD photon-counting output | A binary, coincidence-limited frame produced by thresholding the post-multiplication/read-noise value and then applying the configured Bernoulli detection efficiency. Multiple accepted photoelectrons in one pixel and frame still produce one output event. |
 | Interpixel capacitance (IPC) | Post-collection capacitive charge coupling between detector nodes, not a presampling optical blur. |
 
-CCD, EMCCD, CMOS, sCMOS, quantitative low-noise CMOS, HgCdTe avalanche arrays,
-Skipper CCD, SPAD, MKID, and APD describe detector technology or readout
-families. Configured CMOS variants share the CMOS architecture in core; named
-commercial camera profiles belong in a companion package. A single-pixel APD is
-a channel detector and is not forced into an area-frame API.
+CCD, EMCCD, CMOS, sCMOS, quantitative low-noise CMOS, conventional HgCdTe,
+HgCdTe linear-avalanche photodiode arrays, Skipper CCD, SPAD, MKID, and APD
+describe detector technology or readout families. Configured CMOS variants
+share the CMOS architecture in core; named commercial camera profiles belong
+in a companion package. A single-pixel APD is a channel detector and is not
+forced into an area-frame API.
 
 ## WFS And HIL Terms
 

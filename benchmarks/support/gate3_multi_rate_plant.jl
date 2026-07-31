@@ -61,7 +61,7 @@ end
 
 @inline function multi_rate_sensor(model::MultiRateAcquisitionModel{
     T,<:HgCdTeRampKind}) where {T}
-    return AOS.Detectors.HgCdTeAvalancheArraySensor(
+    return AOS.Detectors.HgCdTeSensor(
         sampling_mode=AOS.Detectors.UpTheRampSampling(
             model.nondestructive_reads),
         read_time=zero(T), T=T)
