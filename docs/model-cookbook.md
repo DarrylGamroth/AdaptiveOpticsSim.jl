@@ -94,6 +94,23 @@ Choose the sensor and sampling/readout model independently of the optical
 front end. `detector_mtf` reports the realized discrete presampling response's
 normalized interior MTF.
 
+For a fast deterministic RTC throughput load, retain the same prepared
+frame-detector boundary but omit optional physical effects:
+
+```julia
+load_detector = Detector(
+    integration_time=1e-3,
+    qe=1.0,
+    noise=NoiseNone(),
+    response_model=NullFrameResponse(),
+)
+load_plan = prepare_detector_acquisition(load_detector, detector_rate)
+frame = capture!(load_detector, detector_rate, load_plan; rng)
+```
+
+This path still applies declared radiometry and exposure. It is not a
+camera-specific profile and does not imply reduced optical fidelity upstream.
+
 Counting and channel detectors remain explicit:
 
 ```julia

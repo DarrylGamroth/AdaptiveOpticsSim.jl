@@ -29,7 +29,7 @@ function _apply_separable_response!(::ScalarCPUStyle, frame::AbstractMatrix, scr
             scratch[i, j] = zero_t
         end
         for kk in eachindex(kernel_x)
-            jj = j + kk - radius_x - 1
+            jj = j - (kk - radius_x - 1)
             1 <= jj <= m || continue
             weight = kernel_x[kk]
             for i in 1:n
@@ -45,7 +45,7 @@ function _apply_separable_response!(::ScalarCPUStyle, frame::AbstractMatrix, scr
             offset = kk - radius_y - 1
             weight = kernel_y[kk]
             for i in 1:n
-                ii = i + offset
+                ii = i - offset
                 1 <= ii <= n || continue
                 frame[i, j] += weight * scratch[ii, j]
             end
@@ -80,10 +80,10 @@ function apply_response!(::ScalarCPUStyle, model::SampledFrameResponse, frame::A
             offset_j = kj - radius_j - 1
             weight = model.kernel[ki, kj]
             for j in 1:m
-                jj = j + offset_j
+                jj = j - offset_j
                 1 <= jj <= m || continue
                 for i in 1:n
-                    ii = i + offset_i
+                    ii = i - offset_i
                     1 <= ii <= n || continue
                     scratch[i, j] += weight * frame[ii, jj]
                 end

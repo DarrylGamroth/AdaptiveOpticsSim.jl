@@ -83,8 +83,9 @@
     right_frame = copy(capture!(asymmetric_det, right_impulse;
         rng=MersenneTwister(63)))
     @test sum(center_frame) ≈ 1.0
-    @test sum(left_frame) ≈ 0.3
-    @test sum(right_frame) ≈ 0.9
+    @test center_frame[5, 4:6] ≈ asymmetric_kernel[2, :]
+    @test sum(left_frame) ≈ 0.9
+    @test sum(right_frame) ≈ 0.3
     @test sum(left_frame) <= sum(left_impulse)
     @test sum(right_frame) <= sum(right_impulse)
     @test minimum(left_frame) >= 0
