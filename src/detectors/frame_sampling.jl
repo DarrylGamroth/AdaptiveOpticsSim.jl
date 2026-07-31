@@ -57,8 +57,32 @@ function _ensure_read_times_buffer(current, ::Type{T}, n_reads::Int) where {T<:A
     return current
 end
 
-function _copy_windowed_frame!(target::AbstractMatrix, full_frame::AbstractMatrix, det::Detector)
-    window = det.params.readout_window
+@kernel function copy_windowed_frame_kernel!(target, full_frame,
+    row_first, col_first, n::Int, m::Int)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= m
+        @inbounds target[i, j] =
+            full_frame[row_first + i - 1, col_first + j - 1]
+    end
+end
+
+@kernel function copy_windowed_cube_kernel!(target, full_cube,
+    row_first, col_first, n::Int, m::Int, n_planes::Int)
+    i, j, k = @index(Global, NTuple)
+    if i <= n && j <= m && k <= n_planes
+        @inbounds target[i, j, k] =
+            full_cube[row_first + i - 1, col_first + j - 1, k]
+    end
+end
+
+function _copy_windowed_frame!(target::AbstractMatrix,
+    full_frame::AbstractMatrix, det::Detector)
+    return _copy_windowed_frame!(execution_style(target), target,
+        full_frame, det.params.readout_window)
+end
+
+function _copy_windowed_frame!(::ScalarCPUStyle, target::AbstractMatrix,
+    full_frame::AbstractMatrix, window::Union{Nothing,FrameWindow})
     if window === nothing
         copyto!(target, full_frame)
     else
@@ -67,13 +91,43 @@ function _copy_windowed_frame!(target::AbstractMatrix, full_frame::AbstractMatri
     return target
 end
 
-function _copy_windowed_cube!(target::AbstractArray{T,3}, full_cube::AbstractArray{T,3}, det::Detector) where {T}
-    window = det.params.readout_window
+function _copy_windowed_frame!(style::AcceleratorStyle,
+    target::AbstractMatrix, full_frame::AbstractMatrix,
+    window::Union{Nothing,FrameWindow})
+    row_first = window === nothing ? 1 : first(window.rows)
+    col_first = window === nothing ? 1 : first(window.cols)
+    n, m = size(target)
+    launch_kernel!(style, copy_windowed_frame_kernel!, target, full_frame,
+        row_first, col_first, n, m; ndrange=(n, m))
+    return target
+end
+
+function _copy_windowed_cube!(target::AbstractArray{T,3},
+    full_cube::AbstractArray{T,3}, det::Detector) where {T}
+    return _copy_windowed_cube!(execution_style(target), target,
+        full_cube, det.params.readout_window)
+end
+
+function _copy_windowed_cube!(::ScalarCPUStyle,
+    target::AbstractArray{T,3}, full_cube::AbstractArray{T,3},
+    window::Union{Nothing,FrameWindow}) where {T}
     if window === nothing
         copyto!(target, full_cube)
     else
         copyto!(target, @view(full_cube[window.rows, window.cols, :]))
     end
+    return target
+end
+
+function _copy_windowed_cube!(style::AcceleratorStyle,
+    target::AbstractArray{T,3}, full_cube::AbstractArray{T,3},
+    window::Union{Nothing,FrameWindow}) where {T}
+    row_first = window === nothing ? 1 : first(window.rows)
+    col_first = window === nothing ? 1 : first(window.cols)
+    n, m, n_planes = size(target)
+    launch_kernel!(style, copy_windowed_cube_kernel!, target, full_cube,
+        row_first, col_first, n, m, n_planes;
+        ndrange=(n, m, n_planes))
     return target
 end
 
