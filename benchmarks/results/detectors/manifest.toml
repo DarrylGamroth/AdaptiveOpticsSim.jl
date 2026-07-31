@@ -28,3 +28,8 @@ purpose = "conventional CCD single-read qualification with analytic moment bound
 status = "active"
 id = "DET-CCD-QUAL-2026-07-30"
 path = "2026-07-30-ccd-single-read-qualification.toml"
+[[artifacts]]
+purpose = "EMCCD multiplication, photon-counting, saturation, and acquisition-timing qualification"
+status = "active"
+id = "DET-EMCCD-QUAL-2026-07-30"
+path = "2026-07-30-emccd-qualification.toml"

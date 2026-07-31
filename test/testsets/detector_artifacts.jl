@@ -63,4 +63,53 @@
     @test deterministic["single_read_read_time_rejected"]
     @test deterministic["allocation_gate_passed"]
     @test deterministic["steady_alloc_bytes"] == 0
+
+    emccd_entry = detector_entries["DET-EMCCD-QUAL-2026-07-30"]
+    @test emccd_entry["status"] == "active"
+    emccd_path = joinpath(dirname(detector_artifact_path),
+        emccd_entry["path"])
+    @test isfile(emccd_path)
+    emccd = TOML.parsefile(emccd_path)
+    @test emccd["schema_version"] == 1
+    @test emccd["family"] == "emccd"
+    @test emccd["all_gates_passed"]
+    @test !emccd["environment"]["source_dirty"]
+    qualification = emccd["qualification"]
+    @test qualification["samples_per_case"] == 16_384
+    @test qualification["sigma_limit"] == 6.0
+    moment_cases = qualification["multiplication_moment_cases"]
+    @test Set(case["id"] for case in moment_cases) == Set((
+        "conditional_gamma_exponential",
+        "conditional_gamma_erlang",
+        "conditional_gamma_fractional_shape",
+        "clipped_gaussian_moderate_charge",
+        "cic_before_conditional_gamma",
+    ))
+    @test all(case -> case["mean_passed"] && case["variance_passed"],
+        moment_cases)
+    @test only(filter(case ->
+        case["id"] == "clipped_gaussian_moderate_charge",
+        moment_cases))["all_nonnegative"]
+    @test all(case -> case["passed"],
+        qualification["multiplication_cdf_cases"])
+    photon_counting_cases = qualification["photon_counting_cases"]
+    @test Set(case["incident_mean"] for case in photon_counting_cases) ==
+        Set((0.05, 0.5, 2.0))
+    @test all(case -> case["mean_passed"] &&
+        case["variance_passed"] && case["all_binary"] &&
+        case["coincidence_limited"], photon_counting_cases)
+    emccd_deterministic = qualification["deterministic"]
+    @test all(emccd_deterministic[key] for key in (
+        "cic_exposure_invariant",
+        "input_full_well_passed",
+        "register_full_well_passed",
+        "conventional_output_passed",
+        "gain_range_rejected",
+        "accelerator_conditional_gamma_rejected",
+        "frame_transfer_preserves_optical_output",
+        "timing_contract_passed",
+        "snr_contract_passed",
+        "allocation_gate_passed",
+    ))
+    @test emccd_deterministic["steady_alloc_bytes"] == 0
 end
