@@ -793,8 +793,8 @@ function device_model_matrix_zero_extended_response(
     @inbounds for j in axes(output, 2), i in axes(output, 1)
         value = zero(T)
         for kj in axes(kernel, 2), ki in axes(kernel, 1)
-            ii = i + ki - radius_i - 1
-            jj = j + kj - radius_j - 1
+            ii = i - (ki - radius_i - 1)
+            jj = j - (kj - radius_j - 1)
             if checkbounds(Bool, input, ii, jj)
                 value = muladd(kernel[ki, kj], input[ii, jj], value)
             end

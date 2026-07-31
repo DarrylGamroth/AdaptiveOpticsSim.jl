@@ -994,6 +994,15 @@ struct GaussianPixelResponse{T<:AbstractFloat,V<:AbstractVector{T}} <: AbstractF
     end
 end
 
+"""
+    SampledFrameResponse(kernel; normalize=true, T=Float64,
+        backend=CPUBackend())
+
+Centered, odd-sized discrete impulse response applied before detector sampling
+or binning. A kernel sample at offset `(Δrow, Δcolumn)` contributes at that
+same offset from an input impulse. Finite frames use zero extension, so support
+that falls outside the frame is lost.
+"""
 struct SampledFrameResponse{T<:AbstractFloat,A<:AbstractMatrix{T}} <: AbstractFrameResponse
     kernel::A
     function SampledFrameResponse{T,A}(::OwnedDetectorParameterToken,
@@ -1541,7 +1550,7 @@ end
     if i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for kk in 1:klen
-            jj = j + kk - radius - 1
+            jj = j - (kk - radius - 1)
             if 1 <= jj <= m
                 acc += kernel[kk] * img[i, jj]
             end
@@ -1555,7 +1564,7 @@ end
     if i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for kk in 1:klen
-            ii = i + kk - radius - 1
+            ii = i - (kk - radius - 1)
             if 1 <= ii <= n
                 acc += kernel[kk] * img[ii, j]
             end
@@ -1570,10 +1579,10 @@ end
     if i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for ki in 1:kn
-            ii = i + ki - radius_i - 1
+            ii = i - (ki - radius_i - 1)
             if 1 <= ii <= n
                 for kj in 1:km
-                    jj = j + kj - radius_j - 1
+                    jj = j - (kj - radius_j - 1)
                     if 1 <= jj <= m
                         acc += kernel[ki, kj] * img[ii, jj]
                     end
@@ -1590,10 +1599,10 @@ end
     if b <= n_batch && i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for ki in 1:kn
-            ii = i + ki - radius_i - 1
+            ii = i - (ki - radius_i - 1)
             if 1 <= ii <= n
                 for kj in 1:km
-                    jj = j + kj - radius_j - 1
+                    jj = j - (kj - radius_j - 1)
                     if 1 <= jj <= m
                         acc += kernel[ki, kj] * img[b, ii, jj]
                     end
@@ -1610,7 +1619,7 @@ end
     if b <= n_batch && i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for kk in 1:klen
-            jj = j + kk - radius - 1
+            jj = j - (kk - radius - 1)
             if 1 <= jj <= m
                 acc += kernel[kk] * img[b, i, jj]
             end
@@ -1625,7 +1634,7 @@ end
     if b <= n_batch && i <= n && j <= m
         acc = zero(eltype(out))
         @inbounds for kk in 1:klen
-            ii = i + kk - radius - 1
+            ii = i - (kk - radius - 1)
             if 1 <= ii <= n
                 acc += kernel[kk] * img[b, ii, j]
             end

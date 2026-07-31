@@ -478,10 +478,10 @@ function _batched_apply_response!(::ScalarCPUStyle, model::SampledFrameResponse,
             offset_j = kj - radius_j - 1
             weight = model.kernel[ki, kj]
             for j in 1:m
-                jj = j + offset_j
+                jj = j - offset_j
                 1 <= jj <= m || continue
                 for i in 1:n
-                    ii = i + offset_i
+                    ii = i - offset_i
                     1 <= ii <= n || continue
                     for b in 1:n_batch
                         scratch[b, i, j] += weight * cube[b, ii, jj]
@@ -564,7 +564,7 @@ function _batched_apply_separable_response!(::ScalarCPUStyle, cube::AbstractArra
         offset = kk - radius_x - 1
         weight = kernel_x[kk]
         for j in 1:m
-            jj = j + offset
+            jj = j - offset
             1 <= jj <= m || continue
             for i in 1:n, b in 1:n_batch
                 scratch[b, i, j] += weight * cube[b, i, jj]
@@ -576,7 +576,7 @@ function _batched_apply_separable_response!(::ScalarCPUStyle, cube::AbstractArra
         offset = kk - radius_y - 1
         weight = kernel_y[kk]
         for j in 1:m, i in 1:n
-            ii = i + offset
+            ii = i - offset
             1 <= ii <= n || continue
             for b in 1:n_batch
                 cube[b, i, j] += weight * scratch[b, ii, j]

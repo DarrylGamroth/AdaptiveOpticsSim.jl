@@ -148,6 +148,7 @@ Primary evidence:
 - the workflows in [`user-guide.md`](user-guide.md) and [`release-validation-runbook.md`](release-validation-runbook.md)
 - benchmark artifacts under `benchmarks/results/`
 - [conventional-detector CPU HIL latency baseline](../benchmarks/results/detectors/2026-07-14-detector-hil-latency.toml)
+- [minimal deterministic frame-detector CPU service-cost evidence](../benchmarks/results/detectors/2026-07-30-shared-low-fidelity-service-cost.toml)
 - [final pre-HIL local CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml)
 - [final pre-HIL WSL CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml)
 - [Gate 2 serial plant CPU service-time evidence](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
@@ -210,8 +211,9 @@ Current AMDGPU-supported scope:
   frame-transfer EMCCD, global- and rolling-shutter CMOS, and global-shutter
   HgCdTe single-read and scheduled up-the-ramp operation. Tests preserve
   response/MTF metadata, prove response-before-exposure ordering against an
-  independent zero-extended-convolution oracle, and retain exact
-  transition/readout/storage state on device
+  independent zero-extended-convolution oracle, prove post-collection IPC
+  separately from presampling MTF, and retain exact transition/readout/storage
+  state on device
 
 Primary evidence:
 
@@ -303,7 +305,7 @@ The following are outside the current support claim:
 
 - CUDA execution. The extension, dedicated test project, fail-fast `421/421`
   hardware target, and current manual WSL hardware evidence—including prepared direct
-  imaging and the
+  imaging, deterministic shared frame-response/IPC acquisition, and the
   [final pre-HIL CUDA artifact](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)—are
   available, but CUDA has not yet been explicitly returned to the supported
   delivery scope or a routine validation cadence.

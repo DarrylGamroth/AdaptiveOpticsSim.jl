@@ -18,3 +18,8 @@ purpose = "warmed conventional-detector CPU HIL latency baseline with HdrHistogr
 status = "active"
 id = "DET-HIL-2026-07-14"
 path = "2026-07-14-detector-hil-latency.toml"
+[[artifacts]]
+purpose = "warmed minimal deterministic prepared frame-detector service cost with raw HdrHistogram tails"
+status = "active"
+id = "DET-HIL-LOW-FIDELITY-2026-07-30"
+path = "2026-07-30-shared-low-fidelity-service-cost.toml"

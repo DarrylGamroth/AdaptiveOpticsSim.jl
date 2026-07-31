@@ -1517,6 +1517,66 @@ function run_optional_detector_device_model_matrix_checks(
     return nothing
 end
 
+function run_optional_shared_detector_ipc_checks(
+    ::Type{B},
+    BackendArray,
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    response_kernel = T[
+        0.00 0.05 0.00
+        0.10 0.55 0.20
+        0.00 0.10 0.00
+    ]
+    ipc_kernel = T[
+        0.00 0.02 0.00
+        0.03 0.90 0.01
+        0.00 0.04 0.00
+    ]
+    row = DeviceModelMatrixM3GlobalCMOS()
+    map = device_model_matrix_detector_rate_map(row; backend=selector, T)
+    detector = Detector(
+        noise=NoiseNone(),
+        integration_time=T(0.75),
+        qe=T(0.4),
+        sensor=CMOSSensor(T=T, backend=selector),
+        response_model=SampledFrameResponse(response_kernel;
+            T, backend=selector),
+        charge_coupling_model=InterpixelCapacitance(ipc_kernel;
+            T, backend=selector),
+        T,
+        backend=selector,
+    )
+    plan = prepare_detector_acquisition(detector, map)
+    response_mtf_before = detector_mtf(detector, T(0.19), T(0.31))
+    output = capture!(detector, map, plan, Xoshiro(0x7_502))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(output),
+    )
+
+    expected = device_model_matrix_zero_extended_response(
+        Array(map.values), response_kernel)
+    expected .*= T(0.75 * 0.4)
+    expected = device_model_matrix_zero_extended_response(expected,
+        ipc_kernel)
+    device = compute_device(output)
+    coupling = detector.params.charge_coupling_model
+
+    @test output isa BackendArray
+    @test isapprox(Array(output), expected; rtol=8f-6, atol=8f-7)
+    @test coupling isa InterpixelCapacitance
+    @test coupling.response.kernel isa BackendArray
+    @test compute_device(coupling.response.kernel) == device
+    @test optional_detector_state_device_resident(detector, device,
+        BackendArray)
+    @test plan.input_values === map.values
+    @test detector_export_metadata(detector).charge_coupling ==
+        :interpixel_capacitance
+    @test detector_mtf(detector, T(0.19), T(0.31)) ==
+        response_mtf_before
+    return nothing
+end
+
 function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(selector)
@@ -2700,7 +2760,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         rng=MersenneTwister(303))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(edge_frame))
-    @test sum(Array(edge_frame)) ≈ T(0.9) atol=T(2e-6) rtol=T(2e-6)
+    @test sum(Array(edge_frame)) ≈ T(0.3) atol=T(2e-6) rtol=T(2e-6)
     @test sum(Array(edge_frame)) <= sum(edge_host) + T(2e-6)
 
     edge_cube_host = zeros(T, 2, 9, 9)
@@ -2713,8 +2773,8 @@ function run_optional_plane_product_checks(tel::Telescope,
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(edge_stack))
     edge_stack_host = Array(edge_stack)
-    @test sum(@view(edge_stack_host[1, :, :])) ≈ T(0.9) atol=T(2e-6) rtol=T(2e-6)
-    @test sum(@view(edge_stack_host[2, :, :])) ≈ T(0.3) atol=T(2e-6) rtol=T(2e-6)
+    @test sum(@view(edge_stack_host[1, :, :])) ≈ T(0.3) atol=T(2e-6) rtol=T(2e-6)
+    @test sum(@view(edge_stack_host[2, :, :])) ≈ T(0.9) atol=T(2e-6) rtol=T(2e-6)
 
     fraunhofer = FraunhoferPropagation(field)
     propagated = propagation_output(field, fraunhofer)
@@ -4248,6 +4308,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_device_path_batch_checks(B, backend)
     run_optional_wfs_device_model_matrix_checks(B, backend)
     run_optional_detector_device_model_matrix_checks(B, backend)
+    run_optional_shared_detector_ipc_checks(B, backend)
     run_optional_detector_event_checks(B, backend)
     run_optional_command_application_checks(B, backend)
     run_optional_controller_routing_checks(B, backend)

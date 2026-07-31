@@ -1078,6 +1078,23 @@ optical-grid mapping is prepared, a non-null response requires
 intensity values. Repeated capture trusts later writes to the prepared storage,
 so its producer is responsible for preserving finite nonnegative samples.
 
+For whole-frame acquisition, the common ordered stages are: prepared
+radiometric scaling; presampling response; physical-pixel integration;
+QE/exposure; configured binning; signal defects and persistence; photon and
+background-flux statistics; dark current, DSNU, and sensor-generated charge;
+nonlinearity, saturation, charge transfer or pre-read multiplication; IPC;
+read noise; post-read gain and sensor output effects; readout correction;
+quantization and configured background-map subtraction; then windowing and
+output conversion. Unsupported or unconfigured sensor-specific stages are
+typed no-ops. IPC therefore does not contribute to `detector_mtf`, and output
+conversion does not redefine the charge-domain full-well limit.
+
+For the lowest-cost deterministic RTC load, configure `NoiseNone()` and
+`NullFrameResponse()` and omit optional defect, coupling, readout-product, and
+output-conversion effects. The prepared path remains type-inferred and
+allocation-free after warmup. This is still the ordinary detector pipeline,
+not a separate reduced-order detector type or a camera profile.
+
 `MKIDArrayDetector` is the maintained MKID surface for accumulated counting-array
 HIL use. It models photon-counting output with quantum efficiency, fill factor,
 dark count rate, optional counting dead time/correlation models, and exported

@@ -1091,7 +1091,7 @@ end
         AdaptiveOpticsSim.Detectors.apply_response!(KA_CPU_STYLE, asymmetric, ka_frame,
             ka_scratch)
         @test ka_cpu_close(ka_frame, scalar_frame)
-        @test sum(ka_frame) ≈ 0.9
+        @test sum(ka_frame) ≈ 0.3
 
         ramp_cube = Array{Float64}(undef, 5, 5, 5)
         for read_idx in axes(ramp_cube, 3)
@@ -1145,8 +1145,8 @@ end
         AdaptiveOpticsSim.Detectors._batched_apply_response!(KA_CPU_STYLE, asymmetric,
             ka_cube, ka_cube_scratch)
         @test ka_cpu_close(ka_cube, scalar_cube)
-        @test sum(@view(ka_cube[1, :, :])) ≈ 0.9
-        @test sum(@view(ka_cube[2, :, :])) ≈ 0.3
+        @test sum(@view(ka_cube[1, :, :])) ≈ 0.3
+        @test sum(@view(ka_cube[2, :, :])) ≈ 0.9
 
         noise = reshape(collect(range(-0.2, 0.2; length=25)), 5, 5)
         scalar_frame .= frame

@@ -484,11 +484,12 @@ the converted output frame is ready. It therefore excludes external RTC
 transport, frame-grabber I/O, and camera-link scheduling.
 
 The default contract uses one Julia, BLAS, and FFT thread; three warmed serial
-closed-loop repetitions; 100,000 samples per card; and a fixed-size
+self-paced repetitions; 100,000 samples per card; and a fixed-size
 `HdrHistogram.Histogram`. Since the next capture begins only after the previous
 one completes, there is no independent arrival schedule and coordinated-
 omission correction is intentionally not applied. First capture and steady-
-state allocation measurements are reported separately. The histogram source
+state allocation measurements are reported separately, and every run retains a
+verified compact raw histogram. The histogram source
 is an untagged commit from the GitHub `HdrHistogram.jl` repository, pinned in
 the benchmark project rather than resolved from a local checkout.
 
@@ -498,6 +499,7 @@ For a quick harness check, reduce the sample count, repetitions, and frame size:
 AOS_DETECTOR_HIL_SAMPLES=1000 \
 AOS_DETECTOR_HIL_RUNS=1 \
 AOS_DETECTOR_HIL_SIZE=32 \
+AOS_DETECTOR_HIL_CARDS=DET-HIL-00 \
 julia --project=benchmarks benchmarks/benchmark_detector_hil_latency.jl
 ```
 
@@ -522,6 +524,12 @@ cards were allocation-free after warmup. Median-over-run latency summaries were:
 | fast linear EMCCD | 85.2 μs | 102.9 μs | 153.1 μs |
 | HgCdTe avalanche CDS | 188.9 μs | 223.5 μs | 326.1 μs |
 | 16-sample Skipper CCD | 202.4 μs | 233.2 μs | 338.4 μs |
+
+The independently maintained minimal prepared path is archived in
+[`2026-07-30-shared-low-fidelity-service-cost.toml`](../benchmarks/results/detectors/2026-07-30-shared-low-fidelity-service-cost.toml).
+It selects only `DET-HIL-00`: `NoiseNone`, null presampling response, scalar
+QE, no optional detector effects, and no converted output buffer. This is
+self-paced in-process service-cost evidence, not a fixed-arrival latency claim.
 
 These values are a regression baseline for that host and contract, not an
 external-RTC latency SLO or a prediction for other frame sizes and CPUs.

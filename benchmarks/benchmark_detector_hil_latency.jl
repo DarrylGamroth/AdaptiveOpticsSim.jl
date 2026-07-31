@@ -1,5 +1,6 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Detectors
+using AdaptiveOpticsSim.Optics
 using Dates
 using HdrHistogram
 using LinearAlgebra
@@ -7,6 +8,9 @@ using Random
 using Statistics
 using TOML
 
+include(joinpath(@__DIR__, "support", "hdr_histogram_artifact.jl"))
+
+const HdrArtifact = HdrHistogramArtifact
 const DETECTOR_HIL_SAMPLES = parse(Int,
     get(ENV, "AOS_DETECTOR_HIL_SAMPLES", "100000"))
 const DETECTOR_HIL_WARMUP = parse(Int,
@@ -19,6 +23,10 @@ const DETECTOR_HIL_BASELINE = get(ENV, "AOS_DETECTOR_HIL_BASELINE", "")
 const DETECTOR_HIL_OUTPUT = get(ENV, "AOS_DETECTOR_HIL_OUTPUT", "")
 const DETECTOR_HIL_REGRESSION_FACTOR = parse(Float64,
     get(ENV, "AOS_DETECTOR_HIL_REGRESSION_FACTOR", "1.25"))
+const DETECTOR_HIL_CARD_IDS = let value =
+        strip(get(ENV, "AOS_DETECTOR_HIL_CARDS", ""))
+    isempty(value) ? () : Tuple(strip.(split(value, ',')))
+end
 
 const DETECTOR_HIL_HIGHEST_NS = Int64(60_000_000_000)
 const DETECTOR_HIL_SIGNIFICANT_FIGURES = 3
@@ -28,6 +36,15 @@ struct DetectorHILCard{D,A<:AbstractMatrix,R<:AbstractRNG}
     label::String
     detector::D
     input::A
+    rng::R
+end
+
+struct PreparedDetectorHILCard{D,M,P,R<:AbstractRNG}
+    id::String
+    label::String
+    detector::D
+    map::M
+    plan::P
     rng::R
 end
 
@@ -56,6 +73,28 @@ end
 function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
     T = Float32
     input = detector_hil_input(T, n)
+    low_fidelity_values = copy(input)
+    low_fidelity_metadata = OpticalPlaneMetadata(
+        DetectorPlane(), low_fidelity_values;
+        coordinate_domain=AngularCoordinates(),
+        sampling=(one(T), one(T)),
+        spectral=MonochromaticChannel(T(0.55e-6)),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition(),
+    )
+    low_fidelity_map = IntensityMap(low_fidelity_metadata,
+        low_fidelity_values)
+    low_fidelity = Detector(
+        integration_time=1e-3,
+        qe=1.0,
+        noise=NoiseNone(),
+        sensor=CCDSensor(T=T),
+        response_model=NullFrameResponse(),
+        T=T,
+    )
+    low_fidelity_plan = prepare_detector_acquisition(low_fidelity,
+        low_fidelity_map)
     ipc = InterpixelCapacitance(T[
         0.00 0.01 0.00
         0.01 0.96 0.01
@@ -133,6 +172,14 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
     )
 
     return (
+        PreparedDetectorHILCard(
+            "DET-HIL-00",
+            "Minimal deterministic prepared frame capture",
+            low_fidelity,
+            low_fidelity_map,
+            low_fidelity_plan,
+            runtime_rng(100),
+        ),
         DetectorHILCard("DET-HIL-01", "CMOS global-shutter capture", cmos,
             input, runtime_rng(101)),
         DetectorHILCard("DET-HIL-02", "CMOS capture with response and IPC",
@@ -150,15 +197,26 @@ end
 
 @inline detector_hil_capture!(card::DetectorHILCard) =
     capture!(card.detector, card.input, card.rng)
+@inline detector_hil_capture!(card::PreparedDetectorHILCard) =
+    capture!(card.detector, card.map, card.plan, card.rng)
 
-function detector_hil_first_capture_ns(card::DetectorHILCard)
+function selected_detector_hil_cards()
+    cards = detector_hil_cards()
+    isempty(DETECTOR_HIL_CARD_IDS) && return cards
+    selected = filter(card -> card.id in DETECTOR_HIL_CARD_IDS, cards)
+    length(selected) == length(DETECTOR_HIL_CARD_IDS) || error(
+        "AOS_DETECTOR_HIL_CARDS contains an unknown or duplicate card id")
+    return selected
+end
+
+function detector_hil_first_capture_ns(card)
     GC.gc()
     start = time_ns()
     detector_hil_capture!(card)
     return Int64(time_ns() - start)
 end
 
-function detector_hil_steady_alloc_bytes(card::DetectorHILCard)
+function detector_hil_steady_alloc_bytes(card)
     for _ in 1:10
         detector_hil_capture!(card)
     end
@@ -173,8 +231,17 @@ end
 
 function histogram_summary(histogram::HdrHistogram.Histogram, wall_ns::Int64,
     samples::Int, gc_delta)
+    encoded = HdrArtifact.verified_sparse_histogram(
+        histogram,
+        Int64(1),
+        DETECTOR_HIL_HIGHEST_NS,
+        DETECTOR_HIL_SIGNIFICANT_FIGURES,
+        samples,
+    )
     return Dict{String,Any}(
         "samples" => samples,
+        "completed_operations" => samples,
+        "failed_operations" => 0,
         "wall_ns" => wall_ns,
         "throughput_hz" => 1.0e9 * samples / wall_ns,
         "min_ns" => min(histogram),
@@ -185,10 +252,11 @@ function histogram_summary(histogram::HdrHistogram.Histogram, wall_ns::Int64,
         "p99_9_ns" => HdrHistogram.value_at_percentile(histogram, 99.9),
         "max_ns" => max(histogram),
         "gc" => gc_delta,
+        encoded...,
     )
 end
 
-function measure_detector_hil_run!(card::DetectorHILCard, samples::Int)
+function measure_detector_hil_run!(card, samples::Int)
     histogram = HdrHistogram.Histogram(1, DETECTOR_HIL_HIGHEST_NS,
         DETECTOR_HIL_SIGNIFICANT_FIGURES)
     GC.gc()
@@ -206,7 +274,7 @@ function measure_detector_hil_run!(card::DetectorHILCard, samples::Int)
         gc_counter_delta(gc_before, gc_after))
 end
 
-function print_detector_hil_run(card::DetectorHILCard, run_index::Int,
+function print_detector_hil_run(card, run_index::Int,
     summary::Dict{String,Any})
     println(card.id, " run=", run_index, " label=", card.label)
     println("  p50_ns: ", summary["p50_ns"])
@@ -235,7 +303,7 @@ function summarize_detector_hil_runs(runs::Vector{Dict{String,Any}})
     )
 end
 
-function detector_card_metadata(card::DetectorHILCard)
+function detector_card_metadata(card)
     metadata = detector_export_metadata(card.detector)
     return Dict{String,Any}(
         "sensor" => String(metadata.sensor),
@@ -247,6 +315,10 @@ function detector_card_metadata(card::DetectorHILCard)
         "sampling_mode" => String(metadata.sampling_mode),
         "sampling_reads" => something(metadata.sampling_reads, 0),
         "output_type" => string(metadata.output_type),
+        "integration_time_s" => metadata.integration_time,
+        "quantum_efficiency" => metadata.qe,
+        "detector_defects" => String(metadata.detector_defects),
+        "nonlinearity_model" => String(metadata.nonlinearity_model),
     )
 end
 
@@ -323,7 +395,7 @@ end
 function detector_hil_contract()
     return Dict{String,Any}(
         "boundary" => "input detector frame available to converted output frame ready",
-        "load_model" => "warmed serial closed-loop",
+        "load_model" => "warmed serial self-paced service time",
         "arrival_model" => "next capture starts after the previous capture completes",
         "coordinated_omission_correction" => false,
         "coordinated_omission_reason" => "no independent arrival schedule is modeled",
@@ -337,6 +409,7 @@ function detector_hil_contract()
         "samples_per_run" => DETECTOR_HIL_SAMPLES,
         "runs" => DETECTOR_HIL_RUNS,
         "warmup_captures" => DETECTOR_HIL_WARMUP,
+        "selected_card_ids" => collect(DETECTOR_HIL_CARD_IDS),
         "tail_resolution_note" => DETECTOR_HIL_SAMPLES >= 100_000 ?
             "at least 100 observations are expected beyond p99.9 per run" :
             "fewer than 100000 samples; p99.9 is diagnostic only",
@@ -366,13 +439,13 @@ function run_detector_hil_latency_benchmarks()
     all_gates_passed = true
 
     println("detector_hil_latency_contract")
-    println("  load_model: warmed serial closed-loop")
+    println("  load_model: warmed serial self-paced service time")
     println("  samples_per_run: ", DETECTOR_HIL_SAMPLES)
     println("  runs: ", DETECTOR_HIL_RUNS)
     println("  frame_size: ", DETECTOR_HIL_SIZE, "x", DETECTOR_HIL_SIZE)
     println("  coordinated_omission_correction: false (no independent arrivals)")
 
-    for card in detector_hil_cards()
+    for card in selected_detector_hil_cards()
         first_capture_ns = detector_hil_first_capture_ns(card)
         for _ in 1:DETECTOR_HIL_WARMUP
             detector_hil_capture!(card)
@@ -412,9 +485,9 @@ function run_detector_hil_latency_benchmarks()
     end
 
     artifact = Dict{String,Any}(
-        "schema_version" => 1,
+        "schema_version" => 2,
         "benchmark" => "detector_hil_latency",
-        "evidence_class" => "warmed in-process detector capture latency",
+        "evidence_class" => "warmed self-paced in-process detector service time",
         "contract" => detector_hil_contract(),
         "environment" => detector_hil_environment(),
         "cards" => results,

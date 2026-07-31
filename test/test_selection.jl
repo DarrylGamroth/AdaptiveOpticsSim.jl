@@ -16,6 +16,7 @@ const DETECTOR_TEST_SUITE_NAMES = (
     "detector-shared",
     "detector-lifecycle",
     "detector-response",
+    "detector-shared-qualification",
     "detector-ccd",
     "detector-skipper",
     "detector-emccd",
@@ -128,6 +129,11 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec(
         "detector-response",
         "testsets/detector_response.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-shared-qualification",
+        "testsets/detector_shared_qualification.jl";
         fixtures=("detector_test_fixtures.jl",),
     ),
     TestSuiteSpec(
