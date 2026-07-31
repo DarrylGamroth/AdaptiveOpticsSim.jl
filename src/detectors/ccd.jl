@@ -1,25 +1,34 @@
+"""
+    CCDSensor(; clock_induced_charge_per_frame=0,
+        sample_duration=0, sampling_mode=SingleRead(), T=Float64)
+
+CCD area-sensor model. `sample_duration` is the duration of one configured
+Skipper nondestructive sample and must remain zero for conventional
+`SingleRead` operation. Whole-acquisition readout and readiness timing belongs
+to the Plant acquisition definition.
+"""
 struct CCDSensor{T<:AbstractFloat,M<:FrameSamplingMode} <: FrameSensorType
     clock_induced_charge_per_frame::T
-    read_time::T
+    sample_duration::T
     sampling_mode::M
 end
 
 function CCDSensor(;
     clock_induced_charge_per_frame::Real=0.0,
-    read_time::Real=0.0,
+    sample_duration::Real=0.0,
     sampling_mode::FrameSamplingMode=SingleRead(),
     T::Type{<:AbstractFloat}=Float64,
 )
     mode = validate_ccd_sampling_mode(sampling_mode)
     cic = T(clock_induced_charge_per_frame)
-    read_duration = T(read_time)
+    duration = T(sample_duration)
     isfinite(cic) && cic >= zero(T) || throw(InvalidConfiguration(
         "CCDSensor clock_induced_charge_per_frame must be finite and >= 0"))
-    isfinite(read_duration) && read_duration >= zero(T) ||
+    isfinite(duration) && duration >= zero(T) ||
         throw(InvalidConfiguration(
-            "CCDSensor read_time must be finite and >= 0"))
-    validate_ccd_read_time(mode, read_duration)
-    return CCDSensor{T,typeof(mode)}(cic, read_duration, mode)
+            "CCDSensor sample_duration must be finite and >= 0"))
+    validate_ccd_sample_duration(mode, duration)
+    return CCDSensor{T,typeof(mode)}(cic, duration, mode)
 end
 
 validate_ccd_sampling_mode(mode::SingleRead) = validate_frame_sampling_mode(mode)
@@ -27,14 +36,14 @@ validate_ccd_sampling_mode(mode::SkipperSampling) = validate_frame_sampling_mode
 validate_ccd_sampling_mode(mode::FrameSamplingMode) = throw(InvalidConfiguration(
     "CCDSensor sampling_mode must be SingleRead or SkipperSampling"))
 
-function validate_ccd_read_time(::SingleRead, read_time)
-    iszero(read_time) || throw(InvalidConfiguration(
-        "CCDSensor read_time applies only to SkipperSampling; " *
+function validate_ccd_sample_duration(::SingleRead, sample_duration)
+    iszero(sample_duration) || throw(InvalidConfiguration(
+        "CCDSensor sample_duration applies only to SkipperSampling; " *
         "Plant acquisition definitions own single-read readout and readiness timing"))
     return nothing
 end
 
-validate_ccd_read_time(::SkipperSampling, read_time) = nothing
+validate_ccd_sample_duration(::SkipperSampling, sample_duration) = nothing
 
 detector_sensor_symbol(::CCDSensor) = :ccd
 supports_clock_induced_charge(::CCDSensor) = true
@@ -53,23 +62,25 @@ effective_readout_sigma(sensor::CCDSensor, sigma) =
     effective_readout_sigma(sensor.sampling_mode, sigma)
 
 sampling_read_time(sensor::CCDSensor, ::Type{T}) where {T<:AbstractFloat} =
-    ccd_sampling_read_time(sensor.sampling_mode, sensor.read_time, T)
-ccd_sampling_read_time(::SingleRead, read_time, ::Type{T}) where {T<:AbstractFloat} =
+    ccd_sampling_read_time(sensor.sampling_mode, sensor.sample_duration, T)
+ccd_sampling_read_time(::SingleRead, sample_duration,
+    ::Type{T}) where {T<:AbstractFloat} =
     nothing
-ccd_sampling_read_time(::SkipperSampling, read_time, ::Type{T}) where {T<:AbstractFloat} =
-    T(read_time)
+ccd_sampling_read_time(::SkipperSampling, sample_duration,
+    ::Type{T}) where {T<:AbstractFloat} =
+    T(sample_duration)
 
 function sampling_wallclock_time(sensor::CCDSensor, integration_time,
     ::Type{T}) where {T<:AbstractFloat}
     return ccd_sampling_wallclock_time(sensor.sampling_mode, integration_time,
-        sensor.read_time, T)
+        sensor.sample_duration, T)
 end
 
-ccd_sampling_wallclock_time(::SingleRead, integration_time, read_time,
+ccd_sampling_wallclock_time(::SingleRead, integration_time, sample_duration,
     ::Type{T}) where {T<:AbstractFloat} = T(integration_time)
-ccd_sampling_wallclock_time(mode::SkipperSampling, integration_time, read_time,
-    ::Type{T}) where {T<:AbstractFloat} =
-    T(integration_time) + T(mode.n_samples) * T(read_time)
+ccd_sampling_wallclock_time(mode::SkipperSampling, integration_time,
+    sample_duration, ::Type{T}) where {T<:AbstractFloat} =
+    T(integration_time) + T(mode.n_samples) * T(sample_duration)
 
 function apply_sensor_statistics!(sensor::CCDSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)

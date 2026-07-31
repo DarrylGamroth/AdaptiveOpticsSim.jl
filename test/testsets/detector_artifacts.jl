@@ -244,4 +244,38 @@
         "gamma_steady_alloc_bytes"] == 0
     @test avalanche_deterministic[
         "scheduled_steady_alloc_bytes"] == 0
+
+    skipper_entry = detector_entries["DET-SKIPPER-QUAL-2026-07-31"]
+    @test skipper_entry["status"] == "active"
+    skipper_path = joinpath(
+        dirname(detector_artifact_path), skipper_entry["path"])
+    @test isfile(skipper_path)
+    skipper = TOML.parsefile(skipper_path)
+    @test skipper["schema_version"] == 1
+    @test skipper["family"] == "skipper_ccd_independent_read"
+    @test skipper["all_gates_passed"]
+    @test !skipper["environment"]["source_dirty"]
+    skipper_qualification = skipper["qualification"]
+    @test skipper_qualification["samples_per_case"] == 16_384
+    @test skipper_qualification["sigma_limit"] == 6.0
+    skipper_cases = skipper_qualification["moment_cases"]
+    @test Set(case["n_samples"] for case in skipper_cases) ==
+        Set((1, 4, 16, 64))
+    @test all(case ->
+        case["mean_passed"] && case["variance_passed"],
+        skipper_cases)
+    skipper_deterministic = skipper_qualification["deterministic"]
+    @test all(skipper_deterministic[key] for key in (
+        "exact_mean_and_gain_passed",
+        "retained_charge_packet_passed",
+        "input_referred_full_well_passed",
+        "fixed_frame_storage_passed",
+        "sample_count_passed",
+        "timing_passed",
+        "batched_capture_rejected",
+        "batched_input_unmodified",
+        "deterministic_replay_passed",
+        "allocation_gate_passed",
+    ))
+    @test skipper_deterministic["steady_alloc_bytes"] == 0
 end

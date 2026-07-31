@@ -40,9 +40,9 @@ end
         clock_induced_charge_per_frame=Inf)
     @test_throws InvalidConfiguration CCDSensor(
         clock_induced_charge_per_frame=NaN)
-    @test_throws InvalidConfiguration CCDSensor(read_time=-1.0)
-    @test_throws InvalidConfiguration CCDSensor(read_time=Inf)
-    @test_throws InvalidConfiguration CCDSensor(read_time=1e-3)
+    @test_throws InvalidConfiguration CCDSensor(sample_duration=-1.0)
+    @test_throws InvalidConfiguration CCDSensor(sample_duration=Inf)
+    @test_throws InvalidConfiguration CCDSensor(sample_duration=1e-3)
     @test_throws InvalidConfiguration CCDSensor(
         sampling_mode=UpTheRampSampling(2))
 

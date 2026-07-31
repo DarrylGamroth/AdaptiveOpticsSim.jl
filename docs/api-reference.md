@@ -1133,8 +1133,10 @@ dimensions when the active sensor geometry itself is smaller.
 expectation in electrons per pixel per completed frame, so it is not scaled by
 exposure duration. A configured presampling response supplies detector MTF;
 `CCDSensor` does not infer one from CCD technology. For `SingleRead()`,
-`read_time` must remain zero: Plant acquisition definitions own readout and
-readiness durations, and core does not infer a serial-register timing model.
+`sample_duration` must remain zero: the parameter belongs only to
+`SkipperSampling`, while Plant acquisition definitions own conventional
+readout and readiness durations. Core does not infer a serial-register timing
+model.
 The optional thermal field is named `cic_per_frame_law` for the same
 dimensional reason.
 
@@ -1144,7 +1146,9 @@ without retaining an `n`-plane read cube. This bounds memory independently of
 sample count and keeps the warmed repeated-capture path allocation-free. The
 current model assumes independent read samples. Configure CCD clock-induced
 charge with `clock_induced_charge_per_frame`; unlike dark current, it is not
-scaled by integration time.
+scaled by integration time. `CCDSensor.sample_duration` is the duration of one
+configured full-frame nondestructive sample. It is not a sampling period or an
+electronics integration-window model.
 
 `UpTheRampSampling(n)` is available on `HgCdTeSensor` and on the
 linear-avalanche HgCdTe sensor. It retains `n` evenly spaced

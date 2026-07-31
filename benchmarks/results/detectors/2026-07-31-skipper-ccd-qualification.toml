@@ -1,0 +1,99 @@
+all_gates_passed = true
+artifact_id = "DET-SKIPPER-QUAL-2026-07-31"
+family = "skipper_ccd_independent_read"
+schema_version = 1
+
+[environment]
+architecture = "x86_64"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "9f4b6289d51cc673e8a9b7e229d4a9eeed8ffc77"
+timestamp_utc = "2026-07-31T09:14:26.650"
+
+[model]
+estimator = "streaming arithmetic mean"
+read_noise_variance = "sigma_single^2 / n_samples"
+sample_duration = "duration of one configured full-frame nondestructive sample"
+scientific_reference = "https://arxiv.org/abs/1106.1839"
+
+[qualification]
+samples_per_case = 16384
+sigma_limit = 6.0
+
+    [qualification.deterministic]
+    allocation_gate_passed = true
+    batched_capture_rejected = true
+    batched_input_unmodified = true
+    deterministic_replay_passed = true
+    exact_mean_and_gain_passed = true
+    fixed_frame_storage_passed = true
+    input_referred_full_well_passed = true
+    retained_charge_packet_passed = true
+    sample_count_passed = true
+    sample_duration_seconds = 2.0e-6
+    sampling_wallclock_seconds = 1.000016
+    steady_alloc_bytes = 0
+    timing_passed = true
+
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 16.0
+    id = "independent_reads_n1"
+    mean_absolute_limit = 0.1875
+    mean_passed = true
+    n_samples = 1
+    observed_mean = 0.0053561551410623316
+    observed_variance = 15.995657969713855
+    sample_count = 16384
+    seed = 8211
+    single_sample_sigma_electrons = 4.0
+    variance_absolute_limit = 1.060692542041278
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 4.0
+    id = "independent_reads_n4"
+    mean_absolute_limit = 0.09375
+    mean_passed = true
+    n_samples = 4
+    observed_mean = -0.0010444415458009783
+    observed_variance = 3.9765017396733233
+    sample_count = 16384
+    seed = 8212
+    single_sample_sigma_electrons = 4.0
+    variance_absolute_limit = 0.2651731355103195
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 1.0
+    id = "independent_reads_n16"
+    mean_absolute_limit = 0.046875
+    mean_passed = true
+    n_samples = 16
+    observed_mean = 0.0060161985671304844
+    observed_variance = 1.012682121651826
+    sample_count = 16384
+    seed = 8213
+    single_sample_sigma_electrons = 4.0
+    variance_absolute_limit = 0.06629328387757988
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 0.25
+    id = "independent_reads_n64"
+    mean_absolute_limit = 0.0234375
+    mean_passed = true
+    n_samples = 64
+    observed_mean = 0.0006489523374061453
+    observed_variance = 0.2505509083640086
+    sample_count = 16384
+    seed = 8214
+    single_sample_sigma_electrons = 4.0
+    variance_absolute_limit = 0.01657332096939497
+    variance_passed = true
+
+[scope]
+excluded = ["correlated 1/f read noise", "dual-slope-integration electronics", "adaptive stopping or region-dependent sample counts", "raw per-sample cube", "charge-transfer inefficiency and camera profiles"]
+included = ["fixed-count nondestructive samples of one retained CCD charge packet", "independent Gaussian read noise and streaming arithmetic mean", "fixed frame-sized readout-product storage", "explicit per-sample duration and total sampling wall-clock duration"]

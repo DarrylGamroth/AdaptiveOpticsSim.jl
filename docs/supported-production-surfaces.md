@@ -197,6 +197,9 @@ Current AMDGPU-supported scope:
   moderate-charge distributional bounds, nonnegativity, device residency, and
   scalar indexing disabled. Conditional-Gamma multiplication remains the CPU
   reference and is rejected on accelerators
+- bounded Skipper CCD independent-read sampling with a device-resident
+  streaming mean, fixed frame-sized storage, distributional read-noise
+  reduction, explicit sample duration, and scalar indexing disabled
 - direct rolling-shutter row-band and frame-transfer image/storage detector
   lifecycles with device-resident state and scalar indexing disabled
 - integrated single-device ownership for two or more compatible, equally

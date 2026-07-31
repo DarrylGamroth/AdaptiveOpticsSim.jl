@@ -165,7 +165,7 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
         noise=NoisePhotonReadout(3.0),
         full_well=100_000,
         bits=16,
-        sensor=CCDSensor(read_time=2e-6,
+        sensor=CCDSensor(sample_duration=2e-6,
             sampling_mode=SkipperSampling(16), T=T),
         response_model=NullFrameResponse(),
         T=T,

@@ -121,7 +121,7 @@ function ccd_artifact_deterministic_contract()
         capture!(long, zero_input, Xoshiro(3201))
 
     read_time_rejected = try
-        CCDSensor(read_time=1e-3)
+        CCDSensor(sample_duration=1e-3)
         false
     catch err
         err isa InvalidConfiguration
