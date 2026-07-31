@@ -102,7 +102,8 @@ function skipper_deterministic_contract()
             products isa SkipperReadoutProducts &&
             fieldnames(typeof(products)) == (:mean_frame, :sample_count) &&
             size(products.mean_frame) == size(input) &&
-            detector_read_cube(detector) === nothing,
+            AdaptiveOpticsSim.Detectors.detector_read_cube(detector) ===
+                nothing,
         "sample_count_passed" => products.sample_count == 8,
         "sample_duration_seconds" => metadata.sampling_read_time,
         "sampling_wallclock_seconds" => metadata.sampling_wallclock_time,
