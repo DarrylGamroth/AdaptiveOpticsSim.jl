@@ -198,5 +198,6 @@ function generate_skipper_qualification_artifact()
     return SKIPPER_ARTIFACT_PATH
 end
 
-abspath(PROGRAM_FILE) == @__FILE__ &&
+if abspath(PROGRAM_FILE) == abspath(@__FILE__)
     println(generate_skipper_qualification_artifact())
+end
