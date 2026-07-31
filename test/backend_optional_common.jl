@@ -1517,6 +1517,101 @@ function run_optional_detector_device_model_matrix_checks(
     return nothing
 end
 
+function run_optional_cmos_family_checks(
+    ::Type{B},
+    BackendArray,
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    zero_input = BackendArray(zeros(T, 4, 4))
+
+    column_detector = Detector(
+        noise=NoiseNone(),
+        qe=one(T),
+        sensor=CMOSSensor(column_readout_sigma=one(T), T=T,
+            backend=selector),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=selector,
+    )
+    column_output = capture!(column_detector, zero_input,
+        MersenneTwister(5101))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(column_output))
+    column_host = Array(column_output)
+    @test column_output isa BackendArray
+    @test all(j -> all(==(column_host[1, j]), column_host[:, j]),
+        axes(column_host, 2))
+    @test !all(iszero, column_host)
+
+    row_detector = Detector(
+        noise=NoiseNone(),
+        qe=one(T),
+        sensor=CMOSSensor(row_readout_sigma=one(T), T=T,
+            backend=selector),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=selector,
+    )
+    row_output = capture!(row_detector, zero_input,
+        MersenneTwister(5102))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(row_output))
+    row_host = Array(row_output)
+    @test row_output isa BackendArray
+    @test all(i -> all(==(row_host[i, 1]), row_host[i, :]),
+        axes(row_host, 1))
+    @test !all(iszero, row_host)
+
+    sigma_map = zeros(T, 4, 4)
+    sigma_map[2, 3] = T(2)
+    pixel_detector = Detector(
+        noise=NoiseNone(),
+        qe=one(T),
+        sensor=CMOSSensor(
+            readout_noise_model=CMOSReadNoiseMap(sigma_map;
+                T=T, backend=selector),
+            T=T,
+            backend=selector,
+        ),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=selector,
+    )
+    pixel_output = capture!(pixel_detector, zero_input,
+        MersenneTwister(5103))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(pixel_output))
+    pixel_host = Array(pixel_output)
+    @test pixel_output isa BackendArray
+    @test count(!iszero, pixel_host) == 1
+    @test !iszero(pixel_host[2, 3])
+
+    output_pattern = AdaptiveOpticsSim.Detectors.StaticCMOSOutputPattern(
+        2, T[1, 2], T[0, 10]; T=T, backend=selector)
+    output_detector = Detector(
+        noise=NoiseNone(),
+        qe=one(T),
+        sensor=CMOSSensor(output_model=output_pattern, T=T,
+            backend=selector),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=selector,
+    )
+    output = capture!(output_detector,
+        BackendArray(fill(T(2), 4, 4)), MersenneTwister(5104))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(output))
+    @test output isa BackendArray
+    @test Array(output) == T[
+        2 2 14 14
+        2 2 14 14
+        2 2 14 14
+        2 2 14 14
+    ]
+    return nothing
+end
+
 function run_optional_shared_detector_ipc_checks(
     ::Type{B},
     BackendArray,
@@ -4310,6 +4405,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_device_path_batch_checks(B, backend)
     run_optional_wfs_device_model_matrix_checks(B, backend)
     run_optional_detector_device_model_matrix_checks(B, backend)
+    run_optional_cmos_family_checks(B, backend)
     run_optional_shared_detector_ipc_checks(B, backend)
     run_optional_detector_event_checks(B, backend)
     run_optional_command_application_checks(B, backend)
