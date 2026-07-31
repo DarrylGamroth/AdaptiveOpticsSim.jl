@@ -72,10 +72,11 @@ function StaticCMOSOutputPattern(output_cols::Integer, gains::AbstractVector, of
 end
 
 @kernel function apply_cmos_output_pattern_kernel!(frame, gains, offsets, output_cols::Int, n::Int, m::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n && j <= m
-        output_idx = cld(j, output_cols)
-        @inbounds frame[i, j] = frame[i, j] * gains[output_idx] + offsets[output_idx]
+    i, local_col, output_idx = @index(Global, NTuple)
+    col = (output_idx - 1) * output_cols + local_col
+    if i <= n && col <= m
+        @inbounds frame[i, col] =
+            frame[i, col] * gains[output_idx] + offsets[output_idx]
     end
 end
 
@@ -303,7 +304,9 @@ end
 function apply_output_model!(style::AcceleratorStyle, model::StaticCMOSOutputPattern, frame)
     n, m = size(frame)
     _require_cmos_output_shape(model, size(frame))
-    launch_kernel!(style, apply_cmos_output_pattern_kernel!, frame, model.gains, model.offsets, model.output_cols, n, m; ndrange=(n, m))
+    launch_kernel!(style, apply_cmos_output_pattern_kernel!, frame,
+        model.gains, model.offsets, model.output_cols, n, m;
+        ndrange=(n, model.output_cols, length(model.gains)))
     return frame
 end
 
