@@ -231,15 +231,6 @@ end
 apply_sensor_statistics!(sensor::FrameSensorType, det::Detector,
     rng::AbstractRNG, exposure_time::Real) = det.state.frame
 
-function apply_avalanche_excess_noise!(factor, det::Detector, rng::AbstractRNG)
-    factor <= one(factor) && return det.state.frame
-    randn_backend!(rng, det.state.noise_buffer)
-    scale2 = factor * factor - one(factor)
-    zero_t = zero(eltype(det.state.frame))
-    @. det.state.frame += sqrt(max(scale2 * det.state.frame, zero_t)) * det.state.noise_buffer
-    return det.state.frame
-end
-
 apply_pre_readout_gain!(::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
 apply_post_readout_gain!(::FrameSensorType, det::Detector) = det.state.frame
 apply_detection_output!(::FrameSensorType, det::Detector,

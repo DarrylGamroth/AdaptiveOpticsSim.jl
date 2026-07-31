@@ -138,15 +138,6 @@ _batched_sensor_statistics!(sensor::FrameSensorType, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
     exposure_time::Real) = cube
 
-function _batched_avalanche_excess_noise!(factor, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    factor <= one(factor) && return cube
-    randn_backend!(rng, scratch)
-    scale2 = factor * factor - one(factor)
-    zero_t = zero(eltype(cube))
-    @. cube += sqrt(max(scale2 * cube, zero_t)) * scratch
-    return cube
-end
-
 _batched_post_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray) = cube
 _batched_detection_output!(::FrameSensorType, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube

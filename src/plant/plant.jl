@@ -150,7 +150,7 @@ import ..Detectors:
     _require_prepared_acquisition,
     accumulate_incremental_charge_generation!,
     advance_thermal!,
-    apply_avalanche_excess_noise!,
+    apply_hgcdte_avalanche_statistics!,
     apply_quantization!,
     capture!,
     capture_signal_pipeline!,

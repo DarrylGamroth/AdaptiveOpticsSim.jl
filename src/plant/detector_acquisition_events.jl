@@ -452,7 +452,7 @@ end
 
 @inline function _apply_scheduled_hgcdte_interval_statistics!(
     sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
-    return apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
+    return apply_hgcdte_avalanche_statistics!(sensor, det, rng)
 end
 
 """
