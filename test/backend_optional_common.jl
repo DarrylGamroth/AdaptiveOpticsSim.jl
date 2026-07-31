@@ -3322,6 +3322,44 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
     return nothing
 end
 
+function run_optional_skipper_ccd_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    detector = Detector(
+        integration_time=one(T),
+        noise=NoiseReadout(T(4)),
+        qe=one(T),
+        sensor=CCDSensor(
+            sampling_mode=SkipperSampling(16),
+            sample_duration=T(2e-6),
+            T=T),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=selector,
+    )
+    output = capture!(
+        detector, BackendArray(zeros(T, 128, 128));
+        rng=MersenneTwister(2031))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(output))
+    host = Array(output)
+    products = readout_products(detector)
+    @test output isa BackendArray
+    @test products isa SkipperReadoutProducts
+    @test products.mean_frame isa BackendArray
+    @test products.sample_count == 16
+    @test detector_read_cube(detector) === nothing
+    @test isapprox(mean(host), zero(T); atol=T(0.05))
+    @test isapprox(var(host), one(T); rtol=T(0.05))
+    metadata = detector_export_metadata(detector)
+    @test metadata.sampling_read_time == T(2e-6)
+    @test metadata.sampling_wallclock_time ==
+        one(T) + T(16) * T(2e-6)
+    return nothing
+end
+
 function optional_detector_event_map(
     values::AbstractMatrix{T}) where {T<:AbstractFloat}
     metadata = OpticalPlaneMetadata(DetectorPlane(), values;
@@ -4511,6 +4549,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
 
     run_optional_counting_detector_parity(B, BackendArray)
     run_optional_avalanche_detector_parity(B, BackendArray)
+    run_optional_skipper_ccd_checks(B, BackendArray)
 
     tel = Telescope(resolution=16, diameter=8.0f0,
         central_obstruction=0.0f0, T=T, backend=selector)

@@ -366,7 +366,7 @@ so memory remains proportional to frame size instead of sample count:
 skipper = Detector(
     sensor=CCDSensor(
         sampling_mode=SkipperSampling(64),
-        read_time=20e-6,
+        sample_duration=20e-6,
     ),
     noise=NoisePhotonReadout(3.0),
 )

@@ -143,7 +143,7 @@ end
 function detector_sensor_calibration_signature(sensor::CCDSensor,
     sig::UInt)
     sig = hash(typeof(sensor), sig)
-    sig = hash(sensor.read_time, sig)
+    sig = hash(sensor.sample_duration, sig)
     return detector_sampling_calibration_signature(sensor.sampling_mode, sig)
 end
 
