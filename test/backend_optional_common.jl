@@ -1544,7 +1544,7 @@ function run_optional_shared_detector_ipc_checks(
             T, backend=selector),
         charge_coupling_model=InterpixelCapacitance(ipc_kernel;
             T, backend=selector),
-        T,
+        T=T,
         backend=selector,
     )
     plan = prepare_detector_acquisition(detector, map)
