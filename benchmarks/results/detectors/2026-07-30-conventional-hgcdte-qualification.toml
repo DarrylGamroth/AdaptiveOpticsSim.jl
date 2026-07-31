@@ -1,0 +1,126 @@
+all_gates_passed = true
+artifact_id = "DET-HGCDTE-QUAL-2026-07-30"
+family = "conventional_hgcdte"
+schema_version = 1
+
+[environment]
+adaptive_optics_sim_version = "0.1.0"
+architecture = "x86_64"
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "2bf3e04f25e01dd89c814e14c402277201a62ba9"
+timestamp_utc = "2026-07-31T06:53:37.607"
+
+[qualification]
+frame_size = [128, 128]
+samples_per_case = 16384
+sigma_limit = 6.0
+
+    [qualification.deterministic]
+    allocation_gate_passed = true
+    architecture_separated = true
+    configured_ipc_passed = true
+    configured_mtf_preserved = true
+    deterministic_replay_passed = true
+    direct_synthesized_ramp_passed = true
+    irregular_scheduled_ramp_passed = true
+    nonlinearity_passed = true
+    persistence_passed = true
+    reference_correction_passed = true
+    saturation_passed = true
+    single_ndr_cds_fowler_passed = true
+    steady_alloc_bytes = 0
+    window_preserves_full_frame_timing = true
+
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 16.0
+    id = "single_read_noise"
+    mean_absolute_limit = 0.1875
+    mean_passed = true
+    observed_mean = -0.00554383837951201
+    observed_variance = 16.1091492940843
+    sample_count = 16384
+    seed = 5101
+    variance_absolute_limit = 1.060692542041278
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 4.0
+    id = "averaged_ndr4_noise"
+    mean_absolute_limit = 0.09375
+    mean_passed = true
+    observed_mean = 0.0045148344563136576
+    observed_variance = 3.9445000665381706
+    sample_count = 16384
+    seed = 5102
+    variance_absolute_limit = 0.2651731355103195
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 32.00000000000001
+    id = "correlated_double_sampling_noise"
+    mean_absolute_limit = 0.26516504294495535
+    mean_passed = true
+    observed_mean = -0.07157492290156232
+    observed_variance = 32.06799245902616
+    sample_count = 16384
+    seed = 5103
+    variance_absolute_limit = 2.1213850840825565
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 4.0
+    id = "fowler8_noise"
+    mean_absolute_limit = 0.09375
+    mean_passed = true
+    observed_mean = 0.004923904653310286
+    observed_variance = 4.006278089089782
+    sample_count = 16384
+    seed = 5104
+    variance_absolute_limit = 0.2651731355103195
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 10.588235294117649
+    id = "up_the_ramp16_noise"
+    mean_absolute_limit = 0.15252922815374262
+    mean_passed = true
+    observed_mean = -0.010267818500578018
+    observed_variance = 10.76836526161981
+    sample_count = 16384
+    seed = 5105
+    variance_absolute_limit = 0.7019288881155519
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 10.0
+    expected_variance = 10.0
+    id = "dark_current"
+    mean_absolute_limit = 0.14823176532039278
+    mean_passed = true
+    observed_mean = 9.97918701171875
+    observed_variance = 10.159549702191057
+    sample_count = 16384
+    seed = 5106
+    variance_absolute_limit = 0.6793030288297994
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 7.0
+    expected_variance = 7.0
+    id = "readout_glow"
+    mean_absolute_limit = 0.12401959270615269
+    mean_passed = true
+    observed_mean = 6.98175048828125
+    observed_variance = 6.97598384886749
+    sample_count = 16384
+    seed = 5107
+    variance_absolute_limit = 0.48033949894985345
+    variance_passed = true
+
+[scope]
+excluded = ["cosmic-ray jump detection or ramp segmentation", "saturation-aware ramp fitting", "correlated 1/f read noise", "reciprocity failure", "calibrated persistence or detector maps", "signal-dependent IPC", "camera or vendor profiles", "linear-avalanche multiplication qualification"]
+included = ["conventional HgCdTe area arrays without avalanche multiplication", "single, averaged nondestructive, correlated-double, Fowler, and up-the-ramp sampling", "direct synthesized-final-charge and Plant scheduled evolving-charge ramps", "dark current, readout glow, independent Gaussian read noise, nonlinearity, persistence, saturation, and reference correction", "explicit presampling response, MTF, and post-collection IPC"]
