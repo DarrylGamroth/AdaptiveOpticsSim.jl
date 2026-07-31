@@ -130,12 +130,6 @@ end
 detector_sensor_symbol(::HgCdTeAvalancheArraySensor) =
     :hgcdte_linear_avalanche_array
 
-hgcdte_avalanche_multiplication_symbol(
-    ::ConditionalGammaAvalancheMultiplication) = :conditional_gamma
-hgcdte_avalanche_multiplication_symbol(
-    ::ClippedGaussianAvalancheMultiplicationApproximation) =
-    :clipped_gaussian_approximation
-
 function sensor_saturation_limit(
     sensor::HgCdTeAvalancheArraySensor, det::Detector)
     full_well = det.params.full_well

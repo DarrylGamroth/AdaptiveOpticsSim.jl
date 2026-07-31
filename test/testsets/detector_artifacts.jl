@@ -219,7 +219,7 @@
         case["mean_passed"] &&
         case["variance_passed"] &&
         case["all_nonnegative"] &&
-        case["moderate_charge_approximation_regime"],
+        case["qualified_regime_passed"],
         avalanche_moments)
     avalanche_deterministic =
         avalanche_qualification["deterministic"]

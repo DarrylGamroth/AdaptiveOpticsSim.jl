@@ -105,7 +105,7 @@ function hgcdte_avalanche_moment_record(
         "variance_passed" =>
             abs(observed_variance - expected_variance) <= variance_limit,
         "all_nonnegative" => all(>=(0), samples),
-        "moderate_charge_approximation_regime" =>
+        "qualified_regime_passed" =>
             model != "clipped_gaussian_approximation" || shape >= 25,
     )
 end
@@ -447,7 +447,7 @@ function generate_hgcdte_avalanche_qualification_artifact()
         case["mean_passed"] &&
         case["variance_passed"] &&
         case["all_nonnegative"] &&
-        case["moderate_charge_approximation_regime"],
+        case["qualified_regime_passed"],
         moment_cases)
     deterministic_gates = (
         "architecture_separated",
