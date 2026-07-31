@@ -162,7 +162,7 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["plant-time"])) == ("plant-time",)
     @test Tuple(spec.name for spec in resolve_test_suites(
-        ["detectors"])) == ("detectors",)
+        ["detectors"])) == DETECTOR_TEST_SUITE_NAMES
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["wfs-common"])) == ("wfs-common",)
     @test Tuple(spec.name for spec in resolve_test_suites(
@@ -181,7 +181,7 @@ end
         ("control-primitives", "control-reconstruction")
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["sensors"])) == (
-            "detectors",
+            DETECTOR_TEST_SUITE_NAMES...,
             "wfs-common",
             "wfs-shack-hartmann",
             "wfs-pyramid-bioedge",
@@ -362,6 +362,7 @@ end
     ))
     @test registered_testset_paths() == normpath.(actual_testsets)
     @test registered_test_fixture_paths() == sort!(normpath.([
+        joinpath(dirname(@__DIR__), "detector_test_fixtures.jl"),
         joinpath(dirname(@__DIR__), "ka_cpu_style_fixture.jl"),
         joinpath(dirname(@__DIR__), "plant_device_batching_fixtures.jl"),
         joinpath(
@@ -380,6 +381,7 @@ end
         "plant-device-batching",
         "plant-device-model-matrix",
         "plant-sampled-aberrations",
+        DETECTOR_TEST_SUITE_NAMES...,
         "wfs-common",
         "wfs-shack-hartmann",
         "wfs-pyramid-bioedge",

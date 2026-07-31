@@ -11,6 +11,24 @@ TestSuiteSpec(name::AbstractString, paths::AbstractString...;
         Tuple(String.(paths)),
     )
 
+const DETECTOR_TEST_SUITE_NAMES = (
+    "detector-parameter-ownership",
+    "detector-shared",
+    "detector-lifecycle",
+    "detector-response",
+    "detector-ccd",
+    "detector-skipper",
+    "detector-emccd",
+    "detector-cmos",
+    "detector-ingaas",
+    "detector-thermal",
+    "detector-hgcdte",
+    "detector-apd",
+    "detector-spad",
+    "detector-mkid",
+    "detector-artifacts",
+)
+
 # Registry order is the full-suite execution order. Keep it stable so bare
 # `Pkg.test()` remains the deterministic composition gate.
 const TEST_SUITE_SPECS = (
@@ -92,7 +110,81 @@ const TEST_SUITE_SPECS = (
         "control-reconstruction",
         "testsets/control_reconstruction.jl",
     ),
-    TestSuiteSpec("detectors", "testsets/detectors.jl"),
+    TestSuiteSpec(
+        "detector-parameter-ownership",
+        "testsets/detector_parameter_ownership.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-shared",
+        "testsets/detector_shared.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-lifecycle",
+        "testsets/detector_lifecycle.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-response",
+        "testsets/detector_response.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-ccd",
+        "testsets/detector_ccd.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-skipper",
+        "testsets/detector_skipper.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-emccd",
+        "testsets/detector_emccd.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-cmos",
+        "testsets/detector_cmos.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-ingaas",
+        "testsets/detector_ingaas.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-thermal",
+        "testsets/detector_thermal.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-hgcdte",
+        "testsets/detector_hgcdte.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-apd",
+        "testsets/detector_apd.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-spad",
+        "testsets/detector_spad.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-mkid",
+        "testsets/detector_mkid.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "detector-artifacts",
+        "testsets/detector_artifacts.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
     TestSuiteSpec(
         "wfs-common",
         "testsets/wfs_common_and_parity.jl",
@@ -153,6 +245,7 @@ const TEST_SUITE_SPECS = (
 )
 
 const TEST_GROUP_SPECS = (
+    "detectors" => DETECTOR_TEST_SUITE_NAMES,
     "core" => (
         "core-optics",
         "direct-science",
@@ -191,7 +284,7 @@ const TEST_GROUP_SPECS = (
     "control" => ("control-primitives", "control-reconstruction"),
     "calibration" => ("calibration-workflows",),
     "sensors" => (
-        "detectors",
+        DETECTOR_TEST_SUITE_NAMES...,
         "wfs-common",
         "wfs-shack-hartmann",
         "wfs-pyramid-bioedge",
@@ -251,7 +344,7 @@ const TEST_CI_SHARD_SPECS = (
     "ci-sensors-control" => (
         "control-primitives",
         "control-reconstruction",
-        "detectors",
+        DETECTOR_TEST_SUITE_NAMES...,
         "wfs-common",
         "wfs-shack-hartmann",
         "wfs-pyramid-bioedge",
