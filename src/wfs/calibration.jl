@@ -167,6 +167,7 @@ function detector_sensor_calibration_signature(
     sig = hash(typeof(sensor), sig)
     sig = hash(sensor.avalanche_gain, sig)
     sig = hash(sensor.excess_noise_factor, sig)
+    sig = hash(sensor.multiplication_model, sig)
     return detector_hgcdte_readout_calibration_signature(sensor, sig)
 end
 

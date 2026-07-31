@@ -3259,6 +3259,40 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
     @test isapprox(sum(stochastic_host) / length(stochastic_host), T(250);
         rtol=T(0.03))
 
+    hgcdte_avalanche_detector = Detector(
+        noise=NoiseNone(), qe=one(T),
+        sensor=HgCdTeAvalancheArraySensor(
+            avalanche_gain=T(5),
+            excess_noise_factor=T(1.5),
+            multiplication_model=AdaptiveOpticsSim.Detectors.
+                ClippedGaussianAvalancheMultiplicationApproximation(),
+            T=T),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    hgcdte_avalanche_input =
+        BackendArray(fill(T(64), 128, 128))
+    hgcdte_avalanche_output = capture!(
+        hgcdte_avalanche_detector, hgcdte_avalanche_input;
+        rng=MersenneTwister(2028))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(
+            hgcdte_avalanche_output))
+    hgcdte_avalanche_host = Array(hgcdte_avalanche_output)
+    @test hgcdte_avalanche_output isa BackendArray
+    @test all(>=(zero(T)), hgcdte_avalanche_host)
+    @test isapprox(mean(hgcdte_avalanche_host), T(320);
+        rtol=T(0.02))
+    @test isapprox(var(hgcdte_avalanche_host), T(800);
+        rtol=T(0.08))
+    @test_throws InvalidConfiguration Detector(
+        noise=NoiseNone(), qe=one(T),
+        sensor=HgCdTeAvalancheArraySensor(
+            avalanche_gain=T(5),
+            excess_noise_factor=T(1.5),
+            multiplication_model=AdaptiveOpticsSim.Detectors.
+                ConditionalGammaAvalancheMultiplication(),
+            T=T),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+
     ramp_detector = Detector(integration_time=T(2), noise=NoiseNone(),
         qe=one(T), gain=one(T),
         sensor=HgCdTeSensor(read_time=zero(T),
@@ -3374,6 +3408,51 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
     @test Array(ramp_output) == fill(T(2), 2, 2)
     @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(
         ramp_detector) == :scheduled_evolving_charge
+
+    avalanche_values = BackendArray(fill(T(128), 4, 4))
+    avalanche_map = optional_detector_event_map(avalanche_values)
+    avalanche_detector = Detector(
+        integration_time=one(T), qe=one(T), noise=NoiseNone(),
+        sensor=HgCdTeAvalancheArraySensor(
+            avalanche_gain=T(2),
+            excess_noise_factor=T(1.5),
+            multiplication_model=AdaptiveOpticsSim.Detectors.
+                ClippedGaussianAvalancheMultiplicationApproximation(),
+            read_time=zero(T),
+            sampling_mode=UpTheRampSampling(3), T=T),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    avalanche_prepared = Plant.prepare_global_shutter_acquisition(
+        avalanche_detector, avalanche_map, definition)
+    avalanche_state = Plant.GlobalShutterAcquisitionState(
+        avalanche_prepared)
+    Plant.begin_exposure!(avalanche_prepared, avalanche_state, start)
+    Plant.take_nondestructive_read!(
+        avalanche_prepared, avalanche_state, start, rng)
+    Plant.accumulate_exposure_interval!(
+        avalanche_prepared, avalanche_state, start, ramp_middle, rng)
+    Plant.take_nondestructive_read!(
+        avalanche_prepared, avalanche_state, ramp_middle, rng)
+    fill!(avalanche_values, zero(T))
+    Plant.accumulate_exposure_interval!(
+        avalanche_prepared, avalanche_state, ramp_middle, close, rng)
+    Plant.take_nondestructive_read!(
+        avalanche_prepared, avalanche_state, close, rng)
+    Plant.close_exposure!(
+        avalanche_prepared, avalanche_state, close)
+    avalanche_output = Plant.complete_readout!(
+        avalanche_prepared, avalanche_state, close, rng)
+    Plant.mark_acquisition_ready!(
+        avalanche_prepared, avalanche_state, close)
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(avalanche_output))
+    avalanche_cube = detector_ramp_cube(avalanche_detector)
+    @test avalanche_output isa BackendArray
+    @test avalanche_cube isa BackendArray
+    @test all(>=(zero(T)), Array(avalanche_cube))
+    @test Array(@view avalanche_cube[:, :, 3]) ==
+        Array(@view avalanche_cube[:, :, 2])
+    @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(
+        avalanche_detector) == :scheduled_evolving_charge
 
     rolling_values = BackendArray(fill(T(2), 8, 8))
     rolling_map = optional_detector_event_map(rolling_values)

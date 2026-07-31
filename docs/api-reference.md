@@ -956,9 +956,13 @@ not the moved detector bindings.
 - Conventional sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`,
   `EMCCDSensor`, `InGaAsSensor`, and `HgCdTeSensor`
 - Linear-avalanche area sensor: `HgCdTeAvalancheArraySensor`; its avalanche
-  parameters remain distinct from the qualified-public
+  parameters and multiplication policy remain distinct from the qualified-public
   `Detectors.HgCdTeReadout` sampling configuration shared with
-  `HgCdTeSensor`
+  `HgCdTeSensor`. Select the qualified-public
+  `Detectors.ConditionalGammaAvalancheMultiplication` CPU reference model or
+  `Detectors.ClippedGaussianAvalancheMultiplicationApproximation` portable
+  moderate-charge approximation explicitly when the default policy is not the
+  intended statistical contract.
 - Counting sensor families: `APDSensor`, `SPADArraySensor`, and
   `MKIDArraySensor`
 - EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,

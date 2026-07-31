@@ -3,6 +3,30 @@ abstract type AbstractDetectorExecutionPlan end
 struct DetectorDirectPlan <: AbstractDetectorExecutionPlan end
 struct DetectorHostMirrorPlan <: AbstractDetectorExecutionPlan end
 
+# Marsaglia-Tsang unit-scale Gamma sampler shared by detector multiplication
+# models. Shape values below one use the standard boosting identity.
+@inline function _gamma_unit_scale(
+    rng::AbstractRNG, shape::T) where {T<:AbstractFloat}
+    if shape < one(T)
+        return _gamma_unit_scale(rng, shape + one(T)) *
+            rand(rng, T)^inv(shape)
+    end
+
+    d = shape - one(T) / T(3)
+    c = inv(sqrt(T(9) * d))
+    while true
+        x = randn(rng, T)
+        base = one(T) + c * x
+        base <= zero(T) && continue
+        v = base^3
+        u = rand(rng, T)
+        if u < one(T) - T(0.0331) * x^4 ||
+            log(u) < T(0.5) * x^2 + d * (one(T) - v + log(v))
+            return d * v
+        end
+    end
+end
+
 @inline detector_execution_plan(style::ExecutionStyle, det::Detector) =
     detector_execution_plan(typeof(style), typeof(det))
 

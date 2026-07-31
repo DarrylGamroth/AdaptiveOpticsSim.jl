@@ -43,3 +43,8 @@ purpose = "conventional HgCdTe nondestructive-read and clean-ramp qualification"
 status = "active"
 id = "DET-HGCDTE-QUAL-2026-07-30"
 path = "2026-07-30-conventional-hgcdte-qualification.toml"
+[[artifacts]]
+purpose = "HgCdTe linear-avalanche multiplication, ordering, and readout qualification"
+status = "active"
+id = "DET-HGCDTE-AVALANCHE-QUAL-2026-07-31"
+path = "2026-07-31-hgcdte-linear-avalanche-qualification.toml"

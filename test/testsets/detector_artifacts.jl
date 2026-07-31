@@ -189,4 +189,59 @@
         "allocation_gate_passed",
     ))
     @test hgcdte_deterministic["steady_alloc_bytes"] == 0
+
+    avalanche_entry =
+        detector_entries["DET-HGCDTE-AVALANCHE-QUAL-2026-07-31"]
+    @test avalanche_entry["status"] == "active"
+    avalanche_path = joinpath(
+        dirname(detector_artifact_path), avalanche_entry["path"])
+    @test isfile(avalanche_path)
+    avalanche = TOML.parsefile(avalanche_path)
+    @test avalanche["schema_version"] == 1
+    @test avalanche["family"] ==
+        "hgcdte_linear_avalanche_photodiode_array"
+    @test avalanche["all_gates_passed"]
+    @test !avalanche["environment"]["source_dirty"]
+    @test avalanche["model"]["excess_noise_factor_definition"] ==
+        "F = E[M^2] / E[M]^2"
+    avalanche_qualification = avalanche["qualification"]
+    @test avalanche_qualification["samples_per_case"] == 16_384
+    @test avalanche_qualification["sigma_limit"] == 6.0
+    avalanche_moments =
+        avalanche_qualification["multiplication_moment_cases"]
+    @test Set(case["id"] for case in avalanche_moments) == Set((
+        "conditional_gamma_single_carrier",
+        "conditional_gamma_multiple_carriers",
+        "conditional_gamma_low_excess_noise",
+        "clipped_gaussian_moderate_charge",
+    ))
+    @test all(case ->
+        case["mean_passed"] &&
+        case["variance_passed"] &&
+        case["all_nonnegative"] &&
+        case["qualified_regime_passed"],
+        avalanche_moments)
+    avalanche_deterministic =
+        avalanche_qualification["deterministic"]
+    @test all(avalanche_deterministic[key] for key in (
+        "architecture_separated",
+        "exact_gain_passed",
+        "input_referred_saturation_passed",
+        "generated_charge_ordering_passed",
+        "read_noise_and_conversion_gain_ordering_passed",
+        "single_ndr_cds_fowler_ramp_passed",
+        "window_preserves_full_frame_timing",
+        "configured_mtf_preserved",
+        "configured_ipc_passed",
+        "scheduled_retains_prior_multiplication",
+        "gamma_accelerator_rejected",
+        "deterministic_replay_passed",
+        "allocation_gate_passed",
+    ))
+    @test avalanche_deterministic[
+        "approximate_steady_alloc_bytes"] == 0
+    @test avalanche_deterministic[
+        "gamma_steady_alloc_bytes"] == 0
+    @test avalanche_deterministic[
+        "scheduled_steady_alloc_bytes"] == 0
 end

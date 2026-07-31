@@ -1,58 +1,24 @@
 @testset "HgCdTe detector families" begin
-    uniform_signal = fill(50.0, 8, 8)
     zero_psf = zeros(4, 4)
-    det_saphira = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=5.0))
-    frame_saphira = copy(capture!(det_saphira, uniform_signal; rng=MersenneTwister(14)))
-    @test frame_saphira == 5.0 .* uniform_signal
-    @test supports_avalanche_gain(det_saphira.params.sensor)
-    @test supports_sensor_glow(det_saphira.params.sensor)
-    @test detector_export_metadata(det_saphira).frame_response == :none
-    @test detector_export_metadata(det_saphira).charge_coupling == :none
-    saphira_impulse = zeros(5, 5)
-    saphira_impulse[3, 3] = 100.0
-    det_saphira_ipc = Detector(integration_time=1.0, noise=NoiseNone(),
-        qe=1.0, sensor=HgCdTeSensor(),
-        charge_coupling_model=InterpixelCapacitance(
-            [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]))
-    frame_saphira_ipc = capture!(det_saphira_ipc, saphira_impulse;
-        rng=MersenneTwister(14))
-    @test frame_saphira_ipc[3, 3] == 96.0
-    @test frame_saphira_ipc[2, 3] == 1.0
-    @test detector_export_metadata(det_saphira_ipc).charge_coupling ==
-        :interpixel_capacitance
-    det_saphira_excess = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=1.0, excess_noise_factor=sqrt(2.0)))
-    frame_saphira_excess = copy(capture!(det_saphira_excess, uniform_signal; rng=MersenneTwister(14)))
-    @test std(vec(frame_saphira_excess)) > 0
-    det_saphira_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, full_well=100.0, sensor=HgCdTeAvalancheArraySensor(avalanche_gain=5.0))
-    frame_saphira_sat = copy(capture!(det_saphira_sat, uniform_signal; rng=MersenneTwister(15)))
-    @test maximum(frame_saphira_sat) == 100.0
-    saphira_saturated_stack = fill(50.0, 2, 8, 8)
-    AdaptiveOpticsSim.Detectors.capture_stack!(det_saphira_sat,
-        saphira_saturated_stack, similar(saphira_saturated_stack);
-        rng=MersenneTwister(15))
-    @test all(==(100.0), saphira_saturated_stack)
-    det_saphira_single = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+    det_hgcdte_single = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor())
-    frame_saphira_single = copy(capture!(det_saphira_single, zero_psf; rng=MersenneTwister(16)))
-    single_products = readout_products(det_saphira_single)
+    frame_hgcdte_single = copy(capture!(det_hgcdte_single, zero_psf; rng=MersenneTwister(16)))
+    single_products = readout_products(det_hgcdte_single)
     @test single_products isa HgCdTeReadoutProducts
     @test single_products isa MultiReadFrameReadoutProducts
-    @test detector_reference_frame(det_saphira_single) === nothing
-    @test detector_signal_frame(det_saphira_single) !== nothing
-    @test detector_combined_frame(det_saphira_single) == frame_saphira_single
-    @test detector_reference_cube(det_saphira_single) === nothing
-    @test detector_signal_cube(det_saphira_single) !== nothing
-    @test detector_read_cube(det_saphira_single) === nothing
-    @test detector_read_times(det_saphira_single) === nothing
+    @test detector_reference_frame(det_hgcdte_single) === nothing
+    @test detector_signal_frame(det_hgcdte_single) !== nothing
+    @test detector_combined_frame(det_hgcdte_single) == frame_hgcdte_single
+    @test detector_reference_cube(det_hgcdte_single) === nothing
+    @test detector_signal_cube(det_hgcdte_single) !== nothing
+    @test detector_read_cube(det_hgcdte_single) === nothing
+    @test detector_read_times(det_hgcdte_single) === nothing
 
     conventional_detector = Detector(integration_time=1.0,
         noise=NoiseNone(), qe=1.0, binning=2)
     @test fieldtype(typeof(conventional_detector.state),
         :readout_products) === NoFrameReadoutProducts
-    @test fieldtype(typeof(det_saphira_single.state), :readout_products) !== FrameReadoutProducts
+    @test fieldtype(typeof(det_hgcdte_single.state), :readout_products) !== FrameReadoutProducts
 
     struct DummyReadoutProducts{A,V} <: FrameReadoutProducts
         signal_frame::A
@@ -70,37 +36,37 @@
     @test detector_read_cube(dummy_products) === nothing
     @test detector_read_times(dummy_products) == [0.25, 0.5]
 
-    det_saphira_ndr = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+    det_hgcdte_ndr = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=AveragedNonDestructiveReads(4)))
-    frame_saphira_ndr = copy(capture!(det_saphira_ndr, zero_psf; rng=MersenneTwister(16)))
-    @test std(vec(frame_saphira_ndr)) < std(vec(frame_saphira_single))
-    @test supports_nondestructive_reads(det_saphira_ndr.params.sensor)
-    @test supports_readout_correction(det_saphira_ndr.params.sensor)
-    @test supports_read_cube(det_saphira_ndr.params.sensor)
-    saphira_meta = detector_export_metadata(det_saphira_ndr)
-    @test saphira_meta.sampling_mode == :averaged_non_destructive_reads
-    @test saphira_meta.sampling_reads == 4
-    @test saphira_meta.sampling_reference_reads == 0
-    @test saphira_meta.sampling_signal_reads == 4
-    @test saphira_meta.readout_sigma == 2.0
-    @test saphira_meta.provides_signal_frame
-    @test !saphira_meta.provides_reference_frame
-    @test saphira_meta.provides_combined_frame
-    @test !saphira_meta.provides_reference_cube
-    @test saphira_meta.provides_signal_cube
-    @test saphira_meta.provides_read_cube
-    @test saphira_meta.signal_cube_reads == 4
-    @test saphira_meta.read_cube_reads == 4
-    @test detector_combined_frame(det_saphira_ndr) == frame_saphira_ndr
-    @test size(detector_signal_cube(det_saphira_ndr)) == (4, 4, 4)
-    @test length(detector_read_times(det_saphira_ndr)) == 4
-    det_saphira_cds = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+    frame_hgcdte_ndr = copy(capture!(det_hgcdte_ndr, zero_psf; rng=MersenneTwister(16)))
+    @test std(vec(frame_hgcdte_ndr)) < std(vec(frame_hgcdte_single))
+    @test supports_nondestructive_reads(det_hgcdte_ndr.params.sensor)
+    @test supports_readout_correction(det_hgcdte_ndr.params.sensor)
+    @test supports_read_cube(det_hgcdte_ndr.params.sensor)
+    hgcdte_meta = detector_export_metadata(det_hgcdte_ndr)
+    @test hgcdte_meta.sampling_mode == :averaged_non_destructive_reads
+    @test hgcdte_meta.sampling_reads == 4
+    @test hgcdte_meta.sampling_reference_reads == 0
+    @test hgcdte_meta.sampling_signal_reads == 4
+    @test hgcdte_meta.readout_sigma == 2.0
+    @test hgcdte_meta.provides_signal_frame
+    @test !hgcdte_meta.provides_reference_frame
+    @test hgcdte_meta.provides_combined_frame
+    @test !hgcdte_meta.provides_reference_cube
+    @test hgcdte_meta.provides_signal_cube
+    @test hgcdte_meta.provides_read_cube
+    @test hgcdte_meta.signal_cube_reads == 4
+    @test hgcdte_meta.read_cube_reads == 4
+    @test detector_combined_frame(det_hgcdte_ndr) == frame_hgcdte_ndr
+    @test size(detector_signal_cube(det_hgcdte_ndr)) == (4, 4, 4)
+    @test length(detector_read_times(det_hgcdte_ndr)) == 4
+    det_hgcdte_cds = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=CorrelatedDoubleSampling()))
-    frame_saphira_cds = copy(capture!(det_saphira_cds, zero_psf; rng=MersenneTwister(16)))
-    @test std(vec(frame_saphira_cds)) > std(vec(frame_saphira_single))
-    cds_meta = detector_export_metadata(det_saphira_cds)
+    frame_hgcdte_cds = copy(capture!(det_hgcdte_cds, zero_psf; rng=MersenneTwister(16)))
+    @test std(vec(frame_hgcdte_cds)) > std(vec(frame_hgcdte_single))
+    cds_meta = detector_export_metadata(det_hgcdte_cds)
     @test cds_meta.sampling_mode == :correlated_double_sampling
     @test cds_meta.sampling_reference_reads == 1
     @test cds_meta.sampling_signal_reads == 1
@@ -109,15 +75,15 @@
     @test cds_meta.provides_signal_cube
     @test cds_meta.reference_cube_reads == 1
     @test cds_meta.signal_cube_reads == 1
-    @test size(detector_reference_cube(det_saphira_cds)) == (4, 4, 1)
-    @test size(detector_signal_cube(det_saphira_cds)) == (4, 4, 1)
-    @test detector_combined_frame(det_saphira_cds) ≈
-        detector_signal_frame(det_saphira_cds) .- detector_reference_frame(det_saphira_cds)
-    det_saphira_fowler = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+    @test size(detector_reference_cube(det_hgcdte_cds)) == (4, 4, 1)
+    @test size(detector_signal_cube(det_hgcdte_cds)) == (4, 4, 1)
+    @test detector_combined_frame(det_hgcdte_cds) ≈
+        detector_signal_frame(det_hgcdte_cds) .- detector_reference_frame(det_hgcdte_cds)
+    det_hgcdte_fowler = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=FowlerSampling(8)))
-    frame_saphira_fowler = copy(capture!(det_saphira_fowler, zero_psf; rng=MersenneTwister(16)))
-    fowler_meta = detector_export_metadata(det_saphira_fowler)
+    frame_hgcdte_fowler = copy(capture!(det_hgcdte_fowler, zero_psf; rng=MersenneTwister(16)))
+    fowler_meta = detector_export_metadata(det_hgcdte_fowler)
     @test fowler_meta.sampling_mode == :fowler_sampling
     @test fowler_meta.sampling_reads == 16
     @test fowler_meta.sampling_reference_reads == 8
@@ -125,8 +91,8 @@
     @test fowler_meta.readout_sigma == 2.0
     @test fowler_meta.reference_cube_reads == 8
     @test fowler_meta.signal_cube_reads == 8
-    @test detector_combined_frame(det_saphira_fowler) ≈
-        detector_signal_frame(det_saphira_fowler) .- detector_reference_frame(det_saphira_fowler)
+    @test detector_combined_frame(det_hgcdte_fowler) ≈
+        detector_signal_frame(det_hgcdte_fowler) .- detector_reference_frame(det_hgcdte_fowler)
 
     ramp_input = fill(5.0, 4, 4)
     ramp_detector = Detector(integration_time=2.0, noise=NoiseNone(),
@@ -229,61 +195,61 @@
         ones(4, 4); rng=MersenneTwister(164))
 
     multiread_noise_fixture = zeros(64, 64)
-    single_std = std(vec(copy(capture!(det_saphira_single, multiread_noise_fixture;
+    single_std = std(vec(copy(capture!(det_hgcdte_single, multiread_noise_fixture;
         rng=MersenneTwister(160)))))
-    ndr_std = std(vec(copy(capture!(det_saphira_ndr, multiread_noise_fixture;
+    ndr_std = std(vec(copy(capture!(det_hgcdte_ndr, multiread_noise_fixture;
         rng=MersenneTwister(160)))))
-    cds_std = std(vec(copy(capture!(det_saphira_cds, multiread_noise_fixture;
+    cds_std = std(vec(copy(capture!(det_hgcdte_cds, multiread_noise_fixture;
         rng=MersenneTwister(160)))))
-    fowler_std = std(vec(copy(capture!(det_saphira_fowler, multiread_noise_fixture;
+    fowler_std = std(vec(copy(capture!(det_hgcdte_fowler, multiread_noise_fixture;
         rng=MersenneTwister(160)))))
     @test isapprox(single_std, 4.0; rtol=0.15)
     @test isapprox(ndr_std, 2.0; rtol=0.15)
     @test isapprox(cds_std, 4.0 * sqrt(2.0); rtol=0.15)
     @test isapprox(fowler_std, 2.0; rtol=0.15)
-    det_saphira_timed_single = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_timed_single = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0,
         sensor=HgCdTeSensor(read_time=1.0))
-    frame_saphira_timed_single = copy(capture!(det_saphira_timed_single, zero_psf; rng=MersenneTwister(17)))
-    det_saphira_timed_cds = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    frame_hgcdte_timed_single = copy(capture!(det_hgcdte_timed_single, zero_psf; rng=MersenneTwister(17)))
+    det_hgcdte_timed_cds = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0,
         sensor=HgCdTeSensor(read_time=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
-    frame_saphira_timed_cds = copy(capture!(det_saphira_timed_cds, zero_psf; rng=MersenneTwister(17)))
-    @test sum(frame_saphira_timed_cds) > sum(frame_saphira_timed_single)
-    det_saphira_timed_glow = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    frame_hgcdte_timed_cds = copy(capture!(det_hgcdte_timed_cds, zero_psf; rng=MersenneTwister(17)))
+    @test sum(frame_hgcdte_timed_cds) > sum(frame_hgcdte_timed_single)
+    det_hgcdte_timed_glow = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=3.0, gain=1.0,
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(glow_rate=2.0, read_time=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
-    frame_saphira_timed_glow = copy(capture!(det_saphira_timed_glow, zero_psf; rng=MersenneTwister(17)))
-    det_saphira_timed_noglow = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    frame_hgcdte_timed_glow = copy(capture!(det_hgcdte_timed_glow, zero_psf; rng=MersenneTwister(17)))
+    det_hgcdte_timed_noglow = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=3.0, gain=1.0,
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(read_time=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
-    frame_saphira_timed_noglow = copy(capture!(det_saphira_timed_noglow, zero_psf; rng=MersenneTwister(17)))
-    @test sum(frame_saphira_timed_glow) > sum(frame_saphira_timed_noglow)
-    timed_meta = detector_export_metadata(det_saphira_timed_cds)
+    frame_hgcdte_timed_noglow = copy(capture!(det_hgcdte_timed_noglow, zero_psf; rng=MersenneTwister(17)))
+    @test sum(frame_hgcdte_timed_glow) > sum(frame_hgcdte_timed_noglow)
+    timed_meta = detector_export_metadata(det_hgcdte_timed_cds)
     @test timed_meta.sampling_read_time == 1.0
     @test timed_meta.sampling_wallclock_time == 3.0
-    det_saphira_windowed = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_windowed = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(read_time=1.0,
             sampling_mode=CorrelatedDoubleSampling()),
         readout_window=FrameWindow(2:3, 2:3))
-    capture!(det_saphira_windowed, fill(10.0, 4, 4); rng=MersenneTwister(18))
-    windowed_meta = detector_export_metadata(det_saphira_windowed)
+    capture!(det_hgcdte_windowed, fill(10.0, 4, 4); rng=MersenneTwister(18))
+    windowed_meta = detector_export_metadata(det_hgcdte_windowed)
     @test windowed_meta.sampling_read_time == 1.0
     @test windowed_meta.sampling_wallclock_time == 3.0
-    @test detector_combined_frame(det_saphira_windowed) !== nothing
-    @test size(detector_reference_cube(det_saphira_windowed)) == (2, 2, 1)
-    @test size(detector_signal_cube(det_saphira_windowed)) == (2, 2, 1)
-    @test size(detector_signal_frame(det_saphira_windowed)) == (2, 2)
-    @test size(detector_read_cube(det_saphira_windowed)) == (2, 2, 2)
-    @test detector_read_times(det_saphira_windowed) == [1.0, 2.0]
-    @test detector_combined_frame(det_saphira_windowed) ≈
-        detector_signal_frame(det_saphira_windowed) .- detector_reference_frame(det_saphira_windowed)
-    det_saphira_windowed_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    @test detector_combined_frame(det_hgcdte_windowed) !== nothing
+    @test size(detector_reference_cube(det_hgcdte_windowed)) == (2, 2, 1)
+    @test size(detector_signal_cube(det_hgcdte_windowed)) == (2, 2, 1)
+    @test size(detector_signal_frame(det_hgcdte_windowed)) == (2, 2)
+    @test size(detector_read_cube(det_hgcdte_windowed)) == (2, 2, 2)
+    @test detector_read_times(det_hgcdte_windowed) == [1.0, 2.0]
+    @test detector_combined_frame(det_hgcdte_windowed) ≈
+        detector_signal_frame(det_hgcdte_windowed) .- detector_reference_frame(det_hgcdte_windowed)
+    det_hgcdte_windowed_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0,
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(read_time=1.0,
@@ -296,17 +262,17 @@
     row_pattern = repeat(reshape([1.0, 2.0, 3.0, 4.0], :, 1), 1, 4)
     col_pattern = repeat(reshape([1.0, 2.0, 3.0, 4.0], 1, :), 4, 1)
     windowed_corrected_input = row_pattern .+ col_pattern
-    windowed_corrected = capture!(det_saphira_windowed_corrected, windowed_corrected_input; rng=MersenneTwister(18))
+    windowed_corrected = capture!(det_hgcdte_windowed_corrected, windowed_corrected_input; rng=MersenneTwister(18))
     @test maximum(abs, windowed_corrected) < 1e-6
-    @test detector_combined_frame(det_saphira_windowed_corrected) ≈
-        detector_signal_frame(det_saphira_windowed_corrected) .- detector_reference_frame(det_saphira_windowed_corrected)
-    @test size(detector_read_cube(det_saphira_windowed_corrected)) == (2, 2, 2)
-    det_saphira_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    @test detector_combined_frame(det_hgcdte_windowed_corrected) ≈
+        detector_signal_frame(det_hgcdte_windowed_corrected) .- detector_reference_frame(det_hgcdte_windowed_corrected)
+    @test size(detector_read_cube(det_hgcdte_windowed_corrected)) == (2, 2, 2)
+    det_hgcdte_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferencePixelCommonModeCorrection(1, 1))
-    corrected_frame = capture!(det_saphira_corrected, fill(5.0, 4, 4); rng=MersenneTwister(19))
-    corrected_meta = detector_export_metadata(det_saphira_corrected)
+    corrected_frame = capture!(det_hgcdte_corrected, fill(5.0, 4, 4); rng=MersenneTwister(19))
+    corrected_meta = detector_export_metadata(det_hgcdte_corrected)
     @test corrected_meta.readout_correction == :reference_pixel_common_mode
     @test corrected_meta.correction_edge_rows == 1
     @test corrected_meta.correction_edge_cols == 1
@@ -368,37 +334,37 @@
             invalid_ramp_calibration, calibration_input, 1.0)
     end
 
-    det_saphira_row_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_row_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceRowCommonModeCorrection(1))
-    row_corrected = capture!(det_saphira_row_corrected, row_pattern; rng=MersenneTwister(20))
+    row_corrected = capture!(det_hgcdte_row_corrected, row_pattern; rng=MersenneTwister(20))
     @test maximum(abs, row_corrected) < 1e-6
-    det_saphira_col_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_col_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceColumnCommonModeCorrection(1))
-    col_corrected = capture!(det_saphira_col_corrected, col_pattern; rng=MersenneTwister(21))
+    col_corrected = capture!(det_hgcdte_col_corrected, col_pattern; rng=MersenneTwister(21))
     @test maximum(abs, col_corrected) < 1e-6
-    det_saphira_output_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_output_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceOutputCommonModeCorrection(2; edge_rows=1, edge_cols=1))
     output_pattern = hcat(fill(5.0, 4, 2), fill(10.0, 4, 2))
-    output_corrected = capture!(det_saphira_output_corrected, output_pattern; rng=MersenneTwister(22))
-    output_meta = detector_export_metadata(det_saphira_output_corrected)
+    output_corrected = capture!(det_hgcdte_output_corrected, output_pattern; rng=MersenneTwister(22))
+    output_meta = detector_export_metadata(det_hgcdte_output_corrected)
     @test output_meta.readout_correction == :reference_output_common_mode
     @test output_meta.correction_group_cols == 2
     @test maximum(abs, output_corrected) < 1e-6
-    det_saphira_composite = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_composite = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=CompositeFrameReadoutCorrection((
             ReferenceRowCommonModeCorrection(1),
             ReferenceColumnCommonModeCorrection(1))))
     composite_pattern = row_pattern .+ col_pattern
-    composite_corrected = capture!(det_saphira_composite, composite_pattern; rng=MersenneTwister(23))
-    composite_meta = detector_export_metadata(det_saphira_composite)
+    composite_corrected = capture!(det_hgcdte_composite, composite_pattern; rng=MersenneTwister(23))
+    composite_meta = detector_export_metadata(det_hgcdte_composite)
     @test composite_meta.readout_correction == :composite
     @test composite_meta.correction_stage_count == 2
     @test maximum(abs, composite_corrected) < 1e-6

@@ -14,6 +14,7 @@ using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using LinearAlgebra
 using Random
+using Statistics
 
 # Hardware targets exercise qualified-public and internal plant contracts in
 # addition to the routine exported workflow.
