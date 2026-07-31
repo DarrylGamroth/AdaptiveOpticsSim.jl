@@ -3150,7 +3150,9 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
 
     stochastic_detector = Detector(noise=NoiseNone(), qe=one(T), gain=T(5),
         sensor=EMCCDSensor(excess_noise_factor=T(1.4),
-            multiplication_model=AdaptiveOpticsSim.Detectors.StochasticMultiplicationRegister(T(0.6)),
+            multiplication_model=AdaptiveOpticsSim.Detectors.
+                ClippedGaussianMultiplicationApproximation(
+                    minimum_conditional_noise_factor=T(0.6), T=T),
             T=T), response_model=NullFrameResponse(), T=T, backend=selector)
     stochastic_input = BackendArray(fill(T(50), 128, 128))
     stochastic_output = capture!(stochastic_detector, stochastic_input;
