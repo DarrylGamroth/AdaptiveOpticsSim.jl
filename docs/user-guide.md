@@ -374,9 +374,12 @@ frame = capture!(skipper, image; rng=runtime_rng(3))
 ```
 
 The reported effective read-noise sigma scales as `1/sqrt(n_samples)`, and
-sampling wall-clock metadata includes all reads. The core model assumes
-independent read samples; calibrated correlated-noise and adaptive-read
-policies remain future extensions.
+sampling wall-clock metadata includes all reads. `sample_duration` is the
+duration of one configured full-frame nondestructive sample; it is not a
+sample period or a model of the correlated-double-sampling electronics
+integration window. The core model assumes independent read samples;
+calibrated correlated-noise and adaptive-read policies remain future
+extensions.
 
 For EMCCD cameras, the core package models the generic sensor physics rather
 than vendor camera presets. Use `EMOutput()` for the electron-multiplication
