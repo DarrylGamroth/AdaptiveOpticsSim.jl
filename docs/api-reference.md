@@ -961,8 +961,9 @@ not the moved detector bindings.
   `EMOutput`, `ConventionalOutput`, `emccd_snr`
 - Linear APD topology: `SingleElementAPD`, `APDChannelBank`; analog APD output
   uses `channel_output`, while `APDDetector` remains the counting-channel path.
-- CMOS readout structure: `CMOSReadNoiseMap`; row and column noise, output
-  groups, shutter timing, and detector defect maps compose through
+- CMOS readout structure: `CMOSReadNoiseMap` and
+  qualified-public `Detectors.StaticCMOSOutputPattern`; row and column noise,
+  output groups, shutter timing, and detector defect maps compose through
   `CMOSSensor`. Vendor camera profiles are intentionally outside core.
 - Frame response: `FrameResponseModel`, `NullFrameResponse`,
   `GaussianPixelResponse`, `SampledFrameResponse`,
@@ -1111,8 +1112,13 @@ through composition rather than camera classes. `NoiseReadout` supplies a
 uniform independent component; `row_readout_sigma`, `column_readout_sigma`,
 and `CMOSReadNoiseMap` add structured components at the readout stage.
 `PixelResponseNonuniformity`, `DarkSignalNonuniformity`, `BadPixelMask`, and
-`StaticCMOSOutputPattern` carry measured calibration structure. Core provides
-no vendor defaults or named cameras.
+qualified-public `Detectors.StaticCMOSOutputPattern` carry measured calibration
+structure. Core provides no vendor defaults or named cameras.
+
+Qualified-public `Detectors.FrameWindow` is an output-product selection
+applied after completion of the full modeled frame. It does not change
+row-band exposure or acquisition timing; use physically cropped detector
+dimensions when the active sensor geometry itself is smaller.
 
 `CCDSensor()` is the conventional single-read CCD model. Its
 `clock_induced_charge_per_frame` parameter is an independent Poisson

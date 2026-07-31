@@ -100,6 +100,14 @@ struct SkipperSampling <: FrameSamplingMode
     n_samples::Int
 end
 
+"""
+    FrameWindow(rows, cols)
+
+Select the rectangular region copied from a completed full detector frame into
+the reusable output product. This selection does not change which sensor rows
+are exposed or the acquisition timing; model a physically cropped sensor as a
+detector with the cropped frame dimensions.
+"""
 struct FrameWindow
     rows::UnitRange{Int}
     cols::UnitRange{Int}
