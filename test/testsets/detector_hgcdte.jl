@@ -151,6 +151,10 @@
         detector_read_times(ramp_detector)
     @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(
         ramp_detector) == :synthesized_final_charge
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.Detectors.ensure_up_the_ramp_products!(
+            ramp_detector, 5; acquisition=:invalid)
+    end
     @test detector_read_times(ramp_detector) == [0.0, 0.5, 1.0, 1.5, 2.0]
     @test vec(Array(detector_read_cube(ramp_detector)[1, 1, :])) ==
         [0.0, 2.5, 5.0, 7.5, 10.0]
