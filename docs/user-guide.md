@@ -482,6 +482,32 @@ continuous apertures can collapse to the same discrete kernel. Prepare an
 explicitly oversampled optical mapping when those differences must affect the
 image or MTF.
 
+Linear-avalanche multiplication uses the detector-literature excess-noise
+factor \(F=\mathrm{E}[M^2]/\mathrm{E}[M]^2\). For the nonnegative CPU reference
+distribution, select the qualified-public conditional-Gamma policy:
+
+```julia
+linear_avalanche = Detector(
+    sensor=HgCdTeAvalancheArraySensor(
+        avalanche_gain=20.0,
+        excess_noise_factor=1.25,
+        multiplication_model=
+            AdaptiveOpticsSim.Detectors.
+                ConditionalGammaAvalancheMultiplication(),
+    ),
+)
+```
+
+This policy draws input-referred multiplied charge with shape \(q/(F-1)\) and
+scale \(F-1\), then applies the mean avalanche gain before read noise.
+`AdaptiveOpticsSim.Detectors.ClippedGaussianAvalancheMultiplicationApproximation()`
+is the accelerator-capable alternative and the constructor default. Its
+qualified statistical regime is \(q/(F-1)\geq25\); lower-charge results are
+computationally defined but are not claimed to reproduce the avalanche
+distribution. Conditional-Gamma construction on an accelerator is rejected
+instead of being silently replaced. Neither policy is Geiger-mode photon
+counting or a photon-timestamp model.
+
 Conventional HgCdTe arrays and explicitly configured linear-avalanche arrays
 support up-the-ramp fitting through the shared readout contract:
 

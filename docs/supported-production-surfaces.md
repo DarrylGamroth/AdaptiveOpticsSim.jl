@@ -192,6 +192,11 @@ Current AMDGPU-supported scope:
 - exact global-shutter detector-event accumulation and scheduled windowed
   HgCdTe up-the-ramp snapshots/fitting with device-resident products and scalar
   indexing disabled
+- HgCdTe linear-avalanche direct capture and scheduled up-the-ramp execution
+  with the explicitly approximate clipped-Gaussian multiplication policy,
+  moderate-charge distributional bounds, nonnegativity, device residency, and
+  scalar indexing disabled. Conditional-Gamma multiplication remains the CPU
+  reference and is rejected on accelerators
 - direct rolling-shutter row-band and frame-transfer image/storage detector
   lifecycles with device-resident state and scalar indexing disabled
 - integrated single-device ownership for two or more compatible, equally

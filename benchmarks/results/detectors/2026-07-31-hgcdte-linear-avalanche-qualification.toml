@@ -1,0 +1,128 @@
+all_gates_passed = true
+artifact_id = "DET-HGCDTE-AVALANCHE-QUAL-2026-07-31"
+family = "hgcdte_linear_avalanche_photodiode_array"
+schema_version = 1
+
+[environment]
+adaptive_optics_sim_version = "0.1.0"
+architecture = "x86_64"
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "1395a443a0f9bbae13676f33964481ee674fa230"
+timestamp_utc = "2026-07-31T08:27:37.714"
+
+[model]
+clipped_gaussian_approximation = "max(q + sqrt((F - 1)q)Z, 0), qualified only when q / (F - 1) >= 25"
+conditional_gamma = "shape = input_charge / (F - 1); scale = F - 1 before mean avalanche gain"
+conditional_variance = "avalanche_gain^2 * (F - 1) * input_charge"
+excess_noise_factor_definition = "F = E[M^2] / E[M]^2"
+scientific_reference = "https://arxiv.org/abs/1903.08444"
+
+[qualification]
+frame_count_per_case = 16
+frame_size = [32, 32]
+samples_per_case = 16384
+sigma_limit = 6.0
+
+    [qualification.deterministic]
+    allocation_gate_passed = true
+    approximate_steady_alloc_bytes = 0
+    architecture_separated = true
+    configured_ipc_passed = true
+    configured_mtf_preserved = true
+    deterministic_replay_passed = true
+    exact_gain_passed = true
+    gamma_accelerator_rejected = true
+    gamma_steady_alloc_bytes = 0
+    generated_charge_ordering_passed = true
+    input_referred_saturation_passed = true
+    read_noise_and_conversion_gain_ordering_passed = true
+    scheduled_retains_prior_multiplication = true
+    scheduled_steady_alloc_bytes = 0
+    single_ndr_cds_fowler_ramp_passed = true
+    window_preserves_full_frame_timing = true
+
+    [[qualification.multiplication_moment_cases]]
+    all_nonnegative = true
+    avalanche_gain = 10.0
+    conditional_gamma_shape = 2.0
+    excess_noise_factor = 1.5
+    expected_mean = 10.0
+    expected_variance = 50.0
+    id = "conditional_gamma_single_carrier"
+    input_charge_electrons = 1.0
+    mean_absolute_limit = 0.33145630368119416
+    mean_passed = true
+    model = "conditional_gamma"
+    moderate_charge_approximation_regime = true
+    observed_mean = 9.970471744453485
+    observed_variance = 50.99832522035396
+    sample_count = 16384
+    seed = 6101
+    variance_absolute_limit = 5.240848300197544
+    variance_passed = true
+    [[qualification.multiplication_moment_cases]]
+    all_nonnegative = true
+    avalanche_gain = 5.0
+    conditional_gamma_shape = 32.0
+    excess_noise_factor = 1.25
+    expected_mean = 40.0
+    expected_variance = 50.0
+    id = "conditional_gamma_multiple_carriers"
+    input_charge_electrons = 8.0
+    mean_absolute_limit = 0.33145630368119416
+    mean_passed = true
+    model = "conditional_gamma"
+    moderate_charge_approximation_regime = true
+    observed_mean = 39.94019173556245
+    observed_variance = 49.05641505951191
+    sample_count = 16384
+    seed = 6102
+    variance_absolute_limit = 3.4665497226929016
+    variance_passed = true
+    [[qualification.multiplication_moment_cases]]
+    all_nonnegative = true
+    avalanche_gain = 3.0
+    conditional_gamma_shape = 199.99999999999983
+    excess_noise_factor = 1.1
+    expected_mean = 60.0
+    expected_variance = 18.000000000000014
+    id = "conditional_gamma_low_excess_noise"
+    input_charge_electrons = 20.0
+    mean_absolute_limit = 0.19887378220871654
+    mean_passed = true
+    model = "conditional_gamma"
+    moderate_charge_approximation_regime = true
+    observed_mean = 60.016029304050576
+    observed_variance = 17.915786600543292
+    sample_count = 16384
+    seed = 6103
+    variance_absolute_limit = 1.2021948493283365
+    variance_passed = true
+    [[qualification.multiplication_moment_cases]]
+    all_nonnegative = true
+    avalanche_gain = 5.0
+    conditional_gamma_shape = 128.0
+    excess_noise_factor = 1.5
+    expected_mean = 320.0
+    expected_variance = 800.0
+    id = "clipped_gaussian_moderate_charge"
+    input_charge_electrons = 64.0
+    mean_absolute_limit = 1.3258252147247767
+    mean_passed = true
+    model = "clipped_gaussian_approximation"
+    moderate_charge_approximation_regime = true
+    observed_mean = 319.92858457178744
+    observed_variance = 810.0634126306786
+    sample_count = 16384
+    seed = 6104
+    variance_absolute_limit = 53.03462710206391
+    variance_passed = true
+
+[scope]
+excluded = ["Geiger-mode counting or photon timestamp output", "conditional-Gamma accelerator execution", "low-charge distribution fidelity for the clipped-Gaussian approximation", "bias-voltage or gain-temperature calibration", "per-pixel avalanche-gain maps", "bandwidth-dependent readout electronics", "signal-dependent IPC", "camera or vendor profiles"]
+included = ["HgCdTe linear-avalanche photodiode area arrays", "CPU conditional-Gamma multiplication", "backend-portable clipped-Gaussian moderate-charge approximation", "input-referred saturation and exact avalanche/read/conversion-gain ordering", "dark current and readout glow before avalanche multiplication", "single, averaged nondestructive, correlated-double, Fowler, and up-the-ramp sampling", "full-frame and windowed output with explicit response/MTF and IPC", "scheduled evolving-charge ramps that retain prior multiplication realizations"]
