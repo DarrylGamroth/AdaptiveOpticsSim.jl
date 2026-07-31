@@ -1158,6 +1158,22 @@ and the overlapped `steady_state_frame_period`. `SequentialAcquisition()` is
 the default. Neither acquisition policy changes the presampling response or its
 derived MTF, QE, charge multiplication, or detector noise.
 
+The qualified-public EMCCD multiplication policies live in `Detectors`.
+`ClippedGaussianMultiplicationApproximation` is the default nonnegative
+moderate/high-charge approximation and is available on maintained CPU and GPU
+backends. `ConditionalGammaMultiplication` implements the conditional-Gamma
+law on CPU and is rejected during accelerator detector construction rather
+than changing algorithms by backend. `em_gain_range` is enforced for
+`EMOutput`. If both detector `full_well` and `register_full_well` are set, the
+smaller input-referred limit applies. `ConventionalOutput` bypasses EM gain and
+its gain-range constraint.
+
+`PhotonCountingEMMode` thresholds the post-EM, post-read-noise frame and then
+applies its Bernoulli `detection_efficiency`. Its output is binary per pixel per
+frame and therefore coincidence-limited; it is not photon-number resolving
+within one frame. The internal capability traits report photon counting and
+photon-number resolution separately.
+
 ## Wavefront Sensors
 
 Reusable physical components in this section—modulation models, microlens

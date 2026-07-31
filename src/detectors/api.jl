@@ -37,3 +37,7 @@ export DetectorAcquisitionPlan, prepare_detector_acquisition
 export detector_ramp_slope, detector_ramp_intercept
 export detector_ramp_cube, detector_ramp_times
 export readout_ready, reset_integration!, thermal_model
+
+public AbstractEMGainModel
+public ClippedGaussianMultiplicationApproximation
+public ConditionalGammaMultiplication

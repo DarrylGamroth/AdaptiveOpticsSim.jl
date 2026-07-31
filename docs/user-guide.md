@@ -375,7 +375,10 @@ For EMCCD cameras, the core package models the generic sensor physics rather
 than vendor camera presets. Use `EMOutput()` for the electron-multiplication
 register path and `ConventionalOutput()` for a conventional output channel.
 Linear EM operation is the default; use `excess_noise_factor=sqrt(2)` when you
-want the common high-gain linear-mode excess-noise approximation:
+want the common high-gain linear-mode excess-noise approximation. The default
+`ClippedGaussianMultiplicationApproximation` is nonnegative and portable across
+CPU and accelerator backends, but its normal approximation is intended for
+moderate-to-high input charge:
 
 ```julia
 det = Detector(
@@ -412,10 +415,15 @@ det = Detector(
 conventional output, and photon-counting operating modes. Treat it as a design
 and validation helper, not a replacement for a calibrated camera model.
 `clock_induced_charge_per_frame` is explicitly per frame and is not scaled by
-integration time. The default excess-noise model is the fast moment
-approximation. `AdaptiveOpticsSim.Detectors.StochasticMultiplicationRegister` uses a
-conditional Gamma model on CPU and a nonnegative moment approximation on
-accelerators. Camera-specific parameter packs belong in a companion profiles
+integration time. CIC enters before EM gain. For the stronger CPU distribution
+model, select the qualified-public
+`AdaptiveOpticsSim.Detectors.ConditionalGammaMultiplication()` explicitly.
+That model is CPU-only and is not silently replaced on accelerators; accelerator
+construction rejects it before detector state is prepared. The two model names
+therefore identify different statistical contracts rather than one
+backend-dependent algorithm. `em_gain_range` is enforced for `EMOutput`, and
+input full well and register-referred full well are both applied when both are
+configured. Camera-specific parameter packs belong in a companion profiles
 package.
 
 Frame transfer is an acquisition-timing policy, not an optical response. Set a
@@ -436,7 +444,10 @@ After the first capture, `detector_export_metadata(frame_transfer_emccd)`
 reports one-frame output latency as `sampling_wallclock_time` and the overlapped
 cadence as `steady_state_frame_period`. `SequentialAcquisition()` instead adds
 integration and readout durations. Both modes run the same optical, charge, EM
-gain, and noise pipeline.
+gain, and noise pipeline. In a scheduled HIL plant,
+`FrameTransferAcquisitionDefinition` remains the authority for event readout
+and product-readiness durations; the sensor-side pixel-rate calculation is a
+direct-capture timing estimate, not a replacement for that Plant contract.
 
 HgCdTe avalanche arrays likewise have no implicit optical blur or interpixel
 coupling. Configure presampling detector response and post-collection IPC as

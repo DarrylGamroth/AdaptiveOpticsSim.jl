@@ -634,6 +634,8 @@ end
 @inline owned_frame_sensor(sensor::FrameSensorType, ::Type{T},
     ::AbstractArrayBackend) where {T<:AbstractFloat} = sensor
 
+validate_sensor_gain(::FrameSensorType, gain) = nothing
+
 validate_frame_detector_sensor(::FrameSensorType) = nothing
 
 function validate_frame_detector_sensor(sensor::CountingSensorType)
@@ -752,6 +754,8 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     selector = _resolve_backend_selector(backend)
     array_backend = _resolve_array_backend(backend)
     run_sensor = owned_frame_sensor(sensor, T, selector)
+    gain_t = T(gain)
+    validate_sensor_gain(run_sensor, gain_t)
     integration_time_t = T(integration_time)
     isfinite(integration_time_t) && integration_time_t > zero(T) ||
         throw(InvalidConfiguration("Detector integration_time must be finite and > 0"))
@@ -804,7 +808,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
         qe_scalar,
         psf_sampling,
         binning,
-        T(gain),
+        gain_t,
         T(dark_current),
         bits,
         full_well_t,

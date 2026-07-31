@@ -3,7 +3,36 @@ abstract type AbstractEMCCDOperatingMode end
 abstract type AbstractEMCCDOutputPath end
 abstract type AbstractEMCCDAcquisitionMode end
 
-struct ExcessNoiseApproximation <: AbstractEMGainModel end
+struct ClippedGaussianMultiplicationApproximation{T<:AbstractFloat} <:
+    AbstractEMGainModel
+    minimum_conditional_noise_factor::T
+end
+
+function ClippedGaussianMultiplicationApproximation(;
+    minimum_conditional_noise_factor::Real=0.0,
+    T::Type{<:AbstractFloat}=Float64)
+    factor = T(minimum_conditional_noise_factor)
+    isfinite(factor) && factor >= zero(T) || throw(InvalidConfiguration(
+        "ClippedGaussianMultiplicationApproximation " *
+        "minimum_conditional_noise_factor must be finite and >= 0"))
+    return ClippedGaussianMultiplicationApproximation{T}(factor)
+end
+
+struct ConditionalGammaMultiplication{T<:AbstractFloat} <:
+    AbstractEMGainModel
+    minimum_conditional_noise_factor::T
+end
+
+function ConditionalGammaMultiplication(;
+    minimum_conditional_noise_factor::Real=0.0,
+    T::Type{<:AbstractFloat}=Float64)
+    factor = T(minimum_conditional_noise_factor)
+    isfinite(factor) && factor >= zero(T) || throw(InvalidConfiguration(
+        "ConditionalGammaMultiplication minimum_conditional_noise_factor " *
+        "must be finite and >= 0"))
+    return ConditionalGammaMultiplication{T}(factor)
+end
+
 struct LinearEMMode <: AbstractEMCCDOperatingMode end
 struct EMOutput <: AbstractEMCCDOutputPath end
 struct ConventionalOutput <: AbstractEMCCDOutputPath end
@@ -36,17 +65,16 @@ end
 
 function PhotonCountingEMMode(; threshold::Real, detection_efficiency::Real=1.0,
     T::Type{<:AbstractFloat}=Float64)
-    threshold >= 0 || throw(InvalidConfiguration("PhotonCountingEMMode threshold must be >= 0"))
-    zero(T) <= T(detection_efficiency) <= one(T) ||
-        throw(InvalidConfiguration("PhotonCountingEMMode detection_efficiency must be in [0, 1]"))
-    return PhotonCountingEMMode{T}(T(threshold), T(detection_efficiency))
+    threshold_t = T(threshold)
+    efficiency = T(detection_efficiency)
+    isfinite(threshold_t) && threshold_t >= zero(T) ||
+        throw(InvalidConfiguration(
+            "PhotonCountingEMMode threshold must be finite and >= 0"))
+    isfinite(efficiency) && zero(T) <= efficiency <= one(T) ||
+        throw(InvalidConfiguration(
+            "PhotonCountingEMMode detection_efficiency must be finite and in [0, 1]"))
+    return PhotonCountingEMMode{T}(threshold_t, efficiency)
 end
-
-struct StochasticMultiplicationRegister{T<:AbstractFloat} <: AbstractEMGainModel
-    register_noise_factor::T
-end
-
-StochasticMultiplicationRegister(register_noise_factor::Real) = StochasticMultiplicationRegister{Float64}(float(register_noise_factor))
 
 struct EMCCDSensor{T<:AbstractFloat,M<:AbstractEMGainModel,
     O<:AbstractEMCCDOperatingMode,P<:AbstractEMCCDOutputPath,
@@ -64,49 +92,118 @@ end
 
 function EMCCDSensor(; excess_noise_factor::Real=1.0,
     clock_induced_charge_per_frame::Real=0.0,
-    multiplication_model::AbstractEMGainModel=ExcessNoiseApproximation(),
+    multiplication_model::AbstractEMGainModel=
+        ClippedGaussianMultiplicationApproximation(),
     register_full_well::Union{Nothing,Real}=nothing,
     operating_mode::AbstractEMCCDOperatingMode=LinearEMMode(),
     output_path::AbstractEMCCDOutputPath=EMOutput(),
     acquisition_mode::AbstractEMCCDAcquisitionMode=SequentialAcquisition(),
     em_gain_range::Tuple{<:Real,<:Real}=(1.0, Inf),
     readout_rate_hz::Union{Nothing,Real}=nothing, T::Type{<:AbstractFloat}=Float64)
-    excess_noise_factor >= 1 || throw(InvalidConfiguration("EMCCDSensor excess_noise_factor must be >= 1"))
-    clock_induced_charge_per_frame >= 0 || throw(InvalidConfiguration(
-        "EMCCDSensor clock_induced_charge_per_frame must be >= 0"))
+    excess_noise = T(excess_noise_factor)
+    cic = T(clock_induced_charge_per_frame)
+    isfinite(excess_noise) && excess_noise >= one(T) ||
+        throw(InvalidConfiguration(
+            "EMCCDSensor excess_noise_factor must be finite and >= 1"))
+    isfinite(cic) && cic >= zero(T) || throw(InvalidConfiguration(
+        "EMCCDSensor clock_induced_charge_per_frame must be finite and >= 0"))
     reg_full_well = register_full_well === nothing ? nothing : T(register_full_well)
-    reg_full_well === nothing || reg_full_well > zero(reg_full_well) ||
-        throw(InvalidConfiguration("EMCCDSensor register_full_well must be > 0"))
+    reg_full_well === nothing ||
+        isfinite(reg_full_well) && reg_full_well > zero(reg_full_well) ||
+        throw(InvalidConfiguration(
+            "EMCCDSensor register_full_well must be finite and > 0"))
     em_range = (T(em_gain_range[1]), T(em_gain_range[2]))
-    em_range[1] > zero(T) || throw(InvalidConfiguration("EMCCDSensor em_gain_range lower bound must be > 0"))
-    em_range[2] >= em_range[1] ||
+    isfinite(em_range[1]) && em_range[1] > zero(T) ||
+        throw(InvalidConfiguration(
+            "EMCCDSensor em_gain_range lower bound must be finite and > 0"))
+    !isnan(em_range[2]) && em_range[2] >= em_range[1] ||
         throw(InvalidConfiguration("EMCCDSensor em_gain_range upper bound must be >= lower bound"))
     readout_rate = readout_rate_hz === nothing ? nothing : T(readout_rate_hz)
-    readout_rate === nothing || readout_rate > zero(readout_rate) ||
-        throw(InvalidConfiguration("EMCCDSensor readout_rate_hz must be > 0"))
+    readout_rate === nothing ||
+        isfinite(readout_rate) && readout_rate > zero(readout_rate) ||
+        throw(InvalidConfiguration(
+            "EMCCDSensor readout_rate_hz must be finite and > 0"))
     converted_model = convert_em_gain_model(multiplication_model, T)
     validated_model = validate_em_gain_model(converted_model)
     converted_mode = convert_emccd_operating_mode(operating_mode, T)
     validated_mode = validate_emccd_operating_mode(converted_mode)
+    validated_output = validate_emccd_output_path(output_path)
     converted_acquisition = convert_emccd_acquisition_mode(acquisition_mode, T)
     validated_acquisition = validate_emccd_acquisition_mode(converted_acquisition)
     return EMCCDSensor{T,typeof(validated_model),typeof(validated_mode),
-        typeof(output_path),typeof(validated_acquisition)}(
-        T(excess_noise_factor), T(clock_induced_charge_per_frame), validated_model,
+        typeof(validated_output),typeof(validated_acquisition)}(
+        excess_noise, cic, validated_model,
         reg_full_well, validated_mode,
-        output_path, validated_acquisition, em_range, readout_rate)
+        validated_output, validated_acquisition, em_range, readout_rate)
 end
+
+function owned_frame_sensor(sensor::EMCCDSensor, ::Type{T},
+    backend::AbstractArrayBackend) where {T<:AbstractFloat}
+    owned = EMCCDSensor(
+        excess_noise_factor=sensor.excess_noise_factor,
+        clock_induced_charge_per_frame=sensor.clock_induced_charge_per_frame,
+        multiplication_model=sensor.multiplication_model,
+        register_full_well=sensor.register_full_well,
+        operating_mode=sensor.operating_mode,
+        output_path=sensor.output_path,
+        acquisition_mode=sensor.acquisition_mode,
+        em_gain_range=sensor.em_gain_range,
+        readout_rate_hz=sensor.readout_rate_hz,
+        T=T,
+    )
+    validate_em_gain_backend(
+        owned.output_path, owned.multiplication_model, backend)
+    return owned
+end
+
+validate_em_gain_backend(::ConventionalOutput, ::AbstractEMGainModel,
+    ::AbstractArrayBackend) = nothing
+validate_em_gain_backend(::EMOutput, model::AbstractEMGainModel,
+    backend::AbstractArrayBackend) =
+    validate_em_gain_backend(model, backend)
+validate_em_gain_backend(::AbstractEMGainModel,
+    ::AbstractArrayBackend) = nothing
+validate_em_gain_backend(::ConditionalGammaMultiplication,
+    ::CPUBackend) =
+    nothing
+
+function validate_em_gain_backend(::ConditionalGammaMultiplication,
+    backend::AbstractArrayBackend)
+    throw(InvalidConfiguration(
+        "ConditionalGammaMultiplication is CPU-only; use " *
+        "ClippedGaussianMultiplicationApproximation for backend " *
+        "$(typeof(backend))"))
+end
+
+validate_sensor_gain(sensor::EMCCDSensor, gain) =
+    validate_emccd_gain(sensor.output_path, sensor, gain)
+
+function validate_emccd_gain(::EMOutput, sensor::EMCCDSensor, gain)
+    lower, upper = sensor.em_gain_range
+    isfinite(gain) && lower <= gain <= upper ||
+        throw(InvalidConfiguration(
+            "Detector gain must be finite and lie within " *
+            "EMCCDSensor em_gain_range"))
+    return nothing
+end
+
+validate_emccd_gain(::ConventionalOutput, ::EMCCDSensor, gain) = nothing
 
 detector_sensor_symbol(::EMCCDSensor) = :emccd
 supports_clock_induced_charge(::EMCCDSensor) = true
-supports_photon_number_resolving(sensor::EMCCDSensor) = supports_emccd_photon_counting(sensor.operating_mode)
+supports_photon_counting(sensor::EMCCDSensor) =
+    supports_emccd_photon_counting(sensor.operating_mode)
 supports_emccd_photon_counting(::AbstractEMCCDOperatingMode) = false
 supports_emccd_photon_counting(::PhotonCountingEMMode) = true
 configured_cic_per_frame(sensor::EMCCDSensor,
     ::Type{T}) where {T<:AbstractFloat} =
     T(sensor.clock_induced_charge_per_frame)
-is_excess_noise_model(::AbstractEMGainModel) = false
-is_excess_noise_model(::ExcessNoiseApproximation) = true
+is_approximate_em_gain_model(::AbstractEMGainModel) = false
+is_approximate_em_gain_model(
+    ::ClippedGaussianMultiplicationApproximation) = true
+em_gain_model_symbol(::ClippedGaussianMultiplicationApproximation) =
+    :clipped_gaussian_approximation
+em_gain_model_symbol(::ConditionalGammaMultiplication) = :conditional_gamma
 
 acquisition_mode_symbol(sensor::EMCCDSensor) =
     emccd_acquisition_mode_symbol(sensor.acquisition_mode)
@@ -166,32 +263,60 @@ emccd_steady_state_frame_period(mode::FrameTransferAcquisition,
     integration_time, readout_time) =
     max(integration_time, readout_time) + mode.transfer_time
 
-convert_em_gain_model(::ExcessNoiseApproximation, ::Type{T}) where {T<:AbstractFloat} = ExcessNoiseApproximation()
-convert_em_gain_model(model::StochasticMultiplicationRegister, ::Type{T}) where {T<:AbstractFloat} =
-    StochasticMultiplicationRegister{T}(T(model.register_noise_factor))
+convert_em_gain_model(model::ClippedGaussianMultiplicationApproximation,
+    ::Type{T}) where {T<:AbstractFloat} =
+    ClippedGaussianMultiplicationApproximation(
+        minimum_conditional_noise_factor=
+            model.minimum_conditional_noise_factor,
+        T=T)
+convert_em_gain_model(model::ConditionalGammaMultiplication,
+    ::Type{T}) where {T<:AbstractFloat} =
+    ConditionalGammaMultiplication(
+        minimum_conditional_noise_factor=
+            model.minimum_conditional_noise_factor,
+        T=T)
+convert_em_gain_model(model::AbstractEMGainModel,
+    ::Type{T}) where {T<:AbstractFloat} = model
 convert_emccd_operating_mode(::LinearEMMode, ::Type{T}) where {T<:AbstractFloat} = LinearEMMode()
 convert_emccd_operating_mode(mode::PhotonCountingEMMode, ::Type{T}) where {T<:AbstractFloat} =
     PhotonCountingEMMode(threshold=T(mode.threshold), detection_efficiency=T(mode.detection_efficiency), T=T)
-validate_em_gain_model(::ExcessNoiseApproximation) = ExcessNoiseApproximation()
+convert_emccd_operating_mode(mode::AbstractEMCCDOperatingMode,
+    ::Type{T}) where {T<:AbstractFloat} = mode
+validate_em_gain_model(model::ClippedGaussianMultiplicationApproximation) =
+    model
+validate_em_gain_model(model::ConditionalGammaMultiplication) = model
 validate_emccd_operating_mode(::LinearEMMode) = LinearEMMode()
 validate_emccd_operating_mode(mode::PhotonCountingEMMode) = mode
+validate_emccd_output_path(::EMOutput) = EMOutput()
+validate_emccd_output_path(::ConventionalOutput) = ConventionalOutput()
 convert_emccd_acquisition_mode(::SequentialAcquisition, ::Type{T}) where
     {T<:AbstractFloat} = SequentialAcquisition()
 convert_emccd_acquisition_mode(mode::FrameTransferAcquisition,
     ::Type{T}) where {T<:AbstractFloat} =
     FrameTransferAcquisition{T}(T(mode.transfer_time))
+convert_emccd_acquisition_mode(mode::AbstractEMCCDAcquisitionMode,
+    ::Type{T}) where {T<:AbstractFloat} = mode
 validate_emccd_acquisition_mode(::SequentialAcquisition) = SequentialAcquisition()
 
-function validate_emccd_acquisition_mode(mode::FrameTransferAcquisition)
-    mode.transfer_time >= zero(mode.transfer_time) || throw(InvalidConfiguration(
-        "FrameTransferAcquisition transfer_time must be >= 0"))
-    return mode
-end
+validate_em_gain_model(model::AbstractEMGainModel) =
+    throw(InvalidConfiguration(
+        "unsupported EMCCD multiplication model $(typeof(model))"))
+validate_emccd_operating_mode(mode::AbstractEMCCDOperatingMode) =
+    throw(InvalidConfiguration(
+        "unsupported EMCCD operating mode $(typeof(mode))"))
+validate_emccd_output_path(path::AbstractEMCCDOutputPath) =
+    throw(InvalidConfiguration(
+        "unsupported EMCCD output path $(typeof(path))"))
+validate_emccd_acquisition_mode(mode::AbstractEMCCDAcquisitionMode) =
+    throw(InvalidConfiguration(
+        "unsupported EMCCD acquisition mode $(typeof(mode))"))
 
-function validate_em_gain_model(model::StochasticMultiplicationRegister)
-    model.register_noise_factor >= zero(model.register_noise_factor) ||
-        throw(InvalidConfiguration("StochasticMultiplicationRegister register_noise_factor must be >= 0"))
-    return model
+function validate_emccd_acquisition_mode(mode::FrameTransferAcquisition)
+    isfinite(mode.transfer_time) &&
+        mode.transfer_time >= zero(mode.transfer_time) ||
+        throw(InvalidConfiguration(
+            "FrameTransferAcquisition transfer_time must be finite and >= 0"))
+    return mode
 end
 
 function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector,
@@ -211,27 +336,50 @@ end
 
 apply_pre_readout_gain!(::ConventionalOutput, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG) = det.state.frame
 
-function apply_em_register_gain!(::ExcessNoiseApproximation, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
-    apply_avalanche_excess_noise!(sensor.excess_noise_factor, det, rng)
-    det.state.frame .*= det.params.gain
-    return det.state.frame
+function apply_em_register_gain!(
+    model::ClippedGaussianMultiplicationApproximation,
+    sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
+    return _apply_clipped_gaussian_em_register!(
+        model, sensor, det.state.frame, det.state.noise_buffer,
+        det.params.gain, rng)
 end
 
-function apply_em_register_gain!(model::StochasticMultiplicationRegister, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
-    return _apply_stochastic_em_register!(execution_style(det.state.frame), model,
-        sensor, det.state.frame, det.state.noise_buffer, det.params.gain, rng)
+function apply_em_register_gain!(model::ConditionalGammaMultiplication,
+    sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
+    return _apply_conditional_gamma_multiplication!(
+        execution_style(det.state.frame), model, sensor,
+        det.state.frame, det.state.noise_buffer, det.params.gain, rng)
 end
 
 function apply_post_readout_gain!(sensor::EMCCDSensor, det::Detector)
     return det.state.frame
 end
 
-@inline function em_register_noise_factor(model::StochasticMultiplicationRegister,
+@inline function em_conditional_noise_factor(
+    model::Union{ClippedGaussianMultiplicationApproximation,
+        ConditionalGammaMultiplication},
     sensor::EMCCDSensor)
     sensor.excess_noise_factor <= one(sensor.excess_noise_factor) &&
-        return model.register_noise_factor
-    return max(model.register_noise_factor,
+        return model.minimum_conditional_noise_factor
+    return max(model.minimum_conditional_noise_factor,
         sqrt(sensor.excess_noise_factor^2 - one(sensor.excess_noise_factor)))
+end
+
+function _apply_clipped_gaussian_em_register!(
+    model::ClippedGaussianMultiplicationApproximation,
+    sensor::EMCCDSensor, frame::AbstractArray{T},
+    scratch::AbstractArray, gain, rng::AbstractRNG) where {T<:AbstractFloat}
+    factor = T(em_conditional_noise_factor(model, sensor))
+    gain_t = T(gain)
+    if factor <= zero(T)
+        frame .*= gain_t
+        return frame
+    end
+    randn_backend!(rng, scratch)
+    zero_t = zero(T)
+    @. frame = gain_t *
+        max(frame + factor * sqrt(max(frame, zero_t)) * scratch, zero_t)
+    return frame
 end
 
 @inline function _gamma_unit_scale(rng::AbstractRNG, shape::T) where {T<:AbstractFloat}
@@ -255,11 +403,11 @@ end
     end
 end
 
-function _apply_stochastic_em_register!(::ScalarCPUStyle,
-    model::StochasticMultiplicationRegister, sensor::EMCCDSensor,
+function _apply_conditional_gamma_multiplication!(::ScalarCPUStyle,
+    model::ConditionalGammaMultiplication, sensor::EMCCDSensor,
     frame::AbstractArray{T}, scratch::AbstractArray, gain,
     rng::AbstractRNG) where {T<:AbstractFloat}
-    factor = T(em_register_noise_factor(model, sensor))
+    factor = T(em_conditional_noise_factor(model, sensor))
     gain_t = T(gain)
     if factor <= zero(T)
         frame .*= gain_t
@@ -274,17 +422,12 @@ function _apply_stochastic_em_register!(::ScalarCPUStyle,
     return frame
 end
 
-function _apply_stochastic_em_register!(::AcceleratorStyle,
-    model::StochasticMultiplicationRegister, sensor::EMCCDSensor,
+function _apply_conditional_gamma_multiplication!(::AcceleratorStyle,
+    model::ConditionalGammaMultiplication, sensor::EMCCDSensor,
     frame::AbstractArray{T}, scratch::AbstractArray, gain,
     rng::AbstractRNG) where {T<:AbstractFloat}
-    randn_backend!(rng, scratch)
-    factor = T(em_register_noise_factor(model, sensor))
-    gain_t = T(gain)
-    zero_t = zero(T)
-    @. frame = gain_t * max(frame + factor * sqrt(max(frame, zero_t)) * scratch,
-        zero_t)
-    return frame
+    throw(InvalidConfiguration(
+        "ConditionalGammaMultiplication is CPU-only"))
 end
 
 apply_detection_output!(sensor::EMCCDSensor, det::Detector,
@@ -331,13 +474,14 @@ end
 
 function _batched_pre_readout_gain!(::EMOutput, sensor::EMCCDSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG)
-    if is_excess_noise_model(sensor.multiplication_model)
-        _batched_avalanche_excess_noise!(sensor.excess_noise_factor, cube, scratch, rng)
-        cube .*= det.params.gain
-        return cube
+    if is_approximate_em_gain_model(sensor.multiplication_model)
+        return _apply_clipped_gaussian_em_register!(
+            sensor.multiplication_model, sensor, cube, scratch,
+            det.params.gain, rng)
     end
-    return _apply_stochastic_em_register!(execution_style(cube),
-        sensor.multiplication_model, sensor, cube, scratch, det.params.gain, rng)
+    return _apply_conditional_gamma_multiplication!(
+        execution_style(cube), sensor.multiplication_model, sensor,
+        cube, scratch, det.params.gain, rng)
 end
 
 _batched_pre_readout_gain!(::ConventionalOutput, sensor::EMCCDSensor, det::Detector,
@@ -377,8 +521,11 @@ function sensor_saturation_limit(sensor::EMCCDSensor, det::Detector)
 end
 
 function sensor_saturation_limit(::EMOutput, sensor::EMCCDSensor, det::Detector)
-    sensor.register_full_well === nothing && return det.params.full_well
-    return sensor.register_full_well / det.params.gain
+    input_limit = det.params.full_well
+    sensor.register_full_well === nothing && return input_limit
+    register_referred_limit = sensor.register_full_well / det.params.gain
+    input_limit === nothing && return register_referred_limit
+    return min(input_limit, register_referred_limit)
 end
 
 sensor_saturation_limit(::ConventionalOutput, sensor::EMCCDSensor, det::Detector) = det.params.full_well

@@ -526,6 +526,9 @@ new_root_exports = [
 new_domain_public = [
     "Optics.AbstractSource",
     "Atmospheres.AbstractTimedAtmosphere",
+    "Detectors.AbstractEMGainModel",
+    "Detectors.ClippedGaussianMultiplicationApproximation",
+    "Detectors.ConditionalGammaMultiplication",
 ]
 removed_exports = []
 removed_public = []
@@ -1018,7 +1021,11 @@ exports = [
     "reset_integration!",
     "thermal_model",
 ]
-public = []
+public = [
+    "AbstractEMGainModel",
+    "ClippedGaussianMultiplicationApproximation",
+    "ConditionalGammaMultiplication",
+]
 
 [[api_allowlists]]
 owner = "WavefrontSensors"

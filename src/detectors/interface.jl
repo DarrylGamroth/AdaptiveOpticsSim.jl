@@ -54,6 +54,7 @@ supports_detector_persistence(::FrameSensorType) = false
 supports_detector_nonlinearity(::FrameSensorType) = false
 supports_shutter_timing(::FrameSensorType) = false
 supports_photon_number_resolving(::SensorType) = false
+supports_photon_counting(::SensorType) = false
 supports_energy_resolving(::SensorType) = false
 supports_raw_digital_output(::SensorType) = false
 supports_nondestructive_reads(::FrameSensorType) = false
