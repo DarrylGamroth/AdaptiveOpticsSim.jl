@@ -140,8 +140,9 @@ function ccd_artifact_deterministic_contract()
         "cic_exposure_invariant" => cic_exposure_invariant,
         "single_read_read_time_rejected" => read_time_rejected,
         "default_response_is_null" => metadata.frame_response == :none,
-        "default_supports_mtf" => supports_detector_mtf(
-            allocation_detector),
+        "default_supports_mtf" =>
+            AdaptiveOpticsSim.Detectors.supports_detector_mtf(
+                allocation_detector),
         "sampling_mode" => String(metadata.sampling_mode),
         "sampling_read_time_is_absent" =>
             isnothing(metadata.sampling_read_time),
