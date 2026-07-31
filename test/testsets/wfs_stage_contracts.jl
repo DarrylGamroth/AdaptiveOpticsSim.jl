@@ -35,8 +35,8 @@ function contract_sampled_response(input::AbstractMatrix{T},
         offset_j = kj - radius_j - 1
         weight = kernel[ki, kj]
         for j in axes(input, 2), i in axes(input, 1)
-            ii = i + offset_i
-            jj = j + offset_j
+            ii = i - offset_i
+            jj = j - offset_j
             if checkbounds(Bool, input, ii, jj)
                 output[i, j] += weight * input[ii, jj]
             end
