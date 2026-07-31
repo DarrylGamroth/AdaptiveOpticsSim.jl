@@ -56,7 +56,7 @@ function skipper_deterministic_contract()
         response_model=NullFrameResponse())
     input = fill(20.0, 16, 16)
     output = capture!(detector, input, Xoshiro(8201))
-    products = readout_products(detector)
+    products = AdaptiveOpticsSim.Detectors.readout_products(detector)
     metadata = detector_export_metadata(detector)
 
     cube = fill(3.0, 2, 16, 16)
