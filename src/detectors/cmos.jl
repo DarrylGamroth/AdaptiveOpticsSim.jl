@@ -72,10 +72,11 @@ function StaticCMOSOutputPattern(output_cols::Integer, gains::AbstractVector, of
 end
 
 @kernel function apply_cmos_output_pattern_kernel!(frame, gains, offsets, output_cols::Int, n::Int, m::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n && j <= m
-        output_idx = cld(j, output_cols)
-        @inbounds frame[i, j] = frame[i, j] * gains[output_idx] + offsets[output_idx]
+    i, local_col, output_idx = @index(Global, NTuple)
+    col = (output_idx - 1) * output_cols + local_col
+    if i <= n && col <= m
+        @inbounds frame[i, col] =
+            frame[i, col] * gains[output_idx] + offsets[output_idx]
     end
 end
 
@@ -103,15 +104,21 @@ function CMOSSensor(; column_readout_sigma::Real=0.0,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
-    column_readout_sigma >= 0 || throw(InvalidConfiguration("CMOSSensor column_readout_sigma must be >= 0"))
-    row_readout_sigma >= 0 || throw(InvalidConfiguration("CMOSSensor row_readout_sigma must be >= 0"))
+    column_sigma = T(column_readout_sigma)
+    row_sigma = T(row_readout_sigma)
+    isfinite(column_sigma) && column_sigma >= zero(T) ||
+        throw(InvalidConfiguration(
+            "CMOSSensor column_readout_sigma must be finite and >= 0"))
+    isfinite(row_sigma) && row_sigma >= zero(T) ||
+        throw(InvalidConfiguration(
+            "CMOSSensor row_readout_sigma must be finite and >= 0"))
     converted_noise = convert_cmos_read_noise_model(readout_noise_model, T, backend)
     validated_noise = validate_cmos_read_noise_model(converted_noise)
     converted_output = convert_cmos_output_model(output_model, T, backend)
     validated_output = validate_cmos_output_model(converted_output)
     validated_timing = validate_frame_timing_model(convert_frame_timing_model(timing_model, T))
     return CMOSSensor{T,typeof(validated_noise),typeof(validated_output),typeof(validated_timing)}(
-        T(column_readout_sigma), T(row_readout_sigma), validated_noise,
+        column_sigma, row_sigma, validated_noise,
         validated_output, validated_timing)
 end
 
@@ -143,6 +150,10 @@ is_null_cmos_read_noise_model(::NullCMOSReadNoise) = true
 convert_cmos_read_noise_model(::NullCMOSReadNoise, ::Type{T}, backend) where {T<:AbstractFloat} =
     NullCMOSReadNoise()
 
+convert_cmos_read_noise_model(model::AbstractCMOSReadNoiseModel,
+    ::Type{<:AbstractFloat}, backend) = throw(UnsupportedAlgorithm(
+    "unsupported CMOS read-noise model $(typeof(model))"))
+
 function convert_cmos_read_noise_model(model::CMOSReadNoiseMap, ::Type{T}, backend) where {T<:AbstractFloat}
     sigma = _to_backend_matrix(T.(Array(model.sigma)), backend)
     return CMOSReadNoiseMap{T,typeof(sigma)}(
@@ -151,8 +162,15 @@ end
 
 validate_cmos_read_noise_model(::NullCMOSReadNoise) = NullCMOSReadNoise()
 validate_cmos_read_noise_model(model::CMOSReadNoiseMap) = model
+validate_cmos_read_noise_model(model::AbstractCMOSReadNoiseModel) =
+    throw(UnsupportedAlgorithm(
+        "unsupported CMOS read-noise model $(typeof(model))"))
 
 convert_cmos_output_model(::NullCMOSOutputModel, ::Type{T}, backend) where {T<:AbstractFloat} = NullCMOSOutputModel()
+
+convert_cmos_output_model(model::AbstractCMOSOutputModel,
+    ::Type{<:AbstractFloat}, backend) = throw(UnsupportedAlgorithm(
+    "unsupported CMOS output model $(typeof(model))"))
 
 function convert_cmos_output_model(model::StaticCMOSOutputPattern, ::Type{T}, backend) where {T<:AbstractFloat}
     gains = _to_backend_vector(T.(Array(model.gains)), backend)
@@ -168,16 +186,29 @@ function validate_cmos_output_model(model::StaticCMOSOutputPattern)
     length(model.gains) > 0 || throw(InvalidConfiguration("StaticCMOSOutputPattern gains must not be empty"))
     length(model.gains) == length(model.offsets) ||
         throw(InvalidConfiguration("StaticCMOSOutputPattern gains and offsets must have matching length"))
-    minimum(model.gains) >= zero(eltype(model.gains)) ||
+    host_gains = Array(model.gains)
+    host_offsets = Array(model.offsets)
+    minimum(host_gains) >= zero(eltype(host_gains)) ||
         throw(InvalidConfiguration("StaticCMOSOutputPattern gains must be >= 0"))
+    all(isfinite, host_gains) ||
+        throw(InvalidConfiguration(
+            "StaticCMOSOutputPattern gains must be finite"))
+    all(isfinite, host_offsets) ||
+        throw(InvalidConfiguration(
+            "StaticCMOSOutputPattern offsets must be finite"))
     return model
 end
+
+validate_cmos_output_model(model::AbstractCMOSOutputModel) =
+    throw(UnsupportedAlgorithm(
+        "unsupported CMOS output model $(typeof(model))"))
 
 function sampling_wallclock_time(sensor::CMOSSensor, integration_time, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
     is_global_shutter(sensor.timing_model) && return T(integration_time)
-    active_rows = window === nothing ? frame_size[1] : length(window.rows)
-    return T(integration_time) + T(cld(active_rows, sensor.timing_model.row_group_size)) * T(sensor.timing_model.line_time)
+    band_count = cld(frame_size[1], sensor.timing_model.row_group_size)
+    return T(integration_time) +
+        T(band_count) * T(sensor.timing_model.line_time)
 end
 
 function apply_sensor_readout_noise!(sensor::CMOSSensor, det::Detector,
@@ -273,7 +304,9 @@ end
 function apply_output_model!(style::AcceleratorStyle, model::StaticCMOSOutputPattern, frame)
     n, m = size(frame)
     _require_cmos_output_shape(model, size(frame))
-    launch_kernel!(style, apply_cmos_output_pattern_kernel!, frame, model.gains, model.offsets, model.output_cols, n, m; ndrange=(n, m))
+    launch_kernel!(style, apply_cmos_output_pattern_kernel!, frame,
+        model.gains, model.offsets, model.output_cols, n, m;
+        ndrange=(n, model.output_cols, length(model.gains)))
     return frame
 end
 

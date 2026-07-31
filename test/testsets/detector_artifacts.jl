@@ -112,4 +112,38 @@
         "allocation_gate_passed",
     ))
     @test emccd_deterministic["steady_alloc_bytes"] == 0
+
+    cmos_entry = detector_entries["DET-CMOS-QUAL-2026-07-30"]
+    @test cmos_entry["status"] == "active"
+    cmos_path = joinpath(dirname(detector_artifact_path),
+        cmos_entry["path"])
+    @test isfile(cmos_path)
+    cmos = TOML.parsefile(cmos_path)
+    @test cmos["schema_version"] == 1
+    @test cmos["family"] == "parameterized_cmos"
+    @test cmos["all_gates_passed"]
+    @test !cmos["environment"]["source_dirty"]
+    cmos_qualification = cmos["qualification"]
+    @test cmos_qualification["samples_per_case"] == 16_384
+    @test cmos_qualification["sigma_limit"] == 6.0
+    covariance_cases = cmos_qualification["spatial_noise_cases"]
+    @test Set(case["id"] for case in covariance_cases) == Set((
+        "column_common",
+        "row_common",
+        "pixel_independent",
+        "combined",
+    ))
+    @test all(case -> all(values(case["gates"])), covariance_cases)
+    cmos_deterministic = cmos_qualification["deterministic"]
+    @test all(cmos_deterministic[key] for key in (
+        "global_shutter_passed",
+        "rolling_exposure_passed",
+        "global_reset_passed",
+        "window_preserves_full_frame_timing",
+        "configured_mtf_preserved",
+        "readout_pipeline_passed",
+        "deterministic_replay_passed",
+        "allocation_gate_passed",
+    ))
+    @test cmos_deterministic["steady_alloc_bytes"] == 0
 end

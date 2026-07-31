@@ -529,6 +529,8 @@ new_domain_public = [
     "Detectors.AbstractEMGainModel",
     "Detectors.ClippedGaussianMultiplicationApproximation",
     "Detectors.ConditionalGammaMultiplication",
+    "Detectors.FrameWindow",
+    "Detectors.StaticCMOSOutputPattern",
 ]
 removed_exports = []
 removed_public = []
@@ -1025,6 +1027,8 @@ public = [
     "AbstractEMGainModel",
     "ClippedGaussianMultiplicationApproximation",
     "ConditionalGammaMultiplication",
+    "FrameWindow",
+    "StaticCMOSOutputPattern",
 ]
 
 [[api_allowlists]]

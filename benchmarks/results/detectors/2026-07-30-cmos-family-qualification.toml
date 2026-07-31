@@ -1,0 +1,142 @@
+all_gates_passed = true
+artifact_id = "DET-CMOS-QUAL-2026-07-30"
+family = "parameterized_cmos"
+schema_version = 1
+
+[environment]
+adaptive_optics_sim_version = "0.1.0"
+architecture = "x86_64"
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "698c08a67017d40d72841703267659c11d353eb2"
+timestamp_utc = "2026-07-31T05:46:18.227"
+
+[qualification]
+frame_count_per_case = 1024
+frame_size = [32, 32]
+samples_per_case = 16384
+sigma_limit = 6.0
+
+    [qualification.deterministic]
+    allocation_gate_passed = true
+    configured_mtf_preserved = true
+    deterministic_replay_passed = true
+    global_reset_passed = true
+    global_shutter_passed = true
+    readout_pipeline_passed = true
+    rolling_exposure_passed = true
+    steady_alloc_bytes = 0
+    window_preserves_full_frame_timing = true
+
+    [[qualification.spatial_noise_cases]]
+    diagonal_covariance_absolute_limit = 0.10546875
+    expected_diagonal_covariance = 0.0
+    expected_mean = 0.0
+    expected_same_column_covariance = 2.25
+    expected_same_row_covariance = 0.0
+    expected_variance = 2.25
+    id = "column_common"
+    mean_absolute_limit = 0.0703125
+    observed_diagonal_covariance = -0.007918432297404372
+    observed_mean = 0.017951909968776963
+    observed_same_column_covariance = 2.2909907690571147
+    observed_same_row_covariance = -0.007918432297404372
+    observed_variance = 2.2909907690571143
+    same_column_covariance_absolute_limit = 0.14915533665653735
+    same_row_covariance_absolute_limit = 0.10546875
+    sample_count = 16384
+    seed = 4101
+    variance_absolute_limit = 0.14915988872455474
+
+        [qualification.spatial_noise_cases.gates]
+        diagonal_covariance = true
+        mean = true
+        same_column_covariance = true
+        same_row_covariance = true
+        variance = true
+    [[qualification.spatial_noise_cases]]
+    diagonal_covariance_absolute_limit = 0.0732421875
+    expected_diagonal_covariance = 0.0
+    expected_mean = 0.0
+    expected_same_column_covariance = 0.0
+    expected_same_row_covariance = 1.5625
+    expected_variance = 1.5625
+    id = "row_common"
+    mean_absolute_limit = 0.05859375
+    observed_diagonal_covariance = 0.03555085849100148
+    observed_mean = 0.0032436189746998002
+    observed_same_column_covariance = 0.03555085849100148
+    observed_same_row_covariance = 1.5710486712624658
+    observed_variance = 1.5710486712624658
+    same_column_covariance_absolute_limit = 0.0732421875
+    same_row_covariance_absolute_limit = 0.10358009490037318
+    sample_count = 16384
+    seed = 4102
+    variance_absolute_limit = 0.10358325605871857
+
+        [qualification.spatial_noise_cases.gates]
+        diagonal_covariance = true
+        mean = true
+        same_column_covariance = true
+        same_row_covariance = true
+        variance = true
+    [[qualification.spatial_noise_cases]]
+    diagonal_covariance_absolute_limit = 0.0263671875
+    expected_diagonal_covariance = 0.0
+    expected_mean = 0.0
+    expected_same_column_covariance = 0.0
+    expected_same_row_covariance = 0.0
+    expected_variance = 0.5625
+    id = "pixel_independent"
+    mean_absolute_limit = 0.03515625
+    observed_diagonal_covariance = 0.00019038299861489386
+    observed_mean = -0.007904068565543366
+    observed_same_column_covariance = 0.0069840624046407255
+    observed_same_row_covariance = 0.006787680775776234
+    observed_variance = 0.5684941252079909
+    same_column_covariance_absolute_limit = 0.0263671875
+    same_row_covariance_absolute_limit = 0.0263671875
+    sample_count = 16384
+    seed = 4103
+    variance_absolute_limit = 0.037289972181138685
+
+        [qualification.spatial_noise_cases.gates]
+        diagonal_covariance = true
+        mean = true
+        same_column_covariance = true
+        same_row_covariance = true
+        variance = true
+    [[qualification.spatial_noise_cases]]
+    diagonal_covariance_absolute_limit = 0.10359375000000001
+    expected_diagonal_covariance = 0.0
+    expected_mean = 0.0
+    expected_same_column_covariance = 0.6400000000000001
+    expected_same_row_covariance = 1.2100000000000002
+    expected_variance = 2.2100000000000004
+    id = "combined"
+    mean_absolute_limit = 0.0696846972530555
+    observed_diagonal_covariance = 0.01819762014699121
+    observed_mean = -0.008617376018610484
+    observed_same_column_covariance = 0.6734130056140564
+    observed_same_row_covariance = 1.214153660688932
+    observed_variance = 2.214616497249329
+    same_column_covariance_absolute_limit = 0.10785019721383224
+    same_row_covariance_absolute_limit = 0.1181045369180414
+    sample_count = 16384
+    seed = 4104
+    variance_absolute_limit = 0.14650815736945155
+
+        [qualification.spatial_noise_cases.gates]
+        diagonal_covariance = true
+        mean = true
+        same_column_covariance = true
+        same_row_covariance = true
+        variance = true
+
+[scope]
+excluded = ["temporal 1/f noise", "random-telegraph signal noise", "calibrated camera maps or profiles", "on-camera filtering", "vendor-specific readout modes"]
+included = ["ordinary, scientific, and quantitative low-noise CMOS through explicit parameters", "global, rolling-exposure, and global-reset row-band timing", "frame-independent Gaussian row, column, and heteroscedastic pixel read noise", "PRNU, DSNU, bad pixels, static output groups, saturation, gain, and quantization", "configured presampling response and detector MTF"]

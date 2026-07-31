@@ -33,3 +33,8 @@ purpose = "EMCCD multiplication, photon-counting, saturation, and acquisition-ti
 status = "active"
 id = "DET-EMCCD-QUAL-2026-07-30"
 path = "2026-07-30-emccd-qualification.toml"
+[[artifacts]]
+purpose = "parameterized CMOS-family spatial-noise, shutter-timing, and readout qualification"
+status = "active"
+id = "DET-CMOS-QUAL-2026-07-30"
+path = "2026-07-30-cmos-family-qualification.toml"

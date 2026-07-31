@@ -41,3 +41,5 @@ export readout_ready, reset_integration!, thermal_model
 public AbstractEMGainModel
 public ClippedGaussianMultiplicationApproximation
 public ConditionalGammaMultiplication
+public FrameWindow
+public StaticCMOSOutputPattern

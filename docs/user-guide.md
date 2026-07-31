@@ -338,11 +338,18 @@ det = Detector(
 
 `CMOSReadNoiseMap` is an absolute per-pixel read-noise sigma map and is added
 to any uniform `NoiseReadout` component. Use `PixelResponseNonuniformity`,
-`DarkSignalNonuniformity`, `BadPixelMask`, and `StaticCMOSOutputPattern` for
-measured gain, dark, bad-pixel, and output-amplifier structure. CMOS has no
-implicit blur: select `RectangularPixelAperture`, another frame response, or
-`InterpixelCapacitance` only when the detector sampling or calibration supports
-it.
+`DarkSignalNonuniformity`, `BadPixelMask`, and
+`Detectors.StaticCMOSOutputPattern` for measured gain, dark, bad-pixel, and
+output-amplifier structure. CMOS has no implicit blur: select
+`RectangularPixelAperture`, another frame response, or
+`InterpixelCapacitance` only when the detector sampling or calibration
+supports it.
+
+`Detectors.FrameWindow` selects a rectangular product from the completed full
+frame. It does not crop the physical sensor or shorten rolling-shutter timing.
+To model a sensor ROI whose electronics expose and read only the cropped rows,
+construct the detector on that cropped frame geometry and express any physical
+row-phase offset explicitly in the source or schedule.
 
 Conventional CCD capture uses `CCDSensor()` with `SingleRead()` by default.
 Configure `clock_induced_charge_per_frame` as an independent Poisson

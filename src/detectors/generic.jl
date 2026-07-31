@@ -594,7 +594,9 @@ convert_frame_timing_model(model::RollingShutter, ::Type{T}) where {T<:AbstractF
 validate_frame_timing_model(::GlobalShutter) = GlobalShutter()
 
 function validate_frame_timing_model(model::RollingShutter)
-    model.line_time >= zero(model.line_time) || throw(InvalidConfiguration("RollingShutter line_time must be >= 0"))
+    isfinite(model.line_time) && model.line_time >= zero(model.line_time) ||
+        throw(InvalidConfiguration(
+            "RollingShutter line_time must be finite and >= 0"))
     model.row_group_size > 0 || throw(InvalidConfiguration("RollingShutter row_group_size must be > 0"))
     return model
 end
