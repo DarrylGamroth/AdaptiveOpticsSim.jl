@@ -91,7 +91,7 @@ _thermalized_sensor(sensor::HgCdTeSensor, enabled::Bool,
         glow_rate=T(0.02),
         read_time=sensor.readout.read_time,
         sampling_mode=sensor.readout.sampling_mode,
-        persistence_model=sensor.readout.persistence_model,
+        persistence_model=sensor.persistence_model,
         T=T) : sensor
 
 function _gc_counter_delta(before, after)

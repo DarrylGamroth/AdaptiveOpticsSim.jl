@@ -1,7 +1,6 @@
 """
     HgCdTeReadout(; glow_rate=0, read_time=0,
-        sampling_mode=SingleRead(), persistence_model=NullPersistence(),
-        T=Float64)
+        sampling_mode=SingleRead(), T=Float64)
 
 Immutable readout configuration shared by conventional HgCdTe arrays and
 HgCdTe linear-avalanche arrays. `read_time` is the duration of one full sensor
@@ -11,19 +10,16 @@ physical read duration.
 struct HgCdTeReadout{
     T<:AbstractFloat,
     M<:FrameSamplingMode,
-    P<:AbstractPersistenceModel,
 }
     glow_rate::T
     read_time::T
     sampling_mode::M
-    persistence_model::P
 end
 
 function HgCdTeReadout(;
     glow_rate::Real=0.0,
     read_time::Real=0.0,
     sampling_mode::FrameSamplingMode=SingleRead(),
-    persistence_model::AbstractPersistenceModel=NullPersistence(),
     T::Type{<:AbstractFloat}=Float64,
 )
     glow = T(glow_rate)
@@ -34,10 +30,7 @@ function HgCdTeReadout(;
         throw(InvalidConfiguration(
             "HgCdTeReadout read_time must be finite and >= 0"))
     mode = validate_hgcdte_sampling_mode(sampling_mode)
-    converted_persistence = convert_persistence_model(persistence_model, T)
-    validated_persistence = validate_persistence_model(converted_persistence)
-    return HgCdTeReadout{T,typeof(mode),typeof(validated_persistence)}(
-        glow, read_duration, mode, validated_persistence)
+    return HgCdTeReadout{T,typeof(mode)}(glow, read_duration, mode)
 end
 
 """
@@ -48,8 +41,20 @@ avalanche multiplication. Detector response, IPC, nonlinearity, persistence,
 and readout correction remain explicit configuration rather than implicit
 technology or camera profiles.
 """
-struct HgCdTeSensor{R<:HgCdTeReadout} <: HgCdTeSensorType
+struct HgCdTeSensor{
+    R<:HgCdTeReadout,
+    P<:AbstractPersistenceModel,
+} <: HgCdTeSensorType
     readout::R
+    persistence_model::P
+end
+
+function HgCdTeSensor(readout::HgCdTeReadout{T};
+    persistence_model::AbstractPersistenceModel=NullPersistence(),
+) where {T<:AbstractFloat}
+    persistence = prepare_hgcdte_persistence_model(persistence_model, T)
+    return HgCdTeSensor{typeof(readout),typeof(persistence)}(
+        readout, persistence)
 end
 
 function HgCdTeSensor(;
@@ -63,9 +68,13 @@ function HgCdTeSensor(;
         glow_rate=glow_rate,
         read_time=read_time,
         sampling_mode=sampling_mode,
-        persistence_model=persistence_model,
         T=T,
-    ))
+    ); persistence_model=persistence_model)
+end
+
+@inline function prepare_hgcdte_persistence_model(
+    model::AbstractPersistenceModel, ::Type{T}) where {T<:AbstractFloat}
+    return validate_persistence_model(convert_persistence_model(model, T))
 end
 
 validate_hgcdte_sampling_mode(mode::SingleRead) =
@@ -107,7 +116,7 @@ default_response_model(::HgCdTeSensorType;
 @inline multi_read_sampling_mode(sensor::HgCdTeSensorType) =
     hgcdte_readout(sensor).sampling_mode
 @inline persistence_model(sensor::HgCdTeSensorType) =
-    hgcdte_readout(sensor).persistence_model
+    sensor.persistence_model
 
 sampling_read_time(sensor::HgCdTeSensorType,
     ::Type{T}) where {T<:AbstractFloat} =

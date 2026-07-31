@@ -9,16 +9,19 @@ composed through `HgCdTeReadout`; conventional HgCdTe operation should use
 struct HgCdTeAvalancheArraySensor{
     T<:AbstractFloat,
     R<:HgCdTeReadout,
+    P<:AbstractPersistenceModel,
 } <: HgCdTeAvalancheArraySensorType
     avalanche_gain::T
     excess_noise_factor::T
     readout::R
+    persistence_model::P
 end
 
 function HgCdTeAvalancheArraySensor(
     readout::HgCdTeReadout{T};
     avalanche_gain::Real=1.0,
     excess_noise_factor::Real=1.0,
+    persistence_model::AbstractPersistenceModel=NullPersistence(),
 ) where {T<:AbstractFloat}
     gain = T(avalanche_gain)
     noise_factor = T(excess_noise_factor)
@@ -27,8 +30,10 @@ function HgCdTeAvalancheArraySensor(
     isfinite(noise_factor) && noise_factor >= one(T) ||
         throw(InvalidConfiguration(
             "HgCdTeAvalancheArraySensor excess_noise_factor must be finite and >= 1"))
+    persistence = prepare_hgcdte_persistence_model(persistence_model, T)
     return HgCdTeAvalancheArraySensor{
-        T,typeof(readout)}(gain, noise_factor, readout)
+        T,typeof(readout),typeof(persistence)}(
+        gain, noise_factor, readout, persistence)
 end
 
 function HgCdTeAvalancheArraySensor(;
@@ -44,12 +49,12 @@ function HgCdTeAvalancheArraySensor(;
         glow_rate=glow_rate,
         read_time=read_time,
         sampling_mode=sampling_mode,
-        persistence_model=persistence_model,
         T=T,
     )
     return HgCdTeAvalancheArraySensor(readout;
         avalanche_gain=avalanche_gain,
-        excess_noise_factor=excess_noise_factor)
+        excess_noise_factor=excess_noise_factor,
+        persistence_model=persistence_model)
 end
 
 @inline hgcdte_readout(sensor::HgCdTeAvalancheArraySensor) = sensor.readout

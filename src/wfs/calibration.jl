@@ -151,7 +151,7 @@ function detector_hgcdte_readout_calibration_signature(
     sensor::HgCdTeSensorType, sig::UInt)
     readout = hgcdte_readout(sensor)
     sig = hash(readout.read_time, sig)
-    sig = hash(readout.persistence_model, sig)
+    sig = hash(persistence_model(sensor), sig)
     return detector_sampling_calibration_signature(
         readout.sampling_mode, sig)
 end

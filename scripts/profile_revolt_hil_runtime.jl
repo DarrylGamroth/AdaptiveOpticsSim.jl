@@ -117,7 +117,7 @@ _thermalized_sensor(sensor::HgCdTeSensor, enabled::Bool,
         glow_rate=T(0.02),
         read_time=sensor.readout.read_time,
         sampling_mode=sensor.readout.sampling_mode,
-        persistence_model=sensor.readout.persistence_model,
+        persistence_model=sensor.persistence_model,
         T=T) : sensor
 
 function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractString=_config_dir_arg,

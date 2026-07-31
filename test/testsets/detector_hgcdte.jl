@@ -408,6 +408,15 @@
     @test !supports_avalanche_gain(HgCdTeSensor(shared_readout))
     @test supports_avalanche_gain(HgCdTeAvalancheArraySensor(
         shared_readout; avalanche_gain=3.0))
+    @test !hasfield(typeof(shared_readout), :persistence_model)
+    shared_readout_persistent = HgCdTeSensor(shared_readout;
+        persistence_model=ExponentialPersistence(0.25, 0.0))
+    shared_readout_avalanche = HgCdTeAvalancheArraySensor(shared_readout;
+        avalanche_gain=3.0)
+    @test shared_readout_persistent.persistence_model isa
+        ExponentialPersistence
+    @test shared_readout_avalanche.persistence_model isa
+        AdaptiveOpticsSim.Detectors.NullPersistence
 
     conventional_saturation = Detector(
         integration_time=1.0, noise=NoiseNone(), qe=1.0,
