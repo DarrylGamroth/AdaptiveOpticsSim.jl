@@ -47,7 +47,8 @@ function _resolve_thermal_model(name::AbstractString, sensor_label::Symbol, T::T
             temperature_K=120.0,
             dark_current_law=dark_law,
             glow_rate_law=(sensor_label in (:ingaas, :hgcdte_avalanche_array) ? glow_law : NullTemperatureLaw()),
-            cic_rate_law=(sensor_label == :emccd ? cic_law : NullTemperatureLaw()),
+            cic_per_frame_law=(sensor_label == :emccd ? cic_law :
+                NullTemperatureLaw()),
             T=T), :fixed120
     elseif lowered == "dynamic120"
         return FirstOrderThermalModel(
@@ -59,7 +60,8 @@ function _resolve_thermal_model(name::AbstractString, sensor_label::Symbol, T::T
             max_temperature_K=300.0,
             dark_current_law=dark_law,
             glow_rate_law=(sensor_label in (:ingaas, :hgcdte_avalanche_array) ? glow_law : NullTemperatureLaw()),
-            cic_rate_law=(sensor_label == :emccd ? cic_law : NullTemperatureLaw()),
+            cic_per_frame_law=(sensor_label == :emccd ? cic_law :
+                NullTemperatureLaw()),
             T=T), :dynamic120
     end
     error("unsupported thermal mode '$name'; use none, fixed120, or dynamic120")

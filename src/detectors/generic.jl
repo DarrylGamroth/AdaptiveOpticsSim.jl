@@ -175,15 +175,17 @@ reference_qe(model::ScalarQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat}
 reference_qe(model::SampledQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} = T(maximum(model.values))
 
 configured_glow_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
-configured_cic_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
+configured_cic_per_frame(::FrameSensorType, ::Type{T}) where {
+    T<:AbstractFloat} = zero(T)
 
 dark_current_law(::SensorType) = NullTemperatureLaw()
 glow_rate_law(::SensorType) = NullTemperatureLaw()
-cic_rate_law(::SensorType) = NullTemperatureLaw()
+cic_per_frame_law(::SensorType) = NullTemperatureLaw()
 
 active_dark_current_law(sensor::SensorType, ::NullDetectorThermalModel) = dark_current_law(sensor)
 active_glow_rate_law(sensor::SensorType, ::NullDetectorThermalModel) = glow_rate_law(sensor)
-active_cic_rate_law(sensor::SensorType, ::NullDetectorThermalModel) = cic_rate_law(sensor)
+active_cic_per_frame_law(sensor::SensorType, ::NullDetectorThermalModel) =
+    cic_per_frame_law(sensor)
 
 function active_dark_current_law(sensor::SensorType, model::FixedTemperature)
     return is_null_temperature_law(model.dark_current_law) ? dark_current_law(sensor) : model.dark_current_law
@@ -201,12 +203,15 @@ function active_glow_rate_law(sensor::SensorType, model::FirstOrderThermalModel)
     return is_null_temperature_law(model.glow_rate_law) ? glow_rate_law(sensor) : model.glow_rate_law
 end
 
-function active_cic_rate_law(sensor::SensorType, model::FixedTemperature)
-    return is_null_temperature_law(model.cic_rate_law) ? cic_rate_law(sensor) : model.cic_rate_law
+function active_cic_per_frame_law(sensor::SensorType, model::FixedTemperature)
+    return is_null_temperature_law(model.cic_per_frame_law) ?
+        cic_per_frame_law(sensor) : model.cic_per_frame_law
 end
 
-function active_cic_rate_law(sensor::SensorType, model::FirstOrderThermalModel)
-    return is_null_temperature_law(model.cic_rate_law) ? cic_rate_law(sensor) : model.cic_rate_law
+function active_cic_per_frame_law(sensor::SensorType,
+    model::FirstOrderThermalModel)
+    return is_null_temperature_law(model.cic_per_frame_law) ?
+        cic_per_frame_law(sensor) : model.cic_per_frame_law
 end
 
 effective_dark_current(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
@@ -214,9 +219,12 @@ effective_dark_current(det::Detector, ::Type{T}=eltype(det.state.frame)) where {
 effective_glow_rate(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
     T(evaluate_temperature_law(active_glow_rate_law(det.params.sensor, det.params.thermal_model),
         configured_glow_rate(det.params.sensor, T), detector_temperature(det, T)))
-effective_cic_rate(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
-    T(evaluate_temperature_law(active_cic_rate_law(det.params.sensor, det.params.thermal_model),
-        configured_cic_rate(det.params.sensor, T), detector_temperature(det, T)))
+effective_cic_per_frame(det::Detector,
+    ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+    T(evaluate_temperature_law(
+        active_cic_per_frame_law(det.params.sensor, det.params.thermal_model),
+        configured_cic_per_frame(det.params.sensor, T),
+        detector_temperature(det, T)))
 effective_persistence_model(det::Detector) = persistence_model(det.params.sensor)
 
 sensor_is_frame_based(::SensorType) = false
@@ -293,7 +301,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         thermal_time_constant_s(det.params.thermal_model, T),
         temperature_law_symbol(active_dark_current_law(det.params.sensor, det.params.thermal_model)),
         temperature_law_symbol(active_glow_rate_law(det.params.sensor, det.params.thermal_model)),
-        temperature_law_symbol(active_cic_rate_law(det.params.sensor, det.params.thermal_model)),
+        temperature_law_symbol(active_cic_per_frame_law(
+            det.params.sensor, det.params.thermal_model)),
         frame_sampling_symbol(det.params.sensor),
         frame_sampling_reads(det.params.sensor),
         frame_sampling_reference_reads(det.params.sensor),

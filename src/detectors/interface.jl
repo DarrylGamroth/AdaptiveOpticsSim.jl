@@ -520,14 +520,14 @@ struct FixedTemperature{
     dark_current_law::DC
     glow_rate_law::G
     dark_count_law::DCR
-    cic_rate_law::CIC
+    cic_per_frame_law::CIC
 end
 
 function FixedTemperature(; temperature_K::Real,
     dark_current_law::AbstractTemperatureLaw=NullTemperatureLaw(),
     glow_rate_law::AbstractTemperatureLaw=NullTemperatureLaw(),
     dark_count_law::AbstractTemperatureLaw=NullTemperatureLaw(),
-    cic_rate_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    cic_per_frame_law::AbstractTemperatureLaw=NullTemperatureLaw(),
     T::Type{<:AbstractFloat}=Float64)
     temperature_K > 0 || throw(InvalidConfiguration("FixedTemperature temperature_K must be > 0"))
     return FixedTemperature{
@@ -535,13 +535,13 @@ function FixedTemperature(; temperature_K::Real,
         typeof(dark_current_law),
         typeof(glow_rate_law),
         typeof(dark_count_law),
-        typeof(cic_rate_law),
+        typeof(cic_per_frame_law),
     }(
         T(temperature_K),
         dark_current_law,
         glow_rate_law,
         dark_count_law,
-        cic_rate_law,
+        cic_per_frame_law,
     )
 end
 
@@ -561,7 +561,7 @@ struct FirstOrderThermalModel{
     dark_current_law::DC
     glow_rate_law::G
     dark_count_law::DCR
-    cic_rate_law::CIC
+    cic_per_frame_law::CIC
 end
 
 function FirstOrderThermalModel(; ambient_temperature_K::Real,
@@ -573,7 +573,7 @@ function FirstOrderThermalModel(; ambient_temperature_K::Real,
     dark_current_law::AbstractTemperatureLaw=NullTemperatureLaw(),
     glow_rate_law::AbstractTemperatureLaw=NullTemperatureLaw(),
     dark_count_law::AbstractTemperatureLaw=NullTemperatureLaw(),
-    cic_rate_law::AbstractTemperatureLaw=NullTemperatureLaw(),
+    cic_per_frame_law::AbstractTemperatureLaw=NullTemperatureLaw(),
     T::Type{<:AbstractFloat}=Float64)
     ambient_temperature_K > 0 || throw(InvalidConfiguration("FirstOrderThermalModel ambient_temperature_K must be > 0"))
     setpoint_temperature_K > 0 || throw(InvalidConfiguration("FirstOrderThermalModel setpoint_temperature_K must be > 0"))
@@ -594,7 +594,7 @@ function FirstOrderThermalModel(; ambient_temperature_K::Real,
         typeof(dark_current_law),
         typeof(glow_rate_law),
         typeof(dark_count_law),
-        typeof(cic_rate_law),
+        typeof(cic_per_frame_law),
     }(
         T(ambient_temperature_K),
         T(setpoint_temperature_K),
@@ -605,7 +605,7 @@ function FirstOrderThermalModel(; ambient_temperature_K::Real,
         dark_current_law,
         glow_rate_law,
         dark_count_law,
-        cic_rate_law,
+        cic_per_frame_law,
     )
 end
 
@@ -719,7 +719,8 @@ function convert_thermal_model(model::FixedTemperature, ::Type{T}) where {T<:Abs
         dark_current_law=validate_temperature_law(convert_temperature_law(model.dark_current_law, T)),
         glow_rate_law=validate_temperature_law(convert_temperature_law(model.glow_rate_law, T)),
         dark_count_law=validate_temperature_law(convert_temperature_law(model.dark_count_law, T)),
-        cic_rate_law=validate_temperature_law(convert_temperature_law(model.cic_rate_law, T)),
+        cic_per_frame_law=validate_temperature_law(
+            convert_temperature_law(model.cic_per_frame_law, T)),
         T=T,
     )
 end
@@ -735,7 +736,8 @@ function convert_thermal_model(model::FirstOrderThermalModel, ::Type{T}) where {
         dark_current_law=validate_temperature_law(convert_temperature_law(model.dark_current_law, T)),
         glow_rate_law=validate_temperature_law(convert_temperature_law(model.glow_rate_law, T)),
         dark_count_law=validate_temperature_law(convert_temperature_law(model.dark_count_law, T)),
-        cic_rate_law=validate_temperature_law(convert_temperature_law(model.cic_rate_law, T)),
+        cic_per_frame_law=validate_temperature_law(
+            convert_temperature_law(model.cic_per_frame_law, T)),
         T=T,
     )
 end
@@ -748,7 +750,7 @@ function validate_thermal_model(model::FixedTemperature)
     validate_temperature_law(model.dark_current_law)
     validate_temperature_law(model.glow_rate_law)
     validate_temperature_law(model.dark_count_law)
-    validate_temperature_law(model.cic_rate_law)
+    validate_temperature_law(model.cic_per_frame_law)
     return model
 end
 
@@ -774,7 +776,7 @@ function validate_thermal_model(model::FirstOrderThermalModel)
     validate_temperature_law(model.dark_current_law)
     validate_temperature_law(model.glow_rate_law)
     validate_temperature_law(model.dark_count_law)
-    validate_temperature_law(model.cic_rate_law)
+    validate_temperature_law(model.cic_per_frame_law)
     return model
 end
 
@@ -1374,7 +1376,7 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     thermal_time_constant_s::Union{Nothing,T}
     dark_current_law::Symbol
     glow_rate_law::Symbol
-    cic_rate_law::Symbol
+    cic_per_frame_law::Symbol
     sampling_mode::Symbol
     sampling_reads::Union{Nothing,Int}
     sampling_reference_reads::Union{Nothing,Int}

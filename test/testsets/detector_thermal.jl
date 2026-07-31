@@ -189,8 +189,9 @@
 
     thermal_emccd = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=NullFrameResponse(),
-        thermal_model=FixedTemperature(temperature_K=250.0, cic_rate_law=linear),
+        thermal_model=FixedTemperature(temperature_K=250.0,
+            cic_per_frame_law=linear),
         sensor=EMCCDSensor(clock_induced_charge_per_frame=2.0))
-    @test effective_cic_rate(thermal_emccd) ≈ 1.0
+    @test effective_cic_per_frame(thermal_emccd) ≈ 1.0
 
 end
