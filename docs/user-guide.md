@@ -344,6 +344,13 @@ implicit blur: select `RectangularPixelAperture`, another frame response, or
 `InterpixelCapacitance` only when the detector sampling or calibration supports
 it.
 
+Conventional CCD capture uses `CCDSensor()` with `SingleRead()` by default.
+Configure `clock_induced_charge_per_frame` as an independent Poisson
+expectation in electrons per pixel per frame; it is not multiplied by exposure
+duration. A single-read `CCDSensor` does not accept `read_time`, because Plant
+acquisition definitions own readout completion and readiness timing. Detector
+MTF comes only from an explicitly configured presampling response.
+
 Skipper CCD readout is a CCD sampling mode rather than a photon-counting
 detector. It averages nondestructive samples online and retains only the mean,
 so memory remains proportional to frame size instead of sample count:

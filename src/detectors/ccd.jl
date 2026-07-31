@@ -10,19 +10,31 @@ function CCDSensor(;
     sampling_mode::FrameSamplingMode=SingleRead(),
     T::Type{<:AbstractFloat}=Float64,
 )
-    clock_induced_charge_per_frame >= 0 || throw(InvalidConfiguration(
-        "CCDSensor clock_induced_charge_per_frame must be >= 0"))
-    read_time >= 0 ||
-        throw(InvalidConfiguration("CCDSensor read_time must be >= 0"))
     mode = validate_ccd_sampling_mode(sampling_mode)
-    return CCDSensor{T,typeof(mode)}(
-        T(clock_induced_charge_per_frame), T(read_time), mode)
+    cic = T(clock_induced_charge_per_frame)
+    read_duration = T(read_time)
+    isfinite(cic) && cic >= zero(T) || throw(InvalidConfiguration(
+        "CCDSensor clock_induced_charge_per_frame must be finite and >= 0"))
+    isfinite(read_duration) && read_duration >= zero(T) ||
+        throw(InvalidConfiguration(
+            "CCDSensor read_time must be finite and >= 0"))
+    validate_ccd_read_time(mode, read_duration)
+    return CCDSensor{T,typeof(mode)}(cic, read_duration, mode)
 end
 
 validate_ccd_sampling_mode(mode::SingleRead) = validate_frame_sampling_mode(mode)
 validate_ccd_sampling_mode(mode::SkipperSampling) = validate_frame_sampling_mode(mode)
 validate_ccd_sampling_mode(mode::FrameSamplingMode) = throw(InvalidConfiguration(
     "CCDSensor sampling_mode must be SingleRead or SkipperSampling"))
+
+function validate_ccd_read_time(::SingleRead, read_time)
+    iszero(read_time) || throw(InvalidConfiguration(
+        "CCDSensor read_time applies only to SkipperSampling; " *
+        "Plant acquisition definitions own single-read readout and readiness timing"))
+    return nothing
+end
+
+validate_ccd_read_time(::SkipperSampling, read_time) = nothing
 
 detector_sensor_symbol(::CCDSensor) = :ccd
 supports_clock_induced_charge(::CCDSensor) = true
@@ -34,7 +46,8 @@ supports_skipper_sampling(::FrameSamplingMode) = false
 supports_skipper_sampling(::SkipperSampling) = true
 
 multi_read_sampling_mode(sensor::CCDSensor) = sensor.sampling_mode
-configured_cic_rate(sensor::CCDSensor, ::Type{T}) where {T<:AbstractFloat} =
+configured_cic_per_frame(sensor::CCDSensor,
+    ::Type{T}) where {T<:AbstractFloat} =
     T(sensor.clock_induced_charge_per_frame)
 effective_readout_sigma(sensor::CCDSensor, sigma) =
     effective_readout_sigma(sensor.sampling_mode, sigma)
@@ -60,9 +73,9 @@ ccd_sampling_wallclock_time(mode::SkipperSampling, integration_time, read_time,
 
 function apply_sensor_statistics!(sensor::CCDSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
-    rate = effective_cic_rate(det)
-    rate <= zero(rate) && return det.state.frame
-    fill!(det.state.noise_buffer, rate)
+    mean_per_frame = effective_cic_per_frame(det)
+    mean_per_frame <= zero(mean_per_frame) && return det.state.frame
+    fill!(det.state.noise_buffer, mean_per_frame)
     poisson_noise_frame!(det, rng, det.state.noise_buffer)
     det.state.frame .+= det.state.noise_buffer
     return det.state.frame
@@ -76,9 +89,9 @@ end
 function _batched_sensor_statistics!(sensor::CCDSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
     exposure_time::Real)
-    rate = effective_cic_rate(det)
-    rate <= zero(rate) && return cube
-    fill!(scratch, rate)
+    mean_per_frame = effective_cic_per_frame(det)
+    mean_per_frame <= zero(mean_per_frame) && return cube
+    fill!(scratch, mean_per_frame)
     poisson_noise_frame!(det, rng, scratch)
     cube .+= scratch
     return cube

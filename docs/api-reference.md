@@ -1114,6 +1114,16 @@ and `CMOSReadNoiseMap` add structured components at the readout stage.
 `StaticCMOSOutputPattern` carry measured calibration structure. Core provides
 no vendor defaults or named cameras.
 
+`CCDSensor()` is the conventional single-read CCD model. Its
+`clock_induced_charge_per_frame` parameter is an independent Poisson
+expectation in electrons per pixel per completed frame, so it is not scaled by
+exposure duration. A configured presampling response supplies detector MTF;
+`CCDSensor` does not infer one from CCD technology. For `SingleRead()`,
+`read_time` must remain zero: Plant acquisition definitions own readout and
+readiness durations, and core does not infer a serial-register timing model.
+The optional thermal field is named `cic_per_frame_law` for the same
+dimensional reason.
+
 `SkipperSampling(n)` configures repeated nondestructive CCD sampling. The
 implementation accumulates a mean online and exposes `SkipperReadoutProducts`
 without retaining an `n`-plane read cube. This bounds memory independently of

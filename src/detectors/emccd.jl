@@ -102,7 +102,8 @@ supports_clock_induced_charge(::EMCCDSensor) = true
 supports_photon_number_resolving(sensor::EMCCDSensor) = supports_emccd_photon_counting(sensor.operating_mode)
 supports_emccd_photon_counting(::AbstractEMCCDOperatingMode) = false
 supports_emccd_photon_counting(::PhotonCountingEMMode) = true
-configured_cic_rate(sensor::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} =
+configured_cic_per_frame(sensor::EMCCDSensor,
+    ::Type{T}) where {T<:AbstractFloat} =
     T(sensor.clock_induced_charge_per_frame)
 is_excess_noise_model(::AbstractEMGainModel) = false
 is_excess_noise_model(::ExcessNoiseApproximation) = true
@@ -195,8 +196,8 @@ end
 
 function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
-    rate = effective_cic_rate(det)
-    add_poisson_rate!(det.state.frame, det, rng, rate)
+    mean_per_frame = effective_cic_per_frame(det)
+    add_poisson_rate!(det.state.frame, det, rng, mean_per_frame)
     return det.state.frame
 end
 
@@ -314,9 +315,9 @@ end
 function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
     exposure_time::Real)
-    rate = effective_cic_rate(det)
-    if rate > zero(rate)
-        fill!(scratch, rate)
+    mean_per_frame = effective_cic_per_frame(det)
+    if mean_per_frame > zero(mean_per_frame)
+        fill!(scratch, mean_per_frame)
         poisson_noise_frame!(det, rng, scratch)
         cube .+= scratch
     end

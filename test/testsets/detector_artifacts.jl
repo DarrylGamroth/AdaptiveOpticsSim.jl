@@ -39,4 +39,28 @@
             run["histogram_recorded_bins"] > 0 &&
             !isempty(run["histogram_base64"])
     end
+
+    ccd_entry = detector_entries["DET-CCD-QUAL-2026-07-30"]
+    @test ccd_entry["status"] == "active"
+    ccd_path = joinpath(dirname(detector_artifact_path),
+        ccd_entry["path"])
+    @test isfile(ccd_path)
+    ccd = TOML.parsefile(ccd_path)
+    @test ccd["schema_version"] == 1
+    @test ccd["family"] == "conventional_ccd_single_read"
+    @test ccd["all_gates_passed"]
+    @test !ccd["environment"]["source_dirty"]
+    qualification = ccd["qualification"]
+    @test qualification["samples_per_case"] == 16_384
+    @test qualification["sigma_limit"] == 6.0
+    @test Set(case["id"] for case in qualification["moment_cases"]) ==
+        Set(("shot", "dark", "clock_induced_charge", "read_noise",
+            "combined"))
+    @test all(case -> case["mean_passed"] && case["variance_passed"],
+        qualification["moment_cases"])
+    deterministic = qualification["deterministic"]
+    @test deterministic["cic_exposure_invariant"]
+    @test deterministic["single_read_read_time_rejected"]
+    @test deterministic["allocation_gate_passed"]
+    @test deterministic["steady_alloc_bytes"] == 0
 end
