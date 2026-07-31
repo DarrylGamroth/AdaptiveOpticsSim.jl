@@ -62,7 +62,8 @@ function skipper_deterministic_contract()
     cube = fill(3.0, 2, 16, 16)
     original = copy(cube)
     batched_rejected = try
-        capture_stack!(detector, cube, similar(cube), Xoshiro(8202))
+        AdaptiveOpticsSim.Detectors.capture_stack!(
+            detector, cube, similar(cube), Xoshiro(8202))
         false
     catch err
         err isa InvalidConfiguration
