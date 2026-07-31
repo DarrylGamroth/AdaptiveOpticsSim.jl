@@ -23,3 +23,8 @@ purpose = "warmed minimal deterministic prepared frame-detector service cost wit
 status = "active"
 id = "DET-HIL-LOW-FIDELITY-2026-07-30"
 path = "2026-07-30-shared-low-fidelity-service-cost.toml"
+[[artifacts]]
+purpose = "conventional CCD single-read qualification with analytic moment bounds"
+status = "active"
+id = "DET-CCD-QUAL-2026-07-30"
+path = "2026-07-30-ccd-single-read-qualification.toml"

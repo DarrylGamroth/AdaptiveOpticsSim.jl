@@ -191,8 +191,9 @@ physical grids with declared incoherent-addition semantics. Incompatible
 prepared products remain in an `OpticalProductBundle` or require an explicit
 prepared mapping; array shape alone is not evidence of compatibility.
 
-For `MV-04`, HgCdTe up-the-ramp sampling currently fits a linear ramp with
-independent read noise and retains the read cube and timestamps. It shares the
+For the HgCdTe surfaces qualified separately from the family-neutral `MV-04`
+pipeline, up-the-ramp sampling currently fits a linear ramp with independent
+read noise and retains the read cube and timestamps. It shares the
 exposure-level photon/dark realization across reads and does not yet model
 cosmic-ray segmentation, saturation-aware fitting, or correlated 1/f noise.
 EMCCD frame transfer is an acquisition-timing model: it changes reported

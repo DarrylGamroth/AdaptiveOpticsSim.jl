@@ -1,0 +1,97 @@
+all_gates_passed = true
+artifact_id = "DET-CCD-QUAL-2026-07-30"
+family = "conventional_ccd_single_read"
+schema_version = 1
+
+[environment]
+adaptive_optics_sim_version = "0.1.0"
+architecture = "x86_64"
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "fc2b02620f10e0e5870a50e6b337251568816b78"
+timestamp_utc = "2026-07-31T03:29:39.334"
+
+[qualification]
+frame_count_per_case = 16
+frame_size = [32, 32]
+samples_per_case = 16384
+sigma_limit = 6.0
+
+    [qualification.deterministic]
+    allocation_gate_passed = true
+    cic_exposure_invariant = true
+    default_response_is_null = true
+    default_supports_mtf = false
+    sampling_mode = "single_read"
+    sampling_read_time_is_absent = true
+    single_read_read_time_rejected = true
+    steady_alloc_bytes = 0
+
+    [[qualification.moment_cases]]
+    expected_mean = 20.0
+    expected_variance = 20.0
+    id = "shot"
+    mean_absolute_limit = 0.2096313728906053
+    mean_passed = true
+    observed_mean = 19.98199462890625
+    observed_variance = 19.774869585272988
+    sample_count = 16384
+    seed = 3101
+    variance_absolute_limit = 1.3423356910286477
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 24.0
+    expected_variance = 24.0
+    id = "dark"
+    mean_absolute_limit = 0.22963966338592293
+    mean_passed = true
+    observed_mean = 23.98309326171875
+    observed_variance = 24.005390760757866
+    sample_count = 16384
+    seed = 3102
+    variance_absolute_limit = 1.607525701091424
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 3.5
+    expected_variance = 3.5
+    id = "clock_induced_charge"
+    mean_absolute_limit = 0.08769509500251425
+    mean_passed = true
+    observed_mean = 3.481689453125
+    observed_variance = 3.5457795785837454
+    sample_count = 16384
+    seed = 3103
+    variance_absolute_limit = 0.24804580908896456
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 9.0
+    id = "read_noise"
+    mean_absolute_limit = 0.140625
+    mean_passed = true
+    observed_mean = -0.007406830013101706
+    observed_variance = 9.065872984610063
+    sample_count = 16384
+    seed = 3104
+    variance_absolute_limit = 0.596639554898219
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 28.0
+    expected_variance = 34.25
+    id = "combined"
+    mean_absolute_limit = 0.2743289041574912
+    mean_passed = true
+    observed_mean = 28.05054423579167
+    observed_variance = 34.342062500198466
+    sample_count = 16384
+    seed = 3105
+    variance_absolute_limit = 2.284052957144305
+    variance_passed = true
+
+[scope]
+excluded = ["Skipper sampling", "charge-transfer inefficiency", "serial or parallel register geometry", "blooming and transfer smear", "radiation damage", "camera or vendor profiles"]
+included = ["single-read CCD shared frame pipeline", "independent Poisson clock-induced charge per pixel per frame", "shot, dark, CIC, and independent Gaussian read-noise moments", "Plant-owned readout/readiness timing boundary"]
