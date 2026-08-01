@@ -9,8 +9,8 @@ julia_threads = 1
 julia_version = "1.12.6"
 kernel = "Linux"
 source_dirty = false
-source_revision = "205480183b073df4c5e84f11c49d713d052f761e"
-timestamp_utc = "2026-08-01T07:07:49.700"
+source_revision = "2cbf4c161627e103c7dfd1dad5135a24eaa68e09"
+timestamp_utc = "2026-08-01T07:17:28.661"
 
 [model]
 excess_noise_factor_definition = "F = E[M^2] / E[M]^2"
@@ -38,7 +38,6 @@ sigma_limit = 6.0
     topology_metadata_passed = true
 
     [[qualification.moment_cases]]
-    all_nonnegative = true
     expected_mean = 480.0
     expected_variance = 4032.0
     id = "multiplied_shot"
@@ -51,7 +50,6 @@ sigma_limit = 6.0
     variance_absolute_limit = 267.2945205944021
     variance_passed = true
     [[qualification.moment_cases]]
-    all_nonnegative = true
     expected_mean = 240.0
     expected_variance = 288.0
     id = "multiplication_only"
@@ -64,13 +62,12 @@ sigma_limit = 6.0
     variance_absolute_limit = 19.092465756743007
     variance_passed = true
     [[qualification.moment_cases]]
-    all_nonnegative = true
-    expected_mean = 60.0
+    expected_mean = 0.0
     expected_variance = 16.0
     id = "read_only"
     mean_absolute_limit = 0.1875
     mean_passed = true
-    observed_mean = 60.01941469869768
+    observed_mean = 0.019414698697680914
     observed_variance = 16.053059508865406
     sample_count = 16384
     seed = 9042
