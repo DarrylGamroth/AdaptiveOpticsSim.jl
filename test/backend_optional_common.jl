@@ -3360,6 +3360,91 @@ function run_optional_skipper_ccd_checks(
     return nothing
 end
 
+function run_optional_ingaas_deterministic_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    function persistence_detector(gain)
+        return Detector(
+            integration_time=one(T),
+            noise=NoiseNone(),
+            qe=one(T),
+            gain=gain,
+            sensor=InGaAsSensor(
+                persistence_model=ExponentialPersistence(T(0.25), T(0.5)),
+                T=T),
+            T=T,
+            backend=selector,
+        )
+    end
+    detector = persistence_detector(T(4))
+    unit_gain_detector = persistence_detector(one(T))
+    illumination = BackendArray(fill(T(8), 16, 16))
+    dark = BackendArray(zeros(T, 16, 16))
+    first = copy(capture!(detector, illumination, MersenneTwister(2041)))
+    second = copy(capture!(detector, dark, MersenneTwister(2042)))
+    third = copy(capture!(detector, dark, MersenneTwister(2043)))
+    unit_first = copy(capture!(
+        unit_gain_detector, illumination, MersenneTwister(2041)))
+    unit_second = copy(capture!(
+        unit_gain_detector, dark, MersenneTwister(2042)))
+    unit_third = copy(capture!(
+        unit_gain_detector, dark, MersenneTwister(2043)))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(third))
+    @test first isa BackendArray
+    @test second isa BackendArray
+    @test third isa BackendArray
+    @test detector.state.latent_buffer isa BackendArray
+    @test unit_gain_detector.state.latent_buffer isa BackendArray
+    @test Array(first) == T(4) .* Array(unit_first) == fill(T(32), 16, 16)
+    @test Array(second) == T(4) .* Array(unit_second) == fill(T(8), 16, 16)
+    @test Array(third) == T(4) .* Array(unit_third) == fill(T(6), 16, 16)
+    @test Array(detector.state.latent_buffer) ==
+        Array(unit_gain_detector.state.latent_buffer) ==
+        fill(T(1.125), 16, 16)
+    metadata = detector_export_metadata(detector)
+    @test metadata.frame_response == :none
+    @test metadata.persistence_model == :exponential
+    @test !supports_detector_mtf(detector)
+    return nothing
+end
+
+function run_optional_ingaas_moment_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    stochastic = Detector(
+        integration_time=T(2),
+        noise=NoiseNone(),
+        qe=one(T),
+        dark_current=T(1.5),
+        sensor=InGaAsSensor(glow_rate=T(2.5), T=T),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=selector,
+    )
+    stochastic_output = capture!(stochastic,
+        BackendArray(zeros(T, 128, 128)), MersenneTwister(2044))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(stochastic_output))
+    stochastic_host = Array(stochastic_output)
+    @test stochastic_output isa BackendArray
+    @test isapprox(mean(stochastic_host), T(8); atol=T(0.15))
+    @test isapprox(var(stochastic_host), T(8); rtol=T(0.08))
+    return nothing
+end
+
+function run_optional_ingaas_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    run_optional_ingaas_deterministic_checks(B, BackendArray)
+    run_optional_ingaas_moment_checks(B, BackendArray)
+    return nothing
+end
+
 function optional_detector_event_map(
     values::AbstractMatrix{T}) where {T<:AbstractFloat}
     metadata = OpticalPlaneMetadata(DetectorPlane(), values;
@@ -4549,6 +4634,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
 
     run_optional_counting_detector_parity(B, BackendArray)
     run_optional_avalanche_detector_parity(B, BackendArray)
+    run_optional_ingaas_checks(B, BackendArray)
     run_optional_skipper_ccd_checks(B, BackendArray)
 
     tel = Telescope(resolution=16, diameter=8.0f0,

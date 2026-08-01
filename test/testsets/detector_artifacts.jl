@@ -278,4 +278,40 @@
         "allocation_gate_passed",
     ))
     @test skipper_deterministic["steady_alloc_bytes"] == 0
+
+    ingaas_entry = detector_entries["DET-INGAAS-QUAL-2026-07-31"]
+    @test ingaas_entry["status"] == "active"
+    ingaas_path = joinpath(
+        dirname(detector_artifact_path), ingaas_entry["path"])
+    @test isfile(ingaas_path)
+    ingaas = TOML.parsefile(ingaas_path)
+    @test ingaas["schema_version"] == 1
+    @test ingaas["family"] == "ingaas_frame_detector"
+    @test ingaas["all_gates_passed"]
+    @test !ingaas["environment"]["source_dirty"]
+    @test length(ingaas["environment"]["source_revision"]) == 40
+    @test ingaas["model"]["default_response"] == "none"
+    @test ingaas["model"]["coefficient_domain"] ==
+        "dimensionless per completed frame"
+    ingaas_qualification = ingaas["qualification"]
+    @test ingaas_qualification["samples_per_case"] == 16_384
+    @test ingaas_qualification["sigma_limit"] == 6.0
+    ingaas_poisson = ingaas_qualification["poisson_case"]
+    @test ingaas_poisson["id"] == "combined_glow_and_dark_current"
+    @test ingaas_poisson["mean_passed"]
+    @test ingaas_poisson["variance_passed"]
+    ingaas_deterministic = ingaas_qualification["deterministic"]
+    @test all(ingaas_deterministic[key] for key in (
+        "default_response_is_null",
+        "default_response_preserves_impulse",
+        "default_mtf_is_not_claimed",
+        "pipeline_order_passed",
+        "persistence_recurrence_passed",
+        "persistence_gain_independence_passed",
+        "deterministic_replay_passed",
+        "batched_persistence_rejected",
+        "batched_input_unmodified",
+        "allocation_gate_passed",
+    ))
+    @test ingaas_deterministic["steady_alloc_bytes"] == 0
 end

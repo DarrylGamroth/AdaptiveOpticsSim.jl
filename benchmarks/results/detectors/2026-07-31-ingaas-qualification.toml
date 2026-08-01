@@ -1,0 +1,59 @@
+all_gates_passed = true
+artifact_id = "DET-INGAAS-QUAL-2026-07-31"
+family = "ingaas_frame_detector"
+schema_version = 1
+
+[environment]
+architecture = "x86_64"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "65166d1cba2146f125f2f8e0976f6ff28adac152"
+timestamp_utc = "2026-08-01T05:10:00.570"
+
+[model]
+coefficient_domain = "dimensionless per completed frame"
+default_response = "none"
+persistence_recurrence = "latent[k+1] = decay * latent[k] + coupling * charge[k]"
+persistence_update_boundary = "after charge transport and before readout electronics"
+scientific_references = ["https://arxiv.org/abs/1307.1469", "https://arxiv.org/abs/1406.2695"]
+
+[qualification]
+samples_per_case = 16384
+sigma_limit = 6.0
+
+    [qualification.deterministic]
+    allocation_gate_passed = true
+    batched_input_unmodified = true
+    batched_persistence_rejected = true
+    default_mtf_is_not_claimed = true
+    default_response_is_null = true
+    default_response_preserves_impulse = true
+    deterministic_replay_passed = true
+    persistence_charge_means = [8.0, 2.0, 1.5]
+    persistence_gain_independence_passed = true
+    persistence_latent_means = [2.0, 1.5, 1.125]
+    persistence_recurrence_passed = true
+    pipeline_order_passed = true
+    steady_alloc_bytes = 0
+
+    [qualification.poisson_case]
+    dark_current_electrons_per_pixel_second = 1.5
+    expected_mean = 8.0
+    expected_variance = 8.0
+    exposure_seconds = 2.0
+    glow_rate_electrons_per_pixel_second = 2.5
+    id = "combined_glow_and_dark_current"
+    mean_absolute_limit = 0.13258252147247768
+    mean_passed = true
+    observed_mean = 7.9949951171875
+    observed_variance = 7.881925752280375
+    sample_count = 16384
+    seed = 9410
+    variance_absolute_limit = 0.530346271020639
+    variance_passed = true
+
+[scope]
+excluded = ["calibrated wavelength-dependent material response", "trap populations or elapsed-time persistence constants", "afterglow spectra and exposure-dependent persistence", "correlated 1/f or burst noise", "universal InGaAs MTF and camera profiles"]
+included = ["explicit shared frame pipeline effects", "independent Poisson glow and dark-current charge", "null default response and explicit configured response", "discrete charge-domain exponential persistence recurrence", "deterministic replay and bounded persistent state"]

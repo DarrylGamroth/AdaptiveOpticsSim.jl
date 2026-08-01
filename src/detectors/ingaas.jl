@@ -1,3 +1,16 @@
+"""
+    InGaAsSensor(; glow_rate=0, persistence_model=NullPersistence(), T=Float64)
+
+Product-neutral InGaAs area-sensor model. `glow_rate` is a configured glow
+charge rate in electrons per pixel per second of integration. It does not model
+read-cadence-dependent glow. A presampling response is never inferred from the
+detector material; configure one on the owning `Detector` when required.
+
+`ExponentialPersistence` is an optional charge-domain, frame-to-frame reduced
+model. It is updated after charge nonlinearity, saturation, and coupling and
+before read noise, conversion gain, correction, quantization, and background
+subtraction.
+"""
 struct InGaAsSensor{T<:AbstractFloat,P<:AbstractPersistenceModel} <: FrameSensorType
     glow_rate::T
     persistence_model::P
@@ -5,10 +18,13 @@ end
 
 function InGaAsSensor(; glow_rate::Real=0.0, persistence_model::AbstractPersistenceModel=NullPersistence(),
     T::Type{<:AbstractFloat}=Float64)
-    glow_rate >= 0 || throw(InvalidConfiguration("InGaAsSensor glow_rate must be >= 0"))
+    glow = T(glow_rate)
+    isfinite(glow) && glow >= zero(T) || throw(InvalidConfiguration(
+        "InGaAsSensor glow_rate must be finite and >= 0"))
     converted_persistence = convert_persistence_model(persistence_model, T)
     validated_persistence = validate_persistence_model(converted_persistence)
-    return InGaAsSensor{T,typeof(validated_persistence)}(T(glow_rate), validated_persistence)
+    return InGaAsSensor{T,typeof(validated_persistence)}(
+        glow, validated_persistence)
 end
 
 detector_sensor_symbol(::InGaAsSensor) = :ingaas
@@ -16,8 +32,9 @@ supports_sensor_glow(::InGaAsSensor) = true
 supports_detector_defect_maps(::InGaAsSensor) = true
 supports_detector_persistence(::InGaAsSensor) = true
 supports_detector_nonlinearity(::InGaAsSensor) = true
-default_response_model(::InGaAsSensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
-    GaussianPixelResponse(response_width_px=0.4, T=T, backend=backend)
+default_response_model(::InGaAsSensor;
+    T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=CPUBackend()) = NullFrameResponse()
 persistence_model(sensor::InGaAsSensor) = sensor.persistence_model
 configured_glow_rate(sensor::InGaAsSensor, ::Type{T}) where {T<:AbstractFloat} = T(sensor.glow_rate)
 
@@ -66,6 +83,25 @@ function update_sensor_persistence!(sensor::InGaAsSensor{T,<:ExponentialPersiste
     model = sensor.persistence_model
     det.state.latent_buffer .= model.decay .* det.state.latent_buffer .+ model.coupling .* det.state.frame
     return det.state.latent_buffer
+end
+
+function _finalize_capture!(::InGaAsSensor, det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
+    return finalize_ingaas_capture!(det, rng, exposure_time, exposure_time)
+end
+
+function _finalize_incremental_capture!(::InGaAsSensor, det::Detector,
+    rng::AbstractRNG, exposure_time::Real)
+    return finalize_ingaas_capture!(det, rng, exposure_time,
+        zero(exposure_time))
+end
+
+function finalize_ingaas_capture!(det::Detector, rng::AbstractRNG,
+    exposure_time::Real, charge_exposure_time::Real)
+    finalize_charge_generation!(det, rng, charge_exposure_time)
+    finalize_charge_transport!(det, rng)
+    update_sensor_persistence!(det.params.sensor, det, exposure_time)
+    return finalize_electronics_without_persistence!(det, rng, exposure_time)
 end
 
 function apply_post_readout_gain!(::InGaAsSensor, det::Detector)

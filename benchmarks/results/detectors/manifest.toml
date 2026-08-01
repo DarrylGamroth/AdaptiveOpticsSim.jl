@@ -53,3 +53,8 @@ purpose = "Skipper CCD bounded independent-read and streaming-mean qualification
 status = "active"
 id = "DET-SKIPPER-QUAL-2026-07-31"
 path = "2026-07-31-skipper-ccd-qualification.toml"
+[[artifacts]]
+purpose = "InGaAs null-response, glow/dark, and charge-domain persistence qualification"
+status = "active"
+id = "DET-INGAAS-QUAL-2026-07-31"
+path = "2026-07-31-ingaas-qualification.toml"
