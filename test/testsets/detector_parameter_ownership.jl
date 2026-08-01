@@ -160,6 +160,14 @@
     raw_gain_map = [1.0 0.8; 0.9 1.1]
     raw_dark_map = [0.1 0.2; 0.3 0.4]
     raw_bad_mask = Bool[false true; false false]
+    @test_throws InvalidConfiguration PixelResponseNonuniformity(
+        [1.0 NaN; 0.9 1.1])
+    @test_throws InvalidConfiguration PixelResponseNonuniformity(
+        [1.0 -0.1; 0.9 1.1])
+    @test_throws InvalidConfiguration DarkSignalNonuniformity(
+        [0.1 Inf; 0.3 0.4])
+    @test_throws InvalidConfiguration DarkSignalNonuniformity(
+        [0.1 -0.2; 0.3 0.4])
     prnu = PixelResponseNonuniformity(raw_gain_map)
     dsnu = DarkSignalNonuniformity(raw_dark_map)
     bad_pixels = BadPixelMask(raw_bad_mask; throughput=0.0)

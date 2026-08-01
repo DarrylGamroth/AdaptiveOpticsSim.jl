@@ -578,16 +578,25 @@ end
 
 validate_detector_defect_model(::NullDetectorDefectModel) = NullDetectorDefectModel()
 
+@inline _detector_parameter_host_values(values::Array) = values
+@inline _detector_parameter_host_values(values::AbstractArray) = Array(values)
+
 function validate_detector_defect_model(model::PixelResponseNonuniformity)
     isempty(model.gain_map) && throw(InvalidConfiguration("PixelResponseNonuniformity gain_map must not be empty"))
-    minimum(model.gain_map) >= zero(eltype(model.gain_map)) ||
+    host_gain_map = _detector_parameter_host_values(model.gain_map)
+    all(isfinite, host_gain_map) ||
+        throw(InvalidConfiguration("PixelResponseNonuniformity gain_map must be finite"))
+    minimum(host_gain_map) >= zero(eltype(host_gain_map)) ||
         throw(InvalidConfiguration("PixelResponseNonuniformity gain_map must be >= 0"))
     return model
 end
 
 function validate_detector_defect_model(model::DarkSignalNonuniformity)
     isempty(model.dark_map) && throw(InvalidConfiguration("DarkSignalNonuniformity dark_map must not be empty"))
-    minimum(model.dark_map) >= zero(eltype(model.dark_map)) ||
+    host_dark_map = _detector_parameter_host_values(model.dark_map)
+    all(isfinite, host_dark_map) ||
+        throw(InvalidConfiguration("DarkSignalNonuniformity dark_map must be finite"))
+    minimum(host_dark_map) >= zero(eltype(host_dark_map)) ||
         throw(InvalidConfiguration("DarkSignalNonuniformity dark_map must be >= 0"))
     return model
 end
