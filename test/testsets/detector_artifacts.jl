@@ -1,43 +1,214 @@
+using SHA
+
+detector_artifact_sha256(path::AbstractString) =
+    bytes2hex(SHA.sha256(read(path)))
+
 @testset "Detector validation artifacts" begin
-    detector_artifact_path = normpath(joinpath(@__DIR__, "..", "..", "benchmarks", "results",
-        "detectors", "2026-07-12-detector-mkid-validation.toml"))
-    @test isfile(detector_artifact_path)
-    detector_artifact = TOML.parsefile(detector_artifact_path)
-    @test all(values(detector_artifact["interpretation"]))
-    @test issubset(Set(["apd", "spad_array", "mkid_array"]),
-        Set(detector_artifact["scope"]["families"]))
-    detector_manifest = TOML.parsefile(joinpath(dirname(detector_artifact_path),
-        "manifest.toml"))
+    detector_directory = normpath(joinpath(
+        @__DIR__, "..", "..", "benchmarks", "results", "detectors"))
+    detector_manifest = TOML.parsefile(
+        joinpath(detector_directory, "manifest.toml"))
+    manifest_entries = detector_manifest["artifacts"]
+    manifest_ids = [entry["id"] for entry in manifest_entries]
+    @test length(unique(manifest_ids)) == length(manifest_ids)
+    @test all(entry -> haskey(entry, "status"), manifest_entries)
     detector_entries = Dict(entry["id"] => entry for entry in
-        detector_manifest["artifacts"])
-    @test detector_entries["DET-VAL-2026-07-12"]["status"] == "active"
+        manifest_entries)
+
+    for entry in manifest_entries
+        if entry["status"] == "superseded"
+            @test haskey(entry, "superseded_by")
+            @test haskey(detector_entries, entry["superseded_by"])
+        else
+            @test entry["status"] == "active"
+        end
+        path = joinpath(detector_directory, entry["path"])
+        @test isfile(path)
+        @test haskey(entry, "sha256")
+        @test entry["sha256"] == detector_artifact_sha256(path)
+    end
+
+    @test all(entry["status"] != "active" for entry in manifest_entries
+        if startswith(entry["id"], "DET-VAL-"))
+    @test detector_entries["DET-VAL-2026-04-01"]["status"] ==
+        "superseded"
+    @test detector_entries["DET-VAL-2026-04-01"]["superseded_by"] ==
+        "DET-VAL-2026-07-12"
     @test detector_entries["DET-VAL-2026-04-23"]["status"] == "superseded"
     @test detector_entries["DET-VAL-2026-04-23"]["superseded_by"] ==
         "DET-VAL-2026-07-12"
+    @test detector_entries["DET-VAL-2026-07-12"]["status"] ==
+        "superseded"
+    @test detector_entries["DET-VAL-2026-07-12"]["superseded_by"] ==
+        "DET-QUAL-CLOSURE-2026-08-01"
+    @test detector_entries[
+        "DET-HIL-LOW-FIDELITY-2026-07-30"]["status"] == "superseded"
+    @test detector_entries[
+        "DET-HIL-LOW-FIDELITY-2026-07-30"]["superseded_by"] ==
+        "DET-HIL-LOW-FIDELITY-2026-08-01"
+
+    family_artifact_ids = Set((
+        "DET-CCD-QUAL-2026-07-30",
+        "DET-EMCCD-QUAL-2026-07-30",
+        "DET-CMOS-QUAL-2026-07-30",
+        "DET-HGCDTE-QUAL-2026-07-30",
+        "DET-HGCDTE-AVALANCHE-QUAL-2026-07-31",
+        "DET-SKIPPER-QUAL-2026-07-31",
+        "DET-INGAAS-QUAL-2026-07-31",
+        "DET-LINEAR-APD-QUAL-2026-07-31",
+        "DET-SPAD-QUAL-2026-08-01",
+        "DET-MKID-QUAL-2026-08-01",
+    ))
+    @test all(detector_entries[id]["status"] == "active"
+        for id in family_artifact_ids)
+
+    closure_entry = detector_entries["DET-QUAL-CLOSURE-2026-08-01"]
+    @test closure_entry["status"] == "active"
+    detector_artifact_path = joinpath(
+        detector_directory, closure_entry["path"])
+    closure = TOML.parsefile(detector_artifact_path)
+    @test closure["schema_version"] == 1
+    @test closure["artifact_id"] == "DET-QUAL-CLOSURE-2026-08-01"
+    @test closure["status"] == "passed"
+    @test closure["all_qualification_runs_passed"]
+    @test !closure["source_dirty"]
+    @test closure["characterized_source_revision"] ==
+        "dd1659686e51fb201edc860b8c6237a6d10a00e1"
+    @test occursin("product-neutral", closure["decision"]["core_boundary"])
+    @test occursin("named camera profiles",
+        closure["decision"]["external_boundary"])
+    @test occursin("existing conventional-detector",
+        closure["decision"]["example_decision"])
+    @test Set(closure["supersedes_artifact_ids"]) == Set((
+        "DET-VAL-2026-04-01",
+        "DET-VAL-2026-04-23",
+        "DET-VAL-2026-07-12",
+    ))
+    @test Set(closure["qualification_artifact_ids"]) ==
+        family_artifact_ids
+    @test closure["low_fidelity_artifact_id"] ==
+        "DET-HIL-LOW-FIDELITY-2026-08-01"
+
+    validation_runs = closure["validation_runs"]
+    @test Set(run["id"] for run in validation_runs) == Set((
+        "DET-QUAL-CPU-2026-08-01",
+        "DET-QUAL-AMDGPU-2026-08-01",
+        "DET-QUAL-CUDA-2026-08-01",
+    ))
+    @test all(run -> run["result"] == "passed" &&
+        run["passed_checks"] > 0 &&
+        run["failed_checks"] == 0 &&
+        run["errored_checks"] == 0,
+        validation_runs)
+    cpu_run = only(filter(run -> run["backend"] == "cpu",
+        validation_runs))
+    amdgpu_run = only(filter(run -> run["backend"] == "amdgpu",
+        validation_runs))
+    cuda_run = only(filter(run -> run["backend"] == "cuda",
+        validation_runs))
+    @test cpu_run["support_claim"]
+    @test cpu_run["passed_checks"] == 3_192
+    @test cpu_run["broken_checks"] == 1
+    @test amdgpu_run["support_claim"]
+    @test amdgpu_run["passed_checks"] == 244
+    @test Set(amdgpu_run["excluded_checks"]) == Set((
+        "InGaAs stochastic Poisson moments",
+        "SPAD stochastic Poisson-surrogate moments",
+    ))
+    @test amdgpu_run["broader_integration_target_result"] ==
+        "failed outside detector scope"
+    @test endswith(amdgpu_run["broader_integration_followup"],
+        "/issues/200")
+    @test !cuda_run["support_claim"]
+    @test cuda_run["passed_checks"] == 250
+    @test cuda_run["full_integration_result"] == "passed"
+    @test cuda_run["full_integration_passed_checks"] == 1_028
+    @test all(run -> run["environment"]["julia_version"] == "1.12.6" &&
+        run["environment"]["kernelabstractions_version"] == "0.9.42" &&
+        length(run["environment"]["project_sha256"]) == 64 &&
+        length(run["environment"]["manifest_sha256"]) == 64,
+        validation_runs)
+    @test !amdgpu_run["environment"]["scalar_indexing_allowed"]
+    @test !cuda_run["environment"]["scalar_indexing_allowed"]
+
+    family_rows = closure["families"]
+    @test Set(row["validity_id"] for row in family_rows) ==
+        Set(vcat(["MV-04"], ["MV-$(id)" for id in 32:41]))
+    @test all(row -> row["cpu_result"] == "passed" &&
+        row["amdgpu_result"] == "passed" &&
+        row["cuda_result"] == "passed" &&
+        !isempty(row["approximations_and_nonclaims"]) &&
+        !isempty(row["amdgpu_applicability"]) &&
+        !isempty(row["cuda_applicability"]) &&
+        !isempty(row["determinism_contract"]) &&
+        !isempty(row["allocation_performance_boundary"]) &&
+        !isempty(row["documentation_links"]), family_rows)
+    validation_run_ids = Set(run["id"] for run in validation_runs)
+    @test all(row ->
+        Set(row["cpu_evidence_ids"]) ==
+            Set(("DET-QUAL-CPU-2026-08-01",)) &&
+        Set(row["amdgpu_evidence_ids"]) ==
+            Set(("DET-QUAL-AMDGPU-2026-08-01",)) &&
+        Set(row["cuda_evidence_ids"]) ==
+            Set(("DET-QUAL-CUDA-2026-08-01",)) &&
+        issubset(Set(vcat(row["cpu_evidence_ids"],
+            row["amdgpu_evidence_ids"], row["cuda_evidence_ids"])),
+            validation_run_ids), family_rows)
+    referenced_artifacts = Set(vcat(
+        [row["artifact_ids"] for row in family_rows]...))
+    @test all(id -> haskey(detector_entries, id) &&
+        detector_entries[id]["status"] == "active",
+        referenced_artifacts)
 
     low_fidelity_entry =
-        detector_entries["DET-HIL-LOW-FIDELITY-2026-07-30"]
+        detector_entries["DET-HIL-LOW-FIDELITY-2026-08-01"]
     @test low_fidelity_entry["status"] == "active"
     low_fidelity_path = joinpath(dirname(detector_artifact_path),
         low_fidelity_entry["path"])
     @test isfile(low_fidelity_path)
     low_fidelity = TOML.parsefile(low_fidelity_path)
-    @test low_fidelity["schema_version"] == 2
+    @test low_fidelity["schema_version"] == 3
     @test low_fidelity["benchmark"] == "detector_hil_latency"
+    @test low_fidelity["evidence_class"] ==
+        "warmed self-paced in-process detector service time"
     @test low_fidelity["all_gates_passed"]
+    @test !low_fidelity["environment"]["source_dirty"]
+    @test low_fidelity["environment"]["git_commit"] ==
+        closure["characterized_source_revision"]
+    @test length(low_fidelity["environment"]["active_project_sha256"]) == 64
+    @test length(low_fidelity["environment"]["active_manifest_sha256"]) == 64
     @test low_fidelity["contract"]["load_model"] ==
         "warmed serial self-paced service time"
     @test low_fidelity["contract"]["selected_card_ids"] == ["DET-HIL-00"]
+    @test low_fidelity["contract"]["samples_per_run"] == 100_000
+    @test low_fidelity["contract"]["runs"] == 3
     @test length(low_fidelity["cards"]) == 1
     card = only(low_fidelity["cards"])
     @test card["id"] == "DET-HIL-00"
     @test card["steady_alloc_bytes"] == 0
+    @test card["correctness"]["evaluated"]
+    @test card["correctness"]["passed"]
+    @test card["correctness"]["input_unmodified"]
+    @test card["correctness"]["output_matches_independent_oracle"]
+    @test card["correctness"]["maximum_absolute_error"] == 0
+    @test length(card["workload"]["input_sha256"]) == 64
     @test card["regression"]["allocation_gate_passed"]
+    @test card["regression"]["latency_gate_evaluated"]
+    @test card["regression"]["latency_gate_passed"]
+    @test card["regression"]["baseline_source_revision"] ==
+        "5541e4c5ad9802bf29bb3c335f5237034a56fba1"
+    @test card["regression"]["baseline_artifact_sha256"] ==
+        detector_artifact_sha256(joinpath(detector_directory,
+            detector_entries[
+                "DET-HIL-LOW-FIDELITY-2026-07-30"]["path"]))
     @test all(card["runs"]) do run
-        run["completed_operations"] == run["samples"] &&
+        run["samples"] == 100_000 &&
+            run["completed_operations"] == run["samples"] &&
             run["failed_operations"] == 0 &&
             run["histogram_recorded_bins"] > 0 &&
-            !isempty(run["histogram_base64"])
+            !isempty(run["histogram_base64"]) &&
+            run["gc"]["allocd"] == 0 &&
+            run["gc"]["collect"] == 0
     end
 
     ccd_entry = detector_entries["DET-CCD-QUAL-2026-07-30"]

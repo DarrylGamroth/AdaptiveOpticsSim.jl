@@ -345,6 +345,17 @@ production-shaped smoke, run:
 - `julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu.jl`
 - `julia --project=test/cuda --startup-file=no test/runtests_cuda.jl`
 
+For fail-fast detector qualification without compiling unrelated optics, WFS,
+control, or orchestration kernels, run:
+
+- `julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu_detectors.jl`
+- `julia --project=test/cuda --startup-file=no test/runtests_cuda_detectors.jl`
+
+These focused targets cover the shared response/MTF and acquisition pipeline,
+CCD, EMCCD, CMOS, conventional and linear-avalanche HgCdTe, Skipper CCD,
+InGaAs, linear APD, SPAD, and MKID surfaces. They complement rather than replace
+the complete integration targets.
+
 These targets are intended for hosts where the corresponding GPU package and
 runtime are actually available. They fail fast instead of skipping when the
 backend is unavailable. The AMDGPU target is the current release-gated
@@ -526,10 +537,13 @@ cards were allocation-free after warmup. Median-over-run latency summaries were:
 | 16-sample Skipper CCD | 202.4 μs | 233.2 μs | 338.4 μs |
 
 The independently maintained minimal prepared path is archived in
-[`2026-07-30-shared-low-fidelity-service-cost.toml`](../benchmarks/results/detectors/2026-07-30-shared-low-fidelity-service-cost.toml).
+[`2026-08-01-shared-low-fidelity-service-cost.toml`](../benchmarks/results/detectors/2026-08-01-shared-low-fidelity-service-cost.toml).
 It selects only `DET-HIL-00`: `NoiseNone`, null presampling response, scalar
 QE, no optional detector effects, and no converted output buffer. This is
 self-paced in-process service-cost evidence, not a fixed-arrival latency claim.
+The current artifact retains three 100,000-sample raw histograms, passes an
+independent radiometric oracle, proves input nonmutation and zero warmed heap
+allocation, and passes a same-host p99 regression gate.
 
 These values are a regression baseline for that host and contract, not an
 external-RTC latency SLO or a prediction for other frame sizes and CPUs.
@@ -610,6 +624,21 @@ integrated multi-rate plant remains a deterministic serial CPU oracle. The GPU
 targets validate maintained device-resident optical surfaces and direct
 detector lifecycles; they do not claim an integrated GPU scheduler, external
 RTC latency, or fixed-arrival capacity.
+
+The final detector qualification candidate `dd16596` is indexed by the
+[detector closure catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml).
+Its bounded CPU qualification/composition set passed 3,192 checks with one
+intentional broken marker. The dedicated local gfx1030 AMDGPU detector target
+passed 244/244; InGaAs and SPAD stochastic Poisson checks remain explicit AMD
+non-claims because GPUCompiler segfaults while compiling that kernel. The
+broader AMDGPU target separately encountered a GPUCompiler segmentation fault
+in the Pyramid geometric-slope kernel outside detector scope; follow-up is
+tracked in [issue #200](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/200).
+On WSL, the RTX
+3050 Ti CUDA detector target passed 250/250 and the complete CUDA target passed
+1,028/1,028 with CUDA.jl 6.2.1, KernelAbstractions.jl 0.9.42, Julia 1.12.6, and
+scalar indexing disabled. CUDA remains validation-only rather than a production
+support claim.
 
 The final composed CPU Gate 0 run is preserved even though `G0-PERF-05` missed
 its relative p99 limit by 96 ns while every absolute and allocation gate

@@ -395,9 +395,11 @@ first-call regressions.
 The series is complete only when exact root and domain API assertions pass,
 every supported binding has one canonical owner, numerical characterization
 and hot-path budgets remain within their maintained contracts, superseded root
-bindings are removed, and the companion migration is merged. The
+bindings are removed, and the companion migration is merged. The maintained
+completion evidence for the
 [detector qualification gate](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/155)
-is now open and tracked as a separate delivery series.
+is the family-specific qualification artifacts and the final
+[CPU/AMDGPU/CUDA evidence catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml).
 
 ## Active Cleanup Themes
 
