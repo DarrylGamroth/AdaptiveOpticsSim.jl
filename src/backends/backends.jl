@@ -14,6 +14,7 @@ using LinearAlgebra
 using Random
 
 import ..AdaptiveOpticsSim:
+    AdaptiveOpticsSimError,
     InvalidConfiguration,
     normal01,
     poisson_sample,

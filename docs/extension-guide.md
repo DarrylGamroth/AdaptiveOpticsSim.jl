@@ -44,6 +44,51 @@ extensions likewise extend
 recorded in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
 
+## Exact Compute-Device Selection
+
+Gate 9A preparation distinguishes a semantic backend family from one exact
+runtime device. `Backends.compute_device_availability(device)` is the cold
+availability query. It returns `ComputeDeviceAvailable` or
+`ComputeDeviceUnavailable`; inspect the latter through
+`compute_device_unavailable_reason`. Availability is not model support or a
+memory/deadline admission result.
+
+`Backends.allocate_array(device, T, dims...)` is the qualified preparation-time
+allocation seam. An accelerator extension that supports exact selection must
+extend `Backends.compute_device_availability`,
+`Backends._with_compute_device`, and
+`Backends._prepare_device_execution_context` for its family-qualified
+`AcceleratorComputeDevice`. Device identifiers use the owning runtime's native
+same-process convention: CUDA ordinals are zero-based and AMDGPU identifiers
+are one-based in the maintained extensions. The extension must:
+
+- validate the identifier and return a structured unavailable reason;
+- select exactly that runtime device and restore the caller's previous device
+  context even when allocation or context construction throws;
+- return storage whose `Backends.compute_device` equals the request; and
+- create prepared stream/context state on that same device.
+
+Do not implement exact selection by allocating on the current default device
+and inferring its identity afterward. `ComputeDeviceError` reports structured
+`operation`, `reason`, and `device` fields when an exact selection or allocation
+cannot be honored. Exact-target preparation is cold; repeated kernels retain
+their prepared context and do not call this selection path.
+
+The maintained structured exact-device reason vocabulary is:
+
+- `:exact_device_selection_unavailable` when no owning extension implements
+  exact selection;
+- `:invalid_device_identifier` when the identifier does not follow the
+  runtime's identifier convention;
+- `:backend_runtime_unavailable` when the owning runtime is not functional;
+- `:device_unavailable` when the runtime cannot address that otherwise valid
+  identifier; and
+- `:wrong_device` when allocation violates the exact-residency invariant.
+
+`ComputeDeviceError.operation` is `:select`, `:prepare_context`, or `:allocate`
+according to the failed preparation boundary. These values are programmatic
+contract data; user-facing detail remains in the exception message.
+
 ## Source Layout
 
 Use lower-case directory names for new source-tree locations. Julia type names

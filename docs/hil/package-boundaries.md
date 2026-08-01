@@ -5,7 +5,7 @@ Status: active
 ## Purpose
 
 This specification assigns stable responsibilities to
-`AdaptiveOpticsSim.jl`, the future HIL companion, user RTC integration, and
+`AdaptiveOpticsSim.jl`, `AdaptiveOpticsHIL.jl`, user RTC integration, and
 optical companions such as `Proper.jl`. Dependencies point from operational
 packages toward the deterministic simulation kernel.
 
@@ -55,7 +55,8 @@ be mistaken for the final asynchronous scheduling model.
 - deterministic trigger-source, distribution-link, and detector-acquisition
   semantics, including physical trigger faults distinct from timestamp labels
 - deterministic event stepping independent of wall clock and transport
-- device-aware backend identity and backend-generic algorithms
+- device-aware backend identity, exact-device availability/allocation/context
+  seams, target-support traits, and backend-generic algorithms
 - CPU/CUDA/AMDGPU parity and correctness tests
 - simple internal reconstruction and controller primitives used as oracles
 

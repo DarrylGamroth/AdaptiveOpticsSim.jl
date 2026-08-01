@@ -18,6 +18,62 @@ Backends.backend_fill(::Type{Backends.CUDABackendTag}, value, dims::Vararg{Int})
 Backends.compute_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
 
+function Backends.compute_device_availability(
+    device::Backends.AcceleratorComputeDevice{Backends.CUDABackend,I},
+) where {I<:Integer}
+    identifier = try
+        Int(Backends.compute_device_identifier(device))
+    catch
+        return Backends.ComputeDeviceUnavailable(:invalid_device_identifier)
+    end
+    identifier >= 0 || return Backends.ComputeDeviceUnavailable(
+        :invalid_device_identifier)
+    CUDA.functional() || return Backends.ComputeDeviceUnavailable(
+        :backend_runtime_unavailable)
+    try
+        CUDA.CuDevice(identifier)
+    catch
+        return Backends.ComputeDeviceUnavailable(:device_unavailable)
+    end
+    return Backends.ComputeDeviceAvailable()
+end
+
+Backends.compute_device_availability(
+    ::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+) = Backends.ComputeDeviceUnavailable(:invalid_device_identifier)
+
+@noinline function _require_cuda_device(
+    device::Backends.AcceleratorComputeDevice{Backends.CUDABackend,I},
+) where {I<:Integer}
+    availability = Backends.compute_device_availability(device)
+    Backends.compute_device_is_available(availability) ||
+        Backends._throw_compute_device_error(
+            :select,
+            Backends.compute_device_unavailable_reason(availability),
+            device,
+            "CUDA cannot address the requested device ordinal",
+        )
+    return CUDA.CuDevice(Int(Backends.compute_device_identifier(device)))
+end
+
+@noinline function _require_cuda_device(
+    device::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+)
+    Backends._throw_compute_device_error(
+        :select,
+        :invalid_device_identifier,
+        device,
+        "CUDA device identifiers must be integer ordinals",
+    )
+end
+
+function Backends._with_compute_device(
+    f::F,
+    device::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+) where {F}
+    return CUDA.device!(f, _require_cuda_device(device))
+end
+
 struct CUDAPreparedDeviceExecutionContext <:
     Backends._AbstractPreparedDeviceExecutionContext
     device::CUDA.CuDevice
@@ -36,6 +92,20 @@ function Backends._prepare_device_execution_context(
         device,
         stream,
         Backends.compute_device(storage),
+    )
+end
+
+function Backends._prepare_device_execution_context(
+    device::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+)
+    runtime_device = _require_cuda_device(device)
+    stream = CUDA.device!(runtime_device) do
+        CUDA.CuStream()
+    end
+    return CUDAPreparedDeviceExecutionContext(
+        runtime_device,
+        stream,
+        device,
     )
 end
 

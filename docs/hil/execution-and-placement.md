@@ -115,6 +115,65 @@ transfer-only observations remain distinct. The artifact is a synchronized
 self-paced service-cost characterization; it does not satisfy the later
 fixed-arrival HIL-latency, mixed-placement, or multi-GPU requirements.
 
+## Gate 9A Static Mixed-Placement Requirements
+
+The following clauses define the first single-host mixed-resource capability.
+Gate 9A admits CPU resources and at most one accelerator. Gate 9B separately
+owns placement across multiple accelerators and placement-independent
+multi-device stochastic evolution.
+
+- **HIL-EXEC-001.a:** One prepared plant MAY assign complete path execution
+  groups across CPU resources and at most one accelerator. Each group MUST have
+  exactly one execution resource and one execution writer for the run.
+- **HIL-EXEC-001.b:** A path execution group MUST remain the Gate 9A placement
+  unit. Its optical path and acquisition consumers MUST remain co-located;
+  Gate 9A MUST NOT split their ordinary numerical stages across devices.
+- **HIL-EXEC-001.c:** Core MUST expose stable group identity, exact compute-
+  device support, target-scoped allocation and prepared-context seams, and
+  target-local resource facts without assigning an execution resource, owner,
+  Julia thread, CPU affinity, ring, or scheduling policy.
+- **HIL-EXEC-001.d:** Gate 9A MUST retain one authoritative plant timeline,
+  atmosphere evolution, command authority, and product-sequence authority.
+  Target-local immutable data and compact versioned command values MAY be
+  replicated. Placement-independent replicated stochastic evolution remains a
+  Gate 9B capability.
+- **HIL-EXEC-001.e:** Every cross-memory-domain array movement MUST use an
+  explicit prepared handoff with finite storage, exact source and destination
+  domains, a product contract, byte accounting, and a completion boundary.
+- **HIL-EXEC-001.f:** CPU/CUDA and CPU/AMDGPU support MUST be promoted per
+  prepared placement and model combination. Evidence for either surface MUST
+  NOT imply multi-accelerator support.
+- **HIL-EXEC-002.a:** HIL MUST support a fully explicit policy and a constrained
+  deterministic policy over stable group and execution-resource identities.
+  A hard user constraint MUST NOT be weakened by a preference or rule.
+- **HIL-EXEC-002.b:** Planning MUST produce one immutable inspectable plan that
+  records inventory, assignments, memory domains, handoffs, reserved contexts,
+  constraints, headroom, burst assumptions, stable tie-breaks, estimate and
+  planner versions, and assignment rationale.
+- **HIL-EXEC-002.c:** The admitted plan MUST remain fixed while armed or
+  running. Runtime migration, work stealing, opportunistic fallback, and
+  online replanning are outside Gate 9A.
+- **HIL-EXEC-003.a:** Core MUST provide exact-target capability and structural
+  resource facts through dispatch or traits. Unknown capability or capacity
+  MUST remain explicit and MUST NOT be guessed from accelerator object size.
+- **HIL-EXEC-003.b:** HIL preparation MUST validate hard constraints, target
+  availability, model capability, structural and opaque memory reserves,
+  required transfers, simultaneous-burst utilization, deadline headroom, and
+  reserved coordination contexts before arm.
+- **HIL-EXEC-003.c:** Unsupported, conflicting, unassigned, stale, overflowed,
+  memory-infeasible, transfer-infeasible, or burst-overloaded plans MUST fail
+  with structured diagnostics and MUST NOT partially arm the runtime.
+- **HIL-EXEC-003.d:** A successful admission result MUST NOT be described as a
+  latency claim. Promotion additionally requires fixed-arrival hardware
+  evidence against the best applicable single-resource placement.
+
+Verification intent (informative): cold contract tests cover exact-target
+selection, stable identities, deterministic planning, and each infeasibility
+class with fake resources. Integrated CPU/CUDA and CPU/AMDGPU runs separately
+verify discrete-state consistency, numerical tolerance, residency, explicit
+transfer completion, fixed-arrival latency, burst, saturation, failure, drain,
+and recovery for their declared profiles.
+
 ## Optical Branch Ownership And Parallelism
 
 Different source directions are the primary coarse-grained parallel unit. They
@@ -144,10 +203,12 @@ remaining event-runtime ownership requirements are:
   model-specific retained state only when a plan permits cross-timestamp
   rendering
 
-Preparation owns allocation, FFT planning, path grouping, worker placement,
-and cache construction. The warmed event path mutates fixed prepared storage
-within its declared allocation ceiling; individual numerical kernels and
-batch-state transitions may carry stricter zero-allocation contracts.
+Core preparation owns model allocation, FFT planning, path grouping, and cache
+construction. HIL preparation separately owns execution-resource assignment,
+worker scheduling/affinity, and handoff capacity. The warmed event path mutates
+fixed prepared storage within its declared allocation ceiling; individual
+numerical kernels and batch-state transitions may carry stricter zero-
+allocation contracts.
 
 Each acquisition also binds a prepared product provider: full optical,
 reduced-order, or synthetic/replay. Provider choice changes capability,
@@ -452,25 +513,28 @@ default HIL strategy.
 
 ### Mixed CPU/GPU execution
 
-One logical plant may place complete execution groups on CPU workers and one
-or more GPUs. A typical layout keeps clock coordination, RTC ports, command
-admission, metadata, and host-only detector work on reserved CPU owners while
-placing high-rate or computationally expensive optical paths on GPU owners.
+One logical plant may place complete execution groups on CPU workers and at
+most one GPU in Gate 9A. A typical layout keeps clock coordination, RTC ports,
+command admission, metadata, and host-only integration work on reserved CPU
+owners while placing high-rate or computationally expensive optical paths on
+GPU owners.
 CPU and GPU groups may run concurrently when their prepared dependencies and
 deadlines permit it.
 
-Shared telescope parameters, atmosphere epoch tokens or retained/materialized
-state, effective command snapshots, and deterministic RNG identities are
-replicated or published with explicit lifetimes across
-the participating resources. Large field, OPD, photon-arrival-rate, or frame arrays cross a
-CPU/GPU boundary only at an explicit prepared handoff with bounded storage and
-a measured transfer budget. An ordinary optical path should not be split
-stage-by-stage across CPU and GPU merely to keep both busy.
+Immutable target-local telescope/model data may be replicated during
+preparation. The authoritative atmosphere owner publishes epoch identity and
+bounded materialized path inputs; the command authority publishes compact
+effective-command values; and stable RNG owner identities remain consistent
+across participating resources. Large field, OPD, photon-arrival-rate, or frame
+arrays cross a CPU/GPU boundary only at an explicit prepared handoff with
+bounded storage and a measured transfer budget. An ordinary optical path
+should not be split stage-by-stage across CPU and GPU merely to keep both busy.
 
 A mixed placement may intentionally transfer a completed GPU frame to a
-host-resident RTC adapter or CPU-only detector operation. That boundary is
-part of the sensor latency contract and must use prepared buffers. It must not
-be hidden behind an unbounded asynchronous copy.
+host-resident RTC adapter or another declared complete-product consumer. The
+path and its acquisition physics remain one Gate 9A group. Any planned transfer
+is part of the sensor latency contract, uses prepared buffers, and must not be
+hidden behind an unbounded asynchronous copy.
 
 CPU/GPU support is claimed per prepared placement and model combination.
 Numerical parity, epoch and command consistency, transfer residency,

@@ -14,6 +14,80 @@ end
 backend_selector(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = AdaptiveOpticsSim.Backends.CUDABackend()
 backend_selector(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = AdaptiveOpticsSim.Backends.AMDGPUBackend()
 
+function run_optional_exact_compute_device_checks(
+    ::Type{B},
+    BackendArray,
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    seed_storage = BackendArray(zeros(Float32, 1))
+    device = compute_device(seed_storage)
+    availability = AdaptiveOpticsSim.Backends.compute_device_availability(
+        device)
+    @test typeof(availability) ===
+        AdaptiveOpticsSim.Backends.ComputeDeviceAvailable
+    @test AdaptiveOpticsSim.Backends.compute_device_is_available(availability)
+    @test isnothing(
+        AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
+            availability))
+
+    storage = AdaptiveOpticsSim.Backends.allocate_array(
+        device, Float32, 2, 3)
+    @test storage isa BackendArray
+    @test size(storage) == (2, 3)
+    @test compute_device(storage) == device
+
+    context = AdaptiveOpticsSim.Backends._prepare_device_execution_context(
+        device)
+    prepared_device =
+        AdaptiveOpticsSim.Backends._prepared_device_execution_compute_device(
+            context)
+    @test prepared_device == device
+    context_device =
+        AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
+            context) do
+            compute_device(BackendArray(zeros(Float32, 1)))
+        end
+    @test context_device == device
+
+    invalid_device = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        backend_selector(B), 1.0f0)
+    invalid_availability =
+        AdaptiveOpticsSim.Backends.compute_device_availability(invalid_device)
+    @test typeof(invalid_availability) ===
+        AdaptiveOpticsSim.Backends.ComputeDeviceUnavailable
+    @test AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
+        invalid_availability) == :invalid_device_identifier
+    invalid_error = try
+        AdaptiveOpticsSim.Backends.allocate_array(
+            invalid_device, Float32, 1)
+        nothing
+    catch error
+        error
+    end
+    @test typeof(invalid_error) <:
+        AdaptiveOpticsSim.Backends.ComputeDeviceError
+    @test invalid_error.reason == :invalid_device_identifier
+
+    foreign_device = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        backend_selector(B), Int(typemax(Int32)))
+    foreign_availability =
+        AdaptiveOpticsSim.Backends.compute_device_availability(foreign_device)
+    @test typeof(foreign_availability) ===
+        AdaptiveOpticsSim.Backends.ComputeDeviceUnavailable
+    @test AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
+        foreign_availability) == :device_unavailable
+    foreign_error = try
+        AdaptiveOpticsSim.Backends.allocate_array(
+            foreign_device, Float32, 1)
+        nothing
+    catch error
+        error
+    end
+    @test typeof(foreign_error) <:
+        AdaptiveOpticsSim.Backends.ComputeDeviceError
+    @test foreign_error.reason == :device_unavailable
+    return nothing
+end
+
 function run_optional_command_application_checks(::Type{B}, BackendArray) where {
     B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
@@ -4728,6 +4802,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
     backend = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     @test backend !== nothing
+    run_optional_exact_compute_device_checks(B, backend)
     run_optional_backend_selector_smoke(B, backend)
     run_optional_lgs_convolution_normalization(B)
     run_optional_sodium_profile_wfs(B, backend)

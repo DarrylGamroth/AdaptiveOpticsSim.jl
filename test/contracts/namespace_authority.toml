@@ -524,6 +524,14 @@ new_root_exports = [
     "Ensembles",
 ]
 new_domain_public = [
+    "Backends.AbstractComputeDeviceAvailability",
+    "Backends.ComputeDeviceAvailable",
+    "Backends.ComputeDeviceUnavailable",
+    "Backends.ComputeDeviceError",
+    "Backends.compute_device_availability",
+    "Backends.compute_device_is_available",
+    "Backends.compute_device_unavailable_reason",
+    "Backends.allocate_array",
     "Optics.AbstractSource",
     "Atmospheres.AbstractTimedAtmosphere",
     "Detectors.AbstractEMGainModel",
@@ -532,6 +540,12 @@ new_domain_public = [
     "Detectors.AbstractHgCdTeAvalancheMultiplication",
     "Detectors.ConditionalGammaAvalancheMultiplication",
     "Detectors.ClippedGaussianAvalancheMultiplicationApproximation",
+    "Plant.AbstractPathExecutionTargetSupport",
+    "Plant.SupportedPathExecutionTarget",
+    "Plant.UnsupportedPathExecutionTarget",
+    "Plant.path_execution_target_support",
+    "Plant.path_execution_target_supported",
+    "Plant.path_execution_target_rejection_reason",
     "Detectors.FrameWindow",
     "Detectors.StaticCMOSOutputPattern",
     "Detectors.HgCdTeReadout",
@@ -543,7 +557,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "a4f0d86a5952fba3ae33d63eed311bd7da47e617adfbda43b28e2a95438add89"
+sha256 = "00e8bbb5196b2af4d04267617e1f630f1982624ad1ad5be293218ecfb07c3c82"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -704,6 +718,14 @@ public = [
     "AcceleratorComputeDevice",
     "compute_device_backend",
     "compute_device_identifier",
+    "AbstractComputeDeviceAvailability",
+    "ComputeDeviceAvailable",
+    "ComputeDeviceUnavailable",
+    "ComputeDeviceError",
+    "compute_device_availability",
+    "compute_device_is_available",
+    "compute_device_unavailable_reason",
+    "allocate_array",
 ]
 
 [[api_allowlists]]
@@ -1728,6 +1750,9 @@ public = [
     "PreparedPathExecutionGroup",
     "PreparedDevicePathBatchOwner",
     "PathExecutionRequirements",
+    "AbstractPathExecutionTargetSupport",
+    "SupportedPathExecutionTarget",
+    "UnsupportedPathExecutionTarget",
     "CPUExecutionBudget",
     "CPUExecutionEnvironment",
     "deterministic_cpu_execution_budget",
@@ -1744,6 +1769,9 @@ public = [
     "path_execution_group_requirements",
     "path_execution_backend",
     "path_execution_compute_device",
+    "path_execution_target_support",
+    "path_execution_target_supported",
+    "path_execution_target_rejection_reason",
     "path_execution_requires_full_optical",
     "path_execution_group_acquisition_count",
     "path_execution_group_acquisition_id",
@@ -2157,6 +2185,7 @@ adaptive_optics_sim_hooks = [
     "_randn_backend!",
     "_randn_frame_noise!",
     "_synchronize_prepared_device_execution_context!",
+    "_with_compute_device",
     "_with_prepared_device_execution_context",
     "array_backend_selector",
     "backend_fill",
@@ -2167,6 +2196,7 @@ adaptive_optics_sim_hooks = [
     "backend_zeros",
     "can_apply_device_readout_correction",
     "compute_device_identifier",
+    "compute_device_availability",
     "counting_output_execution_plan",
     "default_build_backend",
     "detector_execution_plan",
@@ -2218,6 +2248,7 @@ adaptive_optics_sim_hooks = [
     "_prepare_device_execution_context",
     "_prepared_device_execution_compute_device",
     "_synchronize_prepared_device_execution_context!",
+    "_with_compute_device",
     "_with_prepared_device_execution_context",
     "array_backend_selector",
     "backend_fill",
@@ -2225,6 +2256,7 @@ adaptive_optics_sim_hooks = [
     "backend_randn",
     "backend_zeros",
     "compute_device_identifier",
+    "compute_device_availability",
     "disable_scalar_backend!",
     "gpu_backend_array_type",
     "gpu_backend_loaded",
@@ -2292,6 +2324,7 @@ hooks = [
     "_prepared_device_execution_compute_device",
     "_randn_backend!",
     "_synchronize_prepared_device_execution_context!",
+    "_with_compute_device",
     "_with_prepared_device_execution_context",
     "array_backend_selector",
     "backend_fill",
@@ -2301,6 +2334,7 @@ hooks = [
     "backend_randn",
     "backend_zeros",
     "compute_device_identifier",
+    "compute_device_availability",
     "disable_scalar_backend!",
     "execute_fft_plan!",
     "gpu_backend_array_type",

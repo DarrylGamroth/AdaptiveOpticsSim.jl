@@ -48,6 +48,10 @@ hardware-validated GPU workflows. The core package now has:
   compute-device identity, one prepared accelerator owner, retained
   CPU/AMDGPU/CUDA correctness and service-cost evidence, and a separately
   validated `AdaptiveOpticsHIL.jl` pin
+- an active Gate 9A delivery series for static placement of complete groups
+  across CPU resources and at most one accelerator, tracked by
+  [AdaptiveOpticsHIL issue #43](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/43);
+  mixed execution is not yet a supported production surface
 - a canonical `AdaptiveOpticsSim.Plant` owner for HIL-neutral plant time,
   topology, commands, acquisition events, providers, preparation, and event
   composition, with a bounded root export surface and explicit Julia 1.12 API
@@ -258,23 +262,27 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    `SCHED_FIFO` priority 20; transport/RTC interoperability, mixed or GPU
    placement, multi-process/host operation, full optics/detectors, and
    NFIRAOS/MORFEO capacity remain outside it.
-8. Complete a bounded `Hsm.jl` proof-of-fit in `AdaptiveOpticsHIL.jl` before
-   beginning another breaking core series. The proof may replace only the
-   lifecycle control plane, not Agent execution ownership or the SPSC data
-   plane, and must record an adopt-or-reject decision against the existing
-   state semantics, failure/drain behavior, type stability, warmed allocation,
-   and latency evidence.
-9. Execute the API namespace refactor described below after that decision and
-   before detector qualification. This is a breaking ownership cleanup with no
-   compatibility aliases. It must preserve numerical results, accelerator
-   extension behavior, prepared ownership, and warmed hot-path budgets.
-10. Close the detector-qualification series with a family-specific evidence
-    catalog and final CPU/AMDGPU/CUDA validation. Product-neutral frame,
-    counting-array, and channel models remain in the canonical `Detectors`
-    namespace. Named camera profiles remain outside core. The current models do
-    not justify a sibling package; reconsider one only for event-resolved
-    products, calibrated profile collections, or dependency-heavy detector
-    physics that would otherwise expand the core contract.
+   Gate 9A static mixed CPU/GPU placement is now tracked by
+   [AdaptiveOpticsHIL issue #43](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/43).
+   It first adds exact-target core contracts and target-local preparation, then
+   an immutable HIL placement plan, plan-bound Agent owners, explicit bounded
+   transfers, and independent CPU/AMDGPU and CPU/CUDA qualification. Gate 9B
+   retains multi-GPU placement and addressable multi-device RNG work.
+8. Preserve the recorded `Hsm.jl` proof-of-fit decision in
+   `AdaptiveOpticsHIL.jl`: explicit lifecycle control was retained because Hsm
+   added dependency and transition overhead without improving the bounded
+   failure/drain semantics. Agent execution ownership and the SPSC data plane
+   remain unchanged.
+9. Preserve the completed API namespace refactor and canonical domain
+   ownership described below. This is a breaking ownership cleanup with no
+   compatibility aliases; numerical results, accelerator extensions, prepared
+   ownership, and warmed hot-path budgets remain regression gates.
+10. Preserve the completed detector family qualification and evidence catalog.
+    Product-neutral frame, counting-array, and channel models remain in the
+    canonical `Detectors` namespace. Named camera profiles remain outside core.
+    Reconsider a sibling only for event-resolved products, calibrated profile
+    collections, or dependency-heavy detector physics that would otherwise
+    expand the core contract.
 11. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
@@ -337,7 +345,7 @@ parallel scheduler integrations.
 | `Control` | control reconstructors, controllers, delay lines, and prepared runtime operations | dependency direction is `Control` to `Calibration`; tomography remains separate |
 | `Tomography` | tomography geometry, atmosphere reconstruction, fitting, and DM-command mapping | general controller execution remains in `Control` |
 | `Ensembles` | coarse offline execution policies, sweeps, and optional parallel integrations | this is not an `AdaptiveOpticsHIL.jl` deadline scheduler |
-| `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, placement, providers, and event composition | physical domain models enter through explicit imports |
+| `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, execution requirements, providers, and event composition | resource inventory, placement policy, pacing, rings, and workers belong to `AdaptiveOpticsHIL.jl`; physical domain models enter through explicit imports |
 
 `AdaptiveOpticsSim` exports the canonical modules plus shared errors,
 fidelity profiles, and deliberately selected cross-domain workflow vocabulary.
