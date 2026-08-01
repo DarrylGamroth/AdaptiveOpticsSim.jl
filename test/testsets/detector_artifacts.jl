@@ -349,4 +349,52 @@
         "allocation_gate_passed",
     ))
     @test linear_apd_deterministic["steady_alloc_bytes"] == 0
+
+    spad_entry = detector_entries["DET-SPAD-QUAL-2026-08-01"]
+    @test spad_entry["status"] == "active"
+    spad_path = joinpath(
+        dirname(detector_artifact_path), spad_entry["path"])
+    @test isfile(spad_path)
+    spad = TOML.parsefile(spad_path)
+    @test spad["schema_version"] == 1
+    @test spad["family"] == "spad_accumulated_count_array"
+    @test spad["all_gates_passed"]
+    @test !spad["environment"]["source_dirty"]
+    @test spad["environment"]["source_revision"] ==
+        "df9f2b0bfb3e62c24fa0e1a279ac6b743083a4ff"
+    @test spad["model"]["statistical_scope"] ==
+        "Poisson draw from adjusted mean; not the exact dead-time or afterpulse count distribution"
+    spad_qualification = spad["qualification"]
+    @test spad_qualification["samples_per_moment_case"] == 16_384
+    @test spad_qualification["sigma_limit"] == 6.0
+    spad_curves = spad_qualification["dead_time_curves"]
+    @test Set(curve["id"] for curve in spad_curves) ==
+        Set(("nonparalyzable", "paralyzable"))
+    @test all(curve -> curve["all_points_passed"], spad_curves)
+    @test all(curve ->
+        Set(point["lambda_tau"] for point in curve["points"]) ==
+            Set((0.0, 1e-3, 1e-2, 0.1, 1.0, 10.0, 100.0)),
+        spad_curves)
+    spad_poisson_cases =
+        spad_qualification["poisson_surrogate_cases"]
+    @test Set(case["id"] for case in spad_poisson_cases) == Set((
+        "photon_only", "dark_only", "photon_and_dark",
+        "dead_time_adjusted_surrogate"))
+    @test all(case -> case["mean_passed"] && case["variance_passed"],
+        spad_poisson_cases)
+    spad_deterministic = spad_qualification["deterministic"]
+    @test all(spad_deterministic[key] for key in (
+        "exact_radiometry_and_gate_passed",
+        "first_order_afterpulse_mean_passed",
+        "afterpulse_metadata_passed",
+        "redistribution_center_passed",
+        "redistribution_conserves_counts",
+        "fixed_shape_mismatch_rejected",
+        "fixed_shape_storage_preserved",
+        "invalid_input_rejected",
+        "detector_mtf_not_applicable",
+        "deterministic_replay_passed",
+        "allocation_gate_passed",
+    ))
+    @test spad_deterministic["steady_alloc_bytes"] == 0
 end

@@ -1,0 +1,174 @@
+all_gates_passed = true
+artifact_id = "DET-SPAD-QUAL-2026-08-01"
+family = "spad_accumulated_count_array"
+schema_version = 1
+
+[environment]
+architecture = "x86_64"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "df9f2b0bfb3e62c24fa0e1a279ac6b743083a4ff"
+timestamp_utc = "2026-08-01T08:07:29.674"
+
+[model]
+input = "cell-integrated photon-arrival rate per array cell"
+nonparalyzable_mean_law = "mu / (1 + mu * tau / live_time)"
+output = "accumulated expected-count or sampled-count image"
+paralyzable_mean_law = "mu * exp(-mu * tau / live_time)"
+pipeline_order = "radiometry and dark expectation; dead-time mean law; deterministic mean response; optional Poisson surrogate; output conversion"
+scientific_references = ["https://doi.org/10.1109/TCOMM.2018.2822815", "https://doi.org/10.1098/rsta.2019.0194", "https://doi.org/10.1364/AO.35.001956"]
+statistical_scope = "Poisson draw from adjusted mean; not the exact dead-time or afterpulse count distribution"
+
+[qualification]
+samples_per_moment_case = 16384
+sigma_limit = 6.0
+
+    [[qualification.dead_time_curves]]
+    all_points_passed = true
+    dead_time_s = 0.1
+    id = "nonparalyzable"
+
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.0
+        lambda_tau = 0.0
+        observed_count = 0.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.009990009990009992
+        lambda_tau = 0.001
+        observed_count = 0.009990009990009992
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.099009900990099
+        lambda_tau = 0.01
+        observed_count = 0.099009900990099
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.9090909090909091
+        lambda_tau = 0.1
+        observed_count = 0.9090909090909091
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 5.0
+        lambda_tau = 1.0
+        observed_count = 5.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 9.090909090909092
+        lambda_tau = 10.0
+        observed_count = 9.090909090909092
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 9.900990099009901
+        lambda_tau = 100.0
+        observed_count = 9.900990099009901
+        passed = true
+    [[qualification.dead_time_curves]]
+    all_points_passed = true
+    dead_time_s = 0.1
+    id = "paralyzable"
+
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.0
+        lambda_tau = 0.0
+        observed_count = 0.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.009990004998333751
+        lambda_tau = 0.001
+        observed_count = 0.009990004998333751
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.0990049833749168
+        lambda_tau = 0.01
+        observed_count = 0.0990049833749168
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.9048374180359595
+        lambda_tau = 0.1
+        observed_count = 0.9048374180359595
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 3.6787944117144233
+        lambda_tau = 1.0
+        observed_count = 3.6787944117144233
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.004539992976248485
+        lambda_tau = 10.0
+        observed_count = 0.004539992976248485
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 3.720075976020836e-41
+        lambda_tau = 100.0
+        observed_count = 3.720075976020836e-41
+        passed = true
+
+    [qualification.deterministic]
+    afterpulse_metadata_passed = true
+    allocation_gate_passed = true
+    detector_mtf_not_applicable = true
+    deterministic_replay_passed = true
+    exact_radiometry_and_gate_passed = true
+    first_order_afterpulse_mean_passed = true
+    fixed_shape_mismatch_rejected = true
+    fixed_shape_storage_preserved = true
+    invalid_input_rejected = true
+    redistribution_center_passed = true
+    redistribution_conserves_counts = true
+    steady_alloc_bytes = 0
+
+    [[qualification.poisson_surrogate_cases]]
+    expected_mean = 20.0
+    expected_variance = 20.0
+    id = "photon_only"
+    mean_absolute_limit = 0.2096313728906053
+    mean_passed = true
+    observed_mean = 20.00701904296875
+    observed_variance = 20.479166990786705
+    sample_count = 16384
+    seed = 9160
+    variance_absolute_limit = 1.3423366901720637
+    variance_passed = true
+    [[qualification.poisson_surrogate_cases]]
+    expected_mean = 12.0
+    expected_variance = 12.0
+    id = "dark_only"
+    mean_absolute_limit = 0.16237976320958225
+    mean_passed = true
+    observed_mean = 11.98583984375
+    observed_variance = 12.051926682765671
+    sample_count = 16384
+    seed = 9161
+    variance_absolute_limit = 0.8119235943677268
+    variance_passed = true
+    [[qualification.poisson_surrogate_cases]]
+    expected_mean = 8.0
+    expected_variance = 8.0
+    id = "photon_and_dark"
+    mean_absolute_limit = 0.13258252147247768
+    mean_passed = true
+    observed_mean = 7.96954345703125
+    observed_variance = 7.928328278401916
+    sample_count = 16384
+    seed = 9162
+    variance_absolute_limit = 0.5466684233926364
+    variance_passed = true
+    [[qualification.poisson_surrogate_cases]]
+    expected_mean = 16.666666666666668
+    expected_variance = 16.666666666666668
+    id = "dead_time_adjusted_surrogate"
+    mean_absolute_limit = 0.19136638615493579
+    mean_passed = true
+    observed_mean = 16.63897705078125
+    observed_variance = 16.623667780954104
+    sample_count = 16384
+    seed = 9163
+    variance_absolute_limit = 1.121338915945724
+    variance_passed = true
+
+[scope]
+excluded = ["photon-event timestamps, avalanche waveforms, and energy resolution", "exact dead-time and afterpulse count distributions", "history-dependent or higher-generation afterpulsing", "optical blur, pixel-aperture response, and detector MTF", "spectral detection-efficiency curves and calibrated detector maps", "named detector modules and camera profiles"]
+included = ["fixed array dimensions and preallocated storage", "active-area detection efficiency, fill factor, live time, and dark counts", "nonparalyzable and paralyzable expected-count dead-time laws", "first-order afterpulse mean scaling", "count-conserving nearest-neighbor redistribution", "Poisson surrogate moments after mean-response adjustment", "deterministic replay and warmed CPU allocation"]

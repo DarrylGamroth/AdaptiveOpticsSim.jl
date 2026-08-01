@@ -63,3 +63,8 @@ purpose = "linear-mode APD channel topology, ordering, and statistical qualifica
 status = "active"
 id = "DET-LINEAR-APD-QUAL-2026-07-31"
 path = "2026-07-31-linear-apd-qualification.toml"
+[[artifacts]]
+purpose = "SPAD fixed-array dead-time mean response and accumulated-count surrogate qualification"
+status = "active"
+id = "DET-SPAD-QUAL-2026-08-01"
+path = "2026-08-01-spad-qualification.toml"
