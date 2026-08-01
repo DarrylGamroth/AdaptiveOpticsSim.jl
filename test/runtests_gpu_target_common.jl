@@ -92,6 +92,34 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     return nothing
 end
 
+"""
+    run_gpu_detector_target(::Type{<:Backends.GPUBackendTag})
+
+Run the maintained detector qualification surface on a required hardware
+backend. This target deliberately excludes unrelated optics, WFS, control, and
+orchestration checks so a failure in another subsystem cannot hide detector
+qualification evidence. The complete hardware target remains the release
+integration gate.
+"""
+function run_gpu_detector_target(::Type{B}) where {B<:Backends.GPUBackendTag}
+    require_backend_target!(B)
+    BackendArray = Backends.gpu_backend_array_type(B)
+    @test BackendArray !== nothing
+
+    @testset "$(backend_label(B)) detector hardware target" begin
+        run_optional_detector_device_model_matrix_checks(B, BackendArray)
+        run_optional_cmos_family_checks(B, BackendArray)
+        run_optional_shared_detector_ipc_checks(B, BackendArray)
+        run_optional_detector_event_checks(B, BackendArray)
+        run_optional_avalanche_detector_parity(B, BackendArray)
+        run_optional_skipper_ccd_checks(B, BackendArray)
+        run_optional_ingaas_checks(B, BackendArray)
+        run_optional_spad_qualification_checks(B, BackendArray)
+        run_optional_counting_detector_parity(B, BackendArray)
+    end
+    return nothing
+end
+
 function run_revolt_like_hil_backend_smoke(
     ::Type{B},
 ) where {B<:Backends.GPUBackendTag}

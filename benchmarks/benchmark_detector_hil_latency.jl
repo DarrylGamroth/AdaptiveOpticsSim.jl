@@ -3,8 +3,10 @@ using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using Dates
 using HdrHistogram
+using KernelAbstractions
 using LinearAlgebra
 using Random
+using SHA
 using Statistics
 using TOML
 
@@ -37,6 +39,7 @@ struct DetectorHILCard{D,A<:AbstractMatrix,R<:AbstractRNG}
     detector::D
     input::A
     rng::R
+    rng_seed::UInt64
 end
 
 struct PreparedDetectorHILCard{D,M,P,R<:AbstractRNG}
@@ -46,6 +49,7 @@ struct PreparedDetectorHILCard{D,M,P,R<:AbstractRNG}
     map::M
     plan::P
     rng::R
+    rng_seed::UInt64
 end
 
 function configure_detector_hil_benchmark!()
@@ -179,19 +183,75 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
             low_fidelity_map,
             low_fidelity_plan,
             runtime_rng(100),
+            UInt64(100),
         ),
         DetectorHILCard("DET-HIL-01", "CMOS global-shutter capture", cmos,
-            input, runtime_rng(101)),
+            input, runtime_rng(101), UInt64(101)),
         DetectorHILCard("DET-HIL-02", "CMOS capture with response and IPC",
-            cmos_response_ipc, input, runtime_rng(102)),
+            cmos_response_ipc, input, runtime_rng(102), UInt64(102)),
         DetectorHILCard("DET-HIL-03", "CCD capture", ccd, input,
-            runtime_rng(103)),
+            runtime_rng(103), UInt64(103)),
         DetectorHILCard("DET-HIL-04", "EMCCD fast linear capture", emccd,
-            input, runtime_rng(104)),
+            input, runtime_rng(104), UInt64(104)),
         DetectorHILCard("DET-HIL-05", "HgCdTe avalanche CDS capture", hgcdte,
-            input, runtime_rng(105)),
+            input, runtime_rng(105), UInt64(105)),
         DetectorHILCard("DET-HIL-06", "Skipper CCD 16-sample capture", skipper,
-            input, runtime_rng(106)),
+            input, runtime_rng(106), UInt64(106)),
+    )
+end
+
+detector_hil_input_values(card::DetectorHILCard) = card.input
+detector_hil_input_values(card::PreparedDetectorHILCard) =
+    intensity_values(card.map)
+
+function bytes_sha256(values::AbstractArray)
+    bytes = reinterpret(UInt8, vec(values))
+    return bytes2hex(SHA.sha256(bytes))
+end
+
+function detector_hil_workload(card)
+    values = detector_hil_input_values(card)
+    return Dict{String,Any}(
+        "input_quantity" => "cell-integrated photon-arrival rate",
+        "input_units" => "photons per second per represented detector cell",
+        "input_generation" =>
+            "45000 + 5000*sinpi((row + column) / frame_size)",
+        "input_element_type" => string(eltype(values)),
+        "input_shape" => collect(size(values)),
+        "input_sha256" => bytes_sha256(values),
+        "rng_seed" => Int(card.rng_seed),
+    )
+end
+
+function detector_hil_correctness(card::PreparedDetectorHILCard,
+    input_sha256::String)
+    values = detector_hil_input_values(card)
+    metadata = detector_export_metadata(card.detector)
+    expected = similar(values)
+    scale = eltype(values)(metadata.integration_time * metadata.qe)
+    @. expected = values * scale
+    observed = output_frame(card.detector)
+    maximum_absolute_error = maximum(abs, observed .- expected)
+    output_matches = isapprox(observed, expected;
+        rtol=8eps(eltype(expected)), atol=zero(eltype(expected)))
+    input_unmodified = bytes_sha256(values) == input_sha256
+    return Dict{String,Any}(
+        "evaluated" => true,
+        "passed" => output_matches && input_unmodified,
+        "output_matches_independent_oracle" => output_matches,
+        "input_unmodified" => input_unmodified,
+        "maximum_absolute_error" => maximum_absolute_error,
+        "output_sha256" => bytes_sha256(observed),
+        "oracle" => "input_rate * quantum_efficiency * integration_time",
+    )
+end
+
+function detector_hil_correctness(::DetectorHILCard, ::String)
+    return Dict{String,Any}(
+        "evaluated" => false,
+        "passed" => true,
+        "reason" =>
+            "stochastic cards rely on the separately maintained detector qualification suites",
     )
 end
 
@@ -323,10 +383,10 @@ function detector_card_metadata(card)
 end
 
 function baseline_cards(path::AbstractString)
-    isempty(path) && return Dict{String,Any}()
+    isempty(path) && return Dict{String,Any}(), Dict{String,Any}()
     data = TOML.parsefile(path)
     cards = get(data, "cards", Any[])
-    return Dict(String(card["id"]) => card for card in cards)
+    return data, Dict(String(card["id"]) => card for card in cards)
 end
 
 function require_compatible_detector_baseline!(card_id::String,
@@ -334,9 +394,35 @@ function require_compatible_detector_baseline!(card_id::String,
     baseline_detector = baseline["detector"]
     for key in ("sensor", "noise", "frame_size", "output_size",
         "frame_response", "charge_coupling", "sampling_mode",
-        "sampling_reads", "output_type")
+        "sampling_reads", "output_type", "integration_time_s",
+        "quantum_efficiency", "detector_defects", "nonlinearity_model")
         get(baseline_detector, key, nothing) == current[key] || error(
             "baseline detector configuration mismatch for $(card_id) field $(key)")
+    end
+    return nothing
+end
+
+function require_compatible_detector_contract!(
+    current::Dict{String,Any}, baseline::Dict{String,Any})
+    baseline_contract = baseline["contract"]
+    for key in ("boundary", "load_model", "arrival_model",
+        "coordinated_omission_correction", "single_writer", "julia_threads",
+        "blas_threads", "fft_threads", "samples_per_run", "runs",
+        "warmup_captures", "selected_card_ids")
+        get(baseline_contract, key, nothing) == current[key] || error(
+            "baseline benchmark contract mismatch for field $(key)")
+    end
+    return nothing
+end
+
+function require_compatible_detector_host!(
+    current::Dict{String,Any}, baseline::Dict{String,Any})
+    baseline_environment = baseline["environment"]
+    for key in ("julia_version", "hdrhistogram_version", "kernel",
+        "architecture", "cpu_target", "cpu_model", "logical_cpu_threads",
+        "julia_threads", "blas_threads", "blas_config", "fft_threads")
+        get(baseline_environment, key, nothing) == current[key] || error(
+            "baseline host/runtime mismatch for field $(key)")
     end
     return nothing
 end
@@ -366,21 +452,67 @@ end
 
 function git_commit()
     try
-        return readchomp(`git rev-parse HEAD`)
+        return readchomp(Cmd(`git rev-parse HEAD`; dir=normpath(joinpath(
+            @__DIR__, ".."))))
     catch
         return "unknown"
     end
 end
 
+function git_source_dirty()
+    try
+        root = normpath(joinpath(@__DIR__, ".."))
+        return !isempty(readchomp(Cmd(
+            `git status --porcelain=v1 --untracked-files=normal`; dir=root)))
+    catch
+        return true
+    end
+end
+
+file_sha256(path::AbstractString) =
+    isfile(path) ? bytes2hex(SHA.sha256(read(path))) : "missing"
+
+function linux_cpu_affinity()
+    Sys.islinux() || return "not-applicable"
+    status_path = "/proc/self/status"
+    isfile(status_path) || return "unavailable"
+    for line in eachline(status_path)
+        startswith(line, "Cpus_allowed_list:") || continue
+        return strip(split(line, ':'; limit=2)[2])
+    end
+    return "unavailable"
+end
+
+function linux_cpu_governors()
+    Sys.islinux() || return "not-applicable"
+    cpu_root = "/sys/devices/system/cpu"
+    isdir(cpu_root) || return "unavailable"
+    governors = String[]
+    for cpu_path in readdir(cpu_root; join=true)
+        path = joinpath(cpu_path, "cpufreq", "scaling_governor")
+        isfile(path) && push!(governors, strip(read(path, String)))
+    end
+    isempty(governors) && return "unavailable"
+    return join(sort!(unique!(governors)), ",")
+end
+
 function detector_hil_environment()
     cpu = first(Sys.cpu_info())
+    active_project = Base.active_project()
+    active_manifest = joinpath(dirname(active_project), "Manifest.toml")
+    source_project = normpath(joinpath(@__DIR__, "..", "Project.toml"))
     return Dict{String,Any}(
         "timestamp_utc" => string(Dates.now(Dates.UTC)),
         "git_commit" => git_commit(),
+        "source_dirty" => git_source_dirty(),
         "julia_version" => string(VERSION),
         "adaptive_optics_sim_version" => string(Base.pkgversion(AdaptiveOpticsSim)),
         "hdrhistogram_version" => string(Base.pkgversion(HdrHistogram)),
+        "kernelabstractions_version" =>
+            string(Base.pkgversion(KernelAbstractions)),
         "kernel" => string(Sys.KERNEL),
+        "kernel_release" => Sys.islinux() ? readchomp(`uname -r`) :
+            "not-applicable",
         "architecture" => string(Sys.ARCH),
         "cpu_target" => string(Sys.CPU_NAME),
         "cpu_model" => cpu.model,
@@ -389,6 +521,11 @@ function detector_hil_environment()
         "blas_threads" => BLAS.get_num_threads(),
         "blas_config" => string(BLAS.get_config()),
         "fft_threads" => 1,
+        "cpu_affinity" => linux_cpu_affinity(),
+        "cpu_governors" => linux_cpu_governors(),
+        "active_project_sha256" => file_sha256(active_project),
+        "active_manifest_sha256" => file_sha256(active_manifest),
+        "source_project_sha256" => file_sha256(source_project),
     )
 end
 
@@ -434,7 +571,16 @@ end
 
 function run_detector_hil_latency_benchmarks()
     configure_detector_hil_benchmark!()
-    baselines = baseline_cards(DETECTOR_HIL_BASELINE)
+    baseline, baseline_card_catalog = baseline_cards(DETECTOR_HIL_BASELINE)
+    contract = detector_hil_contract()
+    environment = detector_hil_environment()
+    if !isempty(DETECTOR_HIL_BASELINE)
+        require_compatible_detector_contract!(contract, baseline)
+        require_compatible_detector_host!(environment, baseline)
+    end
+    if !isempty(DETECTOR_HIL_OUTPUT) && environment["source_dirty"]
+        error("refusing to write durable detector HIL evidence from a dirty source tree")
+    end
     results = Vector{Dict{String,Any}}()
     all_gates_passed = true
 
@@ -446,7 +592,10 @@ function run_detector_hil_latency_benchmarks()
     println("  coordinated_omission_correction: false (no independent arrivals)")
 
     for card in selected_detector_hil_cards()
+        workload = detector_hil_workload(card)
         first_capture_ns = detector_hil_first_capture_ns(card)
+        correctness = detector_hil_correctness(
+            card, workload["input_sha256"])
         for _ in 1:DETECTOR_HIL_WARMUP
             detector_hil_capture!(card)
         end
@@ -461,8 +610,15 @@ function run_detector_hil_latency_benchmarks()
         summary = summarize_detector_hil_runs(runs)
         metadata = detector_card_metadata(card)
         regression = detector_hil_regression(card.id, metadata, summary,
-            allocation_gate_passed, baselines)
-        all_gates_passed &= allocation_gate_passed &&
+            allocation_gate_passed, baseline_card_catalog)
+        if !isempty(DETECTOR_HIL_BASELINE)
+            regression["baseline_artifact_sha256"] =
+                file_sha256(DETECTOR_HIL_BASELINE)
+            regression["baseline_source_revision"] =
+                baseline["environment"]["git_commit"]
+        end
+        all_gates_passed &= correctness["passed"] &&
+            allocation_gate_passed &&
             regression["latency_gate_passed"]
         println("  first_capture_ns: ", first_capture_ns)
         println("  steady_alloc_bytes: ", steady_alloc_bytes)
@@ -477,7 +633,9 @@ function run_detector_hil_latency_benchmarks()
             "label" => card.label,
             "first_capture_ns" => first_capture_ns,
             "steady_alloc_bytes" => steady_alloc_bytes,
+            "correctness" => correctness,
             "detector" => metadata,
+            "workload" => workload,
             "runs" => runs,
             "summary" => summary,
             "regression" => regression,
@@ -485,11 +643,11 @@ function run_detector_hil_latency_benchmarks()
     end
 
     artifact = Dict{String,Any}(
-        "schema_version" => 2,
+        "schema_version" => 3,
         "benchmark" => "detector_hil_latency",
         "evidence_class" => "warmed self-paced in-process detector service time",
-        "contract" => detector_hil_contract(),
-        "environment" => detector_hil_environment(),
+        "contract" => contract,
+        "environment" => environment,
         "cards" => results,
         "all_gates_passed" => all_gates_passed,
     )

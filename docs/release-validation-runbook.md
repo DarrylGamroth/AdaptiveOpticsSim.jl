@@ -144,6 +144,8 @@ Runs:
 
 - [runtests_cuda.jl](../test/runtests_cuda.jl) with the
   [`test/cuda`](../test/cuda) project
+- [runtests_cuda_detectors.jl](../test/runtests_cuda_detectors.jl) for a
+  fail-fast detector-only qualification rerun
 
 Use this on a CUDA-capable host. The validation script instantiates the
 backend-specific `test/cuda` project so `CUDA.jl` does not need to be installed
@@ -163,6 +165,11 @@ host-ready, and transfer-only boundaries. CUDA is still outside the present
 production support claim until it is explicitly restored to the supported
 delivery scope and assigned a routine validation cadence.
 
+Detector qualification candidate `dd16596` passed 250/250 focused detector
+checks and 1,028/1,028 complete-target checks on that host. The exact project,
+manifest, runtime, device, and family scope are retained in the
+[detector closure catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml).
+
 ### AMDGPU
 
 Enabled with:
@@ -173,6 +180,8 @@ Runs:
 
 - [runtests_amdgpu.jl](../test/runtests_amdgpu.jl) with the
   [`test/amdgpu`](../test/amdgpu) project
+- [runtests_amdgpu_detectors.jl](../test/runtests_amdgpu_detectors.jl) for a
+  fail-fast detector-only qualification rerun
 
 Use this on an AMDGPU-capable host. The validation script instantiates the
 backend-specific `test/amdgpu` project so `AMDGPU.jl` does not need to be
@@ -190,6 +199,17 @@ integrated GPU event loop. The July 14 REVOLT-like
 remains a non-equivalent historical workload. The current paired
 single-device owner characterization is retained in the
 [Gate 7 catalog](../benchmarks/results/gate7/manifest.toml).
+
+Detector qualification candidate `dd16596` passed 244/244 focused detector
+checks on the local gfx1030 target. InGaAs and SPAD stochastic Poisson checks
+are explicit AMDGPU exclusions; deterministic semantics and residency remain
+qualified. The broader target currently encounters an AMDGPU/GPUCompiler
+segmentation fault while compiling the unrelated Pyramid geometric-slope
+kernel, which does not invalidate the focused detector result but must remain
+visible in release review and is tracked in
+[issue #200](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/200).
+See the
+[detector closure catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml).
 
 ### Gate 7 single-GPU closure benchmark
 

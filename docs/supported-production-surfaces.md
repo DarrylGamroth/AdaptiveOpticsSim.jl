@@ -148,7 +148,8 @@ Primary evidence:
 - the workflows in [`user-guide.md`](user-guide.md) and [`release-validation-runbook.md`](release-validation-runbook.md)
 - benchmark artifacts under `benchmarks/results/`
 - [conventional-detector CPU HIL latency baseline](../benchmarks/results/detectors/2026-07-14-detector-hil-latency.toml)
-- [minimal deterministic frame-detector CPU service-cost evidence](../benchmarks/results/detectors/2026-07-30-shared-low-fidelity-service-cost.toml)
+- [minimal deterministic frame-detector CPU service-cost evidence](../benchmarks/results/detectors/2026-08-01-shared-low-fidelity-service-cost.toml)
+- [detector family qualification closure catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml)
 - [final pre-HIL local CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-local-cpu.toml)
 - [final pre-HIL WSL CPU service-time evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cpu.toml)
 - [Gate 2 serial plant CPU service-time evidence](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
@@ -165,6 +166,7 @@ AMDGPU is a production-supported accelerator backend on the maintained surfaces
 covered by the dedicated hardware validation target:
 
 - [../test/runtests_amdgpu.jl](../test/runtests_amdgpu.jl)
+- [../test/runtests_amdgpu_detectors.jl](../test/runtests_amdgpu_detectors.jl)
 
 Current AMDGPU-supported scope:
 
@@ -222,6 +224,10 @@ Current AMDGPU-supported scope:
   independent zero-extended-convolution oracle, prove post-collection IPC
   separately from presampling MTF, and retain exact transition/readout/storage
   state on device
+- deterministic InGaAs persistence and residency, linear-APD channel order,
+  SPAD dead-time/redistribution/conversion, and MKID parity/passband handling;
+  stochastic InGaAs and SPAD Poisson checks remain explicit AMDGPU non-claims
+  after an AMDGPU/GPUCompiler compilation crash
 
 Primary evidence:
 
@@ -229,6 +235,7 @@ Primary evidence:
 - [release-validation-runbook.md](release-validation-runbook.md)
 - benchmark artifacts under `benchmarks/results/`
 - [current CPU/CUDA/AMDGPU cross-host characterization](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml)
+- [current detector qualification closure catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml)
 - [../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml](../benchmarks/results/validation_runs/2026-04-10-rtc-devel-amdgpu.toml)
 
 Current expectation:
@@ -258,6 +265,14 @@ pass. This strengthens the declared single-device execution surface without
 claiming fixed-arrival HIL latency, mixed placement, multi-GPU execution, or
 instrument capacity. CUDA's routine support status remains governed
 separately by the support-boundary rule below.
+
+Detector qualification candidate `dd16596` passed 244/244 focused AMDGPU
+detector checks. The complete AMDGPU target separately encounters a compiler
+segmentation fault in the unrelated Pyramid geometric-slope kernel at this
+revision; the supported detector claim is therefore tied to the focused target
+and the exact scope in the closure catalog, not presented as a complete-target
+pass. The broader defect is tracked in
+[issue #200](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/200).
 
 ### GPU support-boundary rule
 
@@ -311,8 +326,10 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
-- CUDA execution. The extension, dedicated test project, fail-fast `421/421`
-  hardware target, and current manual WSL hardware evidence—including prepared direct
+- CUDA execution. The extension, dedicated test project, focused 250/250
+  detector target, complete 1,028/1,028 hardware target, and current manual WSL
+  evidence—including the exact detector family scope in the
+  [closure catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml), prepared direct
   imaging, deterministic shared frame-response/IPC acquisition, and the
   [final pre-HIL CUDA artifact](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)—are
   available, but CUDA has not yet been explicitly returned to the supported
