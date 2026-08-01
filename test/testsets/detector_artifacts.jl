@@ -131,12 +131,38 @@ detector_artifact_sha256(path::AbstractString) =
     @test !amdgpu_run["environment"]["scalar_indexing_allowed"]
     @test !cuda_run["environment"]["scalar_indexing_allowed"]
 
+    expected_family_evidence = Dict(
+        "MV-04" => ("shared_frame_detector_pipeline",
+            ("DET-HIL-LOW-FIDELITY-2026-08-01",)),
+        "MV-32" => ("conventional_ccd_single_read",
+            ("DET-CCD-QUAL-2026-07-30",)),
+        "MV-33" => ("emccd", ("DET-EMCCD-QUAL-2026-07-30",)),
+        "MV-34" => ("parameterized_cmos",
+            ("DET-CMOS-QUAL-2026-07-30",)),
+        "MV-35" => ("conventional_hgcdte",
+            ("DET-HGCDTE-QUAL-2026-07-30",)),
+        "MV-36" => ("hgcdte_linear_avalanche_photodiode_array",
+            ("DET-HGCDTE-AVALANCHE-QUAL-2026-07-31",)),
+        "MV-37" => ("skipper_ccd_independent_read",
+            ("DET-SKIPPER-QUAL-2026-07-31",)),
+        "MV-38" => ("ingaas_frame_detector",
+            ("DET-INGAAS-QUAL-2026-07-31",)),
+        "MV-39" => ("linear_mode_apd_channels",
+            ("DET-LINEAR-APD-QUAL-2026-07-31",)),
+        "MV-40" => ("spad_accumulated_count_array",
+            ("DET-SPAD-QUAL-2026-08-01",)),
+        "MV-41" => ("mkid_accumulated_count_array",
+            ("DET-MKID-QUAL-2026-08-01",)),
+    )
     family_rows = closure["families"]
+    @test length(family_rows) == length(expected_family_evidence)
     @test Set(row["validity_id"] for row in family_rows) ==
         Set(vcat(["MV-04"], ["MV-$(id)" for id in 32:41]))
     @test all(row -> row["cpu_result"] == "passed" &&
         row["amdgpu_result"] == "passed" &&
         row["cuda_result"] == "passed" &&
+        !isempty(row["implemented_effects"]) &&
+        !isempty(row["qualified_effects"]) &&
         !isempty(row["approximations_and_nonclaims"]) &&
         !isempty(row["amdgpu_applicability"]) &&
         !isempty(row["cuda_applicability"]) &&
@@ -154,6 +180,12 @@ detector_artifact_sha256(path::AbstractString) =
         issubset(Set(vcat(row["cpu_evidence_ids"],
             row["amdgpu_evidence_ids"], row["cuda_evidence_ids"])),
             validation_run_ids), family_rows)
+    for row in family_rows
+        expected_family_id, expected_artifact_ids =
+            expected_family_evidence[row["validity_id"]]
+        @test row["family_id"] == expected_family_id
+        @test Tuple(row["artifact_ids"]) == expected_artifact_ids
+    end
     referenced_artifacts = Set(vcat(
         [row["artifact_ids"] for row in family_rows]...))
     @test all(id -> haskey(detector_entries, id) &&
