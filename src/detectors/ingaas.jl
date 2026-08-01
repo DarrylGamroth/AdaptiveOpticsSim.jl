@@ -1,10 +1,10 @@
 """
     InGaAsSensor(; glow_rate=0, persistence_model=NullPersistence(), T=Float64)
 
-Product-neutral InGaAs area-sensor model. `glow_rate` is the expected
-readout-glow charge rate in electrons per pixel per second. A presampling
-response is never inferred from the detector material; configure one on the
-owning `Detector` when required.
+Product-neutral InGaAs area-sensor model. `glow_rate` is a configured glow
+charge rate in electrons per pixel per second of integration. It does not model
+read-cadence-dependent glow. A presampling response is never inferred from the
+detector material; configure one on the owning `Detector` when required.
 
 `ExponentialPersistence` is an optional charge-domain, frame-to-frame reduced
 model. It is updated after charge nonlinearity, saturation, and coupling and

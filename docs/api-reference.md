@@ -1125,10 +1125,11 @@ structure. Core provides no vendor defaults or named cameras.
 
 `InGaAsSensor` is a product-neutral InGaAs area-sensor model. Its `glow_rate`
 is an independent Poisson expectation rate in electrons per pixel per second;
-ordinary `Detector.dark_current` remains a separate rate. InGaAs technology
-does not select a presampling response: the default is `NullFrameResponse`, and
-an aperture, sampled response, or other detector MTF must be configured
-explicitly. [Astronomical InGaAs characterization](https://arxiv.org/abs/1307.1469)
+the model applies it over integration duration and does not infer a read-cadence
+glow law. Ordinary `Detector.dark_current` remains a separate rate. InGaAs
+technology does not select a presampling response: the default is
+`NullFrameResponse`, and an aperture, sampled response, or other detector MTF
+must be configured explicitly. [Astronomical InGaAs characterization](https://arxiv.org/abs/1307.1469)
 shows that dark current, readout glow, read noise, nonuniformity, and other
 effects depend on the particular focal-plane array and operating condition,
 so core supplies no family calibration or camera profile.
