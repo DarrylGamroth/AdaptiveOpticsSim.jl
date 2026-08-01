@@ -1123,6 +1123,27 @@ and `CMOSReadNoiseMap` add structured components at the readout stage.
 qualified-public `Detectors.StaticCMOSOutputPattern` carry measured calibration
 structure. Core provides no vendor defaults or named cameras.
 
+`InGaAsSensor` is a product-neutral InGaAs area-sensor model. Its `glow_rate`
+is an independent Poisson expectation rate in electrons per pixel per second;
+ordinary `Detector.dark_current` remains a separate rate. InGaAs technology
+does not select a presampling response: the default is `NullFrameResponse`, and
+an aperture, sampled response, or other detector MTF must be configured
+explicitly. [Astronomical InGaAs characterization](https://arxiv.org/abs/1307.1469)
+shows that dark current, readout glow, read noise, nonuniformity, and other
+effects depend on the particular focal-plane array and operating condition,
+so core supplies no family calibration or camera profile.
+
+`ExponentialPersistence(coupling, decay)` is an optional deterministic
+frame-to-frame reduced model. For `InGaAsSensor`, the latent state is updated
+as `l[k+1] = decay*l[k] + coupling*q[k]`, where `q[k]` is the charge-domain
+frame after nonlinearity, saturation, and charge coupling but before read
+noise, conversion gain, correction, quantization, and background subtraction.
+The latent state is added to the next frame. Both coefficients are
+dimensionless and applied once per completed frame; the model has no elapsed-
+time constant, trap population, exposure-dependent decay, or calibrated
+persistence claim. Configure `NullPersistence()` when this approximation is
+not intended.
+
 Qualified-public `Detectors.FrameWindow` is an output-product selection
 applied after completion of the full modeled frame. It does not change
 row-band exposure or acquisition timing; use physically cropped detector

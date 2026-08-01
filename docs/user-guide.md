@@ -345,6 +345,30 @@ output-amplifier structure. CMOS has no implicit blur: select
 `InterpixelCapacitance` only when the detector sampling or calibration
 supports it.
 
+InGaAs arrays use the same explicit frame pipeline. The technology name does
+not choose a pixel response or MTF; the default response is null. Configure
+glow separately from dark current, and add the optional persistence recurrence
+only when a frame-to-frame charge-domain approximation is useful:
+
+```julia
+ingaas = Detector(
+    sensor=InGaAsSensor(
+        glow_rate=0.4,
+        persistence_model=ExponentialPersistence(0.02, 0.75),
+    ),
+    dark_current=1.2,
+    qe=0.80,
+    response_model=RectangularPixelAperture(width_x_px=1.0,
+        width_y_px=1.0),
+)
+frame = capture!(ingaas, image; rng=runtime_rng(4))
+```
+
+The persistence coefficients apply once per completed frame, not per second.
+They define a deterministic charge-domain recurrence and do not represent a
+calibrated time constant or trap population. Camera-specific QE, defect,
+response, persistence, and glow maps belong in an external profile.
+
 `Detectors.FrameWindow` selects a rectangular product from the completed full
 frame. It does not crop the physical sensor or shorten rolling-shutter timing.
 To model a sensor ROI whose electronics expose and read only the cropped rows,

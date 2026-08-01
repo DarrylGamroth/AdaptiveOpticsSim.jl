@@ -620,6 +620,21 @@ function FirstOrderThermalModel(; ambient_temperature_K::Real,
     )
 end
 
+"""
+    ExponentialPersistence(coupling, decay)
+
+Discrete frame-to-frame latent-signal model. For the charge-domain frame
+`q[k]` and latent state `l[k]` of a sensor that supports this model, the state
+update is
+
+```math
+l[k+1] = decay * l[k] + coupling * q[k].
+```
+
+The coefficients are dimensionless per completed frame. They do not define a
+physical time constant, exposure-time scaling, or calibrated trap population.
+The owning sensor defines the charge-domain boundary used for `q[k]`.
+"""
 struct ExponentialPersistence{T<:AbstractFloat} <: AbstractPersistenceModel
     coupling::T
     decay::T

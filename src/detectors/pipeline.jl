@@ -123,7 +123,8 @@ function finalize_charge_transport!(det::Detector, rng::AbstractRNG)
     return det.state.frame
 end
 
-function finalize_electronics!(det::Detector, rng::AbstractRNG,
+function finalize_electronics_without_persistence!(det::Detector,
+    rng::AbstractRNG,
     exposure_time::Real)
     apply_readout_noise!(det, rng)
     apply_sensor_readout_noise!(det.params.sensor, det, rng)
@@ -133,6 +134,12 @@ function finalize_electronics!(det::Detector, rng::AbstractRNG,
     apply_readout_correction!(det.params.correction_model, det.state.frame, det)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
+    return det.state.frame
+end
+
+function finalize_electronics!(det::Detector, rng::AbstractRNG,
+    exposure_time::Real)
+    finalize_electronics_without_persistence!(det, rng, exposure_time)
     update_sensor_persistence!(det.params.sensor, det, exposure_time)
     return det.state.frame
 end
