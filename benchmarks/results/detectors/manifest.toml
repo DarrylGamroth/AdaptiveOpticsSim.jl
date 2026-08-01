@@ -68,3 +68,8 @@ purpose = "SPAD fixed-array dead-time mean response and accumulated-count surrog
 status = "active"
 id = "DET-SPAD-QUAL-2026-08-01"
 path = "2026-08-01-spad-qualification.toml"
+[[artifacts]]
+purpose = "MKID accumulated-count, passband, dead-time mean response, and metadata-boundary qualification"
+status = "active"
+id = "DET-MKID-QUAL-2026-08-01"
+path = "2026-08-01-mkid-qualification.toml"

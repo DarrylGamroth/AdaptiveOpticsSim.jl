@@ -399,6 +399,30 @@ end
     end
     @test counting_observation.storage ≈ expected_channels
 
+    mkid = MKIDArrayDetector(integration_time=T(0.5), noise=NoiseNone(),
+        sensor=MKIDArraySensor(qe=T(0.5), dark_count_rate=zero(T),
+            fill_factor=one(T), characteristics=MKIDArrayCharacteristics(
+                wavelength_passband_m=(T(0.8e-6), T(0.9e-6)), T=T),
+            T=T), T=T)
+    missing_mkid_source_model = CurvaturePackedAcquisition(mkid;
+        readout_model=CurvatureChannelReadout())
+    missing_mkid_source_error = contract_captured_error() do
+        prepare_wfs_acquisition(missing_mkid_source_model, rates,
+            counting_observation)
+    end
+    @test missing_mkid_source_error isa WFSPreparationError
+    @test missing_mkid_source_error.reason === :radiometry
+    mkid_model = CurvaturePackedAcquisition(mkid;
+        readout_model=CurvatureChannelReadout(),
+        source=source)
+    mkid_observation = WFSObservation(zeros(T, 2, 16);
+        units=:photon_count, layout=:curvature_branch_channels)
+    mkid_plan = prepare_wfs_acquisition(mkid_model, rates,
+        mkid_observation)
+    @test mkid_plan.source_throughput === zero(T)
+    acquire_wfs_observation!(mkid_observation, rates, mkid_plan, rng)
+    @test all(iszero, mkid_observation.storage)
+
     linear_apd = LinearAPDDetector(
         topology=LinearAPDChannelBank(32),
         integration_time=T(0.5), qe=T(0.4), avalanche_gain=T(2),
@@ -537,6 +561,7 @@ end
         acquire_wfs_observation!(packed_observation, rates, packed_plan, rng)
         acquire_wfs_observation!(counting_observation, rates,
             counting_plan, rng)
+        acquire_wfs_observation!(mkid_observation, rates, mkid_plan, rng)
         acquire_wfs_observation!(linear_observation, rates,
             linear_plan, rng)
         estimate_wfs_measurement!(measurement, observations,
@@ -553,6 +578,8 @@ end
             rates, packed_plan, rng)) == 0
         @test @allocated(acquire_wfs_observation!(counting_observation,
             rates, counting_plan, rng)) == 0
+        @test @allocated(acquire_wfs_observation!(mkid_observation,
+            rates, mkid_plan, rng)) == 0
         @test @allocated(acquire_wfs_observation!(linear_observation,
             rates, linear_plan, rng)) == 0
         @test @allocated(estimate_wfs_measurement!(measurement,
@@ -611,7 +638,8 @@ end
 
     mkid = MKIDArrayDetector(integration_time=T(0.5), noise=NoiseNone(),
         sensor=MKIDArraySensor(qe=one(T), dark_count_rate=zero(T),
-            fill_factor=one(T), wavelength_range_m=(T(0.5e-6), T(1e-6)),
+            fill_factor=one(T), characteristics=MKIDArrayCharacteristics(
+                wavelength_passband_m=(T(0.5e-6), T(1e-6)), T=T),
             T=T), T=T)
     mkid_observation = WFSObservation(zeros(T, size(rate_values));
         units=:photon_count, layout=:counting_channels)
@@ -622,8 +650,23 @@ end
     @test missing_mkid_source.reason === :radiometry
     mkid_plan = prepare_wfs_acquisition(mkid, rate, mkid_observation;
         source=source)
+    @test mkid_plan.source_throughput === one(T)
     acquire_wfs_observation!(mkid_observation, rate, mkid_plan, rng)
     @test mkid_observation.storage == rate_values .* T(0.5)
+
+    source_free_mkid = MKIDArrayDetector(integration_time=T(0.5),
+        noise=NoiseNone(), sensor=MKIDArraySensor(qe=one(T),
+            dark_count_rate=zero(T), fill_factor=one(T), T=T), T=T)
+    source_free_mkid_observation = WFSObservation(
+        zeros(T, size(rate_values));
+        units=:photon_count, layout=:counting_channels)
+    source_free_mkid_plan = prepare_wfs_acquisition(source_free_mkid,
+        rate, source_free_mkid_observation)
+    @test source_free_mkid_plan.source === nothing
+    @test source_free_mkid_plan.source_throughput === one(T)
+    acquire_wfs_observation!(source_free_mkid_observation, rate,
+        source_free_mkid_plan, rng)
+    @test source_free_mkid_observation.storage == rate_values .* T(0.5)
 
     invalid_source_error = contract_captured_error() do
         prepare_wfs_acquisition(spad, rate, observation; source=(source,))
@@ -724,6 +767,9 @@ end
             source_free_plan, rng)
         @test @allocated(acquire_wfs_observation!(source_free_observation,
             rate, source_free_plan, rng)) == 0
+        acquire_wfs_observation!(mkid_observation, rate, mkid_plan, rng)
+        @test @allocated(acquire_wfs_observation!(mkid_observation,
+            rate, mkid_plan, rng)) == 0
     end
 end
 

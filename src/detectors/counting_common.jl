@@ -110,10 +110,6 @@ counting_reported_fill_factor(det::AbstractCountingDetector, ::Type{T}=eltype(co
 counting_post_gain(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = one(T)
 counting_dark_count_rate(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = zero(T)
 counting_channel_gain_map(det::AbstractCountingDetector) = nothing
-counting_energy_resolution(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = nothing
-counting_timing_jitter_s(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = nothing
-counting_wavelength_min_m(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = nothing
-counting_wavelength_max_m(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = nothing
 counting_source_throughput(det::AbstractCountingDetector, src::AbstractSource,
     ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = one(T)
 
@@ -270,7 +266,8 @@ effective_dark_count_rate(det::AbstractCountingDetector, ::Type{T}=eltype(counti
     T(evaluate_temperature_law(active_dark_count_law(det, thermal_model(det)),
         counting_dark_count_rate(det, T), detector_temperature(det, T)))
 
-function detector_export_metadata(det::AbstractCountingDetector; T::Type{<:AbstractFloat}=eltype(counting_array(det)))
+function counting_detector_export_metadata(det::AbstractCountingDetector,
+    ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat}
     output = output_frame(det)
     return CountingDetectorExportMetadata{T}(
         T(counting_integration_time(det)),
@@ -295,11 +292,12 @@ function detector_export_metadata(det::AbstractCountingDetector; T::Type{<:Abstr
         detector_noise_symbol(det.noise),
         counting_output_type(det),
         ChannelReadoutMetadata(counting_layout(det), size(output), length(output)),
-        counting_energy_resolution(det, T),
-        counting_timing_jitter_s(det, T),
-        counting_wavelength_min_m(det, T),
-        counting_wavelength_max_m(det, T),
     )
+end
+
+function detector_export_metadata(det::AbstractCountingDetector;
+    T::Type{<:AbstractFloat}=eltype(counting_array(det)))
+    return counting_detector_export_metadata(det, T)
 end
 
 function ensure_buffers!(det::AbstractCountingDetector, dims::Tuple{Int,Int})
@@ -483,8 +481,8 @@ end
 
 function _capture_counting!(det::AbstractCountingDetector,
     channels::AbstractMatrix, source_throughput, rng::AbstractRNG)
-    ensure_buffers!(det, size(channels))
     _require_finite_nonnegative_intensity(channels)
+    ensure_buffers!(det, size(channels))
     return _capture_prevalidated_counting!(det, channels, source_throughput,
         rng)
 end

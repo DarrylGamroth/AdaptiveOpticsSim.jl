@@ -134,8 +134,10 @@ counts = output_frame(spad)
 
 Use `LinearAPDDetector` for analog single-element or fixed-bank APD channels,
 `SPADArrayDetector` for Geiger-mode accumulated-count images, and
-`MKIDArrayDetector` for accumulated count images
-with MKID energy-resolution and timing metadata.
+`MKIDArrayDetector` for accumulated-count images. Optional
+`MKIDArrayCharacteristics` describe physical resolving power,
+photon-arrival-time resolution, and a wavelength passband; they do not add
+per-photon energy or timestamp products.
 
 For event-driven detector timing, prepare the appropriate global-shutter,
 rolling-shutter, or frame-transfer acquisition definition. Nondestructive reads

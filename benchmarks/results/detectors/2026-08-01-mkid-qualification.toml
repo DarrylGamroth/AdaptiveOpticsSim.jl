@@ -1,0 +1,221 @@
+all_gates_passed = true
+artifact_id = "DET-MKID-QUAL-2026-08-01"
+family = "mkid_accumulated_count_array"
+schema_version = 1
+
+[environment]
+architecture = "x86_64"
+array_backend = "CPU"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "fdb04b54c94864a19d7ce15ca1f387fc122354ee"
+timestamp_utc = "2026-08-01T10:20:08.044"
+
+[model]
+characteristics = "optional energy resolving power, photon-arrival-time resolution, and inclusive wavelength passband"
+input = "cell-integrated, spectrally prefiltered photon-arrival rate in photons per second per detector pixel"
+nonparalyzable_mean_law = "mu / (1 + mu * tau / live_time)"
+observable = "accumulated expected-count or sampled-count image per integration"
+paralyzable_mean_law = "mu * exp(-mu * tau / live_time)"
+pipeline_order = "QE, fill factor, live time, and source throughput; dark expectation; dead-time mean law; optional Poisson surrogate; output conversion"
+scientific_references = ["https://doi.org/10.1038/nature02037", "https://arxiv.org/abs/1007.0752", "https://doi.org/10.1086/674013"]
+statistical_scope = "Poisson draw from the adjusted accumulated-count mean; not an event-resolved MKID distribution"
+
+[qualification]
+samples_per_moment_case = 16384
+sigma_limit = 6.0
+
+    [[qualification.dead_time_curves]]
+    all_points_passed = true
+    dead_time_s = 0.1
+    id = "no_dead_time"
+
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.0
+        lambda_tau = 0.0
+        observed_count = 0.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.01
+        lambda_tau = 0.001
+        observed_count = 0.01
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.09999999999999999
+        lambda_tau = 0.01
+        observed_count = 0.09999999999999999
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 1.0
+        lambda_tau = 0.1
+        observed_count = 1.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 10.0
+        lambda_tau = 1.0
+        observed_count = 10.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 100.0
+        lambda_tau = 10.0
+        observed_count = 100.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 1000.0
+        lambda_tau = 100.0
+        observed_count = 1000.0
+        passed = true
+    [[qualification.dead_time_curves]]
+    all_points_passed = true
+    dead_time_s = 0.1
+    id = "nonparalyzable"
+
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.0
+        lambda_tau = 0.0
+        observed_count = 0.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.009990009990009992
+        lambda_tau = 0.001
+        observed_count = 0.009990009990009992
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.099009900990099
+        lambda_tau = 0.01
+        observed_count = 0.099009900990099
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.9090909090909091
+        lambda_tau = 0.1
+        observed_count = 0.9090909090909091
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 5.0
+        lambda_tau = 1.0
+        observed_count = 5.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 9.090909090909092
+        lambda_tau = 10.0
+        observed_count = 9.090909090909092
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 9.900990099009901
+        lambda_tau = 100.0
+        observed_count = 9.900990099009901
+        passed = true
+    [[qualification.dead_time_curves]]
+    all_points_passed = true
+    dead_time_s = 0.1
+    id = "paralyzable"
+
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.0
+        lambda_tau = 0.0
+        observed_count = 0.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.009990004998333751
+        lambda_tau = 0.001
+        observed_count = 0.009990004998333751
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.0990049833749168
+        lambda_tau = 0.01
+        observed_count = 0.0990049833749168
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.9048374180359595
+        lambda_tau = 0.1
+        observed_count = 0.9048374180359595
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 3.6787944117144233
+        lambda_tau = 1.0
+        observed_count = 3.6787944117144233
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.004539992976248485
+        lambda_tau = 10.0
+        observed_count = 0.004539992976248485
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 3.720075976020836e-41
+        lambda_tau = 100.0
+        observed_count = 3.720075976020836e-41
+        passed = true
+
+    [qualification.deterministic]
+    allocation_gate_passed = true
+    characteristics_separated_from_observable = true
+    detector_mtf_not_applicable = true
+    deterministic_replay_passed = true
+    exact_radiometry_and_gate_passed = true
+    gated_dark_live_time_passed = true
+    inclusive_passband_passed = true
+    integer_rounding_and_saturation_passed = true
+    invalid_input_preserved_storage = true
+    invalid_input_rejected = true
+    matrix_prefilter_contract_passed = true
+    optional_characteristics_default_to_nothing = true
+    prepared_source_throughput_bound = true
+    source_free_preparation_without_passband = true
+    spad_mean_response_absent = true
+    steady_alloc_bytes = 0
+    weighted_spectral_bundle_passed = true
+
+    [[qualification.poisson_surrogate_cases]]
+    expected_mean = 20.0
+    expected_variance = 20.0
+    id = "photon_only"
+    mean_absolute_limit = 0.2096313728906053
+    mean_passed = true
+    observed_mean = 20.01055908203125
+    observed_variance = 20.066359841226184
+    sample_count = 16384
+    seed = 9260
+    variance_absolute_limit = 1.3423366901720637
+    variance_passed = true
+    [[qualification.poisson_surrogate_cases]]
+    expected_mean = 12.0
+    expected_variance = 12.0
+    id = "dark_only"
+    mean_absolute_limit = 0.16237976320958225
+    mean_passed = true
+    observed_mean = 12.01104736328125
+    observed_variance = 12.150216714108899
+    sample_count = 16384
+    seed = 9261
+    variance_absolute_limit = 0.8119235943677268
+    variance_passed = true
+    [[qualification.poisson_surrogate_cases]]
+    expected_mean = 8.0
+    expected_variance = 8.0
+    id = "photon_and_dark"
+    mean_absolute_limit = 0.13258252147247768
+    mean_passed = true
+    observed_mean = 7.99102783203125
+    observed_variance = 7.952370206391295
+    sample_count = 16384
+    seed = 9262
+    variance_absolute_limit = 0.5466684233926364
+    variance_passed = true
+    [[qualification.poisson_surrogate_cases]]
+    expected_mean = 16.666666666666668
+    expected_variance = 16.666666666666668
+    id = "dead_time_adjusted_surrogate"
+    mean_absolute_limit = 0.19136638615493579
+    mean_passed = true
+    observed_mean = 16.62933349609375
+    observed_variance = 16.733805915996907
+    sample_count = 16384
+    seed = 9263
+    variance_absolute_limit = 1.121338915945724
+    variance_passed = true
+
+[scope]
+excluded = ["per-photon energy estimates and photon-arrival timestamps", "measured energy distributions and exact dead-time count distributions", "pulse pile-up, resonator dynamics, and quasiparticle physics", "readout-tone multiplexing and calibrated spectral-efficiency curves", "detector spatial response, pixel aperture, and detector MTF", "calibrated detector maps, named modules, and camera profiles"]
+included = ["quantum efficiency, scalar fill factor, live time, and dark counts", "inclusive scalar passband and weighted spectral-source throughput", "nonparalyzable and paralyzable expected-count dead-time laws", "Poisson surrogate moments after dead-time mean adjustment", "optional physical-characteristic metadata separated from observables", "prepared WFS source-throughput binding", "deterministic replay and warmed CPU allocation"]

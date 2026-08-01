@@ -630,8 +630,9 @@ value = only(capture!(apd, 2.0e5; rng=runtime_rng(4)))
 ```
 
 `SPADArrayDetector((rows, columns); ...)` owns fixed-shape Geiger-mode
-accumulated-count area imaging. `MKIDArrayDetector` remains
-the energy-resolving accumulated counting-array model. Neither is a
+accumulated-count area imaging. `MKIDArrayDetector` owns MKID accumulated-count
+images. Its optional resolving-power and arrival-time-resolution values are
+physical characteristics, not simulated per-photon observables. Neither is a
 linear-mode APD channel surface.
 
 Rolling-shutter detectors can also capture a time-varying scene. Use
@@ -890,12 +891,14 @@ detector family instead of the generic frame-detector surface:
 - `LinearAPDDetector(...)` for analog single-element or fixed-bank channels
 - `SPADArrayDetector((rows, columns); ...)` for fixed-shape accumulated-count
   imaging arrays
-- `MKIDArrayDetector(...)` for accumulated-count imaging with MKID
-  energy/timing metadata and an optional meter-valued source passband
+- `MKIDArrayDetector(...)` for accumulated-count imaging with optional
+  `MKIDArrayCharacteristics` describing resolving power, arrival-time
+  resolution, and a meter-valued source passband
 
 MKID source filtering is applied by source-aware `capture!` and WFS/runtime
 paths that carry a source through detector capture. Matrix-only capture assumes
-the input was already spectrally filtered.
+the input was already spectrally filtered. These characteristics do not add
+per-photon energy estimates or arrival timestamps to the output image.
 
 Leave detector effects simple or disabled when the goal is deterministic model
 comparison rather than detector realism.

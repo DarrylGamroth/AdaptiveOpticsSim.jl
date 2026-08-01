@@ -1121,16 +1121,25 @@ trusts the bound producer to preserve finite nonnegative samples. Fill factor is
 scalar radiometry and does not create a pixel aperture or detector MTF. The
 model does not emit photon timestamps or avalanche events.
 
-`MKIDArrayDetector` is the maintained MKID surface for accumulated counting-array
-HIL use. It models photon-counting output with quantum efficiency, fill factor,
-dark count rate, optional counting dead-time and mean-response models, and exported
-energy-resolution and timing-jitter metadata. `energy_resolution` is the
-dimensionless resolving power `E/ΔE`, and `timing_jitter_s` is in seconds.
-Configure its optional inclusive passband in meters with
-`wavelength_range_m=(minimum, maximum)`. Source-aware capture applies that
-passband, including weighted `SpectralSource` bundles; matrix-only capture
-assumes spectrally prefiltered input. The current model does not emit per-photon
-timestamp/energy event lists.
+`MKIDArrayDetector` is the maintained MKID surface for accumulated-count HIL
+use. Its observable is one expected-count or sampled-count image. The shared
+pipeline applies quantum efficiency, fill factor, live integration time, source
+throughput, dark counts, an optional dead-time mean law, optional Poisson
+sampling, and output conversion. It does not apply SPAD afterpulse or
+nearest-neighbor redistribution stages.
+
+Optional physical characteristics are grouped in
+`MKIDArrayCharacteristics`. `energy_resolving_power` is the dimensionless ratio
+`E/ΔE`; `photon_arrival_time_resolution_s` is in seconds; and
+`wavelength_passband_m=(minimum, maximum)` is an inclusive interval in meters.
+`MKIDArrayExportMetadata` keeps these characteristics separate from its
+`observable=:accumulated_count_image` declaration and explicitly reports that
+energy estimates and photon-arrival timestamps are absent. Source-aware capture
+applies the passband, including weighted `SpectralSource` bundles; matrix-only
+capture assumes spectrally prefiltered input. Prepared WFS paths compute source
+throughput once during preparation. No detector spatial response or MTF is
+modeled or inferred: inputs are already cell-integrated per detector pixel, and
+scalar fill factor does not define a pixel aperture or presampling response.
 
 `CMOSSensor` covers CMOS, sCMOS, and quantitative low-noise CMOS architectures
 through composition rather than camera classes. `NoiseReadout` supplies a

@@ -236,6 +236,7 @@ exports = [
     "HgCdTeAvalancheArraySensor",
     "SPADArraySensor",
     "MKIDArraySensor",
+    "MKIDArrayCharacteristics",
     "SingleElementLinearAPD",
     "LinearAPDChannelBank",
     "FrameResponseModel",
@@ -534,6 +535,7 @@ new_domain_public = [
     "Detectors.FrameWindow",
     "Detectors.StaticCMOSOutputPattern",
     "Detectors.HgCdTeReadout",
+    "Detectors.MKIDArrayExportMetadata",
     "Detectors.detector_ramp_acquisition",
 ]
 removed_exports = []
@@ -954,6 +956,7 @@ exports = [
     "HgCdTeAvalancheArraySensor",
     "SPADArraySensor",
     "MKIDArraySensor",
+    "MKIDArrayCharacteristics",
     "SingleElementLinearAPD",
     "LinearAPDChannelBank",
     "FrameResponseModel",
@@ -1036,6 +1039,7 @@ public = [
     "FrameWindow",
     "StaticCMOSOutputPattern",
     "HgCdTeReadout",
+    "MKIDArrayExportMetadata",
     "detector_ramp_acquisition",
 ]
 

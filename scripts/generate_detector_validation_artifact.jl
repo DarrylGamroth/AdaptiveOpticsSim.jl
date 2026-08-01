@@ -340,9 +340,11 @@ function mkid_case()
             qe=0.75,
             dark_count_rate=0.0,
             fill_factor=0.8,
-            energy_resolution=12.0,
-            timing_jitter_s=2e-6,
-            wavelength_range_m=(0.8e-6, 1.4e-6),
+            characteristics=MKIDArrayCharacteristics(
+                energy_resolving_power=12.0,
+                photon_arrival_time_resolution_s=2e-6,
+                wavelength_passband_m=(0.8e-6, 1.4e-6),
+            ),
         ),
     )
     input = fill(10.0, 8, 8)
@@ -362,15 +364,22 @@ function mkid_case()
         "inside_band_mean" => mean(inside_frame),
         "outside_band_max" => maximum(abs, outside_frame),
         "spectral_bundle_mean" => mean(spectral_frame),
-        "energy_resolution" => metadata.energy_resolution,
-        "timing_jitter_s" => metadata.timing_jitter_s,
-        "wavelength_min_m" => metadata.wavelength_min_m,
-        "wavelength_max_m" => metadata.wavelength_max_m,
+        "energy_resolving_power" =>
+            metadata.characteristics.energy_resolving_power,
+        "photon_arrival_time_resolution_s" =>
+            metadata.characteristics.photon_arrival_time_resolution_s,
+        "wavelength_passband_m" => collect(
+            metadata.characteristics.wavelength_passband_m),
+        "observable" => String(metadata.observable),
         "contract_holds" => isapprox(matrix_frame, fill(12.0, 8, 8); atol=1e-12, rtol=1e-12) &&
             isapprox(inside_frame, matrix_frame; atol=1e-12, rtol=1e-12) && all(iszero, outside_frame) &&
             isapprox(mean(spectral_frame), 3.6; atol=1e-12, rtol=1e-12) &&
-            metadata.energy_resolution == 12.0 && metadata.timing_jitter_s == 2e-6 &&
-            metadata.wavelength_min_m == 0.8e-6 && metadata.wavelength_max_m == 1.4e-6,
+            metadata.characteristics.energy_resolving_power == 12.0 &&
+            metadata.characteristics.photon_arrival_time_resolution_s == 2e-6 &&
+            metadata.characteristics.wavelength_passband_m == (0.8e-6, 1.4e-6) &&
+            metadata.observable == :accumulated_count_image &&
+            !metadata.provides_energy_estimates &&
+            !metadata.provides_photon_arrival_timestamps,
     )
 end
 

@@ -3216,15 +3216,15 @@ end
 function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
-    mean_response = NearestNeighborCountRedistribution(T(0.4))
     sensor_kwargs = (
         qe=T(1),
         dark_count_rate=T(0),
         fill_factor=T(1),
-        energy_resolution=T(12),
-        timing_jitter_s=T(2e-6),
-        wavelength_range_m=(T(0.8e-6), T(1.4e-6)),
-        mean_response_model=mean_response,
+        characteristics=MKIDArrayCharacteristics(
+            energy_resolving_power=T(12),
+            photon_arrival_time_resolution_s=T(2e-6),
+            wavelength_passband_m=(T(0.8e-6), T(1.4e-6)),
+            T=T),
         T=T,
     )
     cpu = MKIDArrayDetector(
@@ -3241,8 +3241,7 @@ function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B
         T=T,
         backend=selector,
     )
-    input = zeros(T, 5, 5)
-    input[3, 3] = T(10)
+    input = reshape(T.(1:25), 5, 5)
     cpu_output = capture!(cpu, input, MersenneTwister(19))
     gpu_output = capture!(gpu, BackendArray(input), MersenneTwister(19))
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(gpu_output))

@@ -319,8 +319,8 @@ The reduced maintained smoke covers:
 - direct rolling-shutter row-band integration and frame-transfer image/storage
   lifecycle checks with detector products and the prepared storage frame
   remaining device resident and scalar indexing disabled
-- MKID accumulated-count capture, source passband handling, and
-  count-conserving nearest-neighbor redistribution parity
+- MKID accumulated-count capture, source passband handling, output conversion,
+  and device residency
 
 For independent controllable optics, optional backend smoke checks command
 isolation and additive application without a packed aggregate. Controller
