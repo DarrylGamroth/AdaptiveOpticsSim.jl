@@ -340,7 +340,9 @@ end
         integration_time=1.0,
         noise=NoiseNone(),
         sensor=MKIDArraySensor(qe=1.0, dark_count_rate=0.0, fill_factor=1.0,
-            wavelength_range_m=(0.9 * wavelength(src), 1.1 * wavelength(src))),
+            characteristics=MKIDArrayCharacteristics(
+                wavelength_passband_m=(
+                    0.9 * wavelength(src), 1.1 * wavelength(src)))),
     )
     counting_mkid = copy(measure!(counting, pupil, src, mkid))
     @test counting_mkid ≈ counting_flat atol=1e-10

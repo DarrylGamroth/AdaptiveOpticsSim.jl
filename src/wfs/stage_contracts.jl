@@ -495,17 +495,21 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
 end
 
 """Prepared acquisition for a channel-oriented photon-counting detector."""
-struct PreparedWFSCountingAcquisition{D,I,O,S,A,F}
+struct PreparedWFSCountingAcquisition{D,I,O,S,T,A,F}
     detector::D
     optical_product::I
     observation::O
     source::S
+    source_throughput::T
     detector_input::A
     detector_output::F
 end
 
 @inline _counting_wfs_source_required(::AbstractCountingDetector) = false
-@inline _counting_wfs_source_required(::MKIDArrayDetector) = true
+@inline function _counting_wfs_source_required(detector::MKIDArrayDetector)
+    return detector.params.sensor.characteristics.wavelength_passband_m !==
+        nothing
+end
 
 function _require_counting_wfs_source(detector::AbstractCountingDetector,
     ::Nothing)
@@ -593,30 +597,20 @@ function prepare_wfs_acquisition(detector::AbstractCountingDetector,
     compute_device(observation.storage) == compute_device(output) || throw(
         WFSPreparationError(:acquisition, :device,
             "counting WFS observation and detector output occupy different devices"))
-    return PreparedWFSCountingAcquisition(detector, optical_product,
-        observation, source, counting_array(detector), output)
-end
-
-@inline function _capture_counting_wfs!(detector, input, ::Nothing, rng)
-    return _capture_prevalidated_counting!(detector, input,
-        one(eltype(counting_array(detector))), rng)
-end
-
-@inline function _capture_counting_wfs!(detector, input,
-    source::AbstractSource, rng)
     output_type = eltype(counting_array(detector))
-    source_throughput = counting_source_throughput(detector, source,
-        output_type)
-    return _capture_prevalidated_counting!(detector, input,
-        source_throughput, rng)
+    source_throughput = source === nothing ? one(output_type) :
+        counting_source_throughput(detector, source, output_type)
+    return PreparedWFSCountingAcquisition(detector, optical_product,
+        observation, source, source_throughput, counting_array(detector),
+        output)
 end
 
 function acquire_wfs_observation!(observation::WFSObservation,
     optical_product::IntensityMap,
     plan::PreparedWFSCountingAcquisition, rng::AbstractRNG)
     validate_wfs_acquisition_binding(observation, optical_product, plan)
-    frame = _capture_counting_wfs!(plan.detector,
-        optical_product.values, plan.source, rng)
+    frame = _capture_prevalidated_counting!(plan.detector,
+        optical_product.values, plan.source_throughput, rng)
     copyto!(observation.storage, frame)
     return observation
 end

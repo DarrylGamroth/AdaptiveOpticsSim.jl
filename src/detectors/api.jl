@@ -7,7 +7,7 @@ export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput
 export emccd_snr
 export SequentialAcquisition, FrameTransferAcquisition
 export HgCdTeAvalancheArraySensor
-export SPADArraySensor, MKIDArraySensor
+export SPADArraySensor, MKIDArraySensor, MKIDArrayCharacteristics
 export SingleElementLinearAPD, LinearAPDChannelBank
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse
 export SampledFrameResponse, RectangularPixelAperture
@@ -48,4 +48,5 @@ public ClippedGaussianAvalancheMultiplicationApproximation
 public FrameWindow
 public StaticCMOSOutputPattern
 public HgCdTeReadout
+public MKIDArrayExportMetadata
 public detector_ramp_acquisition

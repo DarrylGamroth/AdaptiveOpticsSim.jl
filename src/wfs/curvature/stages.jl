@@ -135,13 +135,14 @@ struct PreparedCurvaturePackedFrameAcquisition{M,I,O,R,P,T}
     detector_duration::T
 end
 
-struct PreparedCurvaturePackedChannelAcquisition{M,I,O,C,A,F,T}
+struct PreparedCurvaturePackedChannelAcquisition{M,I,O,C,A,F,S,T}
     model::M
     optical_products::I
     observation::O
     channels::C
     detector_input::A
     detector_output::F
+    source_throughput::S
     detector_duration::T
 end
 
@@ -643,9 +644,11 @@ function prepare_wfs_acquisition(
     compute_device(observation.storage) == compute_device(output) || throw(
         WFSPreparationError(:acquisition, :device,
             "packed counting Curvature observation and detector output occupy different devices"))
+    source_throughput = model.source === nothing ? one(T) :
+        counting_source_throughput(detector, model.source, T)
     return PreparedCurvaturePackedChannelAcquisition(model,
         optical_products, observation, channels, counting_array(detector),
-        output, duration)
+        output, source_throughput, duration)
 end
 
 function prepare_wfs_acquisition(
@@ -696,7 +699,7 @@ function prepare_wfs_acquisition(
             "packed channel Curvature observation and linear-APD output occupy different devices"))
     return PreparedCurvaturePackedChannelAcquisition(model,
         optical_products, observation, channels, detector_input,
-        detector_input, duration)
+        detector_input, nothing, duration)
 end
 
 function prepare_wfs_acquisition(model::CurvaturePackedAcquisition,
@@ -780,8 +783,8 @@ end
 
 function _capture_curvature_channel_detector!(detector::AbstractCountingDetector,
     plan::PreparedCurvaturePackedChannelAcquisition, rng::AbstractRNG)
-    return _capture_counting_wfs!(detector, plan.channels,
-        plan.model.source, rng)
+    return _capture_prevalidated_counting!(detector, plan.channels,
+        plan.source_throughput, rng)
 end
 
 function _capture_curvature_channel_detector!(detector::LinearAPDDetector,

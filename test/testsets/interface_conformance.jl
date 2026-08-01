@@ -73,7 +73,9 @@
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode
     @test SPADArraySensorType <: CountingSensorType
     @test MKIDArraySensorType <: CountingSensorType
-    @test supports_energy_resolving(mkid.params.sensor)
+    @test supports_photon_counting(mkid.params.sensor)
+    @test !supports_energy_resolving(mkid.params.sensor)
+    @test !supports_photon_number_resolving(mkid.params.sensor)
     @test curv_count.params.readout_model isa CurvatureChannelReadout
 
     # IF-SRC

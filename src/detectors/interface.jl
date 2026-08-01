@@ -1502,10 +1502,6 @@ struct CountingDetectorExportMetadata{T<:AbstractFloat}
     noise::Symbol
     output_type::Union{Nothing,DataType}
     readout::ChannelReadoutMetadata
-    energy_resolution::Union{Nothing,T}
-    timing_jitter_s::Union{Nothing,T}
-    wavelength_min_m::Union{Nothing,T}
-    wavelength_max_m::Union{Nothing,T}
 end
 
 NoiseReadout(sigma::Real) = NoiseReadout{Float64}(float(sigma))
