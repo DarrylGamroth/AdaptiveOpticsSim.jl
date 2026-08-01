@@ -578,6 +578,7 @@ function prepare_wfs_acquisition(detector::AbstractCountingDetector,
     compute_device(counting_array(detector)) == compute_device(input) || throw(
         WFSPreparationError(:acquisition, :device,
             "counting detector and WFS rate product occupy different devices"))
+    _require_finite_nonnegative_intensity(input)
     ensure_buffers!(detector, size(input))
     output = output_frame(detector)
     size(observation.storage) == size(output) || throw(WFSPreparationError(

@@ -1110,12 +1110,16 @@ integration time, and source throughput; plus integrated dark counts; followed
 by the selected dead-time mean law and deterministic mean-response stages. An
 optional `NoisePhoton()` stage then draws a Poisson count from that adjusted
 expectation. This last step is a bounded accumulated-count surrogate, not the
-true non-Poisson distribution produced by dead time or afterpulsing. Direct
-capture validates finite nonnegative input and exact fixed dimensions before
+true non-Poisson distribution produced by dead time or afterpulsing.
+Mean-response composites may contain at most one first-order afterpulse stage
+and one nearest-neighbor redistribution stage, so their scalar export metadata
+remains exact. Direct capture validates finite nonnegative input and exact fixed
+dimensions before
 mutation; prepared WFS acquisition binds those conditions once and remains
-device resident. Fill factor is scalar radiometry and does not create a pixel
-aperture or detector MTF. The model does not emit photon timestamps or avalanche
-events.
+device resident. Preparation validates the initial values; repeated acquisition
+trusts the bound producer to preserve finite nonnegative samples. Fill factor is
+scalar radiometry and does not create a pixel aperture or detector MTF. The
+model does not emit photon timestamps or avalanche events.
 
 `MKIDArrayDetector` is the maintained MKID surface for accumulated counting-array
 HIL use. It models photon-counting output with quantum efficiency, fill factor,

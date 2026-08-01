@@ -453,24 +453,26 @@ mean_afterpulses_per_detection(::CountingMeanResponseModel, ::Type{T}) where {T<
 mean_afterpulses_per_detection(model::FirstOrderAfterpulseMeanResponse, ::Type{T}) where {T<:AbstractFloat} =
     T(model.mean_afterpulses_per_detection)
 mean_afterpulses_per_detection(model::CompositeCountingMeanResponse, ::Type{T}) where {T<:AbstractFloat} =
-    _max_or_nothing((mean_afterpulses_per_detection(stage, T) for stage in model.stages))
+    _unique_or_nothing((mean_afterpulses_per_detection(stage, T) for stage in model.stages),
+        "FirstOrderAfterpulseMeanResponse")
 redistribution_fraction(::CountingMeanResponseModel, ::Type{T}) where {T<:AbstractFloat} = nothing
 redistribution_fraction(model::NearestNeighborCountRedistribution, ::Type{T}) where {T<:AbstractFloat} =
     T(model.redistribution_fraction)
 redistribution_fraction(model::CompositeCountingMeanResponse, ::Type{T}) where {T<:AbstractFloat} =
-    _max_or_nothing((redistribution_fraction(stage, T) for stage in model.stages))
+    _unique_or_nothing((redistribution_fraction(stage, T) for stage in model.stages),
+        "NearestNeighborCountRedistribution")
 
-function _max_or_nothing(values)
+function _unique_or_nothing(values, stage_name)
     found = false
-    max_value = nothing
+    selected_value = nothing
     for value in values
         isnothing(value) && continue
-        if !found || value > max_value
-            max_value = value
-            found = true
-        end
+        found && throw(InvalidConfiguration(
+            "composite counting metadata cannot represent multiple $stage_name stages"))
+        selected_value = value
+        found = true
     end
-    return found ? max_value : nothing
+    return found ? selected_value : nothing
 end
 
 convert_frame_response_model(::NullFrameResponse, ::Type{T}, backend) where {T<:AbstractFloat} = NullFrameResponse()

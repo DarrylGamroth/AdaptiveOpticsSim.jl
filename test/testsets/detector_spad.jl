@@ -41,12 +41,33 @@ end
     @test capture!(gated, fill(10.0, 2, 8), Xoshiro(9102)) ==
         fill(2.0, 2, 8)
     @test supports_counting_gating(gated)
+
+    gated_dark = SPADArrayDetector((1, 1); integration_time=2.0,
+        noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
+        sensor=SPADArraySensor(active_area_detection_efficiency=0.0,
+            dark_count_rate=4.0))
+    @test capture!(gated_dark, zeros(1, 1), Xoshiro(9103)) ==
+        fill(2.0, 1, 1)
+
+    arrhenius = ArrheniusRateLaw(300.0, 6000.0)
+    temperature = 250.0
+    thermal = SPADArrayDetector((1, 1); noise=NoiseNone(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=0.0,
+            dark_count_rate=10.0),
+        thermal_model=FixedTemperature(temperature_K=temperature,
+            dark_count_law=arrhenius))
+    expected_dark_rate = 10.0 * exp(6000.0 * (inv(300.0) - inv(temperature)))
+    @test effective_dark_count_rate(thermal) ≈ expected_dark_rate
+    @test capture!(thermal, zeros(1, 1), Xoshiro(9104)) ≈
+        fill(expected_dark_rate, 1, 1)
+    @test detector_export_metadata(thermal).dark_count_law == :arrhenius
 end
 
 @testset "SPAD dead-time mean laws" begin
     dead_time = 0.1
     dimensionless_rates = (0.0, 1e-3, 1e-2, 0.1, 1.0, 10.0, 100.0)
     for (model, expected_response) in (
+        (NoDeadTime(), x -> x / dead_time),
         (NonParalyzableDeadTime(dead_time), x -> (x / dead_time) / (1 + x)),
         (ParalyzableDeadTime(dead_time), x -> (x / dead_time) * exp(-x)),
     )
@@ -122,12 +143,41 @@ end
     composite_output = capture!(composite, center_input, Xoshiro(9123))
     @test composite_output == 1.25 .* center_output
     @test sum(composite_output) == 1.25 * sum(center_input)
+    composite_metadata = detector_export_metadata(composite)
+    @test composite_metadata.mean_response_model == :composite
+    @test composite_metadata.mean_afterpulses_per_detection == 0.25
+    @test composite_metadata.redistribution_fraction == 0.4
+
+    duplicate_afterpulse = CompositeCountingMeanResponse(
+        FirstOrderAfterpulseMeanResponse(0.2),
+        CompositeCountingMeanResponse(
+            NearestNeighborCountRedistribution(0.1),
+            FirstOrderAfterpulseMeanResponse(0.3)))
+    @test_throws InvalidConfiguration SPADArrayDetector((3, 3);
+        sensor=SPADArraySensor(mean_response_model=duplicate_afterpulse))
+    duplicate_redistribution = CompositeCountingMeanResponse(
+        NearestNeighborCountRedistribution(0.1),
+        NearestNeighborCountRedistribution(0.2))
+    @test_throws InvalidConfiguration SPADArrayDetector((3, 3);
+        sensor=SPADArraySensor(mean_response_model=duplicate_redistribution))
 
     singleton = SPADArrayDetector((1, 1); noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=1.0,
             mean_response_model=NearestNeighborCountRedistribution(0.4)))
     @test capture!(singleton, fill(10.0, 1, 1), Xoshiro(9124)) ==
         fill(10.0, 1, 1)
+end
+
+@testset "SPAD ordered deterministic pipeline" begin
+    detector = SPADArrayDetector((1, 1); integration_time=2.0,
+        noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
+        sensor=SPADArraySensor(
+            active_area_detection_efficiency=0.5,
+            dark_count_rate=1.0,
+            dead_time_model=NonParalyzableDeadTime(0.1),
+            mean_response_model=FirstOrderAfterpulseMeanResponse(0.2)))
+    @test only(capture!(detector, fill(8.0, 1, 1), Xoshiro(9125))) ≈
+        2.0 rtol=1e-14 atol=1e-14
 end
 
 @testset "SPAD Poisson surrogate moments" begin
@@ -161,6 +211,8 @@ end
         output_type=UInt16)
     input = fill(2.6, 2, 3)
     @test capture!(detector, input, Xoshiro(9140)) == fill(UInt16(3), 2, 3)
+    @test capture!(detector, fill(1e9, 2, 3), Xoshiro(9140)) ==
+        fill(typemax(UInt16), 2, 3)
 
     counts = detector.state.counts
     before = copy(counts)

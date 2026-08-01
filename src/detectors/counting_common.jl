@@ -187,8 +187,24 @@ function validate_mean_response_model(model::NearestNeighborCountRedistribution)
 end
 
 function validate_mean_response_model(model::CompositeCountingMeanResponse)
-    return CompositeCountingMeanResponse(tuple((validate_mean_response_model(stage) for stage in model.stages)...))
+    validated = CompositeCountingMeanResponse(
+        tuple((validate_mean_response_model(stage) for stage in model.stages)...))
+    _afterpulse_stage_count(validated) <= 1 || throw(InvalidConfiguration(
+        "CompositeCountingMeanResponse permits at most one FirstOrderAfterpulseMeanResponse stage"))
+    _redistribution_stage_count(validated) <= 1 || throw(InvalidConfiguration(
+        "CompositeCountingMeanResponse permits at most one NearestNeighborCountRedistribution stage"))
+    return validated
 end
+
+_afterpulse_stage_count(::CountingMeanResponseModel) = 0
+_afterpulse_stage_count(::FirstOrderAfterpulseMeanResponse) = 1
+_afterpulse_stage_count(model::CompositeCountingMeanResponse) =
+    sum(_afterpulse_stage_count, model.stages; init=0)
+
+_redistribution_stage_count(::CountingMeanResponseModel) = 0
+_redistribution_stage_count(::NearestNeighborCountRedistribution) = 1
+_redistribution_stage_count(model::CompositeCountingMeanResponse) =
+    sum(_redistribution_stage_count, model.stages; init=0)
 
 validate_counting_noise(noise::NoiseNone) = noise
 validate_counting_noise(noise::NoisePhoton) = noise

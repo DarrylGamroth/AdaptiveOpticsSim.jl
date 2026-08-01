@@ -588,6 +588,15 @@ end
     @test observation.storage == rate_values .* T(0.125)
     @test rate.values == rate_before
 
+    invalid_rate_values = copy(rate_values)
+    invalid_rate_values[1, 1] = -one(T)
+    invalid_rate = contract_rate_map(invalid_rate_values;
+        sampling=rate.metadata.sampling,
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=rate.metadata.spectral)
+    @test_throws InvalidConfiguration prepare_wfs_acquisition(
+        spad, invalid_rate, observation; source=source)
+
     source_free_spad = SPADArrayDetector(size(rate_values); integration_time=T(0.5),
         noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=one(T), dark_count_rate=zero(T),

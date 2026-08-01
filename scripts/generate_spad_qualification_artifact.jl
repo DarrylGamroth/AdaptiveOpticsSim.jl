@@ -69,6 +69,7 @@ function spad_dead_time_curves()
     dimensionless_rates = (0.0, 1e-3, 1e-2, 0.1, 1.0, 10.0, 100.0)
     curves = Dict{String,Any}[]
     for (id, model, response) in (
+        ("no_dead_time", NoDeadTime(), x -> x / dead_time),
         ("nonparalyzable", NonParalyzableDeadTime(dead_time),
             x -> (x / dead_time) / (1 + x)),
         ("paralyzable", ParalyzableDeadTime(dead_time),
@@ -108,11 +109,39 @@ function spad_deterministic_contract()
     radiometry_output = copy(capture!(radiometry,
         fill(10.0, 2, 8), Xoshiro(9180)))
 
+    gated_dark = SPADArrayDetector((1, 1); integration_time=2.0,
+        noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
+        sensor=SPADArraySensor(active_area_detection_efficiency=0.0,
+            dark_count_rate=4.0))
+    gated_dark_output = copy(capture!(gated_dark,
+        zeros(1, 1), Xoshiro(9181)))
+
+    arrhenius = ArrheniusRateLaw(300.0, 6000.0)
+    temperature = 250.0
+    expected_dark_rate = 10.0 *
+        exp(6000.0 * (inv(300.0) - inv(temperature)))
+    thermal = SPADArrayDetector((1, 1); noise=NoiseNone(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=0.0,
+            dark_count_rate=10.0),
+        thermal_model=FixedTemperature(temperature_K=temperature,
+            dark_count_law=arrhenius))
+    thermal_output = copy(capture!(thermal, zeros(1, 1), Xoshiro(9182)))
+
     afterpulse = SPADArrayDetector((2, 8); noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=1.0,
             mean_response_model=FirstOrderAfterpulseMeanResponse(1.5)))
     afterpulse_output = copy(capture!(afterpulse,
-        fill(4.0, 2, 8), Xoshiro(9181)))
+        fill(4.0, 2, 8), Xoshiro(9183)))
+
+    ordered_pipeline = SPADArrayDetector((1, 1); integration_time=2.0,
+        noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
+        sensor=SPADArraySensor(
+            active_area_detection_efficiency=0.5,
+            dark_count_rate=1.0,
+            dead_time_model=NonParalyzableDeadTime(0.1),
+            mean_response_model=FirstOrderAfterpulseMeanResponse(0.2)))
+    ordered_pipeline_output = copy(capture!(ordered_pipeline,
+        fill(8.0, 1, 1), Xoshiro(9184)))
 
     redistribution = SPADArrayDetector((3, 3); noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=1.0,
@@ -120,12 +149,20 @@ function spad_deterministic_contract()
     impulse = zeros(3, 3)
     impulse[2, 2] = 10.0
     redistribution_output = copy(capture!(redistribution,
-        impulse, Xoshiro(9182)))
+        impulse, Xoshiro(9185)))
+
+    integer_output = SPADArrayDetector((1, 2); noise=NoiseNone(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=1.0),
+        output_type=UInt16)
+    rounded_output = copy(capture!(integer_output,
+        fill(2.6, 1, 2), Xoshiro(9186)))
+    saturated_output = copy(capture!(integer_output,
+        fill(1e9, 1, 2), Xoshiro(9187)))
 
     fixed_storage = redistribution.state.counts
     before_mismatch = copy(fixed_storage)
     mismatch_rejected = try
-        capture!(redistribution, zeros(2, 2), Xoshiro(9183))
+        capture!(redistribution, zeros(2, 2), Xoshiro(9188))
         false
     catch error
         error isa DimensionMismatchError
@@ -136,7 +173,7 @@ function spad_deterministic_contract()
     invalid_input_rejected = all((fill(-1.0, 3, 3), fill(Inf, 3, 3),
         fill(NaN, 3, 3))) do input
         try
-            capture!(redistribution, input, Xoshiro(9184))
+            capture!(redistribution, input, Xoshiro(9189))
             false
         catch error
             error isa InvalidConfiguration
@@ -153,14 +190,14 @@ function spad_deterministic_contract()
     end
     replay_input = fill(40.0, 16, 16)
     replay_passed =
-        capture!(replay_detector(), replay_input, Xoshiro(9185)) ==
-        capture!(replay_detector(), replay_input, Xoshiro(9185))
+        capture!(replay_detector(), replay_input, Xoshiro(9190)) ==
+        capture!(replay_detector(), replay_input, Xoshiro(9190))
 
     allocation_detector = SPADArrayDetector((8, 8); noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=0.5,
             mean_response_model=NearestNeighborCountRedistribution(0.1)))
     allocation_input = fill(2.0, 8, 8)
-    allocation_rng = Xoshiro(9186)
+    allocation_rng = Xoshiro(9191)
     capture!(allocation_detector, allocation_input, allocation_rng)
     steady_alloc_bytes = @allocated capture!(allocation_detector,
         allocation_input, allocation_rng)
@@ -169,8 +206,17 @@ function spad_deterministic_contract()
     return Dict{String,Any}(
         "exact_radiometry_and_gate_passed" =>
             radiometry_output == fill(2.0, 2, 8),
+        "gated_dark_live_time_passed" =>
+            gated_dark_output == fill(2.0, 1, 1),
+        "temperature_dependent_dark_count_passed" =>
+            AdaptiveOpticsSim.Detectors.effective_dark_count_rate(thermal) ≈
+                expected_dark_rate &&
+            thermal_output ≈ fill(expected_dark_rate, 1, 1) &&
+            detector_export_metadata(thermal).dark_count_law == :arrhenius,
         "first_order_afterpulse_mean_passed" =>
             afterpulse_output == fill(10.0, 2, 8),
+        "ordered_live_time_pipeline_passed" =>
+            only(ordered_pipeline_output) ≈ 2.0,
         "afterpulse_metadata_passed" =>
             metadata.mean_response_model ==
                 :first_order_afterpulse_mean_response &&
@@ -179,6 +225,9 @@ function spad_deterministic_contract()
             [0.0 1.0 0.0; 1.0 6.0 1.0; 0.0 1.0 0.0],
         "redistribution_conserves_counts" =>
             sum(redistribution_output) == sum(impulse),
+        "integer_rounding_and_saturation_passed" =>
+            rounded_output == fill(UInt16(3), 1, 2) &&
+            saturated_output == fill(typemax(UInt16), 1, 2),
         "fixed_shape_mismatch_rejected" => mismatch_rejected,
         "fixed_shape_storage_preserved" => mismatch_preserved,
         "invalid_input_rejected" => invalid_input_rejected,
@@ -204,10 +253,14 @@ function generate_spad_qualification_artifact()
     deterministic = spad_deterministic_contract()
     deterministic_gates = (
         "exact_radiometry_and_gate_passed",
+        "gated_dark_live_time_passed",
+        "temperature_dependent_dark_count_passed",
         "first_order_afterpulse_mean_passed",
+        "ordered_live_time_pipeline_passed",
         "afterpulse_metadata_passed",
         "redistribution_center_passed",
         "redistribution_conserves_counts",
+        "integer_rounding_and_saturation_passed",
         "fixed_shape_mismatch_rejected",
         "fixed_shape_storage_preserved",
         "invalid_input_rejected",
@@ -231,15 +284,24 @@ function generate_spad_qualification_artifact()
             "julia_threads" => Threads.nthreads(),
             "architecture" => string(Sys.ARCH),
             "kernel" => string(Sys.KERNEL),
+            "array_backend" => "CPU",
             "source_revision" => spad_git_revision(),
             "source_dirty" => spad_git_dirty(),
         ),
         "model" => Dict(
-            "input" => "cell-integrated photon-arrival rate per array cell",
-            "output" => "accumulated expected-count or sampled-count image",
+            "input" => "cell-integrated photon-arrival rate in photons per second per array cell",
+            "output" => "accumulated expected counts or sampled counts per integration",
+            "live_time_equation" =>
+                "live_time = duty_cycle * integration_time",
             "pipeline_order" => "radiometry and dark expectation; dead-time mean law; deterministic mean response; optional Poisson surrogate; output conversion",
             "nonparalyzable_mean_law" => "mu / (1 + mu * tau / live_time)",
             "paralyzable_mean_law" => "mu * exp(-mu * tau / live_time)",
+            "first_order_afterpulse_mean_law" =>
+                "mu_out = mu_in * (1 + mean_afterpulses_per_detection)",
+            "nearest_neighbor_redistribution" =>
+                "retain 1 - f in each source cell and divide f among its orthogonal in-bounds neighbors",
+            "noise_none_semantics" =>
+                "floating expected counts after deterministic mean response",
             "statistical_scope" => "Poisson draw from adjusted mean; not the exact dead-time or afterpulse count distribution",
             "scientific_references" => [
                 "https://doi.org/10.1109/TCOMM.2018.2822815",
@@ -257,7 +319,7 @@ function generate_spad_qualification_artifact()
         "scope" => Dict(
             "included" => [
                 "fixed array dimensions and preallocated storage",
-                "active-area detection efficiency, fill factor, live time, and dark counts",
+                "active-area detection efficiency, fill factor, live time, and temperature-dependent dark counts",
                 "nonparalyzable and paralyzable expected-count dead-time laws",
                 "first-order afterpulse mean scaling",
                 "count-conserving nearest-neighbor redistribution",

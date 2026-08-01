@@ -2592,8 +2592,19 @@ function run_optional_zernike_curvature_stages(
         gpu_rates, counting_observation)
     acquire_wfs_observation!(counting_observation, gpu_rates,
         counting_acquisition, Xoshiro(0x4357))
+    counting_host = Array(counting_observation.storage)
+    expected_counting = zeros(T, 2, 16)
+    counting_plus_host = Array(gpu_rates[1].values)
+    counting_minus_host = Array(gpu_rates[2].values)
+    @inbounds for i in 1:4, j in 1:4
+        index = (i - 1) * 4 + j
+        expected_counting[1, index] = counting_plus_host[i, j] * T(0.125)
+        expected_counting[2, index] = counting_minus_host[i, j] * T(0.125)
+    end
     @test counting_observation.storage isa BackendArray
-    @test all(isfinite, Array(counting_observation.storage))
+    @test all(isfinite, counting_host)
+    @test isapprox(counting_host, expected_counting;
+        rtol=T(3e-5), atol=T(3e-5))
 
     linear_apd = LinearAPDDetector(
         topology=LinearAPDChannelBank(32),
@@ -3205,7 +3216,7 @@ end
 function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
-    correlation = NearestNeighborCountRedistribution(T(0.4))
+    mean_response = NearestNeighborCountRedistribution(T(0.4))
     sensor_kwargs = (
         qe=T(1),
         dark_count_rate=T(0),
@@ -3213,7 +3224,7 @@ function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B
         energy_resolution=T(12),
         timing_jitter_s=T(2e-6),
         wavelength_range_m=(T(0.8e-6), T(1.4e-6)),
-        mean_response_model=correlation,
+        mean_response_model=mean_response,
         T=T,
     )
     cpu = MKIDArrayDetector(

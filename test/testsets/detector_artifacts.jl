@@ -369,7 +369,7 @@
     @test spad_qualification["sigma_limit"] == 6.0
     spad_curves = spad_qualification["dead_time_curves"]
     @test Set(curve["id"] for curve in spad_curves) ==
-        Set(("nonparalyzable", "paralyzable"))
+        Set(("no_dead_time", "nonparalyzable", "paralyzable"))
     @test all(curve -> curve["all_points_passed"], spad_curves)
     @test all(curve ->
         Set(point["lambda_tau"] for point in curve["points"]) ==
@@ -385,10 +385,14 @@
     spad_deterministic = spad_qualification["deterministic"]
     @test all(spad_deterministic[key] for key in (
         "exact_radiometry_and_gate_passed",
+        "gated_dark_live_time_passed",
+        "temperature_dependent_dark_count_passed",
         "first_order_afterpulse_mean_passed",
+        "ordered_live_time_pipeline_passed",
         "afterpulse_metadata_passed",
         "redistribution_center_passed",
         "redistribution_conserves_counts",
+        "integer_rounding_and_saturation_passed",
         "fixed_shape_mismatch_rejected",
         "fixed_shape_storage_preserved",
         "invalid_input_rejected",
