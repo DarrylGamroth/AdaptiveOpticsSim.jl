@@ -3360,7 +3360,7 @@ function run_optional_skipper_ccd_checks(
     return nothing
 end
 
-function run_optional_ingaas_checks(
+function run_optional_ingaas_deterministic_checks(
     ::Type{B}, BackendArray) where {
     B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
@@ -3408,7 +3408,14 @@ function run_optional_ingaas_checks(
     @test metadata.frame_response == :none
     @test metadata.persistence_model == :exponential
     @test !supports_detector_mtf(detector)
+    return nothing
+end
 
+function run_optional_ingaas_moment_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
     stochastic = Detector(
         integration_time=T(2),
         noise=NoiseNone(),
@@ -3427,6 +3434,14 @@ function run_optional_ingaas_checks(
     @test stochastic_output isa BackendArray
     @test isapprox(mean(stochastic_host), T(8); atol=T(0.15))
     @test isapprox(var(stochastic_host), T(8); rtol=T(0.08))
+    return nothing
+end
+
+function run_optional_ingaas_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    run_optional_ingaas_deterministic_checks(B, BackendArray)
+    run_optional_ingaas_moment_checks(B, BackendArray)
     return nothing
 end
 
