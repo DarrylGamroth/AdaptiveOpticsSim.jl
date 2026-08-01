@@ -58,3 +58,8 @@ purpose = "InGaAs null-response, glow/dark, and charge-domain persistence qualif
 status = "active"
 id = "DET-INGAAS-QUAL-2026-07-31"
 path = "2026-07-31-ingaas-qualification.toml"
+[[artifacts]]
+purpose = "linear-mode APD channel topology, ordering, and statistical qualification"
+status = "active"
+id = "DET-LINEAR-APD-QUAL-2026-07-31"
+path = "2026-07-31-linear-apd-qualification.toml"

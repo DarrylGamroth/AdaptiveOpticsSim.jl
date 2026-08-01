@@ -1157,8 +1157,8 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
         readout_name = lowercase(String(get(cfg, "readout_model", "frame")))
         readout_model = if readout_name == "frame"
             CurvatureFrameReadout()
-        elseif readout_name == "counting"
-            CurvatureCountingReadout()
+        elseif readout_name == "channel"
+            CurvatureChannelReadout()
         else
             throw(InvalidConfiguration("unknown curvature readout model '$readout_name'"))
         end

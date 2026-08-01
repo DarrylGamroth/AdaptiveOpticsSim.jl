@@ -85,7 +85,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :set_curvature_calibration!,
         :CurvatureReadoutModel,
         :CurvatureFrameReadout,
-        :CurvatureCountingReadout,
+        :CurvatureChannelReadout,
         :CurvatureBranchResponse,
     )
         @test parentmodule(getfield(WavefrontSensors, name)) ===

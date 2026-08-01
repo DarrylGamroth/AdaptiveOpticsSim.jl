@@ -314,4 +314,39 @@
         "allocation_gate_passed",
     ))
     @test ingaas_deterministic["steady_alloc_bytes"] == 0
+
+    linear_apd_entry =
+        detector_entries["DET-LINEAR-APD-QUAL-2026-07-31"]
+    @test linear_apd_entry["status"] == "active"
+    linear_apd_path = joinpath(
+        dirname(detector_artifact_path), linear_apd_entry["path"])
+    @test isfile(linear_apd_path)
+    linear_apd = TOML.parsefile(linear_apd_path)
+    @test linear_apd["schema_version"] == 1
+    @test linear_apd["family"] == "linear_mode_apd_channels"
+    @test linear_apd["all_gates_passed"]
+    @test !linear_apd["environment"]["source_dirty"]
+    @test linear_apd["model"]["operating_regime"] == "linear mode"
+    @test linear_apd["model"]["excess_noise_factor_definition"] ==
+        "F = E[M^2] / E[M]^2"
+    linear_apd_qualification = linear_apd["qualification"]
+    @test linear_apd_qualification["samples_per_case"] == 16_384
+    @test linear_apd_qualification["sigma_limit"] == 6.0
+    linear_apd_moments = linear_apd_qualification["moment_cases"]
+    @test Set(case["id"] for case in linear_apd_moments) == Set((
+        "multiplied_shot", "multiplication_only", "read_only"))
+    @test all(case -> case["mean_passed"] && case["variance_passed"],
+        linear_apd_moments)
+    linear_apd_deterministic = linear_apd_qualification["deterministic"]
+    @test all(linear_apd_deterministic[key] for key in (
+        "ambiguous_generic_apd_removed",
+        "single_element_vector_storage",
+        "exact_signal_order_passed",
+        "channel_bank_vector_storage",
+        "topology_metadata_passed",
+        "matrix_input_rejected",
+        "deterministic_replay_passed",
+        "allocation_gate_passed",
+    ))
+    @test linear_apd_deterministic["steady_alloc_bytes"] == 0
 end

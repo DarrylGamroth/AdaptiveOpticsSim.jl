@@ -376,7 +376,7 @@ end
         sensor=SPADArraySensor(pde=T(0.4), dark_count_rate=zero(T),
             fill_factor=one(T)), T=T)
     counting_model = CurvaturePackedAcquisition(spad;
-        readout_model=CurvatureCountingReadout(), source=source)
+        readout_model=CurvatureChannelReadout(), source=source)
     counting_observation = WFSObservation(zeros(T, 2, 16);
         units=:photon_count, layout=:curvature_branch_channels)
     counting_plan = prepare_wfs_acquisition(counting_model, rates,
@@ -398,6 +398,33 @@ end
         expected_channels[2, index] = rates[2].values[i, j] * T(0.2)
     end
     @test counting_observation.storage ≈ expected_channels
+
+    linear_apd = LinearAPDDetector(
+        topology=LinearAPDChannelBank(32),
+        integration_time=T(0.5), qe=T(0.4), avalanche_gain=T(2),
+        conversion_gain=T(3), noise=NoiseNone(), T=T)
+    linear_model = CurvaturePackedAcquisition(linear_apd;
+        readout_model=CurvatureChannelReadout())
+    linear_observation = WFSObservation(zeros(T, 2, 16);
+        units=:detector_count, layout=:curvature_branch_channels)
+    linear_plan = prepare_wfs_acquisition(linear_model, rates,
+        linear_observation)
+    acquire_wfs_observation!(linear_observation, rates, linear_plan, rng)
+    @test linear_observation.storage ≈ expected_channels .* T(6)
+    @test channel_output(linear_apd) == vec(linear_observation.storage)
+    @test @inferred(acquire_wfs_observation!(linear_observation, rates,
+        linear_plan, rng)) === linear_observation
+
+    wrong_linear_apd = LinearAPDDetector(
+        topology=LinearAPDChannelBank(16), noise=NoiseNone(), T=T)
+    wrong_linear_model = CurvaturePackedAcquisition(wrong_linear_apd;
+        readout_model=CurvatureChannelReadout())
+    wrong_linear_error = contract_captured_error() do
+        prepare_wfs_acquisition(wrong_linear_model, rates,
+            linear_observation)
+    end
+    @test wrong_linear_error isa WFSPreparationError
+    @test wrong_linear_error.reason === :shape
 
     reference = zeros(T, size(sensor.estimator.state.reference_signal_2d))
     set_curvature_calibration!(sensor, reference;
@@ -510,6 +537,8 @@ end
         acquire_wfs_observation!(packed_observation, rates, packed_plan, rng)
         acquire_wfs_observation!(counting_observation, rates,
             counting_plan, rng)
+        acquire_wfs_observation!(linear_observation, rates,
+            linear_plan, rng)
         estimate_wfs_measurement!(measurement, observations,
             estimator_plan)
         estimate_wfs_measurement!(packed_measurement, packed_observation,
@@ -524,6 +553,8 @@ end
             rates, packed_plan, rng)) == 0
         @test @allocated(acquire_wfs_observation!(counting_observation,
             rates, counting_plan, rng)) == 0
+        @test @allocated(acquire_wfs_observation!(linear_observation,
+            rates, linear_plan, rng)) == 0
         @test @allocated(estimate_wfs_measurement!(measurement,
             observations, estimator_plan)) == 0
         @test @allocated(estimate_wfs_measurement!(packed_measurement,

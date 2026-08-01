@@ -26,7 +26,8 @@ import AdaptiveOpticsSim.WavefrontSensors: prepare_sampling!,
 export AO188ActuatorSupportModel, CircularActuatorSupport
 export SubaruHighOrderWFSModel, OperationalShackHartmannWFSModel, AO188CurvatureModel
 export AO188ReplayMode, DirectReplayMode, PreparedReplayMode
-export AO188LatencyModel, AO188DetectorConfig, AO188WFSDetectorConfig, AO188APDDetectorConfig
+export AO188LatencyModel, AO188DetectorConfig, AO188WFSDetectorConfig
+export AO188LinearAPDConfig
 export AO188SimulationParams, AO188CurvatureSimulationParams
 export AO188Simulation, subaru_ao188_simulation, subaru_ao188_curvature_simulation
 export subaru_ao188_phase_timing, prepare_replay!, ao188_readout
@@ -53,7 +54,7 @@ struct AO188CurvatureModel{T<:AbstractFloat,R<:CurvatureReadoutModel,B<:Curvatur
     readout_pixels_per_sample::Int
 end
 AO188CurvatureModel(; defocus_rms_nm::Real=500.0,
-    readout_model::CurvatureReadoutModel=CurvatureCountingReadout(),
+    readout_model::CurvatureReadoutModel=CurvatureChannelReadout(),
     branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
     crop_samples_per_pupil_sample::Integer=8,
     readout_pixels_per_sample::Integer=1,
@@ -82,7 +83,7 @@ function AO188CurvatureSimulationParams(; kwargs...)
     atmosphere_step = get(nt, :atmosphere_step, 1e-3)
     high_detector_exposure = get(nt, :high_detector_exposure, atmosphere_step)
     high_detector = get(nt, :high_detector,
-        AO188APDDetectorConfig(T=T0, integration_time=high_detector_exposure))
+        AO188LinearAPDConfig(T=T0, integration_time=high_detector_exposure))
     rest = Base.structdiff(nt, (; high_order_sensor_model=nothing, source_band=nothing, high_detector=nothing))
     return AO188SimulationParams(; source_band=:I, high_order_sensor_model=AO188CurvatureModel(T=T0),
         high_detector=high_detector, rest...)
@@ -177,42 +178,37 @@ function AO188WFSDetectorConfig(;
     )
 end
 
-struct AO188APDDetectorConfig{T<:AbstractFloat,N<:NoiseModel,D<:CountingDeadTimeModel,GM,TM<:Union{Nothing,AbstractDetectorThermalModel}} <: AO188DetectorConfig
+struct AO188LinearAPDConfig{T<:AbstractFloat,N<:NoiseModel} <:
+    AO188DetectorConfig
     integration_time::T
     qe::T
-    gain::T
-    dark_count_rate::T
+    avalanche_gain::T
+    excess_noise_factor::T
+    dark_current::T
+    conversion_gain::T
     noise::N
-    dead_time_model::D
-    output_type::Union{Nothing,DataType}
-    channel_gain_map::GM
-    thermal_model::TM
 end
 
-function AO188APDDetectorConfig(;
+function AO188LinearAPDConfig(;
     T::Type{<:AbstractFloat}=Float32,
     integration_time::Real=1e-3,
     qe::Real=0.9,
-    gain::Real=1.0,
-    dark_count_rate::Real=0.0,
+    avalanche_gain::Real=1.0,
+    excess_noise_factor::Real=1.0,
+    dark_current::Real=0.0,
+    conversion_gain::Real=1.0,
     noise::NoiseModel=NoisePhoton(),
-    dead_time_model::CountingDeadTimeModel=NoDeadTime(),
-    output_type::Union{Nothing,DataType}=nothing,
-    channel_gain_map=nothing,
-    thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
 )
     integration_time_t = validated_ao188_duration(integration_time, T,
-        "APD integration_time")
-    return AO188APDDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(dead_time_model),typeof(channel_gain_map),typeof(thermal_model)}(
+        "linear-APD integration_time")
+    return AO188LinearAPDConfig{T,typeof(convert_noise(noise, T))}(
         integration_time_t,
         T(qe),
-        T(gain),
-        T(dark_count_rate),
+        T(avalanche_gain),
+        T(excess_noise_factor),
+        T(dark_current),
+        T(conversion_gain),
         convert_noise(noise, T),
-        dead_time_model,
-        output_type,
-        channel_gain_map,
-        thermal_model,
     )
 end
 
@@ -234,20 +230,32 @@ function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend::AbstractA
     )
 end
 
-function detector_from_config(cfg::AO188APDDetectorConfig{T}; backend::AbstractArrayBackend=CPUBackend()) where {T<:AbstractFloat}
-    return APDDetector(
+function detector_from_config(cfg::AO188LinearAPDConfig{T},
+    n_channels::Integer;
+    backend::AbstractArrayBackend=CPUBackend()) where {T<:AbstractFloat}
+    return LinearAPDDetector(
+        topology=LinearAPDChannelBank(n_channels),
         integration_time=cfg.integration_time,
         qe=cfg.qe,
-        gain=cfg.gain,
-        dark_count_rate=cfg.dark_count_rate,
+        avalanche_gain=cfg.avalanche_gain,
+        excess_noise_factor=cfg.excess_noise_factor,
+        dark_current=cfg.dark_current,
+        conversion_gain=cfg.conversion_gain,
         noise=cfg.noise,
-        dead_time_model=cfg.dead_time_model,
-        output_type=cfg.output_type,
-        channel_gain_map=cfg.channel_gain_map,
-        thermal_model=something(cfg.thermal_model, NullDetectorThermalModel()),
         T=T,
         backend=backend,
     )
+end
+
+function high_detector_from_config(cfg::AO188DetectorConfig, wfs;
+    backend::AbstractArrayBackend=CPUBackend())
+    return detector_from_config(cfg; backend=backend)
+end
+
+function high_detector_from_config(cfg::AO188LinearAPDConfig, wfs;
+    backend::AbstractArrayBackend=CPUBackend())
+    return detector_from_config(cfg, length(camera_frame(wfs));
+        backend=backend)
 end
 
 function default_ao188_low_order_resolution(resolution::Integer, low_order_lenslets::Integer)
@@ -724,7 +732,9 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     high_wfs = _build_high_order_wfs(params.high_order_sensor_model, tel, params; backend=backend)
     low_wfs = ShackHartmannWFS(low_tel; n_lenslets=params.low_order_lenslets, mode=Diffractive(), T=T, backend=backend)
-    high_detector = isnothing(params.high_detector) ? nothing : detector_from_config(params.high_detector; backend=backend)
+    high_detector = isnothing(params.high_detector) ? nothing :
+        high_detector_from_config(params.high_detector, high_wfs;
+            backend=backend)
     low_detector = detector_from_config(params.low_detector; backend=backend)
 
     calibration_tel = tel

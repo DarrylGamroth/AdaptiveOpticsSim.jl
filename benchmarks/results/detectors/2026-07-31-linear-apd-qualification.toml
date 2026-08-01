@@ -1,0 +1,79 @@
+all_gates_passed = true
+artifact_id = "DET-LINEAR-APD-QUAL-2026-07-31"
+family = "linear_mode_apd_channels"
+schema_version = 1
+
+[environment]
+architecture = "x86_64"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+source_dirty = false
+source_revision = "2cbf4c161627e103c7dfd1dad5135a24eaa68e09"
+timestamp_utc = "2026-08-01T07:17:28.661"
+
+[model]
+excess_noise_factor_definition = "F = E[M^2] / E[M]^2"
+input = "photon flux per channel per second"
+multiplication_approximation = "q' = max(q + sqrt((F - 1) * q) * Z, 0)"
+operating_regime = "linear mode"
+output = "one-dimensional analog channel values"
+qualified_moderate_charge_condition = "q / (F - 1) >= 25"
+scientific_references = ["https://doi.org/10.1109/16.47763", "https://nvlpubs.nist.gov/nistpubs/Legacy/TN/nbstechnicalnote1065.pdf"]
+topology = "single element or fixed channel bank"
+
+[qualification]
+samples_per_case = 16384
+sigma_limit = 6.0
+
+    [qualification.deterministic]
+    allocation_gate_passed = true
+    ambiguous_generic_apd_removed = true
+    channel_bank_vector_storage = true
+    deterministic_replay_passed = true
+    exact_signal_order_passed = true
+    matrix_input_rejected = true
+    single_element_vector_storage = true
+    steady_alloc_bytes = 0
+    topology_metadata_passed = true
+
+    [[qualification.moment_cases]]
+    expected_mean = 480.0
+    expected_variance = 4032.0
+    id = "multiplied_shot"
+    mean_absolute_limit = 2.9764702249476644
+    mean_passed = true
+    observed_mean = 480.3323971313249
+    observed_variance = 3955.401397799282
+    sample_count = 16384
+    seed = 9040
+    variance_absolute_limit = 267.2945205944021
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 240.0
+    expected_variance = 288.0
+    id = "multiplication_only"
+    mean_absolute_limit = 0.795495128834866
+    mean_passed = true
+    observed_mean = 240.03744051892218
+    observed_variance = 291.96304400104265
+    sample_count = 16384
+    seed = 9041
+    variance_absolute_limit = 19.092465756743007
+    variance_passed = true
+    [[qualification.moment_cases]]
+    expected_mean = 0.0
+    expected_variance = 16.0
+    id = "read_only"
+    mean_absolute_limit = 0.1875
+    mean_passed = true
+    observed_mean = 0.019414698697680914
+    observed_variance = 16.053059508865406
+    sample_count = 16384
+    seed = 9042
+    variance_absolute_limit = 1.060692542041278
+    variance_passed = true
+
+[scope]
+excluded = ["Geiger-mode operation and photon timestamps", "bandwidth-dependent analog electronics", "transimpedance-amplifier response", "correlated channel noise", "calibrated gain-bandwidth products", "named detector modules and camera profiles"]
+included = ["quantum efficiency and integration duration", "dark current", "linear avalanche gain and moderate-charge excess-noise approximation", "additive read noise and conversion gain", "single-element and fixed channel-bank topology", "deterministic replay and warmed allocation"]

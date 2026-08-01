@@ -1438,7 +1438,7 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     read_cube_reads::Union{Nothing,Int}
 end
 
-struct CountingReadoutMetadata
+struct ChannelReadoutMetadata
     layout::Symbol
     output_size::Tuple{Int,Int}
     n_channels::Int
@@ -1466,7 +1466,7 @@ struct CountingDetectorExportMetadata{T<:AbstractFloat}
     sensor::Symbol
     noise::Symbol
     output_type::Union{Nothing,DataType}
-    readout::CountingReadoutMetadata
+    readout::ChannelReadoutMetadata
     energy_resolution::Union{Nothing,T}
     timing_jitter_s::Union{Nothing,T}
     wavelength_min_m::Union{Nothing,T}

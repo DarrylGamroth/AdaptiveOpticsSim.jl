@@ -1,5 +1,5 @@
 export Detector
-export APDDetector, LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
+export LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
 export HgCdTeSensor
@@ -7,8 +7,8 @@ export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput
 export emccd_snr
 export SequentialAcquisition, FrameTransferAcquisition
 export HgCdTeAvalancheArraySensor
-export APDSensor, SPADArraySensor, MKIDArraySensor
-export SingleElementAPD, APDChannelBank
+export SPADArraySensor, MKIDArraySensor
+export SingleElementLinearAPD, LinearAPDChannelBank
 export FrameResponseModel, NullFrameResponse, GaussianPixelResponse
 export SampledFrameResponse, RectangularPixelAperture
 export CMOSReadNoiseMap, InterpixelCapacitance, detector_mtf

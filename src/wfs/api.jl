@@ -44,7 +44,7 @@ export ZernikeWFS
 export CurvatureWFS
 export CurvatureReadoutModel
 export CurvatureFrameReadout
-export CurvatureCountingReadout
+export CurvatureChannelReadout
 export CurvatureBranchResponse
 export FluxThresholdValidSubapertures
 export AbstractSlopeExtractionModel

@@ -157,7 +157,14 @@ curvature signal sampled on the valid subaperture grid.
 """
 abstract type CurvatureReadoutModel end
 struct CurvatureFrameReadout <: CurvatureReadoutModel end
-struct CurvatureCountingReadout <: CurvatureReadoutModel end
+
+"""
+    CurvatureChannelReadout()
+
+Map the positive- and negative-defocus Curvature WFS branches to two values per
+pupil sample for a compatible channel or counting detector.
+"""
+struct CurvatureChannelReadout <: CurvatureReadoutModel end
 
 """
     CurvatureBranchResponse(; plus_throughput=1, minus_throughput=1, plus_background=0, minus_background=0, T=Float64)
@@ -411,19 +418,19 @@ end
 
 sensing_mode(::CurvatureWFS) = Diffractive()
 validate_curvature_readout_geometry(::CurvatureFrameReadout, readout_pixels_per_sample::Int) = nothing
-function validate_curvature_readout_geometry(::CurvatureCountingReadout, readout_pixels_per_sample::Int)
+function validate_curvature_readout_geometry(::CurvatureChannelReadout, readout_pixels_per_sample::Int)
     readout_pixels_per_sample == 1 ||
-        throw(InvalidConfiguration("CurvatureCountingReadout requires readout_pixels_per_sample == 1"))
+        throw(InvalidConfiguration("CurvatureChannelReadout requires readout_pixels_per_sample == 1"))
     return nothing
 end
 convert_curvature_branch_response(response::CurvatureBranchResponse, ::Type{T}) where {T<:AbstractFloat} =
     CurvatureBranchResponse(T=T, plus_throughput=response.plus_throughput, minus_throughput=response.minus_throughput,
         plus_background=response.plus_background, minus_background=response.minus_background)
 curvature_camera_dims(pupil_samples::Int, ::CurvatureFrameReadout) = (2 * pupil_samples, pupil_samples)
-curvature_camera_dims(pupil_samples::Int, ::CurvatureCountingReadout) = (2, pupil_samples * pupil_samples)
+curvature_camera_dims(pupil_samples::Int, ::CurvatureChannelReadout) = (2, pupil_samples * pupil_samples)
 curvature_camera_dims(pupil_samples::Int, readout_pixels_per_sample::Int, ::CurvatureFrameReadout) =
     (2 * pupil_samples * readout_pixels_per_sample, pupil_samples * readout_pixels_per_sample)
-curvature_camera_dims(pupil_samples::Int, readout_pixels_per_sample::Int, ::CurvatureCountingReadout) = (2, pupil_samples * pupil_samples)
+curvature_camera_dims(pupil_samples::Int, readout_pixels_per_sample::Int, ::CurvatureChannelReadout) = (2, pupil_samples * pupil_samples)
 curvature_camera_frame(backend, ::Type{T}, pupil_samples::Int, readout_model::CurvatureReadoutModel;
     readout_pixels_per_sample::Int=1) where {T<:AbstractFloat} =
     backend{T}(undef, curvature_camera_dims(pupil_samples, readout_pixels_per_sample, readout_model)...)
@@ -611,7 +618,7 @@ function pack_curvature_readout!(::ScalarCPUStyle, ::CurvatureFrameReadout, wfs:
     return wfs.acquisition.state.camera_frame
 end
 
-function pack_curvature_readout!(::ScalarCPUStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS)
+function pack_curvature_readout!(::ScalarCPUStyle, ::CurvatureChannelReadout, wfs::CurvatureWFS)
     copyto!(@view(wfs.acquisition.state.camera_frame[1, :]), vec(wfs.front_end.propagation.frame_plus))
     copyto!(@view(wfs.acquisition.state.camera_frame[2, :]), vec(wfs.front_end.propagation.frame_minus))
     return wfs.acquisition.state.camera_frame
@@ -624,7 +631,7 @@ function pack_curvature_readout!(style::AcceleratorStyle, ::CurvatureFrameReadou
     return wfs.acquisition.state.camera_frame
 end
 
-function pack_curvature_readout!(style::AcceleratorStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS)
+function pack_curvature_readout!(style::AcceleratorStyle, ::CurvatureChannelReadout, wfs::CurvatureWFS)
     launch_kernel!(style, curvature_channel_pack_kernel!, wfs.acquisition.state.camera_frame, wfs.front_end.propagation.frame_plus,
         wfs.front_end.propagation.frame_minus, wfs.params.pupil_samples; ndrange=size(wfs.front_end.propagation.frame_plus))
     return wfs.acquisition.state.camera_frame
@@ -834,7 +841,7 @@ function curvature_signal_from_current_frames!(style::AcceleratorStyle, wfs::Cur
     return curvature_signal_from_planes!(style, wfs)
 end
 
-function curvature_signal!(::ScalarCPUStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS,
+function curvature_signal!(::ScalarCPUStyle, ::CurvatureChannelReadout, wfs::CurvatureWFS,
     frame::AbstractMatrix{T}) where {T<:AbstractFloat}
     size(frame) == size(wfs.acquisition.state.camera_frame) ||
         throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled channel readout"))
@@ -859,7 +866,7 @@ function curvature_signal!(::ScalarCPUStyle, ::CurvatureCountingReadout, wfs::Cu
     return wfs.estimator.state.slopes
 end
 
-function curvature_signal!(style::AcceleratorStyle, ::CurvatureCountingReadout, wfs::CurvatureWFS,
+function curvature_signal!(style::AcceleratorStyle, ::CurvatureChannelReadout, wfs::CurvatureWFS,
     frame::AbstractMatrix{T}) where {T<:AbstractFloat}
     size(frame) == size(wfs.acquisition.state.camera_frame) ||
         throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled channel readout"))
@@ -996,13 +1003,14 @@ function measure!(::Diffractive, wfs::CurvatureWFS,
         src, det; rng=rng)
 end
 
-function measure_detector_coupled!(::CurvatureCountingReadout,
+function measure_detector_coupled!(::CurvatureChannelReadout,
     wfs::CurvatureWFS, ::PupilFunction,
     src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
-    throw(InvalidConfiguration("CurvatureWFS detector coupling requires CurvatureFrameReadout"))
+    throw(InvalidConfiguration(
+        "CurvatureChannelReadout requires a linear-mode APD channel bank or a counting detector"))
 end
 
-function measure_detector_coupled!(::CurvatureCountingReadout,
+function measure_detector_coupled!(::CurvatureChannelReadout,
     wfs::CurvatureWFS, pupil::PupilFunction,
     src::AbstractSource, det::AbstractCountingDetector; rng::AbstractRNG=Random.default_rng())
     ensure_curvature_calibration!(wfs, pupil, src)
@@ -1011,6 +1019,21 @@ function measure_detector_coupled!(::CurvatureCountingReadout,
     size(output_frame(det)) == size(wfs.acquisition.state.camera_frame) ||
         throw(InvalidConfiguration("CurvatureWFS counting-detector output size must match the sampled channel readout"))
     return curvature_signal!(wfs, output_frame(det))
+end
+
+function measure_detector_coupled!(::CurvatureChannelReadout,
+    wfs::CurvatureWFS, pupil::PupilFunction,
+    src::AbstractSource, det::LinearAPDDetector;
+    rng::AbstractRNG=Random.default_rng())
+    ensure_curvature_calibration!(wfs, pupil, src)
+    curvature_intensity!(wfs, pupil, src)
+    input = vec(wfs.acquisition.state.camera_frame)
+    length(input) == length(channel_output(det)) || throw(
+        InvalidConfiguration(
+            "CurvatureWFS linear-APD channel count must match the sampled channel readout"))
+    capture!(det, input; rng=rng)
+    copyto!(wfs.acquisition.state.camera_frame, channel_output(det))
+    return curvature_signal!(wfs, wfs.acquisition.state.camera_frame)
 end
 
 function measure_detector_coupled!(::CurvatureFrameReadout,
@@ -1040,15 +1063,19 @@ end
 @inline wfs_output_frame_prototype(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
 @inline wfs_output_metadata(wfs::CurvatureWFS) = wfs_output_metadata(wfs.params.readout_model, wfs)
 @inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing
-@inline wfs_output_metadata(::CurvatureCountingReadout, wfs::CurvatureWFS) =
-    CountingReadoutMetadata(:branch_by_channel, size(wfs.acquisition.state.camera_frame), length(wfs.acquisition.state.camera_frame))
+@inline wfs_output_metadata(::CurvatureChannelReadout, wfs::CurvatureWFS) =
+    ChannelReadoutMetadata(:branch_by_channel,
+        size(wfs.acquisition.state.camera_frame),
+        length(wfs.acquisition.state.camera_frame))
 
 @inline supports_prepared_runtime(::CurvatureWFS, src::AbstractSource) =
     is_leaf_source(src)
 @inline supports_detector_output(wfs::CurvatureWFS, det::AbstractDetector) = supports_detector_output(wfs.params.readout_model, det)
 @inline supports_detector_output(::CurvatureFrameReadout, ::AbstractDetector) = true
-@inline supports_detector_output(::CurvatureCountingReadout, ::AbstractDetector) = false
-@inline supports_detector_output(::CurvatureCountingReadout, ::AbstractCountingDetector) = true
+@inline supports_detector_output(::CurvatureChannelReadout, ::AbstractDetector) = false
+@inline supports_detector_output(::CurvatureChannelReadout, ::AbstractCountingDetector) = true
+@inline supports_detector_output(::CurvatureChannelReadout,
+    ::LinearAPDDetector) = true
 
 @inline function prepare_runtime_wfs!(wfs::CurvatureWFS,
     pupil::PupilFunction, src::AbstractSource)
