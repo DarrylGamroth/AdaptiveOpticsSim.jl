@@ -3438,6 +3438,33 @@ function run_optional_ingaas_deterministic_checks(
     return nothing
 end
 
+function run_optional_spad_moment_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    stochastic = SPADArrayDetector((128, 128); noise=NoisePhoton(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=one(T),
+            dead_time_model=NonParalyzableDeadTime(T(0.05)), T=T),
+        T=T, backend=selector)
+    stochastic_output = capture!(stochastic,
+        BackendArray(fill(T(100), 128, 128)), Xoshiro(0x53504146))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(stochastic_output))
+    stochastic_host = Array(stochastic_output)
+    expected_mean = T(100 / 6)
+    @test stochastic_output isa BackendArray
+    @test isapprox(mean(stochastic_host), expected_mean; atol=T(0.2))
+    @test isapprox(var(stochastic_host), expected_mean; rtol=T(0.1))
+    return nothing
+end
+
+# AMDGPU/GPUCompiler on the maintained Julia 1.12.6 host can segfault while
+# compiling the portable Poisson kernel. Keep deterministic SPAD semantics in
+# the release target without silently promoting a stochastic AMDGPU claim.
+run_optional_spad_moment_checks(
+    ::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}, BackendArray) = nothing
+
 function run_optional_spad_qualification_checks(
     ::Type{B}, BackendArray) where {
     B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
@@ -3484,19 +3511,7 @@ function run_optional_spad_qualification_checks(
     @test Array(paralyzable_output) ≈
         reshape(T[0, 10exp(-1), 1000exp(-100)], 1, 3) rtol=T(2e-5)
 
-    stochastic = SPADArrayDetector((128, 128); noise=NoisePhoton(),
-        sensor=SPADArraySensor(active_area_detection_efficiency=one(T),
-            dead_time_model=NonParalyzableDeadTime(T(0.05)), T=T),
-        T=T, backend=selector)
-    stochastic_output = capture!(stochastic,
-        BackendArray(fill(T(100), 128, 128)), Xoshiro(0x53504146))
-    AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(stochastic_output))
-    stochastic_host = Array(stochastic_output)
-    expected_mean = T(100 / 6)
-    @test stochastic_output isa BackendArray
-    @test isapprox(mean(stochastic_host), expected_mean; atol=T(0.2))
-    @test isapprox(var(stochastic_host), expected_mean; rtol=T(0.1))
+    run_optional_spad_moment_checks(B, BackendArray)
 
     fixed_counts = deterministic.state.counts
     @test_throws DimensionMismatchError capture!(deterministic,
