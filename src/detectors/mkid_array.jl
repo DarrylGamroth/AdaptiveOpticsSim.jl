@@ -16,7 +16,7 @@ per-photon energy/timestamp events.
 struct MKIDArraySensor{
     T<:AbstractFloat,
     D<:CountingDeadTimeModel,
-    C<:AbstractCountingCorrelationModel,
+    C<:CountingMeanResponseModel,
 } <: MKIDArraySensorType
     qe::T
     dark_count_rate::T
@@ -26,14 +26,14 @@ struct MKIDArraySensor{
     wavelength_min_m::Union{Nothing,T}
     wavelength_max_m::Union{Nothing,T}
     dead_time_model::D
-    correlation_model::C
+    mean_response_model::C
 end
 
 function MKIDArraySensor(; qe::Real=0.7, dark_count_rate::Real=0.0, fill_factor::Real=1.0,
     energy_resolution::Real=10.0, timing_jitter_s::Real=1e-6,
     wavelength_range_m::Union{Nothing,Tuple{<:Real,<:Real}}=nothing,
     dead_time_model::CountingDeadTimeModel=NoDeadTime(),
-    correlation_model::AbstractCountingCorrelationModel=NullCountingCorrelation(),
+    mean_response_model::CountingMeanResponseModel=NullCountingMeanResponse(),
     T::Type{<:AbstractFloat}=Float64)
     typed_qe = T(qe)
     typed_dark_count_rate = T(dark_count_rate)
@@ -61,8 +61,8 @@ function MKIDArraySensor(; qe::Real=0.7, dark_count_rate::Real=0.0, fill_factor:
         lo, hi
     end
     dead_time = validate_dead_time_model(convert_dead_time_model(dead_time_model, T))
-    correlation = validate_correlation_model(convert_correlation_model(correlation_model, T))
-    return MKIDArraySensor{T,typeof(dead_time),typeof(correlation)}(
+    mean_response = validate_mean_response_model(convert_mean_response_model(mean_response_model, T))
+    return MKIDArraySensor{T,typeof(dead_time),typeof(mean_response)}(
         typed_qe,
         typed_dark_count_rate,
         typed_fill_factor,
@@ -71,7 +71,7 @@ function MKIDArraySensor(; qe::Real=0.7, dark_count_rate::Real=0.0, fill_factor:
         wavelength_min_m,
         wavelength_max_m,
         dead_time,
-        correlation,
+        mean_response,
     )
 end
 
@@ -121,7 +121,7 @@ end
 counting_sensor(det::MKIDArrayDetector) = det.params.sensor
 counting_gate_model(det::MKIDArrayDetector) = det.params.gate_model
 counting_dead_time_model(det::MKIDArrayDetector) = det.params.sensor.dead_time_model
-counting_correlation_model(det::MKIDArrayDetector) = det.params.sensor.correlation_model
+counting_mean_response_model(det::MKIDArrayDetector) = det.params.sensor.mean_response_model
 counting_integration_time(det::MKIDArrayDetector) = det.params.integration_time
 counting_layout(det::MKIDArrayDetector) = det.params.layout
 counting_output_type(det::MKIDArrayDetector) = det.params.output_type
@@ -136,7 +136,7 @@ set_counting_host_buffer!(det::MKIDArrayDetector, values) = (det.state.host_buff
 set_counting_output_buffer!(det::MKIDArrayDetector, values) = (det.state.output_buffer = values; det)
 set_counting_output_host_buffer!(det::MKIDArrayDetector, values) =
     (det.state.output_buffer_host = values; det)
-counting_qe(det::MKIDArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.qe)
+counting_detection_efficiency(det::MKIDArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.qe)
 counting_fill_factor(det::MKIDArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
 counting_reported_fill_factor(det::MKIDArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
 counting_dark_count_rate(det::MKIDArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.dark_count_rate)
@@ -254,7 +254,7 @@ function convert_mkid_sensor(sensor::MKIDArraySensorType, ::Type{T}) where {T<:A
         timing_jitter_s=sensor.timing_jitter_s,
         wavelength_range_m=wavelength_range_m,
         dead_time_model=sensor.dead_time_model,
-        correlation_model=sensor.correlation_model,
+        mean_response_model=sensor.mean_response_model,
         T=T,
     )
 end

@@ -293,7 +293,7 @@ end
         :LinearAPDChannelBank,
         :CountingDeadTimeModel,
         :DutyCycleGate,
-        :ChannelCrosstalkModel,
+        :NearestNeighborCountRedistribution,
         :channel_output,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)

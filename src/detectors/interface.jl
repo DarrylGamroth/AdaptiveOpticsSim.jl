@@ -7,7 +7,7 @@ abstract type AbstractFrameDetector <: AbstractDetector end
 abstract type AbstractCountingDetector <: AbstractDetector end
 abstract type CountingDeadTimeModel end
 abstract type AbstractCountingGateModel end
-abstract type AbstractCountingCorrelationModel end
+abstract type CountingMeanResponseModel end
 abstract type AbstractDetectorResponse end
 abstract type AbstractFrameResponse <: AbstractDetectorResponse end
 abstract type AbstractChargeCouplingModel end
@@ -38,8 +38,8 @@ supports_counting_noise(::AbstractCountingDetector) = true
 supports_dead_time(det::AbstractCountingDetector) = supports_dead_time(counting_dead_time_model(det))
 supports_channel_gain_map(det::AbstractCountingDetector) = !isnothing(counting_channel_gain_map(det))
 supports_counting_gating(det::AbstractCountingDetector) = !is_null_counting_gate(counting_gate_model(det))
-supports_afterpulsing(det::AbstractCountingDetector) = _supports_afterpulsing(counting_correlation_model(det))
-supports_channel_crosstalk(det::AbstractCountingDetector) = _supports_channel_crosstalk(counting_correlation_model(det))
+supports_first_order_afterpulse_mean_response(det::AbstractCountingDetector) = _supports_first_order_afterpulse_mean_response(counting_mean_response_model(det))
+supports_nearest_neighbor_count_redistribution(det::AbstractCountingDetector) = _supports_nearest_neighbor_count_redistribution(counting_mean_response_model(det))
 supports_paralyzable_dead_time(det::AbstractCountingDetector) = is_paralyzable_dead_time(counting_dead_time_model(det))
 
 detector_sensor_symbol(sensor::SensorType) =
@@ -823,39 +823,56 @@ end
 
 DutyCycleGate(duty_cycle::Real) = DutyCycleGate{Float64}(float(duty_cycle))
 
-struct NullCountingCorrelation <: AbstractCountingCorrelationModel end
+struct NullCountingMeanResponse <: CountingMeanResponseModel end
 
-struct AfterpulsingModel{T<:AbstractFloat} <: AbstractCountingCorrelationModel
-    probability::T
+"""
+    FirstOrderAfterpulseMeanResponse(mean_afterpulses_per_detection)
+
+Deterministically scale the post-dead-time expected count by one plus the
+nonnegative mean number of first-order afterpulse counts per detection. This
+accumulated-count approximation does not model avalanche history or event-time
+statistics.
+"""
+struct FirstOrderAfterpulseMeanResponse{T<:AbstractFloat} <: CountingMeanResponseModel
+    mean_afterpulses_per_detection::T
 end
 
-AfterpulsingModel(probability::Real) = AfterpulsingModel{Float64}(float(probability))
+FirstOrderAfterpulseMeanResponse(mean_afterpulses_per_detection::Real) =
+    FirstOrderAfterpulseMeanResponse{Float64}(float(mean_afterpulses_per_detection))
 
-struct ChannelCrosstalkModel{T<:AbstractFloat} <: AbstractCountingCorrelationModel
-    coupling::T
+"""
+    NearestNeighborCountRedistribution(redistribution_fraction)
+
+Redistribute the selected fraction of each cell's expected count equally among
+its orthogonal in-bounds neighbors. The operation conserves the array sum and
+does not imply optical blur, electrical crosstalk, or detector MTF.
+"""
+struct NearestNeighborCountRedistribution{T<:AbstractFloat} <: CountingMeanResponseModel
+    redistribution_fraction::T
 end
 
-ChannelCrosstalkModel(coupling::Real) = ChannelCrosstalkModel{Float64}(float(coupling))
+NearestNeighborCountRedistribution(redistribution_fraction::Real) =
+    NearestNeighborCountRedistribution{Float64}(float(redistribution_fraction))
 
-struct CompositeCountingCorrelation{M<:Tuple} <: AbstractCountingCorrelationModel
+struct CompositeCountingMeanResponse{M<:Tuple} <: CountingMeanResponseModel
     stages::M
-    function CompositeCountingCorrelation(stages::Tuple{Vararg{AbstractCountingCorrelationModel}})
-        isempty(stages) && throw(InvalidConfiguration("CompositeCountingCorrelation requires at least one stage"))
+    function CompositeCountingMeanResponse(stages::Tuple{Vararg{CountingMeanResponseModel}})
+        isempty(stages) && throw(InvalidConfiguration("CompositeCountingMeanResponse requires at least one stage"))
         return new{typeof(stages)}(stages)
     end
 end
 
-CompositeCountingCorrelation(stages::Tuple) =
-    throw(InvalidConfiguration("CompositeCountingCorrelation stages must be AbstractCountingCorrelationModel values"))
-CompositeCountingCorrelation(stages::AbstractCountingCorrelationModel...) = CompositeCountingCorrelation(tuple(stages...))
+CompositeCountingMeanResponse(stages::Tuple) =
+    throw(InvalidConfiguration("CompositeCountingMeanResponse stages must be CountingMeanResponseModel values"))
+CompositeCountingMeanResponse(stages::CountingMeanResponseModel...) = CompositeCountingMeanResponse(tuple(stages...))
 
 counting_gate_symbol(::NullCountingGate) = :none
 counting_gate_symbol(::DutyCycleGate) = :duty_cycle
 
-counting_correlation_symbol(::NullCountingCorrelation) = :none
-counting_correlation_symbol(::AfterpulsingModel) = :afterpulsing
-counting_correlation_symbol(::ChannelCrosstalkModel) = :channel_crosstalk
-counting_correlation_symbol(::CompositeCountingCorrelation) = :composite
+counting_mean_response_symbol(::NullCountingMeanResponse) = :none
+counting_mean_response_symbol(::FirstOrderAfterpulseMeanResponse) = :first_order_afterpulse_mean_response
+counting_mean_response_symbol(::NearestNeighborCountRedistribution) = :nearest_neighbor_count_redistribution
+counting_mean_response_symbol(::CompositeCountingMeanResponse) = :composite
 
 function PixelResponseNonuniformity(gain_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
@@ -1446,7 +1463,7 @@ end
 
 struct CountingDetectorExportMetadata{T<:AbstractFloat}
     integration_time::T
-    qe::T
+    detection_efficiency::T
     fill_factor::Union{Nothing,T}
     gain::T
     dark_count_rate::T
@@ -1454,9 +1471,9 @@ struct CountingDetectorExportMetadata{T<:AbstractFloat}
     dead_time::Union{Nothing,T}
     gate_model::Symbol
     duty_cycle::Union{Nothing,T}
-    correlation_model::Symbol
-    afterpulse_probability::Union{Nothing,T}
-    crosstalk::Union{Nothing,T}
+    mean_response_model::Symbol
+    mean_afterpulses_per_detection::Union{Nothing,T}
+    redistribution_fraction::Union{Nothing,T}
     thermal_model::Symbol
     detector_temperature_K::Union{Nothing,T}
     ambient_temperature_K::Union{Nothing,T}

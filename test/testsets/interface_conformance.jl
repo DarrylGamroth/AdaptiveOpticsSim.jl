@@ -7,7 +7,7 @@
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     det = Detector(noise=NoiseNone())
-    spad = SPADArrayDetector(noise=NoisePhoton())
+    spad = SPADArrayDetector((8, 8); noise=NoisePhoton())
     mkid = MKIDArrayDetector(noise=NoisePhoton())
     psf = fill(1.0, 8, 8)
     linear_apd = LinearAPDDetector(

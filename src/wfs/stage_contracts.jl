@@ -597,12 +597,17 @@ function prepare_wfs_acquisition(detector::AbstractCountingDetector,
 end
 
 @inline function _capture_counting_wfs!(detector, input, ::Nothing, rng)
-    return capture!(detector, input, rng)
+    return _capture_prevalidated_counting!(detector, input,
+        one(eltype(counting_array(detector))), rng)
 end
 
 @inline function _capture_counting_wfs!(detector, input,
     source::AbstractSource, rng)
-    return capture!(detector, input, source, rng)
+    output_type = eltype(counting_array(detector))
+    source_throughput = counting_source_throughput(detector, source,
+        output_type)
+    return _capture_prevalidated_counting!(detector, input,
+        source_throughput, rng)
 end
 
 function acquire_wfs_observation!(observation::WFSObservation,

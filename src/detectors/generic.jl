@@ -449,14 +449,16 @@ has_bad_pixels(model::CompositeDetectorDefectModel) = any(has_bad_pixels, model.
 
 counting_gate_duty_cycle(::AbstractCountingGateModel, ::Type{T}) where {T<:AbstractFloat} = nothing
 counting_gate_duty_cycle(model::DutyCycleGate, ::Type{T}) where {T<:AbstractFloat} = T(model.duty_cycle)
-afterpulse_probability(::AbstractCountingCorrelationModel, ::Type{T}) where {T<:AbstractFloat} = nothing
-afterpulse_probability(model::AfterpulsingModel, ::Type{T}) where {T<:AbstractFloat} = T(model.probability)
-afterpulse_probability(model::CompositeCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} =
-    _max_or_nothing((afterpulse_probability(stage, T) for stage in model.stages))
-crosstalk_value(::AbstractCountingCorrelationModel, ::Type{T}) where {T<:AbstractFloat} = nothing
-crosstalk_value(model::ChannelCrosstalkModel, ::Type{T}) where {T<:AbstractFloat} = T(model.coupling)
-crosstalk_value(model::CompositeCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} =
-    _max_or_nothing((crosstalk_value(stage, T) for stage in model.stages))
+mean_afterpulses_per_detection(::CountingMeanResponseModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+mean_afterpulses_per_detection(model::FirstOrderAfterpulseMeanResponse, ::Type{T}) where {T<:AbstractFloat} =
+    T(model.mean_afterpulses_per_detection)
+mean_afterpulses_per_detection(model::CompositeCountingMeanResponse, ::Type{T}) where {T<:AbstractFloat} =
+    _max_or_nothing((mean_afterpulses_per_detection(stage, T) for stage in model.stages))
+redistribution_fraction(::CountingMeanResponseModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+redistribution_fraction(model::NearestNeighborCountRedistribution, ::Type{T}) where {T<:AbstractFloat} =
+    T(model.redistribution_fraction)
+redistribution_fraction(model::CompositeCountingMeanResponse, ::Type{T}) where {T<:AbstractFloat} =
+    _max_or_nothing((redistribution_fraction(stage, T) for stage in model.stages))
 
 function _max_or_nothing(values)
     found = false

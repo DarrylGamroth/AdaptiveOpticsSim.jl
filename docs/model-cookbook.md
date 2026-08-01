@@ -119,11 +119,11 @@ counting_wfs = CurvatureWFS(
     pupil_samples=8,
     readout_model=CurvatureChannelReadout(),
 )
-spad = SPADArrayDetector(
+spad = SPADArrayDetector((2, 64);
     integration_time=1.0,
     noise=NoiseNone(),
     sensor=SPADArraySensor(
-        pde=0.5,
+        active_area_detection_efficiency=0.5,
         fill_factor=0.8,
         dark_count_rate=0.0,
     ),

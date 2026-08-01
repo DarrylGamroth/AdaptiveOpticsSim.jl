@@ -12,7 +12,7 @@
     mkid_meta = detector_export_metadata(mkid)
     @test mkid_meta isa CountingDetectorExportMetadata
     @test mkid_meta.sensor == :mkid_array
-    @test mkid_meta.qe == 0.7
+    @test mkid_meta.detection_efficiency == 0.7
     @test mkid_meta.fill_factor == 0.9
     @test mkid_meta.energy_resolution == 12.0
     @test mkid_meta.timing_jitter_s == 2e-6

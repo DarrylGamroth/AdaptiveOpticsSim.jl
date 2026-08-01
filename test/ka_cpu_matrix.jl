@@ -1219,11 +1219,11 @@ end
         counting_input[3, 3] = 10.0
         scalar_counting = similar(counting_input)
         ka_counting = similar(counting_input)
-        AdaptiveOpticsSim.Detectors._apply_counting_channel_crosstalk!(
+        AdaptiveOpticsSim.Detectors._apply_nearest_neighbor_count_redistribution!(
             SCALAR_CPU_STYLE, scalar_counting, counting_input, 0.4)
-        AdaptiveOpticsSim.Detectors._apply_counting_channel_crosstalk!(
+        AdaptiveOpticsSim.Detectors._apply_nearest_neighbor_count_redistribution!(
             KA_CPU_STYLE, ka_counting, counting_input, 0.4)
-        mark_ka_cpu_kernel!(:counting_channel_crosstalk_kernel!)
+        mark_ka_cpu_kernel!(:nearest_neighbor_count_redistribution_kernel!)
         @test ka_cpu_close(ka_counting, scalar_counting)
         @test sum(ka_counting) ≈ sum(counting_input)
 

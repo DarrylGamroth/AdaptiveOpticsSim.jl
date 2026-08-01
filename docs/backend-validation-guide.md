@@ -320,7 +320,7 @@ The reduced maintained smoke covers:
   lifecycle checks with detector products and the prepared storage frame
   remaining device resident and scalar indexing disabled
 - MKID accumulated-count capture, source passband handling, and
-  flux-conserving channel-crosstalk parity
+  count-conserving nearest-neighbor redistribution parity
 
 For independent controllable optics, optional backend smoke checks command
 isolation and additive application without a packed aggregate. Controller
@@ -409,7 +409,7 @@ With AMDGPU 2.7, photon Poisson sampling, detector readout correction, windowed
 multi-read products, and float-to-integer detector export use host-mirror
 paths. Poisson sampling, correction, and integer export reuse detector host
 buffers; windowed readout-product construction retains its existing allocation
-behavior. Counting crosstalk and the rest of the maintained detector array math
+behavior. Nearest-neighbor count redistribution and the rest of the maintained detector array math
 remain backend kernels.
 
 On the normal point-source path, prepared Shack-Hartmann field formation, FFTs,
