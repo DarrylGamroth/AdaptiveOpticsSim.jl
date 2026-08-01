@@ -201,7 +201,7 @@ end
             detector.state.output_buffer, detector.state.output_buffer_host)
         @test all(current_arrays[index] === arrays[index]
             for index in eachindex(arrays))
-        @test all(current_arrays[index] == snapshots[index]
+        @test all(isequal(current_arrays[index], snapshots[index])
             for index in eachindex(arrays))
     end
     @test size(capture!(detector, fill(1.0, 3, 2), Xoshiro(9243))) ==
