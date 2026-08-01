@@ -1,22 +1,32 @@
 abstract type AbstractLinearAPDTopology end
 
-"""A single linear-mode APD with scalar optical input and vector storage."""
-struct SingleElementAPD <: AbstractLinearAPDTopology end
+"""
+    SingleElementLinearAPD()
 
-"""A fixed-size bank of independent linear-mode APD channels."""
-struct APDChannelBank <: AbstractLinearAPDTopology
+Select one linear-mode avalanche-photodiode element. The detector accepts a
+scalar or one-element-vector photon flux and retains one-dimensional storage.
+"""
+struct SingleElementLinearAPD <: AbstractLinearAPDTopology end
+
+"""
+    LinearAPDChannelBank(n_channels)
+
+Select a fixed bank of `n_channels` independent linear-mode avalanche-
+photodiode channels. Use [`SingleElementLinearAPD`](@ref) for one channel.
+"""
+struct LinearAPDChannelBank <: AbstractLinearAPDTopology
     n_channels::Int
-    function APDChannelBank(n_channels::Integer)
+    function LinearAPDChannelBank(n_channels::Integer)
         n_channels >= 2 || throw(InvalidConfiguration(
-            "APDChannelBank n_channels must be >= 2; use SingleElementAPD for one channel"))
+            "LinearAPDChannelBank n_channels must be >= 2; use SingleElementLinearAPD for one channel"))
         return new(Int(n_channels))
     end
 end
 
-linear_apd_channel_count(::SingleElementAPD) = 1
-linear_apd_channel_count(topology::APDChannelBank) = topology.n_channels
-linear_apd_topology_symbol(::SingleElementAPD) = :single_element
-linear_apd_topology_symbol(::APDChannelBank) = :channel_bank
+linear_apd_channel_count(::SingleElementLinearAPD) = 1
+linear_apd_channel_count(topology::LinearAPDChannelBank) = topology.n_channels
+linear_apd_topology_symbol(::SingleElementLinearAPD) = :single_element
+linear_apd_topology_symbol(::LinearAPDChannelBank) = :channel_bank
 
 struct LinearAPDDetectorParams{T<:AbstractFloat,TP<:AbstractLinearAPDTopology}
     integration_time::T
@@ -34,12 +44,12 @@ mutable struct LinearAPDDetectorState{T<:AbstractFloat,A<:AbstractVector{T}}
 end
 
 """
-    LinearAPDDetector(; topology=SingleElementAPD(), ...)
+    LinearAPDDetector(; topology=SingleElementLinearAPD(), ...)
 
 Linear-mode single-element APD or fixed channel bank. Inputs are photon fluxes
 in photons/channel/second and outputs are one-dimensional channel values. This
-is intentionally separate from both area-detector frames and the Geiger-mode
-counting `APDDetector`.
+is intentionally separate from both area-detector frames and Geiger-mode SPAD
+counting arrays.
 """
 struct LinearAPDDetector{N<:NoiseModel,P<:LinearAPDDetectorParams,
     S<:LinearAPDDetectorState,B<:AbstractArrayBackend} <: AbstractDetector
@@ -51,7 +61,7 @@ end
 @inline backend(::LinearAPDDetector{<:Any,<:Any,<:Any,B}) where {B} = B()
 
 function LinearAPDDetector(;
-    topology::AbstractLinearAPDTopology=SingleElementAPD(),
+    topology::AbstractLinearAPDTopology=SingleElementLinearAPD(),
     integration_time::Real=1.0,
     qe::Real=1.0,
     avalanche_gain::Real=1.0,
@@ -62,18 +72,30 @@ function LinearAPDDetector(;
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend(),
 )
-    integration_time > 0 || throw(InvalidConfiguration(
-        "LinearAPDDetector integration_time must be > 0"))
-    zero(T) <= T(qe) <= one(T) || throw(InvalidConfiguration(
-        "LinearAPDDetector qe must lie in [0, 1]"))
-    avalanche_gain >= 1 || throw(InvalidConfiguration(
-        "LinearAPDDetector avalanche_gain must be >= 1"))
-    excess_noise_factor >= 1 || throw(InvalidConfiguration(
-        "LinearAPDDetector excess_noise_factor must be >= 1"))
-    dark_current >= 0 || throw(InvalidConfiguration(
-        "LinearAPDDetector dark_current must be >= 0"))
-    conversion_gain > 0 || throw(InvalidConfiguration(
-        "LinearAPDDetector conversion_gain must be > 0"))
+    integration_time_t = T(integration_time)
+    qe_t = T(qe)
+    avalanche_gain_t = T(avalanche_gain)
+    excess_noise_factor_t = T(excess_noise_factor)
+    dark_current_t = T(dark_current)
+    conversion_gain_t = T(conversion_gain)
+    isfinite(integration_time_t) && integration_time_t > zero(T) ||
+        throw(InvalidConfiguration(
+            "LinearAPDDetector integration_time must be finite and > 0"))
+    isfinite(qe_t) && zero(T) <= qe_t <= one(T) ||
+        throw(InvalidConfiguration(
+            "LinearAPDDetector qe must be finite and lie in [0, 1]"))
+    isfinite(avalanche_gain_t) && avalanche_gain_t >= one(T) ||
+        throw(InvalidConfiguration(
+            "LinearAPDDetector avalanche_gain must be finite and >= 1"))
+    isfinite(excess_noise_factor_t) && excess_noise_factor_t >= one(T) ||
+        throw(InvalidConfiguration(
+            "LinearAPDDetector excess_noise_factor must be finite and >= 1"))
+    isfinite(dark_current_t) && dark_current_t >= zero(T) ||
+        throw(InvalidConfiguration(
+            "LinearAPDDetector dark_current must be finite and >= 0"))
+    isfinite(conversion_gain_t) && conversion_gain_t > zero(T) ||
+        throw(InvalidConfiguration(
+            "LinearAPDDetector conversion_gain must be finite and > 0"))
 
     converted_noise = validate_noise(convert_noise(noise, T))
     selector = _resolve_backend_selector(backend)
@@ -84,8 +106,8 @@ function LinearAPDDetector(;
     fill!(channels, zero(T))
     fill!(noise_buffer, zero(T))
     params = LinearAPDDetectorParams{T,typeof(topology)}(
-        T(integration_time), T(qe), T(avalanche_gain), T(excess_noise_factor),
-        T(dark_current), T(conversion_gain), topology)
+        integration_time_t, qe_t, avalanche_gain_t, excess_noise_factor_t,
+        dark_current_t, conversion_gain_t, topology)
     state = LinearAPDDetectorState{T,typeof(channels)}(channels, noise_buffer)
     return LinearAPDDetector{typeof(converted_noise),typeof(params),typeof(state),
         typeof(selector)}(converted_noise, params, state)
@@ -119,7 +141,7 @@ function apply_linear_apd_avalanche!(det::LinearAPDDetector,
     factor = det.params.excess_noise_factor
     if factor > one(factor)
         randn_backend!(rng, det.state.noise_buffer)
-        scale2 = factor * factor - one(factor)
+        scale2 = factor - one(factor)
         zero_t = zero(eltype(channels))
         @. channels = max(channels + sqrt(max(scale2 * channels, zero_t)) *
             det.state.noise_buffer, zero_t)
@@ -150,7 +172,8 @@ function capture!(det::LinearAPDDetector, photon_flux::AbstractVector;
     length(photon_flux) == length(det.state.channels) ||
         throw(DimensionMismatchError(
             "linear APD input length must match its fixed channel topology"))
-    copyto!(det.state.channels, photon_flux)
+    photon_flux === det.state.channels ||
+        copyto!(det.state.channels, photon_flux)
     return finalize_linear_apd_capture!(det, rng)
 end
 
@@ -160,7 +183,7 @@ capture!(det::LinearAPDDetector, photon_flux::AbstractVector,
 function capture!(det::LinearAPDDetector, photon_flux::Real;
     rng::AbstractRNG=Random.default_rng())
     length(det.state.channels) == 1 || throw(DimensionMismatchError(
-        "scalar linear APD capture requires SingleElementAPD topology"))
+        "scalar linear APD capture requires SingleElementLinearAPD topology"))
     fill!(det.state.channels, photon_flux)
     return finalize_linear_apd_capture!(det, rng)
 end

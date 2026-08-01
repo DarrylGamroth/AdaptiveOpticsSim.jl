@@ -2584,7 +2584,7 @@ function run_optional_zernike_curvature_stages(
         sensor=SPADArraySensor(pde=T(0.5), dark_count_rate=zero(T),
             fill_factor=one(T)), T=T, backend=selector)
     counting_model = CurvaturePackedAcquisition(spad;
-        readout_model=CurvatureCountingReadout(), source=source)
+        readout_model=CurvatureChannelReadout(), source=source)
     counting_storage = similar(gpu_rates[1].values, T, 2, 16)
     counting_observation = WFSObservation(counting_storage;
         units=:photon_count, layout=:curvature_branch_channels)
@@ -2594,6 +2594,33 @@ function run_optional_zernike_curvature_stages(
         counting_acquisition, Xoshiro(0x4357))
     @test counting_observation.storage isa BackendArray
     @test all(isfinite, Array(counting_observation.storage))
+
+    linear_apd = LinearAPDDetector(
+        topology=LinearAPDChannelBank(32),
+        integration_time=T(0.25), qe=T(0.5), avalanche_gain=T(2),
+        conversion_gain=T(2), noise=NoiseNone(), T=T,
+        backend=selector)
+    linear_model = CurvaturePackedAcquisition(linear_apd;
+        readout_model=CurvatureChannelReadout())
+    linear_storage = similar(gpu_rates[1].values, T, 2, 16)
+    linear_observation = WFSObservation(linear_storage;
+        units=:detector_count, layout=:curvature_branch_channels)
+    linear_acquisition = prepare_wfs_acquisition(linear_model,
+        gpu_rates, linear_observation)
+    acquire_wfs_observation!(linear_observation, gpu_rates,
+        linear_acquisition, Xoshiro(0x4358))
+    linear_host = Array(linear_observation.storage)
+    expected_linear = zeros(T, 2, 16)
+    plus_host = Array(gpu_rates[1].values)
+    minus_host = Array(gpu_rates[2].values)
+    @inbounds for i in 1:4, j in 1:4
+        index = (i - 1) * 4 + j
+        expected_linear[1, index] = plus_host[i, j] * T(0.5)
+        expected_linear[2, index] = minus_host[i, j] * T(0.5)
+    end
+    @test linear_observation.storage isa BackendArray
+    @test isapprox(linear_host, expected_linear;
+        rtol=T(3e-5), atol=T(3e-5))
 
     curvature_reference = similar(gpu_curvature.estimator.state.signal_2d)
     fill!(curvature_reference, zero(T))
@@ -3310,7 +3337,7 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
     @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(
         ramp_detector) == :synthesized_final_charge
 
-    linear_apd = LinearAPDDetector(topology=APDChannelBank(4),
+    linear_apd = LinearAPDDetector(topology=LinearAPDChannelBank(4),
         integration_time=T(0.5), qe=T(0.5), avalanche_gain=T(4),
         conversion_gain=T(2), noise=NoiseNone(), T=T, backend=selector)
     linear_output = capture!(linear_apd, BackendArray(fill(T(10), 4));

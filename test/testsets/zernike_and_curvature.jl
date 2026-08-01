@@ -315,15 +315,19 @@ end
     @test norm(slopes_minus) > 1e-6
     @test dot(slopes_plus, slopes_minus) < 0
 
-    counting = CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0, readout_model=CurvatureCountingReadout())
+    counting = CurvatureWFS(tel; pupil_samples=8,
+        defocus_rms_nm=500.0, readout_model=CurvatureChannelReadout())
     counting_flat = copy(measure!(counting, pupil, src))
     @test size(camera_frame(counting)) == (2, 64)
     @test counting_flat ≈ zero.(counting_flat) atol=1e-10
     @test_throws InvalidConfiguration measure!(counting, pupil, src, det)
-    apd = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0, noise=NoiseNone())
+    apd = LinearAPDDetector(topology=LinearAPDChannelBank(128),
+        integration_time=1.0, qe=1.0, avalanche_gain=1.0,
+        dark_current=0.0, noise=NoiseNone())
     counting_apd = copy(measure!(counting, pupil, src, apd))
     @test counting_apd ≈ counting_flat atol=1e-10
-    @test detector_export_metadata(apd).readout.output_size == size(camera_frame(counting))
+    @test detector_export_metadata(apd).n_channels ==
+        length(camera_frame(counting))
     spad = SPADArrayDetector(
         integration_time=1.0,
         noise=NoiseNone(),
@@ -346,11 +350,11 @@ end
         outside_mkid_band, mkid))
     @test all(iszero, output_frame(mkid))
     @test all(iszero, counting_mkid_outside)
-    apd_dead = APDDetector(integration_time=1.0, qe=1.0, gain=1.0, dark_count_rate=0.0,
-        noise=NoiseNone(), dead_time_model=NonParalyzableDeadTime(0.25))
-    counting_dead = copy(measure!(counting, pupil, src, apd_dead))
-    @test counting_dead ≈ counting_flat atol=1e-10
-    @test_throws InvalidConfiguration CurvatureWFS(tel; pupil_samples=8, readout_model=CurvatureCountingReadout(),
+    wrong_bank = LinearAPDDetector(topology=LinearAPDChannelBank(64),
+        noise=NoiseNone())
+    @test_throws InvalidConfiguration measure!(counting, pupil, src,
+        wrong_bank)
+    @test_throws InvalidConfiguration CurvatureWFS(tel; pupil_samples=8, readout_model=CurvatureChannelReadout(),
         readout_pixels_per_sample=2)
 
     response = CurvatureBranchResponse(T=Float64, plus_throughput=1.2, minus_throughput=0.8,

@@ -613,13 +613,13 @@ current linear estimator does not perform cosmic-ray segmentation,
 saturation-aware fitting, or correlated-noise estimation.
 
 For a linear-mode single-element APD, use `LinearAPDDetector`. Its channel
-storage is a vector rather than a fake 1×1 image. `SingleElementAPD()` accepts
-either a scalar photon flux or a one-element vector; `APDChannelBank(n)` uses a
+storage is a vector rather than a fake 1×1 image. `SingleElementLinearAPD()` accepts
+either a scalar photon flux or a one-element vector; `LinearAPDChannelBank(n)` uses a
 fixed-size vector suitable for preallocated channel readout:
 
 ```julia
 apd = LinearAPDDetector(
-    topology=SingleElementAPD(),
+    topology=SingleElementLinearAPD(),
     integration_time=100e-6,
     qe=0.75,
     avalanche_gain=30.0,
@@ -629,8 +629,9 @@ apd = LinearAPDDetector(
 value = only(capture!(apd, 2.0e5; rng=runtime_rng(4)))
 ```
 
-The existing `APDDetector` remains the Geiger/counting channel model; SPAD and
-MKID detectors remain accumulated counting-array models.
+`SPADArrayDetector` owns Geiger-mode area counting. `MKIDArrayDetector` remains
+the energy-resolving accumulated counting-array model. Neither is a
+linear-mode APD channel surface.
 
 Rolling-shutter detectors can also capture a time-varying scene. Use
 `InPlaceFrameSource` when the source can write into a preallocated frame, or
@@ -885,7 +886,7 @@ readout behavior, windowing, or exported frame outputs.
 For counting-imager or counting-channel paths, use a maintained counting
 detector family instead of the generic frame-detector surface:
 
-- `APDDetector(...)` for channel-style counting readout
+- `LinearAPDDetector(...)` for analog single-element or fixed-bank channels
 - `SPADArrayDetector(...)` for accumulated-count imaging arrays
 - `MKIDArrayDetector(...)` for accumulated-count imaging with MKID
   energy/timing metadata and an optional meter-valued source passband

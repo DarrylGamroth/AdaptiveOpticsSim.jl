@@ -307,7 +307,7 @@ end
         rng=MersenneTwister(3),
     )
     @test curvature.high_wfs isa CurvatureWFS
-    @test curvature.high_detector isa APDDetector
+    @test curvature.high_detector isa LinearAPDDetector
     step!(curvature)
     @test size(readout(curvature).wfs_frames[1]) ==
         (2, curvature_params.high_order_samples^2)

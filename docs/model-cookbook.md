@@ -117,7 +117,7 @@ Counting and channel detectors remain explicit:
 counting_wfs = CurvatureWFS(
     tel;
     pupil_samples=8,
-    readout_model=CurvatureCountingReadout(),
+    readout_model=CurvatureChannelReadout(),
 )
 spad = SPADArrayDetector(
     integration_time=1.0,
@@ -133,8 +133,8 @@ counts = output_frame(spad)
 ```
 
 Use `LinearAPDDetector` for analog single-element or fixed-bank APD channels,
-`APDDetector` for Geiger-mode channel counting, `SPADArrayDetector` for
-accumulated-count images, and `MKIDArrayDetector` for accumulated count images
+`SPADArrayDetector` for Geiger-mode accumulated-count images, and
+`MKIDArrayDetector` for accumulated count images
 with MKID energy-resolution and timing metadata.
 
 For event-driven detector timing, prepare the appropriate global-shutter,

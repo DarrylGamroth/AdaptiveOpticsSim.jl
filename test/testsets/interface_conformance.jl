@@ -7,10 +7,11 @@
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     det = Detector(noise=NoiseNone())
-    apd = APDDetector(noise=NoisePhoton())
     spad = SPADArrayDetector(noise=NoisePhoton())
     mkid = MKIDArrayDetector(noise=NoisePhoton())
     psf = fill(1.0, 8, 8)
+    linear_apd = LinearAPDDetector(
+        topology=LinearAPDChannelBank(length(psf)), noise=NoisePhoton())
     opd_map = OPDMap(fill(0.1, size(pupil.opd)))
     ncpa = NCPA(tel, dm, atm; coefficients=[0.01, -0.02])
     imat = interaction_matrix(dm, wfs, pupil; amplitude=0.1)
@@ -32,7 +33,8 @@
     bio = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     zwfs = ZernikeWFS(tel; pupil_samples=2)
     curv = CurvatureWFS(tel; pupil_samples=2)
-    curv_count = CurvatureWFS(tel; pupil_samples=2, readout_model=CurvatureCountingReadout())
+    curv_count = CurvatureWFS(tel; pupil_samples=2,
+        readout_model=CurvatureChannelReadout())
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
     moving_atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
         wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0])
@@ -69,11 +71,10 @@
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceRowCommonModeCorrection()) == :reference_row_common_mode
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceColumnCommonModeCorrection()) == :reference_column_common_mode
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode
-    @test APDSensor <: CountingSensorType
     @test SPADArraySensorType <: CountingSensorType
     @test MKIDArraySensorType <: CountingSensorType
     @test supports_energy_resolving(mkid.params.sensor)
-    @test curv_count.params.readout_model isa CurvatureCountingReadout
+    @test curv_count.params.readout_model isa CurvatureChannelReadout
 
     # IF-SRC
     assert_source_interface(src)
@@ -123,7 +124,7 @@
     assert_dm_interface(dm, tel)
     # IF-DET
     assert_detector_interface(det, psf)
-    assert_detector_interface(apd, psf)
+    assert_detector_interface(linear_apd, vec(psf))
     assert_detector_interface(spad, psf)
     assert_detector_interface(mkid, psf)
     # IF-OPT
@@ -154,7 +155,8 @@
     @test supports_detector_output(zwfs, det)
     @test supports_detector_output(curv, det)
     @test !supports_detector_output(curv_count, det)
-    @test supports_detector_output(curv_count, apd)
+    @test supports_detector_output(curv_count, linear_apd)
+    @test supports_detector_output(curv_count, spad)
     @test !supports_stacked_sources(wfs, src)
     @test supports_stacked_sources(wfs, ast)
     @test supports_stacked_sources(wfs_diffractive, ast)

@@ -97,6 +97,8 @@ end
     detector.params.integration_time
 @inline _curvature_detector_duration(detector::AbstractCountingDetector) =
     counting_integration_time(detector)
+@inline _curvature_detector_duration(detector::LinearAPDDetector) =
+    detector.params.integration_time
 
 @inline _curvature_branch_durations(::Nothing, duration::T) where {
     T<:AbstractFloat,
@@ -133,7 +135,7 @@ struct PreparedCurvaturePackedFrameAcquisition{M,I,O,R,P,T}
     detector_duration::T
 end
 
-struct PreparedCurvaturePackedCountingAcquisition{M,I,O,C,A,F,T}
+struct PreparedCurvaturePackedChannelAcquisition{M,I,O,C,A,F,T}
     model::M
     optical_products::I
     observation::O
@@ -569,11 +571,11 @@ function _curvature_packed_rate_map(products)
     return IntensityMap(packed_metadata, values)
 end
 
-@inline _require_curvature_counting_measure(::CellIntegratedMeasure) = nothing
+@inline _require_curvature_channel_measure(::CellIntegratedMeasure) = nothing
 
-function _require_curvature_counting_measure(::AbstractSpatialMeasure)
+function _require_curvature_channel_measure(::AbstractSpatialMeasure)
     throw(WFSPreparationError(:acquisition, :radiometry,
-        "packed counting Curvature inputs must carry cell-integrated photon rate"))
+        "packed Curvature channel inputs must carry cell-integrated photon rate"))
 end
 
 function prepare_wfs_acquisition(
@@ -596,14 +598,14 @@ end
 
 function prepare_wfs_acquisition(
     model::CurvaturePackedAcquisition{
-        <:AbstractCountingDetector,<:CurvatureCountingReadout},
+        <:AbstractCountingDetector,<:CurvatureChannelReadout},
     optical_products::Tuple{<:IntensityMap,<:IntensityMap},
     observation::WFSObservation)
     validate_wfs_optical_products(optical_products)
     validate_wfs_observation(observation)
     _require_curvature_branch_compatibility(optical_products)
     duration = _require_curvature_packed_duration(model)
-    _require_curvature_counting_measure(
+    _require_curvature_channel_measure(
         optical_products[1].metadata.spatial_measure)
     isequal(observation.metadata.layout, :curvature_branch_channels) ||
         throw(WFSPreparationError(:acquisition, :detector_mapping,
@@ -641,16 +643,67 @@ function prepare_wfs_acquisition(
     compute_device(observation.storage) == compute_device(output) || throw(
         WFSPreparationError(:acquisition, :device,
             "packed counting Curvature observation and detector output occupy different devices"))
-    return PreparedCurvaturePackedCountingAcquisition(model,
+    return PreparedCurvaturePackedChannelAcquisition(model,
         optical_products, observation, channels, counting_array(detector),
         output, duration)
+end
+
+function prepare_wfs_acquisition(
+    model::CurvaturePackedAcquisition{
+        <:LinearAPDDetector,<:CurvatureChannelReadout},
+    optical_products::Tuple{<:IntensityMap,<:IntensityMap},
+    observation::WFSObservation)
+    validate_wfs_optical_products(optical_products)
+    validate_wfs_observation(observation)
+    _require_curvature_branch_compatibility(optical_products)
+    duration = _require_curvature_packed_duration(model)
+    _require_curvature_channel_measure(
+        optical_products[1].metadata.spatial_measure)
+    isequal(observation.metadata.layout, :curvature_branch_channels) ||
+        throw(WFSPreparationError(:acquisition, :detector_mapping,
+            "packed channel Curvature observation requires :curvature_branch_channels layout"))
+    n, m = size(optical_products[1].values)
+    n == m || throw(WFSPreparationError(:acquisition, :shape,
+        "packed channel Curvature branches must be square"))
+    detector = model.detector
+    detector_input = channel_output(detector)
+    length(detector_input) == 2 * n * n || throw(WFSPreparationError(
+        :acquisition, :shape,
+        "linear-APD channel bank must contain exactly two channels per Curvature sample"))
+    T = eltype(optical_products[1].values)
+    T === eltype(detector_input) || throw(WFSPreparationError(
+        :acquisition, :numeric_type,
+        "linear-APD detector and packed Curvature precision differ"))
+    typeof(backend(detector)) === typeof(backend(optical_products[1].values)) ||
+        throw(WFSPreparationError(:acquisition, :backend,
+            "linear-APD detector and packed Curvature channels use different backends"))
+    compute_device(detector_input) ==
+        compute_device(optical_products[1].values) || throw(
+        WFSPreparationError(:acquisition, :device,
+            "linear-APD detector and packed Curvature channels occupy different devices"))
+    channels = reshape(detector_input, 2, n * n)
+    size(observation.storage) == size(channels) || throw(
+        WFSPreparationError(:acquisition, :shape,
+            "packed channel Curvature observation must match the linear-APD channel layout"))
+    observation.metadata.numeric_type === eltype(detector_input) || throw(
+        WFSPreparationError(:acquisition, :numeric_type,
+            "packed channel Curvature observation type must match linear-APD output"))
+    typeof(backend(observation.storage)) === typeof(backend(detector)) ||
+        throw(WFSPreparationError(:acquisition, :backend,
+            "packed channel Curvature observation and linear-APD detector backends differ"))
+    compute_device(observation.storage) == compute_device(detector_input) ||
+        throw(WFSPreparationError(:acquisition, :device,
+            "packed channel Curvature observation and linear-APD output occupy different devices"))
+    return PreparedCurvaturePackedChannelAcquisition(model,
+        optical_products, observation, channels, detector_input,
+        detector_input, duration)
 end
 
 function prepare_wfs_acquisition(model::CurvaturePackedAcquisition,
     optical_products::Tuple{<:IntensityMap,<:IntensityMap},
     observation::WFSObservation)
     throw(WFSPreparationError(:acquisition, :detector_mapping,
-        "CurvatureFrameReadout requires a frame Detector and CurvatureCountingReadout requires a counting detector"))
+        "CurvatureFrameReadout requires a frame Detector and CurvatureChannelReadout requires a linear-mode APD channel bank or counting detector"))
 end
 
 function _pack_curvature_regions!(::ScalarCPUStyle, packed, plus, minus)
@@ -715,20 +768,31 @@ end
 
 function acquire_wfs_observation!(observation::WFSObservation,
     optical_products::Tuple{<:IntensityMap,<:IntensityMap},
-    plan::PreparedCurvaturePackedCountingAcquisition, rng::AbstractRNG)
+    plan::PreparedCurvaturePackedChannelAcquisition, rng::AbstractRNG)
     validate_wfs_acquisition_binding(observation, optical_products, plan)
     detector = plan.model.detector
     _pack_curvature_channels!(execution_style(plan.channels), plan.channels,
         optical_products[1].values, optical_products[2].values)
-    frame = _capture_counting_wfs!(detector, plan.channels,
-        plan.model.source, rng)
+    frame = _capture_curvature_channel_detector!(detector, plan, rng)
     copyto!(observation.storage, frame)
     return observation
 end
 
+function _capture_curvature_channel_detector!(detector::AbstractCountingDetector,
+    plan::PreparedCurvaturePackedChannelAcquisition, rng::AbstractRNG)
+    return _capture_counting_wfs!(detector, plan.channels,
+        plan.model.source, rng)
+end
+
+function _capture_curvature_channel_detector!(detector::LinearAPDDetector,
+    plan::PreparedCurvaturePackedChannelAcquisition, rng::AbstractRNG)
+    return capture!(detector, plan.detector_input, rng)
+end
+
 function validate_wfs_acquisition_binding(observation::WFSObservation,
     optical_products::Tuple{<:IntensityMap,<:IntensityMap},
-    plan::PreparedCurvaturePackedCountingAcquisition)
+    plan::PreparedCurvaturePackedChannelAcquisition{
+        <:CurvaturePackedAcquisition{<:AbstractCountingDetector}})
     observation === plan.observation &&
         optical_products === plan.optical_products || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
@@ -738,6 +802,25 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
         output_frame(detector) === plan.detector_output || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
             "packed Curvature counting storage changed after preparation"))
+    _curvature_detector_duration(detector) == plan.detector_duration ||
+        throw(WFSPreparationError(:acquisition, :prepared_binding,
+            "packed Curvature detector duration changed after preparation"))
+    return nothing
+end
+
+function validate_wfs_acquisition_binding(observation::WFSObservation,
+    optical_products::Tuple{<:IntensityMap,<:IntensityMap},
+    plan::PreparedCurvaturePackedChannelAcquisition{
+        <:CurvaturePackedAcquisition{<:LinearAPDDetector}})
+    observation === plan.observation &&
+        optical_products === plan.optical_products || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "packed Curvature channel storage does not match its plan"))
+    detector = plan.model.detector
+    channel_output(detector) === plan.detector_input &&
+        plan.detector_input === plan.detector_output || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "packed Curvature linear-APD storage changed after preparation"))
     _curvature_detector_duration(detector) == plan.detector_duration ||
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "packed Curvature detector duration changed after preparation"))

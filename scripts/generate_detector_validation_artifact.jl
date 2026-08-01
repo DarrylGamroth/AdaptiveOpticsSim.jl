@@ -287,15 +287,20 @@ end
 
 function apd_case()
     channels = fill(2.0, 4, 4)
-    det = APDDetector(
+    # This aggregate artifact predates the explicit operating-regime split.
+    # Reproduce its historical Geiger counting-chain case through the current
+    # SPAD owner without restoring a generic APD detector surface.
+    det = SPADArrayDetector(
         integration_time=1.0,
-        qe=1.0,
-        gain=1.0,
-        dark_count_rate=0.0,
         noise=NoiseNone(),
         gate_model=DutyCycleGate(0.5),
-        dead_time_model=NonParalyzableDeadTime(0.25),
-        correlation_model=AfterpulsingModel(0.1),
+        sensor=SPADArraySensor(
+            pde=1.0,
+            fill_factor=1.0,
+            dark_count_rate=0.0,
+            dead_time_model=NonParalyzableDeadTime(0.25),
+            correlation_model=AfterpulsingModel(0.1),
+        ),
     )
     frame = copy(capture!(det, channels; rng=MersenneTwister(31)))
     gated = 2.0 * 0.5

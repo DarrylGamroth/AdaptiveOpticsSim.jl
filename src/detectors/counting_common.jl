@@ -228,7 +228,7 @@ function detector_export_metadata(det::AbstractCountingDetector; T::Type{<:Abstr
         detector_sensor_symbol(counting_sensor(det)),
         detector_noise_symbol(det.noise),
         counting_output_type(det),
-        CountingReadoutMetadata(counting_layout(det), size(output), length(output)),
+        ChannelReadoutMetadata(counting_layout(det), size(output), length(output)),
         counting_energy_resolution(det, T),
         counting_timing_jitter_s(det, T),
         counting_wavelength_min_m(det, T),

@@ -949,7 +949,7 @@ Import conventional frame and area-detector vocabulary with
 not the moved detector bindings.
 
 - Conventional frame/area detector: `Detectors.Detector`
-- Counting/channel detectors: `LinearAPDDetector`, `APDDetector`,
+- Channel and counting-array detectors: `LinearAPDDetector`,
   `SPADArrayDetector`, and `MKIDArrayDetector`
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
@@ -963,12 +963,11 @@ not the moved detector bindings.
   `Detectors.ClippedGaussianAvalancheMultiplicationApproximation` portable
   moderate-charge approximation explicitly when the default policy is not the
   intended statistical contract.
-- Counting sensor families: `APDSensor`, `SPADArraySensor`, and
-  `MKIDArraySensor`
+- Counting sensor families: `SPADArraySensor` and `MKIDArraySensor`
 - EMCCD modes and helpers: `LinearEMMode`, `PhotonCountingEMMode`,
   `EMOutput`, `ConventionalOutput`, `emccd_snr`
-- Linear APD topology: `SingleElementAPD`, `APDChannelBank`; analog APD output
-  uses `channel_output`, while `APDDetector` remains the counting-channel path.
+- Linear-mode APD topology: `SingleElementLinearAPD`,
+  `LinearAPDChannelBank`; analog APD output uses `channel_output`.
 - CMOS readout structure: `CMOSReadNoiseMap` and
   qualified-public `Detectors.StaticCMOSOutputPattern`; row and column noise,
   output groups, shutter timing, and detector defect maps compose through
@@ -1279,7 +1278,7 @@ components. Migrated bindings are not forwarded through the root.
 - Curvature optical composition and readout: `Optics.CurvatureDefocusPair`,
   `CurvatureOpticalFrontEnd`, `curvature_rate_maps`,
   `CurvatureReadoutModel`, `CurvatureFrameReadout`,
-  `CurvatureCountingReadout`, `CurvaturePackedAcquisition`,
+  `CurvatureChannelReadout`, `CurvaturePackedAcquisition`,
   `CurvatureBranchResponse`, and `set_curvature_calibration!`
 - Shack-Hartmann calibration and extraction: `FluxThresholdValidSubapertures`,
   `AbstractSlopeExtractionModel`, `CenterOfGravityExtraction`,
@@ -1407,7 +1406,7 @@ cell-integrated photon-arrival-rate plane. A concrete pair of ordinary detector
 plans permits independent response models, QE, exposure durations, stochastic
 effects, and readout for the two branches. `CurvaturePackedAcquisition` instead
 maps both compatible branches to one detector: `CurvatureFrameReadout` uses a
-`:curvature_branch_regions` observation and `CurvatureCountingReadout` uses
+`:curvature_branch_regions` observation and `CurvatureChannelReadout` uses
 `:curvature_branch_channels`. Packed branches must have identical geometry,
 radiometry, backend, device, numeric type, and detector-owned exposure duration;
 different branch exposures require separate detectors. Estimator preparation

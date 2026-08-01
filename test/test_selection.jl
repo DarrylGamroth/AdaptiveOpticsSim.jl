@@ -25,7 +25,7 @@ const DETECTOR_TEST_SUITE_NAMES = (
     "detector-thermal",
     "detector-hgcdte",
     "detector-hgcdte-avalanche",
-    "detector-apd",
+    "detector-linear-apd",
     "detector-spad",
     "detector-mkid",
     "detector-artifacts",
@@ -178,8 +178,8 @@ const TEST_SUITE_SPECS = (
         fixtures=("detector_test_fixtures.jl",),
     ),
     TestSuiteSpec(
-        "detector-apd",
-        "testsets/detector_apd.jl";
+        "detector-linear-apd",
+        "testsets/detector_linear_apd.jl";
         fixtures=("detector_test_fixtures.jl",),
     ),
     TestSuiteSpec(
