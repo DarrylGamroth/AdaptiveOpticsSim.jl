@@ -268,13 +268,13 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    before detector qualification. This is a breaking ownership cleanup with no
    compatibility aliases. It must preserve numerical results, accelerator
    extension behavior, prepared ownership, and warmed hot-path budgets.
-10. Continue the opened detector-qualification series after stabilization of
-    the canonical `Detectors` namespace and companion pin. Conventional
-    CCD/EMCCD/CMOS, HgCdTe, Skipper CCD, InGaAs, linear-mode APD, and SPAD
-    families now have separate scoped claims. Complete the distinct MKID gate
-    next, without importing event-resolved claims into the accumulated-count
-    model. Keep named camera profiles outside core; use the completed series to
-    decide whether a sibling detector package is warranted.
+10. Close the detector-qualification series with a family-specific evidence
+    catalog and final CPU/AMDGPU/CUDA validation. Product-neutral frame,
+    counting-array, and channel models remain in the canonical `Detectors`
+    namespace. Named camera profiles remain outside core. The current models do
+    not justify a sibling package; reconsider one only for event-resolved
+    products, calibrated profile collections, or dependency-heavy detector
+    physics that would otherwise expand the core contract.
 11. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
