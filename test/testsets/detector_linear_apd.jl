@@ -86,8 +86,10 @@ end
         noise=NoiseReadout(2.0),
     )
     read_samples = copy(capture!(read_only,
-        fill(10.0, sample_count), Xoshiro(9022)))
-    test_linear_apd_moments(read_samples, 60.0, 16.0)
+        zeros(sample_count), Xoshiro(9022)))
+    test_linear_apd_moments(read_samples, 0.0, 16.0)
+    @test minimum(read_samples) < 0
+    @test maximum(read_samples) > 0
 end
 
 

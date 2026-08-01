@@ -35,7 +35,6 @@ function linear_apd_moment_case(id, detector, input, expected_mean,
             abs(observed_mean - expected_mean) <= mean_limit,
         "variance_passed" =>
             abs(observed_variance - expected_variance) <= variance_limit,
-        "all_nonnegative" => all(>=(0), samples),
     )
 end
 
@@ -57,7 +56,7 @@ function linear_apd_moment_cases()
         linear_apd_moment_case("multiplication_only",
             multiplication_only, fill(80.0, n), 240.0, 288.0, 9041),
         linear_apd_moment_case("read_only", read_only,
-            fill(10.0, n), 60.0, 16.0, 9042),
+            zeros(n), 0.0, 16.0, 9042),
     ]
 end
 

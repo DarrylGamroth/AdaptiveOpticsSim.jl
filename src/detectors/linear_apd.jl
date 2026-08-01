@@ -44,12 +44,28 @@ mutable struct LinearAPDDetectorState{T<:AbstractFloat,A<:AbstractVector{T}}
 end
 
 """
-    LinearAPDDetector(; topology=SingleElementLinearAPD(), ...)
+    LinearAPDDetector(;
+        topology=SingleElementLinearAPD(),
+        integration_time=1.0,
+        qe=1.0,
+        avalanche_gain=1.0,
+        excess_noise_factor=1.0,
+        dark_current=0.0,
+        conversion_gain=1.0,
+        noise=NoisePhoton(),
+        T=Float64,
+        backend=CPUBackend(),
+    )
 
-Linear-mode single-element APD or fixed channel bank. Inputs are photon fluxes
-in photons/channel/second and outputs are one-dimensional channel values. This
-is intentionally separate from both area-detector frames and Geiger-mode SPAD
-counting arrays.
+Construct a linear-mode single-element APD or fixed channel bank. Inputs are
+photon fluxes in photons per channel per second and outputs are
+one-dimensional analog channel values. The signal path applies quantum
+efficiency and integration, dark current, optional photon noise, avalanche
+multiplication, additive read noise, and conversion gain in that order.
+
+`excess_noise_factor` uses the detector convention
+`F = E[M^2] / E[M]^2`. This API is intentionally separate from both
+area-detector frames and Geiger-mode SPAD counting arrays.
 """
 struct LinearAPDDetector{N<:NoiseModel,P<:LinearAPDDetectorParams,
     S<:LinearAPDDetectorState,B<:AbstractArrayBackend} <: AbstractDetector
