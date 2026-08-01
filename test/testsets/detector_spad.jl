@@ -8,6 +8,48 @@ function test_spad_poisson_moments(samples, expected_mean;
     @test abs(var(samples) - expected_mean) <= variance_limit
 end
 
+struct IncompleteSPADContractDetector <: AbstractCountingDetector end
+
+@testset "SPAD counting dispatch contracts" begin
+    incomplete = IncompleteSPADContractDetector()
+    @test_throws InvalidConfiguration counting_mean_response_model(incomplete)
+    @test counting_detection_efficiency(incomplete, Float32) === 1.0f0
+
+    null_response = NullCountingMeanResponse()
+    afterpulse = FirstOrderAfterpulseMeanResponse(1 // 4)
+    redistribution = NearestNeighborCountRedistribution(2 // 5)
+    composite = CompositeCountingMeanResponse(afterpulse, redistribution)
+
+    @test afterpulse.mean_afterpulses_per_detection == 0.25
+    @test redistribution.redistribution_fraction == 0.4
+    @test_throws InvalidConfiguration CompositeCountingMeanResponse(
+        (null_response, 1))
+
+    @test !_supports_first_order_afterpulse_mean_response(null_response)
+    @test _supports_first_order_afterpulse_mean_response(afterpulse)
+    @test _supports_first_order_afterpulse_mean_response(composite)
+    @test !_supports_nearest_neighbor_count_redistribution(null_response)
+    @test _supports_nearest_neighbor_count_redistribution(redistribution)
+    @test _supports_nearest_neighbor_count_redistribution(composite)
+
+    @test _afterpulse_stage_count(null_response) == 0
+    @test _afterpulse_stage_count(afterpulse) == 1
+    @test _afterpulse_stage_count(composite) == 1
+    @test _redistribution_stage_count(null_response) == 0
+    @test _redistribution_stage_count(redistribution) == 1
+    @test _redistribution_stage_count(composite) == 1
+
+    @test counting_mean_response_symbol(null_response) == :none
+    @test counting_mean_response_symbol(afterpulse) ==
+        :first_order_afterpulse_mean_response
+    @test counting_mean_response_symbol(redistribution) ==
+        :nearest_neighbor_count_redistribution
+    @test counting_mean_response_symbol(composite) == :composite
+
+    detector = SPADArrayDetector((1, 1))
+    @test counting_layout(detector) == :pixel_counts
+end
+
 @testset "SPAD ownership and deterministic radiometry" begin
     sensor = SPADArraySensor(active_area_detection_efficiency=0.5,
         dark_count_rate=0.0, fill_factor=0.8)

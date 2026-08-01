@@ -69,8 +69,10 @@ counting_gate_model(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_gate_model overload for $(typeof(det))"))
 counting_dead_time_model(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_dead_time_model overload for $(typeof(det))"))
-counting_mean_response_model(det::AbstractCountingDetector) =
-    throw(InvalidConfiguration("missing counting_mean_response_model overload for $(typeof(det))"))
+function counting_mean_response_model(det::AbstractCountingDetector)
+    throw(InvalidConfiguration(
+        "missing counting_mean_response_model overload for $(typeof(det))"))
+end
 counting_integration_time(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_integration_time overload for $(typeof(det))"))
 counting_layout(det::AbstractCountingDetector) =
@@ -99,7 +101,10 @@ set_counting_host_buffer!(det::AbstractCountingDetector, values) =
 set_counting_output_host_buffer!(det::AbstractCountingDetector, values) =
     throw(InvalidConfiguration("missing set_counting_output_host_buffer! overload for $(typeof(det))"))
 
-counting_detection_efficiency(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = one(T)
+function counting_detection_efficiency(det::AbstractCountingDetector,
+    ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat}
+    return one(T)
+end
 counting_fill_factor(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = one(T)
 counting_reported_fill_factor(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = nothing
 counting_post_gain(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = one(T)
@@ -115,12 +120,35 @@ counting_source_throughput(det::AbstractCountingDetector, src::AbstractSource,
 supports_dead_time(::NoDeadTime) = false
 supports_dead_time(::NonParalyzableDeadTime) = true
 supports_dead_time(::ParalyzableDeadTime) = true
-_supports_first_order_afterpulse_mean_response(::CountingMeanResponseModel) = false
-_supports_first_order_afterpulse_mean_response(::FirstOrderAfterpulseMeanResponse) = true
-_supports_first_order_afterpulse_mean_response(model::CompositeCountingMeanResponse) = any(_supports_first_order_afterpulse_mean_response, model.stages)
-_supports_nearest_neighbor_count_redistribution(::CountingMeanResponseModel) = false
-_supports_nearest_neighbor_count_redistribution(::NearestNeighborCountRedistribution) = true
-_supports_nearest_neighbor_count_redistribution(model::CompositeCountingMeanResponse) = any(_supports_nearest_neighbor_count_redistribution, model.stages)
+function _supports_first_order_afterpulse_mean_response(
+    ::CountingMeanResponseModel)
+    return false
+end
+
+function _supports_first_order_afterpulse_mean_response(
+    ::FirstOrderAfterpulseMeanResponse)
+    return true
+end
+
+function _supports_first_order_afterpulse_mean_response(
+    model::CompositeCountingMeanResponse)
+    return any(_supports_first_order_afterpulse_mean_response, model.stages)
+end
+
+function _supports_nearest_neighbor_count_redistribution(
+    ::CountingMeanResponseModel)
+    return false
+end
+
+function _supports_nearest_neighbor_count_redistribution(
+    ::NearestNeighborCountRedistribution)
+    return true
+end
+
+function _supports_nearest_neighbor_count_redistribution(
+    model::CompositeCountingMeanResponse)
+    return any(_supports_nearest_neighbor_count_redistribution, model.stages)
+end
 
 is_null_counting_gate(::AbstractCountingGateModel) = false
 is_null_counting_gate(::NullCountingGate) = true
@@ -196,15 +224,29 @@ function validate_mean_response_model(model::CompositeCountingMeanResponse)
     return validated
 end
 
-_afterpulse_stage_count(::CountingMeanResponseModel) = 0
-_afterpulse_stage_count(::FirstOrderAfterpulseMeanResponse) = 1
-_afterpulse_stage_count(model::CompositeCountingMeanResponse) =
-    sum(_afterpulse_stage_count, model.stages; init=0)
+function _afterpulse_stage_count(::CountingMeanResponseModel)
+    return 0
+end
 
-_redistribution_stage_count(::CountingMeanResponseModel) = 0
-_redistribution_stage_count(::NearestNeighborCountRedistribution) = 1
-_redistribution_stage_count(model::CompositeCountingMeanResponse) =
-    sum(_redistribution_stage_count, model.stages; init=0)
+function _afterpulse_stage_count(::FirstOrderAfterpulseMeanResponse)
+    return 1
+end
+
+function _afterpulse_stage_count(model::CompositeCountingMeanResponse)
+    return sum(_afterpulse_stage_count, model.stages; init=0)
+end
+
+function _redistribution_stage_count(::CountingMeanResponseModel)
+    return 0
+end
+
+function _redistribution_stage_count(::NearestNeighborCountRedistribution)
+    return 1
+end
+
+function _redistribution_stage_count(model::CompositeCountingMeanResponse)
+    return sum(_redistribution_stage_count, model.stages; init=0)
+end
 
 validate_counting_noise(noise::NoiseNone) = noise
 validate_counting_noise(noise::NoisePhoton) = noise

@@ -91,7 +91,9 @@ counting_gate_model(det::SPADArrayDetector) = det.params.gate_model
 counting_dead_time_model(det::SPADArrayDetector) = det.params.sensor.dead_time_model
 counting_mean_response_model(det::SPADArrayDetector) = det.params.sensor.mean_response_model
 counting_integration_time(det::SPADArrayDetector) = det.params.integration_time
-counting_layout(::SPADArrayDetector) = :pixel_counts
+function counting_layout(::SPADArrayDetector)
+    return :pixel_counts
+end
 counting_output_type(det::SPADArrayDetector) = det.params.output_type
 counting_array(det::SPADArrayDetector) = det.state.counts
 counting_noise_buffer(det::SPADArrayDetector) = det.state.noise_buffer

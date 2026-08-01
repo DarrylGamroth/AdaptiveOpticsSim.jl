@@ -837,8 +837,11 @@ struct FirstOrderAfterpulseMeanResponse{T<:AbstractFloat} <: CountingMeanRespons
     mean_afterpulses_per_detection::T
 end
 
-FirstOrderAfterpulseMeanResponse(mean_afterpulses_per_detection::Real) =
-    FirstOrderAfterpulseMeanResponse{Float64}(float(mean_afterpulses_per_detection))
+function FirstOrderAfterpulseMeanResponse(
+    mean_afterpulses_per_detection::Real)
+    return FirstOrderAfterpulseMeanResponse{Float64}(
+        float(mean_afterpulses_per_detection))
+end
 
 """
     NearestNeighborCountRedistribution(redistribution_fraction)
@@ -851,8 +854,10 @@ struct NearestNeighborCountRedistribution{T<:AbstractFloat} <: CountingMeanRespo
     redistribution_fraction::T
 end
 
-NearestNeighborCountRedistribution(redistribution_fraction::Real) =
-    NearestNeighborCountRedistribution{Float64}(float(redistribution_fraction))
+function NearestNeighborCountRedistribution(redistribution_fraction::Real)
+    return NearestNeighborCountRedistribution{Float64}(
+        float(redistribution_fraction))
+end
 
 struct CompositeCountingMeanResponse{M<:Tuple} <: CountingMeanResponseModel
     stages::M
@@ -862,17 +867,30 @@ struct CompositeCountingMeanResponse{M<:Tuple} <: CountingMeanResponseModel
     end
 end
 
-CompositeCountingMeanResponse(stages::Tuple) =
-    throw(InvalidConfiguration("CompositeCountingMeanResponse stages must be CountingMeanResponseModel values"))
+function CompositeCountingMeanResponse(stages::Tuple)
+    throw(InvalidConfiguration(
+        "CompositeCountingMeanResponse stages must be CountingMeanResponseModel values"))
+end
 CompositeCountingMeanResponse(stages::CountingMeanResponseModel...) = CompositeCountingMeanResponse(tuple(stages...))
 
 counting_gate_symbol(::NullCountingGate) = :none
 counting_gate_symbol(::DutyCycleGate) = :duty_cycle
 
-counting_mean_response_symbol(::NullCountingMeanResponse) = :none
-counting_mean_response_symbol(::FirstOrderAfterpulseMeanResponse) = :first_order_afterpulse_mean_response
-counting_mean_response_symbol(::NearestNeighborCountRedistribution) = :nearest_neighbor_count_redistribution
-counting_mean_response_symbol(::CompositeCountingMeanResponse) = :composite
+function counting_mean_response_symbol(::NullCountingMeanResponse)
+    return :none
+end
+
+function counting_mean_response_symbol(::FirstOrderAfterpulseMeanResponse)
+    return :first_order_afterpulse_mean_response
+end
+
+function counting_mean_response_symbol(::NearestNeighborCountRedistribution)
+    return :nearest_neighbor_count_redistribution
+end
+
+function counting_mean_response_symbol(::CompositeCountingMeanResponse)
+    return :composite
+end
 
 function PixelResponseNonuniformity(gain_map::AbstractMatrix; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
