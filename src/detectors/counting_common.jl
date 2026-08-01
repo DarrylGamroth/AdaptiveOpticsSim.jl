@@ -15,33 +15,36 @@ ParalyzableDeadTime(dead_time::Real) = ParalyzableDeadTime{Float64}(float(dead_t
     return (i > 1) + (i < n) + (j > 1) + (j < m)
 end
 
-@inline function counting_channel_crosstalk_value(input, coupling, i::Int, j::Int, n::Int, m::Int)
+@inline function nearest_neighbor_redistributed_count(input, fraction,
+    i::Int, j::Int, n::Int, m::Int)
     center = @inbounds input[i, j]
     center_neighbors = counting_channel_neighbor_count(i, j, n, m)
-    value = center_neighbors == 0 ? center : (one(coupling) - coupling) * center
+    value = center_neighbors == 0 ? center : (one(fraction) - fraction) * center
     if i > 1
         neighbors = counting_channel_neighbor_count(i - 1, j, n, m)
-        value += coupling * (@inbounds input[i - 1, j]) / neighbors
+        value += fraction * (@inbounds input[i - 1, j]) / neighbors
     end
     if i < n
         neighbors = counting_channel_neighbor_count(i + 1, j, n, m)
-        value += coupling * (@inbounds input[i + 1, j]) / neighbors
+        value += fraction * (@inbounds input[i + 1, j]) / neighbors
     end
     if j > 1
         neighbors = counting_channel_neighbor_count(i, j - 1, n, m)
-        value += coupling * (@inbounds input[i, j - 1]) / neighbors
+        value += fraction * (@inbounds input[i, j - 1]) / neighbors
     end
     if j < m
         neighbors = counting_channel_neighbor_count(i, j + 1, n, m)
-        value += coupling * (@inbounds input[i, j + 1]) / neighbors
+        value += fraction * (@inbounds input[i, j + 1]) / neighbors
     end
     return value
 end
 
-@kernel function counting_channel_crosstalk_kernel!(output, input, coupling, n::Int, m::Int)
+@kernel function nearest_neighbor_count_redistribution_kernel!(output, input,
+    fraction, n::Int, m::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= m
-        @inbounds output[i, j] = counting_channel_crosstalk_value(input, coupling, i, j, n, m)
+        @inbounds output[i, j] = nearest_neighbor_redistributed_count(
+            input, fraction, i, j, n, m)
     end
 end
 
@@ -66,8 +69,10 @@ counting_gate_model(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_gate_model overload for $(typeof(det))"))
 counting_dead_time_model(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_dead_time_model overload for $(typeof(det))"))
-counting_correlation_model(det::AbstractCountingDetector) =
-    throw(InvalidConfiguration("missing counting_correlation_model overload for $(typeof(det))"))
+function counting_mean_response_model(det::AbstractCountingDetector)
+    throw(InvalidConfiguration(
+        "missing counting_mean_response_model overload for $(typeof(det))"))
+end
 counting_integration_time(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_integration_time overload for $(typeof(det))"))
 counting_layout(det::AbstractCountingDetector) =
@@ -96,7 +101,10 @@ set_counting_host_buffer!(det::AbstractCountingDetector, values) =
 set_counting_output_host_buffer!(det::AbstractCountingDetector, values) =
     throw(InvalidConfiguration("missing set_counting_output_host_buffer! overload for $(typeof(det))"))
 
-counting_qe(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = one(T)
+function counting_detection_efficiency(det::AbstractCountingDetector,
+    ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat}
+    return one(T)
+end
 counting_fill_factor(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = one(T)
 counting_reported_fill_factor(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = nothing
 counting_post_gain(det::AbstractCountingDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = one(T)
@@ -112,12 +120,35 @@ counting_source_throughput(det::AbstractCountingDetector, src::AbstractSource,
 supports_dead_time(::NoDeadTime) = false
 supports_dead_time(::NonParalyzableDeadTime) = true
 supports_dead_time(::ParalyzableDeadTime) = true
-_supports_afterpulsing(::AbstractCountingCorrelationModel) = false
-_supports_afterpulsing(::AfterpulsingModel) = true
-_supports_afterpulsing(model::CompositeCountingCorrelation) = any(_supports_afterpulsing, model.stages)
-_supports_channel_crosstalk(::AbstractCountingCorrelationModel) = false
-_supports_channel_crosstalk(::ChannelCrosstalkModel) = true
-_supports_channel_crosstalk(model::CompositeCountingCorrelation) = any(_supports_channel_crosstalk, model.stages)
+function _supports_first_order_afterpulse_mean_response(
+    ::CountingMeanResponseModel)
+    return false
+end
+
+function _supports_first_order_afterpulse_mean_response(
+    ::FirstOrderAfterpulseMeanResponse)
+    return true
+end
+
+function _supports_first_order_afterpulse_mean_response(
+    model::CompositeCountingMeanResponse)
+    return any(_supports_first_order_afterpulse_mean_response, model.stages)
+end
+
+function _supports_nearest_neighbor_count_redistribution(
+    ::CountingMeanResponseModel)
+    return false
+end
+
+function _supports_nearest_neighbor_count_redistribution(
+    ::NearestNeighborCountRedistribution)
+    return true
+end
+
+function _supports_nearest_neighbor_count_redistribution(
+    model::CompositeCountingMeanResponse)
+    return any(_supports_nearest_neighbor_count_redistribution, model.stages)
+end
 
 is_null_counting_gate(::AbstractCountingGateModel) = false
 is_null_counting_gate(::NullCountingGate) = true
@@ -138,12 +169,14 @@ convert_dead_time_model(model::ParalyzableDeadTime, ::Type{T}) where {T<:Abstrac
 validate_dead_time_model(model::NoDeadTime) = model
 
 function validate_dead_time_model(model::NonParalyzableDeadTime)
-    model.dead_time >= 0 || throw(InvalidConfiguration("NonParalyzableDeadTime dead_time must be >= 0"))
+    isfinite(model.dead_time) && model.dead_time >= 0 ||
+        throw(InvalidConfiguration("NonParalyzableDeadTime dead_time must be finite and >= 0"))
     return model
 end
 
 function validate_dead_time_model(model::ParalyzableDeadTime)
-    model.dead_time >= 0 || throw(InvalidConfiguration("ParalyzableDeadTime dead_time must be >= 0"))
+    isfinite(model.dead_time) && model.dead_time >= 0 ||
+        throw(InvalidConfiguration("ParalyzableDeadTime dead_time must be finite and >= 0"))
     return model
 end
 
@@ -152,34 +185,67 @@ convert_gate_model(model::DutyCycleGate, ::Type{T}) where {T<:AbstractFloat} = D
 validate_gate_model(::NullCountingGate) = NullCountingGate()
 
 function validate_gate_model(model::DutyCycleGate)
-    zero(model.duty_cycle) < model.duty_cycle <= one(model.duty_cycle) ||
-        throw(InvalidConfiguration("DutyCycleGate duty_cycle must lie in (0, 1]"))
+    isfinite(model.duty_cycle) && zero(model.duty_cycle) < model.duty_cycle <= one(model.duty_cycle) ||
+        throw(InvalidConfiguration("DutyCycleGate duty_cycle must be finite and lie in (0, 1]"))
     return model
 end
 
-convert_correlation_model(::NullCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} = NullCountingCorrelation()
-convert_correlation_model(model::AfterpulsingModel, ::Type{T}) where {T<:AbstractFloat} = AfterpulsingModel{T}(T(model.probability))
-convert_correlation_model(model::ChannelCrosstalkModel, ::Type{T}) where {T<:AbstractFloat} =
-    ChannelCrosstalkModel{T}(T(model.coupling))
-convert_correlation_model(model::CompositeCountingCorrelation, ::Type{T}) where {T<:AbstractFloat} =
-    CompositeCountingCorrelation(tuple((convert_correlation_model(stage, T) for stage in model.stages)...))
+convert_mean_response_model(::NullCountingMeanResponse, ::Type{T}) where {T<:AbstractFloat} = NullCountingMeanResponse()
+convert_mean_response_model(model::FirstOrderAfterpulseMeanResponse, ::Type{T}) where {T<:AbstractFloat} =
+    FirstOrderAfterpulseMeanResponse{T}(T(model.mean_afterpulses_per_detection))
+convert_mean_response_model(model::NearestNeighborCountRedistribution, ::Type{T}) where {T<:AbstractFloat} =
+    NearestNeighborCountRedistribution{T}(T(model.redistribution_fraction))
+convert_mean_response_model(model::CompositeCountingMeanResponse, ::Type{T}) where {T<:AbstractFloat} =
+    CompositeCountingMeanResponse(tuple((convert_mean_response_model(stage, T) for stage in model.stages)...))
 
-validate_correlation_model(::NullCountingCorrelation) = NullCountingCorrelation()
+validate_mean_response_model(::NullCountingMeanResponse) = NullCountingMeanResponse()
 
-function validate_correlation_model(model::AfterpulsingModel)
-    zero(model.probability) <= model.probability <= one(model.probability) ||
-        throw(InvalidConfiguration("AfterpulsingModel probability must lie in [0, 1]"))
+function validate_mean_response_model(model::FirstOrderAfterpulseMeanResponse)
+    value = model.mean_afterpulses_per_detection
+    isfinite(value) && value >= zero(value) || throw(InvalidConfiguration(
+        "FirstOrderAfterpulseMeanResponse mean_afterpulses_per_detection must be finite and >= 0"))
     return model
 end
 
-function validate_correlation_model(model::ChannelCrosstalkModel)
-    zero(model.coupling) <= model.coupling <= one(model.coupling) ||
-        throw(InvalidConfiguration("ChannelCrosstalkModel coupling must lie in [0, 1]"))
+function validate_mean_response_model(model::NearestNeighborCountRedistribution)
+    value = model.redistribution_fraction
+    isfinite(value) && zero(value) <= value <= one(value) || throw(InvalidConfiguration(
+        "NearestNeighborCountRedistribution redistribution_fraction must be finite and lie in [0, 1]"))
     return model
 end
 
-function validate_correlation_model(model::CompositeCountingCorrelation)
-    return CompositeCountingCorrelation(tuple((validate_correlation_model(stage) for stage in model.stages)...))
+function validate_mean_response_model(model::CompositeCountingMeanResponse)
+    validated = CompositeCountingMeanResponse(
+        tuple((validate_mean_response_model(stage) for stage in model.stages)...))
+    _afterpulse_stage_count(validated) <= 1 || throw(InvalidConfiguration(
+        "CompositeCountingMeanResponse permits at most one FirstOrderAfterpulseMeanResponse stage"))
+    _redistribution_stage_count(validated) <= 1 || throw(InvalidConfiguration(
+        "CompositeCountingMeanResponse permits at most one NearestNeighborCountRedistribution stage"))
+    return validated
+end
+
+function _afterpulse_stage_count(::CountingMeanResponseModel)
+    return 0
+end
+
+function _afterpulse_stage_count(::FirstOrderAfterpulseMeanResponse)
+    return 1
+end
+
+function _afterpulse_stage_count(model::CompositeCountingMeanResponse)
+    return sum(_afterpulse_stage_count, model.stages; init=0)
+end
+
+function _redistribution_stage_count(::CountingMeanResponseModel)
+    return 0
+end
+
+function _redistribution_stage_count(::NearestNeighborCountRedistribution)
+    return 1
+end
+
+function _redistribution_stage_count(model::CompositeCountingMeanResponse)
+    return sum(_redistribution_stage_count, model.stages; init=0)
 end
 
 validate_counting_noise(noise::NoiseNone) = noise
@@ -208,7 +274,7 @@ function detector_export_metadata(det::AbstractCountingDetector; T::Type{<:Abstr
     output = output_frame(det)
     return CountingDetectorExportMetadata{T}(
         T(counting_integration_time(det)),
-        counting_qe(det, T),
+        counting_detection_efficiency(det, T),
         counting_reported_fill_factor(det, T),
         counting_post_gain(det, T),
         counting_dark_count_rate(det, T),
@@ -216,9 +282,9 @@ function detector_export_metadata(det::AbstractCountingDetector; T::Type{<:Abstr
         counting_dead_time_value(counting_dead_time_model(det), T),
         counting_gate_symbol(counting_gate_model(det)),
         counting_gate_duty_cycle(counting_gate_model(det), T),
-        counting_correlation_symbol(counting_correlation_model(det)),
-        afterpulse_probability(counting_correlation_model(det), T),
-        crosstalk_value(counting_correlation_model(det), T),
+        counting_mean_response_symbol(counting_mean_response_model(det)),
+        mean_afterpulses_per_detection(counting_mean_response_model(det), T),
+        redistribution_fraction(counting_mean_response_model(det), T),
         thermal_model_symbol(thermal_model(det)),
         detector_temperature(det, T),
         ambient_temperature_K(thermal_model(det), T),
@@ -267,7 +333,7 @@ counting_exposure_time(det::AbstractCountingDetector) = effective_gate_time(coun
 
 function seed_counting_input!(det::AbstractCountingDetector, input::AbstractMatrix, source_throughput)
     copyto!(counting_array(det), input)
-    counting_array(det) .*= counting_qe(det) * counting_fill_factor(det) *
+    counting_array(det) .*= counting_detection_efficiency(det) * counting_fill_factor(det) *
         counting_exposure_time(det) * source_throughput
     return counting_array(det)
 end
@@ -315,46 +381,50 @@ function apply_counting_noise!(::NoisePhoton, det::AbstractCountingDetector, rng
     return counting_array(det)
 end
 
-apply_counting_correlation!(det::AbstractCountingDetector, rng::AbstractRNG) =
-    apply_counting_correlation!(counting_correlation_model(det), det, rng)
-apply_counting_correlation!(::NullCountingCorrelation, det::AbstractCountingDetector, rng::AbstractRNG) = counting_array(det)
+apply_counting_mean_response!(det::AbstractCountingDetector) =
+    apply_counting_mean_response!(counting_mean_response_model(det), det)
+apply_counting_mean_response!(::NullCountingMeanResponse, det::AbstractCountingDetector) = counting_array(det)
 
-function apply_counting_correlation!(model::AfterpulsingModel, det::AbstractCountingDetector, rng::AbstractRNG)
-    p = model.probability
-    p <= zero(p) && return counting_array(det)
-    counting_array(det) .*= (one(p) + p)
+function apply_counting_mean_response!(model::FirstOrderAfterpulseMeanResponse,
+    det::AbstractCountingDetector)
+    mean_afterpulses = model.mean_afterpulses_per_detection
+    mean_afterpulses <= zero(mean_afterpulses) && return counting_array(det)
+    counting_array(det) .*= (one(mean_afterpulses) + mean_afterpulses)
     return counting_array(det)
 end
 
-function apply_counting_correlation!(model::ChannelCrosstalkModel, det::AbstractCountingDetector, rng::AbstractRNG)
-    coupling = model.coupling
-    coupling <= zero(coupling) && return counting_array(det)
+function apply_counting_mean_response!(model::NearestNeighborCountRedistribution,
+    det::AbstractCountingDetector)
+    fraction = model.redistribution_fraction
+    fraction <= zero(fraction) && return counting_array(det)
     counts = counting_array(det)
     input = counting_noise_buffer(det)
     copyto!(input, counts)
-    _apply_counting_channel_crosstalk!(execution_style(counts), counts, input, coupling)
+    _apply_nearest_neighbor_count_redistribution!(execution_style(counts), counts, input, fraction)
     return counts
 end
 
-function _apply_counting_channel_crosstalk!(::ScalarCPUStyle, output::AbstractMatrix,
-    input::AbstractMatrix, coupling)
+function _apply_nearest_neighbor_count_redistribution!(::ScalarCPUStyle, output::AbstractMatrix,
+    input::AbstractMatrix, fraction)
     n, m = size(output)
     @inbounds for j in 1:m, i in 1:n
-        output[i, j] = counting_channel_crosstalk_value(input, coupling, i, j, n, m)
+        output[i, j] = nearest_neighbor_redistributed_count(input,
+            fraction, i, j, n, m)
     end
     return output
 end
 
-function _apply_counting_channel_crosstalk!(style::AcceleratorStyle, output::AbstractMatrix,
-    input::AbstractMatrix, coupling)
+function _apply_nearest_neighbor_count_redistribution!(style::AcceleratorStyle, output::AbstractMatrix,
+    input::AbstractMatrix, fraction)
     n, m = size(output)
-    launch_kernel!(style, counting_channel_crosstalk_kernel!, output, input, coupling, n, m;
+    launch_kernel!(style, nearest_neighbor_count_redistribution_kernel!, output, input, fraction, n, m;
         ndrange=(n, m))
     return output
 end
 
-function apply_counting_correlation!(model::CompositeCountingCorrelation, det::AbstractCountingDetector, rng::AbstractRNG)
-    foreach(stage -> apply_counting_correlation!(stage, det, rng), model.stages)
+function apply_counting_mean_response!(model::CompositeCountingMeanResponse,
+    det::AbstractCountingDetector)
+    foreach(stage -> apply_counting_mean_response!(stage, det), model.stages)
     return counting_array(det)
 end
 
@@ -397,19 +467,26 @@ function write_output!(det::AbstractCountingDetector)
     return _write_counting_output!(plan, det, output, counts)
 end
 
-function _capture_counting!(det::AbstractCountingDetector, channels::AbstractMatrix,
-    source_throughput, rng::AbstractRNG)
-    ensure_buffers!(det, size(channels))
+function _capture_prevalidated_counting!(det::AbstractCountingDetector,
+    channels::AbstractMatrix, source_throughput, rng::AbstractRNG)
     exposure_time = counting_exposure_time(det)
     seed_counting_input!(det, channels, source_throughput)
     apply_counting_channel_gain_map!(det)
     apply_dark_counts!(det, exposure_time)
-    apply_counting_noise!(det, rng)
     apply_dead_time!(det)
-    apply_counting_correlation!(det, rng)
+    apply_counting_mean_response!(det)
+    apply_counting_noise!(det, rng)
     apply_post_counting_gain!(det)
     advance_thermal!(det, counting_integration_time(det))
     return write_output!(det)
+end
+
+function _capture_counting!(det::AbstractCountingDetector,
+    channels::AbstractMatrix, source_throughput, rng::AbstractRNG)
+    ensure_buffers!(det, size(channels))
+    _require_finite_nonnegative_intensity(channels)
+    return _capture_prevalidated_counting!(det, channels, source_throughput,
+        rng)
 end
 
 function capture!(det::AbstractCountingDetector, channels::AbstractMatrix{T};

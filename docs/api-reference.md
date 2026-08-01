@@ -1010,8 +1010,8 @@ not the moved detector bindings.
   `ArrheniusRateLaw`, `LinearTemperatureLaw`, `ExponentialTemperatureLaw`
 - Counting models: `CountingDeadTimeModel`, `NoDeadTime`,
   `NonParalyzableDeadTime`, `ParalyzableDeadTime`, `DutyCycleGate`,
-  `AfterpulsingModel`, `ChannelCrosstalkModel`,
-  `CompositeCountingCorrelation`
+  `FirstOrderAfterpulseMeanResponse`, `NearestNeighborCountRedistribution`,
+  `CompositeCountingMeanResponse`
 - Runtime functions: `capture!`, `output_frame`, `channel_output`,
   `detector_export_metadata`, `readout_ready`, `reset_integration!`,
   `thermal_model`, `detector_ramp_slope`, `detector_ramp_intercept`,
@@ -1103,9 +1103,27 @@ output-conversion effects. The prepared path remains type-inferred and
 allocation-free after warmup. This is still the ordinary detector pipeline,
 not a separate reduced-order detector type or a camera profile.
 
+`SPADArrayDetector((rows, columns); ...)` is the maintained fixed-shape
+Geiger-mode area-counting surface. Its deterministic order is cell-integrated
+photon-arrival rate times active-area detection efficiency, fill factor, live
+integration time, and source throughput; plus integrated dark counts; followed
+by the selected dead-time mean law and deterministic mean-response stages. An
+optional `NoisePhoton()` stage then draws a Poisson count from that adjusted
+expectation. This last step is a bounded accumulated-count surrogate, not the
+true non-Poisson distribution produced by dead time or afterpulsing.
+Mean-response composites may contain at most one first-order afterpulse stage
+and one nearest-neighbor redistribution stage, so their scalar export metadata
+remains exact. Direct capture validates finite nonnegative input and exact fixed
+dimensions before
+mutation; prepared WFS acquisition binds those conditions once and remains
+device resident. Preparation validates the initial values; repeated acquisition
+trusts the bound producer to preserve finite nonnegative samples. Fill factor is
+scalar radiometry and does not create a pixel aperture or detector MTF. The
+model does not emit photon timestamps or avalanche events.
+
 `MKIDArrayDetector` is the maintained MKID surface for accumulated counting-array
 HIL use. It models photon-counting output with quantum efficiency, fill factor,
-dark count rate, optional counting dead time/correlation models, and exported
+dark count rate, optional counting dead-time and mean-response models, and exported
 energy-resolution and timing-jitter metadata. `energy_resolution` is the
 dimensionless resolving power `E/ΔE`, and `timing_jitter_s` is in seconds.
 Configure its optional inclusive passband in meters with

@@ -1,33 +1,45 @@
+"""
+    SPADArraySensor(; active_area_detection_efficiency=0.5,
+        dark_count_rate=0, fill_factor=1, dead_time_model=NoDeadTime(),
+        mean_response_model=NullCountingMeanResponse(), ...)
+
+Product-neutral parameters for an accumulated-count SPAD array. Active-area
+detection efficiency and fill factor are independent scalar radiometric terms;
+neither creates a wavelength response, pixel aperture, or detector MTF.
+"""
 struct SPADArraySensor{
     T<:AbstractFloat,
     D<:CountingDeadTimeModel,
-    C<:AbstractCountingCorrelationModel,
+    C<:CountingMeanResponseModel,
 } <: SPADArraySensorType
-    pde::T
+    active_area_detection_efficiency::T
     dark_count_rate::T
     fill_factor::T
     dead_time_model::D
-    correlation_model::C
+    mean_response_model::C
 end
 
-function SPADArraySensor(; pde::Real=0.5, dark_count_rate::Real=0.0, fill_factor::Real=1.0,
+function SPADArraySensor(; active_area_detection_efficiency::Real=0.5, dark_count_rate::Real=0.0, fill_factor::Real=1.0,
     dead_time_model::CountingDeadTimeModel=NoDeadTime(),
-    correlation_model::AbstractCountingCorrelationModel=NullCountingCorrelation(),
+    mean_response_model::CountingMeanResponseModel=NullCountingMeanResponse(),
     T::Type{<:AbstractFloat}=Float64)
-    zero(pde) <= pde <= one(pde) ||
-        throw(InvalidConfiguration("SPADArraySensor pde must lie in [0, 1]"))
-    dark_count_rate >= 0 ||
-        throw(InvalidConfiguration("SPADArraySensor dark_count_rate must be >= 0"))
-    zero(fill_factor) < fill_factor <= one(fill_factor) ||
-        throw(InvalidConfiguration("SPADArraySensor fill_factor must lie in (0, 1]"))
+    typed_efficiency = T(active_area_detection_efficiency)
+    typed_dark_count_rate = T(dark_count_rate)
+    typed_fill_factor = T(fill_factor)
+    isfinite(typed_efficiency) && zero(T) <= typed_efficiency <= one(T) ||
+        throw(InvalidConfiguration("SPADArraySensor active_area_detection_efficiency must be finite and lie in [0, 1]"))
+    isfinite(typed_dark_count_rate) && typed_dark_count_rate >= zero(T) ||
+        throw(InvalidConfiguration("SPADArraySensor dark_count_rate must be finite and >= 0"))
+    isfinite(typed_fill_factor) && zero(T) < typed_fill_factor <= one(T) ||
+        throw(InvalidConfiguration("SPADArraySensor fill_factor must be finite and lie in (0, 1]"))
     dead_time = validate_dead_time_model(convert_dead_time_model(dead_time_model, T))
-    correlation = validate_correlation_model(convert_correlation_model(correlation_model, T))
-    return SPADArraySensor{T,typeof(dead_time),typeof(correlation)}(
-        T(pde),
-        T(dark_count_rate),
-        T(fill_factor),
+    mean_response = validate_mean_response_model(convert_mean_response_model(mean_response_model, T))
+    return SPADArraySensor{T,typeof(dead_time),typeof(mean_response)}(
+        typed_efficiency,
+        typed_dark_count_rate,
+        typed_fill_factor,
         dead_time,
-        correlation,
+        mean_response,
     )
 end
 
@@ -38,11 +50,11 @@ struct SPADArrayDetectorParams{
     TM<:AbstractDetectorThermalModel,
 }
     integration_time::T
+    dimensions::Tuple{Int,Int}
     gate_model::G
     thermal_model::TM
     sensor::S
     output_type::Union{Nothing,DataType}
-    layout::Symbol
 end
 
 mutable struct SPADArrayDetectorState{
@@ -77,9 +89,11 @@ end
 counting_sensor(det::SPADArrayDetector) = det.params.sensor
 counting_gate_model(det::SPADArrayDetector) = det.params.gate_model
 counting_dead_time_model(det::SPADArrayDetector) = det.params.sensor.dead_time_model
-counting_correlation_model(det::SPADArrayDetector) = det.params.sensor.correlation_model
+counting_mean_response_model(det::SPADArrayDetector) = det.params.sensor.mean_response_model
 counting_integration_time(det::SPADArrayDetector) = det.params.integration_time
-counting_layout(det::SPADArrayDetector) = det.params.layout
+function counting_layout(::SPADArrayDetector)
+    return :pixel_counts
+end
 counting_output_type(det::SPADArrayDetector) = det.params.output_type
 counting_array(det::SPADArrayDetector) = det.state.counts
 counting_noise_buffer(det::SPADArrayDetector) = det.state.noise_buffer
@@ -92,7 +106,7 @@ set_counting_host_buffer!(det::SPADArrayDetector, values) = (det.state.host_buff
 set_counting_output_buffer!(det::SPADArrayDetector, values) = (det.state.output_buffer = values; det)
 set_counting_output_host_buffer!(det::SPADArrayDetector, values) =
     (det.state.output_buffer_host = values; det)
-counting_qe(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.pde)
+counting_detection_efficiency(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.active_area_detection_efficiency)
 counting_fill_factor(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
 counting_reported_fill_factor(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
 counting_dark_count_rate(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.dark_count_rate)
@@ -101,33 +115,37 @@ detector_sensor_symbol(::SPADArraySensor) = :spad_array
 
 dark_count_law(::SPADArrayDetector) = NullTemperatureLaw()
 
-function _build_spad_array_detector(noise::NoiseModel; integration_time::Real,
+function _build_spad_array_detector(dimensions::Tuple{Int,Int}, noise::NoiseModel;
+    integration_time::Real,
     gate_model::AbstractCountingGateModel,
     thermal_model::AbstractDetectorThermalModel,
     sensor::SPADArraySensorType,
     output_type::Union{Nothing,DataType},
-    layout::Symbol,
     T::Type{<:AbstractFloat},
     backend)
-    integration_time > 0 || throw(InvalidConfiguration("SPADArrayDetector integration_time must be > 0"))
+    all(>(0), dimensions) || throw(InvalidConfiguration(
+        "SPADArrayDetector dimensions must contain two positive values"))
+    typed_integration_time = T(integration_time)
+    isfinite(typed_integration_time) && typed_integration_time > zero(T) ||
+        throw(InvalidConfiguration("SPADArrayDetector integration_time must be finite and > 0"))
     converted = convert_noise(noise, T)
     validated = validate_counting_noise(converted)
     gate = validate_gate_model(convert_gate_model(gate_model, T))
     thermal = validate_thermal_model(convert_thermal_model(thermal_model, T))
     typed_sensor = convert_spad_sensor(sensor, T)
     params = SPADArrayDetectorParams{T,typeof(typed_sensor),typeof(gate),typeof(thermal)}(
-        T(integration_time),
+        typed_integration_time,
+        dimensions,
         gate,
         thermal,
         typed_sensor,
         output_type,
-        layout,
     )
-    counts = backend{T}(undef, 1, 1)
-    noise_buffer = backend{T}(undef, 1, 1)
-    host_buffer = Matrix{T}(undef, 1, 1)
-    output_buffer = output_type === nothing ? nothing : backend{output_type}(undef, 1, 1)
-    output_buffer_host = output_type === nothing ? nothing : Matrix{output_type}(undef, 1, 1)
+    counts = backend{T}(undef, dimensions...)
+    noise_buffer = backend{T}(undef, dimensions...)
+    host_buffer = Matrix{T}(undef, dimensions...)
+    output_buffer = output_type === nothing ? nothing : backend{output_type}(undef, dimensions...)
+    output_buffer_host = output_type === nothing ? nothing : Matrix{output_type}(undef, dimensions...)
     fill!(counts, zero(T))
     fill!(noise_buffer, zero(T))
     fill!(host_buffer, zero(T))
@@ -144,29 +162,42 @@ function _build_spad_array_detector(noise::NoiseModel; integration_time::Real,
         validated, params, state)
 end
 
-function SPADArrayDetector(; integration_time::Real=1.0, noise::NoiseModel=NoisePhoton(),
+"""
+    SPADArrayDetector((rows, columns); sensor=SPADArraySensor(), ...)
+
+Construct a fixed-shape Geiger-mode accumulated-count area detector. Input
+matrices contain already cell-integrated photon-arrival rates. The model emits
+an expected-count or sampled-count image, not photon events or timestamps.
+"""
+function SPADArrayDetector(dimensions::Tuple{Int,Int};
+    integration_time::Real=1.0, noise::NoiseModel=NoisePhoton(),
     sensor::SPADArraySensor=SPADArraySensor(),
     output_type::Union{Nothing,DataType}=nothing,
-    layout::Symbol=:pixel_counts,
     gate_model::AbstractCountingGateModel=NullCountingGate(),
     thermal_model::AbstractDetectorThermalModel=NullDetectorThermalModel(),
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
-    return _build_spad_array_detector(noise; integration_time=integration_time,
+    return _build_spad_array_detector(dimensions, noise; integration_time=integration_time,
         gate_model=gate_model, thermal_model=thermal_model, sensor=sensor,
-        output_type=output_type, layout=layout, T=T, backend=backend)
+        output_type=output_type, T=T, backend=backend)
+end
+
+function ensure_buffers!(det::SPADArrayDetector, dimensions::Tuple{Int,Int})
+    dimensions == det.params.dimensions || throw(DimensionMismatchError(
+        "SPADArrayDetector input dimensions must match its fixed detector dimensions"))
+    return det
 end
 
 convert_spad_sensor(sensor::SPADArraySensor{T}, ::Type{T}) where {T<:AbstractFloat} = sensor
 
 function convert_spad_sensor(sensor::SPADArraySensorType, ::Type{T}) where {T<:AbstractFloat}
     return SPADArraySensor(
-        pde=sensor.pde,
+        active_area_detection_efficiency=sensor.active_area_detection_efficiency,
         dark_count_rate=sensor.dark_count_rate,
         fill_factor=sensor.fill_factor,
         dead_time_model=sensor.dead_time_model,
-        correlation_model=sensor.correlation_model,
+        mean_response_model=sensor.mean_response_model,
         T=T,
     )
 end

@@ -31,8 +31,8 @@ export AbstractDetectorThermalModel, NullDetectorThermalModel
 export FixedTemperature, FirstOrderThermalModel
 export ArrheniusRateLaw, LinearTemperatureLaw, ExponentialTemperatureLaw
 export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime
-export ParalyzableDeadTime, DutyCycleGate, AfterpulsingModel
-export ChannelCrosstalkModel, CompositeCountingCorrelation
+export ParalyzableDeadTime, DutyCycleGate, FirstOrderAfterpulseMeanResponse
+export NearestNeighborCountRedistribution, CompositeCountingMeanResponse
 export capture!, output_frame, channel_output, detector_export_metadata
 export DetectorAcquisitionPlan, prepare_detector_acquisition
 export detector_ramp_slope, detector_ramp_intercept

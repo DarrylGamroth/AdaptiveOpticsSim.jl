@@ -372,8 +372,8 @@ end
             rates[2].values .* T(0.2)
     end
 
-    spad = SPADArrayDetector(integration_time=T(0.5), noise=NoiseNone(),
-        sensor=SPADArraySensor(pde=T(0.4), dark_count_rate=zero(T),
+    spad = SPADArrayDetector((2, 16); integration_time=T(0.5), noise=NoiseNone(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=T(0.4), dark_count_rate=zero(T),
             fill_factor=one(T)), T=T)
     counting_model = CurvaturePackedAcquisition(spad;
         readout_model=CurvatureChannelReadout(), source=source)
@@ -575,8 +575,8 @@ end
         coordinate_domain=NormalizedPupilCoordinates(),
         spectral=MonochromaticChannel(T(wavelength(source))))
 
-    spad = SPADArrayDetector(integration_time=T(0.25), noise=NoiseNone(),
-        sensor=SPADArraySensor(pde=T(0.5), dark_count_rate=zero(T),
+    spad = SPADArrayDetector(size(rate_values); integration_time=T(0.25), noise=NoiseNone(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=T(0.5), dark_count_rate=zero(T),
             fill_factor=one(T), T=T), T=T)
     observation = WFSObservation(zeros(T, size(rate_values));
         units=:photon_count, layout=:counting_channels)
@@ -588,9 +588,18 @@ end
     @test observation.storage == rate_values .* T(0.125)
     @test rate.values == rate_before
 
-    source_free_spad = SPADArrayDetector(integration_time=T(0.5),
+    invalid_rate_values = copy(rate_values)
+    invalid_rate_values[1, 1] = -one(T)
+    invalid_rate = contract_rate_map(invalid_rate_values;
+        sampling=rate.metadata.sampling,
+        coordinate_domain=NormalizedPupilCoordinates(),
+        spectral=rate.metadata.spectral)
+    @test_throws InvalidConfiguration prepare_wfs_acquisition(
+        spad, invalid_rate, observation; source=source)
+
+    source_free_spad = SPADArrayDetector(size(rate_values); integration_time=T(0.5),
         noise=NoiseNone(),
-        sensor=SPADArraySensor(pde=one(T), dark_count_rate=zero(T),
+        sensor=SPADArraySensor(active_area_detection_efficiency=one(T), dark_count_rate=zero(T),
             fill_factor=one(T), T=T), T=T)
     source_free_observation = WFSObservation(zeros(T, size(rate_values));
         units=:photon_count, layout=:counting_channels)
@@ -702,14 +711,11 @@ end
         observation, replacement_rate, plan, rng)
     @test replacement_observation.storage == replacement_before
 
-    ensure_buffers!(spad, (3, 2))
-    observation_before = copy(observation.storage)
-    stale_storage_error = contract_captured_error() do
-        acquire_wfs_observation!(observation, rate, plan, rng)
-    end
-    @test stale_storage_error isa WFSPreparationError
-    @test stale_storage_error.reason === :prepared_binding
-    @test observation.storage == observation_before
+    fixed_input_storage = counting_array(spad)
+    @test_throws DimensionMismatchError ensure_buffers!(spad, (3, 2))
+    @test counting_array(spad) === fixed_input_storage
+    acquire_wfs_observation!(observation, rate, plan, rng)
+    @test observation.storage == rate_values .* T(0.125)
 
     if coverage_enabled
         @test_skip "counting acquisition allocation assertion is disabled under coverage instrumentation"

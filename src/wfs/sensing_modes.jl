@@ -61,7 +61,7 @@ end
 
 @inline function wfs_detector_incidence_scale(det::AbstractCountingDetector,
     src::AbstractSource, ::Type{T}) where {T<:AbstractFloat}
-    return T(counting_exposure_time(det)) * counting_qe(det, T) *
+    return T(counting_exposure_time(det)) * counting_detection_efficiency(det, T) *
         counting_fill_factor(det, T) * counting_source_throughput(det, src, T) *
         counting_post_gain(det, T)
 end

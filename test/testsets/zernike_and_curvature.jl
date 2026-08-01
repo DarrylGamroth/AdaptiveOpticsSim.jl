@@ -328,10 +328,10 @@ end
     @test counting_apd ≈ counting_flat atol=1e-10
     @test detector_export_metadata(apd).n_channels ==
         length(camera_frame(counting))
-    spad = SPADArrayDetector(
+    spad = SPADArrayDetector(size(camera_frame(counting));
         integration_time=1.0,
         noise=NoiseNone(),
-        sensor=SPADArraySensor(pde=1.0, dark_count_rate=0.0, fill_factor=1.0),
+        sensor=SPADArraySensor(active_area_detection_efficiency=1.0, dark_count_rate=0.0, fill_factor=1.0),
     )
     counting_spad = copy(measure!(counting, pupil, src, spad))
     @test counting_spad ≈ counting_flat atol=1e-10

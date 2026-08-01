@@ -788,9 +788,11 @@ end
 
     spectral_spad_pyramid = PyramidWFS(tel;
         pupil_samples=8, mode=Diffractive(), modulation=1.0)
-    spectral_spad = SPADArrayDetector(integration_time=1.0,
+    spectral_spad = SPADArrayDetector(
+        size(spectral_spad_pyramid.acquisition.state.camera_frame);
+        integration_time=1.0,
         noise=NoiseNone(),
-        sensor=SPADArraySensor(pde=1.0, dark_count_rate=0.0,
+        sensor=SPADArraySensor(active_area_detection_efficiency=1.0, dark_count_rate=0.0,
             fill_factor=1.0))
     spectral_spad_slopes = measure!(spectral_spad_pyramid, pupil,
         selective_source, spectral_spad; rng=MersenneTwister(782))

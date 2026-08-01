@@ -2580,8 +2580,8 @@ function run_optional_zernike_curvature_stages(
     @test isapprox(packed_host[5:8, :], Array(gpu_rates[2].values) .* T(0.125);
         rtol=T(3e-5), atol=T(3e-5))
 
-    spad = SPADArrayDetector(integration_time=T(0.25), noise=NoiseNone(),
-        sensor=SPADArraySensor(pde=T(0.5), dark_count_rate=zero(T),
+    spad = SPADArrayDetector((2, 16); integration_time=T(0.25), noise=NoiseNone(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=T(0.5), dark_count_rate=zero(T),
             fill_factor=one(T)), T=T, backend=selector)
     counting_model = CurvaturePackedAcquisition(spad;
         readout_model=CurvatureChannelReadout(), source=source)
@@ -2592,8 +2592,19 @@ function run_optional_zernike_curvature_stages(
         gpu_rates, counting_observation)
     acquire_wfs_observation!(counting_observation, gpu_rates,
         counting_acquisition, Xoshiro(0x4357))
+    counting_host = Array(counting_observation.storage)
+    expected_counting = zeros(T, 2, 16)
+    counting_plus_host = Array(gpu_rates[1].values)
+    counting_minus_host = Array(gpu_rates[2].values)
+    @inbounds for i in 1:4, j in 1:4
+        index = (i - 1) * 4 + j
+        expected_counting[1, index] = counting_plus_host[i, j] * T(0.125)
+        expected_counting[2, index] = counting_minus_host[i, j] * T(0.125)
+    end
     @test counting_observation.storage isa BackendArray
-    @test all(isfinite, Array(counting_observation.storage))
+    @test all(isfinite, counting_host)
+    @test isapprox(counting_host, expected_counting;
+        rtol=T(3e-5), atol=T(3e-5))
 
     linear_apd = LinearAPDDetector(
         topology=LinearAPDChannelBank(32),
@@ -3205,7 +3216,7 @@ end
 function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
-    correlation = ChannelCrosstalkModel(T(0.4))
+    mean_response = NearestNeighborCountRedistribution(T(0.4))
     sensor_kwargs = (
         qe=T(1),
         dark_count_rate=T(0),
@@ -3213,7 +3224,7 @@ function run_optional_counting_detector_parity(::Type{B}, BackendArray) where {B
         energy_resolution=T(12),
         timing_jitter_s=T(2e-6),
         wavelength_range_m=(T(0.8e-6), T(1.4e-6)),
-        correlation_model=correlation,
+        mean_response_model=mean_response,
         T=T,
     )
     cpu = MKIDArrayDetector(
@@ -3435,6 +3446,88 @@ function run_optional_ingaas_deterministic_checks(
     @test metadata.frame_response == :none
     @test metadata.persistence_model == :exponential
     @test !supports_detector_mtf(detector)
+    return nothing
+end
+
+function run_optional_spad_moment_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    stochastic = SPADArrayDetector((128, 128); noise=NoisePhoton(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=one(T),
+            dead_time_model=NonParalyzableDeadTime(T(0.05)), T=T),
+        T=T, backend=selector)
+    stochastic_output = capture!(stochastic,
+        BackendArray(fill(T(100), 128, 128)), Xoshiro(0x53504146))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(stochastic_output))
+    stochastic_host = Array(stochastic_output)
+    expected_mean = T(100 / 6)
+    @test stochastic_output isa BackendArray
+    @test isapprox(mean(stochastic_host), expected_mean; atol=T(0.2))
+    @test isapprox(var(stochastic_host), expected_mean; rtol=T(0.1))
+    return nothing
+end
+
+# AMDGPU/GPUCompiler on the maintained Julia 1.12.6 host can segfault while
+# compiling the portable Poisson kernel. Keep deterministic SPAD semantics in
+# the release target without silently promoting a stochastic AMDGPU claim.
+run_optional_spad_moment_checks(
+    ::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}, BackendArray) = nothing
+
+function run_optional_spad_qualification_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+
+    deterministic = SPADArrayDetector((3, 3);
+        integration_time=T(2), noise=NoiseNone(),
+        gate_model=DutyCycleGate(T(0.5)),
+        sensor=SPADArraySensor(
+            active_area_detection_efficiency=T(0.5),
+            fill_factor=T(0.8),
+            dead_time_model=NonParalyzableDeadTime(T(0.1)),
+            mean_response_model=NearestNeighborCountRedistribution(T(0.4)),
+            T=T),
+        output_type=UInt16, T=T, backend=selector)
+    impulse_host = zeros(T, 3, 3)
+    impulse_host[2, 2] = T(10)
+    deterministic_output = capture!(deterministic,
+        BackendArray(impulse_host), Xoshiro(0x53504144))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(deterministic_output))
+    # The live time is one second. The center expectation before redistribution
+    # is (10 * 0.5 * 0.8) / (1 + 4 * 0.1) = 20/7 counts.
+    expected = zeros(T, 3, 3)
+    expected[2, 2] = T(12 / 7)
+    expected[1, 2] = expected[2, 1] = expected[2, 3] =
+        expected[3, 2] = T(2 / 7)
+    @test deterministic.state.counts isa BackendArray
+    @test deterministic.state.noise_buffer isa BackendArray
+    @test deterministic_output isa BackendArray
+    @test Array(deterministic.state.counts) ≈ expected rtol=T(2e-6)
+    @test Array(deterministic_output) == round.(UInt16, expected)
+
+    paralyzable = SPADArrayDetector((1, 3); noise=NoiseNone(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=one(T),
+            dead_time_model=ParalyzableDeadTime(T(0.1)), T=T),
+        T=T, backend=selector)
+    paralyzable_input = BackendArray(reshape(T[0, 10, 1000], 1, 3))
+    paralyzable_output = capture!(paralyzable, paralyzable_input,
+        Xoshiro(0x53504145))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(paralyzable_output))
+    @test Array(paralyzable_output) ≈
+        reshape(T[0, 10exp(-1), 1000exp(-100)], 1, 3) rtol=T(2e-5)
+
+    run_optional_spad_moment_checks(B, BackendArray)
+
+    fixed_counts = deterministic.state.counts
+    @test_throws DimensionMismatchError capture!(deterministic,
+        BackendArray(zeros(T, 2, 2)), Xoshiro(0x53504147))
+    @test deterministic.state.counts === fixed_counts
     return nothing
 end
 
@@ -4634,6 +4727,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_sodium_profile_wfs(B, backend)
     run_optional_zernike_normalization(B, backend)
     run_optional_wfs_stage_contracts(B, backend)
+    run_optional_spad_qualification_checks(B, backend)
     run_optional_prepared_plant_checks(B, backend)
     run_optional_device_path_batch_checks(B, backend)
     run_optional_wfs_device_model_matrix_checks(B, backend)

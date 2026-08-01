@@ -629,7 +629,8 @@ apd = LinearAPDDetector(
 value = only(capture!(apd, 2.0e5; rng=runtime_rng(4)))
 ```
 
-`SPADArrayDetector` owns Geiger-mode area counting. `MKIDArrayDetector` remains
+`SPADArrayDetector((rows, columns); ...)` owns fixed-shape Geiger-mode
+accumulated-count area imaging. `MKIDArrayDetector` remains
 the energy-resolving accumulated counting-array model. Neither is a
 linear-mode APD channel surface.
 
@@ -887,7 +888,8 @@ For counting-imager or counting-channel paths, use a maintained counting
 detector family instead of the generic frame-detector surface:
 
 - `LinearAPDDetector(...)` for analog single-element or fixed-bank channels
-- `SPADArrayDetector(...)` for accumulated-count imaging arrays
+- `SPADArrayDetector((rows, columns); ...)` for fixed-shape accumulated-count
+  imaging arrays
 - `MKIDArrayDetector(...)` for accumulated-count imaging with MKID
   energy/timing metadata and an optional meter-valued source passband
 
