@@ -325,6 +325,11 @@ function generate_mkid_qualification_artifact()
                 "optional energy resolving power, photon-arrival-time resolution, and inclusive wavelength passband",
             "statistical_scope" =>
                 "Poisson draw from the adjusted accumulated-count mean; not an event-resolved MKID distribution",
+            "scientific_references" => [
+                "https://doi.org/10.1038/nature02037",
+                "https://arxiv.org/abs/1007.0752",
+                "https://doi.org/10.1086/674013",
+            ],
         ),
         "qualification" => Dict(
             "samples_per_moment_case" => MKID_SAMPLE_COUNT,

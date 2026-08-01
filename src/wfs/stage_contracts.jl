@@ -494,7 +494,7 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
     return nothing
 end
 
-"""Prepared acquisition for a channel-oriented photon-counting detector."""
+"""Prepared acquisition for an accumulated-count detector."""
 struct PreparedWFSCountingAcquisition{D,I,O,S,T,A,F}
     detector::D
     optical_product::I
