@@ -5,17 +5,22 @@ schema_version = 1
 
 [environment]
 architecture = "x86_64"
+array_backend = "CPU"
 julia_threads = 1
 julia_version = "1.12.6"
 kernel = "Linux"
 source_dirty = false
-source_revision = "df9f2b0bfb3e62c24fa0e1a279ac6b743083a4ff"
-timestamp_utc = "2026-08-01T08:07:29.674"
+source_revision = "15d00243c39f6d4710d262573c4e0a8780bce21a"
+timestamp_utc = "2026-08-01T08:42:01.690"
 
 [model]
-input = "cell-integrated photon-arrival rate per array cell"
+first_order_afterpulse_mean_law = "mu_out = mu_in * (1 + mean_afterpulses_per_detection)"
+input = "cell-integrated photon-arrival rate in photons per second per array cell"
+live_time_equation = "live_time = duty_cycle * integration_time"
+nearest_neighbor_redistribution = "retain 1 - f in each source cell and divide f among its orthogonal in-bounds neighbors"
+noise_none_semantics = "floating expected counts after deterministic mean response"
 nonparalyzable_mean_law = "mu / (1 + mu * tau / live_time)"
-output = "accumulated expected-count or sampled-count image"
+output = "accumulated expected counts or sampled counts per integration"
 paralyzable_mean_law = "mu * exp(-mu * tau / live_time)"
 pipeline_order = "radiometry and dark expectation; dead-time mean law; deterministic mean response; optional Poisson surrogate; output conversion"
 scientific_references = ["https://doi.org/10.1109/TCOMM.2018.2822815", "https://doi.org/10.1098/rsta.2019.0194", "https://doi.org/10.1364/AO.35.001956"]
@@ -25,6 +30,46 @@ statistical_scope = "Poisson draw from adjusted mean; not the exact dead-time or
 samples_per_moment_case = 16384
 sigma_limit = 6.0
 
+    [[qualification.dead_time_curves]]
+    all_points_passed = true
+    dead_time_s = 0.1
+    id = "no_dead_time"
+
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.0
+        lambda_tau = 0.0
+        observed_count = 0.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.01
+        lambda_tau = 0.001
+        observed_count = 0.01
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 0.09999999999999999
+        lambda_tau = 0.01
+        observed_count = 0.09999999999999999
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 1.0
+        lambda_tau = 0.1
+        observed_count = 1.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 10.0
+        lambda_tau = 1.0
+        observed_count = 10.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 100.0
+        lambda_tau = 10.0
+        observed_count = 100.0
+        passed = true
+        [[qualification.dead_time_curves.points]]
+        expected_count = 1000.0
+        lambda_tau = 100.0
+        observed_count = 1000.0
+        passed = true
     [[qualification.dead_time_curves]]
     all_points_passed = true
     dead_time_s = 0.1
@@ -115,10 +160,14 @@ sigma_limit = 6.0
     first_order_afterpulse_mean_passed = true
     fixed_shape_mismatch_rejected = true
     fixed_shape_storage_preserved = true
+    gated_dark_live_time_passed = true
+    integer_rounding_and_saturation_passed = true
     invalid_input_rejected = true
+    ordered_live_time_pipeline_passed = true
     redistribution_center_passed = true
     redistribution_conserves_counts = true
     steady_alloc_bytes = 0
+    temperature_dependent_dark_count_passed = true
 
     [[qualification.poisson_surrogate_cases]]
     expected_mean = 20.0
@@ -171,4 +220,4 @@ sigma_limit = 6.0
 
 [scope]
 excluded = ["photon-event timestamps, avalanche waveforms, and energy resolution", "exact dead-time and afterpulse count distributions", "history-dependent or higher-generation afterpulsing", "optical blur, pixel-aperture response, and detector MTF", "spectral detection-efficiency curves and calibrated detector maps", "named detector modules and camera profiles"]
-included = ["fixed array dimensions and preallocated storage", "active-area detection efficiency, fill factor, live time, and dark counts", "nonparalyzable and paralyzable expected-count dead-time laws", "first-order afterpulse mean scaling", "count-conserving nearest-neighbor redistribution", "Poisson surrogate moments after mean-response adjustment", "deterministic replay and warmed CPU allocation"]
+included = ["fixed array dimensions and preallocated storage", "active-area detection efficiency, fill factor, live time, and temperature-dependent dark counts", "nonparalyzable and paralyzable expected-count dead-time laws", "first-order afterpulse mean scaling", "count-conserving nearest-neighbor redistribution", "Poisson surrogate moments after mean-response adjustment", "deterministic replay and warmed CPU allocation"]

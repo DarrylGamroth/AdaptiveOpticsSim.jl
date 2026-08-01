@@ -361,7 +361,7 @@
     @test spad["all_gates_passed"]
     @test !spad["environment"]["source_dirty"]
     @test spad["environment"]["source_revision"] ==
-        "df9f2b0bfb3e62c24fa0e1a279ac6b743083a4ff"
+        "15d00243c39f6d4710d262573c4e0a8780bce21a"
     @test spad["model"]["statistical_scope"] ==
         "Poisson draw from adjusted mean; not the exact dead-time or afterpulse count distribution"
     spad_qualification = spad["qualification"]
