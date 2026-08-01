@@ -4,7 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  schedule:
+    - cron: "17 9 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 permissions:
   contents: read
@@ -12,6 +19,9 @@ permissions:
 jobs:
   full-composition:
     name: Full composition / Linux
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -39,6 +49,10 @@ jobs:
 
   fast-feedback:
     name: Fast feedback / ${{ matrix.shard }}
+    if: >-
+      github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -75,6 +89,10 @@ jobs:
 
   platform-closure:
     name: Platform closure / ${{ matrix.os }} / ${{ matrix.shard }}
+    if: >-
+      github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -114,6 +132,10 @@ jobs:
 
   grouped-cpu-execution:
     name: Grouped CPU execution
+    if: >-
+      github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -141,6 +163,10 @@ jobs:
 
   scheduler-extensions:
     name: Optional CPU scheduler extensions
+    if: >-
+      github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -166,8 +192,45 @@ jobs:
       - name: Run scheduler extension tests
         run: julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl
 
+  linux-arm64-portability:
+    name: Linux aarch64 portability
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      JULIA_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+
+      - name: Cache Julia artifacts
+        uses: julia-actions/cache@v3
+
+      - name: Verify Linux aarch64 runner
+        run: julia --startup-file=no -e 'using InteractiveUtils; Sys.islinux() && Sys.ARCH === :aarch64 || error("Linux aarch64 validation requires an aarch64 runner"); versioninfo()'
+
+      - name: Instantiate
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run Linux aarch64 portability shard
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=["ci-foundations"])'
+
   apple-accelerate:
     name: Apple Silicon / AppleAccelerate
+    if: >-
+      github.event_name != 'push' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false)
     runs-on: macos-15
     timeout-minutes: 90
     permissions:
