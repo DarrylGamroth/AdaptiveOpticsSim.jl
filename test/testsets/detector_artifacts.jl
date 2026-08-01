@@ -401,4 +401,64 @@
         "allocation_gate_passed",
     ))
     @test spad_deterministic["steady_alloc_bytes"] == 0
+
+    mkid_entry = detector_entries["DET-MKID-QUAL-2026-08-01"]
+    @test mkid_entry["status"] == "active"
+    mkid_path = joinpath(
+        dirname(detector_artifact_path), mkid_entry["path"])
+    @test isfile(mkid_path)
+    mkid = TOML.parsefile(mkid_path)
+    @test mkid["schema_version"] == 1
+    @test mkid["family"] == "mkid_accumulated_count_array"
+    @test mkid["all_gates_passed"]
+    @test !mkid["environment"]["source_dirty"]
+    @test mkid["environment"]["source_revision"] ==
+        "fdb04b54c94864a19d7ce15ca1f387fc122354ee"
+    @test mkid["model"]["observable"] ==
+        "accumulated expected-count or sampled-count image per integration"
+    @test mkid["model"]["statistical_scope"] ==
+        "Poisson draw from the adjusted accumulated-count mean; not an event-resolved MKID distribution"
+    @test Set(mkid["model"]["scientific_references"]) == Set((
+        "https://doi.org/10.1038/nature02037",
+        "https://arxiv.org/abs/1007.0752",
+        "https://doi.org/10.1086/674013",
+    ))
+    mkid_qualification = mkid["qualification"]
+    @test mkid_qualification["samples_per_moment_case"] == 16_384
+    @test mkid_qualification["sigma_limit"] == 6.0
+    mkid_curves = mkid_qualification["dead_time_curves"]
+    @test Set(curve["id"] for curve in mkid_curves) ==
+        Set(("no_dead_time", "nonparalyzable", "paralyzable"))
+    @test all(curve -> curve["all_points_passed"], mkid_curves)
+    @test all(curve ->
+        Set(point["lambda_tau"] for point in curve["points"]) ==
+            Set((0.0, 1e-3, 1e-2, 0.1, 1.0, 10.0, 100.0)),
+        mkid_curves)
+    mkid_poisson_cases =
+        mkid_qualification["poisson_surrogate_cases"]
+    @test Set(case["id"] for case in mkid_poisson_cases) == Set((
+        "photon_only", "dark_only", "photon_and_dark",
+        "dead_time_adjusted_surrogate"))
+    @test all(case -> case["mean_passed"] && case["variance_passed"],
+        mkid_poisson_cases)
+    mkid_deterministic = mkid_qualification["deterministic"]
+    @test all(mkid_deterministic[key] for key in (
+        "exact_radiometry_and_gate_passed",
+        "gated_dark_live_time_passed",
+        "inclusive_passband_passed",
+        "weighted_spectral_bundle_passed",
+        "matrix_prefilter_contract_passed",
+        "integer_rounding_and_saturation_passed",
+        "characteristics_separated_from_observable",
+        "optional_characteristics_default_to_nothing",
+        "spad_mean_response_absent",
+        "invalid_input_rejected",
+        "invalid_input_preserved_storage",
+        "prepared_source_throughput_bound",
+        "source_free_preparation_without_passband",
+        "detector_mtf_not_applicable",
+        "deterministic_replay_passed",
+        "allocation_gate_passed",
+    ))
+    @test mkid_deterministic["steady_alloc_bytes"] == 0
 end
