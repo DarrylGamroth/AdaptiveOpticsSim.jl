@@ -6,4 +6,4 @@ public compute_device_backend, compute_device_identifier
 public AbstractComputeDeviceAvailability, ComputeDeviceAvailable
 public ComputeDeviceUnavailable, ComputeDeviceError
 public compute_device_availability, compute_device_is_available
-public compute_device_unavailable_reason, allocate_array
+public compute_device_unavailable_reason, allocate_device_array

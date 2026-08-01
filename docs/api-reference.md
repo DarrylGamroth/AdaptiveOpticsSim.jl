@@ -128,11 +128,11 @@ backend = CPUBackend()
 `AbstractComputeDevice`, `HostComputeDevice`, `AcceleratorComputeDevice`,
 `compute_device_backend`, `compute_device_identifier`, the exact-device
 availability result types/accessors, `ComputeDeviceError`, and
-`allocate_array(device, T, dims...)` are stable qualified-public names, such as
-`Backends.HostComputeDevice()`. Exact-device availability is a cold runtime
-fact, not a model-support, capacity, or latency claim. Backend launch, FFT,
-reduction, and registration helpers remain developer or extension seams unless
-the exact owner allowlist promotes them.
+`allocate_device_array(device, T, dims...)` are stable qualified-public names,
+such as `Backends.HostComputeDevice()`. Exact-device availability is a cold
+runtime fact, not a model-support, capacity, or latency claim. Backend-family
+allocation, launch, FFT, reduction, and registration helpers remain developer
+or extension seams unless the exact owner allowlist promotes them.
 
 ## `AdaptiveOpticsSim.Optics` Foundations
 

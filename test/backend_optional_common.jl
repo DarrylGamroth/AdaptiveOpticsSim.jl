@@ -14,6 +14,16 @@ end
 backend_selector(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = AdaptiveOpticsSim.Backends.CUDABackend()
 backend_selector(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = AdaptiveOpticsSim.Backends.AMDGPUBackend()
 
+alternate_compute_device_identifier(
+    ::Type{AdaptiveOpticsSim.Backends.CUDABackendTag},
+    identifier::Integer,
+) = iszero(identifier) ? one(identifier) : zero(identifier)
+
+alternate_compute_device_identifier(
+    ::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag},
+    identifier::Integer,
+) = isone(identifier) ? identifier + one(identifier) : one(identifier)
+
 function run_optional_exact_compute_device_checks(
     ::Type{B},
     BackendArray,
@@ -29,24 +39,56 @@ function run_optional_exact_compute_device_checks(
         AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
             availability))
 
-    storage = AdaptiveOpticsSim.Backends.allocate_array(
-        device, Float32, 2, 3)
+    alternate_device = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        backend_selector(B),
+        alternate_compute_device_identifier(
+            B,
+            AdaptiveOpticsSim.Backends.compute_device_identifier(device),
+        ),
+    )
+    alternate_availability =
+        AdaptiveOpticsSim.Backends.compute_device_availability(
+            alternate_device)
+    selected_device =
+        AdaptiveOpticsSim.Backends.compute_device_is_available(
+            alternate_availability) ? alternate_device : device
+    caller_device = compute_device(BackendArray(zeros(Float32, 1)))
+
+    storage = AdaptiveOpticsSim.Backends.allocate_device_array(
+        selected_device, Float32, 2, 3)
     @test storage isa BackendArray
     @test size(storage) == (2, 3)
-    @test compute_device(storage) == device
+    @test compute_device(storage) == selected_device
+    @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
 
     context = AdaptiveOpticsSim.Backends._prepare_device_execution_context(
-        device)
+        selected_device)
     prepared_device =
         AdaptiveOpticsSim.Backends._prepared_device_execution_compute_device(
             context)
-    @test prepared_device == device
+    @test prepared_device == selected_device
+    @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
     context_device =
         AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
             context) do
             compute_device(BackendArray(zeros(Float32, 1)))
         end
-    @test context_device == device
+    @test context_device == selected_device
+    @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
+
+    injected_error = try
+        AdaptiveOpticsSim.Backends._with_compute_device(
+            selected_device) do
+            @test compute_device(BackendArray(zeros(Float32, 1))) ==
+                selected_device
+            error("injected exact-device context failure")
+        end
+        nothing
+    catch error
+        error
+    end
+    @test injected_error isa ErrorException
+    @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
 
     invalid_device = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
         backend_selector(B), 1.0f0)
@@ -57,7 +99,7 @@ function run_optional_exact_compute_device_checks(
     @test AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
         invalid_availability) == :invalid_device_identifier
     invalid_error = try
-        AdaptiveOpticsSim.Backends.allocate_array(
+        AdaptiveOpticsSim.Backends.allocate_device_array(
             invalid_device, Float32, 1)
         nothing
     catch error
@@ -76,7 +118,7 @@ function run_optional_exact_compute_device_checks(
     @test AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
         foreign_availability) == :device_unavailable
     foreign_error = try
-        AdaptiveOpticsSim.Backends.allocate_array(
+        AdaptiveOpticsSim.Backends.allocate_device_array(
             foreign_device, Float32, 1)
         nothing
     catch error

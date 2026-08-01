@@ -373,7 +373,7 @@ This is a preparation-time backend extension seam. The owning extension must
 select the requested device, restore the caller's previous device context, and
 return storage whose reported `compute_device` exactly matches `device`.
 """
-function allocate_array(
+function allocate_device_array(
     device::AbstractComputeDevice,
     ::Type{T},
     dims::Vararg{Int,N},

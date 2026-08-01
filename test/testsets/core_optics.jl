@@ -337,13 +337,15 @@ end
         :compute_device_availability,
         :compute_device_is_available,
         :compute_device_unavailable_reason,
-        :allocate_array,
+        :allocate_device_array,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)
         @test Base.ispublic(Backends, name)
         @test parentmodule(getfield(Backends, name)) === Backends
     end
+    @test !Base.isexported(Backends, :allocate_array)
+    @test !Base.ispublic(Backends, :allocate_array)
     for name in (
         :Telescope,
         :photon_irradiance,
@@ -608,7 +610,7 @@ end
     @test isnothing(
         AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
             host_availability))
-    exact_host_storage = AdaptiveOpticsSim.Backends.allocate_array(
+    exact_host_storage = AdaptiveOpticsSim.Backends.allocate_device_array(
         host_device, Float32, 2, 3)
     @test exact_host_storage isa Matrix{Float32}
     @test size(exact_host_storage) == (2, 3)
@@ -633,7 +635,7 @@ end
     @test AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
         unavailable_cuda) == :exact_device_selection_unavailable
     unavailable_error = try
-        AdaptiveOpticsSim.Backends.allocate_array(
+        AdaptiveOpticsSim.Backends.allocate_device_array(
             cuda_device_0, Float32, 2, 3)
         nothing
     catch error

@@ -53,9 +53,9 @@ availability query. It returns `ComputeDeviceAvailable` or
 `compute_device_unavailable_reason`. Availability is not model support or a
 memory/deadline admission result.
 
-`Backends.allocate_array(device, T, dims...)` is the qualified preparation-time
-allocation seam. An accelerator extension that supports exact selection must
-extend `Backends.compute_device_availability`,
+`Backends.allocate_device_array(device, T, dims...)` is the qualified
+preparation-time allocation seam. An accelerator extension that supports exact
+selection must extend `Backends.compute_device_availability`,
 `Backends._with_compute_device`, and
 `Backends._prepare_device_execution_context` for its family-qualified
 `AcceleratorComputeDevice`. Device identifiers use the owning runtime's native
