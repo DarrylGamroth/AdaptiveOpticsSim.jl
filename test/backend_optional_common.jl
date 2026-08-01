@@ -3556,6 +3556,13 @@ function run_optional_ingaas_moment_checks(
     return nothing
 end
 
+# AMDGPU/GPUCompiler on the maintained Julia 1.12.6 host can segfault while
+# compiling the portable Poisson kernel. Deterministic InGaAs persistence and
+# residency remain release-target checks; stochastic moment qualification is a
+# CUDA and CPU claim until that compiler failure is resolved.
+run_optional_ingaas_moment_checks(
+    ::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}, BackendArray) = nothing
+
 function run_optional_ingaas_checks(
     ::Type{B}, BackendArray) where {
     B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
