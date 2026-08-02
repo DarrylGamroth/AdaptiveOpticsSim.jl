@@ -44,6 +44,75 @@ extensions likewise extend
 recorded in
 [`../test/contracts/namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml).
 
+## Prepared Numerical Execution Interfaces
+
+Prepared algorithm interfaces follow an `AbstractFFTs`-style nominal model,
+but each protocol remains with its canonical scientific owner. Add an abstract
+plan type only when multiple implementations share documented operations and
+invariants. Do not add a universal package plan root, an `Interfaces` module,
+or a generic `process!` operation merely to make unrelated algorithms look
+uniform.
+
+Use the following ownership split:
+
+| Value | Extension contract |
+|---|---|
+| Definition | Cold reusable configuration with no prepared storage or live run ownership. |
+| Plan | Run-immutable dimensions, mappings, coefficients, compatibility rules, and logically immutable reentrant operators. |
+| State | Persistent mutable values that can affect a later scientific result; one writer. |
+| Workspace | Replaceable scratch and execution resources; recreation cannot change the deterministic trajectory. |
+| Product | Caller-visible output with explicit metadata and ownership. |
+| Prepared execution owner | Exact validated binding of the concrete plan, state, workspace, products, and backend/device/context. |
+
+An abstract plan subtype signals nominal participation. It is not sufficient
+by itself. The owning module must document and test:
+
+- required domain-specific mutating methods
+- input, output, state, and workspace invariants
+- supported numeric types, array backends, and exact compute devices
+- structured preparation and execution failures
+- stale or foreign binding rejection before mutation
+- type inference and warmed CPU allocation behavior
+- applicable accelerator residency and synchronization behavior
+
+Do not store `Any` in an implementation field, array element type, reference,
+or other prepared owner. Preparation must normalize user or extension input to
+a concrete internal representation before returning. An unconstrained
+`::Any`, `<:Any`, or `Vararg{Any}` in a fallback or matching method signature
+does not itself impose boxed storage; review such signatures for dispatch
+intent rather than rejecting them with a textual search.
+
+Keep concrete plan, state, and workspace types as type parameters of a prepared
+owner. Do not store the abstract plan root in a hot field or collection. Exact
+input/output array identity belongs to the prepared owner unless the underlying
+operator itself requires that identity. A reentrant logically immutable FFT or
+backend handle may be part of a plan; a scratch-owning, stream-bound,
+task-bound, or non-reentrant handle belongs to a workspace or prepared owner.
+
+New and migrated package or extension implementation does not directly use
+Julia's `Memory` type. Use
+[FixedSizeArrays.jl](https://github.com/JuliaArrays/FixedSizeArrays.jl)'s
+`FixedSizeArray{ConcreteT}` for homogeneous armed host storage; construction
+must reject a non-concrete element type. A `Vector` may be used as a cold
+builder, but preparation must seal it into fixed-size storage before execution.
+Use a concrete tuple or union for small bounded heterogeneous composition. For
+larger topologies, group owners into concrete homogeneous fixed-size arrays by
+execution family and select those groups with compact concrete descriptors or
+a purpose-built owner whose type does not encode path count. Use the concrete
+backend array type for numerical storage.
+
+On Julia versions where FixedSizeArrays.jl uses `Memory` as its internal
+backing, that backing remains an implementation detail of the dependency. Do
+not name, dispatch on, assert, or expose the backing type in package code or
+tests. The fixed-size semantic container does not repair element-type erasure:
+changing `Memory{Any}` to `FixedSizeArray{Any}`, `Vector{Any}`, an abstract
+vector, or a vector of an uninstantiated parametric family does not satisfy the
+execution contract. Use a concrete owner or an explicit prepared function
+barrier with inference and allocation evidence.
+
+The implementation migration and its required evidence are tracked in
+[issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225).
+
 ## Exact Compute-Device Selection
 
 Gate 9A preparation distinguishes a semantic backend family from one exact
@@ -1264,7 +1333,8 @@ Extension code should follow the package-wide backend rules:
 - avoid scalar indexing on GPU arrays
 - preallocate workspaces for hot paths
 - use explicit `!` methods when mutating state
-- centralize RNG ownership in the caller or workspace
+- centralize evolving RNG state in the caller or an explicit prepared state
+  owner; workspace may own only replaceable random-generation scratch
 - use multiple dispatch or traits instead of `isa` chains
 
 An accelerator-array extension registers both a semantic backend family and a

@@ -132,11 +132,54 @@ the companion HIL package implements test models against those interfaces.
 
 ## Main Data Model
 
-The dominant pattern is:
+Cold model configuration continues to use immutable parameter or definition
+types. Prepared numerical execution uses a more precise ownership split:
 
-- immutable params struct
-- mutable state struct
-- top-level domain object holding params plus state
+- an immutable definition describes reusable configuration
+- a run-immutable plan owns validated numerical or physical execution data
+- mutable state owns values that affect later scientific results
+- a replaceable workspace owns scratch and execution resources
+- caller-visible products remain distinct from scratch
+- a prepared execution owner binds the exact plan, state, workspace, products,
+  and backend/device/context for one single writer
+
+Discarding state may change the next result. Recreating a workspace must not.
+This distinction is stronger than whether a field is mutable. A plan may retain
+a logically immutable and reentrant FFT or backend operator; a scratch-owning,
+stream-bound, task-bound, or non-reentrant handle belongs to the workspace or
+prepared owner instead. Exact caller-array identity normally belongs to the
+prepared owner rather than the reusable plan.
+
+Nominal abstract plan types follow the `AbstractFFTs` model only where one
+canonical domain owns a real shared protocol. The owning module documents the
+required methods, invariants, traits, failure behavior, and conformance tests.
+Concrete prepared owners parameterize their plan, state, and workspace fields;
+hot execution does not store an abstract plan root. No implementation field or
+collection element type is `Any`; cold input is normalized to concrete
+ownership before preparation returns. Unconstrained method-signature wildcards
+are not stored representations and remain available for dispatch fallbacks.
+There is no universal
+`AbstractAdaptiveOpticsPlan`, global `Interfaces` namespace, or generic
+`process!` verb. Domain operations retain their accepted names.
+
+The target architecture does not directly use Julia's `Memory` as an
+implementation or API type. Homogeneous bounded host storage uses an
+FixedSizeArrays.jl `FixedSizeArray` whose element type is concrete and whose
+final shape is allocated during preparation. A `Vector` may be a cold builder
+but is sealed before execution. Small fixed heterogeneous composition uses
+concrete tuples or unions. Larger topologies group concrete homogeneous owners
+by execution family and use compact concrete descriptors or purpose-built
+owners without encoding path count in the type. Backend numerical storage
+retains its concrete backend array type. FixedSizeArrays.jl may use `Memory` as
+an internal backing; package code does not name or depend on that backing.
+Boundedness is an owner/lifecycle invariant, and replacing `Memory{Any}` with
+`Vector{Any}` does not repair type erasure. The breaking migration and evidence
+gates are tracked in
+[issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225).
+
+The following examples include current mixed owners that issue #225 will
+decompose; they describe the implementation baseline rather than exceptions to
+the target contract.
 
 Examples:
 
@@ -366,10 +409,17 @@ numerical primitives but is not a generic package runtime.
 
 The maintained ownership model is:
 
-- cold definitions are separate from prepared plans and mutable state
+- cold definitions, run-immutable plans, persistent state, replaceable
+  workspaces, caller-visible products, and exact prepared bindings are separate
 - every mutable endpoint, optic, path workspace, acquisition, and RNG owner has
   one writer
 - exported products are distinct from scratch buffers
+- boundedness is enforced by prepared-owner lifecycle and capacity checks;
+  direct `Memory` use is a legacy representation being removed by issue #225
+- implementation fields and collection element types do not store `Any`
+- hot registries do not store abstract element types or uninstantiated
+  parametric families; bounded heterogeneous work crosses concrete family
+  groups, a concrete prepared owner, or an explicit function barrier
 - command endpoints own independent schema, sequence, effective-time, silence,
   bounded calendar, and effective-command state
 - controller-output routing borrows exact named products; successful admission

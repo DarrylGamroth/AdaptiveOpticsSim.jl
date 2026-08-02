@@ -6,8 +6,24 @@
 # - Use multiple dispatch + traits; avoid OO-style inheritance patterns.
 # - Prefer dispatch/traits or small helper functions over `isa` checks in package code.
 # - Separate params (immutable structs) from state (mutable structs).
+# - Use `Plan` only for a run-immutable numerical or physical execution
+#   contract. Keep persistent scientific state, replaceable scratch, caller-
+#   visible products, and exact input/output/context bindings in separate
+#   owners.
 # - Use explicit `!`-mutating functions for hot paths.
 # - Preallocate workspaces; avoid allocations in inner loops.
+# - Do not use `Memory` directly in package or extension implementation.
+#   Use FixedSizeArrays.jl's `FixedSizeArray` with a concrete element type for
+#   homogeneous armed host storage; a `Vector` may be a cold builder but must be
+#   sealed before execution. Use tuples, concrete unions, family-grouped
+#   owners, or purpose-built owners for bounded heterogeneity.
+# - Do not store `Any` in a struct field or collection element type. Do not
+#   return `Any` from preparation into execution ownership. Unconstrained
+#   `::Any`, `<:Any`, or `Vararg{Any}` method signatures are dispatch wildcards,
+#   not stored representations, and should be judged separately.
+# - Do not store abstract element types or uninstantiated parametric families in
+#   hot-path registries. A container change does not repair type erasure; use a
+#   concrete owner or an explicit function barrier.
 # - Keep core free of hard-coded file formats (no baked-in FITS).
 # - Prefer structured errors (custom exception types) over print-and-return.
 # - Use Logging.jl for diagnostics; avoid logging inside hot loops.
@@ -36,7 +52,9 @@
 # - Use AbstractFFTs for FFT portability and KernelAbstractions for kernels.
 #
 # Determinism and validation:
-# - Centralize RNG in workspace; fixed seeds for reproducibility.
+# - Centralize RNG state in an explicit single-writer state or prepared owner;
+#   fixed seeds for reproducibility. Do not classify an evolving RNG as
+#   replaceable workspace scratch.
 # - Compare outputs against OOPAO reference datasets within tolerance.
 #
 # Dependencies:
