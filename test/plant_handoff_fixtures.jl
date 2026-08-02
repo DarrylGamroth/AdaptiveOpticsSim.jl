@@ -280,6 +280,7 @@ function handoff_test_partitions()
         definition,
         assignment;
         run_seed=0x206,
+        command_authority_target=HostComputeDevice(),
     )
 end
 

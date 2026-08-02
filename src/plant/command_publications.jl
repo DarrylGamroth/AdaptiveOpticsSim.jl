@@ -800,7 +800,8 @@ function _partition_command_endpoint_configurations(
         "$(length(prepared)) target-local configurations were supplied",
     ))
     @inbounds for index in eachindex(declared)
-        expected = command_endpoint_id(declared[index][2])
+        schema = declared[index][2]
+        expected = command_endpoint_id(schema)
         actual = command_endpoint_id(prepared[index])
         actual == expected || throw(PlantPreparationError(
             :command_replica,
@@ -808,8 +809,71 @@ function _partition_command_endpoint_configurations(
             "target-local command configuration $actual does not match " *
             "declared endpoint $expected",
         ))
+        prepared[index] = _seal_partition_command_endpoint_configuration(
+            schema, prepared[index])
     end
     return prepared
+end
+
+@inline function _seal_partition_command_value(
+    schema::PlantCommandSchema{T,0},
+    value,
+    label::AbstractString,
+) where {T}
+    return _validate_effective_seed(schema, value, label)
+end
+
+function _seal_partition_command_value(
+    schema::PlantCommandSchema{T,N},
+    value,
+    label::AbstractString,
+) where {T,N}
+    validated = _validate_effective_seed(schema, value, label)
+    compute_device(validated) == HostComputeDevice() || throw(
+        PlantPreparationError(
+            :command_replica,
+            :configuration_residency,
+            "$label for $(command_endpoint_id(schema)) must be host-resident " *
+            "cold configuration; got $(compute_device(validated))",
+        ))
+    sealed = copy(validated)
+    compute_device(sealed) == HostComputeDevice() || throw(
+        PlantPreparationError(
+            :command_replica,
+            :configuration_copy,
+            "copied $label for $(command_endpoint_id(schema)) is not " *
+            "host-resident",
+        ))
+    Base.mightalias(sealed, validated) && throw(PlantPreparationError(
+        :command_replica,
+        :aliased_configuration,
+        "copied $label for $(command_endpoint_id(schema)) still aliases " *
+        "caller-owned storage",
+    ))
+    return sealed
+end
+
+function _seal_partition_command_endpoint_configuration(
+    schema::PlantCommandSchema,
+    configuration::CommandEndpointConfiguration,
+)
+    initial = _seal_partition_command_value(
+        schema,
+        initial_effective_command(configuration),
+        "initial effective command",
+    )
+    supplied_safe = safe_effective_command(configuration)
+    _require_safe_command_configuration(
+        command_silence_policy(schema), supplied_safe)
+    safe = supplied_safe === nothing ? nothing :
+        _seal_partition_command_value(schema, supplied_safe, "safe command")
+    return CommandEndpointConfiguration(
+        command_endpoint_id(configuration),
+        command_endpoint_capacity(configuration),
+        command_sequence_window(configuration),
+        initial,
+        safe,
+    )
 end
 
 function _prepare_target_local_command_endpoints(

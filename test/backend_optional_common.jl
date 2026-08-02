@@ -332,11 +332,13 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
     accelerator_only = prepare_plant_partitions(
         definition, accelerator_only_assignment;
         run_seed=0x9a20,
+        command_authority_target=target,
         command_endpoints,
     )
     mixed = prepare_plant_partitions(
         definition, mixed_assignment;
         run_seed=0x9a20,
+        command_authority_target=host,
         command_endpoints,
     )
 

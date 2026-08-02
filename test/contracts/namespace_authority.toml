@@ -578,7 +578,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "d0020e634635cc79f9d1e45cb4ab3e4526e921f39dce1063004d6aa39db83fc9"
+sha256 = "14fcfcfdc495923d2c351539b07458d578fccc548d2bd88229ce2e665ee25eff"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1576,6 +1576,9 @@ public = [
     "validate_target_local_command_endpoint_target",
     "AtmosphereAuthorityBinding",
     "PreparedAtmosphereAuthority",
+    "PreparedCommandAuthority",
+    "CommandAuthorityState",
+    "CommandAuthorityWorkspace",
     "PreparedTargetPartition",
     "PreparedPlantPartitions",
     "prepare_plant_partitions",
@@ -1584,7 +1587,15 @@ public = [
     "prepared_atmosphere_authority",
     "atmosphere_authority_binding",
     "atmosphere_authority_identity",
+    "prepared_command_authority",
     "command_authority_identity",
+    "command_authority_target",
+    "prepared_command_authority_endpoints",
+    "prepared_command_authority_endpoint",
+    "command_authority_endpoint_state",
+    "command_authority_application_state",
+    "command_authority_disposition_workspace",
+    "command_authority_failed",
     "partition_resource_report",
     "partition_controllable_optic_ids",
     "partition_command_endpoint_ids",

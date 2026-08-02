@@ -31,6 +31,8 @@ function Backends.allocate_array(
     return HandoffTestArray(Array{T}(undef, dimensions...), target)
 end
 
+Backends.array_backend_type(::HandoffTestBackend) = HandoffTestArray
+
 function Base.fill!(array::HandoffTestArray, value)
     fill!(array.storage, value)
     return array
@@ -421,7 +423,12 @@ function path_input_publication_test_partitions(;
         :beta => beta_target,
     )
     return with_path_input_publication_cold_scalar_indexing() do
-        prepare_plant_partitions(definition, assignment; run_seed)
+        prepare_plant_partitions(
+            definition,
+            assignment;
+            run_seed,
+            command_authority_target=authority_target,
+        )
     end
 end
 

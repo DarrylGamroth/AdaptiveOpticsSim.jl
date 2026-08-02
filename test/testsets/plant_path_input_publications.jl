@@ -595,7 +595,11 @@ end
     assignment = resolve_plant_partition_assignment(
         definition, HostComputeDevice(), :reduced => HostComputeDevice())
     partitions = prepare_plant_partitions(
-        definition, assignment; run_seed=0x221)
+        definition,
+        assignment;
+        run_seed=0x221,
+        command_authority_target=HostComputeDevice(),
+    )
     path = only(prepared_paths(only(prepared_partitions(partitions))))
     @test !hasproperty(path, :materialization)
     @test !hasproperty(path, :handoff)

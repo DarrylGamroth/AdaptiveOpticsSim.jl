@@ -197,12 +197,15 @@ the Gate 9A maximum of two target partitions remains a small bounded group.
 These values are deliberately non-executable. Each target partition does own
 one role-neutral prepared physical-optic state/workspace and one active/staging
 effective-command copy for every visible logical optic and endpoint. All paths
-on that target share the same owner. The partition set also carries one
-placement-neutral `Plant.CommandAuthorityIdentity`, but no command authority,
-admission state, publication source, payload lease, atmosphere publication,
-transfer, task, queue, or placement rationale. The HIL package still owns
-publisher binding, planning, admission, bounded handoffs, execution ownership,
-and runtime qualification.
+on that target share the same owner. The caller also supplies one explicit exact
+command-authority target to `prepare_plant_partitions`. The resulting immutable
+`Plant.PreparedCommandAuthority` binds that target, its prepared context, the
+run-local `Plant.CommandAuthorityIdentity`, and canonical endpoint plans. Its
+separate state and workspace own mutable admission and effective-value storage;
+the partition result still has no publication route, payload lease, atmosphere
+publication, transfer schedule, task, queue, or placement rationale. HIL owns
+planning, admission of the complete execution plan, runtime ownership, and
+qualification.
 
 Core also provides the separate qualified
 `Plant.PreparedCrossDomainHandoff` primitive for explicit host-to-accelerator

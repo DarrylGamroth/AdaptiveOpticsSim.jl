@@ -32,6 +32,8 @@ Base.copyto!(destination::TargetPartitionTestArray,
 
 Backends.array_backend_selector(::Type{<:TargetPartitionTestArray}) =
     TargetPartitionTestBackend()
+Backends.array_backend_type(::TargetPartitionTestBackend) =
+    TargetPartitionTestArray
 Backends.backend(::TargetPartitionTestArray) = TargetPartitionTestBackend()
 Backends.compute_device(::TargetPartitionTestArray) =
     TARGET_PARTITION_TEST_ACCELERATOR
@@ -596,6 +598,7 @@ function target_partition_test_fresh_token_guards(
     path = first(prepared_paths(partition))
     acquisition = first(prepared_acquisitions(partition))
     authority = prepared_atmosphere_authority(prepared)
+    command_authority = prepared_command_authority(prepared)
     binding = atmosphere_authority_binding(prepared)
 
     @test_throws ArgumentError PreparedTargetLocalPathResources(
@@ -632,6 +635,15 @@ function target_partition_test_fresh_token_guards(
         getfield(authority, :rngs),
         getfield(authority, :binding),
     )
+    @test_throws ArgumentError PreparedCommandAuthority(
+        Plant._PreparedCommandAuthorityToken(),
+        getfield(command_authority, :binding),
+        getfield(command_authority, :identity),
+        getfield(command_authority, :target),
+        getfield(command_authority, :context),
+        getfield(command_authority, :optic_definitions),
+        getfield(command_authority, :endpoints),
+    )
     @test_throws ArgumentError PreparedTargetPartition(
         Plant._PreparedTargetPartitionToken(),
         getfield(partition, :target),
@@ -652,7 +664,7 @@ function target_partition_test_fresh_token_guards(
         getfield(prepared, :definition),
         assignment,
         authority,
-        command_authority_identity(prepared),
+        prepared_command_authority(prepared),
         getfield(prepared, :partitions),
         getfield(prepared, :run_seed),
         getfield(prepared, :rng_derivation_version),
@@ -681,14 +693,25 @@ end
 
     command_endpoints = target_partition_test_command_endpoints()
     cpu = prepare_plant_partitions(
-        definition, cpu_assignment; run_seed=71, command_endpoints)
+        definition, cpu_assignment;
+        run_seed=71, command_authority_target=host, command_endpoints)
     accelerator_only = prepare_plant_partitions(
-        definition, accelerator_assignment; run_seed=71, command_endpoints)
+        definition, accelerator_assignment;
+        run_seed=71, command_authority_target=accelerator, command_endpoints)
     mixed = prepare_plant_partitions(
-        definition, mixed_assignment; run_seed=71, command_endpoints)
+        definition, mixed_assignment;
+        run_seed=71, command_authority_target=host, command_endpoints)
     mixed_accelerator_authority = prepare_plant_partitions(
         mixed_accelerator_authority_assignment;
         run_seed=71,
+        command_authority_target=accelerator,
+        command_endpoints,
+    )
+    accelerator_paths_host_command_authority = prepare_plant_partitions(
+        definition,
+        accelerator_assignment;
+        run_seed=71,
+        command_authority_target=host,
         command_endpoints,
     )
     target_partition_test_fresh_token_guards(mixed_assignment, mixed)
@@ -702,6 +725,51 @@ end
     @test atmosphere_authority_target(mixed) == host
     @test atmosphere_authority_target(mixed_accelerator_authority) ==
         accelerator
+    @test command_authority_target(cpu) == host
+    @test command_authority_target(accelerator_only) == accelerator
+    @test command_authority_target(mixed) == host
+    @test command_authority_target(mixed_accelerator_authority) == accelerator
+    @test atmosphere_authority_target(
+        accelerator_paths_host_command_authority) == accelerator
+    @test command_authority_target(
+        accelerator_paths_host_command_authority) == host
+    @test all(partition -> compute_device(partition) == accelerator,
+        prepared_partitions(accelerator_paths_host_command_authority))
+    @test prepared_command_authority(mixed) isa PreparedCommandAuthority
+    @test command_authority_identity(prepared_command_authority(mixed)) ===
+        command_authority_identity(mixed)
+
+    authority_plan = prepared_command_authority(mixed)
+    authority_state = @inferred CommandAuthorityState(authority_plan)
+    authority_workspace = @inferred CommandAuthorityWorkspace(authority_plan)
+    endpoint_id = CommandEndpointID(:partition_test_command)
+    @test only(prepared_command_authority_endpoints(authority_plan)).endpoint ===
+        prepared_command_authority_endpoint(authority_plan, endpoint_id)
+    @test command_authority_endpoint_state(
+        authority_plan, authority_state, endpoint_id) isa CommandEndpointState
+    application_state = command_authority_application_state(
+        authority_plan, authority_state, endpoint_id)
+    @test effective_command(application_state) == [0.0]
+    @test command_authority_disposition_workspace(
+        authority_plan, authority_workspace, endpoint_id) isa
+        CommandDispositionWorkspace
+    @test !command_authority_failed(authority_state)
+
+    caller_initial = initial_effective_command(only(command_endpoints))
+    caller_initial[1] = 99.0
+    isolated_state = CommandAuthorityState(authority_plan)
+    @test effective_command(command_authority_application_state(
+        authority_plan, isolated_state, endpoint_id)) == [0.0]
+    caller_initial[1] = 0.0
+
+    foreign_authority = prepared_command_authority(cpu)
+    target_partition_test_error(() -> command_authority_endpoint_state(
+        foreign_authority, authority_state, endpoint_id),
+        :command_authority, :foreign_state)
+    target_partition_test_error(() ->
+        command_authority_disposition_workspace(
+            foreign_authority, authority_workspace, endpoint_id),
+        :command_authority, :foreign_workspace)
     @test atmosphere_authority_identity(mixed) === atmosphere_identity(
         prepared_atmosphere(prepared_atmosphere_authority(mixed)))
     @test all(partition -> atmosphere_authority_binding(partition) ===
@@ -795,6 +863,7 @@ end
     selected = prepare_plant_partitions(
         selected_definition, selected_assignment;
         run_seed=71,
+        command_authority_target=host,
         command_endpoints,
     )
     selected_host = prepared_partition(selected, host)
@@ -830,6 +899,7 @@ end
     sampled = prepare_plant_partitions(
         sampled_definition, sampled_assignment;
         run_seed=71,
+        command_authority_target=host,
         command_endpoints,
     )
     caller_opd = surface_opd(sampled_aberration_surface(
@@ -885,7 +955,8 @@ end
         :gamma => host,
     )
     grown = prepare_plant_partitions(
-        grown_assignment; run_seed=71, command_endpoints)
+        grown_assignment;
+        run_seed=71, command_authority_target=host, command_endpoints)
     @test typeof(grown) === typeof(cpu)
     @test typeof(only(prepared_partitions(grown))) === typeof(cpu_partition)
     @test typeof(partition_controllable_optic_ids(
@@ -895,16 +966,42 @@ end
         only(prepared_partitions(grown)))) ===
         typeof(partition_command_endpoint_ids(cpu_partition))
     target_partition_test_error(() -> prepare_plant_partitions(
-        stale_definition, cpu_assignment; run_seed=71),
+        stale_definition, cpu_assignment;
+        run_seed=71, command_authority_target=host),
         :partition_assignment, :stale_assignment)
     target_partition_test_error(() -> prepare_plant_partitions(
-        foreign_definition, cpu_assignment; run_seed=71),
+        foreign_definition, cpu_assignment;
+        run_seed=71, command_authority_target=host),
         :partition_assignment, :foreign_assignment)
+    second_accelerator = AcceleratorComputeDevice(
+        TargetPartitionTestBackend(), UInt32(2))
+    target_partition_test_error(() -> prepare_plant_partitions(
+        definition,
+        mixed_assignment;
+        run_seed=71,
+        command_authority_target=second_accelerator,
+        command_endpoints,
+    ), :command_authority, :multiple_accelerators)
+    target_partition_test_error(() -> prepare_plant_partitions(
+        definition,
+        cpu_assignment;
+        run_seed=71,
+        command_authority_target=:host,
+        command_endpoints,
+    ), :command_authority, :invalid_target)
     try
         TARGET_PARTITION_TEST_AVAILABLE[] = false
         target_partition_test_error(() -> prepare_plant_partitions(
-            mixed_assignment; run_seed=71),
+            mixed_assignment;
+            run_seed=71, command_authority_target=host),
             :partition_assignment, :unavailable_target)
+        target_partition_test_error(() -> prepare_plant_partitions(
+            definition,
+            cpu_assignment;
+            run_seed=71,
+            command_authority_target=accelerator,
+            command_endpoints,
+        ), :command_authority, :unavailable_target)
     finally
         TARGET_PARTITION_TEST_AVAILABLE[] = true
     end

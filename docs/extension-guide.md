@@ -671,6 +671,7 @@ assignment = AdaptiveOpticsSim.Plant.resolve_plant_partition_assignment(
 prepared = AdaptiveOpticsSim.Plant.prepare_plant_partitions(
     assignment;
     run_seed=0x1234,
+    command_authority_target=host_target,
     command_endpoints=endpoint_configurations,
 )
 authority =
