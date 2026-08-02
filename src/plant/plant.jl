@@ -325,6 +325,7 @@ include("resource_facts_batching.jl")
 include("resource_facts_graph.jl")
 include("partitions.jl")
 include("handoffs.jl")
+include("effective_command_routes.jl")
 include("path_input_publications.jl")
 include("api.jl")
 

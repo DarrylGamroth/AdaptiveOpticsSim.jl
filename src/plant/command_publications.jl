@@ -425,7 +425,7 @@ function _require_effective_value_bounds(
     return value
 end
 
-function _require_target_local_effective_value(
+function _require_target_local_effective_value_layout(
     schema::PlantCommandSchema{T,0},
     value,
     ::AbstractComputeDevice,
@@ -434,6 +434,15 @@ function _require_target_local_effective_value(
         :numeric_type,
         "scalar effective value has type $(typeof(value)); expected $T",
     )
+    return value
+end
+
+function _require_target_local_effective_value(
+    schema::PlantCommandSchema{T,0},
+    value,
+    target::AbstractComputeDevice,
+) where {T}
+    _require_target_local_effective_value_layout(schema, value, target)
     isfinite(value) || _effective_command_publication_error(
         :nonfinite,
         "effective value must be finite",
@@ -442,7 +451,7 @@ function _require_target_local_effective_value(
         schema, value, command_bounds(schema))
 end
 
-function _require_target_local_effective_value(
+function _require_target_local_effective_value_layout(
     ::PlantCommandSchema{T,0},
     value::AbstractArray{T,0},
     ::AbstractComputeDevice,
@@ -453,7 +462,7 @@ function _require_target_local_effective_value(
     )
 end
 
-function _require_target_local_effective_value(
+function _require_target_local_effective_value_layout(
     schema::PlantCommandSchema{T,N},
     value::AbstractArray{T,N},
     target::AbstractComputeDevice,
@@ -468,6 +477,15 @@ function _require_target_local_effective_value(
         :wrong_target,
         "effective value occupies $(compute_device(value)); expected $target",
     )
+    return value
+end
+
+function _require_target_local_effective_value(
+    schema::PlantCommandSchema{T,N},
+    value::AbstractArray{T,N},
+    target::AbstractComputeDevice,
+) where {T,N}
+    _require_target_local_effective_value_layout(schema, value, target)
     _all_command_values_finite(value) ||
         _effective_command_publication_error(
             :nonfinite,
@@ -477,7 +495,7 @@ function _require_target_local_effective_value(
         schema, value, command_bounds(schema))
 end
 
-function _require_target_local_effective_value(
+function _require_target_local_effective_value_layout(
     schema::PlantCommandSchema{T,N},
     value,
     ::AbstractComputeDevice,
@@ -487,6 +505,14 @@ function _require_target_local_effective_value(
         "effective value must be an AbstractArray{$T,$N}; got " *
         "$(typeof(value))",
     )
+end
+
+@inline function _require_target_local_effective_value(
+    schema::PlantCommandSchema,
+    value,
+    target::AbstractComputeDevice,
+)
+    return _require_target_local_effective_value_layout(schema, value, target)
 end
 
 @inline function _require_publication_schema_field(
@@ -500,11 +526,37 @@ end
     return nothing
 end
 
-function _require_effective_command_publication(
+@inline function _effective_command_publication_schema_matches(
+    expected::PlantCommandSchema,
+    supplied::PlantCommandSchema,
+)
+    return command_schema_id(supplied) == command_schema_id(expected) &&
+        command_schema_version(supplied) ==
+            command_schema_version(expected) &&
+        command_endpoint_id(supplied) == command_endpoint_id(expected) &&
+        command_numeric_type(supplied) === command_numeric_type(expected) &&
+        command_dimensions(supplied) == command_dimensions(expected) &&
+        command_units(supplied) == command_units(expected) &&
+        command_sign_convention(supplied) ==
+            command_sign_convention(expected) &&
+        command_basis(supplied) == command_basis(expected) &&
+        command_basis_revision(supplied) ==
+            command_basis_revision(expected) &&
+        command_semantics(supplied) == command_semantics(expected) &&
+        command_bounds(supplied) == command_bounds(expected) &&
+        command_value_policy(supplied) == command_value_policy(expected) &&
+        command_sequence_policy(supplied) ==
+            command_sequence_policy(expected) &&
+        command_effective_time_policy(supplied) ==
+            command_effective_time_policy(expected) &&
+        command_silence_policy(supplied) ==
+            command_silence_policy(expected)
+end
+
+function _require_effective_command_publication_metadata(
     endpoint::PreparedTargetLocalCommandEndpoint,
     state::TargetLocalCommandEndpointState,
     publication::EffectiveCommandPublication,
-    value,
 )
     endpoint.binding === state.binding || _effective_command_publication_error(
         :foreign_endpoint_state,
@@ -561,6 +613,27 @@ function _require_effective_command_publication(
         command_basis_revision(supplied) ==
             command_basis_revision(expected),
         :basis_revision, "basis revision")
+    _require_publication_schema_field(
+        command_semantics(supplied) == command_semantics(expected),
+        :semantics, "semantics")
+    _require_publication_schema_field(
+        command_bounds(supplied) == command_bounds(expected),
+        :bounds, "bounds")
+    _require_publication_schema_field(
+        command_value_policy(supplied) == command_value_policy(expected),
+        :value_policy, "value policy")
+    _require_publication_schema_field(
+        command_sequence_policy(supplied) ==
+            command_sequence_policy(expected),
+        :sequence_policy, "sequence policy")
+    _require_publication_schema_field(
+        command_effective_time_policy(supplied) ==
+            command_effective_time_policy(expected),
+        :effective_time_policy, "effective-time policy")
+    _require_publication_schema_field(
+        command_silence_policy(supplied) ==
+            command_silence_policy(expected),
+        :silence_policy, "silence policy")
 
     state.has_staged_publication && _effective_command_publication_error(
         :stage_pending,
@@ -581,7 +654,37 @@ function _require_effective_command_publication(
                 "effective-command publication timestamp must not regress",
             )
     end
-    _require_target_local_effective_value(expected, value, endpoint.target)
+    return nothing
+end
+
+function _require_effective_command_publication(
+    endpoint::PreparedTargetLocalCommandEndpoint,
+    state::TargetLocalCommandEndpointState,
+    publication::EffectiveCommandPublication,
+    value,
+)
+    _require_effective_command_publication_metadata(
+        endpoint, state, publication)
+    _require_target_local_effective_value(
+        command_schema(endpoint), value, endpoint.target)
+    return nothing
+end
+
+# Effective values routed from the sole command authority have already passed
+# finite-value and effective-bound validation while the authority staged its
+# candidate. A target-local replica therefore revalidates publication identity,
+# ordering, shape, and exact residency without launching a redundant device
+# reduction for every replica.
+function _require_routed_effective_command_publication(
+    endpoint::PreparedTargetLocalCommandEndpoint,
+    state::TargetLocalCommandEndpointState,
+    publication::EffectiveCommandPublication,
+    value,
+)
+    _require_effective_command_publication_metadata(
+        endpoint, state, publication)
+    _require_target_local_effective_value_layout(
+        command_schema(endpoint), value, endpoint.target)
     return nothing
 end
 
@@ -617,7 +720,7 @@ end
     return nothing
 end
 
-function _stage_effective_command_publication!(
+function _stage_prevalidated_effective_command_publication!(
     endpoint_owner::TargetLocalCommandEndpointOwner,
     publication::EffectiveCommandPublication,
     value,
@@ -634,8 +737,6 @@ function _stage_effective_command_publication!(
         )
     endpoint = endpoint_owner.endpoint
     endpoint_state = endpoint_owner.state
-    _require_effective_command_publication(
-        endpoint, endpoint_state, publication, value)
     state.has_staged_publication && _effective_command_publication_error(
         :optic_stage_pending,
         "target-local controllable optic already has a staged publication",
@@ -657,6 +758,21 @@ function _stage_effective_command_publication!(
     state.staged_endpoint_slot = endpoint_owner.slot
     state.has_staged_publication = true
     return nothing
+end
+
+function _stage_effective_command_publication!(
+    endpoint_owner::TargetLocalCommandEndpointOwner,
+    publication::EffectiveCommandPublication,
+    value,
+)
+    _require_effective_command_publication(
+        endpoint_owner.endpoint,
+        endpoint_owner.state,
+        publication,
+        value,
+    )
+    return _stage_prevalidated_effective_command_publication!(
+        endpoint_owner, publication, value)
 end
 
 function _stage_effective_command_publication!(

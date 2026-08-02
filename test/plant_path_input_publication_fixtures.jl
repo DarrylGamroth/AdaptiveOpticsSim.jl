@@ -367,6 +367,7 @@ end
 function path_input_publication_test_definition(;
     alpha_model=PathInputPublicationTestPathModel(),
     beta_model=PathInputPublicationTestPathModel(),
+    controllable_optics=(),
 )
     telescope = TelescopeDefinition(
         resolution=8,
@@ -403,7 +404,12 @@ function path_input_publication_test_definition(;
         ),
         beta_model,
     )
-    return PlantDefinition(; telescope, atmosphere, paths=(alpha, beta))
+    return PlantDefinition(;
+        telescope,
+        atmosphere,
+        paths=(alpha, beta),
+        controllable_optics,
+    )
 end
 
 function path_input_publication_test_partitions(;

@@ -268,8 +268,12 @@ function command_publication_test_schema(
     basis=CommandBasis(:actuator, :publication_basis),
     basis_revision=1,
     semantics=AbsoluteCommand,
+    bounds=UniformCommandBounds(T(-10), T(10)),
+    value_policy=CommandValuePolicy(range_stage=EnforceOnApplication),
+    sequence_policy=CommandSequencePolicy(),
+    effective_time_policy=CommandEffectiveTimePolicy(),
+    silence_policy=CommandSilencePolicy(),
 ) where {T}
-    bounds = UniformCommandBounds(T(-10), T(10))
     return PlantCommandSchema(
         T,
         dimensions;
@@ -282,11 +286,10 @@ function command_publication_test_schema(
         basis_revision,
         semantics,
         bounds,
-        value_policy=CommandValuePolicy(
-            range_stage=EnforceOnApplication),
-        sequence_policy=CommandSequencePolicy(),
-        effective_time_policy=CommandEffectiveTimePolicy(),
-        silence_policy=CommandSilencePolicy(),
+        value_policy,
+        sequence_policy,
+        effective_time_policy,
+        silence_policy,
     )
 end
 
@@ -638,6 +641,34 @@ end
         (:basis_revision, command_publication_test_publication(
             fixture; schema=command_publication_test_schema(
                 basis_revision=2), sequence=3), [2.0, 3.0]),
+        (:semantics, command_publication_test_publication(
+            fixture; schema=command_publication_test_schema(
+                semantics=IncrementalCommand), sequence=3), [2.0, 3.0]),
+        (:bounds, command_publication_test_publication(
+            fixture; schema=command_publication_test_schema(
+                bounds=UniformCommandBounds(-20.0, 20.0)), sequence=3),
+            [2.0, 3.0]),
+        (:value_policy, command_publication_test_publication(
+            fixture; schema=command_publication_test_schema(
+                value_policy=CommandValuePolicy(
+                    nonfinite=FailOnInvalidCommand,
+                    range_stage=EnforceOnApplication)), sequence=3),
+            [2.0, 3.0]),
+        (:sequence_policy, command_publication_test_publication(
+            fixture; schema=command_publication_test_schema(
+                sequence_policy=CommandSequencePolicy(
+                    duplicate=FailOnSequence)), sequence=3), [2.0, 3.0]),
+        (:effective_time_policy, command_publication_test_publication(
+            fixture; schema=command_publication_test_schema(
+                effective_time_policy=CommandEffectiveTimePolicy(
+                    future=RejectFutureCommand)), sequence=3), [2.0, 3.0]),
+        (:silence_policy, command_publication_test_publication(
+            fixture; schema=command_publication_test_schema(
+                silence_policy=CommandSilencePolicy(
+                    ApplySafeCommand,
+                    AgeFromApplication;
+                    timeout=PlantDuration(1),
+                )), sequence=3), [2.0, 3.0]),
         (:dimensions, command_publication_test_publication(
             fixture; timestamp=PlantTimestamp(10), sequence=3), [2.0]),
         (:numeric_type, command_publication_test_publication(
