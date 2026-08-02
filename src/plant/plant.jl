@@ -22,8 +22,16 @@ import ..Backends:
     CPUBackend,
     HostComputeDevice,
     ScalarCPUStyle,
+    _PreparedArrayTransferCompleted,
+    _PreparedArrayTransferCompletionFailed,
+    _PreparedArrayTransferPending,
+    _PreparedArrayTransferSubmissionFailed,
+    _PreparedArrayTransferSubmitted,
+    _observe_prepared_array_transfer_completion!,
+    _prepare_array_transfer,
     _prepare_device_execution_context,
     _prepared_device_execution_compute_device,
+    _submit_prepared_array_transfer!,
     _synchronize_prepared_device_execution_context!,
     _throw_compute_device_error,
     _with_prepared_device_execution_context,
@@ -312,6 +320,7 @@ include("resource_facts_partitions.jl")
 include("resource_facts_batching.jl")
 include("resource_facts_graph.jl")
 include("partitions.jl")
+include("handoffs.jl")
 include("api.jl")
 
 end # module Plant

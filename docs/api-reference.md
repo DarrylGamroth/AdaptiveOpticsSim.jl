@@ -559,6 +559,23 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   role-neutral owner per exact target, shared by all co-located paths. A complete
   `CommandEndpointConfiguration` set supplies initial effective values whenever
   the declaration contains endpoints
+- Qualified typed cross-device handoff boundary:
+  `AbstractHandoffPayloadContract`, `PreparedCrossDomainHandoff`,
+  `HandoffPreparationIdentity`, `HandoffSlotReference`,
+  `prepare_cross_domain_handoff`, `handoff_source_target`,
+  `handoff_destination_target`, `handoff_capacity`, and
+  `handoff_payload_bytes`. A contract extends `handoff_payload_eltype`,
+  `handoff_payload_axes`, and `validate_handoff_publication`. The caller-driven
+  lifecycle uses `try_next_free_handoff_slot!`, `producer_handoff_payload`,
+  `submit_handoff!`, `try_complete_handoff!`,
+  `try_borrow_completed_handoff!`, and `reclaim_handoff!`; inspect it through
+  `handoff_slot_status` and `handoff_slot_failure_reason`. `HandoffStatus` and
+  `HandoffSlotStatus` provide allocation-free structured outcomes. This
+  object requires one external owner to serialize all lifecycle methods and
+  is not thread-safe. An explicit backend failure is reclaimable only when the
+  backend guarantees quiescence; an unexpected exception leaves the slot in
+  `HandoffTransferUncertain`. The boundary owns neither a queue nor a HIL
+  payload lease, wait strategy, placement policy, or transport
 - Qualified target-local command inspection:
   `CommandAuthorityIdentity`, `EffectiveCommandPublicationSequence`,
   `EffectiveCommandPublication`, `PreparedTargetLocalCommandEndpoint`,

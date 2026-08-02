@@ -311,6 +311,67 @@ end
     ::_HostPreparedDeviceExecutionContext,
 ) = nothing
 
+#
+# Prepared point-to-point array transfers
+#
+# A transfer implementation is deliberately opt-in for each supported source
+# and destination storage pair.  Core provides no generic `copyto!` fallback:
+# an accelerator extension (or a test backend) must retain any stream/event
+# state it needs and must restore the caller's device context around launch and
+# completion observation. Submission returns `_PreparedArrayTransferSubmitted`
+# only after ownership has passed to the backend, or
+# `_PreparedArrayTransferSubmissionFailed` only when no transfer can still
+# access either slot. One nonblocking completion observation returns pending,
+# completed, or failed; the failed result likewise guarantees quiescence.
+# Throwing or returning any other value leaves slot ownership uncertain and is
+# a fail-stop condition for that prepared handoff.
+#
+@enum _PreparedArrayTransferSubmissionStatus::UInt8 begin
+    _PreparedArrayTransferSubmitted = 0x01
+    _PreparedArrayTransferSubmissionFailed = 0x02
+end
+
+@enum _PreparedArrayTransferCompletionStatus::UInt8 begin
+    _PreparedArrayTransferPending = 0x01
+    _PreparedArrayTransferCompleted = 0x02
+    _PreparedArrayTransferCompletionFailed = 0x03
+end
+
+function _prepare_array_transfer(
+    source::AbstractArray,
+    destination::AbstractArray,
+    source_context::_AbstractPreparedDeviceExecutionContext,
+    destination_context::_AbstractPreparedDeviceExecutionContext,
+)
+    source_target = compute_device(source)
+    destination_target = compute_device(destination)
+    _throw_compute_device_error(
+        :prepare_transfer,
+        :unsupported_transfer_pair,
+        destination_target,
+        "no explicit array-transfer implementation is registered from " *
+        "$(typeof(source)) on $source_target to $(typeof(destination)) " *
+        "on $destination_target",
+    )
+end
+
+function _submit_prepared_array_transfer!(
+    transfer,
+    destination::AbstractArray,
+    source::AbstractArray,
+)
+    throw(InvalidConfiguration(
+        "prepared array-transfer state $(typeof(transfer)) does not provide " *
+        "an explicit submission implementation for $(typeof(source)) to " *
+        "$(typeof(destination))"))
+end
+
+function _observe_prepared_array_transfer_completion!(transfer)
+    throw(InvalidConfiguration(
+        "prepared array-transfer state $(typeof(transfer)) does not provide " *
+        "a nonblocking completion observation"))
+end
+
 @inline function same_backend(x, y)
     return backend_type(x) === backend_type(y)
 end

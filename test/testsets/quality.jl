@@ -241,6 +241,7 @@ end
         "plant-partition-assignments",
         "plant-target-partitions",
         "plant-command-publications",
+        "plant-handoffs",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
@@ -274,6 +275,7 @@ end
         "plant-partition-assignments",
         "plant-target-partitions",
         "plant-command-publications",
+        "plant-handoffs",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
@@ -352,6 +354,7 @@ end
     @test occursin("plant-gate5-closure", listing_text)
     @test occursin("plant-partition-assignments", listing_text)
     @test occursin("plant-target-partitions", listing_text)
+    @test occursin("plant-handoffs", listing_text)
     @test occursin("plant-cpu-execution", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
@@ -375,6 +378,7 @@ end
         joinpath(dirname(@__DIR__), "detector_test_fixtures.jl"),
         joinpath(dirname(@__DIR__), "ka_cpu_style_fixture.jl"),
         joinpath(dirname(@__DIR__), "plant_device_batching_fixtures.jl"),
+        joinpath(dirname(@__DIR__), "plant_handoff_fixtures.jl"),
         joinpath(
             dirname(@__DIR__),
             "plant_device_model_matrix_fixtures.jl",
@@ -397,6 +401,7 @@ end
         "wfs-pyramid-bioedge",
         "wfs-zernike-curvature",
         "plant-preparation",
+        "plant-handoffs",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
