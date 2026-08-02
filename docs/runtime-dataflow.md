@@ -17,19 +17,32 @@ requirements, see
 
 ## Ownership Layers
 
-The runtime is intentionally split into four layers:
+The runtime distinguishes six roles:
 
 1. Cold definitions describe stable identities, optical topology, acquisition
    topology, command schemas, timing policies, and model choices.
-2. Preparation validates the complete binding and constructs typed plans,
-   backend-resident storage, bounded capacities, workspaces, and deterministic
-   RNG owners.
-3. Mutable state has a single writer. The prepared plant event loop owns the
-   virtual-time scheduler, command lifecycle, detector lifecycle, controllable-
-   optic state, and product-readiness state.
-4. Products are explicit caller-visible values such as a `PupilFunction`,
+2. Run-immutable plans describe validated numerical or physical execution,
+   including mappings, coefficients, compatibility, and backend requirements.
+3. Persistent mutable state has a single writer and affects later scientific
+   results. It includes the virtual-time scheduler, command and detector
+   lifecycles, controllable-optic state, and product-readiness state.
+4. Replaceable workspaces own scratch and execution resources. Recreating one
+   cannot change the deterministic physical trajectory.
+5. Products are explicit caller-visible values such as a `PupilFunction`,
    `IntensityMap`, `WFSObservation`, `WFSMeasurement`, or
-   `AcquisitionProducts`.
+   `AcquisitionProducts`; they are not scratch.
+6. A prepared execution owner validates and binds the exact concrete plan,
+   state, workspace, products, and backend/device/context for one writer.
+
+Preparation may construct all six run-owned roles, but construction time does
+not make every result a plan. Likewise, mutability alone does not distinguish
+state from workspace: discarding state can change the next result, while a
+workspace is replaceable without changing the trajectory. The package does
+not retain direct Julia `Memory` use in the target architecture; issue #225
+migrates the current representation. Prepared owners enforce final capacity
+and armed-state non-growth over FixedSizeArrays.jl fixed-size arrays with
+concrete element types, tuples, purpose-built owners, or backend arrays. A
+resizable vector is limited to cold construction before sealing.
 
 The telescope owns revisioned aperture geometry, intensity reflectivity,
 diameter, and spatial sampling. It owns neither a path's mutable OPD or electric

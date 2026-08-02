@@ -55,6 +55,14 @@ hardware-validated GPU workflows. The core package now has:
   HIL placement, and admission remain open. The series is tracked by
   [AdaptiveOpticsHIL issue #43](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/43);
   mixed execution is not yet a supported production surface
+- an approved breaking prepared-execution ownership refactor, tracked by
+  [issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225),
+  that will establish domain-owned nominal plan interfaces; separate
+  definitions, plans, persistent state, replaceable workspaces, products, and
+  exact prepared owners; and remove direct `Memory` use without weakening
+  boundedness, type stability, or CPU/GPU evidence. Implementation begins
+  after the Gate 9A serial-oracle prerequisite in
+  [PR #224](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/pull/224)
 - a canonical `AdaptiveOpticsSim.Plant` owner for HIL-neutral plant time,
   topology, commands, acquisition events, providers, preparation, and event
   composition, with a bounded root export surface and explicit Julia 1.12 API
@@ -282,13 +290,25 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    ownership described below. This is a breaking ownership cleanup with no
    compatibility aliases; numerical results, accelerator extensions, prepared
    ownership, and warmed hot-path budgets remain regression gates.
-10. Preserve the completed detector family qualification and evidence catalog.
+10. Execute the prepared-execution contract series in
+    [issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225)
+    after [PR #224](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/pull/224).
+    Freeze terminology and characterization first; establish
+    domain-owned nominal interfaces; correct strategy types misnamed as plans;
+    review an optics pilot; then migrate detectors, WFS stages, Plant prepared
+    owners, and the AdaptiveOpticsHIL integration. Remove every direct
+    `Memory` implementation use rather than replacing erased element types
+    mechanically. Each slice must retain numerical correctness, concrete hot
+    dispatch, CPU zero-allocation contracts, accelerator residency, and bounded
+    topology growth. Add no universal plan root, generic `process!` API, or
+    compatibility layer.
+11. Preserve the completed detector family qualification and evidence catalog.
     Product-neutral frame, counting-array, and channel models remain in the
     canonical `Detectors` namespace. Named camera profiles remain outside core.
     Reconsider a sibling only for event-resolved products, calibrated profile
     collections, or dependency-heavy detector physics that would otherwise
     expand the core contract.
-11. Preserve hardware validation and zero-allocation CPU gates, then use pinned
+12. Preserve hardware validation and zero-allocation CPU gates, then use pinned
    NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
    extreme-scale profiles. Give each a production-shaped synthetic traffic
    variant, a reduced-order closed-loop variant where applicable, and a full

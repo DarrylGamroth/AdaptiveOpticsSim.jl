@@ -53,7 +53,8 @@ transport ownership to core.
 - **HIL-EXEC-006.a:** Topology-sized path and endpoint registries MUST use a
   bounded homogeneous representation or prepared executor handles behind
   function barriers; their container types MUST NOT recursively encode
-  registry cardinality.
+  registry cardinality. Boundedness MUST be enforced by the prepared owner and
+  lifecycle rather than inferred from a low-level storage container.
 - **HIL-EXEC-006.b:** Small fixed stage pipelines inside one execution group
   MAY remain concretely specialized when their numerical kernels stay inferred
   and measured code quality justifies it.
@@ -511,17 +512,28 @@ records preparation/compilation latency and generated-code size versus endpoint
 count so low steady-state latency is not purchased with unbounded startup or
 code growth.
 
-The implemented boundary uses fixed-size homogeneous `Memory` registries for
-declared paths, acquisitions, controllable optics, and sampled aberrations;
-prepared command endpoints, optics, paths, acquisitions, and owner RNG groups;
-schedule-free selections; and event-loop execution groups. Per-owner
-`@noinline` barriers recover the concrete path, acquisition, materialization,
-and sampled-aberration pipeline. Small command-schema, path-product,
-acquisition-product, and per-path optical-application tuples remain specialized
-because their cardinality belongs to one bounded owner rather than the whole
-plant. The deliberate heterogeneous-owner barrier has an explicit warmed
-allocation budget; concrete numerical stage kernels retain their stricter
-inference and allocation contracts.
+The current implemented boundary uses fixed-size homogeneous `Memory`
+registries for declared paths, acquisitions, controllable optics, sampled
+aberrations, prepared owners, RNG groups, schedule-free selections, and
+event-loop execution groups. That representation established the retained
+Gate 6 topology-growth baseline, but it is not the target architecture.
+[Issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225)
+removes direct `Memory` use and separates plans, persistent state, replaceable
+workspaces, products, and exact prepared bindings. Homogeneous prepared
+host storage will use FixedSizeArrays.jl fixed-size arrays with concrete element
+types; bounded heterogeneous storage will use concrete tuples/unions,
+family-grouped or purpose-built owners, or explicit prepared function barriers.
+A vector may be used during cold construction but is sealed before execution.
+Replacing an erased `Memory` element type with the same erased element type in
+another container is not acceptable.
+
+Per-owner `@noinline` barriers currently recover the concrete path,
+acquisition, materialization, and sampled-aberration pipeline. Small
+command-schema, path-product, acquisition-product, and per-path optical-
+application tuples remain specialized because their cardinality belongs to one
+bounded owner rather than the whole plant. The migration must retain the
+topology-growth, inference, allocation, and storage evidence before the new
+representation is promoted.
 
 The maintained
 [`benchmark_gate6_topology_growth.jl`](../../benchmarks/benchmark_gate6_topology_growth.jl)
