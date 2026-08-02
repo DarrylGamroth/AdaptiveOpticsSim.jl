@@ -1208,6 +1208,56 @@ function _require_exact_command_application_target(
     return values
 end
 
+function _require_exact_prepared_command_authority_target(
+    authority::PreparedCommandAuthority,
+    target::AbstractComputeDevice=authority.target,
+)
+    authority.target == target || _throw_wrong_plant_target(
+        target, "prepared command authority", authority.target)
+    context_target =
+        _prepared_device_execution_compute_device(authority.context)
+    context_target == target || _throw_wrong_plant_target(
+        target, "prepared command-authority execution context", context_target)
+    @inbounds for binding in authority.endpoints
+        _require_exact_command_endpoint_target(binding, target)
+    end
+    return authority
+end
+
+function _require_exact_command_authority_state_target(
+    authority::PreparedCommandAuthority,
+    state::CommandAuthorityState,
+    target::AbstractComputeDevice=authority.target,
+)
+    _require_command_authority_binding(authority, state)
+    length(state.endpoint_states) == length(authority.endpoints) &&
+        length(state.application_states) == length(authority.endpoints) &&
+        length(state.publication_sequences) == length(authority.endpoints) ||
+        _command_authority_preparation_error(
+            :prepared_binding,
+            "command-authority state capacity changed after preparation",
+        )
+    @inbounds for index in eachindex(authority.endpoints)
+        endpoint = authority.endpoints[index].endpoint
+        endpoint_state = state.endpoint_states[index]
+        _require_command_endpoint_binding(endpoint, endpoint_state)
+        _require_exact_command_payload_target(
+            endpoint_state.payloads,
+            target,
+            "command-authority payload slot",
+        )
+        application = state.application_states[index]
+        _require_command_application_binding(
+            endpoint, endpoint_state, application)
+        _require_exact_command_application_target(
+            application.values,
+            target,
+            "command-authority application",
+        )
+    end
+    return state
+end
+
 function _require_exact_plant_event_loop_state_target(
     prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState,

@@ -578,7 +578,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "14fcfcfdc495923d2c351539b07458d578fccc548d2bd88229ce2e665ee25eff"
+sha256 = "92b282d19cec092b6f923056756ff54627c1d8d9cd7dd1d81ea7485a9ece34eb"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1590,7 +1590,6 @@ public = [
     "prepared_command_authority",
     "command_authority_identity",
     "command_authority_target",
-    "prepared_command_authority_endpoints",
     "prepared_command_authority_endpoint",
     "command_authority_endpoint_state",
     "command_authority_application_state",
@@ -1654,6 +1653,7 @@ public = [
     "producer_handoff_payload",
     "submit_handoff!",
     "try_complete_handoff!",
+    "complete_handoff!",
     "try_borrow_completed_handoff!",
     "reclaim_handoff!",
     "handoff_slot_status",
@@ -2158,6 +2158,7 @@ bindings = [
     "_PreparedArrayTransferPending",
     "_PreparedArrayTransferSubmissionFailed",
     "_PreparedArrayTransferSubmitted",
+    "_complete_prepared_array_transfer!",
     "_observe_prepared_array_transfer_completion!",
     "_prepare_array_transfer",
     "_prepare_device_execution_context",

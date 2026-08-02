@@ -5,6 +5,7 @@ struct TargetPartitionTestBackend <: AbstractArrayBackend end
 const TARGET_PARTITION_TEST_ACCELERATOR = AcceleratorComputeDevice(
     TargetPartitionTestBackend(), UInt32(1))
 const TARGET_PARTITION_TEST_AVAILABLE = Ref(true)
+const TARGET_PARTITION_TEST_MISPLACE_ALLOCATIONS = Ref(false)
 
 struct TargetPartitionTestArray{T,N} <: DenseArray{T,N}
     storage::Array{T,N}
@@ -37,9 +38,15 @@ Backends.array_backend_type(::TargetPartitionTestBackend) =
 Backends.backend(::TargetPartitionTestArray) = TargetPartitionTestBackend()
 Backends.compute_device(::TargetPartitionTestArray) =
     TARGET_PARTITION_TEST_ACCELERATOR
-Backends.allocate_array(::TargetPartitionTestBackend, ::Type{T},
-    dimensions::Vararg{Int,N}) where {T,N} =
-    TargetPartitionTestArray(Array{T}(undef, dimensions...))
+function Backends.allocate_array(
+    ::TargetPartitionTestBackend,
+    ::Type{T},
+    dimensions::Vararg{Int,N},
+) where {T,N}
+    TARGET_PARTITION_TEST_MISPLACE_ALLOCATIONS[] &&
+        return Array{T}(undef, dimensions...)
+    return TargetPartitionTestArray(Array{T}(undef, dimensions...))
+end
 Backends.execution_style(::TargetPartitionTestArray) = ScalarCPUStyle()
 Backends.compute_device_availability(
     ::AcceleratorComputeDevice{TargetPartitionTestBackend}) =
@@ -470,6 +477,7 @@ end
 
 function target_partition_test_controllable_optic(;
     visibility::AbstractPathVisibility=AllPathVisibility(),
+    silence_policy::CommandSilencePolicy=CommandSilencePolicy(),
 )
     schema = PlantCommandSchema(
         Float64,
@@ -486,7 +494,7 @@ function target_partition_test_controllable_optic(;
         value_policy=CommandValuePolicy(),
         sequence_policy=CommandSequencePolicy(),
         effective_time_policy=CommandEffectiveTimePolicy(),
-        silence_policy=CommandSilencePolicy(),
+        silence_policy,
     )
     return ControllableOpticDefinition(
         :partition_test_optic,
@@ -504,7 +512,9 @@ target_partition_test_command_endpoints() = (
 
 function target_partition_test_definition(; include_gamma::Bool=false,
     include_sampled_aberration::Bool=false,
-    optic_visibility::AbstractPathVisibility=AllPathVisibility())
+    optic_visibility::AbstractPathVisibility=AllPathVisibility(),
+    command_silence_policy::CommandSilencePolicy=CommandSilencePolicy(),
+)
     telescope = TargetPartitionTestTelescopeDefinition(UInt(1))
     source = Source(band=:I, magnitude=0.0)
     alpha = OpticalPathDefinition(
@@ -527,7 +537,9 @@ function target_partition_test_definition(; include_gamma::Bool=false,
         atmosphere=TargetPartitionTestAtmosphereDefinition(),
         controllable_optics=(
             target_partition_test_controllable_optic(
-                visibility=optic_visibility),),
+                visibility=optic_visibility,
+                silence_policy=command_silence_policy,
+            ),),
         paths=include_gamma ? (alpha, beta, gamma) : (alpha, beta),
         acquisitions=include_gamma ?
             (alpha_camera, beta_camera, gamma_camera) :
@@ -743,8 +755,10 @@ end
     authority_state = @inferred CommandAuthorityState(authority_plan)
     authority_workspace = @inferred CommandAuthorityWorkspace(authority_plan)
     endpoint_id = CommandEndpointID(:partition_test_command)
-    @test only(prepared_command_authority_endpoints(authority_plan)).endpoint ===
+    authority_endpoint =
         prepared_command_authority_endpoint(authority_plan, endpoint_id)
+    @test authority_endpoint isa PreparedCommandEndpoint
+    @test command_endpoint_id(authority_endpoint) == endpoint_id
     @test command_authority_endpoint_state(
         authority_plan, authority_state, endpoint_id) isa CommandEndpointState
     application_state = command_authority_application_state(
@@ -755,12 +769,75 @@ end
         CommandDispositionWorkspace
     @test !command_authority_failed(authority_state)
 
+    accelerator_authority_plan =
+        prepared_command_authority(accelerator_only)
+    accelerator_authority_state =
+        @inferred CommandAuthorityState(accelerator_authority_plan)
+    accelerator_effective = effective_command(
+        command_authority_application_state(
+            accelerator_authority_plan,
+            accelerator_authority_state,
+            endpoint_id,
+        ))
+    @test accelerator_effective isa TargetPartitionTestArray
+    @test compute_device(accelerator_effective) == accelerator
+
     caller_initial = initial_effective_command(only(command_endpoints))
     caller_initial[1] = 99.0
     isolated_state = CommandAuthorityState(authority_plan)
     @test effective_command(command_authority_application_state(
         authority_plan, isolated_state, endpoint_id)) == [0.0]
     caller_initial[1] = 0.0
+
+    safe_policy = CommandSilencePolicy(
+        ApplySafeCommand,
+        AgeFromApplication;
+        timeout=PlantDuration(5),
+    )
+    wrapped_definition = target_partition_test_definition(
+        command_silence_policy=safe_policy)
+    wrapped_assignment = resolve_plant_partition_assignment(
+        wrapped_definition, host, :alpha => host, :beta => host)
+    initial_parent = [-0.5, 9.0]
+    safe_parent = [0.25, 9.0]
+    wrapped_endpoints = (
+        CommandEndpointConfiguration(
+            :partition_test_command,
+            @view(initial_parent[1:1]);
+            capacity=2,
+            safe_command=@view(safe_parent[1:1]),
+        ),)
+    wrapped = prepare_plant_partitions(
+        wrapped_definition,
+        wrapped_assignment;
+        run_seed=72,
+        command_authority_target=host,
+        command_endpoints=wrapped_endpoints,
+    )
+    initial_parent[1] = 8.0
+    safe_parent[1] = 7.0
+    wrapped_authority = prepared_command_authority(wrapped)
+    wrapped_state = CommandAuthorityState(wrapped_authority)
+    wrapped_application = command_authority_application_state(
+        wrapped_authority, wrapped_state, endpoint_id)
+    @test effective_command(wrapped_application) == [-0.5]
+    wrapped_replica = only(target_local_controllable_optic_owners(
+        only(prepared_partitions(wrapped))))
+    @test effective_command(target_local_command_endpoint_state(
+        wrapped_replica, endpoint_id)) == [-0.5]
+    wrapped_endpoint = prepared_command_authority_endpoint(
+        wrapped_authority, endpoint_id)
+    wrapped_endpoint_state = command_authority_endpoint_state(
+        wrapped_authority, wrapped_state, endpoint_id)
+    wrapped_dispositions = CommandDispositionWorkspace(wrapped_endpoint)
+    apply_command_silence_transition!(
+        wrapped_dispositions,
+        wrapped_endpoint,
+        wrapped_endpoint_state,
+        wrapped_application,
+        PlantTimestamp(5),
+    )
+    @test effective_command(wrapped_application) == [0.25]
 
     foreign_authority = prepared_command_authority(cpu)
     target_partition_test_error(() -> command_authority_endpoint_state(
@@ -989,6 +1066,63 @@ end
         command_authority_target=:host,
         command_endpoints,
     ), :command_authority, :invalid_target)
+    device_initial = (
+        CommandEndpointConfiguration(
+            :partition_test_command,
+            TargetPartitionTestArray([0.0]);
+            capacity=2,
+        ),)
+    target_partition_test_error(() -> prepare_plant_partitions(
+        definition,
+        cpu_assignment;
+        run_seed=71,
+        command_authority_target=host,
+        command_endpoints=device_initial,
+    ), :command_replica, :configuration_residency)
+    safe_definition = target_partition_test_definition(
+        command_silence_policy=CommandSilencePolicy(
+            ApplySafeCommand,
+            AgeFromApplication;
+            timeout=PlantDuration(5),
+        ))
+    safe_assignment = resolve_plant_partition_assignment(
+        safe_definition, host, :alpha => host, :beta => host)
+    device_safe = (
+        CommandEndpointConfiguration(
+            :partition_test_command,
+            [0.0];
+            capacity=2,
+            safe_command=TargetPartitionTestArray([0.0]),
+        ),)
+    target_partition_test_error(() -> prepare_plant_partitions(
+        safe_definition,
+        safe_assignment;
+        run_seed=71,
+        command_authority_target=host,
+        command_endpoints=device_safe,
+    ), :command_replica, :configuration_residency)
+
+    authority_only_accelerator = prepare_plant_partitions(
+        definition,
+        cpu_assignment;
+        run_seed=71,
+        command_authority_target=accelerator,
+        command_endpoints,
+    )
+    try
+        TARGET_PARTITION_TEST_MISPLACE_ALLOCATIONS[] = true
+        @test_throws ComputeDeviceError CommandAuthorityState(
+            prepared_command_authority(authority_only_accelerator))
+        @test_throws ComputeDeviceError prepare_plant_partitions(
+            definition,
+            cpu_assignment;
+            run_seed=71,
+            command_authority_target=accelerator,
+            command_endpoints,
+        )
+    finally
+        TARGET_PARTITION_TEST_MISPLACE_ALLOCATIONS[] = false
+    end
     try
         TARGET_PARTITION_TEST_AVAILABLE[] = false
         target_partition_test_error(() -> prepare_plant_partitions(

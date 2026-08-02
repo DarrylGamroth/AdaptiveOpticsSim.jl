@@ -207,6 +207,25 @@ function Backends._observe_prepared_array_transfer_completion!(
     end
 end
 
+function Backends._complete_prepared_array_transfer!(
+    transfer::HandoffTestPreparedTransfer,
+)
+    return Backends._with_prepared_device_execution_context(
+        transfer.context) do
+        transfer.submitted || error("fake transfer was not submitted")
+        HANDOFF_TEST_FAIL_COMPLETION[] && begin
+            transfer.submitted = false
+            return Backends._PreparedArrayTransferCompletionFailed
+        end
+        HANDOFF_TEST_THROW_COMPLETION[] &&
+            error("injected uncertain handoff completion")
+        HANDOFF_TEST_INVALID_COMPLETION[] && return :invalid_completion
+        transfer.remaining_pending = zero(UInt8)
+        transfer.submitted = false
+        return Backends._PreparedArrayTransferCompleted
+    end
+end
+
 struct HandoffUnsupportedTestArray{T,N,A<:Array{T,N},D} <:
     AbstractArray{T,N}
     storage::A

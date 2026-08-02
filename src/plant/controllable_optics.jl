@@ -14,12 +14,13 @@
         capacity, sequence_window=capacity, safe_command=nothing)
 
 Run-configuration input for one declared command endpoint. It supplies bounded
-calendar/history capacity and copied initial and optional safe effective
+calendar/history capacity and host-resident initial and optional safe effective
 commands without adding cadence, transport, atomicity, storage placement, or
-optical grouping. Array-command storage is derived from the exact plant target;
-scalar command values remain host-resident. Stable endpoint ordinals are
-derived canonically during plant preparation rather than supplied by
-declaration order.
+optical grouping. Cold array inputs are defensively copied before exact-target
+storage is derived; device-resident configuration arrays are rejected. Scalar
+command values remain host-resident. Stable endpoint ordinals are derived
+canonically during plant preparation rather than supplied by declaration
+order.
 """
 struct CommandEndpointConfiguration{I,S}
     endpoint::CommandEndpointID

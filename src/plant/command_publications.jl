@@ -791,18 +791,21 @@ function _partition_command_endpoint_configurations(
     definition::PlantDefinition,
     configurations,
 )
-    prepared = _sorted_command_endpoint_configurations(configurations)
+    supplied = _sorted_command_endpoint_configurations(configurations)
     declared = _canonical_command_endpoint_declarations(definition)
-    length(prepared) == length(declared) || throw(PlantPreparationError(
+    length(supplied) == length(declared) || throw(PlantPreparationError(
         :command_replica,
         :configuration_count,
         "plant declares $(length(declared)) command endpoints but " *
-        "$(length(prepared)) target-local configurations were supplied",
+        "$(length(supplied)) target-local configurations were supplied",
     ))
+    prepared = Memory{CommandEndpointConfiguration}(
+        undef, length(supplied))
     @inbounds for index in eachindex(declared)
         schema = declared[index][2]
         expected = command_endpoint_id(schema)
-        actual = command_endpoint_id(prepared[index])
+        configuration = supplied[index]
+        actual = command_endpoint_id(configuration)
         actual == expected || throw(PlantPreparationError(
             :command_replica,
             :configuration_identity,
@@ -810,7 +813,7 @@ function _partition_command_endpoint_configurations(
             "declared endpoint $expected",
         ))
         prepared[index] = _seal_partition_command_endpoint_configuration(
-            schema, prepared[index])
+            schema, configuration)
     end
     return prepared
 end

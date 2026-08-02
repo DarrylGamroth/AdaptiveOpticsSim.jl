@@ -27,6 +27,7 @@ import ..Backends:
     _PreparedArrayTransferPending,
     _PreparedArrayTransferSubmissionFailed,
     _PreparedArrayTransferSubmitted,
+    _complete_prepared_array_transfer!,
     _observe_prepared_array_transfer_completion!,
     _prepare_array_transfer,
     _prepare_device_execution_context,

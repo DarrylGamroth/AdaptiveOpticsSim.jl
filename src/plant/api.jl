@@ -237,7 +237,7 @@ public prepare_plant_partitions, prepared_partitions, prepared_partition
 public prepared_atmosphere_authority
 public atmosphere_authority_binding, atmosphere_authority_identity
 public prepared_command_authority, command_authority_identity
-public command_authority_target, prepared_command_authority_endpoints
+public command_authority_target
 public prepared_command_authority_endpoint
 public command_authority_endpoint_state
 public command_authority_application_state
@@ -276,7 +276,7 @@ public handoff_preparation_identity, handoff_contract
 public handoff_source_target, handoff_destination_target
 public handoff_capacity, handoff_payload_bytes
 public try_next_free_handoff_slot!, producer_handoff_payload
-public submit_handoff!, try_complete_handoff!
+public submit_handoff!, try_complete_handoff!, complete_handoff!
 public try_borrow_completed_handoff!, reclaim_handoff!
 public handoff_slot_status, handoff_slot_failure_reason
 

@@ -62,8 +62,6 @@ end
     authority.target
 @inline command_authority_identity(authority::PreparedCommandAuthority) =
     authority.identity
-@inline prepared_command_authority_endpoints(
-    authority::PreparedCommandAuthority) = authority.endpoints
 @inline command_authority_failed(state::CommandAuthorityState) = state.failed
 
 @noinline function _command_authority_preparation_error(
@@ -98,19 +96,38 @@ function _require_command_authority_target_available(
     )
 end
 
+@inline function _require_gate9a_command_authority_target(
+    assignment::ResolvedPlantPartitionAssignment,
+    target::HostComputeDevice,
+)
+    return target
+end
+
+@inline function _require_gate9a_accelerator_pair(
+    ::HostComputeDevice,
+    ::AcceleratorComputeDevice,
+)
+    return nothing
+end
+
+function _require_gate9a_accelerator_pair(
+    partition_target::AcceleratorComputeDevice,
+    target::AcceleratorComputeDevice,
+)
+    partition_target == target && return nothing
+    _command_authority_preparation_error(
+        :multiple_accelerators,
+        "Gate 9A permits at most one exact accelerator across path and " *
+        "command-authority placement; got $partition_target and $target",
+    )
+end
+
 function _require_gate9a_command_authority_target(
     assignment::ResolvedPlantPartitionAssignment,
-    target::AbstractComputeDevice,
+    target::AcceleratorComputeDevice,
 )
-    target isa AcceleratorComputeDevice || return target
     for partition_target in partition_targets(assignment)
-        partition_target isa AcceleratorComputeDevice || continue
-        partition_target == target && continue
-        _command_authority_preparation_error(
-            :multiple_accelerators,
-            "Gate 9A permits at most one exact accelerator across path and " *
-            "command-authority placement; got $partition_target and $target",
-        )
+        _require_gate9a_accelerator_pair(partition_target, target)
     end
     return target
 end
@@ -173,7 +190,7 @@ function _prepare_command_authority(
             _prepare_command_authority_endpoints(
                 definition, configurations, exact_target)
         end
-    return PreparedCommandAuthority(
+    authority = PreparedCommandAuthority(
         _PREPARED_COMMAND_AUTHORITY_TOKEN,
         _PreparedCommandAuthorityBinding(),
         identity,
@@ -182,6 +199,8 @@ function _prepare_command_authority(
         optic_definitions,
         endpoints,
     )
+    return _require_exact_prepared_command_authority_target(
+        authority, exact_target)
 end
 
 function _prepare_command_authority_state(
@@ -208,13 +227,15 @@ function _prepare_command_authority_state(
         endpoint_states[index] = endpoint_state
         application_states[index] = application_state
     end
-    return CommandAuthorityState(
+    state = CommandAuthorityState(
         authority.binding,
         _partition_registry(endpoint_states, CommandEndpointState),
         _partition_registry(application_states, CommandApplicationState),
         sequences,
         false,
     )
+    return _require_exact_command_authority_state_target(
+        authority, state, authority.target)
 end
 
 function CommandAuthorityState(
