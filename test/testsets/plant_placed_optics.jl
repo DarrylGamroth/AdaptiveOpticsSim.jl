@@ -39,6 +39,33 @@ function Plant.prepare_controllable_optic(
         only(command_endpoint_ids(definition)))
 end
 
+function Plant.validate_controllable_optic_target(
+    prepared::PreparedPlacedOpticsTestOptic,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The implementation owns one immutable endpoint identifier and no
+    # numerical storage.
+    return prepared
+end
+
+function Plant.validate_controllable_optic_state_target(
+    ::PreparedPlacedOpticsTestOptic,
+    state::PlacedOpticsTestOpticState,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The visible surface offset is a scalar host control-plane value.
+    return state
+end
+
+function Plant.validate_controllable_optic_workspace_target(
+    ::PreparedPlacedOpticsTestOptic,
+    workspace::PlacedOpticsTestOpticWorkspace,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The staged surface offset is a scalar host control-plane value.
+    return workspace
+end
+
 function Plant.prepare_controllable_optic_state(
     prepared::PreparedPlacedOpticsTestOptic,
     ::ControllableOpticDefinition,
@@ -99,6 +126,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
@@ -111,6 +139,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
         optical_model=:placed_optics_test,
@@ -246,13 +275,13 @@ function placed_optics_test_components(; reverse::Bool=false)
         configurations = Base.reverse(configurations)
     end
     definition = PlantDefinition(;
-        telescope,
-        atmosphere,
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         controllable_optics=optics,
         paths,
     )
     plant = prepare_plant(
-        definition;
+        definition, PLANT_TEST_HOST_TARGET;
         run_seed=0x8501,
         command_endpoints=configurations,
     )
@@ -357,12 +386,12 @@ function placed_optics_event_fixture()
     )
     plant = prepare_plant(
         PlantDefinition(;
-            telescope,
-            atmosphere,
+            telescope=plant_test_telescope_definition(telescope),
+            atmosphere=plant_test_atmosphere_definition(atmosphere),
             controllable_optics=(science, common),
             paths,
             acquisitions,
-        );
+        ), PLANT_TEST_HOST_TARGET;
         run_seed=0x8502,
         command_endpoints=(
             CommandEndpointConfiguration(:science_only_command, 2.0;
@@ -510,8 +539,8 @@ end
     )
     unknown_error = placed_optics_captured_error() do
         PlantDefinition(;
-            telescope=plant_telescope(components.definition),
-            atmosphere=plant_atmosphere(components.definition),
+            telescope=telescope_definition(components.definition),
+            atmosphere=atmosphere_definition(components.definition),
             controllable_optics=(unknown,),
             paths=path_definitions(components.definition),
         )
@@ -610,8 +639,8 @@ end
     )
     definition = components.definition
     with_acquisition = PlantDefinition(;
-        telescope=plant_telescope(definition),
-        atmosphere=plant_atmosphere(definition),
+        telescope=telescope_definition(definition),
+        atmosphere=atmosphere_definition(definition),
         controllable_optics=controllable_optic_definitions(definition),
         paths=path_definitions(definition),
         acquisitions=(acquisition_definition,),
@@ -623,7 +652,7 @@ end
             only(command_endpoint_ids(optic)), 0.0; capacity=1)
     end
     prepared = prepare_plant(
-        with_acquisition;
+        with_acquisition, PLANT_TEST_HOST_TARGET;
         run_seed=0x8503,
         command_endpoints=configurations,
     )

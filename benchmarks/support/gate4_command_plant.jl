@@ -68,6 +68,33 @@ function AOSPlant.prepare_controllable_optic(
     return PreparedCommandPlaneOptic(endpoint, pattern)
 end
 
+function AOSPlant.validate_controllable_optic_target(
+    prepared::PreparedCommandPlaneOptic,
+    target::AOS.Backends.AbstractComputeDevice,
+)
+    AOSPlant._require_exact_plant_array_target(
+        prepared.pattern, target, "Gate 4 command-plane optic pattern")
+    return prepared
+end
+
+function AOSPlant.validate_controllable_optic_state_target(
+    ::PreparedCommandPlaneOptic,
+    state::CommandPlaneOpticState,
+    ::AOS.Backends.AbstractComputeDevice,
+)
+    # The visible modal coefficient is a scalar host control-plane value.
+    return state
+end
+
+function AOSPlant.validate_controllable_optic_workspace_target(
+    ::PreparedCommandPlaneOptic,
+    workspace::CommandPlaneOpticWorkspace,
+    ::AOS.Backends.AbstractComputeDevice,
+)
+    # The staged modal coefficient is a scalar host control-plane value.
+    return workspace
+end
+
 function AOSPlant.prepare_controllable_optic_state(
     prepared::PreparedCommandPlaneOptic{T},
     ::AOSPlant.ControllableOpticDefinition,
@@ -126,6 +153,7 @@ function AOSPlant.prepare_path_executor(
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
     atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(
@@ -139,6 +167,7 @@ function AOSPlant.prepare_path_executor(
         pupil,
         AOS.Optics.direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
         optical_model=:gate4_command_direct_imaging,
@@ -204,13 +233,14 @@ end
 function command_plant_definition(raw::AbstractDict;
     reverse_declarations::Bool=false)
     T = Float64
-    telescope = AOS.Optics.Telescope(
+    telescope = AOS.Optics.TelescopeDefinition(
         resolution=Int(raw["resolution"]),
         diameter=T(raw["diameter_m"]),
         central_obstruction=T(raw["central_obstruction"]),
+        revision=UInt(1),
         T=T,
     )
-    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(telescope;
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphereDefinition(;
         r0=T(raw["r0_m"]),
         L0=T(raw["outer_scale_m"]),
         fractional_cn2=T[1],
@@ -288,7 +318,8 @@ function prepare_command_plant(raw::AbstractDict;
     reverse_declarations::Bool=false)
     definition, configurations, first_schema, second_schema =
         command_plant_definition(raw; reverse_declarations)
-    plant = AOSPlant.prepare_plant(definition;
+    plant = AOSPlant.prepare_plant(
+        definition, AOS.Backends.HostComputeDevice();
         run_seed=UInt64(raw["run_seed"]),
         command_endpoints=configurations)
     prepared = AOSPlant.prepare_plant_event_loop(

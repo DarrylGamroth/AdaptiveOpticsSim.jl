@@ -41,16 +41,18 @@ function AOSPlant.prepare_path_executor(
     source::AOS.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
-    pupil = PupilFunction(telescope; T, backend=backend(telescope))
+    pupil = PupilFunction(
+        telescope; T, backend=AOS.Backends.backend(telescope))
     sensor = ShackHartmannWFS(
         telescope;
         n_lenslets=model.n_lenslets,
         n_pix_subap=model.n_pix_subap,
         mode=Diffractive(),
         T=T,
-        backend=backend(telescope),
+        backend=AOS.Backends.backend(telescope),
     )
     front_end = ShackHartmannOpticalFrontEnd(sensor.front_end, source)
     output = shack_hartmann_rate_map(front_end, pupil)
@@ -64,6 +66,7 @@ function AOSPlant.prepare_path_executor(
         pupil,
         output,
         execution;
+        context=context,
         materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere,
             telescope,
@@ -86,9 +89,11 @@ function AOSPlant.prepare_path_executor(
     source::AOS.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
-    pupil = PupilFunction(telescope; T, backend=backend(telescope))
+    pupil = PupilFunction(
+        telescope; T, backend=AOS.Backends.backend(telescope))
     execution = prepare_direct_imaging(
         pupil,
         source;
@@ -102,6 +107,7 @@ function AOSPlant.prepare_path_executor(
         pupil,
         direct_imaging_output(execution),
         execution;
+        context=context,
         materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere,
             telescope,
@@ -185,15 +191,14 @@ function prepare_gate7_operation(
 )
     T = Float32
     resolution = Int(workload["pupil_resolution"])
-    telescope = Telescope(
+    telescope = AOS.Optics.TelescopeDefinition(
         resolution=resolution,
         diameter=T(workload["telescope_diameter_m"]),
         central_obstruction=zero(T),
+        revision=UInt(1),
         T=T,
-        backend=selector,
     )
-    atmosphere = MultiLayerAtmosphere(
-        telescope;
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphereDefinition(;
         r0=T(workload["r0_m"]),
         L0=T(workload["outer_scale_m"]),
         fractional_cn2=T.(workload["fractional_cn2"]),
@@ -202,7 +207,6 @@ function prepare_gate7_operation(
         altitude=T.(workload["layer_altitude_m"]),
         layer_ids=(:ground, :high),
         T=T,
-        backend=selector,
     )
     wavelength_m = T(workload["wavelength_m"])
     source_alpha = Source(
@@ -259,8 +263,12 @@ function prepare_gate7_operation(
         paths,
         acquisitions,
     )
+    target = AOS.Backends.compute_device(
+        AOS.Backends.allocate_array(selector, UInt8, 1),
+    )
     plant = prepare_plant(
-        definition;
+        definition,
+        target;
         run_seed=UInt64(workload["run_seed"]),
     )
     sample_period_ns = Int64(workload["sample_period_ns"])
@@ -421,8 +429,8 @@ function gate7_residency(operation::Gate7Operation)
     expected_device = nothing
     @inbounds for id in gate7_path_ids()
         path = _gate7_path(operation, id)
-        input_device = compute_device(path.input.opd)
-        output_device = compute_device(path.result.values)
+        input_device = AOS.Backends.compute_device(path.input.opd)
+        output_device = AOS.Backends.compute_device(path.result.values)
         input_device == output_device ||
             error("Gate 7 benchmark path $id spans compute devices")
         if expected_device === nothing
@@ -446,11 +454,11 @@ function gate7_residency(operation::Gate7Operation)
     @inbounds for index in eachindex(operation.prepared.atmosphere.layers)
         screen = operation.prepared.atmosphere.layers[
             index].generator.state.opd
-        compute_device(screen) == expected_device ||
+        AOS.Backends.compute_device(screen) == expected_device ||
             error("Gate 7 atmosphere layer $index occupies another device")
         layer_records[index] = Dict{String,Any}(
             "type" => string(typeof(screen)),
-            "device" => string(compute_device(screen)),
+            "device" => string(AOS.Backends.compute_device(screen)),
             "shape" => collect(size(screen)),
         )
     end

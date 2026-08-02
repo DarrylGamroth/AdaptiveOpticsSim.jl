@@ -51,8 +51,19 @@ plant_model_definition_style(::Type) = _UnsupportedPlantModelDefinition()
         label)
 end
 
-@inline _require_cold_plant_model_definition(::ColdPlantModelDefinition,
-    model, ::Symbol, ::AbstractString) = model
+@inline function _require_cold_plant_model_definition(
+    ::ColdPlantModelDefinition,
+    model,
+    component::Symbol,
+    label::AbstractString,
+)
+    ismutabletype(typeof(model)) && throw(PlantDefinitionError(
+        component,
+        :mutable_model_definition,
+        "$component $label type $(typeof(model)) must be immutable",
+    ))
+    return model
+end
 
 function _require_cold_plant_model_definition(
     ::_UnsupportedPlantModelDefinition, model, component::Symbol,
@@ -374,8 +385,8 @@ sampling, array backend, and compute device. Placement, path visibility, and
 additive or replacement application are explicit optical semantics.
 
 The declaration retains caller storage. `prepare_plant` makes a defensive
-backend-local OPD copy and prepares each visible path's finite-support
-pupil-footprint coupling before repeated execution.
+exact-target OPD copy from supported caller input and prepares each visible
+path's finite-support pupil-footprint coupling before repeated execution.
 """
 struct SampledAberrationDefinition{
     S<:Union{NCPA,OPDMap},
@@ -645,19 +656,37 @@ function _normalize_sampled_aberration_definitions(aberrations)
         "AbstractVector; got $(typeof(aberrations))"))
 end
 
-@inline _require_plant_telescope(::AbstractTelescope) = nothing
+@inline function _require_plant_telescope_definition(
+    definition::AbstractTelescopeDefinition,
+)
+    ismutabletype(typeof(definition)) && throw(PlantDefinitionError(
+        :plant,
+        :mutable_telescope_definition,
+        "plant telescope definitions must be immutable",
+    ))
+    return definition
+end
 
-function _require_plant_telescope(value)
-    throw(PlantDefinitionError(:plant, :invalid_telescope,
-        "plant telescope must implement AbstractTelescope; got " *
+function _require_plant_telescope_definition(value)
+    throw(PlantDefinitionError(:plant, :invalid_telescope_definition,
+        "plant telescope must implement AbstractTelescopeDefinition; got " *
         "$(typeof(value))"))
 end
 
-@inline _require_plant_atmosphere(::AbstractAtmosphere) = nothing
+@inline function _require_plant_atmosphere_definition(
+    definition::AbstractTimedAtmosphereDefinition,
+)
+    ismutabletype(typeof(definition)) && throw(PlantDefinitionError(
+        :plant,
+        :mutable_atmosphere_definition,
+        "plant timed-atmosphere definitions must be immutable",
+    ))
+    return definition
+end
 
-function _require_plant_atmosphere(value)
-    throw(PlantDefinitionError(:plant, :invalid_atmosphere,
-        "plant atmosphere must implement AbstractAtmosphere; got " *
+function _require_plant_atmosphere_definition(value)
+    throw(PlantDefinitionError(:plant, :invalid_atmosphere_definition,
+        "plant atmosphere must implement AbstractTimedAtmosphereDefinition; got " *
         "$(typeof(value))"))
 end
 
@@ -820,10 +849,11 @@ end
     PlantDefinition(; telescope, atmosphere, controllable_optics=(),
         sampled_aberrations=(), paths=(), acquisitions=())
 
-Immutable declared topology for one telescope and atmosphere, reusable optical
-paths, independent acquisitions, and independently identified controllable
-optics with versioned semantic command schemas. Native sampled aberrations are
-separate immutable optical declarations rather than controllable devices.
+Immutable declared topology for one telescope definition and timed-atmosphere
+definition, reusable optical paths, independent acquisitions, and
+independently identified controllable optics with versioned semantic command
+schemas. Native sampled aberrations are separate immutable optical
+declarations rather than controllable devices.
 Tuples, named tuples, and vectors are accepted as cold organization and copied
 into fixed-size homogeneous registries; every component carries its own stable
 identity. This value is not prepared
@@ -831,8 +861,8 @@ execution state and owns no mutable command state, schedule, queue, transport,
 RNG stream, or HIL descriptor.
 """
 struct PlantDefinition{T,A}
-    telescope::T
-    atmosphere::A
+    telescope_definition::T
+    atmosphere_definition::A
     controllable_optics::Memory{ControllableOpticDefinition}
     sampled_aberrations::Memory{SampledAberrationDefinition}
     paths::Memory{OpticalPathDefinition}
@@ -844,8 +874,8 @@ struct PlantDefinition{T,A}
         paths::Memory{OpticalPathDefinition},
         acquisitions::Memory{AcquisitionDefinition},
     ) where {T,A}
-        _require_plant_telescope(telescope)
-        _require_plant_atmosphere(atmosphere)
+        _require_plant_telescope_definition(telescope)
+        _require_plant_atmosphere_definition(atmosphere)
         foreach(_require_controllable_optic_definition,
             controllable_optics)
         foreach(_require_sampled_aberration_definition,
@@ -898,8 +928,10 @@ function PlantDefinition(telescope, atmosphere, controllable_optics, paths,
         paths, acquisitions)
 end
 
-@inline plant_telescope(plant::PlantDefinition) = plant.telescope
-@inline plant_atmosphere(plant::PlantDefinition) = plant.atmosphere
+@inline telescope_definition(plant::PlantDefinition) =
+    plant.telescope_definition
+@inline atmosphere_definition(plant::PlantDefinition) =
+    plant.atmosphere_definition
 @inline controllable_optic_definitions(plant::PlantDefinition) =
     plant.controllable_optics
 @inline sampled_aberration_definitions(plant::PlantDefinition) =

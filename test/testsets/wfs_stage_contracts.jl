@@ -2627,3 +2627,100 @@ end
         pupil, direct_plan)
     @test replacement.storage == replacement_before
 end
+
+@testset "Prepared WFS exact-target validation" begin
+    T = Float64
+    target = AdaptiveOpticsSim.Backends.HostComputeDevice()
+    wrong_target = ContractComputeDevice(0x205)
+    scalar_observation = WFSObservation(Ref(zero(T));
+        units=:electron_count, layout=:scalar)
+    scalar_measurement = WFSMeasurement(Ref(zero(T));
+        units=:metre, kind=:scalar)
+    @test WavefrontSensors._require_exact_wfs_observation_target(
+        scalar_observation, wrong_target) === scalar_observation
+    @test WavefrontSensors._require_exact_wfs_measurement_target(
+        scalar_measurement, wrong_target) === scalar_measurement
+    tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    source = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(10), T=T)
+    pupil = PupilFunction(tel; T=T)
+
+    sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, T=T)
+    front_end = ShackHartmannOpticalFrontEnd(sensor.front_end, source)
+    rate = shack_hartmann_rate_map(front_end, pupil)
+    formation = prepare_wfs_optical_formation(front_end, pupil, rate)
+    @test WavefrontSensors._require_exact_wfs_target(
+        formation, target) === formation
+
+    detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+        qe=one(T), response_model=NullFrameResponse(), T=T)
+    observation = WFSObservation(similar(rate.values);
+        units=:electron_count, layout=:lenslet_mosaic)
+    acquisition = prepare_wfs_acquisition(detector, rate, observation)
+    @test WavefrontSensors._require_exact_wfs_target(
+        acquisition, target) === acquisition
+
+    set_subaperture_calibration!(sensor.calibration,
+        zeros(T, size(sensor.calibration.reference_signal_2d));
+        centroid_response=one(T), wavelength=wavelength(source),
+        signature=UInt(0x205))
+    measurement = WFSMeasurement(similar(slopes(sensor));
+        units=:pixel, kind=:centroid_slopes)
+    estimation = prepare_wfs_estimation(
+        sensor, observation, measurement)
+    @test WavefrontSensors._require_exact_wfs_target(
+        estimation, target) === estimation
+
+    for plan in (formation, acquisition, estimation)
+        error = contract_captured_error() do
+            WavefrontSensors._require_exact_wfs_target(
+                plan, wrong_target)
+        end
+        @test error isa WFSPreparationError
+        @test error.reason === :device
+    end
+
+    extension_model = ContractRateModel(
+        one(T), zero(T), rate.metadata)
+    extension_plan = prepare_wfs_optical_formation(
+        extension_model, pupil, rate)
+    unsupported = contract_captured_error() do
+        WavefrontSensors._require_exact_wfs_target(
+            extension_plan, target)
+    end
+    @test unsupported isa WFSPreparationError
+    @test unsupported.stage === :preparation
+    @test unsupported.reason === :unsupported_target_validation
+
+    zernike = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
+    zernike_front_end = ZernikeOpticalFrontEnd(zernike, source)
+    zernike_rate = zernike_rate_map(zernike_front_end, pupil)
+    zernike_formation = prepare_wfs_optical_formation(
+        zernike_front_end, pupil, zernike_rate)
+    @test WavefrontSensors._require_exact_wfs_target(
+        zernike_formation, target) === zernike_formation
+
+    curvature = CurvatureWFS(tel; pupil_samples=4,
+        readout_pixels_per_sample=1, T=T)
+    curvature_front_end = CurvatureOpticalFrontEnd(curvature, source)
+    curvature_rates = curvature_rate_maps(curvature_front_end, pupil)
+    curvature_formation = prepare_wfs_optical_formation(
+        curvature_front_end, pupil, curvature_rates)
+    @test WavefrontSensors._require_exact_wfs_target(
+        curvature_formation, target) === curvature_formation
+
+    for family in (Val(:pyramid), Val(:bioedge))
+        four_pupil = contract_four_pupil_sensor(family, tel;
+            pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
+        four_pupil_front_end = contract_four_pupil_front_end(
+            family, four_pupil, source)
+        four_pupil_rate = contract_four_pupil_rate_map(
+            family, four_pupil_front_end, pupil)
+        four_pupil_formation = prepare_wfs_optical_formation(
+            four_pupil_front_end, pupil, four_pupil_rate)
+        @test WavefrontSensors._require_exact_wfs_target(
+            four_pupil_formation, target) === four_pupil_formation
+    end
+end

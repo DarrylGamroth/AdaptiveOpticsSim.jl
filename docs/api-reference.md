@@ -165,6 +165,11 @@ namespace.
 - Telescope/source: `Telescope`, `Source`, `LGSSource`, `Asterism`;
   source radiometry is declared with `PhysicalPhotonIrradianceSource` or
   `NormalizedTestSource`
+- Qualified cold telescope preparation: `Optics.AbstractTelescopeDefinition`,
+  `Optics.TelescopeDefinition`, and `Optics.prepare_telescope(definition,
+  target)`. A definition contains scalar aperture configuration and no sampled
+  arrays, backend, compute device, or mutable state; preparation materializes
+  one independent numerical `Telescope` on the exact target
 - Source accessors: `wavelength`, `photon_irradiance`, `source_radiometry`,
   `source_radiometric_value`, `optical_path`
 - Telescope aperture mutation: `set_pupil!`, `set_pupil_reflectivity!`,
@@ -399,7 +404,11 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `acquisition_product_ready_timestamp`. This HIL-neutral serial oracle
   composes exact periodic or delivered-trigger acquisition starts with
   independently periodic optical paths and complete acquisition products; it
-  owns no wall clock, task, queue, port, transport, or RTC protocol
+  retains the prepared plant's exact prepared device execution context. Its
+  public step and finite-horizon calls enter that context and restore the
+  caller's previous device and stream selections only after establishing the
+  retained stream's backend completion boundary. It owns no wall clock, task,
+  queue, port, transport, or RTC protocol
 - Qualified single-device path batching:
   `PreparedDevicePathBatchOwner`, `device_path_batch_owner_count`,
   `device_path_batch_owner`, `device_path_batch_compute_device`,
@@ -416,7 +425,10 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   path-local products remain device resident, and return establishes backend
   completion before any member is marked complete. CPU paths, singletons,
   unequal schedule/origin paths, mixed or unsupported WFS families, and
-  incompatible signatures/products retain the independent Gate 6 lifecycle
+  incompatible signatures/products retain the independent Gate 6 lifecycle.
+  Each public independent-group worker call enters the retained context in its
+  own task and completes that stream before publishing the group's ready or
+  complete phase
 
 - Stable identities: `AtmosphereLayerID`, `ControllableOpticID`,
   `SampledAberrationID`, `CommandEndpointID`, `PlantCommandSchemaID`,
@@ -497,7 +509,8 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `AdaptiveOpticsSim.Plant.CommandApplicationState`, plus the caller-owned
   `AdaptiveOpticsSim.Plant.CommandDispositionWorkspace`. These remain explicit
   state/workspace containers rather than exported model types
-- Plant accessors: `plant_telescope`, `plant_atmosphere`,
+- Plant accessors: `telescope_definition`, `atmosphere_definition`,
+  `plant_definition`, `prepared_telescope`, `prepared_atmosphere`,
   `controllable_optic_definitions`, `sampled_aberration_definitions`,
   `path_definitions`,
   `acquisition_definitions`, `controllable_optic_definition`,
@@ -506,16 +519,33 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `path_definition`, `acquisition_definition`
 - Ordinary prepared boundary: `PreparedPlant`, `prepare_plant`,
   `prepare_acquisition_selection`, `execute_acquisition_selection!`, and
-  `execute_acquisition_selection_at!`. Qualified extension/execution seams are
+  `execute_acquisition_selection_at!`. Preparation requires one positional
+  exact compute-device target; query a prepared plant through
+  `Backends.compute_device(plant)`. Qualified extension/execution seams are
   `prepare_pupil_opd_materialization`, `materialize_path_input!`,
   `execute_path!`, and `execute_acquisition!`
+- Qualified exact-target extension seams:
+  `validate_controllable_optic_target`,
+  `validate_controllable_optic_state_target`,
+  `validate_controllable_optic_workspace_target`,
+  `validate_pupil_surface_coupling_target`,
+  `validate_autonomous_optic_coupling_target`,
+  `validate_path_execution_target`, `validate_path_materialization_target`,
+  `validate_acquisition_execution_target`,
+  `validate_acquisition_provider_target`, and
+  `validate_illumination_evaluator_target`. Their unknown-type defaults fail
+  closed. Controllable-optic preparation, event-loop state, and event-loop
+  workspace have distinct seams because those owners are constructed at
+  different preparation boundaries. Built-in subsystem validators remain
+  implementation details. Custom prepared WFS plans use the WFS-owned qualified
+  `WavefrontSensors.validate_wfs_target` seam
 - Qualified sampled-aberration preparation:
   `PreparedSampledAberration`,
   `PreparedSampledAberrationPathBindings`,
   `prepared_sampled_aberrations`,
   `prepared_sampled_aberration_path_bindings`, and their `sampled_aberration_*`
   and `prepared_sampled_aberration_*` accessors. Preparation makes a
-  backend-local defensive OPD copy and resolves bounded, canonical
+  exact-target defensive OPD copy and resolves bounded, canonical
   path-local couplings before execution
 - Qualified controllable-optic path coupling:
   `AbstractPupilSurfacePathCoupling`,
@@ -629,7 +659,10 @@ gate; unusual source physics extend the qualified evaluator seams described in
 the extension guide. Entry tags do not infer a lamp, relay, instrument, control
 authority, or upstream propagation bypass.
 
-Every controllable optic, sampled aberration, command endpoint, path, and
+Every plant stores one immutable `Optics.AbstractTelescopeDefinition` and one
+immutable `Atmospheres.AbstractTimedAtmosphereDefinition`; it does not accept
+already prepared or mutable telescope and atmosphere objects. Every
+controllable optic, sampled aberration, command endpoint, path, and
 acquisition carries an explicit typed identity. Tuples, named tuples, and
 vectors organize cold declarations but do not define identity;
 `PlantDefinition` copies them into fixed-size topology registries, and named
@@ -651,11 +684,12 @@ versioned semantic payload contracts, bounded endpoint state, physical-optic
 preparation, deterministic command/event composition, controller-output
 routing, sampled device feedback, and autonomous periodic optics. A
 `CommandEndpointConfiguration` supplies each declared endpoint's bounded
-calendar/history capacities, copied initial and optional safe values, and
-payload-storage backend. `prepare_plant` requires exactly one configuration
-for every declared endpoint and prepares every declared optic; neither is
-silently omitted. Stable endpoint ordinals and optic execution order derive
-from typed identities rather than declaration position.
+calendar/history capacities and copied initial and optional safe values.
+It does not select a backend. `prepare_plant` derives array-command storage
+from its exact target, requires exactly one configuration for every declared
+endpoint, and prepares every declared optic; neither is silently omitted.
+Scalar command values remain host-resident. Stable endpoint ordinals and optic
+execution order derive from typed identities rather than declaration position.
 
 `prepare_controllable_optic` returns immutable model-specific preparation
 data. `prepare_controllable_optic_state` and
@@ -771,12 +805,24 @@ and prefix admission-preflight abort reasons with
 `:physical_application_failure`; a model may provide a more specific
 `PlantCommandError` reason.
 
-`prepare_plant` requires one explicit `run_seed`, accepts a versioned
+`prepare_plant(definition, target; ...)` requires one exact compute-device
+target and one explicit `run_seed`, accepts a versioned
 `rng_derivation_version`, freezes each path source, and dispatches on the
-concrete cold model types to build backend-, physical-device-, shape-, and
-revision-bound owners. A `PathResultKey` records source geometry, spectral
-sampling, radiometry, optical and propagation model keys, instantaneous-sample
-semantics, output-plane contract, revisions, backend, and device. Its
+concrete cold model types to build target-, shape-, and revision-bound owners.
+It materializes independent numerical telescope and timed-atmosphere owners
+from the reusable cold definitions and retains a target-specific execution
+context. Every `PreparedPathExecutor` retains that exact prepared device
+execution context, and each corresponding `PreparedAcquisitionOwner` retains
+the same context. Public `materialize_path_input!`, `execute_path!`, and
+`execute_acquisition!` calls enter the retained context and restore the
+caller's previous device and stream selections after success or an exception.
+Every prepared data-plane array in the owned graph must report the exact target;
+scalar command values, host configuration and registries, and
+deliberate host RNG staging are exempt. Target selection restores the caller's
+prior accelerator context after success or failure. A `PathResultKey` records
+source geometry, spectral sampling, radiometry, optical and propagation model
+keys, instantaneous-sample semantics, output-plane contract, revisions,
+backend, and device. Its
 descriptive values are defensively snapshotted, and its value equality/hash
 contract is intended for cold compatibility lookup rather than warmed
 execution. Prepared owner constructors validate that concrete execution plans
@@ -814,8 +860,10 @@ an empty consumer set is not an implicit reduced-order declaration.
 each prepared sampled-aberration plan, invokes each typed path executor once,
 and then runs the selected acquisitions. The `_at!` variant first advances the
 shared atmosphere to an explicit absolute model time.
-Both methods use exact owner-bound streams retained by the prepared plant; they
-do not accept tuple-position-dependent caller RNGs. Low-level stochastic model
+Both methods enter the prepared plant's retained device execution context and
+restore the caller's previous device and stream selections. They use exact
+owner-bound RNG streams and do not accept tuple-position-dependent caller RNGs.
+Low-level stochastic model
 APIs continue to receive an explicit `AbstractRNG`, while prepared execution
 supplies it directly rather than performing a registry lookup. Neither method
 introduces cadence, triggers, a scheduler, ports, or a retained atmosphere
@@ -887,6 +935,12 @@ root forwarding bindings for atmosphere-owned names.
 - `MultiLayerAtmosphere`
 - `InfinitePhaseScreen`
 - `InfiniteMultiLayerAtmosphere`
+- Qualified cold timed-atmosphere preparation:
+  `Atmospheres.AbstractTimedAtmosphereDefinition`,
+  `Atmospheres.KolmogorovAtmosphereDefinition`,
+  `Atmospheres.MultiLayerAtmosphereDefinition`,
+  `Atmospheres.InfiniteMultiLayerAtmosphereDefinition`, and
+  `Atmospheres.prepare_timed_atmosphere(definition, telescope, target)`
 - Epochs: `AtmosphereEpoch`, `current_epoch`, `epoch_time`, `epoch_sequence`
 - Explicit evolution: `advance_by!`, `advance_to!`
 - Direction preparation: `prepare_atmosphere_renderer`,

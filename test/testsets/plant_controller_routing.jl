@@ -1,4 +1,3 @@
-struct ControllerRoutingTestAtmosphere <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere end
 struct ControllerRoutingTestOpticModel end
 struct PreparedControllerRoutingTestOptic end
 
@@ -11,6 +10,11 @@ Plant.prepare_controllable_optic(
     ::Telescope,
     ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 ) = PreparedControllerRoutingTestOptic()
+
+Plant.validate_controllable_optic_target(
+    prepared::PreparedControllerRoutingTestOptic,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+) = prepared
 
 function controller_routing_schema(::Type{T}, endpoint::Symbol,
     dimensions::Tuple) where {T<:AbstractFloat}
@@ -38,9 +42,9 @@ function controller_routing_plant(;
     tweeter_dimensions=(3,),
     scalar=false,
 )
-    tel = Telescope(resolution=8, diameter=8.0,
-        central_obstruction=0.0)
-    atmosphere = ControllerRoutingTestAtmosphere()
+    tel = TelescopeDefinition(resolution=8, diameter=8.0,
+        central_obstruction=0.0, revision=1)
+    atmosphere = KolmogorovAtmosphereDefinition(r0=0.2, L0=25.0)
     woofer_schema = controller_routing_schema(Float64, :woofer_command,
         scalar ? () : woofer_dimensions)
     tweeter_schema = controller_routing_schema(Float64, :tweeter_command,
@@ -62,7 +66,7 @@ function controller_routing_plant(;
         ),
     )
     initial_woofer = scalar ? 0.0 : zeros(Float64, woofer_dimensions)
-    return prepare_plant(definition;
+    return prepare_plant(definition, PLANT_TEST_HOST_TARGET;
         run_seed=1,
         command_endpoints=(
             CommandEndpointConfiguration(:woofer_command,

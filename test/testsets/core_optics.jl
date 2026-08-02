@@ -1390,6 +1390,85 @@ end
     @test sum(normalized_spectral_intensity) ≈ 2.0 rtol=1e-10
 end
 
+@testset "Direct-imaging exact target ownership" begin
+    optics = AdaptiveOpticsSim.Optics
+    backends = AdaptiveOpticsSim.Backends
+    target = backends.HostComputeDevice()
+    telescope = Telescope(
+        resolution=8,
+        diameter=8.0,
+        central_obstruction=0.0,
+    )
+    pupil = PupilFunction(telescope)
+    first_source = Source(
+        band=:custom,
+        wavelength=1.0e-6,
+        photon_irradiance=1.0,
+    )
+    second_source = Source(
+        band=:custom,
+        wavelength=1.0e-6,
+        photon_irradiance=2.0,
+    )
+
+    leaf = prepare_direct_imaging(pupil, first_source)
+    @test @inferred(optics._require_exact_direct_imaging_target(
+        leaf.plan, target)) === leaf.plan
+    @test @inferred(optics._require_exact_direct_imaging_target(
+        leaf, target)) === leaf
+
+    preformed_field = ElectricField(pupil, first_source)
+    preformed = prepare_direct_imaging(first_source, preformed_field)
+    @test @inferred(optics._require_exact_direct_imaging_target(
+        preformed, target)) === preformed
+
+    asterism = Asterism([first_source, second_source])
+    incoherent = prepare_direct_imaging(pupil, asterism)
+    @test @inferred(optics._require_exact_direct_imaging_target(
+        incoherent, target)) === incoherent
+
+    spectral = with_spectrum(first_source, SpectralBundle(
+        [1.0e-6, 1.1e-6],
+        [0.5, 0.5],
+    ))
+    bundled = prepare_direct_imaging(pupil, spectral)
+    @test @inferred(optics._require_exact_direct_imaging_target(
+        bundled, target)) === bundled
+
+    batch = prepare_direct_imaging_batch(pupil, asterism)
+    @test @inferred(optics._require_exact_direct_imaging_target(
+        batch, target)) === batch
+
+    wrong_workspace = optics.DirectImagingWorkspace(
+        leaf.workspace.propagation,
+        copy(leaf.workspace.unshifted_intensity),
+    )
+    wrong_binding = optics.PreparedDirectImaging(
+        leaf.input,
+        leaf.field,
+        leaf.output,
+        leaf.plan,
+        wrong_workspace,
+    )
+    @test_throws InvalidConfiguration optics._require_exact_direct_imaging_target(
+        wrong_binding, target)
+
+    wrong_target = backends.AcceleratorComputeDevice(CUDABackend(), 0)
+    wrong_target_error = try
+        optics._require_exact_direct_imaging_target(leaf, wrong_target)
+        nothing
+    catch error
+        error
+    end
+    @test wrong_target_error isa backends.ComputeDeviceError
+    @test wrong_target_error.operation == :validate_direct_imaging_target
+    @test wrong_target_error.reason == :wrong_device
+    @test wrong_target_error.device == wrong_target
+    @test_throws InvalidConfiguration optics._require_exact_direct_imaging_target(
+        nothing, target)
+    @test !Base.ispublic(optics, :_require_exact_direct_imaging_target)
+end
+
 @testset "Explicit optical products and surfaces" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.1)
     src = Source(band=:I, magnitude=0.0)

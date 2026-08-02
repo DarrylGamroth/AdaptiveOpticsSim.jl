@@ -188,8 +188,15 @@ end
 @inline acquisition_product_contract(product::AbstractArray) =
     _array_product_contract(product)
 
-@inline acquisition_product_contract(product::Base.RefValue{T}) where {T} =
-    _RefProductContract(T)
+@inline function acquisition_product_contract(
+    product::Base.RefValue{T}) where {T}
+    isconcretetype(T) && T <: Number || throw(PlantPreparationError(
+        :acquisition,
+        :unsupported_product,
+        "host Ref acquisition products require a concrete numeric scalar type; got $(T)",
+    ))
+    return _RefProductContract(T)
+end
 
 function acquisition_product_contract(product::IntensityMap)
     validate_plane_storage(product.metadata, product.values;

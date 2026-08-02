@@ -28,6 +28,10 @@ struct UnkeyedCalibrationFrameResponse{T<:AbstractFloat} <:
     alpha::T
 end
 
+struct UnsupportedExactTargetReadoutProducts <:
+    AdaptiveOpticsSim.Detectors.FrameReadoutProducts
+end
+
 function AdaptiveOpticsSim.Detectors.convert_frame_response_model(
     model::UnkeyedCalibrationFrameResponse, ::Type{T}, backend) where
     {T<:AbstractFloat}

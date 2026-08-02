@@ -55,6 +55,21 @@ function Plant.validate_path_materialization_binding(
     return nothing
 end
 
+function Plant.validate_path_materialization_target(
+    materialization::ZeroPupilMaterialization,
+    input::PupilFunction,
+    ::AbstractAtmosphere,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    materialization.destination === input || throw(
+        PlantPreparationError(:path, :prepared_binding,
+            "zero-pupil materialization belongs to another path input"))
+    Plant._require_exact_plant_product_target(
+        materialization.destination, target,
+        "zero-pupil materialization destination")
+    return materialization
+end
+
 function Plant.validate_path_materialization(
     materialization::ZeroPupilMaterialization,
     input::PupilFunction,
@@ -86,6 +101,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -98,6 +114,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=ZeroPupilMaterialization(pupil),
         optical_model=:conjugate_geometry_test,
         propagation_model=:fraunhofer_fft,
@@ -157,6 +174,36 @@ function Plant.prepare_controllable_optic(
         metadata,
         model.registration,
     )
+end
+
+function Plant.validate_controllable_optic_target(
+    prepared::PreparedConjugateGeometryOptic,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_array_target(
+        prepared.pattern, target, "conjugate-geometry optic pattern")
+    Plant._require_exact_plant_metadata_target(
+        prepared.metadata, target, "conjugate-geometry optic surface")
+    return prepared
+end
+
+function Plant.validate_controllable_optic_state_target(
+    ::PreparedConjugateGeometryOptic,
+    state::ConjugateGeometryOpticState,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_array_target(
+        state.surface, target, "conjugate-geometry visible surface")
+    return state
+end
+
+function Plant.validate_controllable_optic_workspace_target(
+    ::PreparedConjugateGeometryOptic,
+    workspace::ConjugateGeometryOpticWorkspace,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The staged scale coefficient is a scalar host control-plane value.
+    return workspace
 end
 
 function Plant.prepare_controllable_optic_state(
@@ -284,8 +331,8 @@ function conjugate_geometry_path(
     )
     atmosphere = conjugate_geometry_atmosphere(telescope)
     definition = PlantDefinition(;
-        telescope,
-        atmosphere,
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         paths=(
             OpticalPathDefinition(
                 :geometry,
@@ -294,7 +341,8 @@ function conjugate_geometry_path(
             ),
         ),
     )
-    plant = prepare_plant(definition; run_seed=0x8504)
+    plant = prepare_plant(
+        definition, PLANT_TEST_HOST_TARGET; run_seed=0x8504)
     return plant, prepared_path(plant, :geometry)
 end
 
@@ -435,12 +483,12 @@ function conjugate_geometry_event_fixture(; split_couplings::Bool=false)
     )
     plant = prepare_plant(
         PlantDefinition(;
-            telescope,
-            atmosphere,
+            telescope=plant_test_telescope_definition(telescope),
+            atmosphere=plant_test_atmosphere_definition(atmosphere),
             controllable_optics=(second, first),
             paths=(path,),
             acquisitions=(acquisition,),
-        );
+        ), PLANT_TEST_HOST_TARGET;
         run_seed=0x8505,
         command_endpoints=(
             CommandEndpointConfiguration(

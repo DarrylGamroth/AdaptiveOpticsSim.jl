@@ -50,6 +50,7 @@ function AOSPlant.prepare_path_executor(
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
     atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     pupil = AOS.Optics.PupilFunction(telescope)
     imaging = AOS.Optics.prepare_direct_imaging(pupil, source;
@@ -62,6 +63,7 @@ function AOSPlant.prepare_path_executor(
         pupil,
         AOS.Optics.direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
         optical_model=(kind=:direct_imaging,
@@ -77,6 +79,7 @@ function AOSPlant.prepare_path_executor(
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
     atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(telescope; T=T)
@@ -102,6 +105,7 @@ function AOSPlant.prepare_path_executor(
         pupil,
         result,
         execution;
+        context=context,
         materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
         optical_model=(kind=:shack_hartmann,
@@ -120,6 +124,7 @@ function AOSPlant.prepare_path_executor(
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
     atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(telescope; T=T)
@@ -144,6 +149,7 @@ function AOSPlant.prepare_path_executor(
         pupil,
         result,
         execution;
+        context=context,
         materialization=AOSPlant.prepare_pupil_opd_materialization(
             atmosphere, telescope, source, pupil),
         optical_model=(kind=:pyramid,
@@ -200,13 +206,14 @@ function serial_plant_definition(raw::AbstractDict;
     reverse_declarations::Bool=false)
     T = Float64
     resolution = Int(raw["resolution"])
-    telescope = AOS.Optics.Telescope(
+    telescope = AOS.Optics.TelescopeDefinition(
         resolution=resolution,
         diameter=T(raw["diameter_m"]),
         central_obstruction=T(raw["central_obstruction"]),
+        revision=UInt(1),
         T=T,
     )
-    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(telescope;
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphereDefinition(;
         r0=T(raw["r0_m"]),
         L0=T(raw["outer_scale_m"]),
         fractional_cn2=T.(raw["fractional_cn2"]),
@@ -278,7 +285,8 @@ end
 function prepare_serial_plant_operation(raw::AbstractDict;
     reverse_declarations::Bool=false)
     definition = serial_plant_definition(raw; reverse_declarations)
-    plant = AOSPlant.prepare_plant(definition;
+    plant = AOSPlant.prepare_plant(
+        definition, AOS.Backends.HostComputeDevice();
         run_seed=UInt64(raw["run_seed"]),
         rng_derivation_version=Int(raw["rng_derivation_version"]),
     )
@@ -352,7 +360,7 @@ end
 
 function final_observation_summary(operation::SerialPlantOperation)
     acquisitions = AOSPlant.prepared_acquisitions(operation.selection)
-    atmosphere = AOSPlant.plant_atmosphere(operation.selection.plant.definition)
+    atmosphere = AOSPlant.prepared_atmosphere(operation.selection.plant)
     return Dict{String,Any}(
         "model_time_s" => AOS.Atmospheres.epoch_time(AOS.Atmospheres.current_epoch(atmosphere)),
         "epoch_sequence" => Int(AOS.Atmospheres.epoch_sequence(

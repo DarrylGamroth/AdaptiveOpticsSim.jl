@@ -906,6 +906,51 @@ function validate_direct_imaging_batch(
     return prepared
 end
 
+function _require_exact_direct_imaging_target(
+    prepared::PreparedDirectImagingBatch,
+    target::AbstractComputeDevice,
+)
+    signature_device = prepared.signature.device
+    signature_device == target || _throw_wrong_direct_imaging_target(
+        target,
+        "direct-imaging batch signature",
+        signature_device,
+    )
+    validate_direct_imaging_batch(prepared)
+
+    @inbounds for input in prepared.inputs
+        _require_exact_direct_imaging_pupil_target(input, target)
+    end
+    @inbounds for field in prepared.fields
+        _require_exact_direct_imaging_metadata_target(
+            field.metadata, target, "direct-imaging batch field")
+        _require_exact_direct_imaging_array_target(
+            field.values, target, "direct-imaging batch field storage")
+    end
+    @inbounds for product in prepared.output
+        _require_exact_direct_imaging_metadata_target(
+            product.metadata, target, "direct-imaging batch output")
+        _require_exact_direct_imaging_array_target(
+            product.values, target,
+            "direct-imaging batch output storage")
+    end
+
+    workspace = prepared.workspace
+    _require_exact_direct_imaging_array_target(
+        workspace.field_stack, target,
+        "direct-imaging batch field stack")
+    _require_exact_direct_imaging_array_target(
+        workspace.output_stack, target,
+        "direct-imaging batch output stack")
+    _require_exact_direct_imaging_array_target(
+        workspace.shift_axis1, target,
+        "direct-imaging batch axis-1 shifts")
+    _require_exact_direct_imaging_array_target(
+        workspace.shift_axis2, target,
+        "direct-imaging batch axis-2 shifts")
+    return prepared
+end
+
 @kernel function direct_imaging_batch_intensity_kernel!(
     output,
     field_stack,

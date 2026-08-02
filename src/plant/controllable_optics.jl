@@ -3,7 +3,7 @@
 #
 # A cold ControllableOpticDefinition describes physical identity, optical
 # placement/path visibility, and semantic command schemas. This layer
-# separately binds run capacities, initial/safe values, backend storage,
+# separately binds run capacities and initial/safe values,
 # model-specific physical preparation, and canonical path/group lookup.
 # Mutable optic, endpoint, and workspace owners are constructed by the event
 # loop.
@@ -11,36 +11,34 @@
 
 """
     CommandEndpointConfiguration(endpoint, initial_command;
-        capacity, sequence_window=capacity, safe_command=nothing,
-        backend=CPUBackend())
+        capacity, sequence_window=capacity, safe_command=nothing)
 
 Run-configuration input for one declared command endpoint. It supplies bounded
-calendar/history capacity, copied initial and optional safe effective commands,
-and payload-storage backend without adding cadence, transport, atomicity, or
-optical grouping. Stable endpoint ordinals are derived canonically during
-plant preparation rather than supplied by declaration order.
+calendar/history capacity and copied initial and optional safe effective
+commands without adding cadence, transport, atomicity, storage placement, or
+optical grouping. Array-command storage is derived from the exact plant target;
+scalar command values remain host-resident. Stable endpoint ordinals are
+derived canonically during plant preparation rather than supplied by
+declaration order.
 """
-struct CommandEndpointConfiguration{I,S,B<:AbstractArrayBackend}
+struct CommandEndpointConfiguration{I,S}
     endpoint::CommandEndpointID
     capacity::Int
     sequence_window::Int
     initial_command::I
     safe_command::S
-    backend::B
 end
 
 function CommandEndpointConfiguration(endpoint, initial_command;
     capacity,
     sequence_window=capacity,
-    safe_command=nothing,
-    backend::AbstractArrayBackend=CPUBackend())
+    safe_command=nothing)
     return CommandEndpointConfiguration(
         _as_command_endpoint_id(endpoint),
         _checked_command_endpoint_capacity(capacity),
         _checked_command_sequence_window(sequence_window),
         initial_command,
         safe_command,
-        backend,
     )
 end
 
@@ -57,8 +55,6 @@ end
 @inline safe_effective_command(
     configuration::CommandEndpointConfiguration) =
     configuration.safe_command
-@inline backend(configuration::CommandEndpointConfiguration) =
-    configuration.backend
 
 @inline _require_command_endpoint_configuration(
     configuration::CommandEndpointConfiguration) = configuration
@@ -252,34 +248,47 @@ implementation after path preparation types are available.
 
 function _copy_prepared_effective_command(
     endpoint::PreparedCommandEndpoint{<:PlantCommandSchema{T,0}},
-    value, label::AbstractString) where {T}
+    value, label::AbstractString, ::AbstractComputeDevice) where {T}
     return _validate_effective_seed(command_schema(endpoint), value, label)
 end
 
 function _copy_prepared_effective_command(
     endpoint::PreparedCommandEndpoint{<:PlantCommandSchema{T,N}},
-    value, label::AbstractString) where {T,N}
+    value, label::AbstractString,
+    target::AbstractComputeDevice,
+) where {T,N}
     validated = _validate_effective_seed(command_schema(endpoint), value,
         label)
-    copied = allocate_array(backend(endpoint), T,
+    copied = allocate_device_array(target, T,
         command_dimensions(command_schema(endpoint))...)
     copyto!(copied, validated)
     return copied
 end
 
 function _copy_prepared_safe_command(endpoint::PreparedCommandEndpoint,
-    ::Nothing)
+    ::Nothing, ::AbstractComputeDevice)
     policy = command_silence_policy(command_schema(endpoint))
     _require_safe_command_configuration(policy, nothing)
     return nothing
 end
 
 function _copy_prepared_safe_command(endpoint::PreparedCommandEndpoint,
-    value)
+    value, target::AbstractComputeDevice)
     policy = command_silence_policy(command_schema(endpoint))
     _require_safe_command_configuration(policy, value)
-    return _copy_prepared_effective_command(endpoint, value, "safe command")
+    return _copy_prepared_effective_command(
+        endpoint, value, "safe command", target)
 end
+
+@inline _command_endpoint_backend(
+    ::PlantCommandSchema{<:Any,0},
+    ::AbstractComputeDevice,
+) = CPUBackend()
+
+@inline _command_endpoint_backend(
+    ::PlantCommandSchema,
+    target::AbstractComputeDevice,
+) = compute_device_backend(target)
 
 function _command_endpoint_configuration(configurations,
     id::CommandEndpointID)
@@ -329,7 +338,7 @@ function _controllable_optic_slot(definitions,
 end
 
 function _prepare_plant_command_endpoints(definition::PlantDefinition,
-    configurations, optic_definitions)
+    configurations, optic_definitions, target::AbstractComputeDevice)
     declared = _canonical_command_endpoint_declarations(definition)
     length(configurations) == length(declared) || throw(
         PlantPreparationError(:command_endpoint,
@@ -345,11 +354,12 @@ function _prepare_plant_command_endpoints(definition::PlantDefinition,
             capacity=configuration.capacity,
             sequence_window=configuration.sequence_window,
             ordinal,
-            backend=configuration.backend)
+            backend=_command_endpoint_backend(schema, target))
         initial = _copy_prepared_effective_command(endpoint,
-            configuration.initial_command, "initial effective command")
+            configuration.initial_command, "initial effective command",
+            target)
         safe = _copy_prepared_safe_command(endpoint,
-            configuration.safe_command)
+            configuration.safe_command, target)
         optic_slot = _controllable_optic_slot(optic_definitions, owner)
         endpoints[ordinal] = _PreparedPlantCommandEndpoint(
             endpoint, UInt32(optic_slot), initial, safe)
@@ -367,9 +377,7 @@ function _prepared_command_endpoint_slot(endpoints,
 end
 
 function _prepare_controllable_optics(definition::PlantDefinition,
-    optic_definitions, endpoints)
-    telescope = plant_telescope(definition)
-    atmosphere = plant_atmosphere(definition)
+    optic_definitions, endpoints, telescope, atmosphere)
     optics = Memory{PreparedControllableOptic}(
         undef, length(optic_definitions))
     for index in eachindex(optic_definitions)

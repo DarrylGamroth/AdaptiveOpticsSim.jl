@@ -6,6 +6,15 @@
 # methods; the resulting owners bind exact products and prepared stage plans.
 #
 
+@inline function _with_completed_prepared_device_execution_context(
+    f::F, context) where {F}
+    return _with_prepared_device_execution_context(context) do
+        result = f()
+        _synchronize_prepared_device_execution_context!(context)
+        result
+    end
+end
+
 """Semantic contract for when an optical path result samples the plant."""
 abstract type AbstractOpticalSamplingContract end
 
@@ -573,11 +582,12 @@ concrete prepared propagation/front-end workspace used to update `result`.
 An input may begin at a declared pupil-function, electric-field, or intensity
 entry boundary; it need not represent the entrance pupil.
 """
-struct PreparedPathExecutor{D,S,T,A,I,R,M,E,K<:PathResultKey}
+struct PreparedPathExecutor{D,S,T,A,X,I,R,M,E,K<:PathResultKey}
     definition::D
     source::S
     telescope::T
     atmosphere::A
+    context::X
     rng_token::RNGOwnerToken
     input::I
     result::R
@@ -586,13 +596,14 @@ struct PreparedPathExecutor{D,S,T,A,I,R,M,E,K<:PathResultKey}
     key::K
 
     function PreparedPathExecutor(::_PreparedPathExecutorToken,
-        definition::D, source::S, telescope::T, atmosphere::A, input::I,
-        result::R, materialization::M, execution::E, key::K) where {
-        D,S,T,A,I,R,M,E,K<:PathResultKey,
+        definition::D, source::S, telescope::T, atmosphere::A, context::X,
+        input::I, result::R, materialization::M, execution::E,
+        key::K) where {
+        D,S,T,A,X,I,R,M,E,K<:PathResultKey,
     }
-        return new{D,S,T,A,I,R,M,E,K}(definition, source, telescope,
-            atmosphere, RNGOwnerToken(), input, result, materialization,
-            execution, key)
+        return new{D,S,T,A,X,I,R,M,E,K}(definition, source, telescope,
+            atmosphere, context, RNGOwnerToken(), input, result,
+            materialization, execution, key)
     end
 end
 
@@ -602,6 +613,7 @@ end
 function PreparedPathExecutor(definition::OpticalPathDefinition,
     source::AbstractSource, telescope::AbstractTelescope,
     atmosphere::AbstractAtmosphere, input, result, execution;
+    context,
     materialization,
     optical_model,
     sampling_contract::AbstractOpticalSamplingContract=
@@ -613,6 +625,9 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
     first_result = _first_path_result(result)
     selector = backend(first_result)
     device = compute_device(first_result.values)
+    _prepared_device_execution_compute_device(context) == device || throw(
+        PlantPreparationError(:path, :execution_context_target,
+            "prepared path execution context does not match its exact compute device"))
     _require_path_result_domain(result, selector, device)
     _require_path_input_domain(input, selector, device)
     typeof(backend(telescope)) === typeof(selector) || throw(
@@ -640,8 +655,8 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
         device,
     )
     return PreparedPathExecutor(_PREPARED_PATH_EXECUTOR_TOKEN, definition,
-        source, telescope, atmosphere, input, result, materialization,
-        execution, key)
+        source, telescope, atmosphere, context, input, result,
+        materialization, execution, key)
 end
 
 @inline path_input(path::PreparedPathExecutor) = path.input
@@ -675,13 +690,7 @@ function _require_timed_path_atmosphere(atmosphere::AbstractAtmosphere)
         "current-epoch path materialization requires a timed atmosphere"))
 end
 
-"""
-    materialize_path_input!(path, epoch)
-
-Materialize one path's atmosphere-dependent input from the explicitly supplied
-current epoch. This operation never advances the atmosphere.
-"""
-function materialize_path_input!(path::PreparedPathExecutor,
+function _materialize_path_input_in_context!(path::PreparedPathExecutor,
     epoch::AtmosphereEpoch)
     _require_current_path_binding(path)
     atmosphere = _require_timed_path_atmosphere(path.atmosphere)
@@ -693,8 +702,22 @@ function materialize_path_input!(path::PreparedPathExecutor,
         atmosphere, epoch)
 end
 
-"""Materialize one path input at an explicit epoch with a caller-owned RNG."""
+"""
+    materialize_path_input!(path, epoch)
+
+Materialize one path's atmosphere-dependent input from the explicitly supplied
+current epoch. This operation never advances the atmosphere.
+"""
 function materialize_path_input!(path::PreparedPathExecutor,
+    epoch::AtmosphereEpoch)
+    result = _with_completed_prepared_device_execution_context(
+        path.context) do
+        _materialize_path_input_in_context!(path, epoch)
+    end
+    return result::typeof(path.input)
+end
+
+function _materialize_path_input_in_context!(path::PreparedPathExecutor,
     epoch::AtmosphereEpoch, rng::AbstractRNG)
     _require_current_path_binding(path)
     atmosphere = _require_timed_path_atmosphere(path.atmosphere)
@@ -706,19 +729,46 @@ function materialize_path_input!(path::PreparedPathExecutor,
         atmosphere, epoch, rng)
 end
 
-"""Execute one already prepared path without selecting or advancing time."""
-function execute_path!(path::PreparedPathExecutor)
+"""Materialize one path input at an explicit epoch with a caller-owned RNG."""
+function materialize_path_input!(path::PreparedPathExecutor,
+    epoch::AtmosphereEpoch, rng::AbstractRNG)
+    result = _with_completed_prepared_device_execution_context(
+        path.context) do
+        _materialize_path_input_in_context!(path, epoch, rng)
+    end
+    return result::typeof(path.input)
+end
+
+function _execute_path_in_context!(path::PreparedPathExecutor)
     _require_current_path_binding(path)
     return execute_path!(path.result, path.input, path.execution)
 end
 
-"""Execute one prepared path with its exact prepared RNG-owner group."""
-function execute_path!(path::PreparedPathExecutor,
+"""Execute one already prepared path without selecting or advancing time."""
+function execute_path!(path::PreparedPathExecutor)
+    result = _with_completed_prepared_device_execution_context(
+        path.context) do
+        _execute_path_in_context!(path)
+    end
+    return result::typeof(path.result)
+end
+
+function _execute_path_in_context!(path::PreparedPathExecutor,
     rngs::PreparedOwnerRNGs)
     _require_current_path_binding(path)
     _require_rng_owner_binding(rngs, path)
     return execute_path_rngs!(path.result, path.input, path.execution,
         rngs)
+end
+
+"""Execute one prepared path with its exact prepared RNG-owner group."""
+function execute_path!(path::PreparedPathExecutor,
+    rngs::PreparedOwnerRNGs)
+    result = _with_completed_prepared_device_execution_context(
+        path.context) do
+        _execute_path_in_context!(path, rngs)
+    end
+    return result::typeof(path.result)
 end
 
 """Qualified extension seam for path execution with prepared RNG owners."""
@@ -971,17 +1021,18 @@ borrows one exact prepared path result as read-only input and owns separate
 caller-visible observation/measurement products plus the provider's detector,
 WFS, reduced-order, payload, or replay state.
 """
-struct PreparedAcquisitionOwner{D,K<:PathResultKey,R,P}
+struct PreparedAcquisitionOwner{D,K<:PathResultKey,R,X,P}
     definition::D
     path_key::K
     path_result::R
+    context::X
     rng_token::RNGOwnerToken
     provider::P
 
     function PreparedAcquisitionOwner(::_PreparedAcquisitionOwnerToken,
-        definition::D, path_key::K, path_result::R,
-        provider::P) where {D,K<:PathResultKey,R,P}
-        return new{D,K,R,P}(definition, path_key, path_result,
+        definition::D, path_key::K, path_result::R, context::X,
+        provider::P) where {D,K<:PathResultKey,R,X,P}
+        return new{D,K,R,X,P}(definition, path_key, path_result, context,
             RNGOwnerToken(), provider)
     end
 end
@@ -1077,21 +1128,41 @@ function PreparedAcquisitionOwner(definition::AcquisitionDefinition,
             "acquisition $(definition.id) does not reference prepared path $(path.definition.id)"))
     validate_acquisition_provider_binding(provider, path.result)
     return PreparedAcquisitionOwner(_PREPARED_ACQUISITION_OWNER_TOKEN,
-        definition, path.key, path.result, provider)
+        definition, path.key, path.result, path.context, provider)
 end
 
-"""Execute one acquisition provider into its caller-owned products."""
-@inline function execute_acquisition!(owner::PreparedAcquisitionOwner,
+@inline function _execute_acquisition_in_context!(
+    owner::PreparedAcquisitionOwner,
     rng::AbstractRNG)
     return execute_acquisition_provider!(owner.provider, owner.path_result,
         rng)
 end
 
+"""Execute one acquisition provider into its caller-owned products."""
 function execute_acquisition!(owner::PreparedAcquisitionOwner,
+    rng::AbstractRNG)
+    result = _with_completed_prepared_device_execution_context(
+        owner.context) do
+        _execute_acquisition_in_context!(owner, rng)
+    end
+    return result::typeof(acquisition_products(owner))
+end
+
+function _execute_acquisition_in_context!(owner::PreparedAcquisitionOwner,
     rngs::PreparedOwnerRNGs)
     _require_rng_owner_binding(rngs, owner)
     return execute_acquisition_provider!(owner.provider, owner.path_result,
         rngs)
+end
+
+"""Execute one acquisition using its exact prepared RNG-owner group."""
+function execute_acquisition!(owner::PreparedAcquisitionOwner,
+    rngs::PreparedOwnerRNGs)
+    result = _with_completed_prepared_device_execution_context(
+        owner.context) do
+        _execute_acquisition_in_context!(owner, rngs)
+    end
+    return result::typeof(acquisition_products(owner))
 end
 
 """Qualified extension seam for acquisition execution with prepared RNG owners."""
@@ -1144,8 +1215,21 @@ const _PREPARED_PLANT_TOKEN = _PreparedPlantToken()
 Prepared, schedule-free plant with concrete owners in fixed-size homogeneous
 registries, bounded path-to-optic bindings, and RNG streams.
 """
-struct PreparedPlant{D<:PlantDefinition,S,B,R<:PreparedPlantRNGs}
+struct PreparedPlant{
+    D<:PlantDefinition,
+    C<:AbstractComputeDevice,
+    X,
+    T<:Telescope,
+    A<:AbstractTimedAtmosphere,
+    S,
+    B,
+    R<:PreparedPlantRNGs,
+}
     definition::D
+    target::C
+    context::X
+    telescope::T
+    atmosphere::A
     controllable_optics::Memory{PreparedControllableOptic}
     controllable_optic_path_bindings::PreparedControllableOpticPathBindings
     sampled_aberrations::S
@@ -1156,6 +1240,10 @@ struct PreparedPlant{D<:PlantDefinition,S,B,R<:PreparedPlantRNGs}
     rngs::R
 
     function PreparedPlant(::_PreparedPlantToken, definition::D,
+        target::C,
+        context::X,
+        telescope::T,
+        atmosphere::A,
         controllable_optics::Memory{PreparedControllableOptic},
         bindings::PreparedControllableOpticPathBindings,
         sampled_aberrations::S,
@@ -1164,9 +1252,27 @@ struct PreparedPlant{D<:PlantDefinition,S,B,R<:PreparedPlantRNGs}
         paths::Memory{PreparedPathExecutor},
         acquisitions::Memory{PreparedAcquisitionOwner},
         rngs::R,
-    ) where {D<:PlantDefinition,S,B,R<:PreparedPlantRNGs}
-        return new{D,S,B,R}(
+    ) where {
+        D<:PlantDefinition,
+        C<:AbstractComputeDevice,
+        X,
+        T<:Telescope,
+        A<:AbstractTimedAtmosphere,
+        S,
+        B,
+        R<:PreparedPlantRNGs,
+    }
+        _prepared_device_execution_compute_device(context) == target ||
+            throw(PlantPreparationError(:plant, :execution_context_target,
+                "prepared execution context does not match the exact plant target"))
+        _require_exact_telescope_target(telescope, target)
+        _require_prepared_timed_atmosphere_target(atmosphere, target)
+        plant = new{D,C,X,T,A,S,B,R}(
             definition,
+            target,
+            context,
+            telescope,
+            atmosphere,
             controllable_optics,
             bindings,
             sampled_aberrations,
@@ -1176,9 +1282,14 @@ struct PreparedPlant{D<:PlantDefinition,S,B,R<:PreparedPlantRNGs}
             acquisitions,
             rngs,
         )
+        return _require_exact_prepared_plant_target(plant, target)
     end
 end
 
+@inline plant_definition(plant::PreparedPlant) = plant.definition
+@inline compute_device(plant::PreparedPlant) = plant.target
+@inline prepared_telescope(plant::PreparedPlant) = plant.telescope
+@inline prepared_atmosphere(plant::PreparedPlant) = plant.atmosphere
 @inline prepared_controllable_optics(plant::PreparedPlant) =
     plant.controllable_optics
 @inline prepared_controllable_optic_path_bindings(plant::PreparedPlant) =
@@ -1244,16 +1355,28 @@ end
 
 function prepare_path_executor(definition::OpticalPathDefinition,
     telescope::AbstractTelescope, atmosphere::AbstractAtmosphere)
+    context = _prepare_device_execution_context(
+        pupil_reflectivity(telescope))
+    return _with_completed_prepared_device_execution_context(context) do
+        prepare_path_executor(
+            definition, telescope, atmosphere, context)
+    end
+end
+
+function prepare_path_executor(definition::OpticalPathDefinition,
+    telescope::AbstractTelescope, atmosphere::AbstractAtmosphere,
+    context)
     source = freeze_source(path_source(definition))
     prepared = prepare_path_executor(path_model(definition), definition,
-        source, telescope, atmosphere)
+        source, telescope, atmosphere, context)
     return _require_prepared_path_executor(prepared, definition, source,
-        telescope, atmosphere)
+        telescope, atmosphere, context)
 end
 
 function _require_prepared_path_executor(prepared::PreparedPathExecutor,
     definition::OpticalPathDefinition, source::AbstractSource,
-    telescope::AbstractTelescope, atmosphere::AbstractAtmosphere)
+    telescope::AbstractTelescope, atmosphere::AbstractAtmosphere,
+    context)
     prepared.definition === definition || throw(PlantPreparationError(
         :path, :prepared_binding,
         "prepared path does not retain its exact definition"))
@@ -1266,6 +1389,9 @@ function _require_prepared_path_executor(prepared::PreparedPathExecutor,
     prepared.atmosphere === atmosphere || throw(PlantPreparationError(:path,
         :prepared_binding,
         "prepared path does not retain its plant atmosphere"))
+    prepared.context === context || throw(PlantPreparationError(:path,
+        :prepared_binding,
+        "prepared path does not retain its plant execution context"))
     validate_path_materialization_binding(prepared.materialization,
         prepared.input, prepared.atmosphere, prepared.source)
     validate_path_execution_binding(prepared.execution, prepared.input,
@@ -1276,7 +1402,7 @@ end
 
 function _require_prepared_path_executor(prepared,
     ::OpticalPathDefinition, ::AbstractSource, ::AbstractTelescope,
-    ::AbstractAtmosphere)
+    ::AbstractAtmosphere, context)
     throw(PlantPreparationError(
         :path, :invalid_preparation,
         "path model preparation must return PreparedPathExecutor; got $(typeof(prepared))"))
@@ -1284,12 +1410,13 @@ end
 
 function prepare_path_executor(model, definition::OpticalPathDefinition,
     source::AbstractSource, telescope::AbstractTelescope,
-    atmosphere::AbstractAtmosphere)
+    atmosphere::AbstractAtmosphere, context)
     throw(PlantPreparationError(:path, :unsupported_model,
         "path model $(typeof(model)) does not implement prepare_path_executor"))
 end
 
-function prepare_acquisition_owner(definition::AcquisitionDefinition,
+function _prepare_acquisition_owner_in_context(
+    definition::AcquisitionDefinition,
     path::PreparedPathExecutor)
     provider = prepare_acquisition_provider(acquisition_model(definition),
         definition, path)
@@ -1297,6 +1424,15 @@ function prepare_acquisition_owner(definition::AcquisitionDefinition,
         path)
     owner = PreparedAcquisitionOwner(definition, path, prepared)
     return _require_prepared_acquisition_owner(owner, definition, path)
+end
+
+function prepare_acquisition_owner(definition::AcquisitionDefinition,
+    path::PreparedPathExecutor)
+    result = _with_completed_prepared_device_execution_context(
+        path.context) do
+        _prepare_acquisition_owner_in_context(definition, path)
+    end
+    return result::PreparedAcquisitionOwner
 end
 
 function _require_prepared_acquisition_owner(
@@ -1311,6 +1447,9 @@ function _require_prepared_acquisition_owner(
     prepared.path_result === path.result || throw(PlantPreparationError(
         :acquisition, :prepared_binding,
         "prepared acquisition does not retain the exact path result"))
+    prepared.context === path.context || throw(PlantPreparationError(
+        :acquisition, :prepared_binding,
+        "prepared acquisition does not retain the exact path execution context"))
     validate_acquisition_provider_binding(prepared.provider,
         prepared.path_result)
     return prepared
@@ -1344,11 +1483,11 @@ function prepare_acquisition_provider(model,
 end
 
 function _prepare_path_executors(definitions::AbstractVector, telescope,
-    atmosphere)
+    atmosphere, context)
     paths = Memory{PreparedPathExecutor}(undef, length(definitions))
     @inbounds for index in eachindex(definitions)
         paths[index] = prepare_path_executor(
-            definitions[index], telescope, atmosphere)
+            definitions[index], telescope, atmosphere, context)
     end
     return paths
 end
@@ -1369,7 +1508,8 @@ function _prepare_acquisition_owners(definitions::AbstractVector, paths)
     @inbounds for index in eachindex(definitions)
         definition = definitions[index]
         path = _prepared_path_for_acquisition(definition, paths)
-        acquisitions[index] = prepare_acquisition_owner(definition, path)
+        acquisitions[index] =
+            _prepare_acquisition_owner_in_context(definition, path)
     end
     return acquisitions
 end
@@ -1404,10 +1544,9 @@ function _append_rng_binding_groups!(destination, groups)
     return destination
 end
 
-function _prepare_plant_rngs(definition::PlantDefinition,
+function _prepare_plant_rngs(atmosphere::AbstractTimedAtmosphere,
     paths::AbstractVector, acquisitions::AbstractVector, run_seed::UInt64,
     version::RNGDerivationVersion)
-    atmosphere = plant_atmosphere(definition)
     atmosphere_bindings = _atmosphere_rng_owner_bindings(atmosphere)
     path_bindings = _path_rng_owner_bindings(paths)
     acquisition_bindings = _acquisition_rng_owner_bindings(acquisitions)
@@ -1431,7 +1570,7 @@ function _prepare_plant_rngs(definition::PlantDefinition,
 end
 
 """
-    prepare_plant(definition; run_seed, rng_derivation_version,
+    prepare_plant(definition, target; run_seed, rng_derivation_version,
         command_endpoints=())
 
 Prepare all declared controllable optics, command endpoints, paths, and
@@ -1447,42 +1586,58 @@ stable identities rather than declaration position. Required optic placement
 and visibility declarations resolve to canonical bounded per-path bindings and
 co-placed groups.
 """
-function prepare_plant(definition::PlantDefinition;
+function prepare_plant(definition::PlantDefinition,
+    target::AbstractComputeDevice;
     run_seed,
     rng_derivation_version=_DEFAULT_RNG_DERIVATION_VERSION,
     command_endpoints=())
     seed = _prepare_run_seed(run_seed)
     version = _prepare_rng_derivation_version(rng_derivation_version)
-    endpoint_configurations =
-        _sorted_command_endpoint_configurations(command_endpoints)
-    optic_definitions =
-        _canonical_controllable_optic_definitions(definition)
-    prepared_endpoints = _prepare_plant_command_endpoints(definition,
-        endpoint_configurations, optic_definitions)
-    optics = _prepare_controllable_optics(definition, optic_definitions,
-        prepared_endpoints)
-    sampled_aberrations = _prepare_sampled_aberrations(definition)
-    paths = _prepare_path_executors(path_definitions(definition),
-        plant_telescope(definition), plant_atmosphere(definition))
-    bindings = _prepare_controllable_optic_path_bindings(optics, paths)
-    sampled_bindings = _prepare_sampled_aberration_path_bindings(
-        sampled_aberrations, paths)
-    acquisitions = _prepare_acquisition_owners(
-        acquisition_definitions(definition), paths)
-    rngs = _prepare_plant_rngs(definition, paths, acquisitions, seed,
-        version)
-    return PreparedPlant(
-        _PREPARED_PLANT_TOKEN,
-        definition,
-        optics,
-        bindings,
-        sampled_aberrations,
-        sampled_bindings,
-        prepared_endpoints,
-        paths,
-        acquisitions,
-        rngs,
-    )
+    context = _prepare_device_execution_context(target)
+    _prepared_device_execution_compute_device(context) == target ||
+        throw(PlantPreparationError(:plant, :execution_context_target,
+            "prepared execution context does not match the requested exact target"))
+    return _with_completed_prepared_device_execution_context(context) do
+        telescope = prepare_telescope(
+            telescope_definition(definition), target)
+        atmosphere = prepare_timed_atmosphere(
+            atmosphere_definition(definition), telescope, target)
+        endpoint_configurations =
+            _sorted_command_endpoint_configurations(command_endpoints)
+        optic_definitions =
+            _canonical_controllable_optic_definitions(definition)
+        prepared_endpoints = _prepare_plant_command_endpoints(definition,
+            endpoint_configurations, optic_definitions, target)
+        optics = _prepare_controllable_optics(definition, optic_definitions,
+            prepared_endpoints, telescope, atmosphere)
+        sampled_aberrations =
+            _prepare_sampled_aberrations(definition, target)
+        paths = _prepare_path_executors(path_definitions(definition),
+            telescope, atmosphere, context)
+        bindings = _prepare_controllable_optic_path_bindings(optics, paths)
+        sampled_bindings = _prepare_sampled_aberration_path_bindings(
+            sampled_aberrations, paths)
+        acquisitions = _prepare_acquisition_owners(
+            acquisition_definitions(definition), paths)
+        rngs = _prepare_plant_rngs(
+            atmosphere, paths, acquisitions, seed, version)
+        return PreparedPlant(
+            _PREPARED_PLANT_TOKEN,
+            definition,
+            target,
+            context,
+            telescope,
+            atmosphere,
+            optics,
+            bindings,
+            sampled_aberrations,
+            sampled_bindings,
+            prepared_endpoints,
+            paths,
+            acquisitions,
+            rngs,
+        )
+    end
 end
 
 struct _PreparedAcquisitionSelectionToken end
@@ -1698,40 +1853,48 @@ function prepare_acquisition_selection(plant::PreparedPlant, ids)
 end
 
 Base.@noinline function _require_selected_path_binding(
-    path::PreparedPathExecutor, atmosphere)
+    path::PreparedPathExecutor, atmosphere, context)
     path.atmosphere === atmosphere || throw(PlantPreparationError(:path,
         :prepared_binding,
         "selected path does not retain the prepared plant atmosphere"))
+    path.context === context || throw(PlantPreparationError(:path,
+        :prepared_binding,
+        "selected path does not retain the prepared plant execution context"))
     _require_current_path_binding(path)
     return nothing
 end
 
-function _require_selected_path_bindings(paths::AbstractVector, atmosphere)
+function _require_selected_path_bindings(
+    paths::AbstractVector, atmosphere, context)
     for path in paths
-        _require_selected_path_binding(path, atmosphere)
+        _require_selected_path_binding(path, atmosphere, context)
     end
     return nothing
 end
 
 Base.@noinline function _require_selected_acquisition_binding(
-    acquisition::PreparedAcquisitionOwner)
+    acquisition::PreparedAcquisitionOwner, context)
+    acquisition.context === context || throw(PlantPreparationError(
+        :acquisition, :prepared_binding,
+        "selected acquisition does not retain the prepared plant execution context"))
     validate_acquisition_provider_binding(acquisition.provider,
         acquisition.path_result)
     return nothing
 end
 
 function _require_selected_acquisition_bindings(
-    acquisitions::AbstractVector)
+    acquisitions::AbstractVector, context)
     for acquisition in acquisitions
-        _require_selected_acquisition_binding(acquisition)
+        _require_selected_acquisition_binding(acquisition, context)
     end
     return nothing
 end
 
 function _require_selection_bindings(selection::PreparedAcquisitionSelection)
-    atmosphere = plant_atmosphere(selection.plant.definition)
-    _require_selected_path_bindings(selection.paths, atmosphere)
-    _require_selected_acquisition_bindings(selection.acquisitions)
+    atmosphere = prepared_atmosphere(selection.plant)
+    context = selection.plant.context
+    _require_selected_path_bindings(selection.paths, atmosphere, context)
+    _require_selected_acquisition_bindings(selection.acquisitions, context)
     validate_atmosphere_rng_binding(selection.plant.rngs.atmosphere,
         atmosphere)
     _require_selected_rng_owner_bindings(selection.paths,
@@ -1813,7 +1976,7 @@ end
 
 Base.@noinline function _execute_selected_path!(
     path::PreparedPathExecutor, rngs::PreparedOwnerRNGs)
-    execute_path!(path, rngs)
+    _execute_path_in_context!(path, rngs)
     return nothing
 end
 
@@ -1830,7 +1993,7 @@ end
 
 Base.@noinline function _execute_selected_acquisition!(
     acquisition::PreparedAcquisitionOwner, rngs::PreparedOwnerRNGs)
-    execute_acquisition!(acquisition, rngs)
+    _execute_acquisition_in_context!(acquisition, rngs)
     return nothing
 end
 
@@ -1876,6 +2039,15 @@ function _execute_selected_epoch!(selection::PreparedAcquisitionSelection,
     return selection
 end
 
+function _execute_acquisition_selection_in_context!(
+    selection::PreparedAcquisitionSelection,
+    epoch::AtmosphereEpoch)
+    atmosphere = _require_selection_atmosphere(
+        _require_selection_bindings(selection))
+    _validate_selection_epoch!(selection, atmosphere, epoch)
+    return _execute_selected_epoch!(selection, atmosphere, epoch)
+end
+
 """
     execute_acquisition_selection!(selection, epoch)
 
@@ -1886,8 +2058,21 @@ registry with the exact owner-derived RNG streams prepared by `prepare_plant`.
 function execute_acquisition_selection!(
     selection::PreparedAcquisitionSelection,
     epoch::AtmosphereEpoch)
+    result = _with_completed_prepared_device_execution_context(
+        selection.plant.context) do
+        _execute_acquisition_selection_in_context!(selection, epoch)
+    end
+    return result::typeof(selection)
+end
+
+function _execute_acquisition_selection_at_in_context!(
+    selection::PreparedAcquisitionSelection,
+    model_time::Real)
     atmosphere = _require_selection_atmosphere(
         _require_selection_bindings(selection))
+    atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
+        selection.plant.rngs.atmosphere)
+    epoch = advance_to!(atmosphere, model_time, atmosphere_rng)
     _validate_selection_epoch!(selection, atmosphere, epoch)
     return _execute_selected_epoch!(selection, atmosphere, epoch)
 end
@@ -1903,11 +2088,9 @@ acquisition randomness comes from exact streams owned by the prepared plant.
 function execute_acquisition_selection_at!(
     selection::PreparedAcquisitionSelection,
     model_time::Real)
-    atmosphere = _require_selection_atmosphere(
-        _require_selection_bindings(selection))
-    atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
-        selection.plant.rngs.atmosphere)
-    epoch = advance_to!(atmosphere, model_time, atmosphere_rng)
-    _validate_selection_epoch!(selection, atmosphere, epoch)
-    return _execute_selected_epoch!(selection, atmosphere, epoch)
+    result = _with_completed_prepared_device_execution_context(
+        selection.plant.context) do
+        _execute_acquisition_selection_at_in_context!(selection, model_time)
+    end
+    return result::typeof(selection)
 end

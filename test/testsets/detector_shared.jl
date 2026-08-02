@@ -23,6 +23,74 @@
         qe=0.5, response_model=NullFrameResponse())
     short_plan = prepare_detector_acquisition(short_exposure, shared_rate)
     long_plan = prepare_detector_acquisition(long_exposure, shared_rate)
+    host_target = AdaptiveOpticsSim.Backends.HostComputeDevice()
+    @test AdaptiveOpticsSim.Detectors._require_exact_detector_target(
+        short_exposure, host_target) === short_exposure
+    @test AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
+        short_exposure, short_plan, host_target) === short_plan
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
+            short_exposure, long_plan, host_target)
+    end
+    wrong_target = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        CUDABackend(), 0)
+    wrong_target_error = try
+        AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
+            short_exposure, short_plan, wrong_target)
+        nothing
+    catch error
+        error
+    end
+    @test wrong_target_error isa AdaptiveOpticsSim.Backends.ComputeDeviceError
+    @test wrong_target_error.operation ===
+        :validate_detector_acquisition_target
+
+    for counting_detector in (
+        SPADArrayDetector((4, 4); noise=NoiseNone()),
+        MKIDArrayDetector(noise=NoiseNone()),
+    )
+        @test AdaptiveOpticsSim.Detectors._require_exact_counting_detector_target(
+            counting_detector, host_target) === counting_detector
+        counting_target_error = try
+            AdaptiveOpticsSim.Detectors._require_exact_counting_detector_target(
+                counting_detector, wrong_target)
+            nothing
+        catch error
+            error
+        end
+        @test counting_target_error isa
+            AdaptiveOpticsSim.Backends.ComputeDeviceError
+        @test counting_target_error.operation ===
+            :validate_detector_acquisition_target
+    end
+    @test wrong_target_error.reason === :wrong_device
+    @test wrong_target_error.device == wrong_target
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.Detectors._require_exact_detector_readout_products_target(
+            UnsupportedExactTargetReadoutProducts(), host_target)
+    end
+    sampled_products = AdaptiveOpticsSim.Detectors.SampledFrameReadoutProducts(
+        nothing, zeros(2, 2), zeros(2, 2, 2))
+    @test AdaptiveOpticsSim.Detectors._require_exact_detector_readout_products_target(
+        sampled_products, host_target) === sampled_products
+    rich_kernel = [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0]
+    rich_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+        qe=SampledQuantumEfficiency([0.5e-6, 0.6e-6], [0.4, 0.8]),
+        sensor=CMOSSensor(
+            readout_noise_model=CMOSReadNoiseMap(ones(4, 4)),
+            output_model=StaticCMOSOutputPattern(
+                2, [1.0, 1.0], [0.0, 0.0])),
+        response_model=SampledFrameResponse(rich_kernel),
+        charge_coupling_model=InterpixelCapacitance(rich_kernel),
+        defect_model=CompositeDetectorDefectModel(
+            PixelResponseNonuniformity(ones(4, 4)),
+            DarkSignalNonuniformity(zeros(4, 4)),
+            BadPixelMask(falses(4, 4))),
+        background_flux=fill(0.1, 4, 4),
+        background_map=fill(0.05, 4, 4))
+    rich_plan = prepare_detector_acquisition(rich_detector, shared_rate)
+    @test AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
+        rich_detector, rich_plan, host_target) === rich_plan
     @test !applicable(DetectorAcquisitionPlan, short_exposure.params,
         shared_rate.metadata, 1.0, 1.0)
     @test !applicable(typeof(short_plan),
@@ -261,8 +329,10 @@
     )
     for (label, builder) in prepared_readout_builders
         prepared_detector = builder()
-        prepare_detector_acquisition(prepared_detector,
+        prepared_plan = prepare_detector_acquisition(prepared_detector,
             prepared_readout_rate)
+        @test AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
+            prepared_detector, prepared_plan, host_target) === prepared_plan
         @test readout_products(prepared_detector) isa FrameReadoutProducts
         @test !(readout_products(prepared_detector) isa
             NoFrameReadoutProducts)

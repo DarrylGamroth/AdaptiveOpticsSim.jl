@@ -400,26 +400,277 @@ function _require_prepared_direct_workspace(
     return nothing
 end
 
-function _prepare_direct_field!(field::ElectricField,
-    pupil::PupilFunction, input::PreparedPupilImagingInput)
+@inline function _require_prepared_direct_input(
+    pupil::PupilFunction,
+    ::ElectricField,
+    input::PreparedPupilImagingInput,
+)
     pupil.metadata === input.metadata || throw(InvalidConfiguration(
         "direct-imaging pupil does not match its prepared plan"))
     pupil.amplitude === input.amplitude || throw(InvalidConfiguration(
         "direct-imaging pupil amplitude storage does not match its prepared plan"))
     pupil.opd === input.opd || throw(InvalidConfiguration(
         "direct-imaging pupil OPD storage does not match its prepared plan"))
-    fill_electric_field!(field, pupil, input.formation)
-    return field
+    return nothing
 end
 
-function _prepare_direct_field!(field::ElectricField,
-    input_field::ElectricField, input::PreparedFieldImagingInput)
+@inline function _require_prepared_direct_input(
+    input_field::ElectricField,
+    field::ElectricField,
+    input::PreparedFieldImagingInput,
+)
     input_field === field || throw(InvalidConfiguration(
         "preformed direct-imaging input must be its prepared field"))
     input_field.metadata === input.metadata || throw(InvalidConfiguration(
         "preformed direct-imaging field metadata does not match its prepared plan"))
     input_field.values === input.values || throw(InvalidConfiguration(
         "preformed direct-imaging field storage does not match its prepared plan"))
+    return nothing
+end
+
+@noinline function _throw_wrong_direct_imaging_target(
+    target::AbstractComputeDevice,
+    label::AbstractString,
+    actual::AbstractComputeDevice,
+)
+    _throw_compute_device_error(
+        :validate_direct_imaging_target,
+        :wrong_device,
+        target,
+        "$label occupies $(actual)",
+    )
+end
+
+@inline function _require_exact_direct_imaging_array_target(
+    storage::AbstractArray,
+    target::AbstractComputeDevice,
+    label::AbstractString,
+)
+    actual = compute_device(storage)
+    actual == target || _throw_wrong_direct_imaging_target(
+        target, label, actual)
+    return storage
+end
+
+@inline function _require_exact_direct_imaging_metadata_target(
+    metadata::OpticalPlaneMetadata,
+    target::AbstractComputeDevice,
+    label::AbstractString,
+)
+    actual = metadata.device
+    actual == target || _throw_wrong_direct_imaging_target(
+        target, "$label metadata", actual)
+    return metadata
+end
+
+function _require_exact_direct_imaging_pupil_target(
+    pupil::PupilFunction,
+    target::AbstractComputeDevice,
+)
+    _require_exact_direct_imaging_metadata_target(
+        pupil.metadata, target, "direct-imaging pupil")
+    _require_exact_direct_imaging_array_target(
+        pupil.support, target, "direct-imaging pupil support")
+    _require_exact_direct_imaging_array_target(
+        pupil.amplitude, target, "direct-imaging pupil amplitude")
+    _require_exact_direct_imaging_array_target(
+        pupil.opd, target, "direct-imaging pupil OPD")
+    size(pupil.support) == pupil.metadata.dimensions || throw(
+        DimensionMismatchError(
+            "direct-imaging pupil support dimensions do not match its metadata"))
+    typeof(backend(pupil.support)) === typeof(pupil.metadata.backend) || throw(
+        InvalidConfiguration(
+            "direct-imaging pupil support backend does not match its metadata"))
+    validate_plane_storage(pupil.metadata, pupil.amplitude;
+        label="direct-imaging pupil amplitude")
+    validate_plane_storage(pupil.metadata, pupil.opd;
+        label="direct-imaging pupil OPD")
+    return pupil
+end
+
+function _require_exact_direct_imaging_input_target(
+    input::PreparedPupilImagingInput,
+    target::AbstractComputeDevice,
+)
+    input.formation.input_metadata === input.metadata || throw(
+        InvalidConfiguration(
+            "direct-imaging pupil formation does not match its prepared input"))
+    _require_exact_direct_imaging_metadata_target(
+        input.metadata, target, "direct-imaging planned pupil")
+    _require_exact_direct_imaging_array_target(
+        input.amplitude, target, "direct-imaging planned pupil amplitude")
+    _require_exact_direct_imaging_array_target(
+        input.opd, target, "direct-imaging planned pupil OPD")
+    validate_plane_storage(input.metadata, input.amplitude;
+        label="direct-imaging planned pupil amplitude")
+    validate_plane_storage(input.metadata, input.opd;
+        label="direct-imaging planned pupil OPD")
+    return input
+end
+
+function _require_exact_direct_imaging_input_target(
+    input::PreparedFieldImagingInput,
+    target::AbstractComputeDevice,
+)
+    _require_exact_direct_imaging_metadata_target(
+        input.metadata, target, "direct-imaging planned field")
+    _require_exact_direct_imaging_array_target(
+        input.values, target, "direct-imaging planned field storage")
+    validate_plane_storage(input.metadata, input.values;
+        label="direct-imaging planned field")
+    return input
+end
+
+function _require_exact_direct_imaging_input_target(
+    input::AbstractDirectImagingInputPlan,
+    ::AbstractComputeDevice,
+)
+    throw(InvalidConfiguration(
+        "no exact-target validator is defined for direct-imaging input plan $(typeof(input))"))
+end
+
+function _require_exact_direct_imaging_target(
+    plan::DirectImagingPlan,
+    target::AbstractComputeDevice,
+)
+    _require_exact_direct_imaging_input_target(plan.input, target)
+    _require_exact_direct_imaging_metadata_target(
+        plan.field_metadata, target, "direct-imaging field")
+    _require_exact_direct_imaging_array_target(
+        plan.field_values, target, "direct-imaging field storage")
+    validate_plane_storage(plan.field_metadata, plan.field_values;
+        label="direct-imaging field")
+
+    _require_exact_direct_imaging_metadata_target(
+        plan.output_metadata, target, "direct-imaging output")
+    _require_exact_direct_imaging_array_target(
+        plan.output_values, target, "direct-imaging output storage")
+    validate_plane_storage(plan.output_metadata, plan.output_values;
+        label="direct-imaging output")
+
+    propagation = plan.propagation
+    propagation.input_metadata === plan.field_metadata || throw(
+        InvalidConfiguration(
+            "direct-imaging propagation does not match its prepared field"))
+    _require_exact_direct_imaging_metadata_target(
+        propagation.output_metadata, target,
+        "direct-imaging propagation output")
+    _require_exact_direct_imaging_array_target(
+        propagation.state.scratch, target,
+        "direct-imaging propagation scratch")
+    validate_plane_storage(
+        propagation.output_metadata,
+        propagation.state.scratch;
+        label="direct-imaging propagation scratch",
+    )
+
+    _require_exact_direct_imaging_array_target(
+        plan.unshifted_intensity, target,
+        "direct-imaging unshifted intensity scratch")
+    size(plan.unshifted_intensity) == plan.output_metadata.dimensions || throw(
+        DimensionMismatchError(
+            "direct-imaging unshifted intensity dimensions do not match its output"))
+    eltype(plan.unshifted_intensity) ===
+        plan.output_metadata.numeric_type || throw(InvalidConfiguration(
+        "direct-imaging unshifted intensity numeric type does not match its output"))
+    typeof(backend(plan.unshifted_intensity)) ===
+        typeof(plan.output_metadata.backend) || throw(InvalidConfiguration(
+        "direct-imaging unshifted intensity backend does not match its output"))
+    return plan
+end
+
+function _require_exact_direct_imaging_target(
+    prepared::PreparedDirectImaging,
+    target::AbstractComputeDevice,
+)
+    _require_prepared_direct_input(
+        prepared.input, prepared.field, prepared.plan.input)
+    _require_prepared_direct_field(prepared.field, prepared.plan)
+    _require_prepared_direct_output(prepared.output, prepared.plan)
+    _require_prepared_direct_workspace(prepared.workspace, prepared.plan)
+    _require_exact_direct_imaging_target(prepared.plan, target)
+    _require_exact_direct_imaging_owner_input_target(prepared.input, target)
+    return prepared
+end
+
+@inline _require_exact_direct_imaging_owner_input_target(
+    pupil::PupilFunction,
+    target::AbstractComputeDevice,
+) = _require_exact_direct_imaging_pupil_target(pupil, target)
+
+function _require_exact_direct_imaging_owner_input_target(
+    field::ElectricField,
+    target::AbstractComputeDevice,
+)
+    _require_exact_direct_imaging_metadata_target(
+        field.metadata, target, "direct-imaging input field")
+    _require_exact_direct_imaging_array_target(
+        field.values, target, "direct-imaging input field storage")
+    validate_plane_storage(field.metadata, field.values;
+        label="direct-imaging input field")
+    return field
+end
+
+function _require_exact_direct_imaging_target(
+    prepared::PreparedIncoherentDirectImaging,
+    target::AbstractComputeDevice,
+)
+    _require_direct_component_products(prepared.components, prepared.products)
+    prepared.output.metadata === prepared.accumulation.output_metadata || throw(
+        InvalidConfiguration(
+            "direct-imaging incoherent output does not match its accumulation plan"))
+    length(prepared.products) == length(prepared.accumulation.inputs.metadata) ||
+        throw(DimensionMismatchError(
+            "direct-imaging incoherent product count does not match its accumulation plan"))
+    _require_prepared_intensity_inputs(
+        prepared.output.values,
+        prepared.products,
+        prepared.accumulation.inputs.metadata,
+        prepared.accumulation.inputs.values,
+    )
+    @inbounds for component in prepared.components
+        _require_exact_direct_imaging_target(component, target)
+    end
+    _require_exact_direct_imaging_metadata_target(
+        prepared.output.metadata, target, "direct-imaging incoherent output")
+    _require_exact_direct_imaging_array_target(
+        prepared.output.values, target,
+        "direct-imaging incoherent output storage")
+    validate_plane_storage(prepared.output.metadata, prepared.output.values;
+        label="direct-imaging incoherent output")
+    return prepared
+end
+
+function _require_exact_direct_imaging_target(
+    prepared::PreparedBundledDirectImaging,
+    target::AbstractComputeDevice,
+)
+    _require_direct_component_products(
+        prepared.components, prepared.output.products)
+    @inbounds for component in prepared.components
+        _require_exact_direct_imaging_target(component, target)
+    end
+    return prepared
+end
+
+function _require_exact_direct_imaging_target(
+    prepared,
+    ::AbstractComputeDevice,
+)
+    throw(InvalidConfiguration(
+        "no exact-target validator is defined for prepared direct-imaging owner $(typeof(prepared))"))
+end
+
+function _prepare_direct_field!(field::ElectricField,
+    pupil::PupilFunction, input::PreparedPupilImagingInput)
+    _require_prepared_direct_input(pupil, field, input)
+    fill_electric_field!(field, pupil, input.formation)
+    return field
+end
+
+function _prepare_direct_field!(field::ElectricField,
+    input_field::ElectricField, input::PreparedFieldImagingInput)
+    _require_prepared_direct_input(input_field, field, input)
     return field
 end
 

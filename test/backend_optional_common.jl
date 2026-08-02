@@ -24,6 +24,31 @@ alternate_compute_device_identifier(
     identifier::Integer,
 ) = isone(identifier) ? identifier + one(identifier) : one(identifier)
 
+function backend_current_stream(
+    ::Type{AdaptiveOpticsSim.Backends.CUDABackendTag})
+    return Base.invokelatest(
+        getproperty(getfield(Main, :CUDA), :stream))
+end
+
+function backend_current_stream(
+    ::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag})
+    return Base.invokelatest(
+        getproperty(getfield(Main, :AMDGPU), :stream))
+end
+
+function backend_stream_isdone(
+    ::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}, stream)
+    return Base.invokelatest(
+        getproperty(getfield(Main, :CUDA), :isdone), stream)
+end
+
+function backend_stream_isdone(
+    ::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}, stream)
+    return Base.invokelatest(
+        getproperty(getfield(getfield(Main, :AMDGPU), :HIP), :isdone),
+        stream)
+end
+
 function run_optional_exact_compute_device_checks(
     ::Type{B},
     BackendArray,
@@ -63,18 +88,111 @@ function run_optional_exact_compute_device_checks(
 
     context = AdaptiveOpticsSim.Backends._prepare_device_execution_context(
         selected_device)
+    retained_stream = getfield(context, :stream)
+    caller_stream = backend_current_stream(B)
     prepared_device =
         AdaptiveOpticsSim.Backends._prepared_device_execution_compute_device(
             context)
     @test prepared_device == selected_device
     @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
-    context_device =
+    context_observation =
         AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
             context) do
-            compute_device(BackendArray(zeros(Float32, 1)))
+            (
+                compute_device(BackendArray(zeros(Float32, 1))),
+                backend_current_stream(B),
+            )
         end
-    @test context_device == selected_device
+    @test context_observation[1] == selected_device
+    @test context_observation[2] === retained_stream
     @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
+    @test backend_current_stream(B) === caller_stream
+
+    nested_context =
+        AdaptiveOpticsSim.Backends._prepare_device_execution_context(
+            selected_device)
+    nested_stream = getfield(nested_context, :stream)
+    nested_error =
+        AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
+            context) do
+            @test backend_current_stream(B) === retained_stream
+            AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
+                nested_context) do
+                @test backend_current_stream(B) === nested_stream
+            end
+            @test backend_current_stream(B) === retained_stream
+            caught_error = try
+                AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
+                    nested_context) do
+                    @test backend_current_stream(B) === nested_stream
+                    error("injected nested prepared-context failure")
+                end
+                nothing
+            catch caught
+                caught
+            end
+            @test backend_current_stream(B) === retained_stream
+            caught_error
+        end
+    @test nested_error isa ErrorException
+    @test backend_current_stream(B) === caller_stream
+
+    prepared_error = try
+        AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
+            context) do
+            @test backend_current_stream(B) === retained_stream
+            error("injected prepared-context failure")
+        end
+        nothing
+    catch caught
+        caught
+    end
+    @test prepared_error isa ErrorException
+    @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
+    @test backend_current_stream(B) === caller_stream
+
+    if AdaptiveOpticsSim.Backends.compute_device_is_available(
+        alternate_availability)
+        caller_context =
+            AdaptiveOpticsSim.Backends._prepare_device_execution_context(
+                caller_device)
+        alternate_context =
+            AdaptiveOpticsSim.Backends._prepare_device_execution_context(
+                alternate_device)
+        caller_context_stream = getfield(caller_context, :stream)
+        alternate_context_stream = getfield(alternate_context, :stream)
+        alternate_error =
+            AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
+                caller_context) do
+                @test backend_current_stream(B) === caller_context_stream
+                AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
+                    alternate_context) do
+                    @test compute_device(BackendArray(zeros(Float32, 1))) ==
+                        alternate_device
+                    @test backend_current_stream(B) ===
+                        alternate_context_stream
+                end
+                @test compute_device(BackendArray(zeros(Float32, 1))) ==
+                    caller_device
+                @test backend_current_stream(B) === caller_context_stream
+                caught_error = try
+                    AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
+                        alternate_context) do
+                        error("injected alternate-device context failure")
+                    end
+                    nothing
+                catch caught
+                    caught
+                end
+                @test compute_device(BackendArray(zeros(Float32, 1))) ==
+                    caller_device
+                @test backend_current_stream(B) === caller_context_stream
+                caught_error
+            end
+        @test alternate_error isa ErrorException
+        @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
+        @test backend_current_stream(B) === caller_stream
+    end
 
     injected_error = try
         AdaptiveOpticsSim.Backends._with_compute_device(
@@ -197,13 +315,18 @@ Plant.prepare_controllable_optic(
     ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
 ) = OptionalPreparedControllerRoutingModel()
 
+Plant.validate_controllable_optic_target(
+    prepared::OptionalPreparedControllerRoutingModel,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+) = prepared
+
 function run_optional_controller_routing_checks(::Type{B},
     BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     selector = backend_selector(B)
     telescope = Telescope(resolution=8, diameter=T(4),
         central_obstruction=zero(T), T=T, backend=selector)
-    atmosphere = OptionalStaticAtmosphere(telescope; T, backend=selector)
+    target = compute_device(pupil_reflectivity(telescope))
     schema = PlantCommandSchema(
         T,
         (2,);
@@ -221,17 +344,22 @@ function run_optional_controller_routing_checks(::Type{B},
         effective_time_policy=CommandEffectiveTimePolicy(),
         silence_policy=CommandSilencePolicy(),
     )
-    definition = PlantDefinition(; telescope, atmosphere,
+    definition = PlantDefinition(
+        telescope=AdaptiveOpticsSim.Optics.TelescopeDefinition(
+            resolution=8, diameter=T(4), central_obstruction=zero(T),
+            revision=1, T=T),
+        atmosphere=KolmogorovAtmosphereDefinition(
+            r0=T(0.2), L0=T(25), T=T),
         controllable_optics=(
             ControllableOpticDefinition(:optional_controller_routing,
                 OptionalControllerRoutingModel(), (schema,);
                 placement=PupilPlanePlacement(),
                 visibility=AllPathVisibility()),))
-    plant = prepare_plant(definition;
+    plant = prepare_plant(definition, target;
         run_seed=0x6101,
         command_endpoints=(
             CommandEndpointConfiguration(:optional_controller_routing,
-                zeros(T, 2); capacity=2, backend=selector),))
+                zeros(T, 2); capacity=2),))
 
     flat_output = BackendArray(T[0, 1, 2, 0])
     routed_output = @view flat_output[2:3]
@@ -306,6 +434,8 @@ struct OptionalPreparedFrameAcquisitionModel{T<:AbstractFloat}
     exposure::T
 end
 
+struct OptionalFailingPreparedPathModel end
+
 struct OptionalIlluminationIdentityExecution{P}
     product::P
 end
@@ -321,12 +451,38 @@ Plant.plant_model_definition_style(
     ::Type{<:OptionalPreparedFrameAcquisitionModel}) =
     ColdPlantModelDefinition()
 
+Plant.plant_model_definition_style(
+    ::Type{OptionalFailingPreparedPathModel}) = ColdPlantModelDefinition()
+
+function Plant.prepare_path_executor(
+    ::OptionalFailingPreparedPathModel,
+    ::OpticalPathDefinition,
+    ::AdaptiveOpticsSim.Optics.AbstractSource,
+    ::Telescope,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
+)
+    throw(PlantPreparationError(
+        :path, :injected_preparation_failure,
+        "optional backend test injected a preparation failure"))
+end
+
 function Plant.validate_path_execution_binding(
     execution::OptionalIlluminationIdentityExecution, input, result)
     execution.product === input && input === result || throw(
         PlantPreparationError(:path, :prepared_binding,
             "optional illumination identity binding changed"))
     return nothing
+end
+
+function Plant.validate_path_execution_target(
+    execution::OptionalIlluminationIdentityExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_product_target(
+        execution.product, target,
+        "optional illumination identity product")
+    return execution
 end
 
 function Plant.execute_path!(result, input,
@@ -342,6 +498,7 @@ function Plant.prepare_path_executor(
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -355,6 +512,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=optional_path_materialization(atmosphere, telescope,
             source, pupil),
         optical_model=(kind=:direct_imaging,
@@ -370,6 +528,7 @@ function Plant.prepare_path_executor(
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     values = similar(pupil_reflectivity(telescope), T,
@@ -398,6 +557,7 @@ function Plant.prepare_path_executor(
         destination,
         destination,
         execution;
+        context=context,
         materialization=entry,
         optical_model=(kind=:uniform_detector_illumination,
             photon_rate=T(model.photon_rate)),
@@ -471,23 +631,20 @@ function run_optional_prepared_plant_checks(::Type{B},
     BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     T = Float32
-    telescope = Telescope(resolution=8, diameter=T(4),
-        central_obstruction=zero(T), T=T, backend=selector)
-    atmosphere = MultiLayerAtmosphere(telescope;
-        r0=T(0.2),
-        L0=T(25),
-        fractional_cn2=T[0.7, 0.3],
-        wind_speed=T[8, 4],
-        wind_direction=T[0, 90],
-        altitude=T[0, 5_000],
-        layer_ids=(:ground, :high),
-        T=T,
-        backend=selector,
-    )
+    caller_device = compute_device(
+        AdaptiveOpticsSim.Backends.allocate_array(selector, UInt8, 1))
+    caller_stream = backend_current_stream(B)
+    target = caller_device
+    host_target = AdaptiveOpticsSim.Backends.HostComputeDevice()
+    telescope_definition = AdaptiveOpticsSim.Optics.TelescopeDefinition(
+        resolution=8, diameter=T(4), central_obstruction=zero(T),
+        revision=1, T=T)
+    host_telescope = AdaptiveOpticsSim.Optics.prepare_telescope(
+        telescope_definition, host_target)
     source = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=T(3), T=T)
     sampled_prototype =
-        PupilFunction(telescope; T=T, backend=selector)
+        PupilFunction(host_telescope; T=T, backend=CPUBackend())
     sampled_opd = similar(sampled_prototype.opd)
     fill!(sampled_opd, T(0.125))
     sampled_metadata = OpticalPlaneMetadata(
@@ -512,6 +669,11 @@ function run_optional_prepared_plant_checks(::Type{B},
     )
     path_definition = OpticalPathDefinition(:science, source,
         OptionalPreparedDirectPathModel(2))
+    shack_hartmann_path_definition = OpticalPathDefinition(
+        :shack_hartmann,
+        source,
+        DeviceModelMatrixWFSPathModel(DeviceModelMatrixShackHartmann()),
+    )
     illumination_path_definition = OpticalPathDefinition(:illumination,
         source, OptionalPreparedIlluminationPathModel(T(8)))
     fast_definition = AcquisitionDefinition(:fast_science, :science,
@@ -520,37 +682,173 @@ function run_optional_prepared_plant_checks(::Type{B},
         OptionalPreparedFrameAcquisitionModel(T(0.75)))
     illumination_definition = AcquisitionDefinition(:illumination_frame,
         :illumination, OptionalPreparedFrameAcquisitionModel(T(0.125)))
-    definition = PlantDefinition(; telescope, atmosphere,
+    definition = PlantDefinition(
+        telescope=telescope_definition,
+        atmosphere=MultiLayerAtmosphereDefinition(
+            r0=T(0.2),
+            L0=T(25),
+            fractional_cn2=T[0.7, 0.3],
+            wind_speed=T[8, 4],
+            wind_direction=T[0, 90],
+            altitude=T[0, 5_000],
+            layer_ids=(:ground, :high),
+            T=T,
+        ),
         sampled_aberrations=(sampled_aberration,),
         paths=(science=path_definition,
+            shack_hartmann=shack_hartmann_path_definition,
             illumination=illumination_path_definition),
         acquisitions=(fast_science=fast_definition,
             slow_science=slow_definition,
             illumination_frame=illumination_definition))
 
-    plant = prepare_plant(definition; run_seed=0x6100)
+    cpu_plant = prepare_plant(definition, host_target; run_seed=0x6100)
+    plant = prepare_plant(definition, target; run_seed=0x6100)
+    @test backend_stream_isdone(B, getfield(plant.context, :stream))
+    @test backend_current_stream(B) === caller_stream
+    @test plant_definition(cpu_plant) === definition
+    @test plant_definition(plant) === definition
+    @test compute_device(cpu_plant) == host_target
+    @test compute_device(plant) == target
+    @test Plant._require_exact_prepared_plant_target(
+        cpu_plant, host_target) === cpu_plant
+    @test Plant._require_exact_prepared_plant_target(plant, target) === plant
+    @test Tuple(path_id(path.definition) for path in prepared_paths(cpu_plant)) ==
+        Tuple(path_id(path.definition) for path in prepared_paths(plant))
+    @test Tuple(acquisition_id(owner.definition)
+        for owner in prepared_acquisitions(cpu_plant)) ==
+        Tuple(acquisition_id(owner.definition)
+            for owner in prepared_acquisitions(plant))
+    @test Tuple(sampled_aberration_id(aberration)
+        for aberration in prepared_sampled_aberrations(cpu_plant)) ==
+        Tuple(sampled_aberration_id(aberration)
+            for aberration in prepared_sampled_aberrations(plant))
+    @test prepared_atmosphere(cpu_plant).params.layer_ids ==
+        prepared_atmosphere(plant).params.layer_ids
+    @test rng_replay_metadata(cpu_plant) == rng_replay_metadata(plant)
+    @test compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+        selector, UInt8, 1)) == caller_device
+
+    failure_definition = PlantDefinition(
+        telescope=AdaptiveOpticsSim.Optics.TelescopeDefinition(
+            resolution=4, diameter=T(4), central_obstruction=zero(T),
+            revision=1, T=T),
+        atmosphere=KolmogorovAtmosphereDefinition(
+            r0=T(0.2), L0=T(25), T=T),
+        paths=(OpticalPathDefinition(
+            :injected_failure, source,
+            OptionalFailingPreparedPathModel()),),
+    )
+    @test_throws PlantPreparationError prepare_plant(
+        failure_definition, target; run_seed=0x6101)
+    @test compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+        selector, UInt8, 1)) == caller_device
+
+    alternate_target = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        selector,
+        alternate_compute_device_identifier(
+            B,
+            AdaptiveOpticsSim.Backends.compute_device_identifier(target),
+        ),
+    )
+    alternate_availability =
+        AdaptiveOpticsSim.Backends.compute_device_availability(
+            alternate_target)
+    if AdaptiveOpticsSim.Backends.compute_device_is_available(
+        alternate_availability)
+        alternate_plant = prepare_plant(
+            definition, alternate_target; run_seed=0x6100)
+        @test Plant._require_exact_prepared_plant_target(
+            alternate_plant, alternate_target) === alternate_plant
+        @test compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+            selector, UInt8, 1)) == caller_device
+        alternate_selection = prepare_acquisition_selection(
+            alternate_plant,
+            (:slow_science, :illumination_frame, :fast_science),
+        )
+        @test execute_acquisition_selection_at!(
+            alternate_selection, T(1e-3)) === alternate_selection
+        @test compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+            selector, UInt8, 1)) == caller_device
+        alternate_shack_hartmann_path = prepared_path(
+            alternate_plant, :shack_hartmann)
+        alternate_epoch = current_epoch(
+            prepared_atmosphere(alternate_plant))
+        @test materialize_path_input!(
+            alternate_shack_hartmann_path, alternate_epoch) ===
+            path_input(alternate_shack_hartmann_path)
+        @test execute_path!(alternate_shack_hartmann_path) ===
+            path_result(alternate_shack_hartmann_path)
+        @test compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+            selector, UInt8, 1)) == caller_device
+        @test_throws AtmosphereEpochError materialize_path_input!(
+            alternate_shack_hartmann_path,
+            current_epoch(prepared_atmosphere(plant)),
+        )
+        @test compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+            selector, UInt8, 1)) == caller_device
+        alternate_fast = prepared_acquisition(
+            alternate_plant, :fast_science)
+        @test execute_acquisition!(alternate_fast, Xoshiro(0x6102)) ===
+            acquisition_products(alternate_fast)
+        @test compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+            selector, UInt8, 1)) == caller_device
+        @test_throws PlantPreparationError prepare_plant(
+            failure_definition, alternate_target; run_seed=0x6101)
+        @test compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+            selector, UInt8, 1)) == caller_device
+    end
+
+    atmosphere = prepared_atmosphere(plant)
     prepared_sampled = Plant.prepared_sampled_aberration(
         plant, :optional_science_static)
     prepared_sampled_opd =
         Plant.sampled_aberration_opd(prepared_sampled)
     @test prepared_sampled_opd isa BackendArray
-    @test compute_device(prepared_sampled_opd) ==
-        sampled_metadata.device
+    @test sampled_metadata.device == host_target
+    @test compute_device(prepared_sampled_opd) == target
+    @test Plant.sampled_aberration_metadata(prepared_sampled).device == target
+    @test AdaptiveOpticsSim.Backends._prepared_device_execution_compute_device(
+        plant.context) == target
+    @test compute_device(pupil_mask(prepared_telescope(plant))) == target
+    @test compute_device(pupil_reflectivity(prepared_telescope(plant))) ==
+        target
     fill!(sampled_opd, zero(T))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(prepared_sampled_opd))
     @test all(==(T(0.125)), Array(prepared_sampled_opd))
     path = prepared_path(plant, :science)
+    shack_hartmann_path = prepared_path(plant, :shack_hartmann)
     illumination_path = prepared_path(plant, :illumination)
+    cpu_path = prepared_path(cpu_plant, :science)
+    cpu_shack_hartmann_path = prepared_path(cpu_plant, :shack_hartmann)
     fast = prepared_acquisition(plant, :fast_science)
     slow = prepared_acquisition(plant, :slow_science)
     illumination = prepared_acquisition(plant, :illumination_frame)
+    cpu_fast = prepared_acquisition(cpu_plant, :fast_science)
+    cpu_slow = prepared_acquisition(cpu_plant, :slow_science)
+    @test all(owner -> owner.context === plant.context,
+        (path, shack_hartmann_path, illumination_path,
+            fast, slow, illumination))
+    @test all(owner -> owner.context === cpu_plant.context,
+        (cpu_path, cpu_shack_hartmann_path, cpu_fast, cpu_slow))
     @test path_result(path).values isa BackendArray
+    @test path_result(shack_hartmann_path).values isa BackendArray
     @test path_input(illumination_path).values isa BackendArray
     @test path_input(illumination_path) === path_result(illumination_path)
     @test acquisition_observation(fast) isa BackendArray
     @test acquisition_observation(slow) isa BackendArray
     @test acquisition_observation(illumination) isa BackendArray
+    @test all(storage -> compute_device(storage) == target, (
+        path_input(path).opd,
+        path_result(path).values,
+        path_input(shack_hartmann_path).opd,
+        path_result(shack_hartmann_path).values,
+        path_input(illumination_path).values,
+        acquisition_observation(fast),
+        acquisition_observation(slow),
+        acquisition_observation(illumination),
+    ))
     @test path_result_key(path).device ==
         compute_device(acquisition_observation(fast))
     @test acquisition_observation(fast) !== acquisition_observation(slow)
@@ -611,10 +909,53 @@ function run_optional_prepared_plant_checks(::Type{B},
         AdaptiveOpticsSim.Backends.execution_style(pupil.opd))
     @test Array(pupil.opd) ≈ transformed_expected rtol=zero(T) atol=8eps(T)
 
+    cpu_selection = prepare_acquisition_selection(cpu_plant,
+        (:slow_science, :illumination_frame, :fast_science))
     selection = prepare_acquisition_selection(plant,
         (:slow_science, :illumination_frame, :fast_science))
+    @test @inferred(execute_acquisition_selection_at!(cpu_selection,
+        T(1e-3))) === cpu_selection
     @test @inferred(execute_acquisition_selection_at!(selection,
         T(1e-3))) === selection
+    @test backend_stream_isdone(B, getfield(plant.context, :stream))
+    @test backend_current_stream(B) === caller_stream
+    # CPU and accelerator RNG kernels intentionally use backend-specific
+    # implementations. Compare the optical algorithms under one exact
+    # atmospheric realization by replacing the already-published accelerator
+    # screens, without advancing either atmosphere timeline or atmosphere RNG
+    # stream again.
+    device_model_matrix_copy_atmosphere_screens!(
+        prepared_atmosphere(plant), prepared_atmosphere(cpu_plant))
+    @test @inferred(execute_acquisition_selection!(selection,
+        current_epoch(prepared_atmosphere(plant)))) === selection
+    cpu_shack_hartmann_epoch = current_epoch(prepared_atmosphere(cpu_plant))
+    @test materialize_path_input!(
+        cpu_shack_hartmann_path, cpu_shack_hartmann_epoch) ===
+        path_input(cpu_shack_hartmann_path)
+    @test execute_path!(cpu_shack_hartmann_path) ===
+        path_result(cpu_shack_hartmann_path)
+    shack_hartmann_epoch = current_epoch(atmosphere)
+    @test materialize_path_input!(
+        shack_hartmann_path, shack_hartmann_epoch) ===
+        path_input(shack_hartmann_path)
+    @test execute_path!(shack_hartmann_path) ===
+        path_result(shack_hartmann_path)
+    @test backend_stream_isdone(B, getfield(plant.context, :stream))
+    @test backend_current_stream(B) === caller_stream
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(
+            path_result(shack_hartmann_path).values))
+    first_shack_hartmann_result =
+        Array(path_result(shack_hartmann_path).values)
+    @test first_shack_hartmann_result ≈
+        Array(path_result(cpu_shack_hartmann_path).values) rtol=4f-4 atol=8f-5
+    materialize_path_input!(shack_hartmann_path, shack_hartmann_epoch)
+    execute_path!(shack_hartmann_path)
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(
+            path_result(shack_hartmann_path).values))
+    @test Array(path_result(shack_hartmann_path).values) ==
+        first_shack_hartmann_result
     fast_products = acquisition_products(fast)
     slow_products = acquisition_products(slow)
     @test epoch_time(current_epoch(atmosphere)) == T(1e-3)
@@ -626,8 +967,12 @@ function run_optional_prepared_plant_checks(::Type{B},
     fast_host = Array(acquisition_observation(fast))
     slow_host = Array(acquisition_observation(slow))
     illumination_host = Array(acquisition_observation(illumination))
+    cpu_fast_host = Array(acquisition_observation(cpu_fast))
+    cpu_slow_host = Array(acquisition_observation(cpu_slow))
     @test all(isfinite, fast_host)
     @test sum(fast_host) > zero(T)
+    @test fast_host ≈ cpu_fast_host rtol=4f-4 atol=8f-5
+    @test slow_host ≈ cpu_slow_host rtol=4f-4 atol=8f-5
     @test slow_host ≈ T(3) .* fast_host rtol=T(3e-5) atol=T(3e-5)
     @test all(==(one(T)), illumination_host)
     @test all(==(T(8)), Array(path_result(illumination_path).values))
@@ -721,11 +1066,73 @@ function optional_device_path_batch_allocation_bytes(fixture, owner)
     return (; materialization_bytes, execution_bytes)
 end
 
+function run_optional_independent_path_worker_context_checks(
+    ::Type{B}, selector) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag,
+}
+    fixture = device_batch_test_fixture(
+        backend=selector,
+        T=Float32,
+        selection=Val(:none),
+    )
+    retained_context = fixture.prepared.context
+    retained_stream = getfield(retained_context, :stream)
+    caller_stream = backend_current_stream(B)
+    @test run_plant_events_until!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(199_000_000),
+    ) >= 0
+    claim = begin_optical_path_batch!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(200_000_000),
+    )
+    count = optical_path_batch_due_group_count(
+        fixture.prepared, fixture.state, fixture.workspace, claim)
+    @test count > 0
+    @inbounds for index in 1:count
+        ordinal = optical_path_batch_due_group_ordinal(
+            fixture.prepared, fixture.state, fixture.workspace, claim, index)
+        fetch(@async materialize_path_execution_group!(
+            fixture.prepared,
+            fixture.state,
+            fixture.workspace,
+            claim,
+            ordinal,
+        ))
+        @test backend_stream_isdone(B, retained_stream)
+        @test backend_current_stream(B) === caller_stream
+    end
+    seal_optical_path_batch_materialization!(
+        fixture.prepared, fixture.state, fixture.workspace, claim)
+    @inbounds for index in 1:count
+        ordinal = optical_path_batch_due_group_ordinal(
+            fixture.prepared, fixture.state, fixture.workspace, claim, index)
+        fetch(@async execute_path_execution_group!(
+            fixture.prepared,
+            fixture.state,
+            fixture.workspace,
+            claim,
+            ordinal,
+        ))
+        @test backend_stream_isdone(B, retained_stream)
+        @test backend_current_stream(B) === caller_stream
+    end
+    @test complete_optical_path_batch!(
+        fixture.prepared, fixture.state, fixture.workspace, claim) ==
+        PlantTimestamp(200_000_000)
+    return nothing
+end
+
 function run_optional_device_path_batch_checks(
     ::Type{B},
     BackendArray,
 ) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
+    run_optional_independent_path_worker_context_checks(B, selector)
     lifecycle = device_batch_test_fixture(
         backend=selector,
         T=Float32,

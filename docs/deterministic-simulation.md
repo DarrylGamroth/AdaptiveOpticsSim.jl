@@ -78,9 +78,11 @@ selection, or atmosphere-layer order changes. Duplicate or missing required
 identities are a `PlantPreparationError`.
 
 ```julia
+using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Plant
 
-plant = prepare_plant(definition;
+target = Backends.HostComputeDevice()
+plant = prepare_plant(definition, target;
     run_seed=0x1234,
     rng_derivation_version=RNGDerivationVersion(1),
 )
@@ -88,6 +90,13 @@ selection = prepare_acquisition_selection(plant, (:wfs, :science))
 execute_acquisition_selection_at!(selection, 0.001)
 replay = rng_replay_metadata(plant)
 ```
+
+Where retained caller inputs satisfy the target preparation contract, the same
+cold `PlantDefinition` may be prepared independently for another exact
+compute-device target. Each prepared plant owns a separate numerical telescope,
+timed atmosphere, mutable state, and RNG streams; neither prepared owner mutates
+the shared definition. Stable RNG ownership is independent of target placement,
+but the cross-hardware non-goal above still applies to floating-point results.
 
 The maintained derivation encodes the run seed and version as little-endian
 `UInt64` values and each owner symbol as a little-endian `UInt64` UTF-8 byte

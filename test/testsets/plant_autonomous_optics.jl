@@ -23,6 +23,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -49,6 +50,7 @@ function Plant.prepare_path_executor(
         pupil,
         output,
         execution;
+        context=context,
         materialization=AtmosphereIndependentPath(),
         optical_model=(
             kind=:autonomous_pyramid,
@@ -261,8 +263,8 @@ function autonomous_pyramid_fixture(;
     acquisition = AcquisitionDefinition(:camera, :pyramid,
         AutonomousPyramidAcquisitionModel(T(exposure_ns) / T(1e9)))
     definition = PlantDefinition(;
-        telescope,
-        atmosphere,
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         controllable_optics=(optic,),
         paths=(path,),
         acquisitions=(acquisition,),
@@ -277,7 +279,7 @@ function autonomous_pyramid_fixture(;
         CommandEndpointConfiguration(:mod_enabled, enabled;
             capacity=4),
     )
-    plant = prepare_plant(definition;
+    plant = prepare_plant(definition, PLANT_TEST_HOST_TARGET;
         run_seed=0x7c00,
         command_endpoints=configurations,
     )
@@ -327,13 +329,12 @@ end
 
 function autonomous_pyramid_model_preparation_error(fixture, schemas)
     definition = autonomous_pyramid_optic(schemas)
-    plant_definition = fixture.plant.definition
     return autonomous_pyramid_error() do
         Plant.prepare_controllable_optic(
             Plant.controllable_optic_model(definition),
             definition,
-            plant_telescope(plant_definition),
-            plant_atmosphere(plant_definition),
+            prepared_telescope(fixture.plant),
+            prepared_atmosphere(fixture.plant),
         )
     end
 end
@@ -391,9 +392,18 @@ end
     invalid_schemas = autonomous_pyramid_schemas(
         radius_units=:metre)
     fixture = autonomous_pyramid_fixture()
+    coupling = only(fixture.prepared.autonomous_optics).coupling
+    @test Plant.validate_autonomous_optic_coupling_target(
+        coupling, PLANT_TEST_HOST_TARGET) === coupling
+    unsupported_target_error = autonomous_pyramid_error() do
+        Plant.validate_autonomous_optic_coupling_target(
+            nothing, PLANT_TEST_HOST_TARGET)
+    end
+    @test unsupported_target_error isa PlantPreparationError
+    @test unsupported_target_error.reason == :unsupported_target_validation
     definition = PlantDefinition(;
-        telescope=plant_telescope(fixture.plant.definition),
-        atmosphere=plant_atmosphere(fixture.plant.definition),
+        telescope=telescope_definition(fixture.plant.definition),
+        atmosphere=atmosphere_definition(fixture.plant.definition),
         controllable_optics=(autonomous_pyramid_optic(invalid_schemas;
             visibility=AllPathVisibility()),),
     )
@@ -404,7 +414,7 @@ end
         CommandEndpointConfiguration(:mod_enabled, UInt8(1); capacity=1),
     )
     schema_error = autonomous_pyramid_error() do
-        prepare_plant(definition; run_seed=0x7c01,
+        prepare_plant(definition, PLANT_TEST_HOST_TARGET; run_seed=0x7c01,
             command_endpoints=configurations)
     end
     @test schema_error isa PlantPreparationError
@@ -460,12 +470,11 @@ end
         visibility=SelectedPathVisibility(:pyramid),
     )
     count_error = autonomous_pyramid_error() do
-        plant_definition = fixture.plant.definition
         Plant.prepare_controllable_optic(
             Plant.controllable_optic_model(extra_definition),
             extra_definition,
-            plant_telescope(plant_definition),
-            plant_atmosphere(plant_definition),
+            prepared_telescope(fixture.plant),
+            prepared_atmosphere(fixture.plant),
         )
     end
     @test count_error isa PlantPreparationError
@@ -565,8 +574,8 @@ end
         id=:second_modulator)
     base_definition = fixture.plant.definition
     conflicting_definition = PlantDefinition(;
-        telescope=plant_telescope(base_definition),
-        atmosphere=plant_atmosphere(base_definition),
+        telescope=telescope_definition(base_definition),
+        atmosphere=atmosphere_definition(base_definition),
         controllable_optics=(
             only(controllable_optic_definitions(base_definition)),
             second_optic,
@@ -585,7 +594,8 @@ end
         CommandEndpointConfiguration(:second_enabled, UInt8(1);
             capacity=1),
     )
-    conflicting_plant = prepare_plant(conflicting_definition;
+    conflicting_plant = prepare_plant(
+        conflicting_definition, PLANT_TEST_HOST_TARGET;
         run_seed=0x7c02,
         command_endpoints=conflicting_configurations)
     conflicting_loop = PlantEventLoopDefinition(

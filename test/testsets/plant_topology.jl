@@ -1,5 +1,3 @@
-struct PlantTopologyTestAtmosphere <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere end
-
 struct PlantTopologyTestOpticalModel
     label::Symbol
 end
@@ -100,12 +98,13 @@ end
         @test !Base.isexported(AdaptiveOpticsSim, name)
     end
 
-    telescope = Telescope(
+    telescope = TelescopeDefinition(
         resolution=8,
         diameter=8.0,
         central_obstruction=0.0,
+        revision=1,
     )
-    atmosphere = PlantTopologyTestAtmosphere()
+    atmosphere = KolmogorovAtmosphereDefinition(r0=0.2, L0=25.0)
     ngs = Source(band=:I, magnitude=0.0)
     science_source = Source(
         band=:custom,
@@ -244,8 +243,8 @@ end
         ),
     )
 
-    @test plant_telescope(plant) === telescope
-    @test plant_atmosphere(plant) === atmosphere
+    @test telescope_definition(plant) === telescope
+    @test atmosphere_definition(plant) === atmosphere
     @test controllable_optic_definitions(plant) isa
         Memory{ControllableOpticDefinition}
     @test Tuple(controllable_optic_definitions(plant)) ===
@@ -699,12 +698,25 @@ end
     assert_plant_definition_error(
         () -> PlantDefinition(nothing, atmosphere, (), (), ()),
         :plant,
-        :invalid_telescope,
+        :invalid_telescope_definition,
     )
     assert_plant_definition_error(
         () -> PlantDefinition(telescope, nothing, (), (), ()),
         :plant,
-        :invalid_atmosphere,
+        :invalid_atmosphere_definition,
+    )
+    prepared_telescope = prepare_telescope(telescope, HostComputeDevice())
+    prepared_atmosphere = prepare_timed_atmosphere(
+        atmosphere, prepared_telescope, HostComputeDevice())
+    assert_plant_definition_error(
+        () -> PlantDefinition(prepared_telescope, atmosphere, (), (), ()),
+        :plant,
+        :invalid_telescope_definition,
+    )
+    assert_plant_definition_error(
+        () -> PlantDefinition(telescope, prepared_atmosphere, (), (), ()),
+        :plant,
+        :invalid_atmosphere_definition,
     )
     assert_plant_definition_error(
         () -> path_definition(plant, :unknown),
@@ -762,7 +774,7 @@ end
             telescope=telescope,
             atmosphere=atmosphere,
             controllable_optics=(woofer,),
-        ); run_seed=0x1234)
+        ), HostComputeDevice(); run_seed=0x1234)
     end
     @test preparation_error isa PlantPreparationError
     if preparation_error isa PlantPreparationError
@@ -775,7 +787,7 @@ end
             telescope=telescope,
             atmosphere=atmosphere,
             controllable_optics=(woofer,),
-        ); run_seed=0x1234,
+        ), HostComputeDevice(); run_seed=0x1234,
             command_endpoints=(
                 CommandEndpointConfiguration(:woofer_command,
                     Float32[0]; capacity=1),

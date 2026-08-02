@@ -42,6 +42,27 @@ function AOSPlant.validate_path_materialization_binding(
     return nothing
 end
 
+function AOSPlant.validate_path_materialization_target(
+    materialization::ZeroPupilMaterialization,
+    input::AOS.Optics.PupilFunction,
+    ::AOS.Atmospheres.AbstractAtmosphere,
+    target::AOS.Backends.AbstractComputeDevice,
+)
+    materialization.destination === input || throw(
+        AOSPlant.PlantPreparationError(
+            :path,
+            :prepared_binding,
+            "Gate 5 zero-pupil materialization belongs to another path",
+        ),
+    )
+    AOSPlant._require_exact_plant_product_target(
+        materialization.destination,
+        target,
+        "Gate 5 zero-pupil materialization destination",
+    )
+    return materialization
+end
+
 function AOSPlant.validate_path_materialization(
     materialization::ZeroPupilMaterialization,
     input::AOS.Optics.PupilFunction,
@@ -81,6 +102,7 @@ function AOSPlant.prepare_path_executor(
     source::AOS.Optics.AbstractSource,
     telescope::AOS.Optics.Telescope,
     atmosphere::AOS.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(AOS.Optics.pupil_reflectivity(telescope))
     pupil = AOS.Optics.PupilFunction(
@@ -97,6 +119,7 @@ function AOSPlant.prepare_path_executor(
         pupil,
         AOS.Optics.direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=ZeroPupilMaterialization(pupil),
         optical_model=:gate5_conjugated_optical_placement,
         propagation_model=:fraunhofer_fft,
@@ -282,13 +305,13 @@ function gate5_plant_definition(
         error("Gate 5 resolution must be at least five")
     wfs_count = path_count ÷ 2
     science_count = path_count - wfs_count
-    telescope = AOS.Optics.Telescope(
+    telescope = AOS.Optics.TelescopeDefinition(
         resolution=resolution,
         diameter=Float64(raw["diameter_m"]),
         central_obstruction=Float64(raw["central_obstruction"]),
+        revision=UInt(1),
     )
-    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(
-        telescope;
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphereDefinition(;
         r0=Float64(raw["r0_m"]),
         L0=Float64(raw["outer_scale_m"]),
         fractional_cn2=[1.0],
@@ -337,7 +360,9 @@ function gate5_plant_definition(
     configurations =
         (common_configurations..., moao_configurations...)
 
-    prototype = AOS.Optics.PupilFunction(telescope)
+    prototype_telescope = AOS.Optics.prepare_telescope(
+        telescope, AOS.Backends.HostComputeDevice())
+    prototype = AOS.Optics.PupilFunction(prototype_telescope)
     common_static_value = Float64(raw["common_static_opd_m"])
     common_static_opd = fill(common_static_value, size(prototype.opd))
     common_static = AOSPlant.SampledAberrationDefinition(
@@ -461,7 +486,8 @@ function prepare_gate5_operation(
             reverse_declarations,
         )
     plant = AOSPlant.prepare_plant(
-        definition;
+        definition,
+        AOS.Backends.HostComputeDevice();
         run_seed=UInt64(raw["run_seed"]),
         command_endpoints=configurations,
     )
@@ -641,12 +667,7 @@ function validate_finite_support(raw::AbstractDict)
         Gate5PathModel(),
     )
     path = AOSPlant.prepare_path_executor(
-        Gate5PathModel(),
-        definition,
-        source,
-        telescope,
-        atmosphere,
-    )
+        definition, telescope, atmosphere)
     pupil = AOSPlant.path_input(path)
     surface = fill(2.0, 3, 3)
     metadata = sampled_surface_metadata(pupil, surface)

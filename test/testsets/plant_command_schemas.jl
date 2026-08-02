@@ -1,5 +1,3 @@
-struct CommandSchemaTestAtmosphere <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere end
-
 struct CommandSchemaTestOpticModel
     name::Symbol
 end
@@ -471,12 +469,13 @@ end
 end
 
 @testset "Command schemas attach to independent optic endpoints" begin
-    telescope = Telescope(
+    telescope = TelescopeDefinition(
         resolution=8,
         diameter=8.0,
         central_obstruction=0.0,
+        revision=1,
     )
-    atmosphere = CommandSchemaTestAtmosphere()
+    atmosphere = KolmogorovAtmosphereDefinition(r0=0.2, L0=25.0)
     woofer_schema = _schema_fixture(
         Float32;
         id=:woofer_v1,

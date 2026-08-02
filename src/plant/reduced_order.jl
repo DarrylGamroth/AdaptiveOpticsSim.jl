@@ -408,20 +408,20 @@ end
     ::Type{<:PreparedLinearReducedOrderProvider}) =
     :linear_reduced_order_direct_measurement
 
-function _reduced_order_backend_copy(values::AbstractArray{T},
-    selector::AbstractArrayBackend) where {T<:AbstractFloat}
-    destination = allocate_array(selector, T, size(values)...)
+function _reduced_order_target_copy(values::AbstractArray{T},
+    target::AbstractComputeDevice) where {T<:AbstractFloat}
+    destination = allocate_device_array(target, T, size(values)...)
     copyto!(destination, values)
     return destination
 end
 
 function _prepare_harmonic_disturbance(
     model::HarmonicDisturbanceModel{T},
-    selector::AbstractArrayBackend) where {T<:AbstractFloat}
-    offsets = _reduced_order_backend_copy(model.offsets, selector)
-    amplitudes = _reduced_order_backend_copy(model.amplitudes, selector)
-    frequencies = _reduced_order_backend_copy(model.frequencies_hz, selector)
-    phases = _reduced_order_backend_copy(model.phases_rad, selector)
+    target::AbstractComputeDevice) where {T<:AbstractFloat}
+    offsets = _reduced_order_target_copy(model.offsets, target)
+    amplitudes = _reduced_order_target_copy(model.amplitudes, target)
+    frequencies = _reduced_order_target_copy(model.frequencies_hz, target)
+    phases = _reduced_order_target_copy(model.phases_rad, target)
     prepared = PreparedHarmonicDisturbance(offsets, amplitudes, frequencies,
         phases)
     modes = similar(offsets)
@@ -432,8 +432,8 @@ end
 
 function _prepare_reduced_order_response(
     response::ReducedOrderCommandResponse,
-    selector::AbstractArrayBackend)
-    operator = _reduced_order_backend_copy(response.operator, selector)
+    target::AbstractComputeDevice)
+    operator = _reduced_order_target_copy(response.operator, target)
     return PreparedReducedOrderCommandResponse(response.endpoint, operator,
         response.units, response.sign_convention, response.basis,
         response.basis_revision)
@@ -466,19 +466,19 @@ function prepare_acquisition_provider(
     path::PreparedPathExecutor,
 ) where {T<:AbstractFloat}
     selector = getfield(path.key, :backend)
-    projection = _reduced_order_backend_copy(model.path_projection,
-        selector)
-    sensor = _reduced_order_backend_copy(model.sensor_operator, selector)
+    target = getfield(path.key, :device)
+    projection = _reduced_order_target_copy(model.path_projection, target)
+    sensor = _reduced_order_target_copy(model.sensor_operator, target)
     responses = map(response ->
-        _prepare_reduced_order_response(response, selector),
+        _prepare_reduced_order_response(response, target),
         model.command_responses)
     disturbance, state = _prepare_harmonic_disturbance(model.disturbance,
-        selector)
+        target)
     residual = similar(projection, T, size(projection, 1))
     command_workspace = similar(residual)
     fill!(residual, zero(T))
     fill!(command_workspace, zero(T))
-    measurement_values = allocate_array(selector, T, size(sensor, 1))
+    measurement_values = allocate_device_array(target, T, size(sensor, 1))
     fill!(measurement_values, zero(T))
     measurement = WFSMeasurement(measurement_values;
         units=deepcopy(model.measurement_units),

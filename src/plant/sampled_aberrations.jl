@@ -14,21 +14,30 @@ const _PREPARED_SAMPLED_ABERRATION_TOKEN =
     _PreparedSampledAberrationToken()
 
 """
-Run-owned native sampled-aberration OPD and its immutable declaration.
+Run-owned native sampled-aberration OPD, target-local metadata, and immutable
+declaration. The declaration retains caller-owned configuration input; the
+prepared OPD and metadata describe the exact plant target.
 """
 struct PreparedSampledAberration{
     D<:SampledAberrationDefinition,
     A<:AbstractMatrix,
+    M<:OpticalPlaneMetadata,
 }
     definition::D
     opd::A
+    metadata::M
 
     function PreparedSampledAberration(
         ::_PreparedSampledAberrationToken,
         definition::D,
         opd::A,
-    ) where {D<:SampledAberrationDefinition,A<:AbstractMatrix}
-        return new{D,A}(definition, opd)
+        metadata::M,
+    ) where {
+        D<:SampledAberrationDefinition,
+        A<:AbstractMatrix,
+        M<:OpticalPlaneMetadata,
+    }
+        return new{D,A,M}(definition, opd, metadata)
     end
 end
 
@@ -37,12 +46,14 @@ end
     sampled_aberration_id(aberration.definition)
 @inline sampled_aberration_opd(
     aberration::PreparedSampledAberration) = aberration.opd
+@inline sampled_aberration_metadata(
+    aberration::PreparedSampledAberration) = aberration.metadata
 
 function _validate_prepared_sampled_aberration_storage(
-    definition::SampledAberrationDefinition,
+    metadata::OpticalPlaneMetadata,
     opd::AbstractMatrix,
+    target::AbstractComputeDevice,
 )
-    metadata = sampled_aberration_metadata(definition)
     size(opd) == metadata.dimensions || throw(PlantPreparationError(
         :sampled_aberration, :surface_dimensions,
         "prepared sampled-aberration OPD dimensions $(size(opd)) do not " *
@@ -53,21 +64,79 @@ function _validate_prepared_sampled_aberration_storage(
         "not match declared type $(metadata.numeric_type)"))
     typeof(backend(opd)) === typeof(metadata.backend) || throw(
         PlantPreparationError(:sampled_aberration, :surface_backend,
-            "prepared sampled-aberration OPD changed array backend"))
+            "prepared sampled-aberration OPD and metadata backends differ"))
     compute_device(opd) == metadata.device || throw(PlantPreparationError(
         :sampled_aberration, :surface_device,
-        "prepared sampled-aberration OPD changed compute device"))
+        "prepared sampled-aberration OPD and metadata devices differ"))
+    compute_device(opd) == target || throw(PlantPreparationError(
+        :sampled_aberration, :wrong_device,
+        "prepared sampled-aberration OPD does not occupy the exact plant target"))
     return opd
 end
 
+@inline _require_sampled_aberration_copy_source(
+    ::ScalarCPUStyle,
+    source::AbstractMatrix,
+    ::AbstractComputeDevice,
+) = source
+
+@inline _require_sampled_aberration_copy_source(
+    ::AcceleratorStyle,
+    source::AbstractMatrix,
+    ::HostComputeDevice,
+) = source
+
+function _require_sampled_aberration_copy_source(
+    ::AcceleratorStyle,
+    source::AbstractMatrix,
+    target::AcceleratorComputeDevice,
+)
+    source_target = compute_device(source)
+    source_target == target || _throw_compute_device_error(
+        :prepare_sampled_aberration,
+        :unsupported_cross_device_copy,
+        target,
+        "caller-owned sampled OPD occupies $(source_target); direct " *
+        "accelerator-to-different-accelerator copies are unsupported",
+    )
+    return source
+end
+
+function _target_sampled_aberration_metadata(
+    source::OpticalPlaneMetadata,
+    opd::AbstractMatrix,
+    target::AbstractComputeDevice,
+)
+    return OpticalPlaneMetadata(
+        source.kind,
+        opd;
+        coordinate_domain=source.coordinate_domain,
+        sampling=source.sampling,
+        origin=source.origin,
+        centering=source.centering,
+        orientation=source.orientation,
+        spectral=source.spectral,
+        normalization=source.normalization,
+        spatial_measure=source.spatial_measure,
+        coherence=source.coherence,
+        device=target,
+    )
+end
+
 function _prepare_sampled_aberration(
-    definition::SampledAberrationDefinition)
+    definition::SampledAberrationDefinition,
+    target::AbstractComputeDevice,
+)
     source = surface_opd(sampled_aberration_surface(definition))
-    copied = similar(source)
+    _require_sampled_aberration_copy_source(
+        execution_style(source), source, target)
+    copied = allocate_device_array(target, eltype(source), size(source)...)
     copyto!(copied, source)
-    _validate_prepared_sampled_aberration_storage(definition, copied)
+    metadata = _target_sampled_aberration_metadata(
+        sampled_aberration_metadata(definition), copied, target)
+    _validate_prepared_sampled_aberration_storage(metadata, copied, target)
     return PreparedSampledAberration(
-        _PREPARED_SAMPLED_ABERRATION_TOKEN, definition, copied)
+        _PREPARED_SAMPLED_ABERRATION_TOKEN, definition, copied, metadata)
 end
 
 function _canonical_sampled_aberration_definitions(
@@ -78,13 +147,16 @@ function _canonical_sampled_aberration_definitions(
     return aberrations
 end
 
-function _prepare_sampled_aberrations(definition::PlantDefinition)
+function _prepare_sampled_aberrations(
+    definition::PlantDefinition,
+    target::AbstractComputeDevice,
+)
     declarations = _canonical_sampled_aberration_definitions(definition)
     prepared = Memory{PreparedSampledAberration}(
         undef, length(declarations))
     @inbounds for index in eachindex(declarations)
         prepared[index] =
-            _prepare_sampled_aberration(declarations[index])
+            _prepare_sampled_aberration(declarations[index], target)
     end
     return prepared
 end
@@ -217,7 +289,7 @@ function _prepare_sampled_aberration_path_coupling(
     path_identity = path_id(path.definition)
     try
         return prepare_sampled_pupil_footprint_coupling(
-            sampled_aberration_metadata(definition),
+            sampled_aberration_metadata(aberration),
             aberration.opd,
             path,
             sampled_aberration_placement(definition);

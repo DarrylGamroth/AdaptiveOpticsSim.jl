@@ -47,6 +47,28 @@ struct TelescopeDefinition{T<:AbstractFloat} <: AbstractTelescopeDefinition
     end
 end
 
+function _checked_telescope_definition_resolution(::Bool)
+    throw(InvalidConfiguration(
+        "resolution must be an integer, not Bool"))
+end
+
+function _checked_telescope_definition_resolution(resolution::Integer)
+    typemin(Int) <= resolution <= typemax(Int) || throw(
+        InvalidConfiguration("resolution must be representable as Int"))
+    return Int(resolution)
+end
+
+function _checked_telescope_definition_revision(::Bool)
+    throw(InvalidConfiguration(
+        "revision must be an integer, not Bool"))
+end
+
+function _checked_telescope_definition_revision(revision::Integer)
+    zero(revision) <= revision <= typemax(UInt) || throw(
+        InvalidConfiguration("revision must be representable as UInt"))
+    return UInt(revision)
+end
+
 function TelescopeDefinition(;
     resolution::Integer,
     diameter::Real,
@@ -56,14 +78,8 @@ function TelescopeDefinition(;
     pupil_reflectivity::Real=1.0,
     T::Type{<:AbstractFloat}=Float64,
 )
-    resolution isa Bool && throw(InvalidConfiguration(
-        "resolution must be an integer, not Bool"))
-    revision isa Bool && throw(InvalidConfiguration(
-        "revision must be an integer, not Bool"))
-    typemin(Int) <= resolution <= typemax(Int) || throw(
-        InvalidConfiguration("resolution must be representable as Int"))
-    zero(revision) <= revision <= typemax(UInt) || throw(
-        InvalidConfiguration("revision must be representable as UInt"))
+    resolution_value = _checked_telescope_definition_resolution(resolution)
+    revision_value = _checked_telescope_definition_revision(revision)
     diameter_value = _converted_positive_finite(
         diameter, T, "telescope diameter")
     central_obstruction_value = _converted_nonnegative_finite(
@@ -77,12 +93,12 @@ function TelescopeDefinition(;
     reflectivity_value <= one(T) || throw(InvalidConfiguration(
         "telescope pupil reflectivity must lie in [0, 1]"))
     return TelescopeDefinition{T}(
-        Int(resolution),
+        resolution_value,
         diameter_value,
         central_obstruction_value,
         fov_value,
         reflectivity_value,
-        UInt(revision),
+        revision_value,
     )
 end
 

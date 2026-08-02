@@ -205,6 +205,8 @@ import ..Detectors:
     UpTheRampSampling,
     _require_finite_nonnegative_intensity,
     _capture_prevalidated_counting!,
+    _require_exact_counting_detector_target,
+    _require_exact_detector_acquisition_target,
     _require_prepared_response_sampling,
     apply_readout_correction!,
     apply_response!,
@@ -256,6 +258,7 @@ include("bioedge.jl")
 include("zernike.jl")
 include("curvature.jl")
 include("lift.jl")
+include("exact_target.jl")
 include("api.jl")
 
 end # module WavefrontSensors

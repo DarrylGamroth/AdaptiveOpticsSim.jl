@@ -74,6 +74,41 @@ and inferring its identity afterward. `ComputeDeviceError` reports structured
 cannot be honored. Exact-target preparation is cold; repeated kernels retain
 their prepared context and do not call this selection path.
 
+Whole-plant preparation uses the same contract through the mandatory
+`prepare_plant(definition, target; ...)` positional target. It materializes the
+cold telescope and timed-atmosphere definitions, prepares all numerical model
+owners, and derives array-command storage inside one retained target context.
+Every target-authoritative data-plane array owned by the resulting prepared
+execution graph must report exactly `target` through
+`Backends.compute_device`. The retained cold definition and its caller-owned
+sample inputs, scalar command values, host configuration and registries,
+documented host inspection/staging mirrors, and deliberate host RNG staging
+are not accelerator data-plane arrays. `Backends.compute_device(plant)` reports
+the prepared target. A custom model must allocate its owned execution arrays
+through the target selected by the supplied prepared telescope, atmosphere,
+inputs, and destinations. Do not copy directly from one accelerator to a
+different accelerator during preparation; accept caller-owned host input or
+require the caller to stage the transfer explicitly.
+
+Plant-owned extension points validate exact residency through the qualified
+`validate_controllable_optic_target`,
+`validate_controllable_optic_state_target`,
+`validate_controllable_optic_workspace_target`,
+`validate_pupil_surface_coupling_target`,
+`validate_autonomous_optic_coupling_target`,
+`validate_path_execution_target`,
+`validate_path_materialization_target`,
+`validate_acquisition_execution_target`,
+`validate_acquisition_provider_target`, and
+`validate_illumination_evaluator_target` seams. The controllable-optic
+definition, state, and workspace checks are separate because event-loop state
+and workspace are allocated after immutable optic preparation. Each default
+fails closed for an unknown prepared implementation. Extend every seam owned by
+the preparation object rather than weakening whole-plant traversal or
+inspecting fields by reflection. A custom prepared WFS plan extends the
+WFS-owned qualified `WavefrontSensors.validate_wfs_target` seam. Lower-level
+built-in validators remain implementation details of their owning subsystems.
+
 The maintained structured exact-device reason vocabulary is:
 
 - `:exact_device_selection_unavailable` when no owning extension implements
@@ -97,6 +132,17 @@ names such as `src/wfs`, `src/detectors`, `src/optics`, `src/control`, or
 `src/ensembles`.
 
 ## Plant Model Definitions
+
+`PlantDefinition` accepts one immutable `Optics.AbstractTelescopeDefinition`
+and one immutable `Atmospheres.AbstractTimedAtmosphereDefinition`, not a
+prepared numerical telescope or atmosphere. The built-in
+`Optics.TelescopeDefinition` and timed-atmosphere definitions are reusable
+configuration. Where retained caller inputs satisfy the target preparation
+contract, preparing the same plant definition for another target creates
+independent numerical owners and evolution state. Inspect a declaration with
+`Plant.telescope_definition` and `Plant.atmosphere_definition`; inspect a
+prepared owner with `Plant.plant_definition`, `Plant.prepared_telescope`, and
+`Plant.prepared_atmosphere`.
 
 `ControllableOpticDefinition`, `OpticalPathDefinition`, and
 `AcquisitionDefinition` accept only explicitly declared cold model-definition
@@ -162,9 +208,12 @@ schedule exact safe/fail transitions from admission or application age, with a
 due equal-time command resolved first.
 
 `CommandEndpointConfiguration` supplies each declared endpoint's run-specific
-capacities, initial effective value, optional safe value, and storage backend.
+capacities, initial effective value, and optional safe value. It does not
+select storage placement: array-command storage follows the exact plant target
+and scalar command values remain host-resident.
 Pass exactly one configuration per declared endpoint through
-`prepare_plant(...; command_endpoints=configurations)`. Plant preparation
+`prepare_plant(definition, target; command_endpoints=configurations, ...)`.
+Plant preparation
 canonicalizes endpoint and optic order by stable identity, prepares every
 declared device, and rejects missing or extra configurations.
 
@@ -305,6 +354,14 @@ Plant.prepare_autonomous_periodic_optic(
     fidelity::MyPeriodicOpticFidelity,
 ) = prepare_my_path_coupling(plan, path, fidelity)
 
+function Plant.validate_autonomous_optic_coupling_target(
+    coupling::MyPreparedPathCoupling,
+    target::Backends.AbstractComputeDevice,
+)
+    validate_my_path_coupling_target(coupling, target)
+    return coupling
+end
+
 function Plant.initialize_autonomous_periodic_optic!(
     plan::MyPreparedPeriodicOptic,
     state::MyPeriodicOpticState,
@@ -352,8 +409,9 @@ kind, and do not hide detector exposure integration in a waveform
 quadrature.
 
 Preparation then dispatches on those same concrete model types. A path method
-receives the exact definition, its run-owned frozen source, the plant telescope,
-and atmosphere, and returns a `PreparedPathExecutor`:
+receives the exact definition, its run-owned frozen source, the plant telescope
+and atmosphere, and the plant's prepared device execution context, and returns
+a `PreparedPathExecutor`:
 
 ```julia
 function AdaptiveOpticsSim.Plant.prepare_path_executor(
@@ -362,6 +420,7 @@ function AdaptiveOpticsSim.Plant.prepare_path_executor(
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::AdaptiveOpticsSim.Optics.AbstractTelescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
+    context,
 )
     input, result, execution = prepare_my_optics(
         model, source, telescope, atmosphere)
@@ -369,6 +428,7 @@ function AdaptiveOpticsSim.Plant.prepare_path_executor(
         atmosphere, telescope, source, input)
     return AdaptiveOpticsSim.Plant.PreparedPathExecutor(
         definition, source, telescope, atmosphere, input, result, execution;
+        context=context,
         materialization,
         optical_model=my_exact_model_key(model),
         propagation_model=my_exact_propagation_key(model),
@@ -376,6 +436,19 @@ function AdaptiveOpticsSim.Plant.prepare_path_executor(
     )
 end
 ```
+
+Pass the supplied `context` unchanged. It selects the exact plant compute
+device and, for an accelerator, retains the prepared backend stream; a model
+extension must not select or prepare an independent stream. The constructed
+`PreparedPathExecutor` retains that context, and core gives the same context to
+the corresponding `PreparedAcquisitionOwner`. Public
+`materialize_path_input!`, `execute_path!`, and `execute_acquisition!` calls
+enter the retained context and restore the caller's previous device and stream
+selections after success or an exception. A successful return is also a
+backend completion boundary for that retained stream, so an extension must not
+launch work on an untracked stream or publish a product before its work is
+ordered into the supplied context. The lower-level model dispatches run inside
+that boundary.
 
 The example uses the maintained phase-only path operation, which writes the
 current atmosphere OPD into the exact path-local `PupilFunction`. A genuinely
@@ -390,12 +463,13 @@ model-specific revision without mutating output. The mutating method may then
 write only its bound caller-owned path input. This two-phase contract lets a
 selection reject every invalid path before materializing the first one.
 
-A `MultiLayerAtmosphere` or `InfiniteMultiLayerAtmosphere` used by
-`prepare_plant` declares one stable `AtmosphereLayerID` per layer through its
-`layer_ids` keyword. The ordinary atmosphere constructors still permit omitted
-IDs for non-plant numerical work, but plant preparation rejects missing or
-duplicate stochastic-owner identities. A custom single-owner timed atmosphere
-continues to implement its ordinary `initialize_atmosphere!` and
+A `MultiLayerAtmosphereDefinition` or
+`InfiniteMultiLayerAtmosphereDefinition` stored by a `PlantDefinition`
+declares one stable `AtmosphereLayerID` per layer through its `layer_ids`
+keyword. Ordinary numerical atmosphere constructors still permit omitted IDs
+for non-plant work, but the cold plant declaration rejects missing or duplicate
+stochastic-owner identities. A custom single-owner timed atmosphere continues
+to implement its ordinary `initialize_atmosphere!` and
 `evolve_atmosphere!` methods against `AbstractRNG`; the prepared plant supplies
 the exact owner-bound RNG to those methods.
 
@@ -542,8 +616,8 @@ and acquisition owners are available through `prepared_paths` and
 `prepared_acquisitions` accessors. Repeated execution supplies either one
 explicit current `AtmosphereEpoch` to `execute_acquisition_selection!` or one
 absolute atmosphere model time to `execute_acquisition_selection_at!`.
-`prepare_plant(definition; run_seed, rng_derivation_version)` owns all stateful
-streams, so neither selected-execution method accepts an RNG argument.
+`prepare_plant(definition, target; run_seed, rng_derivation_version)` owns all
+stateful streams, so neither selected-execution method accepts an RNG argument.
 `rng_replay_metadata(plant)` provides structured replay identity and seed data
 without granting another writer access to those streams.
 Reduced-order and synthetic/replay selections do not form an otherwise unused

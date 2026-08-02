@@ -41,6 +41,7 @@ import ..Backends:
     _resolve_array_backend,
     _resolve_backend_selector,
     _synchronize_prepared_device_execution_context!,
+    _throw_compute_device_error,
     _with_prepared_device_execution_context,
     _write_integer_output!,
     allocate_array,
