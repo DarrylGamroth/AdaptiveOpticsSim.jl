@@ -460,10 +460,27 @@ Prepared binding from one timed atmosphere direction to the exact path-local
 `PupilFunction` whose OPD is materialized before optical-path execution.
 Construct it with `prepare_pupil_opd_materialization`.
 """
-struct PreparedPupilOPDMaterialization{R,P,S}
+mutable struct _PreparedPupilOPDMaterializationToken end
+const _PREPARED_PUPIL_OPD_MATERIALIZATION_TOKEN =
+    _PreparedPupilOPDMaterializationToken()
+
+struct PreparedPupilOPDMaterialization{R,P,S,T}
     renderer::R
     destination::P
     source::S
+    telescope::T
+
+    function PreparedPupilOPDMaterialization(
+        token::_PreparedPupilOPDMaterializationToken,
+        renderer::R,
+        destination::P,
+        source::S,
+        telescope::T,
+    ) where {R,P,S,T}
+        token === _PREPARED_PUPIL_OPD_MATERIALIZATION_TOKEN || throw(
+            ArgumentError("invalid internal pupil-OPD materialization token"))
+        return new{R,P,S,T}(renderer, destination, source, telescope)
+    end
 end
 
 """
@@ -482,7 +499,13 @@ function prepare_pupil_opd_materialization(
         T=eltype(pupil.opd))
     _validate_atmosphere_renderer_binding(renderer, atmosphere)
     _validate_atmosphere_destination(pupil, renderer)
-    return PreparedPupilOPDMaterialization(renderer, pupil, source)
+    return PreparedPupilOPDMaterialization(
+        _PREPARED_PUPIL_OPD_MATERIALIZATION_TOKEN,
+        renderer,
+        pupil,
+        source,
+        telescope,
+    )
 end
 
 """Qualified extension seam for prepared materialization-binding validation."""
@@ -496,6 +519,49 @@ end
 @inline validate_path_materialization_binding(
     ::AtmosphereIndependentPath, input, atmosphere, source) = nothing
 
+@inline _validate_path_materialization_telescope(
+    materialization, telescope) = nothing
+
+function _validate_path_materialization_telescope(
+    materialization::PreparedPupilOPDMaterialization,
+    telescope::AbstractTelescope,
+)
+    materialization.telescope === telescope || throw(PlantPreparationError(
+        :path,
+        :prepared_binding,
+        "pupil-OPD materialization does not retain the exact telescope",
+    ))
+    return nothing
+end
+
+function _validate_pupil_opd_renderer_source_binding(
+    renderer::AtmosphereDirectionRenderer,
+    source::AbstractSource,
+)
+    T = renderer.output_metadata.numeric_type
+    isequal(
+        source_geometry_signature(renderer.source, T),
+        source_geometry_signature(source, T),
+    ) || throw(PlantPreparationError(
+        :path,
+        :prepared_binding,
+        "pupil-OPD renderer does not retain the requested source geometry",
+    ))
+    return nothing
+end
+
+function _validate_pupil_opd_renderer_source_binding(
+    renderer,
+    ::AbstractSource,
+)
+    throw(PlantPreparationError(
+        :path,
+        :unsupported_materialization_binding,
+        "pupil-OPD materialization renderer $(typeof(renderer)) does not " *
+        "validate its source geometry",
+    ))
+end
+
 function validate_path_materialization_binding(
     materialization::PreparedPupilOPDMaterialization,
     input::PupilFunction,
@@ -508,6 +574,14 @@ function validate_path_materialization_binding(
     materialization.source === source || throw(PlantPreparationError(
         :path, :prepared_binding,
         "pupil-OPD materialization does not retain the exact frozen source"))
+    aperture_revision(input) == aperture_revision(materialization.telescope) ||
+        throw(PlantPreparationError(
+            :path,
+            :revision,
+            "pupil-OPD materialization telescope revision does not match its destination",
+        ))
+    _validate_pupil_opd_renderer_source_binding(
+        materialization.renderer, source)
     _validate_atmosphere_renderer_binding(materialization.renderer,
         atmosphere)
     _validate_atmosphere_destination(input, materialization.renderer)
@@ -640,6 +714,7 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
     _require_path_input_revisions(input, revision)
     validate_path_materialization_binding(materialization, input,
         atmosphere, source)
+    _validate_path_materialization_telescope(materialization, telescope)
     validate_path_execution_binding(execution, input, result)
     revisions = (telescope=revision, model=model_revisions)
     key = PathResultKey(
@@ -678,6 +753,8 @@ function _require_current_path_binding(path::PreparedPathExecutor)
     _require_current_path_revision(path)
     validate_path_materialization_binding(path.materialization, path.input,
         path.atmosphere, path.source)
+    _validate_path_materialization_telescope(
+        path.materialization, path.telescope)
     validate_path_execution_binding(path.execution, path.input, path.result)
     return nothing
 end
@@ -1394,6 +1471,8 @@ function _require_prepared_path_executor(prepared::PreparedPathExecutor,
         "prepared path does not retain its plant execution context"))
     validate_path_materialization_binding(prepared.materialization,
         prepared.input, prepared.atmosphere, prepared.source)
+    _validate_path_materialization_telescope(
+        prepared.materialization, prepared.telescope)
     validate_path_execution_binding(prepared.execution, prepared.input,
         prepared.result)
     return prepared

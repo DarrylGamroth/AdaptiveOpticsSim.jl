@@ -576,6 +576,29 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   backend guarantees quiescence; an unexpected exception leaves the slot in
   `HandoffTransferUncertain`. The boundary owns neither a queue nor a HIL
   payload lease, wait strategy, placement policy, or transport
+- Qualified authority-owned pupil-OPD publication boundary:
+  `PreparedPupilOPDPublicationRoute`, prepared through
+  `prepare_pupil_opd_publication_route`. Its direct and remote implementations
+  are private; inspect the selected case through
+  `pupil_opd_publication_authority_target`,
+  `pupil_opd_publication_route_target`, and
+  `pupil_opd_publication_handoff_capacity`. A path model opts in explicitly by
+  extending `prepare_pupil_opd_publication_materialization` and returning one
+  native, exactly bound `PreparedPupilOPDMaterialization`. Allocate
+  caller-owned metadata output once with
+  `prepare_pupil_opd_publication_output`, then drive
+  `materialize_pupil_opd_publication!`, `submit_pupil_opd_publication!`,
+  `try_complete_pupil_opd_publication!`,
+  `apply_pupil_opd_publication!`, and
+  `reclaim_pupil_opd_publication!`. `MaterializedPupilOPDPublication` carries
+  the exact opaque route identity, authority, epoch, timestamp, path, and
+  generation. The route identity binds the frozen source and prepared
+  materialization without retaining either in publication metadata;
+  `PupilOPDPublicationStatus` reports expected lifecycle outcomes. A direct
+  route writes its exact target-local `PupilFunction`. A remote route owns one
+  fixed handoff slot and transfers only OPD. One external owner must serialize
+  the lifecycle and must not advance the authority until every due route has
+  applied. Core provides no polling or all-routes batch coordinator here
 - Qualified target-local command inspection:
   `CommandAuthorityIdentity`, `EffectiveCommandPublicationSequence`,
   `EffectiveCommandPublication`, `PreparedTargetLocalCommandEndpoint`,

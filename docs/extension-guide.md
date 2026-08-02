@@ -737,6 +737,61 @@ mutating the handoff concurrently.
 The current maintained implementation validates the seam with a deterministic
 fake accelerator; it does not qualify CUDA or AMDGPU transfers.
 
+### Authority-owned pupil-OPD routes
+
+Core specializes the handoff boundary for the native atmospheric pupil-OPD
+product. `Plant.prepare_pupil_opd_publication_route(partitions, path_id)`
+accepts only a target-local path whose input is a native `PupilFunction` and
+whose atmosphere materializer is a native `PreparedPupilOPDMaterialization`.
+It binds the exact prepared partition set, atmosphere authority, target-local
+path, frozen source, element type, axes, and compute targets. Same-target
+routes materialize directly into the path input. Remote routes prepare one
+authority-local source pupil and one target-local destination slot, then
+transfer only the OPD array through the generic handoff seam above.
+
+A path model must opt in deliberately by defining the qualified method
+
+```julia
+AdaptiveOpticsSim.Plant.prepare_pupil_opd_publication_materialization(
+    ::MyPathModel,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    telescope::AdaptiveOpticsSim.Optics.Telescope,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
+    pupil::AdaptiveOpticsSim.Optics.PupilFunction,
+) = AdaptiveOpticsSim.Plant.prepare_pupil_opd_materialization(
+    atmosphere, telescope, source, pupil)
+```
+
+Core requires the returned value to be a native
+`PreparedPupilOPDMaterialization` bound to those exact supplied objects.
+Its constructor is intentionally closed: use
+`prepare_pupil_opd_materialization`, which binds the exact telescope and pupil
+and prepares a renderer for the requested frozen source geometry. Models
+without this method, values of another materialization type, and stale,
+foreign, or disguised optical bindings fail with structured preparation
+errors. Do not opt in a model merely because its path input happens to be a
+`PupilFunction`; the model must actually define atmosphere-derived pupil OPD
+as this publication product.
+
+Drive one publication through materialize, submit, nonblocking completion,
+apply, and reclaim before reusing the route. One external owner must serialize
+those calls and must not advance atmosphere state until every due route has
+applied. An unexpected backend result makes the route uncertain and
+non-reclaimable. Core does not poll, retain arbitrary atmosphere history, or
+compose the all-routes epoch barrier.
+
+The immutable publication carries an opaque route identity rather than the
+source object or prepared resource graph. That identity binds the exact frozen
+source and materialization for the route; callers compare it only through
+`pupil_opd_publication_route_identity` and do not reconstruct it.
+
+Do not use this seam to infer transfer for an arbitrary path input. Pupil
+support and amplitude, sampled static aberrations, controllable-optic surfaces,
+autonomous path optics, propagation workspaces, and path results remain
+target-local. A future field, intensity, extended-source, asterism,
+multi-component, or illumination product requires its own semantic publication
+and apply contract; it must not opt in through a generic `copyto!` fallback.
+
 Plant invokes a full-optical path executor only after atmosphere
 materialization, prepared native sampled aberrations, controllable surfaces,
 and autonomous path-local optics have formed its caller-owned input. A typed
