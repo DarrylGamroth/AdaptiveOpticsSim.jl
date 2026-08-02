@@ -472,6 +472,28 @@ function validate_controllable_optic_workspace_target(
     ))
 end
 
+@inline function _require_exact_dm_runtime_modes_target(
+    modes::AbstractArray,
+    target::AbstractComputeDevice,
+    label::AbstractString,
+)
+    return _require_exact_plant_array_target(modes, target, label)
+end
+
+function _require_exact_dm_runtime_modes_target(
+    operator::GaussianInfluenceOperator,
+    target::AbstractComputeDevice,
+    label::AbstractString,
+)
+    _require_exact_plant_array_target(
+        operator.pupil_backend, target, "$label pupil storage")
+    _require_exact_plant_array_target(
+        operator.coordinates_backend, target, "$label coordinate storage")
+    # The corresponding host arrays are deliberate immutable geometry and
+    # scalar-indexing storage for the lazy AbstractMatrix interface.
+    return operator
+end
+
 function _require_exact_deformable_mirror_runtime_target(
     mirror::DeformableMirror,
     target::AbstractComputeDevice,
@@ -481,13 +503,14 @@ function _require_exact_deformable_mirror_runtime_target(
     for (field_label, storage) in (
         ("OPD", state.opd),
         ("OPD vector", state.opd_vec),
-        ("influence modes", state.modes),
         ("command coefficients", state.coefs),
         ("actuator coefficients", state.actuator_coefs),
     )
         _require_exact_plant_array_target(
             storage, target, "$label $field_label")
     end
+    _require_exact_dm_runtime_modes_target(
+        state.modes, target, "$label influence modes")
     _require_exact_optional_plant_array_target(
         state.coefs_grid, target, "$label coefficient grid")
     _require_exact_optional_plant_array_target(
