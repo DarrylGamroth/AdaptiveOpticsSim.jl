@@ -166,10 +166,13 @@ namespace.
   source radiometry is declared with `PhysicalPhotonIrradianceSource` or
   `NormalizedTestSource`
 - Qualified cold telescope preparation: `Optics.AbstractTelescopeDefinition`,
-  `Optics.TelescopeDefinition`, and `Optics.prepare_telescope(definition,
-  target)`. A definition contains scalar aperture configuration and no sampled
-  arrays, backend, compute device, or mutable state; preparation materializes
-  one independent numerical `Telescope` on the exact target
+  `Optics.TelescopeDefinition`, `Optics.prepare_telescope(definition, target)`,
+  and `Optics.validate_telescope_target(telescope, target)`. A definition
+  contains aperture configuration and no prepared arrays, backend, compute
+  device, or mutable state; preparation materializes one independent
+  numerical `Optics.AbstractTelescope` on the exact target. Custom prepared
+  telescope types validate their owned data-plane arrays through the
+  fail-closed validation seam
 - Source accessors: `wavelength`, `photon_irradiance`, `source_radiometry`,
   `source_radiometric_value`, `optical_path`
 - Telescope aperture mutation: `set_pupil!`, `set_pupil_reflectivity!`,
@@ -940,8 +943,14 @@ root forwarding bindings for atmosphere-owned names.
   `Atmospheres.KolmogorovAtmosphereDefinition`,
   `Atmospheres.MultiLayerAtmosphereDefinition`,
   `Atmospheres.InfiniteMultiLayerAtmosphereDefinition`, and
-  `Atmospheres.prepare_timed_atmosphere(definition, telescope, target)`
-- Epochs: `AtmosphereEpoch`, `current_epoch`, `epoch_time`, `epoch_sequence`
+  `Atmospheres.prepare_timed_atmosphere(definition, telescope, target)`;
+  custom prepared owners implement the fail-closed
+  `Atmospheres.validate_timed_atmosphere_target(atmosphere, target)` seam
+- Epochs: `AtmosphereEpoch`, `current_epoch`, `epoch_time`, `epoch_sequence`;
+  custom timed owners retain a qualified-public `AtmosphereIdentity` and
+  `AtmosphereTimelineState`, construct the latter with
+  `new_atmosphere_timeline(T)`, and implement `atmosphere_identity` and
+  `atmosphere_timeline`
 - Explicit evolution: `advance_by!`, `advance_to!`
 - Direction preparation: `prepare_atmosphere_renderer`,
   `prepare_atmosphere_renderers`, `direction_renderers`

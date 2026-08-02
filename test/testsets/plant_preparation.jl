@@ -3,6 +3,119 @@ struct DirectSciencePathModel{R}
     revision::R
 end
 
+struct ExtensionTelescopeDefinition <: AbstractTelescopeDefinition
+    revision::UInt
+end
+
+struct ExtensionTelescope <: AdaptiveOpticsSim.Optics.AbstractTelescope
+    pupil::Matrix{Bool}
+    reflectivity::Matrix{Float64}
+    revision::UInt
+end
+
+struct ExtensionTimedAtmosphereDefinition <:
+    AbstractTimedAtmosphereDefinition
+end
+
+mutable struct ExtensionTimedAtmosphere <: AbstractTimedAtmosphere
+    telescope::ExtensionTelescope
+    identity::AdaptiveOpticsSim.Atmospheres.AtmosphereIdentity
+    timeline::AdaptiveOpticsSim.Atmospheres.AtmosphereTimelineState{Float64}
+end
+
+AdaptiveOpticsSim.Optics.pupil_mask(telescope::ExtensionTelescope) =
+    telescope.pupil
+AdaptiveOpticsSim.Optics.pupil_reflectivity(telescope::ExtensionTelescope) =
+    telescope.reflectivity
+AdaptiveOpticsSim.Optics.aperture_revision(telescope::ExtensionTelescope) =
+    telescope.revision
+AdaptiveOpticsSim.Atmospheres.atmosphere_identity(
+    atmosphere::ExtensionTimedAtmosphere) = atmosphere.identity
+AdaptiveOpticsSim.Atmospheres.atmosphere_timeline(
+    atmosphere::ExtensionTimedAtmosphere) = atmosphere.timeline
+AdaptiveOpticsSim.Atmospheres.atmosphere_numeric_type(
+    ::ExtensionTimedAtmosphere) = Float64
+AdaptiveOpticsSim.Atmospheres.initialize_atmosphere!(
+    atmosphere::ExtensionTimedAtmosphere,
+    ::AbstractRNG,
+) = atmosphere
+AdaptiveOpticsSim.Atmospheres.evolve_atmosphere!(
+    atmosphere::ExtensionTimedAtmosphere,
+    ::Real,
+    ::AbstractRNG,
+) = atmosphere
+
+function AdaptiveOpticsSim.Optics.prepare_telescope(
+    definition::ExtensionTelescopeDefinition,
+    target::HostComputeDevice,
+)
+    telescope = ExtensionTelescope(
+        trues(4, 4), fill(0.75, 4, 4), definition.revision)
+    return AdaptiveOpticsSim.Optics.validate_telescope_target(
+        telescope, target)
+end
+
+function AdaptiveOpticsSim.Optics.validate_telescope_target(
+    telescope::ExtensionTelescope,
+    target::AbstractComputeDevice,
+)
+    compute_device(telescope.pupil) == target || throw(
+        InvalidConfiguration("extension telescope pupil occupies wrong target"))
+    compute_device(telescope.reflectivity) == target || throw(
+        InvalidConfiguration(
+            "extension telescope reflectivity occupies wrong target"))
+    return telescope
+end
+
+function AdaptiveOpticsSim.Atmospheres.prepare_timed_atmosphere(
+    ::ExtensionTimedAtmosphereDefinition,
+    telescope::ExtensionTelescope,
+    target::HostComputeDevice,
+)
+    AdaptiveOpticsSim.Optics.validate_telescope_target(telescope, target)
+    return ExtensionTimedAtmosphere(
+        telescope,
+        AdaptiveOpticsSim.Atmospheres.AtmosphereIdentity(),
+        AdaptiveOpticsSim.Atmospheres.new_atmosphere_timeline(Float64),
+    )
+end
+
+function AdaptiveOpticsSim.Atmospheres.validate_timed_atmosphere_target(
+    atmosphere::ExtensionTimedAtmosphere,
+    target::AbstractComputeDevice,
+)
+    AdaptiveOpticsSim.Optics.validate_telescope_target(
+        atmosphere.telescope, target)
+    return atmosphere
+end
+
+@testset "Custom telescope and timed-atmosphere preparation seams" begin
+    target = HostComputeDevice()
+    definition = PlantDefinition(;
+        telescope=ExtensionTelescopeDefinition(UInt(17)),
+        atmosphere=ExtensionTimedAtmosphereDefinition(),
+    )
+    first = prepare_plant(definition, target; run_seed=0x2050)
+    second = prepare_plant(definition, target; run_seed=0x2050)
+
+    @test prepared_telescope(first) isa ExtensionTelescope
+    @test prepared_atmosphere(first) isa ExtensionTimedAtmosphere
+    @test prepared_telescope(first) !== prepared_telescope(second)
+    @test prepared_atmosphere(first) !== prepared_atmosphere(second)
+    @test prepared_atmosphere(first).telescope === prepared_telescope(first)
+    @test aperture_revision(prepared_telescope(first)) == UInt(17)
+    @test AdaptiveOpticsSim.Optics.validate_telescope_target(
+        prepared_telescope(first), target) === prepared_telescope(first)
+    @test AdaptiveOpticsSim.Atmospheres.validate_timed_atmosphere_target(
+        prepared_atmosphere(first), target) === prepared_atmosphere(first)
+    epoch = advance_by!(
+        prepared_atmosphere(first), 0.25; rng=MersenneTwister(0x2050))
+    @test epoch_time(epoch) == 0.25
+    @test epoch_sequence(epoch) == UInt64(1)
+    @test_throws AtmosphereEpochError current_epoch(
+        prepared_atmosphere(second))
+end
+
 function run_selected_acquisition_materialization_tests()
 @testset "Selected acquisition atmosphere materialization" begin
     T = Float64

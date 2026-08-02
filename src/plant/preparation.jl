@@ -1219,7 +1219,7 @@ struct PreparedPlant{
     D<:PlantDefinition,
     C<:AbstractComputeDevice,
     X,
-    T<:Telescope,
+    T<:AbstractTelescope,
     A<:AbstractTimedAtmosphere,
     S,
     B,
@@ -1256,7 +1256,7 @@ struct PreparedPlant{
         D<:PlantDefinition,
         C<:AbstractComputeDevice,
         X,
-        T<:Telescope,
+        T<:AbstractTelescope,
         A<:AbstractTimedAtmosphere,
         S,
         B,
@@ -1265,8 +1265,8 @@ struct PreparedPlant{
         _prepared_device_execution_compute_device(context) == target ||
             throw(PlantPreparationError(:plant, :execution_context_target,
                 "prepared execution context does not match the exact plant target"))
-        _require_exact_telescope_target(telescope, target)
-        _require_prepared_timed_atmosphere_target(atmosphere, target)
+        validate_telescope_target(telescope, target)
+        validate_timed_atmosphere_target(atmosphere, target)
         plant = new{D,C,X,T,A,S,B,R}(
             definition,
             target,
@@ -1598,10 +1598,15 @@ function prepare_plant(definition::PlantDefinition,
         throw(PlantPreparationError(:plant, :execution_context_target,
             "prepared execution context does not match the requested exact target"))
     return _with_completed_prepared_device_execution_context(context) do
-        telescope = prepare_telescope(
-            telescope_definition(definition), target)
-        atmosphere = prepare_timed_atmosphere(
-            atmosphere_definition(definition), telescope, target)
+        telescope = validate_telescope_target(
+            prepare_telescope(telescope_definition(definition), target),
+            target,
+        )
+        atmosphere = validate_timed_atmosphere_target(
+            prepare_timed_atmosphere(
+                atmosphere_definition(definition), telescope, target),
+            target,
+        )
         endpoint_configurations =
             _sorted_command_endpoint_configurations(command_endpoints)
         optic_definitions =

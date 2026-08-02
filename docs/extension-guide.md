@@ -90,8 +90,10 @@ inputs, and destinations. Do not copy directly from one accelerator to a
 different accelerator during preparation; accept caller-owned host input or
 require the caller to stage the transfer explicitly.
 
-Plant-owned extension points validate exact residency through the qualified
-`validate_controllable_optic_target`,
+Prepared-owner extension points validate exact residency through the qualified
+`Optics.validate_telescope_target`,
+`Atmospheres.validate_timed_atmosphere_target`,
+`Plant.validate_controllable_optic_target`,
 `validate_controllable_optic_state_target`,
 `validate_controllable_optic_workspace_target`,
 `validate_pupil_surface_coupling_target`,
@@ -143,6 +145,24 @@ independent numerical owners and evolution state. Inspect a declaration with
 `Plant.telescope_definition` and `Plant.atmosphere_definition`; inspect a
 prepared owner with `Plant.plant_definition`, `Plant.prepared_telescope`, and
 `Plant.prepared_atmosphere`.
+
+A custom `Optics.AbstractTelescopeDefinition` implements the qualified-public
+`Optics.prepare_telescope(definition, target)` method and returns a concrete
+`Optics.AbstractTelescope`. Its prepared owner implements
+`Optics.validate_telescope_target(telescope, target)` and the aperture
+revision, reflectivity, backend, and compute-device interfaces consumed by its
+paths. A custom `Atmospheres.AbstractTimedAtmosphereDefinition` similarly
+implements `Atmospheres.prepare_timed_atmosphere(definition, telescope,
+target)` and its prepared `Atmospheres.AbstractTimedAtmosphere` implements
+`Atmospheres.validate_timed_atmosphere_target(atmosphere, target)`. Both
+validation seams must inspect every owner-controlled data-plane array and fail
+closed on the wrong target without mutating state.
+Timed-atmosphere owners retain a unique `Atmospheres.AtmosphereIdentity` and an
+`Atmospheres.AtmosphereTimelineState` made by
+`Atmospheres.new_atmosphere_timeline(T)`, and implement the qualified-public
+`atmosphere_identity` and `atmosphere_timeline` accessors. These values let the
+shared epoch and owner-bound RNG machinery remain independent of a concrete
+atmosphere layout.
 
 `ControllableOpticDefinition`, `OpticalPathDefinition`, and
 `AcquisitionDefinition` accept only explicitly declared cold model-definition
@@ -468,8 +488,8 @@ A `MultiLayerAtmosphereDefinition` or
 declares one stable `AtmosphereLayerID` per layer through its `layer_ids`
 keyword. Ordinary numerical atmosphere constructors still permit omitted IDs
 for non-plant work, but the cold plant declaration rejects missing or duplicate
-stochastic-owner identities. A custom single-owner timed atmosphere continues
-to implement its ordinary `initialize_atmosphere!` and
+stochastic-owner identities. A custom single-owner timed atmosphere also
+implements its ordinary `initialize_atmosphere!` and
 `evolve_atmosphere!` methods against `AbstractRNG`; the prepared plant supplies
 the exact owner-bound RNG to those methods.
 

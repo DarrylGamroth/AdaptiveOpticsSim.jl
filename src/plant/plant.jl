@@ -112,7 +112,6 @@ import ..Optics:
     _FixedOpticalProductVector,
     _direct_imaging_batch_product_contract,
     _require_exact_direct_imaging_target,
-    _require_exact_telescope_target,
     actuator_model,
     aperture_revision,
     coordinates_xy_arcsec,
@@ -134,6 +133,7 @@ import ..Optics:
     topology_command_count,
     update_cycle_averaged_circular_modulation!,
     update_surface!,
+    validate_telescope_target,
     validate_direct_imaging_batch,
     validate_dm_actuator_model,
     validate_plane_storage,
@@ -198,7 +198,6 @@ import ..Atmospheres:
     PreparedAtmosphereDirectionBatch,
     _advance_by_with_rng!,
     _advance_to_with_rng!,
-    _require_prepared_timed_atmosphere_target,
     _validate_atmosphere_destination,
     _validate_atmosphere_direction_batch_binding,
     _validate_atmosphere_renderer_binding,
@@ -218,6 +217,7 @@ import ..Atmospheres:
     prepare_timed_atmosphere,
     render_atmosphere!,
     render_atmosphere_directions!,
+    validate_timed_atmosphere_target,
     validate_atmosphere_direction_batch,
     validate_atmosphere_rendering
 

@@ -558,6 +558,13 @@ end
     )
     @test Plant.sampled_aberration_definitions(vector_definition)[1] ===
         first_replace
+    sampled_registry =
+        Plant.sampled_aberration_definitions(vector_definition)
+    @test getfield(sampled_registry, :_storage) isa Tuple
+    @test_throws CanonicalIndexError setindex!(
+        sampled_registry, first_replace, 1)
+    @test_throws MethodError setindex!(
+        getfield(sampled_registry, :_storage), first_replace, 1)
 
     topology_cases = (
         (

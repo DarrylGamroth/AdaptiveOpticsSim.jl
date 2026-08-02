@@ -63,6 +63,10 @@ end
     @test multilayer_definition.layers[1].id == AtmosphereLayerID(:ground)
     @test_throws CanonicalIndexError multilayer_definition.layers[1] =
         multilayer_definition.layers[2]
+    retained_layers = getfield(multilayer_definition.layers, :_storage)
+    @test retained_layers isa Tuple
+    @test_throws MethodError setindex!(
+        retained_layers, retained_layers[2], 1)
     first = prepare_timed_atmosphere(
         multilayer_definition, telescope, target)
     second = prepare_timed_atmosphere(

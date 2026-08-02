@@ -561,24 +561,50 @@ function _require_named_sampled_aberration_identity(
     return nothing
 end
 
-function _definition_memory(values, ::Type{T}, validator) where {T}
+struct _FixedPlantDefinitionRegistry{T} <: AbstractVector{T}
+    _storage::Tuple{Vararg{T}}
+end
+
+Base.size(registry::_FixedPlantDefinitionRegistry) =
+    (length(getfield(registry, :_storage)),)
+Base.axes(registry::_FixedPlantDefinitionRegistry) =
+    axes(getfield(registry, :_storage))
+Base.length(registry::_FixedPlantDefinitionRegistry) =
+    length(getfield(registry, :_storage))
+Base.getindex(registry::_FixedPlantDefinitionRegistry, index::Int) =
+    getfield(registry, :_storage)[index]
+Base.IndexStyle(::Type{<:_FixedPlantDefinitionRegistry}) = IndexLinear()
+Base.iterate(registry::_FixedPlantDefinitionRegistry, state...) =
+    iterate(getfield(registry, :_storage), state...)
+Base.copy(registry::_FixedPlantDefinitionRegistry) =
+    collect(getfield(registry, :_storage))
+
+function Base.getproperty(
+    registry::_FixedPlantDefinitionRegistry,
+    name::Symbol,
+)
+    name === :_storage && return collect(getfield(registry, :_storage))
+    return getfield(registry, name)
+end
+
+function _definition_registry(values, ::Type{T}, validator) where {T}
     memory = Memory{T}(undef, length(values))
     @inbounds for (index, value) in enumerate(values)
         validator(value)
         memory[index] = value
     end
-    return memory
+    return _FixedPlantDefinitionRegistry{T}(Tuple(memory))
 end
 
 function _normalize_path_definitions(
     paths::Union{Tuple,AbstractVector},
 )
-    return _definition_memory(
+    return _definition_registry(
         paths, OpticalPathDefinition, _require_path_definition)
 end
 
 function _normalize_path_definitions(paths::NamedTuple)
-    normalized = _definition_memory(
+    normalized = _definition_registry(
         values(paths), OpticalPathDefinition, _require_path_definition)
     foreach(_require_named_path_identity, keys(paths), normalized)
     return normalized
@@ -593,12 +619,12 @@ end
 function _normalize_acquisition_definitions(
     acquisitions::Union{Tuple,AbstractVector},
 )
-    return _definition_memory(acquisitions, AcquisitionDefinition,
+    return _definition_registry(acquisitions, AcquisitionDefinition,
         _require_acquisition_definition)
 end
 
 function _normalize_acquisition_definitions(acquisitions::NamedTuple)
-    normalized = _definition_memory(values(acquisitions),
+    normalized = _definition_registry(values(acquisitions),
         AcquisitionDefinition, _require_acquisition_definition)
     foreach(_require_named_acquisition_identity, keys(acquisitions),
         normalized)
@@ -614,12 +640,12 @@ end
 function _normalize_controllable_optic_definitions(
     optics::Union{Tuple,AbstractVector},
 )
-    return _definition_memory(optics, ControllableOpticDefinition,
+    return _definition_registry(optics, ControllableOpticDefinition,
         _require_controllable_optic_definition)
 end
 
 function _normalize_controllable_optic_definitions(optics::NamedTuple)
-    normalized = _definition_memory(values(optics),
+    normalized = _definition_registry(values(optics),
         ControllableOpticDefinition,
         _require_controllable_optic_definition)
     foreach(_require_named_controllable_optic_identity, keys(optics),
@@ -636,13 +662,13 @@ end
 function _normalize_sampled_aberration_definitions(
     aberrations::Union{Tuple,AbstractVector},
 )
-    return _definition_memory(aberrations, SampledAberrationDefinition,
+    return _definition_registry(aberrations, SampledAberrationDefinition,
         _require_sampled_aberration_definition)
 end
 
 function _normalize_sampled_aberration_definitions(
     aberrations::NamedTuple)
-    normalized = _definition_memory(values(aberrations),
+    normalized = _definition_registry(values(aberrations),
         SampledAberrationDefinition,
         _require_sampled_aberration_definition)
     foreach(_require_named_sampled_aberration_identity, keys(aberrations),
@@ -863,16 +889,20 @@ RNG stream, or HIL descriptor.
 struct PlantDefinition{T,A}
     telescope_definition::T
     atmosphere_definition::A
-    controllable_optics::Memory{ControllableOpticDefinition}
-    sampled_aberrations::Memory{SampledAberrationDefinition}
-    paths::Memory{OpticalPathDefinition}
-    acquisitions::Memory{AcquisitionDefinition}
+    controllable_optics::_FixedPlantDefinitionRegistry{
+        ControllableOpticDefinition}
+    sampled_aberrations::_FixedPlantDefinitionRegistry{
+        SampledAberrationDefinition}
+    paths::_FixedPlantDefinitionRegistry{OpticalPathDefinition}
+    acquisitions::_FixedPlantDefinitionRegistry{AcquisitionDefinition}
 
     function PlantDefinition(telescope::T, atmosphere::A,
-        controllable_optics::Memory{ControllableOpticDefinition},
-        sampled_aberrations::Memory{SampledAberrationDefinition},
-        paths::Memory{OpticalPathDefinition},
-        acquisitions::Memory{AcquisitionDefinition},
+        controllable_optics::_FixedPlantDefinitionRegistry{
+            ControllableOpticDefinition},
+        sampled_aberrations::_FixedPlantDefinitionRegistry{
+            SampledAberrationDefinition},
+        paths::_FixedPlantDefinitionRegistry{OpticalPathDefinition},
+        acquisitions::_FixedPlantDefinitionRegistry{AcquisitionDefinition},
     ) where {T,A}
         _require_plant_telescope_definition(telescope)
         _require_plant_atmosphere_definition(atmosphere)

@@ -731,7 +731,7 @@ end
 
 function _require_exact_path_target(
     path::PreparedPathExecutor,
-    telescope::Telescope,
+    telescope::AbstractTelescope,
     atmosphere::AbstractTimedAtmosphere,
     target::AbstractComputeDevice,
     context,
@@ -947,8 +947,8 @@ function _require_exact_prepared_plant_target(
         _prepared_device_execution_compute_device(plant.context)
     context_target == target || _throw_wrong_plant_target(
         target, "prepared plant execution context", context_target)
-    _require_exact_telescope_target(plant.telescope, target)
-    _require_prepared_timed_atmosphere_target(plant.atmosphere, target)
+    validate_telescope_target(plant.telescope, target)
+    validate_timed_atmosphere_target(plant.atmosphere, target)
 
     @inbounds for binding in plant.command_endpoints
         _require_exact_command_endpoint_target(binding, target)
@@ -1230,7 +1230,7 @@ function _require_exact_prepared_event_loop_target(
         _prepared_device_execution_compute_device(prepared.context)
     context_target == target || _throw_wrong_plant_target(
         target, "prepared plant event-loop context", context_target)
-    _require_prepared_timed_atmosphere_target(prepared.atmosphere, target)
+    validate_timed_atmosphere_target(prepared.atmosphere, target)
 
     @inbounds for binding in prepared.command_endpoints
         _require_exact_command_endpoint_target(binding.binding, target)

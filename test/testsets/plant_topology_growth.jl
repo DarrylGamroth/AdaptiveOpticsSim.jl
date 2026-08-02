@@ -308,9 +308,9 @@ end
         plant = fixture.plant
         selection = fixture.selection
         @test path_definitions(definition) isa
-            Memory{OpticalPathDefinition}
+            AbstractVector{OpticalPathDefinition}
         @test acquisition_definitions(definition) isa
-            Memory{AcquisitionDefinition}
+            AbstractVector{AcquisitionDefinition}
         @test prepared_paths(plant) isa Memory{PreparedPathExecutor}
         @test prepared_acquisitions(plant) isa
             Memory{PreparedAcquisitionOwner}

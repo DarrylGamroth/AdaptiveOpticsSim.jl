@@ -7,21 +7,19 @@ struct AtmosphereLayerDefinition{T<:AbstractFloat}
     altitude::T
 end
 
-struct _FixedAtmosphereLayerDefinitions{
-    T<:AbstractFloat,
-    V<:Memory{AtmosphereLayerDefinition{T}},
-} <: AbstractVector{AtmosphereLayerDefinition{T}}
-    _storage::V
+struct _FixedAtmosphereLayerDefinitions{T<:AbstractFloat} <:
+    AbstractVector{AtmosphereLayerDefinition{T}}
+    _storage::Tuple{Vararg{AtmosphereLayerDefinition{T}}}
 end
 
 Base.size(layers::_FixedAtmosphereLayerDefinitions) =
-    size(getfield(layers, :_storage))
+    (length(getfield(layers, :_storage)),)
 Base.axes(layers::_FixedAtmosphereLayerDefinitions) =
     axes(getfield(layers, :_storage))
 Base.length(layers::_FixedAtmosphereLayerDefinitions) =
     length(getfield(layers, :_storage))
 Base.getindex(layers::_FixedAtmosphereLayerDefinitions, index::Int) =
-    @inbounds getfield(layers, :_storage)[index]
+    getfield(layers, :_storage)[index]
 Base.IndexStyle(::Type{<:_FixedAtmosphereLayerDefinitions}) = IndexLinear()
 Base.iterate(layers::_FixedAtmosphereLayerDefinitions, state...) =
     iterate(getfield(layers, :_storage), state...)
@@ -129,7 +127,7 @@ function _cold_atmosphere_layer_definitions(
         atol=T(1e-6), rtol=T(1e-6)) || throw(InvalidConfiguration(
         "fractional_cn2 must sum to 1"))
     _require_unique_cold_atmosphere_layer_ids(layers)
-    return _FixedAtmosphereLayerDefinitions{T,typeof(layers)}(layers)
+    return _FixedAtmosphereLayerDefinitions{T}(Tuple(layers))
 end
 
 function MultiLayerAtmosphereDefinition(;
@@ -327,14 +325,14 @@ function _require_telescope_target(telescope::Telescope, target, label)
     return telescope
 end
 
-function _require_prepared_timed_atmosphere_target(
+function validate_timed_atmosphere_target(
     atmosphere::KolmogorovAtmosphere,
     target::AbstractComputeDevice,
 )
     return _require_kolmogorov_target(atmosphere, target)
 end
 
-function _require_prepared_timed_atmosphere_target(
+function validate_timed_atmosphere_target(
     atmosphere::MultiLayerAtmosphere,
     target::AbstractComputeDevice,
 )
@@ -399,7 +397,7 @@ function _require_infinite_screen_target(screen, target)
     return screen
 end
 
-function _require_prepared_timed_atmosphere_target(
+function validate_timed_atmosphere_target(
     atmosphere::InfiniteMultiLayerAtmosphere,
     target::AbstractComputeDevice,
 )
@@ -409,10 +407,17 @@ function _require_prepared_timed_atmosphere_target(
     return atmosphere
 end
 
-function _require_prepared_timed_atmosphere_target(
-    prepared,
+"""Qualified fail-closed exact-target validation seam for timed atmospheres."""
+function validate_timed_atmosphere_target(
+    prepared::AbstractTimedAtmosphere,
     ::AbstractComputeDevice,
 )
+    throw(InvalidConfiguration(
+        "prepared timed atmosphere $(typeof(prepared)) does not implement " *
+        "validate_timed_atmosphere_target"))
+end
+
+function validate_timed_atmosphere_target(prepared, ::AbstractComputeDevice)
     throw(InvalidConfiguration(
         "timed atmosphere preparation must return AbstractTimedAtmosphere; " *
         "got $(typeof(prepared))"))
@@ -446,7 +451,7 @@ function prepare_timed_atmosphere(
     return _with_compute_device(target) do
         prepared = _prepare_timed_atmosphere(
             definition, telescope, selector)
-        _require_prepared_timed_atmosphere_target(prepared, target)
+        validate_timed_atmosphere_target(prepared, target)
         return prepared
     end
 end

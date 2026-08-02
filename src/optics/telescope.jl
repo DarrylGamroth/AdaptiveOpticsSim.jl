@@ -192,7 +192,7 @@ function _prepare_telescope(
             definition.revision,
             selector,
         )
-        _require_exact_telescope_target(telescope, target)
+        validate_telescope_target(telescope, target)
         return telescope
     end
 end
@@ -283,7 +283,8 @@ function _materialize_telescope(
         params, aperture)
 end
 
-@inline function _require_exact_telescope_target(
+"""Qualified fail-closed exact-target validation seam for prepared telescopes."""
+@inline function validate_telescope_target(
     telescope::Telescope,
     target::AbstractComputeDevice,
 )
@@ -302,6 +303,21 @@ end
         "prepared telescope reflectivity occupies $(reflectivity_device)",
     )
     return telescope
+end
+
+function validate_telescope_target(
+    telescope::AbstractTelescope,
+    ::AbstractComputeDevice,
+)
+    throw(InvalidConfiguration(
+        "prepared telescope $(typeof(telescope)) does not implement " *
+        "validate_telescope_target"))
+end
+
+function validate_telescope_target(telescope, ::AbstractComputeDevice)
+    throw(InvalidConfiguration(
+        "telescope preparation must return AbstractTelescope; got " *
+        "$(typeof(telescope))"))
 end
 
 function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)

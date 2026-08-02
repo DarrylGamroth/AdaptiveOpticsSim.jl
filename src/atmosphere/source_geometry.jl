@@ -79,16 +79,20 @@ Base.:(==)(a::AtmosphereEpoch, b::AtmosphereEpoch) =
     isequal(a.model_time, b.model_time) &&
     a.sequence == b.sequence
 
+"""Single-writer publication state for one prepared timed atmosphere."""
 mutable struct AtmosphereTimelineState{T<:AbstractFloat}
     model_time::T
     sequence::UInt64
     initialized::Bool
 end
 
+"""Construct unpublished single-writer timeline state for a timed atmosphere."""
 @inline new_atmosphere_timeline(::Type{T}) where {T<:AbstractFloat} =
     AtmosphereTimelineState{T}(zero(T), UInt64(0), false)
 
+"""Return the mutable single-writer timeline retained by a timed atmosphere."""
 @inline atmosphere_timeline(atm::AbstractTimedAtmosphere) = atm.state.timeline
+"""Return the unique run-local identity retained by a timed atmosphere."""
 @inline atmosphere_identity(atm::AbstractTimedAtmosphere) = atm.identity
 
 """Return the currently published epoch, or throw if none has been published."""
@@ -118,19 +122,19 @@ function _explicit_atmosphere_target(target_time::Real, ::Type{T}) where {T<:Abs
     return value
 end
 
-# Concrete models own initialization, wind/refresh evolution, boundary
-# extension, and all RNG consumption through these dispatch points.
+"""Initialize a concrete timed atmosphere using its caller-supplied RNG."""
 function initialize_atmosphere!(atm::AbstractTimedAtmosphere, ::AbstractRNG)
     throw(UnsupportedAlgorithm(
         "$(typeof(atm)) does not implement explicit atmosphere initialization"))
 end
 
+"""Evolve an initialized timed atmosphere by an explicit elapsed duration."""
 function evolve_atmosphere!(atm::AbstractTimedAtmosphere, ::Real, ::AbstractRNG)
     throw(UnsupportedAlgorithm(
         "$(typeof(atm)) does not implement explicit atmosphere evolution"))
 end
 
-
+"""Evolve a timed atmosphere immediately after its first initialization."""
 @inline evolve_initial_atmosphere!(atm::AbstractTimedAtmosphere, duration::Real,
     rng::AbstractRNG) = evolve_atmosphere!(atm, duration, rng)
 
@@ -288,6 +292,7 @@ end
 
 @inline atmosphere_layers(atm::AbstractTimedAtmosphere) = atm.layers
 
+"""Return the real floating-point sample type of a timed atmosphere."""
 function atmosphere_numeric_type(atm::AbstractTimedAtmosphere)
     throw(UnsupportedAlgorithm(
         "$(typeof(atm)) does not declare its atmosphere numeric type"))

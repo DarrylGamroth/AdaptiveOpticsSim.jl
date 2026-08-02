@@ -246,15 +246,25 @@ end
     @test telescope_definition(plant) === telescope
     @test atmosphere_definition(plant) === atmosphere
     @test controllable_optic_definitions(plant) isa
-        Memory{ControllableOpticDefinition}
+        AbstractVector{ControllableOpticDefinition}
     @test Tuple(controllable_optic_definitions(plant)) ===
         (woofer, tweeter, segmented)
-    @test path_definitions(plant) isa Memory{OpticalPathDefinition}
+    @test path_definitions(plant) isa AbstractVector{OpticalPathDefinition}
     @test Tuple(path_definitions(plant)) === (ngs_path, science_path)
     @test acquisition_definitions(plant) isa
-        Memory{AcquisitionDefinition}
+        AbstractVector{AcquisitionDefinition}
     @test Tuple(acquisition_definitions(plant)) ===
         (fast_camera, slow_camera, ngs_wfs, woofer_feedback)
+    for (registry, replacement) in (
+        (controllable_optic_definitions(plant), segmented),
+        (path_definitions(plant), science_path),
+        (acquisition_definitions(plant), slow_camera),
+    )
+        @test getfield(registry, :_storage) isa Tuple
+        @test_throws CanonicalIndexError setindex!(registry, replacement, 1)
+        @test_throws MethodError setindex!(
+            getfield(registry, :_storage), replacement, 1)
+    end
     @test controllable_optic_definition(plant, :woofer) === woofer
     @test controllable_optic_definition(
         plant,
