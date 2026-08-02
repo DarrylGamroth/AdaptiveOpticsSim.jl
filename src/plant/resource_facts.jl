@@ -374,6 +374,62 @@ function structural_array_bytes(array::AbstractArray,
         "exact structural byte counting is not defined for $(typeof(array))")
 end
 
+@inline function _structural_array_target_bytes(
+    ::Tuple{},
+    ::AbstractComputeDevice,
+    ::Symbol,
+)
+    return (present=false, bytes=UInt64(0))
+end
+
+"""
+Count only the explicitly enumerated arrays that occupy `target`.
+
+Prepared owners may deliberately span an accelerator data plane and host
+staging or calibration storage. Selection is by each array's exact compute
+device; an on-target unsupported layout still fails closed through
+`structural_array_bytes`.
+"""
+@inline function _structural_array_target_bytes(
+    arrays::Tuple,
+    target::AbstractComputeDevice,
+    component::Symbol,
+)
+    tail = _structural_array_target_bytes(
+        Base.tail(arrays), target, component)
+    array = first(arrays)
+    compute_device(array) == target || return tail
+    bytes = structural_array_bytes(array, target)
+    return (
+        present=true,
+        bytes=_checked_resource_add(bytes, tail.bytes, component),
+    )
+end
+
+@inline function _targeted_structural_resource_fact(
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+    resident,
+    workspace,
+)
+    (resident.present || workspace.present) ||
+        return UnknownStructuralResourceFact(id, target,
+            :owner_not_on_device)
+    return KnownStructuralResourceFact(
+        id, target, resident.bytes, workspace.bytes)
+end
+
+@inline function _combine_structural_target_bytes(
+    left,
+    right,
+    component::Symbol,
+)
+    return (
+        present=left.present || right.present,
+        bytes=_checked_resource_add(left.bytes, right.bytes, component),
+    )
+end
+
 @inline function _require_fact_target(
     fact::AbstractStructuralResourceFact,
     target::AbstractComputeDevice,

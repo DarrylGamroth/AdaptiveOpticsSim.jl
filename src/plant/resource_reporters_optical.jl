@@ -6,30 +6,6 @@
 # owner, while FFT plans and provider runtime memory remain opaque.
 #
 
-@inline function _owned_structural_array_bytes(
-    target::AbstractComputeDevice,
-    arrays::AbstractArray...,
-)
-    total = UInt64(0)
-    for array in arrays
-        total = _checked_resource_add(total,
-            structural_array_bytes(array, target), :resident_bytes)
-    end
-    return total
-end
-
-@inline function _owned_structural_workspace_bytes(
-    target::AbstractComputeDevice,
-    arrays::AbstractArray...,
-)
-    total = UInt64(0)
-    for array in arrays
-        total = _checked_resource_add(total,
-            structural_array_bytes(array, target), :workspace_bytes)
-    end
-    return total
-end
-
 @inline function _require_distinct_structural_storage(left::AbstractArray,
     right::AbstractArray, owner::Symbol)
     left === right && _structural_resource_error(owner, :unexpected_alias,
@@ -39,28 +15,32 @@ end
 
 @inline function _telescope_structural_resident_bytes(telescope::Telescope,
     target::AbstractComputeDevice)
-    return _owned_structural_array_bytes(target, telescope.aperture.pupil,
-        telescope.aperture.reflectivity)
+    return _structural_array_target_bytes(
+        (telescope.aperture.pupil, telescope.aperture.reflectivity),
+        target, :resident_bytes)
 end
 
 """Report the explicitly owned aperture mask and reflectivity arrays."""
 function structural_resource_fact(telescope::Telescope,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    return KnownStructuralResourceFact(id, target,
-        _telescope_structural_resident_bytes(telescope, target), 0)
+    resident = _telescope_structural_resident_bytes(telescope, target)
+    return _targeted_structural_resource_fact(id, target, resident,
+        (present=false, bytes=UInt64(0)))
 end
 
 @inline function _pupil_structural_resident_bytes(pupil::PupilFunction,
     target::AbstractComputeDevice)
-    return _owned_structural_array_bytes(target, pupil.support,
-        pupil.amplitude, pupil.opd)
+    return _structural_array_target_bytes(
+        (pupil.support, pupil.amplitude, pupil.opd), target,
+        :resident_bytes)
 end
 
 """Report one path-local pupil product; metadata is scalar-only."""
 function structural_resource_fact(pupil::PupilFunction,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    return KnownStructuralResourceFact(id, target,
-        _pupil_structural_resident_bytes(pupil, target), 0)
+    resident = _pupil_structural_resident_bytes(pupil, target)
+    return _targeted_structural_resource_fact(id, target, resident,
+        (present=false, bytes=UInt64(0)))
 end
 
 @inline function _kolmogorov_structural_resident_bytes(
@@ -68,28 +48,28 @@ end
     target::AbstractComputeDevice,
 )
     state = atmosphere.state
-    return _owned_structural_array_bytes(target, state.opd, state.psd,
-        state.spectrum, state.noise_re, state.noise_im, state.freqs)
+    return _structural_array_target_bytes(
+        (state.opd, state.psd, state.freqs), target, :resident_bytes)
 end
 
-@inline function _kolmogorov_structural_resident_bytes(
+@inline function _kolmogorov_structural_workspace_bytes(
     atmosphere::KolmogorovAtmosphere,
-    target::HostComputeDevice,
+    target::AbstractComputeDevice,
 )
     state = atmosphere.state
-    # These staging matrices reside on the CPU graph.  The accelerator method
-    # above intentionally excludes them rather than claiming host staging as
-    # accelerator storage.
-    return _owned_structural_array_bytes(target, state.opd, state.psd,
-        state.spectrum, state.noise_re, state.noise_im, state.noise_re_host,
-        state.noise_im_host, state.freqs)
+    return _structural_array_target_bytes(
+        (state.spectrum, state.noise_re, state.noise_im,
+            state.noise_re_host, state.noise_im_host), target,
+        :workspace_bytes)
 end
 
 """Report a standalone timed Kolmogorov atmosphere, excluding its FFT plan."""
 function structural_resource_fact(atmosphere::KolmogorovAtmosphere,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    return KnownStructuralResourceFact(id, target,
-        _kolmogorov_structural_resident_bytes(atmosphere, target), 0)
+    resident = _kolmogorov_structural_resident_bytes(atmosphere, target)
+    workspace = _kolmogorov_structural_workspace_bytes(atmosphere, target)
+    return _targeted_structural_resource_fact(
+        id, target, resident, workspace)
 end
 
 """
@@ -99,24 +79,30 @@ generator and its private screen telescope belong to this atmosphere owner.
 """
 function structural_resource_fact(atmosphere::MultiLayerAtmosphere,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    resident = UInt64(0)
+    resident = (present=false, bytes=UInt64(0))
+    workspace = (present=false, bytes=UInt64(0))
     for layer in atmosphere.layers
-        resident = _checked_resource_add(resident,
-            _telescope_structural_resident_bytes(layer.generator_telescope,
-                target), :resident_bytes)
-        resident = _checked_resource_add(resident,
-            _kolmogorov_structural_resident_bytes(layer.generator, target),
-            :resident_bytes)
+        resident = _combine_structural_target_bytes(resident,
+            _telescope_structural_resident_bytes(
+                layer.generator_telescope, target), :resident_bytes)
+        resident = _combine_structural_target_bytes(resident,
+            _kolmogorov_structural_resident_bytes(
+                layer.generator, target), :resident_bytes)
+        workspace = _combine_structural_target_bytes(workspace,
+            _kolmogorov_structural_workspace_bytes(
+                layer.generator, target), :workspace_bytes)
     end
-    return KnownStructuralResourceFact(id, target, resident, 0)
+    return _targeted_structural_resource_fact(
+        id, target, resident, workspace)
 end
 
 @inline function _renderer_structural_resident_bytes(
     renderer::AtmosphereDirectionRenderer,
     target::AbstractComputeDevice,
 )
-    return _owned_structural_array_bytes(target, renderer.shift_x,
-        renderer.shift_y, renderer.footprint_scale, renderer.pupil)
+    return _structural_array_target_bytes(
+        (renderer.shift_x, renderer.shift_y, renderer.footprint_scale,
+            renderer.pupil), target, :resident_bytes)
 end
 
 function _materialization_structural_resource_fact(
@@ -135,9 +121,10 @@ function _materialization_structural_resource_fact(
 )
     # The destination is the path's PupilFunction owner and is not counted
     # here.  The frozen renderer arrays are owned by materialization.
-    return KnownStructuralResourceFact(id, target,
-        _renderer_structural_resident_bytes(materialization.renderer, target),
-        0)
+    resident = _renderer_structural_resident_bytes(
+        materialization.renderer, target)
+    return _targeted_structural_resource_fact(id, target, resident,
+        (present=false, bytes=UInt64(0)))
 end
 
 """Report one prepared atmosphere-renderer/materialization owner."""
@@ -153,8 +140,8 @@ end
 @inline function _direct_imaging_resident_bytes(input::PupilFunction,
     field::ElectricField, output::IntensityMap,
     target::AbstractComputeDevice)
-    input_bytes = _pupil_structural_resident_bytes(input, target)
-    return _checked_resource_add(input_bytes,
+    return _combine_structural_target_bytes(
+        _pupil_structural_resident_bytes(input, target),
         _direct_imaging_noninput_resident_bytes(field, output, target),
         :resident_bytes)
 end
@@ -170,7 +157,8 @@ end
 
 @inline function _direct_imaging_noninput_resident_bytes(field::ElectricField,
     output::IntensityMap, target::AbstractComputeDevice)
-    return _owned_structural_array_bytes(target, field.values, output.values)
+    return _structural_array_target_bytes(
+        (field.values, output.values), target, :resident_bytes)
 end
 
 @inline function _direct_imaging_workspace_bytes(
@@ -180,8 +168,9 @@ end
 )
     _require_distinct_structural_storage(propagation.state.scratch,
         unshifted_intensity, :direct_imaging)
-    return _owned_structural_workspace_bytes(target,
-        propagation.state.scratch, unshifted_intensity)
+    return _structural_array_target_bytes(
+        (propagation.state.scratch, unshifted_intensity), target,
+        :workspace_bytes)
 end
 
 function _direct_imaging_workspace_bytes(propagation,
@@ -192,21 +181,11 @@ end
 
 @inline function _validate_direct_imaging_resource_bindings(
     prepared::PreparedDirectImaging)
-    prepared.plan.field_values === prepared.field.values ||
-        _structural_resource_error(:direct_imaging, :invalid_binding,
-            "prepared direct-imaging field storage changed")
-    prepared.plan.output_values === prepared.output.values ||
-        _structural_resource_error(:direct_imaging, :invalid_binding,
-            "prepared direct-imaging output storage changed")
-    prepared.workspace.propagation === prepared.plan.propagation ||
-        _structural_resource_error(:direct_imaging, :invalid_binding,
-            "prepared direct-imaging propagation changed")
-    prepared.workspace.unshifted_intensity === prepared.plan.unshifted_intensity ||
-        _structural_resource_error(:direct_imaging, :invalid_binding,
-            "prepared direct-imaging scratch storage changed")
+    execution_target = compute_device(prepared.field.values)
+    _require_exact_direct_imaging_target(prepared, execution_target)
     _require_distinct_structural_storage(prepared.field.values,
         prepared.output.values, :direct_imaging)
-    return nothing
+    return execution_target
 end
 
 """
@@ -221,35 +200,15 @@ function structural_resource_fact(prepared::PreparedDirectImaging,
         prepared.output, target)
     workspace = _direct_imaging_workspace_bytes(prepared.plan.propagation,
         prepared.plan.unshifted_intensity, target)
-    return KnownStructuralResourceFact(id, target, resident, workspace)
+    return _targeted_structural_resource_fact(
+        id, target, resident, workspace)
 end
 
 @inline function _validate_direct_imaging_batch_resource_bindings(
     prepared::PreparedDirectImagingBatch)
-    workspace = prepared.workspace
-    bindings = prepared.workspace_bindings
-    workspace.field_stack === bindings.field_stack ||
-        _structural_resource_error(:direct_imaging_batch, :invalid_binding,
-            "prepared direct-imaging field stack changed")
-    workspace.output_stack === bindings.output_stack ||
-        _structural_resource_error(:direct_imaging_batch, :invalid_binding,
-            "prepared direct-imaging output stack changed")
-    workspace.shift_axis1 === bindings.shift_axis1 ||
-        _structural_resource_error(:direct_imaging_batch, :invalid_binding,
-            "prepared direct-imaging axis-1 shifts changed")
-    workspace.shift_axis2 === bindings.shift_axis2 ||
-        _structural_resource_error(:direct_imaging_batch, :invalid_binding,
-            "prepared direct-imaging axis-2 shifts changed")
-    workspace.fft_plan === bindings.fft_plan ||
-        _structural_resource_error(:direct_imaging_batch, :invalid_binding,
-            "prepared direct-imaging FFT plan changed")
-    prepared.fields === bindings.fields ||
-        _structural_resource_error(:direct_imaging_batch, :invalid_binding,
-            "prepared direct-imaging field views changed")
-    prepared.output === bindings.output ||
-        _structural_resource_error(:direct_imaging_batch, :invalid_binding,
-            "prepared direct-imaging output views changed")
-    return nothing
+    target = prepared.signature.device
+    _require_exact_direct_imaging_target(prepared, target)
+    return target
 end
 
 """
@@ -261,9 +220,13 @@ function structural_resource_fact(prepared::PreparedDirectImagingBatch,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
     _validate_direct_imaging_batch_resource_bindings(prepared)
     workspace = prepared.workspace
-    bytes = _owned_structural_workspace_bytes(target, workspace.field_stack,
-        workspace.output_stack, workspace.shift_axis1, workspace.shift_axis2)
-    return KnownStructuralResourceFact(id, target, 0, bytes)
+    resident = _structural_array_target_bytes(
+        (workspace.output_stack, workspace.shift_axis1,
+            workspace.shift_axis2), target, :resident_bytes)
+    workspace_bytes = _structural_array_target_bytes(
+        (workspace.field_stack,), target, :workspace_bytes)
+    return _targeted_structural_resource_fact(
+        id, target, resident, workspace_bytes)
 end
 
 function _prepared_direct_path_resource_fact(
@@ -281,7 +244,8 @@ end
 function _prepared_direct_path_resource_fact(
     input::PupilFunction,
     result::IntensityMap,
-    materialization::PreparedPupilOPDMaterialization,
+    materialization::PreparedPupilOPDMaterialization{
+        <:AtmosphereDirectionRenderer},
     execution::PreparedDirectImaging,
     id::StructuralResourceOwnerID,
     target::AbstractComputeDevice,
@@ -296,20 +260,18 @@ function _prepared_direct_path_resource_fact(
         _structural_resource_error(:path, :invalid_binding,
             "path materialization destination does not match its input")
     _validate_direct_imaging_resource_bindings(execution)
-    materialization = _materialization_structural_resource_fact(
-        materialization, id, target)
-    structural_resource_known(materialization) || return materialization
-    resident = _pupil_structural_resident_bytes(input, target)
-    resident = _checked_resource_add(resident,
-        _direct_imaging_noninput_resident_bytes(execution.field,
-            execution.output, target),
-        :resident_bytes)
-    resident = _checked_resource_add(resident,
-        structural_resident_bytes(materialization), :resident_bytes)
+    resident = _combine_structural_target_bytes(
+        _pupil_structural_resident_bytes(input, target),
+        _direct_imaging_noninput_resident_bytes(
+            execution.field, execution.output, target), :resident_bytes)
+    resident = _combine_structural_target_bytes(resident,
+        _renderer_structural_resident_bytes(
+            materialization.renderer, target), :resident_bytes)
     workspace = _direct_imaging_workspace_bytes(
         execution.plan.propagation,
         execution.plan.unshifted_intensity, target)
-    return KnownStructuralResourceFact(id, target, resident, workspace)
+    return _targeted_structural_resource_fact(
+        id, target, resident, workspace)
 end
 
 """

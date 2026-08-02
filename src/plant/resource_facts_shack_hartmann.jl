@@ -9,38 +9,11 @@
 # - IntensityMap, WFSObservation, and WFSMeasurement own their nominated
 #   caller-visible product storage.
 # - Shack--Hartmann acquisition/estimator/calibration/layout states own the
-#   arrays named below; accelerator facts exclude their explicit host mirrors.
+#   arrays named below. Each exact-device fact selects only storage resident on
+#   that device, including explicit host mirrors in a separate host fact.
 # - PreparedMicrolensPropagation owns reusable numerical work arrays. FFT
 #   plans remain opaque library storage and are never inferred here.
 #
-
-@inline function _structural_array_total(target::AbstractComputeDevice,
-    arrays::Tuple, component::Symbol, total::UInt64=UInt64(0))
-    isempty(arrays) && return total
-    bytes = structural_array_bytes(first(arrays), target)
-    return _structural_array_total(target, Base.tail(arrays),
-        component, _checked_resource_add(total, bytes, component))
-end
-
-@inline _structural_resident_array_total(target::AbstractComputeDevice,
-    arrays...) = _structural_array_total(target, arrays, :resident_bytes)
-
-@inline _structural_workspace_array_total(target::AbstractComputeDevice,
-    arrays...) = _structural_array_total(target, arrays, :workspace_bytes)
-
-@inline function _structural_host_staging_total(target::HostComputeDevice,
-    arrays::Tuple, component::Symbol)
-    return _structural_array_total(target, arrays, component)
-end
-
-@inline _structural_host_staging_total(::AcceleratorComputeDevice,
-    ::Tuple, ::Symbol) = UInt64(0)
-
-function _structural_host_staging_total(target::AbstractComputeDevice,
-    ::Tuple, ::Symbol)
-    _structural_resource_error(:array_storage, :unsupported_device,
-        "structural host-staging accounting is not defined for $target")
-end
 
 @inline _known_structural_resource_fact(id::StructuralResourceOwnerID,
     target::AbstractComputeDevice, resident::UInt64, workspace::UInt64) =
@@ -76,86 +49,93 @@ end
 
 function structural_resource_fact(product::IntensityMap,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    return _known_structural_resource_fact(id, target,
-        structural_array_bytes(product.values, target), UInt64(0))
+    resident = _structural_array_target_bytes(
+        (product.values,), target, :resident_bytes)
+    return _targeted_structural_resource_fact(id, target, resident,
+        (present=false, bytes=UInt64(0)))
 end
 
 function structural_resource_fact(observation::WFSObservation{<:AbstractArray},
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    return _known_structural_resource_fact(id, target,
-        structural_array_bytes(observation.storage, target), UInt64(0))
+    resident = _structural_array_target_bytes(
+        (observation.storage,), target, :resident_bytes)
+    return _targeted_structural_resource_fact(id, target, resident,
+        (present=false, bytes=UInt64(0)))
 end
 
 function structural_resource_fact(measurement::WFSMeasurement{<:AbstractArray},
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    return _known_structural_resource_fact(id, target,
-        structural_array_bytes(measurement.storage, target), UInt64(0))
+    resident = _structural_array_target_bytes(
+        (measurement.storage,), target, :resident_bytes)
+    return _targeted_structural_resource_fact(id, target, resident,
+        (present=false, bytes=UInt64(0)))
 end
 
 function structural_resource_fact(state::ShackHartmannAcquisitionState,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    resident = _structural_resident_array_total(target, state.spot_cube,
-        state.exported_spot_cube, state.detector_noise_cube)
-    return _known_structural_resource_fact(id, target, resident, UInt64(0))
+    resident = _structural_array_target_bytes(
+        (state.exported_spot_cube,), target, :resident_bytes)
+    workspace = _structural_array_target_bytes(
+        (state.spot_cube, state.detector_noise_cube), target,
+        :workspace_bytes)
+    return _targeted_structural_resource_fact(
+        id, target, resident, workspace)
 end
 
 function structural_resource_fact(state::ShackHartmannEstimatorState,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    resident = _structural_resident_array_total(target, state.slopes, state.spot_stats,
-        state.spot_stats_accum)
-    resident = _checked_resource_add(resident,
-        _structural_host_staging_total(target,
-            (state.slopes_host, state.centroid_host), :resident_bytes),
-        :resident_bytes)
-    return _known_structural_resource_fact(id, target, resident, UInt64(0))
+    resident = _structural_array_target_bytes(
+        (state.slopes,), target, :resident_bytes)
+    workspace = _structural_array_target_bytes(
+        (state.spot_stats, state.spot_stats_accum, state.slopes_host,
+            state.centroid_host), target, :workspace_bytes)
+    return _targeted_structural_resource_fact(
+        id, target, resident, workspace)
 end
 
 function structural_resource_fact(calibration::SubapertureCalibration,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    resident = structural_array_bytes(calibration.reference_signal_2d, target)
-    resident = _checked_resource_add(resident,
-        _structural_host_staging_total(target,
-            (calibration.reference_signal_host,), :resident_bytes),
-        :resident_bytes)
-    return _known_structural_resource_fact(id, target, resident, UInt64(0))
+    resident = _structural_array_target_bytes(
+        (calibration.reference_signal_2d,
+            calibration.reference_signal_host), target, :resident_bytes)
+    return _targeted_structural_resource_fact(id, target, resident,
+        (present=false, bytes=UInt64(0)))
 end
 
 function structural_resource_fact(layout::SubapertureLayout,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    resident = structural_array_bytes(layout.valid_mask, target)
-    resident = _checked_resource_add(resident,
-        _structural_host_staging_total(target,
-            (layout.valid_mask_host, layout.valid_indices_host),
-            :resident_bytes),
-        :resident_bytes)
-    return _known_structural_resource_fact(id, target, resident, UInt64(0))
+    resident = _structural_array_target_bytes(
+        (layout.valid_mask, layout.valid_mask_host,
+            layout.valid_indices_host), target, :resident_bytes)
+    return _targeted_structural_resource_fact(id, target, resident,
+        (present=false, bytes=UInt64(0)))
 end
 
 function structural_resource_fact(state::DetectorState{
     <:Any,<:AbstractArray,Nothing,Nothing,NoFrameReadoutProducts},
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    resident = _structural_resident_array_total(target,
+    resident = _structural_array_target_bytes((
         state.frame,
+        state.accum_buffer,
+        state.latent_buffer,
+    ), target, :resident_bytes)
+    workspace = _structural_array_target_bytes((
         state.presampling_buffer,
         state.presampling_scratch,
         state.response_buffer,
         state.bin_buffer,
         state.temporal_buffer,
         state.noise_buffer,
-        state.accum_buffer,
-        state.latent_buffer,
-    )
-    resident = _checked_resource_add(resident,
-        _structural_host_staging_total(target,
-            (state.noise_buffer_host, state.batched_buffer_host),
-            :resident_bytes),
-        :resident_bytes)
-    return _known_structural_resource_fact(id, target, resident, UInt64(0))
+        state.noise_buffer_host,
+        state.batched_buffer_host,
+    ), target, :workspace_bytes)
+    return _targeted_structural_resource_fact(
+        id, target, resident, workspace)
 end
 
 function structural_resource_fact(workspace::PreparedMicrolensPropagation,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    workspace_bytes = _structural_workspace_array_total(target,
+    workspace_bytes = _structural_array_target_bytes((
         workspace.field,
         workspace.phasor,
         workspace.fft_buffer,
@@ -172,13 +152,10 @@ function structural_resource_fact(workspace::PreparedMicrolensPropagation,
         workspace.lgs_kernel_fft,
         workspace.fft_asterism_stack,
         workspace.amp_scales,
+        workspace.amp_scales_host,
         workspace.opd_to_cycles,
-    )
-    workspace_bytes = _checked_resource_add(workspace_bytes,
-        _structural_host_staging_total(target,
-            (workspace.amp_scales_host, workspace.opd_to_cycles_host),
-            :workspace_bytes),
-        :workspace_bytes)
-    return _known_structural_resource_fact(id, target, UInt64(0),
-        workspace_bytes)
+        workspace.opd_to_cycles_host,
+    ), target, :workspace_bytes)
+    return _targeted_structural_resource_fact(id, target,
+        (present=false, bytes=UInt64(0)), workspace_bytes)
 end

@@ -10,8 +10,11 @@ Plant.plant_model_definition_style(
 @inline cpu_pupil_bytes(::Type{T}, n::Int) where {T} =
     cpu_array_bytes(Bool, n, n) + 2 * cpu_array_bytes(T, n, n)
 
-@inline cpu_kolmogorov_bytes(::Type{T}, n::Int) where {T} =
-    8 * cpu_array_bytes(T, n, n) + cpu_array_bytes(T, n)
+@inline cpu_kolmogorov_resident_bytes(::Type{T}, n::Int) where {T} =
+    2 * cpu_array_bytes(T, n, n) + cpu_array_bytes(T, n)
+
+@inline cpu_kolmogorov_workspace_bytes(::Type{T}, n::Int) where {T} =
+    6 * cpu_array_bytes(T, n, n)
 
 @testset "Dispatch-owned optical structural resource reporters" begin
     target = HostComputeDevice()
@@ -35,21 +38,24 @@ Plant.plant_model_definition_style(
     atmosphere_fact = structural_resource_fact(atmosphere,
         StructuralResourceOwnerID(:atmosphere, :primary), target)
     @test structural_resident_bytes(atmosphere_fact) ==
-        cpu_kolmogorov_bytes(T, n)
-    @test structural_workspace_bytes(atmosphere_fact) == UInt64(0)
+        cpu_kolmogorov_resident_bytes(T, n)
+    @test structural_workspace_bytes(atmosphere_fact) ==
+        cpu_kolmogorov_workspace_bytes(T, n)
 
     multilayer = MultiLayerAtmosphere(telescope; r0=T(0.2), L0=T(25),
         fractional_cn2=T[0.6, 0.4], wind_speed=T[3, 5],
         wind_direction=T[0, 90], altitude=T[0, 3_000],
         layer_ids=(:ground, :high), T=T)
     screen_n = 3 * n
-    layer_bytes = cpu_array_bytes(Bool, screen_n, screen_n) +
+    layer_resident_bytes = cpu_array_bytes(Bool, screen_n, screen_n) +
         cpu_array_bytes(T, screen_n, screen_n) +
-        cpu_kolmogorov_bytes(T, screen_n)
+        cpu_kolmogorov_resident_bytes(T, screen_n)
     multilayer_fact = structural_resource_fact(multilayer,
         StructuralResourceOwnerID(:atmosphere, :multilayer), target)
-    @test structural_resident_bytes(multilayer_fact) == 2 * layer_bytes
-    @test structural_workspace_bytes(multilayer_fact) == UInt64(0)
+    @test structural_resident_bytes(multilayer_fact) ==
+        2 * layer_resident_bytes
+    @test structural_workspace_bytes(multilayer_fact) ==
+        2 * cpu_kolmogorov_workspace_bytes(T, screen_n)
 
     source = Source(band=:resource_fact, wavelength=T(0.8e-6),
         photon_irradiance=one(T), T=T)
@@ -82,10 +88,11 @@ Plant.plant_model_definition_style(
     batch_fact = structural_resource_fact(batch,
         StructuralResourceOwnerID(:direct_science, :batch_workspace), target)
     expected_batch_workspace =
-        cpu_array_bytes(Complex{T}, padded_n, padded_n, 2) +
+        cpu_array_bytes(Complex{T}, padded_n, padded_n, 2)
+    expected_batch_resident =
         cpu_array_bytes(T, padded_n, padded_n, 2) +
         2 * cpu_array_bytes(Int, 2)
-    @test structural_resident_bytes(batch_fact) == UInt64(0)
+    @test structural_resident_bytes(batch_fact) == expected_batch_resident
     @test structural_workspace_bytes(batch_fact) == expected_batch_workspace
 
     definition = OpticalPathDefinition(:science, source,
@@ -102,4 +109,24 @@ Plant.plant_model_definition_style(
     @test structural_resident_bytes(path_fact) == expected_direct_resident +
         cpu_array_bytes(Bool, n, n)
     @test structural_workspace_bytes(path_fact) == expected_direct_workspace
+
+    wrong_target = AcceleratorComputeDevice(CUDABackend(), 0)
+    for (owner, id) in (
+        (telescope, StructuralResourceOwnerID(:telescope, :wrong)),
+        (pupil, StructuralResourceOwnerID(:path_input, :wrong)),
+        (atmosphere, StructuralResourceOwnerID(:atmosphere, :wrong)),
+        (direct, StructuralResourceOwnerID(:direct_science, :wrong)),
+        (batch, StructuralResourceOwnerID(:direct_science, :wrong_batch)),
+        (path, StructuralResourceOwnerID(:path, :wrong)),
+    )
+        fact = structural_resource_fact(owner, id, wrong_target)
+        @test !structural_resource_known(fact)
+        @test structural_resource_unknown_reason(fact) ==
+            :owner_not_on_device
+    end
+
+    mismatched = PreparedDirectImaging(second_pupil, direct.field,
+        direct.output, direct.plan, direct.workspace)
+    @test_throws InvalidConfiguration structural_resource_fact(mismatched,
+        StructuralResourceOwnerID(:direct_science, :invalid_binding), target)
 end

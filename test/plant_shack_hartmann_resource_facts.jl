@@ -82,8 +82,10 @@ end
     acquisition_fact = structural_resource_fact(sensor.acquisition,
         StructuralResourceOwnerID(:wfs_estimator, :acquisition_state), target)
     @test structural_resident_bytes(acquisition_fact) == sh_resource_bytes((
-        sensor.acquisition.spot_cube,
         sensor.acquisition.exported_spot_cube,
+    ))
+    @test structural_workspace_bytes(acquisition_fact) == sh_resource_bytes((
+        sensor.acquisition.spot_cube,
         sensor.acquisition.detector_noise_cube,
     ))
 
@@ -91,6 +93,8 @@ end
         StructuralResourceOwnerID(:wfs_estimator, :state), target)
     @test structural_resident_bytes(estimator_fact) == sh_resource_bytes((
         sensor.estimator.slopes,
+    ))
+    @test structural_workspace_bytes(estimator_fact) == sh_resource_bytes((
         sensor.estimator.spot_stats,
         sensor.estimator.spot_stats_accum,
         sensor.estimator.slopes_host,
@@ -116,6 +120,10 @@ end
         StructuralResourceOwnerID(:detector_state, :sh_camera), target)
     @test structural_resident_bytes(detector_fact) == sh_resource_bytes((
         detector_state.frame,
+        detector_state.accum_buffer,
+        detector_state.latent_buffer,
+    ))
+    @test structural_workspace_bytes(detector_fact) == sh_resource_bytes((
         detector_state.presampling_buffer,
         detector_state.presampling_scratch,
         detector_state.response_buffer,
@@ -124,8 +132,6 @@ end
         detector_state.noise_buffer,
         detector_state.noise_buffer_host,
         detector_state.batched_buffer_host,
-        detector_state.accum_buffer,
-        detector_state.latent_buffer,
     ))
 
     workspace_fact = structural_resource_fact(propagation,
@@ -161,4 +167,21 @@ end
     @test !structural_resource_known(unsupported_fact)
     @test structural_resource_unknown_reason(unsupported_fact) ==
         :unsupported_model
+
+    wrong_target = AcceleratorComputeDevice(CUDABackend(), 0)
+    for (owner, id) in (
+        (fixture.output,
+            StructuralResourceOwnerID(:acquisition_product, :wrong_output)),
+        (sensor.acquisition,
+            StructuralResourceOwnerID(:wfs_estimator, :wrong_acquisition)),
+        (detector_state,
+            StructuralResourceOwnerID(:detector_state, :wrong_camera)),
+        (propagation,
+            StructuralResourceOwnerID(:workspace, :wrong_microlens)),
+    )
+        fact = structural_resource_fact(owner, id, wrong_target)
+        @test !structural_resource_known(fact)
+        @test structural_resource_unknown_reason(fact) ==
+            :owner_not_on_device
+    end
 end
