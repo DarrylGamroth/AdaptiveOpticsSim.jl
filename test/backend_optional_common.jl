@@ -7,6 +7,37 @@ backend_label(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = "AMDGPU"
 backend_full_smoke_env(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_CUDA"
 backend_full_smoke_env(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = "ADAPTIVEOPTICS_TEST_FULL_AMDGPU"
 
+"""Exact byte extent from device-array metadata; never materializes a host copy."""
+@inline optional_structural_array_bytes(array) =
+    UInt64(length(array)) * UInt64(sizeof(eltype(array)))
+
+function optional_structural_array_bytes(arrays::Tuple)
+    total = UInt64(0)
+    for array in arrays
+        total += optional_structural_array_bytes(array)
+    end
+    return total
+end
+
+function assert_optional_structural_resource_fact(
+    owner,
+    id,
+    target,
+    resident_arrays::Tuple,
+    workspace_arrays::Tuple,
+)
+    fact = Plant.structural_resource_fact(owner, id, target)
+    @test Plant.structural_resource_known(fact)
+    @test compute_device(fact) == target
+    @test all(array -> compute_device(array) == target, resident_arrays)
+    @test all(array -> compute_device(array) == target, workspace_arrays)
+    @test Plant.structural_resident_bytes(fact) ==
+        optional_structural_array_bytes(resident_arrays)
+    @test Plant.structural_workspace_bytes(fact) ==
+        optional_structural_array_bytes(workspace_arrays)
+    return fact
+end
+
 if !isdefined(@__MODULE__, :ContractRateModel)
     include(joinpath(@__DIR__, "wfs_stage_contract_fixtures.jl"))
 end
@@ -2701,6 +2732,86 @@ function run_optional_wfs_stage_contracts(
         AdaptiveOpticsSim.Backends.execution_style(physical_measurement.storage))
     @test physical_measurement.storage isa BackendArray
     @test all(isfinite, Array(physical_measurement.storage))
+
+    # These byte oracles inspect device-array shape and element type only.
+    # Host mirrors are intentionally absent: accelerator resource facts are
+    # exact-device reports and must not account for staging storage.
+    physical_target = compute_device(physical_rate.values)
+    assert_optional_structural_resource_fact(
+        physical_rate,
+        Plant.StructuralResourceOwnerID(:acquisition_product, :physical_sh_rate),
+        physical_target,
+        (physical_rate.values,),
+        (),
+    )
+    assert_optional_structural_resource_fact(
+        physical_observation,
+        Plant.StructuralResourceOwnerID(
+            :acquisition_product, :physical_sh_observation),
+        physical_target,
+        (physical_observation.storage,),
+        (),
+    )
+    assert_optional_structural_resource_fact(
+        physical_measurement,
+        Plant.StructuralResourceOwnerID(
+            :acquisition_product, :physical_sh_measurement),
+        physical_target,
+        (physical_measurement.storage,),
+        (),
+    )
+    assert_optional_structural_resource_fact(
+        physical_wfs.acquisition,
+        Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_acquisition),
+        physical_target,
+        (physical_wfs.acquisition.exported_spot_cube,),
+        (
+            physical_wfs.acquisition.spot_cube,
+            physical_wfs.acquisition.detector_noise_cube,
+        ),
+    )
+    assert_optional_structural_resource_fact(
+        physical_wfs.estimator,
+        Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_state),
+        physical_target,
+        (physical_wfs.estimator.slopes,),
+        (
+            physical_wfs.estimator.spot_stats,
+            physical_wfs.estimator.spot_stats_accum,
+        ),
+    )
+    assert_optional_structural_resource_fact(
+        physical_wfs.calibration,
+        Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_calibration),
+        physical_target,
+        (physical_wfs.calibration.reference_signal_2d,),
+        (),
+    )
+    assert_optional_structural_resource_fact(
+        physical_wfs.front_end.layout,
+        Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_layout),
+        physical_target,
+        (physical_wfs.front_end.layout.valid_mask,),
+        (),
+    )
+    assert_optional_structural_resource_fact(
+        physical_detector.state,
+        Plant.StructuralResourceOwnerID(:detector_state, :physical_sh_camera),
+        physical_target,
+        (
+            physical_detector.state.frame,
+            physical_detector.state.accum_buffer,
+            physical_detector.state.latent_buffer,
+        ),
+        (
+            physical_detector.state.presampling_buffer,
+            physical_detector.state.presampling_scratch,
+            physical_detector.state.response_buffer,
+            physical_detector.state.bin_buffer,
+            physical_detector.state.temporal_buffer,
+            physical_detector.state.noise_buffer,
+        ),
+    )
 
     four_pupil_cpu_tel = Telescope(resolution=4, diameter=T(2),
         central_obstruction=zero(T), T=T, backend=CPUBackend())
@@ -5437,6 +5548,14 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         zero_padding=1,
     )
     science_rate = form_direct_image!(science_imaging)
+    science_target = compute_device(science_rate.values)
+    assert_optional_structural_resource_fact(
+        science_rate,
+        Plant.StructuralResourceOwnerID(:acquisition_product, :science_rate),
+        science_target,
+        (science_rate.values,),
+        (),
+    )
     split_acquisition = prepare_detector_acquisition(split_det, science_rate)
     split_frame = capture!(
         split_det,
