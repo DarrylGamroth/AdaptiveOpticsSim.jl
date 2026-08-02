@@ -1,7 +1,8 @@
 module AdaptiveOpticsSimAMDGPUExt
 
 import AdaptiveOpticsSim
-import AdaptiveOpticsSim: Backends, Calibration, Tomography, WavefrontSensors
+import AdaptiveOpticsSim: Backends, Calibration, Plant, Tomography,
+    WavefrontSensors
 using AMDGPU
 using AbstractFFTs
 using KernelAbstractions
@@ -35,6 +36,12 @@ Backends.backend_zeros(::Type{Backends.AMDGPUBackendTag}, ::Type{T}, dims::Varar
 Backends.backend_fill(::Type{Backends.AMDGPUBackendTag}, value, dims::Vararg{Int}) = AMDGPU.fill(value, dims...)
 Backends.compute_device_identifier(array::AMDGPU.ROCArray) =
     AMDGPU.device_id(AMDGPU.device(array))
+
+function Plant.structural_array_bytes(array::AMDGPU.ROCArray,
+    target::Backends.AbstractComputeDevice)
+    Plant._require_structural_array_target(array, target)
+    return Plant._contiguous_structural_array_bytes(array)
+end
 
 function Backends.compute_device_availability(
     device::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend,I},

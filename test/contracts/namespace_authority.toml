@@ -578,7 +578,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "0eb33330068206e55ac2235c34399c5d6daf4c2e689346f6a0bd768090882c8c"
+sha256 = "b45f1d2c290492a9dcfefe4f543b27e1eb3b5b9776cb2e7bff9d233a2ce08a79"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1570,6 +1570,7 @@ public = [
     "opaque_resource_reserve_bytes",
     "resource_estimate_method",
     "opaque_resource_reserves",
+    "structural_array_bytes",
     "RNGDerivationVersion",
     "RNGOwnerIdentity",
     "RNGOwnerToken",

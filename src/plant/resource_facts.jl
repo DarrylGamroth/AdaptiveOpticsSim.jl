@@ -289,6 +289,14 @@ end
 
 @noinline _handle_resource_add_error(error, ::Symbol) = throw(error)
 
+@noinline function _handle_resource_multiply_error(::OverflowError,
+    component::Symbol)
+    _structural_resource_error(component, :arithmetic_overflow,
+        "$component byte extent exceeds UInt64")
+end
+
+@noinline _handle_resource_multiply_error(error, ::Symbol) = throw(error)
+
 @inline function _checked_resource_add(left::UInt64, right::UInt64,
     component::Symbol)
     try
@@ -296,6 +304,59 @@ end
     catch error
         _handle_resource_add_error(error, component)
     end
+end
+
+
+@inline function _checked_resource_multiply(left::UInt64, right::UInt64,
+    component::Symbol)
+    try
+        return Base.checked_mul(left, right)
+    catch error
+        _handle_resource_multiply_error(error, component)
+    end
+end
+
+@noinline function _unsupported_structural_element_type(::Type{T}) where {T}
+    _structural_resource_error(:array_storage, :unsupported_element_storage,
+        "exact structural byte counting requires an isbits element type; " *
+        "got $T")
+end
+
+@inline function _contiguous_structural_array_bytes(
+    array::AbstractArray{T}) where {T}
+    isbitstype(T) || _unsupported_structural_element_type(T)
+    count = _checked_resource_byte_count(length(array), :array_storage)
+    element_bytes = _checked_resource_byte_count(sizeof(T), :array_storage)
+    return _checked_resource_multiply(count, element_bytes, :array_storage)
+end
+
+@inline function _require_structural_array_target(array::AbstractArray,
+    target::AbstractComputeDevice)
+    actual = compute_device(array)
+    actual == target || _structural_resource_error(:array_storage,
+        :wrong_device,
+        "structural array occupies $actual; expected $target")
+    return array
+end
+
+"""
+    structural_array_bytes(array, target)
+
+Return the exact data-buffer byte extent of an explicitly owned dense array on
+`target`. Core supports ordinary `Array` storage. Accelerator extensions add
+their native dense-array types. Views, packed arrays, sparse arrays, and other
+wrappers fail closed unless a storage owner defines an exact method.
+"""
+function structural_array_bytes(array::Array,
+    target::AbstractComputeDevice)
+    _require_structural_array_target(array, target)
+    return _contiguous_structural_array_bytes(array)
+end
+
+function structural_array_bytes(array::AbstractArray,
+    ::AbstractComputeDevice)
+    _structural_resource_error(:array_storage, :unsupported_array_storage,
+        "exact structural byte counting is not defined for $(typeof(array))")
 end
 
 @inline function _require_fact_target(
