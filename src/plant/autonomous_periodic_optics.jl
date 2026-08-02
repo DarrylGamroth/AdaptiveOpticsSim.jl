@@ -236,9 +236,10 @@ function _require_enabled_autonomous_schema(schema::PlantCommandSchema)
     return schema
 end
 
-function prepare_controllable_optic(model::CircularPyramidModulator,
+function _prepare_circular_pyramid_modulator(
+    model::CircularPyramidModulator,
     definition::ControllableOpticDefinition,
-    ::AbstractTelescope, ::AbstractAtmosphere)
+)
     length(command_schemas(definition)) == 4 || throw(
         PlantPreparationError(:autonomous_periodic_optic,
             :command_schema_count,
@@ -273,6 +274,25 @@ function prepare_controllable_optic(model::CircularPyramidModulator,
     return PreparedCircularPyramidModulator{T,E}(
         model.radius_endpoint, model.frequency_endpoint,
         model.phase_endpoint, model.enabled_endpoint)
+end
+
+@inline function prepare_controllable_optic(
+    model::CircularPyramidModulator,
+    definition::ControllableOpticDefinition,
+    ::AbstractTelescope,
+    ::AbstractAtmosphere,
+)
+    return _prepare_circular_pyramid_modulator(model, definition)
+end
+
+@inline function prepare_target_local_controllable_optic(
+    model::CircularPyramidModulator,
+    definition::ControllableOpticDefinition,
+    ::AbstractTelescope,
+    ::AbstractTimedAtmosphereDefinition,
+    ::AbstractComputeDevice,
+)
+    return _prepare_circular_pyramid_modulator(model, definition)
 end
 
 @inline function _initial_autonomous_command(endpoint_ids::Tuple,

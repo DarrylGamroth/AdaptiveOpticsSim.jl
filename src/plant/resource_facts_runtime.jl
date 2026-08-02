@@ -341,6 +341,88 @@ function structural_resource_fact(state::CommandApplicationState,
         id, target, bytes.resident, bytes.workspace)
 end
 
+@inline function _target_local_command_replica_bytes(
+    ::_TargetLocalScalarEffectiveCommandValues,
+    ::AbstractComputeDevice,
+)
+    return (present=true, resident=UInt64(0), workspace=UInt64(0))
+end
+
+function _target_local_command_replica_bytes(
+    values::_TargetLocalArrayEffectiveCommandValues,
+    target::AbstractComputeDevice,
+)
+    compute_device(values.active) == target || return (
+        present=false, resident=UInt64(0), workspace=UInt64(0))
+    compute_device(values.staging) == target || return (
+        present=false, resident=UInt64(0), workspace=UInt64(0))
+    return (
+        present=true,
+        resident=structural_array_bytes(values.active, target),
+        workspace=structural_array_bytes(values.staging, target),
+    )
+end
+
+function structural_resource_fact(
+    state::TargetLocalCommandEndpointState,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    bytes = _target_local_command_replica_bytes(state.values, target)
+    bytes.present || return UnknownStructuralResourceFact(
+        id, target, :owner_not_on_device)
+    return KnownStructuralResourceFact(
+        id, target, bytes.resident, bytes.workspace)
+end
+
+@inline function structural_resource_fact(
+    prepared::PreparedTargetLocalControllableOptic,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return structural_resource_fact(prepared.implementation, id, target)
+end
+
+@inline function structural_resource_fact(
+    state::TargetLocalControllableOpticState,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return structural_resource_fact(state.physical, id, target)
+end
+
+@inline function structural_resource_fact(
+    workspace::TargetLocalControllableOpticWorkspace,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return structural_resource_fact(workspace.physical, id, target)
+end
+
+@inline function structural_resource_fact(
+    ::PreparedCircularPyramidModulator,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return KnownStructuralResourceFact(id, target, 0, 0)
+end
+
+@inline function structural_resource_fact(
+    ::CircularPyramidModulatorState,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return KnownStructuralResourceFact(id, target, 0, 0)
+end
+
+@inline function structural_resource_fact(
+    ::CircularPyramidModulatorWorkspace,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return KnownStructuralResourceFact(id, target, 0, 0)
+end
+
 function structural_resource_fact(workspace::CommandDispositionWorkspace,
     id::StructuralResourceOwnerID, target::HostComputeDevice)
     return KnownStructuralResourceFact(id, target, 0,

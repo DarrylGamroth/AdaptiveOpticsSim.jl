@@ -198,6 +198,19 @@ end
 
 struct TargetPartitionTestOpticModel end
 
+struct TargetPartitionTestPreparedOptic{D<:AbstractComputeDevice}
+    endpoint::CommandEndpointID
+    target::D
+end
+
+mutable struct TargetPartitionTestOpticState{A<:AbstractArray}
+    active::A
+end
+
+mutable struct TargetPartitionTestOpticWorkspace{A<:AbstractArray}
+    staging::A
+end
+
 struct TargetPartitionTestExecution{I,R,W}
     input::I
     result::R
@@ -210,6 +223,132 @@ Plant.plant_model_definition_style(
     ::Type{TargetPartitionTestAcquisitionModel}) = ColdPlantModelDefinition()
 Plant.plant_model_definition_style(::Type{TargetPartitionTestOpticModel}) =
     ColdPlantModelDefinition()
+
+function Plant.prepare_target_local_controllable_optic(
+    ::TargetPartitionTestOpticModel,
+    definition::ControllableOpticDefinition,
+    ::TargetPartitionTestTelescope,
+    ::TargetPartitionTestAtmosphereDefinition,
+    target::AbstractComputeDevice,
+)
+    return TargetPartitionTestPreparedOptic(
+        only(command_endpoint_ids(definition)), target)
+end
+
+function Plant.prepare_controllable_optic_state(
+    prepared::TargetPartitionTestPreparedOptic,
+    ::ControllableOpticDefinition,
+    endpoint_ids::Tuple,
+    initial_commands::Tuple,
+)
+    only(endpoint_ids) == prepared.endpoint || throw(
+        PlantPreparationError(:controllable_optic, :endpoint_mismatch,
+            "target-partition test optic endpoint changed"))
+    return TargetPartitionTestOpticState(only(initial_commands))
+end
+
+
+function Plant.prepare_controllable_optic_workspace(
+    prepared::TargetPartitionTestPreparedOptic,
+)
+    staging = allocate_device_array(prepared.target, Float64, 1)
+    fill!(staging, 0.0)
+    return TargetPartitionTestOpticWorkspace(staging)
+end
+
+
+function Plant.stage_controllable_optic_command!(
+    prepared::TargetPartitionTestPreparedOptic,
+    ::TargetPartitionTestOpticState,
+    workspace::TargetPartitionTestOpticWorkspace,
+    endpoint::CommandEndpointID,
+    command::AbstractVector{Float64},
+    ::PlantTimestamp,
+)
+    endpoint == prepared.endpoint || throw(PlantCommandError(
+        :physical_application, :endpoint_mismatch,
+        "target-partition test optic received another endpoint"))
+    copyto!(workspace.staging, command)
+    return nothing
+end
+
+
+function Plant.commit_controllable_optic_command!(
+    ::TargetPartitionTestPreparedOptic,
+    state::TargetPartitionTestOpticState{A},
+    workspace::TargetPartitionTestOpticWorkspace{A},
+    ::CommandEndpointID,
+    ::PlantTimestamp,
+) where {A}
+    previous = state.active
+    state.active = workspace.staging
+    workspace.staging = previous
+    return nothing
+end
+
+
+function Plant.validate_controllable_optic_target(
+    prepared::TargetPartitionTestPreparedOptic,
+    target::AbstractComputeDevice,
+)
+    prepared.target == target || throw(PlantPreparationError(
+        :controllable_optic, :wrong_device,
+        "target-partition test optic occupies another target"))
+    return prepared
+end
+
+
+function Plant.validate_controllable_optic_state_target(
+    ::TargetPartitionTestPreparedOptic,
+    state::TargetPartitionTestOpticState,
+    target::AbstractComputeDevice,
+)
+    compute_device(state.active) == target || throw(PlantPreparationError(
+        :controllable_optic, :wrong_device,
+        "target-partition test optic state occupies another target"))
+    return state
+end
+
+
+function Plant.validate_controllable_optic_workspace_target(
+    ::TargetPartitionTestPreparedOptic,
+    workspace::TargetPartitionTestOpticWorkspace,
+    target::AbstractComputeDevice,
+)
+    compute_device(workspace.staging) == target || throw(
+        PlantPreparationError(:controllable_optic, :wrong_device,
+            "target-partition test optic workspace occupies another target"))
+    return workspace
+end
+
+
+function Plant.structural_resource_fact(
+    ::TargetPartitionTestPreparedOptic,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return KnownStructuralResourceFact(id, target, 0, 0)
+end
+
+
+function Plant.structural_resource_fact(
+    state::TargetPartitionTestOpticState,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return KnownStructuralResourceFact(
+        id, target, structural_array_bytes(state.active, target), 0)
+end
+
+
+function Plant.structural_resource_fact(
+    workspace::TargetPartitionTestOpticWorkspace,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    return KnownStructuralResourceFact(
+        id, target, 0, structural_array_bytes(workspace.staging, target))
+end
 
 function Plant.validate_path_execution_binding(
     execution::TargetPartitionTestExecution,
@@ -327,7 +466,9 @@ function target_partition_test_sampled_aberration()
     )
 end
 
-function target_partition_test_controllable_optic()
+function target_partition_test_controllable_optic(;
+    visibility::AbstractPathVisibility=AllPathVisibility(),
+)
     schema = PlantCommandSchema(
         Float64,
         (1,);
@@ -350,12 +491,18 @@ function target_partition_test_controllable_optic()
         TargetPartitionTestOpticModel(),
         (schema,);
         placement=PupilPlanePlacement(),
-        visibility=SelectedPathVisibility(:alpha),
+        visibility,
     )
 end
 
+target_partition_test_command_endpoints() = (
+    CommandEndpointConfiguration(
+        :partition_test_command, [0.0]; capacity=2),
+)
+
 function target_partition_test_definition(; include_gamma::Bool=false,
-    include_sampled_aberration::Bool=false)
+    include_sampled_aberration::Bool=false,
+    optic_visibility::AbstractPathVisibility=AllPathVisibility())
     telescope = TargetPartitionTestTelescopeDefinition(UInt(1))
     source = Source(band=:I, magnitude=0.0)
     alpha = OpticalPathDefinition(
@@ -376,7 +523,9 @@ function target_partition_test_definition(; include_gamma::Bool=false,
         ;
         telescope,
         atmosphere=TargetPartitionTestAtmosphereDefinition(),
-        controllable_optics=(target_partition_test_controllable_optic(),),
+        controllable_optics=(
+            target_partition_test_controllable_optic(
+                visibility=optic_visibility),),
         paths=include_gamma ? (alpha, beta, gamma) : (alpha, beta),
         acquisitions=include_gamma ?
             (alpha_camera, beta_camera, gamma_camera) :
@@ -420,11 +569,22 @@ function target_partition_test_byte_oracle(partition; authority::Bool,
     path_workspace = UInt64(3 * sizeof(Float64))
     acquisition_resident = UInt64(5 * sizeof(Float64))
     count = UInt64(length(prepared_paths(partition)))
+    optic_count = UInt64(length(
+        target_local_controllable_optic_owners(partition)))
+    endpoint_count = UInt64(sum(
+        owner -> length(target_local_command_endpoints(
+            prepared_target_local_controllable_optic(owner))),
+        target_local_controllable_optic_owners(partition);
+        init=0,
+    ))
+    command_bytes = UInt64(sizeof(Float64))
     return (
         resident=telescope_bytes + atmosphere_bytes +
             sampled_aberration_bytes +
-            count * (path_resident + acquisition_resident),
-        workspace=count * path_workspace,
+            count * (path_resident + acquisition_resident) +
+            (optic_count + endpoint_count) * command_bytes,
+        workspace=count * path_workspace +
+            (optic_count + endpoint_count) * command_bytes,
     )
 end
 
@@ -482,6 +642,7 @@ function target_partition_test_fresh_token_guards(
         getfield(partition, :paths),
         getfield(partition, :acquisitions),
         getfield(partition, :rngs),
+        getfield(partition, :controllable_optics),
         getfield(partition, :resource_report),
         getfield(partition, :controllable_optic_ids),
         getfield(partition, :command_endpoint_ids),
@@ -491,6 +652,7 @@ function target_partition_test_fresh_token_guards(
         getfield(prepared, :definition),
         assignment,
         authority,
+        command_authority_identity(prepared),
         getfield(prepared, :partitions),
         getfield(prepared, :run_seed),
         getfield(prepared, :rng_derivation_version),
@@ -517,14 +679,18 @@ end
     @test_throws MethodError ResolvedPlantPartitionAssignment(
         definition, nothing, nothing, (), UInt8(1), ())
 
+    command_endpoints = target_partition_test_command_endpoints()
     cpu = prepare_plant_partitions(
-        definition, cpu_assignment; run_seed=71)
+        definition, cpu_assignment; run_seed=71, command_endpoints)
     accelerator_only = prepare_plant_partitions(
-        definition, accelerator_assignment; run_seed=71)
+        definition, accelerator_assignment; run_seed=71, command_endpoints)
     mixed = prepare_plant_partitions(
-        definition, mixed_assignment; run_seed=71)
+        definition, mixed_assignment; run_seed=71, command_endpoints)
     mixed_accelerator_authority = prepare_plant_partitions(
-        mixed_accelerator_authority_assignment; run_seed=71)
+        mixed_accelerator_authority_assignment;
+        run_seed=71,
+        command_endpoints,
+    )
     target_partition_test_fresh_token_guards(mixed_assignment, mixed)
 
     @test length(prepared_partitions(cpu)) == 1
@@ -584,8 +750,23 @@ end
         partition_controllable_optic_ids(cpu_partition)
     @test partition_command_endpoint_ids(mixed_host) ==
         partition_command_endpoint_ids(cpu_partition)
-    @test isempty(partition_controllable_optic_ids(mixed_accelerator))
-    @test isempty(partition_command_endpoint_ids(mixed_accelerator))
+    @test partition_controllable_optic_ids(mixed_accelerator) ==
+        partition_controllable_optic_ids(cpu_partition)
+    @test partition_command_endpoint_ids(mixed_accelerator) ==
+        partition_command_endpoint_ids(cpu_partition)
+    @test all(partition -> length(
+            target_local_controllable_optic_owners(partition)) == 1,
+        prepared_partitions(mixed))
+    @test length(prepared_paths(cpu_partition)) == 2
+    @test length(target_local_controllable_optic_owners(cpu_partition)) == 1
+    @test command_authority_identity(mixed) !==
+        command_authority_identity(cpu)
+    @test all(partition -> command_authority_identity(
+            only(target_local_command_endpoints(
+                prepared_target_local_controllable_optic(only(
+                    target_local_controllable_optic_owners(partition)))))) ===
+            command_authority_identity(mixed),
+        prepared_partitions(mixed))
 
     for partition in prepared_partitions(mixed)
         @test !hasproperty(partition, :atmosphere)
@@ -607,12 +788,50 @@ end
     @test all(path -> path_input(path).values isa TargetPartitionTestArray,
         prepared_paths(accelerator_partition))
 
+    selected_definition = target_partition_test_definition(
+        optic_visibility=SelectedPathVisibility(:alpha))
+    selected_assignment = resolve_plant_partition_assignment(
+        selected_definition, host, :alpha => host, :beta => accelerator)
+    selected = prepare_plant_partitions(
+        selected_definition, selected_assignment;
+        run_seed=71,
+        command_endpoints,
+    )
+    selected_host = prepared_partition(selected, host)
+    selected_accelerator = prepared_partition(selected, accelerator)
+    @test length(target_local_controllable_optic_owners(selected_host)) == 1
+    @test isempty(target_local_controllable_optic_owners(
+        selected_accelerator))
+    @test Tuple(partition_controllable_optic_ids(selected_host)) ==
+        (ControllableOpticID(:partition_test_optic),)
+    @test isempty(partition_controllable_optic_ids(selected_accelerator))
+    @test Tuple(partition_command_endpoint_ids(selected_host)) ==
+        (CommandEndpointID(:partition_test_command),)
+    @test isempty(partition_command_endpoint_ids(selected_accelerator))
+    for (partition, authority, optic_count) in (
+            (selected_host, true, 1),
+            (selected_accelerator, false, 0))
+        report = partition_resource_report(partition)
+        oracle = target_partition_test_byte_oracle(partition; authority)
+        @test structural_resident_bytes(report) == oracle.resident
+        @test structural_workspace_bytes(report) == oracle.workspace
+        @test count(fact -> structural_resource_owner_id(fact).category ===
+                :controllable_optic_replica,
+            structural_resource_facts(report)) == optic_count
+        @test count(fact -> structural_resource_owner_id(fact).category ===
+                :effective_command_replica,
+            structural_resource_facts(report)) == optic_count
+    end
+
     sampled_definition = target_partition_test_definition(
         include_sampled_aberration=true)
     sampled_assignment = resolve_plant_partition_assignment(
         sampled_definition, host, :alpha => host, :beta => accelerator)
     sampled = prepare_plant_partitions(
-        sampled_definition, sampled_assignment; run_seed=71)
+        sampled_definition, sampled_assignment;
+        run_seed=71,
+        command_endpoints,
+    )
     caller_opd = surface_opd(sampled_aberration_surface(
         only(sampled_aberration_definitions(sampled_definition))))
     for partition in prepared_partitions(sampled)
@@ -665,7 +884,8 @@ end
         :beta => host,
         :gamma => host,
     )
-    grown = prepare_plant_partitions(grown_assignment; run_seed=71)
+    grown = prepare_plant_partitions(
+        grown_assignment; run_seed=71, command_endpoints)
     @test typeof(grown) === typeof(cpu)
     @test typeof(only(prepared_partitions(grown))) === typeof(cpu_partition)
     @test typeof(partition_controllable_optic_ids(
