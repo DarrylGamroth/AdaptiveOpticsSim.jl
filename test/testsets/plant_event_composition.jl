@@ -158,6 +158,16 @@ function Plant.validate_path_execution_binding(
         execution.imaging, input, result)
 end
 
+function Plant.validate_path_execution_target(
+    execution::EventCompositionPathExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # Counters and concurrency probes are deliberate host-side benchmark and
+    # test instrumentation; the wrapped imaging plan owns the data plane.
+    Plant.validate_path_execution_target(execution.imaging, target)
+    return execution
+end
+
 function Plant.execute_path!(result, input,
     execution::EventCompositionPathExecution)
     Plant.validate_path_execution_binding(execution, input,
@@ -174,6 +184,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -189,6 +200,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         execution;
+        context=context,
         materialization=prepare_pupil_opd_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=(kind=:event_composition_direct_imaging,
@@ -272,8 +284,10 @@ function event_composition_fixture(; reverse_order::Bool=false,
             EventCompositionAcquisitionModel(T(0.2),
                 EventFrameTransferEMCCD())),
     )
-    plant = prepare_plant(PlantDefinition(; telescope, atmosphere,
-        paths, acquisitions);
+    plant = prepare_plant(PlantDefinition(
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
+        paths=paths, acquisitions=acquisitions), PLANT_TEST_HOST_TARGET;
         run_seed=0x7900)
 
     trigger_faults = faulted_trigger_fanout ? TriggerFaultTrace(
@@ -952,6 +966,13 @@ end
 
 @testset "Multi-rate plant event composition" begin
     plant, prepared, state, workspace = event_composition_fixture()
+    @test compute_device(prepared) == PLANT_TEST_HOST_TARGET
+    @test @inferred(Plant._require_exact_prepared_event_loop_target(
+        prepared, PLANT_TEST_HOST_TARGET)) === prepared
+    @test @inferred(Plant._require_exact_plant_event_loop_state_target(
+        prepared, state, PLANT_TEST_HOST_TARGET)) === state
+    @test @inferred(Plant._require_exact_plant_event_loop_workspace_target(
+        prepared, workspace, PLANT_TEST_HOST_TARGET)) === workspace
     @test plant_event_path_count(prepared) == 3
     @test path_execution_group_count(prepared) == 3
     @test plant_event_acquisition_count(prepared) == 5

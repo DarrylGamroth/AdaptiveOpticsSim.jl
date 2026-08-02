@@ -1,8 +1,119 @@
-struct PlantPreparationTestAtmosphere <: AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere end
-
 struct DirectSciencePathModel{R}
     zero_padding::Int
     revision::R
+end
+
+struct ExtensionTelescopeDefinition <: AbstractTelescopeDefinition
+    revision::UInt
+end
+
+struct ExtensionTelescope <: AdaptiveOpticsSim.Optics.AbstractTelescope
+    pupil::Matrix{Bool}
+    reflectivity::Matrix{Float64}
+    revision::UInt
+end
+
+struct ExtensionTimedAtmosphereDefinition <:
+    AbstractTimedAtmosphereDefinition
+end
+
+mutable struct ExtensionTimedAtmosphere <: AbstractTimedAtmosphere
+    telescope::ExtensionTelescope
+    identity::AdaptiveOpticsSim.Atmospheres.AtmosphereIdentity
+    timeline::AdaptiveOpticsSim.Atmospheres.AtmosphereTimelineState{Float64}
+end
+
+AdaptiveOpticsSim.Optics.pupil_mask(telescope::ExtensionTelescope) =
+    telescope.pupil
+AdaptiveOpticsSim.Optics.pupil_reflectivity(telescope::ExtensionTelescope) =
+    telescope.reflectivity
+AdaptiveOpticsSim.Optics.aperture_revision(telescope::ExtensionTelescope) =
+    telescope.revision
+AdaptiveOpticsSim.Atmospheres.atmosphere_identity(
+    atmosphere::ExtensionTimedAtmosphere) = atmosphere.identity
+AdaptiveOpticsSim.Atmospheres.atmosphere_timeline(
+    atmosphere::ExtensionTimedAtmosphere) = atmosphere.timeline
+AdaptiveOpticsSim.Atmospheres.atmosphere_numeric_type(
+    ::ExtensionTimedAtmosphere) = Float64
+AdaptiveOpticsSim.Atmospheres.initialize_atmosphere!(
+    atmosphere::ExtensionTimedAtmosphere,
+    ::AbstractRNG,
+) = atmosphere
+AdaptiveOpticsSim.Atmospheres.evolve_atmosphere!(
+    atmosphere::ExtensionTimedAtmosphere,
+    ::Real,
+    ::AbstractRNG,
+) = atmosphere
+
+function AdaptiveOpticsSim.Optics.prepare_telescope(
+    definition::ExtensionTelescopeDefinition,
+    target::HostComputeDevice,
+)
+    telescope = ExtensionTelescope(
+        trues(4, 4), fill(0.75, 4, 4), definition.revision)
+    return AdaptiveOpticsSim.Optics.validate_telescope_target(
+        telescope, target)
+end
+
+function AdaptiveOpticsSim.Optics.validate_telescope_target(
+    telescope::ExtensionTelescope,
+    target::AbstractComputeDevice,
+)
+    compute_device(telescope.pupil) == target || throw(
+        InvalidConfiguration("extension telescope pupil occupies wrong target"))
+    compute_device(telescope.reflectivity) == target || throw(
+        InvalidConfiguration(
+            "extension telescope reflectivity occupies wrong target"))
+    return telescope
+end
+
+function AdaptiveOpticsSim.Atmospheres.prepare_timed_atmosphere(
+    ::ExtensionTimedAtmosphereDefinition,
+    telescope::ExtensionTelescope,
+    target::HostComputeDevice,
+)
+    AdaptiveOpticsSim.Optics.validate_telescope_target(telescope, target)
+    return ExtensionTimedAtmosphere(
+        telescope,
+        AdaptiveOpticsSim.Atmospheres.AtmosphereIdentity(),
+        AdaptiveOpticsSim.Atmospheres.new_atmosphere_timeline(Float64),
+    )
+end
+
+function AdaptiveOpticsSim.Atmospheres.validate_timed_atmosphere_target(
+    atmosphere::ExtensionTimedAtmosphere,
+    target::AbstractComputeDevice,
+)
+    AdaptiveOpticsSim.Optics.validate_telescope_target(
+        atmosphere.telescope, target)
+    return atmosphere
+end
+
+@testset "Custom telescope and timed-atmosphere preparation seams" begin
+    target = HostComputeDevice()
+    definition = PlantDefinition(;
+        telescope=ExtensionTelescopeDefinition(UInt(17)),
+        atmosphere=ExtensionTimedAtmosphereDefinition(),
+    )
+    first = prepare_plant(definition, target; run_seed=0x2050)
+    second = prepare_plant(definition, target; run_seed=0x2050)
+
+    @test prepared_telescope(first) isa ExtensionTelescope
+    @test prepared_atmosphere(first) isa ExtensionTimedAtmosphere
+    @test prepared_telescope(first) !== prepared_telescope(second)
+    @test prepared_atmosphere(first) !== prepared_atmosphere(second)
+    @test prepared_atmosphere(first).telescope === prepared_telescope(first)
+    @test aperture_revision(prepared_telescope(first)) == UInt(17)
+    @test AdaptiveOpticsSim.Optics.validate_telescope_target(
+        prepared_telescope(first), target) === prepared_telescope(first)
+    @test AdaptiveOpticsSim.Atmospheres.validate_timed_atmosphere_target(
+        prepared_atmosphere(first), target) === prepared_atmosphere(first)
+    epoch = advance_by!(
+        prepared_atmosphere(first), 0.25; rng=MersenneTwister(0x2050))
+    @test epoch_time(epoch) == 0.25
+    @test epoch_sequence(epoch) == UInt64(1)
+    @test_throws AtmosphereEpochError current_epoch(
+        prepared_atmosphere(second))
 end
 
 function run_selected_acquisition_materialization_tests()
@@ -43,12 +154,18 @@ function run_selected_acquisition_materialization_tests()
     lgs_definition = AcquisitionDefinition(:lgs_frame, :lgs,
         FramePlantAcquisitionModel(T(0.5), MatchingPlantPath()))
 
-    definition = PlantDefinition(; telescope, atmosphere,
+    telescope_configuration = plant_test_telescope_definition(telescope)
+    atmosphere_configuration = plant_test_atmosphere_definition(atmosphere)
+    definition = PlantDefinition(
+        telescope=telescope_configuration,
+        atmosphere=atmosphere_configuration,
         paths=(science_path_definition, ngs_path_definition,
             lgs_path_definition),
         acquisitions=(slow_definition, ngs_definition, fast_definition,
             lgs_definition))
-    plant = prepare_plant(definition; run_seed=0x6000)
+    plant = prepare_plant(
+        definition, PLANT_TEST_HOST_TARGET; run_seed=0x6000)
+    atmosphere = prepared_atmosphere(plant)
     selection = prepare_acquisition_selection(plant,
         (:lgs_frame, :fast_science, :ngs_frame, :slow_science))
     ordered_selection = prepare_acquisition_selection(plant,
@@ -107,12 +224,15 @@ function run_selected_acquisition_materialization_tests()
     @test acquisition_observation(slow) ≈
         T(3) .* acquisition_observation(fast) atol=T(1e-11) rtol=T(1e-11)
 
-    reordered_definition = PlantDefinition(; telescope, atmosphere,
+    reordered_definition = PlantDefinition(
+        telescope=telescope_configuration,
+        atmosphere=atmosphere_configuration,
         paths=(lgs_path_definition, ngs_path_definition,
             science_path_definition),
         acquisitions=(lgs_definition, fast_definition, ngs_definition,
             slow_definition))
-    reordered_plant = prepare_plant(reordered_definition;
+    reordered_plant = prepare_plant(
+        reordered_definition, PLANT_TEST_HOST_TARGET;
         run_seed=0x6000)
     reordered_selection = prepare_acquisition_selection(reordered_plant,
         (:ngs_frame, :slow_science, :lgs_frame, :fast_science))
@@ -123,7 +243,8 @@ function run_selected_acquisition_materialization_tests()
         prepared_acquisitions(reordered_selection)) == map(
         owner -> acquisition_id(owner.definition),
         prepared_acquisitions(selection))
-    execute_acquisition_selection!(reordered_selection, epoch)
+    execute_acquisition_selection_at!(
+        reordered_selection, epoch_time(epoch))
     for id in (:fast_science, :lgs_frame, :ngs_frame, :slow_science)
         @test plant_test_observation_values(acquisition_observation(
             prepared_acquisition(reordered_plant, id))) ≈
@@ -212,7 +333,7 @@ function run_selected_acquisition_materialization_tests()
         owner -> copy(plant_test_observation_values(
             acquisition_observation(owner))),
         prepared_acquisitions(selection))
-    set_pupil_reflectivity!(telescope, T(0.9))
+    set_pupil_reflectivity!(prepared_telescope(plant), T(0.9))
     assert_plant_preparation_error(
         () -> execute_acquisition_selection!(selection,
             current_epoch(atmosphere)),
@@ -280,6 +401,17 @@ function Plant.validate_path_execution_binding(
     return nothing
 end
 
+function Plant.validate_path_execution_target(
+    execution::PlantBindingOnlyExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_product_target(
+        execution.input, target, "binding-only execution input")
+    Plant._require_exact_plant_product_target(
+        execution.result, target, "binding-only execution result")
+    return execution
+end
+
 function Plant.execute_path!(result, input,
     execution::PlantBindingOnlyExecution)
     Plant.validate_path_execution_binding(execution, input,
@@ -291,6 +423,15 @@ function Plant.validate_path_execution_binding(
     execution::CountedDirectImagingExecution, input, result)
     return Plant.validate_path_execution_binding(
         execution.imaging, input, result)
+end
+
+function Plant.validate_path_execution_target(
+    execution::CountedDirectImagingExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The Ref counter is host-side test instrumentation.
+    Plant.validate_path_execution_target(execution.imaging, target)
+    return execution
 end
 
 function Plant.execute_path!(result, input,
@@ -319,25 +460,26 @@ for model in (
 end
 
 @inline plant_test_path_materialization(
-    ::PlantPreparationTestAtmosphere,
-    ::Telescope,
-    ::AbstractSource,
-    ::PupilFunction,
-) = Plant.AtmosphereIndependentPath()
-
-@inline plant_test_path_materialization(
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
     telescope::Telescope,
     source::AbstractSource,
     pupil::PupilFunction,
 ) = prepare_pupil_opd_materialization(atmosphere, telescope, source, pupil)
 
+@inline plant_test_path_materialization(
+    ::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    ::Telescope,
+    ::Asterism,
+    ::PupilFunction,
+) = Plant.AtmosphereIndependentPath()
+
 function Plant.prepare_path_executor(
     ::InvalidPreparedPathModel,
     ::OpticalPathDefinition,
     ::AbstractSource,
     ::Telescope,
-    ::PlantPreparationTestAtmosphere,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     return nothing
 end
@@ -356,6 +498,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
+    context,
 )
     pupil = PupilFunction(telescope)
     imaging = prepare_direct_imaging(pupil, source;
@@ -368,6 +511,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=plant_test_path_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=(kind=:direct_imaging,
@@ -384,6 +528,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     pupil = PupilFunction(telescope)
     imaging = prepare_direct_imaging(pupil, source;
@@ -397,6 +542,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         execution;
+        context=context,
         materialization=prepare_pupil_opd_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=(kind=:counted_direct_imaging,
@@ -412,6 +558,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T)
@@ -433,6 +580,7 @@ function Plant.prepare_path_executor(
         pupil,
         output,
         execution;
+        context=context,
         materialization=plant_test_path_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=(kind=:shack_hartmann,
@@ -557,7 +705,9 @@ end
     T = Float64
     telescope = Telescope(resolution=8, diameter=T(4),
         central_obstruction=zero(T), T=T)
-    atmosphere = PlantPreparationTestAtmosphere()
+    telescope_configuration = plant_test_telescope_definition(telescope)
+    atmosphere_configuration = KolmogorovAtmosphereDefinition(
+        r0=T(0.2), L0=T(25), T=T)
     science_source = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=T(3), T=T)
     wfs_source = Source(band=:custom, wavelength=T(0.65e-6),
@@ -574,16 +724,51 @@ end
     wfs_acquisition_definition = AcquisitionDefinition(:wfs_frame, :wfs,
         ContractWFSPlantAcquisitionModel(T(0.5)))
     definition = PlantDefinition(
-        telescope=telescope,
-        atmosphere=atmosphere,
+        telescope=telescope_configuration,
+        atmosphere=atmosphere_configuration,
         paths=(science=science_definition, wfs=wfs_definition),
         acquisitions=(fast_science=fast_definition,
             slow_science=slow_definition,
             wfs_frame=wfs_acquisition_definition),
     )
 
-    plant = prepare_plant(definition; run_seed=0x5000)
+    # Preparation is a cold function-barrier boundary because backend FFT-plan
+    # construction is intentionally vendor-defined and inference-opaque. Once
+    # that boundary returns, the concrete prepared graph and its runtime
+    # accessors must remain fully inferable.
+    plant = prepare_plant(
+        definition, PLANT_TEST_HOST_TARGET; run_seed=0x5000)
+    telescope = @inferred prepared_telescope(plant)
+    atmosphere = @inferred prepared_atmosphere(plant)
     @test plant isa PreparedPlant
+    @test @inferred(plant_definition(plant)) === definition
+    @test @inferred(compute_device(plant)) == PLANT_TEST_HOST_TARGET
+    @test telescope === getfield(plant, :telescope)
+    @test atmosphere === getfield(plant, :atmosphere)
+    @test @inferred(Plant._require_exact_prepared_plant_target(
+        plant, PLANT_TEST_HOST_TARGET)) === plant
+    scalar_product = Ref(zero(T))
+    @test Plant._require_exact_plant_product_target(
+        scalar_product, PLANT_TEST_HOST_TARGET,
+        "host scalar acquisition product") === scalar_product
+    assert_plant_preparation_error(
+        () -> Plant._require_exact_plant_product_target(
+            Ref((zeros(T, 1),)), PLANT_TEST_HOST_TARGET,
+            "invalid nested acquisition product"),
+        :acquisition, :unsupported_product)
+    wrong_target = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        CUDABackend(), 0)
+    wrong_target_error = try
+        Plant._require_exact_prepared_plant_target(plant, wrong_target)
+        nothing
+    catch error
+        error
+    end
+    @test wrong_target_error isa
+        AdaptiveOpticsSim.Backends.ComputeDeviceError
+    @test wrong_target_error.operation == :validate_prepared_plant_target
+    @test wrong_target_error.reason == :wrong_device
+    @test wrong_target_error.device == wrong_target
     @test prepared_paths(plant) isa Memory{PreparedPathExecutor}
     @test prepared_acquisitions(plant) isa
         Memory{PreparedAcquisitionOwner}
@@ -597,6 +782,12 @@ end
     fast = prepared_acquisition(plant, :fast_science)
     slow = prepared_acquisition(plant, AcquisitionID(:slow_science))
     wfs = prepared_acquisition(plant, :wfs_frame)
+
+    @test science_path.context === plant.context
+    @test wfs_path.context === plant.context
+    @test fast.context === plant.context
+    @test slow.context === plant.context
+    @test wfs.context === plant.context
 
     @test path_input(science_path) === science_path.input
     @test path_result(science_path) === science_path.result
@@ -732,6 +923,7 @@ end
             (science_path.input, foreign_field),
             science_path.result,
             science_path.execution;
+            context=science_path.context,
             materialization=Plant.AtmosphereIndependentPath(),
             optical_model=science_path.key.optical_model,
             sampling_contract=science_path.key.sampling_contract,
@@ -752,6 +944,7 @@ end
             input,
             result,
             execution;
+            context=science_path.context,
             materialization=Plant.AtmosphereIndependentPath(),
             optical_model=science_path.key.optical_model,
             sampling_contract=science_path.key.sampling_contract,
@@ -868,6 +1061,7 @@ end
         wfs_path.input,
         unbound_wfs_result,
         wfs_path.execution;
+        context=wfs_path.context,
         materialization=Plant.AtmosphereIndependentPath(),
         optical_model=wfs_path.key.optical_model,
         sampling_contract=wfs_path.key.sampling_contract,

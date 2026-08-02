@@ -32,6 +32,21 @@ function Plant.validate_path_materialization_binding(
     return nothing
 end
 
+function Plant.validate_path_materialization_target(
+    materialization::SampledZeroPupilMaterialization,
+    input::PupilFunction,
+    ::AdaptiveOpticsSim.Atmospheres.AbstractAtmosphere,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    materialization.destination === input || throw(
+        PlantPreparationError(:path, :prepared_binding,
+            "sampled-aberration zero materialization binding changed"))
+    Plant._require_exact_plant_product_target(
+        materialization.destination, target,
+        "sampled-aberration zero materialization destination")
+    return materialization
+end
+
 function Plant.validate_path_materialization(
     materialization::SampledZeroPupilMaterialization,
     input::PupilFunction,
@@ -68,6 +83,17 @@ function Plant.validate_path_execution_binding(
     return nothing
 end
 
+function Plant.validate_path_execution_target(
+    execution::SampledAberrationHandoffExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_product_target(
+        execution.input, target, "sampled-aberration handoff input")
+    Plant._require_exact_plant_product_target(
+        execution.result, target, "sampled-aberration handoff result")
+    return execution
+end
+
 function Plant.execute_path!(
     result::IntensityMap,
     input::PupilFunction,
@@ -84,6 +110,7 @@ function Plant.prepare_path_executor(
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -109,6 +136,7 @@ function Plant.prepare_path_executor(
         pupil,
         result,
         execution;
+        context=context,
         materialization=SampledZeroPupilMaterialization(pupil),
         optical_model=:sampled_aberration_handoff,
         propagation_model=:external_typed_handoff,
@@ -183,14 +211,15 @@ function sampled_aberration_lowlevel_path(source::Source)
     )
     atmosphere = sampled_aberration_test_atmosphere(telescope)
     definition = PlantDefinition(;
-        telescope,
-        atmosphere,
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         paths=(
             OpticalPathDefinition(
                 :geometry, source, SampledAberrationHandoffPathModel()),
         ),
     )
-    plant = prepare_plant(definition; run_seed=0x8700)
+    plant = prepare_plant(
+        definition, PLANT_TEST_HOST_TARGET; run_seed=0x8700)
     return plant, prepared_path(plant, :geometry)
 end
 
@@ -284,18 +313,19 @@ function sampled_aberration_path_fixture()
             SampledAberrationAcquisitionModel(T(0.01))),
     )
     definition = PlantDefinition(;
-        telescope,
-        atmosphere,
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         sampled_aberrations=(science, common),
         paths,
         acquisitions,
     )
-    plant = prepare_plant(definition; run_seed=0x8701)
+    plant = prepare_plant(
+        definition, PLANT_TEST_HOST_TARGET; run_seed=0x8701)
     selection = prepare_acquisition_selection(
         plant, (:science_camera, :wfs_camera, :other_camera))
     return (;
         telescope,
-        atmosphere,
+        atmosphere=prepared_atmosphere(plant),
         definition,
         plant,
         selection,
@@ -411,6 +441,8 @@ end
     values = similar(prototype.opd)
     fill!(values, one(T))
     metadata = sampled_aberration_test_metadata(prototype, values)
+    telescope = plant_test_telescope_definition(telescope)
+    atmosphere = plant_test_atmosphere_definition(atmosphere)
 
     registered = SampledAberrationDefinition(
         :registered,
@@ -526,6 +558,13 @@ end
     )
     @test Plant.sampled_aberration_definitions(vector_definition)[1] ===
         first_replace
+    sampled_registry =
+        Plant.sampled_aberration_definitions(vector_definition)
+    @test getfield(sampled_registry, :_storage) isa Tuple
+    @test_throws CanonicalIndexError setindex!(
+        sampled_registry, first_replace, 1)
+    @test_throws MethodError setindex!(
+        getfield(sampled_registry, :_storage), first_replace, 1)
 
     topology_cases = (
         (
@@ -561,7 +600,8 @@ end
     @test unknown_definition_error.component === :sampled_aberration
     @test unknown_definition_error.reason === :unknown_id
 
-    named_plant = prepare_plant(named_definition; run_seed=0x8702)
+    named_plant = prepare_plant(
+        named_definition, PLANT_TEST_HOST_TARGET; run_seed=0x8702)
     unknown_prepared_error = sampled_aberration_definition_error() do
         Plant.prepared_sampled_aberration(named_plant, :missing)
     end
@@ -594,7 +634,8 @@ end
         paths=(path,),
     )
     assert_plant_preparation_error(
-        () -> prepare_plant(ambiguous; run_seed=0x8702),
+        () -> prepare_plant(
+            ambiguous, PLANT_TEST_HOST_TARGET; run_seed=0x8702),
         :sampled_aberration,
         :ambiguous_replacement_order,
     )
@@ -711,13 +752,13 @@ end
     )
     plant = prepare_plant(
         PlantDefinition(;
-            telescope,
-            atmosphere,
+            telescope=plant_test_telescope_definition(telescope),
+            atmosphere=plant_test_atmosphere_definition(atmosphere),
             controllable_optics=(optic,),
             sampled_aberrations=(static,),
             paths=(event_path,),
             acquisitions=(acquisition,),
-        );
+        ), PLANT_TEST_HOST_TARGET;
         run_seed=0x8703,
         command_endpoints=(
             CommandEndpointConfiguration(

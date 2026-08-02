@@ -136,7 +136,17 @@ function Backends._with_prepared_device_execution_context(
     context::AMDGPUPreparedDeviceExecutionContext,
 ) where {F}
     return AMDGPU.device!(context.device) do
-        AMDGPU.stream!(f, context.stream)
+        # AMDGPU 2.7's scoped `stream!(f, stream)` restores the old stream but
+        # does not select the requested stream before invoking `f`. Select and
+        # restore explicitly so the prepared stream is authoritative even for
+        # nested and multi-device execution contexts.
+        old_stream = AMDGPU.stream()
+        AMDGPU.stream!(context.stream)
+        try
+            f()
+        finally
+            AMDGPU.stream!(old_stream)
+        end
     end
 end
 

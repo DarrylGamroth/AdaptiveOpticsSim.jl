@@ -41,7 +41,8 @@ function Plant.prepare_path_executor(
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere)
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context)
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
     imaging = prepare_direct_imaging(pupil, source; zero_padding=1)
@@ -54,6 +55,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         execution;
+        context=context,
         materialization=prepare_pupil_opd_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=:reduced_order_unused_direct_imaging,
@@ -74,6 +76,44 @@ function Plant.prepare_controllable_optic(
         "reduced-order test optic requires a vector command"))
     return PreparedReducedOrderTestOptic(command_endpoint_id(schema),
         only(dimensions))
+end
+
+function Plant.validate_controllable_optic_target(
+    prepared::PreparedReducedOrderTestOptic,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # This prepared implementation owns endpoint identity and cardinality only;
+    # target-local command storage belongs to the command endpoint.
+    return prepared
+end
+
+function Plant.validate_controllable_optic_state_target(
+    ::PreparedReducedOrderTestOptic,
+    state::ReducedOrderTestOpticState,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_array_target(
+        state.visible, target, "reduced-order optic visible command")
+    return state
+end
+
+function Plant.validate_controllable_optic_workspace_target(
+    ::PreparedReducedOrderTestOptic,
+    workspace::ReducedOrderTestOpticWorkspace,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_array_target(
+        workspace.staged, target, "reduced-order optic staged command")
+    return workspace
+end
+
+function Plant.validate_path_execution_target(
+    execution::ReducedOrderCountedPathExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The Ref counter is host-side test instrumentation.
+    Plant.validate_path_execution_target(execution.imaging, target)
+    return execution
 end
 
 function Plant.prepare_controllable_optic_state(
@@ -227,10 +267,13 @@ function reduced_order_test_fixture(;
         CommandEndpointConfiguration(command_endpoint_id(schema), initial;
             capacity=command_capacity)
     end
-    definition = PlantDefinition(; telescope, atmosphere,
+    definition = PlantDefinition(
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         controllable_optics=optics, paths=(path,),
         acquisitions=(acquisition,))
-    plant = prepare_plant(definition; run_seed=0x7b00,
+    plant = prepare_plant(definition, PLANT_TEST_HOST_TARGET;
+        run_seed=0x7b00,
         command_endpoints=configurations)
     start = acquisition_start === nothing ?
         PeriodicAcquisitionStart(PeriodicSchedule(
@@ -504,7 +547,8 @@ end
         UInt32(1), 0.25, nothing)
     scalar_response = reduced_order_test_response(scalar_schema, [2.0, -1.0])
     prepared_scalar_response = Plant._prepare_reduced_order_event_response(
-        Plant._prepare_reduced_order_response(scalar_response, CPUBackend()),
+        Plant._prepare_reduced_order_response(
+            scalar_response, PLANT_TEST_HOST_TARGET),
         (scalar_binding,))
     scalar_endpoint_state = CommandEndpointState(scalar_endpoint)
     scalar_application = CommandApplicationState(scalar_endpoint,
@@ -528,7 +572,8 @@ end
     matrix_response = reduced_order_test_response(matrix_schema,
         [1.0 2.0; -1.0 0.5])
     prepared_matrix_response = Plant._prepare_reduced_order_event_response(
-        Plant._prepare_reduced_order_response(matrix_response, CPUBackend()),
+        Plant._prepare_reduced_order_response(
+            matrix_response, PLANT_TEST_HOST_TARGET),
         (matrix_binding,))
     matrix_endpoint_state = CommandEndpointState(matrix_endpoint)
     matrix_application = CommandApplicationState(matrix_endpoint,

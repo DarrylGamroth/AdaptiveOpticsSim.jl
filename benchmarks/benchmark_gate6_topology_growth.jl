@@ -210,7 +210,7 @@ function gate6_topology_code_proxies(
     selection,
 )
     epoch = current_epoch(
-        AOSPlant.plant_atmosphere(operation.plant.definition))
+        AOSPlant.prepared_atmosphere(operation.plant))
     event_types = Tuple{
         typeof(operation.event_loop),
         typeof(operation.state),

@@ -542,8 +542,16 @@ struct PreparedDevicePathBatchOwner
 end
 
 """Run-immutable, fixed-capacity deterministic plant-event composition."""
-struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
+struct PreparedPlantEventLoop{
+    C<:AbstractComputeDevice,
+    X,
+    A<:AbstractTimedAtmosphere,
+    R,
+    T,
+}
     binding::_PlantEventLoopBinding
+    target::C
+    context::X
     atmosphere::A
     atmosphere_rng::R
     scheduler::PreparedEventScheduler
@@ -561,6 +569,8 @@ struct PreparedPlantEventLoop{A<:AbstractTimedAtmosphere,R,T}
     autonomous_optics::Memory{_PreparedAutonomousPeriodicOptic}
     trigger_topology::T
 end
+
+@inline compute_device(prepared::PreparedPlantEventLoop) = prepared.target
 
 @inline plant_event_path_count(prepared::PreparedPlantEventLoop) =
     length(prepared.path_groups)
@@ -1687,7 +1697,7 @@ end
 @inline _prepared_trigger_topology(topology::PreparedTriggerTopology) =
     topology
 
-function _prepare_plant_event_loop(
+function _prepare_plant_event_loop_in_context(
     plant::PreparedPlant,
     definition::PlantEventLoopDefinition,
     device_batch_selection::Val,
@@ -1732,8 +1742,7 @@ function _prepare_plant_event_loop(
     autonomous_optics = _prepare_event_autonomous_optics(
         autonomous_definitions, optics, path_groups,
         definition.trigger_topology)
-    atmosphere = _require_selection_atmosphere(
-        plant_atmosphere(getfield(plant, :definition)))
+    atmosphere = _require_selection_atmosphere(prepared_atmosphere(plant))
     atmosphere_rng = _prepared_atmosphere_rng(atmosphere,
         getfield(getfield(plant, :rngs), :atmosphere))
     binding = _PlantEventLoopBinding()
@@ -1744,12 +1753,27 @@ function _prepare_plant_event_loop(
             path_groups,
             atmosphere,
         )
-    return PreparedPlantEventLoop(binding, atmosphere,
+    prepared = PreparedPlantEventLoop(binding, compute_device(plant),
+        getfield(plant, :context), atmosphere,
         atmosphere_rng, scheduler, actions, optics, optic_path_bindings,
         sampled_aberrations, sampled_aberration_path_bindings,
         command_endpoints, path_groups, device_batch_owners,
         path_device_batch_owner_slots, acquisitions, autonomous_optics,
         _prepared_trigger_topology(definition.trigger_topology))
+    return _require_exact_prepared_event_loop_target(
+        prepared, compute_device(plant))
+end
+
+function _prepare_plant_event_loop(
+    plant::PreparedPlant,
+    definition::PlantEventLoopDefinition,
+    device_batch_selection::Val,
+)
+    return _with_completed_prepared_device_execution_context(
+        getfield(plant, :context)) do
+        _prepare_plant_event_loop_in_context(
+            plant, definition, device_batch_selection)
+    end
 end
 
 """
@@ -1837,7 +1861,8 @@ function _event_optic_endpoint_initials(
     commands = map(optic.endpoint_slots) do slot
         binding = prepared.command_endpoints[Int(slot)].binding
         _copy_prepared_effective_command(binding.endpoint,
-            binding.initial_command, "initial physical command")
+            binding.initial_command, "initial physical command",
+            prepared.target)
     end
     return ids, commands
 end
@@ -1864,7 +1889,7 @@ function _initialize_event_autonomous_optics!(
     return nothing
 end
 
-function PlantEventLoopState(prepared::PreparedPlantEventLoop)
+function _plant_event_loop_state(prepared::PreparedPlantEventLoop)
     scheduler = EventSchedulerState(prepared.scheduler)
     command_endpoints, command_applications = _event_command_states(
         prepared, scheduler_timestamp(scheduler))
@@ -1897,7 +1922,15 @@ function PlantEventLoopState(prepared::PreparedPlantEventLoop)
     @inbounds for index in eachindex(prepared.command_endpoints)
         _schedule_event_command_endpoint!(prepared, state, index)
     end
-    return state
+    return _require_exact_plant_event_loop_state_target(
+        prepared, state, prepared.target)
+end
+
+function PlantEventLoopState(prepared::PreparedPlantEventLoop)
+    return _with_completed_prepared_device_execution_context(
+        prepared.context) do
+        _plant_event_loop_state(prepared)
+    end
 end
 
 mutable struct PlantEventLoopWorkspace{T,B}
@@ -1951,7 +1984,7 @@ function _optical_path_batch_workspace(
     )
 end
 
-function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
+function _plant_event_loop_workspace(prepared::PreparedPlantEventLoop)
     command_endpoints = Memory{CommandDispositionWorkspace}(undef,
         length(prepared.command_endpoints))
     disposition_capacity = 0
@@ -1970,7 +2003,7 @@ function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
     due_paths = Memory{Bool}(undef, length(prepared.path_groups))
     fill!(due_paths, false)
     optical_path_batch = _optical_path_batch_workspace(prepared)
-    return PlantEventLoopWorkspace(prepared.binding,
+    workspace = PlantEventLoopWorkspace(prepared.binding,
         EventSchedulerWorkspace(prepared.scheduler), command_endpoints,
         controllable_optics,
         Memory{PlantCommandDisposition}(undef, disposition_capacity), 0,
@@ -1981,6 +2014,15 @@ function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
         due_paths, optical_path_batch,
         _event_trigger_workspace(prepared.trigger_topology),
         Ref{TriggerDelivery}())
+    return _require_exact_plant_event_loop_workspace_target(
+        prepared, workspace, prepared.target)
+end
+
+function PlantEventLoopWorkspace(prepared::PreparedPlantEventLoop)
+    return _with_completed_prepared_device_execution_context(
+        prepared.context) do
+        _plant_event_loop_workspace(prepared)
+    end
 end
 
 @inline function _require_plant_event_loop_binding(
@@ -3748,7 +3790,8 @@ end
 end
 
 function _process_trigger_topology!(
-    prepared::PreparedPlantEventLoop{<:Any,<:Any,<:PreparedTriggerTopology},
+    prepared::PreparedPlantEventLoop{
+        <:Any,<:Any,<:Any,<:Any,<:PreparedTriggerTopology},
     state::PlantEventLoopState{<:TriggerTopologyState},
     workspace::PlantEventLoopWorkspace{<:TriggerTopologyWorkspace},
     claim::EventClaim)
@@ -3808,7 +3851,8 @@ function _process_trigger_topology!(
 end
 
 function _process_trigger_topology!(
-    ::PreparedPlantEventLoop{<:Any,<:Any,<:_NoPreparedTriggerTopology},
+    ::PreparedPlantEventLoop{
+        <:Any,<:Any,<:Any,<:Any,<:_NoPreparedTriggerTopology},
     ::PlantEventLoopState{<:_NoTriggerTopologyState},
     ::PlantEventLoopWorkspace{<:_NoTriggerTopologyWorkspace}, ::EventClaim)
     _plant_event_loop_error(:invalid_action,
@@ -4306,6 +4350,20 @@ function begin_optical_path_batch!(
     workspace::PlantEventLoopWorkspace,
     timestamp::PlantTimestamp,
 )
+    result = _with_completed_prepared_device_execution_context(
+        prepared.context) do
+        _begin_optical_path_batch_in_context!(
+            prepared, state, workspace, timestamp)
+    end
+    return result::OpticalPathBatchClaim
+end
+
+function _begin_optical_path_batch_in_context!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
     _require_idle_optical_path_batch(workspace)
@@ -4381,6 +4439,28 @@ function materialize_path_execution_group!(
     claim::OpticalPathBatchClaim,
     ordinal::Integer,
 )
+    return _with_prepared_device_execution_context(
+        prepared.context) do
+        _materialize_path_execution_group_in_context!(
+            prepared, state, workspace, claim, ordinal, Val(true))
+    end
+end
+
+@inline _synchronize_independent_path_execution_group!(
+    ::Val{false}, context) = nothing
+
+@inline _synchronize_independent_path_execution_group!(
+    ::Val{true}, context) =
+    _synchronize_prepared_device_execution_context!(context)
+
+function _materialize_path_execution_group_in_context!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+    ordinal::Integer,
+    synchronize::Val,
+)
     batch = _require_current_optical_path_batch(
         prepared, state, workspace, claim)
     _require_optical_path_batch_phase(
@@ -4410,6 +4490,8 @@ function materialize_path_execution_group!(
         _materialize_due_path!(
             group.path, prepared.atmosphere, batch.epoch, group.rngs)
     end
+    _synchronize_independent_path_execution_group!(
+        synchronize, prepared.context)
     @inbounds batch.group_status[slot] = _OpticalPathBatchGroupReady
     return nothing
 end
@@ -4519,7 +4601,7 @@ Base.@noinline function _execute_due_path!(
     path::PreparedPathExecutor,
     rngs::PreparedOwnerRNGs,
 )
-    execute_path!(path, rngs)
+    _execute_path_in_context!(path, rngs)
     return nothing
 end
 
@@ -4674,6 +4756,21 @@ function execute_path_execution_group!(
     claim::OpticalPathBatchClaim,
     ordinal::Integer,
 )
+    return _with_prepared_device_execution_context(
+        prepared.context) do
+        _execute_path_execution_group_in_context!(
+            prepared, state, workspace, claim, ordinal, Val(true))
+    end
+end
+
+function _execute_path_execution_group_in_context!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    claim::OpticalPathBatchClaim,
+    ordinal::Integer,
+    synchronize::Val,
+)
     batch = _require_current_optical_path_batch(
         prepared, state, workspace, claim)
     _require_optical_path_batch_phase(
@@ -4698,6 +4795,8 @@ function execute_path_execution_group!(
     group = @inbounds prepared.path_groups[slot]
     _execute_materialized_path_execution_group!(
         prepared, state, group, claim.timestamp)
+    _synchronize_independent_path_execution_group!(
+        synchronize, prepared.context)
     @inbounds state.path_sampled[slot] = true
     @inbounds batch.group_status[slot] = _OpticalPathBatchGroupComplete
     return nothing
@@ -4787,13 +4886,28 @@ public materialization, execution, and completion lifecycle available to HIL
 execution policies.
 """
 function execute_optical_path_batch!(
+    executor::SerialOpticalPathBatchExecutor,
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
+    result = _with_completed_prepared_device_execution_context(
+        prepared.context) do
+        _execute_serial_optical_path_batch_in_context!(
+            executor, prepared, state, workspace, timestamp)
+    end
+    return result::PlantTimestamp
+end
+
+function _execute_serial_optical_path_batch_in_context!(
     ::SerialOpticalPathBatchExecutor,
     prepared::PreparedPlantEventLoop,
     state::PlantEventLoopState,
     workspace::PlantEventLoopWorkspace,
     timestamp::PlantTimestamp,
 )
-    claim = begin_optical_path_batch!(
+    claim = _begin_optical_path_batch_in_context!(
         prepared, state, workspace, timestamp)
     try
         count = optical_path_batch_due_group_count(
@@ -4819,6 +4933,28 @@ function execute_optical_path_batch!(
     end
     return complete_optical_path_batch!(
         prepared, state, workspace, claim)
+end
+
+@inline function _execute_optical_path_batch_in_context!(
+    executor::AbstractOpticalPathBatchExecutor,
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
+    return execute_optical_path_batch!(
+        executor, prepared, state, workspace, timestamp)
+end
+
+@inline function _execute_optical_path_batch_in_context!(
+    executor::SerialOpticalPathBatchExecutor,
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    timestamp::PlantTimestamp,
+)
+    return _execute_serial_optical_path_batch_in_context!(
+        executor, prepared, state, workspace, timestamp)
 end
 
 function _process_ordinary_event!(prepared::PreparedPlantEventLoop,
@@ -4887,6 +5023,20 @@ function step_plant_events!(
     workspace::PlantEventLoopWorkspace,
     batch_executor::AbstractOpticalPathBatchExecutor,
 )
+    result = _with_completed_prepared_device_execution_context(
+        prepared.context) do
+        _step_plant_events_in_context!(
+            prepared, state, workspace, batch_executor)
+    end
+    return result::Union{Nothing,PlantTimestamp}
+end
+
+function _step_plant_events_in_context!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    batch_executor::AbstractOpticalPathBatchExecutor,
+)
     _require_plant_event_loop_binding(prepared, state)
     _require_plant_event_loop_binding(prepared, workspace)
     _require_idle_optical_path_batch(workspace)
@@ -4900,7 +5050,7 @@ function step_plant_events!(
         key = due_event_key(workspace.scheduler, prepared.scheduler,
             state.scheduler, 1)
         if key.phase == OpticalSamplePhase
-            execute_optical_path_batch!(
+            _execute_optical_path_batch_in_context!(
                 batch_executor, prepared, state, workspace, timestamp)
             _require_idle_optical_path_batch(workspace)
             continue
@@ -4953,13 +5103,31 @@ function run_plant_events_until!(
     batch_executor::AbstractOpticalPathBatchExecutor;
     max_timestamps::Integer=typemax(Int),
 )
+    result = _with_completed_prepared_device_execution_context(
+        prepared.context) do
+        _run_plant_events_until_in_context!(
+            prepared, state, workspace, stop, batch_executor;
+            max_timestamps)
+    end
+    return result::Int
+end
+
+function _run_plant_events_until_in_context!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    workspace::PlantEventLoopWorkspace,
+    stop::PlantTimestamp,
+    batch_executor::AbstractOpticalPathBatchExecutor;
+    max_timestamps::Integer=typemax(Int),
+)
     limit = _checked_event_step_limit(max_timestamps)
     count = 0
     while count < limit
         timestamp = next_plant_event_timestamp(prepared, state, workspace)
         timestamp === nothing && break
         timestamp <= stop || break
-        step_plant_events!(prepared, state, workspace, batch_executor)
+        _step_plant_events_in_context!(
+            prepared, state, workspace, batch_executor)
         count += 1
     end
     return count

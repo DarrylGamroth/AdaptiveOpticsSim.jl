@@ -387,8 +387,8 @@ function prepare_detector_acquisition(det::Detector, map::IntensityMap;
         map.values, rate_scale, quantum_efficiency)
 end
 
-@inline function _require_prepared_acquisition(det::Detector,
-    map::IntensityMap, plan::DetectorAcquisitionPlan)
+@inline function _require_prepared_detector_binding(
+    det::Detector, plan::DetectorAcquisitionPlan)
     det.params === plan.detector_params || throw(InvalidConfiguration(
         "detector does not match its prepared acquisition plan"))
     det.state === plan.detector_state || throw(InvalidConfiguration(
@@ -398,6 +398,12 @@ end
             "detector backend does not match its prepared acquisition plan"))
     det.state.frame === plan.detector_frame || throw(InvalidConfiguration(
         "detector device storage does not match its prepared acquisition plan"))
+    return nothing
+end
+
+@inline function _require_prepared_acquisition(det::Detector,
+    map::IntensityMap, plan::DetectorAcquisitionPlan)
+    _require_prepared_detector_binding(det, plan)
     map.metadata === plan.input_metadata || throw(InvalidConfiguration(
         "intensity map does not match its prepared acquisition plan"))
     map.values === plan.input_values || throw(InvalidConfiguration(

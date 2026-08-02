@@ -65,6 +65,15 @@ function Plant.validate_path_execution_binding(
         execution.imaging, input, result)
 end
 
+function Plant.validate_path_execution_target(
+    execution::ProviderCountedPathExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The Ref counter is host-side test instrumentation.
+    Plant.validate_path_execution_target(execution.imaging, target)
+    return execution
+end
+
 function Plant.execute_path!(result, input,
     execution::ProviderCountedPathExecution)
     Plant.validate_path_execution_binding(execution, input, result)
@@ -78,6 +87,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
@@ -92,6 +102,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         execution;
+        context=context,
         materialization=prepare_pupil_opd_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=(kind=:provider_counted_direct_imaging,
@@ -189,6 +200,17 @@ function Plant.validate_acquisition_provider_binding(
         PlantPreparationError(:acquisition, :shape,
             "test reduced-order product shape must match its declared path"))
     return nothing
+end
+
+function Plant.validate_acquisition_provider_target(
+    provider::TestCommandResponsiveReducedProvider,
+    path_result,
+    products::AcquisitionProducts,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The provider owns scalar control state only. Plant validates its path
+    # result and acquisition products independently.
+    return provider
 end
 
 function Plant.execute_acquisition_provider!(
@@ -293,9 +315,14 @@ end
         AcquisitionDefinition(:replay, :provider_path,
             ProviderReplayModel(T(7), T(8))),
     )
-    definition = PlantDefinition(; telescope, atmosphere,
-        paths=(path_definition,), acquisitions)
-    plant = prepare_plant(definition; run_seed=0x7300)
+    definition = PlantDefinition(
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
+        paths=(path_definition,),
+        acquisitions=acquisitions)
+    plant = prepare_plant(
+        definition, PLANT_TEST_HOST_TARGET; run_seed=0x7300)
+    atmosphere = prepared_atmosphere(plant)
     path = prepared_path(plant, :provider_path)
     full = prepared_acquisition(plant, :full)
     reduced = prepared_acquisition(plant, :reduced)
@@ -538,6 +565,18 @@ end
         () -> validate_acquisition_product_contract(tuple_type_mismatch,
             tuple_contract),
         :acquisition, :product_type)
+    scalar_ref = Ref(zero(T))
+    scalar_ref_contract = acquisition_product_contract(scalar_ref)
+    @test validate_acquisition_product_contract(
+        scalar_ref, scalar_ref_contract, "scalar Ref") === scalar_ref
+    for unsupported_ref in (
+        Ref((zeros(T, 1),)),
+        Ref{Number}(zero(T)),
+    )
+        assert_plant_preparation_error(
+            () -> acquisition_product_contract(unsupported_ref),
+            :acquisition, :unsupported_product)
+    end
     assert_plant_preparation_error(
         () -> acquisition_product_contract(AcquisitionProducts(
             :unsupported; metadata=(kind=:unsupported,))),

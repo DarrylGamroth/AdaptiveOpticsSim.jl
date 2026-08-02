@@ -32,6 +32,21 @@ function Plant.validate_path_materialization_binding(
     return nothing
 end
 
+function Plant.validate_path_materialization_target(
+    materialization::MCAOMOAOZeroPupilMaterialization,
+    input::PupilFunction,
+    ::AbstractAtmosphere,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    materialization.destination === input || throw(
+        PlantPreparationError(:path, :prepared_binding,
+            "MCAO/MOAO zero-pupil materialization belongs to another path"))
+    Plant._require_exact_plant_product_target(
+        materialization.destination, target,
+        "MCAO/MOAO zero-pupil materialization destination")
+    return materialization
+end
+
 function Plant.validate_path_materialization(
     materialization::MCAOMOAOZeroPupilMaterialization,
     input::PupilFunction,
@@ -71,6 +86,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
@@ -83,6 +99,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=MCAOMOAOZeroPupilMaterialization(pupil),
         optical_model=:native_deformable_mirror_mcao_moao_test,
         propagation_model=:fraunhofer_fft,
@@ -292,12 +309,12 @@ function mcao_moao_full_optical_fixture()
     end
     plant = prepare_plant(
         PlantDefinition(;
-            telescope,
-            atmosphere,
+            telescope=plant_test_telescope_definition(telescope),
+            atmosphere=plant_test_atmosphere_definition(atmosphere),
             controllable_optics=optics,
             paths,
             acquisitions,
-        );
+        ), PLANT_TEST_HOST_TARGET;
         run_seed=0x8601,
         command_endpoints=configurations,
     )
@@ -506,12 +523,12 @@ function mcao_moao_reduced_order_fixture(;
     end
     plant = prepare_plant(
         PlantDefinition(;
-            telescope,
-            atmosphere,
+            telescope=plant_test_telescope_definition(telescope),
+            atmosphere=plant_test_atmosphere_definition(atmosphere),
             controllable_optics=optics,
             paths,
             acquisitions,
-        );
+        ), PLANT_TEST_HOST_TARGET;
         run_seed=0x8602,
         command_endpoints=configurations,
     )

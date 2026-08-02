@@ -23,6 +23,16 @@ function Plant.validate_illumination_evaluator_binding(
     return nothing
 end
 
+function Plant.validate_illumination_evaluator_target(
+    evaluator::TestIlluminationEvaluator,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_product_target(
+        evaluator.destination, target,
+        "test illumination evaluator destination")
+    return evaluator
+end
+
 @inline function Plant.evaluate_illumination!(destination,
     evaluator::TestIlluminationEvaluator, model_time, rng::AbstractRNG)
     return destination
@@ -128,6 +138,21 @@ function Plant.validate_illumination_evaluator_binding(
     return nothing
 end
 
+function Plant.validate_illumination_evaluator_target(
+    evaluator::PreparedTimedPupilIllumination,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    evaluator.device == target || Plant._throw_wrong_plant_target(
+        target, "timed pupil illumination evaluator", evaluator.device)
+    Plant._require_exact_plant_array_target(
+        evaluator.state.support_template, target,
+        "timed pupil illumination support template")
+    Plant._require_exact_plant_array_target(
+        evaluator.state.amplitude_template, target,
+        "timed pupil illumination amplitude template")
+    return evaluator
+end
+
 function Plant.evaluate_illumination!(
     destination::PupilFunction,
     evaluator::PreparedTimedPupilIllumination, model_time,
@@ -176,6 +201,15 @@ function Plant.validate_path_execution_binding(
     return nothing
 end
 
+function Plant.validate_path_execution_target(
+    execution::IlluminationIdentityExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_product_target(
+        execution.product, target, "illumination identity product")
+    return execution
+end
+
 function Plant.execute_path!(result, input,
     execution::IlluminationIdentityExecution)
     Plant.validate_path_execution_binding(execution, input,
@@ -203,7 +237,8 @@ function Plant.prepare_path_executor(
     model::NativeDetectorIlluminationPathModel,
     definition::OpticalPathDefinition, source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere)
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context)
     destination = illumination_detector_input(telescope, source)
     entry = prepare_illumination_entry(
         UniformIntensityIllumination(model.rate;
@@ -214,6 +249,7 @@ function Plant.prepare_path_executor(
     execution = IlluminationIdentityExecution(destination)
     return PreparedPathExecutor(definition, source, telescope, atmosphere,
         destination, destination, execution;
+        context=context,
         materialization=entry,
         optical_model=(kind=:native_uniform_detector_illumination,
             photon_rate=model.rate),
@@ -225,7 +261,8 @@ function Plant.prepare_path_executor(
     model::TimedPupilIlluminationPathModel,
     definition::OpticalPathDefinition, source::AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere)
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context)
     pupil = PupilFunction(telescope; backend=backend(telescope))
     visibility = Dict{Symbol,Any}(
         :downstream_path => path_id(definition).name,
@@ -235,6 +272,7 @@ function Plant.prepare_path_executor(
     imaging = prepare_direct_imaging(pupil, source; zero_padding=2)
     return PreparedPathExecutor(definition, source, telescope, atmosphere,
         pupil, direct_imaging_output(imaging), imaging;
+        context=context,
         materialization=entry,
         optical_model=(kind=:timed_pupil_illumination_direct_imaging,
             illumination=(offset_m=model.params.offset_m,
@@ -287,9 +325,11 @@ function illumination_test_plant(path_models::NamedTuple;
     ordered_paths = reverse_declarations ? reverse(paths) : paths
     ordered_acquisitions = reverse_declarations ?
         reverse(acquisitions) : acquisitions
-    definition = PlantDefinition(; telescope, atmosphere,
+    definition = PlantDefinition(
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         paths=ordered_paths, acquisitions=ordered_acquisitions)
-    return prepare_plant(definition; run_seed)
+    return prepare_plant(definition, PLANT_TEST_HOST_TARGET; run_seed)
 end
 
 function illumination_materialization(path::PreparedPathExecutor)
@@ -484,10 +524,10 @@ end
     alpha_before = copy(illumination_destination(alpha_entry).opd)
     assert_illumination_preparation_error(
         () -> materialize_path_input!(prepared_path(timed_plant, :alpha),
-            current_epoch(plant_atmosphere(timed_plant.definition))),
+            current_epoch(prepared_atmosphere(timed_plant))),
         :illumination, :rng_owner)
     @test materialize_path_input!(prepared_path(timed_plant, :alpha),
-        current_epoch(plant_atmosphere(timed_plant.definition)),
+        current_epoch(prepared_atmosphere(timed_plant)),
         Xoshiro(0x7431)) === illumination_destination(alpha_entry)
     @test illumination_destination(alpha_entry).opd != alpha_before
 
@@ -650,7 +690,7 @@ end
             rng) == 0
         selection_bytes = illumination_selection_execution_allocations(
             native_selection,
-            current_epoch(plant_atmosphere(native_plant.definition)),
+            current_epoch(prepared_atmosphere(native_plant)),
         )
         selected_owner_count =
             length(prepared_paths(native_selection)) +

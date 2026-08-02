@@ -94,3 +94,4 @@ public supports_prepared_runtime
 public supports_detector_output
 public supports_stacked_sources
 public supports_grouped_execution
+public validate_wfs_target

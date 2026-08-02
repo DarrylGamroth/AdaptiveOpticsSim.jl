@@ -34,11 +34,14 @@ import ..Backends:
     ExecutionStyle,
     KernelLaunchPhase,
     ScalarCPUStyle,
+    _throw_compute_device_error,
+    _with_compute_device,
     _resolve_array_backend,
     _resolve_backend_selector,
     backend,
     begin_kernel_phase,
     compute_device,
+    compute_device_backend,
     execute_fft_plan!,
     execution_style,
     finish_kernel_phase!,
@@ -72,6 +75,7 @@ import ..Optics:
     _accumulate_field_intensity_async!,
     _converted_nonnegative_finite,
     _converted_positive_finite,
+    _converted_finite,
     apply_phase_async!,
     coordinates_xy_arcsec,
     extended_source_asterism,
@@ -111,6 +115,15 @@ published as immutable current-state epoch identity tokens.
 """
 abstract type AbstractTimedAtmosphere <: AbstractAtmosphere end
 
+"""
+Configuration-only declaration of one maintained explicitly timed atmosphere.
+
+Concrete definitions own scientific parameters and stable layer identities,
+but no numerical arrays, backend/device selection, mutable evolution state,
+plans, workspace, or RNG streams.
+"""
+abstract type AbstractTimedAtmosphereDefinition end
+
 # Extension seam retained for untimed/static test atmospheres and user models.
 # Maintained stochastic atmospheres use `advance_by!` / `advance_to!` instead.
 function advance! end
@@ -120,6 +133,7 @@ include("kolmogorov.jl")
 include("infinite_screen_math.jl")
 include("infinite_screen.jl")
 include("multilayer.jl")
+include("definitions.jl")
 include("direction_batch.jl")
 include("phase_stats.jl")
 include("atmospheric_field_propagation.jl")

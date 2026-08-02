@@ -12,11 +12,12 @@ boundary and document map.
 
 ## Plant, Path, And Acquisition Model
 
-A plant ultimately contains one telescope and atmosphere, independently placed
-controllable optics, reusable optical paths, and independently scheduled or
-triggered acquisitions. The implemented Gate 2 declaration boundary commits
-the telescope, atmosphere, path, and acquisition topology. The first four
-Gate 4 slices additionally declare every physical controllable optic, define
+A plant ultimately contains one prepared numerical telescope and timed
+atmosphere, independently placed controllable optics, reusable optical paths,
+and independently scheduled or triggered acquisitions. The implemented Gate 2
+declaration boundary commits their cold telescope, timed-atmosphere, path, and
+acquisition definitions. The first four Gate 4 slices additionally declare
+every physical controllable optic, define
 one immutable versioned semantic schema for each independently timed or
 latched command endpoint, and provide standalone bounded admission and
 effective-command state owners. The fifth slice prepares every declared optic
@@ -35,7 +36,7 @@ common multi-altitude MCAO and target-specific MOAO surfaces through those
 prepared bindings, and requires a reduced-order path to name exactly its
 visible command responses. The fourth slice attaches native sampled `NCPA`
 and `OPDMap` effects to explicit common or selected paths, makes run-owned
-backend-local copies, and forms them before controllable and autonomous optics
+exact-target copies, and forms them before controllable and autonomous optics
 and before the typed path executor. Device-specific dynamics remain
 model-specific; none of these contracts is hidden in an identity or command
 schema.
@@ -56,6 +57,9 @@ types explicitly assert the cold configuration contract:
 
 ```julia
 const Plant = AdaptiveOpticsSim.Plant
+const Backends = AdaptiveOpticsSim.Backends
+const Optics = AdaptiveOpticsSim.Optics
+const Atmospheres = AdaptiveOpticsSim.Atmospheres
 
 Plant.plant_model_definition_style(
     ::Type{InstrumentOpticalModelDefinition},
@@ -106,9 +110,20 @@ function dm_command_schema(id, endpoint, actuator_count)
     )
 end
 
+telescope_definition = Optics.TelescopeDefinition(
+    resolution=256,
+    diameter=8.0,
+    central_obstruction=0.14,
+    revision=1,
+)
+atmosphere_definition = Atmospheres.KolmogorovAtmosphereDefinition(
+    r0=0.16,
+    L0=25.0,
+)
+
 plant = Plant.PlantDefinition(
-    telescope=tel,
-    atmosphere=atm,
+    telescope=telescope_definition,
+    atmosphere=atmosphere_definition,
     controllable_optics=(
         woofer=Plant.ControllableOpticDefinition(
             :woofer,
@@ -163,6 +178,14 @@ plant = Plant.PlantDefinition(
         ),
     ),
 )
+
+target = Backends.HostComputeDevice()
+prepared_plant = Plant.prepare_plant(
+    plant,
+    target;
+    run_seed=0x1234,
+    command_endpoints=command_endpoint_configurations,
+)
 ```
 
 These declarations are owned by `AdaptiveOpticsSim.Plant`; the root package
@@ -179,6 +202,11 @@ the root scientific API.
 `AcquisitionProductContract`, `PathResultKey`, `prepare_plant`,
 `rng_replay_metadata`, `execute_path!`, and `execute_acquisition!` are the
 corresponding schedule-free prepared boundary.
+Qualified accessors distinguish declaration from numerical ownership:
+`Plant.telescope_definition` and `Plant.atmosphere_definition` inspect a
+`PlantDefinition`; `Plant.plant_definition`, `Plant.prepared_telescope`, and
+`Plant.prepared_atmosphere` inspect a `PreparedPlant`; and
+`Backends.compute_device(prepared_plant)` reports its exact target.
 A symbol passed as an identity is normalized to the corresponding typed ID. A
 tuple, named tuple, or vector is only cold declaration organization and is
 copied into a fixed-size topology registry: every definition carries its own
@@ -196,11 +224,13 @@ These Julia structs are immutable topology records: their field bindings
 cannot be reassigned. The model-definition trait makes controllable-optic,
 path, and acquisition model ownership an explicit extension contract;
 unrecognized types, including live controllable optics, detectors, and mutable
-wrappers, are rejected. The telescope and atmosphere remain separately owned
-scientific models with their documented state semantics; in particular, the
-atmosphere has one evolution writer. Preparation freezes compatible
-configuration and constructs separately owned plans, single-writer workspaces,
-and state for the components supported by the current gate.
+wrappers, are rejected. A plant definition stores immutable, configuration-only
+telescope and timed-atmosphere definitions rather than numerical models.
+Preparation materializes a separate numerical telescope and one independently
+evolving timed atmosphere for each prepared plant, then constructs separately
+owned plans, single-writer workspaces, and state for the components supported
+by the current gate. Reusing the cold definition for another exact target does
+not share numerical atmosphere state.
 
 The definitions contain immutable command payload schemas but no mutable
 command state, admission calendar, trigger binding, RNG stream, propagation
@@ -216,13 +246,21 @@ The third and fourth Gate 4 slices prepare standalone endpoint admission and
 effective-command owners with fixed payload slots, accepted-sequence history,
 future calendar, terminal-disposition storage, and replayable silence policy.
 The fifth slice attaches those owners to prepared physical optics and the
-virtual-time event loop. `prepare_plant` now requires one
-`CommandEndpointConfiguration` for every declared endpoint and fails rather
-than silently omitting a physical device or schema.
+virtual-time event loop. `prepare_plant(definition, target; ...)` requires one
+exact compute-device target and one `CommandEndpointConfiguration` for every
+declared endpoint, and fails rather than silently omitting a physical device or
+schema. Endpoint configurations supply capacity and initial/safe values;
+array-command storage follows the plant target rather than selecting a backend
+independently.
 
-Preparation turns immutable definitions into backend-, device-, shape-, and
+Preparation turns immutable definitions into exact-target-, shape-, and
 capacity-bound plans plus explicitly owned mutable state, workspaces, and
 stateful RNG streams derived from a required central run seed and version.
+Every owned data-plane array must reside on the exact target. Scalar command
+values, host configuration and topology registries, and deliberate host RNG
+staging remain host-resident; they are not accelerator data-plane residency
+violations. Target selection restores the caller's previous accelerator context
+on both success and failure.
 Repeated execution calls mutating operations over those prepared owners and
 caller-owned products. Owner construction validates every concrete execution
 plan against the exact input, result, detector state, observation, and optional
@@ -976,9 +1014,10 @@ modal-to-command bases. Static sampled maps can be represented directly with
 explicit pupil or atmospheric-conjugate placement and all-path or selected-path
 visibility. It also declares additive or replacement application and optional
 pupil-relay registration against exact metric plane metadata. Plant
-preparation makes a same-backend/device defensive OPD copy and prepares one
+preparation makes an exact-target defensive OPD copy and prepares one
 finite-support coupling per visible path, so later mutation of caller storage
-cannot alter the run.
+cannot alter the run. Caller-owned host samples are accepted as preparation
+inputs; a direct copy between different accelerator devices is rejected.
 
 For one path, an optional replacement effect is applied first, followed by
 additive effects in canonical placement and stable-identity order. More than
@@ -1191,7 +1230,7 @@ definition. It fixes actuator topology, influence and actuator-response models,
 device-internal `Misregistration`, numeric type, and pupil-relay registration.
 Preparation validates one vector actuator endpoint in metres with the declared
 surface-OPD sign convention, constructs immutable influence data for the
-telescope/backend/device, and allocates separate active and staged
+prepared telescope and exact target, and allocates separate active and staged
 `DeformableMirror` runtimes. Staging forms a complete surface in the staged
 runtime; publication swaps the active and staged owners without copying the
 surface. Path execution reads only the published surface through its immutable
@@ -1208,7 +1247,7 @@ responses during preparation.
 
 The fourth slice adds `Plant.SampledAberrationDefinition` without pretending a
 static effect is a zero-command controllable device. `prepare_plant` copies
-native `NCPA` or `OPDMap` OPD storage on the declared backend/device, resolves
+native `NCPA` or `OPDMap` OPD storage onto the exact plant target, resolves
 the same exact path-local pupil-footprint geometry, and builds a bounded
 canonical binding table. Common effects use `AllPathVisibility`; NCPA normally
 uses `SelectedPathVisibility`. Replacement precedes additive effects and at

@@ -788,6 +788,85 @@ function WavefrontSensors.validate_wfs_estimation_binding(
     return nothing
 end
 
+# Explicit exact-target ownership for the test-only prepared stage protocol.
+# These methods exercise the same extension obligation that production WFS
+# plans expose through the qualified `validate_wfs_target` seam.
+function WavefrontSensors.validate_wfs_target(
+    plan::ContractRatePlan,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
+    WavefrontSensors._require_exact_wfs_input_target(
+        plan.input, target, :optical_formation)
+    WavefrontSensors._require_exact_wfs_product_target(
+        plan.output, target, :optical_formation)
+    return plan
+end
+
+function WavefrontSensors.validate_wfs_target(
+    plan::ContractBundleRatePlan,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
+    WavefrontSensors._require_exact_wfs_input_target(
+        plan.input, target, :optical_formation)
+    WavefrontSensors._require_exact_wfs_product_target(
+        plan.output, target, :optical_formation)
+    @inbounds for component in plan.plans
+        WavefrontSensors.validate_wfs_target(component, target)
+    end
+    return plan
+end
+
+@inline _contract_validate_detector_targets(
+    ::Tuple{}, ::AdaptiveOpticsSim.Backends.AbstractComputeDevice) = nothing
+
+@inline function _contract_validate_detector_targets(
+    bindings::Tuple,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
+    binding = first(bindings)
+    AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
+        binding.detector, binding.plan, target)
+    WavefrontSensors._require_exact_wfs_observation_target(
+        binding.observation, target, :acquisition)
+    return _contract_validate_detector_targets(Base.tail(bindings), target)
+end
+
+function WavefrontSensors.validate_wfs_target(
+    plan::ContractDetectorAcquisitionPlan,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
+    WavefrontSensors._require_exact_wfs_product_target(
+        plan.inputs, target, :acquisition)
+    WavefrontSensors._require_exact_wfs_observation_target(
+        plan.observations, target, :acquisition)
+    _contract_validate_detector_targets(plan.bindings, target)
+    return plan
+end
+
+@inline function _contract_validate_estimator_input_target(
+    input::Union{PupilFunction,ElectricField},
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
+    return WavefrontSensors._require_exact_wfs_input_target(
+        input, target, :estimation)
+end
+
+@inline function _contract_validate_estimator_input_target(
+    input::Union{WFSObservation,Tuple},
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
+    return WavefrontSensors._require_exact_wfs_observation_target(
+        input, target, :estimation)
+end
+
+function WavefrontSensors.validate_wfs_target(
+    plan::Union{
+        ContractSumEstimatorPlan,
+        ContractCopyEstimatorPlan,
+        ContractDirectEstimatorPlan,
+        ContractDirectCopyEstimatorPlan,
+    },
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
+    _contract_validate_estimator_input_target(plan.input, target)
+    WavefrontSensors._require_exact_wfs_measurement_target(
+        plan.measurement, target)
+    return plan
+end
+
 struct ContractPackedAcquisition{R,T<:AbstractFloat}
     regions::R
     duration::T
@@ -931,6 +1010,21 @@ function WavefrontSensors.validate_wfs_acquisition_binding(
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "packed observation storage was replaced"))
     return nothing
+end
+
+function WavefrontSensors.validate_wfs_target(
+    plan::ContractPackedAcquisitionPlan,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
+    WavefrontSensors._require_exact_wfs_product_target(
+        plan.inputs, target, :acquisition)
+    WavefrontSensors._require_exact_wfs_observation_target(
+        plan.observation, target, :acquisition)
+    @inbounds for storage in plan.views
+        WavefrontSensors._require_exact_wfs_storage_target(
+            storage, target, :acquisition,
+            "contract packed-acquisition view")
+    end
+    return plan
 end
 
 function run_contract_stages!(optical_output, optical_input, optical_plan,

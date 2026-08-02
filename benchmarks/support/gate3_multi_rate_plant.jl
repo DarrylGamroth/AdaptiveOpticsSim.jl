@@ -126,13 +126,14 @@ end
 function multi_rate_plant_definition(raw::AbstractDict;
     reverse_declarations::Bool=false)
     T = Float64
-    telescope = AOS.Optics.Telescope(
+    telescope = AOS.Optics.TelescopeDefinition(
         resolution=Int(raw["resolution"]),
         diameter=T(raw["diameter_m"]),
         central_obstruction=T(raw["central_obstruction"]),
+        revision=UInt(1),
         T=T,
     )
-    atmosphere = AOS.Atmospheres.MultiLayerAtmosphere(telescope;
+    atmosphere = AOS.Atmospheres.MultiLayerAtmosphereDefinition(;
         r0=T(raw["r0_m"]),
         L0=T(raw["outer_scale_m"]),
         fractional_cn2=T.(raw["fractional_cn2"]),
@@ -325,7 +326,8 @@ function prepare_multi_rate_operation(raw::AbstractDict;
     reverse_declarations::Bool=false, faulted::Bool=false,
     period_multiplier::Int=1)
     definition = multi_rate_plant_definition(raw; reverse_declarations)
-    plant = AOSPlant.prepare_plant(definition;
+    plant = AOSPlant.prepare_plant(
+        definition, AOS.Backends.HostComputeDevice();
         run_seed=UInt64(raw["run_seed"]),
         rng_derivation_version=Int(raw["rng_derivation_version"]))
     event_definition = multi_rate_event_definition(raw;

@@ -45,12 +45,21 @@ function Plant.validate_path_execution_binding(
         execution.imaging, input, result)
 end
 
+function Plant.validate_path_execution_target(
+    execution::RNGTestPathExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant.validate_path_execution_target(execution.imaging, target)
+    return execution
+end
+
 function Plant.prepare_path_executor(
     model::RNGQuietPathModel,
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -64,6 +73,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=prepare_pupil_opd_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=(kind=:rng_quiet_direct_imaging,
@@ -96,6 +106,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T=T, backend=backend(telescope))
@@ -110,6 +121,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         execution;
+        context=context,
         materialization=prepare_pupil_opd_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=(kind=:rng_test_direct_imaging,
@@ -124,6 +136,14 @@ function Plant.validate_acquisition_execution_binding(
     products::AcquisitionProducts)
     return Plant.validate_acquisition_execution_binding(
         execution.frame, path_result, products)
+end
+
+function Plant.validate_acquisition_execution_target(
+    execution::RNGTestAcquisitionExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant.validate_acquisition_execution_target(execution.frame, target)
+    return execution
 end
 
 function Plant.execute_acquisition_rngs!(products, path_result,
@@ -189,8 +209,8 @@ function rng_test_definition(;
     atmosphere_model::Symbol=:multilayer,
 )
     T = Float64
-    telescope = Telescope(resolution=8, diameter=T(4),
-        central_obstruction=zero(T), T=T)
+    telescope = TelescopeDefinition(resolution=8, diameter=T(4),
+        central_obstruction=zero(T), revision=1, T=T)
     base_cn2 = (T(0.6), T(0.4))
     base_speed = (T(7), T(19))
     base_direction = (T(15), T(105))
@@ -198,7 +218,7 @@ function rng_test_definition(;
     resolved_layer_ids = isnothing(layer_ids) ? nothing :
         ntuple(index -> layer_ids[layer_order[index]], length(layer_order))
     atmosphere = if atmosphere_model === :multilayer
-        MultiLayerAtmosphere(telescope;
+        MultiLayerAtmosphereDefinition(;
             r0=T(0.2),
             L0=T(25),
             fractional_cn2=T[base_cn2[index] for index in layer_order],
@@ -209,7 +229,7 @@ function rng_test_definition(;
             T=T,
         )
     elseif atmosphere_model === :kolmogorov
-        KolmogorovAtmosphere(telescope; r0=T(0.2), L0=T(25), T=T)
+        KolmogorovAtmosphereDefinition(r0=T(0.2), L0=T(25), T=T)
     else
         error("unsupported test atmosphere model $atmosphere_model")
     end
@@ -278,33 +298,31 @@ end
         hash(AtmosphereLayerID(:ground))
 
     definition = rng_test_definition()
-    @test_throws UndefKeywordError prepare_plant(definition)
+    @test_throws MethodError prepare_plant(definition; run_seed=0x7100)
     assert_plant_preparation_error(
-        () -> prepare_plant(definition; run_seed=-1),
+        () -> prepare_plant(definition, PLANT_TEST_HOST_TARGET; run_seed=-1),
         :rng, :invalid_seed)
     assert_plant_preparation_error(
-        () -> prepare_plant(definition; run_seed=1.0),
+        () -> prepare_plant(
+            definition, PLANT_TEST_HOST_TARGET; run_seed=1.0),
         :rng, :invalid_seed)
     assert_plant_preparation_error(
-        () -> prepare_plant(definition; run_seed=0x7100,
+        () -> prepare_plant(definition, PLANT_TEST_HOST_TARGET;
+            run_seed=0x7100,
             rng_derivation_version=0),
         :rng, :invalid_derivation_version)
     assert_plant_preparation_error(
-        () -> prepare_plant(definition; run_seed=0x7100,
+        () -> prepare_plant(definition, PLANT_TEST_HOST_TARGET;
+            run_seed=0x7100,
             rng_derivation_version=1.0),
         :rng, :invalid_derivation_version)
 
-    missing_layer_ids = rng_test_definition(; layer_ids=nothing)
-    assert_plant_preparation_error(
-        () -> prepare_plant(missing_layer_ids; run_seed=0x7100),
-        :rng, :missing_owner_id)
-    duplicate_layer_ids = rng_test_definition(
+    @test_throws InvalidConfiguration rng_test_definition(; layer_ids=nothing)
+    @test_throws InvalidConfiguration rng_test_definition(
         layer_ids=(:duplicate, :duplicate))
-    assert_plant_preparation_error(
-        () -> prepare_plant(duplicate_layer_ids; run_seed=0x7100),
-        :rng, :duplicate_owner_id)
 
-    plant = prepare_plant(definition; run_seed=0x7100,
+    plant = prepare_plant(definition, PLANT_TEST_HOST_TARGET;
+        run_seed=0x7100,
         rng_derivation_version=RNGDerivationVersion(1))
     selection = prepare_acquisition_selection(plant,
         (:quiet_frame, :noisy))
@@ -334,7 +352,8 @@ end
     @test quiet_before == quiet_after
     @test noisy_before != noisy_after
 
-    replay = prepare_plant(rng_test_definition(); run_seed=0x7100,
+    replay = prepare_plant(
+        rng_test_definition(), PLANT_TEST_HOST_TARGET; run_seed=0x7100,
         rng_derivation_version=1)
     replay_selection = prepare_acquisition_selection(replay,
         (:noisy, :quiet_frame))
@@ -344,7 +363,7 @@ end
 
     reordered = prepare_plant(rng_test_definition(
         path_order=(:quiet, :random),
-        acquisition_order=(:quiet_frame, :noisy));
+        acquisition_order=(:quiet_frame, :noisy)), PLANT_TEST_HOST_TARGET;
         run_seed=0x7100, rng_derivation_version=1)
     reordered_selection = prepare_acquisition_selection(reordered,
         (:quiet_frame, :noisy))
@@ -352,13 +371,15 @@ end
     @test rng_replay_metadata(reordered) == metadata
     @test rng_test_observations(reordered) == observations
 
-    changed_seed = prepare_plant(rng_test_definition();
+    changed_seed = prepare_plant(
+        rng_test_definition(), PLANT_TEST_HOST_TARGET;
         run_seed=0x7101, rng_derivation_version=1)
-    changed_version = prepare_plant(rng_test_definition();
+    changed_version = prepare_plant(
+        rng_test_definition(), PLANT_TEST_HOST_TARGET;
         run_seed=0x7100, rng_derivation_version=2)
     renamed = prepare_plant(rng_test_definition(
         noisy_acquisition_id=:renamed_noisy,
-        acquisition_order=(:noisy, :quiet_frame));
+        acquisition_order=(:noisy, :quiet_frame)), PLANT_TEST_HOST_TARGET;
         run_seed=0x7100, rng_derivation_version=1)
     detector_seed = rng_test_owner_seed(metadata, :acquisition, :noisy,
         :detector)
@@ -371,7 +392,7 @@ end
         :acquisition, :renamed_noisy, :detector) != detector_seed
 
     reordered_layers = prepare_plant(rng_test_definition(
-        layer_order=(2, 1)); run_seed=0x7100,
+        layer_order=(2, 1)), PLANT_TEST_HOST_TARGET; run_seed=0x7100,
         rng_derivation_version=1)
     reordered_layers_selection = prepare_acquisition_selection(
         reordered_layers, (:noisy, :quiet_frame))
@@ -383,7 +404,8 @@ end
         rng_test_owner_seed(metadata, :atmosphere, :ground, :layer_state)
 
     single_owner = prepare_plant(rng_test_definition(
-        atmosphere_model=:kolmogorov); run_seed=0x7100)
+        atmosphere_model=:kolmogorov), PLANT_TEST_HOST_TARGET;
+        run_seed=0x7100)
     single_owner_selection = prepare_acquisition_selection(single_owner,
         (:noisy,))
     @test execute_acquisition_selection_at!(single_owner_selection,
@@ -393,8 +415,7 @@ end
         @test_skip "prepared-RNG execution allocation assertion is disabled under coverage instrumentation"
     else
         allocation_bytes = prepared_selection_execution_allocations(
-            selection, current_epoch(
-                plant_atmosphere(plant.definition)))
+            selection, current_epoch(prepared_atmosphere(plant)))
         selected_owner_count = length(prepared_paths(selection)) +
             length(prepared_acquisitions(selection))
         @test allocation_bytes <= 256 * selected_owner_count

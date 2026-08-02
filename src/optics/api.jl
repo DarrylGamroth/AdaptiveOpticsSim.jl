@@ -76,7 +76,9 @@ export microlens_array, prepare_microlens_propagation
 export PyramidPhaseMask, BioEdgeAmplitudeMask
 export ZernikePhaseSpot, CurvatureDefocusPair
 
-public AbstractSource
+public AbstractSource, AbstractTelescope
+public AbstractTelescopeDefinition, TelescopeDefinition, prepare_telescope
+public validate_telescope_target
 public AbstractDirectImagingBatchCapability
 public StackedFraunhoferDirectImagingBatchCapability
 public UnsupportedDirectImagingBatchCapability

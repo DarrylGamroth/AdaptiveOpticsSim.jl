@@ -50,17 +50,33 @@ A plant starts from `PlantDefinition`. It may declare:
 a `CommandEndpointConfiguration`. Preparation:
 
 - canonicalizes stable identities
-- makes run-owned same-backend/device sampled-OPD copies
+- makes run-owned exact-target sampled-OPD copies from supported caller input
 - resolves bounded path-local sampled-aberration and controllable-optic
   couplings
 - prepares path and acquisition implementations
+- retains one exact prepared device execution context in the plant, its path
+  executors, and their acquisition owners
 - allocates backend- and device-compatible destinations
 - copies initial and optional safe commands into endpoint-owned storage
 - constructs independent RNG streams from stable owner identities
 - validates all run-immutable bindings
 
+Successful public preparation and execution returns complete the retained
+backend stream before restoring the caller's device and stream selection.
+Worker-visible independent path-group calls establish that completion before
+publishing their ready or complete phase; coordinator-local serial execution
+uses one enclosing completion boundary.
+
 Preparation may allocate and fail. Repeated execution mutates only prepared
-state and caller-owned products.
+state and caller-owned products. Public schedule-free
+`materialize_path_input!`, `execute_path!`, and `execute_acquisition!` calls
+enter the retained context, including its accelerator stream where applicable,
+and restore the caller's previous device and stream selections after success or
+an exception. The schedule-free `execute_acquisition_selection!` and
+`execute_acquisition_selection_at!` entry points enter the plant context once
+and execute their lower-level operations inside it.
+Model-specific execution dispatches run inside that boundary and must not
+select an alternate device or stream.
 
 ## Controller Output Routing
 
@@ -114,6 +130,10 @@ explicit `PlantCommandTransaction` membership does.
 `PlantTimestamp`; `run_plant_events_until!` advances through all due timestamps
 up to a limit. Equal-time ordering follows stable causal phase, prepared owner
 ordinal, and occurrence—not task completion or tuple iteration.
+`PreparedPlantEventLoop` retains the exact prepared plant device execution
+context. Both public execution calls enter that context and restore the caller's
+previous device and stream selections; their lower-level optical work reuses
+the already active context.
 
 At a due command timestamp the loop:
 

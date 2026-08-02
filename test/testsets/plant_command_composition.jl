@@ -76,6 +76,15 @@ function Plant.prepare_controllable_optic(
     return PreparedCommandCompositionOptic(endpoint, pattern)
 end
 
+function Plant.validate_controllable_optic_target(
+    prepared::PreparedCommandCompositionOptic,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_array_target(
+        prepared.pattern, target, "command-composition optic pattern")
+    return prepared
+end
+
 function Plant.prepare_controllable_optic(
     ::ArrayInitialCommandOpticModel,
     definition::ControllableOpticDefinition,
@@ -90,6 +99,53 @@ function Plant.prepare_controllable_optic(
         "array-initial test optic requires one-dimensional commands"))
     return PreparedArrayInitialCommandOptic{T}(
         command_endpoint_id(schema), only(dimensions))
+end
+
+function Plant.validate_controllable_optic_target(
+    prepared::PreparedArrayInitialCommandOptic,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # Endpoint identity and command cardinality are immutable host
+    # configuration; the target-local initial command belongs to the endpoint.
+    return prepared
+end
+
+function Plant.validate_controllable_optic_state_target(
+    ::PreparedCommandCompositionOptic,
+    state::CommandCompositionOpticState,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The visible modal coefficient is a scalar host control-plane value.
+    return state
+end
+
+function Plant.validate_controllable_optic_workspace_target(
+    ::PreparedCommandCompositionOptic,
+    workspace::CommandCompositionOpticWorkspace,
+    ::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    # The staged modal coefficient is a scalar host control-plane value.
+    return workspace
+end
+
+function Plant.validate_controllable_optic_state_target(
+    ::PreparedArrayInitialCommandOptic,
+    state::ArrayInitialCommandOpticState,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_array_target(
+        state.visible, target, "array-initial optic visible command")
+    return state
+end
+
+function Plant.validate_controllable_optic_workspace_target(
+    ::PreparedArrayInitialCommandOptic,
+    workspace::ArrayInitialCommandOpticWorkspace,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_array_target(
+        workspace.staged, target, "array-initial optic staged command")
+    return workspace
 end
 
 function Plant.prepare_controllable_optic_state(
@@ -210,6 +266,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
@@ -222,6 +279,7 @@ function Plant.prepare_path_executor(
         pupil,
         direct_imaging_output(imaging),
         imaging;
+        context=context,
         materialization=prepare_pupil_opd_materialization(atmosphere,
             telescope, source, pupil),
         optical_model=:command_composition_direct_imaging,
@@ -326,10 +384,13 @@ function command_composition_fixture(; reverse_order::Bool=false,
         CommandEndpointConfiguration(:b_tweeter, 0.0; capacity=4),
     )
     reverse_order && (configurations = reverse(configurations))
-    definition = PlantDefinition(; telescope, atmosphere,
+    definition = PlantDefinition(
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         controllable_optics=optics, paths=(path,),
         acquisitions=(acquisition,))
-    plant = prepare_plant(definition; run_seed=0x7a00,
+    plant = prepare_plant(definition, PLANT_TEST_HOST_TARGET;
+        run_seed=0x7a00,
         command_endpoints=configurations)
     loop_definition = PlantEventLoopDefinition(
         (OpticalSampleDefinition(:science,
@@ -380,11 +441,14 @@ function array_initial_command_fixture()
         ArrayInitialCommandOpticModel(), (schema,);
         placement=PupilPlanePlacement(),
         visibility=AllPathVisibility())
-    definition = PlantDefinition(; telescope, atmosphere,
+    definition = PlantDefinition(
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         controllable_optics=(optic,), paths=(path,),
         acquisitions=(acquisition,))
     initial = T[0.1, -0.2]
-    plant = prepare_plant(definition; run_seed=0x7a01,
+    plant = prepare_plant(definition, PLANT_TEST_HOST_TARGET;
+        run_seed=0x7a01,
         command_endpoints=(
             CommandEndpointConfiguration(:array_initial, initial;
                 capacity=2),
@@ -603,7 +667,7 @@ end
     definition = plant.definition
 
     duplicate_error = captured_command_composition_error() do
-        prepare_plant(definition; run_seed=0x7a02,
+        prepare_plant(definition, PLANT_TEST_HOST_TARGET; run_seed=0x7a02,
             command_endpoints=(
                 CommandEndpointConfiguration(:a_woofer, 0.0; capacity=2),
                 CommandEndpointConfiguration(:a_woofer, 0.0; capacity=2),
@@ -613,7 +677,7 @@ end
     @test duplicate_error.reason == :duplicate_configuration
 
     missing_error = captured_command_composition_error() do
-        prepare_plant(definition; run_seed=0x7a03,
+        prepare_plant(definition, PLANT_TEST_HOST_TARGET; run_seed=0x7a03,
             command_endpoints=(
                 CommandEndpointConfiguration(:a_woofer, 0.0; capacity=2),
                 CommandEndpointConfiguration(:extra, 0.0; capacity=2),
@@ -623,7 +687,7 @@ end
     @test missing_error.reason == :missing_configuration
 
     named_error = captured_command_composition_error() do
-        prepare_plant(definition; run_seed=0x7a04,
+        prepare_plant(definition, PLANT_TEST_HOST_TARGET; run_seed=0x7a04,
             command_endpoints=(
                 wrong=CommandEndpointConfiguration(
                     :a_woofer, 0.0; capacity=2),

@@ -1307,8 +1307,9 @@ end
 )
     owner_slot = @inbounds prepared.path_device_batch_owner_slots[
         Int(ordinal)]
-    iszero(owner_slot) && return materialize_path_execution_group!(
-        prepared, state, workspace, claim, ordinal)
+    iszero(owner_slot) &&
+        return _materialize_path_execution_group_in_context!(
+            prepared, state, workspace, claim, ordinal, Val(false))
     owner = @inbounds prepared.device_path_batch_owners[Int(owner_slot)]
     Int(first(owner.group_slots)) == ordinal &&
         return materialize_device_path_batch!(
@@ -1325,8 +1326,9 @@ end
 )
     owner_slot = @inbounds prepared.path_device_batch_owner_slots[
         Int(ordinal)]
-    iszero(owner_slot) && return execute_path_execution_group!(
-        prepared, state, workspace, claim, ordinal)
+    iszero(owner_slot) &&
+        return _execute_path_execution_group_in_context!(
+            prepared, state, workspace, claim, ordinal, Val(false))
     owner = @inbounds prepared.device_path_batch_owners[Int(owner_slot)]
     Int(first(owner.group_slots)) == ordinal &&
         return execute_device_path_batch!(

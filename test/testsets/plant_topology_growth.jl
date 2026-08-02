@@ -33,6 +33,21 @@ function Plant.validate_path_materialization_binding(
     return nothing
 end
 
+function Plant.validate_path_materialization_target(
+    materialization::TopologyGrowthMaterialization,
+    input::PupilFunction,
+    ::AbstractAtmosphere,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    materialization.destination === input || throw(PlantPreparationError(
+        :path, :prepared_binding,
+        "topology-growth materialization binding changed"))
+    Plant._require_exact_plant_product_target(
+        materialization.destination, target,
+        "topology-growth materialization destination")
+    return materialization
+end
+
 function Plant.validate_path_materialization(
     materialization::TopologyGrowthMaterialization,
     input::PupilFunction,
@@ -69,6 +84,17 @@ function Plant.validate_path_execution_binding(
     return nothing
 end
 
+function Plant.validate_path_execution_target(
+    execution::TopologyGrowthPathExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_product_target(
+        execution.input, target, "topology-growth path input")
+    Plant._require_exact_plant_product_target(
+        execution.result, target, "topology-growth path result")
+    return execution
+end
+
 function Plant.execute_path!(
     result::IntensityMap,
     input::PupilFunction,
@@ -85,6 +111,7 @@ function Plant.prepare_path_executor(
     source::AbstractSource,
     telescope::Telescope,
     atmosphere::AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
@@ -113,6 +140,7 @@ function Plant.prepare_path_executor(
         pupil,
         result,
         execution;
+        context=context,
         materialization=TopologyGrowthMaterialization(pupil),
         optical_model=:topology_growth_handoff,
         propagation_model=:test_typed_handoff,
@@ -130,6 +158,18 @@ function Plant.validate_acquisition_execution_binding(
         PlantPreparationError(:acquisition, :prepared_binding,
             "topology-growth acquisition binding changed"))
     return nothing
+end
+
+function Plant.validate_acquisition_execution_target(
+    execution::TopologyGrowthAcquisitionExecution,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    Plant._require_exact_plant_product_target(
+        execution.source, target, "topology-growth acquisition source")
+    Plant._require_exact_plant_product_target(
+        execution.destination, target,
+        "topology-growth acquisition destination")
+    return execution
 end
 
 function Plant.execute_acquisition!(
@@ -205,19 +245,25 @@ function topology_growth_fixture(path_count::Integer)
         for index in 1:path_count
     ]
     definition = PlantDefinition(;
-        telescope,
-        atmosphere,
+        telescope=plant_test_telescope_definition(telescope),
+        atmosphere=plant_test_atmosphere_definition(atmosphere),
         paths,
         acquisitions,
     )
     plant = prepare_plant(
-        definition; run_seed=UInt64(0x9800 + path_count))
+        definition, PLANT_TEST_HOST_TARGET;
+        run_seed=UInt64(0x9800 + path_count))
     selection = prepare_acquisition_selection(
         plant,
         Symbol[acquisition_id(acquisition).name
             for acquisition in acquisitions],
     )
-    return (; definition, plant, selection, atmosphere)
+    return (;
+        definition,
+        plant,
+        selection,
+        atmosphere=prepared_atmosphere(plant),
+    )
 end
 
 @inline function topology_growth_is_control_statement(statement)
@@ -262,9 +308,9 @@ end
         plant = fixture.plant
         selection = fixture.selection
         @test path_definitions(definition) isa
-            Memory{OpticalPathDefinition}
+            AbstractVector{OpticalPathDefinition}
         @test acquisition_definitions(definition) isa
-            Memory{AcquisitionDefinition}
+            AbstractVector{AcquisitionDefinition}
         @test prepared_paths(plant) isa Memory{PreparedPathExecutor}
         @test prepared_acquisitions(plant) isa
             Memory{PreparedAcquisitionOwner}

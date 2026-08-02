@@ -194,6 +194,7 @@ function Plant.prepare_path_executor(
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
     atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
@@ -212,6 +213,7 @@ function Plant.prepare_path_executor(
         pupil,
         output,
         execution;
+        context=context,
         materialization=prepare_pupil_opd_materialization(
             atmosphere,
             telescope,
@@ -373,15 +375,30 @@ function device_model_matrix_wfs_fixture(
     )
     definition = PlantDefinition(
         ;
-        telescope,
-        atmosphere,
+        telescope=AdaptiveOpticsSim.Optics.TelescopeDefinition(
+            resolution=8,
+            diameter=T(4),
+            central_obstruction=zero(T),
+            revision=1,
+            T=T,
+        ),
+        atmosphere=MultiLayerAtmosphereDefinition(
+            r0=T(r0),
+            L0=T(25),
+            fractional_cn2=T[0.65, 0.35],
+            wind_speed=T[7, 11],
+            wind_direction=T[20, 125],
+            altitude=T[0, 5_000],
+            layer_ids=(:ground, :high),
+            T=T,
+        ),
         sampled_aberrations=physical.sampled_aberrations,
         controllable_optics=(physical.optic,),
         paths=path_definitions,
         acquisitions=acquisition_definitions,
     )
     plant = prepare_plant(
-        definition;
+        definition, compute_device(pupil_reflectivity(telescope));
         run_seed=0x7_500,
         command_endpoints=(physical.configuration,),
     )
