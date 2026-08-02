@@ -343,3 +343,5 @@ end
     @test error isa StructuralResourceError
     @test error.reason == :wrong_owner
 end
+
+include("../plant_shack_hartmann_resource_facts.jl")
