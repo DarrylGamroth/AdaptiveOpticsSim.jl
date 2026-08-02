@@ -223,7 +223,8 @@ const TEST_SUITE_SPECS = (
         fixtures=("plant_test_fixtures.jl",
             "wfs_stage_contract_fixtures.jl")),
     TestSuiteSpec("plant-resource-facts",
-        "testsets/plant_resource_facts.jl"),
+        "testsets/plant_resource_facts.jl",
+        "testsets/plant_optical_resource_reporters.jl"),
     TestSuiteSpec("plant-providers", "testsets/plant_providers.jl";
         fixtures=("plant_test_fixtures.jl",
             "wfs_stage_contract_fixtures.jl")),

@@ -69,6 +69,7 @@ import ..Optics:
     ExpandedSourceComposition,
     ExtendedSource,
     FocalPlane,
+    FraunhoferPropagation,
     GaussianInfluenceWidth,
     GaussianMechanicalCoupling,
     GaussianInfluenceOperator,
@@ -190,9 +191,11 @@ import ..Atmospheres:
     AbstractTimedAtmosphereDefinition,
     AbstractTimedAtmosphere,
     AtmosphereEpoch,
+    AtmosphereDirectionRenderer,
     AtmosphereLayerID,
     InfiniteAtmosphereLayer,
     InfiniteMultiLayerAtmosphere,
+    KolmogorovAtmosphere,
     MovingAtmosphereLayer,
     MultiLayerAtmosphere,
     PreparedAtmosphereDirectionBatch,
@@ -282,6 +285,7 @@ include("device_batching.jl")
 include("illumination.jl")
 include("target_validation.jl")
 include("resource_facts.jl")
+include("resource_reporters_optical.jl")
 include("api.jl")
 
 end # module Plant
