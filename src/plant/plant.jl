@@ -328,6 +328,7 @@ include("handoffs.jl")
 include("effective_command_routes.jl")
 include("command_fanout.jl")
 include("path_input_publications.jl")
+include("mixed_serial_execution.jl")
 include("api.jl")
 
 end # module Plant

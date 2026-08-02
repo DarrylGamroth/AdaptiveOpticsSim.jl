@@ -258,6 +258,15 @@ const TEST_SUITE_SPECS = (
         ),
     ),
     TestSuiteSpec(
+        "plant-mixed-serial-execution",
+        "testsets/plant_mixed_serial_execution.jl";
+        fixtures=(
+            "plant_handoff_fixtures.jl",
+            "plant_path_input_publication_fixtures.jl",
+            "plant_effective_command_route_fixtures.jl",
+        ),
+    ),
+    TestSuiteSpec(
         "plant-resource-facts",
         "testsets/plant_resource_facts.jl",
         "testsets/plant_resource_runtime_facts.jl",
@@ -344,6 +353,7 @@ const TEST_GROUP_SPECS = (
         "plant-effective-command-routes",
         "plant-command-fanout",
         "plant-path-input-publications",
+        "plant-mixed-serial-execution",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
@@ -454,6 +464,7 @@ const TEST_CI_SHARD_SPECS = (
         "plant-effective-command-routes",
         "plant-command-fanout",
         "plant-path-input-publications",
+        "plant-mixed-serial-execution",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
