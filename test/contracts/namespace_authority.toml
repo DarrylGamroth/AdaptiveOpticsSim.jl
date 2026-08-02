@@ -578,7 +578,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "a1eabc5ce771709cee4152a814fdf41f707e36a39b1decc0d402c4d231550087"
+sha256 = "d0020e634635cc79f9d1e45cb4ab3e4526e921f39dce1063004d6aa39db83fc9"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1647,6 +1647,37 @@ public = [
     "reclaim_handoff!",
     "handoff_slot_status",
     "handoff_slot_failure_reason",
+    "PreparedPupilOPDPublicationRoute",
+    "MaterializedPupilOPDPublication",
+    "PupilOPDPublicationStatus",
+    "PupilOPDPublicationSucceeded",
+    "PupilOPDPublicationTransferPending",
+    "PupilOPDPublicationRouteBusy",
+    "PupilOPDPublicationRejected",
+    "PupilOPDPublicationNotMaterialized",
+    "PupilOPDPublicationNotSubmitted",
+    "PupilOPDPublicationNotCompleted",
+    "PupilOPDPublicationTransferFailed",
+    "PupilOPDPublicationNotApplied",
+    "PupilOPDPublicationAlreadyApplied",
+    "PupilOPDPublicationUncertain",
+    "PupilOPDPublicationGenerationExhausted",
+    "prepare_pupil_opd_publication_route",
+    "prepare_pupil_opd_publication_materialization",
+    "materialize_pupil_opd_publication!",
+    "submit_pupil_opd_publication!",
+    "try_complete_pupil_opd_publication!",
+    "apply_pupil_opd_publication!",
+    "reclaim_pupil_opd_publication!",
+    "prepare_pupil_opd_publication_output",
+    "pupil_opd_publication_route_identity",
+    "pupil_opd_publication_authority_target",
+    "pupil_opd_publication_route_target",
+    "pupil_opd_publication_handoff_capacity",
+    "pupil_opd_publication_atmosphere_identity",
+    "pupil_opd_publication_epoch",
+    "pupil_opd_publication_timestamp",
+    "pupil_opd_publication_path_id",
     "StructuralResourceError",
     "StructuralResourceOwnerID",
     "ResourceEstimateMethod",
@@ -2287,6 +2318,7 @@ bindings = [
     "atmosphere_identity",
     "atmosphere_timeline",
     "ensure_initialized!",
+    "epoch_sequence",
     "epoch_time",
     "evolve_atmosphere!",
     "evolve_initial_atmosphere!",
@@ -2297,6 +2329,7 @@ bindings = [
     "prepare_timed_atmosphere",
     "render_atmosphere!",
     "render_atmosphere_directions!",
+    "source_geometry_signature",
     "validate_timed_atmosphere_target",
     "validate_atmosphere_direction_batch",
     "validate_atmosphere_rendering",

@@ -145,6 +145,18 @@ Current CPU-supported families:
   the ownership/state-machine and backend-extension boundary only; it does not
   qualify a CUDA or AMDGPU transfer, mixed optical execution, HIL lease/ring
   ownership, throughput, or latency
+- authority-owned path-specific pupil-OPD publication routes on CPU and the
+  deterministic fake accelerator. Same-target routes materialize directly;
+  remote routes own one fixed typed handoff slot and apply only after explicit
+  completion. Focused tests cover opaque exact-route binding,
+  authority/epoch/path/generation identity, distinct directions at one epoch,
+  rejection of a wrong renderer direction or same-grid foreign telescope,
+  retained inputs, unchanged target-local support and amplitude, serial-oracle
+  numerical parity, expected and uncertain failures, scalar-index prohibition,
+  inference, and zero warmed lifecycle allocation. This qualifies the
+  per-route ownership and numerical boundary only; the all-due mixed executor,
+  target-local optical composition, real CUDA/AMDGPU transfer, capacity,
+  throughput, and latency remain outside the claim
 - trigger-relative autonomous circular-Pyramid modulation with bounded
   radius/frequency/phase/enabled setpoints, free-running/source/delivered-reset
   relationships, deterministic branch faults, and an allocation-free
@@ -375,9 +387,9 @@ The following are outside the current support claim:
 - SPECULA pixel-level equivalence on the HEART Shack-Hartmann surface
 - Metal backend support
 - CUDA or AMDGPU cross-device handoff execution. The Core ownership and
-  transfer state machine has deterministic fake-accelerator evidence only;
-  promoted hardware transfer, mixed-executor, and latency evidence remain
-  later HIL gates
+  transfer state machine and product-specific pupil-OPD route have
+  deterministic fake-accelerator evidence only; promoted hardware transfer,
+  mixed-executor, and latency evidence remain later HIL gates
 - backend-audit surfaces that are not part of the maintained hardware targets
   and release-validation cadence
 - broad claims about every detector/wfs/backend combination outside the

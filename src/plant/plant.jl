@@ -227,6 +227,7 @@ import ..Atmospheres:
     advance_to!,
     atmosphere_identity,
     atmosphere_timeline,
+    epoch_sequence,
     ensure_initialized!,
     epoch_time,
     evolve_atmosphere!,
@@ -238,6 +239,7 @@ import ..Atmospheres:
     prepare_timed_atmosphere,
     render_atmosphere!,
     render_atmosphere_directions!,
+    source_geometry_signature,
     validate_timed_atmosphere_target,
     validate_atmosphere_direction_batch,
     validate_atmosphere_rendering
@@ -321,6 +323,7 @@ include("resource_facts_batching.jl")
 include("resource_facts_graph.jl")
 include("partitions.jl")
 include("handoffs.jl")
+include("path_input_publications.jl")
 include("api.jl")
 
 end # module Plant

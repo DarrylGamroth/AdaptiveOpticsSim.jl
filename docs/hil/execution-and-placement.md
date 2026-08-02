@@ -143,6 +143,15 @@ multi-device stochastic evolution.
 - **HIL-EXEC-001.f:** CPU/CUDA and CPU/AMDGPU support MUST be promoted per
   prepared placement and model combination. Evidence for either surface MUST
   NOT imply multi-accelerator support.
+- **HIL-EXEC-001.g:** Core MUST publish atmosphere-derived input for each
+  supported full-optical path through an exact prepared route. A same-target
+  route MUST materialize directly; a cross-target route MUST transfer only its
+  declared path-input product through an explicit prepared handoff and MUST NOT
+  expose mutable atmosphere state to the target.
+- **HIL-EXEC-001.h:** A path-input route MUST NOT be reused for another epoch
+  until its active publication has completed, applied, and been reclaimed. The
+  atmosphere owner MUST defer a subsequent advance until every route due for
+  the current epoch has applied.
 - **HIL-EXEC-002.a:** HIL MUST support a fully explicit policy and a constrained
   deterministic policy over stable group and execution-resource identities.
   A hard user constraint MUST NOT be weakened by a preference or rule.
@@ -212,6 +221,23 @@ still owns payload leases, descriptor rings, the sole transition-owner Agent,
 return credit, backpressure, planner binding, and output disposition. Current
 evidence uses a fake accelerator only and is not CUDA, AMDGPU, mixed-execution,
 or latency qualification.
+
+Core now also composes that primitive into one qualified, product-specific
+`Plant.PreparedPupilOPDPublicationRoute` per explicitly selected full-optical
+path. The route binds the sole atmosphere authority, exact path and frozen
+source, target-local native `PupilFunction`, and monotonically increasing route
+generation. Its immutable publication carries an opaque exact-route identity,
+authoritative epoch and timestamp, and path identity without retaining the
+source object or prepared resource graph. A same-target route materializes
+directly. A remote route owns exactly one handoff slot and transfers only the
+atmospheric OPD array before applying it to the target-local pupil; support,
+amplitude, static aberrations, controllable surfaces, other path optics,
+workspaces, and results never cross this boundary. Hold-until-applied ownership
+prevents route reuse for a later epoch. The external authority owner must still
+serialize all due routes and defer the next atmosphere advance until each has
+applied; the mixed-composition gate owns that all-routes barrier. Current
+evidence is CPU↔fake-accelerator numerical parity, not real hardware or
+integrated mixed-execution qualification.
 
 ## Optical Branch Ownership And Parallelism
 

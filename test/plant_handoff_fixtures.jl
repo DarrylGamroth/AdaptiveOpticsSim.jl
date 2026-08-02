@@ -13,13 +13,23 @@ end
 HandoffTestArray(storage::Array) =
     HandoffTestArray(storage, HANDOFF_TEST_ACCELERATOR)
 
+# Exact-target telescope preparation in the path-input-publication fixture uses
+# the scalar CPU implementation to populate this deliberately tiny fake
+# accelerator.  That cold-only escape hatch is disabled everywhere else so
+# handoff and publication tests still reject accidental scalar device access.
+const HANDOFF_TEST_COLD_SCALAR_INDEXING = Ref(false)
+
 Base.size(array::HandoffTestArray) = size(array.storage)
 Base.axes(array::HandoffTestArray) = axes(array.storage)
 Base.IndexStyle(::Type{<:HandoffTestArray}) = IndexLinear()
-Base.getindex(::HandoffTestArray, ::Int) =
-    error("scalar indexing is disabled for HandoffTestArray")
-Base.setindex!(::HandoffTestArray, value, ::Int) =
-    error("scalar indexing is disabled for HandoffTestArray")
+Base.getindex(array::HandoffTestArray, index::Int) =
+    HANDOFF_TEST_COLD_SCALAR_INDEXING[] ?
+        @inbounds(array.storage[index]) :
+        error("scalar indexing is disabled for HandoffTestArray")
+Base.setindex!(array::HandoffTestArray, value, index::Int) =
+    HANDOFF_TEST_COLD_SCALAR_INDEXING[] ?
+        (@inbounds(array.storage[index] = value); array) :
+        error("scalar indexing is disabled for HandoffTestArray")
 Base.similar(array::HandoffTestArray, ::Type{T}, dimensions::Dims{N}) where {
     T,N} = HandoffTestArray(Array{T}(undef, dimensions), array.device)
 Base.similar(array::HandoffTestArray, dimensions::Dims{N}) where {N} =

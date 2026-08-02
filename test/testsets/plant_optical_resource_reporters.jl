@@ -131,7 +131,12 @@ Plant.plant_model_definition_style(
         StructuralResourceOwnerID(:direct_science, :invalid_binding), target)
 
     unsupported_materialization = PreparedPupilOPDMaterialization(
-        :unsupported_renderer, pupil, source)
+        Plant._PREPARED_PUPIL_OPD_MATERIALIZATION_TOKEN,
+        :unsupported_renderer,
+        pupil,
+        source,
+        telescope,
+    )
     unsupported_materialization_fact = structural_resource_fact(
         unsupported_materialization,
         StructuralResourceOwnerID(:path_materialization, :unsupported),
