@@ -174,6 +174,22 @@ verify discrete-state consistency, numerical tolerance, residency, explicit
 transfer completion, fixed-arrival latency, burst, saturation, failure, drain,
 and recovery for their declared profiles.
 
+The current core preparation boundary implements the caller-resolved part of
+this contract. `Plant.ResolvedPlantPartitionAssignment` records a complete
+canonical path-to-target mapping and one exact atmosphere-authority target.
+`Plant.prepare_plant_partitions` prepares CPU-only, one-accelerator, or
+CPU-plus-one-accelerator resources from the same cold declaration. Each
+`Plant.PreparedTargetPartition` contains complete co-located path/acquisition
+groups and an exact target-scoped structural resource report; all partitions
+bind the same sole `Plant.PreparedAtmosphereAuthority`. Topology snapshots,
+resolved path mappings, prepared path/acquisition collections, and recorded
+optic/endpoint identities use homogeneous cardinality-neutral registries; only
+the Gate 9A maximum of two target partitions remains a small bounded group.
+These values are deliberately non-executable: they contain no atmosphere
+publication, command replica mutation, transfer, task, queue, owner, or
+placement rationale. The HIL package still owns planning, admission, bounded
+handoffs, execution ownership, and runtime qualification.
+
 ## Optical Branch Ownership And Parallelism
 
 Different source directions are the primary coarse-grained parallel unit. They

@@ -107,6 +107,17 @@ Current CPU-supported families:
   and native-code growth. This supports the core executor boundary, not a
   production worker implementation, affinity/pacing policy, fixed-arrival HIL
   capacity, integrated GPU event loop, or NFIRAOS/MORFEO qualification
+- the preparation-only caller-resolved partition boundary for CPU-only,
+  one-accelerator-only, and CPU-plus-one-accelerator resources. Complete
+  path/acquisition groups remain co-located, one authority owns the timed
+  atmosphere/timeline/RNG state, stable RNG metadata is placement invariant,
+  and every partition carries exact target-scoped structural facts. Maintained
+  CPU/fake-resource tests and optional CUDA/AMDGPU checks defend topology,
+  authority binding, exact residency, static sampled-OPD materialization, and
+  resource accounting. Cold preparation may copy declared static data into an
+  exact target; this surface does not execute mixed work, publish atmosphere or
+  command state, hand runtime products between partitions, choose placement,
+  admit capacity, or establish a HIL latency claim
 - trigger-relative autonomous circular-Pyramid modulation with bounded
   radius/frequency/phase/enabled setpoints, free-running/source/delivered-reset
   relationships, deterministic branch faults, and an allocation-free

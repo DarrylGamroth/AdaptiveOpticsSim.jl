@@ -49,7 +49,10 @@ hardware-validated GPU workflows. The core package now has:
   CPU/AMDGPU/CUDA correctness and service-cost evidence, and a separately
   validated `AdaptiveOpticsHIL.jl` pin
 - an active Gate 9A delivery series for static placement of complete groups
-  across CPU resources and at most one accelerator, tracked by
+  across CPU resources and at most one accelerator. Core now has exact
+  structural resource facts and preparation-only caller-resolved target
+  partitions with one atmosphere authority; execution, publication, transfer,
+  HIL placement, and admission remain open. The series is tracked by
   [AdaptiveOpticsHIL issue #43](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/43);
   mixed execution is not yet a supported production surface
 - a canonical `AdaptiveOpticsSim.Plant` owner for HIL-neutral plant time,
@@ -264,10 +267,12 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    NFIRAOS/MORFEO capacity remain outside it.
    Gate 9A static mixed CPU/GPU placement is now tracked by
    [AdaptiveOpticsHIL issue #43](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/43).
-   It first adds exact-target core contracts and target-local preparation, then
-   an immutable HIL placement plan, plan-bound Agent owners, explicit bounded
-   transfers, and independent CPU/AMDGPU and CPU/CUDA qualification. Gate 9B
-   retains multi-GPU placement and addressable multi-device RNG work.
+   Its exact-target core contracts, structural resource facts, and
+   preparation-only target-local partition boundary are implemented. The next
+   slices add an immutable HIL placement plan, plan-bound Agent owners,
+   explicit bounded publication/transfers, and independent CPU/AMDGPU and
+   CPU/CUDA mixed-execution qualification. Gate 9B retains multi-GPU placement
+   and addressable multi-device RNG work.
 8. Preserve the recorded `Hsm.jl` proof-of-fit decision in
    `AdaptiveOpticsHIL.jl`: explicit lifecycle control was retained because Hsm
    added dependency and transition overhead without improving the bounded

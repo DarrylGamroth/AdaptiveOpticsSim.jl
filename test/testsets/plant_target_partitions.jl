@@ -1,11 +1,10 @@
-# Focused preparation-only target-partition qualification.  This file is
-# intentionally self-contained until the suite registry adopts it: run it with
-# `include("test/runtests_head.jl"); include("test/testsets/plant_target_partitions.jl")`.
+# Focused preparation-only target-partition qualification.
 
 struct TargetPartitionTestBackend <: AbstractArrayBackend end
 
 const TARGET_PARTITION_TEST_ACCELERATOR = AcceleratorComputeDevice(
     TargetPartitionTestBackend(), UInt32(1))
+const TARGET_PARTITION_TEST_AVAILABLE = Ref(true)
 
 struct TargetPartitionTestArray{T,N} <: DenseArray{T,N}
     storage::Array{T,N}
@@ -42,7 +41,8 @@ Backends.allocate_array(::TargetPartitionTestBackend, ::Type{T},
 Backends.execution_style(::TargetPartitionTestArray) = ScalarCPUStyle()
 Backends.compute_device_availability(
     ::AcceleratorComputeDevice{TargetPartitionTestBackend}) =
-    ComputeDeviceAvailable()
+    TARGET_PARTITION_TEST_AVAILABLE[] ? ComputeDeviceAvailable() :
+    ComputeDeviceUnavailable(:test_device_offline)
 Backends._with_compute_device(f::F,
     ::AcceleratorComputeDevice{TargetPartitionTestBackend}) where {F} = f()
 
@@ -196,6 +196,8 @@ struct TargetPartitionTestAcquisitionModel
     label::Symbol
 end
 
+struct TargetPartitionTestOpticModel end
+
 struct TargetPartitionTestExecution{I,R,W}
     input::I
     result::R
@@ -206,6 +208,8 @@ Plant.plant_model_definition_style(::Type{TargetPartitionTestPathModel}) =
     ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
     ::Type{TargetPartitionTestAcquisitionModel}) = ColdPlantModelDefinition()
+Plant.plant_model_definition_style(::Type{TargetPartitionTestOpticModel}) =
+    ColdPlantModelDefinition()
 
 function Plant.validate_path_execution_binding(
     execution::TargetPartitionTestExecution,
@@ -301,7 +305,57 @@ function Plant.prepare_target_local_acquisition_provider(
     return prepare_unchanged_synthetic_provider(products)
 end
 
-function target_partition_test_definition(; include_gamma::Bool=false)
+function target_partition_test_sampled_aberration()
+    opd = fill(2e-9, 2, 2)
+    metadata = OpticalPlaneMetadata(
+        PupilPlane(),
+        opd;
+        coordinate_domain=MetricCoordinates(),
+        sampling=(1.0, 1.0),
+        spectral=AchromaticSpectralCoordinate(),
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=NonCombinableProduct(),
+    )
+    return SampledAberrationDefinition(
+        :partition_static_opd,
+        OPDMap(opd),
+        metadata;
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
+        application=DMAdditive(),
+    )
+end
+
+function target_partition_test_controllable_optic()
+    schema = PlantCommandSchema(
+        Float64,
+        (1,);
+        id=:partition_test_schema,
+        version=1,
+        endpoint=:partition_test_command,
+        units=:metre,
+        sign_convention=:positive_surface_increases_opd,
+        basis=CommandBasis(:actuator, :partition_test_actuator),
+        basis_revision=1,
+        semantics=AbsoluteCommand,
+        bounds=UnboundedCommandValues(),
+        value_policy=CommandValuePolicy(),
+        sequence_policy=CommandSequencePolicy(),
+        effective_time_policy=CommandEffectiveTimePolicy(),
+        silence_policy=CommandSilencePolicy(),
+    )
+    return ControllableOpticDefinition(
+        :partition_test_optic,
+        TargetPartitionTestOpticModel(),
+        (schema,);
+        placement=PupilPlanePlacement(),
+        visibility=SelectedPathVisibility(:alpha),
+    )
+end
+
+function target_partition_test_definition(; include_gamma::Bool=false,
+    include_sampled_aberration::Bool=false)
     telescope = TargetPartitionTestTelescopeDefinition(UInt(1))
     source = Source(band=:I, magnitude=0.0)
     alpha = OpticalPathDefinition(
@@ -316,14 +370,18 @@ function target_partition_test_definition(; include_gamma::Bool=false)
         :beta_camera, :beta, TargetPartitionTestAcquisitionModel(:beta))
     gamma_camera = AcquisitionDefinition(
         :gamma_camera, :gamma, TargetPartitionTestAcquisitionModel(:gamma))
+    sampled_aberrations = include_sampled_aberration ?
+        (target_partition_test_sampled_aberration(),) : ()
     return PlantDefinition(
         ;
         telescope,
         atmosphere=TargetPartitionTestAtmosphereDefinition(),
+        controllable_optics=(target_partition_test_controllable_optic(),),
         paths=include_gamma ? (alpha, beta, gamma) : (alpha, beta),
         acquisitions=include_gamma ?
             (alpha_camera, beta_camera, gamma_camera) :
             (alpha_camera, beta_camera),
+        sampled_aberrations,
     )
 end
 
@@ -352,50 +410,139 @@ function target_partition_test_acquisition_ids(partition)
         prepared_acquisitions(partition))
 end
 
-function target_partition_test_byte_oracle(partition; authority::Bool)
+function target_partition_test_byte_oracle(partition; authority::Bool,
+    sampled_aberration_count::Integer=0)
     telescope_bytes = UInt64(4 * sizeof(Float64))
     atmosphere_bytes = authority ? UInt64(4 * sizeof(Float64)) : UInt64(0)
+    sampled_aberration_bytes = UInt64(sampled_aberration_count) *
+        UInt64(4 * sizeof(Float64))
     path_resident = UInt64(2 * 2 * 2 * sizeof(Float64))
     path_workspace = UInt64(3 * sizeof(Float64))
     acquisition_resident = UInt64(5 * sizeof(Float64))
     count = UInt64(length(prepared_paths(partition)))
     return (
         resident=telescope_bytes + atmosphere_bytes +
+            sampled_aberration_bytes +
             count * (path_resident + acquisition_resident),
         workspace=count * path_workspace,
     )
+end
+
+function target_partition_test_fresh_token_guards(
+    assignment::ResolvedPlantPartitionAssignment,
+    prepared::PreparedPlantPartitions,
+)
+    partition = first(prepared_partitions(prepared))
+    path = first(prepared_paths(partition))
+    acquisition = first(prepared_acquisitions(partition))
+    authority = prepared_atmosphere_authority(prepared)
+    binding = atmosphere_authority_binding(prepared)
+
+    @test_throws ArgumentError PreparedTargetLocalPathResources(
+        Plant._PreparedTargetLocalPathResourcesToken(),
+        getfield(path, :definition),
+        getfield(path, :source),
+        getfield(path, :telescope),
+        getfield(path, :context),
+        getfield(path, :input),
+        getfield(path, :result),
+        getfield(path, :execution),
+        getfield(path, :key),
+    )
+    @test_throws ArgumentError PreparedTargetLocalAcquisitionResources(
+        Plant._PreparedTargetLocalAcquisitionResourcesToken(),
+        getfield(acquisition, :definition),
+        getfield(acquisition, :path_key),
+        getfield(acquisition, :path_result),
+        getfield(acquisition, :context),
+        getfield(acquisition, :provider),
+    )
+    @test_throws ArgumentError AtmosphereAuthorityBinding(
+        Plant._AtmosphereAuthorityBindingToken(),
+        getfield(binding, :target),
+        getfield(binding, :identity),
+    )
+    @test_throws ArgumentError PreparedAtmosphereAuthority(
+        Plant._PreparedAtmosphereAuthorityToken(),
+        getfield(authority, :definition_identity),
+        getfield(authority, :target),
+        getfield(authority, :context),
+        getfield(authority, :telescope),
+        getfield(authority, :atmosphere),
+        getfield(authority, :rngs),
+        getfield(authority, :binding),
+    )
+    @test_throws ArgumentError PreparedTargetPartition(
+        Plant._PreparedTargetPartitionToken(),
+        getfield(partition, :target),
+        getfield(partition, :context),
+        getfield(partition, :telescope),
+        getfield(partition, :authority_binding),
+        getfield(partition, :sampled_aberrations),
+        getfield(partition, :paths),
+        getfield(partition, :acquisitions),
+        getfield(partition, :rngs),
+        getfield(partition, :resource_report),
+        getfield(partition, :controllable_optic_ids),
+        getfield(partition, :command_endpoint_ids),
+    )
+    @test_throws ArgumentError PreparedPlantPartitions(
+        Plant._PreparedPlantPartitionsToken(),
+        getfield(prepared, :definition),
+        assignment,
+        authority,
+        getfield(prepared, :partitions),
+        getfield(prepared, :run_seed),
+        getfield(prepared, :rng_derivation_version),
+    )
+    return nothing
 end
 
 @testset "Preparation-only target-local partitions" begin
     definition = target_partition_test_definition()
     host = HostComputeDevice()
     accelerator = TARGET_PARTITION_TEST_ACCELERATOR
-    cpu_assignment = resolve_plant_partition_assignment(
+    cpu_assignment = @inferred resolve_plant_partition_assignment(
         definition, host, :beta => host, :alpha => host)
-    accelerator_assignment = resolve_plant_partition_assignment(
+    accelerator_assignment = @inferred resolve_plant_partition_assignment(
         definition, accelerator, :alpha => accelerator, :beta => accelerator)
-    mixed_assignment = resolve_plant_partition_assignment(
+    mixed_assignment = @inferred resolve_plant_partition_assignment(
         definition, host, :beta => accelerator, :alpha => host)
+    mixed_accelerator_authority_assignment =
+        @inferred resolve_plant_partition_assignment(
+            definition, accelerator, :beta => accelerator, :alpha => host)
 
     # This internal-token constructor is deliberately the only constructor;
     # callers cannot fabricate an all-fields assignment value.
     @test_throws MethodError ResolvedPlantPartitionAssignment(
         definition, nothing, nothing, (), UInt8(1), ())
 
-    cpu = prepare_plant_partitions(definition, cpu_assignment; run_seed=71)
+    cpu = prepare_plant_partitions(
+        definition, cpu_assignment; run_seed=71)
     accelerator_only = prepare_plant_partitions(
         definition, accelerator_assignment; run_seed=71)
-    mixed = prepare_plant_partitions(definition, mixed_assignment; run_seed=71)
+    mixed = prepare_plant_partitions(
+        definition, mixed_assignment; run_seed=71)
+    mixed_accelerator_authority = prepare_plant_partitions(
+        mixed_accelerator_authority_assignment; run_seed=71)
+    target_partition_test_fresh_token_guards(mixed_assignment, mixed)
 
     @test length(prepared_partitions(cpu)) == 1
     @test length(prepared_partitions(accelerator_only)) == 1
     @test length(prepared_partitions(mixed)) == 2
-    @test compute_device(mixed.authority) == host
-    @test atmosphere_authority_target(mixed.authority) == host
-    @test atmosphere_authority_identity(mixed.authority) ===
-        atmosphere_identity(prepared_atmosphere(mixed.authority))
+    @test compute_device(prepared_atmosphere_authority(mixed)) == host
+    @test compute_device(prepared_atmosphere_authority(
+        mixed_accelerator_authority)) == accelerator
+    @test atmosphere_authority_target(mixed) == host
+    @test atmosphere_authority_target(mixed_accelerator_authority) ==
+        accelerator
+    @test atmosphere_authority_identity(mixed) === atmosphere_identity(
+        prepared_atmosphere(prepared_atmosphere_authority(mixed)))
     @test all(partition -> atmosphere_authority_binding(partition) ===
-        atmosphere_authority_binding(mixed.authority), prepared_partitions(mixed))
+        atmosphere_authority_binding(mixed), prepared_partitions(mixed))
+    @test all(partition -> atmosphere_authority_binding(partition) ===
+        atmosphere_authority_binding(mixed_accelerator_authority),
+        prepared_partitions(mixed_accelerator_authority))
     @test length(unique(objectid.([
         atmosphere_authority_identity(atmosphere_authority_binding(partition))
         for partition in prepared_partitions(mixed)]))) == 1
@@ -404,6 +551,10 @@ end
     accelerator_partition = only(prepared_partitions(accelerator_only))
     mixed_host = prepared_partition(mixed, host)
     mixed_accelerator = prepared_partition(mixed, accelerator)
+    mixed_accelerator_authority_host = prepared_partition(
+        mixed_accelerator_authority, host)
+    mixed_accelerator_authority_accelerator = prepared_partition(
+        mixed_accelerator_authority, accelerator)
     @test target_partition_test_path_ids(cpu_partition) ==
         (OpticalPathID(:alpha), OpticalPathID(:beta))
     @test target_partition_test_acquisition_ids(cpu_partition) ==
@@ -415,6 +566,26 @@ end
         (OpticalPathID(:beta),)
     @test target_partition_test_acquisition_ids(mixed_accelerator) ==
         (AcquisitionID(:beta_camera),)
+    @test target_partition_test_path_ids(
+        mixed_accelerator_authority_host) ==
+        target_partition_test_path_ids(mixed_host)
+    @test target_partition_test_path_ids(
+        mixed_accelerator_authority_accelerator) ==
+        target_partition_test_path_ids(mixed_accelerator)
+    @test Tuple(partition_controllable_optic_ids(cpu_partition)) ==
+        (ControllableOpticID(:partition_test_optic),)
+    @test Tuple(partition_command_endpoint_ids(cpu_partition)) ==
+        (CommandEndpointID(:partition_test_command),)
+    @test partition_controllable_optic_ids(accelerator_partition) ==
+        partition_controllable_optic_ids(cpu_partition)
+    @test partition_command_endpoint_ids(accelerator_partition) ==
+        partition_command_endpoint_ids(cpu_partition)
+    @test partition_controllable_optic_ids(mixed_host) ==
+        partition_controllable_optic_ids(cpu_partition)
+    @test partition_command_endpoint_ids(mixed_host) ==
+        partition_command_endpoint_ids(cpu_partition)
+    @test isempty(partition_controllable_optic_ids(mixed_accelerator))
+    @test isempty(partition_command_endpoint_ids(mixed_accelerator))
 
     for partition in prepared_partitions(mixed)
         @test !hasproperty(partition, :atmosphere)
@@ -436,14 +607,46 @@ end
     @test all(path -> path_input(path).values isa TargetPartitionTestArray,
         prepared_paths(accelerator_partition))
 
+    sampled_definition = target_partition_test_definition(
+        include_sampled_aberration=true)
+    sampled_assignment = resolve_plant_partition_assignment(
+        sampled_definition, host, :alpha => host, :beta => accelerator)
+    sampled = prepare_plant_partitions(
+        sampled_definition, sampled_assignment; run_seed=71)
+    caller_opd = surface_opd(sampled_aberration_surface(
+        only(sampled_aberration_definitions(sampled_definition))))
+    for partition in prepared_partitions(sampled)
+        prepared_opd = sampled_aberration_opd(
+            only(prepared_sampled_aberrations(partition)))
+        @test compute_device(prepared_opd) == compute_device(partition)
+        @test prepared_opd !== caller_opd
+        @test Array(prepared_opd) == caller_opd
+        report = partition_resource_report(partition)
+        oracle = target_partition_test_byte_oracle(
+            partition;
+            authority=compute_device(partition) == host,
+            sampled_aberration_count=1,
+        )
+        @test structural_resident_bytes(report) == oracle.resident
+        @test structural_workspace_bytes(report) == oracle.workspace
+        @test count(fact ->
+                structural_resource_owner_id(fact).category ===
+                    :sampled_aberration,
+            structural_resource_facts(report)) == 1
+    end
+
     @test rng_replay_metadata(cpu) == rng_replay_metadata(accelerator_only)
     @test rng_replay_metadata(cpu) == rng_replay_metadata(mixed)
+    @test rng_replay_metadata(cpu) ==
+        rng_replay_metadata(mixed_accelerator_authority)
     @test rng_replay_metadata(mixed).run_seed == UInt64(71)
     @test length(rng_replay_metadata(mixed).owners) == 5
 
     for (partition, authority) in ((cpu_partition, true),
             (accelerator_partition, true), (mixed_host, true),
-            (mixed_accelerator, false))
+            (mixed_accelerator, false),
+            (mixed_accelerator_authority_host, false),
+            (mixed_accelerator_authority_accelerator, true))
         report = partition_resource_report(partition)
         oracle = target_partition_test_byte_oracle(partition; authority)
         @test structural_resident_bytes(report) == oracle.resident
@@ -455,12 +658,36 @@ end
 
     stale_definition = target_partition_test_definition()
     foreign_definition = target_partition_test_definition(include_gamma=true)
+    grown_assignment = @inferred resolve_plant_partition_assignment(
+        foreign_definition,
+        host,
+        :alpha => host,
+        :beta => host,
+        :gamma => host,
+    )
+    grown = prepare_plant_partitions(grown_assignment; run_seed=71)
+    @test typeof(grown) === typeof(cpu)
+    @test typeof(only(prepared_partitions(grown))) === typeof(cpu_partition)
+    @test typeof(partition_controllable_optic_ids(
+        only(prepared_partitions(grown)))) ===
+        typeof(partition_controllable_optic_ids(cpu_partition))
+    @test typeof(partition_command_endpoint_ids(
+        only(prepared_partitions(grown)))) ===
+        typeof(partition_command_endpoint_ids(cpu_partition))
     target_partition_test_error(() -> prepare_plant_partitions(
         stale_definition, cpu_assignment; run_seed=71),
         :partition_assignment, :stale_assignment)
     target_partition_test_error(() -> prepare_plant_partitions(
         foreign_definition, cpu_assignment; run_seed=71),
         :partition_assignment, :foreign_assignment)
+    try
+        TARGET_PARTITION_TEST_AVAILABLE[] = false
+        target_partition_test_error(() -> prepare_plant_partitions(
+            mixed_assignment; run_seed=71),
+            :partition_assignment, :unavailable_target)
+    finally
+        TARGET_PARTITION_TEST_AVAILABLE[] = true
+    end
     target_partition_test_error(() -> prepared_partition(mixed,
         AcceleratorComputeDevice(TargetPartitionTestBackend(), UInt32(2))),
         :partition, :unknown_target)

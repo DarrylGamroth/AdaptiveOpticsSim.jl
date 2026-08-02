@@ -9,11 +9,6 @@
 # assignment from one resolved for a different topology.
 #
 
-import ..Backends: compute_device_availability, compute_device_is_available,
-    compute_device_unavailable_reason
-import ..Atmospheres: InfiniteMultiLayerAtmosphereDefinition,
-    KolmogorovAtmosphereDefinition, MultiLayerAtmosphereDefinition
-
 struct _PartitionAcquisitionTopology
     id::AcquisitionID
     path::OpticalPathID
@@ -26,9 +21,9 @@ Base.isequal(left::_PartitionAcquisitionTopology,
     right::_PartitionAcquisitionTopology) =
     isequal(left.id, right.id) && isequal(left.path, right.path)
 
-struct _PartitionOpticTopology{E<:Tuple}
+struct _PartitionOpticTopology
     id::ControllableOpticID
-    endpoints::E
+    endpoints::_FixedPlantRegistry{CommandEndpointID}
 end
 
 Base.:(==)(left::_PartitionOpticTopology,
@@ -38,14 +33,12 @@ Base.isequal(left::_PartitionOpticTopology,
     right::_PartitionOpticTopology) =
     isequal(left.id, right.id) && isequal(left.endpoints, right.endpoints)
 
-struct _PlantPartitionTopologySnapshot{
-    P<:Tuple,A<:Tuple,O<:Tuple,S<:Tuple,L<:Tuple,
-}
-    paths::P
-    acquisitions::A
-    optics::O
-    sampled_aberrations::S
-    atmosphere_layers::L
+struct _PlantPartitionTopologySnapshot
+    paths::_FixedPlantRegistry{OpticalPathID}
+    acquisitions::_FixedPlantRegistry{_PartitionAcquisitionTopology}
+    optics::_FixedPlantRegistry{_PartitionOpticTopology}
+    sampled_aberrations::_FixedPlantRegistry{SampledAberrationID}
+    atmosphere_layers::_FixedPlantRegistry{AtmosphereLayerID}
 end
 
 Base.:(==)(left::_PlantPartitionTopologySnapshot,
@@ -67,13 +60,46 @@ struct _ResolvedPartitionPathTarget
     target_ordinal::UInt8
 end
 
-struct ResolvedPlantPartitionAssignment{D<:PlantDefinition,I,T<:Tuple,P<:Tuple,S}
+mutable struct _ResolvedPlantPartitionAssignmentToken end
+const _RESOLVED_PLANT_PARTITION_ASSIGNMENT_TOKEN =
+    _ResolvedPlantPartitionAssignmentToken()
+
+struct ResolvedPlantPartitionAssignment{D<:PlantDefinition}
     definition::D
-    definition_identity::I
-    topology::S
-    targets::T
+    definition_identity::_PlantDefinitionIdentity
+    topology::_PlantPartitionTopologySnapshot
+    targets::_FixedPlantRegistry{AbstractComputeDevice}
     atmosphere_authority_target_ordinal::UInt8
-    paths::P
+    paths::_FixedPlantRegistry{_ResolvedPartitionPathTarget}
+
+    function ResolvedPlantPartitionAssignment(
+        token::_ResolvedPlantPartitionAssignmentToken,
+        definition::D,
+        definition_identity::_PlantDefinitionIdentity,
+        topology::_PlantPartitionTopologySnapshot,
+        targets::_FixedPlantRegistry{AbstractComputeDevice},
+        atmosphere_authority_target_ordinal::UInt8,
+        paths::_FixedPlantRegistry{_ResolvedPartitionPathTarget},
+    ) where {D<:PlantDefinition}
+        token === _RESOLVED_PLANT_PARTITION_ASSIGNMENT_TOKEN || throw(
+            ArgumentError("invalid internal partition-assignment token"))
+        return new{D}(
+            definition,
+            definition_identity,
+            topology,
+            targets,
+            atmosphere_authority_target_ordinal,
+            paths,
+        )
+    end
+end
+
+function _partition_registry(values, ::Type{T}) where {T}
+    storage = Memory{T}(undef, length(values))
+    @inbounds for (index, value) in enumerate(values)
+        storage[index] = value
+    end
+    return _FixedPlantRegistry{T}(Tuple(storage))
 end
 
 struct _PartitionAssignmentInput
@@ -130,7 +156,7 @@ end
 function _canonical_partition_path_ids(definition::PlantDefinition)
     ids = OpticalPathID[path_id(path) for path in path_definitions(definition)]
     sort!(ids; by=_partition_name_key)
-    return Tuple(ids)
+    return _partition_registry(ids, OpticalPathID)
 end
 
 function _canonical_partition_acquisitions(definition::PlantDefinition)
@@ -140,19 +166,19 @@ function _canonical_partition_acquisitions(definition::PlantDefinition)
         acquisition_definitions(definition)
     ]
     sort!(acquisitions; by=entry -> _partition_name_key(entry.id))
-    return Tuple(acquisitions)
+    return _partition_registry(acquisitions, _PartitionAcquisitionTopology)
 end
 
 function _canonical_partition_optics(definition::PlantDefinition)
     optics = _PartitionOpticTopology[]
     for optic in controllable_optic_definitions(definition)
-        endpoints = collect(command_endpoint_ids(optic))
+        endpoints = CommandEndpointID[command_endpoint_ids(optic)...]
         sort!(endpoints; by=_partition_name_key)
         push!(optics, _PartitionOpticTopology(controllable_optic_id(optic),
-            Tuple(endpoints)))
+            _partition_registry(endpoints, CommandEndpointID)))
     end
     sort!(optics; by=entry -> _partition_name_key(entry.id))
-    return Tuple(optics)
+    return _partition_registry(optics, _PartitionOpticTopology)
 end
 
 function _canonical_partition_sampled_aberrations(definition::PlantDefinition)
@@ -161,13 +187,21 @@ function _canonical_partition_sampled_aberrations(definition::PlantDefinition)
         sampled_aberration_definitions(definition)
     ]
     sort!(ids; by=_partition_name_key)
-    return Tuple(ids)
+    return _partition_registry(ids, SampledAberrationID)
 end
 
-@inline _canonical_partition_atmosphere_layers(
+"""
+    partition_atmosphere_layer_ids(definition)
+
+Return the stable atmosphere-layer identities required by plant partition
+preparation. Atmosphere model extensions must implement this cold seam and
+return a `Tuple` of `AtmosphereLayerID` values. A single-owner atmosphere with
+no independently identified layers returns `()`.
+"""
+@inline partition_atmosphere_layer_ids(
     ::KolmogorovAtmosphereDefinition) = ()
 
-function _canonical_partition_atmosphere_layers(
+function partition_atmosphere_layer_ids(
     definition::AbstractTimedAtmosphereDefinition,
 )
     _partition_assignment_error(:unsupported_atmosphere_definition,
@@ -175,13 +209,54 @@ function _canonical_partition_atmosphere_layers(
         "canonical stable layer identities for partition preparation")
 end
 
-function _canonical_partition_atmosphere_layers(
+function partition_atmosphere_layer_ids(
     definition::Union{MultiLayerAtmosphereDefinition,
         InfiniteMultiLayerAtmosphereDefinition},
 )
-    ids = AtmosphereLayerID[layer.id for layer in definition.layers]
+    return Tuple(layer.id for layer in definition.layers)
+end
+
+function _canonical_partition_atmosphere_layers(
+    definition::AbstractTimedAtmosphereDefinition,
+)
+    declared = partition_atmosphere_layer_ids(definition)
+    return _canonical_partition_atmosphere_layers(declared, definition)
+end
+
+function _canonical_partition_atmosphere_layers(
+    declared::Tuple,
+    ::AbstractTimedAtmosphereDefinition,
+)
+    ids = AtmosphereLayerID[]
+    seen = Set{AtmosphereLayerID}()
+    for id in declared
+        resolved = _require_partition_atmosphere_layer_id(id)
+        resolved in seen && _partition_assignment_error(
+            :duplicate_atmosphere_layer_id,
+            "partition atmosphere-layer identity $resolved appears more than once",
+        )
+        push!(seen, resolved)
+        push!(ids, resolved)
+    end
     sort!(ids; by=_partition_name_key)
-    return Tuple(ids)
+    return _partition_registry(ids, AtmosphereLayerID)
+end
+
+function _canonical_partition_atmosphere_layers(
+    declared,
+    definition::AbstractTimedAtmosphereDefinition,
+)
+    _partition_assignment_error(:invalid_atmosphere_layer_ids,
+        "partition_atmosphere_layer_ids($(typeof(definition))) must " *
+        "return a Tuple; got $(typeof(declared))")
+end
+
+@inline _require_partition_atmosphere_layer_id(id::AtmosphereLayerID) = id
+
+function _require_partition_atmosphere_layer_id(id)
+    _partition_assignment_error(:invalid_atmosphere_layer_id,
+        "partition atmosphere-layer identities must be AtmosphereLayerID " *
+        "values; got $(typeof(id))")
 end
 
 function _plant_partition_topology_snapshot(definition::PlantDefinition)
@@ -240,11 +315,13 @@ function _canonical_partition_targets(authority::AbstractComputeDevice,
             host_target, accelerator_target, input.target)
     end
     if isnothing(host_target)
-        return (accelerator_target,)
+        return _partition_registry((accelerator_target,),
+            AbstractComputeDevice)
     elseif isnothing(accelerator_target)
-        return (host_target,)
+        return _partition_registry((host_target,), AbstractComputeDevice)
     end
-    return (host_target, accelerator_target)
+    return _partition_registry((host_target, accelerator_target),
+        AbstractComputeDevice)
 end
 
 function _require_partition_target_available(target::AbstractComputeDevice)
@@ -256,14 +333,14 @@ function _require_partition_target_available(target::AbstractComputeDevice)
         (isnothing(reason) ? "" : " ($reason)"))
 end
 
-function _require_partition_targets_available(targets::Tuple)
+function _require_partition_targets_available(targets::AbstractVector)
     for target in targets
         _require_partition_target_available(target)
     end
     return targets
 end
 
-function _partition_target_ordinal(targets::Tuple,
+function _partition_target_ordinal(targets::AbstractVector,
     target::AbstractComputeDevice)
     for index in eachindex(targets)
         targets[index] == target && return UInt8(index)
@@ -272,7 +349,7 @@ function _partition_target_ordinal(targets::Tuple,
         "partition target $target is not part of this resolved assignment")
 end
 
-@inline function _partition_target_at(targets::Tuple, ordinal::UInt8)
+@inline function _partition_target_at(targets::AbstractVector, ordinal::UInt8)
     index = Int(ordinal)
     1 <= index <= length(targets) || _partition_assignment_error(
         :invalid_target_ordinal,
@@ -294,12 +371,13 @@ end
 function _canonical_resolved_path_targets(
     inputs::AbstractVector{_PartitionAssignmentInput},
     topology::_PlantPartitionTopologySnapshot,
-    targets::Tuple,
+    targets::AbstractVector,
 )
-    return Tuple(_ResolvedPartitionPathTarget(id,
+    paths = _ResolvedPartitionPathTarget[_ResolvedPartitionPathTarget(id,
         _partition_target_ordinal(targets,
             _assigned_partition_path_target(inputs, id))) for id in
-        topology.paths)
+        topology.paths]
+    return _partition_registry(paths, _ResolvedPartitionPathTarget)
 end
 
 function _resolve_plant_partition_assignment(definition::PlantDefinition,
@@ -316,7 +394,8 @@ function _resolve_plant_partition_assignment(definition::PlantDefinition,
     paths = _canonical_resolved_path_targets(inputs, topology, targets)
     authority_ordinal = _partition_target_ordinal(targets,
         resolved_authority)
-    return ResolvedPlantPartitionAssignment(definition,
+    return ResolvedPlantPartitionAssignment(
+        _RESOLVED_PLANT_PARTITION_ASSIGNMENT_TOKEN, definition,
         _plant_definition_identity(definition), topology, targets,
         authority_ordinal, paths)
 end
@@ -342,6 +421,8 @@ end
 
 @inline partition_targets(assignment::ResolvedPlantPartitionAssignment) =
     getfield(assignment, :targets)
+@inline plant_definition(assignment::ResolvedPlantPartitionAssignment) =
+    getfield(assignment, :definition)
 
 @inline atmosphere_authority_target(
     assignment::ResolvedPlantPartitionAssignment) = _partition_target_at(

@@ -561,31 +561,27 @@ function _require_named_sampled_aberration_identity(
     return nothing
 end
 
-struct _FixedPlantDefinitionRegistry{T} <: AbstractVector{T}
+struct _FixedPlantRegistry{T} <: AbstractVector{T}
     _storage::Tuple{Vararg{T}}
 end
 
-Base.size(registry::_FixedPlantDefinitionRegistry) =
+Base.size(registry::_FixedPlantRegistry) =
     (length(getfield(registry, :_storage)),)
-Base.axes(registry::_FixedPlantDefinitionRegistry) =
+Base.axes(registry::_FixedPlantRegistry) =
     axes(getfield(registry, :_storage))
-Base.length(registry::_FixedPlantDefinitionRegistry) =
+Base.length(registry::_FixedPlantRegistry) =
     length(getfield(registry, :_storage))
-Base.getindex(registry::_FixedPlantDefinitionRegistry, index::Int) =
+Base.getindex(registry::_FixedPlantRegistry, index::Int) =
     getfield(registry, :_storage)[index]
-Base.IndexStyle(::Type{<:_FixedPlantDefinitionRegistry}) = IndexLinear()
-Base.iterate(registry::_FixedPlantDefinitionRegistry, state...) =
+Base.IndexStyle(::Type{<:_FixedPlantRegistry}) = IndexLinear()
+Base.iterate(registry::_FixedPlantRegistry, state...) =
     iterate(getfield(registry, :_storage), state...)
-Base.copy(registry::_FixedPlantDefinitionRegistry) =
+Base.copy(registry::_FixedPlantRegistry) =
     collect(getfield(registry, :_storage))
-
-function Base.getproperty(
-    registry::_FixedPlantDefinitionRegistry,
-    name::Symbol,
-)
-    name === :_storage && return collect(getfield(registry, :_storage))
-    return getfield(registry, name)
-end
+Base.:(==)(left::_FixedPlantRegistry, right::_FixedPlantRegistry) =
+    getfield(left, :_storage) == getfield(right, :_storage)
+Base.isequal(left::_FixedPlantRegistry, right::_FixedPlantRegistry) =
+    isequal(getfield(left, :_storage), getfield(right, :_storage))
 
 function _definition_registry(values, ::Type{T}, validator) where {T}
     memory = Memory{T}(undef, length(values))
@@ -593,7 +589,7 @@ function _definition_registry(values, ::Type{T}, validator) where {T}
         validator(value)
         memory[index] = value
     end
-    return _FixedPlantDefinitionRegistry{T}(Tuple(memory))
+    return _FixedPlantRegistry{T}(Tuple(memory))
 end
 
 function _normalize_path_definitions(
@@ -869,6 +865,8 @@ function _require_sampled_aberration_visibility_paths(
     return nothing
 end
 
+mutable struct _PlantDefinitionIdentity end
+
 """
     PlantDefinition(telescope, atmosphere, controllable_optics,
         sampled_aberrations, paths, acquisitions)
@@ -882,27 +880,30 @@ schemas. Native sampled aberrations are separate immutable optical
 declarations rather than controllable devices.
 Tuples, named tuples, and vectors are accepted as cold organization and copied
 into fixed-size homogeneous registries; every component carries its own stable
-identity. This value is not prepared
-execution state and owns no mutable command state, schedule, queue, transport,
-RNG stream, or HIL descriptor.
+identity. This value is not prepared execution state and owns no mutable
+command state, schedule, queue, transport, RNG stream, or HIL descriptor. A
+private opaque token distinguishes this exact declaration from a separately
+reconstructed value; the token carries no model parameters or simulation
+state.
 """
 struct PlantDefinition{T,A}
+    identity::_PlantDefinitionIdentity
     telescope_definition::T
     atmosphere_definition::A
-    controllable_optics::_FixedPlantDefinitionRegistry{
+    controllable_optics::_FixedPlantRegistry{
         ControllableOpticDefinition}
-    sampled_aberrations::_FixedPlantDefinitionRegistry{
+    sampled_aberrations::_FixedPlantRegistry{
         SampledAberrationDefinition}
-    paths::_FixedPlantDefinitionRegistry{OpticalPathDefinition}
-    acquisitions::_FixedPlantDefinitionRegistry{AcquisitionDefinition}
+    paths::_FixedPlantRegistry{OpticalPathDefinition}
+    acquisitions::_FixedPlantRegistry{AcquisitionDefinition}
 
     function PlantDefinition(telescope::T, atmosphere::A,
-        controllable_optics::_FixedPlantDefinitionRegistry{
+        controllable_optics::_FixedPlantRegistry{
             ControllableOpticDefinition},
-        sampled_aberrations::_FixedPlantDefinitionRegistry{
+        sampled_aberrations::_FixedPlantRegistry{
             SampledAberrationDefinition},
-        paths::_FixedPlantDefinitionRegistry{OpticalPathDefinition},
-        acquisitions::_FixedPlantDefinitionRegistry{AcquisitionDefinition},
+        paths::_FixedPlantRegistry{OpticalPathDefinition},
+        acquisitions::_FixedPlantRegistry{AcquisitionDefinition},
     ) where {T,A}
         _require_plant_telescope_definition(telescope)
         _require_plant_atmosphere_definition(atmosphere)
@@ -923,10 +924,13 @@ struct PlantDefinition{T,A}
         _require_sampled_aberration_visibility_paths(paths,
             sampled_aberrations)
         _require_acquisition_paths(paths, acquisitions)
-        return new{T,A}(telescope, atmosphere,
+        return new{T,A}(_PlantDefinitionIdentity(), telescope, atmosphere,
             controllable_optics, sampled_aberrations, paths, acquisitions)
     end
 end
+
+@inline _plant_definition_identity(definition::PlantDefinition) =
+    getfield(definition, :identity)
 
 function PlantDefinition(; telescope, atmosphere, controllable_optics=(),
     sampled_aberrations=(), paths=(), acquisitions=())

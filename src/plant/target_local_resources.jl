@@ -8,18 +8,18 @@
 # evolution and runtime ownership.
 #
 
-struct _PreparedTargetLocalPathResourcesToken end
+mutable struct _PreparedTargetLocalPathResourcesToken end
 const _PREPARED_TARGET_LOCAL_PATH_RESOURCES_TOKEN =
     _PreparedTargetLocalPathResourcesToken()
 
 """
     PreparedTargetLocalPathResources
 
-Immutable target-local optical-path resources prepared from one exact
-definition, frozen source, telescope, and execution context.  `input`,
-`result`, and `execution` retain one co-located prepared optical binding.  The
-record contains no atmosphere, materialization policy, timeline, or execution
-operation.
+Immutable binding record for target-local optical-path resources prepared from
+one exact definition, frozen source, telescope, and execution context.
+`input`, `result`, and `execution` retain co-located static data and reusable
+mutable workspace. The record contains no atmosphere authority,
+materialization policy, timeline, schedule, or partition executor.
 """
 struct PreparedTargetLocalPathResources{D,S,T,X,I,R,E,K<:PathResultKey}
     definition::D
@@ -33,7 +33,7 @@ struct PreparedTargetLocalPathResources{D,S,T,X,I,R,E,K<:PathResultKey}
     key::K
 
     function PreparedTargetLocalPathResources(
-        ::_PreparedTargetLocalPathResourcesToken,
+        token::_PreparedTargetLocalPathResourcesToken,
         definition::D,
         source::S,
         telescope::T,
@@ -43,6 +43,8 @@ struct PreparedTargetLocalPathResources{D,S,T,X,I,R,E,K<:PathResultKey}
         execution::E,
         key::K,
     ) where {D,S,T,X,I,R,E,K<:PathResultKey}
+        token === _PREPARED_TARGET_LOCAL_PATH_RESOURCES_TOKEN || throw(
+            ArgumentError("invalid internal target-local path token"))
         return new{D,S,T,X,I,R,E,K}(
             definition,
             source,
@@ -104,7 +106,13 @@ function PreparedTargetLocalPathResources(
     )
     revision = aperture_revision(telescope)
     _require_path_input_revisions(input, revision)
+    validate_telescope_target(telescope, device)
+    _require_exact_plant_product_target(
+        input, device, "prepared target-local path input")
+    _require_exact_plant_product_target(
+        result, device, "prepared target-local path result")
     validate_path_execution_binding(execution, input, result)
+    validate_path_execution_target(execution, device)
     revisions = (telescope=revision, model=model_revisions)
     key = PathResultKey(
         path_source_geometry_key(source),
@@ -137,6 +145,24 @@ end
     resources.result
 @inline path_result_key(resources::PreparedTargetLocalPathResources) =
     resources.key
+
+function require_path_result(path::PreparedTargetLocalPathResources;
+    source_geometry=getfield(path.key, :source_geometry),
+    spectral_sampling=getfield(path.key, :spectral_sampling),
+    radiometry=getfield(path.key, :radiometry),
+    optical_model=getfield(path.key, :optical_model),
+    sampling_contract=getfield(path.key, :sampling_contract),
+    propagation_model=getfield(path.key, :propagation_model),
+    output_plane=getfield(path.key, :output_plane),
+    revisions=getfield(path.key, :revisions),
+    backend::AbstractArrayBackend=getfield(path.key, :backend),
+    device::AbstractComputeDevice=getfield(path.key, :device))
+    required = PathResultKey(source_geometry, spectral_sampling, radiometry,
+        optical_model, sampling_contract, propagation_model, output_plane,
+        revisions, backend, device)
+    _require_path_result_key(path.key, required)
+    return path
+end
 
 function _require_prepared_target_local_path_resources(
     resources::PreparedTargetLocalPathResources,
@@ -172,10 +198,17 @@ function _require_prepared_target_local_path_resources(
         "prepared target-local path execution context does not match its exact compute device",
     ))
     _validate_path_input(resources.input)
+    target = getfield(resources.key, :device)
+    validate_telescope_target(resources.telescope, target)
+    _require_exact_plant_product_target(
+        resources.input, target, "prepared target-local path input")
+    _require_exact_plant_product_target(
+        resources.result, target, "prepared target-local path result")
     _require_path_input_revisions(resources.input,
         getfield(getfield(resources.key, :revisions), :telescope))
     validate_path_execution_binding(resources.execution, resources.input,
         resources.result)
+    validate_path_execution_target(resources.execution, target)
     return resources
 end
 
@@ -229,16 +262,17 @@ function prepare_target_local_path_resources(
     ))
 end
 
-struct _PreparedTargetLocalAcquisitionResourcesToken end
+mutable struct _PreparedTargetLocalAcquisitionResourcesToken end
 const _PREPARED_TARGET_LOCAL_ACQUISITION_RESOURCES_TOKEN =
     _PreparedTargetLocalAcquisitionResourcesToken()
 
 """
     PreparedTargetLocalAcquisitionResources
 
-Immutable target-local acquisition resources that borrow one exact path result
-and retain one exact prepared provider.  They own neither a lifecycle nor a
-schedule and expose no execution operation.
+Immutable binding record for target-local acquisition resources that borrow
+one exact path result and retain one exact prepared provider with its mutable
+detector or estimator state. It owns no event lifecycle, schedule, transfer,
+or partition executor.
 """
 struct PreparedTargetLocalAcquisitionResources{D,K<:PathResultKey,R,X,P}
     definition::D
@@ -249,13 +283,15 @@ struct PreparedTargetLocalAcquisitionResources{D,K<:PathResultKey,R,X,P}
     provider::P
 
     function PreparedTargetLocalAcquisitionResources(
-        ::_PreparedTargetLocalAcquisitionResourcesToken,
+        token::_PreparedTargetLocalAcquisitionResourcesToken,
         definition::D,
         path_key::K,
         path_result::R,
         context::X,
         provider::P,
     ) where {D,K<:PathResultKey,R,X,P}
+        token === _PREPARED_TARGET_LOCAL_ACQUISITION_RESOURCES_TOKEN || throw(
+            ArgumentError("invalid internal target-local acquisition token"))
         return new{D,K,R,X,P}(
             definition,
             path_key,

@@ -132,7 +132,7 @@ end
 function optional_target_partition_definition(::Type{T}) where {
     T<:AbstractFloat,
 }
-    telescope = TelescopeDefinition(
+    telescope = Optics.TelescopeDefinition(
         resolution=8,
         diameter=T(4),
         central_obstruction=zero(T),
@@ -211,7 +211,7 @@ end
 
 function assert_optional_target_partition_residency(partition, target,
     BackendArray)
-    @test compute_device(getfield(partition, :telescope).aperture.reflectivity) ==
+    @test compute_device(prepared_telescope(partition).aperture.reflectivity) ==
         target
     for path in prepared_paths(partition)
         @test path_input(path).opd isa BackendArray
@@ -256,14 +256,17 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
 
     @test length(prepared_partitions(accelerator_only)) == 1
     @test length(prepared_partitions(mixed)) == 2
-    @test compute_device(accelerator_only.authority) == target
-    @test compute_device(mixed.authority) == host
-    @test atmosphere_authority_identity(accelerator_only.authority) ===
-        atmosphere_identity(prepared_atmosphere(accelerator_only.authority))
-    @test atmosphere_authority_identity(mixed.authority) ===
-        atmosphere_identity(prepared_atmosphere(mixed.authority))
+    @test compute_device(prepared_atmosphere_authority(accelerator_only)) ==
+        target
+    @test compute_device(prepared_atmosphere_authority(mixed)) == host
+    @test atmosphere_authority_identity(accelerator_only) ===
+        atmosphere_identity(prepared_atmosphere(
+            prepared_atmosphere_authority(accelerator_only)))
+    @test atmosphere_authority_identity(mixed) ===
+        atmosphere_identity(prepared_atmosphere(
+            prepared_atmosphere_authority(mixed)))
     @test all(partition -> atmosphere_authority_binding(partition) ===
-        atmosphere_authority_binding(mixed.authority), prepared_partitions(mixed))
+        atmosphere_authority_binding(mixed), prepared_partitions(mixed))
 
     accelerator_partition = only(prepared_partitions(accelerator_only))
     mixed_host = prepared_partition(mixed, host)

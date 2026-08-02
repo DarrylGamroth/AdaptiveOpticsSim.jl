@@ -8,6 +8,9 @@ end
 
 struct PartitionAssignmentFakeBackend <: AbstractArrayBackend end
 
+struct PartitionAssignmentDuplicateLayerAtmosphereDefinition <:
+    AbstractTimedAtmosphereDefinition end
+
 Plant.plant_model_definition_style(::Type{PartitionAssignmentTestPathModel}) =
     ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
@@ -17,22 +20,9 @@ Backends.compute_device_availability(
     ::AcceleratorComputeDevice{PartitionAssignmentFakeBackend}) =
     ComputeDeviceAvailable()
 
-if !isdefined(Plant, :_plant_definition_identity)
-    const _PARTITION_ASSIGNMENT_DEFINITION_IDENTITIES =
-        Dict{UInt,Base.RefValue{Nothing}}()
-
-    function Plant._plant_definition_identity(definition::PlantDefinition)
-        key = objectid(getfield(definition, :paths))
-        return get!(_PARTITION_ASSIGNMENT_DEFINITION_IDENTITIES, key) do
-            Ref(nothing)
-        end
-    end
-end
-
-if !isdefined(Plant, :ResolvedPlantPartitionAssignment)
-    Base.include(Plant, normpath(joinpath(@__DIR__, "..", "..", "src",
-        "plant", "partition_assignments.jl")))
-end
+Plant.partition_atmosphere_layer_ids(
+    ::PartitionAssignmentDuplicateLayerAtmosphereDefinition) =
+    (AtmosphereLayerID(:duplicate), AtmosphereLayerID(:duplicate))
 
 for name in (
     :ResolvedPlantPartitionAssignment,
@@ -108,14 +98,24 @@ end
         definition, host, :beta => host, OpticalPathID(:alpha) => host)
 
     @test assignment isa ResolvedPlantPartitionAssignment
+    @test plant_definition(assignment) === definition
     @test atmosphere_authority_target(assignment) == host
-    @test partition_targets(assignment) == (host,)
+    @test Tuple(partition_targets(assignment)) == (host,)
     @test assigned_path_ids(assignment, host) ==
         (OpticalPathID(:alpha), OpticalPathID(:beta))
     @test partition_target(assignment, :alpha) == host
     @test partition_target(assignment, OpticalPathID(:beta)) == host
     @test Plant._require_current_partition_assignment_definition(
         assignment, definition) === assignment
+    @test_throws ArgumentError ResolvedPlantPartitionAssignment(
+        Plant._ResolvedPlantPartitionAssignmentToken(),
+        getfield(assignment, :definition),
+        getfield(assignment, :definition_identity),
+        getfield(assignment, :topology),
+        getfield(assignment, :targets),
+        getfield(assignment, :atmosphere_authority_target_ordinal),
+        getfield(assignment, :paths),
+    )
 
     reordered_definition = partition_assignment_test_definition(
         reverse_paths=true)
@@ -129,7 +129,7 @@ end
         include_paths=false)
     authority_only = resolve_plant_partition_assignment(
         authority_only_definition, host)
-    @test partition_targets(authority_only) == (host,)
+    @test Tuple(partition_targets(authority_only)) == (host,)
     @test assigned_path_ids(authority_only, host) == ()
     @test atmosphere_authority_target(authority_only) == host
 
@@ -146,14 +146,22 @@ end
     )
     layered = resolve_plant_partition_assignment(
         layered_definition, host, :alpha => host, :beta => host)
-    @test getfield(layered, :topology).atmosphere_layers ==
+    @test Tuple(getfield(layered, :topology).atmosphere_layers) ==
         (AtmosphereLayerID(:ground), AtmosphereLayerID(:high))
+    duplicate_layer_definition = partition_assignment_test_definition(
+        atmosphere_definition=
+            PartitionAssignmentDuplicateLayerAtmosphereDefinition(),
+    )
+    partition_assignment_test_error(() ->
+        resolve_plant_partition_assignment(duplicate_layer_definition, host,
+            :alpha => host, :beta => host),
+        :duplicate_atmosphere_layer_id)
 
     fake_accelerator = AcceleratorComputeDevice(
         PartitionAssignmentFakeBackend(), UInt32(1))
     mixed = resolve_plant_partition_assignment(
         definition, host, :beta => fake_accelerator, :alpha => host)
-    @test partition_targets(mixed) == (host, fake_accelerator)
+    @test Tuple(partition_targets(mixed)) == (host, fake_accelerator)
     @test assigned_path_ids(mixed, host) == (OpticalPathID(:alpha),)
     @test assigned_path_ids(mixed, fake_accelerator) == (OpticalPathID(:beta),)
     @test partition_target(mixed, :beta) == fake_accelerator
@@ -191,6 +199,18 @@ end
             same_topology_new_definition), :stale_assignment)
     foreign_definition = partition_assignment_test_definition(
         include_gamma=true)
+    grown_assignment = @inferred resolve_plant_partition_assignment(
+        foreign_definition,
+        host,
+        :alpha => host,
+        :beta => host,
+        :gamma => host,
+    )
+    @test typeof(grown_assignment) === typeof(assignment)
+    @test typeof(getfield(grown_assignment, :topology)) ===
+        typeof(getfield(assignment, :topology))
+    @test typeof(getfield(grown_assignment, :paths)) ===
+        typeof(getfield(assignment, :paths))
     partition_assignment_test_error(() ->
         Plant._require_current_partition_assignment_definition(assignment,
             foreign_definition), :foreign_assignment)
