@@ -281,6 +281,7 @@ include("event_composition.jl")
 include("device_batching.jl")
 include("illumination.jl")
 include("target_validation.jl")
+include("resource_facts.jl")
 include("api.jl")
 
 end # module Plant

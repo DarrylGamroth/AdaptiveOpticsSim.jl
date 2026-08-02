@@ -222,6 +222,8 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("plant-preparation", "testsets/plant_preparation.jl";
         fixtures=("plant_test_fixtures.jl",
             "wfs_stage_contract_fixtures.jl")),
+    TestSuiteSpec("plant-resource-facts",
+        "testsets/plant_resource_facts.jl"),
     TestSuiteSpec("plant-providers", "testsets/plant_providers.jl";
         fixtures=("plant_test_fixtures.jl",
             "wfs_stage_contract_fixtures.jl")),
@@ -289,6 +291,7 @@ const TEST_GROUP_SPECS = (
         "plant-sampled-aberrations",
         "plant-gate5-closure",
         "plant-preparation",
+        "plant-resource-facts",
         "plant-providers",
         "plant-rng",
         "plant-illumination",
@@ -391,6 +394,7 @@ const TEST_CI_SHARD_SPECS = (
         "plant-sampled-aberrations",
         "plant-gate5-closure",
         "plant-preparation",
+        "plant-resource-facts",
         "plant-providers",
         "plant-rng",
         "plant-illumination",

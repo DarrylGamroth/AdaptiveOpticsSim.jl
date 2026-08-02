@@ -578,7 +578,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "f761b2848ab7abf2aca9e118e77a8d64efab185ab5988e2f55c23a665dcf8ede"
+sha256 = "0eb33330068206e55ac2235c34399c5d6daf4c2e689346f6a0bd768090882c8c"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1550,6 +1550,26 @@ public = [
     "sampled_aberration_definition",
     "path_definition",
     "acquisition_definition",
+    "StructuralResourceError",
+    "StructuralResourceOwnerID",
+    "ResourceEstimateMethod",
+    "AbstractStructuralResourceFact",
+    "KnownStructuralResourceFact",
+    "UnknownStructuralResourceFact",
+    "OpaqueResourceReserve",
+    "StructuralResourceReport",
+    "structural_resource_fact",
+    "structural_resource_facts",
+    "aggregate_structural_resource_facts",
+    "require_exact_structural_resource_facts",
+    "structural_resource_owner_id",
+    "structural_resource_known",
+    "structural_resource_unknown_reason",
+    "structural_resident_bytes",
+    "structural_workspace_bytes",
+    "opaque_resource_reserve_bytes",
+    "resource_estimate_method",
+    "opaque_resource_reserves",
     "RNGDerivationVersion",
     "RNGOwnerIdentity",
     "RNGOwnerToken",

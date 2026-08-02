@@ -33,6 +33,13 @@ struct PlantPreparationError <: AdaptiveOpticsSimError
     msg::String
 end
 
+"""Invalid structural resource fact, reserve, or aggregation operation."""
+struct StructuralResourceError <: AdaptiveOpticsSimError
+    component::Symbol
+    reason::Symbol
+    msg::String
+end
+
 """Invalid prepared detector-acquisition event or lifecycle transition."""
 struct DetectorAcquisitionError <: AdaptiveOpticsSimError
     component::Symbol
