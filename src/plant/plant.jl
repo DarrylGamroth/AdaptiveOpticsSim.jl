@@ -32,7 +32,10 @@ import ..Backends:
     backend,
     clamp_array!,
     compute_device,
+    compute_device_availability,
     compute_device_backend,
+    compute_device_is_available,
+    compute_device_unavailable_reason,
     execution_style,
     launch_kernel!,
     resolve_array_backend
@@ -197,10 +200,13 @@ import ..Atmospheres:
     AtmosphereEpoch,
     AtmosphereDirectionRenderer,
     AtmosphereLayerID,
+    InfiniteMultiLayerAtmosphereDefinition,
     InfiniteAtmosphereLayer,
     InfiniteMultiLayerAtmosphere,
+    KolmogorovAtmosphereDefinition,
     KolmogorovAtmosphere,
     MovingAtmosphereLayer,
+    MultiLayerAtmosphereDefinition,
     MultiLayerAtmosphere,
     PreparedAtmosphereDirectionBatch,
     _advance_by_with_rng!,
@@ -274,6 +280,7 @@ include("command_schemas.jl")
 include("command_admission.jl")
 include("command_application.jl")
 include("definitions.jl")
+include("partition_assignments.jl")
 include("controllable_optics.jl")
 include("triggers.jl")
 include("acquisition_lifecycles.jl")
@@ -294,13 +301,16 @@ include("event_composition.jl")
 include("device_batching.jl")
 include("illumination.jl")
 include("target_validation.jl")
+include("target_local_resources.jl")
 include("resource_facts.jl")
 include("resource_facts_runtime.jl")
 include("resource_facts_shack_hartmann.jl")
 include("resource_reporters_optical.jl")
 include("resource_facts_acquisition.jl")
+include("resource_facts_partitions.jl")
 include("resource_facts_batching.jl")
 include("resource_facts_graph.jl")
+include("partitions.jl")
 include("api.jl")
 
 end # module Plant

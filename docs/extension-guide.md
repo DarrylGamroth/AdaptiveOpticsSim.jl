@@ -491,7 +491,12 @@ for non-plant work, but the cold plant declaration rejects missing or duplicate
 stochastic-owner identities. A custom single-owner timed atmosphere also
 implements its ordinary `initialize_atmosphere!` and
 `evolve_atmosphere!` methods against `AbstractRNG`; the prepared plant supplies
-the exact owner-bound RNG to those methods.
+the exact owner-bound RNG to those methods. To participate in target-local
+partition preparation it also implements qualified
+`Plant.partition_atmosphere_layer_ids(definition)` and returns a `Tuple` of
+stable `AtmosphereLayerID` values. Return `()` for a single stochastic owner
+with no independently identified layers. Core rejects non-tuples, non-layer
+identities, and duplicates.
 
 `input` is a path-local `PupilFunction`, a declared-plane `ElectricField` or
 `IntensityMap`, or a concrete tuple of them. The prepared execution determines
@@ -574,6 +579,84 @@ storage or state before mutation. Do not store a `Function`, abstract executor
 vector, schedule, RNG registry, queue, or transport in model execution owners.
 Preparation may allocate; warmed execution must retain the allocation contract
 of its underlying stages.
+
+### Target-local partition preparation
+
+A model that participates in preparation-only CPU/accelerator partitioning
+implements two additional qualified seams. The path seam prepares only
+co-located static data and reusable workspace; it receives no atmosphere and
+must not invent a renderer, timeline, transfer, or executor:
+
+```julia
+function AdaptiveOpticsSim.Plant.prepare_target_local_path_resources(
+    model::MyOpticalModelDefinition,
+    definition::AdaptiveOpticsSim.Plant.OpticalPathDefinition,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
+    telescope::AdaptiveOpticsSim.Optics.AbstractTelescope,
+    context,
+)
+    input, result, execution = prepare_my_target_local_optics(
+        model, source, telescope)
+    return AdaptiveOpticsSim.Plant.PreparedTargetLocalPathResources(
+        definition, source, telescope, input, result, execution;
+        context,
+        optical_model=my_exact_model_key(model),
+        propagation_model=my_exact_propagation_key(model),
+        model_revisions=my_revision_key(model),
+    )
+end
+
+function AdaptiveOpticsSim.Plant.prepare_target_local_acquisition_provider(
+    model::MyAcquisitionDefinition,
+    definition::AdaptiveOpticsSim.Plant.AcquisitionDefinition,
+    path::AdaptiveOpticsSim.Plant.PreparedTargetLocalPathResources,
+)
+    AdaptiveOpticsSim.Plant.require_path_result(
+        path; optical_model=model.required_optical_model)
+    execution, observation, measurement =
+        prepare_my_acquisition(model, path)
+    products = AdaptiveOpticsSim.Plant.AcquisitionProducts(
+        observation, measurement;
+        metadata=my_product_metadata(model, path, observation, measurement))
+    return AdaptiveOpticsSim.Plant.prepare_full_optical_provider(
+        execution, products)
+end
+```
+
+Reuse a shared model-specific helper when ordinary `prepare_path_executor` and
+target-local preparation construct the same optical data. Do not implement the
+target-local seam by preparing and discarding a second timed atmosphere. The
+returned execution/provider types must implement their normal exact-binding
+and exact-target validators. They must also provide exact
+`Plant.structural_resource_fact` dispatch for every owned resident array and
+workspace; an unknown fact remains an admission failure rather than an
+estimated byte count.
+
+The caller, not core, resolves placement:
+
+```julia
+assignment = AdaptiveOpticsSim.Plant.resolve_plant_partition_assignment(
+    definition,
+    host_target,
+    :wfs => accelerator_target,
+    :science => host_target,
+)
+prepared = AdaptiveOpticsSim.Plant.prepare_plant_partitions(
+    assignment; run_seed=0x1234)
+authority =
+    AdaptiveOpticsSim.Plant.prepared_atmosphere_authority(prepared)
+gpu_partition = AdaptiveOpticsSim.Plant.prepared_partition(
+    prepared, accelerator_target)
+```
+
+Every declared path must appear exactly once. Acquisition placement is derived
+from its path, so an acquisition cannot be split onto another target. The
+assignment admits host resources and at most one exact accelerator target in
+Gate 9A. `PreparedPlantPartitions` is an inspectable, non-executable preparation
+result. Cold preparation may defensively copy declared static data, such as a
+sampled OPD, into each exact target that uses it. The result performs no runtime
+atmosphere publication, command replication, inter-partition product handoff,
+scheduling, or placement planning.
 
 Plant invokes a full-optical path executor only after atmosphere
 materialization, prepared native sampled aberrations, controllable surfaces,

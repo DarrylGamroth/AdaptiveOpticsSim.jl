@@ -129,6 +129,173 @@ function run_optional_device_batch_resource_fact_checks(
     return nothing
 end
 
+function optional_target_partition_definition(::Type{T}) where {
+    T<:AbstractFloat,
+}
+    telescope = Optics.TelescopeDefinition(
+        resolution=8,
+        diameter=T(4),
+        central_obstruction=zero(T),
+        revision=1,
+        T=T,
+    )
+    atmosphere = KolmogorovAtmosphereDefinition(
+        r0=T(0.2), L0=T(25), T=T)
+    alpha_source = Source(
+        band=:custom,
+        wavelength=T(0.8e-6),
+        photon_irradiance=T(60),
+        T=T,
+    )
+    beta_source = Source(
+        band=:custom,
+        wavelength=T(0.8e-6),
+        photon_irradiance=T(45),
+        coordinates=(T(4), T(35)),
+        T=T,
+    )
+    return PlantDefinition(
+        ;
+        telescope,
+        atmosphere,
+        paths=(
+            OpticalPathDefinition(
+                :alpha,
+                alpha_source,
+                DeviceBatchTestPathModel(1),
+            ),
+            OpticalPathDefinition(
+                :beta,
+                beta_source,
+                DeviceBatchTestPathModel(1),
+            ),
+        ),
+        acquisitions=(
+            AcquisitionDefinition(
+                :alpha_camera,
+                :alpha,
+                DeviceBatchTestAcquisitionModel(T(0.08)),
+            ),
+            AcquisitionDefinition(
+                :beta_camera,
+                :beta,
+                DeviceBatchTestAcquisitionModel(T(0.08)),
+            ),
+        ),
+    )
+end
+
+function assert_optional_target_partition_report(partition, target;
+    authority::Bool)
+    report = partition_resource_report(partition)
+    facts = structural_resource_facts(report)
+    @test compute_device(report) == target
+    @test all(structural_resource_known, facts)
+    @test all(fact -> compute_device(fact) == target, facts)
+    @test structural_resident_bytes(report) == sum(
+        structural_resident_bytes,
+        facts;
+        init=UInt64(0),
+    )
+    @test structural_workspace_bytes(report) == sum(
+        structural_workspace_bytes,
+        facts;
+        init=UInt64(0),
+    )
+    @test length(facts) == length(prepared_paths(partition)) +
+        length(prepared_acquisitions(partition)) + 1 + Int(authority)
+    @test count(fact -> structural_resource_owner_id(fact).category ==
+        :atmosphere, facts) == Int(authority)
+    return report
+end
+
+function assert_optional_target_partition_residency(partition, target,
+    BackendArray)
+    @test compute_device(prepared_telescope(partition).aperture.reflectivity) ==
+        target
+    for path in prepared_paths(partition)
+        @test path_input(path).opd isa BackendArray
+        @test path_result(path).values isa BackendArray
+        @test path.execution.field.values isa BackendArray
+        @test compute_device(path_input(path).opd) == target
+        @test compute_device(path_result(path).values) == target
+        @test compute_device(path.execution.field.values) == target
+    end
+    for acquisition in prepared_acquisitions(partition)
+        product = acquisition_products(acquisition_provider(acquisition))
+        @test product.observation isa BackendArray
+        @test compute_device(product.observation) == target
+    end
+    return nothing
+end
+
+function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag,
+}
+    selector = backend_selector(B)
+    target = compute_device(AdaptiveOpticsSim.Backends.allocate_array(
+        selector, UInt8, 1))
+    host = HostComputeDevice()
+    definition = optional_target_partition_definition(Float32)
+    accelerator_only_assignment = resolve_plant_partition_assignment(
+        definition,
+        target,
+        :alpha => target,
+        :beta => target,
+    )
+    mixed_assignment = resolve_plant_partition_assignment(
+        definition,
+        host,
+        :alpha => host,
+        :beta => target,
+    )
+    accelerator_only = prepare_plant_partitions(
+        definition, accelerator_only_assignment; run_seed=0x9a20)
+    mixed = prepare_plant_partitions(
+        definition, mixed_assignment; run_seed=0x9a20)
+
+    @test length(prepared_partitions(accelerator_only)) == 1
+    @test length(prepared_partitions(mixed)) == 2
+    @test compute_device(prepared_atmosphere_authority(accelerator_only)) ==
+        target
+    @test compute_device(prepared_atmosphere_authority(mixed)) == host
+    @test atmosphere_authority_identity(accelerator_only) ===
+        atmosphere_identity(prepared_atmosphere(
+            prepared_atmosphere_authority(accelerator_only)))
+    @test atmosphere_authority_identity(mixed) ===
+        atmosphere_identity(prepared_atmosphere(
+            prepared_atmosphere_authority(mixed)))
+    @test all(partition -> atmosphere_authority_binding(partition) ===
+        atmosphere_authority_binding(mixed), prepared_partitions(mixed))
+
+    accelerator_partition = only(prepared_partitions(accelerator_only))
+    mixed_host = prepared_partition(mixed, host)
+    mixed_accelerator = prepared_partition(mixed, target)
+    @test Tuple(path_id(path.definition) for path in
+        prepared_paths(accelerator_partition)) ==
+        (OpticalPathID(:alpha), OpticalPathID(:beta))
+    @test Tuple(path_id(path.definition) for path in
+        prepared_paths(mixed_host)) == (OpticalPathID(:alpha),)
+    @test Tuple(path_id(path.definition) for path in
+        prepared_paths(mixed_accelerator)) == (OpticalPathID(:beta),)
+    @test Tuple(acquisition_id(acquisition.definition) for acquisition in
+        prepared_acquisitions(mixed_host)) == (AcquisitionID(:alpha_camera),)
+    @test Tuple(acquisition_id(acquisition.definition) for acquisition in
+        prepared_acquisitions(mixed_accelerator)) ==
+        (AcquisitionID(:beta_camera),)
+
+    assert_optional_target_partition_residency(
+        accelerator_partition, target, BackendArray)
+    assert_optional_target_partition_residency(
+        mixed_accelerator, target, BackendArray)
+    assert_optional_target_partition_report(
+        accelerator_partition, target; authority=true)
+    assert_optional_target_partition_report(mixed_host, host; authority=true)
+    assert_optional_target_partition_report(
+        mixed_accelerator, target; authority=false)
+    return nothing
+end
+
 if !isdefined(@__MODULE__, :ContractRateModel)
     include(joinpath(@__DIR__, "wfs_stage_contract_fixtures.jl"))
 end
@@ -5497,6 +5664,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_spad_qualification_checks(B, backend)
     run_optional_prepared_plant_checks(B, backend)
+    run_optional_target_partition_checks(B, backend)
     run_optional_device_path_batch_checks(B, backend)
     run_optional_wfs_device_model_matrix_checks(B, backend)
     run_optional_detector_device_model_matrix_checks(B, backend)

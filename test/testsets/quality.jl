@@ -238,6 +238,8 @@ end
         "plant-sampled-aberrations",
         "plant-gate5-closure",
         "plant-preparation",
+        "plant-partition-assignments",
+        "plant-target-partitions",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
@@ -268,6 +270,8 @@ end
         "plant-sampled-aberrations",
         "plant-gate5-closure",
         "plant-preparation",
+        "plant-partition-assignments",
+        "plant-target-partitions",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
@@ -344,6 +348,8 @@ end
     @test occursin("plant-mcao-moao", listing_text)
     @test occursin("plant-sampled-aberrations", listing_text)
     @test occursin("plant-gate5-closure", listing_text)
+    @test occursin("plant-partition-assignments", listing_text)
+    @test occursin("plant-target-partitions", listing_text)
     @test occursin("plant-cpu-execution", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)

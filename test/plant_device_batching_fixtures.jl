@@ -117,13 +117,10 @@ Plant.plant_model_definition_style(
     ::Type{<:DeviceBatchTestAcquisitionModel},
 ) = ColdPlantModelDefinition()
 
-function Plant.prepare_path_executor(
+function device_batch_test_path_parts(
     model::DeviceBatchTestPathModel,
-    definition::OpticalPathDefinition,
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     telescope::Telescope,
-    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
-    context,
 )
     T = eltype(pupil_reflectivity(telescope))
     pupil = PupilFunction(telescope; T, backend=backend(telescope))
@@ -132,6 +129,19 @@ function Plant.prepare_path_executor(
         source;
         zero_padding=model.zero_padding,
     )
+    return pupil, execution
+end
+
+function Plant.prepare_path_executor(
+    model::DeviceBatchTestPathModel,
+    definition::OpticalPathDefinition,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
+    telescope::Telescope,
+    atmosphere::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphere,
+    context,
+)
+    pupil, execution = device_batch_test_path_parts(
+        model, source, telescope)
     return PreparedPathExecutor(
         definition,
         source,
@@ -156,10 +166,35 @@ function Plant.prepare_path_executor(
     )
 end
 
-function Plant.prepare_acquisition_provider(
+function Plant.prepare_target_local_path_resources(
+    model::DeviceBatchTestPathModel,
+    definition::OpticalPathDefinition,
+    source::AdaptiveOpticsSim.Optics.AbstractSource,
+    telescope::Telescope,
+    context,
+)
+    pupil, execution = device_batch_test_path_parts(
+        model, source, telescope)
+    return Plant.PreparedTargetLocalPathResources(
+        definition,
+        source,
+        telescope,
+        pupil,
+        direct_imaging_output(execution),
+        execution;
+        context=context,
+        optical_model=(
+            kind=:device_batch_test_direct_imaging,
+            zero_padding=model.zero_padding,
+        ),
+        propagation_model=:fraunhofer_fft,
+        model_revisions=UInt(1),
+    )
+end
+
+function device_batch_test_acquisition_provider(
     model::DeviceBatchTestAcquisitionModel,
-    ::AcquisitionDefinition,
-    path::PreparedPathExecutor,
+    path,
 )
     require_path_result(path)
     result = path_result(path)
@@ -185,6 +220,23 @@ function Plant.prepare_acquisition_provider(
         ),
     )
     return prepare_full_optical_provider(execution, products)
+end
+
+
+function Plant.prepare_acquisition_provider(
+    model::DeviceBatchTestAcquisitionModel,
+    ::AcquisitionDefinition,
+    path::PreparedPathExecutor,
+)
+    return device_batch_test_acquisition_provider(model, path)
+end
+
+function Plant.prepare_target_local_acquisition_provider(
+    model::DeviceBatchTestAcquisitionModel,
+    ::AcquisitionDefinition,
+    path::Plant.PreparedTargetLocalPathResources,
+)
+    return device_batch_test_acquisition_provider(model, path)
 end
 
 @inline function prepare_device_batch_test_event_loop(
