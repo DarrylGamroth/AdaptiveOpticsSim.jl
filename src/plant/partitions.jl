@@ -137,7 +137,7 @@ struct PreparedPlantPartitions{D,A,U,C,P,V}
     definition::D
     assignment::A
     authority::U
-    command_authority_identity::C
+    command_authority::C
     partitions::P
     run_seed::UInt64
     rng_derivation_version::V
@@ -147,7 +147,7 @@ struct PreparedPlantPartitions{D,A,U,C,P,V}
         definition::D,
         assignment::A,
         authority::U,
-        command_authority_identity::C,
+        command_authority::C,
         partitions::P,
         run_seed::UInt64,
         rng_derivation_version::V,
@@ -158,7 +158,7 @@ struct PreparedPlantPartitions{D,A,U,C,P,V}
             definition,
             assignment,
             authority,
-            command_authority_identity,
+            command_authority,
             partitions,
             run_seed,
             rng_derivation_version,
@@ -223,8 +223,12 @@ end
     partition::PreparedTargetPartition) = partition.controllable_optic_ids
 @inline partition_command_endpoint_ids(partition::PreparedTargetPartition) =
     partition.command_endpoint_ids
+@inline prepared_command_authority(partitions::PreparedPlantPartitions) =
+    partitions.command_authority
 @inline command_authority_identity(partitions::PreparedPlantPartitions) =
-    partitions.command_authority_identity
+    command_authority_identity(prepared_command_authority(partitions))
+@inline command_authority_target(partitions::PreparedPlantPartitions) =
+    command_authority_target(prepared_command_authority(partitions))
 
 function prepared_partition(partitions::PreparedPlantPartitions,
     target::AbstractComputeDevice)
@@ -650,25 +654,33 @@ end
 
 """
     prepare_plant_partitions(definition, assignment; run_seed,
-        rng_derivation_version, command_endpoints=())
+        command_authority_target, rng_derivation_version,
+        command_endpoints=())
 
 Prepare one cold plant declaration into complete exact-target resource
 partitions. Preparation validates the resolved assignment before allocating,
 constructs exactly one timed atmosphere/timeline/RNG authority, and may copy
 declared static data and configured initial effective commands into its
-target-local owners. It creates one placement-neutral command-authority
-identity but no command authority, publication source, or admission state. It
-does not publish runtime products or move arrays between prepared partitions.
+target-local owners. It also prepares one immutable command-authority plan on
+the explicitly supplied exact target. The plan owns no admission, application,
+publication, queue, or executor state. Preparation does not publish runtime
+products or move arrays between prepared partitions.
 """
 function prepare_plant_partitions(
     definition::PlantDefinition,
     assignment::ResolvedPlantPartitionAssignment;
     run_seed,
+    command_authority_target,
     rng_derivation_version=_DEFAULT_RNG_DERIVATION_VERSION,
     command_endpoints=(),
 )
     _require_current_partition_assignment_definition(assignment, definition)
     _require_partition_targets_available(partition_targets(assignment))
+    exact_command_authority_target =
+        _require_command_authority_target(command_authority_target)
+    _require_command_authority_target_available(exact_command_authority_target)
+    _require_gate9a_command_authority_target(
+        assignment, exact_command_authority_target)
     seed = _prepare_run_seed(run_seed)
     version = _prepare_rng_derivation_version(rng_derivation_version)
     command_configurations = _partition_command_endpoint_configurations(
@@ -678,6 +690,14 @@ function prepare_plant_partitions(
     authority_target = atmosphere_authority_target(assignment)
     authority_context, authority_telescope, atmosphere =
         _prepare_atmosphere_authority_resources(definition, authority_target)
+    command_authority = _prepare_command_authority(
+        definition,
+        command_identity,
+        exact_command_authority_target,
+        command_configurations,
+        authority_target,
+        authority_context,
+    )
     targets = partition_targets(assignment)
     unbound = Memory{_UnboundTargetPartition}(undef, length(targets))
     @inbounds for index in eachindex(targets)
@@ -738,7 +758,7 @@ function prepare_plant_partitions(
         definition,
         assignment,
         authority,
-        command_identity,
+        command_authority,
         partitions,
         seed,
         version,

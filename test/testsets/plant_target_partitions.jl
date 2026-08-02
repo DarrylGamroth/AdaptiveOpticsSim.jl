@@ -5,6 +5,7 @@ struct TargetPartitionTestBackend <: AbstractArrayBackend end
 const TARGET_PARTITION_TEST_ACCELERATOR = AcceleratorComputeDevice(
     TargetPartitionTestBackend(), UInt32(1))
 const TARGET_PARTITION_TEST_AVAILABLE = Ref(true)
+const TARGET_PARTITION_TEST_MISPLACE_ALLOCATIONS = Ref(false)
 
 struct TargetPartitionTestArray{T,N} <: DenseArray{T,N}
     storage::Array{T,N}
@@ -32,12 +33,20 @@ Base.copyto!(destination::TargetPartitionTestArray,
 
 Backends.array_backend_selector(::Type{<:TargetPartitionTestArray}) =
     TargetPartitionTestBackend()
+Backends.array_backend_type(::TargetPartitionTestBackend) =
+    TargetPartitionTestArray
 Backends.backend(::TargetPartitionTestArray) = TargetPartitionTestBackend()
 Backends.compute_device(::TargetPartitionTestArray) =
     TARGET_PARTITION_TEST_ACCELERATOR
-Backends.allocate_array(::TargetPartitionTestBackend, ::Type{T},
-    dimensions::Vararg{Int,N}) where {T,N} =
-    TargetPartitionTestArray(Array{T}(undef, dimensions...))
+function Backends.allocate_array(
+    ::TargetPartitionTestBackend,
+    ::Type{T},
+    dimensions::Vararg{Int,N},
+) where {T,N}
+    TARGET_PARTITION_TEST_MISPLACE_ALLOCATIONS[] &&
+        return Array{T}(undef, dimensions...)
+    return TargetPartitionTestArray(Array{T}(undef, dimensions...))
+end
 Backends.execution_style(::TargetPartitionTestArray) = ScalarCPUStyle()
 Backends.compute_device_availability(
     ::AcceleratorComputeDevice{TargetPartitionTestBackend}) =
@@ -217,6 +226,12 @@ struct TargetPartitionTestExecution{I,R,W}
     workspace::W
 end
 
+struct TargetPartitionTestPupilExecution{I,R,W}
+    input::I
+    result::R
+    workspace::W
+end
+
 Plant.plant_model_definition_style(::Type{TargetPartitionTestPathModel}) =
     ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
@@ -372,6 +387,32 @@ function Plant.validate_path_execution_target(
     return execution
 end
 
+function Plant.validate_path_execution_binding(
+    execution::TargetPartitionTestPupilExecution,
+    input::PupilFunction,
+    result::IntensityMap,
+)
+    execution.input === input && execution.result === result || throw(
+        PlantPreparationError(:path, :prepared_binding,
+            "target-partition pupil execution lost its exact products"))
+    return nothing
+end
+
+function Plant.validate_path_execution_target(
+    execution::TargetPartitionTestPupilExecution,
+    target::AbstractComputeDevice,
+)
+    all(storage -> compute_device(storage) == target,
+        (execution.input.support,
+            execution.input.amplitude,
+            execution.input.opd,
+            execution.result.values,
+            execution.workspace)) || throw(PlantPreparationError(
+        :path, :wrong_device,
+        "target-partition pupil execution storage is not co-located"))
+    return execution
+end
+
 function Plant.structural_resource_fact(
     execution::TargetPartitionTestExecution,
     id::StructuralResourceOwnerID,
@@ -401,6 +442,55 @@ function target_partition_test_intensity_map(
         coherence=IncoherentIntensityAddition(),
     )
     return IntensityMap(metadata, values)
+end
+
+function target_partition_test_pupil_path(
+    partition::PreparedTargetPartition,
+    path::PreparedTargetLocalPathResources,
+)
+    telescope = prepared_telescope(partition)
+    selector = backend(telescope)
+    support = allocate_array(selector, Bool, 2, 2)
+    amplitude = allocate_array(selector, Float64, 2, 2)
+    opd = allocate_array(selector, Float64, 2, 2)
+    fill!(support, true)
+    fill!(amplitude, 1.0)
+    fill!(opd, 0.0)
+    metadata = OpticalPlaneMetadata(
+        PupilPlane(),
+        opd;
+        coordinate_domain=MetricCoordinates(),
+        sampling=(1.0, 1.0),
+        spectral=AchromaticSpectralCoordinate(),
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=CoherentFieldCombination(),
+    )
+    input = PupilFunction{
+        typeof(metadata),
+        typeof(support),
+        typeof(amplitude),
+        typeof(opd),
+        typeof(selector),
+    }(metadata, support, amplitude, opd, aperture_revision(telescope))
+    result = target_partition_test_intensity_map(
+        selector, path_id(path.definition).name)
+    workspace = allocate_array(selector, Float64, 3)
+    execution = TargetPartitionTestPupilExecution(
+        input, result, workspace)
+    return PreparedTargetLocalPathResources(
+        path.definition,
+        path.source,
+        telescope,
+        input,
+        result,
+        execution;
+        context=getfield(partition, :context),
+        optical_model=(kind=:target_partition_pupil_coupling_test,
+            path=path_id(path.definition)),
+        propagation_model=:test_identity,
+        model_revisions=UInt(1),
+    )
 end
 
 function Plant.prepare_target_local_path_resources(
@@ -468,6 +558,7 @@ end
 
 function target_partition_test_controllable_optic(;
     visibility::AbstractPathVisibility=AllPathVisibility(),
+    silence_policy::CommandSilencePolicy=CommandSilencePolicy(),
 )
     schema = PlantCommandSchema(
         Float64,
@@ -484,7 +575,7 @@ function target_partition_test_controllable_optic(;
         value_policy=CommandValuePolicy(),
         sequence_policy=CommandSequencePolicy(),
         effective_time_policy=CommandEffectiveTimePolicy(),
-        silence_policy=CommandSilencePolicy(),
+        silence_policy,
     )
     return ControllableOpticDefinition(
         :partition_test_optic,
@@ -502,7 +593,9 @@ target_partition_test_command_endpoints() = (
 
 function target_partition_test_definition(; include_gamma::Bool=false,
     include_sampled_aberration::Bool=false,
-    optic_visibility::AbstractPathVisibility=AllPathVisibility())
+    optic_visibility::AbstractPathVisibility=AllPathVisibility(),
+    command_silence_policy::CommandSilencePolicy=CommandSilencePolicy(),
+)
     telescope = TargetPartitionTestTelescopeDefinition(UInt(1))
     source = Source(band=:I, magnitude=0.0)
     alpha = OpticalPathDefinition(
@@ -525,7 +618,9 @@ function target_partition_test_definition(; include_gamma::Bool=false,
         atmosphere=TargetPartitionTestAtmosphereDefinition(),
         controllable_optics=(
             target_partition_test_controllable_optic(
-                visibility=optic_visibility),),
+                visibility=optic_visibility,
+                silence_policy=command_silence_policy,
+            ),),
         paths=include_gamma ? (alpha, beta, gamma) : (alpha, beta),
         acquisitions=include_gamma ?
             (alpha_camera, beta_camera, gamma_camera) :
@@ -596,6 +691,7 @@ function target_partition_test_fresh_token_guards(
     path = first(prepared_paths(partition))
     acquisition = first(prepared_acquisitions(partition))
     authority = prepared_atmosphere_authority(prepared)
+    command_authority = prepared_command_authority(prepared)
     binding = atmosphere_authority_binding(prepared)
 
     @test_throws ArgumentError PreparedTargetLocalPathResources(
@@ -632,6 +728,15 @@ function target_partition_test_fresh_token_guards(
         getfield(authority, :rngs),
         getfield(authority, :binding),
     )
+    @test_throws ArgumentError PreparedCommandAuthority(
+        Plant._PreparedCommandAuthorityToken(),
+        getfield(command_authority, :binding),
+        getfield(command_authority, :identity),
+        getfield(command_authority, :target),
+        getfield(command_authority, :context),
+        getfield(command_authority, :optic_definitions),
+        getfield(command_authority, :endpoints),
+    )
     @test_throws ArgumentError PreparedTargetPartition(
         Plant._PreparedTargetPartitionToken(),
         getfield(partition, :target),
@@ -652,7 +757,7 @@ function target_partition_test_fresh_token_guards(
         getfield(prepared, :definition),
         assignment,
         authority,
-        command_authority_identity(prepared),
+        prepared_command_authority(prepared),
         getfield(prepared, :partitions),
         getfield(prepared, :run_seed),
         getfield(prepared, :rng_derivation_version),
@@ -681,14 +786,25 @@ end
 
     command_endpoints = target_partition_test_command_endpoints()
     cpu = prepare_plant_partitions(
-        definition, cpu_assignment; run_seed=71, command_endpoints)
+        definition, cpu_assignment;
+        run_seed=71, command_authority_target=host, command_endpoints)
     accelerator_only = prepare_plant_partitions(
-        definition, accelerator_assignment; run_seed=71, command_endpoints)
+        definition, accelerator_assignment;
+        run_seed=71, command_authority_target=accelerator, command_endpoints)
     mixed = prepare_plant_partitions(
-        definition, mixed_assignment; run_seed=71, command_endpoints)
+        definition, mixed_assignment;
+        run_seed=71, command_authority_target=host, command_endpoints)
     mixed_accelerator_authority = prepare_plant_partitions(
         mixed_accelerator_authority_assignment;
         run_seed=71,
+        command_authority_target=accelerator,
+        command_endpoints,
+    )
+    accelerator_paths_host_command_authority = prepare_plant_partitions(
+        definition,
+        accelerator_assignment;
+        run_seed=71,
+        command_authority_target=host,
         command_endpoints,
     )
     target_partition_test_fresh_token_guards(mixed_assignment, mixed)
@@ -702,6 +818,116 @@ end
     @test atmosphere_authority_target(mixed) == host
     @test atmosphere_authority_target(mixed_accelerator_authority) ==
         accelerator
+    @test command_authority_target(cpu) == host
+    @test command_authority_target(accelerator_only) == accelerator
+    @test command_authority_target(mixed) == host
+    @test command_authority_target(mixed_accelerator_authority) == accelerator
+    @test atmosphere_authority_target(
+        accelerator_paths_host_command_authority) == accelerator
+    @test command_authority_target(
+        accelerator_paths_host_command_authority) == host
+    @test all(partition -> compute_device(partition) == accelerator,
+        prepared_partitions(accelerator_paths_host_command_authority))
+    @test prepared_command_authority(mixed) isa PreparedCommandAuthority
+    @test command_authority_identity(prepared_command_authority(mixed)) ===
+        command_authority_identity(mixed)
+
+    authority_plan = prepared_command_authority(mixed)
+    authority_state = @inferred CommandAuthorityState(authority_plan)
+    authority_workspace = @inferred CommandAuthorityWorkspace(authority_plan)
+    endpoint_id = CommandEndpointID(:partition_test_command)
+    authority_endpoint =
+        prepared_command_authority_endpoint(authority_plan, endpoint_id)
+    @test authority_endpoint isa PreparedCommandEndpoint
+    @test command_endpoint_id(authority_endpoint) == endpoint_id
+    @test command_authority_endpoint_state(
+        authority_plan, authority_state, endpoint_id) isa CommandEndpointState
+    application_state = command_authority_application_state(
+        authority_plan, authority_state, endpoint_id)
+    @test effective_command(application_state) == [0.0]
+    @test command_authority_disposition_workspace(
+        authority_plan, authority_workspace, endpoint_id) isa
+        CommandDispositionWorkspace
+    @test !command_authority_failed(authority_state)
+
+    accelerator_authority_plan =
+        prepared_command_authority(accelerator_only)
+    accelerator_authority_state =
+        @inferred CommandAuthorityState(accelerator_authority_plan)
+    accelerator_effective = effective_command(
+        command_authority_application_state(
+            accelerator_authority_plan,
+            accelerator_authority_state,
+            endpoint_id,
+        ))
+    @test accelerator_effective isa TargetPartitionTestArray
+    @test compute_device(accelerator_effective) == accelerator
+
+    caller_initial = initial_effective_command(only(command_endpoints))
+    caller_initial[1] = 99.0
+    isolated_state = CommandAuthorityState(authority_plan)
+    @test effective_command(command_authority_application_state(
+        authority_plan, isolated_state, endpoint_id)) == [0.0]
+    caller_initial[1] = 0.0
+
+    safe_policy = CommandSilencePolicy(
+        ApplySafeCommand,
+        AgeFromApplication;
+        timeout=PlantDuration(5),
+    )
+    wrapped_definition = target_partition_test_definition(
+        command_silence_policy=safe_policy)
+    wrapped_assignment = resolve_plant_partition_assignment(
+        wrapped_definition, host, :alpha => host, :beta => host)
+    initial_parent = [-0.5, 9.0]
+    safe_parent = [0.25, 9.0]
+    wrapped_endpoints = (
+        CommandEndpointConfiguration(
+            :partition_test_command,
+            @view(initial_parent[1:1]);
+            capacity=2,
+            safe_command=@view(safe_parent[1:1]),
+        ),)
+    wrapped = prepare_plant_partitions(
+        wrapped_definition,
+        wrapped_assignment;
+        run_seed=72,
+        command_authority_target=host,
+        command_endpoints=wrapped_endpoints,
+    )
+    initial_parent[1] = 8.0
+    safe_parent[1] = 7.0
+    wrapped_authority = prepared_command_authority(wrapped)
+    wrapped_state = CommandAuthorityState(wrapped_authority)
+    wrapped_application = command_authority_application_state(
+        wrapped_authority, wrapped_state, endpoint_id)
+    @test effective_command(wrapped_application) == [-0.5]
+    wrapped_replica = only(target_local_controllable_optic_owners(
+        only(prepared_partitions(wrapped))))
+    @test effective_command(target_local_command_endpoint_state(
+        wrapped_replica, endpoint_id)) == [-0.5]
+    wrapped_endpoint = prepared_command_authority_endpoint(
+        wrapped_authority, endpoint_id)
+    wrapped_endpoint_state = command_authority_endpoint_state(
+        wrapped_authority, wrapped_state, endpoint_id)
+    wrapped_dispositions = CommandDispositionWorkspace(wrapped_endpoint)
+    apply_command_silence_transition!(
+        wrapped_dispositions,
+        wrapped_endpoint,
+        wrapped_endpoint_state,
+        wrapped_application,
+        PlantTimestamp(5),
+    )
+    @test effective_command(wrapped_application) == [0.25]
+
+    foreign_authority = prepared_command_authority(cpu)
+    target_partition_test_error(() -> command_authority_endpoint_state(
+        foreign_authority, authority_state, endpoint_id),
+        :command_authority, :foreign_state)
+    target_partition_test_error(() ->
+        command_authority_disposition_workspace(
+            foreign_authority, authority_workspace, endpoint_id),
+        :command_authority, :foreign_workspace)
     @test atmosphere_authority_identity(mixed) === atmosphere_identity(
         prepared_atmosphere(prepared_atmosphere_authority(mixed)))
     @test all(partition -> atmosphere_authority_binding(partition) ===
@@ -795,6 +1021,7 @@ end
     selected = prepare_plant_partitions(
         selected_definition, selected_assignment;
         run_seed=71,
+        command_authority_target=host,
         command_endpoints,
     )
     selected_host = prepared_partition(selected, host)
@@ -830,16 +1057,49 @@ end
     sampled = prepare_plant_partitions(
         sampled_definition, sampled_assignment;
         run_seed=71,
+        command_authority_target=host,
         command_endpoints,
     )
     caller_opd = surface_opd(sampled_aberration_surface(
         only(sampled_aberration_definitions(sampled_definition))))
     for partition in prepared_partitions(sampled)
-        prepared_opd = sampled_aberration_opd(
-            only(prepared_sampled_aberrations(partition)))
+        aberration = only(prepared_sampled_aberrations(partition))
+        prepared_opd = sampled_aberration_opd(aberration)
         @test compute_device(prepared_opd) == compute_device(partition)
         @test prepared_opd !== caller_opd
         @test Array(prepared_opd) == caller_opd
+
+        pupil_path = target_partition_test_pupil_path(
+            partition, first(prepared_paths(partition)))
+        bindings = Plant._prepare_sampled_aberration_path_bindings(
+            prepared_sampled_aberrations(partition), [pupil_path])
+        @test prepared_sampled_aberration_binding_count(bindings) == 1
+        sampled_coupling = prepared_sampled_aberration_path_coupling(
+            bindings, 1)
+        @test sampled_coupling isa
+            PreparedIdentityPupilFootprintCoupling
+        @test getfield(sampled_coupling, :destination) ===
+            path_input(pupil_path)
+        apply_sampled_pupil_surface!(
+            path_input(pupil_path),
+            prepared_opd,
+            sampled_coupling,
+            sampled_aberration_application(aberration.definition),
+        )
+        @test all(path_input(pupil_path).opd .== 2e-9)
+
+        optic = prepared_target_local_controllable_optic(only(
+            target_local_controllable_optic_owners(partition)))
+        @test controllable_optic_placement(optic) ===
+            controllable_optic_placement(optic.definition)
+        @test controllable_optic_visibility(optic) ===
+            controllable_optic_visibility(optic.definition)
+        optic_coupling = prepare_controllable_optic_path_coupling(
+            optic, pupil_path)
+        @test optic_coupling isa PreparedDirectPupilSurfaceCoupling
+        @test getfield(optic_coupling, :destination) ===
+            path_input(pupil_path)
+
         report = partition_resource_report(partition)
         oracle = target_partition_test_byte_oracle(
             partition;
@@ -853,6 +1113,21 @@ end
                     :sampled_aberration,
             structural_resource_facts(report)) == 1
     end
+
+    sampled_host = prepared_partition(sampled, host)
+    sampled_accelerator = prepared_partition(sampled, accelerator)
+    host_optic = prepared_target_local_controllable_optic(only(
+        target_local_controllable_optic_owners(sampled_host)))
+    accelerator_pupil_path = target_partition_test_pupil_path(
+        sampled_accelerator,
+        first(prepared_paths(sampled_accelerator)),
+    )
+    target_partition_test_error(
+        () -> prepare_controllable_optic_path_coupling(
+            host_optic, accelerator_pupil_path),
+        :controllable_optic,
+        :wrong_device,
+    )
 
     @test rng_replay_metadata(cpu) == rng_replay_metadata(accelerator_only)
     @test rng_replay_metadata(cpu) == rng_replay_metadata(mixed)
@@ -885,7 +1160,8 @@ end
         :gamma => host,
     )
     grown = prepare_plant_partitions(
-        grown_assignment; run_seed=71, command_endpoints)
+        grown_assignment;
+        run_seed=71, command_authority_target=host, command_endpoints)
     @test typeof(grown) === typeof(cpu)
     @test typeof(only(prepared_partitions(grown))) === typeof(cpu_partition)
     @test typeof(partition_controllable_optic_ids(
@@ -895,16 +1171,99 @@ end
         only(prepared_partitions(grown)))) ===
         typeof(partition_command_endpoint_ids(cpu_partition))
     target_partition_test_error(() -> prepare_plant_partitions(
-        stale_definition, cpu_assignment; run_seed=71),
+        stale_definition, cpu_assignment;
+        run_seed=71, command_authority_target=host),
         :partition_assignment, :stale_assignment)
     target_partition_test_error(() -> prepare_plant_partitions(
-        foreign_definition, cpu_assignment; run_seed=71),
+        foreign_definition, cpu_assignment;
+        run_seed=71, command_authority_target=host),
         :partition_assignment, :foreign_assignment)
+    second_accelerator = AcceleratorComputeDevice(
+        TargetPartitionTestBackend(), UInt32(2))
+    target_partition_test_error(() -> prepare_plant_partitions(
+        definition,
+        mixed_assignment;
+        run_seed=71,
+        command_authority_target=second_accelerator,
+        command_endpoints,
+    ), :command_authority, :multiple_accelerators)
+    target_partition_test_error(() -> prepare_plant_partitions(
+        definition,
+        cpu_assignment;
+        run_seed=71,
+        command_authority_target=:host,
+        command_endpoints,
+    ), :command_authority, :invalid_target)
+    device_initial = (
+        CommandEndpointConfiguration(
+            :partition_test_command,
+            TargetPartitionTestArray([0.0]);
+            capacity=2,
+        ),)
+    target_partition_test_error(() -> prepare_plant_partitions(
+        definition,
+        cpu_assignment;
+        run_seed=71,
+        command_authority_target=host,
+        command_endpoints=device_initial,
+    ), :command_replica, :configuration_residency)
+    safe_definition = target_partition_test_definition(
+        command_silence_policy=CommandSilencePolicy(
+            ApplySafeCommand,
+            AgeFromApplication;
+            timeout=PlantDuration(5),
+        ))
+    safe_assignment = resolve_plant_partition_assignment(
+        safe_definition, host, :alpha => host, :beta => host)
+    device_safe = (
+        CommandEndpointConfiguration(
+            :partition_test_command,
+            [0.0];
+            capacity=2,
+            safe_command=TargetPartitionTestArray([0.0]),
+        ),)
+    target_partition_test_error(() -> prepare_plant_partitions(
+        safe_definition,
+        safe_assignment;
+        run_seed=71,
+        command_authority_target=host,
+        command_endpoints=device_safe,
+    ), :command_replica, :configuration_residency)
+
+    authority_only_accelerator = prepare_plant_partitions(
+        definition,
+        cpu_assignment;
+        run_seed=71,
+        command_authority_target=accelerator,
+        command_endpoints,
+    )
+    try
+        TARGET_PARTITION_TEST_MISPLACE_ALLOCATIONS[] = true
+        @test_throws ComputeDeviceError CommandAuthorityState(
+            prepared_command_authority(authority_only_accelerator))
+        @test_throws ComputeDeviceError prepare_plant_partitions(
+            definition,
+            cpu_assignment;
+            run_seed=71,
+            command_authority_target=accelerator,
+            command_endpoints,
+        )
+    finally
+        TARGET_PARTITION_TEST_MISPLACE_ALLOCATIONS[] = false
+    end
     try
         TARGET_PARTITION_TEST_AVAILABLE[] = false
         target_partition_test_error(() -> prepare_plant_partitions(
-            mixed_assignment; run_seed=71),
+            mixed_assignment;
+            run_seed=71, command_authority_target=host),
             :partition_assignment, :unavailable_target)
+        target_partition_test_error(() -> prepare_plant_partitions(
+            definition,
+            cpu_assignment;
+            run_seed=71,
+            command_authority_target=accelerator,
+            command_endpoints,
+        ), :command_authority, :unavailable_target)
     finally
         TARGET_PARTITION_TEST_AVAILABLE[] = true
     end

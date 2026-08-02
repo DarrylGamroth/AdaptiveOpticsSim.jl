@@ -566,6 +566,9 @@ new_domain_public = [
     "Plant.path_execution_target_support",
     "Plant.path_execution_target_supported",
     "Plant.path_execution_target_rejection_reason",
+    "Plant.PreparedMixedResourcePlantEventLoop",
+    "Plant.MixedResourcePlantEventLoopState",
+    "Plant.MixedResourcePlantEventLoopWorkspace",
     "Detectors.FrameWindow",
     "Detectors.StaticCMOSOutputPattern",
     "Detectors.HgCdTeReadout",
@@ -578,7 +581,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "d0020e634635cc79f9d1e45cb4ab3e4526e921f39dce1063004d6aa39db83fc9"
+sha256 = "6b8915c58cd7e5358d431e53255e92c14c95c342283aa1be7bb78661db2913c2"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1576,6 +1579,9 @@ public = [
     "validate_target_local_command_endpoint_target",
     "AtmosphereAuthorityBinding",
     "PreparedAtmosphereAuthority",
+    "PreparedCommandAuthority",
+    "CommandAuthorityState",
+    "CommandAuthorityWorkspace",
     "PreparedTargetPartition",
     "PreparedPlantPartitions",
     "prepare_plant_partitions",
@@ -1584,7 +1590,14 @@ public = [
     "prepared_atmosphere_authority",
     "atmosphere_authority_binding",
     "atmosphere_authority_identity",
+    "prepared_command_authority",
     "command_authority_identity",
+    "command_authority_target",
+    "prepared_command_authority_endpoint",
+    "command_authority_endpoint_state",
+    "command_authority_application_state",
+    "command_authority_disposition_workspace",
+    "command_authority_failed",
     "partition_resource_report",
     "partition_controllable_optic_ids",
     "partition_command_endpoint_ids",
@@ -1643,6 +1656,7 @@ public = [
     "producer_handoff_payload",
     "submit_handoff!",
     "try_complete_handoff!",
+    "complete_handoff!",
     "try_borrow_completed_handoff!",
     "reclaim_handoff!",
     "handoff_slot_status",
@@ -1951,6 +1965,9 @@ public = [
     "PreparedPlantEventLoop",
     "PlantEventLoopState",
     "PlantEventLoopWorkspace",
+    "PreparedMixedResourcePlantEventLoop",
+    "MixedResourcePlantEventLoopState",
+    "MixedResourcePlantEventLoopWorkspace",
     "PreparedPathExecutionGroup",
     "PreparedDevicePathBatchOwner",
     "PathExecutionRequirements",
@@ -2147,6 +2164,7 @@ bindings = [
     "_PreparedArrayTransferPending",
     "_PreparedArrayTransferSubmissionFailed",
     "_PreparedArrayTransferSubmitted",
+    "_complete_prepared_array_transfer!",
     "_observe_prepared_array_transfer_completion!",
     "_prepare_array_transfer",
     "_prepare_device_execution_context",

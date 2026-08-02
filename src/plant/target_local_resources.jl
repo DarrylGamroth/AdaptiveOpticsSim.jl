@@ -146,6 +146,27 @@ end
 @inline path_result_key(resources::PreparedTargetLocalPathResources) =
     resources.key
 
+@inline _prepare_sampled_aberration_path_coupling(
+    aberration::PreparedSampledAberration,
+    path::PreparedTargetLocalPathResources,
+) = _prepare_sampled_aberration_path_coupling_impl(aberration, path)
+
+function prepare_controllable_optic_path_coupling(
+    optic::PreparedTargetLocalControllableOptic,
+    path::PreparedTargetLocalPathResources,
+)
+    path_target = getfield(path.key, :device)
+    compute_device(optic) == path_target || throw(PlantPreparationError(
+        :controllable_optic,
+        :wrong_device,
+        "target-local controllable optic $(controllable_optic_id(optic)) " *
+        "occupies $(compute_device(optic)); path " *
+        "$(path_id(path.definition)) occupies $path_target",
+    ))
+    return prepare_controllable_optic_path_coupling(
+        optic.implementation, optic.definition, path)
+end
+
 function require_path_result(path::PreparedTargetLocalPathResources;
     source_geometry=getfield(path.key, :source_geometry),
     spectral_sampling=getfield(path.key, :spectral_sampling),

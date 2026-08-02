@@ -671,6 +671,7 @@ assignment = AdaptiveOpticsSim.Plant.resolve_plant_partition_assignment(
 prepared = AdaptiveOpticsSim.Plant.prepare_plant_partitions(
     assignment;
     run_seed=0x1234,
+    command_authority_target=host_target,
     command_endpoints=endpoint_configurations,
 )
 authority =
@@ -688,10 +689,11 @@ sampled OPD, into each exact target that uses it. The result performs no runtime
 atmosphere publication, command admission, authoritative command publication,
 product movement or automatic handoff, scheduling, or placement planning. If the
 definition declares command endpoints, `endpoint_configurations` must contain
-one complete `CommandEndpointConfiguration` per endpoint. Core uses only each
-configured initial effective value to seed independent target-local
-active/staging storage and physical state; capacity, history, safe-command,
-silence, and admission policy remain authority-side concerns.
+one complete `CommandEndpointConfiguration` per endpoint. Initial and optional
+safe array values are cold host-resident configuration: Core seals a detached
+host copy before deriving independent exact-target authority and replica
+storage, and rejects device-resident configuration arrays. Capacity, history,
+safe-command, silence, and admission policy remain authority-side concerns.
 
 ### Cross-device handoff transfers
 
@@ -710,9 +712,13 @@ An accelerator extension opts a concrete storage pair into this boundary by
 implementing `Backends._prepare_array_transfer(source, destination,
 source_context, destination_context)`,
 `Backends._submit_prepared_array_transfer!`, and one nonblocking
-`Backends._observe_prepared_array_transfer_completion!` observation. Prepared
-backend state retains the exact context or event state needed to launch and
-observe the transfer while restoring the caller's previous device context.
+`Backends._observe_prepared_array_transfer_completion!` observation. The
+deterministic serial oracle additionally requires
+`Backends._complete_prepared_array_transfer!`, which blocks inside the backend
+until the submitted transfer is quiescent and returns only completed or
+failed. Prepared backend state retains the exact context or event state needed
+to launch and complete the transfer while restoring the caller's previous
+device context.
 Submission returns `_PreparedArrayTransferSubmitted`, or returns
 `_PreparedArrayTransferSubmissionFailed` only after guaranteeing that no
 transfer can access either slot. One completion observation returns

@@ -27,6 +27,7 @@ import ..Backends:
     _PreparedArrayTransferPending,
     _PreparedArrayTransferSubmissionFailed,
     _PreparedArrayTransferSubmitted,
+    _complete_prepared_array_transfer!,
     _observe_prepared_array_transfer_completion!,
     _prepare_array_transfer,
     _prepare_device_execution_context,
@@ -293,6 +294,7 @@ include("definitions.jl")
 include("partition_assignments.jl")
 include("controllable_optics.jl")
 include("command_publications.jl")
+include("command_authority.jl")
 include("triggers.jl")
 include("acquisition_lifecycles.jl")
 include("detector_acquisition_events.jl")
@@ -323,7 +325,11 @@ include("resource_facts_batching.jl")
 include("resource_facts_graph.jl")
 include("partitions.jl")
 include("handoffs.jl")
+include("effective_command_routes.jl")
+include("command_fanout.jl")
 include("path_input_publications.jl")
+include("mixed_serial_execution.jl")
+include("mixed_serial_event_loop.jl")
 include("api.jl")
 
 end # module Plant

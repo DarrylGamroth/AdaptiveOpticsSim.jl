@@ -31,6 +31,8 @@ function Backends.allocate_array(
     return HandoffTestArray(Array{T}(undef, dimensions...), target)
 end
 
+Backends.array_backend_type(::HandoffTestBackend) = HandoffTestArray
+
 function Base.fill!(array::HandoffTestArray, value)
     fill!(array.storage, value)
     return array
@@ -365,6 +367,8 @@ end
 function path_input_publication_test_definition(;
     alpha_model=PathInputPublicationTestPathModel(),
     beta_model=PathInputPublicationTestPathModel(),
+    controllable_optics=(),
+    acquisitions=(),
 )
     telescope = TelescopeDefinition(
         resolution=8,
@@ -401,7 +405,13 @@ function path_input_publication_test_definition(;
         ),
         beta_model,
     )
-    return PlantDefinition(; telescope, atmosphere, paths=(alpha, beta))
+    return PlantDefinition(;
+        telescope,
+        atmosphere,
+        paths=(alpha, beta),
+        controllable_optics,
+        acquisitions,
+    )
 end
 
 function path_input_publication_test_partitions(;
@@ -421,7 +431,12 @@ function path_input_publication_test_partitions(;
         :beta => beta_target,
     )
     return with_path_input_publication_cold_scalar_indexing() do
-        prepare_plant_partitions(definition, assignment; run_seed)
+        prepare_plant_partitions(
+            definition,
+            assignment;
+            run_seed,
+            command_authority_target=authority_target,
+        )
     end
 end
 

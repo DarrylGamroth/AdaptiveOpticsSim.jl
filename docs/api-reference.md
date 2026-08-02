@@ -413,6 +413,27 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   caller's previous device and stream selections only after establishing the
   retained stream's backend completion boundary. It owns no wall clock, task,
   queue, port, transport, or RTC protocol
+- Mixed-resource plant-event composition: the
+  `prepare_plant_event_loop(::PreparedPlantPartitions, ...)` method returns a
+  qualified `PreparedMixedResourcePlantEventLoop`; callers construct
+  `MixedResourcePlantEventLoopState` and
+  `MixedResourcePlantEventLoopWorkspace`, then use the same
+  `admit_plant_command!`, `admit_plant_command_transaction!`,
+  `command_disposition_count`, `command_disposition`,
+  `clear_command_dispositions!`, `effective_command`,
+  `acquisition_products`, `acquisition_product_sequence`,
+  `acquisition_product_ready_timestamp`, `next_plant_event_timestamp`,
+  `step_plant_events!`, and `run_plant_events_until!` operations as the
+  single-resource loop. This deterministic serial oracle retains one
+  atmosphere and command authority while entering every complete
+  path/acquisition group's exact prepared target. The initial method supports
+  full-optical frame-detector lifecycles and rejects autonomous periodic
+  optics during preparation. After preparation and exact-path warmup, its
+  successful CPU command-admission and complete event-run paths allocate zero
+  Julia heap bytes; preparation, compilation, diagnostics, exceptions, and
+  accelerator or KernelAbstractions launch behavior are separate contracts.
+  It does not add a worker, queue, pacing, placement, product-egress, or
+  transport policy
 - Qualified single-device path batching:
   `PreparedDevicePathBatchOwner`, `device_path_batch_owner_count`,
   `device_path_batch_owner`, `device_path_batch_compute_device`,

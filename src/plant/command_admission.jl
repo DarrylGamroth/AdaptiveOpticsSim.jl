@@ -221,6 +221,119 @@ end
 end
 
 """
+Explicit atomic command submission for two or more distinct endpoints.
+
+All members request one common effective plant timestamp. Construction alone
+does not admit commands, assign transaction identity, group optical surfaces,
+or imply a transport encoding.
+"""
+struct _PlantCommandTransactionToken end
+const _PLANT_COMMAND_TRANSACTION_TOKEN = _PlantCommandTransactionToken()
+
+struct PlantCommandTransaction{C<:Tuple}
+    commands::C
+
+    PlantCommandTransaction(commands::C,
+        ::_PlantCommandTransactionToken) where {C<:Tuple} =
+        new{C}(commands)
+end
+
+function PlantCommandTransaction(
+    commands::Vararg{PlantCommand,N}) where {N}
+    N >= 2 || _command_admission_error(
+        :transaction,
+        :invalid_member_count,
+        "an atomic command transaction requires at least two commands",
+    )
+    first_timestamp = command_requested_effective_timestamp(first(commands))
+    @inbounds for right in 2:N
+        command = commands[right]
+        command_requested_effective_timestamp(command) == first_timestamp ||
+            _command_admission_error(
+                :transaction,
+                :effective_timestamp_mismatch,
+                "every atomic transaction member must request the same " *
+                "effective plant timestamp",
+            )
+        endpoint = command_endpoint_id(command)
+        for left in 1:(right - 1)
+            command_endpoint_id(commands[left]) == endpoint &&
+                _command_admission_error(
+                    :transaction,
+                    :duplicate_endpoint,
+                    "atomic transaction contains command endpoint $endpoint " *
+                    "more than once",
+                )
+        end
+    end
+    return PlantCommandTransaction(commands, _PLANT_COMMAND_TRANSACTION_TOKEN)
+end
+
+"""Immediate all-member result of one atomic transaction admission."""
+struct PlantCommandTransactionAdmission
+    transaction::UInt64
+    status::CommandAdmissionStatus
+    member_count::UInt32
+    scheduled_timestamp::PlantTimestamp
+    has_scheduled_timestamp::Bool
+
+    function PlantCommandTransactionAdmission(
+        transaction::UInt64,
+        status::CommandAdmissionStatus,
+        member_count::UInt32,
+        scheduled_timestamp::PlantTimestamp,
+    )
+        return new(
+            transaction,
+            status,
+            member_count,
+            scheduled_timestamp,
+            true,
+        )
+    end
+
+    function PlantCommandTransactionAdmission(
+        transaction::UInt64,
+        status::CommandAdmissionStatus,
+        member_count::UInt32,
+        ::Nothing,
+    )
+        return new(
+            transaction,
+            status,
+            member_count,
+            zero(PlantTimestamp),
+            false,
+        )
+    end
+end
+
+@inline command_admission_status(
+    admission::PlantCommandTransactionAdmission) = admission.status
+@inline command_transaction_member_count(
+    admission::PlantCommandTransactionAdmission) = admission.member_count
+@inline function command_transaction_id(
+    admission::PlantCommandTransactionAdmission)
+    iszero(admission.transaction) && return nothing
+    return admission.transaction
+end
+@inline command_scheduled_timestamp(
+    admission::PlantCommandTransactionAdmission) =
+    admission.has_scheduled_timestamp ? admission.scheduled_timestamp : nothing
+
+struct _CommandTransactionAdmissionPlan
+    presentation::CommandPresentationID
+    sequence_class::CommandSequenceClass
+    scheduled_timestamp::PlantTimestamp
+    slot::UInt32
+    generation::UInt64
+end
+
+struct _CommandTransactionPolicyFailure <: Exception
+    error::PlantCommandError
+end
+
+"""
 Total deterministic order key for application-ready plant commands.
 
 Commands order by scheduled plant time, then stable prepared endpoint ordinal,
@@ -579,8 +692,30 @@ mutable struct CommandDispositionWorkspace
 end
 
 function CommandDispositionWorkspace(endpoint::PreparedCommandEndpoint)
-    return CommandDispositionWorkspace(getfield(endpoint, :binding),
-        Memory{PlantCommandDisposition}(undef, endpoint.capacity), 0)
+    return _command_disposition_workspace(endpoint, 0)
+end
+
+function _command_disposition_workspace(
+    endpoint::PreparedCommandEndpoint,
+    additional_capacity::Int,
+)
+    additional_capacity >= 0 || _command_admission_error(
+        :disposition,
+        :invalid_capacity,
+        "additional disposition capacity must be nonnegative",
+    )
+    endpoint.capacity <= typemax(Int) - additional_capacity ||
+        _command_admission_error(
+            :disposition,
+            :capacity_overflow,
+            "disposition workspace capacity exceeds Int range",
+        )
+    capacity = endpoint.capacity + additional_capacity
+    return CommandDispositionWorkspace(
+        getfield(endpoint, :binding),
+        Memory{PlantCommandDisposition}(undef, capacity),
+        0,
+    )
 end
 
 @inline pending_command_count(state::CommandEndpointState) =
@@ -1435,7 +1570,7 @@ end
 
 @inline function _release_claimed_command_slot!(state::CommandEndpointState,
     slot::Int, metadata::_CommandSlotMetadata)
-    state.slots[slot] = _CommandSlotMetadata(
+    @inbounds state.slots[slot] = _CommandSlotMetadata(
         UInt64(0), UInt64(0), zero(PlantTimestamp), zero(PlantTimestamp),
         zero(PlantTimestamp), UInt64(0), UInt32(0), metadata.generation,
         _FreeCommandSlot)
@@ -1444,7 +1579,17 @@ end
     return nothing
 end
 
-function _finish_command_application!(
+struct _PrevalidatedCommandApplicationDisposition{
+    S<:CommandEndpointState,
+}
+    workspace::CommandDispositionWorkspace
+    state::S
+    slot::Int
+    metadata::_CommandSlotMetadata
+    disposition::PlantCommandDisposition
+end
+
+function _prevalidate_command_application_disposition(
     workspace::CommandDispositionWorkspace,
     endpoint::PreparedCommandEndpoint,
     state::CommandEndpointState,
@@ -1466,10 +1611,33 @@ function _finish_command_application!(
         metadata.requested_effective_timestamp,
         state.current_timestamp,
     )
-    workspace.dispositions[1] = disposition
+    return _PrevalidatedCommandApplicationDisposition(
+        workspace, state, slot, metadata, disposition)
+end
+
+@inline function _commit_prevalidated_command_application_disposition!(
+    prepared::_PrevalidatedCommandApplicationDisposition,
+)
+    workspace = prepared.workspace
+    state = prepared.state
+    @inbounds workspace.dispositions[1] = prepared.disposition
     workspace.count = 1
-    _release_claimed_command_slot!(state, slot, metadata)
-    return disposition
+    _release_claimed_command_slot!(
+        state, prepared.slot, prepared.metadata)
+    return prepared.disposition
+end
+
+function _finish_command_application!(
+    workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    state::CommandEndpointState,
+    claim::PlantCommandApplicationClaim,
+    kind::CommandTerminalKind,
+    reason::CommandDispositionReason,
+)
+    prepared = _prevalidate_command_application_disposition(
+        workspace, endpoint, state, claim, kind, reason)
+    return _commit_prevalidated_command_application_disposition!(prepared)
 end
 
 """
@@ -1498,6 +1666,54 @@ function fail_plant_command_application!(
         FailedCommand, resolved_reason)
 end
 
+function _append_failed_pending_plant_commands!(
+    workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    state::CommandEndpointState,
+    timestamp::PlantTimestamp;
+    reason=CommandDispositionReason(:endpoint_failure))
+    _require_command_endpoint_binding(endpoint, state)
+    _require_command_endpoint_binding(endpoint, workspace)
+    _require_operational_command_endpoint(state)
+    _require_idle_command_endpoint(state)
+    _require_forward_command_timestamp(state, timestamp)
+    resolved_reason = _as_command_disposition_reason(reason)
+    count = state.pending_count
+    first_disposition = workspace.count + 1
+    last_disposition = workspace.count + count
+    last_disposition <= length(workspace.dispositions) ||
+        _command_admission_error(
+            :disposition,
+            :disposition_capacity,
+            "pending-command failure exceeds disposition workspace capacity",
+        )
+    @inbounds for index in 1:count
+        slot = Int(state.calendar[index])
+        metadata = state.slots[slot]
+        workspace.dispositions[first_disposition + index - 1] =
+            _command_disposition(
+                CommandPresentationID(metadata.presentation,
+                    _PLANT_COMMAND_COUNTER_TOKEN),
+                endpoint,
+                PlantCommandSequence(metadata.sequence,
+                    _PLANT_COMMAND_COUNTER_TOKEN),
+                FailedCommand,
+                resolved_reason,
+                metadata.requested_effective_timestamp,
+                timestamp,
+            )
+        state.slots[slot] = _CommandSlotMetadata(
+            UInt64(0), UInt64(0), zero(PlantTimestamp),
+            zero(PlantTimestamp), zero(PlantTimestamp), UInt64(0),
+            UInt32(0), metadata.generation, _FreeCommandSlot)
+    end
+    state.pending_count = 0
+    state.active_count = 0
+    state.current_timestamp = timestamp
+    workspace.count = last_disposition
+    return count
+end
+
 """
     fail_pending_plant_commands!(workspace, endpoint, state, timestamp;
         reason=:endpoint_failure)
@@ -1512,36 +1728,162 @@ function fail_pending_plant_commands!(
     state::CommandEndpointState,
     timestamp::PlantTimestamp;
     reason=CommandDispositionReason(:endpoint_failure))
-    _require_command_endpoint_binding(endpoint, state)
-    _require_command_endpoint_binding(endpoint, workspace)
-    _require_operational_command_endpoint(state)
     _require_empty_command_dispositions(workspace)
-    _require_idle_command_endpoint(state)
-    _require_forward_command_timestamp(state, timestamp)
-    resolved_reason = _as_command_disposition_reason(reason)
-    count = state.pending_count
-    @inbounds for index in 1:count
-        slot = Int(state.calendar[index])
-        metadata = state.slots[slot]
-        workspace.dispositions[index] = _command_disposition(
-            CommandPresentationID(metadata.presentation,
-                _PLANT_COMMAND_COUNTER_TOKEN),
-            endpoint,
-            PlantCommandSequence(metadata.sequence,
-                _PLANT_COMMAND_COUNTER_TOKEN),
-            FailedCommand,
-            resolved_reason,
-            metadata.requested_effective_timestamp,
-            timestamp,
-        )
-        state.slots[slot] = _CommandSlotMetadata(
-            UInt64(0), UInt64(0), zero(PlantTimestamp),
-            zero(PlantTimestamp), zero(PlantTimestamp), UInt64(0),
-            UInt32(0), metadata.generation, _FreeCommandSlot)
+    return _append_failed_pending_plant_commands!(
+        workspace, endpoint, state, timestamp; reason)
+end
+
+@inline function _next_command_transaction_sequence(sequence::UInt64)
+    sequence != typemax(UInt64) || _command_admission_error(
+        :transaction,
+        :transaction_overflow,
+        "plant command transaction identity exceeds UInt64 range",
+    )
+    return sequence + one(UInt64)
+end
+
+function _transaction_command_for_endpoint(
+    transaction::PlantCommandTransaction,
+    id::CommandEndpointID,
+)
+    for command in transaction.commands
+        command_endpoint_id(command) == id && return command
     end
-    state.pending_count = 0
-    state.active_count = 0
-    state.current_timestamp = timestamp
-    workspace.count = count
-    return count
+    return nothing
+end
+
+function _require_no_equal_time_command(
+    state::CommandEndpointState,
+    timestamp::PlantTimestamp,
+)
+    @inbounds for index in 1:state.pending_count
+        metadata = state.slots[Int(state.calendar[index])]
+        metadata.scheduled_timestamp == timestamp &&
+            _command_admission_error(
+                :transaction,
+                :equal_time_endpoint_conflict,
+                "an atomic transaction member endpoint already has a " *
+                "command scheduled at $timestamp",
+            )
+    end
+    return nothing
+end
+
+function _preflight_command_transaction_member!(
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    endpoint_workspace::CommandDispositionWorkspace,
+    command::PlantCommand,
+    timestamp::PlantTimestamp,
+)
+    _require_command_endpoint_binding(endpoint, endpoint_state)
+    _require_command_endpoint_binding(endpoint, endpoint_workspace)
+    _require_operational_command_endpoint(endpoint_state)
+    _require_empty_command_dispositions(endpoint_workspace)
+    _require_idle_command_endpoint(endpoint_state)
+    _require_forward_command_timestamp(endpoint_state, timestamp)
+    command_effective_time_policy(command_schema(endpoint)).supersession ==
+        PreservePendingCommands || _command_admission_error(
+        :transaction,
+        :unsupported_supersession,
+        "atomic transaction endpoints must preserve pending commands",
+    )
+    validate_plant_command(endpoint, command)
+    sequence_class = _classify_command_sequence(
+        endpoint, endpoint_state, command.sequence)
+    sequence_action = _command_sequence_action(
+        command_sequence_policy(command_schema(endpoint)), sequence_class)
+    if sequence_action != AcceptSequence
+        reason = _command_sequence_reason(sequence_class)
+        message = "atomic transaction member sequence policy " *
+            (sequence_action == FailOnSequence ?
+                "requires structural failure" : "rejected the command")
+        error = PlantCommandError(:transaction, reason.name, message)
+        sequence_action == FailOnSequence &&
+            throw(_CommandTransactionPolicyFailure(error))
+        throw(error)
+    end
+
+    requested = command.requested_effective_timestamp
+    scheduled = requested
+    policy = command_effective_time_policy(command_schema(endpoint))
+    if timestamp < requested
+        policy.future == AllowFutureCommand || _command_admission_error(
+            :transaction,
+            :future_command,
+            "atomic transaction member rejects future commands",
+        )
+    elseif requested < timestamp
+        if policy.late == FailOnLateCommand
+            throw(_CommandTransactionPolicyFailure(PlantCommandError(
+                :transaction,
+                :late_command,
+                "atomic transaction member late-command policy requires " *
+                "structural failure",
+            )))
+        end
+        policy.late == ApplyLateCommandNow || _command_admission_error(
+            :transaction,
+            :late_command,
+            "atomic transaction member rejects late commands",
+        )
+        scheduled = timestamp
+    end
+    endpoint_state.active_count < endpoint.capacity ||
+        _command_admission_error(
+            :transaction,
+            :calendar_capacity,
+            "atomic transaction member endpoint is at calendar capacity",
+        )
+    _require_no_equal_time_command(endpoint_state, scheduled)
+
+    slot = _find_free_command_slot(endpoint_state)
+    metadata = endpoint_state.slots[Int(slot)]
+    generation = _next_command_counter(
+        metadata.generation,
+        :slot_generation_overflow,
+        "command payload-slot generation",
+    )
+    _stage_command_payload!(
+        endpoint_state.payloads, endpoint.schema, command.payload)
+    return _CommandTransactionAdmissionPlan(
+        _next_command_presentation(endpoint_state),
+        sequence_class,
+        scheduled,
+        slot,
+        generation,
+    )
+end
+
+function _commit_command_transaction_member!(
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    command::PlantCommand,
+    timestamp::PlantTimestamp,
+    transaction::UInt64,
+    member_count::UInt32,
+    plan::_CommandTransactionAdmissionPlan,
+)
+    slot = Int(plan.slot)
+    _commit_staged_command_payload!(endpoint_state.payloads, slot, nothing)
+    @inbounds endpoint_state.slots[slot] = _CommandSlotMetadata(
+        plan.presentation.value,
+        command.sequence.value,
+        command.requested_effective_timestamp,
+        plan.scheduled_timestamp,
+        timestamp,
+        transaction,
+        member_count,
+        plan.generation,
+        _PendingCommandSlot,
+    )
+    _insert_pending_command_slot!(endpoint, endpoint_state, plan.slot)
+    endpoint_state.active_count += 1
+    _record_accepted_command_sequence!(
+        endpoint, endpoint_state, command.sequence)
+    endpoint_state.presentation_sequence = plan.presentation.value
+    endpoint_state.current_timestamp = timestamp
+    endpoint_state.last_admission_timestamp = timestamp
+    endpoint_state.has_admission = true
+    return nothing
 end

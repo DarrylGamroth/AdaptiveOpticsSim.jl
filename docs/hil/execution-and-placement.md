@@ -152,6 +152,48 @@ multi-device stochastic evolution.
   until its active publication has completed, applied, and been reclaimed. The
   atmosphere owner MUST defer a subsequent advance until every route due for
   the current epoch has applied.
+- **HIL-EXEC-001.i:** One command authority on one caller-selected exact target
+  MUST apply external command validation, admission, absolute or incremental
+  semantics, atomic transaction semantics, command-silence policy, and
+  effective-command publication sequencing exactly once. Its target MAY own no
+  path partition and MUST NOT be inferred from atmosphere or path placement.
+  Target-local replicas MUST consume complete effective values and MUST NOT
+  reinterpret controller commands or reapply incremental semantics.
+- **HIL-EXEC-001.j:** Each authoritative effective-command decision MUST
+  produce one target-specific publication for every required target-local
+  endpoint replica. Scalar values and arrays already on the destination target
+  MUST use a direct route. A cross-memory-domain array MUST use one typed,
+  bounded prepared handoff per destination. Every route MUST preserve the
+  authority, optic, endpoint schema, plant timestamp, endpoint-local
+  publication sequence, and effective value.
+- **HIL-EXEC-001.k:** The command authority MUST evaluate plant-time command
+  silence exactly once. Hold MUST retain the last committed effective value
+  without a new publication; a safe-command transition MUST fan out the
+  prepared safe effective value through the same publication routes; and a
+  fail transition MUST leave committed replica values unchanged and enter
+  fail-stop execution.
+- **HIL-EXEC-001.l:** For one command or atomic command transaction, every
+  publication and route MUST be validated, every required handoff slot MUST be
+  acquired, transferred, completed, and borrowed, and every target-local
+  effective value and physical optic MUST be staged before the first visible
+  commit. After staging has detached every borrowed payload, every completed
+  handoff MUST be reclaimed before any target-local or authority-side commit.
+- **HIL-EXEC-001.m:** After successful staging and reclamation, every target-
+  local and authority-side commit seam MUST be bounded and nonthrowing. The
+  composed commit MUST become observable to dependent paths only after every
+  required replica and authority state has committed.
+- **HIL-EXEC-001.n:** A failure before the first commit MUST preserve all prior
+  active authority and replica values and MUST reclaim every completed or
+  proven-failed slot. A staging result whose mutation cannot be ruled out,
+  uncertain transfer ownership, failed reclamation, or a violation after commit
+  begins MUST disarm the executor and enter fail-stop; Gate 9A MUST NOT roll
+  back or execute a dependent path from partially visible state.
+- **HIL-EXEC-001.o:** Each dependent path sample MUST observe, for every visible
+  endpoint, the latest committed publication not later than its sample time
+  under lexicographic `(plant timestamp, endpoint-local publication sequence)`
+  ordering. It MUST NOT execute while a required same-or-earlier publication
+  is in flight, staged, or partially committed. An endpoint-local sequence
+  MUST NOT order unrelated endpoints.
 - **HIL-EXEC-002.a:** HIL MUST support a fully explicit policy and a constrained
   deterministic policy over stable group and execution-resource identities.
   A hard user constraint MUST NOT be weakened by a preference or rule.
@@ -178,10 +220,14 @@ multi-device stochastic evolution.
 
 Verification intent (informative): cold contract tests cover exact-target
 selection, stable identities, deterministic planning, and each infeasibility
-class with fake resources. Integrated CPU/CUDA and CPU/AMDGPU runs separately
-verify discrete-state consistency, numerical tolerance, residency, explicit
-transfer completion, fixed-arrival latency, burst, saturation, failure, drain,
-and recovery for their declared profiles.
+class with fake resources. Focused Core tests cover sole-authority identity,
+direct and cross-domain route lifecycles, exact publication metadata, transfer
+and reclamation failures, canonical atomic transactions, safe/silence fanout,
+terminal-credit recovery, and warmed allocation. Gate closure additionally
+requires dependent-path ordering, serial-oracle parity, and separate CPU/CUDA
+and CPU/AMDGPU evidence for discrete state, numerical tolerance, residency,
+explicit transfer completion, fixed-arrival latency, burst, saturation,
+failure, drain, and recovery.
 
 The current core preparation boundary implements the caller-resolved part of
 this contract. `Plant.ResolvedPlantPartitionAssignment` records a complete
@@ -197,12 +243,16 @@ the Gate 9A maximum of two target partitions remains a small bounded group.
 These values are deliberately non-executable. Each target partition does own
 one role-neutral prepared physical-optic state/workspace and one active/staging
 effective-command copy for every visible logical optic and endpoint. All paths
-on that target share the same owner. The partition set also carries one
-placement-neutral `Plant.CommandAuthorityIdentity`, but no command authority,
-admission state, publication source, payload lease, atmosphere publication,
-transfer, task, queue, or placement rationale. The HIL package still owns
-publisher binding, planning, admission, bounded handoffs, execution ownership,
-and runtime qualification.
+on that target share the same owner. The caller also supplies one explicit exact
+command-authority target to `prepare_plant_partitions`. The resulting immutable
+`Plant.PreparedCommandAuthority` binds that target, its prepared context, the
+run-local `Plant.CommandAuthorityIdentity`, and canonical endpoint plans. Its
+separate state and workspace own mutable admission, command-silence, effective-
+value, disposition, and endpoint-local publication-sequence storage. The
+partition result itself still has no publication route, payload lease,
+atmosphere publication, transfer schedule, task, queue, or placement rationale.
+HIL owns planning, admission of the complete execution plan, runtime ownership,
+and qualification.
 
 Core also provides the separate qualified
 `Plant.PreparedCrossDomainHandoff` primitive for explicit host-to-accelerator
@@ -222,6 +272,59 @@ return credit, backpressure, planner binding, and output disposition. Current
 evidence uses a fake accelerator only and is not CUDA, AMDGPU, mixed-execution,
 or latency qualification.
 
+Core now prepares a private effective-command route from that sole authority
+to every required target-local endpoint replica. Scalar values and same-target
+arrays use direct routes; each cross-target array route owns one typed handoff
+with one source and one destination slot. A route validates exact authority,
+optic, endpoint schema, destination target, timestamp, sequence, and value;
+completes and borrows a remote payload; stages the target-local effective value
+and physical optic; reclaims the detached payload; and only then permits local
+commit. A transfer or staging state whose ownership cannot be proved becomes
+fail-stop and cannot be reused. Focused CPU/fake-accelerator tests cover direct
+and remote values, exact context restoration, structured failure ownership,
+and zero warmed route-lifecycle allocation.
+
+These routes consume an already-effective value and caller-supplied publication
+timestamp and sequence. A private serial command-fanout coordinator now selects
+one due command or complete atomic transaction, rejects two selected endpoints
+of one physical optic before acquiring route storage, applies command semantics
+once at the authority, proposes each endpoint-local sequence, and drives every
+route through prepare, stage, and reclaim. It prevalidates terminal dispositions
+before committing target-local replicas and then the authority effective value,
+sequence, and disposition. A precommit failure preserves active values and
+attempts deterministic reclamation; uncertain ownership or any exception after
+commit begins makes the authority fail-stop.
+
+The same coordinator evaluates command silence once at the authority. Hold
+produces no publication, a safe transition fans the prepared effective value to
+every replica before committing the authority latch, and fail-on-silence drains
+all pending commands without changing replica values. Atomic transaction
+selection, preflight, commit, and terminal outcomes follow canonical prepared-
+endpoint order regardless of caller tuple order. Fixed disposition storage
+reserves the additional terminal credit needed to reject a new transaction
+member and drain a full endpoint calendar without stranding outcomes. Focused
+CPU/fake-accelerator tests cover ordinary, atomic, safe, hold, fail-stop, and
+warmed inference/allocation behavior.
+
+The qualified `Plant.PreparedMixedResourcePlantEventLoop`, returned by
+`prepare_plant_event_loop(::PreparedPlantPartitions, ...)`, now composes this
+coordinator with the event scheduler, atmosphere authority, path-input routes,
+complete target-local path/acquisition groups, and product-sequence authority.
+It deliberately reuses the single-resource command-admission, disposition,
+product-query, next-event, step, and finite-horizon operation vocabulary
+through dispatch.
+
+At each plant timestamp, causal scheduler order applies due command or silence
+decisions before optical sampling. The loop identifies all due paths,
+preflights every active acquisition integration and command dependency,
+advances the sole atmosphere authority at most once, and completes and applies
+every due pupil-OPD publication before executing any due path. It then
+integrates active acquisitions through the sample boundary and executes each
+complete group in its exact prepared target context. Products remain on the
+group's assigned target. An execution or handoff failure disarms both the
+mixed optical executor and its outer event coordinator; no retry can expose a
+partially progressed run as healthy.
+
 Core now also composes that primitive into one qualified, product-specific
 `Plant.PreparedPupilOPDPublicationRoute` per explicitly selected full-optical
 path. The route binds the sole atmosphere authority, exact path and frozen
@@ -233,11 +336,24 @@ directly. A remote route owns exactly one handoff slot and transfers only the
 atmospheric OPD array before applying it to the target-local pupil; support,
 amplitude, static aberrations, controllable surfaces, other path optics,
 workspaces, and results never cross this boundary. Hold-until-applied ownership
-prevents route reuse for a later epoch. The external authority owner must still
-serialize all due routes and defer the next atmosphere advance until each has
-applied; the mixed-composition gate owns that all-routes barrier. Current
-evidence is CPU↔fake-accelerator numerical parity, not real hardware or
-integrated mixed-execution qualification.
+prevents route reuse for a later epoch. When the route primitive is used
+independently, its external authority owner must still serialize all due routes
+and defer the next atmosphere advance until each has applied. The prepared
+mixed-resource event loop supplies that all-routes barrier for its selected
+paths. Focused CPU-only versus CPU↔fake-accelerator tests establish scheduler
+timestamps, atmosphere epochs, path and detector-product parity, product
+sequences, RNG continuation, context restoration, structured fail-stop
+behavior, and zero warmed Julia heap allocation across complete successful
+CPU runs covering global-shutter, rolling-shutter, frame-transfer,
+up-the-ramp, triggered, ordinary-command, safe-command, and atomic-transaction
+events. Preparation, compilation, diagnostics, and exceptional paths are
+outside that steady-state contract. Accelerator and KernelAbstractions launch
+allocation remains a separately measured backend contract. The initial loop
+is restricted to full-optical
+`FrameAcquisitionExecution` providers and rejects autonomous periodic optics.
+Reduced-order or synthetic mixed composition, acquisition-product egress, HIL
+leases/rings, placement admission, real CUDA/AMDGPU mixed execution, and
+fixed-arrival latency qualification remain open.
 
 ## Optical Branch Ownership And Parallelism
 

@@ -385,27 +385,55 @@ function validate_handoff_publication(
     return nothing
 end
 
-function _validate_pupil_opd_route_binding(
-    route::PreparedPupilOPDPublicationRoute,
+@inline function _validate_pupil_opd_route_binding(
+    route::PreparedDirectPupilOPDPublicationRoute,
 )
-    prepared_atmosphere_authority(route.partitions) === route.authority ||
+    return _validate_pupil_opd_route_binding(
+        route,
+        route.partitions,
+        route.authority,
+        route.partition,
+        route.path,
+    )
+end
+
+@inline function _validate_pupil_opd_route_binding(
+    route::PreparedRemotePupilOPDPublicationRoute,
+)
+    return _validate_pupil_opd_route_binding(
+        route,
+        route.partitions,
+        route.authority,
+        route.partition,
+        route.path,
+    )
+end
+
+function _validate_pupil_opd_route_binding(
+    route,
+    partitions::PreparedPlantPartitions,
+    authority::PreparedAtmosphereAuthority,
+    partition::PreparedTargetPartition,
+    path::PreparedTargetLocalPathResources,
+)
+    prepared_atmosphere_authority(partitions) === authority ||
         _pupil_opd_publication_error(
             :prepared_binding, "route no longer matches its atmosphere authority")
-    atmosphere_authority_binding(route.partition) ===
-        atmosphere_authority_binding(route.authority) ||
+    atmosphere_authority_binding(partition) ===
+        atmosphere_authority_binding(authority) ||
         _pupil_opd_publication_error(
             :prepared_binding,
             "target partition does not retain the route's authority binding",
         )
-    target = compute_device(route.partition)
-    getfield(route.path.key, :device) == target ||
+    target = compute_device(partition)
+    getfield(path.key, :device) == target ||
         _pupil_opd_publication_error(
             :prepared_binding, "path-result key no longer matches its target")
-    _prepared_device_execution_compute_device(route.path.context) == target ||
+    _prepared_device_execution_compute_device(path.context) == target ||
         _pupil_opd_publication_error(
             :prepared_binding, "path context no longer matches its target")
-    validate_telescope_target(route.path.telescope, target)
-    input = _require_pupil_opd_path_input(path_input(route.path))
+    validate_telescope_target(path.telescope, target)
+    input = _require_pupil_opd_path_input(path_input(path))
     _validate_path_input(input)
     input.metadata.device == target &&
         compute_device(input.support) == target &&
@@ -413,14 +441,14 @@ function _validate_pupil_opd_route_binding(
         compute_device(input.opd) == target ||
         _pupil_opd_publication_error(
             :prepared_binding, "path pupil no longer occupies its target")
-    revision = aperture_revision(route.path.telescope)
-    revision == getfield(getfield(route.path.key, :revisions), :telescope) ||
+    revision = aperture_revision(path.telescope)
+    revision == getfield(getfield(path.key, :revisions), :telescope) ||
         _pupil_opd_publication_error(
             :revision, "path telescope revision changed after preparation")
     _require_path_input_revisions(input, revision)
     validate_path_execution_binding(
-        route.path.execution, input, route.path.result)
-    validate_path_execution_target(route.path.execution, target)
+        path.execution, input, path.result)
+    validate_path_execution_target(path.execution, target)
     _validate_pupil_opd_publication_materialization_binding(route)
     return nothing
 end
@@ -787,6 +815,45 @@ function try_complete_pupil_opd_publication!(
     if status == HandoffTransferPending
         route.state.phase = _PupilOPDRouteSubmitted
         return PupilOPDPublicationTransferPending
+    end
+    if status == HandoffCompletionFailed
+        route.state.phase = _PupilOPDRouteFailed
+        return PupilOPDPublicationTransferFailed
+    end
+    route.state.phase = _PupilOPDRouteUncertain
+    return PupilOPDPublicationUncertain
+end
+
+# Deterministic serial-oracle seam. Concurrent owners use the nonblocking
+# `try_complete_pupil_opd_publication!` transition and their own wait strategy.
+function _complete_pupil_opd_publication!(
+    route::PreparedDirectPupilOPDPublicationRoute,
+    publication::MaterializedPupilOPDPublication,
+)
+    route.state.phase == _PupilOPDRouteUncertain &&
+        return PupilOPDPublicationUncertain
+    route.state.phase == _PupilOPDRouteApplied ||
+        return PupilOPDPublicationNotSubmitted
+    _validate_active_pupil_opd_publication(route, publication) ||
+        return PupilOPDPublicationRejected
+    return PupilOPDPublicationSucceeded
+end
+
+function _complete_pupil_opd_publication!(
+    route::PreparedRemotePupilOPDPublicationRoute,
+    publication::MaterializedPupilOPDPublication,
+)
+    route.state.phase == _PupilOPDRouteUncertain &&
+        return PupilOPDPublicationUncertain
+    route.state.phase == _PupilOPDRouteSubmitted ||
+        return PupilOPDPublicationNotSubmitted
+    _validate_active_pupil_opd_publication(route, publication) ||
+        return PupilOPDPublicationRejected
+    route.state.phase = _PupilOPDRouteUncertain
+    status = complete_handoff!(route.handoff, route.state.reference[])
+    if status == HandoffTransitionSucceeded
+        route.state.phase = _PupilOPDRouteCompleted
+        return PupilOPDPublicationSucceeded
     end
     if status == HandoffCompletionFailed
         route.state.phase = _PupilOPDRouteFailed

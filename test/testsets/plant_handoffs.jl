@@ -37,7 +37,7 @@ function handoff_allocation_sample!(handoff, contract)
             HandoffTransitionSucceeded
     end
     complete_bytes = @allocated begin
-        @assert try_complete_handoff!(handoff, reference) ==
+        @assert complete_handoff!(handoff, reference) ==
             HandoffTransitionSucceeded
     end
     payload_output = Ref{typeof(getfield(handoff, :destination_slots)[1])}()
@@ -156,6 +156,28 @@ end
     @test reused_reference.slot == reference.slot
     @test reused_reference.generation == reference.generation + one(UInt64)
 
+    blocking_sources, blocking_destinations = handoff_test_buffers(1)
+    blocking_handoff = prepare_cross_domain_handoff(
+        partitions, contract, blocking_sources, blocking_destinations)
+    blocking_output = handoff_test_slot_output(blocking_handoff)
+    @test try_next_free_handoff_slot!(blocking_output, blocking_handoff) ==
+        HandoffTransitionSucceeded
+    blocking_reference = blocking_output[]
+    fill!(producer_handoff_payload(
+        blocking_handoff, blocking_reference), 8.0)
+    HANDOFF_TEST_PENDING_OBSERVATIONS[] = typemax(UInt8)
+    @test submit_handoff!(
+        blocking_handoff, blocking_reference, publication) ==
+        HandoffTransitionSucceeded
+    @test @inferred(complete_handoff!(
+        blocking_handoff, blocking_reference)) ==
+        HandoffTransitionSucceeded
+    @test handoff_slot_status(blocking_handoff, blocking_reference) ==
+        HandoffTransferCompleted
+    @test reclaim_handoff!(blocking_handoff, blocking_reference) ==
+        HandoffTransitionSucceeded
+    HANDOFF_TEST_PENDING_OBSERVATIONS[] = zero(UInt8)
+
     second_sources, second_destinations = handoff_test_buffers()
     second_handoff = prepare_cross_domain_handoff(
         partitions, contract, second_sources, second_destinations)
@@ -251,6 +273,37 @@ end
     @test handoff_slot_failure_reason(handoff, completion_reference) ==
         :completion_failed
     @test reclaim_handoff!(handoff, completion_reference) ==
+        HandoffTransitionSucceeded
+
+    blocking_failure_sources, blocking_failure_destinations =
+        handoff_test_buffers(1)
+    blocking_failure_handoff = prepare_cross_domain_handoff(
+        partitions,
+        contract,
+        blocking_failure_sources,
+        blocking_failure_destinations,
+    )
+    blocking_failure_output =
+        handoff_test_slot_output(blocking_failure_handoff)
+    @test try_next_free_handoff_slot!(
+        blocking_failure_output, blocking_failure_handoff) ==
+        HandoffTransitionSucceeded
+    blocking_failure_reference = blocking_failure_output[]
+    @test submit_handoff!(
+        blocking_failure_handoff,
+        blocking_failure_reference,
+        publication,
+    ) == HandoffTransitionSucceeded
+    HANDOFF_TEST_FAIL_COMPLETION[] = true
+    @test complete_handoff!(
+        blocking_failure_handoff, blocking_failure_reference) ==
+        HandoffCompletionFailed
+    HANDOFF_TEST_FAIL_COMPLETION[] = false
+    @test handoff_slot_failure_reason(
+        blocking_failure_handoff, blocking_failure_reference) ==
+        :synchronous_completion_failed
+    @test reclaim_handoff!(
+        blocking_failure_handoff, blocking_failure_reference) ==
         HandoffTransitionSucceeded
 
     uncertain_submission_output = handoff_test_slot_output(handoff)

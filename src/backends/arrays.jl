@@ -317,12 +317,15 @@ end
 # A transfer implementation is deliberately opt-in for each supported source
 # and destination storage pair.  Core provides no generic `copyto!` fallback:
 # an accelerator extension (or a test backend) must retain any stream/event
-# state it needs and must restore the caller's device context around launch and
-# completion observation. Submission returns `_PreparedArrayTransferSubmitted`
+# state it needs and must restore the caller's device context around launch,
+# completion observation, and synchronous completion. Submission returns
+# `_PreparedArrayTransferSubmitted`
 # only after ownership has passed to the backend, or
 # `_PreparedArrayTransferSubmissionFailed` only when no transfer can still
 # access either slot. One nonblocking completion observation returns pending,
-# completed, or failed; the failed result likewise guarantees quiescence.
+# completed, or failed. The synchronous completion seam blocks inside the
+# backend and returns only completed or failed. Either failed result guarantees
+# quiescence.
 # Throwing or returning any other value leaves slot ownership uncertain and is
 # a fail-stop condition for that prepared handoff.
 #
@@ -370,6 +373,12 @@ function _observe_prepared_array_transfer_completion!(transfer)
     throw(InvalidConfiguration(
         "prepared array-transfer state $(typeof(transfer)) does not provide " *
         "a nonblocking completion observation"))
+end
+
+function _complete_prepared_array_transfer!(transfer)
+    throw(InvalidConfiguration(
+        "prepared array-transfer state $(typeof(transfer)) does not provide " *
+        "a synchronous completion implementation"))
 end
 
 @inline function same_backend(x, y)

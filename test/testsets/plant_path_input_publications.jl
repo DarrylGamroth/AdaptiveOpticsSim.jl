@@ -104,6 +104,39 @@ function pupil_opd_publication_allocation_sample!(
     )
 end
 
+function pupil_opd_blocking_completion_allocation_sample!(
+    direct::Plant.PreparedDirectPupilOPDPublicationRoute,
+    remote::Plant.PreparedRemotePupilOPDPublicationRoute,
+    epoch::AtmosphereEpoch,
+    timestamp::PlantTimestamp,
+)
+    direct_output = prepare_pupil_opd_publication_output(direct)
+    remote_output = prepare_pupil_opd_publication_output(remote)
+    @assert materialize_pupil_opd_publication!(
+        direct_output, direct, epoch, timestamp) == PupilOPDPublicationSucceeded
+    @assert materialize_pupil_opd_publication!(
+        remote_output, remote, epoch, timestamp) == PupilOPDPublicationSucceeded
+    direct_publication = direct_output[]
+    remote_publication = remote_output[]
+    @assert submit_pupil_opd_publication!(remote, remote_publication) ==
+        PupilOPDPublicationSucceeded
+    direct_completion = @allocated begin
+        @assert Plant._complete_pupil_opd_publication!(
+            direct, direct_publication) == PupilOPDPublicationSucceeded
+    end
+    remote_completion = @allocated begin
+        @assert Plant._complete_pupil_opd_publication!(
+            remote, remote_publication) == PupilOPDPublicationSucceeded
+    end
+    @assert apply_pupil_opd_publication!(remote, remote_publication) ==
+        PupilOPDPublicationSucceeded
+    @assert reclaim_pupil_opd_publication!(remote, remote_publication) ==
+        PupilOPDPublicationSucceeded
+    @assert reclaim_pupil_opd_publication!(direct, direct_publication) ==
+        PupilOPDPublicationSucceeded
+    return direct_completion, remote_completion
+end
+
 @testset "Authority-owned pupil-OPD publication routes" begin
     reset_handoff_test_transfer_controls!()
     partitions = path_input_publication_test_partitions()
@@ -556,6 +589,106 @@ end
         uncertain, uncertain_output[]) == PupilOPDPublicationUncertain
 end
 
+@testset "Blocking pupil-OPD publication completion" begin
+    reset_handoff_test_transfer_controls!()
+    partitions = path_input_publication_test_partitions()
+    direct = prepare_pupil_opd_publication_route(partitions, :alpha)
+    remote = prepare_pupil_opd_publication_route(partitions, :beta)
+    direct_output = prepare_pupil_opd_publication_output(direct)
+    remote_output = prepare_pupil_opd_publication_output(remote)
+    timestamp = PlantTimestamp(0)
+    epoch = path_input_publication_test_epoch!(partitions, timestamp)
+
+    @test materialize_pupil_opd_publication!(
+        direct_output, direct, epoch, timestamp) == PupilOPDPublicationSucceeded
+    @test materialize_pupil_opd_publication!(
+        remote_output, remote, epoch, timestamp) == PupilOPDPublicationSucceeded
+    direct_publication = direct_output[]
+    remote_publication = remote_output[]
+    @test Plant._complete_pupil_opd_publication!(
+        remote, remote_publication) == PupilOPDPublicationNotSubmitted
+    @test Plant._complete_pupil_opd_publication!(
+        direct,
+        forged_pupil_opd_publication(
+            direct_publication;
+            route_generation=getfield(direct_publication, :route_generation) +
+                one(UInt64),
+        ),
+    ) == PupilOPDPublicationRejected
+
+    sentinel = UInt32(0xbeef)
+    HANDOFF_TEST_ACTIVE_DEVICE[] = sentinel
+    direct_context_entries = HANDOFF_TEST_CONTEXT_ENTRIES[]
+    @test @inferred(Plant._complete_pupil_opd_publication!(
+        direct, direct_publication)) == PupilOPDPublicationSucceeded
+    @test HANDOFF_TEST_ACTIVE_DEVICE[] == sentinel
+    @test HANDOFF_TEST_CONTEXT_ENTRIES[] == direct_context_entries
+
+    @test submit_pupil_opd_publication!(remote, remote_publication) ==
+        PupilOPDPublicationSucceeded
+    @test Plant._complete_pupil_opd_publication!(
+        remote,
+        forged_pupil_opd_publication(
+            remote_publication; timestamp=PlantTimestamp(1)),
+    ) == PupilOPDPublicationRejected
+    remote_context_entries = HANDOFF_TEST_CONTEXT_ENTRIES[]
+    @test @inferred(Plant._complete_pupil_opd_publication!(
+        remote, remote_publication)) == PupilOPDPublicationSucceeded
+    @test HANDOFF_TEST_ACTIVE_DEVICE[] == sentinel
+    @test HANDOFF_TEST_CONTEXT_ENTRIES[] == remote_context_entries + one(UInt64)
+    HANDOFF_TEST_ACTIVE_DEVICE[] = zero(UInt32)
+    @test apply_pupil_opd_publication!(remote, remote_publication) ==
+        PupilOPDPublicationSucceeded
+    @test reclaim_pupil_opd_publication!(remote, remote_publication) ==
+        PupilOPDPublicationSucceeded
+    @test reclaim_pupil_opd_publication!(direct, direct_publication) ==
+        PupilOPDPublicationSucceeded
+    @test Plant._complete_pupil_opd_publication!(
+        direct, direct_publication) == PupilOPDPublicationNotSubmitted
+
+    failure_partitions = path_input_publication_test_partitions(run_seed=0x220)
+    failure_route = prepare_pupil_opd_publication_route(failure_partitions, :beta)
+    failure_output = prepare_pupil_opd_publication_output(failure_route)
+    failure_epoch = path_input_publication_test_epoch!(
+        failure_partitions, timestamp)
+    @test materialize_pupil_opd_publication!(
+        failure_output, failure_route, failure_epoch, timestamp) ==
+        PupilOPDPublicationSucceeded
+    failure_publication = failure_output[]
+    @test submit_pupil_opd_publication!(failure_route, failure_publication) ==
+        PupilOPDPublicationSucceeded
+    HANDOFF_TEST_FAIL_COMPLETION[] = true
+    @test Plant._complete_pupil_opd_publication!(
+        failure_route, failure_publication) == PupilOPDPublicationTransferFailed
+    HANDOFF_TEST_FAIL_COMPLETION[] = false
+    @test failure_route.state.phase == Plant._PupilOPDRouteFailed
+    @test reclaim_pupil_opd_publication!(failure_route, failure_publication) ==
+        PupilOPDPublicationSucceeded
+
+    uncertain_partitions = path_input_publication_test_partitions(run_seed=0x221)
+    uncertain_route = prepare_pupil_opd_publication_route(
+        uncertain_partitions, :beta)
+    uncertain_output = prepare_pupil_opd_publication_output(uncertain_route)
+    uncertain_epoch = path_input_publication_test_epoch!(
+        uncertain_partitions, timestamp)
+    @test materialize_pupil_opd_publication!(
+        uncertain_output, uncertain_route, uncertain_epoch, timestamp) ==
+        PupilOPDPublicationSucceeded
+    uncertain_publication = uncertain_output[]
+    @test submit_pupil_opd_publication!(uncertain_route, uncertain_publication) ==
+        PupilOPDPublicationSucceeded
+    HANDOFF_TEST_THROW_COMPLETION[] = true
+    @test_throws ErrorException Plant._complete_pupil_opd_publication!(
+        uncertain_route, uncertain_publication)
+    HANDOFF_TEST_THROW_COMPLETION[] = false
+    @test uncertain_route.state.phase == Plant._PupilOPDRouteUncertain
+    @test Plant._complete_pupil_opd_publication!(
+        uncertain_route, uncertain_publication) == PupilOPDPublicationUncertain
+    @test reclaim_pupil_opd_publication!(
+        uncertain_route, uncertain_publication) == PupilOPDPublicationUncertain
+    @test HANDOFF_TEST_ACTIVE_DEVICE[] == zero(UInt32)
+end
+
 @testset "Pupil-OPD publication inference and allocation" begin
     reset_handoff_test_transfer_controls!()
     partitions = path_input_publication_test_partitions(run_seed=0x220)
@@ -574,6 +707,33 @@ end
         direct, remote, epoch, timestamp)
     if !coverage_instrumented()
         @test allocations == (0, 0, 0, 0, 0, 0, 0)
+    end
+
+    blocking_partitions = path_input_publication_test_partitions(run_seed=0x221)
+    blocking_direct = prepare_pupil_opd_publication_route(
+        blocking_partitions, :alpha)
+    blocking_remote = prepare_pupil_opd_publication_route(
+        blocking_partitions, :beta)
+    blocking_warm_timestamp = PlantTimestamp(0)
+    blocking_warm_epoch = path_input_publication_test_epoch!(
+        blocking_partitions, blocking_warm_timestamp)
+    pupil_opd_blocking_completion_allocation_sample!(
+        blocking_direct,
+        blocking_remote,
+        blocking_warm_epoch,
+        blocking_warm_timestamp,
+    )
+    blocking_timestamp = PlantTimestamp(1_000_000)
+    blocking_epoch = path_input_publication_test_epoch!(
+        blocking_partitions, blocking_timestamp)
+    blocking_allocations = pupil_opd_blocking_completion_allocation_sample!(
+        blocking_direct,
+        blocking_remote,
+        blocking_epoch,
+        blocking_timestamp,
+    )
+    if !coverage_instrumented()
+        @test blocking_allocations == (0, 0)
     end
 end
 
@@ -595,7 +755,11 @@ end
     assignment = resolve_plant_partition_assignment(
         definition, HostComputeDevice(), :reduced => HostComputeDevice())
     partitions = prepare_plant_partitions(
-        definition, assignment; run_seed=0x221)
+        definition,
+        assignment;
+        run_seed=0x221,
+        command_authority_target=HostComputeDevice(),
+    )
     path = only(prepared_paths(only(prepared_partitions(partitions))))
     @test !hasproperty(path, :materialization)
     @test !hasproperty(path, :handoff)

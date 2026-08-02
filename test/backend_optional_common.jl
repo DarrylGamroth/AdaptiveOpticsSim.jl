@@ -332,11 +332,13 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
     accelerator_only = prepare_plant_partitions(
         definition, accelerator_only_assignment;
         run_seed=0x9a20,
+        command_authority_target=target,
         command_endpoints,
     )
     mixed = prepare_plant_partitions(
         definition, mixed_assignment;
         run_seed=0x9a20,
+        command_authority_target=host,
         command_endpoints,
     )
 
@@ -353,6 +355,18 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
             prepared_atmosphere_authority(mixed)))
     @test all(partition -> atmosphere_authority_binding(partition) ===
         atmosphere_authority_binding(mixed), prepared_partitions(mixed))
+
+    accelerator_command_authority =
+        prepared_command_authority(accelerator_only)
+    accelerator_command_state =
+        CommandAuthorityState(accelerator_command_authority)
+    accelerator_command_application = command_authority_application_state(
+        accelerator_command_authority,
+        accelerator_command_state,
+        command_endpoint_id(only(command_endpoints)),
+    )
+    @test compute_device(effective_command(
+        accelerator_command_application)) == target
 
     accelerator_partition = only(prepared_partitions(accelerator_only))
     mixed_host = prepared_partition(mixed, host)

@@ -727,6 +727,50 @@ function try_complete_handoff!(
 end
 
 """
+    complete_handoff!(handoff, reference)
+
+Synchronously wait in the prepared backend for one submitted transfer to
+become quiescent. This is the deterministic serial-oracle seam. Concurrent HIL
+owners use `try_complete_handoff!` and an external wait strategy instead.
+"""
+function complete_handoff!(
+    handoff::PreparedCrossDomainHandoff,
+    reference::HandoffSlotReference,
+)
+    status, ordinal = _handoff_reference_status(handoff, reference)
+    status == HandoffTransitionSucceeded || return status
+    state = @inbounds handoff.states[ordinal]
+    state.status == HandoffTransferCompleted &&
+        return DuplicateHandoffCompletion
+    state.status == HandoffTransferFailed && return HandoffAlreadyFailed
+    state.status == HandoffTransferUncertain && return HandoffAlreadyUncertain
+    state.status == HandoffTransferSubmitted || return HandoffNotSubmitted
+    state.status = HandoffTransferUncertain
+    state.failure_reason = :synchronous_completion_in_progress
+    completion = try
+        @inbounds _complete_prepared_array_transfer!(
+            handoff.backend_states[ordinal])
+    catch
+        state.failure_reason = :synchronous_completion_exception
+        rethrow()
+    end
+    if completion == _PreparedArrayTransferCompleted
+        state.status = HandoffTransferCompleted
+        state.failure_reason = :none
+        return HandoffTransitionSucceeded
+    end
+    if completion == _PreparedArrayTransferCompletionFailed
+        state.status = HandoffTransferFailed
+        state.failure_reason = :synchronous_completion_failed
+        return HandoffCompletionFailed
+    end
+    state.failure_reason = :invalid_synchronous_completion_status
+    throw(InvalidConfiguration(
+        "prepared array-transfer synchronous completion returned unsupported " *
+        "status $(repr(completion)); slot ownership is now uncertain"))
+end
+
+"""
 Borrow the completed destination and its typed publication metadata.
 
 The handoff retains slot ownership until `reclaim_handoff!`; the external

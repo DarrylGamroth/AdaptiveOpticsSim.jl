@@ -426,83 +426,6 @@ struct _PreparedPlantEventCommandEndpoint
     handle::EventGeneratorHandle
 end
 
-"""
-Explicit atomic command submission for two or more distinct endpoints.
-
-All members request one common effective plant timestamp. Construction alone
-does not admit commands, assign transaction identity, group optical surfaces,
-or imply a transport encoding.
-"""
-struct _PlantCommandTransactionToken end
-const _PLANT_COMMAND_TRANSACTION_TOKEN = _PlantCommandTransactionToken()
-
-struct PlantCommandTransaction{C<:Tuple}
-    commands::C
-
-    PlantCommandTransaction(commands::C,
-        ::_PlantCommandTransactionToken) where {C<:Tuple} =
-        new{C}(commands)
-end
-
-function PlantCommandTransaction(
-    commands::Vararg{PlantCommand,N}) where {N}
-    N >= 2 || _command_admission_error(:transaction,
-        :invalid_member_count,
-        "an atomic command transaction requires at least two commands")
-    first_timestamp = command_requested_effective_timestamp(first(commands))
-    @inbounds for right in 2:N
-        command = commands[right]
-        command_requested_effective_timestamp(command) == first_timestamp ||
-            _command_admission_error(:transaction,
-                :effective_timestamp_mismatch,
-                "every atomic transaction member must request the same " *
-                "effective plant timestamp")
-        endpoint = command_endpoint_id(command)
-        for left in 1:(right - 1)
-            command_endpoint_id(commands[left]) == endpoint &&
-                _command_admission_error(:transaction,
-                    :duplicate_endpoint,
-                    "atomic transaction contains command endpoint $endpoint " *
-                    "more than once")
-        end
-    end
-    return PlantCommandTransaction(commands, _PLANT_COMMAND_TRANSACTION_TOKEN)
-end
-
-"""Immediate all-member result of one atomic transaction admission."""
-struct PlantCommandTransactionAdmission
-    transaction::UInt64
-    status::CommandAdmissionStatus
-    member_count::UInt32
-    scheduled_timestamp::Union{Nothing,PlantTimestamp}
-end
-
-@inline command_admission_status(
-    admission::PlantCommandTransactionAdmission) = admission.status
-@inline command_transaction_member_count(
-    admission::PlantCommandTransactionAdmission) =
-    admission.member_count
-@inline function command_transaction_id(
-    admission::PlantCommandTransactionAdmission)
-    iszero(admission.transaction) && return nothing
-    return admission.transaction
-end
-@inline command_scheduled_timestamp(
-    admission::PlantCommandTransactionAdmission) =
-    admission.scheduled_timestamp
-
-struct _CommandTransactionAdmissionPlan
-    presentation::CommandPresentationID
-    sequence_class::CommandSequenceClass
-    scheduled_timestamp::PlantTimestamp
-    slot::UInt32
-    generation::UInt64
-end
-
-struct _CommandTransactionPolicyFailure <: Exception
-    error::PlantCommandError
-end
-
 mutable struct _PreparedDevicePathBatchOwnerBinding end
 struct _PreparedDevicePathBatchOwnerToken end
 const _PREPARED_DEVICE_PATH_BATCH_OWNER_TOKEN =
@@ -2447,22 +2370,6 @@ function fail_pending_plant_commands!(
     return count
 end
 
-@inline function _next_command_transaction_sequence(
-    state::PlantEventLoopState)
-    state.command_transaction_sequence != typemax(UInt64) ||
-        _command_admission_error(:transaction, :transaction_overflow,
-            "plant command transaction identity exceeds UInt64 range")
-    return state.command_transaction_sequence + UInt64(1)
-end
-
-function _transaction_command_for_endpoint(
-    transaction::PlantCommandTransaction, id::CommandEndpointID)
-    for command in transaction.commands
-        command_endpoint_id(command) == id && return command
-    end
-    return nothing
-end
-
 function _prepare_transaction_member_slots!(
     prepared::PreparedPlantEventLoop,
     workspace::PlantEventLoopWorkspace,
@@ -2493,118 +2400,6 @@ function _prepare_transaction_member_slots!(
             "owned by this prepared plant event loop")
     workspace.transaction_count = count
     return count
-end
-
-function _require_no_equal_time_command(
-    state::CommandEndpointState, timestamp::PlantTimestamp)
-    @inbounds for index in 1:state.pending_count
-        metadata = state.slots[Int(state.calendar[index])]
-        metadata.scheduled_timestamp == timestamp &&
-            _command_admission_error(:transaction,
-                :equal_time_endpoint_conflict,
-                "an atomic transaction member endpoint already has a " *
-                "command scheduled at $timestamp")
-    end
-    return nothing
-end
-
-function _preflight_command_transaction_member!(
-    endpoint::PreparedCommandEndpoint,
-    endpoint_state::CommandEndpointState,
-    endpoint_workspace::CommandDispositionWorkspace,
-    command::PlantCommand,
-    timestamp::PlantTimestamp)
-    _require_command_endpoint_binding(endpoint, endpoint_state)
-    _require_command_endpoint_binding(endpoint, endpoint_workspace)
-    _require_operational_command_endpoint(endpoint_state)
-    _require_empty_command_dispositions(endpoint_workspace)
-    _require_idle_command_endpoint(endpoint_state)
-    _require_forward_command_timestamp(endpoint_state, timestamp)
-    command_effective_time_policy(command_schema(endpoint)).supersession ==
-        PreservePendingCommands || _command_admission_error(:transaction,
-        :unsupported_supersession,
-        "atomic transaction endpoints must preserve pending commands")
-    validate_plant_command(endpoint, command)
-    sequence_class = _classify_command_sequence(endpoint, endpoint_state,
-        command.sequence)
-    sequence_action = _command_sequence_action(
-        command_sequence_policy(command_schema(endpoint)), sequence_class)
-    if sequence_action != AcceptSequence
-        reason = _command_sequence_reason(sequence_class)
-        message = "atomic transaction member sequence policy " *
-            (sequence_action == FailOnSequence ?
-                "requires structural failure" : "rejected the command")
-        error = PlantCommandError(:transaction, reason.name, message)
-        sequence_action == FailOnSequence &&
-            throw(_CommandTransactionPolicyFailure(error))
-        throw(error)
-    end
-
-    requested = command.requested_effective_timestamp
-    scheduled = requested
-    policy = command_effective_time_policy(command_schema(endpoint))
-    if timestamp < requested
-        policy.future == AllowFutureCommand ||
-            _command_admission_error(:transaction, :future_command,
-                "atomic transaction member rejects future commands")
-    elseif requested < timestamp
-        if policy.late == FailOnLateCommand
-            throw(_CommandTransactionPolicyFailure(PlantCommandError(
-                :transaction, :late_command,
-                "atomic transaction member late-command policy requires " *
-                "structural failure")))
-        end
-        policy.late == ApplyLateCommandNow ||
-            _command_admission_error(:transaction, :late_command,
-                "atomic transaction member rejects late commands")
-        scheduled = timestamp
-    end
-    endpoint_state.active_count < endpoint.capacity ||
-        _command_admission_error(:transaction, :calendar_capacity,
-            "atomic transaction member endpoint is at calendar capacity")
-    _require_no_equal_time_command(endpoint_state, scheduled)
-
-    slot = _find_free_command_slot(endpoint_state)
-    metadata = endpoint_state.slots[Int(slot)]
-    generation = _next_command_counter(metadata.generation,
-        :slot_generation_overflow, "command payload-slot generation")
-    _stage_command_payload!(endpoint_state.payloads, endpoint.schema,
-        command.payload)
-    return _CommandTransactionAdmissionPlan(
-        _next_command_presentation(endpoint_state), sequence_class,
-        scheduled, slot, generation)
-end
-
-function _commit_command_transaction_member!(
-    endpoint::PreparedCommandEndpoint,
-    endpoint_state::CommandEndpointState,
-    command::PlantCommand,
-    timestamp::PlantTimestamp,
-    transaction::UInt64,
-    member_count::UInt32,
-    plan::_CommandTransactionAdmissionPlan)
-    slot = Int(plan.slot)
-    _commit_staged_command_payload!(endpoint_state.payloads, slot, nothing)
-    endpoint_state.slots[slot] = _CommandSlotMetadata(
-        plan.presentation.value,
-        command.sequence.value,
-        command.requested_effective_timestamp,
-        plan.scheduled_timestamp,
-        timestamp,
-        transaction,
-        member_count,
-        plan.generation,
-        _PendingCommandSlot,
-    )
-    _insert_pending_command_slot!(endpoint, endpoint_state, plan.slot)
-    endpoint_state.active_count += 1
-    _record_accepted_command_sequence!(endpoint, endpoint_state,
-        command.sequence)
-    endpoint_state.presentation_sequence = plan.presentation.value
-    endpoint_state.current_timestamp = timestamp
-    endpoint_state.last_admission_timestamp = timestamp
-    endpoint_state.has_admission = true
-    return nothing
 end
 
 function _terminate_event_command_transaction_admission!(
@@ -2718,6 +2513,13 @@ function admit_plant_command_transaction!(
         timestamp)
     count = _prepare_transaction_member_slots!(prepared, workspace,
         transaction)
+    transaction_id = try
+        _next_command_transaction_sequence(
+            state.command_transaction_sequence)
+    catch
+        workspace.transaction_count = 0
+        rethrow()
+    end
     scheduled = zero(PlantTimestamp)
     has_scheduled = false
     failure = nothing
@@ -2751,7 +2553,6 @@ function admit_plant_command_transaction!(
             workspace, transaction, timestamp, failure)
     end
 
-    transaction_id = _next_command_transaction_sequence(state)
     member_count = UInt32(count)
     @inbounds for index in 1:count
         endpoint_slot = Int(workspace.transaction_endpoint_slots[index])
