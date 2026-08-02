@@ -38,6 +38,29 @@ end
 @inline _dm_topology_metadata_is_exact(::NamedTuple{(),Tuple{}}) = true
 @inline _dm_topology_metadata_is_exact(metadata) = false
 
+@inline _dm_influence_storage_is_exact(
+    ::Union{GaussianInfluenceWidth,GaussianMechanicalCoupling},
+    ::Any,
+) = true
+
+@inline function _dm_influence_storage_is_exact(
+    model::DenseInfluenceMatrix,
+    modes::AbstractMatrix,
+)
+    return model.modes === modes
+end
+
+@inline function _dm_influence_storage_is_exact(
+    model::MeasuredInfluenceFunctions,
+    modes::AbstractMatrix,
+)
+    return model.modes === modes &&
+        _dm_topology_metadata_is_exact(model.metadata)
+end
+
+@inline _dm_influence_storage_is_exact(::AbstractDMInfluenceModel, ::Any) =
+    false
+
 function _dm_topology_host_bytes(topology::ActuatorGridTopology,
     target::HostComputeDevice)
     _dm_topology_metadata_is_exact(topology.metadata) || return nothing
@@ -132,6 +155,10 @@ function structural_resource_fact(
     id::StructuralResourceOwnerID,
     target::AbstractComputeDevice,
 )
+    _dm_influence_storage_is_exact(
+        prepared.params.influence_model, prepared.modes) ||
+        return UnknownStructuralResourceFact(
+            id, target, :unsupported_influence_storage)
     device = prepared.surface_metadata.device
     is_device_target = target == device
     is_host_target = target == HostComputeDevice()

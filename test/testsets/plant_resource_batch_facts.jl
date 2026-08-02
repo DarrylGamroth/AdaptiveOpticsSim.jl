@@ -35,6 +35,16 @@ struct WFSBatchResourceFactFakeBackend <: AbstractArrayBackend end
     @test structural_workspace_bytes(fact) == expected_workspace
     @test all(array -> compute_device(array) == target, independent_arrays)
 
+    graph_report = require_exact_structural_resource_facts(
+        fixture.prepared, fixture.state, fixture.workspace, target)
+    graph_id = StructuralResourceOwnerID(
+        :wfs_batch_workspace, :wfs_alpha)
+    graph_fact = only(candidate for candidate in
+        structural_resource_facts(graph_report) if
+        structural_resource_owner_id(candidate) == graph_id)
+    @test structural_resident_bytes(graph_fact) == UInt64(0)
+    @test structural_workspace_bytes(graph_fact) == expected_workspace
+
     off_partition = AcceleratorComputeDevice(
         WFSBatchResourceFactFakeBackend(), UInt32(1))
     off_partition_fact = structural_resource_fact(

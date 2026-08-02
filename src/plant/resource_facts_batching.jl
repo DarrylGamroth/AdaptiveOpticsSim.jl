@@ -18,8 +18,22 @@ function structural_resource_fact(aberration::PreparedSampledAberration,
         (present=false, bytes=UInt64(0)))
 end
 
+@inline function _atmosphere_batch_structural_workspace_bytes(
+    implementation::_PreparedDevicePathBatchImplementation,
+    target::AbstractComputeDevice,
+)
+    workspace = implementation.atmosphere_batch.workspace
+    return _structural_array_target_bytes((
+        workspace.shift_x,
+        workspace.shift_y,
+        workspace.footprint_scale,
+        workspace.pupil,
+        workspace.output,
+    ), target, :workspace_bytes)
+end
+
 function _device_path_batch_structural_resource_fact(
-    ::_PreparedDevicePathBatchImplementation,
+    ::Any,
     id::StructuralResourceOwnerID,
     target::AbstractComputeDevice,
 )
@@ -32,19 +46,28 @@ function _device_path_batch_structural_resource_fact(
     id::StructuralResourceOwnerID,
     target::AbstractComputeDevice,
 )
-    atmosphere_workspace = implementation.atmosphere_batch.workspace
     optical_workspace = implementation.optical_batch.workspace
-    workspace = _structural_array_target_bytes((
-        atmosphere_workspace.shift_x,
-        atmosphere_workspace.shift_y,
-        atmosphere_workspace.footprint_scale,
-        atmosphere_workspace.pupil,
-        atmosphere_workspace.output,
+    workspace = _atmosphere_batch_structural_workspace_bytes(
+        implementation, target)
+    optical_bytes = _structural_array_target_bytes((
         optical_workspace.field_stack,
         optical_workspace.output_stack,
         optical_workspace.shift_axis1,
         optical_workspace.shift_axis2,
     ), target, :workspace_bytes)
+    workspace = _combine_structural_target_bytes(
+        workspace, optical_bytes, :workspace_bytes)
+    return _targeted_structural_resource_fact(
+        id, target, (present=false, bytes=UInt64(0)), workspace)
+end
+
+function _device_path_batch_structural_resource_fact(
+    implementation::_PreparedWFSDevicePathBatch,
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    workspace = _atmosphere_batch_structural_workspace_bytes(
+        implementation, target)
     return _targeted_structural_resource_fact(
         id, target, (present=false, bytes=UInt64(0)), workspace)
 end

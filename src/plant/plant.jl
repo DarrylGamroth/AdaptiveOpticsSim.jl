@@ -298,6 +298,9 @@ include("resource_facts.jl")
 include("resource_facts_runtime.jl")
 include("resource_facts_shack_hartmann.jl")
 include("resource_reporters_optical.jl")
+include("resource_facts_acquisition.jl")
+include("resource_facts_batching.jl")
+include("resource_facts_graph.jl")
 include("api.jl")
 
 end # module Plant

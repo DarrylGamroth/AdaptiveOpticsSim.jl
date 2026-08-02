@@ -42,11 +42,6 @@ function structural_resource_fact(::PreparedShackHartmannEstimator,
     return _known_structural_resource_fact(id, target, UInt64(0), UInt64(0))
 end
 
-function structural_resource_fact(::AcquisitionProducts,
-    id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    return _known_structural_resource_fact(id, target, UInt64(0), UInt64(0))
-end
-
 function structural_resource_fact(product::IntensityMap,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
     resident = _structural_array_target_bytes(

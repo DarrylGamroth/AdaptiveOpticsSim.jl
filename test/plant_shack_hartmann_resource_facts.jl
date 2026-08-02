@@ -55,8 +55,6 @@ end
             StructuralResourceOwnerID(:detector_acquisition, :plan)),
         (fixture.estimator,
             StructuralResourceOwnerID(:wfs_estimator, :prepared)),
-        (fixture.products,
-            StructuralResourceOwnerID(:acquisition_product, :container)),
     )
     for (owner, id) in wrappers
         fact = structural_resource_fact(owner, id, target)
@@ -78,6 +76,13 @@ end
         sh_resource_bytes(fixture.observation.storage)
     @test structural_resident_bytes(measurement_fact) ==
         sh_resource_bytes(fixture.measurement.storage)
+    products_fact = structural_resource_fact(fixture.products,
+        StructuralResourceOwnerID(:acquisition_product, :container), target)
+    @test structural_resident_bytes(products_fact) == sh_resource_bytes((
+        fixture.observation.storage,
+        fixture.measurement.storage,
+    ))
+    @test structural_workspace_bytes(products_fact) == UInt64(0)
 
     acquisition_fact = structural_resource_fact(sensor.acquisition,
         StructuralResourceOwnerID(:wfs_estimator, :acquisition_state), target)
@@ -164,9 +169,13 @@ end
         T=Float32)
     unsupported_fact = structural_resource_fact(unsupported.state,
         StructuralResourceOwnerID(:detector_state, :unsupported), target)
-    @test !structural_resource_known(unsupported_fact)
-    @test structural_resource_unknown_reason(unsupported_fact) ==
-        :unsupported_model
+    @test structural_resource_known(unsupported_fact)
+    @test structural_resident_bytes(unsupported_fact) == sh_resource_bytes((
+        unsupported.state.frame,
+        unsupported.state.accum_buffer,
+        unsupported.state.latent_buffer,
+        unsupported.state.output_buffer,
+    ))
 
     wrong_target = AcceleratorComputeDevice(CUDABackend(), 0)
     for (owner, id) in (

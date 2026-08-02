@@ -38,6 +38,24 @@ function assert_optional_structural_resource_fact(
     return fact
 end
 
+function assert_optional_device_batch_structural_resource_fact(
+    owner,
+    atmosphere,
+    id,
+    target,
+    workspace_arrays::Tuple,
+)
+    fact = Plant.structural_resource_fact(
+        owner, atmosphere, id, target)
+    @test Plant.structural_resource_known(fact)
+    @test compute_device(fact) == target
+    @test all(array -> compute_device(array) == target, workspace_arrays)
+    @test Plant.structural_resident_bytes(fact) == UInt64(0)
+    @test Plant.structural_workspace_bytes(fact) ==
+        optional_structural_array_bytes(workspace_arrays)
+    return fact
+end
+
 if !isdefined(@__MODULE__, :ContractRateModel)
     include(joinpath(@__DIR__, "wfs_stage_contract_fixtures.jl"))
 end
@@ -1228,6 +1246,27 @@ function run_optional_device_path_batch_checks(
         ),
     )
 
+    atmosphere_workspace = implementation.atmosphere_batch.workspace
+    optical_workspace = implementation.optical_batch.workspace
+    assert_optional_device_batch_structural_resource_fact(
+        owner,
+        lifecycle.prepared.atmosphere,
+        Plant.StructuralResourceOwnerID(
+            :direct_batch_workspace, :optional_direct_batch),
+        device,
+        (
+            atmosphere_workspace.shift_x,
+            atmosphere_workspace.shift_y,
+            atmosphere_workspace.footprint_scale,
+            atmosphere_workspace.pupil,
+            atmosphere_workspace.output,
+            optical_workspace.field_stack,
+            optical_workspace.output_stack,
+            optical_workspace.shift_axis1,
+            optical_workspace.shift_axis2,
+        ),
+    )
+
     allocation_bytes =
         optional_device_path_batch_allocation_bytes(lifecycle, owner)
     # Backend runtimes retain the data plane on the device but may allocate
@@ -1557,6 +1596,21 @@ function run_optional_wfs_device_model_matrix_checks(
                 BackendArray,
             ),
             implementation.path_results,
+        )
+        atmosphere_workspace = implementation.atmosphere_batch.workspace
+        assert_optional_device_batch_structural_resource_fact(
+            owner,
+            device_fixture.prepared.atmosphere,
+            Plant.StructuralResourceOwnerID(
+                :wfs_batch_workspace, :optional_wfs_batch),
+            device,
+            (
+                atmosphere_workspace.shift_x,
+                atmosphere_workspace.shift_y,
+                atmosphere_workspace.footprint_scale,
+                atmosphere_workspace.pupil,
+                atmosphere_workspace.output,
+            ),
         )
         retained_context = implementation.context
         retained_plans = ntuple(2) do index

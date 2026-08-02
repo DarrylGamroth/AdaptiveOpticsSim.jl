@@ -30,6 +30,29 @@ function plant_resource_graph_error(f)
     return nothing
 end
 
+@testset "Whole-graph selected-partition ownership" begin
+    target = HostComputeDevice()
+    id = StructuralResourceOwnerID(:path, :off_partition)
+    facts = AbstractStructuralResourceFact[]
+    Plant._append_structural_graph_fact!(facts,
+        UnknownStructuralResourceFact(id, target, :owner_not_on_device),
+        target)
+    @test length(facts) == 1
+    @test structural_resource_known(only(facts))
+    @test structural_resource_owner_id(only(facts)) == id
+    @test structural_resident_bytes(only(facts)) == UInt64(0)
+    @test structural_workspace_bytes(only(facts)) == UInt64(0)
+
+    unsupported_id = StructuralResourceOwnerID(:path, :unsupported)
+    Plant._append_structural_graph_fact!(facts,
+        UnknownStructuralResourceFact(
+            unsupported_id, target, :unsupported_prepared_path),
+        target)
+    @test !structural_resource_known(last(facts))
+    @test structural_resource_unknown_reason(last(facts)) ==
+        :unsupported_prepared_path
+end
+
 function plant_resource_graph_atmosphere_bytes(atmosphere)
     resident = UInt64(0)
     workspace = UInt64(0)

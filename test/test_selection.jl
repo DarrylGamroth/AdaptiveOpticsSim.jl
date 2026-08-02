@@ -226,7 +226,14 @@ const TEST_SUITE_SPECS = (
         "plant-resource-facts",
         "testsets/plant_resource_facts.jl",
         "testsets/plant_resource_runtime_facts.jl",
+        "testsets/plant_resource_acquisition_facts.jl",
         "testsets/plant_optical_resource_reporters.jl",
+        "testsets/plant_resource_batch_facts.jl",
+        "testsets/plant_resource_graph_facts.jl";
+        fixtures=(
+            "plant_device_batching_fixtures.jl",
+            "plant_device_model_matrix_fixtures.jl",
+        ),
     ),
     TestSuiteSpec("plant-providers", "testsets/plant_providers.jl";
         fixtures=("plant_test_fixtures.jl",

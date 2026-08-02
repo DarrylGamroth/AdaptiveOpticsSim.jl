@@ -302,7 +302,8 @@ inspection accessors are stable qualified API such as
 `Plant.CommandValuePolicy` and `Plant.EventSchedulerState`. Plant-specific
 errors are owned and exported here: `PlantTimeError`, `PlantScheduleError`,
 `PlantDefinitionError`, `PlantCommandError`, `PlantPreparationError`, and
-`DetectorAcquisitionError`.
+`DetectorAcquisitionError`. `StructuralResourceError` remains qualified with
+the resource-reporting API below.
 
 The completed Gate 3 API defines canonical plant instants, elapsed durations, nominal periodic
 recurrence, and a fixed-capacity serial event calendar without adding wall-clock
@@ -432,6 +433,27 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   Each public independent-group worker call enters the retained context in its
   own task and completes that stream before publishing the group's ready or
   complete phase
+- Qualified structural-resource reporting:
+  `StructuralResourceOwnerID`, `ResourceEstimateMethod`,
+  `KnownStructuralResourceFact`, `UnknownStructuralResourceFact`,
+  `OpaqueResourceReserve`, `StructuralResourceReport`,
+  `structural_resource_fact`, `structural_array_bytes`,
+  `aggregate_structural_resource_facts`, and
+  `require_exact_structural_resource_facts`. The event-loop overload derives
+  stable owner IDs and reports one non-overlapping numerical-storage graph for
+  an exact device; accelerator-prepared loops may also report their explicit
+  host mirrors and staging as a separate `HostComputeDevice()` partition.
+  Logical owners with no array storage in the selected partition remain
+  visible as known zero-byte facts. Whole-graph reporters currently cover the
+  promoted deterministic direct-science, conventional-detector, and
+  monochromatic diffractive Shack–Hartmann profiles; other path or acquisition
+  implementations fail closed until they define exact ownership.
+  Resident, reusable workspace, and caller-declared opaque provider reserves
+  remain separate. Unknown ownership, unsupported storage, duplicate owners,
+  wrong devices, inconsistent estimate versions, and byte-count overflow fail
+  structurally. Reporting is cold inspection and does not walk object fields,
+  query allocator state, copy accelerator arrays to host, or assign execution
+  resources
 
 - Stable identities: `AtmosphereLayerID`, `ControllableOpticID`,
   `SampledAberrationID`, `CommandEndpointID`, `PlantCommandSchemaID`,

@@ -191,4 +191,35 @@ end
             :controllable_optic_state, :resource_runtime_dm),
         wrong_target,
     ))
+
+    sampled_modes = zeros(T, resolution^2, n_act^2)
+    measured_model = MeasuredInfluenceFunctions(
+        sampled_modes; metadata=(calibration=copy(sampled_modes),))
+    measured_dm_model = DeformableMirrorModel(
+        topology=ActuatorGridTopology(n_act; T),
+        influence_model=measured_model,
+        T=T,
+    )
+    measured_definition = ControllableOpticDefinition(
+        :resource_runtime_measured_dm,
+        measured_dm_model,
+        (schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
+    )
+    measured_prepared = prepare_controllable_optic(
+        measured_dm_model,
+        measured_definition,
+        telescope,
+        atmosphere,
+    )
+    measured_fact = structural_resource_fact(
+        measured_prepared,
+        StructuralResourceOwnerID(
+            :controllable_optic_plan, :resource_runtime_measured_dm),
+        target,
+    )
+    @test !structural_resource_known(measured_fact)
+    @test structural_resource_unknown_reason(measured_fact) ==
+        :unsupported_influence_storage
 end
