@@ -195,6 +195,24 @@ transfer, task, queue, or placement rationale. The HIL package still owns
 publisher binding, planning, admission, bounded handoffs, execution ownership,
 and runtime qualification.
 
+Core also provides the separate qualified
+`Plant.PreparedCrossDomainHandoff` primitive for explicit host-to-accelerator
+or accelerator-to-host array movement. It binds one semantic payload contract,
+paired fixed-capacity caller-provided slots, exact source/destination devices,
+prepared backend contexts, logical byte accounting, generation-bearing slot
+references, and the `free → submitted → completed | failed → reclaimed`
+lifecycle. One external owner must serialize every lifecycle method; the value
+is not thread-safe. Completion observation is a single nonblocking operation;
+Core does not poll or wait. Only an explicit quiescent backend failure is
+reclaimable. An unexpected backend exception or invalid result leaves the slot
+uncertain and requires fail-stop disposal unless a later backend recovery
+contract proves quiescence. This primitive does not make the partition result
+executable and does not choose which plant products cross a boundary. HIL
+still owns payload leases, descriptor rings, the sole transition-owner Agent,
+return credit, backpressure, planner binding, and output disposition. Current
+evidence uses a fake accelerator only and is not CUDA, AMDGPU, mixed-execution,
+or latency qualification.
+
 ## Optical Branch Ownership And Parallelism
 
 Different source directions are the primary coarse-grained parallel unit. They

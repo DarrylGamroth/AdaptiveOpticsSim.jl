@@ -134,6 +134,17 @@ Current CPU-supported families:
   publish atmosphere state, bind the command publisher, transfer a command
   payload, hand runtime products between partitions, choose placement, admit
   capacity, or establish a HIL latency claim
+- the typed fixed-capacity Core cross-device handoff state machine, qualified
+  with host↔fake-accelerator storage. Focused tests cover exact target and
+  storage contracts, paired capacity, nonaliasing, typed publication metadata,
+  preparation provenance, generation-bearing slot lifetime, separate submit
+  and nonblocking completion observation, visibility, failure, reclamation,
+  context restoration, inference, and zero warmed lifecycle allocation. This
+  includes fail-stop non-reclaimable uncertain ownership after unexpected
+  backend errors and requires external lifecycle serialization. It qualifies
+  the ownership/state-machine and backend-extension boundary only; it does not
+  qualify a CUDA or AMDGPU transfer, mixed optical execution, HIL lease/ring
+  ownership, throughput, or latency
 - trigger-relative autonomous circular-Pyramid modulation with bounded
   radius/frequency/phase/enabled setpoints, free-running/source/delivered-reset
   relationships, deterministic branch faults, and an allocation-free
@@ -363,6 +374,10 @@ The following are outside the current support claim:
   delivery scope or a routine validation cadence.
 - SPECULA pixel-level equivalence on the HEART Shack-Hartmann surface
 - Metal backend support
+- CUDA or AMDGPU cross-device handoff execution. The Core ownership and
+  transfer state machine has deterministic fake-accelerator evidence only;
+  promoted hardware transfer, mixed-executor, and latency evidence remain
+  later HIL gates
 - backend-audit surfaces that are not part of the maintained hardware targets
   and release-validation cadence
 - broad claims about every detector/wfs/backend combination outside the

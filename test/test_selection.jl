@@ -228,6 +228,9 @@ const TEST_SUITE_SPECS = (
         "testsets/plant_target_partitions.jl"),
     TestSuiteSpec("plant-command-publications",
         "testsets/plant_command_publications.jl"),
+    TestSuiteSpec("plant-handoffs",
+        "testsets/plant_handoffs.jl";
+        fixtures=("plant_handoff_fixtures.jl",)),
     TestSuiteSpec(
         "plant-resource-facts",
         "testsets/plant_resource_facts.jl",
@@ -311,6 +314,7 @@ const TEST_GROUP_SPECS = (
         "plant-partition-assignments",
         "plant-target-partitions",
         "plant-command-publications",
+        "plant-handoffs",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
@@ -417,6 +421,7 @@ const TEST_CI_SHARD_SPECS = (
         "plant-partition-assignments",
         "plant-target-partitions",
         "plant-command-publications",
+        "plant-handoffs",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",

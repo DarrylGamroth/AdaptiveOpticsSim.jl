@@ -686,12 +686,56 @@ Gate 9A. `PreparedPlantPartitions` is an inspectable, non-executable preparation
 result. Cold preparation may defensively copy declared static data, such as a
 sampled OPD, into each exact target that uses it. The result performs no runtime
 atmosphere publication, command admission, authoritative command publication,
-inter-partition product handoff, scheduling, or placement planning. If the
+product movement or automatic handoff, scheduling, or placement planning. If the
 definition declares command endpoints, `endpoint_configurations` must contain
 one complete `CommandEndpointConfiguration` per endpoint. Core uses only each
 configured initial effective value to seed independent target-local
 active/staging storage and physical state; capacity, history, safe-command,
 silence, and admission policy remain authority-side concerns.
+
+### Cross-device handoff transfers
+
+A semantic payload contract subtypes qualified
+`AdaptiveOpticsSim.Plant.AbstractHandoffPayloadContract{M}` and extends
+`handoff_payload_eltype`, `handoff_payload_axes`, and
+`validate_handoff_publication`. The element type must be concrete and isbits;
+the axes and immutable inline-stored publication type are fixed at preparation.
+The caller and contract must not mutate any semantic state referenced by a
+publication between successful submission and reclamation. Construct a
+fixed-capacity transfer with `Plant.prepare_cross_domain_handoff` using paired,
+nonaliasing caller-provided source and destination arrays on distinct exact
+host/accelerator targets.
+
+An accelerator extension opts a concrete storage pair into this boundary by
+implementing `Backends._prepare_array_transfer(source, destination,
+source_context, destination_context)`,
+`Backends._submit_prepared_array_transfer!`, and one nonblocking
+`Backends._observe_prepared_array_transfer_completion!` observation. Prepared
+backend state retains the exact context or event state needed to launch and
+observe the transfer while restoring the caller's previous device context.
+Submission returns `_PreparedArrayTransferSubmitted`, or returns
+`_PreparedArrayTransferSubmissionFailed` only after guaranteeing that no
+transfer can access either slot. One completion observation returns
+`_PreparedArrayTransferPending`, `_PreparedArrayTransferCompleted`, or
+`_PreparedArrayTransferCompletionFailed`; the failed result likewise
+guarantees that the transfer is quiescent. An exception or unsupported result
+leaves the slot in fail-stop `HandoffTransferUncertain` state and it cannot be
+reclaimed. The caller must disarm and dispose of that prepared handoff unless a
+later backend-specific recovery contract explicitly establishes quiescence.
+There is no generic `copyto!` fallback, global device synchronization, polling
+loop, or implicit host staging in Core.
+
+Before submission the single producer exclusively owns the selected source
+slot. Successful submission transfers source ownership to the handoff until
+terminal reclamation. Preparation gives the handoff exclusive ownership of
+destination slots; a consumer accesses one only after successful completion
+through `try_borrow_completed_handoff!`. HIL separately owns slot leasing,
+descriptor rings, return credit, backpressure, scheduling, and wait policy.
+One HIL transfer Agent should serialize every Core lifecycle method; producer
+and consumer Agents exchange descriptors or leases with that owner instead of
+mutating the handoff concurrently.
+The current maintained implementation validates the seam with a deterministic
+fake accelerator; it does not qualify CUDA or AMDGPU transfers.
 
 Plant invokes a full-optical path executor only after atmosphere
 materialization, prepared native sampled aberrations, controllable surfaces,
