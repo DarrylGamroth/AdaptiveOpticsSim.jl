@@ -36,6 +36,62 @@ Backends.backend_fill(::Type{Backends.AMDGPUBackendTag}, value, dims::Vararg{Int
 Backends.compute_device_identifier(array::AMDGPU.ROCArray) =
     AMDGPU.device_id(AMDGPU.device(array))
 
+function Backends.compute_device_availability(
+    device::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend,I},
+) where {I<:Integer}
+    identifier = try
+        Int(Backends.compute_device_identifier(device))
+    catch
+        return Backends.ComputeDeviceUnavailable(:invalid_device_identifier)
+    end
+    identifier >= 1 || return Backends.ComputeDeviceUnavailable(
+        :invalid_device_identifier)
+    AMDGPU.functional() || return Backends.ComputeDeviceUnavailable(
+        :backend_runtime_unavailable)
+    try
+        AMDGPU.HIPDevice(identifier)
+    catch
+        return Backends.ComputeDeviceUnavailable(:device_unavailable)
+    end
+    return Backends.ComputeDeviceAvailable()
+end
+
+Backends.compute_device_availability(
+    ::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend},
+) = Backends.ComputeDeviceUnavailable(:invalid_device_identifier)
+
+@noinline function _require_amdgpu_device(
+    device::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend,I},
+) where {I<:Integer}
+    availability = Backends.compute_device_availability(device)
+    Backends.compute_device_is_available(availability) ||
+        Backends._throw_compute_device_error(
+            :select,
+            Backends.compute_device_unavailable_reason(availability),
+            device,
+            "AMDGPU cannot address the requested device identifier",
+        )
+    return AMDGPU.HIPDevice(Int(Backends.compute_device_identifier(device)))
+end
+
+@noinline function _require_amdgpu_device(
+    device::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend},
+)
+    Backends._throw_compute_device_error(
+        :select,
+        :invalid_device_identifier,
+        device,
+        "AMDGPU device identifiers must be positive integer identifiers",
+    )
+end
+
+function Backends._with_compute_device(
+    f::F,
+    device::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend},
+) where {F}
+    return AMDGPU.device!(f, _require_amdgpu_device(device))
+end
+
 struct AMDGPUPreparedDeviceExecutionContext <:
     Backends._AbstractPreparedDeviceExecutionContext
     device::AMDGPU.HIPDevice
@@ -54,6 +110,20 @@ function Backends._prepare_device_execution_context(
         device,
         stream,
         Backends.compute_device(storage),
+    )
+end
+
+function Backends._prepare_device_execution_context(
+    device::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend},
+)
+    runtime_device = _require_amdgpu_device(device)
+    stream = AMDGPU.device!(runtime_device) do
+        AMDGPU.HIPStream()
+    end
+    return AMDGPUPreparedDeviceExecutionContext(
+        runtime_device,
+        stream,
+        device,
     )
 end
 

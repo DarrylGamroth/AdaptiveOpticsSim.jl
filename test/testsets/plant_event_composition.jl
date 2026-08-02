@@ -992,6 +992,15 @@ end
         @test path_execution_backend(requirements) == CPUBackend()
         @test path_execution_compute_device(requirements) ==
             AdaptiveOpticsSim.Backends.HostComputeDevice()
+        target_support =
+            @inferred AbstractPathExecutionTargetSupport path_execution_target_support(
+                group,
+                AdaptiveOpticsSim.Backends.HostComputeDevice(),
+            )
+        @test typeof(target_support) === SupportedPathExecutionTarget
+        @test path_execution_target_supported(target_support)
+        @test isnothing(
+            path_execution_target_rejection_reason(target_support))
         @test path_execution_requires_full_optical(requirements)
         @test path_execution_group_acquisition_count(group) ==
             length(expected_group_acquisitions[ordinal])
@@ -1006,6 +1015,10 @@ end
     first_requirements = path_execution_group_requirements(first_group)
     path_execution_backend(first_requirements)
     path_execution_compute_device(first_requirements)
+    path_execution_target_support(
+        first_requirements,
+        AdaptiveOpticsSim.Backends.HostComputeDevice(),
+    )
     path_execution_requires_full_optical(first_requirements)
     if coverage_instrumented()
         @test_skip "path-requirements allocation gate disabled under coverage instrumentation"
@@ -1016,6 +1029,9 @@ end
             first_requirements)) == 0
         @test @allocated(path_execution_compute_device(
             first_requirements)) == 0
+        @test @allocated(path_execution_target_support(
+            first_requirements,
+            AdaptiveOpticsSim.Backends.HostComputeDevice())) == 0
         @test @allocated(path_execution_requires_full_optical(
             first_requirements)) == 0
     end
@@ -1028,9 +1044,32 @@ end
         AdaptiveOpticsSim.Backends.HostComputeDevice(),
         true,
     )
+    cuda_device_0 = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        CUDABackend(), 0)
+    cuda_device_1 = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        CUDABackend(), 1)
+    backend_mismatch =
+        @inferred AbstractPathExecutionTargetSupport path_execution_target_support(
+            first_requirements, cuda_device_0)
+    @test typeof(backend_mismatch) === UnsupportedPathExecutionTarget
+    @test !path_execution_target_supported(backend_mismatch)
+    @test path_execution_target_rejection_reason(backend_mismatch) ==
+        :backend_mismatch
+    cuda_requirements = PathExecutionRequirements(
+        CUDABackend(), cuda_device_0, true)
+    requires_repreparation =
+        @inferred AbstractPathExecutionTargetSupport path_execution_target_support(
+            cuda_requirements, cuda_device_1)
+    @test typeof(requires_repreparation) === UnsupportedPathExecutionTarget
+    @test !path_execution_target_supported(requires_repreparation)
+    @test path_execution_target_rejection_reason(requires_repreparation) ==
+        :requires_repreparation
     for name in (
         :PreparedPathExecutionGroup,
         :PathExecutionRequirements,
+        :AbstractPathExecutionTargetSupport,
+        :SupportedPathExecutionTarget,
+        :UnsupportedPathExecutionTarget,
         :path_execution_group_count,
         :path_execution_group,
         :path_execution_group_ordinal,
@@ -1038,6 +1077,9 @@ end
         :path_execution_group_requirements,
         :path_execution_backend,
         :path_execution_compute_device,
+        :path_execution_target_support,
+        :path_execution_target_supported,
+        :path_execution_target_rejection_reason,
         :path_execution_requires_full_optical,
         :path_execution_group_acquisition_count,
         :path_execution_group_acquisition_id,

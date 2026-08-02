@@ -312,15 +312,64 @@ struct PathExecutionRequirements
     end
 end
 
+"""Cold compatibility result for one prepared group and exact target device."""
+abstract type AbstractPathExecutionTargetSupport end
+
+"""The prepared group already owns all state required on the exact target."""
+struct SupportedPathExecutionTarget <: AbstractPathExecutionTargetSupport end
+
+"""The prepared group cannot execute on the target for the structured `reason`."""
+struct UnsupportedPathExecutionTarget <:
+    AbstractPathExecutionTargetSupport
+    reason::Symbol
+end
+
+function path_execution_target_supported(
+    ::SupportedPathExecutionTarget,
+)
+    return true
+end
+
+function path_execution_target_supported(
+    ::UnsupportedPathExecutionTarget,
+)
+    return false
+end
+@inline path_execution_target_rejection_reason(
+    ::SupportedPathExecutionTarget,
+) = nothing
+@inline path_execution_target_rejection_reason(
+    support::UnsupportedPathExecutionTarget,
+) = support.reason
+
+"""
+Report whether an already prepared path group can execute on `target`.
+
+Prepared groups are bound to one exact device. A same-family alternate device
+therefore requires target-local preparation rather than an implicit runtime
+move. Resource-local preparation extends this cold contract; warmed execution
+never selects or migrates a target.
+"""
+@inline function path_execution_target_support(
+    requirements::PathExecutionRequirements,
+    target::AbstractComputeDevice,
+)
+    typeof(compute_device_backend(target)) === typeof(requirements.backend) ||
+        return UnsupportedPathExecutionTarget(:backend_mismatch)
+    target == requirements.compute_device ||
+        return UnsupportedPathExecutionTarget(:requires_repreparation)
+    return SupportedPathExecutionTarget()
+end
+
 """
 Run-immutable owner of one prepared direction-dependent optical path and every
 compatible acquisition consumer scheduled on that path.
 
 The group owns path-local mutable products, workspaces, and RNG streams through
-`path`; repeated execution therefore has exactly one writer. `ordinal` and
-`id` are stable for equivalent prepared topologies, while acquisition slots are
-run-local bounded references. The group owns no task, queue, CPU affinity, or
-transport policy.
+`path`; repeated execution therefore has exactly one writer. `id` is the stable
+declared path identity and does not depend on resource or owner order. `ordinal`
+and acquisition slots are run-local bounded references. The group owns no task,
+queue, CPU affinity, or transport policy.
 """
 struct PreparedPathExecutionGroup
     ordinal::UInt32
@@ -531,6 +580,10 @@ end
 @inline path_execution_group_requirements(
     group::PreparedPathExecutionGroup,
 ) = group.requirements
+@inline path_execution_target_support(
+    group::PreparedPathExecutionGroup,
+    target::AbstractComputeDevice,
+) = path_execution_target_support(group.requirements, target)
 @inline path_execution_backend(requirements::PathExecutionRequirements) =
     requirements.backend
 @inline path_execution_compute_device(

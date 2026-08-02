@@ -330,6 +330,23 @@ end
     @test Base.ispublic(Backends, :compute_device_backend)
     @test Base.ispublic(Backends, :compute_device_identifier)
     for name in (
+        :AbstractComputeDeviceAvailability,
+        :ComputeDeviceAvailable,
+        :ComputeDeviceUnavailable,
+        :ComputeDeviceError,
+        :compute_device_availability,
+        :compute_device_is_available,
+        :compute_device_unavailable_reason,
+        :allocate_device_array,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test Base.ispublic(Backends, name)
+        @test parentmodule(getfield(Backends, name)) === Backends
+    end
+    @test !Base.isexported(Backends, :allocate_array)
+    @test !Base.ispublic(Backends, :allocate_array)
+    for name in (
         :Telescope,
         :photon_irradiance,
         :OpticalPlaneMetadata,
@@ -584,6 +601,27 @@ end
         CPUBackend()
     @test isnothing(
         AdaptiveOpticsSim.Backends.compute_device_identifier(host_device))
+    host_availability = @inferred(
+        AdaptiveOpticsSim.Backends.compute_device_availability(host_device))
+    @test typeof(host_availability) ===
+        AdaptiveOpticsSim.Backends.ComputeDeviceAvailable
+    @test AdaptiveOpticsSim.Backends.compute_device_is_available(
+        host_availability)
+    @test isnothing(
+        AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
+            host_availability))
+    host_context =
+        AdaptiveOpticsSim.Backends._prepare_device_execution_context(
+            host_device)
+    prepared_host_device =
+        AdaptiveOpticsSim.Backends._prepared_device_execution_compute_device(
+            host_context)
+    @test prepared_host_device == host_device
+    exact_host_storage = AdaptiveOpticsSim.Backends.allocate_device_array(
+        host_device, Float32, 2, 3)
+    @test exact_host_storage isa Matrix{Float32}
+    @test size(exact_host_storage) == (2, 3)
+    @test compute_device(exact_host_storage) == host_device
     cuda_device_0 = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
         CUDABackend(), 0)
     cuda_device_1 = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
@@ -595,6 +633,39 @@ end
     @test AdaptiveOpticsSim.Backends.compute_device_backend(cuda_device_0) ==
         CUDABackend()
     @test AdaptiveOpticsSim.Backends.compute_device_identifier(cuda_device_0) == 0
+    unavailable_cuda = @inferred(
+        AdaptiveOpticsSim.Backends.compute_device_availability(cuda_device_0))
+    @test typeof(unavailable_cuda) ===
+        AdaptiveOpticsSim.Backends.ComputeDeviceUnavailable
+    @test !AdaptiveOpticsSim.Backends.compute_device_is_available(
+        unavailable_cuda)
+    @test AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
+        unavailable_cuda) == :exact_device_selection_unavailable
+    unavailable_error = try
+        AdaptiveOpticsSim.Backends.allocate_device_array(
+            cuda_device_0, Float32, 2, 3)
+        nothing
+    catch error
+        error
+    end
+    @test typeof(unavailable_error) <:
+        AdaptiveOpticsSim.Backends.ComputeDeviceError
+    @test unavailable_error.operation == :select
+    @test unavailable_error.reason == :exact_device_selection_unavailable
+    @test unavailable_error.device == cuda_device_0
+    unavailable_context_error = try
+        AdaptiveOpticsSim.Backends._prepare_device_execution_context(
+            cuda_device_0)
+        nothing
+    catch error
+        error
+    end
+    @test typeof(unavailable_context_error) <:
+        AdaptiveOpticsSim.Backends.ComputeDeviceError
+    @test unavailable_context_error.operation == :prepare_context
+    @test unavailable_context_error.reason ==
+        :exact_device_selection_unavailable
+    @test unavailable_context_error.device == cuda_device_0
     @test_throws InvalidConfiguration begin
         AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(CPUBackend(), 0)
     end
@@ -618,6 +689,14 @@ end
             coherence=IncoherentIntensityAddition())
         wrapper_map = IntensityMap(wrapper_metadata, wrapper)
         @test wrapper_map.values === wrapper
+    end
+    if coverage_instrumented()
+        @test_skip "exact-device availability allocation gate disabled under coverage instrumentation"
+    else
+        AdaptiveOpticsSim.Backends.compute_device_availability(host_device)
+        @test @allocated(
+            AdaptiveOpticsSim.Backends.compute_device_availability(
+                host_device)) == 0
     end
 
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0,

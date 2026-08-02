@@ -126,10 +126,13 @@ backend = CPUBackend()
 `Backends` exports `CPUBackend`, `CUDABackend`, `AMDGPUBackend`,
 `MetalBackend`, `AbstractArrayBackend`, `backend`, and `compute_device`.
 `AbstractComputeDevice`, `HostComputeDevice`, `AcceleratorComputeDevice`,
-`compute_device_backend`, and `compute_device_identifier` are stable
-qualified-public names, such as `Backends.HostComputeDevice()`. Backend launch,
-allocation, FFT, reduction, and registration helpers are developer or
-extension seams unless the exact owner allowlist promotes them.
+`compute_device_backend`, `compute_device_identifier`, the exact-device
+availability result types/accessors, `ComputeDeviceError`, and
+`allocate_device_array(device, T, dims...)` are stable qualified-public names,
+such as `Backends.HostComputeDevice()`. Exact-device availability is a cold
+runtime fact, not a model-support, capacity, or latency claim. Backend-family
+allocation, launch, FFT, reduction, and registration helpers remain developer
+or extension seams unless the exact owner allowlist promotes them.
 
 ## `AdaptiveOpticsSim.Optics` Foundations
 
@@ -542,6 +545,12 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `path_result_key`, `acquisition_provider`, `acquisition_products`,
   `acquisition_observation`, `acquisition_measurement`, and
   `acquisition_product_metadata`
+- Prepared execution-target contract: qualified
+  `Plant.PathExecutionRequirements`, `path_execution_group_path_id`,
+  `path_execution_target_support`, `path_execution_target_supported`, and
+  `path_execution_target_rejection_reason`. A single-device prepared group
+  supports only its exact device; a same-family alternate device reports
+  `:requires_repreparation` rather than moving at runtime.
 - Product-provider contract: qualified traits
   `Plant.FullOpticalProviderStyle`,
   `Plant.CommandResponsiveReducedOrderProviderStyle`, and

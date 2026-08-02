@@ -119,6 +119,26 @@ backend family rather than one host or accelerator device.
 """
 abstract type AbstractComputeDevice end
 
+"""Failure to inspect, select, or allocate on one exact compute device."""
+struct ComputeDeviceError{D<:AbstractComputeDevice} <:
+    AdaptiveOpticsSimError
+    operation::Symbol
+    reason::Symbol
+    device::D
+    msg::String
+end
+
+"""Cold runtime-availability result for one exact compute device."""
+abstract type AbstractComputeDeviceAvailability end
+
+"""The backend runtime can currently address the exact compute device."""
+struct ComputeDeviceAvailable <: AbstractComputeDeviceAvailability end
+
+"""The exact compute device is unavailable for the structured `reason`."""
+struct ComputeDeviceUnavailable <: AbstractComputeDeviceAvailability
+    reason::Symbol
+end
+
 """The host compute device used by ordinary CPU array storage."""
 struct HostComputeDevice <: AbstractComputeDevice end
 
@@ -197,9 +217,67 @@ end
 @inline compute_device_identifier(device::AcceleratorComputeDevice) =
     device.identifier
 
+@inline compute_device_availability(::HostComputeDevice) =
+    ComputeDeviceAvailable()
+@inline compute_device_availability(::AcceleratorComputeDevice) =
+    ComputeDeviceUnavailable(:exact_device_selection_unavailable)
+function compute_device_is_available(::ComputeDeviceAvailable)
+    return true
+end
+
+function compute_device_is_available(::ComputeDeviceUnavailable)
+    return false
+end
+@inline compute_device_unavailable_reason(::ComputeDeviceAvailable) = nothing
+@inline compute_device_unavailable_reason(
+    availability::ComputeDeviceUnavailable,
+) = availability.reason
+
+@noinline function _throw_compute_device_error(
+    operation::Symbol,
+    reason::Symbol,
+    device::D,
+    detail::AbstractString,
+) where {D<:AbstractComputeDevice}
+    throw(ComputeDeviceError(
+        operation,
+        reason,
+        device,
+        "cannot $(operation) exact compute device $(device): $(detail)",
+    ))
+end
+
+@inline _with_compute_device(f::F, ::HostComputeDevice) where {F} = f()
+
+function _with_compute_device(
+    ::F,
+    device::AcceleratorComputeDevice,
+) where {F}
+    _throw_compute_device_error(
+        :select,
+        :exact_device_selection_unavailable,
+        device,
+        "the owning backend extension does not provide exact device selection",
+    )
+end
+
 @inline function _prepare_device_execution_context(storage::AbstractArray)
     return _prepare_device_execution_context(execution_style(storage),
         storage)
+end
+
+@inline _prepare_device_execution_context(device::HostComputeDevice) =
+    _HostPreparedDeviceExecutionContext(device)
+
+function _prepare_device_execution_context(
+    device::AcceleratorComputeDevice,
+)
+    _throw_compute_device_error(
+        :prepare_context,
+        :exact_device_selection_unavailable,
+        device,
+        "the owning backend extension does not provide an exact-device context",
+    )
 end
 
 @inline function _prepare_device_execution_context(
@@ -290,7 +368,33 @@ function available_gpu_backends()
     return Tuple(out)
 end
 
-allocate_array(backend, ::Type{T}, dims::Vararg{Int,N}) where {T,N} = _resolve_array_backend(backend){T}(undef, dims...)
+allocate_array(backend, ::Type{T}, dims::Vararg{Int,N}) where {T,N} =
+    _resolve_array_backend(backend){T}(undef, dims...)
+
+"""
+Allocate uninitialized array storage on one exact compute device.
+
+This is a preparation-time backend extension seam. The owning extension must
+select the requested device, restore the caller's previous device context, and
+return storage whose reported `compute_device` exactly matches `device`.
+"""
+function allocate_device_array(
+    device::AbstractComputeDevice,
+    ::Type{T},
+    dims::Vararg{Int,N},
+) where {T,N}
+    return _with_compute_device(device) do
+        storage = allocate_array(compute_device_backend(device), T, dims...)
+        actual = compute_device(storage)
+        actual == device || _throw_compute_device_error(
+            :allocate,
+            :wrong_device,
+            device,
+            "backend allocation returned storage on $(actual)",
+        )
+        return storage
+    end
+end
 
 # Keep the default CPU FFT provider explicit. Optional provider extensions may
 # add more-specific methods for ordinary Arrays; accelerator arrays continue to
