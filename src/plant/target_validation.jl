@@ -472,6 +472,48 @@ function validate_controllable_optic_workspace_target(
     ))
 end
 
+@inline function _require_target_local_command_values_target(
+    ::_TargetLocalScalarEffectiveCommandValues,
+    ::AbstractComputeDevice,
+)
+    return nothing
+end
+
+function _require_target_local_command_values_target(
+    values::_TargetLocalArrayEffectiveCommandValues,
+    target::AbstractComputeDevice,
+)
+    _require_exact_plant_array_target(
+        values.active, target, "target-local active effective command")
+    _require_exact_plant_array_target(
+        values.staging, target, "target-local staged effective command")
+    values.active === values.staging && throw(PlantPreparationError(
+        :command_replica,
+        :aliased_staging,
+        "target-local active and staging command storage must be distinct",
+    ))
+    return nothing
+end
+
+function validate_target_local_command_endpoint_target(
+    endpoint::PreparedTargetLocalCommandEndpoint,
+    state::TargetLocalCommandEndpointState,
+    target::AbstractComputeDevice,
+)
+    endpoint.binding === state.binding || throw(PlantPreparationError(
+        :command_replica,
+        :foreign_endpoint_state,
+        "target-local command state belongs to another prepared endpoint",
+    ))
+    compute_device(endpoint) == target || _throw_wrong_plant_target(
+        target,
+        "target-local command endpoint",
+        compute_device(endpoint),
+    )
+    _require_target_local_command_values_target(state.values, target)
+    return state
+end
+
 @inline function _require_exact_dm_runtime_modes_target(
     modes::AbstractArray,
     target::AbstractComputeDevice,

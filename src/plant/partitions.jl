@@ -77,10 +77,11 @@ const _PREPARED_TARGET_PARTITION_TOKEN = _PreparedTargetPartitionToken()
 
 """
 One non-executable exact-target partition. It owns target-local static data and
-mutable workspaces for complete path/acquisition groups, but no atmosphere
-timeline, atmosphere RNG, command replica, schedule, or transfer state.
+mutable workspaces for complete path/acquisition groups and role-neutral
+target-local controllable optics. It owns no atmosphere timeline, atmosphere
+RNG, command admission, authority placement, schedule, or transfer state.
 """
-struct PreparedTargetPartition{D,X,T,B,S,P,A,R}
+struct PreparedTargetPartition{D,X,T,B,S,P,A,R,O}
     target::D
     context::X
     telescope::T
@@ -89,6 +90,7 @@ struct PreparedTargetPartition{D,X,T,B,S,P,A,R}
     paths::P
     acquisitions::A
     rngs::R
+    controllable_optics::O
     resource_report::StructuralResourceReport
     controllable_optic_ids::_FixedPlantRegistry{ControllableOpticID}
     command_endpoint_ids::_FixedPlantRegistry{CommandEndpointID}
@@ -103,13 +105,14 @@ struct PreparedTargetPartition{D,X,T,B,S,P,A,R}
         paths::P,
         acquisitions::A,
         rngs::R,
+        controllable_optics::O,
         resource_report::StructuralResourceReport,
         controllable_optic_ids::_FixedPlantRegistry{ControllableOpticID},
         command_endpoint_ids::_FixedPlantRegistry{CommandEndpointID},
-    ) where {D,X,T,B,S,P,A,R}
+    ) where {D,X,T,B,S,P,A,R,O}
         token === _PREPARED_TARGET_PARTITION_TOKEN || throw(
             ArgumentError("invalid internal target-partition token"))
-        return new{D,X,T,B,S,P,A,R}(
+        return new{D,X,T,B,S,P,A,R,O}(
             target,
             context,
             telescope,
@@ -118,6 +121,7 @@ struct PreparedTargetPartition{D,X,T,B,S,P,A,R}
             paths,
             acquisitions,
             rngs,
+            controllable_optics,
             resource_report,
             controllable_optic_ids,
             command_endpoint_ids,
@@ -129,10 +133,11 @@ mutable struct _PreparedPlantPartitionsToken end
 const _PREPARED_PLANT_PARTITIONS_TOKEN = _PreparedPlantPartitionsToken()
 
 """Prepared target-local partitions for one exact resolved assignment."""
-struct PreparedPlantPartitions{D,A,U,P,V}
+struct PreparedPlantPartitions{D,A,U,C,P,V}
     definition::D
     assignment::A
     authority::U
+    command_authority_identity::C
     partitions::P
     run_seed::UInt64
     rng_derivation_version::V
@@ -142,16 +147,18 @@ struct PreparedPlantPartitions{D,A,U,P,V}
         definition::D,
         assignment::A,
         authority::U,
+        command_authority_identity::C,
         partitions::P,
         run_seed::UInt64,
         rng_derivation_version::V,
-    ) where {D,A,U,P,V}
+    ) where {D,A,U,C,P,V}
         token === _PREPARED_PLANT_PARTITIONS_TOKEN || throw(
             ArgumentError("invalid internal prepared-partitions token"))
-        return new{D,A,U,P,V}(
+        return new{D,A,U,C,P,V}(
             definition,
             assignment,
             authority,
+            command_authority_identity,
             partitions,
             run_seed,
             rng_derivation_version,
@@ -159,13 +166,14 @@ struct PreparedPlantPartitions{D,A,U,P,V}
     end
 end
 
-struct _UnboundTargetPartition{D,X,T,S,P,A}
+struct _UnboundTargetPartition{D,X,T,S,P,A,O}
     target::D
     context::X
     telescope::T
     sampled_aberrations::S
     paths::P
     acquisitions::A
+    controllable_optics::O
     controllable_optic_ids::_FixedPlantRegistry{ControllableOpticID}
     command_endpoint_ids::_FixedPlantRegistry{CommandEndpointID}
 end
@@ -205,6 +213,8 @@ end
 @inline prepared_paths(partition::PreparedTargetPartition) = partition.paths
 @inline prepared_acquisitions(partition::PreparedTargetPartition) =
     partition.acquisitions
+@inline target_local_controllable_optic_owners(
+    partition::PreparedTargetPartition) = partition.controllable_optics
 @inline prepared_sampled_aberrations(partition::PreparedTargetPartition) =
     partition.sampled_aberrations
 @inline partition_resource_report(partition::PreparedTargetPartition) =
@@ -213,6 +223,8 @@ end
     partition::PreparedTargetPartition) = partition.controllable_optic_ids
 @inline partition_command_endpoint_ids(partition::PreparedTargetPartition) =
     partition.command_endpoint_ids
+@inline command_authority_identity(partitions::PreparedPlantPartitions) =
+    partitions.command_authority_identity
 
 function prepared_partition(partitions::PreparedPlantPartitions,
     target::AbstractComputeDevice)
@@ -389,11 +401,7 @@ function _partition_controllable_optic_definitions(
     return _partition_registry(values, ControllableOpticDefinition)
 end
 
-function _partition_controllable_optic_identities(
-    definition::PlantDefinition,
-    path_ids::AbstractVector,
-)
-    optics = _partition_controllable_optic_definitions(definition, path_ids)
+function _partition_controllable_optic_identities(optics::AbstractVector)
     optic_ids = ControllableOpticID[
         controllable_optic_id(optic) for optic in optics]
     endpoint_values = CommandEndpointID[]
@@ -414,6 +422,8 @@ function _prepare_unbound_target_partition(
     authority_target::AbstractComputeDevice,
     authority_context,
     authority_telescope,
+    command_configurations,
+    command_authority_identity::CommandAuthorityIdentity,
 )
     context, telescope = _partition_telescope_resources(
         target,
@@ -432,8 +442,10 @@ function _prepare_unbound_target_partition(
         _canonical_partition_acquisition_definitions(definition, path_ids)
     sampled_definitions = _partition_sampled_aberration_definitions(
         definition, path_ids)
-    optic_ids, endpoint_ids = _partition_controllable_optic_identities(
+    optic_definitions = _partition_controllable_optic_definitions(
         definition, path_ids)
+    optic_ids, endpoint_ids =
+        _partition_controllable_optic_identities(optic_definitions)
     return _with_completed_prepared_device_execution_context(context) do
         sampled_aberrations = _prepare_partition_sampled_aberrations(
             sampled_definitions, target)
@@ -441,6 +453,15 @@ function _prepare_unbound_target_partition(
             path_definitions, telescope, context)
         acquisitions = _prepare_target_local_acquisitions(
             acquisition_definitions, paths)
+        controllable_optics =
+            _prepare_target_local_controllable_optic_owners(
+                optic_definitions,
+                telescope,
+                atmosphere_definition(definition),
+                target,
+                command_configurations,
+                command_authority_identity,
+            )
         return _UnboundTargetPartition(
             target,
             context,
@@ -448,6 +469,7 @@ function _prepare_unbound_target_partition(
             sampled_aberrations,
             paths,
             acquisitions,
+            controllable_optics,
             optic_ids,
             endpoint_ids,
         )
@@ -543,6 +565,26 @@ function _partition_resource_report(
         )
         push!(facts, structural_resource_fact(acquisition, id, target))
     end
+    for owner in partition.controllable_optics
+        optic_id = controllable_optic_id(owner)
+        id = StructuralResourceOwnerID(
+            :controllable_optic_replica, optic_id.name)
+        push!(facts, _combine_structural_owner_facts(id, target, (
+            structural_resource_fact(owner.prepared, id, target),
+            structural_resource_fact(owner.state, id, target),
+            structural_resource_fact(owner.workspace, id, target),
+        )))
+        @inbounds for index in eachindex(owner.prepared.endpoints)
+            endpoint = owner.prepared.endpoints[index]
+            endpoint_state = owner.state.endpoints[index]
+            endpoint_id = StructuralResourceOwnerID(
+                :effective_command_replica,
+                command_endpoint_id(endpoint).name,
+            )
+            push!(facts, structural_resource_fact(
+                endpoint_state, endpoint_id, target))
+        end
+    end
     return aggregate_structural_resource_facts(facts, target)
 end
 
@@ -565,6 +607,7 @@ function _bind_target_partition(
         partition.paths,
         partition.acquisitions,
         rngs,
+        partition.controllable_optics,
         report,
         partition.controllable_optic_ids,
         partition.command_endpoint_ids,
@@ -607,24 +650,31 @@ end
 
 """
     prepare_plant_partitions(definition, assignment; run_seed,
-        rng_derivation_version)
+        rng_derivation_version, command_endpoints=())
 
 Prepare one cold plant declaration into complete exact-target resource
 partitions. Preparation validates the resolved assignment before allocating,
 constructs exactly one timed atmosphere/timeline/RNG authority, and may copy
-declared static data into its target-local owners. It does not publish runtime
-products or move arrays between prepared partitions.
+declared static data and configured initial effective commands into its
+target-local owners. It creates one placement-neutral command-authority
+identity but no command authority, publication source, or admission state. It
+does not publish runtime products or move arrays between prepared partitions.
 """
 function prepare_plant_partitions(
     definition::PlantDefinition,
     assignment::ResolvedPlantPartitionAssignment;
     run_seed,
     rng_derivation_version=_DEFAULT_RNG_DERIVATION_VERSION,
+    command_endpoints=(),
 )
     _require_current_partition_assignment_definition(assignment, definition)
     _require_partition_targets_available(partition_targets(assignment))
     seed = _prepare_run_seed(run_seed)
     version = _prepare_rng_derivation_version(rng_derivation_version)
+    command_configurations = _partition_command_endpoint_configurations(
+        definition, command_endpoints)
+    command_identity = CommandAuthorityIdentity(
+        _COMMAND_AUTHORITY_IDENTITY_TOKEN)
     authority_target = atmosphere_authority_target(assignment)
     authority_context, authority_telescope, atmosphere =
         _prepare_atmosphere_authority_resources(definition, authority_target)
@@ -638,6 +688,8 @@ function prepare_plant_partitions(
             authority_target,
             authority_context,
             authority_telescope,
+            command_configurations,
+            command_identity,
         )
     end
     atmosphere_bindings = _atmosphere_rng_owner_bindings(atmosphere)
@@ -686,6 +738,7 @@ function prepare_plant_partitions(
         definition,
         assignment,
         authority,
+        command_identity,
         partitions,
         seed,
         version,

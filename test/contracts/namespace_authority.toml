@@ -578,7 +578,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "6a602fbc1226e33409f2dd50cb8dcc749d2ec80f24370fe92c2c0a6a1aad55eb"
+sha256 = "678f430bf1bf2ba2e319fe977a2b5f80c91eb0ea2914324687efe9c5f4a35d1f"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1452,6 +1452,7 @@ public = [
     "prepare_controllable_optic",
     "prepare_controllable_optic_state",
     "prepare_controllable_optic_workspace",
+    "prepare_target_local_controllable_optic",
     "prepare_controllable_optic_path_coupling",
     "validate_controllable_optic_target",
     "validate_controllable_optic_state_target",
@@ -1559,9 +1560,20 @@ public = [
     "partition_atmosphere_layer_ids",
     "PreparedTargetLocalPathResources",
     "PreparedTargetLocalAcquisitionResources",
+    "CommandAuthorityIdentity",
+    "EffectiveCommandPublicationSequence",
+    "EffectiveCommandPublication",
+    "PreparedTargetLocalCommandEndpoint",
+    "TargetLocalCommandEndpointState",
+    "TargetLocalCommandEndpointOwner",
+    "PreparedTargetLocalControllableOptic",
+    "TargetLocalControllableOpticState",
+    "TargetLocalControllableOpticWorkspace",
+    "TargetLocalControllableOpticOwner",
     "prepare_target_local_path_resources",
     "prepare_target_local_acquisition_resources",
     "prepare_target_local_acquisition_provider",
+    "validate_target_local_command_endpoint_target",
     "AtmosphereAuthorityBinding",
     "PreparedAtmosphereAuthority",
     "PreparedTargetPartition",
@@ -1572,9 +1584,22 @@ public = [
     "prepared_atmosphere_authority",
     "atmosphere_authority_binding",
     "atmosphere_authority_identity",
+    "command_authority_identity",
     "partition_resource_report",
     "partition_controllable_optic_ids",
     "partition_command_endpoint_ids",
+    "target_local_controllable_optic_owners",
+    "prepared_target_local_controllable_optic",
+    "target_local_controllable_optic_state",
+    "target_local_controllable_optic_workspace",
+    "target_local_command_endpoints",
+    "target_local_command_endpoint_state",
+    "target_local_command_endpoint_owner",
+    "has_effective_command_publication",
+    "effective_command_publication_timestamp",
+    "effective_command_publication_sequence",
+    "last_effective_command_publication_timestamp",
+    "last_effective_command_publication_sequence",
     "StructuralResourceError",
     "StructuralResourceOwnerID",
     "ResourceEstimateMethod",

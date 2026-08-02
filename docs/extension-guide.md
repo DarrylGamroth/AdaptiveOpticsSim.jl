@@ -583,9 +583,9 @@ of its underlying stages.
 ### Target-local partition preparation
 
 A model that participates in preparation-only CPU/accelerator partitioning
-implements two additional qualified seams. The path seam prepares only
-co-located static data and reusable workspace; it receives no atmosphere and
-must not invent a renderer, timeline, transfer, or executor:
+implements the applicable qualified target-local seams. The path seam prepares
+only co-located static data and reusable workspace; it receives no atmosphere
+and must not invent a renderer, timeline, transfer, or executor:
 
 ```julia
 function AdaptiveOpticsSim.Plant.prepare_target_local_path_resources(
@@ -623,6 +623,33 @@ function AdaptiveOpticsSim.Plant.prepare_target_local_acquisition_provider(
 end
 ```
 
+A controllable-optic model separately implements the fail-closed target-local
+physical-preparation seam:
+
+```julia
+function AdaptiveOpticsSim.Plant.prepare_target_local_controllable_optic(
+    model::MyControllableOpticModel,
+    definition::AdaptiveOpticsSim.Plant.ControllableOpticDefinition,
+    telescope::AdaptiveOpticsSim.Optics.AbstractTelescope,
+    atmosphere_definition::AdaptiveOpticsSim.Atmospheres.AbstractTimedAtmosphereDefinition,
+    target::AdaptiveOpticsSim.Backends.AbstractComputeDevice,
+)
+    return prepare_my_controllable_optic(model, definition, telescope, target)
+end
+```
+
+It receives the cold atmosphere definition only for geometry or capability
+decisions; it must not prepare a second timed atmosphere. It returns immutable
+physical preparation data on the exact target. Core then invokes the existing
+`prepare_controllable_optic_state` and
+`prepare_controllable_optic_workspace` seams, validates all three physical
+owners, and constructs one shared target-local owner per visible logical optic.
+Provide exact `validate_controllable_optic_target`,
+`validate_controllable_optic_state_target`,
+`validate_controllable_optic_workspace_target`, and
+`structural_resource_fact` methods. Unknown model/target combinations fail
+closed.
+
 Reuse a shared model-specific helper when ordinary `prepare_path_executor` and
 target-local preparation construct the same optical data. Do not implement the
 target-local seam by preparing and discarding a second timed atmosphere. The
@@ -642,7 +669,10 @@ assignment = AdaptiveOpticsSim.Plant.resolve_plant_partition_assignment(
     :science => host_target,
 )
 prepared = AdaptiveOpticsSim.Plant.prepare_plant_partitions(
-    assignment; run_seed=0x1234)
+    assignment;
+    run_seed=0x1234,
+    command_endpoints=endpoint_configurations,
+)
 authority =
     AdaptiveOpticsSim.Plant.prepared_atmosphere_authority(prepared)
 gpu_partition = AdaptiveOpticsSim.Plant.prepared_partition(
@@ -655,8 +685,13 @@ assignment admits host resources and at most one exact accelerator target in
 Gate 9A. `PreparedPlantPartitions` is an inspectable, non-executable preparation
 result. Cold preparation may defensively copy declared static data, such as a
 sampled OPD, into each exact target that uses it. The result performs no runtime
-atmosphere publication, command replication, inter-partition product handoff,
-scheduling, or placement planning.
+atmosphere publication, command admission, authoritative command publication,
+inter-partition product handoff, scheduling, or placement planning. If the
+definition declares command endpoints, `endpoint_configurations` must contain
+one complete `CommandEndpointConfiguration` per endpoint. Core uses only each
+configured initial effective value to seed independent target-local
+active/staging storage and physical state; capacity, history, safe-command,
+silence, and admission policy remain authority-side concerns.
 
 Plant invokes a full-optical path executor only after atmosphere
 materialization, prepared native sampled aberrations, controllable surfaces,

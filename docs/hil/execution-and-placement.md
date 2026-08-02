@@ -185,10 +185,15 @@ bind the same sole `Plant.PreparedAtmosphereAuthority`. Topology snapshots,
 resolved path mappings, prepared path/acquisition collections, and recorded
 optic/endpoint identities use homogeneous cardinality-neutral registries; only
 the Gate 9A maximum of two target partitions remains a small bounded group.
-These values are deliberately non-executable: they contain no atmosphere
-publication, command replica mutation, transfer, task, queue, owner, or
-placement rationale. The HIL package still owns planning, admission, bounded
-handoffs, execution ownership, and runtime qualification.
+These values are deliberately non-executable. Each target partition does own
+one role-neutral prepared physical-optic state/workspace and one active/staging
+effective-command copy for every visible logical optic and endpoint. All paths
+on that target share the same owner. The partition set also carries one
+placement-neutral `Plant.CommandAuthorityIdentity`, but no command authority,
+admission state, publication source, payload lease, atmosphere publication,
+transfer, task, queue, or placement rationale. The HIL package still owns
+publisher binding, planning, admission, bounded handoffs, execution ownership,
+and runtime qualification.
 
 ## Optical Branch Ownership And Parallelism
 
@@ -538,13 +543,16 @@ CPU and GPU groups may run concurrently when their prepared dependencies and
 deadlines permit it.
 
 Immutable target-local telescope/model data may be replicated during
-preparation. The authoritative atmosphere owner publishes epoch identity and
-bounded materialized path inputs; the command authority publishes compact
-effective-command values; and stable RNG owner identities remain consistent
-across participating resources. Large field, OPD, photon-arrival-rate, or frame
-arrays cross a CPU/GPU boundary only at an explicit prepared handoff with
-bounded storage and a measured transfer budget. An ordinary optical path
-should not be split stage-by-stage across CPU and GPU merely to keep both busy.
+preparation. Core also prepares role-neutral target-local physical-optic owners
+and sealed active/staging effective-command storage. The authoritative
+atmosphere owner publishes epoch identity and bounded materialized path inputs;
+the later-bound command authority publishes versioned metadata plus a bounded
+payload lease to each relevant target-local owner; and stable RNG owner
+identities remain consistent across participating resources. Large field, OPD,
+photon-arrival-rate, or frame arrays cross a CPU/GPU boundary only at an
+explicit prepared handoff with bounded storage and a measured transfer budget.
+An ordinary optical path should not be split stage-by-stage across CPU and GPU
+merely to keep both busy.
 
 A mixed placement may intentionally transfer a completed GPU frame to a
 host-resident RTC adapter or another declared complete-product consumer. The

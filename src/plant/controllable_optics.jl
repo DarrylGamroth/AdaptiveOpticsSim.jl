@@ -181,6 +181,31 @@ function prepare_controllable_optic(model,
 end
 
 """
+    prepare_target_local_controllable_optic(
+        model, definition, telescope, atmosphere_definition, target)
+
+Fail-closed extension seam for immutable physical-optic preparation in a
+target-local partition.  Unlike `prepare_controllable_optic`, this seam does
+not receive or create a mutable timed-atmosphere owner.  Models may use the
+cold atmosphere definition for static conjugate geometry; every numerical
+array they return must occupy `target`.
+"""
+function prepare_target_local_controllable_optic(
+    model,
+    ::ControllableOpticDefinition,
+    ::AbstractTelescope,
+    ::AbstractTimedAtmosphereDefinition,
+    ::AbstractComputeDevice,
+)
+    throw(PlantPreparationError(
+        :controllable_optic,
+        :unsupported_target_local_model,
+        "controllable-optic model $(typeof(model)) does not implement " *
+        "prepare_target_local_controllable_optic",
+    ))
+end
+
+"""
 Construct the single-writer physical state for one prepared optic.
 
 Every array in `initial_commands` is a fresh state-owned copy rather than

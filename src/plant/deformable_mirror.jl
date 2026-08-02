@@ -537,11 +537,10 @@ end
     return deepcopy(topology)::TP
 end
 
-function prepare_controllable_optic(
+function _prepare_deformable_mirror_controllable_optic(
     model::DeformableMirrorModel{T},
     definition::ControllableOpticDefinition,
     telescope::Telescope,
-    ::AbstractAtmosphere,
 ) where {T<:AbstractFloat}
     schema = _require_deformable_mirror_schema(model, definition)
     eltype(pupil_reflectivity(telescope)) === T ||
@@ -595,6 +594,27 @@ function prepare_controllable_optic(
         surface_metadata,
         model.pupil_relay_registration,
     )
+end
+
+@inline function prepare_controllable_optic(
+    model::DeformableMirrorModel,
+    definition::ControllableOpticDefinition,
+    telescope::Telescope,
+    ::AbstractAtmosphere,
+)
+    return _prepare_deformable_mirror_controllable_optic(
+        model, definition, telescope)
+end
+
+@inline function prepare_target_local_controllable_optic(
+    model::DeformableMirrorModel,
+    definition::ControllableOpticDefinition,
+    telescope::Telescope,
+    ::AbstractTimedAtmosphereDefinition,
+    ::AbstractComputeDevice,
+)
+    return _prepare_deformable_mirror_controllable_optic(
+        model, definition, telescope)
 end
 
 @inline function _deformable_mirror_separable_runtime(

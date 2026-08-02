@@ -154,10 +154,39 @@ function optional_target_partition_definition(::Type{T}) where {
         coordinates=(T(4), T(35)),
         T=T,
     )
+    dm_schema = PlantCommandSchema(
+        T,
+        (4,);
+        id=:optional_partition_dm_schema,
+        version=1,
+        endpoint=:optional_partition_dm_command,
+        units=:metre,
+        sign_convention=:positive_surface_increases_opd,
+        basis=CommandBasis(:actuator, :optional_partition_dm),
+        basis_revision=1,
+        semantics=AbsoluteCommand,
+        bounds=UnboundedCommandValues(),
+        value_policy=CommandValuePolicy(),
+        sequence_policy=CommandSequencePolicy(),
+        effective_time_policy=CommandEffectiveTimePolicy(),
+        silence_policy=CommandSilencePolicy(),
+    )
+    dm = ControllableOpticDefinition(
+        :optional_partition_dm,
+        DeformableMirrorModel(
+            n_act=2,
+            influence_width=T(0.3),
+            T=T,
+        ),
+        (dm_schema,);
+        placement=PupilPlanePlacement(),
+        visibility=AllPathVisibility(),
+    )
     return PlantDefinition(
         ;
         telescope,
         atmosphere,
+        controllable_optics=(dm,),
         paths=(
             OpticalPathDefinition(
                 :alpha,
@@ -185,6 +214,18 @@ function optional_target_partition_definition(::Type{T}) where {
     )
 end
 
+function optional_target_partition_command_configurations(::Type{T}) where {
+    T<:AbstractFloat,
+}
+    return (
+        CommandEndpointConfiguration(
+            :optional_partition_dm_command,
+            zeros(T, 4);
+            capacity=2,
+        ),
+    )
+end
+
 function assert_optional_target_partition_report(partition, target;
     authority::Bool)
     report = partition_resource_report(partition)
@@ -203,7 +244,12 @@ function assert_optional_target_partition_report(partition, target;
         init=UInt64(0),
     )
     @test length(facts) == length(prepared_paths(partition)) +
-        length(prepared_acquisitions(partition)) + 1 + Int(authority)
+        length(prepared_acquisitions(partition)) +
+        length(target_local_controllable_optic_owners(partition)) +
+        sum(owner -> length(target_local_command_endpoints(
+                prepared_target_local_controllable_optic(owner))),
+            target_local_controllable_optic_owners(partition); init=0) +
+        1 + Int(authority)
     @test count(fact -> structural_resource_owner_id(fact).category ==
         :atmosphere, facts) == Int(authority)
     return report
@@ -226,6 +272,38 @@ function assert_optional_target_partition_residency(partition, target,
         @test product.observation isa BackendArray
         @test compute_device(product.observation) == target
     end
+    for owner in target_local_controllable_optic_owners(partition)
+        prepared = prepared_target_local_controllable_optic(owner)
+        state = target_local_controllable_optic_state(owner)
+        workspace = target_local_controllable_optic_workspace(owner)
+        @test compute_device(owner) == target
+        @test Plant.validate_controllable_optic_target(
+            prepared.implementation, target) === prepared.implementation
+        @test Plant.validate_controllable_optic_state_target(
+            prepared.implementation, state.physical, target) === state.physical
+        @test Plant.validate_controllable_optic_workspace_target(
+            prepared.implementation, workspace.physical, target) ===
+            workspace.physical
+        for endpoint in target_local_command_endpoints(prepared)
+            endpoint_state = target_local_command_endpoint_state(
+                owner, command_endpoint_id(endpoint))
+            @test effective_command(endpoint_state) isa BackendArray
+            @test compute_device(effective_command(endpoint_state)) == target
+            @test Plant.validate_target_local_command_endpoint_target(
+                endpoint, endpoint_state, target) === endpoint_state
+            values = getfield(endpoint_state, :values)
+            assert_optional_structural_resource_fact(
+                endpoint_state,
+                StructuralResourceOwnerID(
+                    :effective_command_replica,
+                    command_endpoint_id(endpoint).name,
+                ),
+                target,
+                (getfield(values, :active),),
+                (getfield(values, :staging),),
+            )
+        end
+    end
     return nothing
 end
 
@@ -237,6 +315,8 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
         selector, UInt8, 1))
     host = HostComputeDevice()
     definition = optional_target_partition_definition(Float32)
+    command_endpoints =
+        optional_target_partition_command_configurations(Float32)
     accelerator_only_assignment = resolve_plant_partition_assignment(
         definition,
         target,
@@ -250,9 +330,15 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
         :beta => target,
     )
     accelerator_only = prepare_plant_partitions(
-        definition, accelerator_only_assignment; run_seed=0x9a20)
+        definition, accelerator_only_assignment;
+        run_seed=0x9a20,
+        command_endpoints,
+    )
     mixed = prepare_plant_partitions(
-        definition, mixed_assignment; run_seed=0x9a20)
+        definition, mixed_assignment;
+        run_seed=0x9a20,
+        command_endpoints,
+    )
 
     @test length(prepared_partitions(accelerator_only)) == 1
     @test length(prepared_partitions(mixed)) == 2
@@ -271,6 +357,8 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
     accelerator_partition = only(prepared_partitions(accelerator_only))
     mixed_host = prepared_partition(mixed, host)
     mixed_accelerator = prepared_partition(mixed, target)
+    @test length(target_local_controllable_optic_owners(
+        accelerator_partition)) == 1
     @test Tuple(path_id(path.definition) for path in
         prepared_paths(accelerator_partition)) ==
         (OpticalPathID(:alpha), OpticalPathID(:beta))
@@ -293,6 +381,56 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
     assert_optional_target_partition_report(mixed_host, host; authority=true)
     assert_optional_target_partition_report(
         mixed_accelerator, target; authority=false)
+
+    owner = only(target_local_controllable_optic_owners(mixed_accelerator))
+    prepared_optic = prepared_target_local_controllable_optic(owner)
+    endpoint = only(target_local_command_endpoints(prepared_optic))
+    endpoint_id = command_endpoint_id(endpoint)
+    endpoint_owner = target_local_command_endpoint_owner(owner, endpoint_id)
+    payload = BackendArray(Float32[1, 0, -0.5, 0.25])
+    publication = Plant._effective_command_publication(
+        command_authority_identity(mixed),
+        target,
+        controllable_optic_id(owner),
+        command_schema(endpoint),
+        PlantTimestamp(17),
+        1,
+    )
+    Plant._stage_effective_command_publication!(
+        endpoint_owner, publication, payload)
+    Plant._commit_effective_command_publication!(endpoint_owner)
+    endpoint_state = target_local_command_endpoint_state(owner, endpoint_id)
+    physical_state = target_local_controllable_optic_state(owner).physical
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(
+            surface_opd(physical_state.active)),
+    )
+    @test Array(effective_command(endpoint_state)) == Array(payload)
+    @test Array(physical_state.active.state.coefs) == Array(payload)
+    @test last_effective_command_publication_timestamp(endpoint_state) ==
+        PlantTimestamp(17)
+    @test last_effective_command_publication_sequence(endpoint_state) ==
+        EffectiveCommandPublicationSequence(1)
+
+    rejected = Plant._effective_command_publication(
+        command_authority_identity(mixed),
+        target,
+        controllable_optic_id(owner),
+        command_schema(endpoint),
+        PlantTimestamp(18),
+        2,
+    )
+    error = try
+        Plant._stage_effective_command_publication!(
+            endpoint_owner, rejected, Float32[9, 9, 9, 9])
+        nothing
+    catch caught
+        caught
+    end
+    @test error isa PlantCommandError
+    @test error.reason === :wrong_target
+    @test Array(effective_command(endpoint_state)) == Array(payload)
+    @test Array(physical_state.active.state.coefs) == Array(payload)
     return nothing
 end
 
