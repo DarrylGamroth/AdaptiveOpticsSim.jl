@@ -111,19 +111,29 @@ Current CPU-supported families:
   one-accelerator-only, and CPU-plus-one-accelerator resources. Complete
   path/acquisition groups remain co-located, one authority owns the timed
   atmosphere/timeline/RNG state, stable RNG metadata is placement invariant,
-  and every partition carries exact target-scoped structural facts. Maintained
+  and every partition carries exact target-scoped structural facts. Each
+  visible logical controllable optic also has one shared role-neutral physical
+  owner and independent active/staging effective-command storage on that exact
+  target. One placement-neutral run identity names the future sole command
+  publisher; core does not bind or execute that authority. Maintained
   CPU/fake-resource tests and WSL CUDA hardware validation defend topology,
-  authority binding, exact residency, static sampled-OPD materialization, and
-  resource accounting. The AMDGPU optional checks exist, but this public path
-  is not promoted on AMDGPU: normal Julia 1.12.6/AMDGPU.jl 2.7.0 terminates the
-  local `gfx1030` process, while manual staged construction and `--compile=min`
-  complete. [Issue #216](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/216)
-  tracks that no-command reproducer separately from #213. A queued GitHub
-  AMDGPU run with no eligible runner is infrastructure status, not validation
-  evidence. Cold preparation may copy declared static data into an exact
-  target; this surface does not execute mixed work, publish atmosphere or
-  command state, hand runtime products between partitions, choose placement,
-  admit capacity, or establish a HIL latency claim
+  authority identity, exact residency, static sampled-OPD materialization,
+  deterministic local DM application, alias isolation, and resource accounting.
+  The AMDGPU optional checks exist, but this public path is not promoted on
+  AMDGPU. The no-command partition reproducer terminates the local `gfx1030`
+  process under normal Julia 1.12.6/AMDGPU.jl 2.7.0 compilation, while its
+  manual staged construction and `--compile=min` controls complete.
+  [Issue #216](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/216)
+  tracks that reproducer. The command-aware check separately terminates in
+  GPUCompiler while compiling finite-array validation even with
+  `--compile=min`; [issue #213](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/213)
+  tracks that path. A queued GitHub AMDGPU run with no eligible runner is
+  infrastructure status, not validation evidence. Cold preparation may copy
+  declared static data and initial command
+  values into an exact target; this surface does not execute mixed work,
+  publish atmosphere state, bind the command publisher, transfer a command
+  payload, hand runtime products between partitions, choose placement, admit
+  capacity, or establish a HIL latency claim
 - trigger-relative autonomous circular-Pyramid modulation with bounded
   radius/frequency/phase/enabled setpoints, free-running/source/delivered-reset
   relationships, deterministic branch faults, and an allocation-free

@@ -549,7 +549,31 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `Backends.compute_device(plant)`. Qualified extension/execution seams are
   `prepare_pupil_opd_materialization`, `materialize_path_input!`,
   `execute_path!`, and `execute_acquisition!`
+- Qualified preparation-only partition boundary:
+  `ResolvedPlantPartitionAssignment`, `prepare_plant_partitions`,
+  `PreparedPlantPartitions`, `PreparedTargetPartition`,
+  `PreparedAtmosphereAuthority`, `prepared_partitions`,
+  `prepared_partition`, `prepared_atmosphere_authority`,
+  `target_local_controllable_optic_owners`, and
+  `partition_resource_report`. Every visible logical optic has at most one
+  role-neutral owner per exact target, shared by all co-located paths. A complete
+  `CommandEndpointConfiguration` set supplies initial effective values whenever
+  the declaration contains endpoints
+- Qualified target-local command inspection:
+  `CommandAuthorityIdentity`, `EffectiveCommandPublicationSequence`,
+  `EffectiveCommandPublication`, `PreparedTargetLocalCommandEndpoint`,
+  `TargetLocalCommandEndpointState`,
+  `PreparedTargetLocalControllableOptic`,
+  `TargetLocalControllableOpticState`,
+  `TargetLocalControllableOpticWorkspace`, and their `command_authority_identity`,
+  `effective_command*`, `target_local_*`, and
+  `last_effective_command_publication_*` accessors. Publication metadata does
+  not own an array payload. The committed target-local active copy is sealed
+  from caller, staging, endpoint, and owner aliases. Public mutation remains
+  withheld until the HIL composition layer can enforce the sole-publisher and
+  bounded-payload-lifetime contract
 - Qualified exact-target extension seams:
+  `prepare_target_local_controllable_optic`,
   `validate_controllable_optic_target`,
   `validate_controllable_optic_state_target`,
   `validate_controllable_optic_workspace_target`,
