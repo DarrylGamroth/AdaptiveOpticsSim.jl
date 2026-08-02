@@ -226,6 +226,12 @@ struct TargetPartitionTestExecution{I,R,W}
     workspace::W
 end
 
+struct TargetPartitionTestPupilExecution{I,R,W}
+    input::I
+    result::R
+    workspace::W
+end
+
 Plant.plant_model_definition_style(::Type{TargetPartitionTestPathModel}) =
     ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
@@ -381,6 +387,32 @@ function Plant.validate_path_execution_target(
     return execution
 end
 
+function Plant.validate_path_execution_binding(
+    execution::TargetPartitionTestPupilExecution,
+    input::PupilFunction,
+    result::IntensityMap,
+)
+    execution.input === input && execution.result === result || throw(
+        PlantPreparationError(:path, :prepared_binding,
+            "target-partition pupil execution lost its exact products"))
+    return nothing
+end
+
+function Plant.validate_path_execution_target(
+    execution::TargetPartitionTestPupilExecution,
+    target::AbstractComputeDevice,
+)
+    all(storage -> compute_device(storage) == target,
+        (execution.input.support,
+            execution.input.amplitude,
+            execution.input.opd,
+            execution.result.values,
+            execution.workspace)) || throw(PlantPreparationError(
+        :path, :wrong_device,
+        "target-partition pupil execution storage is not co-located"))
+    return execution
+end
+
 function Plant.structural_resource_fact(
     execution::TargetPartitionTestExecution,
     id::StructuralResourceOwnerID,
@@ -410,6 +442,55 @@ function target_partition_test_intensity_map(
         coherence=IncoherentIntensityAddition(),
     )
     return IntensityMap(metadata, values)
+end
+
+function target_partition_test_pupil_path(
+    partition::PreparedTargetPartition,
+    path::PreparedTargetLocalPathResources,
+)
+    telescope = prepared_telescope(partition)
+    selector = backend(telescope)
+    support = allocate_array(selector, Bool, 2, 2)
+    amplitude = allocate_array(selector, Float64, 2, 2)
+    opd = allocate_array(selector, Float64, 2, 2)
+    fill!(support, true)
+    fill!(amplitude, 1.0)
+    fill!(opd, 0.0)
+    metadata = OpticalPlaneMetadata(
+        PupilPlane(),
+        opd;
+        coordinate_domain=MetricCoordinates(),
+        sampling=(1.0, 1.0),
+        spectral=AchromaticSpectralCoordinate(),
+        normalization=DimensionlessNormalization(),
+        spatial_measure=PointSampledMeasure(),
+        coherence=CoherentFieldCombination(),
+    )
+    input = PupilFunction{
+        typeof(metadata),
+        typeof(support),
+        typeof(amplitude),
+        typeof(opd),
+        typeof(selector),
+    }(metadata, support, amplitude, opd, aperture_revision(telescope))
+    result = target_partition_test_intensity_map(
+        selector, path_id(path.definition).name)
+    workspace = allocate_array(selector, Float64, 3)
+    execution = TargetPartitionTestPupilExecution(
+        input, result, workspace)
+    return PreparedTargetLocalPathResources(
+        path.definition,
+        path.source,
+        telescope,
+        input,
+        result,
+        execution;
+        context=getfield(partition, :context),
+        optical_model=(kind=:target_partition_pupil_coupling_test,
+            path=path_id(path.definition)),
+        propagation_model=:test_identity,
+        model_revisions=UInt(1),
+    )
 end
 
 function Plant.prepare_target_local_path_resources(
@@ -982,11 +1063,43 @@ end
     caller_opd = surface_opd(sampled_aberration_surface(
         only(sampled_aberration_definitions(sampled_definition))))
     for partition in prepared_partitions(sampled)
-        prepared_opd = sampled_aberration_opd(
-            only(prepared_sampled_aberrations(partition)))
+        aberration = only(prepared_sampled_aberrations(partition))
+        prepared_opd = sampled_aberration_opd(aberration)
         @test compute_device(prepared_opd) == compute_device(partition)
         @test prepared_opd !== caller_opd
         @test Array(prepared_opd) == caller_opd
+
+        pupil_path = target_partition_test_pupil_path(
+            partition, first(prepared_paths(partition)))
+        bindings = Plant._prepare_sampled_aberration_path_bindings(
+            prepared_sampled_aberrations(partition), [pupil_path])
+        @test prepared_sampled_aberration_binding_count(bindings) == 1
+        sampled_coupling = prepared_sampled_aberration_path_coupling(
+            bindings, 1)
+        @test sampled_coupling isa
+            PreparedIdentityPupilFootprintCoupling
+        @test getfield(sampled_coupling, :destination) ===
+            path_input(pupil_path)
+        apply_sampled_pupil_surface!(
+            path_input(pupil_path),
+            prepared_opd,
+            sampled_coupling,
+            sampled_aberration_application(aberration.definition),
+        )
+        @test all(path_input(pupil_path).opd .== 2e-9)
+
+        optic = prepared_target_local_controllable_optic(only(
+            target_local_controllable_optic_owners(partition)))
+        @test controllable_optic_placement(optic) ===
+            controllable_optic_placement(optic.definition)
+        @test controllable_optic_visibility(optic) ===
+            controllable_optic_visibility(optic.definition)
+        optic_coupling = prepare_controllable_optic_path_coupling(
+            optic, pupil_path)
+        @test optic_coupling isa PreparedDirectPupilSurfaceCoupling
+        @test getfield(optic_coupling, :destination) ===
+            path_input(pupil_path)
+
         report = partition_resource_report(partition)
         oracle = target_partition_test_byte_oracle(
             partition;
@@ -1000,6 +1113,21 @@ end
                     :sampled_aberration,
             structural_resource_facts(report)) == 1
     end
+
+    sampled_host = prepared_partition(sampled, host)
+    sampled_accelerator = prepared_partition(sampled, accelerator)
+    host_optic = prepared_target_local_controllable_optic(only(
+        target_local_controllable_optic_owners(sampled_host)))
+    accelerator_pupil_path = target_partition_test_pupil_path(
+        sampled_accelerator,
+        first(prepared_paths(sampled_accelerator)),
+    )
+    target_partition_test_error(
+        () -> prepare_controllable_optic_path_coupling(
+            host_optic, accelerator_pupil_path),
+        :controllable_optic,
+        :wrong_device,
+    )
 
     @test rng_replay_metadata(cpu) == rng_replay_metadata(accelerator_only)
     @test rng_replay_metadata(cpu) == rng_replay_metadata(mixed)

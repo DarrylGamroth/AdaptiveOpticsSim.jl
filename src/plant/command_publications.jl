@@ -290,6 +290,12 @@ end
 @inline controllable_optic_id(
     optic::PreparedTargetLocalControllableOptic) =
     controllable_optic_id(optic.definition)
+@inline controllable_optic_placement(
+    optic::PreparedTargetLocalControllableOptic) =
+    controllable_optic_placement(optic.definition)
+@inline controllable_optic_visibility(
+    optic::PreparedTargetLocalControllableOptic) =
+    controllable_optic_visibility(optic.definition)
 @inline target_local_command_endpoints(
     optic::PreparedTargetLocalControllableOptic) = optic.endpoints
 @inline prepared_target_local_controllable_optic(

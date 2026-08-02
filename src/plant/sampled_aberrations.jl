@@ -284,6 +284,13 @@ function _prepare_sampled_aberration_path_coupling(
     aberration::PreparedSampledAberration,
     path::PreparedPathExecutor,
 )
+    return _prepare_sampled_aberration_path_coupling_impl(aberration, path)
+end
+
+function _prepare_sampled_aberration_path_coupling_impl(
+    aberration::PreparedSampledAberration,
+    path,
+)
     definition = aberration.definition
     id = sampled_aberration_id(definition)
     path_identity = path_id(path.definition)

@@ -796,6 +796,45 @@ function try_complete_pupil_opd_publication!(
     return PupilOPDPublicationUncertain
 end
 
+# Deterministic serial-oracle seam. Concurrent owners use the nonblocking
+# `try_complete_pupil_opd_publication!` transition and their own wait strategy.
+function _complete_pupil_opd_publication!(
+    route::PreparedDirectPupilOPDPublicationRoute,
+    publication::MaterializedPupilOPDPublication,
+)
+    route.state.phase == _PupilOPDRouteUncertain &&
+        return PupilOPDPublicationUncertain
+    route.state.phase == _PupilOPDRouteApplied ||
+        return PupilOPDPublicationNotSubmitted
+    _validate_active_pupil_opd_publication(route, publication) ||
+        return PupilOPDPublicationRejected
+    return PupilOPDPublicationSucceeded
+end
+
+function _complete_pupil_opd_publication!(
+    route::PreparedRemotePupilOPDPublicationRoute,
+    publication::MaterializedPupilOPDPublication,
+)
+    route.state.phase == _PupilOPDRouteUncertain &&
+        return PupilOPDPublicationUncertain
+    route.state.phase == _PupilOPDRouteSubmitted ||
+        return PupilOPDPublicationNotSubmitted
+    _validate_active_pupil_opd_publication(route, publication) ||
+        return PupilOPDPublicationRejected
+    route.state.phase = _PupilOPDRouteUncertain
+    status = complete_handoff!(route.handoff, route.state.reference[])
+    if status == HandoffTransitionSucceeded
+        route.state.phase = _PupilOPDRouteCompleted
+        return PupilOPDPublicationSucceeded
+    end
+    if status == HandoffCompletionFailed
+        route.state.phase = _PupilOPDRouteFailed
+        return PupilOPDPublicationTransferFailed
+    end
+    route.state.phase = _PupilOPDRouteUncertain
+    return PupilOPDPublicationUncertain
+end
+
 function apply_pupil_opd_publication!(
     route::PreparedDirectPupilOPDPublicationRoute,
     publication::MaterializedPupilOPDPublication,
