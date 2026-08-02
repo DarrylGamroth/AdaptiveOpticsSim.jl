@@ -86,6 +86,8 @@ end
     mask = Matrix{Bool}(undef, 2, 3)
     @test structural_array_bytes(dense, target) == UInt64(60)
     @test structural_array_bytes(mask, target) == UInt64(6)
+    @test structural_array_bytes(
+        Memory{Any}(undef, 3), target) == UInt64(3 * sizeof(Ptr{Cvoid}))
     wrong_target = AcceleratorComputeDevice(
         ResourceFactFakeBackend(), UInt32(1))
     error = try

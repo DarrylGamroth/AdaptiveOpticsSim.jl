@@ -353,6 +353,21 @@ function structural_array_bytes(array::Array,
     return _contiguous_structural_array_bytes(array)
 end
 
+@inline function _memory_structural_array_bytes(memory::Memory)
+    count = _checked_resource_byte_count(length(memory), :array_storage)
+    element_bytes = _checked_resource_byte_count(
+        Base.elsize(typeof(memory)), :array_storage)
+    return _checked_resource_multiply(count, element_bytes, :array_storage)
+end
+
+function structural_array_bytes(memory::Memory,
+    target::AbstractComputeDevice)
+    target == HostComputeDevice() || _structural_resource_error(
+        :array_storage, :wrong_device,
+        "Memory storage occupies $(HostComputeDevice()); expected $target")
+    return _memory_structural_array_bytes(memory)
+end
+
 function structural_array_bytes(array::AbstractArray,
     ::AbstractComputeDevice)
     _structural_resource_error(:array_storage, :unsupported_array_storage,

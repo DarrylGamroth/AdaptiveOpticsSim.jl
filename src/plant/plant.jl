@@ -53,6 +53,7 @@ import ..Optics:
     AbstractTelescope,
     AchromaticSpectralCoordinate,
     ActuatorGridTopology,
+    SampledActuatorTopology,
     Asterism,
     CellIntegratedMeasure,
     CircularModulation,
@@ -282,6 +283,7 @@ include("device_batching.jl")
 include("illumination.jl")
 include("target_validation.jl")
 include("resource_facts.jl")
+include("resource_facts_runtime.jl")
 include("api.jl")
 
 end # module Plant
