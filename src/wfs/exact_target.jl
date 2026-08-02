@@ -979,7 +979,7 @@ function _require_exact_wfs_target(
         plan.measurement, plan.input, plan)
     _require_exact_wfs_observation_target(plan.input, target, :estimation)
     _require_exact_wfs_measurement_target(plan.measurement, target)
-    state = plan.estimator.state
+    state = plan.estimator.estimator.state
     _require_exact_wfs_array_targets(
         (
             state.valid_mask,
