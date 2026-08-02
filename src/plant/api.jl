@@ -221,6 +221,7 @@ public structural_resource_owner_id, structural_resource_known
 public structural_resource_unknown_reason, structural_resident_bytes
 public structural_workspace_bytes, opaque_resource_reserve_bytes
 public resource_estimate_method, opaque_resource_reserves
+public structural_array_bytes
 
 public RNGDerivationVersion, RNGOwnerIdentity, RNGOwnerToken, RNGOwnerBinding
 public PreparedRNGStream, PreparedOwnerRNGs, PreparedAtmosphereRNGs

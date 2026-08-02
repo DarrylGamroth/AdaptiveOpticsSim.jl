@@ -81,6 +81,29 @@ end
         owner, target, :fft_provider, true, method)
     @test_throws StructuralResourceError OpaqueResourceReserve(
         owner, target, :fft_provider, big(typemax(UInt64)) + 1, method)
+
+    dense = zeros(Float32, 3, 5)
+    mask = Matrix{Bool}(undef, 2, 3)
+    @test structural_array_bytes(dense, target) == UInt64(60)
+    @test structural_array_bytes(mask, target) == UInt64(6)
+    wrong_target = AcceleratorComputeDevice(
+        ResourceFactFakeBackend(), UInt32(1))
+    error = try
+        structural_array_bytes(dense, wrong_target)
+        nothing
+    catch caught
+        caught
+    end
+    @test error isa StructuralResourceError
+    @test error.reason == :wrong_device
+    @test_throws StructuralResourceError structural_array_bytes(
+        @view(dense[:, 1:2]), target)
+    @test_throws StructuralResourceError structural_array_bytes(
+        falses(2, 3), target)
+    @test_throws StructuralResourceError structural_array_bytes(
+        String["unsupported"], target)
+    @test_throws StructuralResourceError Plant._checked_resource_multiply(
+        typemax(UInt64), UInt64(2), :array_storage)
 end
 
 @testset "Structural resource aggregation" begin
