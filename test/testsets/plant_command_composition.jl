@@ -867,6 +867,30 @@ end
     @test effective_command(conflict, conflict_state, :a_woofer) == 0.1
     @test effective_command(conflict, conflict_state, :b_tweeter) == 0.0
 
+    _, exhausted, exhausted_state, exhausted_workspace, exhausted_first,
+        exhausted_second = command_composition_fixture()
+    exhausted_state.command_transaction_sequence = typemax(UInt64)
+    exhausted_transaction = Plant.PlantCommandTransaction(
+        PlantCommand(
+            exhausted_second, 1, PlantTimestamp(100_000_000), 2.0),
+        PlantCommand(
+            exhausted_first, 1, PlantTimestamp(100_000_000), 0.2),
+    )
+    exhausted_error = captured_command_composition_error() do
+        Plant.admit_plant_command_transaction!(
+            exhausted,
+            exhausted_state,
+            exhausted_workspace,
+            exhausted_transaction,
+            PlantTimestamp(0),
+        )
+    end
+    @test exhausted_error isa PlantCommandError
+    @test exhausted_error.reason == :transaction_overflow
+    @test exhausted_state.command_transaction_sequence == typemax(UInt64)
+    @test exhausted_workspace.transaction_count == 0
+    @test command_disposition_count(exhausted_workspace) == 0
+
     fail_late = CommandEffectiveTimePolicy(
         AllowFutureCommand,
         FailOnLateCommand,

@@ -241,6 +241,15 @@ const TEST_SUITE_SPECS = (
         ),
     ),
     TestSuiteSpec(
+        "plant-command-fanout",
+        "testsets/plant_command_fanout.jl";
+        fixtures=(
+            "plant_handoff_fixtures.jl",
+            "plant_path_input_publication_fixtures.jl",
+            "plant_effective_command_route_fixtures.jl",
+        ),
+    ),
+    TestSuiteSpec(
         "plant-path-input-publications",
         "testsets/plant_path_input_publications.jl";
         fixtures=(
@@ -333,6 +342,7 @@ const TEST_GROUP_SPECS = (
         "plant-command-publications",
         "plant-handoffs",
         "plant-effective-command-routes",
+        "plant-command-fanout",
         "plant-path-input-publications",
         "plant-resource-facts",
         "plant-providers",
@@ -442,6 +452,7 @@ const TEST_CI_SHARD_SPECS = (
         "plant-command-publications",
         "plant-handoffs",
         "plant-effective-command-routes",
+        "plant-command-fanout",
         "plant-path-input-publications",
         "plant-resource-facts",
         "plant-providers",

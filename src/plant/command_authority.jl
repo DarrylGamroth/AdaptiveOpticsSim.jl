@@ -48,6 +48,7 @@ mutable struct CommandAuthorityState{S,A}
     endpoint_states::S
     application_states::A
     publication_sequences::Memory{UInt64}
+    command_transaction_sequence::UInt64
     failed::Bool
 end
 
@@ -232,6 +233,7 @@ function _prepare_command_authority_state(
         _partition_registry(endpoint_states, CommandEndpointState),
         _partition_registry(application_states, CommandApplicationState),
         sequences,
+        zero(UInt64),
         false,
     )
     return _require_exact_command_authority_state_target(

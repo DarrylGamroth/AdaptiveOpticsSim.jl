@@ -538,6 +538,70 @@ end
         endpoint_state, claim, error)
 end
 
+function _prevalidate_command_silence_transition(
+    workspace::CommandDispositionWorkspace,
+    endpoint::PreparedCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    application_state::CommandApplicationState,
+    timestamp::PlantTimestamp,
+)
+    _require_command_endpoint_binding(endpoint, endpoint_state)
+    _require_command_endpoint_binding(endpoint, workspace)
+    _require_command_application_binding(
+        endpoint, endpoint_state, application_state)
+    _require_operational_command_endpoint(endpoint_state)
+    _require_empty_command_dispositions(workspace)
+    _require_idle_command_endpoint(endpoint_state)
+    _require_forward_command_timestamp(endpoint_state, timestamp)
+    expected = next_command_silence_timestamp(
+        endpoint, endpoint_state, application_state)
+    expected === nothing && _command_admission_error(
+        :silence, :silence_not_scheduled,
+        "command endpoint has no pending silence transition")
+    timestamp == expected || _command_admission_error(
+        :silence, :unexpected_silence_timestamp,
+        "command silence transition expected at $expected; got $timestamp")
+    key = next_command_order_key(endpoint, endpoint_state)
+    key !== nothing && command_scheduled_timestamp(key) <= timestamp &&
+        _command_admission_error(:silence, :commands_due,
+            "resolve application-ready commands before an equal-time " *
+            "command-silence transition")
+
+    policy = command_silence_policy(command_schema(endpoint))
+    origin = _command_silence_origin_timestamp(
+        policy.age_origin, endpoint_state, application_state)
+    return PlantCommandSilenceTransition(
+        command_endpoint_id(endpoint),
+        policy.action,
+        policy.age_origin,
+        origin,
+        expected,
+        timestamp,
+    )
+end
+
+@inline function _commit_prevalidated_command_silence_latch!(
+    application_state::CommandApplicationState,
+    transition::PlantCommandSilenceTransition,
+)
+    application_state.last_silence_origin_timestamp =
+        transition.origin_timestamp
+    application_state.has_silence_transition = true
+    return nothing
+end
+
+@inline function _commit_prevalidated_safe_command_silence!(
+    endpoint_state::CommandEndpointState,
+    application_state::CommandApplicationState,
+    transition::PlantCommandSilenceTransition,
+)
+    _commit_application_candidate!(application_state.values)
+    endpoint_state.current_timestamp = transition.transition_timestamp
+    _commit_prevalidated_command_silence_latch!(
+        application_state, transition)
+    return nothing
+end
+
 @noinline function _handle_staged_command_application_error!(
     workspace::CommandDispositionWorkspace,
     endpoint::PreparedCommandEndpoint,
@@ -564,46 +628,22 @@ function apply_command_silence_transition!(
     endpoint_state::CommandEndpointState,
     application_state::CommandApplicationState,
     timestamp::PlantTimestamp)
-    _require_command_endpoint_binding(endpoint, endpoint_state)
-    _require_command_endpoint_binding(endpoint, workspace)
-    _require_command_application_binding(endpoint, endpoint_state,
-        application_state)
-    _require_operational_command_endpoint(endpoint_state)
-    _require_empty_command_dispositions(workspace)
-    _require_idle_command_endpoint(endpoint_state)
-    _require_forward_command_timestamp(endpoint_state, timestamp)
-    expected = next_command_silence_timestamp(endpoint, endpoint_state,
-        application_state)
-    expected === nothing && _command_admission_error(
-        :silence, :silence_not_scheduled,
-        "command endpoint has no pending silence transition")
-    timestamp == expected || _command_admission_error(
-        :silence, :unexpected_silence_timestamp,
-        "command silence transition expected at $expected; got $timestamp")
-    key = next_command_order_key(endpoint, endpoint_state)
-    key !== nothing && command_scheduled_timestamp(key) <= timestamp &&
-        _command_admission_error(:silence, :commands_due,
-            "resolve application-ready commands before an equal-time " *
-            "command-silence transition")
-
-    policy = command_silence_policy(command_schema(endpoint))
-    origin = _command_silence_origin_timestamp(policy.age_origin,
-        endpoint_state, application_state)
-    if policy.action == ApplySafeCommand
+    transition = _prevalidate_command_silence_transition(
+        workspace, endpoint, endpoint_state, application_state, timestamp)
+    if transition.action == ApplySafeCommand
         staged = try
             _stage_safe_command!(application_state.values)
         catch error
             _handle_safe_command_staging_error(error)
         end
-        _commit_application_candidate!(application_state.values)
-        endpoint_state.current_timestamp = timestamp
+        _commit_prevalidated_safe_command_silence!(
+            endpoint_state, application_state, transition)
     else
         fail_pending_plant_commands!(workspace, endpoint, endpoint_state,
             timestamp; reason=:command_silence)
         endpoint_state.failed = true
+        _commit_prevalidated_command_silence_latch!(
+            application_state, transition)
     end
-    application_state.last_silence_origin_timestamp = origin
-    application_state.has_silence_transition = true
-    return PlantCommandSilenceTransition(command_endpoint_id(endpoint),
-        policy.action, policy.age_origin, origin, expected, timestamp)
+    return transition
 end
