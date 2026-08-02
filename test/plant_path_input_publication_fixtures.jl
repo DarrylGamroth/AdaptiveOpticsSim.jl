@@ -368,6 +368,7 @@ function path_input_publication_test_definition(;
     alpha_model=PathInputPublicationTestPathModel(),
     beta_model=PathInputPublicationTestPathModel(),
     controllable_optics=(),
+    acquisitions=(),
 )
     telescope = TelescopeDefinition(
         resolution=8,
@@ -409,6 +410,7 @@ function path_input_publication_test_definition(;
         atmosphere,
         paths=(alpha, beta),
         controllable_optics,
+        acquisitions,
     )
 end
 

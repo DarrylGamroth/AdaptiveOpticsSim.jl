@@ -62,12 +62,14 @@ struct _MixedSerialPathWorkspace{Q} <: _AbstractMixedSerialPathWorkspace
     publication::Base.RefValue{Q}
 end
 
-mutable struct _MixedSerialBatchWorkspace{F,S,E}
+mutable struct _MixedSerialBatchWorkspace{F,S,E,M}
     fanout::F
     fanout_state::S
     next_epoch_sequence::UInt64
     timestamp::PlantTimestamp
     epoch::E
+    target_time::M
+    preflighted::Bool
 end
 
 struct _MixedSerialExecutionWorkspace{B,F,C}
@@ -290,10 +292,55 @@ function _prepare_mixed_serial_execution(
     partitions::PreparedPlantPartitions,
 )
     ids = _canonical_partition_path_ids(plant_definition(partitions))
+    return _prepare_mixed_serial_execution(partitions, ids)
+end
+
+function _prepare_mixed_serial_execution_path_ids(
+    partitions::PreparedPlantPartitions,
+    selected_ids::Union{Tuple,AbstractVector},
+)
+    canonical_ids = _canonical_partition_path_ids(plant_definition(partitions))
+    ids = OpticalPathID[]
+    sizehint!(ids, length(selected_ids))
+    for value in selected_ids
+        id = _prepare_mixed_serial_path_id(value)
+        id in canonical_ids || _mixed_serial_preparation_error(
+            :unknown_path,
+            "prepared plant contains no optical path $id",
+        )
+        push!(ids, id)
+    end
     isempty(ids) && _mixed_serial_preparation_error(
         :empty_topology,
         "mixed serial execution requires at least one optical path",
     )
+    sort!(ids; by=_partition_name_key)
+    @inbounds for slot in 2:length(ids)
+        ids[slot - 1] == ids[slot] && _mixed_serial_preparation_error(
+            :duplicate_path,
+            "optical path $(ids[slot]) was selected more than once",
+        )
+    end
+    return _partition_registry(ids, OpticalPathID)
+end
+
+@inline _prepare_mixed_serial_path_id(id::OpticalPathID) = id
+@inline _prepare_mixed_serial_path_id(id::Symbol) = OpticalPathID(id)
+
+function _prepare_mixed_serial_path_id(value)
+    _mixed_serial_preparation_error(
+        :invalid_path_id,
+        "prepared optical path identity must be an OpticalPathID or Symbol; " *
+        "got $(typeof(value))",
+    )
+end
+
+function _prepare_mixed_serial_execution(
+    partitions::PreparedPlantPartitions,
+    selected_ids::Union{Tuple,AbstractVector},
+)
+    ids = _prepare_mixed_serial_execution_path_ids(
+        partitions, selected_ids)
     fanout = _prepare_command_fanout(partitions)
     paths = Memory{_AbstractPreparedMixedSerialPath}(undef, length(ids))
     @inbounds for slot in eachindex(ids)
@@ -306,6 +353,17 @@ function _prepare_mixed_serial_execution(
         fanout,
         ids,
         paths,
+    )
+end
+
+function _prepare_mixed_serial_execution(
+    ::PreparedPlantPartitions,
+    selected_ids,
+)
+    _mixed_serial_preparation_error(
+        :invalid_path_registry,
+        "prepared optical paths must be a Tuple or AbstractVector; got " *
+        "$(typeof(selected_ids))",
     )
 end
 
@@ -355,6 +413,8 @@ function _prepare_mixed_serial_execution_workspace(
             UInt64(0),
             zero(PlantTimestamp),
             epoch,
+            timeline.model_time,
+            false,
         ),
         Memory{Bool}(undef, length(prepared.paths)),
         path_workspaces,
@@ -519,6 +579,7 @@ function _preflight_mixed_serial_path(
         batch.fanout.lanes,
         batch.fanout_state.lanes,
         batch.fanout_state.authority.publication_sequences,
+        batch.fanout_state.authority.publication_timestamps,
         batch.timestamp,
     )
     return nothing
@@ -529,7 +590,8 @@ end
     lane_state::_CommandFanoutLaneState,
     dependency::_PreparedMixedSerialCommandDependency,
     publication_sequence::UInt64,
-    timestamp::PlantTimestamp,
+    publication_timestamp::PlantTimestamp,
+    sample_timestamp::PlantTimestamp,
 )
     destination = dependency.destination
     endpoint = lane.authority_endpoint.endpoint
@@ -557,20 +619,21 @@ end
         )
 
     key = next_command_order_key(endpoint, lane_state.endpoint)
-    key !== nothing && command_scheduled_timestamp(key) <= timestamp &&
+    key !== nothing && command_scheduled_timestamp(key) <= sample_timestamp &&
         _mixed_serial_execution_error(
             :command_not_applied,
             "command endpoint $(command_endpoint_id(destination)) has an " *
-            "unapplied command due no later than optical sample $timestamp",
+            "unapplied command due no later than optical sample " *
+            "$sample_timestamp",
         )
     silence = next_command_silence_timestamp(
         endpoint, lane_state.endpoint, lane_state.application)
-    silence !== nothing && silence <= timestamp &&
+    silence !== nothing && silence <= sample_timestamp &&
         _mixed_serial_execution_error(
             :command_silence_not_applied,
             "command endpoint $(command_endpoint_id(destination)) has an " *
             "unapplied silence transition due no later than optical sample " *
-            "$timestamp",
+            "$sample_timestamp",
         )
 
     local_state = destination.state
@@ -602,29 +665,35 @@ end
             "is at sequence $(local_state.last_sequence); authority is at " *
             "$publication_sequence",
         )
-    applied = last_command_application_timestamp(lane_state.application)
-    local_state.last_timestamp == applied ||
+    local_state.last_timestamp == publication_timestamp ||
         _mixed_serial_execution_error(
             :command_replica_timestamp,
             "target-local command endpoint $(command_endpoint_id(destination)) " *
-            "does not match its authority application timestamp",
+            "does not match its authoritative publication timestamp",
         )
-    applied <= timestamp || _mixed_serial_execution_error(
+    publication_timestamp <= sample_timestamp || _mixed_serial_execution_error(
         :command_from_future,
         "command endpoint $(command_endpoint_id(destination)) was applied " *
-        "after optical sample $timestamp",
+        "after optical sample $sample_timestamp",
     )
     return nothing
 end
 
 @inline _require_mixed_serial_command_dependencies!(
-    ::Tuple{}, ::Tuple, ::Tuple, ::Memory{UInt64}, ::PlantTimestamp) = nothing
+    ::Tuple{},
+    ::Tuple,
+    ::Tuple,
+    ::Memory{UInt64},
+    ::Memory{PlantTimestamp},
+    ::PlantTimestamp,
+) = nothing
 
 @inline function _require_mixed_serial_command_dependencies!(
     dependencies::Tuple,
     lanes::Tuple,
     lane_states::Tuple,
     sequences::Memory{UInt64},
+    publication_timestamps::Memory{PlantTimestamp},
     timestamp::PlantTimestamp,
 )
     dependency = first(dependencies)
@@ -634,10 +703,17 @@ end
         lane_states[slot],
         dependency,
         sequences[slot],
+        publication_timestamps[slot],
         timestamp,
     )
     return _require_mixed_serial_command_dependencies!(
-        Base.tail(dependencies), lanes, lane_states, sequences, timestamp)
+        Base.tail(dependencies),
+        lanes,
+        lane_states,
+        sequences,
+        publication_timestamps,
+        timestamp,
+    )
 end
 
 function _preflight_mixed_serial_due_paths(
@@ -831,40 +907,73 @@ function _execute_and_reclaim_mixed_serial_due_paths!(
     return nothing
 end
 
-function _execute_mixed_serial_paths!(
+function _execute_selected_mixed_serial_paths!(
     prepared::_PreparedMixedSerialExecution,
     state::_MixedSerialExecutionState,
     workspace::_MixedSerialExecutionWorkspace,
-    due_paths,
+    timestamp::PlantTimestamp,
+)
+    try
+        _preflight_selected_mixed_serial_paths!(
+            prepared, state, workspace, timestamp)
+    catch
+        fill!(workspace.due_paths, false)
+        rethrow()
+    end
+    return _execute_preflighted_mixed_serial_paths!(
+        prepared, state, workspace, timestamp)
+end
+
+function _preflight_selected_mixed_serial_paths!(
+    prepared::_PreparedMixedSerialExecution,
+    state::_MixedSerialExecutionState,
+    workspace::_MixedSerialExecutionWorkspace,
     timestamp::PlantTimestamp,
 )
     _require_mixed_serial_binding(prepared, state, workspace)
     _require_mixed_serial_timestamp(state, timestamp)
-    try
-        _select_mixed_serial_due_paths!(
-            workspace.due_paths, prepared.path_ids, due_paths)
-    catch
-        fill!(workspace.due_paths, false)
-        rethrow()
-    end
+    workspace.batch.preflighted && _mixed_serial_execution_error(
+        :batch_already_preflighted,
+        "mixed serial optical batch already retains a preflight result",
+    )
+    any(workspace.due_paths) || _mixed_serial_execution_error(
+        :empty_due_paths,
+        "mixed serial execution requires at least one due optical path",
+    )
+    atmosphere = prepared_atmosphere(
+        prepared_atmosphere_authority(prepared.partitions))
+    target, sequence =
+        _preflight_mixed_serial_atmosphere_time(atmosphere, timestamp)
+    workspace.batch.next_epoch_sequence = sequence
+    workspace.batch.timestamp = timestamp
+    workspace.batch.target_time = target
+    _preflight_mixed_serial_due_paths(
+        prepared,
+        workspace.due_paths,
+        workspace.batch,
+    )
+    workspace.batch.preflighted = true
+    return nothing
+end
 
+function _execute_preflighted_mixed_serial_paths!(
+    prepared::_PreparedMixedSerialExecution,
+    state::_MixedSerialExecutionState,
+    workspace::_MixedSerialExecutionWorkspace,
+    timestamp::PlantTimestamp,
+)
+    _require_mixed_serial_binding(prepared, state, workspace)
+    workspace.batch.preflighted &&
+        workspace.batch.timestamp == timestamp ||
+        _mixed_serial_execution_error(
+            :batch_not_preflighted,
+            "mixed serial optical batch was not preflighted at $timestamp",
+        )
     authority = prepared_atmosphere_authority(prepared.partitions)
     atmosphere = prepared_atmosphere(authority)
-    target_time, next_epoch_sequence = try
-        target, sequence =
-            _preflight_mixed_serial_atmosphere_time(atmosphere, timestamp)
-        workspace.batch.next_epoch_sequence = sequence
-        workspace.batch.timestamp = timestamp
-        _preflight_mixed_serial_due_paths(
-            prepared,
-            workspace.due_paths,
-            workspace.batch,
-        )
-        (target, sequence)
-    catch
-        fill!(workspace.due_paths, false)
-        rethrow()
-    end
+    target_time = workspace.batch.target_time
+    next_epoch_sequence = workspace.batch.next_epoch_sequence
+    workspace.batch.preflighted = false
 
     state.phase = _MixedSerialExecutionMaterializing
     try
@@ -897,6 +1006,26 @@ function _execute_mixed_serial_paths!(
     state.has_timestamp = true
     state.phase = _MixedSerialExecutionIdle
     return nothing
+end
+
+function _execute_mixed_serial_paths!(
+    prepared::_PreparedMixedSerialExecution,
+    state::_MixedSerialExecutionState,
+    workspace::_MixedSerialExecutionWorkspace,
+    due_paths,
+    timestamp::PlantTimestamp,
+)
+    _require_mixed_serial_binding(prepared, state, workspace)
+    _require_mixed_serial_timestamp(state, timestamp)
+    try
+        _select_mixed_serial_due_paths!(
+            workspace.due_paths, prepared.path_ids, due_paths)
+    catch
+        fill!(workspace.due_paths, false)
+        rethrow()
+    end
+    return _execute_selected_mixed_serial_paths!(
+        prepared, state, workspace, timestamp)
 end
 
 function _execute_mixed_serial_paths!(

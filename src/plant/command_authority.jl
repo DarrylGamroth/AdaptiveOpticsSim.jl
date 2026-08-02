@@ -11,7 +11,10 @@ mutable struct _PreparedCommandAuthorityBinding end
 mutable struct _PreparedCommandAuthorityToken end
 const _PREPARED_COMMAND_AUTHORITY_TOKEN = _PreparedCommandAuthorityToken()
 
-"""Run-immutable preparation for the sole mixed-plant command authority."""
+"""
+Run-immutable preparation for one mixed-resource plant's sole command
+authority.
+"""
 struct PreparedCommandAuthority{I,D,X,O,E}
     binding::_PreparedCommandAuthorityBinding
     identity::I
@@ -48,6 +51,7 @@ mutable struct CommandAuthorityState{S,A}
     endpoint_states::S
     application_states::A
     publication_sequences::Memory{UInt64}
+    publication_timestamps::Memory{PlantTimestamp}
     command_transaction_sequence::UInt64
     failed::Bool
 end
@@ -214,6 +218,8 @@ function _prepare_command_authority_state(
         undef, endpoint_count)
     sequences = Memory{UInt64}(undef, endpoint_count)
     fill!(sequences, zero(UInt64))
+    publication_timestamps = Memory{PlantTimestamp}(undef, endpoint_count)
+    fill!(publication_timestamps, initial_timestamp)
     @inbounds for index in eachindex(authority.endpoints)
         binding = authority.endpoints[index]
         endpoint = binding.endpoint
@@ -233,6 +239,7 @@ function _prepare_command_authority_state(
         _partition_registry(endpoint_states, CommandEndpointState),
         _partition_registry(application_states, CommandApplicationState),
         sequences,
+        publication_timestamps,
         zero(UInt64),
         false,
     )

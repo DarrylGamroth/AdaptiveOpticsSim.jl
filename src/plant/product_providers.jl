@@ -472,6 +472,10 @@ end
     provider::PreparedAcquisitionProvider) = provider.payload_work
 @inline acquisition_products(provider::PreparedAcquisitionProvider) =
     provider.products
+@inline acquisition_observation(provider::PreparedAcquisitionProvider) =
+    provider.products.observation
+@inline acquisition_measurement(provider::PreparedAcquisitionProvider) =
+    provider.products.measurement
 @inline acquisition_product_contract(provider::PreparedAcquisitionProvider) =
     deepcopy(getfield(provider, :contract))
 @inline acquisition_product_metadata(provider::PreparedAcquisitionProvider) =

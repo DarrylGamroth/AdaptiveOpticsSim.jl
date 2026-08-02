@@ -449,6 +449,8 @@ public direct_measurement_acquisition_status
 public direct_measurement_acquisition_sequence
 
 public PreparedPlantEventLoop, PlantEventLoopState, PlantEventLoopWorkspace
+public PreparedMixedResourcePlantEventLoop, MixedResourcePlantEventLoopState
+public MixedResourcePlantEventLoopWorkspace
 public PreparedPathExecutionGroup
 public PreparedDevicePathBatchOwner
 public PathExecutionRequirements

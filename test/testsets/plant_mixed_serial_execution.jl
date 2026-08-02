@@ -1,28 +1,6 @@
 @inline mixed_serial_host_values(values::Array) = values
 @inline mixed_serial_host_values(values::HandoffTestArray) = values.storage
 
-function Plant.apply_controllable_optic_surface!(
-    input::PupilFunction,
-    prepared::EffectiveCommandRouteTestPreparedOptic,
-    state::EffectiveCommandRouteTestOpticState{<:Real},
-    coupling::PreparedDirectPupilSurfaceCoupling,
-)
-    coupling.destination === input || throw(PlantPreparationError(
-        :controllable_optic,
-        :prepared_binding,
-        "mixed-serial test coupling belongs to another pupil",
-    ))
-    if input.opd isa HandoffTestArray
-        HANDOFF_TEST_ACTIVE_DEVICE[] ==
-            UInt32(compute_device_identifier(prepared.target)) || error(
-                "mixed-serial test optic ran outside its device context")
-        @. input.opd.storage += state.active
-    else
-        @. input.opd += state.active
-    end
-    return input
-end
-
 function mixed_serial_fixture(;
     command::Bool=false,
 )
@@ -127,6 +105,38 @@ end
     ) === nothing
     @test atmosphere_timeline(atmosphere).sequence == UInt64(2)
     @test state.last_timestamp == PlantTimestamp(10)
+end
+
+@testset "Mixed serial preparation selects a canonical scheduled subset" begin
+    reset_handoff_test_transfer_controls!()
+    partitions = path_input_publication_test_partitions()
+    prepared = Plant._prepare_mixed_serial_execution(
+        partitions, (:beta,))
+    state = Plant._prepare_mixed_serial_execution_state(prepared)
+    workspace = Plant._prepare_mixed_serial_execution_workspace(
+        prepared, state)
+
+    @test prepared.path_ids == OpticalPathID[OpticalPathID(:beta)]
+    @test only(prepared.paths).id == OpticalPathID(:beta)
+    workspace.due_paths[1] = true
+    @test Plant._execute_selected_mixed_serial_paths!(
+        prepared, state, workspace, PlantTimestamp(0)) === nothing
+    @test mixed_serial_result_values(partitions, :beta) ≈
+        mixed_serial_oracle_values(partitions, :beta)
+
+    duplicate = mixed_serial_capture_error() do
+        Plant._prepare_mixed_serial_execution(partitions, (:beta, :beta))
+    end
+    @test duplicate isa PlantPreparationError
+    duplicate isa PlantPreparationError &&
+        @test duplicate.reason === :duplicate_path
+
+    unknown = mixed_serial_capture_error() do
+        Plant._prepare_mixed_serial_execution(partitions, (:missing,))
+    end
+    @test unknown isa PlantPreparationError
+    unknown isa PlantPreparationError &&
+        @test unknown.reason === :unknown_path
 end
 
 @testset "Mixed serial preflight is mutation-free" begin

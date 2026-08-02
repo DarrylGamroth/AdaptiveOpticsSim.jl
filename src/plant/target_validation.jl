@@ -1232,7 +1232,8 @@ function _require_exact_command_authority_state_target(
     _require_command_authority_binding(authority, state)
     length(state.endpoint_states) == length(authority.endpoints) &&
         length(state.application_states) == length(authority.endpoints) &&
-        length(state.publication_sequences) == length(authority.endpoints) ||
+        length(state.publication_sequences) == length(authority.endpoints) &&
+        length(state.publication_timestamps) == length(authority.endpoints) ||
         _command_authority_preparation_error(
             :prepared_binding,
             "command-authority state capacity changed after preparation",

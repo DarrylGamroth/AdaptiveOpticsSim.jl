@@ -468,6 +468,15 @@ function _require_target_local_effective_value_layout(
     )
 end
 
+@inline function _require_target_local_effective_value(
+    schema::PlantCommandSchema{T,0},
+    value::AbstractArray{T,0},
+    target::AbstractComputeDevice,
+) where {T}
+    return _require_target_local_effective_value_layout(
+        schema, value, target)
+end
+
 function _require_target_local_effective_value_layout(
     schema::PlantCommandSchema{T,N},
     value::AbstractArray{T,N},

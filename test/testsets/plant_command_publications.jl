@@ -451,6 +451,10 @@ end
     @test structural_resource_known(fact)
     @test structural_resident_bytes(fact) == 0
     @test structural_workspace_bytes(fact) == 0
+    command_publication_test_error(:numeric_type) do
+        Plant._require_target_local_effective_value(
+            schema, fill(1.5), target)
+    end
 end
 
 @testset "Effective-command publication values are target-local and sealed" begin

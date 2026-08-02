@@ -566,6 +566,9 @@ new_domain_public = [
     "Plant.path_execution_target_support",
     "Plant.path_execution_target_supported",
     "Plant.path_execution_target_rejection_reason",
+    "Plant.PreparedMixedResourcePlantEventLoop",
+    "Plant.MixedResourcePlantEventLoopState",
+    "Plant.MixedResourcePlantEventLoopWorkspace",
     "Detectors.FrameWindow",
     "Detectors.StaticCMOSOutputPattern",
     "Detectors.HgCdTeReadout",
@@ -578,7 +581,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "92b282d19cec092b6f923056756ff54627c1d8d9cd7dd1d81ea7485a9ece34eb"
+sha256 = "6b8915c58cd7e5358d431e53255e92c14c95c342283aa1be7bb78661db2913c2"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1962,6 +1965,9 @@ public = [
     "PreparedPlantEventLoop",
     "PlantEventLoopState",
     "PlantEventLoopWorkspace",
+    "PreparedMixedResourcePlantEventLoop",
+    "MixedResourcePlantEventLoopState",
+    "MixedResourcePlantEventLoopWorkspace",
     "PreparedPathExecutionGroup",
     "PreparedDevicePathBatchOwner",
     "PathExecutionRequirements",

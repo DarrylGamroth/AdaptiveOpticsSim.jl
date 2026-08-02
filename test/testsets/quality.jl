@@ -242,7 +242,11 @@ end
         "plant-target-partitions",
         "plant-command-publications",
         "plant-handoffs",
+        "plant-effective-command-routes",
+        "plant-command-fanout",
         "plant-path-input-publications",
+        "plant-mixed-serial-execution",
+        "plant-mixed-serial-events",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
@@ -277,7 +281,11 @@ end
         "plant-target-partitions",
         "plant-command-publications",
         "plant-handoffs",
+        "plant-effective-command-routes",
+        "plant-command-fanout",
         "plant-path-input-publications",
+        "plant-mixed-serial-execution",
+        "plant-mixed-serial-events",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",
@@ -357,7 +365,11 @@ end
     @test occursin("plant-partition-assignments", listing_text)
     @test occursin("plant-target-partitions", listing_text)
     @test occursin("plant-handoffs", listing_text)
+    @test occursin("plant-effective-command-routes", listing_text)
+    @test occursin("plant-command-fanout", listing_text)
     @test occursin("plant-path-input-publications", listing_text)
+    @test occursin("plant-mixed-serial-execution", listing_text)
+    @test occursin("plant-mixed-serial-events", listing_text)
     @test occursin("plant-cpu-execution", listing_text)
     @test occursin("plant-time", listing_text)
     @test occursin("plant =", listing_text)
@@ -382,6 +394,14 @@ end
         joinpath(dirname(@__DIR__), "ka_cpu_style_fixture.jl"),
         joinpath(dirname(@__DIR__), "plant_device_batching_fixtures.jl"),
         joinpath(dirname(@__DIR__), "plant_handoff_fixtures.jl"),
+        joinpath(
+            dirname(@__DIR__),
+            "plant_effective_command_route_fixtures.jl",
+        ),
+        joinpath(
+            dirname(@__DIR__),
+            "plant_mixed_serial_event_fixtures.jl",
+        ),
         joinpath(
             dirname(@__DIR__),
             "plant_path_input_publication_fixtures.jl",
@@ -409,7 +429,11 @@ end
         "wfs-zernike-curvature",
         "plant-preparation",
         "plant-handoffs",
+        "plant-effective-command-routes",
+        "plant-command-fanout",
         "plant-path-input-publications",
+        "plant-mixed-serial-execution",
+        "plant-mixed-serial-events",
         "plant-resource-facts",
         "plant-providers",
         "plant-rng",

@@ -203,6 +203,28 @@ function Plant.validate_controllable_optic_workspace_target(
     return workspace
 end
 
+function Plant.apply_controllable_optic_surface!(
+    input::PupilFunction,
+    prepared::EffectiveCommandRouteTestPreparedOptic,
+    state::EffectiveCommandRouteTestOpticState{<:Real},
+    coupling::PreparedDirectPupilSurfaceCoupling,
+)
+    coupling.destination === input || throw(PlantPreparationError(
+        :controllable_optic,
+        :prepared_binding,
+        "command-route test coupling belongs to another pupil",
+    ))
+    if input.opd isa HandoffTestArray
+        HANDOFF_TEST_ACTIVE_DEVICE[] ==
+            UInt32(compute_device_identifier(prepared.target)) || error(
+                "command-route test optic ran outside its device context")
+        @. input.opd.storage += state.active
+    else
+        @. input.opd += state.active
+    end
+    return input
+end
+
 @inline function effective_command_route_test_value_bytes(
     ::Real,
     ::AbstractComputeDevice,
@@ -254,23 +276,27 @@ end
 function effective_command_route_test_schema(;
     dimensions=(2,),
     semantics::CommandValueSemantics=IncrementalCommand,
+    id::Symbol=:effective_command_route_schema,
+    endpoint::Symbol=:effective_command_route_endpoint,
+    basis::Symbol=:effective_command_route_basis,
+    silence_policy::CommandSilencePolicy=CommandSilencePolicy(),
 )
     return PlantCommandSchema(
         Float64,
         dimensions;
-        id=:effective_command_route_schema,
+        id,
         version=1,
-        endpoint=:effective_command_route_endpoint,
+        endpoint,
         units=:metre,
         sign_convention=:positive_surface_increases_opd,
-        basis=CommandBasis(:actuator, :effective_command_route_basis),
+        basis=CommandBasis(:actuator, basis),
         basis_revision=1,
         semantics,
         bounds=UnboundedCommandValues(),
         value_policy=CommandValuePolicy(),
         sequence_policy=CommandSequencePolicy(),
         effective_time_policy=CommandEffectiveTimePolicy(),
-        silence_policy=CommandSilencePolicy(),
+        silence_policy,
     )
 end
 

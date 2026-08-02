@@ -306,10 +306,24 @@ member and drain a full endpoint calendar without stranding outcomes. Focused
 CPU/fake-accelerator tests cover ordinary, atomic, safe, hold, fail-stop, and
 warmed inference/allocation behavior.
 
-The coordinator does not yet gate dependent paths against committed target-
-local publications or compose the mixed serial path and acquisition executor.
-Those obligations, integrated hardware parity, and latency evidence remain
-open.
+The qualified `Plant.PreparedMixedResourcePlantEventLoop`, returned by
+`prepare_plant_event_loop(::PreparedPlantPartitions, ...)`, now composes this
+coordinator with the event scheduler, atmosphere authority, path-input routes,
+complete target-local path/acquisition groups, and product-sequence authority.
+It deliberately reuses the single-resource command-admission, disposition,
+product-query, next-event, step, and finite-horizon operation vocabulary
+through dispatch.
+
+At each plant timestamp, causal scheduler order applies due command or silence
+decisions before optical sampling. The loop identifies all due paths,
+preflights every active acquisition integration and command dependency,
+advances the sole atmosphere authority at most once, and completes and applies
+every due pupil-OPD publication before executing any due path. It then
+integrates active acquisitions through the sample boundary and executes each
+complete group in its exact prepared target context. Products remain on the
+group's assigned target. An execution or handoff failure disarms both the
+mixed optical executor and its outer event coordinator; no retry can expose a
+partially progressed run as healthy.
 
 Core now also composes that primitive into one qualified, product-specific
 `Plant.PreparedPupilOPDPublicationRoute` per explicitly selected full-optical
@@ -322,11 +336,19 @@ directly. A remote route owns exactly one handoff slot and transfers only the
 atmospheric OPD array before applying it to the target-local pupil; support,
 amplitude, static aberrations, controllable surfaces, other path optics,
 workspaces, and results never cross this boundary. Hold-until-applied ownership
-prevents route reuse for a later epoch. The external authority owner must still
-serialize all due routes and defer the next atmosphere advance until each has
-applied; the mixed-composition gate owns that all-routes barrier. Current
-evidence is CPU↔fake-accelerator numerical parity, not real hardware or
-integrated mixed-execution qualification.
+prevents route reuse for a later epoch. When the route primitive is used
+independently, its external authority owner must still serialize all due routes
+and defer the next atmosphere advance until each has applied. The prepared
+mixed-resource event loop supplies that all-routes barrier for its selected
+paths. Focused CPU-only versus CPU↔fake-accelerator tests establish scheduler
+timestamps, atmosphere epochs, path and detector-product parity, product
+sequences, RNG continuation, context restoration, structured fail-stop
+behavior, bounded lifecycle-step allocation, and a zero-allocation recurring
+optical tick. The initial loop is restricted to full-optical
+`FrameAcquisitionExecution` providers and rejects autonomous periodic optics.
+Reduced-order or synthetic mixed composition, acquisition-product egress, HIL
+leases/rings, placement admission, real CUDA/AMDGPU mixed execution, and
+fixed-arrival latency qualification remain open.
 
 ## Optical Branch Ownership And Parallelism
 

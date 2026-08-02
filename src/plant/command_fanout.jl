@@ -2,9 +2,9 @@
 # Authority-owned effective-command fanout
 #
 # This private serial coordinator is the command-side correctness oracle for a
-# prepared mixed plant. The sole authority applies command semantics once, then
-# publishes the already-effective value to every target-local replica. It owns
-# no scheduler, task, queue, pacing policy, or RTC transport.
+# prepared mixed-resource plant. The sole authority applies command semantics
+# once, then publishes the already-effective value to every target-local
+# replica. It owns no scheduler, task, queue, pacing policy, or RTC transport.
 #
 
 mutable struct _PreparedCommandFanoutBinding end
@@ -1500,7 +1500,13 @@ end
 end
 
 @inline function _commit_selected_command_authority!(
-    ::Tuple{}, ::Tuple{}, ::Tuple{}, ::Memory{UInt64})
+    ::Tuple{},
+    ::Tuple{},
+    ::Tuple{},
+    ::Memory{UInt64},
+    ::Memory{PlantTimestamp},
+    ::PlantTimestamp,
+)
     return nothing
 end
 
@@ -1509,6 +1515,8 @@ end
     lane_states::Tuple,
     workspaces::Tuple,
     sequences::Memory{UInt64},
+    publication_timestamps::Memory{PlantTimestamp},
+    timestamp::PlantTimestamp,
 )
     lane = first(lanes)
     lane_state = first(lane_states)
@@ -1516,8 +1524,9 @@ end
     if workspace.selected
         _commit_staged_application!(
             lane_state.application, lane_state.endpoint)
-        @inbounds sequences[Int(lane.endpoint_slot)] =
-            workspace.proposed_sequence
+        slot = Int(lane.endpoint_slot)
+        @inbounds sequences[slot] = workspace.proposed_sequence
+        @inbounds publication_timestamps[slot] = timestamp
         _commit_prevalidated_command_application_disposition!(
             workspace.finalization[])
         workspace.has_claim = false
@@ -1527,11 +1536,19 @@ end
         Base.tail(lane_states),
         Base.tail(workspaces),
         sequences,
+        publication_timestamps,
+        timestamp,
     )
 end
 
 @inline function _commit_selected_safe_command_authority!(
-    ::Tuple{}, ::Tuple{}, ::Tuple{}, ::Memory{UInt64})
+    ::Tuple{},
+    ::Tuple{},
+    ::Tuple{},
+    ::Memory{UInt64},
+    ::Memory{PlantTimestamp},
+    ::PlantTimestamp,
+)
     return nothing
 end
 
@@ -1540,6 +1557,8 @@ end
     lane_states::Tuple,
     workspaces::Tuple,
     sequences::Memory{UInt64},
+    publication_timestamps::Memory{PlantTimestamp},
+    timestamp::PlantTimestamp,
 )
     lane = first(lanes)
     lane_state = first(lane_states)
@@ -1550,14 +1569,17 @@ end
             lane_state.application,
             workspace.silence[],
         )
-        @inbounds sequences[Int(lane.endpoint_slot)] =
-            workspace.proposed_sequence
+        slot = Int(lane.endpoint_slot)
+        @inbounds sequences[slot] = workspace.proposed_sequence
+        @inbounds publication_timestamps[slot] = timestamp
     end
     return _commit_selected_safe_command_authority!(
         Base.tail(lanes),
         Base.tail(lane_states),
         Base.tail(workspaces),
         sequences,
+        publication_timestamps,
+        timestamp,
     )
 end
 
@@ -2105,6 +2127,8 @@ function _apply_next_command_fanout!(
             state.lanes,
             workspace.lanes,
             state.authority.publication_sequences,
+            state.authority.publication_timestamps,
+            timestamp,
         )
     catch error
         _fail_command_fanout_postcommit!(
@@ -2200,6 +2224,8 @@ function _apply_command_silence_fanout!(
             state.lanes,
             workspace.lanes,
             state.authority.publication_sequences,
+            state.authority.publication_timestamps,
+            timestamp,
         )
     catch error
         _fail_command_fanout_postcommit!(

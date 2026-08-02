@@ -364,6 +364,7 @@ end
     @test state.phase == Plant._CommandFanoutIdle
     @test !command_authority_failed(state.authority)
     @test state.authority.publication_sequences[1] == UInt64(1)
+    @test state.authority.publication_timestamps[1] == timestamp
     @test command_disposition_count(disposition) == 1
     applied = command_disposition(disposition, 1)
     @test command_terminal_kind(applied) == AppliedCommand
@@ -487,6 +488,8 @@ end
     @test all(==([-2.0, -3.0]), physical)
     @test !command_fanout_test_no_publication(safe_partitions)
     @test safe_state.authority.publication_sequences[1] == UInt64(1)
+    @test safe_state.authority.publication_timestamps[1] ==
+        PlantTimestamp(10)
     @test safe_state.phase == Plant._CommandFanoutIdle
     @test !command_authority_failed(safe_state.authority)
     @test command_disposition_count(safe_disposition) == 0
@@ -656,6 +659,8 @@ end
     @test command_fanout_transaction_has_publication(
         fixture.partitions, fixture.beta_id)
     @test all(==(UInt64(1)), fixture.state.authority.publication_sequences)
+    @test all(
+        ==(timestamp), fixture.state.authority.publication_timestamps)
     @test fixture.state.phase == Plant._CommandFanoutIdle
     @test !command_authority_failed(fixture.state.authority)
     @test command_disposition_count(fixture.alpha_disposition) == 1
