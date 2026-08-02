@@ -343,8 +343,13 @@ mixed-resource event loop supplies that all-routes barrier for its selected
 paths. Focused CPU-only versus CPU↔fake-accelerator tests establish scheduler
 timestamps, atmosphere epochs, path and detector-product parity, product
 sequences, RNG continuation, context restoration, structured fail-stop
-behavior, bounded lifecycle-step allocation, and a zero-allocation recurring
-optical tick. The initial loop is restricted to full-optical
+behavior, and zero warmed Julia heap allocation across complete successful
+CPU runs covering global-shutter, rolling-shutter, frame-transfer,
+up-the-ramp, triggered, ordinary-command, safe-command, and atomic-transaction
+events. Preparation, compilation, diagnostics, and exceptional paths are
+outside that steady-state contract. Accelerator and KernelAbstractions launch
+allocation remains a separately measured backend contract. The initial loop
+is restricted to full-optical
 `FrameAcquisitionExecution` providers and rejects autonomous periodic optics.
 Reduced-order or synthetic mixed composition, acquisition-product egress, HIL
 leases/rings, placement admission, real CUDA/AMDGPU mixed execution, and

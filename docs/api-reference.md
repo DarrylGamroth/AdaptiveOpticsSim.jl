@@ -428,8 +428,12 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   atmosphere and command authority while entering every complete
   path/acquisition group's exact prepared target. The initial method supports
   full-optical frame-detector lifecycles and rejects autonomous periodic
-  optics during preparation. It does not add a worker, queue, pacing,
-  placement, product-egress, or transport policy
+  optics during preparation. After preparation and exact-path warmup, its
+  successful CPU command-admission and complete event-run paths allocate zero
+  Julia heap bytes; preparation, compilation, diagnostics, exceptions, and
+  accelerator or KernelAbstractions launch behavior are separate contracts.
+  It does not add a worker, queue, pacing, placement, product-egress, or
+  transport policy
 - Qualified single-device path batching:
   `PreparedDevicePathBatchOwner`, `device_path_batch_owner_count`,
   `device_path_batch_owner`, `device_path_batch_compute_device`,

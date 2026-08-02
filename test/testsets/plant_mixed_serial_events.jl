@@ -25,25 +25,46 @@ function mixed_serial_event_rng_probe(fixture)
     )
 end
 
-
 function mixed_serial_event_step_allocations!(fixture)
     return @allocated step_plant_events!(
         fixture.prepared, fixture.state, fixture.workspace)
 end
 
-function mixed_serial_event_cycle_allocation_budget!(fixture, stop)
-    maximum_bytes = 0
-    while true
-        timestamp = next_plant_event_timestamp(
-            fixture.prepared, fixture.state, fixture.workspace)
-        timestamp === nothing && break
-        timestamp > stop && break
-        maximum_bytes = max(
-            maximum_bytes,
-            mixed_serial_event_step_allocations!(fixture),
-        )
-    end
-    return maximum_bytes
+function mixed_serial_event_run_allocations!(fixture, stop)
+    return @allocated run_plant_events_until!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        stop,
+    )
+end
+
+function mixed_serial_event_command_admission_allocations!(
+    fixture,
+    command,
+    timestamp,
+)
+    return @allocated admit_plant_command!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        command,
+        timestamp,
+    )
+end
+
+function mixed_serial_event_transaction_admission_allocations!(
+    fixture,
+    transaction,
+    timestamp,
+)
+    return @allocated admit_plant_command_transaction!(
+        fixture.prepared,
+        fixture.state,
+        fixture.workspace,
+        transaction,
+        timestamp,
+    )
 end
 
 function mixed_serial_event_capture_error(f)
@@ -351,7 +372,7 @@ end
     reset_handoff_test_transfer_controls!()
 end
 
-@testset "Mixed serial event hot path is inferred and bounded" begin
+@testset "Mixed serial CPU event paths are inferred and zero allocation" begin
     reset_handoff_test_transfer_controls!()
     inferred_fixture = mixed_serial_event_fixture()
     run_plant_events_until!(
@@ -366,11 +387,168 @@ end
         inferred_fixture.workspace,
     )) == PlantTimestamp(600_000_000)
 
-    budget_fixture = mixed_serial_event_fixture()
-    maximum_cycle_allocations =
-        mixed_serial_event_cycle_allocation_budget!(
-            budget_fixture, PlantTimestamp(305_000_000))
-    @info "Mixed serial event maximum lifecycle-step allocations" maximum_cycle_allocations
+    detector_modes = (:global, :rolling, :frame_transfer, :up_the_ramp)
+    lifecycle_run_allocations = map(detector_modes) do mode
+        warm_fixture = mixed_serial_event_fixture(
+            beta_target=HostComputeDevice(),
+            detector_mode=mode,
+        )
+        run_plant_events_until!(
+            warm_fixture.prepared,
+            warm_fixture.state,
+            warm_fixture.workspace,
+            PlantTimestamp(120_000_000),
+        )
+        measured_fixture = mixed_serial_event_fixture(
+            beta_target=HostComputeDevice(),
+            detector_mode=mode,
+        )
+        mixed_serial_event_run_allocations!(
+            measured_fixture, PlantTimestamp(120_000_000))
+    end
+    @info(
+        "Mixed serial CPU detector-lifecycle allocations",
+        detector_modes,
+        lifecycle_run_allocations,
+    )
+
+    warm_trigger = mixed_serial_event_fixture(
+        beta_target=HostComputeDevice(), triggered=true)
+    run_plant_events_until!(
+        warm_trigger.prepared,
+        warm_trigger.state,
+        warm_trigger.workspace,
+        PlantTimestamp(120_000_000),
+    )
+    measured_trigger = mixed_serial_event_fixture(
+        beta_target=HostComputeDevice(), triggered=true)
+    trigger_run_allocations = mixed_serial_event_run_allocations!(
+        measured_trigger, PlantTimestamp(120_000_000))
+
+    command_timestamp = PlantTimestamp(50_000_000)
+    warm_command = mixed_serial_event_fixture(
+        beta_target=HostComputeDevice(), with_command=true)
+    admit_plant_command!(
+        warm_command.prepared,
+        warm_command.state,
+        warm_command.workspace,
+        PlantCommand(warm_command.schema, 1, command_timestamp, 2.0),
+        zero(PlantTimestamp),
+    )
+    run_plant_events_until!(
+        warm_command.prepared,
+        warm_command.state,
+        warm_command.workspace,
+        PlantTimestamp(160_000_000),
+    )
+    measured_command = mixed_serial_event_fixture(
+        beta_target=HostComputeDevice(), with_command=true)
+    command_admission_allocations =
+        mixed_serial_event_command_admission_allocations!(
+            measured_command,
+            PlantCommand(
+                measured_command.schema, 1, command_timestamp, 2.0),
+            zero(PlantTimestamp),
+        )
+    command_run_allocations = mixed_serial_event_run_allocations!(
+        measured_command, PlantTimestamp(160_000_000))
+
+    silence_policy = CommandSilencePolicy(
+        ApplySafeCommand,
+        AgeFromApplication;
+        timeout=PlantDuration(50_000_000),
+    )
+    warm_silence = mixed_serial_event_fixture(
+        beta_target=HostComputeDevice(),
+        with_command=true,
+        silence_policy=silence_policy,
+        safe_command=-2.0,
+    )
+    admit_plant_command!(
+        warm_silence.prepared,
+        warm_silence.state,
+        warm_silence.workspace,
+        PlantCommand(
+            warm_silence.schema, 1, PlantTimestamp(10_000_000), 2.0),
+        zero(PlantTimestamp),
+    )
+    run_plant_events_until!(
+        warm_silence.prepared,
+        warm_silence.state,
+        warm_silence.workspace,
+        PlantTimestamp(160_000_000),
+    )
+    measured_silence = mixed_serial_event_fixture(
+        beta_target=HostComputeDevice(),
+        with_command=true,
+        silence_policy=silence_policy,
+        safe_command=-2.0,
+    )
+    silence_admission_allocations =
+        mixed_serial_event_command_admission_allocations!(
+            measured_silence,
+            PlantCommand(
+                measured_silence.schema,
+                1,
+                PlantTimestamp(10_000_000),
+                2.0,
+            ),
+            zero(PlantTimestamp),
+        )
+    silence_run_allocations = mixed_serial_event_run_allocations!(
+        measured_silence, PlantTimestamp(160_000_000))
+
+    warm_transaction = mixed_serial_transaction_event_fixture(
+        beta_target=HostComputeDevice())
+    warm_transaction_value = PlantCommandTransaction(
+        PlantCommand(
+            warm_transaction.beta_schema, 1, command_timestamp, 4.0),
+        PlantCommand(
+            warm_transaction.alpha_schema, 1, command_timestamp, 2.0),
+    )
+    admit_plant_command_transaction!(
+        warm_transaction.prepared,
+        warm_transaction.state,
+        warm_transaction.workspace,
+        warm_transaction_value,
+        zero(PlantTimestamp),
+    )
+    run_plant_events_until!(
+        warm_transaction.prepared,
+        warm_transaction.state,
+        warm_transaction.workspace,
+        PlantTimestamp(160_000_000),
+    )
+    measured_transaction = mixed_serial_transaction_event_fixture(
+        beta_target=HostComputeDevice())
+    measured_transaction_value = PlantCommandTransaction(
+        PlantCommand(
+            measured_transaction.beta_schema, 1, command_timestamp, 4.0),
+        PlantCommand(
+            measured_transaction.alpha_schema, 1, command_timestamp, 2.0),
+    )
+    transaction_admission_allocations =
+        mixed_serial_event_transaction_admission_allocations!(
+            measured_transaction,
+            measured_transaction_value,
+            zero(PlantTimestamp),
+        )
+    transaction_run_allocations = mixed_serial_event_run_allocations!(
+        measured_transaction, PlantTimestamp(160_000_000))
+
+    cpu_event_run_allocations = (
+        trigger=trigger_run_allocations,
+        command=command_run_allocations,
+        silence=silence_run_allocations,
+        transaction=transaction_run_allocations,
+    )
+    cpu_admission_allocations = (
+        command=command_admission_allocations,
+        silence=silence_admission_allocations,
+        transaction=transaction_admission_allocations,
+    )
+    @info "Mixed serial CPU event-run allocations" cpu_event_run_allocations
+    @info "Mixed serial CPU admission allocations" cpu_admission_allocations
 
     allocation_fixture = mixed_serial_event_fixture()
     run_plant_events_until!(
@@ -382,7 +560,11 @@ end
     allocations = mixed_serial_event_step_allocations!(allocation_fixture)
     @info "Mixed serial event steady-state allocations" allocations
     if !coverage_instrumented()
-        @test maximum_cycle_allocations <= 4_096
+        # Preparation, compilation, diagnostics, and exceptional paths are
+        # outside the successful steady-state CPU HIL allocation contract.
+        @test all(iszero, lifecycle_run_allocations)
+        @test all(iszero, values(cpu_event_run_allocations))
+        @test all(iszero, values(cpu_admission_allocations))
         @test allocations == 0
     end
 end

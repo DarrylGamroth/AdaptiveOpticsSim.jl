@@ -22,6 +22,12 @@ struct _PreparedMixedSerialPathSchedule
     acquisition_slots::Memory{UInt32}
 end
 
+struct _PreparedMixedSerialTriggeredAcquisition
+    consumer::TriggerConsumerID
+    acquisition_slot::UInt32
+    start_handle::EventGeneratorHandle
+end
+
 abstract type _AbstractPreparedMixedSerialEventAcquisition end
 
 struct _PreparedMixedSerialEventAcquisition{
@@ -58,6 +64,8 @@ struct PreparedMixedResourcePlantEventLoop{B,E,T}
     commands::Memory{_PreparedMixedSerialEventCommand}
     paths::Memory{_PreparedMixedSerialPathSchedule}
     acquisitions::Memory{_AbstractPreparedMixedSerialEventAcquisition}
+    triggered_acquisitions::Memory{
+        _PreparedMixedSerialTriggeredAcquisition}
     trigger_topology::T
 end
 
@@ -80,8 +88,18 @@ mutable struct MixedResourcePlantEventLoopState{B,E,T}
     phase::_MixedSerialEventLoopPhase
 end
 
+# The acquisition registry is intentionally heterogeneous. Retaining these
+# owners once in mutable workspace storage avoids reboxing the large immutable
+# prepared loop and each event claim at its concrete lifecycle function barrier.
+mutable struct _MixedSerialAcquisitionEventInvocation{P,S}
+    prepared::P
+    state::S
+    claim::Base.RefValue{EventClaim}
+    owner_slot::UInt32
+end
+
 """Fixed-capacity scratch storage for a `PreparedMixedResourcePlantEventLoop`."""
-mutable struct MixedResourcePlantEventLoopWorkspace{B,E,T}
+mutable struct MixedResourcePlantEventLoopWorkspace{B,E,T,I}
     binding::B
     scheduler::EventSchedulerWorkspace
     execution::E
@@ -90,6 +108,7 @@ mutable struct MixedResourcePlantEventLoopWorkspace{B,E,T}
     event_timestamp::Base.RefValue{PlantTimestamp}
     command_dispositions::Memory{PlantCommandDisposition}
     command_disposition_count::Int
+    acquisition_event::I
 end
 
 @inline function _mixed_resource_plant_partitions(
@@ -343,6 +362,44 @@ function _prepare_mixed_serial_event_commands(
     return commands
 end
 
+@inline function _append_mixed_serial_triggered_acquisition!(
+    ::Vector{_PreparedMixedSerialTriggeredAcquisition},
+    ::PeriodicAcquisitionStart,
+    ::UInt32,
+    ::EventGeneratorHandle,
+)
+    return nothing
+end
+
+function _append_mixed_serial_triggered_acquisition!(
+    bindings::Vector{_PreparedMixedSerialTriggeredAcquisition},
+    start::TriggeredAcquisitionStart,
+    acquisition_slot::UInt32,
+    start_handle::EventGeneratorHandle,
+)
+    push!(bindings, _PreparedMixedSerialTriggeredAcquisition(
+        start.consumer, acquisition_slot, start_handle))
+    return nothing
+end
+
+function _prepare_mixed_serial_triggered_acquisitions(
+    definitions,
+    scheduler::PreparedEventScheduler,
+)
+    bindings = _PreparedMixedSerialTriggeredAcquisition[]
+    sizehint!(bindings, length(definitions))
+    @inbounds for slot in eachindex(definitions)
+        _append_mixed_serial_triggered_acquisition!(
+            bindings,
+            definitions[slot].start,
+            UInt32(slot),
+            event_generator_handle(
+                scheduler, ExposureOpenPhase, 2slot - 1),
+        )
+    end
+    return Memory{_PreparedMixedSerialTriggeredAcquisition}(bindings)
+end
+
 function prepare_plant_event_loop(
     partitions::PreparedPlantPartitions,
     definition::PlantEventLoopDefinition,
@@ -389,6 +446,8 @@ function prepare_plant_event_loop(
         _prepare_mixed_serial_path_schedules(
             sample_definitions, acquisitions, scheduler),
         acquisitions,
+        _prepare_mixed_serial_triggered_acquisitions(
+            acquisition_definitions, scheduler),
         _prepared_trigger_topology(definition.trigger_topology),
     )
 end
@@ -560,6 +619,12 @@ function MixedResourcePlantEventLoopWorkspace(
         Ref(zero(PlantTimestamp)),
         Memory{PlantCommandDisposition}(undef, capacity),
         0,
+        _MixedSerialAcquisitionEventInvocation(
+            prepared,
+            state,
+            Ref{EventClaim}(),
+            zero(UInt32),
+        ),
     )
 end
 
@@ -581,6 +646,12 @@ end
             :prepared_binding,
             "mixed serial event-loop optical execution binding changed",
         )
+    workspace.acquisition_event.prepared.binding === prepared.binding &&
+        workspace.acquisition_event.state === state ||
+        _mixed_serial_event_error(
+            :prepared_binding,
+            "mixed serial acquisition invocation belongs to another owner",
+        )
     length(prepared.paths) == length(state.path_sampled) ==
         length(workspace.execution.due_paths) ||
         _mixed_serial_event_error(
@@ -596,6 +667,17 @@ end
             "preparation",
         )
     return nothing
+end
+
+@inline function _stage_mixed_serial_acquisition_event!(
+    workspace::MixedResourcePlantEventLoopWorkspace,
+    claim::EventClaim,
+    owner_slot::UInt32,
+)
+    invocation = workspace.acquisition_event
+    invocation.claim[] = claim
+    invocation.owner_slot = owner_slot
+    return invocation
 end
 
 @inline function _require_mixed_serial_event_idle(
@@ -1001,6 +1083,7 @@ end
 function _process_mixed_serial_acquisition_start!(
     prepared::PreparedMixedResourcePlantEventLoop,
     state::MixedResourcePlantEventLoopState,
+    workspace::MixedResourcePlantEventLoopWorkspace,
     claim::EventClaim,
     action::_PlantEventAction,
 )
@@ -1008,6 +1091,20 @@ function _process_mixed_serial_acquisition_start!(
         prepared, action.owner_slot)
     acquisition_state = _mixed_serial_event_acquisition_state(
         state, action.owner_slot)
+    invocation = _stage_mixed_serial_acquisition_event!(
+        workspace, claim, action.owner_slot)
+    return _process_mixed_serial_acquisition_start!(
+        invocation, acquisition, acquisition_state)
+end
+
+Base.@noinline function _process_mixed_serial_acquisition_start!(
+    invocation::_MixedSerialAcquisitionEventInvocation,
+    acquisition::_PreparedMixedSerialEventAcquisition,
+    acquisition_state::_AcquisitionEventLifecycleState,
+)
+    prepared = invocation.prepared
+    state = invocation.state
+    claim = invocation.claim[]
     timestamp = claim.key.timestamp
     _require_mixed_serial_event_path_available(
         prepared, state, acquisition, timestamp)
@@ -1092,6 +1189,7 @@ end
 function _process_mixed_serial_acquisition_boundary!(
     prepared::PreparedMixedResourcePlantEventLoop,
     state::MixedResourcePlantEventLoopState,
+    workspace::MixedResourcePlantEventLoopWorkspace,
     claim::EventClaim,
     action::_PlantEventAction,
 )
@@ -1099,6 +1197,20 @@ function _process_mixed_serial_acquisition_boundary!(
         prepared, action.owner_slot)
     acquisition_state = _mixed_serial_event_acquisition_state(
         state, action.owner_slot)
+    invocation = _stage_mixed_serial_acquisition_event!(
+        workspace, claim, action.owner_slot)
+    return _process_mixed_serial_acquisition_boundary!(
+        invocation, acquisition, acquisition_state)
+end
+
+Base.@noinline function _process_mixed_serial_acquisition_boundary!(
+    invocation::_MixedSerialAcquisitionEventInvocation,
+    acquisition::_PreparedMixedSerialEventAcquisition,
+    acquisition_state::_AcquisitionEventLifecycleState,
+)
+    prepared = invocation.prepared
+    state = invocation.state
+    claim = invocation.claim[]
     result = _process_mixed_serial_lifecycle_boundary!(
         acquisition, acquisition_state, claim.key.timestamp)
     if result.disposition == _RescheduleAcquisitionBoundary
@@ -1148,6 +1260,7 @@ end
 function _process_mixed_serial_rolling_band_open!(
     prepared::PreparedMixedResourcePlantEventLoop,
     state::MixedResourcePlantEventLoopState,
+    workspace::MixedResourcePlantEventLoopWorkspace,
     claim::EventClaim,
     action::_PlantEventAction,
 )
@@ -1155,6 +1268,20 @@ function _process_mixed_serial_rolling_band_open!(
         prepared, action.owner_slot)
     acquisition_state = _mixed_serial_event_acquisition_state(
         state, action.owner_slot)
+    invocation = _stage_mixed_serial_acquisition_event!(
+        workspace, claim, action.owner_slot)
+    return _process_mixed_serial_rolling_band_open!(
+        invocation, acquisition, acquisition_state)
+end
+
+Base.@noinline function _process_mixed_serial_rolling_band_open!(
+    invocation::_MixedSerialAcquisitionEventInvocation,
+    acquisition::_PreparedMixedSerialEventAcquisition,
+    acquisition_state::_AcquisitionEventLifecycleState,
+)
+    prepared = invocation.prepared
+    state = invocation.state
+    claim = invocation.claim[]
     following = _open_next_mixed_serial_rolling_band!(
         acquisition, acquisition_state, claim.key.timestamp)
     if following === nothing
@@ -1190,6 +1317,7 @@ end
 function _process_mixed_serial_acquisition_readout!(
     prepared::PreparedMixedResourcePlantEventLoop,
     state::MixedResourcePlantEventLoopState,
+    workspace::MixedResourcePlantEventLoopWorkspace,
     claim::EventClaim,
     action::_PlantEventAction,
 )
@@ -1197,9 +1325,26 @@ function _process_mixed_serial_acquisition_readout!(
         prepared, action.owner_slot)
     acquisition_state = _mixed_serial_event_acquisition_state(
         state, action.owner_slot)
+    invocation = _stage_mixed_serial_acquisition_event!(
+        workspace, claim, action.owner_slot)
+    return _process_mixed_serial_acquisition_readout!(
+        invocation,
+        acquisition,
+        acquisition_state,
+    )
+end
+
+Base.@noinline function _process_mixed_serial_acquisition_readout!(
+    invocation::_MixedSerialAcquisitionEventInvocation,
+    acquisition::_PreparedMixedSerialEventAcquisition,
+    acquisition_state::_AcquisitionEventLifecycleState,
+)
+    prepared = invocation.prepared
+    state = invocation.state
+    claim = invocation.claim[]
     _complete_mixed_serial_acquisition_readout!(
         acquisition, acquisition_state, claim.key.timestamp)
-    index = Int(action.owner_slot)
+    index = Int(invocation.owner_slot)
     sequence = _event_product_sequence(acquisition_state)
     previous = @inbounds state.product_sequences[index]
     sequence > previous || _mixed_serial_event_error(
@@ -1250,6 +1395,7 @@ end
 function _process_mixed_serial_acquisition_readiness!(
     prepared::PreparedMixedResourcePlantEventLoop,
     state::MixedResourcePlantEventLoopState,
+    workspace::MixedResourcePlantEventLoopWorkspace,
     claim::EventClaim,
     action::_PlantEventAction,
 )
@@ -1257,6 +1403,20 @@ function _process_mixed_serial_acquisition_readiness!(
         prepared, action.owner_slot)
     acquisition_state = _mixed_serial_event_acquisition_state(
         state, action.owner_slot)
+    invocation = _stage_mixed_serial_acquisition_event!(
+        workspace, claim, action.owner_slot)
+    return _process_mixed_serial_acquisition_readiness!(
+        invocation, acquisition, acquisition_state)
+end
+
+Base.@noinline function _process_mixed_serial_acquisition_readiness!(
+    invocation::_MixedSerialAcquisitionEventInvocation,
+    acquisition::_PreparedMixedSerialEventAcquisition,
+    acquisition_state::_AcquisitionEventLifecycleState,
+)
+    prepared = invocation.prepared
+    state = invocation.state
+    claim = invocation.claim[]
     _mark_mixed_serial_acquisition_ready!(
         acquisition, acquisition_state, claim.key.timestamp)
     deactivate_event_generator!(
@@ -1363,13 +1523,13 @@ function _process_mixed_serial_command_endpoint!(
     return nothing
 end
 
-function _triggered_mixed_serial_acquisition_slot_or_zero(
+function _triggered_mixed_serial_acquisition_binding_slot_or_zero(
     prepared::PreparedMixedResourcePlantEventLoop,
     consumer::TriggerConsumerID,
 )
-    @inbounds for slot in eachindex(prepared.acquisitions)
-        start = prepared.acquisitions[slot].start
-        _start_matches_consumer(start, consumer) && return UInt32(slot)
+    @inbounds for slot in eachindex(prepared.triggered_acquisitions)
+        prepared.triggered_acquisitions[slot].consumer == consumer &&
+            return UInt32(slot)
     end
     return zero(UInt32)
 end
@@ -1379,17 +1539,18 @@ function _process_mixed_serial_trigger_topology!(
         <:Any,<:Any,<:PreparedTriggerTopology},
     state::MixedResourcePlantEventLoopState{<:Any,<:Any,<:TriggerTopologyState},
     workspace::MixedResourcePlantEventLoopWorkspace{
-        <:Any,<:Any,<:TriggerTopologyWorkspace},
+        <:Any,<:Any,<:TriggerTopologyWorkspace,<:Any},
     claim::EventClaim,
 )
     topology = prepared.trigger_topology
     trigger_state = state.trigger
     source = next_trigger_source(topology, trigger_state)
-    delivery = next_trigger_delivery(topology, trigger_state)
-    source_due = delivery === nothing ||
+    delivery_slot = _next_pending_slot(trigger_state)
+    source_due = iszero(delivery_slot) ||
         realized_trigger_source_timestamp(source) <=
-            delivered_trigger_edge(delivery).timestamp
-    activated_slot = zero(UInt32)
+            delivered_trigger_edge(
+                @inbounds(trigger_state.pending[delivery_slot])).timestamp
+    activated_binding_slot = zero(UInt32)
     activation_timestamp = zero(PlantTimestamp)
     if source_due
         realized_trigger_source_timestamp(source) == claim.key.timestamp ||
@@ -1400,26 +1561,27 @@ function _process_mixed_serial_trigger_topology!(
         realize_next_trigger_source!(
             workspace.trigger, topology, trigger_state)
     else
+        delivery = @inbounds trigger_state.pending[delivery_slot]
         delivered = delivered_trigger_edge(delivery)
         delivered.timestamp == claim.key.timestamp ||
             _mixed_serial_event_error(
                 :trigger_schedule,
                 "trigger delivery does not match its scheduler claim",
             )
-        activated_slot =
-            _triggered_mixed_serial_acquisition_slot_or_zero(
-                prepared, trigger_delivery_consumer(delivery))
-        iszero(activated_slot) && _mixed_serial_event_error(
+        activated_binding_slot =
+            _triggered_mixed_serial_acquisition_binding_slot_or_zero(
+            prepared, trigger_delivery_consumer(delivery))
+        iszero(activated_binding_slot) && _mixed_serial_event_error(
             :trigger_binding,
             "delivered trigger consumer " *
             "$(trigger_delivery_consumer(delivery)) has no acquisition",
         )
-        acquisition = _mixed_serial_event_acquisition(
-            prepared, activated_slot)
+        activated = @inbounds prepared.triggered_acquisitions[
+            Int(activated_binding_slot)]
         _require_inactive_mixed_serial_generator(
             prepared,
             state,
-            acquisition.start_handle,
+            activated.start_handle,
             delivered.timestamp,
         )
         pop_next_trigger_delivery!(
@@ -1433,13 +1595,13 @@ function _process_mixed_serial_trigger_topology!(
     next_timestamp = _next_trigger_action_timestamp(topology, trigger_state)
     reschedule_event!(
         prepared.scheduler, state.scheduler, claim, next_timestamp)
-    if !iszero(activated_slot)
-        acquisition = _mixed_serial_event_acquisition(
-            prepared, activated_slot)
+    if !iszero(activated_binding_slot)
+        activated = @inbounds prepared.triggered_acquisitions[
+            Int(activated_binding_slot)]
         activate_event_generator!(
             prepared.scheduler,
             state.scheduler,
-            acquisition.start_handle,
+            activated.start_handle,
             activation_timestamp,
         )
     end
@@ -1452,7 +1614,7 @@ function _process_mixed_serial_trigger_topology!(
     ::MixedResourcePlantEventLoopState{
         <:Any,<:Any,<:_NoTriggerTopologyState},
     ::MixedResourcePlantEventLoopWorkspace{
-        <:Any,<:Any,<:_NoTriggerTopologyWorkspace},
+        <:Any,<:Any,<:_NoTriggerTopologyWorkspace,<:Any},
     ::EventClaim,
 )
     _mixed_serial_event_error(
@@ -1642,19 +1804,19 @@ function _process_mixed_serial_ordinary_event!(
             prepared, state, workspace, claim, action)
     kind == _AcquisitionBoundaryAction &&
         return _process_mixed_serial_acquisition_boundary!(
-            prepared, state, claim, action)
+            prepared, state, workspace, claim, action)
     kind == _AcquisitionStartAction &&
         return _process_mixed_serial_acquisition_start!(
-            prepared, state, claim, action)
+            prepared, state, workspace, claim, action)
     kind == _RollingBandOpenAction &&
         return _process_mixed_serial_rolling_band_open!(
-            prepared, state, claim, action)
+            prepared, state, workspace, claim, action)
     kind == _AcquisitionReadoutAction &&
         return _process_mixed_serial_acquisition_readout!(
-            prepared, state, claim, action)
+            prepared, state, workspace, claim, action)
     kind == _AcquisitionReadinessAction &&
         return _process_mixed_serial_acquisition_readiness!(
-            prepared, state, claim, action)
+            prepared, state, workspace, claim, action)
     _mixed_serial_event_error(
         :invalid_action,
         "prepared mixed serial event has an unknown action kind",

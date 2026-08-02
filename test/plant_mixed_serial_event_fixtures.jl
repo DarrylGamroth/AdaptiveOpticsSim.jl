@@ -280,7 +280,9 @@ function mixed_serial_event_fixture(;
     return (; partitions, events, prepared, state, workspace, schema)
 end
 
-function mixed_serial_transaction_event_fixture()
+function mixed_serial_transaction_event_fixture(;
+    beta_target::AbstractComputeDevice=HANDOFF_TEST_ACCELERATOR,
+)
     alpha_schema = effective_command_route_test_schema(
         dimensions=(),
         id=:mixed_serial_transaction_alpha_schema,
@@ -321,7 +323,7 @@ function mixed_serial_transaction_event_fixture()
         definition,
         HostComputeDevice(),
         :alpha => HostComputeDevice(),
-        :beta => HANDOFF_TEST_ACCELERATOR,
+        :beta => beta_target,
     )
     configurations = (
         CommandEndpointConfiguration(
