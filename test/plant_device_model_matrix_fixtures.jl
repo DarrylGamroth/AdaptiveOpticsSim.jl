@@ -304,6 +304,7 @@ function device_model_matrix_wfs_fixture(
     second_period_ns::Integer=100_000_000,
     second_phase_ns::Integer=0,
     second_origin::PlantTimestamp=zero(PlantTimestamp),
+    include_physical_state::Bool=true,
     T::Type{<:AbstractFloat}=Float64,
     r0::Real=T(0.2),
 )
@@ -367,12 +368,13 @@ function device_model_matrix_wfs_fixture(
             DeviceBatchTestAcquisitionModel(T(0.08)),
         ),
     )
-    physical = device_batch_test_physical_definitions(
-        telescope,
-        backend,
-        T;
-        selected_path=:wfs_alpha,
-    )
+    physical = include_physical_state ?
+        device_batch_test_physical_definitions(
+            telescope,
+            backend,
+            T;
+            selected_path=:wfs_alpha,
+        ) : nothing
     definition = PlantDefinition(
         ;
         telescope=AdaptiveOpticsSim.Optics.TelescopeDefinition(
@@ -392,15 +394,17 @@ function device_model_matrix_wfs_fixture(
             layer_ids=(:ground, :high),
             T=T,
         ),
-        sampled_aberrations=physical.sampled_aberrations,
-        controllable_optics=(physical.optic,),
+        sampled_aberrations=isnothing(physical) ? () :
+            physical.sampled_aberrations,
+        controllable_optics=isnothing(physical) ? () : (physical.optic,),
         paths=path_definitions,
         acquisitions=acquisition_definitions,
     )
     plant = prepare_plant(
         definition, compute_device(pupil_reflectivity(telescope));
         run_seed=0x7_500,
-        command_endpoints=(physical.configuration,),
+        command_endpoints=isnothing(physical) ? () :
+            (physical.configuration,),
     )
     first_sample = OpticalSampleDefinition(
         :wfs_alpha,
@@ -449,7 +453,7 @@ function device_model_matrix_wfs_fixture(
         workspace=PlantEventLoopWorkspace(prepared),
         path_ids=include_second ?
             (:wfs_alpha, :wfs_beta) : (:wfs_alpha,),
-        command_schema=physical.schema,
+        command_schema=isnothing(physical) ? nothing : physical.schema,
     )
 end
 

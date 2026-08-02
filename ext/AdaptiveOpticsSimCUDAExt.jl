@@ -1,7 +1,7 @@
 module AdaptiveOpticsSimCUDAExt
 
 import AdaptiveOpticsSim
-import AdaptiveOpticsSim: Backends, WavefrontSensors
+import AdaptiveOpticsSim: Backends, Plant, WavefrontSensors
 using CUDA
 using LinearAlgebra
 
@@ -17,6 +17,12 @@ Backends.backend_zeros(::Type{Backends.CUDABackendTag}, ::Type{T}, dims::Vararg{
 Backends.backend_fill(::Type{Backends.CUDABackendTag}, value, dims::Vararg{Int}) = CUDA.fill(value, dims...)
 Backends.compute_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
+
+function Plant.structural_array_bytes(array::CUDA.CuArray,
+    target::Backends.AbstractComputeDevice)
+    Plant._require_structural_array_target(array, target)
+    return Plant._contiguous_structural_array_bytes(array)
+end
 
 function Backends.compute_device_availability(
     device::Backends.AcceleratorComputeDevice{Backends.CUDABackend,I},

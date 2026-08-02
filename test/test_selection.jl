@@ -222,6 +222,19 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("plant-preparation", "testsets/plant_preparation.jl";
         fixtures=("plant_test_fixtures.jl",
             "wfs_stage_contract_fixtures.jl")),
+    TestSuiteSpec(
+        "plant-resource-facts",
+        "testsets/plant_resource_facts.jl",
+        "testsets/plant_resource_runtime_facts.jl",
+        "testsets/plant_resource_acquisition_facts.jl",
+        "testsets/plant_optical_resource_reporters.jl",
+        "testsets/plant_resource_batch_facts.jl",
+        "testsets/plant_resource_graph_facts.jl";
+        fixtures=(
+            "plant_device_batching_fixtures.jl",
+            "plant_device_model_matrix_fixtures.jl",
+        ),
+    ),
     TestSuiteSpec("plant-providers", "testsets/plant_providers.jl";
         fixtures=("plant_test_fixtures.jl",
             "wfs_stage_contract_fixtures.jl")),
@@ -289,6 +302,7 @@ const TEST_GROUP_SPECS = (
         "plant-sampled-aberrations",
         "plant-gate5-closure",
         "plant-preparation",
+        "plant-resource-facts",
         "plant-providers",
         "plant-rng",
         "plant-illumination",
@@ -391,6 +405,7 @@ const TEST_CI_SHARD_SPECS = (
         "plant-sampled-aberrations",
         "plant-gate5-closure",
         "plant-preparation",
+        "plant-resource-facts",
         "plant-providers",
         "plant-rng",
         "plant-illumination",

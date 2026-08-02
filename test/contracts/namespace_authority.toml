@@ -578,7 +578,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "f761b2848ab7abf2aca9e118e77a8d64efab185ab5988e2f55c23a665dcf8ede"
+sha256 = "b45f1d2c290492a9dcfefe4f543b27e1eb3b5b9776cb2e7bff9d233a2ce08a79"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -1550,6 +1550,27 @@ public = [
     "sampled_aberration_definition",
     "path_definition",
     "acquisition_definition",
+    "StructuralResourceError",
+    "StructuralResourceOwnerID",
+    "ResourceEstimateMethod",
+    "AbstractStructuralResourceFact",
+    "KnownStructuralResourceFact",
+    "UnknownStructuralResourceFact",
+    "OpaqueResourceReserve",
+    "StructuralResourceReport",
+    "structural_resource_fact",
+    "structural_resource_facts",
+    "aggregate_structural_resource_facts",
+    "require_exact_structural_resource_facts",
+    "structural_resource_owner_id",
+    "structural_resource_known",
+    "structural_resource_unknown_reason",
+    "structural_resident_bytes",
+    "structural_workspace_bytes",
+    "opaque_resource_reserve_bytes",
+    "resource_estimate_method",
+    "opaque_resource_reserves",
+    "structural_array_bytes",
     "RNGDerivationVersion",
     "RNGOwnerIdentity",
     "RNGOwnerToken",
@@ -2045,6 +2066,7 @@ bindings = [
     "ExpandedSourceComposition",
     "ExtendedSource",
     "FocalPlane",
+    "FraunhoferPropagation",
     "GaussianInfluenceWidth",
     "GaussianMechanicalCoupling",
     "GaussianInfluenceOperator",
@@ -2075,8 +2097,10 @@ bindings = [
     "PreparedDirectImagingBatch",
     "PreparedFocalPlaneModulation",
     "PreparedIncoherentDirectImaging",
+    "PreparedMicrolensPropagation",
     "PupilFunction",
     "PupilPlane",
+    "SampledActuatorTopology",
     "Source",
     "SpatialDensityMeasure",
     "SpectralSource",
@@ -2121,7 +2145,6 @@ consumer = "Plant"
 provider = "Optics"
 action = "remove_unused_import"
 bindings = [
-    "FraunhoferPropagation",
     "topology_axis_count",
 ]
 
@@ -2134,9 +2157,11 @@ bindings = [
     "AbstractTimedAtmosphereDefinition",
     "AbstractTimedAtmosphere",
     "AtmosphereEpoch",
+    "AtmosphereDirectionRenderer",
     "AtmosphereLayerID",
     "InfiniteAtmosphereLayer",
     "InfiniteMultiLayerAtmosphere",
+    "KolmogorovAtmosphere",
     "MovingAtmosphereLayer",
     "MultiLayerAtmosphere",
     "PreparedAtmosphereDirectionBatch",
@@ -2176,6 +2201,7 @@ bindings = [
     "CMOSSensor",
     "Detector",
     "DetectorAcquisitionPlan",
+    "DetectorState",
     "EMCCDSensor",
     "FrameReadoutProducts",
     "FrameSamplingMode",
@@ -2184,6 +2210,7 @@ bindings = [
     "GlobalResetExposure",
     "HgCdTeSensorType",
     "HgCdTeAvalancheArraySensor",
+    "NoFrameReadoutProducts",
     "RollingExposure",
     "RollingShutter",
     "UpTheRampReadoutProducts",
@@ -2230,6 +2257,12 @@ bindings = [
     "PreparedPyramidOpticalFormation",
     "PreparedShackHartmannOpticalBundleFormation",
     "PreparedShackHartmannOpticalFormation",
+    "PreparedShackHartmannEstimator",
+    "PreparedWFSDetectorAcquisition",
+    "ShackHartmannAcquisitionState",
+    "ShackHartmannEstimatorState",
+    "SubapertureCalibration",
+    "SubapertureLayout",
     "WFSMeasurement",
     "WFSMeasurementMetadata",
     "WFSObservation",

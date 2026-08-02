@@ -53,6 +53,7 @@ import ..Optics:
     AbstractTelescope,
     AchromaticSpectralCoordinate,
     ActuatorGridTopology,
+    SampledActuatorTopology,
     Asterism,
     CellIntegratedMeasure,
     CircularModulation,
@@ -69,6 +70,7 @@ import ..Optics:
     ExpandedSourceComposition,
     ExtendedSource,
     FocalPlane,
+    FraunhoferPropagation,
     GaussianInfluenceWidth,
     GaussianMechanicalCoupling,
     GaussianInfluenceOperator,
@@ -99,6 +101,7 @@ import ..Optics:
     PreparedDirectImagingBatch,
     PreparedFocalPlaneModulation,
     PreparedIncoherentDirectImaging,
+    PreparedMicrolensPropagation,
     PupilFunction,
     PupilPlane,
     Source,
@@ -145,6 +148,7 @@ import ..Detectors:
     CMOSSensor,
     Detector,
     DetectorAcquisitionPlan,
+    DetectorState,
     EMCCDSensor,
     FrameReadoutProducts,
     FrameSamplingMode,
@@ -153,6 +157,7 @@ import ..Detectors:
     GlobalResetExposure,
     HgCdTeSensorType,
     HgCdTeAvalancheArraySensor,
+    NoFrameReadoutProducts,
     RollingExposure,
     RollingShutter,
     UpTheRampReadoutProducts,
@@ -190,9 +195,11 @@ import ..Atmospheres:
     AbstractTimedAtmosphereDefinition,
     AbstractTimedAtmosphere,
     AtmosphereEpoch,
+    AtmosphereDirectionRenderer,
     AtmosphereLayerID,
     InfiniteAtmosphereLayer,
     InfiniteMultiLayerAtmosphere,
+    KolmogorovAtmosphere,
     MovingAtmosphereLayer,
     MultiLayerAtmosphere,
     PreparedAtmosphereDirectionBatch,
@@ -236,6 +243,12 @@ import ..WavefrontSensors:
     PreparedPyramidOpticalFormation,
     PreparedShackHartmannOpticalBundleFormation,
     PreparedShackHartmannOpticalFormation,
+    PreparedShackHartmannEstimator,
+    PreparedWFSDetectorAcquisition,
+    ShackHartmannAcquisitionState,
+    ShackHartmannEstimatorState,
+    SubapertureCalibration,
+    SubapertureLayout,
     WFSMeasurement,
     WFSMeasurementMetadata,
     WFSObservation,
@@ -281,6 +294,13 @@ include("event_composition.jl")
 include("device_batching.jl")
 include("illumination.jl")
 include("target_validation.jl")
+include("resource_facts.jl")
+include("resource_facts_runtime.jl")
+include("resource_facts_shack_hartmann.jl")
+include("resource_reporters_optical.jl")
+include("resource_facts_acquisition.jl")
+include("resource_facts_batching.jl")
+include("resource_facts_graph.jl")
 include("api.jl")
 
 end # module Plant
