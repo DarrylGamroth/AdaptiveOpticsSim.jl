@@ -99,6 +99,7 @@ import ..Optics:
     PreparedDirectImagingBatch,
     PreparedFocalPlaneModulation,
     PreparedIncoherentDirectImaging,
+    PreparedMicrolensPropagation,
     PupilFunction,
     PupilPlane,
     Source,
@@ -145,6 +146,7 @@ import ..Detectors:
     CMOSSensor,
     Detector,
     DetectorAcquisitionPlan,
+    DetectorState,
     EMCCDSensor,
     FrameReadoutProducts,
     FrameSamplingMode,
@@ -153,6 +155,7 @@ import ..Detectors:
     GlobalResetExposure,
     HgCdTeSensorType,
     HgCdTeAvalancheArraySensor,
+    NoFrameReadoutProducts,
     RollingExposure,
     RollingShutter,
     UpTheRampReadoutProducts,
@@ -236,6 +239,12 @@ import ..WavefrontSensors:
     PreparedPyramidOpticalFormation,
     PreparedShackHartmannOpticalBundleFormation,
     PreparedShackHartmannOpticalFormation,
+    PreparedShackHartmannEstimator,
+    PreparedWFSDetectorAcquisition,
+    ShackHartmannAcquisitionState,
+    ShackHartmannEstimatorState,
+    SubapertureCalibration,
+    SubapertureLayout,
     WFSMeasurement,
     WFSMeasurementMetadata,
     WFSObservation,
@@ -282,6 +291,7 @@ include("device_batching.jl")
 include("illumination.jl")
 include("target_validation.jl")
 include("resource_facts.jl")
+include("resource_facts_shack_hartmann.jl")
 include("api.jl")
 
 end # module Plant
