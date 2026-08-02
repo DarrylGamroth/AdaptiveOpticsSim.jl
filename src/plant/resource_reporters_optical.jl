@@ -229,7 +229,7 @@ function structural_resource_fact(prepared::PreparedDirectImagingBatch,
         id, target, resident, workspace_bytes)
 end
 
-function _prepared_direct_path_resource_fact(
+function _prepared_path_resource_fact(
     ::Any,
     ::Any,
     ::Any,
@@ -241,7 +241,7 @@ function _prepared_direct_path_resource_fact(
         :unsupported_prepared_path)
 end
 
-function _prepared_direct_path_resource_fact(
+function _prepared_path_resource_fact(
     input::PupilFunction,
     result::IntensityMap,
     materialization::PreparedPupilOPDMaterialization{
@@ -281,6 +281,9 @@ plan aliases and the renderer destination are counted only through that owner.
 """
 function structural_resource_fact(path::PreparedPathExecutor,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    return _prepared_direct_path_resource_fact(path.input, path.result,
+    execution_target = getfield(path.key, :device)
+    _require_exact_path_target(path, path.telescope, path.atmosphere,
+        execution_target, path.context)
+    return _prepared_path_resource_fact(path.input, path.result,
         path.materialization, path.execution, id, target)
 end

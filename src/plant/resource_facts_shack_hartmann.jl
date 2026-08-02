@@ -159,3 +159,43 @@ function structural_resource_fact(workspace::PreparedMicrolensPropagation,
     return _targeted_structural_resource_fact(id, target,
         (present=false, bytes=UInt64(0)), workspace_bytes)
 end
+
+function _prepared_path_resource_fact(
+    input::PupilFunction,
+    result::IntensityMap,
+    materialization::PreparedPupilOPDMaterialization{
+        <:AtmosphereDirectionRenderer},
+    execution::WFSOpticalPathExecution{
+        <:PreparedShackHartmannOpticalFormation},
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+)
+    plan = execution.plan
+    plan.input === input || _structural_resource_error(
+        :path, :invalid_binding,
+        "Shack-Hartmann path input does not match its optical plan")
+    plan.output === result || _structural_resource_error(
+        :path, :invalid_binding,
+        "Shack-Hartmann path result does not match its optical plan")
+    materialization.destination === input || _structural_resource_error(
+        :path, :invalid_binding,
+        "Shack-Hartmann materialization destination does not match its input")
+
+    resident = _combine_structural_target_bytes(
+        _pupil_structural_resident_bytes(input, target),
+        _structural_array_target_bytes(
+            (result.values,), target, :resident_bytes),
+        :resident_bytes)
+    resident = _combine_structural_target_bytes(resident,
+        _renderer_structural_resident_bytes(
+            materialization.renderer, target), :resident_bytes)
+    path_fact = _targeted_structural_resource_fact(
+        id, target, resident,
+        (present=false, bytes=UInt64(0)))
+    layout_fact = structural_resource_fact(
+        plan.front_end.layout, id, target)
+    propagation_fact = structural_resource_fact(
+        plan.front_end.propagation, id, target)
+    return _combine_structural_owner_facts(
+        id, target, (path_fact, layout_fact, propagation_fact))
+end

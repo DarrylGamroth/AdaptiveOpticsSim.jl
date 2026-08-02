@@ -430,6 +430,37 @@ end
     )
 end
 
+function _combine_structural_owner_facts(
+    id::StructuralResourceOwnerID,
+    target::AbstractComputeDevice,
+    facts::Tuple,
+)
+    present = false
+    resident = UInt64(0)
+    workspace = UInt64(0)
+    for candidate in facts
+        fact = _require_resource_owner(
+            _require_fact_target(candidate, target), id)
+        if structural_resource_known(fact)
+            _require_resource_method(
+                fact, _STRUCTURAL_RESOURCE_ESTIMATE_METHOD)
+            present = true
+            resident = _checked_resource_add(
+                resident, structural_resident_bytes(fact),
+                :resident_bytes)
+            workspace = _checked_resource_add(
+                workspace, structural_workspace_bytes(fact),
+                :workspace_bytes)
+        elseif structural_resource_unknown_reason(fact) !=
+                :owner_not_on_device
+            return fact
+        end
+    end
+    present || return UnknownStructuralResourceFact(
+        id, target, :owner_not_on_device)
+    return KnownStructuralResourceFact(id, target, resident, workspace)
+end
+
 @inline function _require_fact_target(
     fact::AbstractStructuralResourceFact,
     target::AbstractComputeDevice,
