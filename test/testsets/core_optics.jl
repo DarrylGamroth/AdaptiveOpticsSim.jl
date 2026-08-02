@@ -610,6 +610,13 @@ end
     @test isnothing(
         AdaptiveOpticsSim.Backends.compute_device_unavailable_reason(
             host_availability))
+    host_context =
+        AdaptiveOpticsSim.Backends._prepare_device_execution_context(
+            host_device)
+    prepared_host_device =
+        AdaptiveOpticsSim.Backends._prepared_device_execution_compute_device(
+            host_context)
+    @test prepared_host_device == host_device
     exact_host_storage = AdaptiveOpticsSim.Backends.allocate_device_array(
         host_device, Float32, 2, 3)
     @test exact_host_storage isa Matrix{Float32}
@@ -646,6 +653,19 @@ end
     @test unavailable_error.operation == :select
     @test unavailable_error.reason == :exact_device_selection_unavailable
     @test unavailable_error.device == cuda_device_0
+    unavailable_context_error = try
+        AdaptiveOpticsSim.Backends._prepare_device_execution_context(
+            cuda_device_0)
+        nothing
+    catch error
+        error
+    end
+    @test typeof(unavailable_context_error) <:
+        AdaptiveOpticsSim.Backends.ComputeDeviceError
+    @test unavailable_context_error.operation == :prepare_context
+    @test unavailable_context_error.reason ==
+        :exact_device_selection_unavailable
+    @test unavailable_context_error.device == cuda_device_0
     @test_throws InvalidConfiguration begin
         AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(CPUBackend(), 0)
     end

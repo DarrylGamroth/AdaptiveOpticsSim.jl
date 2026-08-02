@@ -221,8 +221,13 @@ end
     ComputeDeviceAvailable()
 @inline compute_device_availability(::AcceleratorComputeDevice) =
     ComputeDeviceUnavailable(:exact_device_selection_unavailable)
-@inline compute_device_is_available(::ComputeDeviceAvailable) = true
-@inline compute_device_is_available(::ComputeDeviceUnavailable) = false
+function compute_device_is_available(::ComputeDeviceAvailable)
+    return true
+end
+
+function compute_device_is_available(::ComputeDeviceUnavailable)
+    return false
+end
 @inline compute_device_unavailable_reason(::ComputeDeviceAvailable) = nothing
 @inline compute_device_unavailable_reason(
     availability::ComputeDeviceUnavailable,

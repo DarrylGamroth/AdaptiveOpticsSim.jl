@@ -324,12 +324,17 @@ struct UnsupportedPathExecutionTarget <:
     reason::Symbol
 end
 
-@inline path_execution_target_supported(
+function path_execution_target_supported(
     ::SupportedPathExecutionTarget,
-) = true
-@inline path_execution_target_supported(
+)
+    return true
+end
+
+function path_execution_target_supported(
     ::UnsupportedPathExecutionTarget,
-) = false
+)
+    return false
+end
 @inline path_execution_target_rejection_reason(
     ::SupportedPathExecutionTarget,
 ) = nothing
