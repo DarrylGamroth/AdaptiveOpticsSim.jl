@@ -525,7 +525,9 @@ types; bounded heterogeneous storage will use concrete tuples/unions,
 family-grouped or purpose-built owners, or explicit prepared function barriers.
 A vector may be used during cold construction but is sealed before execution.
 Replacing an erased `Memory` element type with the same erased element type in
-another container is not acceptable.
+another container is not acceptable. No prepared implementation field or
+collection element type remains `Any`; cold input is normalized into concrete
+family ownership before arming.
 
 Per-owner `@noinline` barriers currently recover the concrete path,
 acquisition, materialization, and sampled-aberration pipeline. Small

@@ -17,9 +17,13 @@
 #   homogeneous armed host storage; a `Vector` may be a cold builder but must be
 #   sealed before execution. Use tuples, concrete unions, family-grouped
 #   owners, or purpose-built owners for bounded heterogeneity.
-# - Do not store `Any`, abstract element types, or uninstantiated parametric
-#   families in hot-path registries. A container change does not repair type
-#   erasure; use a concrete owner or an explicit function barrier.
+# - Do not store `Any` in a struct field or collection element type. Do not
+#   return `Any` from preparation into execution ownership. Unconstrained
+#   `::Any`, `<:Any`, or `Vararg{Any}` method signatures are dispatch wildcards,
+#   not stored representations, and should be judged separately.
+# - Do not store abstract element types or uninstantiated parametric families in
+#   hot-path registries. A container change does not repair type erasure; use a
+#   concrete owner or an explicit function barrier.
 # - Keep core free of hard-coded file formats (no baked-in FITS).
 # - Prefer structured errors (custom exception types) over print-and-return.
 # - Use Logging.jl for diagnostics; avoid logging inside hot loops.

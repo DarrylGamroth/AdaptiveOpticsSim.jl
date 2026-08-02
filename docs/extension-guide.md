@@ -75,6 +75,13 @@ by itself. The owning module must document and test:
 - type inference and warmed CPU allocation behavior
 - applicable accelerator residency and synchronization behavior
 
+Do not store `Any` in an implementation field, array element type, reference,
+or other prepared owner. Preparation must normalize user or extension input to
+a concrete internal representation before returning. An unconstrained
+`::Any`, `<:Any`, or `Vararg{Any}` in a fallback or matching method signature
+does not itself impose boxed storage; review such signatures for dispatch
+intent rather than rejecting them with a textual search.
+
 Keep concrete plan, state, and workspace types as type parameters of a prepared
 owner. Do not store the abstract plan root in a hot field or collection. Exact
 input/output array identity belongs to the prepared owner unless the underlying

@@ -298,10 +298,12 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
     review an optics pilot; then migrate detectors, WFS stages, Plant prepared
     owners, and the AdaptiveOpticsHIL integration. Remove every direct
     `Memory` implementation use rather than replacing erased element types
-    mechanically. Each slice must retain numerical correctness, concrete hot
-    dispatch, CPU zero-allocation contracts, accelerator residency, and bounded
-    topology growth. Add no universal plan root, generic `process!` API, or
-    compatibility layer.
+    mechanically. Eliminate `Any`-typed fields, elements, and prepared return
+    values; normalize cold input into concrete execution-family ownership.
+    Each slice must retain numerical correctness, concrete hot dispatch, CPU
+    zero-allocation contracts, accelerator residency, and bounded topology
+    growth. Add no universal plan root, generic `process!` API, or compatibility
+    layer.
 11. Preserve the completed detector family qualification and evidence catalog.
     Product-neutral frame, counting-array, and channel models remain in the
     canonical `Detectors` namespace. Named camera profiles remain outside core.

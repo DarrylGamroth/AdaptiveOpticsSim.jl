@@ -42,7 +42,9 @@ not retain direct Julia `Memory` use in the target architecture; issue #225
 migrates the current representation. Prepared owners enforce final capacity
 and armed-state non-growth over FixedSizeArrays.jl fixed-size arrays with
 concrete element types, tuples, purpose-built owners, or backend arrays. A
-resizable vector is limited to cold construction before sealing.
+resizable vector is limited to cold construction before sealing. Preparation
+does not return a field or collection with stored type `Any`; external input is
+normalized into concrete family ownership before execution.
 
 The telescope owns revisioned aperture geometry, intensity reflectivity,
 diameter, and spatial sampling. It owns neither a path's mutable OPD or electric

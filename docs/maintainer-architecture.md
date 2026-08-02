@@ -154,7 +154,11 @@ Nominal abstract plan types follow the `AbstractFFTs` model only where one
 canonical domain owns a real shared protocol. The owning module documents the
 required methods, invariants, traits, failure behavior, and conformance tests.
 Concrete prepared owners parameterize their plan, state, and workspace fields;
-hot execution does not store an abstract plan root. There is no universal
+hot execution does not store an abstract plan root. No implementation field or
+collection element type is `Any`; cold input is normalized to concrete
+ownership before preparation returns. Unconstrained method-signature wildcards
+are not stored representations and remain available for dispatch fallbacks.
+There is no universal
 `AbstractAdaptiveOpticsPlan`, global `Interfaces` namespace, or generic
 `process!` verb. Domain operations retain their accepted names.
 
@@ -412,9 +416,10 @@ The maintained ownership model is:
 - exported products are distinct from scratch buffers
 - boundedness is enforced by prepared-owner lifecycle and capacity checks;
   direct `Memory` use is a legacy representation being removed by issue #225
-- hot registries do not store `Any`, abstract element types, or uninstantiated
-  parametric families; bounded heterogeneous work crosses a concrete prepared
-  owner or explicit function barrier
+- implementation fields and collection element types do not store `Any`
+- hot registries do not store abstract element types or uninstantiated
+  parametric families; bounded heterogeneous work crosses concrete family
+  groups, a concrete prepared owner, or an explicit function barrier
 - command endpoints own independent schema, sequence, effective-time, silence,
   bounded calendar, and effective-command state
 - controller-output routing borrows exact named products; successful admission
