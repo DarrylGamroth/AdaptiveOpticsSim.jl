@@ -15,6 +15,9 @@ export advance!, advance_by!, advance_to!, propagate!
 export render_atmosphere!
 
 public AbstractTimedAtmosphere
+public AbstractTimedAtmosphereDefinition
+public KolmogorovAtmosphereDefinition, MultiLayerAtmosphereDefinition
+public InfiniteMultiLayerAtmosphereDefinition, prepare_timed_atmosphere
 public AbstractAtmosphereDirectionBatchCapability
 public ExtractedScreenDirectionBatchCapability
 public UnsupportedAtmosphereDirectionBatchCapability

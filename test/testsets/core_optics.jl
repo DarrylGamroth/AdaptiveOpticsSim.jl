@@ -1,5 +1,8 @@
 const TestAbstractFFTs = AdaptiveOpticsSim.AbstractFFTs
 
+mutable struct MutableTelescopeTestDefinition <: AbstractTelescopeDefinition
+end
+
 struct TestExpandedSourceWrapper{S<:AdaptiveOpticsSim.Optics.AbstractSource} <:
     AdaptiveOpticsSim.Optics.AbstractSource
     source::S
@@ -1079,7 +1082,108 @@ end
 end
 
 @testset "Telescope and direct imaging" begin
+    @test Base.ispublic(Optics, :AbstractTelescopeDefinition)
+    @test Base.ispublic(Optics, :TelescopeDefinition)
+    @test Base.ispublic(Optics, :prepare_telescope)
+    @test !Base.isexported(Optics, :TelescopeDefinition)
+    @test !Base.ispublic(AdaptiveOpticsSim, :TelescopeDefinition)
+
+    definition = TelescopeDefinition(
+        resolution=32,
+        diameter=8.0,
+        central_obstruction=0.2,
+        fov_arcsec=10.0,
+        pupil_reflectivity=0.25,
+        revision=7,
+        T=Float32,
+    )
+    @test definition isa AbstractTelescopeDefinition
+    @test !ismutabletype(typeof(definition))
+    @test fieldtypes(typeof(definition)) ==
+        (Int, Float32, Float32, Float32, Float32, UInt)
+    @test !hasproperty(definition, :backend)
+    @test !hasproperty(definition, :device)
+    @test all(!(getfield(definition, name) isa AbstractArray) for
+        name in fieldnames(typeof(definition)))
+
+    host_target = AdaptiveOpticsSim.Backends.HostComputeDevice()
+    prepared_telescope = @inferred prepare_telescope(definition, host_target)
+    standalone_telescope = Telescope(
+        resolution=32,
+        diameter=8.0,
+        central_obstruction=0.2,
+        fov_arcsec=10.0,
+        pupil_reflectivity=0.25,
+        T=Float32,
+    )
+    @test prepared_telescope isa Telescope
+    @test backend(prepared_telescope) == CPUBackend()
+    @test compute_device(pupil_mask(prepared_telescope)) == host_target
+    @test compute_device(pupil_reflectivity(prepared_telescope)) == host_target
+    @test aperture_revision(prepared_telescope) == UInt(7)
+    @test pupil_mask(prepared_telescope) == pupil_mask(standalone_telescope)
+    @test pupil_reflectivity(prepared_telescope) ==
+        pupil_reflectivity(standalone_telescope)
+
+    @test_throws UndefKeywordError TelescopeDefinition(
+        resolution=8, diameter=8.0)
+    for invalid_resolution in (0, -1)
+        @test_throws InvalidConfiguration TelescopeDefinition(
+            resolution=invalid_resolution, diameter=8.0, revision=0)
+        @test_throws InvalidConfiguration Telescope(
+            resolution=invalid_resolution, diameter=8.0)
+    end
+    for invalid_diameter in (0.0, -1.0, Inf, NaN)
+        @test_throws InvalidConfiguration TelescopeDefinition(
+            resolution=8, diameter=invalid_diameter, revision=0)
+        @test_throws InvalidConfiguration Telescope(
+            resolution=8, diameter=invalid_diameter)
+    end
+    for invalid_obstruction in (-0.1, 1.0, Inf, NaN)
+        @test_throws InvalidConfiguration TelescopeDefinition(
+            resolution=8, diameter=8.0,
+            central_obstruction=invalid_obstruction, revision=0)
+        @test_throws InvalidConfiguration Telescope(
+            resolution=8, diameter=8.0,
+            central_obstruction=invalid_obstruction)
+    end
+    for invalid_fov in (-0.1, Inf, NaN)
+        @test_throws InvalidConfiguration TelescopeDefinition(
+            resolution=8, diameter=8.0, fov_arcsec=invalid_fov,
+            revision=0)
+        @test_throws InvalidConfiguration Telescope(
+            resolution=8, diameter=8.0, fov_arcsec=invalid_fov)
+    end
+    @test_throws InvalidConfiguration TelescopeDefinition(
+        resolution=8, diameter=8.0, revision=-1)
+    @test_throws InvalidConfiguration prepare_telescope(
+        MutableTelescopeTestDefinition(), host_target)
+    @test_throws InvalidConfiguration TelescopeDefinition(
+        resolution=true, diameter=8.0, revision=0)
+    @test_throws InvalidConfiguration TelescopeDefinition(
+        resolution=8, diameter=8.0, revision=true)
+    @test_throws InvalidConfiguration TelescopeDefinition(
+        resolution=8, diameter=big(10.0)^1000, revision=0, T=Float32)
+    @test_throws TypeError TelescopeDefinition(
+        resolution=8, diameter=8.0, pupil_reflectivity=ones(8, 8),
+        revision=0)
+
+    unavailable_target = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+        CUDABackend(), 0)
+    unavailable_error = try
+        prepare_telescope(definition, unavailable_target)
+        nothing
+    catch error
+        error
+    end
+    @test unavailable_error isa AdaptiveOpticsSim.Backends.ComputeDeviceError
+    @test unavailable_error.operation == :select
+    @test unavailable_error.device == unavailable_target
+
     for invalid_reflectivity in (-0.1, 1.1, Inf, NaN)
+        @test_throws InvalidConfiguration TelescopeDefinition(resolution=8,
+            diameter=8.0, pupil_reflectivity=invalid_reflectivity,
+            revision=0)
         @test_throws InvalidConfiguration Telescope(resolution=8,
             diameter=8.0, pupil_reflectivity=invalid_reflectivity)
     end

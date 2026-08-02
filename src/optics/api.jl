@@ -77,6 +77,7 @@ export PyramidPhaseMask, BioEdgeAmplitudeMask
 export ZernikePhaseSpot, CurvatureDefocusPair
 
 public AbstractSource
+public AbstractTelescopeDefinition, TelescopeDefinition, prepare_telescope
 public AbstractDirectImagingBatchCapability
 public StackedFraunhoferDirectImagingBatchCapability
 public UnsupportedDirectImagingBatchCapability

@@ -16,6 +16,142 @@ function unmasked_atmosphere_opd(atm::AbstractTimedAtmosphere,
     return output
 end
 
+mutable struct MutableTimedAtmosphereTestDefinition <:
+    AbstractTimedAtmosphereDefinition
+end
+
+@testset "Cold timed-atmosphere definitions" begin
+    T = Float64
+    target = HostComputeDevice()
+    @test Base.ispublic(Atmospheres, :AbstractTimedAtmosphereDefinition)
+    @test Base.ispublic(Atmospheres, :KolmogorovAtmosphereDefinition)
+    @test Base.ispublic(Atmospheres, :MultiLayerAtmosphereDefinition)
+    @test Base.ispublic(Atmospheres, :InfiniteMultiLayerAtmosphereDefinition)
+    @test Base.ispublic(Atmospheres, :prepare_timed_atmosphere)
+    @test !Base.isexported(Atmospheres, :MultiLayerAtmosphereDefinition)
+    @test !Base.ispublic(AdaptiveOpticsSim, :MultiLayerAtmosphereDefinition)
+    telescope = Telescope(
+        resolution=4,
+        diameter=T(4),
+        central_obstruction=zero(T),
+        T=T,
+    )
+
+    kolmogorov_definition = KolmogorovAtmosphereDefinition(
+        r0=T(0.2), L0=T(25), T=T)
+    kolmogorov = prepare_timed_atmosphere(
+        kolmogorov_definition, telescope, target)
+    @test kolmogorov isa KolmogorovAtmosphere
+    @test isconcretetype(typeof(kolmogorov))
+    @test compute_device(kolmogorov.state.opd) == target
+    @test compute_device(kolmogorov.state.psd) == target
+    @test compute_device(kolmogorov.state.spectrum) == target
+    @test compute_device(kolmogorov.state.freqs) == target
+
+    multilayer_definition = MultiLayerAtmosphereDefinition(
+        r0=T(0.2),
+        L0=T(25),
+        fractional_cn2=T[0.7, 0.3],
+        wind_speed=T[8, 3],
+        wind_direction=T[15, 120],
+        altitude=T[0, 8_000],
+        layer_ids=(:ground, :high),
+        T=T,
+    )
+    copied_layers = copy(multilayer_definition.layers)
+    copied_layers[1] = copied_layers[2]
+    @test multilayer_definition.layers[1].id == AtmosphereLayerID(:ground)
+    @test_throws CanonicalIndexError multilayer_definition.layers[1] =
+        multilayer_definition.layers[2]
+    first = prepare_timed_atmosphere(
+        multilayer_definition, telescope, target)
+    second = prepare_timed_atmosphere(
+        multilayer_definition, telescope, target)
+    @test first !== second
+    @test first.identity !== second.identity
+    @test first.state !== second.state
+    @test map(layer -> layer.params.altitude, first.layers) == T[0, 8_000]
+    @test first.params.layer_ids == second.params.layer_ids
+    @test all(layer -> compute_device(layer.generator.state.opd) == target,
+        first.layers)
+    @test all(layer -> compute_device(
+        pupil_mask(layer.generator_telescope)) == target, first.layers)
+    advance_by!(first, T(0); rng=MersenneTwister(0x205))
+    @test epoch_sequence(current_epoch(first)) == UInt64(1)
+    @test_throws AtmosphereEpochError current_epoch(second)
+
+    infinite_definition = InfiniteMultiLayerAtmosphereDefinition(
+        r0=T(0.2),
+        L0=T(25),
+        fractional_cn2=T[1],
+        wind_speed=T[0],
+        wind_direction=T[0],
+        altitude=T[0],
+        layer_ids=(:ground,),
+        screen_resolution=5,
+        stencil_size=7,
+        T=T,
+    )
+    infinite = prepare_timed_atmosphere(
+        infinite_definition, telescope, target)
+    @test infinite isa InfiniteMultiLayerAtmosphere
+    @test compute_device(infinite.layers[1].screen.state.screen) == target
+    @test compute_device(infinite.layers[1].screen.state.boundary_buffer) ==
+        target
+
+    @test_throws InvalidConfiguration MultiLayerAtmosphereDefinition(
+        r0=T(0.2),
+        fractional_cn2=T[1],
+        wind_speed=T[0],
+        wind_direction=T[0],
+        altitude=T[0],
+        layer_ids=nothing,
+        T=T,
+    )
+    @test_throws InvalidConfiguration MultiLayerAtmosphereDefinition(
+        r0=T(0.2),
+        fractional_cn2=T[0.5, 0.5],
+        wind_speed=T[0, 0],
+        wind_direction=T[0, 0],
+        altitude=T[0, 1],
+        layer_ids=(:duplicate, :duplicate),
+        T=T,
+    )
+    @test_throws InvalidConfiguration MultiLayerAtmosphereDefinition(
+        r0=T(0.2),
+        fractional_cn2=T[0.4, 0.4],
+        wind_speed=T[0, 0],
+        wind_direction=T[0, 0],
+        altitude=T[0, 1],
+        layer_ids=(:ground, :high),
+        T=T,
+    )
+    @test_throws InvalidConfiguration InfiniteMultiLayerAtmosphereDefinition(
+        r0=T(0.2),
+        fractional_cn2=T[1],
+        wind_speed=T[0],
+        wind_direction=T[0],
+        altitude=T[0],
+        layer_ids=(:ground,),
+        screen_resolution=true,
+        T=T,
+    )
+    @test_throws InvalidConfiguration prepare_timed_atmosphere(
+        MutableTimedAtmosphereTestDefinition(), telescope, target)
+    wrong_target = AcceleratorComputeDevice(CUDABackend(), 0)
+    wrong_target_error = try
+        prepare_timed_atmosphere(
+            multilayer_definition, telescope, wrong_target)
+        nothing
+    catch error
+        error
+    end
+    @test wrong_target_error isa Backends.ComputeDeviceError
+    @test wrong_target_error.operation == :prepare_timed_atmosphere
+    @test wrong_target_error.reason == :wrong_device
+    @test wrong_target_error.device == wrong_target
+end
+
 @testset "Explicit atmosphere epochs and prepared renderers" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     onaxis = Source(band=:I, magnitude=0.0)

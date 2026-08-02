@@ -533,7 +533,15 @@ new_domain_public = [
     "Backends.compute_device_unavailable_reason",
     "Backends.allocate_device_array",
     "Optics.AbstractSource",
+    "Optics.AbstractTelescopeDefinition",
+    "Optics.TelescopeDefinition",
+    "Optics.prepare_telescope",
     "Atmospheres.AbstractTimedAtmosphere",
+    "Atmospheres.AbstractTimedAtmosphereDefinition",
+    "Atmospheres.KolmogorovAtmosphereDefinition",
+    "Atmospheres.MultiLayerAtmosphereDefinition",
+    "Atmospheres.InfiniteMultiLayerAtmosphereDefinition",
+    "Atmospheres.prepare_timed_atmosphere",
     "Detectors.AbstractEMGainModel",
     "Detectors.ClippedGaussianMultiplicationApproximation",
     "Detectors.ConditionalGammaMultiplication",
@@ -886,6 +894,9 @@ exports = [
 ]
 public = [
     "AbstractSource",
+    "AbstractTelescopeDefinition",
+    "TelescopeDefinition",
+    "prepare_telescope",
     "AbstractDirectImagingBatchCapability",
     "StackedFraunhoferDirectImagingBatchCapability",
     "UnsupportedDirectImagingBatchCapability",
@@ -937,6 +948,11 @@ exports = [
 ]
 public = [
     "AbstractTimedAtmosphere",
+    "AbstractTimedAtmosphereDefinition",
+    "KolmogorovAtmosphereDefinition",
+    "MultiLayerAtmosphereDefinition",
+    "InfiniteMultiLayerAtmosphereDefinition",
+    "prepare_timed_atmosphere",
     "AbstractAtmosphereDirectionBatchCapability",
     "ExtractedScreenDirectionBatchCapability",
     "UnsupportedAtmosphereDirectionBatchCapability",

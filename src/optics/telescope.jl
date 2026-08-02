@@ -1,3 +1,91 @@
+"""Configuration-only declaration of a telescope model."""
+abstract type AbstractTelescopeDefinition end
+
+"""
+    TelescopeDefinition(; resolution, diameter, revision,
+        central_obstruction=0, fov_arcsec=0, pupil_reflectivity=1,
+        T=Float64)
+
+Immutable, configuration-only declaration of the currently supported annular
+telescope aperture. All fields are scalar values. The definition owns no
+sampled aperture, mutable state, array backend, or compute device.
+
+`pupil_reflectivity` is an intensity-throughput fraction. `revision` is the
+explicit aperture-definition revision copied into the prepared telescope.
+"""
+struct TelescopeDefinition{T<:AbstractFloat} <: AbstractTelescopeDefinition
+    resolution::Int
+    diameter::T
+    central_obstruction::T
+    fov_arcsec::T
+    pupil_reflectivity::T
+    revision::UInt
+
+    function TelescopeDefinition{T}(
+        resolution::Int,
+        diameter::T,
+        central_obstruction::T,
+        fov_arcsec::T,
+        pupil_reflectivity::T,
+        revision::UInt,
+    ) where {T<:AbstractFloat}
+        _require_valid_telescope_parameters(
+            resolution,
+            diameter,
+            central_obstruction,
+            fov_arcsec,
+        )
+        _require_valid_pupil_reflectivity(pupil_reflectivity)
+        return new{T}(
+            resolution,
+            diameter,
+            central_obstruction,
+            fov_arcsec,
+            pupil_reflectivity,
+            revision,
+        )
+    end
+end
+
+function TelescopeDefinition(;
+    resolution::Integer,
+    diameter::Real,
+    revision::Integer,
+    central_obstruction::Real=0.0,
+    fov_arcsec::Real=0.0,
+    pupil_reflectivity::Real=1.0,
+    T::Type{<:AbstractFloat}=Float64,
+)
+    resolution isa Bool && throw(InvalidConfiguration(
+        "resolution must be an integer, not Bool"))
+    revision isa Bool && throw(InvalidConfiguration(
+        "revision must be an integer, not Bool"))
+    typemin(Int) <= resolution <= typemax(Int) || throw(
+        InvalidConfiguration("resolution must be representable as Int"))
+    zero(revision) <= revision <= typemax(UInt) || throw(
+        InvalidConfiguration("revision must be representable as UInt"))
+    diameter_value = _converted_positive_finite(
+        diameter, T, "telescope diameter")
+    central_obstruction_value = _converted_nonnegative_finite(
+        central_obstruction, T, "telescope central obstruction")
+    central_obstruction_value < one(T) || throw(InvalidConfiguration(
+        "telescope central obstruction must lie in [0, 1)"))
+    fov_value = _converted_nonnegative_finite(
+        fov_arcsec, T, "telescope field of view")
+    reflectivity_value = _converted_nonnegative_finite(
+        pupil_reflectivity, T, "telescope pupil reflectivity")
+    reflectivity_value <= one(T) || throw(InvalidConfiguration(
+        "telescope pupil reflectivity must lie in [0, 1]"))
+    return TelescopeDefinition{T}(
+        Int(resolution),
+        diameter_value,
+        central_obstruction_value,
+        fov_value,
+        reflectivity_value,
+        UInt(revision),
+    )
+end
+
 struct TelescopeParams{T<:AbstractFloat}
     resolution::Int
     diameter::T
@@ -39,30 +127,165 @@ function Telescope(; resolution::Int,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend())
 
-    selector = _resolve_backend_selector(backend)
-    backend = _resolve_array_backend(selector)
-
+    diameter_value = _converted_positive_finite(
+        diameter, T, "telescope diameter")
+    central_obstruction_value = _converted_nonnegative_finite(
+        central_obstruction, T, "telescope central obstruction")
+    central_obstruction_value < one(T) || throw(InvalidConfiguration(
+        "telescope central obstruction must lie in [0, 1)"))
+    fov_value = _converted_nonnegative_finite(
+        fov_arcsec, T, "telescope field of view")
     params = TelescopeParams{T}(
         resolution,
-        T(diameter),
-        T(central_obstruction),
-        T(fov_arcsec),
+        diameter_value,
+        central_obstruction_value,
+        fov_value,
     )
+    _require_valid_telescope_parameters(
+        params.resolution,
+        params.diameter,
+        params.central_obstruction,
+        params.fov_arcsec,
+    )
+    _require_valid_pupil_reflectivity(pupil_reflectivity)
+    selector = _resolve_backend_selector(backend)
+    return _materialize_telescope(
+        params,
+        pupil_reflectivity,
+        zero(UInt),
+        selector,
+    )
+end
 
-    pupil = backend{Bool}(undef, resolution, resolution)
+function _prepare_telescope(
+    definition::TelescopeDefinition{T},
+    target::AbstractComputeDevice,
+) where {T<:AbstractFloat}
+    _require_valid_telescope_definition(definition)
+    selector = compute_device_backend(target)
+    return _with_compute_device(target) do
+        params = TelescopeParams{T}(
+            definition.resolution,
+            definition.diameter,
+            definition.central_obstruction,
+            definition.fov_arcsec,
+        )
+        telescope = _materialize_telescope(
+            params,
+            definition.pupil_reflectivity,
+            definition.revision,
+            selector,
+        )
+        _require_exact_telescope_target(telescope, target)
+        return telescope
+    end
+end
+
+function _prepare_telescope(
+    definition::AbstractTelescopeDefinition,
+    ::AbstractComputeDevice,
+)
+    throw(InvalidConfiguration(
+        "telescope definition $(typeof(definition)) does not implement " *
+        "exact-target preparation"))
+end
+
+"""
+    prepare_telescope(definition, target)
+
+Validate and materialize a cold telescope definition on one exact compute
+device. Target selection encloses all allocation and pupil construction, and
+the caller's prior accelerator-device context is restored by the owning
+backend extension.
+"""
+function prepare_telescope(
+    definition::D,
+    target::AbstractComputeDevice,
+) where {D<:AbstractTelescopeDefinition}
+    ismutabletype(D) && throw(InvalidConfiguration(
+        "telescope definitions must be immutable"))
+    return _prepare_telescope(definition, target)
+end
+
+@inline function _require_valid_telescope_definition(
+    definition::TelescopeDefinition,
+)
+    _require_valid_telescope_parameters(
+        definition.resolution,
+        definition.diameter,
+        definition.central_obstruction,
+        definition.fov_arcsec,
+    )
+    _require_valid_pupil_reflectivity(definition.pupil_reflectivity)
+    return nothing
+end
+
+@inline function _require_valid_telescope_parameters(
+    resolution::Int,
+    diameter::Real,
+    central_obstruction::Real,
+    fov_arcsec::Real,
+)
+    resolution > 0 || throw(InvalidConfiguration(
+        "resolution must be positive"))
+    isfinite(diameter) && diameter > zero(diameter) || throw(
+        InvalidConfiguration("diameter must be finite and positive"))
+    isfinite(central_obstruction) &&
+        zero(central_obstruction) <= central_obstruction <
+            one(central_obstruction) || throw(InvalidConfiguration(
+        "central_obstruction must be finite and lie in [0, 1)"))
+    isfinite(fov_arcsec) && fov_arcsec >= zero(fov_arcsec) || throw(
+        InvalidConfiguration("fov_arcsec must be finite and nonnegative"))
+    return nothing
+end
+
+function _materialize_telescope(
+    params::TelescopeParams{T},
+    pupil_reflectivity::Union{Real,AbstractMatrix},
+    revision::UInt,
+    selector::AbstractArrayBackend,
+) where {T<:AbstractFloat}
+    resolution = params.resolution
+    pupil = allocate_array(selector, Bool, resolution, resolution)
     generate_pupil!(pupil, params)
-    reflectivity = initialize_reflectivity(pupil, pupil_reflectivity, T, backend)
-    sampling_m = T(diameter) / T(resolution)
+    reflectivity = initialize_reflectivity(
+        pupil,
+        pupil_reflectivity,
+        T,
+        selector,
+    )
+    sampling_m = params.diameter / T(resolution)
     origin = -T(resolution - 1) * sampling_m / T(2)
     aperture = TelescopeAperture{T,typeof(pupil),typeof(reflectivity)}(
         pupil,
         reflectivity,
         (sampling_m, sampling_m),
         (origin, origin),
-        zero(UInt),
+        revision,
     )
     return Telescope{typeof(params),typeof(aperture),typeof(selector)}(
         params, aperture)
+end
+
+@inline function _require_exact_telescope_target(
+    telescope::Telescope,
+    target::AbstractComputeDevice,
+)
+    pupil_device = compute_device(pupil_mask(telescope))
+    pupil_device == target || _throw_compute_device_error(
+        :prepare_telescope,
+        :wrong_device,
+        target,
+        "prepared telescope pupil occupies $(pupil_device)",
+    )
+    reflectivity_device = compute_device(pupil_reflectivity(telescope))
+    reflectivity_device == target || _throw_compute_device_error(
+        :prepare_telescope,
+        :wrong_device,
+        target,
+        "prepared telescope reflectivity occupies $(reflectivity_device)",
+    )
+    return telescope
 end
 
 function generate_pupil!(pupil::AbstractMatrix{Bool}, params::TelescopeParams)
@@ -97,20 +320,22 @@ function _require_valid_pupil_reflectivity(values::AbstractMatrix)
     return nothing
 end
 
-function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::Real, ::Type{T}, backend) where {T<:AbstractFloat}
+function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::Real,
+    ::Type{T}, selector::AbstractArrayBackend) where {T<:AbstractFloat}
     _require_valid_pupil_reflectivity(reflectivity)
-    out = backend{T}(undef, size(pupil)...)
+    out = allocate_array(selector, T, size(pupil)...)
     fill!(out, T(reflectivity))
     out .*= pupil
     return out
 end
 
-function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::AbstractMatrix, ::Type{T}, backend) where {T<:AbstractFloat}
+function initialize_reflectivity(pupil::AbstractMatrix{Bool}, reflectivity::AbstractMatrix,
+    ::Type{T}, selector::AbstractArrayBackend) where {T<:AbstractFloat}
     if size(reflectivity) != size(pupil)
         throw(DimensionMismatchError("pupil_reflectivity size does not match telescope resolution"))
     end
     _require_valid_pupil_reflectivity(reflectivity)
-    out = backend{T}(undef, size(pupil)...)
+    out = allocate_array(selector, T, size(pupil)...)
     copyto!(out, T.(reflectivity))
     out .*= pupil
     return out
