@@ -51,6 +51,15 @@ end
     @test !structural_resource_known(last(facts))
     @test structural_resource_unknown_reason(last(facts)) ==
         :unsupported_prepared_path
+
+    invalid_error = try
+        Plant._append_structural_graph_fact!(facts, 1, target)
+        nothing
+    catch caught
+        caught
+    end
+    @test invalid_error isa StructuralResourceError
+    @test invalid_error.reason == :invalid_fact
 end
 
 function plant_resource_graph_atmosphere_bytes(atmosphere)

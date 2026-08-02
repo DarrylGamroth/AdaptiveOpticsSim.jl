@@ -1,5 +1,12 @@
 @inline resource_runtime_memory_bytes(memory::Memory) =
     UInt64(length(memory) * Base.elsize(typeof(memory)))
+@inline resource_runtime_array_bytes(array::AbstractArray) =
+    UInt64(length(array) * sizeof(eltype(array)))
+@inline resource_runtime_sum_bytes(arrays) =
+    sum(resource_runtime_array_bytes, arrays; init=UInt64(0))
+
+struct ResourceRuntimeFakeBackend <: AbstractArrayBackend end
+struct ResourceRuntimeUnsupportedInfluence <: AbstractDMInfluenceModel end
 
 function resource_runtime_command_schema(::Type{T}=Float64) where {
     T<:AbstractFloat}
@@ -12,6 +19,27 @@ function resource_runtime_command_schema(::Type{T}=Float64) where {
         units=:metre,
         sign_convention=:positive_surface_increases_opd,
         basis=CommandBasis(:actuator, :resource_runtime_dm),
+        basis_revision=1,
+        semantics=AbsoluteCommand,
+        bounds=UnboundedCommandValues(),
+        value_policy=CommandValuePolicy(),
+        sequence_policy=CommandSequencePolicy(),
+        effective_time_policy=CommandEffectiveTimePolicy(),
+        silence_policy=CommandSilencePolicy(),
+    )
+end
+
+function resource_runtime_scalar_command_schema(::Type{T}=Float64) where {
+    T<:AbstractFloat}
+    return PlantCommandSchema(
+        T,
+        ();
+        id=:resource_runtime_scalar_schema,
+        version=1,
+        endpoint=:resource_runtime_scalar_command,
+        units=:metre,
+        sign_convention=:positive_surface_increases_opd,
+        basis=CommandBasis(:focus, :resource_runtime_scalar),
         basis_revision=1,
         semantics=AbsoluteCommand,
         bounds=UnboundedCommandValues(),
@@ -86,7 +114,7 @@ end
     @test structural_workspace_bytes(binding_fact) == 0
 
     wrong_target = AcceleratorComputeDevice(
-        ResourceFactFakeBackend(), UInt32(1))
+        ResourceRuntimeFakeBackend(), UInt32(1))
     @test !structural_resource_known(structural_resource_fact(
         endpoint_state, endpoint_id, wrong_target))
     @test !structural_resource_known(structural_resource_fact(
@@ -95,6 +123,91 @@ end
             :command_application_state, :resource_runtime_dm_command),
         wrong_target,
     ))
+end
+
+@testset "Scalar command structural resource owners" begin
+    target = HostComputeDevice()
+    wrong_target = AcceleratorComputeDevice(
+        ResourceRuntimeFakeBackend(), UInt32(2))
+    schema = resource_runtime_scalar_command_schema()
+    endpoint = prepare_command_endpoint(
+        schema; capacity=2, sequence_window=2, ordinal=1)
+    state = CommandEndpointState(endpoint)
+    application = CommandApplicationState(endpoint, state, 0.0)
+    workspace = CommandDispositionWorkspace(endpoint)
+    id = StructuralResourceOwnerID(
+        :command_endpoint, :resource_runtime_scalar_command)
+
+    state_fact = structural_resource_fact(state, id, target)
+    @test structural_resource_known(state_fact)
+    @test structural_resident_bytes(state_fact) > UInt64(0)
+    @test structural_workspace_bytes(state_fact) > UInt64(0)
+
+    application_fact = structural_resource_fact(application, id, target)
+    @test structural_resource_known(application_fact)
+    @test iszero(structural_resident_bytes(application_fact))
+    @test iszero(structural_workspace_bytes(application_fact))
+
+    binding = Plant._PreparedPlantCommandEndpoint(
+        endpoint, UInt32(1), 0.0, nothing)
+    binding_fact = structural_resource_fact(binding, id, target)
+    @test structural_resource_known(binding_fact)
+    @test iszero(structural_resident_bytes(binding_fact))
+
+    @test !structural_resource_known(
+        structural_resource_fact(state, id, wrong_target))
+    @test !structural_resource_known(
+        structural_resource_fact(application, id, wrong_target))
+    @test !structural_resource_known(
+        structural_resource_fact(workspace, id, wrong_target))
+end
+
+@testset "Deformable-mirror resource dispatch branches" begin
+    target = HostComputeDevice()
+    wrong_target = AcceleratorComputeDevice(
+        ResourceRuntimeFakeBackend(), UInt32(3))
+
+    @test Plant._dm_topology_metadata_is_exact((;))
+    @test !Plant._dm_topology_metadata_is_exact((calibration=:external,))
+    @test Plant._dm_influence_storage_is_exact(
+        GaussianInfluenceWidth(0.3), nothing)
+
+    dense = DenseInfluenceMatrix(zeros(4, 2))
+    @test Plant._dm_influence_storage_is_exact(dense, dense.modes)
+    @test !Plant._dm_influence_storage_is_exact(dense, copy(dense.modes))
+    @test !Plant._dm_influence_storage_is_exact(
+        ResourceRuntimeUnsupportedInfluence(), dense.modes)
+
+    sampled = SampledActuatorTopology(
+        [-0.5 0.5; 0.0 0.0])
+    sampled_bytes = Plant._dm_topology_host_bytes(sampled, target)
+    @test sampled_bytes == resource_runtime_sum_bytes((
+        sampled.coords,
+        sampled.active_coords,
+        sampled.valid_actuators,
+        sampled.active_indices,
+    ))
+    sampled_with_metadata = SampledActuatorTopology(
+        [-0.5 0.5; 0.0 0.0]; metadata=(calibration=:external,))
+    @test isnothing(Plant._dm_topology_host_bytes(
+        sampled_with_metadata, target))
+    @test iszero(Plant._dm_topology_host_bytes(sampled, wrong_target))
+
+    modes = zeros(Float64, 4, 2)
+    @test Plant._dm_backend_mode_bytes(modes, target) ==
+        resource_runtime_array_bytes(modes)
+    @test iszero(Plant._dm_backend_mode_bytes(modes, wrong_target))
+    @test iszero(Plant._dm_host_mode_bytes(modes, target))
+
+    clipped = ClippedActuators(-1.0, 1.0)
+    health = ActuatorHealthMap([1.0, 0.5])
+    composite = CompositeDMActuatorModel(clipped, health)
+    @test iszero(Plant._dm_actuator_model_bytes(clipped, target))
+    @test Plant._dm_actuator_model_bytes(health, target) ==
+        resource_runtime_array_bytes(health.gains)
+    @test iszero(Plant._dm_actuator_model_bytes(health, wrong_target))
+    @test Plant._dm_actuator_model_bytes(composite, target) ==
+        resource_runtime_array_bytes(health.gains)
 end
 
 @testset "Native deformable-mirror structural resource owners" begin
@@ -178,7 +291,7 @@ end
         state.active.state.coefs_grid, state.active.state.actuator_coefs)
 
     wrong_target = AcceleratorComputeDevice(
-        ResourceFactFakeBackend(), UInt32(1))
+        ResourceRuntimeFakeBackend(), UInt32(1))
     @test !structural_resource_known(structural_resource_fact(
         prepared,
         StructuralResourceOwnerID(

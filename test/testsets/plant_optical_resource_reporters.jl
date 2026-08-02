@@ -129,4 +129,37 @@ Plant.plant_model_definition_style(
         direct.output, direct.plan, direct.workspace)
     @test_throws InvalidConfiguration structural_resource_fact(mismatched,
         StructuralResourceOwnerID(:direct_science, :invalid_binding), target)
+
+    unsupported_materialization = PreparedPupilOPDMaterialization(
+        :unsupported_renderer, pupil, source)
+    unsupported_materialization_fact = structural_resource_fact(
+        unsupported_materialization,
+        StructuralResourceOwnerID(:path_materialization, :unsupported),
+        target,
+    )
+    @test !structural_resource_known(unsupported_materialization_fact)
+    @test structural_resource_unknown_reason(
+        unsupported_materialization_fact) == :unsupported_renderer
+
+    preformed = prepare_direct_imaging(source, direct.field)
+    preformed_fact = structural_resource_fact(preformed,
+        StructuralResourceOwnerID(:direct_science, :preformed), target)
+    @test structural_resident_bytes(preformed_fact) ==
+        cpu_array_bytes(Complex{T}, padded_n, padded_n) +
+        cpu_array_bytes(T, padded_n, padded_n)
+    @test structural_workspace_bytes(preformed_fact) ==
+        expected_direct_workspace
+    other_field = ElectricField(
+        direct.field.metadata, copy(direct.field.values))
+    @test_throws StructuralResourceError Plant._direct_imaging_resident_bytes(
+        other_field, preformed.field, preformed.output, target)
+    @test_throws StructuralResourceError Plant._direct_imaging_workspace_bytes(
+        nothing, zeros(T, 1, 1), target)
+
+    unsupported_path_fact = Plant._prepared_path_resource_fact(
+        nothing, nothing, nothing, nothing,
+        StructuralResourceOwnerID(:path, :unsupported), target)
+    @test !structural_resource_known(unsupported_path_fact)
+    @test structural_resource_unknown_reason(unsupported_path_fact) ==
+        :unsupported_prepared_path
 end

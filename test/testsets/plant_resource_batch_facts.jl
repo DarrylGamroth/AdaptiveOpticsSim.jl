@@ -54,4 +54,13 @@ struct WFSBatchResourceFactFakeBackend <: AbstractArrayBackend end
     @test compute_device(off_partition_fact) == off_partition
     @test structural_resource_unknown_reason(off_partition_fact) ==
         :owner_not_on_device
+
+    unsupported = Plant._device_path_batch_structural_resource_fact(
+        nothing,
+        StructuralResourceOwnerID(:workspace, :unsupported_batch),
+        target,
+    )
+    @test !structural_resource_known(unsupported)
+    @test structural_resource_unknown_reason(unsupported) ==
+        :unsupported_device_path_batch
 end

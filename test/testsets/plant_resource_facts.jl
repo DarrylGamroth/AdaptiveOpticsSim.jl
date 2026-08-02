@@ -52,6 +52,9 @@ end
         "StructuralResourceOwnerID(:path, :science)"
     @test sprint(show, method) ==
         "ResourceEstimateMethod(:fixture_bytes, 3)"
+    @test isequal(owner, StructuralResourceOwnerID(:path, :science))
+    @test isequal(method, ResourceEstimateMethod(:fixture_bytes, 3))
+    @test hash(method) == hash(ResourceEstimateMethod(:fixture_bytes, 3))
 
     @test_throws StructuralResourceError StructuralResourceOwnerID(
         Symbol(""), :science)
@@ -106,6 +109,10 @@ end
         String["unsupported"], target)
     @test_throws StructuralResourceError Plant._checked_resource_multiply(
         typemax(UInt64), UInt64(2), :array_storage)
+    @test_throws ArgumentError Plant._handle_resource_add_error(
+        ArgumentError("not overflow"), :resident_bytes)
+    @test_throws ArgumentError Plant._handle_resource_multiply_error(
+        ArgumentError("not overflow"), :array_storage)
 end
 
 @testset "Structural resource aggregation" begin
@@ -138,6 +145,8 @@ end
         OpaqueResourceReserve{HostComputeDevice}}
     @test getfield(getfield(report, :facts), :_storage) isa Tuple
     @test getfield(getfield(report, :reserves), :_storage) isa Tuple
+    @test size(structural_resource_facts(report)) == (2,)
+    @test copy(structural_resource_facts(report)) == [path, telescope]
     @test @inferred(first(structural_resource_facts(report))) === path
     @test @inferred(structural_resource_fact_totals(report)) ==
         (resident=UInt64(300), workspace=UInt64(30))
@@ -342,6 +351,28 @@ end
     end
     @test error isa StructuralResourceError
     @test error.reason == :wrong_owner
+
+    exact_reserve = OpaqueResourceReserve(
+        fixture_id, target, :fixture_provider, 13,
+        ResourceEstimateMethod(:fixture_reserve, 1))
+    reserved_fixture_report = require_exact_structural_resource_facts(
+        ResourceFactExactFixture(), fixture_id, target;
+        opaque_reserves=(exact_reserve,))
+    @test only(opaque_resource_reserves(reserved_fixture_report)) ===
+        exact_reserve
+
+    unsupported_fact = UnknownStructuralResourceFact(
+        fixture_id, target, :unsupported_fixture)
+    @test Plant._combine_structural_owner_facts(
+        fixture_id, target, (unsupported_fact,)) === unsupported_fact
+    invalid_fact_error = try
+        Plant._require_fact_target(1, target)
+        nothing
+    catch caught
+        caught
+    end
+    @test invalid_fact_error isa StructuralResourceError
+    @test invalid_fact_error.reason == :invalid_fact
 end
 
 include("../plant_shack_hartmann_resource_facts.jl")
