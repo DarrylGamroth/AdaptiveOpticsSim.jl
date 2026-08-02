@@ -56,6 +56,79 @@ function assert_optional_device_batch_structural_resource_fact(
     return fact
 end
 
+function run_optional_device_batch_resource_fact_checks(
+    ::Type{B},
+    BackendArray,
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    selector = backend_selector(B)
+    direct = device_batch_test_fixture(
+        backend=selector,
+        selection=Val(:all),
+        T=Float32,
+        include_unequal_rate=false,
+        include_lgs=false,
+        include_physical_state=false,
+    )
+    direct_owner = device_path_batch_owner(direct.prepared, 1)
+    direct_implementation = direct_owner.implementation
+    direct_device = device_path_batch_compute_device(direct_owner)
+    direct_atmosphere = direct_implementation.atmosphere_batch.workspace
+    direct_optical = direct_implementation.optical_batch.workspace
+    @test direct_implementation isa
+        Plant._PreparedDirectImagingDevicePathBatch
+    @test direct_atmosphere.output isa BackendArray
+    assert_optional_device_batch_structural_resource_fact(
+        direct_owner,
+        direct.prepared.atmosphere,
+        Plant.StructuralResourceOwnerID(
+            :direct_batch_workspace, :optional_direct_batch),
+        direct_device,
+        (
+            direct_atmosphere.shift_x,
+            direct_atmosphere.shift_y,
+            direct_atmosphere.footprint_scale,
+            direct_atmosphere.pupil,
+            direct_atmosphere.output,
+            direct_optical.field_stack,
+            direct_optical.output_stack,
+            direct_optical.shift_axis1,
+            direct_optical.shift_axis2,
+        ),
+    )
+
+    wfs = device_model_matrix_wfs_fixture(
+        DeviceModelMatrixShackHartmann();
+        backend=selector,
+        selection=Val(:all),
+        direction=Val(:ngs),
+        spectral=Val(:monochromatic),
+        include_physical_state=false,
+        T=Float32,
+        r0=2f6,
+    )
+    wfs_owner = device_path_batch_owner(wfs.prepared, 1)
+    wfs_implementation = wfs_owner.implementation
+    wfs_device = device_path_batch_compute_device(wfs_owner)
+    wfs_atmosphere = wfs_implementation.atmosphere_batch.workspace
+    @test wfs_implementation isa Plant._PreparedWFSDevicePathBatch
+    @test wfs_atmosphere.output isa BackendArray
+    assert_optional_device_batch_structural_resource_fact(
+        wfs_owner,
+        wfs.prepared.atmosphere,
+        Plant.StructuralResourceOwnerID(
+            :wfs_batch_workspace, :optional_wfs_batch),
+        wfs_device,
+        (
+            wfs_atmosphere.shift_x,
+            wfs_atmosphere.shift_y,
+            wfs_atmosphere.footprint_scale,
+            wfs_atmosphere.pupil,
+            wfs_atmosphere.output,
+        ),
+    )
+    return nothing
+end
+
 if !isdefined(@__MODULE__, :ContractRateModel)
     include(joinpath(@__DIR__, "wfs_stage_contract_fixtures.jl"))
 end
