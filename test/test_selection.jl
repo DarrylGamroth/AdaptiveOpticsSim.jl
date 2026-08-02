@@ -226,6 +226,7 @@ const TEST_SUITE_SPECS = (
         "plant-resource-facts",
         "testsets/plant_resource_facts.jl",
         "testsets/plant_resource_runtime_facts.jl",
+        "testsets/plant_optical_resource_reporters.jl",
     ),
     TestSuiteSpec("plant-providers", "testsets/plant_providers.jl";
         fixtures=("plant_test_fixtures.jl",
