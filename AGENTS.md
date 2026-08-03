@@ -41,6 +41,19 @@
 #   module: export routine vocabulary there, mark stable advanced seams
 #   `public`, and leave implementation details unmarked.
 #
+# Agent reasoning budget:
+# - Reserve `max` reasoning for architecture, planning, cross-cutting design
+#   decisions, and difficult gate or final reviews. Do not spend `max`
+#   reasoning on routine implementation, test execution, CI monitoring, or
+#   mechanical documentation changes.
+# - When parallel agents are authorized, the coordinating agent may remain at
+#   `max` while it delegates concrete, bounded implementation work at `high` by
+#   default. Use `xhigh` only for unusually subtle numerical, concurrency,
+#   inference, or zero-allocation work.
+# - Use a smaller context fork for bounded workers when they do not need the
+#   full conversation. Keep planning and acceptance decisions with the
+#   coordinating agent.
+#
 # Parallelism:
 # - Focus on coarse-grained parallelism (sources, time steps, sweeps).
 # - Avoid nested parallelism and thread oversubscription.
