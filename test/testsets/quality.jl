@@ -176,6 +176,15 @@ end
         ["wfs-lift"])) == ("wfs-lift",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["calibration"])) == ("calibration-workflows",)
+    @test Tuple(spec.name for spec in resolve_test_suites(["pe01"])) == (
+        "prepared-execution-contracts",
+        "prepared-execution-interfaces",
+        "direct-imaging-batch",
+        "plant-reduced-order",
+        "wfs-zernike-curvature",
+        "plant-effective-command-routes",
+        "plant-path-input-publications",
+    )
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["control"])) ==
         ("control-primitives", "control-reconstruction")
@@ -390,6 +399,14 @@ end
     ))
     @test registered_testset_paths() == normpath.(actual_testsets)
     @test registered_test_fixture_paths() == sort!(normpath.([
+        joinpath(
+            dirname(@__DIR__),
+            "backend_execution_context_conformance.jl",
+        ),
+        joinpath(
+            dirname(@__DIR__),
+            "calibration_interface_conformance.jl",
+        ),
         joinpath(dirname(@__DIR__), "detector_test_fixtures.jl"),
         joinpath(dirname(@__DIR__), "ka_cpu_style_fixture.jl"),
         joinpath(dirname(@__DIR__), "plant_device_batching_fixtures.jl"),
@@ -415,6 +432,14 @@ end
             dirname(@__DIR__),
             "prepared_execution_contract_helpers.jl",
         ),
+        joinpath(
+            dirname(@__DIR__),
+            "plant_acquisition_interface_conformance.jl",
+        ),
+        joinpath(
+            dirname(@__DIR__),
+            "wfs_four_pupil_interface_conformance.jl",
+        ),
         joinpath(dirname(@__DIR__), "wfs_stage_contract_fixtures.jl"),
     ]))
     fixture_users = Tuple(spec.name for spec in TEST_SUITE_SPECS
@@ -422,6 +447,7 @@ end
     @test fixture_users == (
         "ka-cpu",
         "prepared-execution-contracts",
+        "prepared-execution-interfaces",
         "direct-imaging-batch",
         "atmosphere-direction-batch",
         "plant-device-batching",

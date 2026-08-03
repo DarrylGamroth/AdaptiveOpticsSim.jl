@@ -534,18 +534,16 @@ function execute_acquisition_provider!(
         "linear reduced-order acquisition requires a prepared event loop with effective command state")
 end
 
-abstract type _PreparedReducedOrderEventResponse end
-
 struct _PreparedScalarReducedOrderEventResponse{
     R<:PreparedReducedOrderCommandResponse,
-} <: _PreparedReducedOrderEventResponse
+}
     response::R
     endpoint_slot::UInt32
 end
 
 struct _PreparedArrayReducedOrderEventResponse{
     R<:PreparedReducedOrderCommandResponse,
-} <: _PreparedReducedOrderEventResponse
+}
     response::R
     endpoint_slot::UInt32
 end

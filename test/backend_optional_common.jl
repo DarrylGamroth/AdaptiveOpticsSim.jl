@@ -1,3 +1,7 @@
+if !isdefined(@__MODULE__, :assert_prepared_device_execution_context_conformance)
+    include(joinpath(@__DIR__, "backend_execution_context_conformance.jl"))
+end
+
 backend_package_name(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = "CUDA"
 backend_package_name(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = "AMDGPU"
 
@@ -536,6 +540,16 @@ function run_optional_exact_compute_device_checks(
             context)
     @test prepared_device == selected_device
     @test compute_device(BackendArray(zeros(Float32, 1))) == caller_device
+    observe_context() = (
+        compute_device(BackendArray(zeros(Float32, 1))),
+        backend_current_stream(B),
+    )
+    assert_prepared_device_execution_context_conformance(
+        context,
+        selected_device,
+        observe_context,
+        (selected_device, retained_stream),
+    )
     context_observation =
         AdaptiveOpticsSim.Backends._with_prepared_device_execution_context(
             context) do

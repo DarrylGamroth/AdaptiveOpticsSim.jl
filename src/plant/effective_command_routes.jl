@@ -7,6 +7,21 @@
 # cross-domain arrays acquire one dedicated typed handoff slot.
 #
 
+"""
+Internal prepared-owner interface for direct and remote effective-command
+publication. Implementations define
+`_prepare_effective_command_publication_route_state`,
+`_prepare_effective_command_publication_route!`,
+`_stage_effective_command_publication_route!`,
+`_reclaim_effective_command_publication_route!`,
+`_commit_effective_command_publication_route!`, and
+`_abandon_effective_command_publication_route!`. One route binds an exact
+authority, endpoint, destination, optic, and device context; remote routes
+additionally bind one handoff contract. Matching state is externally serialized
+and non-reentrant. Foreign bindings and reported transfer failures raise
+structured Plant errors before publication commit. An uncertain provider
+failure preserves fail-stop route ownership and may rethrow the provider error.
+"""
 abstract type _PreparedEffectiveCommandPublicationRoute end
 
 # Unlike the metadata-oriented `_FixedPlantRegistry`, this execution registry

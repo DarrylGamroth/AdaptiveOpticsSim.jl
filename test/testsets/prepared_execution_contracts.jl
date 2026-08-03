@@ -92,6 +92,133 @@ end
     @test contract["name"] == "prepared_execution_ownership"
     @test contract["status"] == "characterized_baseline"
 
+    decisions = contract["interface_decisions"]
+    @test decisions["work_issue"] == 229
+    @test decisions["delivery_state"] == "implemented"
+    decision_columns = String.(decisions["columns"])
+    @test decision_columns == [
+        "owner",
+        "name",
+        "decision",
+        "contract_kind",
+        "follow_on_gate",
+        "rationale",
+    ]
+    allowed_decisions = Set(String.(decisions["allowed_decisions"]))
+    allowed_contract_kinds =
+        Set(String.(decisions["allowed_contract_kinds"]))
+    decision_rows = Dict{
+        Tuple{String,String},
+        NamedTuple{
+            (:decision, :contract_kind, :follow_on_gate, :rationale),
+            Tuple{String,String,String,String},
+        },
+    }()
+    for row in decisions["entries"]
+        @test length(row) == length(decision_columns)
+        values = Dict(decision_columns .=> row)
+        key = (String(values["owner"]), String(values["name"]))
+        @test !haskey(decision_rows, key)
+        @test values["decision"] in allowed_decisions
+        @test values["contract_kind"] in allowed_contract_kinds
+        @test !isempty(values["follow_on_gate"])
+        @test !isempty(values["rationale"])
+        decision_rows[key] = (
+            decision=String(values["decision"]),
+            contract_kind=String(values["contract_kind"]),
+            follow_on_gate=String(values["follow_on_gate"]),
+            rationale=String(values["rationale"]),
+        )
+    end
+    @test length(decision_rows) == 17
+
+    retained_interfaces = Set((
+        ("Backends", "_AbstractPreparedDeviceExecutionContext"),
+        ("Calibration", "AbstractCalibrationCommandPlan"),
+        ("Plant", "AbstractPreparedAcquisitionLifecycle"),
+        ("Plant", "AbstractPreparedDetectorAcquisitionLifecycle"),
+        ("Plant", "PreparedPupilOPDPublicationRoute"),
+        ("Plant", "_PreparedEffectiveCommandPublicationRoute"),
+        ("WavefrontSensors", "AbstractPreparedFourPupilLGS"),
+    ))
+    removed_interfaces = Set((
+        ("Optics", "AbstractDirectImagingInputPlan"),
+        ("Plant", "_PreparedReducedOrderEventResponse"),
+        ("WavefrontSensors",
+            "AbstractPreparedCurvatureObservationMapping"),
+    ))
+    strategy_interfaces = Set((
+        ("Atmospheres", "AbstractAtmosphericFieldExecutionPlan"),
+        ("Backends", "AbstractReductionExecutionPlan"),
+        ("Detectors", "AbstractDetectorExecutionPlan"),
+        ("WavefrontSensors", "AbstractGroupedAccumulationPlan"),
+        ("WavefrontSensors", "AbstractShackHartmannWFSSensingPlan"),
+    ))
+    deferred_interfaces = Set((
+        ("Plant", "_AbstractPreparedMixedSerialEventAcquisition"),
+        ("Plant", "_AbstractPreparedMixedSerialPath"),
+    ))
+    decision_keys(value) = Set(key for (key, row) in decision_rows
+        if row.decision == value)
+    @test decision_keys("retain") == retained_interfaces
+    @test decision_keys("remove_now") == removed_interfaces
+    @test decision_keys("reclassify_strategy") == strategy_interfaces
+    @test decision_keys("defer_removal") == deferred_interfaces
+    @test all(decision_rows[key].follow_on_gate == "PE-01"
+        for key in union(retained_interfaces, removed_interfaces))
+    @test all(decision_rows[key].follow_on_gate == "PE-02"
+        for key in strategy_interfaces)
+    @test all(decision_rows[key].follow_on_gate == "PE-06"
+        for key in deferred_interfaces)
+
+    suite_names = Set(spec.name for spec in TEST_SUITE_SPECS)
+    interface_contracts = Dict{
+        Tuple{String,String},
+        NamedTuple{
+            (:implementations, :required_methods),
+            Tuple{Vector{String},Vector{String}},
+        },
+    }()
+    conformance_source_parts = String[]
+    for (root, _, files) in walkdir(joinpath(PE_REPOSITORY_ROOT, "test"))
+        for file in files
+            endswith(file, ".jl") || continue
+            push!(conformance_source_parts,
+                read(joinpath(root, file), String))
+        end
+    end
+    conformance_source = join(conformance_source_parts, '\n')
+    for entry in contract["interface_contracts"]
+        key = (String(entry["owner"]), String(entry["name"]))
+        @test !haskey(interface_contracts, key)
+        @test entry["visibility"] in
+            ("internal", "internal_extension", "qualified_public")
+        @test !isempty(entry["implementations"])
+        @test all(!isempty, entry["implementations"])
+        @test length(unique(entry["implementations"])) ==
+            length(entry["implementations"])
+        @test !isempty(entry["required_methods"])
+        @test all(!isempty, entry["required_methods"])
+        @test length(unique(entry["required_methods"])) ==
+            length(entry["required_methods"])
+        @test entry["valid_defaults"] isa Vector
+        @test !isempty(entry["ownership"])
+        @test !isempty(entry["aliasing"])
+        @test !isempty(entry["failure_behavior"])
+        @test !isempty(entry["reentrancy"])
+        @test !isempty(entry["backend_traits"])
+        @test !isempty(entry["conformance_helpers"])
+        @test all(helper -> occursin(helper, conformance_source),
+            entry["conformance_helpers"])
+        @test !isempty(entry["conformance_suites"])
+        @test all(in(suite_names), entry["conformance_suites"])
+        interface_contracts[key] = (
+            implementations=String.(entry["implementations"]),
+            required_methods=String.(entry["required_methods"]),
+        )
+    end
+    @test Set(keys(interface_contracts)) == retained_interfaces
+
     inventory = contract["type_inventory"]
     @test Set(String.(inventory["vocabulary_tokens"])) ==
         PE_VOCABULARY
@@ -156,8 +283,13 @@ end
                 @test values["field_count"] == 0
                 @test values["exact_binding"]
             end
-            "strategy" in values["target_roles"] &&
-                @test values["field_count"] == 0
+            if "strategy" in values["target_roles"]
+                if values["declaration"] == "abstract_type"
+                    @test values["field_count"] == -1
+                else
+                    @test values["field_count"] == 0
+                end
+            end
             values["current_role"] == "plan" &&
                     values["field_count"] == 0 &&
                 @test !isdisjoint(values["target_roles"],
@@ -171,6 +303,64 @@ end
     end
     @test mixed_target_count == inventory["baseline_mixed_type_count"]
     @test length(expected) == inventory["baseline_type_count"]
+
+    inventory_by_name = Dict{
+        String,
+        NamedTuple{
+            (:path, :declaration, :target_roles, :migration_gate),
+            Tuple{String,String,Vector{String},String},
+        },
+    }()
+    for file in inventory["files"]
+        path = String(file["path"])
+        for row in file["entries"]
+            values = Dict(columns .=> row)
+            name = String(values["name"])
+            @test !haskey(inventory_by_name, name)
+            inventory_by_name[name] = (
+                path=path,
+                declaration=String(values["declaration"]),
+                target_roles=String.(values["target_roles"]),
+                migration_gate=String(values["migration_gate"]),
+            )
+        end
+    end
+
+    owner_modules = Dict(
+        "Atmospheres" => Atmospheres,
+        "Backends" => Backends,
+        "Calibration" => Calibration,
+        "Detectors" => Detectors,
+        "Optics" => Optics,
+        "Plant" => Plant,
+        "WavefrontSensors" => WavefrontSensors,
+    )
+    for key in retained_interfaces
+        owner, name = key
+        @test haskey(inventory_by_name, name)
+        @test inventory_by_name[name].declaration == "abstract_type"
+        root = getfield(owner_modules[owner], Symbol(name))
+        @test isabstracttype(root)
+        contract_entry = interface_contracts[key]
+        @test all(implementation ->
+                haskey(inventory_by_name, implementation) ||
+                isdefined(owner_modules[owner], Symbol(implementation)),
+            contract_entry.implementations)
+        @test all(method_name -> isdefined(owner_modules[owner],
+                Symbol(method_name)), contract_entry.required_methods)
+    end
+    for (owner, name) in removed_interfaces
+        @test !haskey(inventory_by_name, name)
+        @test !isdefined(owner_modules[owner], Symbol(name))
+    end
+    for (_, name) in strategy_interfaces
+        @test inventory_by_name[name].target_roles == ["strategy"]
+        @test inventory_by_name[name].migration_gate == "PE-02"
+    end
+    for (_, name) in deferred_interfaces
+        @test inventory_by_name[name].declaration == "abstract_type"
+        @test inventory_by_name[name].migration_gate == "PE-06"
+    end
 
     observed = Dict(
         (declaration.path, declaration.name) =>

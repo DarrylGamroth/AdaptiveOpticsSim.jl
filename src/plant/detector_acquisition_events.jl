@@ -2,6 +2,16 @@ const _DETECTOR_ACQUISITION_EVENT_COMPONENT = :detector_acquisition_events
 
 abstract type AbstractDetectorAcquisitionLifecycleDefinition <:
     AbstractAcquisitionLifecycleDefinition end
+"""
+    AbstractPreparedDetectorAcquisitionLifecycle
+
+Prepared detector-backed subprotocol of `AbstractPreparedAcquisitionLifecycle`.
+Global-shutter, rolling-shutter, and frame-transfer implementations bind one
+exact detector, acquisition plan, readout product owner, and timing definition.
+Their matching state is single-writer and non-reentrant; invalid timing, mode,
+transition order, target, or state binding raises `DetectorAcquisitionError`
+before detector or lifecycle-state mutation.
+"""
 abstract type AbstractPreparedDetectorAcquisitionLifecycle <:
     AbstractPreparedAcquisitionLifecycle end
 abstract type AbstractDetectorAcquisitionLifecycleState <:

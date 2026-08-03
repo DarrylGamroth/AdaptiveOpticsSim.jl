@@ -43,6 +43,16 @@ const TEST_SUITE_SPECS = (
         "testsets/prepared_execution_contracts.jl";
         fixtures=("prepared_execution_contract_helpers.jl",),
     ),
+    TestSuiteSpec(
+        "prepared-execution-interfaces",
+        "testsets/prepared_execution_interfaces.jl";
+        fixtures=(
+            "calibration_interface_conformance.jl",
+            "wfs_four_pupil_interface_conformance.jl",
+            "backend_execution_context_conformance.jl",
+            "plant_acquisition_interface_conformance.jl",
+        ),
+    ),
     TestSuiteSpec("namespace-authority",
         "testsets/namespace_authority.jl"),
     TestSuiteSpec("core-optics", "testsets/core_optics.jl"),
@@ -387,6 +397,15 @@ const TEST_GROUP_SPECS = (
     ),
     "references" => ("reference-tutorials", "gate0"),
     "backends" => ("ka-cpu", "backend-smoke"),
+    "pe01" => (
+        "prepared-execution-contracts",
+        "prepared-execution-interfaces",
+        "direct-imaging-batch",
+        "plant-reduced-order",
+        "wfs-zernike-curvature",
+        "plant-effective-command-routes",
+        "plant-path-input-publications",
+    ),
     "gate4" => (
         "plant-command-schemas",
         "plant-command-admission",
@@ -424,6 +443,7 @@ const TEST_CI_SHARD_SPECS = (
         "tomography",
         "quality",
         "prepared-execution-contracts",
+        "prepared-execution-interfaces",
         "namespace-authority",
         "core-optics",
         "direct-science",

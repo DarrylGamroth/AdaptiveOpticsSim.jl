@@ -33,11 +33,19 @@ end
 #
 # Prepared single-owner execution contexts
 #
-# These contexts are intentionally internal. They let one prepared Plant
-# device-batch owner retain an exact backend stream without making stream
-# objects, task policy, or accelerator packages part of core's public API.
-# Optional backend extensions provide accelerator-specific implementations.
-#
+"""
+    _AbstractPreparedDeviceExecutionContext
+
+Internal extension interface for one prepared owner's exact compute-device and
+stream context. Implementations define
+`_prepared_device_execution_compute_device`,
+`_with_prepared_device_execution_context`, and
+`_synchronize_prepared_device_execution_context!`. Context entry must restore
+the caller's prior device and stream after normal return or failure. One
+context is externally serialized; nested entry may be supported, but concurrent
+ownership is not promised. Unsupported devices fail with a structured
+`ComputeDeviceError` or `InvalidConfiguration` during preparation.
+"""
 abstract type _AbstractPreparedDeviceExecutionContext end
 
 execution_style(A::AbstractArray) = execution_style(KernelAbstractions.get_backend(A))

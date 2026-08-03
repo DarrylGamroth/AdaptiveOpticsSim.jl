@@ -53,7 +53,7 @@ function forged_pupil_opd_publication(
     )
 end
 
-function pupil_opd_publication_allocation_sample!(
+function run_pupil_opd_publication_route_conformance!(
     direct::Plant.PreparedDirectPupilOPDPublicationRoute,
     remote::Plant.PreparedRemotePupilOPDPublicationRoute,
     epoch::AtmosphereEpoch,
@@ -698,12 +698,12 @@ end
     warm_timestamp = PlantTimestamp(0)
     warm_epoch = path_input_publication_test_epoch!(
         partitions, warm_timestamp)
-    pupil_opd_publication_allocation_sample!(
+    run_pupil_opd_publication_route_conformance!(
         direct, remote, warm_epoch, warm_timestamp)
 
     timestamp = PlantTimestamp(1_000_000)
     epoch = path_input_publication_test_epoch!(partitions, timestamp)
-    allocations = pupil_opd_publication_allocation_sample!(
+    allocations = run_pupil_opd_publication_route_conformance!(
         direct, remote, epoch, timestamp)
     if !coverage_instrumented()
         @test allocations == (0, 0, 0, 0, 0, 0, 0)

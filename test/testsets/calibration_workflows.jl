@@ -156,6 +156,12 @@ end
         amplitude=0.1)
     assert_interaction_matrix_contract(imat_basis, length(slopes(wfs)), size(basis.M2C, 2), 0.1)
 
+    aliased_commands = reshape(dm.state.coefs, :, 1)
+    coefficients_before_alias_rejection = copy(dm.state.coefs)
+    @test_throws InvalidConfiguration interaction_matrix(
+        dm, wfs, pupil, aliased_commands; amplitude=0.1)
+    @test dm.state.coefs == coefficients_before_alias_rejection
+
     control_matrix = ControlMatrix(imat.matrix)
     assert_control_matrix_contract(control_matrix, imat.matrix)
     noninverted_control_matrix = ControlMatrix(imat.matrix; invert=false)

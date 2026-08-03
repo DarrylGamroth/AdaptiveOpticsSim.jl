@@ -54,7 +54,7 @@ end
         authority, authority_state, [2.0, 3.0])
     @test candidate == [3.0, 4.0]
     timestamp = PlantTimestamp(10)
-    effective_command_route_test_publish!(
+    run_effective_command_publication_route_conformance!(
         routes, route_states, candidate, timestamp, UInt64(1))
 
     values, physical = effective_command_route_test_replica_values(partitions)
@@ -101,7 +101,7 @@ end
     scalar_authority_state = CommandAuthorityState(scalar_authority)
     scalar_candidate = effective_command_route_test_candidate!(
         scalar_authority, scalar_authority_state, 2.0)
-    effective_command_route_test_publish!(
+    run_effective_command_publication_route_conformance!(
         scalar_routes,
         scalar_route_states,
         scalar_candidate,
@@ -507,7 +507,7 @@ end
     route_states =
         Plant._prepare_effective_command_publication_routes_state(routes)
     candidate = [4.0, 5.0]
-    effective_command_route_test_publish!(
+    run_effective_command_publication_route_conformance!(
         routes, route_states, candidate, PlantTimestamp(1), UInt64(1))
     storage = routes.storage
     state_storage = route_states.storage
@@ -533,7 +533,7 @@ end
         storage, state_storage)
     commit_allocations = @allocated effective_command_route_test_commit!(
         storage, state_storage)
-    @test @inferred(effective_command_route_test_publish!(
+    @test @inferred(run_effective_command_publication_route_conformance!(
         routes,
         route_states,
         candidate,

@@ -139,9 +139,17 @@ end
 @inline photon_irradiance(source::FourPupilSpectralComponent) =
     source.photon_rate_m2_s
 
-# LGS image formation is prepared at the optical-stage boundary. These values
-# own only immutable execution data; the front-end propagation workspace
-# remains the single writer of FFT and scratch storage.
+"""
+    AbstractPreparedFourPupilLGS
+
+Internal prepared interface for four-pupil LGS image formation. Implementations
+define `apply_prepared_four_pupil_lgs!` and
+`_require_exact_prepared_four_pupil_lgs_target`. They own only run-immutable
+execution data. Intensity products and FFT scratch remain distinct,
+caller-owned, single-writer storage on the exact prepared target. A prepared
+value is reentrant only across distinct workspaces. Preparation and target
+validation raise `WFSPreparationError` before optical-product mutation.
+"""
 abstract type AbstractPreparedFourPupilLGS end
 
 struct NoPreparedFourPupilLGS <: AbstractPreparedFourPupilLGS end
