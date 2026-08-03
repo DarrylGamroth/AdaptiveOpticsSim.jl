@@ -154,18 +154,14 @@ struct CurvatureCalibrationBinding{T<:AbstractFloat,R,A}
     valid_support::A
 end
 
-abstract type AbstractPreparedCurvatureObservationMapping end
-
-struct CurvatureImagePairMapping{P,M} <:
-    AbstractPreparedCurvatureObservationMapping
+struct CurvatureImagePairMapping{P,M}
     plus::P
     minus::M
     plus_reduction::Int
     minus_reduction::Int
 end
 
-struct CurvatureChannelPairMapping{C} <:
-    AbstractPreparedCurvatureObservationMapping
+struct CurvatureChannelPairMapping{C}
     channels::C
 end
 

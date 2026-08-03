@@ -29,14 +29,12 @@ function apply_centering_phase!(style::AcceleratorStyle,
     return field
 end
 
-abstract type AbstractDirectImagingInputPlan end
-
 struct PreparedPupilImagingInput{
     F<:PupilFieldFormationPlan,
     M<:OpticalPlaneMetadata,
     A<:AbstractMatrix,
     O<:AbstractMatrix,
-} <: AbstractDirectImagingInputPlan
+}
     formation::F
     metadata::M
     amplitude::A
@@ -46,7 +44,7 @@ end
 struct PreparedFieldImagingInput{
     M<:OpticalPlaneMetadata,
     A<:AbstractMatrix,
-} <: AbstractDirectImagingInputPlan
+}
     metadata::M
     values::A
 end
@@ -61,7 +59,7 @@ periodic off-axis model; subpixel interpolation and finite-field loss require a
 different prepared mapping.
 """
 struct DirectImagingPlan{
-    I<:AbstractDirectImagingInputPlan,
+    I<:Union{PreparedPupilImagingInput,PreparedFieldImagingInput},
     FM<:OpticalPlaneMetadata,
     FA<:AbstractMatrix,
     OM<:OpticalPlaneMetadata,
@@ -259,7 +257,8 @@ function _direct_imaging_shift(output::IntensityMap, src::AbstractSource)
     end
 end
 
-function _prepare_direct_imaging(input_plan::AbstractDirectImagingInputPlan,
+function _prepare_direct_imaging(
+    input_plan::Union{PreparedPupilImagingInput,PreparedFieldImagingInput},
     field::ElectricField, output::IntensityMap,
     propagation::FraunhoferPropagation, src::AbstractSource)
     require_same_plane_grid(output.metadata, propagation.output_metadata;
@@ -519,14 +518,6 @@ function _require_exact_direct_imaging_input_target(
     validate_plane_storage(input.metadata, input.values;
         label="direct-imaging planned field")
     return input
-end
-
-function _require_exact_direct_imaging_input_target(
-    input::AbstractDirectImagingInputPlan,
-    ::AbstractComputeDevice,
-)
-    throw(InvalidConfiguration(
-        "no exact-target validator is defined for direct-imaging input plan $(typeof(input))"))
 end
 
 function _require_exact_direct_imaging_target(

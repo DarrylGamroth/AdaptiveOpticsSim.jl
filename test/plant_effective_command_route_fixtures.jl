@@ -449,7 +449,7 @@ end
         Base.tail(routes), Base.tail(states))
 end
 
-function effective_command_route_test_publish!(
+function run_effective_command_publication_route_conformance!(
     routes::Plant._PreparedEffectiveCommandPublicationRoutes,
     states::Plant._EffectiveCommandPublicationRoutesState,
     value,

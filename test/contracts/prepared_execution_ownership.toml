@@ -10,7 +10,7 @@ claim = "PE-00 records and ratchets current ownership and type-erasure debt; it 
 
 [interface_decisions]
 work_issue = 229
-delivery_state = "planned"
+delivery_state = "implemented"
 columns = ["owner","name","decision","contract_kind","follow_on_gate","rationale"]
 allowed_decisions = ["retain","remove_now","reclassify_strategy","defer_removal"]
 allowed_contract_kinds = ["none","plan_protocol","prepared_owner_protocol"]
@@ -40,8 +40,10 @@ name = "AbstractCalibrationCommandPlan"
 visibility = "internal"
 implementations = ["ActuatorCalibrationCommands","MatrixCalibrationCommands"]
 required_methods = ["calibration_command_count","stage_calibration_command!"]
+conformance_helpers = ["assert_calibration_command_plan_conformance"]
 valid_defaults = []
 ownership = "The plan carries run-immutable command-count or command-basis data; each call overwrites caller-owned coefficient storage and returns that storage."
+aliasing = "Matrix command storage must not alias the destination DM coefficients; preparation rejects that binding before calibration mutation."
 failure_behavior = "Preparation and output validation use DimensionMismatchError or InvalidConfiguration before calibration mutation begins."
 reentrancy = "The plan is reentrant when its command basis is not mutated and invocations use distinct destination, DM, WFS, and pupil owners."
 backend_traits = ["command_storage_backend","destination_storage_backend"]
@@ -53,8 +55,10 @@ name = "AbstractPreparedFourPupilLGS"
 visibility = "internal"
 implementations = ["NoPreparedFourPupilLGS","PreparedFourPupilElongation","PreparedFourPupilSodiumProfile"]
 required_methods = ["apply_prepared_four_pupil_lgs!","_require_exact_prepared_four_pupil_lgs_target"]
+conformance_helpers = ["assert_prepared_four_pupil_lgs_conformance!"]
 valid_defaults = []
 ownership = "The plan owns immutable execution data; intensity and FFT scratch remain caller-owned single-writer workspace."
+aliasing = "Intensity, elongation scratch, and FFT work buffers are distinct exact prepared arrays; execution does not introduce views or replacement storage."
 failure_behavior = "Preparation and exact-target validation use WFSPreparationError before optical-product mutation; execution requires prepared compatible storage."
 reentrancy = "The plan data is reentrant with distinct intensity and FFT workspaces; one workspace must not have concurrent writers."
 backend_traits = ["execution_style","compute_device"]
@@ -66,8 +70,10 @@ name = "_AbstractPreparedDeviceExecutionContext"
 visibility = "internal_extension"
 implementations = ["_HostPreparedDeviceExecutionContext","CUDAPreparedDeviceExecutionContext","AMDGPUPreparedDeviceExecutionContext"]
 required_methods = ["_prepared_device_execution_compute_device","_with_prepared_device_execution_context","_synchronize_prepared_device_execution_context!"]
+conformance_helpers = ["assert_prepared_device_execution_context_conformance"]
 valid_defaults = ["Host context entry and synchronization are no-ops that preserve caller context."]
 ownership = "One prepared execution owner retains one exact device and any stream resources; context entry restores the caller's prior device and stream on success or failure."
+aliasing = "The context owns no numerical array storage; its retained stream/context resources must not be concurrently owned by another execution writer."
 failure_behavior = "Unsupported accelerator preparation uses ComputeDeviceError or InvalidConfiguration; context restoration is mandatory when the callback throws."
 reentrancy = "One context is single-owner and externally serialized; nested entry is supported by concrete implementations but concurrent ownership is not promised."
 backend_traits = ["compute_device_availability","execution_style"]
@@ -79,12 +85,14 @@ name = "AbstractPreparedAcquisitionLifecycle"
 visibility = "qualified_public"
 implementations = ["PreparedGlobalShutterAcquisition","PreparedRollingShutterAcquisition","PreparedFrameTransferAcquisition","PreparedDirectMeasurementAcquisition"]
 required_methods = ["begin_exposure!","complete_readout!","_require_exact_acquisition_lifecycle_target","structural_resource_fact"]
+conformance_helpers = ["assert_prepared_acquisition_lifecycle_conformance"]
 valid_defaults = ["Triggered starts require no periodic-spacing check.","Unknown structural resource facts fail admission closed rather than guessing bytes."]
 ownership = "A prepared lifecycle binds one exact definition and product/resource owner; a separate matching mutable state has one writer and every transition validates that binding before mutation."
+aliasing = "Only aliases explicitly retained by the prepared product/resource owner are valid; substitute state, product, workspace, or context identities are rejected."
 failure_behavior = "Invalid timing, transition, or foreign binding uses the lifecycle's structured Plant or detector acquisition error before mutation."
 reentrancy = "A prepared lifecycle and its matching state are single-writer and not reentrant; independent prepared/state pairs may execute independently."
 backend_traits = ["compute_device","structural_resource_fact"]
-conformance_suites = ["plant-detector-transitions","plant-reduced-order","prepared-execution-interfaces"]
+conformance_suites = ["plant-detector-transitions","plant-event-composition","plant-reduced-order","prepared-execution-interfaces"]
 
 [[interface_contracts]]
 owner = "Plant"
@@ -92,12 +100,14 @@ name = "AbstractPreparedDetectorAcquisitionLifecycle"
 visibility = "qualified_public"
 implementations = ["PreparedGlobalShutterAcquisition","PreparedRollingShutterAcquisition","PreparedFrameTransferAcquisition"]
 required_methods = ["begin_exposure!","complete_readout!","_require_exact_acquisition_lifecycle_target","structural_resource_fact"]
+conformance_helpers = ["assert_prepared_acquisition_lifecycle_conformance"]
 valid_defaults = []
 ownership = "The lifecycle binds one detector, detector-acquisition contract, readout products, and timing definition; the matching state owns persistent transition progress."
+aliasing = "Detector frame, accumulator, ramp, storage-frame, and readout-product aliases are fixed during preparation; frame-transfer storage is explicitly non-aliasing."
 failure_behavior = "DetectorAcquisitionError reports invalid timing, unsupported mode, transition order, and foreign state before detector or state mutation."
 reentrancy = "One detector lifecycle/state pair is single-writer and not reentrant."
 backend_traits = ["detector_execution_style","compute_device"]
-conformance_suites = ["plant-detector-transitions","prepared-execution-interfaces"]
+conformance_suites = ["plant-detector-transitions","plant-event-composition","prepared-execution-interfaces"]
 
 [[interface_contracts]]
 owner = "Plant"
@@ -105,12 +115,14 @@ name = "_PreparedEffectiveCommandPublicationRoute"
 visibility = "internal"
 implementations = ["_PreparedDirectEffectiveCommandPublicationRoute","_PreparedRemoteEffectiveCommandPublicationRoute"]
 required_methods = ["_prepare_effective_command_publication_route_state","_prepare_effective_command_publication_route!","_stage_effective_command_publication_route!","_reclaim_effective_command_publication_route!","_commit_effective_command_publication_route!","_abandon_effective_command_publication_route!"]
+conformance_helpers = ["run_effective_command_publication_route_conformance!"]
 valid_defaults = []
 ownership = "One route binds the command authority, destination replica, endpoint, optic, exact target context, and optional handoff; matching state is single-writer."
+aliasing = "Any direct replica relationship is fixed during preparation; runtime values, destination storage, route state, and remote handoff slots cannot be substituted."
 failure_behavior = "PlantPreparationError and PlantCommandError reject foreign bindings, unavailable destinations, invalid handoffs, and failed or uncertain transitions before publication commit."
 reentrancy = "One route/state pair is externally serialized and not reentrant."
 backend_traits = ["compute_device","handoff_payload_contract"]
-conformance_suites = ["plant-effective-command-routes","prepared-execution-interfaces"]
+conformance_suites = ["plant-effective-command-routes"]
 
 [[interface_contracts]]
 owner = "Plant"
@@ -118,12 +130,14 @@ name = "PreparedPupilOPDPublicationRoute"
 visibility = "qualified_public"
 implementations = ["PreparedDirectPupilOPDPublicationRoute","PreparedRemotePupilOPDPublicationRoute"]
 required_methods = ["prepare_pupil_opd_publication_output","materialize_pupil_opd_publication!","submit_pupil_opd_publication!","try_complete_pupil_opd_publication!","apply_pupil_opd_publication!","reclaim_pupil_opd_publication!"]
+conformance_helpers = ["run_pupil_opd_publication_route_conformance!"]
 valid_defaults = ["Unimplemented submission, completion, apply, and reclaim transitions return PupilOPDPublicationRejected."]
 ownership = "One route owns an opaque exact binding to its atmosphere authority, path, target-local pupil, materialization, mutable phase, and optional handoff slot."
+aliasing = "Direct materialization aliases only the prepared target-local input; remote source, destination, and handoff storage identities are fixed and separately validated."
 failure_behavior = "Preparation and binding defects use PlantPreparationError; lifecycle operations return typed status values and retain fail-stop ownership after uncertain transfer."
 reentrancy = "One route is externally serialized and not reentrant; the active publication is retained until apply and reclaim."
 backend_traits = ["compute_device","handoff_payload_contract"]
-conformance_suites = ["plant-path-input-publications","prepared-execution-interfaces"]
+conformance_suites = ["plant-path-input-publications"]
 
 [type_inventory]
 vocabulary_tokens = ["definition","definitions","parameters","params","plan","prepared","product","products","state","strategy","workspace"]
@@ -134,7 +148,7 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 381
+baseline_type_count = 378
 baseline_mixed_type_count = 32
 
 [[type_inventory.files]]
@@ -183,7 +197,7 @@ entries = [
 path = "src/atmosphere/atmospheric_field_propagation.jl"
 owner = "Atmospheres"
 entries = [
-    ["AbstractAtmosphericFieldExecutionPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["AbstractAtmosphericFieldExecutionPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
     ["AtmosphericFieldPropagationParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
     ["AtmosphericFieldPropagationState","struct",2,"state",["plan","workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
     ["GeometricFieldAsyncPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
@@ -271,7 +285,7 @@ entries = [
 path = "src/backends/reductions.jl"
 owner = "Backends"
 entries = [
-    ["AbstractReductionExecutionPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_specific",false,"PE-01"],
+    ["AbstractReductionExecutionPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_specific",false,"PE-02"],
     ["DirectReductionPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_specific",true,"PE-02"],
     ["HostMirrorReductionPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_specific",true,"PE-02"],
 ]
@@ -343,7 +357,7 @@ entries = [
 path = "src/detectors/pipeline.jl"
 owner = "Detectors"
 entries = [
-    ["AbstractDetectorExecutionPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["AbstractDetectorExecutionPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
     ["DetectorDirectPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
     ["DetectorHostMirrorPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
 ]
@@ -376,7 +390,6 @@ entries = [
 path = "src/optics/direct_imaging.jl"
 owner = "Optics"
 entries = [
-    ["AbstractDirectImagingInputPlan","abstract_type",-1,"plan",["prepared_owner_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
     ["DirectImagingPlan","struct",8,"plan",["plan","workspace","product","prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
     ["DirectImagingWorkspace","struct",2,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
     ["PreparedBundledDirectImaging","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
@@ -694,7 +707,7 @@ entries = [
     ["MixedResourcePlantEventLoopState","mutable_struct",9,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
     ["MixedResourcePlantEventLoopWorkspace","mutable_struct",9,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["PreparedMixedResourcePlantEventLoop","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
-    ["_AbstractPreparedMixedSerialEventAcquisition","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+    ["_AbstractPreparedMixedSerialEventAcquisition","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-06"],
     ["_PreparedMixedResourcePlantEventLoopBinding","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
     ["_PreparedMixedSerialEventAcquisition","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["_PreparedMixedSerialEventCommand","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
@@ -707,7 +720,7 @@ path = "src/plant/mixed_serial_execution.jl"
 owner = "Plant"
 entries = [
     ["_AbstractMixedSerialPathWorkspace","abstract_type",-1,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
-    ["_AbstractPreparedMixedSerialPath","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+    ["_AbstractPreparedMixedSerialPath","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-06"],
     ["_MixedSerialBatchWorkspace","mutable_struct",7,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["_MixedSerialExecutionState","mutable_struct",5,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
     ["_MixedSerialExecutionWorkspace","struct",5,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
@@ -812,7 +825,6 @@ entries = [
     ["PreparedLinearReducedOrderProvider","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["PreparedReducedOrderCommandResponse","struct",6,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
     ["_PreparedArrayReducedOrderEventResponse","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
-    ["_PreparedReducedOrderEventResponse","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
     ["_PreparedScalarReducedOrderEventResponse","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
 ]
 
@@ -920,7 +932,6 @@ entries = [
 path = "src/wfs/curvature/stages.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["AbstractPreparedCurvatureObservationMapping","abstract_type",-1,"prepared",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
     ["PreparedCurvatureEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedCurvatureOpticalFormation","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedCurvaturePackedChannelAcquisition","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
@@ -941,7 +952,7 @@ entries = [
 path = "src/wfs/grouped.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["AbstractGroupedAccumulationPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["AbstractGroupedAccumulationPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
     ["GroupedDirectAccumulatePlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
     ["GroupedStackReducePlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
     ["GroupedStaged2DPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
@@ -980,7 +991,7 @@ entries = [
 path = "src/wfs/shack_hartmann/setup.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["AbstractShackHartmannWFSSensingPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["AbstractShackHartmannWFSSensingPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
     ["ShackHartmannAcquisitionState","mutable_struct",4,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
     ["ShackHartmannEstimatorState","mutable_struct",5,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
     ["ShackHartmannWFSBatchedPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],

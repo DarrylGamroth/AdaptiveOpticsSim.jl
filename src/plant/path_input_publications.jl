@@ -100,8 +100,17 @@ end
 """
 Prepared single-writer route for one exact target-local pupil-OPD input.
 
-Concrete direct and remote routes implement the lifecycle. Core creates no
-task, queue, wait strategy, event-loop integration, or scheduling policy.
+Concrete direct and remote routes implement
+`prepare_pupil_opd_publication_output`,
+`materialize_pupil_opd_publication!`, `submit_pupil_opd_publication!`,
+`try_complete_pupil_opd_publication!`, `apply_pupil_opd_publication!`, and
+`reclaim_pupil_opd_publication!`. One route binds its exact atmosphere
+authority, path, target-local pupil, materialization, phase, and optional
+handoff. It is externally serialized and retains an active publication until
+apply and reclaim. Preparation defects raise `PlantPreparationError`;
+lifecycle methods return typed status values and retain fail-stop ownership
+after uncertain transfer. Core creates no task, queue, wait strategy,
+event-loop integration, or scheduling policy.
 """
 abstract type PreparedPupilOPDPublicationRoute end
 

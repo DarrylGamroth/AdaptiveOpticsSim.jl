@@ -41,6 +41,19 @@ end
     return similar(ref, T, n_rows, n_cols)
 end
 
+"""
+    AbstractCalibrationCommandPlan
+
+Internal run-immutable interface for interaction-matrix command sequences.
+Implementations define `calibration_command_count` and
+`stage_calibration_command!`. Staging overwrites and returns caller-owned
+coefficient storage; it must not retain that destination. A plan may be reused
+concurrently only when its command data are not mutated and every invocation
+has distinct DM, WFS, pupil, and destination owners. Validation rejects shape,
+command-count, and output numeric-type incompatibilities before calibration
+mutation. Command storage must not alias the destination coefficients, and the
+two storage backends must support the staged copy and scaling operations.
+"""
 abstract type AbstractCalibrationCommandPlan end
 
 struct ActuatorCalibrationCommands <: AbstractCalibrationCommandPlan
@@ -87,6 +100,9 @@ function validate_calibration_commands(dm::DeformableMirror,
         throw(DimensionMismatchError("command matrix row count must match DM coefficients"))
     size(commands, 2) > 0 ||
         throw(InvalidConfiguration("interaction matrix requires at least one command mode"))
+    Base.mightalias(commands, dm.state.coefs) && throw(
+        InvalidConfiguration(
+            "calibration commands must not alias DM coefficient storage"))
     return MatrixCalibrationCommands(commands)
 end
 
