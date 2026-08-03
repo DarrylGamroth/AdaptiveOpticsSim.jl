@@ -1,12 +1,12 @@
 correctness_passed = true
-first_construction_samples_ns = [14678052, 14952075, 14403859, 14887605, 15099041]
+first_construction_samples_ns = [14895124, 15944800, 14991676, 15388518, 16104880]
 fixed_size_arrays_version = "1.3.0"
 fresh_process_runs = 5
 julia_version = "1.12.6"
-load_samples_ns = [10379804, 10644530, 10635663, 10476155, 10496372]
+load_samples_ns = [10459170, 11106953, 10569487, 10676558, 10491381]
 name = "fixed_size_arrays_prepared_storage"
-repository_dirty = true
-repository_head = "9ebb326ceaed33c99eecf88ec1242b737177980f"
+repository_dirty = false
+repository_head = "1a79499486532a4a052d8370eabb30c4ac4c78eb"
 schema_version = 1
 source_contract = "benchmarks/contracts/fixed_size_arrays.toml"
 
@@ -16,9 +16,9 @@ any_is_rejected = true
 concrete_is_accepted = true
 
 [first_construction_summary]
-maximum_ns = 15099041
-median_ns = 14887605
-minimum_ns = 14403859
+maximum_ns = 16104880
+median_ns = 15388518
+minimum_ns = 14895124
 
 [inference]
 copyto = true
@@ -26,9 +26,9 @@ indexed_sum = true
 iterated_sum = true
 
 [load_summary]
-maximum_ns = 10644530
-median_ns = 10496372
-minimum_ns = 10379804
+maximum_ns = 11106953
+median_ns = 10569487
+minimum_ns = 10459170
 
 [[resolved_dependencies]]
 direct = false
@@ -43,24 +43,24 @@ version = "1.3.0"
 
 [[results]]
 correctness_passed = true
-first_construction_ns = 14678052
-load_ns = 10379804
+first_construction_ns = 14895124
+load_ns = 10459170
 [[results]]
 correctness_passed = true
-first_construction_ns = 14952075
-load_ns = 10644530
+first_construction_ns = 15944800
+load_ns = 11106953
 [[results]]
 correctness_passed = true
-first_construction_ns = 14403859
-load_ns = 10635663
+first_construction_ns = 14991676
+load_ns = 10569487
 [[results]]
 correctness_passed = true
-first_construction_ns = 14887605
-load_ns = 10476155
+first_construction_ns = 15388518
+load_ns = 10676558
 [[results]]
 correctness_passed = true
-first_construction_ns = 15099041
-load_ns = 10496372
+first_construction_ns = 16104880
+load_ns = 10491381
 
 [shape_contract]
 alternate_matrix_dimensions = [65, 64]
