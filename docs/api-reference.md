@@ -1214,12 +1214,21 @@ not the moved detector bindings.
   `detector_export_metadata`, `readout_ready`, `reset_integration!`,
   `thermal_model`, `detector_ramp_slope`, `detector_ramp_intercept`,
   `detector_ramp_cube`, `detector_ramp_times`
-- Prepared intensity-map acquisition: `DetectorAcquisitionPlan`,
-  `prepare_detector_acquisition`
+- Prepared intensity-map acquisition: exported
+  `prepare_detector_acquisition`; qualified-public
+  `Detectors.DetectorAcquisitionPlan`,
+  `Detectors.PreparedDetectorAcquisition`,
+  `Detectors.detector_acquisition_detector`,
+  `Detectors.detector_acquisition_input`,
+  `Detectors.detector_acquisition_plan`,
+  `Detectors.detector_acquisition_state`,
+  `Detectors.detector_acquisition_workspace`, and
+  `Detectors.detector_acquisition_products`
 
-`capture!(...; integration_duration=seconds)` and `capture_incremental!` are the
+`capture!(prepared_acquisition; integration_duration=seconds)` is the
 frame-step incremental convenience surface. `integration_duration` is a
-positive integration duration, not an absolute timestamp. Event-driven global-
+positive integration duration, not an absolute timestamp or sample period.
+Event-driven global-
 shutter, rolling-shutter, and frame-transfer acquisition instead use the
 qualified plant API above, with exact scheduler-owned exposure/read timestamps
 rather than floating accumulated duration as completion authority. The
@@ -1272,7 +1281,19 @@ explicitly implemented.
 
 For a metadata-validated repeated path, call
 `prepare_detector_acquisition(detector, intensity_map)` once and pass the
-returned plan to `capture!`. Photon-rate maps cannot be rescaled;
+returned exact prepared owner to `capture!`:
+
+```julia
+acquisition = prepare_detector_acquisition(detector, intensity_map)
+frame = capture!(acquisition, rng)
+```
+
+The plan owns only run-immutable metadata, shapes, radiometric scaling, and QE.
+The prepared owner binds the exact detector and input storage to persistent
+state, replaceable workspace, and caller-visible products. Replacing a bound
+owner or violating a forbidden alias requires preparation again; the removed
+detector/input/plan call shape has no compatibility adapter. Photon-rate maps
+cannot be rescaled;
 dimensionless maps require an explicit `normalized_to_photon_rate` conversion.
 Spatial-density maps use their declared cell measure, while cell-integrated
 maps are already rates per represented cell. The prepared frame path applies a
@@ -1283,6 +1304,9 @@ optical-grid mapping is prepared, a non-null response requires
 `psf_sampling == 1`. Preparation rejects empty, negative, NaN, or infinite
 intensity values. Repeated capture trusts later writes to the prepared storage,
 so its producer is responsible for preserving finite nonnegative samples.
+The incremental form is
+`capture!(acquisition; rng, integration_duration=seconds)`; the duration is not
+an absolute timestamp or a sampling period.
 
 For whole-frame acquisition, the common ordered stages are: prepared
 radiometric scaling; presampling response; physical-pixel integration;

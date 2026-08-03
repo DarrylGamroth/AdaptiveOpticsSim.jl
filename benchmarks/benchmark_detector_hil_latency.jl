@@ -42,12 +42,11 @@ struct DetectorHILCard{D,A<:AbstractMatrix,R<:AbstractRNG}
     rng_seed::UInt64
 end
 
-struct PreparedDetectorHILCard{D,M,P,R<:AbstractRNG}
+struct PreparedDetectorHILCard{D,A,R<:AbstractRNG}
     id::String
     label::String
     detector::D
-    map::M
-    plan::P
+    acquisition::A
     rng::R
     rng_seed::UInt64
 end
@@ -180,7 +179,6 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
             "DET-HIL-00",
             "Minimal deterministic prepared frame capture",
             low_fidelity,
-            low_fidelity_map,
             low_fidelity_plan,
             runtime_rng(100),
             UInt64(100),
@@ -202,7 +200,7 @@ end
 
 detector_hil_input_values(card::DetectorHILCard) = card.input
 detector_hil_input_values(card::PreparedDetectorHILCard) =
-    intensity_values(card.map)
+    intensity_values(detector_acquisition_input(card.acquisition))
 
 function bytes_sha256(values::AbstractArray)
     bytes = reinterpret(UInt8, vec(values))
@@ -258,7 +256,7 @@ end
 @inline detector_hil_capture!(card::DetectorHILCard) =
     capture!(card.detector, card.input, card.rng)
 @inline detector_hil_capture!(card::PreparedDetectorHILCard) =
-    capture!(card.detector, card.map, card.plan, card.rng)
+    capture!(card.acquisition, card.rng)
 
 function selected_detector_hil_cards()
     cards = detector_hil_cards()

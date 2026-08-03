@@ -1,11 +1,12 @@
 #
 # Gate 9A acquisition and conventional frame-detector resource facts.
 #
-# Acquisition products own their caller-visible storage. Detector state owns
-# its internal frame, accumulation, readout-product, and processing storage.
-# Prepared lifecycles own only storage added by the lifecycle itself; detector
-# plans, path results, lifecycle bindings, and the event acquisition's singular
-# `product` field are borrowed and are not counted here.
+# Acquisition products own caller-visible storage. Detector state owns
+# persistent accumulation, persistence, and thermal state; detector workspaces
+# own scratch and host staging. Prepared lifecycles own only storage added by
+# the lifecycle itself. Detector plans, path results, lifecycle bindings, and
+# the event acquisition's singular `product` field are borrowed and are not
+# counted here.
 #
 
 import ..Detectors
@@ -24,19 +25,6 @@ const _NO_ACQUISITION_STRUCTURAL_BYTES =
 )
     return _structural_array_target_bytes((array,), target, component)
 end
-
-@inline function _acquisition_optional_array_bytes(
-    memory::Memory,
-    target::HostComputeDevice,
-    component::Symbol,
-)
-    return (present=true,
-        bytes=structural_array_bytes(memory, target))
-end
-
-@inline _acquisition_optional_array_bytes(
-    ::Memory, ::AbstractComputeDevice, ::Symbol) =
-    _NO_ACQUISITION_STRUCTURAL_BYTES
 
 @inline _acquisition_array_tuple_bytes(
     ::Tuple{}, ::AbstractComputeDevice, ::Symbol) =
@@ -405,21 +393,18 @@ end
     ::Detectors.DetectorThermalState) = true
 @inline _detector_thermal_state_storage(state) = false
 
-@inline _detector_readout_storage(
+@inline _detector_readout_product_storage(
     ::Detectors.FrameReadoutProducts,
-    ::Union{Nothing,Detectors.FrameWindow},
     ::AbstractComputeDevice,
 ) = _unknown_detector_state_storage()
 
-@inline _detector_readout_storage(
+@inline _detector_readout_product_storage(
     ::Detectors.NoFrameReadoutProducts,
-    ::Union{Nothing,Detectors.FrameWindow},
     ::AbstractComputeDevice,
 ) = _known_detector_state_storage()
 
-@inline function _detector_readout_storage(
+@inline function _detector_readout_product_storage(
     products::Detectors.SkipperReadoutProducts,
-    ::Union{Nothing,Detectors.FrameWindow},
     target::AbstractComputeDevice,
 )
     resident = _structural_array_target_bytes(
@@ -428,9 +413,8 @@ end
         workspace=_NO_ACQUISITION_STRUCTURAL_BYTES)
 end
 
-@inline function _detector_readout_storage(
+@inline function _detector_readout_product_storage(
     products::Detectors.SampledFrameReadoutProducts,
-    ::Union{Nothing,Detectors.FrameWindow},
     target::AbstractComputeDevice,
 )
     resident = _acquisition_array_tuple_bytes((
@@ -442,30 +426,8 @@ end
         workspace=_NO_ACQUISITION_STRUCTURAL_BYTES)
 end
 
-@inline function _multi_read_workspace_storage(
-    ::Nothing,
-    ::Detectors.MultiReadFrameReadoutProducts,
-    ::AbstractComputeDevice,
-)
-    # Without a readout window these fields are documented aliases of the
-    # public reference/signal cubes and therefore are not counted again.
-    return _NO_ACQUISITION_STRUCTURAL_BYTES
-end
-
-@inline function _multi_read_workspace_storage(
-    ::Detectors.FrameWindow,
+@inline function _detector_readout_product_storage(
     products::Detectors.MultiReadFrameReadoutProducts,
-    target::AbstractComputeDevice,
-)
-    return _acquisition_array_tuple_bytes((
-        products.workspace_reference_cube,
-        products.workspace_signal_cube,
-    ), target, :workspace_bytes)
-end
-
-@inline function _detector_readout_storage(
-    products::Detectors.MultiReadFrameReadoutProducts,
-    window::Union{Nothing,Detectors.FrameWindow},
     target::AbstractComputeDevice,
 )
     resident = _acquisition_array_tuple_bytes((
@@ -477,13 +439,12 @@ end
         products.read_cube,
         products.read_times,
     ), target, :resident_bytes)
-    workspace = _multi_read_workspace_storage(window, products, target)
-    return (; known=true, resident, workspace)
+    return (; known=true, resident,
+        workspace=_NO_ACQUISITION_STRUCTURAL_BYTES)
 end
 
-@inline function _detector_readout_storage(
+@inline function _detector_readout_product_storage(
     products::Detectors.UpTheRampReadoutProducts,
-    window::Union{Nothing,Detectors.FrameWindow},
     target::AbstractComputeDevice,
 )
     resident = _structural_array_target_bytes((
@@ -493,71 +454,97 @@ end
         products.read_cube,
         products.read_times,
     ), target, :resident_bytes)
-    workspace = _up_the_ramp_workspace_storage(
-        window, products, target)
-    return (; known=true, resident, workspace)
+    return (; known=true, resident,
+        workspace=_NO_ACQUISITION_STRUCTURAL_BYTES)
 end
 
-@inline function _up_the_ramp_workspace_storage(
-    ::Nothing,
-    ::Detectors.UpTheRampReadoutProducts,
+@inline _detector_readout_workspace_storage(
+    ::Detectors.NoFrameReadoutWorkspace,
     ::AbstractComputeDevice,
-)
-    # The unwindowed workspace fields are documented aliases of the public
-    # ramp products and therefore are not counted again.
-    return _NO_ACQUISITION_STRUCTURAL_BYTES
-end
+) = _known_detector_state_storage()
 
-@inline function _up_the_ramp_workspace_storage(
-    ::Detectors.FrameWindow,
-    products::Detectors.UpTheRampReadoutProducts,
+@inline _detector_readout_workspace_storage(
+    ::Detectors.FrameReadoutWorkspace,
+    ::AbstractComputeDevice,
+) = _unknown_detector_state_storage()
+
+@inline function _detector_readout_workspace_storage(
+    workspace::Detectors.SkipperReadoutWorkspace,
     target::AbstractComputeDevice,
 )
-    return _structural_array_target_bytes((
-        products.workspace_slope,
-        products.workspace_intercept,
-        products.workspace_integrated,
-        products.workspace_cube,
-    ), target, :workspace_bytes)
+    bytes = _structural_array_target_bytes((workspace.baseline_frame,
+        workspace.sample_sum), target, :workspace_bytes)
+    return (known=true, resident=_NO_ACQUISITION_STRUCTURAL_BYTES,
+        workspace=bytes)
 end
 
-function _detector_state_resource_fact(
+@inline function _detector_readout_workspace_storage(
+    workspace::Detectors.MultiReadFrameReadoutWorkspace,
+    target::AbstractComputeDevice,
+)
+    bytes = _acquisition_array_tuple_bytes((
+        workspace.reference_average,
+        workspace.signal_average,
+        workspace.reference_cube,
+        workspace.signal_cube,
+    ), target, :workspace_bytes)
+    return (known=true, resident=_NO_ACQUISITION_STRUCTURAL_BYTES,
+        workspace=bytes)
+end
+
+@inline function _detector_readout_workspace_storage(
+    workspace::Detectors.UpTheRampReadoutWorkspace,
+    target::AbstractComputeDevice,
+)
+    bytes = _structural_array_target_bytes((workspace.slope,
+        workspace.intercept, workspace.integrated, workspace.cube), target,
+        :workspace_bytes)
+    return (known=true, resident=_NO_ACQUISITION_STRUCTURAL_BYTES,
+        workspace=bytes)
+end
+
+function _detector_runtime_resource_fact(
     state::DetectorState,
-    window::Union{Nothing,Detectors.FrameWindow},
+    workspace::Detectors.DetectorWorkspace,
+    products::Detectors.DetectorProducts,
     id::StructuralResourceOwnerID,
     target::AbstractComputeDevice,
 )
     _detector_thermal_state_storage(state.thermal_state) ||
         return UnknownStructuralResourceFact(
             id, target, :unsupported_detector_thermal_state)
-    readout = _detector_readout_storage(
-        state.readout_products, window, target)
-    readout.known || return UnknownStructuralResourceFact(
+    readout_products = _detector_readout_product_storage(
+        products.readout, target)
+    readout_products.known || return UnknownStructuralResourceFact(
         id, target, :unsupported_detector_readout_products)
+    readout_workspace = _detector_readout_workspace_storage(
+        workspace.readout, target)
+    readout_workspace.known || return UnknownStructuralResourceFact(
+        id, target, :unsupported_detector_readout_workspace)
 
     resident = _acquisition_array_tuple_bytes((
-        state.frame,
+        products.frame,
         state.accum_buffer,
         state.latent_buffer,
-        state.output_buffer,
+        products.output_buffer,
     ), target, :resident_bytes)
     resident = _combine_structural_target_bytes(
-        resident, readout.resident, :resident_bytes)
-    workspace = _acquisition_array_tuple_bytes((
-        state.presampling_buffer,
-        state.presampling_scratch,
-        state.response_buffer,
-        state.bin_buffer,
-        state.temporal_buffer,
-        state.noise_buffer,
-        state.noise_buffer_host,
-        state.batched_buffer_host,
-        state.output_buffer_host,
+        resident, readout_products.resident, :resident_bytes)
+    workspace_bytes = _acquisition_array_tuple_bytes((
+        workspace.presampling_buffer,
+        workspace.presampling_scratch,
+        workspace.response_buffer,
+        workspace.bin_buffer,
+        workspace.temporal_buffer,
+        workspace.noise_buffer,
+        workspace.noise_buffer_host,
+        workspace.batched_buffer_host,
+        workspace.output_buffer_host,
     ), target, :workspace_bytes)
-    workspace = _combine_structural_target_bytes(
-        workspace, readout.workspace, :workspace_bytes)
+    workspace_bytes = _combine_structural_target_bytes(
+        workspace_bytes, readout_workspace.workspace, :workspace_bytes)
     return _targeted_structural_resource_fact(
-        id, target, resident, workspace)
+        id, target, resident, workspace_bytes)
 end
 
 function structural_resource_fact(
@@ -565,27 +552,13 @@ function structural_resource_fact(
     id::StructuralResourceOwnerID,
     target::AbstractComputeDevice,
 )
-    return _standalone_detector_state_resource_fact(
-        state, state.readout_products, id, target)
-end
-
-@inline function _standalone_detector_state_resource_fact(
-    state::DetectorState,
-    ::Detectors.FrameReadoutProducts,
-    id::StructuralResourceOwnerID,
-    target::AbstractComputeDevice,
-)
-    return _detector_state_resource_fact(state, nothing, id, target)
-end
-
-@inline function _standalone_detector_state_resource_fact(
-    ::DetectorState,
-    ::Detectors.MultiReadFrameReadoutProducts,
-    id::StructuralResourceOwnerID,
-    target::AbstractComputeDevice,
-)
-    return UnknownStructuralResourceFact(
-        id, target, :detector_readout_window_required)
+    _detector_thermal_state_storage(state.thermal_state) ||
+        return UnknownStructuralResourceFact(
+            id, target, :unsupported_detector_thermal_state)
+    resident = _structural_array_target_bytes((state.accum_buffer,
+        state.latent_buffer), target, :resident_bytes)
+    return _targeted_structural_resource_fact(id, target, resident,
+        _NO_ACQUISITION_STRUCTURAL_BYTES)
 end
 
 function structural_resource_fact(
@@ -609,8 +582,8 @@ function structural_resource_fact(
     ), target)
     parameters.known || return UnknownStructuralResourceFact(
         id, target, :unsupported_detector_parameter_model)
-    state_fact = _detector_state_resource_fact(
-        detector.state, detector.params.readout_window, id, target)
+    state_fact = _detector_runtime_resource_fact(detector.state,
+        detector.workspace, detector.products, id, target)
     parameter_fact = _targeted_structural_resource_fact(
         id, target, parameters.storage,
         _NO_ACQUISITION_STRUCTURAL_BYTES)
@@ -642,7 +615,8 @@ function structural_resource_fact(
 )
     _require_detector_event_binding(prepared, state)
     resident = _acquisition_array_tuple_bytes(
-        (prepared.read_offsets,), target, :resident_bytes)
+        (prepared.read_offsets, prepared.read_offset_binding), target,
+        :resident_bytes)
     local_fact = _targeted_structural_resource_fact(
         id, target, resident, _NO_ACQUISITION_STRUCTURAL_BYTES)
     return _detector_lifecycle_fact(
@@ -670,7 +644,7 @@ function structural_resource_fact(
 )
     _require_frame_transfer_event_binding(prepared, state)
     resident = _structural_array_target_bytes(
-        (prepared.storage_frame,), target, :resident_bytes)
+        (state.storage_frame,), target, :resident_bytes)
     local_fact = _targeted_structural_resource_fact(
         id, target, resident, _NO_ACQUISITION_STRUCTURAL_BYTES)
     return _detector_lifecycle_fact(

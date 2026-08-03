@@ -471,7 +471,7 @@ end
 
 @inline function detector_calibration_frame!(det::Detector,
     photon_rate::AbstractMatrix, src::AbstractSource)
-    T = eltype(det.state.frame)
+    T = eltype(det.products.frame)
     return detector_calibration_frame!(det, photon_rate,
         effective_qe(det, src, T))
 end

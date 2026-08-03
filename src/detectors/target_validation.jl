@@ -1,5 +1,12 @@
 const _DETECTOR_STATE_TARGET_VALIDATION_FIELDS = (
-    :frame,
+    :accum_buffer,
+    :latent_buffer,
+    :thermal_state,
+    :integrated_time,
+    :readout_ready,
+)
+
+const _DETECTOR_WORKSPACE_TARGET_VALIDATION_FIELDS = (
     :presampling_buffer,
     :presampling_scratch,
     :response_buffer,
@@ -8,25 +15,36 @@ const _DETECTOR_STATE_TARGET_VALIDATION_FIELDS = (
     :noise_buffer,
     :noise_buffer_host,
     :batched_buffer_host,
-    :accum_buffer,
-    :latent_buffer,
-    :output_buffer,
     :output_buffer_host,
-    :readout_products,
-    :thermal_state,
-    :integrated_time,
-    :readout_ready,
+    :readout,
+)
+
+const _DETECTOR_PRODUCTS_TARGET_VALIDATION_FIELDS = (
+    :frame,
+    :output_buffer,
+    :readout,
 )
 
 const _DETECTOR_ACQUISITION_PLAN_TARGET_VALIDATION_FIELDS = (
     :detector_params,
-    :detector_state,
-    :detector_frame,
-    :detector_backend,
     :input_metadata,
-    :input_values,
+    :input_shape,
+    :frame_shape,
+    :output_shape,
     :rate_scale,
     :quantum_efficiency,
+)
+
+const _PREPARED_DETECTOR_ACQUISITION_TARGET_VALIDATION_FIELDS = (
+    :detector,
+    :input,
+    :plan,
+    :state,
+    :workspace,
+    :products,
+    :state_binding,
+    :workspace_binding,
+    :product_binding,
 )
 
 const _SKIPPER_READOUT_TARGET_VALIDATION_FIELDS = (
@@ -48,8 +66,6 @@ const _MULTI_READ_TARGET_VALIDATION_FIELDS = (
     :signal_cube,
     :read_cube,
     :read_times,
-    :workspace_reference_cube,
-    :workspace_signal_cube,
 )
 
 const _RAMP_READOUT_TARGET_VALIDATION_FIELDS = (
@@ -58,20 +74,22 @@ const _RAMP_READOUT_TARGET_VALIDATION_FIELDS = (
     :integrated_frame,
     :read_cube,
     :read_times,
-    :workspace_slope,
-    :workspace_intercept,
-    :workspace_integrated,
-    :workspace_cube,
     :acquisition_kind,
 )
 
 const _COUNTING_DETECTOR_STATE_TARGET_VALIDATION_FIELDS = (
-    :counts,
+    :thermal_state,
+)
+
+const _COUNTING_DETECTOR_WORKSPACE_TARGET_VALIDATION_FIELDS = (
     :noise_buffer,
     :host_buffer,
-    :output_buffer,
     :output_buffer_host,
-    :thermal_state,
+)
+
+const _COUNTING_DETECTOR_PRODUCTS_TARGET_VALIDATION_FIELDS = (
+    :counts,
+    :output_buffer,
 )
 
 @noinline function _throw_wrong_detector_target(
@@ -311,6 +329,14 @@ end
         _DETECTOR_STATE_TARGET_VALIDATION_FIELDS || throw(
         InvalidConfiguration(
             "DetectorState fields changed without updating exact-target validation"))
+    fieldnames(typeof(detector.workspace)) ==
+        _DETECTOR_WORKSPACE_TARGET_VALIDATION_FIELDS || throw(
+        InvalidConfiguration(
+            "DetectorWorkspace fields changed without updating exact-target validation"))
+    fieldnames(typeof(detector.products)) ==
+        _DETECTOR_PRODUCTS_TARGET_VALIDATION_FIELDS || throw(
+        InvalidConfiguration(
+            "DetectorProducts fields changed without updating exact-target validation"))
     return detector
 end
 
@@ -370,12 +396,6 @@ function _require_exact_detector_readout_products_target(
         target, "detector multi-read signal cube")
     _require_exact_optional_detector_array_target(products.read_cube,
         target, "detector multi-read read cube")
-    _require_exact_optional_detector_array_target(
-        products.workspace_reference_cube, target,
-        "detector multi-read reference workspace")
-    _require_exact_optional_detector_array_target(
-        products.workspace_signal_cube, target,
-        "detector multi-read signal workspace")
     # `read_times` is a host read-schedule vector, not a data-plane array.
     return products
 end
@@ -392,14 +412,6 @@ function _require_exact_detector_readout_products_target(
         target, "detector ramp integrated frame")
     _require_exact_detector_array_target(
         products.read_cube, target, "detector ramp read cube")
-    _require_exact_detector_array_target(
-        products.workspace_slope, target, "detector ramp slope workspace")
-    _require_exact_detector_array_target(products.workspace_intercept,
-        target, "detector ramp intercept workspace")
-    _require_exact_detector_array_target(products.workspace_integrated,
-        target, "detector ramp integrated workspace")
-    _require_exact_detector_array_target(
-        products.workspace_cube, target, "detector ramp cube workspace")
     # `read_times` and `acquisition_kind` are host schedule configuration.
     return products
 end
@@ -409,6 +421,54 @@ function _require_exact_detector_readout_products_target(
     throw(InvalidConfiguration(
         "no exact-target validator is defined for detector readout products " *
         "$(typeof(products))"))
+end
+
+@inline function _require_exact_detector_readout_workspace_target(
+    workspace::NoFrameReadoutWorkspace, ::AbstractComputeDevice)
+    return workspace
+end
+
+function _require_exact_detector_readout_workspace_target(
+    workspace::SkipperReadoutWorkspace, target::AbstractComputeDevice)
+    _require_exact_detector_array_target(workspace.baseline_frame, target,
+        "detector Skipper baseline workspace")
+    _require_exact_detector_array_target(workspace.sample_sum, target,
+        "detector Skipper sample-sum workspace")
+    return workspace
+end
+
+function _require_exact_detector_readout_workspace_target(
+    workspace::MultiReadFrameReadoutWorkspace,
+    target::AbstractComputeDevice)
+    _require_exact_detector_array_target(workspace.reference_average, target,
+        "detector multi-read reference-average workspace")
+    _require_exact_detector_array_target(workspace.signal_average, target,
+        "detector multi-read signal-average workspace")
+    _require_exact_optional_detector_array_target(workspace.reference_cube,
+        target, "detector multi-read reference-cube workspace")
+    _require_exact_detector_array_target(workspace.signal_cube, target,
+        "detector multi-read signal-cube workspace")
+    return workspace
+end
+
+function _require_exact_detector_readout_workspace_target(
+    workspace::UpTheRampReadoutWorkspace, target::AbstractComputeDevice)
+    _require_exact_detector_array_target(workspace.slope, target,
+        "detector ramp slope workspace")
+    _require_exact_detector_array_target(workspace.intercept, target,
+        "detector ramp intercept workspace")
+    _require_exact_detector_array_target(workspace.integrated, target,
+        "detector ramp integrated workspace")
+    _require_exact_detector_array_target(workspace.cube, target,
+        "detector ramp cube workspace")
+    return workspace
+end
+
+function _require_exact_detector_readout_workspace_target(
+    workspace::FrameReadoutWorkspace, ::AbstractComputeDevice)
+    throw(InvalidConfiguration(
+        "no exact-target validator is defined for detector readout workspace " *
+        "$(typeof(workspace))"))
 end
 
 """
@@ -424,6 +484,8 @@ function _require_exact_detector_target(
     _require_detector_target_validation_layout(detector)
     params = detector.params
     state = detector.state
+    workspace = detector.workspace
+    products = detector.products
 
     _require_exact_detector_sensor_target(params.sensor, target)
     _require_exact_detector_response_target(params.response_model, target)
@@ -436,31 +498,33 @@ function _require_exact_detector_target(
         target, "detector background-subtraction frame")
 
     _require_exact_detector_array_target(
-        state.frame, target, "detector frame")
-    _require_exact_detector_array_target(state.presampling_buffer,
+        products.frame, target, "detector frame")
+    _require_exact_detector_array_target(workspace.presampling_buffer,
         target, "detector presampling buffer")
-    _require_exact_detector_array_target(state.presampling_scratch,
+    _require_exact_detector_array_target(workspace.presampling_scratch,
         target, "detector presampling scratch")
     _require_exact_detector_array_target(
-        state.response_buffer, target, "detector response buffer")
+        workspace.response_buffer, target, "detector response buffer")
     _require_exact_detector_array_target(
-        state.bin_buffer, target, "detector bin buffer")
+        workspace.bin_buffer, target, "detector bin buffer")
     _require_exact_detector_array_target(
-        state.temporal_buffer, target, "detector temporal buffer")
+        workspace.temporal_buffer, target, "detector temporal buffer")
     _require_exact_detector_array_target(
-        state.noise_buffer, target, "detector noise buffer")
+        workspace.noise_buffer, target, "detector noise buffer")
     _require_exact_detector_array_target(
         state.accum_buffer, target, "detector accumulation buffer")
     _require_exact_detector_array_target(
         state.latent_buffer, target, "detector latent buffer")
     _require_exact_optional_detector_array_target(
-        state.output_buffer, target, "detector output buffer")
+        products.output_buffer, target, "detector output buffer")
     _require_exact_detector_readout_products_target(
-        state.readout_products, target)
+        products.readout, target)
+    _require_exact_detector_readout_workspace_target(
+        workspace.readout, target)
 
-    # Deliberate host staging: state.noise_buffer_host,
-    # state.batched_buffer_host, and state.output_buffer_host. Thermal state,
-    # integration time, readiness, and all remaining params are host
+    # Deliberate host staging: workspace.noise_buffer_host,
+    # workspace.batched_buffer_host, and workspace.output_buffer_host. Thermal
+    # state, integration time, readiness, and all remaining params are host
     # configuration or scalars.
     return detector
 end
@@ -478,17 +542,29 @@ function _require_exact_counting_detector_target(
     target::AbstractComputeDevice,
 )
     state = detector.state
+    workspace = detector.workspace
+    products = detector.products
     fieldnames(typeof(state)) ==
         _COUNTING_DETECTOR_STATE_TARGET_VALIDATION_FIELDS || throw(
         InvalidConfiguration(
             "counting-detector state fields changed without updating " *
             "exact-target validation"))
+    fieldnames(typeof(workspace)) ==
+        _COUNTING_DETECTOR_WORKSPACE_TARGET_VALIDATION_FIELDS || throw(
+        InvalidConfiguration(
+            "counting-detector workspace fields changed without updating " *
+            "exact-target validation"))
+    fieldnames(typeof(products)) ==
+        _COUNTING_DETECTOR_PRODUCTS_TARGET_VALIDATION_FIELDS || throw(
+        InvalidConfiguration(
+            "counting-detector product fields changed without updating " *
+            "exact-target validation"))
     _require_exact_detector_array_target(
-        state.counts, target, "counting detector accumulation array")
+        products.counts, target, "counting detector accumulation array")
     _require_exact_detector_array_target(
-        state.noise_buffer, target, "counting detector noise buffer")
+        workspace.noise_buffer, target, "counting detector noise buffer")
     _require_exact_optional_detector_array_target(
-        state.output_buffer, target, "counting detector output buffer")
+        products.output_buffer, target, "counting detector output buffer")
     return detector
 end
 
@@ -502,34 +578,47 @@ function _require_exact_counting_detector_target(
 end
 
 """
-    _require_exact_detector_acquisition_target(detector, plan, target)
+    _require_exact_detector_acquisition_target(prepared, target)
 
-Internal fail-closed exact-target validation for a prepared frame detector and
-its bound acquisition plan.
+Internal fail-closed exact-target validation for a prepared frame-detector
+acquisition owner.
 """
 function _require_exact_detector_acquisition_target(
-    detector::Detector,
-    plan::DetectorAcquisitionPlan,
+    prepared::PreparedDetectorAcquisition,
     target::AbstractComputeDevice,
 )
+    fieldnames(typeof(prepared)) ==
+        _PREPARED_DETECTOR_ACQUISITION_TARGET_VALIDATION_FIELDS || throw(
+        InvalidConfiguration(
+            "PreparedDetectorAcquisition fields changed without updating " *
+            "exact-target validation"))
+    plan = prepared.plan
     fieldnames(typeof(plan)) ==
         _DETECTOR_ACQUISITION_PLAN_TARGET_VALIDATION_FIELDS || throw(
         InvalidConfiguration(
             "DetectorAcquisitionPlan fields changed without updating " *
             "exact-target validation"))
-    _require_prepared_detector_binding(detector, plan)
+    _require_prepared_detector_binding(prepared)
+    detector = prepared.detector
     _require_exact_detector_target(detector, target)
 
     metadata_device = plan.input_metadata.device
     metadata_device == target || _throw_wrong_detector_target(
         target, "detector acquisition input metadata", metadata_device)
-    _require_exact_detector_array_target(plan.input_values, target,
+    _require_exact_detector_array_target(prepared.input.values, target,
         "detector acquisition input storage")
-    validate_plane_storage(plan.input_metadata, plan.input_values;
+    validate_plane_storage(plan.input_metadata, prepared.input.values;
         label="detector acquisition input")
 
-    # `detector_backend`, `rate_scale`, and `quantum_efficiency` are host
-    # configuration/scalars. Detector references were checked by the existing
-    # prepared binding validator above.
-    return plan
+    # Radiometric scale and quantum efficiency are host scalars. Exact state,
+    # workspace, product, input, and detector bindings were checked above.
+    return prepared
+end
+
+@inline function _require_exact_detector_acquisition_target(
+    detector::Detector, prepared::PreparedDetectorAcquisition,
+    target::AbstractComputeDevice)
+    detector === prepared.detector || throw(InvalidConfiguration(
+        "detector does not match its prepared acquisition owner"))
+    return _require_exact_detector_acquisition_target(prepared, target)
 end

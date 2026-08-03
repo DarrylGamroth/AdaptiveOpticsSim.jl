@@ -289,10 +289,10 @@ end
     )
     plan = prepare_detector_acquisition(detector, map)
     rng = Xoshiro(6140)
-    @test @inferred(capture!(detector, map, plan, rng)) isa
+    @test @inferred(capture!(plan, rng)) isa
         Matrix{Float64}
     @test_detector_allocation prepared_detector_capture_allocations(
-        detector, map, plan, rng) == 0
+        plan, rng) == 0
 
     gamma_detector = Detector(
         integration_time=0.25,
@@ -307,10 +307,9 @@ end
     )
     gamma_plan = prepare_detector_acquisition(gamma_detector, map)
     gamma_rng = Xoshiro(6141)
-    @test @inferred(capture!(
-        gamma_detector, map, gamma_plan, gamma_rng)) isa Matrix{Float64}
+    @test @inferred(capture!(gamma_plan, gamma_rng)) isa Matrix{Float64}
     @test_detector_allocation prepared_detector_capture_allocations(
-        gamma_detector, map, gamma_plan, gamma_rng) == 0
+        gamma_plan, gamma_rng) == 0
 
     warm_scheduled = scheduled_hgcdte_avalanche_fixture(6142)
     @test run_scheduled_hgcdte_avalanche_ramp!(

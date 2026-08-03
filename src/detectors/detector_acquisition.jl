@@ -1,50 +1,102 @@
 """
     DetectorAcquisitionPlan
 
-Prepared contract between one frame detector and one immutable `IntensityMap`
-description. Preparation validates the optical plane, radiometry, storage, and
-device contract and sizes the spatial acquisition work buffers. The plan is
-bound to that detector's mutable state and prepared frame storage, so it cannot
-be reused by an otherwise identical detector or after moving/replacing the
-detector's backend/device storage. It is also bound to the exact validated
-`map.values` storage; a different array cannot reuse the plan even when wrapped
-with the same metadata. Repeated `capture!` calls consume that storage without
-rebuilding metadata or resizing those buffers.
+Run-immutable numerical contract for frame-detector acquisition. The plan owns
+validated configuration, optical-plane description, dimensions, and
+radiometric scaling. It does not own or identify live detector state, scratch,
+products, or mutable intensity storage. Construct it through
+[`prepare_detector_acquisition`](@ref), which returns the exact prepared owner
+used for execution.
 """
 struct _DetectorAcquisitionPlanToken end
 const _DETECTOR_ACQUISITION_PLAN_TOKEN = _DetectorAcquisitionPlanToken()
 
 struct DetectorAcquisitionPlan{
     P<:DetectorParams,
-    S<:DetectorState,
-    A<:AbstractMatrix,
-    I<:AbstractMatrix,
-    B<:AbstractArrayBackend,
     M<:OpticalPlaneMetadata,
     T<:AbstractFloat,
 }
     detector_params::P
-    detector_state::S
-    detector_frame::A
-    detector_backend::B
     input_metadata::M
-    input_values::I
+    input_shape::Tuple{Int,Int}
+    frame_shape::Tuple{Int,Int}
+    output_shape::Tuple{Int,Int}
     rate_scale::T
     quantum_efficiency::T
 
     function DetectorAcquisitionPlan(::_DetectorAcquisitionPlanToken,
-        detector_params::P, detector_state::S, detector_frame::A,
-        detector_backend::B, input_metadata::M, input_values::I, rate_scale::T,
+        detector_params::P, input_metadata::M,
+        input_shape::Tuple{Int,Int}, frame_shape::Tuple{Int,Int},
+        output_shape::Tuple{Int,Int}, rate_scale::T,
         quantum_efficiency::T) where {
-        P<:DetectorParams,S<:DetectorState,A<:AbstractMatrix,
-        I<:AbstractMatrix,B<:AbstractArrayBackend,M<:OpticalPlaneMetadata,
-        T<:AbstractFloat,
+        P<:DetectorParams,M<:OpticalPlaneMetadata,T<:AbstractFloat,
     }
-        return new{P,S,A,I,B,M,T}(detector_params, detector_state,
-            detector_frame, detector_backend, input_metadata, input_values,
-            rate_scale, quantum_efficiency)
+        return new{P,M,T}(detector_params, input_metadata, input_shape,
+            frame_shape, output_shape, rate_scale, quantum_efficiency)
     end
 end
+
+struct _PreparedDetectorAcquisitionToken end
+const _PREPARED_DETECTOR_ACQUISITION_TOKEN =
+    _PreparedDetectorAcquisitionToken()
+
+"""
+    PreparedDetectorAcquisition
+
+Exact single-writer owner for repeated frame-detector acquisition. It binds one
+detector, one intensity product, the run-immutable plan, persistent detector
+state, replaceable workspace, caller-visible products, and snapshots of every
+replaceable owner member. Construct it with
+[`prepare_detector_acquisition`](@ref) and execute it with `capture!`.
+"""
+struct PreparedDetectorAcquisition{
+    D<:Detector,
+    I<:IntensityMap,
+    P<:DetectorAcquisitionPlan,
+    S<:DetectorState,
+    W<:DetectorWorkspace,
+    O<:DetectorProducts,
+    SB<:NamedTuple,
+    WB<:NamedTuple,
+    PB<:NamedTuple,
+}
+    detector::D
+    input::I
+    plan::P
+    state::S
+    workspace::W
+    products::O
+    state_binding::SB
+    workspace_binding::WB
+    product_binding::PB
+
+    function PreparedDetectorAcquisition(
+        ::_PreparedDetectorAcquisitionToken, detector::D, input::I,
+        plan::P, state::S, workspace::W, products::O,
+        state_binding::SB, workspace_binding::WB,
+        product_binding::PB) where {
+        D<:Detector,I<:IntensityMap,P<:DetectorAcquisitionPlan,
+        S<:DetectorState,W<:DetectorWorkspace,O<:DetectorProducts,
+        SB<:NamedTuple,WB<:NamedTuple,PB<:NamedTuple,
+    }
+        return new{D,I,P,S,W,O,SB,WB,PB}(detector, input, plan, state,
+            workspace, products, state_binding, workspace_binding,
+            product_binding)
+    end
+end
+
+@inline detector_acquisition_detector(prepared::PreparedDetectorAcquisition) =
+    prepared.detector
+@inline detector_acquisition_input(prepared::PreparedDetectorAcquisition) =
+    prepared.input
+@inline detector_acquisition_plan(prepared::PreparedDetectorAcquisition) =
+    prepared.plan
+@inline detector_acquisition_state(prepared::PreparedDetectorAcquisition) =
+    prepared.state
+@inline detector_acquisition_workspace(
+    prepared::PreparedDetectorAcquisition) = prepared.workspace
+@inline detector_acquisition_products(prepared::PreparedDetectorAcquisition) =
+    prepared.products
 
 @inline _require_detector_acquisition_plane(::FocalPlane) = nothing
 @inline _require_detector_acquisition_plane(::DetectorPlane) = nothing
@@ -261,8 +313,8 @@ end
 end
 
 function _require_detector_output_configuration(det::Detector)
-    output = det.state.output_buffer
-    output_host = det.state.output_buffer_host
+    output = det.products.output_buffer
+    output_host = det.workspace.output_buffer_host
     requires_output = det.params.output_type !== nothing ||
         det.params.readout_window !== nothing
     if requires_output
@@ -281,13 +333,13 @@ end
 
 function _require_prepared_detector_storage(det::Detector,
     frame_shape::Tuple{Int,Int}, output_shape::Tuple{Int,Int})
-    size(det.state.frame) == frame_shape || throw(DimensionMismatchError(
+    size(det.products.frame) == frame_shape || throw(DimensionMismatchError(
         "detector frame storage size must match prepared frame size"))
-    output = det.state.output_buffer
+    output = det.products.output_buffer
     output === nothing && return nothing
     size(output) == output_shape || throw(DimensionMismatchError(
         "detector output storage size must match prepared readout size"))
-    output_host = det.state.output_buffer_host
+    output_host = det.workspace.output_buffer_host
     output_host === nothing && throw(InvalidConfiguration(
         "Detector output storage requires a prepared host output buffer"))
     size(output_host) == output_shape || throw(DimensionMismatchError(
@@ -330,8 +382,451 @@ end
     _require_detector_output_configuration(det)
     _require_sensor_sampling_configuration(det.params.sensor, frame_shape,
         det.params.readout_window, det.params.integration_time,
-        eltype(det.state.frame))
+        eltype(det.products.frame))
     return nothing
+end
+
+@inline _frame_readout_workspace_members(::NoFrameReadoutWorkspace) = ()
+@inline _frame_readout_workspace_members(workspace::SkipperReadoutWorkspace) =
+    (workspace.baseline_frame, workspace.sample_sum)
+@inline function _frame_readout_workspace_members(
+    workspace::MultiReadFrameReadoutWorkspace)
+    return (workspace.reference_average, workspace.signal_average,
+        workspace.reference_cube, workspace.signal_cube)
+end
+@inline function _frame_readout_workspace_members(
+    workspace::UpTheRampReadoutWorkspace)
+    return (workspace.slope, workspace.intercept, workspace.integrated,
+        workspace.cube)
+end
+
+@inline _frame_readout_product_members(::NoFrameReadoutProducts) = ()
+@inline _frame_readout_product_members(products::SkipperReadoutProducts) =
+    (products.mean_frame, products.sample_count)
+@inline function _frame_readout_product_members(
+    products::SampledFrameReadoutProducts)
+    return (products.reference_frame, products.signal_frame,
+        products.read_cube)
+end
+@inline function _frame_readout_product_members(
+    products::MultiReadFrameReadoutProducts)
+    return (products.reference_frame, products.signal_frame,
+        products.combined_frame, products.reference_cube,
+        products.signal_cube, products.read_cube, products.read_times)
+end
+@inline function _frame_readout_product_members(
+    products::UpTheRampReadoutProducts)
+    return (products.slope_frame, products.intercept_frame,
+        products.integrated_frame, products.read_cube, products.read_times,
+        products.acquisition_kind)
+end
+
+@inline function _detector_state_members(state::DetectorState)
+    return (state.accum_buffer, state.latent_buffer, state.thermal_state)
+end
+
+@inline function _detector_workspace_members(workspace::DetectorWorkspace)
+    return (workspace.presampling_buffer, workspace.presampling_scratch,
+        workspace.response_buffer, workspace.bin_buffer,
+        workspace.temporal_buffer, workspace.noise_buffer,
+        workspace.noise_buffer_host, workspace.batched_buffer_host,
+        workspace.output_buffer_host, workspace.readout,
+        _frame_readout_workspace_members(workspace.readout)...)
+end
+
+@inline function _detector_product_members(products::DetectorProducts)
+    return (products.frame, products.output_buffer, products.readout,
+        _frame_readout_product_members(products.readout)...)
+end
+
+@inline _frame_readout_workspace_binding(::NoFrameReadoutWorkspace) = (;)
+@inline _frame_readout_workspace_binding(workspace::SkipperReadoutWorkspace) =
+    (baseline_frame=workspace.baseline_frame, sample_sum=workspace.sample_sum)
+@inline function _frame_readout_workspace_binding(
+    workspace::MultiReadFrameReadoutWorkspace)
+    return (reference_average=workspace.reference_average,
+        signal_average=workspace.signal_average,
+        reference_cube=workspace.reference_cube,
+        signal_cube=workspace.signal_cube)
+end
+@inline function _frame_readout_workspace_binding(
+    workspace::UpTheRampReadoutWorkspace)
+    return (slope=workspace.slope, intercept=workspace.intercept,
+        integrated=workspace.integrated, cube=workspace.cube)
+end
+
+@inline _frame_readout_product_binding(::NoFrameReadoutProducts) = (;)
+@inline _frame_readout_product_binding(products::SkipperReadoutProducts) =
+    (mean_frame=products.mean_frame, sample_count=products.sample_count)
+@inline function _frame_readout_product_binding(
+    products::SampledFrameReadoutProducts)
+    return (reference_frame=products.reference_frame,
+        signal_frame=products.signal_frame, read_cube=products.read_cube)
+end
+@inline function _frame_readout_product_binding(
+    products::MultiReadFrameReadoutProducts)
+    return (reference_frame=products.reference_frame,
+        signal_frame=products.signal_frame,
+        combined_frame=products.combined_frame,
+        reference_cube=products.reference_cube,
+        signal_cube=products.signal_cube, read_cube=products.read_cube,
+        read_times=products.read_times)
+end
+@inline function _frame_readout_product_binding(
+    products::UpTheRampReadoutProducts)
+    return (slope_frame=products.slope_frame,
+        intercept_frame=products.intercept_frame,
+        integrated_frame=products.integrated_frame,
+        read_cube=products.read_cube, read_times=products.read_times)
+end
+
+@inline function _detector_state_binding(state::DetectorState)
+    return (accum_buffer=state.accum_buffer,
+        latent_buffer=state.latent_buffer, thermal_state=state.thermal_state)
+end
+
+@inline function _detector_workspace_binding(workspace::DetectorWorkspace)
+    return (presampling_buffer=workspace.presampling_buffer,
+        presampling_scratch=workspace.presampling_scratch,
+        response_buffer=workspace.response_buffer,
+        bin_buffer=workspace.bin_buffer,
+        temporal_buffer=workspace.temporal_buffer,
+        noise_buffer=workspace.noise_buffer,
+        noise_buffer_host=workspace.noise_buffer_host,
+        batched_buffer_host=workspace.batched_buffer_host,
+        output_buffer_host=workspace.output_buffer_host,
+        readout=workspace.readout,
+        readout_binding=_frame_readout_workspace_binding(workspace.readout))
+end
+
+@inline function _detector_product_binding(products::DetectorProducts)
+    return (frame=products.frame, output_buffer=products.output_buffer,
+        readout=products.readout,
+        readout_binding=_frame_readout_product_binding(products.readout))
+end
+
+@inline function _require_exact_binding(actual, expected,
+    label::AbstractString)
+    actual === expected || throw(InvalidConfiguration(
+        "$label changed after detector acquisition preparation"))
+    return nothing
+end
+
+@inline _require_frame_readout_workspace_binding(
+    ::NoFrameReadoutWorkspace, ::NamedTuple{()}) = nothing
+
+@inline function _require_frame_readout_workspace_binding(
+    workspace::SkipperReadoutWorkspace, binding::NamedTuple)
+    _require_exact_binding(workspace.baseline_frame, binding.baseline_frame,
+        "Skipper baseline workspace")
+    _require_exact_binding(workspace.sample_sum, binding.sample_sum,
+        "Skipper sample-sum workspace")
+    return nothing
+end
+
+@inline function _require_frame_readout_workspace_binding(
+    workspace::MultiReadFrameReadoutWorkspace, binding::NamedTuple)
+    _require_exact_binding(workspace.reference_average,
+        binding.reference_average, "multi-read reference workspace")
+    _require_exact_binding(workspace.signal_average,
+        binding.signal_average, "multi-read signal workspace")
+    _require_exact_binding(workspace.reference_cube,
+        binding.reference_cube, "multi-read reference-cube workspace")
+    _require_exact_binding(workspace.signal_cube,
+        binding.signal_cube, "multi-read signal-cube workspace")
+    return nothing
+end
+
+@inline function _require_frame_readout_workspace_binding(
+    workspace::UpTheRampReadoutWorkspace, binding::NamedTuple)
+    _require_exact_binding(workspace.slope, binding.slope,
+        "ramp slope workspace")
+    _require_exact_binding(workspace.intercept, binding.intercept,
+        "ramp intercept workspace")
+    _require_exact_binding(workspace.integrated, binding.integrated,
+        "ramp integrated workspace")
+    _require_exact_binding(workspace.cube, binding.cube,
+        "ramp cube workspace")
+    return nothing
+end
+
+@inline _require_frame_readout_product_binding(
+    ::NoFrameReadoutProducts, ::NamedTuple{()}) = nothing
+
+@inline function _require_frame_readout_product_binding(
+    products::SkipperReadoutProducts, binding::NamedTuple)
+    _require_exact_binding(products.mean_frame, binding.mean_frame,
+        "Skipper mean-frame product")
+    _require_exact_binding(products.sample_count, binding.sample_count,
+        "Skipper sample-count product")
+    return nothing
+end
+
+@inline function _require_frame_readout_product_binding(
+    products::SampledFrameReadoutProducts, binding::NamedTuple)
+    _require_exact_binding(products.reference_frame, binding.reference_frame,
+        "sampled reference-frame product")
+    _require_exact_binding(products.signal_frame, binding.signal_frame,
+        "sampled signal-frame product")
+    _require_exact_binding(products.read_cube, binding.read_cube,
+        "sampled read-cube product")
+    return nothing
+end
+
+@inline function _require_frame_readout_product_binding(
+    products::MultiReadFrameReadoutProducts, binding::NamedTuple)
+    _require_exact_binding(products.reference_frame, binding.reference_frame,
+        "multi-read reference-frame product")
+    _require_exact_binding(products.signal_frame, binding.signal_frame,
+        "multi-read signal-frame product")
+    _require_exact_binding(products.combined_frame, binding.combined_frame,
+        "multi-read combined-frame product")
+    _require_exact_binding(products.reference_cube, binding.reference_cube,
+        "multi-read reference-cube product")
+    _require_exact_binding(products.signal_cube, binding.signal_cube,
+        "multi-read signal-cube product")
+    _require_exact_binding(products.read_cube, binding.read_cube,
+        "multi-read read-cube product")
+    _require_exact_binding(products.read_times, binding.read_times,
+        "multi-read time product")
+    return nothing
+end
+
+@inline function _require_frame_readout_product_binding(
+    products::UpTheRampReadoutProducts, binding::NamedTuple)
+    _require_exact_binding(products.slope_frame, binding.slope_frame,
+        "ramp slope-frame product")
+    _require_exact_binding(products.intercept_frame, binding.intercept_frame,
+        "ramp intercept-frame product")
+    _require_exact_binding(products.integrated_frame,
+        binding.integrated_frame, "ramp integrated-frame product")
+    _require_exact_binding(products.read_cube, binding.read_cube,
+        "ramp read-cube product")
+    _require_exact_binding(products.read_times, binding.read_times,
+        "ramp time product")
+    return nothing
+end
+
+@inline function _require_detector_state_binding(state::DetectorState,
+    binding::NamedTuple)
+    _require_exact_binding(state.accum_buffer, binding.accum_buffer,
+        "detector accumulation state")
+    _require_exact_binding(state.latent_buffer, binding.latent_buffer,
+        "detector persistence state")
+    _require_exact_binding(state.thermal_state, binding.thermal_state,
+        "detector thermal state")
+    return nothing
+end
+
+@inline function _require_detector_workspace_binding(
+    workspace::DetectorWorkspace, binding::NamedTuple)
+    _require_exact_binding(workspace.presampling_buffer,
+        binding.presampling_buffer, "detector presampling workspace")
+    _require_exact_binding(workspace.presampling_scratch,
+        binding.presampling_scratch, "detector presampling scratch")
+    _require_exact_binding(workspace.response_buffer, binding.response_buffer,
+        "detector response workspace")
+    _require_exact_binding(workspace.bin_buffer, binding.bin_buffer,
+        "detector binning workspace")
+    _require_exact_binding(workspace.temporal_buffer, binding.temporal_buffer,
+        "detector temporal workspace")
+    _require_exact_binding(workspace.noise_buffer, binding.noise_buffer,
+        "detector noise workspace")
+    _require_exact_binding(workspace.noise_buffer_host,
+        binding.noise_buffer_host, "detector host-noise workspace")
+    _require_exact_binding(workspace.batched_buffer_host,
+        binding.batched_buffer_host, "detector batch workspace")
+    _require_exact_binding(workspace.output_buffer_host,
+        binding.output_buffer_host, "detector host-output workspace")
+    _require_exact_binding(workspace.readout, binding.readout,
+        "detector readout workspace owner")
+    _require_frame_readout_workspace_binding(workspace.readout,
+        binding.readout_binding)
+    return nothing
+end
+
+@inline function _require_detector_product_binding(
+    products::DetectorProducts, binding::NamedTuple)
+    _require_exact_binding(products.frame, binding.frame,
+        "detector frame product")
+    _require_exact_binding(products.output_buffer, binding.output_buffer,
+        "detector converted-output product")
+    _require_exact_binding(products.readout, binding.readout,
+        "detector readout-product owner")
+    _require_frame_readout_product_binding(products.readout,
+        binding.readout_binding)
+    return nothing
+end
+
+@inline _require_no_alias(::Any, ::Any, ::AbstractString) = nothing
+
+@inline function _require_no_alias(left::AbstractArray,
+    right::AbstractArray, label::AbstractString)
+    Base.mightalias(left, right) && throw(InvalidConfiguration(
+        "$label must not alias"))
+    return nothing
+end
+
+@inline _require_no_alias_against(::Any, ::Tuple{},
+    ::AbstractString) = nothing
+
+@inline function _require_no_alias_against(value, others::Tuple,
+    label::AbstractString)
+    _require_no_alias(value, first(others), label)
+    return _require_no_alias_against(value, Base.tail(others), label)
+end
+
+@inline _require_no_internal_aliases(::Tuple{}, ::AbstractString) = nothing
+
+@inline function _require_no_internal_aliases(members::Tuple,
+    label::AbstractString)
+    _require_no_alias_against(first(members), Base.tail(members), label)
+    return _require_no_internal_aliases(Base.tail(members), label)
+end
+
+@inline _require_no_cross_aliases(::Tuple{}, ::Tuple,
+    ::AbstractString) = nothing
+
+@inline function _require_no_cross_aliases(left::Tuple, right::Tuple,
+    label::AbstractString)
+    _require_no_alias_against(first(left), right, label)
+    return _require_no_cross_aliases(Base.tail(left), right, label)
+end
+
+function _require_disjoint_detector_owners(det::Detector,
+    map::IntensityMap)
+    state_members = _detector_state_members(det.state)
+    workspace_members = _detector_workspace_members(det.workspace)
+    product_members = _detector_product_members(det.products)
+    _require_no_internal_aliases(state_members, "detector state storage")
+    _require_no_internal_aliases(workspace_members,
+        "detector workspace storage")
+    _require_no_internal_aliases(product_members,
+        "detector product storage")
+    _require_no_cross_aliases(state_members, workspace_members,
+        "detector state and workspace storage")
+    _require_no_cross_aliases(state_members, product_members,
+        "detector state and product storage")
+    _require_no_cross_aliases(workspace_members, product_members,
+        "detector workspace and product storage")
+    _require_no_alias_against(map.values, state_members,
+        "detector input and state storage")
+    _require_no_alias_against(map.values, workspace_members,
+        "detector input and workspace storage")
+    _require_no_alias_against(map.values, product_members,
+        "detector input and product storage")
+    return nothing
+end
+
+function _detector_preparation_candidate(det::Detector)
+    state = deepcopy(det.state)
+    workspace = deepcopy(det.workspace)
+    products = deepcopy(det.products)
+    return Detector{
+        typeof(det.noise),typeof(det.params),typeof(state),typeof(workspace),
+        typeof(products),typeof(det.background_flux),
+        typeof(det.background_map),typeof(backend(det)),
+    }(det.noise, det.params, state, workspace, products,
+        det.background_flux, det.background_map)
+end
+
+@inline function _require_detector_runtime_owner_types(det::Detector,
+    candidate::Detector)
+    typeof(candidate.state) === typeof(det.state) &&
+        typeof(candidate.workspace) === typeof(det.workspace) &&
+        typeof(candidate.products) === typeof(det.products) || throw(
+        InvalidConfiguration(
+            "prepared detector runtime owners do not fit the detector's concrete storage contract"))
+    return nothing
+end
+
+function _detector_acquisition_preparation_contract(det::Detector,
+    map::IntensityMap;
+    normalized_to_photon_rate::Union{Nothing,Real}=nothing)
+    require_whole_capture_idle(det)
+    metadata = validate_plane_storage(map.metadata, map.values;
+        label="detector intensity input")
+    _require_detector_acquisition_plane(metadata.kind)
+    _require_detector_incoherent(metadata.coherence)
+    _require_finite_nonnegative_intensity(map.values)
+
+    T = eltype(det.products.frame)
+    metadata.numeric_type === T || throw(InvalidConfiguration(
+        "detector and intensity map must use the same numeric type"))
+    typeof(backend(det)) === typeof(metadata.backend) ||
+        throw(InvalidConfiguration(
+            "detector and intensity map must use the same array backend"))
+    compute_device(det.products.frame) == metadata.device ||
+        throw(InvalidConfiguration(
+            "detector and intensity map must occupy the same compute device"))
+
+    normalization_scale = _normalization_rate_scale(metadata.normalization,
+        normalized_to_photon_rate, T)
+    spatial_scale = _spatial_rate_scale(metadata.spatial_measure, metadata, T)
+    rate_scale = normalization_scale * spatial_scale
+    isfinite(rate_scale) && rate_scale > zero(T) || throw(
+        InvalidConfiguration(
+            "prepared detector photon-rate scaling is not representable"))
+    _require_prepared_response_sampling(det.params.response_model,
+        det.params.psf_sampling)
+    quantum_efficiency = _prepared_quantum_efficiency(det,
+        metadata.spectral, T)
+    frame_shape = detector_frame_shape(det, metadata.dimensions)
+    output_shape = detector_output_shape(det, metadata.dimensions)
+    _require_detector_configuration(det, frame_shape)
+    _require_disjoint_detector_owners(det, map)
+    return (; metadata, rate_scale, quantum_efficiency, frame_shape,
+        output_shape)
+end
+
+function _prepare_detached_detector_acquisition(det::Detector,
+    map::IntensityMap;
+    normalized_to_photon_rate::Union{Nothing,Real}=nothing)
+    contract = _detector_acquisition_preparation_contract(det, map;
+        normalized_to_photon_rate=normalized_to_photon_rate)
+    candidate = _detector_preparation_candidate(det)
+    prepare_detector_buffers!(candidate, contract.metadata.dimensions)
+    _require_prepared_detector_storage(candidate, contract.frame_shape,
+        contract.output_shape)
+    prepare_frame_readout_state!(candidate.params.sensor, candidate)
+    _require_prepared_detector_storage(candidate, contract.frame_shape,
+        contract.output_shape)
+    _require_disjoint_detector_owners(candidate, map)
+    _require_detector_runtime_owner_types(det, candidate)
+
+    plan = DetectorAcquisitionPlan(_DETECTOR_ACQUISITION_PLAN_TOKEN,
+        det.params, contract.metadata, contract.metadata.dimensions,
+        contract.frame_shape, contract.output_shape, contract.rate_scale,
+        contract.quantum_efficiency)
+    return PreparedDetectorAcquisition(
+        _PREPARED_DETECTOR_ACQUISITION_TOKEN, candidate, map, plan,
+        candidate.state, candidate.workspace, candidate.products,
+        _detector_state_binding(candidate.state),
+        _detector_workspace_binding(candidate.workspace),
+        _detector_product_binding(candidate.products))
+end
+
+function _rebind_prepared_detector_acquisition(det::Detector,
+    candidate::PreparedDetectorAcquisition)
+    candidate_detector = detector_acquisition_detector(candidate)
+    det.params === candidate.plan.detector_params || throw(
+        InvalidConfiguration(
+            "detached detector acquisition does not match detector parameters"))
+    _require_detector_runtime_owner_types(det, candidate_detector)
+    return PreparedDetectorAcquisition(
+        _PREPARED_DETECTOR_ACQUISITION_TOKEN, det, candidate.input,
+        candidate.plan, candidate.state, candidate.workspace,
+        candidate.products, candidate.state_binding,
+        candidate.workspace_binding, candidate.product_binding)
+end
+
+@inline function _commit_prepared_detector_acquisition!(
+    prepared::PreparedDetectorAcquisition)
+    det = detector_acquisition_detector(prepared)
+    det.state = prepared.state
+    det.workspace = prepared.workspace
+    det.products = prepared.products
+    return prepared
 end
 
 """
@@ -343,93 +838,104 @@ be rescaled. A dimensionless calibration/test map must supply an explicit
 `normalized_to_photon_rate` factor. Spatial-density samples are converted to a
 cell rate using the declared plane sampling; cell-integrated samples are used
 directly. Preparation also validates that every current sample is finite and
-nonnegative. Repeated prepared captures trust subsequent producer writes to
-the same storage; producers must preserve that value contract, and replacement
-storage requires a new plan.
+nonnegative.
+
+The result is an exact `PreparedDetectorAcquisition`. Repeated `capture!` calls
+trust producer writes to its bound intensity storage; producers must preserve
+the finite, nonnegative value contract. Replacing any bound state, workspace,
+product, or input storage requires preparation of a new owner.
 """
 function prepare_detector_acquisition(det::Detector, map::IntensityMap;
     normalized_to_photon_rate::Union{Nothing,Real}=nothing)
-    require_whole_capture_idle(det)
-    metadata = validate_plane_storage(map.metadata, map.values;
-        label="detector intensity input")
-    _require_detector_acquisition_plane(metadata.kind)
-    _require_detector_incoherent(metadata.coherence)
-    _require_finite_nonnegative_intensity(map.values)
-
-    T = eltype(det.state.frame)
-    metadata.numeric_type === T || throw(InvalidConfiguration(
-        "detector and intensity map must use the same numeric type"))
-    typeof(backend(det)) === typeof(metadata.backend) ||
-        throw(InvalidConfiguration(
-            "detector and intensity map must use the same array backend"))
-    compute_device(det.state.frame) == metadata.device ||
-        throw(InvalidConfiguration(
-            "detector and intensity map must occupy the same compute device"))
-
-    normalization_scale = _normalization_rate_scale(metadata.normalization,
-        normalized_to_photon_rate, T)
-    spatial_scale = _spatial_rate_scale(metadata.spatial_measure, metadata, T)
-    rate_scale = normalization_scale * spatial_scale
-    isfinite(rate_scale) && rate_scale > zero(T) || throw(InvalidConfiguration(
-        "prepared detector photon-rate scaling is not representable"))
-    _require_prepared_response_sampling(det.params.response_model,
-        det.params.psf_sampling)
-    quantum_efficiency = _prepared_quantum_efficiency(det,
-        metadata.spectral, T)
-    frame_shape = detector_frame_shape(det, metadata.dimensions)
-    output_shape = detector_output_shape(det, metadata.dimensions)
-    _require_detector_configuration(det, frame_shape)
-    prepare_detector_buffers!(det, metadata.dimensions)
-    _require_prepared_detector_storage(det, frame_shape, output_shape)
-    prepare_frame_readout_state!(det.params.sensor, det)
-    return DetectorAcquisitionPlan(_DETECTOR_ACQUISITION_PLAN_TOKEN,
-        det.params, det.state, det.state.frame, backend(det), metadata,
-        map.values, rate_scale, quantum_efficiency)
+    candidate = _prepare_detached_detector_acquisition(det, map;
+        normalized_to_photon_rate=normalized_to_photon_rate)
+    prepared = _rebind_prepared_detector_acquisition(det, candidate)
+    _commit_prepared_detector_acquisition!(prepared)
+    return prepared
 end
 
 @inline function _require_prepared_detector_binding(
-    det::Detector, plan::DetectorAcquisitionPlan)
+    prepared::PreparedDetectorAcquisition)
+    det = prepared.detector
+    plan = prepared.plan
     det.params === plan.detector_params || throw(InvalidConfiguration(
-        "detector does not match its prepared acquisition plan"))
-    det.state === plan.detector_state || throw(InvalidConfiguration(
-        "detector does not match its prepared acquisition plan"))
-    typeof(backend(det)) === typeof(plan.detector_backend) ||
+        "detector parameters changed after acquisition preparation"))
+    det.state === prepared.state || throw(InvalidConfiguration(
+        "detector state owner changed after acquisition preparation"))
+    det.workspace === prepared.workspace || throw(InvalidConfiguration(
+        "detector workspace owner changed after acquisition preparation"))
+    det.products === prepared.products || throw(InvalidConfiguration(
+        "detector product owner changed after acquisition preparation"))
+    prepared.input.metadata === plan.input_metadata || throw(
+        InvalidConfiguration(
+            "detector input metadata changed after acquisition preparation"))
+    size(prepared.input.values) == plan.input_shape || throw(
+        DimensionMismatchError(
+            "detector input dimensions changed after acquisition preparation"))
+    size(det.products.frame) == plan.frame_shape || throw(
+        DimensionMismatchError(
+            "detector frame dimensions changed after acquisition preparation"))
+    size(output_frame(det)) == plan.output_shape || throw(
+        DimensionMismatchError(
+            "detector output dimensions changed after acquisition preparation"))
+    typeof(backend(det)) === typeof(plan.input_metadata.backend) || throw(
+        InvalidConfiguration(
+            "detector backend changed after acquisition preparation"))
+    compute_device(det.products.frame) == plan.input_metadata.device || throw(
+        InvalidConfiguration(
+            "detector device changed after acquisition preparation"))
+    compute_device(prepared.input.values) == plan.input_metadata.device ||
         throw(InvalidConfiguration(
-            "detector backend does not match its prepared acquisition plan"))
-    det.state.frame === plan.detector_frame || throw(InvalidConfiguration(
-        "detector device storage does not match its prepared acquisition plan"))
+            "detector input device changed after acquisition preparation"))
+    _require_detector_state_binding(det.state, prepared.state_binding)
+    _require_detector_workspace_binding(det.workspace,
+        prepared.workspace_binding)
+    _require_detector_product_binding(det.products, prepared.product_binding)
     return nothing
 end
 
-@inline function _require_prepared_acquisition(det::Detector,
-    map::IntensityMap, plan::DetectorAcquisitionPlan)
-    _require_prepared_detector_binding(det, plan)
-    map.metadata === plan.input_metadata || throw(InvalidConfiguration(
-        "intensity map does not match its prepared acquisition plan"))
-    map.values === plan.input_values || throw(InvalidConfiguration(
-        "intensity storage does not match its prepared acquisition plan"))
+@inline function _require_prepared_detector_binding(det::Detector,
+    prepared::PreparedDetectorAcquisition)
+    det === prepared.detector || throw(InvalidConfiguration(
+        "detector does not match its prepared acquisition owner"))
+    return _require_prepared_detector_binding(prepared)
+end
+
+@inline function _require_prepared_acquisition(
+    prepared::PreparedDetectorAcquisition)
+    _require_prepared_detector_binding(prepared)
     return nothing
 end
 
-@inline function _require_prepared_whole_acquisition(det::Detector,
-    map::IntensityMap, plan::DetectorAcquisitionPlan)
-    _require_prepared_acquisition(det, map, plan)
-    require_whole_capture_idle(det)
+@inline function _require_prepared_acquisition(
+    prepared::PreparedDetectorAcquisition, map::IntensityMap)
+    map.metadata === prepared.input.metadata &&
+        map.values === prepared.input.values || throw(InvalidConfiguration(
+        "intensity product does not match its prepared acquisition owner"))
+    return _require_prepared_acquisition(prepared)
+end
+
+@inline function _require_prepared_whole_acquisition(
+    prepared::PreparedDetectorAcquisition)
+    _require_prepared_acquisition(prepared)
+    require_whole_capture_idle(prepared.detector)
     return nothing
 end
 
-function capture!(det::Detector, map::IntensityMap,
-    plan::DetectorAcquisitionPlan, rng::AbstractRNG)
-    _require_prepared_whole_acquisition(det, map, plan)
-    return capture_with_quantum_efficiency!(det, map.values,
-        plan.quantum_efficiency * plan.rate_scale, rng)
+function capture!(prepared::PreparedDetectorAcquisition,
+    rng::AbstractRNG)
+    _require_prepared_whole_acquisition(prepared)
+    plan = prepared.plan
+    return capture_with_quantum_efficiency!(prepared.detector,
+        prepared.input.values, plan.quantum_efficiency * plan.rate_scale, rng)
 end
 
-function capture!(det::Detector, map::IntensityMap,
-    plan::DetectorAcquisitionPlan; rng::AbstractRNG=Random.default_rng(),
+function capture!(prepared::PreparedDetectorAcquisition;
+    rng::AbstractRNG=Random.default_rng(),
     integration_duration::Union{Nothing,Real}=nothing)
-    integration_duration === nothing && return capture!(det, map, plan, rng)
-    _require_prepared_acquisition(det, map, plan)
-    return capture_incremental!(det, map.values, rng, integration_duration,
-        plan.quantum_efficiency * plan.rate_scale)
+    integration_duration === nothing && return capture!(prepared, rng)
+    _require_prepared_acquisition(prepared)
+    plan = prepared.plan
+    return capture_incremental!(prepared.detector, prepared.input.values, rng,
+        integration_duration, plan.quantum_efficiency * plan.rate_scale)
 end

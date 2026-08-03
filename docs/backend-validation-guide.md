@@ -317,8 +317,8 @@ The reduced maintained smoke covers:
   up-the-ramp snapshots/fitting on evolving charge, with detector products
   remaining device resident and scalar indexing disabled
 - direct rolling-shutter row-band integration and frame-transfer image/storage
-  lifecycle checks with detector products and the prepared storage frame
-  remaining device resident and scalar indexing disabled
+  lifecycle checks with detector products and the lifecycle-state storage
+  frame remaining device resident and scalar indexing disabled
 - MKID accumulated-count capture, source passband handling, output conversion,
   and device residency
 

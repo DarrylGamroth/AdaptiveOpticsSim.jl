@@ -823,7 +823,7 @@ function validate_acquisition_execution_target(
     target::AbstractComputeDevice,
 )
     _require_exact_detector_acquisition_target(
-        execution.detector, execution.plan, target)
+        execution.acquisition, target)
     _require_exact_plant_array_target(
         execution.observation, target, "frame acquisition observation")
     return execution
@@ -1110,30 +1110,19 @@ function _require_exact_detector_lifecycle_target(
     target::AbstractComputeDevice,
 )
     _require_exact_detector_acquisition_target(
-        lifecycle.detector, lifecycle.plan, target)
+        lifecycle.acquisition, target)
     _require_exact_detector_readout_products_target(
         lifecycle.readout_products, target)
     return lifecycle
 end
 
 @inline function _require_exact_acquisition_lifecycle_target(
-    lifecycle::Union{
-        PreparedGlobalShutterAcquisition,
+    lifecycle::Union{PreparedGlobalShutterAcquisition,
         PreparedRollingShutterAcquisition,
-    },
+        PreparedFrameTransferAcquisition},
     target::AbstractComputeDevice,
 )
     return _require_exact_detector_lifecycle_target(lifecycle, target)
-end
-
-function _require_exact_acquisition_lifecycle_target(
-    lifecycle::PreparedFrameTransferAcquisition,
-    target::AbstractComputeDevice,
-)
-    _require_exact_detector_lifecycle_target(lifecycle, target)
-    _require_exact_plant_array_target(
-        lifecycle.storage_frame, target, "frame-transfer storage frame")
-    return lifecycle
 end
 
 function _require_exact_acquisition_lifecycle_target(

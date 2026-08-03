@@ -277,9 +277,16 @@ Examples:
   backend/grid-bound `PreparedMicrolensPropagation`, and layout for
   diffractive sensing. There are no top-level optical field aliases or a
   whole-WFS optical-owner union
-- `Detector` with `DetectorParams` and `DetectorState`
-- `DetectorAcquisitionPlan` as the cold-path compatibility and buffer contract
-  between one frame detector and one immutable intensity-map description
+- frame `Detector` owners with immutable `DetectorParams`, persistent
+  `DetectorState`, replaceable `DetectorWorkspace`, and caller-visible
+  `DetectorProducts`; frame-readout products and workspace follow the same
+  separation, including multi-read, up-the-ramp, and Skipper acquisition
+- `Detectors.DetectorAcquisitionPlan` as the run-immutable numerical and
+  radiometric contract, and `Detectors.PreparedDetectorAcquisition` as the
+  exact single-writer detector/input/plan/state/workspace/product binding.
+  These advanced ownership values and their `detector_acquisition_*` accessors
+  are qualified-public; routine callers prepare once and execute the returned
+  owner with `capture!`
 - `DirectImagingPlan` as reusable run-immutable image-formation metadata and
   mapping, `DirectImagingWorkspace` as replaceable single-writer scratch, and
   `PreparedDirectImaging` as the exact input/field/output/plan/workspace
@@ -421,7 +428,9 @@ The maintained ownership model is:
   one writer
 - exported products are distinct from scratch buffers
 - boundedness is enforced by prepared-owner lifecycle and capacity checks;
-  direct `Memory` use is a legacy representation being removed by issue #225
+  detector read-offset schedules use concrete fixed-cardinality
+  `FixedSizeVector` storage, while remaining direct `Memory` migration outside
+  detector acquisition continues under issue #225
 - implementation fields and collection element types do not store `Any`
 - hot registries do not store abstract element types or uninstantiated
   parametric families; bounded heterogeneous work crosses concrete family
@@ -433,12 +442,13 @@ The maintained ownership model is:
 - WFS, science, calibration, and coronagraph paths own distinct
   `PupilFunction` or field products; path reuse requires an explicit prepared
   compatibility contract
-- WFS and detector pipelines own their sampled/readout/intermediate products
-  explicitly rather than relying on in-place aliasing
+- WFS and detector pipelines separate persistent state, replaceable scratch,
+  and caller-visible sampled/readout products; direct writes into a declared
+  product remain valid and do not make that product workspace
 - optical formation produces photon-arrival rates or explicitly dimensionless
-  products; prepared detector acquisition validates metadata, applies
-  presampling response before physical-pixel integration, and integrates its
-  explicit exposure exactly once
+  products; the exact prepared detector owner validates its bound input and
+  runtime owners, applies presampling response before physical-pixel
+  integration, and integrates its explicit exposure exactly once
 - CPU and accelerator placement is fixed during preparation; synchronization
   occurs only at explicit dependencies or observation/transport boundaries
 - the serial Plant event loop is the deterministic HIL-neutral oracle;

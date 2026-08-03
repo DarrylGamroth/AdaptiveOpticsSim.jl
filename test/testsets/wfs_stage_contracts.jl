@@ -589,6 +589,18 @@ end
         @test @allocated(estimate_wfs_measurement!(counting_measurement,
             counting_observation, counting_estimator)) == 0
     end
+
+    counting_before_replacement = copy(counting_observation.storage)
+    counting_rng_before_replacement = copy(rng)
+    spad.workspace.noise_buffer = similar(spad.workspace.noise_buffer)
+    counting_binding_error = contract_captured_error() do
+        acquire_wfs_observation!(counting_observation, rates,
+            counting_plan, rng)
+    end
+    @test counting_binding_error isa WFSPreparationError
+    @test counting_binding_error.reason === :prepared_binding
+    @test counting_observation.storage == counting_before_replacement
+    @test rand(rng) == rand(counting_rng_before_replacement)
 end
 
 @testset "Prepared photon-counting WFS acquisition" begin
@@ -771,6 +783,17 @@ end
         @test @allocated(acquire_wfs_observation!(mkid_observation,
             rate, mkid_plan, rng)) == 0
     end
+
+    stale_observation_before = copy(observation.storage)
+    stale_rng = copy(rng)
+    spad.workspace.host_buffer = similar(spad.workspace.host_buffer)
+    stale_binding_error = contract_captured_error() do
+        acquire_wfs_observation!(observation, rate, plan, rng)
+    end
+    @test stale_binding_error isa WFSPreparationError
+    @test stale_binding_error.reason === :prepared_binding
+    @test observation.storage == stale_observation_before
+    @test rand(rng) == rand(stale_rng)
 end
 
 function contract_pupil_function(pupil::PupilFunction;
@@ -1584,7 +1607,10 @@ end
     @test numeric_error.reason === :numeric_type
     wrong_layout_observation = WFSObservation(similar(rate.values);
         units=:electron_count, layout=:packed_channels)
-    @test prepare_wfs_acquisition(short_detector, rate,
+    wrong_layout_detector = Detector(noise=NoiseNone(),
+        integration_time=T(0.25), qe=one(T),
+        response_model=NullFrameResponse(), T=T)
+    @test prepare_wfs_acquisition(wrong_layout_detector, rate,
         wrong_layout_observation) isa PreparedWFSDetectorAcquisition
 
     uncalibrated_measurement = WFSMeasurement(similar(slopes(staged));

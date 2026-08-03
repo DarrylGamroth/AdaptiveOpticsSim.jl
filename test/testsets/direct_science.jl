@@ -351,11 +351,13 @@ end
         response_model=NullFrameResponse())
     short_plan = prepare_detector_acquisition(short, rate_map)
     long_plan = prepare_detector_acquisition(long, rate_map)
-    @test short_plan.input_values === rate_map.values
-    @test long_plan.input_values === rate_map.values
-    short_frame = copy(capture!(short, rate_map, short_plan;
+    @test Detectors.detector_acquisition_input(short_plan).values ===
+        rate_map.values
+    @test Detectors.detector_acquisition_input(long_plan).values ===
+        rate_map.values
+    short_frame = copy(capture!(short_plan;
         rng=MersenneTwister(1)))
-    long_frame = copy(capture!(long, rate_map, long_plan;
+    long_frame = copy(capture!(long_plan;
         rng=MersenneTwister(2)))
     @test long_frame ≈ 6 .* short_frame
     @test rate_map.values == rate_before
@@ -365,8 +367,9 @@ end
         response_model=SampledFrameResponse(response_kernel),
         sensor=CCDSensor(sampling_mode=SkipperSampling(3)))
     skipper_plan = prepare_detector_acquisition(skipper, rate_map)
-    @test skipper_plan.input_values === rate_map.values
-    skipper_frame = capture!(skipper, rate_map, skipper_plan;
+    @test Detectors.detector_acquisition_input(skipper_plan).values ===
+        rate_map.values
+    skipper_frame = capture!(skipper_plan;
         rng=MersenneTwister(4))
     @test all(isfinite, skipper_frame)
     @test skipper_frame !== short_frame
@@ -388,6 +391,6 @@ end
         normalized_map)
     converted = prepare_detector_acquisition(external, normalized_map;
         normalized_to_photon_rate=40.0)
-    @test capture!(external, normalized_map, converted;
+    @test capture!(converted;
         rng=MersenneTwister(3)) == fill(10.0, 2, 2)
 end

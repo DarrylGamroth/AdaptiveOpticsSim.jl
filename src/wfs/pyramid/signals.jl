@@ -303,7 +303,7 @@ function ensure_pyramid_calibration!(wfs::PyramidWFS, pupil::PupilFunction,
         sampled = sample_pyramid_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
         frame = detector_calibration_frame!(det, sampled,
             pyramid_detector_calibration_qe(src, det,
-                eltype(det.state.frame)))
+                eltype(det.products.frame)))
         resize_pyramid_signal_buffers!(wfs, size(frame, 1))
         if iszero(wfs.estimator.params.light_ratio)
             fill!(wfs.estimator.state.valid_i4q, true)

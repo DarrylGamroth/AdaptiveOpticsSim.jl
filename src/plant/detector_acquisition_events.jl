@@ -7,10 +7,12 @@ abstract type AbstractDetectorAcquisitionLifecycleDefinition <:
 
 Prepared detector-backed subprotocol of `AbstractPreparedAcquisitionLifecycle`.
 Global-shutter, rolling-shutter, and frame-transfer implementations bind one
-exact detector, acquisition plan, readout product owner, and timing definition.
-Their matching state is single-writer and non-reentrant; invalid timing, mode,
-transition order, target, or state binding raises `DetectorAcquisitionError`
-before detector or lifecycle-state mutation.
+exact prepared detector acquisition, readout-product owner, and timing
+definition.
+Each prepared lifecycle grants exactly one matching state owner and is
+single-writer and non-reentrant; invalid timing, mode, transition order,
+target, duplicate state claim, or state binding raises
+`DetectorAcquisitionError` before detector or lifecycle-state mutation.
 """
 abstract type AbstractPreparedDetectorAcquisitionLifecycle <:
     AbstractPreparedAcquisitionLifecycle end
@@ -21,6 +23,47 @@ abstract type AbstractDetectorAcquisitionLifecycleState <:
     message::String)
     throw(DetectorAcquisitionError(_DETECTOR_ACQUISITION_EVENT_COMPONENT,
         reason, message))
+end
+
+struct _DetectorAcquisitionLease
+    state_owner_id::Threads.Atomic{UInt64}
+end
+
+_DetectorAcquisitionLease() =
+    _DetectorAcquisitionLease(Threads.Atomic{UInt64}(0))
+
+struct _DetectorLifecycleOwnerToken end
+const _DETECTOR_LIFECYCLE_OWNER_TOKEN = _DetectorLifecycleOwnerToken()
+
+@inline function _require_detector_acquisition_state_available(
+    lease::_DetectorAcquisitionLease)
+    !iszero(lease.state_owner_id[]) && _detector_acquisition_event_error(
+        :state_already_claimed,
+        "prepared detector acquisition already has a lifecycle-state owner")
+    return nothing
+end
+
+@inline function _claim_detector_acquisition_state!(
+    lease::_DetectorAcquisitionLease, state)
+    state_owner_id = UInt64(objectid(state))
+    iszero(state_owner_id) && _detector_acquisition_event_error(
+        :invalid_state_owner,
+        "detector acquisition lifecycle state has no usable owner identity")
+    iszero(Threads.atomic_cas!(lease.state_owner_id, UInt64(0),
+        state_owner_id)) ||
+        _detector_acquisition_event_error(
+            :state_already_claimed,
+            "prepared detector acquisition already has a lifecycle-state owner")
+    return state
+end
+
+@inline function _require_detector_acquisition_state_owner(
+    lease::_DetectorAcquisitionLease, state)
+    lease.state_owner_id[] == UInt64(objectid(state)) ||
+        _detector_acquisition_event_error(
+            :foreign_state,
+            "acquisition state is not the lifecycle's claimed state owner")
+    return nothing
 end
 
 """
@@ -71,7 +114,12 @@ struct _ScheduledUpTheRampReadout <: _DetectorEventReadoutStyle end
 @inline _hgcdte_detector_event_readout_style(::UpTheRampSampling) =
     _ScheduledUpTheRampReadout()
 
-mutable struct _GlobalShutterAcquisitionBinding end
+mutable struct _GlobalShutterAcquisitionBinding
+    const state_lease::_DetectorAcquisitionLease
+end
+
+_GlobalShutterAcquisitionBinding() =
+    _GlobalShutterAcquisitionBinding(_DetectorAcquisitionLease())
 
 struct _PreparedGlobalShutterAcquisitionToken end
 const _PREPARED_GLOBAL_SHUTTER_ACQUISITION_TOKEN =
@@ -83,34 +131,38 @@ acquisition owner. Construct with [`prepare_global_shutter_acquisition`](@ref).
 """
 struct PreparedGlobalShutterAcquisition{
     D<:Detector,
-    P<:DetectorAcquisitionPlan,
+    A<:PreparedDetectorAcquisition,
     RP<:FrameReadoutProducts,
     R<:_DetectorEventReadoutStyle,
     T<:AbstractFloat,
 } <: AbstractPreparedDetectorAcquisitionLifecycle
     binding::_GlobalShutterAcquisitionBinding
     detector::D
-    plan::P
+    acquisition::A
     readout_products::RP
     definition::GlobalShutterAcquisitionDefinition
     readout_style::R
     exposure_seconds::T
     detection_efficiency::T
-    read_offsets::Memory{PlantDuration}
+    read_offsets::FixedSizeVectorDefault{PlantDuration}
+    read_offset_binding::FixedSizeVectorDefault{PlantDuration}
 
     function PreparedGlobalShutterAcquisition(
         ::_PreparedGlobalShutterAcquisitionToken,
-        binding::_GlobalShutterAcquisitionBinding, detector::D, plan::P,
+        binding::_GlobalShutterAcquisitionBinding, detector::D,
+        acquisition::A,
         readout_products::RP, definition::GlobalShutterAcquisitionDefinition,
         readout_style::R, exposure_seconds::T, detection_efficiency::T,
-        read_offsets::Memory{PlantDuration}) where {
-        D<:Detector,P<:DetectorAcquisitionPlan,
+        read_offsets::FixedSizeVectorDefault{PlantDuration},
+        read_offset_binding::FixedSizeVectorDefault{PlantDuration}) where {
+        D<:Detector,A<:PreparedDetectorAcquisition,
         RP<:FrameReadoutProducts,R<:_DetectorEventReadoutStyle,
         T<:AbstractFloat,
     }
-        return new{D,P,RP,R,T}(binding, detector, plan, readout_products,
+        return new{D,A,RP,R,T}(binding, detector, acquisition,
+            readout_products,
             definition, readout_style, exposure_seconds,
-            detection_efficiency, read_offsets)
+            detection_efficiency, read_offsets, read_offset_binding)
     end
 end
 
@@ -124,7 +176,7 @@ end
 """Separately owned, single-writer state for one prepared acquisition."""
 mutable struct GlobalShutterAcquisitionState <:
     AbstractDetectorAcquisitionLifecycleState
-    binding::_GlobalShutterAcquisitionBinding
+    const binding::_GlobalShutterAcquisitionBinding
     status::DetectorAcquisitionStatus
     sequence::UInt64
     exposure_start::PlantTimestamp
@@ -133,14 +185,34 @@ mutable struct GlobalShutterAcquisitionState <:
     readout_complete::PlantTimestamp
     readiness::PlantTimestamp
     next_read_index::Int
+
+    function GlobalShutterAcquisitionState(
+        ::_DetectorLifecycleOwnerToken,
+        binding::_GlobalShutterAcquisitionBinding,
+        status::DetectorAcquisitionStatus,
+        sequence::UInt64,
+        exposure_start::PlantTimestamp,
+        exposure_close::PlantTimestamp,
+        integrated_through::PlantTimestamp,
+        readout_complete::PlantTimestamp,
+        readiness::PlantTimestamp,
+        next_read_index::Int,
+    )
+        return new(binding, status, sequence, exposure_start, exposure_close,
+            integrated_through, readout_complete, readiness, next_read_index)
+    end
 end
 
 function GlobalShutterAcquisitionState(
     prepared::PreparedGlobalShutterAcquisition)
+    lease = prepared.binding.state_lease
+    _require_detector_acquisition_state_available(lease)
     origin = zero(PlantTimestamp)
-    return GlobalShutterAcquisitionState(prepared.binding,
+    state = GlobalShutterAcquisitionState(_DETECTOR_LIFECYCLE_OWNER_TOKEN,
+        prepared.binding,
         DetectorAcquisitionReady, UInt64(0), origin, origin, origin, origin,
         origin, 1)
+    return _claim_detector_acquisition_state!(lease, state)
 end
 
 @inline detector_acquisition_status(state::GlobalShutterAcquisitionState) =
@@ -181,14 +253,14 @@ end
 end
 
 function _empty_detector_read_offsets()
-    return Memory{PlantDuration}(undef, 0)
+    return FixedSizeVectorDefault{PlantDuration}(undef, 0)
 end
 
 function _even_detector_read_offsets(exposure::PlantDuration, n_reads::Int)
     exposure.nanoseconds >= n_reads - 1 ||
         _detector_acquisition_event_error(:unrepresentable_read_schedule,
             "up-the-ramp exposure must contain at least one nanosecond per read interval")
-    offsets = Memory{PlantDuration}(undef, n_reads)
+    offsets = FixedSizeVectorDefault{PlantDuration}(undef, n_reads)
     denominator = Int128(n_reads - 1)
     exposure_nanoseconds = Int128(exposure.nanoseconds)
     @inbounds for read_index in 1:n_reads
@@ -196,6 +268,26 @@ function _even_detector_read_offsets(exposure::PlantDuration, n_reads::Int)
         offsets[read_index] = PlantDuration(Int64(numerator ÷ denominator))
     end
     return offsets
+end
+
+function _copy_detector_read_offsets(
+    offsets::FixedSizeVectorDefault{PlantDuration})
+    binding = FixedSizeVectorDefault{PlantDuration}(undef, length(offsets))
+    copyto!(binding, offsets)
+    return binding
+end
+
+@inline function _require_detector_read_offset_binding(
+    prepared::PreparedGlobalShutterAcquisition)
+    length(prepared.read_offsets) == length(prepared.read_offset_binding) ||
+        _detector_acquisition_event_error(:prepared_binding,
+            "detector read schedule changed after preparation")
+    @inbounds for index in eachindex(prepared.read_offsets)
+        prepared.read_offsets[index] == prepared.read_offset_binding[index] ||
+            _detector_acquisition_event_error(:prepared_binding,
+                "detector read schedule changed after preparation")
+    end
+    return nothing
 end
 
 function _quantized_plant_duration(seconds::Real, label::AbstractString,
@@ -226,9 +318,9 @@ function _prepare_detector_read_offsets(::_ScheduledUpTheRampReadout,
     mode = multi_read_sampling_mode(sensor)
     offsets = _even_detector_read_offsets(definition.exposure_duration,
         mode.n_reads)
-    T = eltype(det.state.frame)
+    T = eltype(det.products.frame)
     physical_read_duration = _quantized_plant_duration(
-        sampling_read_time(sensor, size(det.state.frame),
+        sampling_read_time(sensor, size(det.products.frame),
             det.params.readout_window, T),
         "detector read duration", :invalid_read_duration,
         :unrepresentable_read_duration)
@@ -254,12 +346,12 @@ end
 
 @inline function _prepare_detector_event_products!(
     ::_PostExposureDetectorReadout, ::Detector,
-    ::Memory{PlantDuration}, ::Type{<:AbstractFloat})
+    ::FixedSizeVectorDefault{PlantDuration}, ::Type{<:AbstractFloat})
     return nothing
 end
 
 function _prepare_detector_event_products!(::_ScheduledUpTheRampReadout,
-    det::Detector, offsets::Memory{PlantDuration},
+    det::Detector, offsets::FixedSizeVectorDefault{PlantDuration},
     ::Type{T}) where {T<:AbstractFloat}
     products = _require_up_the_ramp_products(
         ensure_up_the_ramp_products!(det, length(offsets);
@@ -299,19 +391,30 @@ spacing and readout validation.
 function prepare_global_shutter_acquisition(det::Detector, map::IntensityMap,
     definition::GlobalShutterAcquisitionDefinition;
     normalized_to_photon_rate::Union{Nothing,Real}=nothing)
-    _require_global_shutter_acquisition(det)
-    plan = prepare_detector_acquisition(det, map;
+    candidate_acquisition = _prepare_detached_detector_acquisition(det, map;
         normalized_to_photon_rate=normalized_to_photon_rate)
-    return prepare_global_shutter_acquisition(det, map, plan, definition)
+    candidate = _prepare_global_shutter_acquisition(
+        candidate_acquisition, definition)
+    acquisition = _rebind_prepared_detector_acquisition(
+        det, candidate_acquisition)
+    prepared = PreparedGlobalShutterAcquisition(
+        _PREPARED_GLOBAL_SHUTTER_ACQUISITION_TOKEN,
+        candidate.binding, det, acquisition, candidate.readout_products,
+        candidate.definition, candidate.readout_style,
+        candidate.exposure_seconds, candidate.detection_efficiency,
+        candidate.read_offsets, candidate.read_offset_binding)
+    _commit_prepared_detector_acquisition!(acquisition)
+    return prepared
 end
 
-function prepare_global_shutter_acquisition(det::Detector, map::IntensityMap,
-    plan::DetectorAcquisitionPlan,
+function _prepare_global_shutter_acquisition(
+    acquisition::PreparedDetectorAcquisition,
     definition::GlobalShutterAcquisitionDefinition)
+    det = detector_acquisition_detector(acquisition)
     _require_global_shutter_acquisition(det)
     _require_detector_event_idle(det)
-    _require_prepared_acquisition(det, map, plan)
-    T = eltype(det.state.frame)
+    _require_prepared_acquisition(acquisition)
+    T = eltype(det.products.frame)
     exposure_seconds = plant_duration_seconds(definition.exposure_duration, T)
     isequal(det.params.integration_time, exposure_seconds) ||
         _detector_acquisition_event_error(:exposure_duration,
@@ -320,15 +423,17 @@ function prepare_global_shutter_acquisition(det::Detector, map::IntensityMap,
     read_offsets = _prepare_detector_read_offsets(readout_style,
         det.params.sensor, det, definition)
     _prepare_detector_event_products!(readout_style, det, read_offsets, T)
+    plan = detector_acquisition_plan(acquisition)
     detection_efficiency = plan.rate_scale * plan.quantum_efficiency
     isfinite(detection_efficiency) && detection_efficiency >= zero(T) ||
         _detector_acquisition_event_error(:detection_efficiency,
             "prepared detector rate scaling and quantum efficiency are not representable")
     return PreparedGlobalShutterAcquisition(
         _PREPARED_GLOBAL_SHUTTER_ACQUISITION_TOKEN,
-        _GlobalShutterAcquisitionBinding(), det, plan,
-        det.state.readout_products, definition, readout_style,
-        exposure_seconds, detection_efficiency, read_offsets)
+        _GlobalShutterAcquisitionBinding(), det, acquisition,
+        det.products.readout, definition, readout_style,
+        exposure_seconds, detection_efficiency, read_offsets,
+        _copy_detector_read_offsets(read_offsets))
 end
 
 @inline function _require_detector_event_binding(
@@ -337,15 +442,22 @@ end
     state.binding === prepared.binding ||
         _detector_acquisition_event_error(:foreign_state,
             "acquisition state belongs to another prepared detector acquisition")
+    _require_detector_acquisition_state_owner(
+        prepared.binding.state_lease, state)
     det = prepared.detector
-    plan = prepared.plan
-    det.params === plan.detector_params &&
-        det.state === plan.detector_state &&
-        det.state.frame === plan.detector_frame &&
-        det.state.readout_products === prepared.readout_products &&
-        typeof(backend(det)) === typeof(plan.detector_backend) ||
+    det === detector_acquisition_detector(prepared.acquisition) &&
+        det.products.readout === prepared.readout_products ||
         _detector_acquisition_event_error(:prepared_binding,
-            "detector storage changed after event acquisition preparation")
+            "detector ownership changed after event acquisition preparation")
+    try
+        _require_prepared_acquisition(prepared.acquisition)
+        _require_detector_read_offset_binding(prepared)
+    catch error
+        error isa Union{InvalidConfiguration,DimensionMismatchError} ||
+            rethrow()
+        _detector_acquisition_event_error(:prepared_binding,
+            "detector ownership changed after event acquisition preparation")
+    end
     return nothing
 end
 
@@ -354,7 +466,7 @@ end
     state::GlobalShutterAcquisitionState)
     elapsed = state.integrated_through - state.exposure_start
     return plant_duration_seconds(elapsed,
-        eltype(prepared.detector.state.frame))
+        eltype(prepared.detector.products.frame))
 end
 
 @inline function _require_detector_event_progress(
@@ -375,17 +487,23 @@ end
 
 function _clear_detector_event_products!(::_ScheduledUpTheRampReadout,
     prepared::PreparedGlobalShutterAcquisition)
+    det = prepared.detector
     products = _require_up_the_ramp_products(prepared.readout_products)
+    workspace_slope, workspace_intercept, workspace_integrated,
+        workspace_cube = _up_the_ramp_execution_storage(products,
+            det.workspace.readout)
     fill!(products.slope_frame, zero(eltype(products.slope_frame)))
     fill!(products.intercept_frame, zero(eltype(products.intercept_frame)))
     fill!(products.integrated_frame, zero(eltype(products.integrated_frame)))
     fill!(products.read_cube, zero(eltype(products.read_cube)))
-    fill!(products.workspace_slope, zero(eltype(products.workspace_slope)))
-    fill!(products.workspace_intercept,
-        zero(eltype(products.workspace_intercept)))
-    fill!(products.workspace_integrated,
-        zero(eltype(products.workspace_integrated)))
-    fill!(products.workspace_cube, zero(eltype(products.workspace_cube)))
+    products.slope_frame === workspace_slope ||
+        fill!(workspace_slope, zero(eltype(workspace_slope)))
+    products.intercept_frame === workspace_intercept ||
+        fill!(workspace_intercept, zero(eltype(workspace_intercept)))
+    products.integrated_frame === workspace_integrated ||
+        fill!(workspace_integrated, zero(eltype(workspace_integrated)))
+    products.read_cube === workspace_cube ||
+        fill!(workspace_cube, zero(eltype(workspace_cube)))
     T = eltype(products.read_times)
     @inbounds for read_index in eachindex(prepared.read_offsets)
         products.read_times[read_index] = plant_duration_seconds(
@@ -457,7 +575,7 @@ end
 
 @inline function _apply_scheduled_hgcdte_interval_statistics!(
     ::HgCdTeSensorType, det::Detector, ::AbstractRNG)
-    return det.state.frame
+    return det.products.frame
 end
 
 @inline function _apply_scheduled_hgcdte_interval_statistics!(
@@ -492,10 +610,11 @@ function accumulate_exposure_interval!(
     _require_interval_before_next_read(prepared, state, stop)
 
     det = prepared.detector
-    T = eltype(det.state.frame)
+    T = eltype(det.products.frame)
     interval_seconds = plant_duration_seconds(stop - start, T)
     exposure_start = start == state.exposure_start
-    capture_signal_pipeline!(det, prepared.plan.input_values, rng,
+    capture_signal_pipeline!(det,
+        detector_acquisition_input(prepared.acquisition).values, rng,
         interval_seconds, prepared.detection_efficiency, exposure_start,
         prepared.exposure_seconds)
     accumulate_incremental_charge_generation!(det, rng, interval_seconds)
@@ -504,7 +623,7 @@ function accumulate_exposure_interval!(
     # reads instead of redrawing noise for charge already observed.
     _apply_detector_event_interval_statistics!(prepared.readout_style, det,
         rng)
-    det.state.accum_buffer .+= det.state.frame
+    det.state.accum_buffer .+= det.products.frame
     advance_thermal!(det, interval_seconds)
     det.state.integrated_time = plant_duration_seconds(
         stop - state.exposure_start, T)
@@ -546,14 +665,16 @@ function _take_nondestructive_read!(::_ScheduledUpTheRampReadout,
 
     det = prepared.detector
     products = _require_up_the_ramp_products(prepared.readout_products)
-    copyto!(det.state.frame, det.state.accum_buffer)
+    _, _, _, workspace_cube = _up_the_ramp_execution_storage(products,
+        det.workspace.readout)
+    copyto!(det.products.frame, det.state.accum_buffer)
     finalize_charge_transport!(det, rng)
-    target = @view products.workspace_cube[:, :, read_index]
-    sample_frame_read!(det.params.sensor, det, target, det.state.frame,
+    target = @view workspace_cube[:, :, read_index]
+    sample_frame_read!(det.params.sensor, det, target, det.products.frame,
         _raw_sampling_sigma(det), rng)
-    if products.read_cube !== products.workspace_cube
+    if products.read_cube !== workspace_cube
         _copy_windowed_sampling_plane!(products.read_cube, read_index,
-            products.workspace_cube, read_index, det)
+            workspace_cube, read_index, det)
     end
     state.next_read_index = read_index + 1
     return nothing
@@ -619,7 +740,7 @@ end
 function _complete_detector_readout!(::_PostExposureDetectorReadout,
     prepared::PreparedGlobalShutterAcquisition, rng::AbstractRNG)
     det = prepared.detector
-    copyto!(det.state.frame, det.state.accum_buffer)
+    copyto!(det.products.frame, det.state.accum_buffer)
     finalize_incremental_capture!(det, rng, prepared.exposure_seconds)
     return write_output!(det)
 end

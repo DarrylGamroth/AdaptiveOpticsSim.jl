@@ -112,8 +112,8 @@ conformance_helpers = ["assert_prepared_acquisition_lifecycle_conformance"]
 valid_defaults = []
 ownership = "The lifecycle binds one detector, detector-acquisition contract, readout products, and timing definition; the matching state owns persistent transition progress."
 aliasing = "Detector frame, accumulator, ramp, storage-frame, and readout-product aliases are fixed during preparation; frame-transfer storage is explicitly non-aliasing."
-failure_behavior = "DetectorAcquisitionError reports invalid timing, unsupported mode, transition order, and foreign state before detector or state mutation."
-reentrancy = "One detector lifecycle/state pair is single-writer and not reentrant."
+failure_behavior = "DetectorAcquisitionError reports invalid timing, unsupported mode, transition order, duplicate state claims, and unclaimed or foreign state identities before detector or state mutation."
+reentrancy = "One detector lifecycle grants exactly one claimed state owner; that lifecycle/state pair is single-writer and not reentrant."
 backend_traits = ["detector_execution_style","compute_device"]
 conformance_suites = ["plant-detector-transitions","plant-event-composition","prepared-execution-interfaces"]
 
@@ -156,8 +156,8 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 386
-baseline_mixed_type_count = 29
+baseline_type_count = 397
+baseline_mixed_type_count = 24
 
 [[type_inventory.files]]
 path = "ext/AdaptiveOpticsSimAMDGPUExt.jl"
@@ -320,11 +320,22 @@ entries = [
 ]
 
 [[type_inventory.files]]
+path = "src/detectors/counting_common.jl"
+owner = "Detectors"
+entries = [
+    ["CountingDetectorProducts","mutable_struct",2,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["CountingDetectorState","struct",1,"state",["state"],false,true,"internal",false,"backend_parameterized",true,"PE-04"],
+    ["CountingDetectorWorkspace","mutable_struct",3,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-04"],
+]
+
+[[type_inventory.files]]
 path = "src/detectors/detector_acquisition.jl"
 owner = "Detectors"
 entries = [
-    ["DetectorAcquisitionPlan","struct",8,"plan",["plan","prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-04"],
+    ["DetectorAcquisitionPlan","struct",7,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-04"],
+    ["PreparedDetectorAcquisition","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-04"],
     ["_DetectorAcquisitionPlanToken","struct",0,"plan",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-04"],
+    ["_PreparedDetectorAcquisitionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-04"],
 ]
 
 [[type_inventory.files]]
@@ -333,16 +344,23 @@ owner = "Detectors"
 entries = [
     ["AbstractDetectorThermalState","abstract_type",-1,"state",["state"],false,true,"internal",false,"backend_parameterized",true,"PE-04"],
     ["DetectorParams","struct",19,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["DetectorState","mutable_struct",17,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["DetectorProducts","mutable_struct",3,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["DetectorState","mutable_struct",5,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-04"],
     ["DetectorThermalState","mutable_struct",1,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-04"],
+    ["DetectorWorkspace","mutable_struct",10,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-04"],
     ["FrameReadoutProducts","abstract_type",-1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["FrameReadoutWorkspace","abstract_type",-1,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",false,"PE-04"],
     ["HgCdTeReadoutProducts","type_alias",-1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
-    ["MultiReadFrameReadoutProducts","mutable_struct",9,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["MultiReadFrameReadoutProducts","mutable_struct",7,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["MultiReadFrameReadoutWorkspace","mutable_struct",4,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-04"],
     ["NoFrameReadoutProducts","struct",0,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["NoFrameReadoutWorkspace","struct",0,"workspace",["workspace"],false,false,"internal",false,"backend_neutral",false,"PE-04"],
     ["NoThermalState","struct",0,"state",["state"],false,false,"internal",false,"backend_parameterized",false,"PE-04"],
     ["SampledFrameReadoutProducts","struct",3,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
     ["SkipperReadoutProducts","struct",2,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
-    ["UpTheRampReadoutProducts","mutable_struct",10,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["SkipperReadoutWorkspace","mutable_struct",2,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-04"],
+    ["UpTheRampReadoutProducts","mutable_struct",6,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["UpTheRampReadoutWorkspace","mutable_struct",4,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-04"],
 ]
 
 [[type_inventory.files]]
@@ -350,7 +368,8 @@ path = "src/detectors/linear_apd.jl"
 owner = "Detectors"
 entries = [
     ["LinearAPDDetectorParams","struct",7,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["LinearAPDDetectorState","mutable_struct",2,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["LinearAPDDetectorProducts","struct",1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["LinearAPDDetectorWorkspace","struct",1,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-04"],
 ]
 
 [[type_inventory.files]]
@@ -358,7 +377,6 @@ path = "src/detectors/mkid_array.jl"
 owner = "Detectors"
 entries = [
     ["MKIDArrayDetectorParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["MKIDArrayDetectorState","mutable_struct",6,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-04"],
 ]
 
 [[type_inventory.files]]
@@ -375,7 +393,6 @@ path = "src/detectors/spad_array.jl"
 owner = "Detectors"
 entries = [
     ["SPADArrayDetectorParams","struct",6,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["SPADArrayDetectorState","mutable_struct",6,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-04"],
 ]
 
 [[type_inventory.files]]
@@ -626,7 +643,7 @@ entries = [
     ["AbstractPreparedDetectorAcquisitionLifecycle","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
     ["GlobalShutterAcquisitionDefinition","struct",3,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
     ["GlobalShutterAcquisitionState","mutable_struct",9,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
-    ["PreparedGlobalShutterAcquisition","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedGlobalShutterAcquisition","struct",10,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["_PreparedGlobalShutterAcquisitionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
 ]
 
@@ -849,8 +866,8 @@ path = "src/plant/rolling_frame_transfer_events.jl"
 owner = "Plant"
 entries = [
     ["FrameTransferAcquisitionDefinition","struct",2,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["FrameTransferAcquisitionState","mutable_struct",13,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
-    ["PreparedFrameTransferAcquisition","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["FrameTransferAcquisitionState","mutable_struct",14,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedFrameTransferAcquisition","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["PreparedRollingShutterAcquisition","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["RollingShutterAcquisitionDefinition","struct",2,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
     ["RollingShutterAcquisitionState","mutable_struct",9,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
@@ -950,7 +967,7 @@ owner = "WavefrontSensors"
 entries = [
     ["PreparedCurvatureEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedCurvatureOpticalFormation","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
-    ["PreparedCurvaturePackedChannelAcquisition","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedCurvaturePackedChannelAcquisition","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedCurvaturePackedFrameAcquisition","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
 ]
 
@@ -1031,8 +1048,8 @@ entries = [
 path = "src/wfs/stage_contracts.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["PreparedWFSCountingAcquisition","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
-    ["PreparedWFSDetectorAcquisition","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedWFSCountingAcquisition","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedWFSDetectorAcquisition","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedWFSMultipleDetectorAcquisition","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
 ]
 
@@ -1064,7 +1081,7 @@ entries = [
 [direct_memory]
 policy = "ratchet"
 columns = ["category","scope","binding","baseline_line","count","hot_path","backend_relevance","replacement"]
-baseline_total = 336
+baseline_total = 330
 zero_tolerance_gate = "PE-07"
 interpretation = "AST references in package and extension implementation; comments, strings, tests, benchmarks, and dependency internals are excluded"
 
@@ -1172,18 +1189,6 @@ path = "src/plant/definitions.jl"
 owner = "Plant"
 entries = [
     ["constructor","_definition_registry","memory",587,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-]
-
-[[direct_memory.files]]
-path = "src/plant/detector_acquisition_events.jl"
-owner = "Plant"
-entries = [
-    ["constructor","_empty_detector_read_offsets","<expression>",174,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_even_detector_read_offsets","offsets",181,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["field_type","PreparedGlobalShutterAcquisition","read_offsets",89,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["signature_type","PreparedGlobalShutterAcquisition","read_offsets",91,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["signature_type","_prepare_detector_event_products!","<expression>",245,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["signature_type","_prepare_detector_event_products!","offsets",251,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
 ]
 
 [[direct_memory.files]]

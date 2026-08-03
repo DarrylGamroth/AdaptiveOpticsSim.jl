@@ -57,34 +57,23 @@ struct SPADArrayDetectorParams{
     output_type::Union{Nothing,DataType}
 end
 
-mutable struct SPADArrayDetectorState{
-    T<:AbstractFloat,
-    A<:AbstractMatrix{T},
-    H<:AbstractMatrix{T},
-    O,
-    OH,
-    TS<:AbstractDetectorThermalState,
-}
-    counts::A
-    noise_buffer::A
-    host_buffer::H
-    output_buffer::O
-    output_buffer_host::OH
-    thermal_state::TS
-end
-
 struct SPADArrayDetector{
     N<:NoiseModel,
     P<:SPADArrayDetectorParams,
-    S<:SPADArrayDetectorState,
+    S<:CountingDetectorState,
+    W<:CountingDetectorWorkspace,
+    R<:CountingDetectorProducts,
     B<:AbstractArrayBackend,
 } <: AbstractCountingDetector
     noise::N
     params::P
     state::S
+    workspace::W
+    products::R
 end
 
-@inline backend(::SPADArrayDetector{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(
+    ::SPADArrayDetector{<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
 counting_sensor(det::SPADArrayDetector) = det.params.sensor
 counting_gate_model(det::SPADArrayDetector) = det.params.gate_model
@@ -95,17 +84,22 @@ function counting_layout(::SPADArrayDetector)
     return :pixel_counts
 end
 counting_output_type(det::SPADArrayDetector) = det.params.output_type
-counting_array(det::SPADArrayDetector) = det.state.counts
-counting_noise_buffer(det::SPADArrayDetector) = det.state.noise_buffer
-counting_host_buffer(det::SPADArrayDetector) = det.state.host_buffer
-counting_output_buffer(det::SPADArrayDetector) = det.state.output_buffer
-counting_output_host_buffer(det::SPADArrayDetector) = det.state.output_buffer_host
-set_counting_array!(det::SPADArrayDetector, values) = (det.state.counts = values; det)
-set_counting_noise_buffer!(det::SPADArrayDetector, values) = (det.state.noise_buffer = values; det)
-set_counting_host_buffer!(det::SPADArrayDetector, values) = (det.state.host_buffer = values; det)
-set_counting_output_buffer!(det::SPADArrayDetector, values) = (det.state.output_buffer = values; det)
+counting_array(det::SPADArrayDetector) = det.products.counts
+counting_noise_buffer(det::SPADArrayDetector) = det.workspace.noise_buffer
+counting_host_buffer(det::SPADArrayDetector) = det.workspace.host_buffer
+counting_output_buffer(det::SPADArrayDetector) = det.products.output_buffer
+counting_output_host_buffer(det::SPADArrayDetector) =
+    det.workspace.output_buffer_host
+set_counting_array!(det::SPADArrayDetector, values) =
+    (det.products.counts = values; det)
+set_counting_noise_buffer!(det::SPADArrayDetector, values) =
+    (det.workspace.noise_buffer = values; det)
+set_counting_host_buffer!(det::SPADArrayDetector, values) =
+    (det.workspace.host_buffer = values; det)
+set_counting_output_buffer!(det::SPADArrayDetector, values) =
+    (det.products.output_buffer = values; det)
 set_counting_output_host_buffer!(det::SPADArrayDetector, values) =
-    (det.state.output_buffer_host = values; det)
+    (det.workspace.output_buffer_host = values; det)
 counting_detection_efficiency(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.active_area_detection_efficiency)
 counting_fill_factor(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
 counting_reported_fill_factor(det::SPADArrayDetector, ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} = T(det.params.sensor.fill_factor)
@@ -153,13 +147,16 @@ function _build_spad_array_detector(dimensions::Tuple{Int,Int}, noise::NoiseMode
     output_buffer_host === nothing || fill!(output_buffer_host,
         zero(eltype(output_buffer_host)))
     thermal_state = thermal_state_from_model(thermal, T)
-    state = SPADArrayDetectorState{T,typeof(counts),typeof(host_buffer),
-        typeof(output_buffer),typeof(output_buffer_host),typeof(thermal_state)}(
-        counts, noise_buffer, host_buffer, output_buffer, output_buffer_host,
-        thermal_state)
+    state = CountingDetectorState{typeof(thermal_state)}(thermal_state)
+    workspace = CountingDetectorWorkspace{T,typeof(noise_buffer),
+        typeof(host_buffer),typeof(output_buffer_host)}(
+        noise_buffer, host_buffer, output_buffer_host)
+    products = CountingDetectorProducts{T,typeof(counts),
+        typeof(output_buffer)}(counts, output_buffer)
     selector = _resolve_backend_selector(backend)
-    return SPADArrayDetector{typeof(validated),typeof(params),typeof(state),typeof(selector)}(
-        validated, params, state)
+    return SPADArrayDetector{typeof(validated),typeof(params),typeof(state),
+        typeof(workspace),typeof(products),typeof(selector)}(
+        validated, params, state, workspace, products)
 end
 
 """

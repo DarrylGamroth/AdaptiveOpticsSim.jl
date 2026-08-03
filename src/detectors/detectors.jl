@@ -7,6 +7,7 @@ products.
 """
 module Detectors
 
+using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
 using LinearAlgebra
 using Random

@@ -171,8 +171,8 @@ function science_detector_fanout_probe()
     rng_b = runtime_rng(18)
     return function ()
         form_direct_image!(imaging)
-        capture!(detector_a, rate, acquisition_a, rng_a)
-        capture!(detector_b, rate, acquisition_b, rng_b)
+        capture!(acquisition_a, rng_a)
+        capture!(acquisition_b, rng_b)
         return rate
     end
 end

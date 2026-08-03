@@ -17,6 +17,14 @@ end
     output = capture!(single, 10.0; rng=Xoshiro(9001))
     @test output == [20.0]
     @test channel_output(single) === output
+    @test single.workspace isa Detectors.LinearAPDDetectorWorkspace
+    @test single.products isa Detectors.LinearAPDDetectorProducts
+    @test isconcretetype(typeof(single.workspace))
+    @test isconcretetype(typeof(single.products))
+    @test !hasfield(typeof(single), :state)
+    @test single.products.channels === output
+    @test !Base.mightalias(single.workspace.noise_buffer,
+        single.products.channels)
     @test supports_avalanche_gain(single)
     metadata = detector_export_metadata(single)
     @test metadata.topology == :single_element

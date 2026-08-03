@@ -38,9 +38,14 @@ struct LinearAPDDetectorParams{T<:AbstractFloat,TP<:AbstractLinearAPDTopology}
     topology::TP
 end
 
-mutable struct LinearAPDDetectorState{T<:AbstractFloat,A<:AbstractVector{T}}
-    channels::A
+"""Replaceable stochastic scratch for linear-mode APD acquisition."""
+struct LinearAPDDetectorWorkspace{T<:AbstractFloat,A<:AbstractVector{T}}
     noise_buffer::A
+end
+
+"""Caller-visible analog channel values from linear-mode APD acquisition."""
+struct LinearAPDDetectorProducts{T<:AbstractFloat,A<:AbstractVector{T}}
+    channels::A
 end
 
 """
@@ -68,13 +73,16 @@ multiplication, additive read noise, and conversion gain in that order.
 area-detector frames and Geiger-mode SPAD counting arrays.
 """
 struct LinearAPDDetector{N<:NoiseModel,P<:LinearAPDDetectorParams,
-    S<:LinearAPDDetectorState,B<:AbstractArrayBackend} <: AbstractDetector
+    W<:LinearAPDDetectorWorkspace,R<:LinearAPDDetectorProducts,
+    B<:AbstractArrayBackend} <: AbstractDetector
     noise::N
     params::P
-    state::S
+    workspace::W
+    products::R
 end
 
-@inline backend(::LinearAPDDetector{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(
+    ::LinearAPDDetector{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
 function LinearAPDDetector(;
     topology::AbstractLinearAPDTopology=SingleElementLinearAPD(),
@@ -124,12 +132,15 @@ function LinearAPDDetector(;
     params = LinearAPDDetectorParams{T,typeof(topology)}(
         integration_time_t, qe_t, avalanche_gain_t, excess_noise_factor_t,
         dark_current_t, conversion_gain_t, topology)
-    state = LinearAPDDetectorState{T,typeof(channels)}(channels, noise_buffer)
-    return LinearAPDDetector{typeof(converted_noise),typeof(params),typeof(state),
-        typeof(selector)}(converted_noise, params, state)
+    workspace = LinearAPDDetectorWorkspace{T,typeof(noise_buffer)}(
+        noise_buffer)
+    products = LinearAPDDetectorProducts{T,typeof(channels)}(channels)
+    return LinearAPDDetector{typeof(converted_noise),typeof(params),
+        typeof(workspace),typeof(products),typeof(selector)}(
+        converted_noise, params, workspace, products)
 end
 
-channel_output(det::LinearAPDDetector) = det.state.channels
+channel_output(det::LinearAPDDetector) = det.products.channels
 readout_ready(::LinearAPDDetector) = true
 reset_integration!(det::LinearAPDDetector) = det
 supports_detector_thermal_model(::LinearAPDDetector) = false
@@ -153,14 +164,14 @@ linear_apd_readout_sigma(noise::NoisePhotonReadout,
 
 function apply_linear_apd_avalanche!(det::LinearAPDDetector,
     rng::AbstractRNG)
-    channels = det.state.channels
+    channels = det.products.channels
     factor = det.params.excess_noise_factor
     if factor > one(factor)
-        randn_backend!(rng, det.state.noise_buffer)
+        randn_backend!(rng, det.workspace.noise_buffer)
         scale2 = factor - one(factor)
         zero_t = zero(eltype(channels))
         @. channels = max(channels + sqrt(max(scale2 * channels, zero_t)) *
-            det.state.noise_buffer, zero_t)
+            det.workspace.noise_buffer, zero_t)
     end
     channels .*= det.params.avalanche_gain
     return channels
@@ -168,7 +179,7 @@ end
 
 function finalize_linear_apd_capture!(det::LinearAPDDetector,
     rng::AbstractRNG)
-    channels = det.state.channels
+    channels = det.products.channels
     T = eltype(channels)
     @. channels = channels * (det.params.qe * det.params.integration_time) +
         det.params.dark_current * det.params.integration_time
@@ -176,8 +187,8 @@ function finalize_linear_apd_capture!(det::LinearAPDDetector,
     apply_linear_apd_avalanche!(det, rng)
     sigma = linear_apd_readout_sigma(det.noise, T)
     if sigma > zero(T)
-        randn_backend!(rng, det.state.noise_buffer)
-        @. channels += sigma * det.state.noise_buffer
+        randn_backend!(rng, det.workspace.noise_buffer)
+        @. channels += sigma * det.workspace.noise_buffer
     end
     channels .*= det.params.conversion_gain
     return channels
@@ -185,11 +196,11 @@ end
 
 function capture!(det::LinearAPDDetector, photon_flux::AbstractVector;
     rng::AbstractRNG=Random.default_rng())
-    length(photon_flux) == length(det.state.channels) ||
+    channels = det.products.channels
+    length(photon_flux) == length(channels) ||
         throw(DimensionMismatchError(
             "linear APD input length must match its fixed channel topology"))
-    photon_flux === det.state.channels ||
-        copyto!(det.state.channels, photon_flux)
+    photon_flux === channels || copyto!(channels, photon_flux)
     return finalize_linear_apd_capture!(det, rng)
 end
 
@@ -198,9 +209,9 @@ capture!(det::LinearAPDDetector, photon_flux::AbstractVector,
 
 function capture!(det::LinearAPDDetector, photon_flux::Real;
     rng::AbstractRNG=Random.default_rng())
-    length(det.state.channels) == 1 || throw(DimensionMismatchError(
+    length(det.products.channels) == 1 || throw(DimensionMismatchError(
         "scalar linear APD capture requires SingleElementLinearAPD topology"))
-    fill!(det.state.channels, photon_flux)
+    fill!(det.products.channels, photon_flux)
     return finalize_linear_apd_capture!(det, rng)
 end
 
@@ -220,11 +231,11 @@ struct LinearAPDExportMetadata{T<:AbstractFloat}
 end
 
 function detector_export_metadata(det::LinearAPDDetector;
-    T::Type{<:AbstractFloat}=eltype(det.state.channels))
+    T::Type{<:AbstractFloat}=eltype(det.products.channels))
     return LinearAPDExportMetadata{T}(
         T(det.params.integration_time), T(det.params.qe),
         T(det.params.avalanche_gain), T(det.params.excess_noise_factor),
         T(det.params.dark_current), T(det.params.conversion_gain),
         linear_apd_topology_symbol(det.params.topology),
-        length(det.state.channels), detector_noise_symbol(det.noise))
+        length(det.products.channels), detector_noise_symbol(det.noise))
 end

@@ -387,23 +387,30 @@ The implemented detector-event surfaces are separate prepared lifecycles:
   frame start and staggers only row-band close
 - frame-transfer EMCCD acquisition separates image-area integration,
   image-to-storage transfer, storage-area readout, and complete-product
-  readiness; one prepared storage frame permits the next image-area exposure
-  to overlap the previous storage readout only when the exact schedule fits
-  that capacity
+  readiness; one separately owned lifecycle-state storage frame permits the
+  next image-area exposure to overlap the previous storage readout only when
+  the exact schedule fits that capacity
 
 Integer plant timestamps determine when these operations occur. Detector
 physics receives the exact positive interval duration in seconds or a prepared
 integration weight; it does not decide event completion by comparing
 accumulated floating-point duration with a tolerance. Each immutable lifecycle
-definition has separately owned single-writer state. Preparation binds the
+definition has one exclusively claimed, separately owned single-writer state.
+Preparation binds the
 exact detector, typed rate product, backend/device, exposure, readout,
 readiness, row-band timing or transfer timing, and any fixed up-the-ramp read
-offsets. The initial retrigger policy is explicit rejection except for the
+offsets. The lifecycle retains one exact
+`Detectors.PreparedDetectorAcquisition`, whose plan, persistent state,
+replaceable workspace, products, input storage, backend, and device bindings
+were validated before publication. Read-offset schedules use concrete
+fixed-cardinality `FixedSizeVector` storage and cannot grow while armed. The
+initial retrigger policy is explicit rejection except for the
 declared one-frame image/storage overlap of a frame-transfer device.
 
-The existing frame-step `capture!(...; integration_duration=...)` convenience API
-may accumulate and auto-finalize at the configured exposure duration, but it
-is not the scheduler contract. Its `integration_duration` names the detector
+The frame-step
+`capture!(prepared_acquisition; integration_duration=...)` convenience API may
+accumulate and auto-finalize at the configured exposure duration, but it is not
+the scheduler contract. Its `integration_duration` names the detector
 integration contributed by that optical interval; it is neither an absolute
 timestamp nor the period between consecutive samples.
 

@@ -1280,7 +1280,7 @@ function device_model_matrix_repeat_detector!(
 )
     prepared = result.prepared
     state = result.state
-    T = eltype(result.detector.state.frame)
+    T = eltype(result.detector.products.frame)
     result.map.values .*= inv(T(3))
     middle = device_model_matrix_detector_ramp_middle(start)
     close = device_model_matrix_detector_close(start)

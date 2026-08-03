@@ -2,7 +2,7 @@
 
 _raw_sampling_sigma(det::Detector{<:NoiseReadout}) = det.noise.sigma
 _raw_sampling_sigma(det::Detector{<:NoisePhotonReadout}) = det.noise.sigma
-_raw_sampling_sigma(det::Detector) = zero(eltype(det.state.frame))
+_raw_sampling_sigma(det::Detector) = zero(eltype(det.products.frame))
 
 function _sampling_average_cube!(out::AbstractMatrix{T}, cube::AbstractArray{T,3}) where {T}
     n_reads = size(cube, 3)
@@ -39,20 +39,11 @@ function _ensure_windowed_cube_buffer(current, det::Detector, full_frame::Abstra
     return current
 end
 
-function _ensure_full_frame_cube_buffer(current, full_frame::AbstractMatrix,
-    n_reads::Int)
-    target_shape = (size(full_frame)..., n_reads)
-    if current === nothing || size(current) != target_shape
-        buffer = similar(full_frame, target_shape...)
-        fill!(buffer, zero(eltype(buffer)))
-        return buffer
-    end
-    return current
-end
-
 function _ensure_read_times_buffer(current, ::Type{T}, n_reads::Int) where {T<:AbstractFloat}
     if current === nothing || length(current) != n_reads || eltype(current) !== T
-        return zeros(T, n_reads)
+        values = FixedSizeVectorDefault{T}(undef, n_reads)
+        fill!(values, zero(T))
+        return values
     end
     return current
 end
@@ -134,51 +125,59 @@ end
 _multi_read_products_ready(::FrameReadoutProducts, ::Detector,
     ::Int, ::Int, ::Int) = false
 
-@inline _multi_read_workspace_reference_cube(::FrameReadoutProducts) = nothing
-@inline _multi_read_workspace_reference_cube(
-    products::MultiReadFrameReadoutProducts) =
-    products.workspace_reference_cube
-@inline _multi_read_workspace_signal_cube(::FrameReadoutProducts) = nothing
-@inline _multi_read_workspace_signal_cube(
-    products::MultiReadFrameReadoutProducts) = products.workspace_signal_cube
-
 function _multi_read_products_ready(products::MultiReadFrameReadoutProducts,
     det::Detector, n_ref::Int, n_sig::Int, n_reads::Int)
     output_shape = readout_product_shape(det)
-    frame_shape = size(det.state.frame)
     reference_frame_ready = n_ref <= 0 ? products.reference_frame === nothing :
         products.reference_frame !== nothing && size(products.reference_frame) == output_shape
     reference_cube_ready = n_ref <= 0 ? products.reference_cube === nothing :
         products.reference_cube !== nothing && size(products.reference_cube) == (output_shape..., n_ref)
-    workspace_reference_ready = n_ref <= 0 ?
-        products.workspace_reference_cube === nothing :
-        products.workspace_reference_cube !== nothing &&
-        size(products.workspace_reference_cube) == (frame_shape..., n_ref)
-    workspace_signal_ready = products.workspace_signal_cube !== nothing &&
-        size(products.workspace_signal_cube) == (frame_shape..., n_sig)
     read_cube_ready = n_reads <= 1 ? products.read_cube === nothing :
         products.read_cube !== nothing && size(products.read_cube) == (output_shape..., n_reads)
     read_times_ready = n_reads <= 1 ? products.read_times === nothing :
         products.read_times !== nothing && length(products.read_times) == n_reads &&
-        eltype(products.read_times) === eltype(det.state.frame)
+        eltype(products.read_times) === eltype(det.products.frame)
     return reference_frame_ready &&
         size(products.signal_frame) == output_shape &&
         size(products.combined_frame) == output_shape &&
         reference_cube_ready &&
         products.signal_cube !== nothing &&
         size(products.signal_cube) == (output_shape..., n_sig) &&
-        workspace_reference_ready && workspace_signal_ready &&
         read_cube_ready && read_times_ready
 end
 
+@inline function _multi_read_workspace_ready(
+    ::NoFrameReadoutWorkspace, det::Detector, ::Int, ::Int)
+    return det.params.readout_window === nothing
+end
+
+function _multi_read_workspace_ready(
+    workspace::MultiReadFrameReadoutWorkspace,
+    det::Detector, n_ref::Int, n_sig::Int)
+    det.params.readout_window === nothing && return false
+    frame_shape = size(det.products.frame)
+    reference_ready = n_ref <= 0 ? workspace.reference_cube === nothing :
+        workspace.reference_cube !== nothing &&
+        size(workspace.reference_cube) == (frame_shape..., n_ref)
+    return reference_ready &&
+        size(workspace.reference_average) == frame_shape &&
+        size(workspace.signal_average) == frame_shape &&
+        size(workspace.signal_cube) == (frame_shape..., n_sig)
+end
+
+_multi_read_workspace_ready(::FrameReadoutWorkspace, ::Detector,
+    ::Int, ::Int) = false
+
 function _ensure_multi_read_products!(sensor::FrameSensorType, det::Detector)
     current = readout_products(det)
-    frame = det.state.frame
+    frame = det.products.frame
     n_ref = frame_sampling_reference_reads(sensor)
     n_sig = frame_sampling_signal_reads(sensor)
     n_reads = frame_sampling_reads(sensor)
+    current_workspace = det.workspace.readout
     _multi_read_products_ready(current, det, n_ref, n_sig, n_reads) &&
-        return det.state.readout_products
+        _multi_read_workspace_ready(current_workspace, det, n_ref, n_sig) &&
+        return det.products.readout
 
     reference_frame = detector_reference_frame(current)
     signal_frame = detector_signal_frame(current)
@@ -187,8 +186,6 @@ function _ensure_multi_read_products!(sensor::FrameSensorType, det::Detector)
     signal_cube = detector_signal_cube(current)
     read_cube = detector_read_cube(current)
     read_times = detector_read_times(current)
-    workspace_reference_cube = _multi_read_workspace_reference_cube(current)
-    workspace_signal_cube = _multi_read_workspace_signal_cube(current)
 
     reference_frame = n_ref <= 0 ? nothing : _ensure_windowed_frame_buffer(reference_frame, det, frame)
     signal_frame = _ensure_windowed_frame_buffer(signal_frame, det, frame)
@@ -199,22 +196,42 @@ function _ensure_multi_read_products!(sensor::FrameSensorType, det::Detector)
     T = eltype(frame)
     read_times = n_reads <= 1 ? nothing : _ensure_read_times_buffer(read_times, T, n_reads)
 
-    if det.params.readout_window === nothing
-        workspace_reference_cube = reference_cube
-        workspace_signal_cube = signal_cube
+    products = MultiReadFrameReadoutProducts(reference_frame, signal_frame,
+        combined_frame, reference_cube, signal_cube, read_cube, read_times)
+    workspace = if det.params.readout_window === nothing
+        NoFrameReadoutWorkspace()
     else
+        reference_average = similar(frame, size(frame)...)
+        signal_average = similar(frame, size(frame)...)
         workspace_reference_cube = n_ref <= 0 ? nothing :
-            _ensure_full_frame_cube_buffer(workspace_reference_cube, frame,
-                n_ref)
-        workspace_signal_cube = _ensure_full_frame_cube_buffer(
-            workspace_signal_cube, frame, n_sig)
+            similar(frame, size(frame)..., n_ref)
+        workspace_signal_cube = similar(frame, size(frame)..., n_sig)
+        fill!(reference_average, zero(eltype(reference_average)))
+        fill!(signal_average, zero(eltype(signal_average)))
+        workspace_reference_cube === nothing || fill!(
+            workspace_reference_cube, zero(eltype(workspace_reference_cube)))
+        fill!(workspace_signal_cube, zero(eltype(workspace_signal_cube)))
+        MultiReadFrameReadoutWorkspace(reference_average, signal_average,
+            workspace_reference_cube, workspace_signal_cube)
     end
+    det.products.readout = products
+    det.workspace.readout = workspace
+    return det.products.readout
+end
 
-    products = MultiReadFrameReadoutProducts(reference_frame, signal_frame, combined_frame,
-        reference_cube, signal_cube, read_cube, read_times,
-        workspace_reference_cube, workspace_signal_cube)
-    det.state.readout_products = products
-    return det.state.readout_products
+@inline function _multi_read_execution_storage(
+    products::MultiReadFrameReadoutProducts,
+    ::NoFrameReadoutWorkspace)
+    return products.reference_frame, products.signal_frame,
+        products.reference_cube, products.signal_cube
+end
+
+
+@inline function _multi_read_execution_storage(
+    ::MultiReadFrameReadoutProducts,
+    workspace::MultiReadFrameReadoutWorkspace)
+    return workspace.reference_average, workspace.signal_average,
+        workspace.reference_cube, workspace.signal_cube
 end
 
 @inline prepare_frame_readout_state!(::FrameSensorType,
@@ -243,8 +260,8 @@ end
 function _sampling_reference_cube(sensor::FrameSensorType, det::Detector, sigma, rng::AbstractRNG)
     n_ref = frame_sampling_reference_reads(sensor)
     n_ref <= 0 && return nothing
-    cube = similar(det.state.frame, size(det.state.frame)..., n_ref)
-    baseline = similar(det.state.frame, size(det.state.frame)...)
+    cube = similar(det.products.frame, size(det.products.frame)..., n_ref)
+    baseline = similar(det.products.frame, size(det.products.frame)...)
     return _sampling_reference_cube!(cube, sensor, det, sigma, rng, baseline)
 end
 
@@ -252,7 +269,7 @@ function _sampling_signal_cube!(cube::AbstractArray{T,3}, sensor::FrameSensorTyp
     det::Detector, sigma, rng::AbstractRNG, baseline::AbstractMatrix{T}) where {T}
     n_sig = frame_sampling_signal_reads(sensor)
     for read_idx in 1:n_sig
-        sample_frame_read!(sensor, det, baseline, det.state.frame, sigma, rng)
+        sample_frame_read!(sensor, det, baseline, det.products.frame, sigma, rng)
         @views copyto!(cube[:, :, read_idx], baseline)
     end
     return cube
@@ -260,8 +277,8 @@ end
 
 function _sampling_signal_cube(sensor::FrameSensorType, det::Detector, sigma, rng::AbstractRNG)
     n_sig = frame_sampling_signal_reads(sensor)
-    cube = similar(det.state.frame, size(det.state.frame)..., n_sig)
-    baseline = similar(det.state.frame, size(det.state.frame)...)
+    cube = similar(det.products.frame, size(det.products.frame)..., n_sig)
+    baseline = similar(det.products.frame, size(det.products.frame)...)
     return _sampling_signal_cube!(cube, sensor, det, sigma, rng, baseline)
 end
 
@@ -384,7 +401,7 @@ end
 
 function _sampling_read_times!(times::AbstractVector{T}, sensor::FrameSensorType,
     det::Detector, n_reads::Int) where {T}
-    read_dt = sampling_read_time(sensor, size(det.state.frame), det.params.readout_window, T)
+    read_dt = sampling_read_time(sensor, size(det.products.frame), det.params.readout_window, T)
     for read_idx in 1:n_reads
         times[read_idx] = T(read_idx) * read_dt
     end
@@ -393,7 +410,7 @@ end
 
 function _sampling_read_times(sensor::FrameSensorType, det::Detector, n_reads::Int)
     n_reads <= 0 && return nothing
-    T = eltype(det.state.frame)
+    T = eltype(det.products.frame)
     times = Vector{T}(undef, n_reads)
     return _sampling_read_times!(times, sensor, det, n_reads)
 end
@@ -421,12 +438,12 @@ function _finalize_multi_read_readout_products!(
     products::MultiReadFrameReadoutProducts, sensor::FrameSensorType,
     det::Detector, rng::AbstractRNG)
     sigma = _raw_sampling_sigma(det)
-    baseline = det.state.response_buffer
-    reference_average = det.state.accum_buffer
-    signal_average = det.state.response_buffer
-    workspace_reference_cube = products.workspace_reference_cube
+    baseline = det.workspace.response_buffer
+    reference_average, signal_average, workspace_reference_cube,
+        workspace_signal_cube = _multi_read_execution_storage(
+            products, det.workspace.readout)
     workspace_signal_cube = _require_multi_read_buffer(
-        products.workspace_signal_cube, :workspace_signal_cube)
+        workspace_signal_cube, :signal_cube)
     reference_frame = products.reference_frame
     reference_cube = products.reference_cube
     signal_cube = _require_multi_read_buffer(products.signal_cube,
@@ -441,7 +458,9 @@ function _finalize_multi_read_readout_products!(
             det, sigma, rng, baseline)
         _sampling_average_cube!(reference_average,
             workspace_reference_cube)
-        _copy_windowed_frame!(prepared_reference_frame, reference_average, det)
+        prepared_reference_frame === reference_average ||
+            _copy_windowed_frame!(prepared_reference_frame,
+                reference_average, det)
         prepared_reference_cube === workspace_reference_cube ||
             _copy_windowed_cube!(prepared_reference_cube,
                 workspace_reference_cube, det)
@@ -450,16 +469,17 @@ function _finalize_multi_read_readout_products!(
     _sampling_signal_cube!(workspace_signal_cube, sensor, det,
         sigma, rng, baseline)
     _sampling_average_cube!(signal_average, workspace_signal_cube)
-    _copy_windowed_frame!(products.signal_frame, signal_average, det)
+    products.signal_frame === signal_average ||
+        _copy_windowed_frame!(products.signal_frame, signal_average, det)
     signal_cube === workspace_signal_cube ||
         _copy_windowed_cube!(signal_cube, workspace_signal_cube, det)
 
     if !isnothing(reference_frame)
         products.combined_frame .= products.signal_frame .- reference_frame
-        det.state.frame .= signal_average .- reference_average
+        det.products.frame .= signal_average .- reference_average
     else
         copyto!(products.combined_frame, products.signal_frame)
-        det.state.frame .= signal_average
+        det.products.frame .= signal_average
     end
 
     read_cube = products.read_cube
@@ -475,20 +495,33 @@ end
 function _up_the_ramp_products_ready(products::UpTheRampReadoutProducts,
     det::Detector, n_reads::Int)
     output_shape = readout_product_shape(det)
-    frame_shape = size(det.state.frame)
     return size(products.slope_frame) == output_shape &&
         size(products.intercept_frame) == output_shape &&
         size(products.integrated_frame) == output_shape &&
         size(products.read_cube) == (output_shape..., n_reads) &&
-        length(products.read_times) == n_reads &&
-        size(products.workspace_slope) == frame_shape &&
-        size(products.workspace_intercept) == frame_shape &&
-        size(products.workspace_integrated) == frame_shape &&
-        size(products.workspace_cube) == (frame_shape..., n_reads)
+        length(products.read_times) == n_reads
 end
 
 _up_the_ramp_products_ready(::FrameReadoutProducts, det::Detector,
     n_reads::Int) = false
+
+@inline function _up_the_ramp_workspace_ready(
+    ::NoFrameReadoutWorkspace, det::Detector, ::Int)
+    return det.params.readout_window === nothing
+end
+
+function _up_the_ramp_workspace_ready(
+    workspace::UpTheRampReadoutWorkspace, det::Detector, n_reads::Int)
+    det.params.readout_window === nothing && return false
+    frame_shape = size(det.products.frame)
+    return size(workspace.slope) == frame_shape &&
+        size(workspace.intercept) == frame_shape &&
+        size(workspace.integrated) == frame_shape &&
+        size(workspace.cube) == (frame_shape..., n_reads)
+end
+
+_up_the_ramp_workspace_ready(::FrameReadoutWorkspace, ::Detector,
+    ::Int) = false
 
 function _ramp_acquisition_kind(acquisition::Symbol)
     acquisition === :synthesized_final_charge &&
@@ -504,47 +537,59 @@ function ensure_up_the_ramp_products!(det::Detector, n_reads::Int;
     acquisition::Symbol=:synthesized_final_charge)
     current = readout_products(det)
     acquisition_kind = _ramp_acquisition_kind(acquisition)
-    if _up_the_ramp_products_ready(current, det, n_reads)
+    if _up_the_ramp_products_ready(current, det, n_reads) &&
+        _up_the_ramp_workspace_ready(det.workspace.readout, det, n_reads)
         current.acquisition_kind = acquisition_kind
         return current
     end
 
-    frame = det.state.frame
+    frame = det.products.frame
     output_shape = readout_product_shape(det)
     frame_shape = size(frame)
     slope_frame = similar(frame, output_shape...)
     intercept_frame = similar(frame, output_shape...)
     integrated_frame = similar(frame, output_shape...)
     read_cube = similar(frame, output_shape..., n_reads)
-    read_times = Vector{eltype(frame)}(undef, n_reads)
-
-    if det.params.readout_window === nothing
-        workspace_slope = slope_frame
-        workspace_intercept = intercept_frame
-        workspace_integrated = integrated_frame
-        workspace_cube = read_cube
-    else
-        workspace_slope = similar(frame, frame_shape...)
-        workspace_intercept = similar(frame, frame_shape...)
-        workspace_integrated = similar(frame, frame_shape...)
-        workspace_cube = similar(frame, frame_shape..., n_reads)
-    end
+    read_times = FixedSizeVectorDefault{eltype(frame)}(undef, n_reads)
 
     products = UpTheRampReadoutProducts(slope_frame, intercept_frame,
-        integrated_frame, read_cube, read_times, workspace_slope,
-        workspace_intercept, workspace_integrated, workspace_cube,
-        acquisition_kind)
+        integrated_frame, read_cube, read_times, acquisition_kind)
     fill!(slope_frame, zero(eltype(slope_frame)))
     fill!(intercept_frame, zero(eltype(intercept_frame)))
     fill!(integrated_frame, zero(eltype(integrated_frame)))
     fill!(read_cube, zero(eltype(read_cube)))
     fill!(read_times, zero(eltype(read_times)))
-    fill!(workspace_slope, zero(eltype(workspace_slope)))
-    fill!(workspace_intercept, zero(eltype(workspace_intercept)))
-    fill!(workspace_integrated, zero(eltype(workspace_integrated)))
-    fill!(workspace_cube, zero(eltype(workspace_cube)))
-    det.state.readout_products = products
+    workspace = if det.params.readout_window === nothing
+        NoFrameReadoutWorkspace()
+    else
+        workspace_slope = similar(frame, frame_shape...)
+        workspace_intercept = similar(frame, frame_shape...)
+        workspace_integrated = similar(frame, frame_shape...)
+        workspace_cube = similar(frame, frame_shape..., n_reads)
+        fill!(workspace_slope, zero(eltype(workspace_slope)))
+        fill!(workspace_intercept, zero(eltype(workspace_intercept)))
+        fill!(workspace_integrated, zero(eltype(workspace_integrated)))
+        fill!(workspace_cube, zero(eltype(workspace_cube)))
+        UpTheRampReadoutWorkspace(workspace_slope, workspace_intercept,
+            workspace_integrated, workspace_cube)
+    end
+    det.products.readout = products
+    det.workspace.readout = workspace
     return products
+end
+
+
+@inline function _up_the_ramp_execution_storage(
+    products::UpTheRampReadoutProducts, ::NoFrameReadoutWorkspace)
+    return products.slope_frame, products.intercept_frame,
+        products.integrated_frame, products.read_cube
+end
+
+
+@inline function _up_the_ramp_execution_storage(
+    ::UpTheRampReadoutProducts, workspace::UpTheRampReadoutWorkspace)
+    return workspace.slope, workspace.intercept, workspace.integrated,
+        workspace.cube
 end
 
 function validate_up_the_ramp_schedule(sensor::FrameSensorType,
@@ -560,8 +605,8 @@ end
 
 function validate_up_the_ramp_schedule(sensor::FrameSensorType, det::Detector,
     mode::UpTheRampSampling, exposure_time::Real)
-    T = eltype(det.state.frame)
-    return validate_up_the_ramp_schedule(sensor, size(det.state.frame),
+    T = eltype(det.products.frame)
+    return validate_up_the_ramp_schedule(sensor, size(det.products.frame),
         det.params.readout_window, mode, exposure_time, T)
 end
 
@@ -583,7 +628,7 @@ function _sample_up_the_ramp_cube!(cube::AbstractArray{T,3},
     for read_idx in 1:n_reads
         fraction = T(read_idx - 1) / denominator
         target = @view cube[:, :, read_idx]
-        @. target = fraction * det.state.frame
+        @. target = fraction * det.products.frame
         add_gaussian_noise!(target, det, rng, sigma)
         target .*= det.params.gain
         apply_readout_correction!(det.params.correction_model, target, det)
@@ -725,21 +770,19 @@ end
 function finalize_scheduled_up_the_ramp_readout_products!(
     products::UpTheRampReadoutProducts, det::Detector,
     exposure_time::Real)
-    _fit_scheduled_up_the_ramp!(execution_style(products.workspace_integrated),
-        products.workspace_integrated, products.workspace_slope,
-        products.workspace_intercept, products.workspace_cube,
+    slope, intercept, integrated, cube = _up_the_ramp_execution_storage(
+        products, det.workspace.readout)
+    _fit_scheduled_up_the_ramp!(execution_style(integrated),
+        integrated, slope, intercept, cube,
         products.read_times, exposure_time)
 
     if det.params.readout_window !== nothing
-        _copy_windowed_frame!(products.slope_frame, products.workspace_slope,
-            det)
-        _copy_windowed_frame!(products.intercept_frame,
-            products.workspace_intercept, det)
-        _copy_windowed_frame!(products.integrated_frame,
-            products.workspace_integrated, det)
+        _copy_windowed_frame!(products.slope_frame, slope, det)
+        _copy_windowed_frame!(products.intercept_frame, intercept, det)
+        _copy_windowed_frame!(products.integrated_frame, integrated, det)
     end
 
-    copyto!(det.state.frame, products.workspace_integrated)
+    copyto!(det.products.frame, integrated)
     return products
 end
 
@@ -748,22 +791,21 @@ function finalize_up_the_ramp_readout_products!(mode::UpTheRampSampling,
     exposure_time::Real)
     validate_up_the_ramp_schedule(sensor, det, mode, exposure_time)
     products = ensure_up_the_ramp_products!(det, mode.n_reads)
+    slope, intercept, integrated, cube = _up_the_ramp_execution_storage(
+        products, det.workspace.readout)
     _fill_up_the_ramp_times!(products.read_times, exposure_time)
-    _sample_up_the_ramp_cube!(products.workspace_cube, sensor, det,
+    _sample_up_the_ramp_cube!(cube, sensor, det,
         _raw_sampling_sigma(det), rng)
-    _fit_up_the_ramp!(execution_style(products.workspace_integrated),
-        products.workspace_integrated, products.workspace_slope,
-        products.workspace_intercept, products.workspace_cube, exposure_time)
+    _fit_up_the_ramp!(execution_style(integrated),
+        integrated, slope, intercept, cube, exposure_time)
 
     if det.params.readout_window !== nothing
-        _copy_windowed_frame!(products.slope_frame, products.workspace_slope, det)
-        _copy_windowed_frame!(products.intercept_frame,
-            products.workspace_intercept, det)
-        _copy_windowed_frame!(products.integrated_frame,
-            products.workspace_integrated, det)
-        _copy_windowed_cube!(products.read_cube, products.workspace_cube, det)
+        _copy_windowed_frame!(products.slope_frame, slope, det)
+        _copy_windowed_frame!(products.intercept_frame, intercept, det)
+        _copy_windowed_frame!(products.integrated_frame, integrated, det)
+        _copy_windowed_cube!(products.read_cube, cube, det)
     end
 
-    copyto!(det.state.frame, products.workspace_integrated)
+    copyto!(det.products.frame, integrated)
     return products
 end

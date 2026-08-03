@@ -158,10 +158,10 @@ function _batched_apply_readout_correction!(model::FrameReadoutCorrectionModel, 
 end
 
 function detector_host_cube!(det::Detector, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
-    host = det.state.batched_buffer_host
+    host = det.workspace.batched_buffer_host
     if size(host) != size(cube)
         host = Array{T,3}(undef, size(cube))
-        det.state.batched_buffer_host = host
+        det.workspace.batched_buffer_host = host
     end
     copyto!(host, cube)
     return host
@@ -680,7 +680,7 @@ function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::Abstra
         return _apply_batched_detector_pipeline!(det, cube, scratch, rng, effective_qe(det, src, eltype(cube)))
     end
     return _capture_stack_generalized!(det, cube, scratch; rng=rng,
-        qe=effective_qe(det, src, eltype(det.state.frame)))
+        qe=effective_qe(det, src, eltype(det.products.frame)))
 end
 
 function capture_stack_with_quantum_efficiency!(det::Detector,
@@ -715,7 +715,7 @@ function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3},
     in_cube::AbstractArray{TI,3}, src::AbstractSource,
     rng::AbstractRNG) where {TO,TI<:AbstractFloat}
     return _capture_stack_generalized!(det, out_cube, in_cube; rng=rng,
-        qe=effective_qe(det, src, eltype(det.state.frame)))
+        qe=effective_qe(det, src, eltype(det.products.frame)))
 end
 
 function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};

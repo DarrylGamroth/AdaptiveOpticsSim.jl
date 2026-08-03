@@ -49,6 +49,7 @@ ownership is not promised. Unsupported devices fail with a structured
 abstract type _AbstractPreparedDeviceExecutionContext end
 
 execution_style(A::AbstractArray) = execution_style(KernelAbstractions.get_backend(A))
+execution_style(::FixedSizeVector) = ScalarCPUStyle()
 execution_style(::KernelAbstractions.CPU) = ScalarCPUStyle()
 execution_style(backend::KernelAbstractions.Backend) = AcceleratorStyle(backend)
 @inline use_host_build_algebra(::ScalarCPUStyle) = true
@@ -77,6 +78,7 @@ array_backend_type(::AMDGPUBackend) = _require_gpu_array_backend(AMDGPUBackendTa
 resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backend)
 
 array_backend_selector(::Type{<:Array}) = CPUBackend()
+array_backend_selector(::Type{<:FixedSizeVector}) = CPUBackend()
 @inline array_backend_selector(
     ::Type{<:SubArray{T,N,P}}) where {T,N,P<:AbstractArray} =
     array_backend_selector(P)
@@ -111,6 +113,7 @@ _resolve_array_backend(backend::Type{<:AbstractArray}) = backend
 
 backend(backend::AbstractArrayBackend) = backend
 backend(A::AbstractArray) = array_backend_selector(typeof(A))
+backend(::FixedSizeVector) = CPUBackend()
 @inline backend(A::SubArray) = backend(parent(A))
 @inline backend(A::Base.ReshapedArray) = backend(parent(A))
 @inline backend(A::Base.ReinterpretArray) = backend(parent(A))
@@ -189,6 +192,7 @@ end
 
 @inline compute_device(storage::AbstractArray) =
     compute_device(execution_style(storage), storage)
+@inline compute_device(::FixedSizeVector) = HostComputeDevice()
 @inline compute_device(storage::SubArray) =
     compute_device(parent(storage))
 @inline compute_device(storage::Base.ReshapedArray) =
@@ -202,6 +206,7 @@ end
 @inline compute_device(storage::Adjoint) =
     compute_device(parent(storage))
 @inline compute_device_identifier(::AbstractArray) = nothing
+@inline compute_device_identifier(::FixedSizeVector) = nothing
 @inline compute_device_identifier(storage::SubArray) =
     compute_device_identifier(parent(storage))
 @inline compute_device_identifier(storage::Base.ReshapedArray) =

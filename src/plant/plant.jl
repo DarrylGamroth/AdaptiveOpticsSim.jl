@@ -10,7 +10,7 @@ respective package domains and enter through the explicit imports below.
 """
 module Plant
 
-using FixedSizeArrays: FixedSizeVector
+using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
 using LinearAlgebra
 using Random
@@ -160,6 +160,7 @@ import ..Detectors:
     CMOSSensor,
     Detector,
     DetectorAcquisitionPlan,
+    PreparedDetectorAcquisition,
     DetectorState,
     EMCCDSensor,
     FrameReadoutProducts,
@@ -169,6 +170,7 @@ import ..Detectors:
     GlobalResetExposure,
     HgCdTeSensorType,
     HgCdTeAvalancheArraySensor,
+    NoThermalState,
     NoFrameReadoutProducts,
     RollingExposure,
     RollingShutter,
@@ -176,8 +178,12 @@ import ..Detectors:
     UpTheRampSampling,
     _copy_windowed_sampling_plane!,
     _raw_sampling_sigma,
+    _up_the_ramp_execution_storage,
     _require_exact_detector_acquisition_target,
     _require_exact_detector_readout_products_target,
+    _commit_prepared_detector_acquisition!,
+    _prepare_detached_detector_acquisition,
+    _rebind_prepared_detector_acquisition,
     _require_prepared_acquisition,
     accumulate_incremental_charge_generation!,
     advance_thermal!,
@@ -185,6 +191,9 @@ import ..Detectors:
     apply_quantization!,
     capture!,
     capture_signal_pipeline!,
+    detector_acquisition_detector,
+    detector_acquisition_input,
+    detector_acquisition_plan,
     ensure_up_the_ramp_products!,
     finalize_charge_transport!,
     finalize_incremental_capture!,

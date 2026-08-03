@@ -51,7 +51,8 @@ end
             StructuralResourceOwnerID(:wfs_optical_formation, :sh)),
         (fixture.acquisition,
             StructuralResourceOwnerID(:detector_acquisition, :sh)),
-        (fixture.acquisition.detector_plan,
+        (Detectors.detector_acquisition_plan(
+                fixture.acquisition.acquisition),
             StructuralResourceOwnerID(:detector_acquisition, :plan)),
         (fixture.estimator,
             StructuralResourceOwnerID(:wfs_estimator, :prepared)),
@@ -124,20 +125,10 @@ end
     detector_fact = structural_resource_fact(detector_state,
         StructuralResourceOwnerID(:detector_state, :sh_camera), target)
     @test structural_resident_bytes(detector_fact) == sh_resource_bytes((
-        detector_state.frame,
         detector_state.accum_buffer,
         detector_state.latent_buffer,
     ))
-    @test structural_workspace_bytes(detector_fact) == sh_resource_bytes((
-        detector_state.presampling_buffer,
-        detector_state.presampling_scratch,
-        detector_state.response_buffer,
-        detector_state.bin_buffer,
-        detector_state.temporal_buffer,
-        detector_state.noise_buffer,
-        detector_state.noise_buffer_host,
-        detector_state.batched_buffer_host,
-    ))
+    @test iszero(structural_workspace_bytes(detector_fact))
 
     workspace_fact = structural_resource_fact(propagation,
         StructuralResourceOwnerID(:workspace, :microlens), target)
@@ -171,10 +162,8 @@ end
         StructuralResourceOwnerID(:detector_state, :unsupported), target)
     @test structural_resource_known(unsupported_fact)
     @test structural_resident_bytes(unsupported_fact) == sh_resource_bytes((
-        unsupported.state.frame,
         unsupported.state.accum_buffer,
         unsupported.state.latent_buffer,
-        unsupported.state.output_buffer,
     ))
 
     wrong_target = AcceleratorComputeDevice(CUDABackend(), 0)

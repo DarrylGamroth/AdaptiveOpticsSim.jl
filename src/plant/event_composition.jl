@@ -570,22 +570,25 @@ end
 @inline function _prepare_detector_event_lifecycle(
     execution::FrameAcquisitionExecution, result::IntensityMap,
     definition::GlobalShutterAcquisitionDefinition)
-    return prepare_global_shutter_acquisition(execution.detector, result,
-        execution.plan, definition)
+    _require_prepared_acquisition(execution.acquisition, result)
+    return _prepare_global_shutter_acquisition(execution.acquisition,
+        definition)
 end
 
 @inline function _prepare_detector_event_lifecycle(
     execution::FrameAcquisitionExecution, result::IntensityMap,
     definition::RollingShutterAcquisitionDefinition)
-    return prepare_rolling_shutter_acquisition(execution.detector, result,
-        execution.plan, definition)
+    _require_prepared_acquisition(execution.acquisition, result)
+    return _prepare_rolling_shutter_acquisition(execution.acquisition,
+        definition)
 end
 
 @inline function _prepare_detector_event_lifecycle(
     execution::FrameAcquisitionExecution, result::IntensityMap,
     definition::FrameTransferAcquisitionDefinition)
-    return prepare_frame_transfer_acquisition(execution.detector, result,
-        execution.plan, definition)
+    _require_prepared_acquisition(execution.acquisition, result)
+    return _prepare_frame_transfer_acquisition(execution.acquisition,
+        definition)
 end
 
 function _sorted_optical_sample_definitions(
@@ -3689,36 +3692,17 @@ end
 @inline _require_event_lifecycle_binding(
     prepared::PreparedGlobalShutterAcquisition,
     state::GlobalShutterAcquisitionState,
-) = _require_detector_event_lifecycle_binding(prepared, state)
+) = _require_detector_event_binding(prepared, state)
 
 @inline _require_event_lifecycle_binding(
     prepared::PreparedRollingShutterAcquisition,
     state::RollingShutterAcquisitionState,
-) = _require_detector_event_lifecycle_binding(prepared, state)
+) = _require_rolling_shutter_event_binding(prepared, state)
 
 @inline _require_event_lifecycle_binding(
     prepared::PreparedFrameTransferAcquisition,
     state::FrameTransferAcquisitionState,
-) = _require_detector_event_lifecycle_binding(prepared, state)
-
-@inline function _require_detector_event_lifecycle_binding(
-    prepared::P,
-    state::S,
-) where {P,S}
-    getfield(state, :binding) === getfield(prepared, :binding) ||
-        _plant_event_loop_error(:foreign_state,
-            "detector lifecycle state belongs to another prepared acquisition")
-    det = getfield(prepared, :detector)
-    plan = getfield(prepared, :plan)
-    det.params === plan.detector_params &&
-        det.state === plan.detector_state &&
-        det.state.frame === plan.detector_frame &&
-        det.state.readout_products === getfield(prepared, :readout_products) &&
-        typeof(backend(det)) === typeof(plan.detector_backend) ||
-        _plant_event_loop_error(:prepared_binding,
-            "detector lifecycle storage changed after event-loop preparation")
-    return nothing
-end
+) = _require_frame_transfer_event_binding(prepared, state)
 
 function _require_event_lifecycle_binding(
     ::Union{

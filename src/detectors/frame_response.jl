@@ -1,7 +1,7 @@
-apply_response!(::NullFrameResponse, det::Detector) = det.state.frame
+apply_response!(::NullFrameResponse, det::Detector) = det.products.frame
 
 function apply_response!(model::AbstractFrameResponse, det::Detector)
-    return apply_response!(execution_style(det.state.frame), model, det.state.frame, det.state.response_buffer)
+    return apply_response!(execution_style(det.products.frame), model, det.products.frame, det.workspace.response_buffer)
 end
 
 @inline presampling_response_input!(::NullFrameResponse, det::Detector,
@@ -12,10 +12,10 @@ function presampling_response_input!(model::AbstractFrameResponse, det::Detector
     det.params.psf_sampling == 1 || throw(InvalidConfiguration(
         "a non-null detector response currently requires psf_sampling == 1; " *
         "prepare an explicit optical-grid mapping before detector acquisition"))
-    copyto!(det.state.presampling_buffer, input)
-    apply_response!(execution_style(det.state.presampling_buffer), model,
-        det.state.presampling_buffer, det.state.presampling_scratch)
-    return det.state.presampling_buffer
+    copyto!(det.workspace.presampling_buffer, input)
+    apply_response!(execution_style(det.workspace.presampling_buffer), model,
+        det.workspace.presampling_buffer, det.workspace.presampling_scratch)
+    return det.workspace.presampling_buffer
 end
 
 function _apply_separable_response!(::ScalarCPUStyle, frame::AbstractMatrix, scratch::AbstractMatrix,
@@ -110,7 +110,7 @@ end
 
 const apply_frame_response! = apply_response!
 
-apply_charge_coupling!(::NullChargeCoupling, det::Detector) = det.state.frame
+apply_charge_coupling!(::NullChargeCoupling, det::Detector) = det.products.frame
 
 function apply_charge_coupling!(model::InterpixelCapacitance, det::Detector)
     return apply_response!(model.response, det)
@@ -122,29 +122,29 @@ function ensure_buffers!(det::Detector, n_in::Int, m_in::Int, n_mid::Int,
         validate_readout_window(det.params.readout_window, n_out, m_out)
     out_rows = window === nothing ? n_out : length(window.rows)
     out_cols = window === nothing ? m_out : length(window.cols)
-    if size(det.state.frame) != (n_out, m_out)
-        det.state.frame = similar(det.state.frame, n_out, m_out)
-        fill!(det.state.frame, zero(eltype(det.state.frame)))
+    if size(det.products.frame) != (n_out, m_out)
+        det.products.frame = similar(det.products.frame, n_out, m_out)
+        fill!(det.products.frame, zero(eltype(det.products.frame)))
     end
-    if size(det.state.presampling_buffer) != (n_in, m_in)
-        det.state.presampling_buffer = similar(det.state.presampling_buffer,
+    if size(det.workspace.presampling_buffer) != (n_in, m_in)
+        det.workspace.presampling_buffer = similar(det.workspace.presampling_buffer,
             n_in, m_in)
     end
-    if size(det.state.presampling_scratch) != (n_in, m_in)
-        det.state.presampling_scratch = similar(det.state.presampling_scratch,
+    if size(det.workspace.presampling_scratch) != (n_in, m_in)
+        det.workspace.presampling_scratch = similar(det.workspace.presampling_scratch,
             n_in, m_in)
     end
-    if size(det.state.response_buffer) != (n_out, m_out)
-        det.state.response_buffer = similar(det.state.response_buffer, n_out, m_out)
+    if size(det.workspace.response_buffer) != (n_out, m_out)
+        det.workspace.response_buffer = similar(det.workspace.response_buffer, n_out, m_out)
     end
-    if size(det.state.bin_buffer) != (n_mid, m_mid)
-        det.state.bin_buffer = similar(det.state.bin_buffer, n_mid, m_mid)
+    if size(det.workspace.bin_buffer) != (n_mid, m_mid)
+        det.workspace.bin_buffer = similar(det.workspace.bin_buffer, n_mid, m_mid)
     end
-    if size(det.state.noise_buffer) != (n_out, m_out)
-        det.state.noise_buffer = similar(det.state.noise_buffer, n_out, m_out)
+    if size(det.workspace.noise_buffer) != (n_out, m_out)
+        det.workspace.noise_buffer = similar(det.workspace.noise_buffer, n_out, m_out)
     end
-    if size(det.state.noise_buffer_host) != (n_out, m_out)
-        det.state.noise_buffer_host = Matrix{eltype(det.state.noise_buffer_host)}(undef, n_out, m_out)
+    if size(det.workspace.noise_buffer_host) != (n_out, m_out)
+        det.workspace.noise_buffer_host = Matrix{eltype(det.workspace.noise_buffer_host)}(undef, n_out, m_out)
     end
     if size(det.state.accum_buffer) != (n_out, m_out)
         det.state.accum_buffer = similar(det.state.accum_buffer, n_out, m_out)
@@ -156,15 +156,15 @@ function ensure_buffers!(det::Detector, n_in::Int, m_in::Int, n_mid::Int,
         det.state.latent_buffer = similar(det.state.latent_buffer, n_out, m_out)
         fill!(det.state.latent_buffer, zero(eltype(det.state.latent_buffer)))
     end
-    if det.state.output_buffer !== nothing && size(det.state.output_buffer) != (out_rows, out_cols)
-        det.state.output_buffer = similar(det.state.output_buffer, out_rows, out_cols)
-        fill!(det.state.output_buffer, zero(eltype(det.state.output_buffer)))
+    if det.products.output_buffer !== nothing && size(det.products.output_buffer) != (out_rows, out_cols)
+        det.products.output_buffer = similar(det.products.output_buffer, out_rows, out_cols)
+        fill!(det.products.output_buffer, zero(eltype(det.products.output_buffer)))
     end
-    if det.state.output_buffer_host !== nothing &&
-        size(det.state.output_buffer_host) != (out_rows, out_cols)
-        det.state.output_buffer_host = similar(det.state.output_buffer_host,
+    if det.workspace.output_buffer_host !== nothing &&
+        size(det.workspace.output_buffer_host) != (out_rows, out_cols)
+        det.workspace.output_buffer_host = similar(det.workspace.output_buffer_host,
             out_rows, out_cols)
-        fill!(det.state.output_buffer_host, zero(eltype(det.state.output_buffer_host)))
+        fill!(det.workspace.output_buffer_host, zero(eltype(det.workspace.output_buffer_host)))
     end
     return det
 end
@@ -213,22 +213,22 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real,
     optical_rate = presampling_response_input!(det.params.response_model, det,
         psf)
     if sampling > 1
-        bin2d!(det.state.bin_buffer, optical_rate, sampling)
+        bin2d!(det.workspace.bin_buffer, optical_rate, sampling)
     else
-        copyto!(det.state.bin_buffer, optical_rate)
+        copyto!(det.workspace.bin_buffer, optical_rate)
     end
-    @. det.state.bin_buffer *= qe * exposure_time * rate_scale
+    @. det.workspace.bin_buffer *= qe * exposure_time * rate_scale
     if binning > 1
-        bin2d!(det.state.frame, det.state.bin_buffer, binning)
+        bin2d!(det.products.frame, det.workspace.bin_buffer, binning)
     else
-        copyto!(det.state.frame, det.state.bin_buffer)
+        copyto!(det.products.frame, det.workspace.bin_buffer)
     end
-    return det.state.frame
+    return det.products.frame
 end
 
 fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real,
     qe) where {T} = fill_frame!(det, psf, exposure_time, qe,
-        one(eltype(det.state.frame)))
+        one(eltype(det.products.frame)))
 fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T} =
     fill_frame!(det, psf, exposure_time, det.params.qe)
 fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T} = fill_frame!(det, psf, det.params.integration_time)

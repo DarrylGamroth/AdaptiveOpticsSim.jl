@@ -535,10 +535,17 @@ camera. Presampling response, physical-pixel integration, QE and elapsed-time
 integration therefore remain downstream of optical spot or pupil-image
 formation and upstream of the estimator.
 
-The current `capture!(...; integration_duration=...)` and
-`capture_incremental!` methods are frame-step convenience APIs. Their duration
-is expressed in seconds; it is not an absolute sample timestamp. They
-accumulate until the configured exposure duration is reached and then finalize
+`Detectors.DetectorAcquisitionPlan` owns only run-immutable numerical and
+radiometric metadata. `Detectors.PreparedDetectorAcquisition` is the exact
+single-writer binding of detector, mutable rate-product storage, plan,
+persistent state, replaceable workspace, and caller-visible products. Plant
+detector lifecycles retain that exact prepared owner rather than reconstructing
+or separately passing those bindings during execution.
+
+The prepared `capture!(acquisition; integration_duration=...)` method is the
+frame-step incremental convenience API. Its duration is expressed in seconds;
+it is not an absolute sample timestamp. It accumulates until the configured
+exposure duration is reached and then finalizes
 automatically using floating-point tolerance. The virtual-time event layer
 does not use that tolerance as its completion authority. Its initial global-
 shutter implementation prepares explicit
@@ -610,10 +617,12 @@ are not a detector response or detector MTF. All detector effects remain after
 the branch rate planes and before estimation.
 
 Implementations use dispatch and traits with statically typed prepared
-composition. Immutable parameters remain separate from single-writer mutable
-workspace and calibration state. Repeated execution writes to caller-owned
-storage through explicit mutating functions, performs no scalar GPU indexing,
-and does not allocate a new product wrapper or bundle on every sample.
+composition. Immutable parameters and plans, persistent single-writer state,
+replaceable workspace, calibration state, and caller-visible products remain
+separate. Repeated CPU execution writes through explicit mutating functions and
+does not allocate a new product wrapper or bundle on every sample. Accelerator
+execution keeps numerical owners resident, performs no scalar GPU indexing,
+and treats launch allocation as a separately measured backend property.
 
 Geometric and reduced-order policies do not allocate or initialize unused
 diffractive FFT workspaces. An approximate raw-pixel policy still forms its

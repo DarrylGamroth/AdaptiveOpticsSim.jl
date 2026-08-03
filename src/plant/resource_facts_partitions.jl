@@ -107,7 +107,9 @@ function _target_local_acquisition_resource_fact(
 )
     execution = implementation.execution
     return _combine_structural_owner_facts(id, target, (
-        structural_resource_fact(execution.detector, id, target),
+        structural_resource_fact(
+            detector_acquisition_detector(execution.acquisition), id,
+            target),
         structural_resource_fact(products, id, target),
     ))
 end

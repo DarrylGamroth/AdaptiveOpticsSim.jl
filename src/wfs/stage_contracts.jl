@@ -438,10 +438,33 @@ function validate_wfs_acquisition_binding(observation, optical_products,
 end
 
 """Prepared detector acquisition shared by detector-backed WFS families."""
-struct PreparedWFSDetectorAcquisition{D,P,O}
-    detector::D
-    detector_plan::P
+struct PreparedWFSDetectorAcquisition{P,O}
+    acquisition::P
     observation::O
+end
+
+function _validate_wfs_detector_observation_contract(
+    detector::Detector, optical_product::IntensityMap,
+    observation::WFSObservation)
+    output_shape = detector_output_shape(
+        detector, size(optical_product.values))
+    size(observation.storage) == output_shape ||
+        throw(WFSPreparationError(:acquisition, :shape,
+            "WFS observation storage must match the prepared detector output"))
+    output_type = detector_output_type(detector)
+    expected_type = output_type === nothing ?
+        eltype(detector.products.frame) : output_type
+    observation.metadata.numeric_type === expected_type ||
+        throw(WFSPreparationError(:acquisition, :numeric_type,
+            "WFS observation element type must match the detector output"))
+    typeof(backend(observation.storage)) === typeof(backend(detector)) ||
+        throw(WFSPreparationError(:acquisition, :backend,
+            "WFS observation and detector backends differ"))
+    compute_device(observation.storage) ==
+        compute_device(detector.products.frame) ||
+        throw(WFSPreparationError(:acquisition, :device,
+            "WFS observation and detector output occupy different devices"))
+    return nothing
 end
 
 function prepare_wfs_acquisition(detector::Detector,
@@ -452,27 +475,17 @@ function prepare_wfs_acquisition(detector::Detector,
     observation.metadata.numeric_type <: Real ||
         throw(WFSPreparationError(:acquisition, :numeric_type,
             "WFS detector observations require real sample storage"))
-    plan = prepare_detector_acquisition(detector, optical_product)
-    size(observation.storage) == size(output_frame(detector)) ||
-        throw(WFSPreparationError(:acquisition, :shape,
-            "WFS observation storage must match the prepared detector output"))
-    observation.metadata.numeric_type === eltype(output_frame(detector)) ||
-        throw(WFSPreparationError(:acquisition, :numeric_type,
-            "WFS observation element type must match the detector output"))
-    typeof(backend(observation.storage)) === typeof(backend(detector)) ||
-        throw(WFSPreparationError(:acquisition, :backend,
-            "WFS observation and detector backends differ"))
-    compute_device(observation.storage) == compute_device(output_frame(detector)) ||
-        throw(WFSPreparationError(:acquisition, :device,
-            "WFS observation and detector output occupy different devices"))
-    return PreparedWFSDetectorAcquisition(detector, plan, observation)
+    _validate_wfs_detector_observation_contract(
+        detector, optical_product, observation)
+    acquisition = prepare_detector_acquisition(detector, optical_product)
+    return PreparedWFSDetectorAcquisition(acquisition, observation)
 end
 
 function acquire_wfs_observation!(observation::WFSObservation,
     optical_product::IntensityMap, plan::PreparedWFSDetectorAcquisition,
     rng::AbstractRNG)
     validate_wfs_acquisition_binding(observation, optical_product, plan)
-    frame = capture!(plan.detector, optical_product, plan.detector_plan, rng)
+    frame = capture!(plan.acquisition, rng)
     copyto!(observation.storage, frame)
     return observation
 end
@@ -482,20 +495,24 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
     observation === plan.observation || throw(WFSPreparationError(
         :acquisition, :prepared_binding,
         "WFS observation does not match prepared storage"))
-    optical_product.metadata === plan.detector_plan.input_metadata &&
-        optical_product.values === plan.detector_plan.input_values || throw(
+    prepared_input = detector_acquisition_input(plan.acquisition)
+    optical_product.metadata === prepared_input.metadata &&
+        optical_product.values === prepared_input.values || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
             "WFS optical product does not match its prepared detector input"))
-    plan.detector.params === plan.detector_plan.detector_params &&
-        plan.detector.state === plan.detector_plan.detector_state &&
-        plan.detector.state.frame === plan.detector_plan.detector_frame ||
+    try
+        _require_prepared_acquisition(plan.acquisition)
+    catch error
+        error isa Union{InvalidConfiguration,DimensionMismatchError} ||
+            rethrow()
         throw(WFSPreparationError(:acquisition, :prepared_binding,
-            "WFS detector storage changed after preparation"))
+            "WFS detector ownership changed after preparation"))
+    end
     return nothing
 end
 
 """Prepared acquisition for an accumulated-count detector."""
-struct PreparedWFSCountingAcquisition{D,I,O,S,T,A,F}
+struct PreparedWFSCountingAcquisition{D,I,O,S,T,A,F,B}
     detector::D
     optical_product::I
     observation::O
@@ -503,6 +520,30 @@ struct PreparedWFSCountingAcquisition{D,I,O,S,T,A,F}
     source_throughput::T
     detector_input::A
     detector_output::F
+    detector_binding::B
+end
+
+@inline function _counting_wfs_detector_binding(
+    detector::AbstractCountingDetector)
+    return (
+        thermal_state=thermal_state(detector),
+        noise_buffer=counting_noise_buffer(detector),
+        host_buffer=counting_host_buffer(detector),
+        output_buffer=counting_output_buffer(detector),
+        output_buffer_host=counting_output_host_buffer(detector),
+    )
+end
+
+@inline function _require_counting_wfs_detector_binding(
+    detector::AbstractCountingDetector, binding::NamedTuple)
+    thermal_state(detector) === binding.thermal_state &&
+        counting_noise_buffer(detector) === binding.noise_buffer &&
+        counting_host_buffer(detector) === binding.host_buffer &&
+        counting_output_buffer(detector) === binding.output_buffer &&
+        counting_output_host_buffer(detector) === binding.output_buffer_host ||
+        throw(WFSPreparationError(:acquisition, :prepared_binding,
+            "counting detector state, workspace, or products changed after WFS preparation"))
+    return nothing
 end
 
 @inline _counting_wfs_source_required(::AbstractCountingDetector) = false
@@ -602,7 +643,7 @@ function prepare_wfs_acquisition(detector::AbstractCountingDetector,
         counting_source_throughput(detector, source, output_type)
     return PreparedWFSCountingAcquisition(detector, optical_product,
         observation, source, source_throughput, counting_array(detector),
-        output)
+        output, _counting_wfs_detector_binding(detector))
 end
 
 function acquire_wfs_observation!(observation::WFSObservation,
@@ -625,6 +666,8 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
         output_frame(plan.detector) === plan.detector_output || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
             "counting detector storage changed after WFS preparation"))
+    _require_counting_wfs_detector_binding(
+        plan.detector, plan.detector_binding)
     return nothing
 end
 

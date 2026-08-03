@@ -55,33 +55,33 @@ function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     rate = effective_glow_rate(det) *
         effective_sensor_glow_time(sensor, exposure_time)
-    rate <= zero(rate) && return det.state.frame
-    fill!(det.state.noise_buffer, rate)
-    poisson_noise!(rng, det.state.noise_buffer)
-    det.state.frame .+= det.state.noise_buffer
-    return det.state.frame
+    rate <= zero(rate) && return det.products.frame
+    fill!(det.workspace.noise_buffer, rate)
+    poisson_noise!(rng, det.workspace.noise_buffer)
+    det.products.frame .+= det.workspace.noise_buffer
+    return det.products.frame
 end
 
 function apply_incremental_sensor_statistics!(sensor::InGaAsSensor,
     det::Detector, rng::AbstractRNG, exposure_time::Real)
     rate = effective_glow_rate(det) * exposure_time
-    return add_poisson_rate!(det.state.frame, det, rng, rate)
+    return add_poisson_rate!(det.products.frame, det, rng, rate)
 end
 
-apply_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_time::Real) where {T} = det.state.frame
+apply_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_time::Real) where {T} = det.products.frame
 
 function apply_sensor_persistence!(sensor::InGaAsSensor{T,<:ExponentialPersistence}, det::Detector, exposure_time::Real) where {T}
     ensure_latent_buffer!(det)
-    det.state.frame .+= det.state.latent_buffer
-    return det.state.frame
+    det.products.frame .+= det.state.latent_buffer
+    return det.products.frame
 end
 
-update_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_time::Real) where {T} = det.state.frame
+update_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_time::Real) where {T} = det.products.frame
 
 function update_sensor_persistence!(sensor::InGaAsSensor{T,<:ExponentialPersistence}, det::Detector, exposure_time::Real) where {T}
     ensure_latent_buffer!(det)
     model = sensor.persistence_model
-    det.state.latent_buffer .= model.decay .* det.state.latent_buffer .+ model.coupling .* det.state.frame
+    det.state.latent_buffer .= model.decay .* det.state.latent_buffer .+ model.coupling .* det.products.frame
     return det.state.latent_buffer
 end
 
@@ -105,8 +105,8 @@ function finalize_ingaas_capture!(det::Detector, rng::AbstractRNG,
 end
 
 function apply_post_readout_gain!(::InGaAsSensor, det::Detector)
-    det.state.frame .*= det.params.gain
-    return det.state.frame
+    det.products.frame .*= det.params.gain
+    return det.products.frame
 end
 
 function _batched_sensor_statistics!(sensor::InGaAsSensor, det::Detector,

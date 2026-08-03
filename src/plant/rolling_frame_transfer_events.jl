@@ -35,18 +35,23 @@ RollingShutterAcquisitionDefinition(exposure_duration::PlantDuration;
     readiness_delay::PlantDuration=zero(PlantDuration)) =
     RollingShutterAcquisitionDefinition(exposure_duration, readiness_delay)
 
-mutable struct _RollingShutterAcquisitionBinding end
+mutable struct _RollingShutterAcquisitionBinding
+    const state_lease::_DetectorAcquisitionLease
+end
+
+_RollingShutterAcquisitionBinding() =
+    _RollingShutterAcquisitionBinding(_DetectorAcquisitionLease())
 
 struct PreparedRollingShutterAcquisition{
     D<:Detector,
-    P<:DetectorAcquisitionPlan,
+    A<:PreparedDetectorAcquisition,
     RP<:FrameReadoutProducts,
     M<:_RollingShutterEventMode,
     T<:AbstractFloat,
 } <: AbstractPreparedDetectorAcquisitionLifecycle
     binding::_RollingShutterAcquisitionBinding
     detector::D
-    plan::P
+    acquisition::A
     readout_products::RP
     definition::RollingShutterAcquisitionDefinition
     mode::M
@@ -60,7 +65,7 @@ end
 
 mutable struct RollingShutterAcquisitionState <:
     AbstractDetectorAcquisitionLifecycleState
-    binding::_RollingShutterAcquisitionBinding
+    const binding::_RollingShutterAcquisitionBinding
     status::DetectorAcquisitionStatus
     sequence::UInt64
     frame_start::PlantTimestamp
@@ -69,14 +74,34 @@ mutable struct RollingShutterAcquisitionState <:
     readiness::PlantTimestamp
     opened_bands::Int
     closed_bands::Int
+
+    function RollingShutterAcquisitionState(
+        ::_DetectorLifecycleOwnerToken,
+        binding::_RollingShutterAcquisitionBinding,
+        status::DetectorAcquisitionStatus,
+        sequence::UInt64,
+        frame_start::PlantTimestamp,
+        integrated_through::PlantTimestamp,
+        readout_complete::PlantTimestamp,
+        readiness::PlantTimestamp,
+        opened_bands::Int,
+        closed_bands::Int,
+    )
+        return new(binding, status, sequence, frame_start, integrated_through,
+            readout_complete, readiness, opened_bands, closed_bands)
+    end
 end
 
 function RollingShutterAcquisitionState(
     prepared::PreparedRollingShutterAcquisition)
+    lease = prepared.binding.state_lease
+    _require_detector_acquisition_state_available(lease)
     origin = zero(PlantTimestamp)
-    return RollingShutterAcquisitionState(prepared.binding,
+    state = RollingShutterAcquisitionState(_DETECTOR_LIFECYCLE_OWNER_TOKEN,
+        prepared.binding,
         DetectorAcquisitionReady, UInt64(0), origin, origin, origin, origin,
         0, 0)
+    return _claim_detector_acquisition_state!(lease, state)
 end
 
 @inline detector_acquisition_status(state::RollingShutterAcquisitionState) =
@@ -213,19 +238,30 @@ end
 function prepare_rolling_shutter_acquisition(det::Detector,
     map::IntensityMap, definition::RollingShutterAcquisitionDefinition;
     normalized_to_photon_rate::Union{Nothing,Real}=nothing)
-    plan = prepare_detector_acquisition(det, map;
+    candidate_acquisition = _prepare_detached_detector_acquisition(det, map;
         normalized_to_photon_rate=normalized_to_photon_rate)
-    return prepare_rolling_shutter_acquisition(det, map, plan, definition)
+    candidate = _prepare_rolling_shutter_acquisition(
+        candidate_acquisition, definition)
+    acquisition = _rebind_prepared_detector_acquisition(
+        det, candidate_acquisition)
+    prepared = PreparedRollingShutterAcquisition(
+        candidate.binding, det, acquisition, candidate.readout_products,
+        candidate.definition, candidate.mode, candidate.exposure_seconds,
+        candidate.detection_efficiency, candidate.line_duration,
+        candidate.row_group_size, candidate.row_count, candidate.band_count)
+    _commit_prepared_detector_acquisition!(acquisition)
+    return prepared
 end
 
-function prepare_rolling_shutter_acquisition(det::Detector,
-    map::IntensityMap, plan::DetectorAcquisitionPlan,
+function _prepare_rolling_shutter_acquisition(
+    acquisition::PreparedDetectorAcquisition,
     definition::RollingShutterAcquisitionDefinition)
+    det = detector_acquisition_detector(acquisition)
     timing = _require_rolling_timing(det.params.timing_model)
     _require_rolling_sensor(det.params.sensor)
     _require_detector_event_idle(det)
-    _require_prepared_acquisition(det, map, plan)
-    T = eltype(det.state.frame)
+    _require_prepared_acquisition(acquisition)
+    T = eltype(det.products.frame)
     exposure_seconds = plant_duration_seconds(definition.exposure_duration, T)
     isequal(det.params.integration_time, exposure_seconds) ||
         _detector_acquisition_event_error(:exposure_duration,
@@ -233,15 +269,16 @@ function prepare_rolling_shutter_acquisition(det::Detector,
     line_duration = _quantized_plant_duration(timing.line_time,
         "rolling-shutter line duration", :invalid_line_duration,
         :unrepresentable_line_duration)
-    row_count = size(det.state.frame, 1)
+    row_count = size(det.products.frame, 1)
     band_count = cld(row_count, timing.row_group_size)
+    plan = detector_acquisition_plan(acquisition)
     detection_efficiency = plan.rate_scale * plan.quantum_efficiency
     isfinite(detection_efficiency) && detection_efficiency >= zero(T) ||
         _detector_acquisition_event_error(:detection_efficiency,
             "prepared detector rate scaling and quantum efficiency are not representable")
     return PreparedRollingShutterAcquisition(
-        _RollingShutterAcquisitionBinding(), det, plan,
-        det.state.readout_products, definition,
+        _RollingShutterAcquisitionBinding(), det, acquisition,
+        det.products.readout, definition,
         _rolling_shutter_event_mode(timing.exposure_mode), exposure_seconds,
         detection_efficiency, line_duration, timing.row_group_size,
         row_count, band_count)
@@ -253,14 +290,21 @@ end
     state.binding === prepared.binding ||
         _detector_acquisition_event_error(:foreign_state,
             "rolling-shutter state belongs to another prepared acquisition")
+    _require_detector_acquisition_state_owner(
+        prepared.binding.state_lease, state)
     det = prepared.detector
-    plan = prepared.plan
-    det.params === plan.detector_params && det.state === plan.detector_state &&
-        det.state.frame === plan.detector_frame &&
-        det.state.readout_products === prepared.readout_products &&
-        typeof(backend(det)) === typeof(plan.detector_backend) ||
+    det === detector_acquisition_detector(prepared.acquisition) &&
+        det.products.readout === prepared.readout_products ||
         _detector_acquisition_event_error(:prepared_binding,
-            "rolling-shutter detector storage changed after preparation")
+            "rolling-shutter detector ownership changed after preparation")
+    try
+        _require_prepared_acquisition(prepared.acquisition)
+    catch error
+        error isa Union{InvalidConfiguration,DimensionMismatchError} ||
+            rethrow()
+        _detector_acquisition_event_error(:prepared_binding,
+            "rolling-shutter detector ownership changed after preparation")
+    end
     return nothing
 end
 
@@ -353,14 +397,15 @@ function accumulate_rolling_exposure_interval!(
             "rolling integration crosses a pending row-band transition")
 
     det = prepared.detector
-    T = eltype(det.state.frame)
+    T = eltype(det.products.frame)
     interval_seconds = plant_duration_seconds(stop - start, T)
-    capture_signal_pipeline!(det, prepared.plan.input_values, rng,
+    capture_signal_pipeline!(det,
+        detector_acquisition_input(prepared.acquisition).values, rng,
         interval_seconds, prepared.detection_efficiency, false,
         prepared.exposure_seconds)
     accumulate_incremental_charge_generation!(det, rng, interval_seconds)
     rows = _rolling_active_rows(prepared, state)
-    @views det.state.accum_buffer[rows, :] .+= det.state.frame[rows, :]
+    @views det.state.accum_buffer[rows, :] .+= det.products.frame[rows, :]
     advance_thermal!(det, interval_seconds)
     state.integrated_through = stop
     return nothing
@@ -432,7 +477,7 @@ function complete_readout!(prepared::PreparedRollingShutterAcquisition,
         _detector_acquisition_event_error(:readout_not_due,
             "rolling readout completion does not match its prepared timestamp")
     det = prepared.detector
-    copyto!(det.state.frame, det.state.accum_buffer)
+    copyto!(det.products.frame, det.state.accum_buffer)
     finalize_incremental_capture!(det, rng, prepared.exposure_seconds)
     output = write_output!(det)
     fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
@@ -465,8 +510,8 @@ end
 
 Exact event definition for an EMCCD frame-transfer acquisition. The sensor's
 `FrameTransferAcquisition` supplies the image-to-storage transfer duration.
-One prepared storage frame permits image-area integration to overlap storage
-readout without aliasing either frame.
+One separately owned lifecycle-state storage frame permits image-area
+integration to overlap storage readout without aliasing either frame.
 """
 struct FrameTransferAcquisitionDefinition <:
     AbstractDetectorAcquisitionLifecycleDefinition
@@ -486,21 +531,24 @@ FrameTransferAcquisitionDefinition(exposure_duration::PlantDuration;
     readout_duration::PlantDuration=zero(PlantDuration)) =
     FrameTransferAcquisitionDefinition(exposure_duration, readout_duration)
 
-mutable struct _FrameTransferAcquisitionBinding end
+mutable struct _FrameTransferAcquisitionBinding
+    const state_lease::_DetectorAcquisitionLease
+end
+
+_FrameTransferAcquisitionBinding() =
+    _FrameTransferAcquisitionBinding(_DetectorAcquisitionLease())
 
 struct PreparedFrameTransferAcquisition{
     D<:Detector,
-    P<:DetectorAcquisitionPlan,
+    A<:PreparedDetectorAcquisition,
     RP<:FrameReadoutProducts,
-    A<:AbstractMatrix,
     T<:AbstractFloat,
 } <: AbstractPreparedDetectorAcquisitionLifecycle
     binding::_FrameTransferAcquisitionBinding
     detector::D
-    plan::P
+    acquisition::A
     readout_products::RP
     definition::FrameTransferAcquisitionDefinition
-    storage_frame::A
     exposure_seconds::T
     detection_efficiency::T
     transfer_duration::PlantDuration
@@ -517,9 +565,10 @@ end
     _FrameTransferStorageReadout = 0x02
 end
 
-mutable struct FrameTransferAcquisitionState <:
+mutable struct FrameTransferAcquisitionState{A<:AbstractMatrix} <:
     AbstractDetectorAcquisitionLifecycleState
-    binding::_FrameTransferAcquisitionBinding
+    const binding::_FrameTransferAcquisitionBinding
+    const storage_frame::A
     image_status::_FrameTransferImageStatus
     storage_status::_FrameTransferStorageStatus
     sequence::UInt64
@@ -532,15 +581,51 @@ mutable struct FrameTransferAcquisitionState <:
     transfer_complete::PlantTimestamp
     storage_readout_complete::PlantTimestamp
     product_ready::PlantTimestamp
+
+    function FrameTransferAcquisitionState(
+        ::_DetectorLifecycleOwnerToken,
+        binding::_FrameTransferAcquisitionBinding,
+        storage_frame::A,
+        image_status::_FrameTransferImageStatus,
+        storage_status::_FrameTransferStorageStatus,
+        sequence::UInt64,
+        image_sequence::UInt64,
+        storage_sequence::UInt64,
+        product_sequence::UInt64,
+        exposure_start::PlantTimestamp,
+        exposure_close::PlantTimestamp,
+        integrated_through::PlantTimestamp,
+        transfer_complete::PlantTimestamp,
+        storage_readout_complete::PlantTimestamp,
+        product_ready::PlantTimestamp,
+    ) where {A<:AbstractMatrix}
+        return new{A}(binding, storage_frame, image_status, storage_status,
+            sequence, image_sequence, storage_sequence, product_sequence,
+            exposure_start, exposure_close, integrated_through,
+            transfer_complete, storage_readout_complete, product_ready)
+    end
 end
 
 function FrameTransferAcquisitionState(
     prepared::PreparedFrameTransferAcquisition)
+    lease = prepared.binding.state_lease
+    _require_detector_acquisition_state_available(lease)
+    det = prepared.detector
+    storage_frame = similar(det.products.frame)
+    fill!(storage_frame, zero(eltype(storage_frame)))
+    for aliased in (det.products.frame, det.state.accum_buffer,
+            output_frame(det))
+        Base.mightalias(storage_frame, aliased) &&
+            _detector_acquisition_event_error(:storage_alias,
+                "frame-transfer storage must not alias detector image or output storage")
+    end
     origin = zero(PlantTimestamp)
-    return FrameTransferAcquisitionState(prepared.binding,
+    state = FrameTransferAcquisitionState(_DETECTOR_LIFECYCLE_OWNER_TOKEN,
+        prepared.binding, storage_frame,
         _FrameTransferImageReady, _FrameTransferStorageEmpty, UInt64(0),
         UInt64(0), UInt64(0), UInt64(0), origin, origin, origin, origin,
         origin, origin)
+    return _claim_detector_acquisition_state!(lease, state)
 end
 
 @inline frame_transfer_storage_capacity(
@@ -585,19 +670,29 @@ end
 function prepare_frame_transfer_acquisition(det::Detector,
     map::IntensityMap, definition::FrameTransferAcquisitionDefinition;
     normalized_to_photon_rate::Union{Nothing,Real}=nothing)
-    plan = prepare_detector_acquisition(det, map;
+    candidate_acquisition = _prepare_detached_detector_acquisition(det, map;
         normalized_to_photon_rate=normalized_to_photon_rate)
-    return prepare_frame_transfer_acquisition(det, map, plan, definition)
+    candidate = _prepare_frame_transfer_acquisition(
+        candidate_acquisition, definition)
+    acquisition = _rebind_prepared_detector_acquisition(
+        det, candidate_acquisition)
+    prepared = PreparedFrameTransferAcquisition(
+        candidate.binding, det, acquisition, candidate.readout_products,
+        candidate.definition, candidate.exposure_seconds,
+        candidate.detection_efficiency, candidate.transfer_duration)
+    _commit_prepared_detector_acquisition!(acquisition)
+    return prepared
 end
 
-function prepare_frame_transfer_acquisition(det::Detector,
-    map::IntensityMap, plan::DetectorAcquisitionPlan,
+function _prepare_frame_transfer_acquisition(
+    acquisition::PreparedDetectorAcquisition,
     definition::FrameTransferAcquisitionDefinition)
+    det = detector_acquisition_detector(acquisition)
     _require_global_shutter_acquisition(det)
     mode = _require_frame_transfer_sensor(det.params.sensor)
     _require_detector_event_idle(det)
-    _require_prepared_acquisition(det, map, plan)
-    T = eltype(det.state.frame)
+    _require_prepared_acquisition(acquisition)
+    T = eltype(det.products.frame)
     exposure_seconds = plant_duration_seconds(definition.exposure_duration, T)
     isequal(det.params.integration_time, exposure_seconds) ||
         _detector_acquisition_event_error(:exposure_duration,
@@ -605,21 +700,14 @@ function prepare_frame_transfer_acquisition(det::Detector,
     transfer_duration = _quantized_plant_duration(mode.transfer_time,
         "frame-transfer duration", :invalid_transfer_duration,
         :unrepresentable_transfer_duration)
-    storage_frame = similar(det.state.frame)
-    fill!(storage_frame, zero(eltype(storage_frame)))
-    for aliased in (det.state.frame, det.state.accum_buffer,
-            output_frame(det))
-        Base.mightalias(storage_frame, aliased) &&
-            _detector_acquisition_event_error(:storage_alias,
-                "frame-transfer storage must not alias detector image or output storage")
-    end
+    plan = detector_acquisition_plan(acquisition)
     detection_efficiency = plan.rate_scale * plan.quantum_efficiency
     isfinite(detection_efficiency) && detection_efficiency >= zero(T) ||
         _detector_acquisition_event_error(:detection_efficiency,
             "prepared detector rate scaling and quantum efficiency are not representable")
     return PreparedFrameTransferAcquisition(
-        _FrameTransferAcquisitionBinding(), det, plan,
-        det.state.readout_products, definition, storage_frame,
+        _FrameTransferAcquisitionBinding(), det, acquisition,
+        det.products.readout, definition,
         exposure_seconds, detection_efficiency, transfer_duration)
 end
 
@@ -629,14 +717,21 @@ end
     state.binding === prepared.binding ||
         _detector_acquisition_event_error(:foreign_state,
             "frame-transfer state belongs to another prepared acquisition")
+    _require_detector_acquisition_state_owner(
+        prepared.binding.state_lease, state)
     det = prepared.detector
-    plan = prepared.plan
-    det.params === plan.detector_params && det.state === plan.detector_state &&
-        det.state.frame === plan.detector_frame &&
-        det.state.readout_products === prepared.readout_products &&
-        typeof(backend(det)) === typeof(plan.detector_backend) ||
+    det === detector_acquisition_detector(prepared.acquisition) &&
+        det.products.readout === prepared.readout_products ||
         _detector_acquisition_event_error(:prepared_binding,
-            "frame-transfer detector storage changed after preparation")
+            "frame-transfer detector ownership changed after preparation")
+    try
+        _require_prepared_acquisition(prepared.acquisition)
+    catch error
+        error isa Union{InvalidConfiguration,DimensionMismatchError} ||
+            rethrow()
+        _detector_acquisition_event_error(:prepared_binding,
+            "frame-transfer detector ownership changed after preparation")
+    end
     return nothing
 end
 
@@ -713,14 +808,15 @@ function accumulate_exposure_interval!(
         _detector_acquisition_event_error(:interval_after_close,
             "frame-transfer integration extends beyond exposure close")
     det = prepared.detector
-    T = eltype(det.state.frame)
+    T = eltype(det.products.frame)
     interval_seconds = plant_duration_seconds(stop - start, T)
     exposure_start = start == state.exposure_start
-    capture_signal_pipeline!(det, prepared.plan.input_values, rng,
+    capture_signal_pipeline!(det,
+        detector_acquisition_input(prepared.acquisition).values, rng,
         interval_seconds, prepared.detection_efficiency, exposure_start,
         prepared.exposure_seconds)
     accumulate_incremental_charge_generation!(det, rng, interval_seconds)
-    det.state.accum_buffer .+= det.state.frame
+    det.state.accum_buffer .+= det.products.frame
     advance_thermal!(det, interval_seconds)
     state.integrated_through = stop
     return nothing
@@ -758,14 +854,14 @@ function complete_frame_transfer!(
         _detector_acquisition_event_error(:transfer_not_due,
             "frame transfer does not match its prepared timestamp")
     det = prepared.detector
-    copyto!(prepared.storage_frame, det.state.accum_buffer)
+    copyto!(state.storage_frame, det.state.accum_buffer)
     fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
     state.storage_status = _FrameTransferStorageReadout
     state.storage_sequence = state.image_sequence
     state.storage_readout_complete = timestamp +
         prepared.definition.readout_duration
     state.image_status = _FrameTransferImageReady
-    return prepared.storage_frame
+    return state.storage_frame
 end
 
 function complete_readout!(prepared::PreparedFrameTransferAcquisition,
@@ -780,10 +876,10 @@ function complete_readout!(prepared::PreparedFrameTransferAcquisition,
         _detector_acquisition_event_error(:readout_not_due,
             "frame-transfer readout does not match its prepared timestamp")
     det = prepared.detector
-    copyto!(det.state.frame, prepared.storage_frame)
+    copyto!(det.products.frame, state.storage_frame)
     finalize_incremental_capture!(det, rng, prepared.exposure_seconds)
     output = write_output!(det)
-    fill!(prepared.storage_frame, zero(eltype(prepared.storage_frame)))
+    fill!(state.storage_frame, zero(eltype(state.storage_frame)))
     state.product_sequence = state.storage_sequence
     state.product_ready = timestamp
     state.storage_sequence = UInt64(0)

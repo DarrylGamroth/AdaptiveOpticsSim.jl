@@ -137,34 +137,23 @@ struct MKIDArrayDetectorParams{
     output_type::Union{Nothing,DataType}
 end
 
-mutable struct MKIDArrayDetectorState{
-    T<:AbstractFloat,
-    A<:AbstractMatrix{T},
-    H<:AbstractMatrix{T},
-    O,
-    OH,
-    TS<:AbstractDetectorThermalState,
-}
-    counts::A
-    noise_buffer::A
-    host_buffer::H
-    output_buffer::O
-    output_buffer_host::OH
-    thermal_state::TS
-end
-
 struct MKIDArrayDetector{
     N<:NoiseModel,
     P<:MKIDArrayDetectorParams,
-    S<:MKIDArrayDetectorState,
+    S<:CountingDetectorState,
+    W<:CountingDetectorWorkspace,
+    R<:CountingDetectorProducts,
     B<:AbstractArrayBackend,
 } <: AbstractCountingDetector
     noise::N
     params::P
     state::S
+    workspace::W
+    products::R
 end
 
-@inline backend(::MKIDArrayDetector{<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(
+    ::MKIDArrayDetector{<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
 counting_sensor(det::MKIDArrayDetector) = det.params.sensor
 counting_gate_model(det::MKIDArrayDetector) = det.params.gate_model
@@ -174,22 +163,22 @@ counting_mean_response_model(::MKIDArrayDetector) = NullCountingMeanResponse()
 counting_integration_time(det::MKIDArrayDetector) = det.params.integration_time
 counting_layout(::MKIDArrayDetector) = :pixel_counts
 counting_output_type(det::MKIDArrayDetector) = det.params.output_type
-counting_array(det::MKIDArrayDetector) = det.state.counts
-counting_noise_buffer(det::MKIDArrayDetector) = det.state.noise_buffer
-counting_host_buffer(det::MKIDArrayDetector) = det.state.host_buffer
-counting_output_buffer(det::MKIDArrayDetector) = det.state.output_buffer
+counting_array(det::MKIDArrayDetector) = det.products.counts
+counting_noise_buffer(det::MKIDArrayDetector) = det.workspace.noise_buffer
+counting_host_buffer(det::MKIDArrayDetector) = det.workspace.host_buffer
+counting_output_buffer(det::MKIDArrayDetector) = det.products.output_buffer
 counting_output_host_buffer(det::MKIDArrayDetector) =
-    det.state.output_buffer_host
+    det.workspace.output_buffer_host
 set_counting_array!(det::MKIDArrayDetector, values) =
-    (det.state.counts = values; det)
+    (det.products.counts = values; det)
 set_counting_noise_buffer!(det::MKIDArrayDetector, values) =
-    (det.state.noise_buffer = values; det)
+    (det.workspace.noise_buffer = values; det)
 set_counting_host_buffer!(det::MKIDArrayDetector, values) =
-    (det.state.host_buffer = values; det)
+    (det.workspace.host_buffer = values; det)
 set_counting_output_buffer!(det::MKIDArrayDetector, values) =
-    (det.state.output_buffer = values; det)
+    (det.products.output_buffer = values; det)
 set_counting_output_host_buffer!(det::MKIDArrayDetector, values) =
-    (det.state.output_buffer_host = values; det)
+    (det.workspace.output_buffer_host = values; det)
 counting_detection_efficiency(det::MKIDArrayDetector,
     ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat} =
     T(det.params.sensor.qe)
@@ -290,14 +279,17 @@ function _build_mkid_array_detector(noise::NoiseModel;
     output_buffer_host === nothing || fill!(output_buffer_host,
         zero(eltype(output_buffer_host)))
     thermal_state = thermal_state_from_model(thermal, T)
-    state = MKIDArrayDetectorState{T,typeof(counts),typeof(host_buffer),
-        typeof(output_buffer),typeof(output_buffer_host),typeof(thermal_state)}(
-        counts, noise_buffer, host_buffer, output_buffer, output_buffer_host,
-        thermal_state)
+    state = CountingDetectorState{typeof(thermal_state)}(thermal_state)
+    workspace = CountingDetectorWorkspace{T,typeof(noise_buffer),
+        typeof(host_buffer),typeof(output_buffer_host)}(
+        noise_buffer, host_buffer, output_buffer_host)
+    products = CountingDetectorProducts{T,typeof(counts),
+        typeof(output_buffer)}(counts, output_buffer)
     selector = _resolve_backend_selector(backend)
     return MKIDArrayDetector{
-        typeof(validated),typeof(params),typeof(state),typeof(selector)}(
-        validated, params, state)
+        typeof(validated),typeof(params),typeof(state),typeof(workspace),
+        typeof(products),typeof(selector)}(
+        validated, params, state, workspace, products)
 end
 
 """

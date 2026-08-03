@@ -141,16 +141,17 @@ end
     prepared_plan = prepare_detector_acquisition(prepared_detector,
         prepared_map)
     prepared_rng = Xoshiro(3005)
-    @test @inferred(capture!(prepared_detector, prepared_map, prepared_plan,
-        prepared_rng)) isa Matrix{Float64}
+    @test @inferred(capture!(prepared_plan, prepared_rng)) isa Matrix{Float64}
     @test_detector_allocation prepared_detector_capture_allocations(
-        prepared_detector, prepared_map, prepared_plan, prepared_rng) == 0
+        prepared_plan, prepared_rng) == 0
 
     valid_output = copy(output_frame(prepared_detector))
     mismatched_map = detector_test_intensity_map(copy(prepared_values);
         sampling=(2.0, 1.0))
-    @test_throws InvalidConfiguration capture!(prepared_detector,
-        mismatched_map, prepared_plan, Xoshiro(3006))
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.Detectors._require_prepared_acquisition(
+            prepared_plan, mismatched_map)
+    end
     @test output_frame(prepared_detector) == valid_output
 end
 

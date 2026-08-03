@@ -1,66 +1,66 @@
 function ensure_latent_buffer!(det::Detector)
-    if size(det.state.latent_buffer) != size(det.state.frame)
-        det.state.latent_buffer = similar(det.state.frame, size(det.state.frame)...)
+    if size(det.state.latent_buffer) != size(det.products.frame)
+        det.state.latent_buffer = similar(det.products.frame, size(det.products.frame)...)
         fill!(det.state.latent_buffer, zero(eltype(det.state.latent_buffer)))
     end
     return det.state.latent_buffer
 end
 
-apply_signal_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.state.frame
-apply_dark_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.state.frame
+apply_signal_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.products.frame
+apply_dark_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.products.frame
 
 function apply_signal_defects!(model::PixelResponseNonuniformity, det::Detector, exposure_time::Real)
-    _require_detector_defect_shape(model, size(det.state.frame))
-    det.state.frame .*= model.gain_map
-    return det.state.frame
+    _require_detector_defect_shape(model, size(det.products.frame))
+    det.products.frame .*= model.gain_map
+    return det.products.frame
 end
 
-apply_dark_defects!(::PixelResponseNonuniformity, det::Detector, exposure_time::Real) = det.state.frame
-apply_signal_defects!(::DarkSignalNonuniformity, det::Detector, exposure_time::Real) = det.state.frame
+apply_dark_defects!(::PixelResponseNonuniformity, det::Detector, exposure_time::Real) = det.products.frame
+apply_signal_defects!(::DarkSignalNonuniformity, det::Detector, exposure_time::Real) = det.products.frame
 
 function apply_dark_defects!(model::DarkSignalNonuniformity, det::Detector, exposure_time::Real)
-    _require_detector_defect_shape(model, size(det.state.frame))
-    det.state.frame .+= model.dark_map .* exposure_time
-    return det.state.frame
+    _require_detector_defect_shape(model, size(det.products.frame))
+    det.products.frame .+= model.dark_map .* exposure_time
+    return det.products.frame
 end
 
 function apply_signal_defects!(model::BadPixelMask, det::Detector, exposure_time::Real)
-    _require_detector_defect_shape(model, size(det.state.frame))
+    _require_detector_defect_shape(model, size(det.products.frame))
     throughput = model.throughput
-    throughput == one(throughput) && return det.state.frame
-    det.state.frame .= ifelse.(model.mask, throughput .* det.state.frame, det.state.frame)
-    return det.state.frame
+    throughput == one(throughput) && return det.products.frame
+    det.products.frame .= ifelse.(model.mask, throughput .* det.products.frame, det.products.frame)
+    return det.products.frame
 end
 
-apply_dark_defects!(::BadPixelMask, det::Detector, exposure_time::Real) = det.state.frame
+apply_dark_defects!(::BadPixelMask, det::Detector, exposure_time::Real) = det.products.frame
 
 function apply_signal_defects!(model::CompositeDetectorDefectModel, det::Detector, exposure_time::Real)
     foreach(stage -> apply_signal_defects!(stage, det, exposure_time), model.stages)
-    return det.state.frame
+    return det.products.frame
 end
 
 function apply_dark_defects!(model::CompositeDetectorDefectModel, det::Detector, exposure_time::Real)
     foreach(stage -> apply_dark_defects!(stage, det, exposure_time), model.stages)
-    return det.state.frame
+    return det.products.frame
 end
 
-apply_frame_nonlinearity!(::NullFrameNonlinearity, det::Detector) = det.state.frame
+apply_frame_nonlinearity!(::NullFrameNonlinearity, det::Detector) = det.products.frame
 
 function apply_frame_nonlinearity!(model::SaturatingFrameNonlinearity, det::Detector)
     coeff = model.coefficient
-    coeff <= zero(coeff) && return det.state.frame
-    @. det.state.frame = det.state.frame / (1 + coeff * det.state.frame)
-    return det.state.frame
+    coeff <= zero(coeff) && return det.products.frame
+    @. det.products.frame = det.products.frame / (1 + coeff * det.products.frame)
+    return det.products.frame
 end
 
-apply_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.state.frame
-update_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.state.frame
+apply_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.products.frame
+update_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.products.frame
 
 function detector_host_buffer!(det::Detector, ::Type{T}, dims::Tuple{Int,Int}) where {T<:AbstractFloat}
-    host = det.state.noise_buffer_host
+    host = det.workspace.noise_buffer_host
     if size(host) != dims
         host = Matrix{T}(undef, dims...)
-        det.state.noise_buffer_host = host
+        det.workspace.noise_buffer_host = host
     end
     return host
 end
@@ -165,24 +165,24 @@ function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatri
     return nothing
 end
 
-apply_background_flux!(::NoBackground, det::Detector, rng::AbstractRNG, exposure_time::Real) = det.state.frame
+apply_background_flux!(::NoBackground, det::Detector, rng::AbstractRNG, exposure_time::Real) = det.products.frame
 
 function apply_background_flux!(background::ScalarBackground, det::Detector, rng::AbstractRNG, exposure_time::Real)
-    return add_poisson_rate!(det.state.frame, det, rng, background.level * exposure_time)
+    return add_poisson_rate!(det.products.frame, det, rng, background.level * exposure_time)
 end
 
 function apply_background_flux!(background::BackgroundFrame, det::Detector, rng::AbstractRNG, exposure_time::Real)
-    _require_background_flux_shape(background, size(det.state.frame))
-    copyto!(det.state.noise_buffer, background.map)
-    det.state.noise_buffer .*= exposure_time
-    poisson_noise_frame!(det, rng, det.state.noise_buffer)
-    det.state.frame .+= det.state.noise_buffer
-    return det.state.frame
+    _require_background_flux_shape(background, size(det.products.frame))
+    copyto!(det.workspace.noise_buffer, background.map)
+    det.workspace.noise_buffer .*= exposure_time
+    poisson_noise_frame!(det, rng, det.workspace.noise_buffer)
+    det.products.frame .+= det.workspace.noise_buffer
+    return det.products.frame
 end
 
 function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     dark_signal = effective_dark_current(det) * effective_dark_current_time(det.params.sensor, exposure_time)
-    return add_poisson_rate!(det.state.frame, det, rng, dark_signal)
+    return add_poisson_rate!(det.products.frame, det, rng, dark_signal)
 end
 
 sensor_saturation_limit(det::Detector) = sensor_saturation_limit(det.params.sensor, det)
@@ -190,32 +190,32 @@ sensor_saturation_limit(::FrameSensorType, det::Detector) = det.params.full_well
 
 function _apply_saturation!(::DetectorDirectStrategy, det::Detector)
     full_well = sensor_saturation_limit(det)
-    full_well === nothing && return det.state.frame
-    clamp_array!(det.state.frame, zero(eltype(det.state.frame)), full_well)
-    return det.state.frame
+    full_well === nothing && return det.products.frame
+    clamp_array!(det.products.frame, zero(eltype(det.products.frame)), full_well)
+    return det.products.frame
 end
 
 function _apply_saturation!(::DetectorHostMirrorStrategy, det::Detector)
     full_well = sensor_saturation_limit(det)
-    full_well === nothing && return det.state.frame
-    host = detector_host_frame!(det, det.state.frame)
+    full_well === nothing && return det.products.frame
+    host = detector_host_frame!(det, det.products.frame)
     clamp!(host, zero(eltype(host)), full_well)
-    copyto!(det.state.frame, host)
-    return det.state.frame
+    copyto!(det.products.frame, host)
+    return det.products.frame
 end
 
 function _apply_saturation!(::ScalarCPUStyle, det::Detector)
     full_well = sensor_saturation_limit(det)
-    full_well === nothing && return det.state.frame
-    clamp!(det.state.frame, zero(eltype(det.state.frame)), full_well)
-    return det.state.frame
+    full_well === nothing && return det.products.frame
+    clamp!(det.products.frame, zero(eltype(det.products.frame)), full_well)
+    return det.products.frame
 end
 
 function _apply_saturation!(style::AcceleratorStyle, det::Detector)
     full_well = sensor_saturation_limit(det)
-    full_well === nothing && return det.state.frame
-    _clamp_array!(style, det.state.frame, zero(eltype(det.state.frame)), full_well)
-    return det.state.frame
+    full_well === nothing && return det.products.frame
+    _clamp_array!(style, det.products.frame, zero(eltype(det.products.frame)), full_well)
+    return det.products.frame
 end
 
 @inline _detector_value_strategy(strategy::DetectorDirectStrategy, ::ExecutionStyle) = strategy
@@ -223,101 +223,101 @@ end
 @inline _detector_value_strategy(::DetectorHostMirrorStrategy, style::AcceleratorStyle) = style
 
 function apply_saturation!(det::Detector)
-    style = execution_style(det.state.frame)
+    style = execution_style(det.products.frame)
     strategy = detector_execution_strategy(typeof(style), typeof(det))
     return _apply_saturation!(_detector_value_strategy(strategy, style), det)
 end
 
 apply_sensor_statistics!(sensor::FrameSensorType, det::Detector,
-    rng::AbstractRNG, exposure_time::Real) = det.state.frame
+    rng::AbstractRNG, exposure_time::Real) = det.products.frame
 
-apply_pre_readout_gain!(::FrameSensorType, det::Detector, rng::AbstractRNG) = det.state.frame
-apply_post_readout_gain!(::FrameSensorType, det::Detector) = det.state.frame
+apply_pre_readout_gain!(::FrameSensorType, det::Detector, rng::AbstractRNG) = det.products.frame
+apply_post_readout_gain!(::FrameSensorType, det::Detector) = det.products.frame
 apply_detection_output!(::FrameSensorType, det::Detector,
-    rng::AbstractRNG) = det.state.frame
-apply_charge_transfer!(::FrameSensorType, det::Detector) = det.state.frame
-reset_readout_products!(det::Detector) = (det.state.readout_products = NoFrameReadoutProducts(); det)
+    rng::AbstractRNG) = det.products.frame
+apply_charge_transfer!(::FrameSensorType, det::Detector) = det.products.frame
+reset_readout_products!(det::Detector) = (det.products.readout = NoFrameReadoutProducts(); det)
 
-apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.state.frame
-apply_readout_noise!(det::Detector{NoisePhoton}, rng::AbstractRNG) = det.state.frame
+apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.products.frame
+apply_readout_noise!(det::Detector{NoisePhoton}, rng::AbstractRNG) = det.products.frame
 
 function apply_readout_noise!(det::Detector{<:NoiseReadout}, rng::AbstractRNG)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
-    return add_gaussian_noise!(det.state.frame, det, rng, sigma)
+    return add_gaussian_noise!(det.products.frame, det, rng, sigma)
 end
 
 function apply_readout_noise!(det::Detector{<:NoisePhotonReadout}, rng::AbstractRNG)
     sigma = effective_readout_sigma(det.params.sensor, det.noise.sigma)
-    return add_gaussian_noise!(det.state.frame, det, rng, sigma)
+    return add_gaussian_noise!(det.products.frame, det, rng, sigma)
 end
 
 apply_sensor_readout_noise!(::FrameSensorType, det::Detector,
-    rng::AbstractRNG) = det.state.frame
+    rng::AbstractRNG) = det.products.frame
 
 function _apply_quantization!(::DetectorDirectStrategy, det::Detector)
     bits = det.params.bits
-    bits === nothing && return det.state.frame
-    levels = exp2(eltype(det.state.frame)(bits))
+    bits === nothing && return det.products.frame
+    levels = exp2(eltype(det.products.frame)(bits))
     full_well = something(det.params.full_well)
-    det.state.frame .*= (levels - one(levels)) / full_well
-    clamp_array!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
-    return det.state.frame
+    det.products.frame .*= (levels - one(levels)) / full_well
+    clamp_array!(det.products.frame, zero(eltype(det.products.frame)), levels - one(levels))
+    return det.products.frame
 end
 
 function _apply_quantization!(::DetectorHostMirrorStrategy, det::Detector)
     bits = det.params.bits
-    bits === nothing && return det.state.frame
-    host = detector_host_frame!(det, det.state.frame)
+    bits === nothing && return det.products.frame
+    host = detector_host_frame!(det, det.products.frame)
     levels = exp2(eltype(host)(bits))
     full_well = something(det.params.full_well)
     host .*= (levels - one(levels)) / full_well
     clamp!(host, zero(eltype(host)), levels - one(levels))
-    copyto!(det.state.frame, host)
-    return det.state.frame
+    copyto!(det.products.frame, host)
+    return det.products.frame
 end
 
 function _apply_quantization!(::ScalarCPUStyle, det::Detector)
     bits = det.params.bits
-    bits === nothing && return det.state.frame
-    levels = exp2(eltype(det.state.frame)(bits))
+    bits === nothing && return det.products.frame
+    levels = exp2(eltype(det.products.frame)(bits))
     full_well = something(det.params.full_well)
-    det.state.frame .*= (levels - one(levels)) / full_well
-    clamp!(det.state.frame, zero(eltype(det.state.frame)), levels - one(levels))
-    return det.state.frame
+    det.products.frame .*= (levels - one(levels)) / full_well
+    clamp!(det.products.frame, zero(eltype(det.products.frame)), levels - one(levels))
+    return det.products.frame
 end
 
 function _apply_quantization!(style::AcceleratorStyle, det::Detector)
     bits = det.params.bits
-    bits === nothing && return det.state.frame
-    levels = exp2(eltype(det.state.frame)(bits))
+    bits === nothing && return det.products.frame
+    levels = exp2(eltype(det.products.frame)(bits))
     full_well = something(det.params.full_well)
-    det.state.frame .*= (levels - one(levels)) / full_well
-    _clamp_array!(style, det.state.frame, zero(eltype(det.state.frame)),
+    det.products.frame .*= (levels - one(levels)) / full_well
+    _clamp_array!(style, det.products.frame, zero(eltype(det.products.frame)),
         levels - one(levels))
-    return det.state.frame
+    return det.products.frame
 end
 
 function apply_quantization!(det::Detector)
-    style = execution_style(det.state.frame)
+    style = execution_style(det.products.frame)
     strategy = detector_execution_strategy(typeof(style), typeof(det))
     return _apply_quantization!(_detector_value_strategy(strategy, style), det)
 end
 
-subtract_background_map!(::NoBackground, det::Detector) = det.state.frame
+subtract_background_map!(::NoBackground, det::Detector) = det.products.frame
 
 function subtract_background_map!(background::ScalarBackground, det::Detector)
-    det.state.frame .-= background.level
-    return det.state.frame
+    det.products.frame .-= background.level
+    return det.products.frame
 end
 
 function subtract_background_map!(background::BackgroundFrame, det::Detector)
-    _require_background_map_shape(background, size(det.state.frame))
-    det.state.frame .-= background.map
-    return det.state.frame
+    _require_background_map_shape(background, size(det.products.frame))
+    det.products.frame .-= background.map
+    return det.products.frame
 end
 
 readout_product_shape(det::Detector) = det.params.readout_window === nothing ?
-    size(det.state.frame) :
+    size(det.products.frame) :
     (length(det.params.readout_window.rows), length(det.params.readout_window.cols))
 
 function _copy_windowed_frame(frame::AbstractMatrix, det::Detector)
@@ -518,11 +518,11 @@ function _apply_readout_correction!(::DetectorDirectStrategy, model::FrameReadou
 end
 
 function _detector_readout_scratch!(det::Detector, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
-    if size(det.state.noise_buffer) != size(frame)
-        det.state.noise_buffer = similar(det.state.noise_buffer, size(frame)...)
-        fill!(det.state.noise_buffer, zero(eltype(det.state.noise_buffer)))
+    if size(det.workspace.noise_buffer) != size(frame)
+        det.workspace.noise_buffer = similar(det.workspace.noise_buffer, size(frame)...)
+        fill!(det.workspace.noise_buffer, zero(eltype(det.workspace.noise_buffer)))
     end
-    return det.state.noise_buffer
+    return det.workspace.noise_buffer
 end
 
 function _apply_readout_correction!(::ScalarCPUStyle, model::FrameReadoutCorrectionModel,
@@ -624,16 +624,16 @@ function initial_temporal_frame(source::InPlaceExposureFrameSource,
 end
 
 function ensure_temporal_buffer!(det::Detector, dims::Tuple{Int,Int})
-    if size(det.state.temporal_buffer) != dims
-        det.state.temporal_buffer = similar(det.state.temporal_buffer, dims...)
+    if size(det.workspace.temporal_buffer) != dims
+        det.workspace.temporal_buffer = similar(det.workspace.temporal_buffer, dims...)
     end
-    return det.state.temporal_buffer
+    return det.workspace.temporal_buffer
 end
 
 function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
     rng::AbstractRNG, exposure_time::Real, ::GlobalShutter)
     capture_signal_pipeline!(det, first_frame, rng, exposure_time)
-    return det.state.frame
+    return det.products.frame
 end
 
 rolling_exposure_start(::RollingExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
@@ -648,28 +648,28 @@ rolling_exposure_duration(::GlobalResetExposure, line_index, line_time, exposure
 function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
     rng::AbstractRNG, exposure_time::Real, timing::RollingShutter)
     fill_frame!(det, first_frame, exposure_time)
-    det.state.accum_buffer .= det.state.frame
+    det.state.accum_buffer .= det.products.frame
 
     scratch = ensure_temporal_buffer!(det, size(first_frame))
-    n_rows = size(det.state.frame, 1)
+    n_rows = size(det.products.frame, 1)
     group_size = timing.row_group_size
-    value_type = eltype(det.state.frame)
-    for row_lo in (firstindex(det.state.frame, 1) + group_size):group_size:n_rows
+    value_type = eltype(det.products.frame)
+    for row_lo in (firstindex(det.products.frame, 1) + group_size):group_size:n_rows
         row_hi = min(row_lo + group_size - 1, n_rows)
         line_index = div(row_lo - 1, group_size)
         sample_time = rolling_exposure_start(timing.exposure_mode, line_index, timing.line_time, exposure_time, value_type)
         group_exposure = rolling_exposure_duration(timing.exposure_mode, line_index, timing.line_time, exposure_time, value_type)
         sample_exposure_frame!(scratch, source, sample_time, group_exposure)
         fill_frame!(det, scratch, group_exposure)
-        @views det.state.accum_buffer[row_lo:row_hi, :] .= det.state.frame[row_lo:row_hi, :]
+        @views det.state.accum_buffer[row_lo:row_hi, :] .= det.products.frame[row_lo:row_hi, :]
     end
 
-    det.state.frame .= det.state.accum_buffer
+    det.products.frame .= det.state.accum_buffer
     apply_signal_defects!(det.params.defect_model, det, exposure_time)
     apply_sensor_persistence!(det.params.sensor, det, exposure_time)
-    photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.state.frame)
+    photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.products.frame)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
-    return det.state.frame
+    return det.products.frame
 end
 
 function _write_output!(::DetectorDirectStrategy, det::Detector, output::AbstractMatrix,
@@ -684,11 +684,11 @@ end
 
 function _write_output!(::DetectorHostMirrorStrategy, det::Detector,
     output::AbstractMatrix, source::AbstractMatrix)
-    frame_host = detector_host_frame!(det, det.state.frame)
+    frame_host = detector_host_frame!(det, det.products.frame)
     window = det.params.readout_window
     source_host = window === nothing ? frame_host :
         @view(frame_host[window.rows, window.cols])
-    output_host = det.state.output_buffer_host
+    output_host = det.workspace.output_buffer_host
     output_host === nothing && throw(InvalidConfiguration(
         "Detector host-mirror output requires a host output buffer"))
     if eltype(output_host) <: Integer
@@ -702,12 +702,12 @@ end
 
 function write_output!(det::Detector)
     window = det.params.readout_window
-    output = det.state.output_buffer
+    output = det.products.output_buffer
     if output === nothing
-        window === nothing && return det.state.frame
+        window === nothing && return det.products.frame
         throw(InvalidConfiguration("Detector readout_window requires an allocated output buffer"))
     end
-    source = window === nothing ? det.state.frame : @view(det.state.frame[window.rows, window.cols])
+    source = window === nothing ? det.products.frame : @view(det.products.frame[window.rows, window.cols])
     strategy = detector_execution_strategy(typeof(execution_style(output)), typeof(det))
     return _write_output!(strategy, det, output, source)
 end
@@ -757,7 +757,7 @@ end
 function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource, rng::AbstractRNG) where {T}
     require_whole_capture_idle(det)
     return capture_with_quantum_efficiency!(det, psf,
-        effective_qe(det, src, eltype(det.state.frame)), rng)
+        effective_qe(det, src, eltype(det.products.frame)), rng)
 end
 
 function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource; rng::AbstractRNG=Random.default_rng()) where {T}
@@ -768,7 +768,7 @@ function capture!(det::Detector, source::AbstractTemporalFrameSource, rng::Abstr
     require_whole_capture_idle(det)
     exposure_time = det.params.integration_time
     first_frame = initial_temporal_frame(source, det,
-        zero(eltype(det.state.frame)), exposure_time)
+        zero(eltype(det.products.frame)), exposure_time)
     capture_temporal_signal!(det, source, first_frame, rng, exposure_time,
         det.params.timing_model)
     finalize_capture!(det, rng, exposure_time)
@@ -793,13 +793,13 @@ scheduled detector events own their timestamps and completion semantics.
 function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
     rng::AbstractRNG, integration_duration::Real, qe=det.params.qe)
     if !iszero(det.state.integrated_time) || !det.state.readout_ready
-        size(photon_rate) == size(det.state.presampling_buffer) ||
+        size(photon_rate) == size(det.workspace.presampling_buffer) ||
             throw(DimensionMismatchError(
                 "incremental detector input dimensions cannot change while " *
                 "an exposure is pending"))
     end
     prepare_detector_buffers!(det, size(photon_rate))
-    T = eltype(det.state.frame)
+    T = eltype(det.products.frame)
     dt = T(integration_duration)
     isfinite(dt) && dt > zero(T) || throw(InvalidConfiguration(
         "integration_duration must be finite and > 0"))
@@ -817,12 +817,12 @@ function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
     capture_signal_pipeline!(det, photon_rate, rng, dt, qe, exposure_start,
         det.params.integration_time)
     accumulate_incremental_charge_generation!(det, rng, dt)
-    det.state.accum_buffer .+= det.state.frame
+    det.state.accum_buffer .+= det.products.frame
     det.state.integrated_time += dt
     advance_thermal!(det, dt)
     det.state.readout_ready = false
     if det.state.integrated_time + tolerance >= det.params.integration_time
-        det.state.frame .= det.state.accum_buffer
+        det.products.frame .= det.state.accum_buffer
         finalize_incremental_capture!(det, rng, det.state.integrated_time)
         fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
         det.state.integrated_time = zero(det.state.integrated_time)

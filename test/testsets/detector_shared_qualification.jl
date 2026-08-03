@@ -213,7 +213,7 @@ end
     scalar_map = detector_test_intensity_map(fill(8.0, 2, 2);
         spectral=MonochromaticChannel(0.55e-6))
     scalar_plan = prepare_detector_acquisition(scalar_qe_detector, scalar_map)
-    @test capture!(scalar_qe_detector, scalar_map, scalar_plan,
+    @test capture!(scalar_plan,
         Xoshiro(2005)) == fill(4.0, 2, 2)
 
     sampled_qe = SampledQuantumEfficiency(
@@ -230,7 +230,7 @@ end
         qe_map = detector_test_intensity_map(fill(8.0, 2, 2);
             spectral=MonochromaticChannel(wavelength_m))
         qe_plan = prepare_detector_acquisition(qe_detector, qe_map)
-        @test capture!(qe_detector, qe_map, qe_plan,
+        @test capture!(qe_plan,
             Xoshiro(2006)) ≈ fill(16 * expected_qe, 2, 2)
     end
 
@@ -241,8 +241,8 @@ end
     low_fidelity_plan = prepare_detector_acquisition(low_fidelity_detector,
         low_fidelity_map)
     low_fidelity_rng = Xoshiro(2007)
-    @test @inferred(capture!(low_fidelity_detector, low_fidelity_map,
-        low_fidelity_plan, low_fidelity_rng)) isa Matrix{Float64}
+    @test @inferred(capture!(low_fidelity_plan, low_fidelity_rng)) isa
+        Matrix{Float64}
     @test output_frame(low_fidelity_detector) == ones(32, 32)
     @test readout_products(low_fidelity_detector) isa NoFrameReadoutProducts
     low_fidelity_metadata = detector_export_metadata(low_fidelity_detector)
@@ -252,8 +252,7 @@ end
     @test low_fidelity_metadata.detector_defects == :none
     @test low_fidelity_metadata.nonlinearity_model == :none
     @test_detector_allocation prepared_detector_capture_allocations(
-        low_fidelity_detector, low_fidelity_map, low_fidelity_plan,
-        low_fidelity_rng) == 0
+        low_fidelity_plan, low_fidelity_rng) == 0
 
     rejected_response = Detector(noise=NoiseNone(), psf_sampling=2,
         response_model=SampledFrameResponse([0.0 0.1 0.0;

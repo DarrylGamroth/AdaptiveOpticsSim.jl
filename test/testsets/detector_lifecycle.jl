@@ -30,10 +30,10 @@
         transition_values
     end)
 
-    capture!(transition_detector, transition_map, transition_plan;
+    capture!(transition_plan;
         rng=MersenneTwister(208), integration_duration=0.25)
     pending_time = transition_detector.state.integrated_time
-    pending_frame = copy(transition_detector.state.frame)
+    pending_frame = copy(transition_detector.products.frame)
     pending_accum = copy(transition_detector.state.accum_buffer)
     @test pending_time == 0.25
     @test !readout_ready(transition_detector)
@@ -44,8 +44,8 @@
         transition_values, transition_source; rng=MersenneTwister(210))
     @test_throws InvalidConfiguration capture!(transition_detector,
         transition_temporal; rng=MersenneTwister(211))
-    @test_throws InvalidConfiguration capture!(transition_detector,
-        transition_map, transition_plan; rng=MersenneTwister(212))
+    @test_throws InvalidConfiguration capture!(transition_plan;
+        rng=MersenneTwister(212))
     @test_throws InvalidConfiguration capture_with_quantum_efficiency!(
         transition_detector, transition_values, 0.25,
         MersenneTwister(213))
@@ -62,23 +62,23 @@
     @test temporal_calls[] == 0
     @test transition_detector.state.integrated_time == pending_time
     @test !readout_ready(transition_detector)
-    @test transition_detector.state.frame == pending_frame
+    @test transition_detector.products.frame == pending_frame
     @test transition_detector.state.accum_buffer == pending_accum
 
     pending_prepare_values = fill(4.0, 4, 4)
     pending_prepare_map = detector_test_intensity_map(pending_prepare_values)
-    pending_frame_shape = size(transition_detector.state.frame)
+    pending_frame_shape = size(transition_detector.products.frame)
     pending_accum_shape = size(transition_detector.state.accum_buffer)
     @test_throws InvalidConfiguration prepare_detector_acquisition(
         transition_detector, pending_prepare_map)
     @test transition_detector.state.integrated_time == pending_time
     @test !readout_ready(transition_detector)
-    @test size(transition_detector.state.frame) == pending_frame_shape
+    @test size(transition_detector.products.frame) == pending_frame_shape
     @test size(transition_detector.state.accum_buffer) == pending_accum_shape
-    @test transition_detector.state.frame == pending_frame
+    @test transition_detector.products.frame == pending_frame
     @test transition_detector.state.accum_buffer == pending_accum
 
-    capture!(transition_detector, transition_map, transition_plan;
+    capture!(transition_plan;
         rng=MersenneTwister(214), integration_duration=0.75)
     @test readout_ready(transition_detector)
     @test iszero(transition_detector.state.integrated_time)
@@ -97,7 +97,7 @@
     @test temporal_calls[] > 0
     @test readout_ready(transition_detector)
     @test iszero(transition_detector.state.integrated_time)
-    capture!(transition_detector, transition_map, transition_plan;
+    capture!(transition_plan;
         rng=MersenneTwister(218))
     @test readout_ready(transition_detector)
     @test iszero(transition_detector.state.integrated_time)
@@ -117,13 +117,13 @@
         sensor=InGaAsSensor(glow_rate=20.0))
     prepare_detector_buffers!(glow_full_duration, (2, 2))
     prepare_detector_buffers!(glow_short_duration, (2, 2))
-    fill!(glow_full_duration.state.frame, 0.0)
-    fill!(glow_short_duration.state.frame, 0.0)
+    fill!(glow_full_duration.products.frame, 0.0)
+    fill!(glow_short_duration.products.frame, 0.0)
     apply_sensor_statistics!(glow_full_duration.params.sensor,
         glow_full_duration, MersenneTwister(207), 0.25)
     apply_sensor_statistics!(glow_short_duration.params.sensor,
         glow_short_duration, MersenneTwister(207), 0.25)
-    @test glow_full_duration.state.frame == glow_short_duration.state.frame
+    @test glow_full_duration.products.frame == glow_short_duration.products.frame
 
     qe_curve = SampledQuantumEfficiency([0.50e-6, 0.60e-6], [0.2, 0.8])
     @test qe_at(qe_curve, 0.55e-6) ≈ 0.5
@@ -157,7 +157,7 @@
     det_tuple = Detector(integration_time=1.0, noise=(NoisePhoton(), NoiseReadout(0.5)),
         qe=1.0, binning=1)
     @test det_tuple.noise isa NoisePhotonReadout
-    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(AdaptiveOpticsSim.Backends.execution_style(det_tuple.state.frame), det_tuple) isa AdaptiveOpticsSim.Detectors.DetectorDirectStrategy
+    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(AdaptiveOpticsSim.Backends.execution_style(det_tuple.products.frame), det_tuple) isa AdaptiveOpticsSim.Detectors.DetectorDirectStrategy
 
     det_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, full_well=5.0)
     frame_sat = capture!(det_sat, fill(10.0, 4, 4); rng=MersenneTwister(2))
@@ -169,7 +169,7 @@
     @test output_frame(det_adc) === frame_adc
     @test maximum(frame_adc) == 0xff
     @test minimum(frame_adc) >= 0x00
-    @test eltype(det_adc.state.frame) == Float64
+    @test eltype(det_adc.products.frame) == Float64
     metadata_adc = detector_export_metadata(det_adc)
     @test metadata_adc.noise == :none
     @test metadata_adc.sensor == :ccd

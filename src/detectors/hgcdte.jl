@@ -169,7 +169,7 @@ function _apply_hgcdte_glow!(sensor::HgCdTeSensorType, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     rate = effective_glow_rate(det) *
         effective_sensor_glow_time(sensor, exposure_time)
-    return add_poisson_rate!(det.state.frame, det, rng, rate)
+    return add_poisson_rate!(det.products.frame, det, rng, rate)
 end
 
 apply_sensor_statistics!(sensor::HgCdTeSensor, det::Detector,
@@ -179,31 +179,31 @@ apply_sensor_statistics!(sensor::HgCdTeSensor, det::Detector,
 function apply_incremental_sensor_statistics!(sensor::HgCdTeSensorType,
     det::Detector, rng::AbstractRNG, exposure_time::Real)
     rate = effective_glow_rate(det) * exposure_time
-    return add_poisson_rate!(det.state.frame, det, rng, rate)
+    return add_poisson_rate!(det.products.frame, det, rng, rate)
 end
 
 function apply_hgcdte_persistence!(::NullPersistence, det::Detector,
     ::Real)
-    return det.state.frame
+    return det.products.frame
 end
 
 function apply_hgcdte_persistence!(model::ExponentialPersistence,
     det::Detector, ::Real)
     ensure_latent_buffer!(det)
-    det.state.frame .+= det.state.latent_buffer
-    return det.state.frame
+    det.products.frame .+= det.state.latent_buffer
+    return det.products.frame
 end
 
 function update_hgcdte_persistence!(::NullPersistence, det::Detector,
     ::Real)
-    return det.state.frame
+    return det.products.frame
 end
 
 function update_hgcdte_persistence!(model::ExponentialPersistence,
     det::Detector, ::Real)
     ensure_latent_buffer!(det)
     det.state.latent_buffer .= model.decay .* det.state.latent_buffer .+
-        model.coupling .* det.state.frame
+        model.coupling .* det.products.frame
     return det.state.latent_buffer
 end
 
@@ -216,8 +216,8 @@ update_sensor_persistence!(sensor::HgCdTeSensorType, det::Detector,
     update_hgcdte_persistence!(persistence_model(sensor), det, exposure_time)
 
 function apply_post_readout_gain!(::HgCdTeSensorType, det::Detector)
-    det.state.frame .*= det.params.gain
-    return det.state.frame
+    det.products.frame .*= det.params.gain
+    return det.products.frame
 end
 
 function _batched_hgcdte_glow!(sensor::HgCdTeSensorType, det::Detector,
@@ -253,7 +253,7 @@ function _hgcdte_readout_products_type(::UpTheRampSampling, frame::A,
     cube_type = typeof(similar(frame, size(frame, 1), size(frame, 2), 1))
     return Union{
         NoFrameReadoutProducts,
-        UpTheRampReadoutProducts{A,cube_type,Vector{T}},
+        UpTheRampReadoutProducts{A,cube_type,FixedSizeVectorDefault{T}},
     }
 end
 
@@ -264,13 +264,37 @@ function _hgcdte_readout_products_type(::FrameSamplingMode, frame::A,
         NoFrameReadoutProducts,
         MultiReadFrameReadoutProducts{A,Nothing,Nothing},
         MultiReadFrameReadoutProducts{A,cube_type,Nothing},
-        MultiReadFrameReadoutProducts{A,cube_type,Vector{T}},
+        MultiReadFrameReadoutProducts{A,cube_type,FixedSizeVectorDefault{T}},
     }
 end
 
 function detector_readout_products_type(sensor::HgCdTeSensorType, frame::A,
     ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
     return _hgcdte_readout_products_type(
+        multi_read_sampling_mode(sensor), frame, T)
+end
+
+function _hgcdte_readout_workspace_type(::UpTheRampSampling, frame::A,
+    ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    cube_type = typeof(similar(frame, size(frame, 1), size(frame, 2), 1))
+    return Union{
+        NoFrameReadoutWorkspace,
+        UpTheRampReadoutWorkspace{A,cube_type},
+    }
+end
+
+function _hgcdte_readout_workspace_type(::FrameSamplingMode, frame::A,
+    ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    cube_type = typeof(similar(frame, size(frame, 1), size(frame, 2), 1))
+    return Union{
+        NoFrameReadoutWorkspace,
+        MultiReadFrameReadoutWorkspace{A,cube_type},
+    }
+end
+
+function detector_readout_workspace_type(sensor::HgCdTeSensorType, frame::A,
+    ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    return _hgcdte_readout_workspace_type(
         multi_read_sampling_mode(sensor), frame, T)
 end
 
@@ -331,5 +355,5 @@ function finalize_hgcdte_capture!(det::Detector, rng::AbstractRNG,
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
     update_sensor_persistence!(det.params.sensor, det, exposure_time)
-    return det.state.frame
+    return det.products.frame
 end

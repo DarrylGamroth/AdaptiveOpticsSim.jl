@@ -216,35 +216,35 @@ function apply_sensor_readout_noise!(sensor::CMOSSensor, det::Detector,
     apply_cmos_column_noise!(sensor, det, rng)
     apply_cmos_row_noise!(sensor, det, rng)
     apply_cmos_pixel_noise!(sensor.readout_noise_model, det, rng)
-    return det.state.frame
+    return det.products.frame
 end
 
 function apply_cmos_column_noise!(sensor::CMOSSensor, det::Detector,
     rng::AbstractRNG)
     sigma = sensor.column_readout_sigma
-    sigma <= zero(sigma) && return det.state.frame
-    randn_frame_noise!(det, rng, det.state.noise_buffer)
-    return apply_column_noise!(execution_style(det.state.frame), det.state.frame, det.state.noise_buffer, sigma)
+    sigma <= zero(sigma) && return det.products.frame
+    randn_frame_noise!(det, rng, det.workspace.noise_buffer)
+    return apply_column_noise!(execution_style(det.products.frame), det.products.frame, det.workspace.noise_buffer, sigma)
 end
 
 function apply_cmos_row_noise!(sensor::CMOSSensor, det::Detector,
     rng::AbstractRNG)
     sigma = sensor.row_readout_sigma
-    sigma <= zero(sigma) && return det.state.frame
-    randn_frame_noise!(det, rng, det.state.noise_buffer)
-    return apply_row_noise!(execution_style(det.state.frame), det.state.frame,
-        det.state.noise_buffer, sigma)
+    sigma <= zero(sigma) && return det.products.frame
+    randn_frame_noise!(det, rng, det.workspace.noise_buffer)
+    return apply_row_noise!(execution_style(det.products.frame), det.products.frame,
+        det.workspace.noise_buffer, sigma)
 end
 
 apply_cmos_pixel_noise!(::NullCMOSReadNoise, det::Detector,
-    rng::AbstractRNG) = det.state.frame
+    rng::AbstractRNG) = det.products.frame
 
 function apply_cmos_pixel_noise!(model::CMOSReadNoiseMap, det::Detector,
     rng::AbstractRNG)
-    _require_cmos_readout_shape(model, size(det.state.frame))
-    randn_frame_noise!(det, rng, det.state.noise_buffer)
-    det.state.frame .+= model.sigma .* det.state.noise_buffer
-    return det.state.frame
+    _require_cmos_readout_shape(model, size(det.products.frame))
+    randn_frame_noise!(det, rng, det.workspace.noise_buffer)
+    det.products.frame .+= model.sigma .* det.workspace.noise_buffer
+    return det.products.frame
 end
 
 function apply_column_noise!(::ScalarCPUStyle, frame, noise, sigma)
@@ -279,9 +279,9 @@ function apply_row_noise!(style::AcceleratorStyle, frame, noise, sigma)
 end
 
 function apply_post_readout_gain!(::CMOSSensor, det::Detector)
-    det.state.frame .*= det.params.gain
-    apply_output_model!(execution_style(det.state.frame), det.params.sensor.output_model, det.state.frame)
-    return det.state.frame
+    det.products.frame .*= det.params.gain
+    apply_output_model!(execution_style(det.products.frame), det.params.sensor.output_model, det.products.frame)
+    return det.products.frame
 end
 
 apply_output_model!(::ExecutionStyle, ::NullCMOSOutputModel, frame) = frame

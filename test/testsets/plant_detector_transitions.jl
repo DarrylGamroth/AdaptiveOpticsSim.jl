@@ -64,9 +64,7 @@ end
         readout_duration=PlantDuration(20),
         readiness_delay=PlantDuration(30))
     detector = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0)
-    plan = prepare_detector_acquisition(detector, map)
-    prepared = prepare_global_shutter_acquisition(detector, map, plan,
-        definition)
+    prepared = prepare_global_shutter_acquisition(detector, map, definition)
     state = GlobalShutterAcquisitionState(prepared)
 
     @test detector_acquisition_status(state) == DetectorAcquisitionReady
@@ -84,13 +82,13 @@ end
 
     rolling = Detector(integration_time=1.0, noise=NoiseNone(),
         sensor=CMOSSensor(timing_model=RollingShutter(1e-6)))
-    @test size(rolling.state.frame) == (1, 1)
+    @test size(rolling.products.frame) == (1, 1)
     rolling_error = caught_detector_acquisition_error() do
         prepare_global_shutter_acquisition(rolling, map, definition)
     end
     @test rolling_error isa DetectorAcquisitionError
     @test rolling_error.reason == :unsupported_timing
-    @test size(rolling.state.frame) == (1, 1)
+    @test size(rolling.products.frame) == (1, 1)
 
     quantized_sensor = HgCdTeSensor(
         sampling_mode=UpTheRampSampling(4), read_time=0.0)

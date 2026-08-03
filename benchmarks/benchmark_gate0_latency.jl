@@ -188,13 +188,12 @@ function make_gate0_card(raw::AbstractDict)
         rng_b = runtime_rng(Int(raw["rng_seed_b"]))
         acquisition_a = prepare_detector_acquisition(detector_a, rate_map)
         acquisition_b = prepare_detector_acquisition(detector_b, rate_map)
-        let imaging=imaging, rate_map=rate_map, detector_a=detector_a,
-            detector_b=detector_b, acquisition_a=acquisition_a,
+        let imaging=imaging, rate_map=rate_map, acquisition_a=acquisition_a,
             acquisition_b=acquisition_b, rng_a=rng_a, rng_b=rng_b
             () -> begin
                 form_direct_image!(imaging)
-                capture!(detector_a, rate_map, acquisition_a, rng_a)
-                capture!(detector_b, rate_map, acquisition_b, rng_b)
+                capture!(acquisition_a, rng_a)
+                capture!(acquisition_b, rng_b)
             end
         end
     elseif kind == "closed_loop_step"

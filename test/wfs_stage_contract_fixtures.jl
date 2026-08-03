@@ -176,20 +176,26 @@ function WavefrontSensors.validate_wfs_optical_formation_binding(
     return nothing
 end
 
-struct ContractDetectorBinding{D,I,P,O}
-    detector::D
-    input::I
-    plan::P
+struct ContractDetectorBinding{A,O}
+    acquisition::A
     observation::O
 end
+
+@inline _contract_binding_detector(binding::ContractDetectorBinding) =
+    AdaptiveOpticsSim.Detectors.detector_acquisition_detector(
+        binding.acquisition)
+
+@inline _contract_binding_input(binding::ContractDetectorBinding) =
+    AdaptiveOpticsSim.Detectors.detector_acquisition_input(
+        binding.acquisition)
 
 function contract_detector_binding(detector::Detector, input::IntensityMap;
     units=:detector_signal, layout=:detector_frame,
     normalized_to_photon_rate=nothing)
-    plan = prepare_detector_acquisition(detector, input;
+    acquisition = prepare_detector_acquisition(detector, input;
         normalized_to_photon_rate=normalized_to_photon_rate)
     observation = WFSObservation(output_frame(detector); units, layout)
-    return ContractDetectorBinding(detector, input, plan, observation)
+    return ContractDetectorBinding(acquisition, observation)
 end
 
 struct ContractDetectorAcquisitionModel{B<:Tuple}
@@ -224,7 +230,7 @@ end
         observation.units === binding.observation.units ||
         throw(WFSPreparationError(:acquisition, :detector_mapping,
             "contract fixture observation does not match its detector binding"))
-    output_frame(binding.detector) === observation.storage ||
+    output_frame(_contract_binding_detector(binding)) === observation.storage ||
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "contract fixture detector output storage was replaced"))
     return nothing
@@ -269,7 +275,7 @@ end
 
 @inline function _contract_require_binding_inputs(bindings::Tuple, products)
     binding = first(bindings)
-    _contract_contains_product(products, binding.input) ||
+    _contract_contains_product(products, _contract_binding_input(binding)) ||
         throw(WFSPreparationError(:acquisition, :detector_mapping,
             "contract fixture detector input is absent from the optical products"))
     return _contract_require_binding_inputs(Base.tail(bindings), products)
@@ -282,7 +288,8 @@ end
 end
 
 @inline function _contract_require_detector_absent(detector, bindings::Tuple)
-    detector.state === first(bindings).detector.state &&
+    detector.state ===
+        _contract_binding_detector(first(bindings)).state &&
         throw(WFSPreparationError(:acquisition, :detector_mapping,
             "one detector state cannot appear in multiple acquisition bindings"))
     return _contract_require_detector_absent(detector, Base.tail(bindings))
@@ -290,7 +297,8 @@ end
 
 @inline function _contract_require_unique_detectors(bindings::Tuple)
     binding = first(bindings)
-    _contract_require_detector_absent(binding.detector, Base.tail(bindings))
+    _contract_require_detector_absent(
+        _contract_binding_detector(binding), Base.tail(bindings))
     return _contract_require_unique_detectors(Base.tail(bindings))
 end
 
@@ -309,7 +317,8 @@ end
 
 @inline function _contract_require_live_detector_outputs(bindings::Tuple)
     binding = first(bindings)
-    output_frame(binding.detector) === binding.observation.storage ||
+    output_frame(_contract_binding_detector(binding)) ===
+        binding.observation.storage ||
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "contract fixture detector output storage was replaced after preparation"))
     return _contract_require_live_detector_outputs(Base.tail(bindings))
@@ -352,7 +361,7 @@ end
         :detector_mapping,
         "multiple detector bindings require one concrete RNG per detector"))
     binding = first(bindings)
-    result = capture!(binding.detector, binding.input, binding.plan, rng)
+    result = capture!(binding.acquisition, rng)
     result === binding.observation.storage ||
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "contract fixture detector returned unexpected output storage"))
@@ -373,8 +382,7 @@ end
 
 @inline function _contract_capture_bindings!(bindings::Tuple, rngs::Tuple)
     binding = first(bindings)
-    result = capture!(binding.detector, binding.input, binding.plan,
-        first(rngs))
+    result = capture!(binding.acquisition, first(rngs))
     result === binding.observation.storage ||
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "contract fixture detector returned unexpected output storage"))
@@ -822,7 +830,7 @@ end
     target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
     binding = first(bindings)
     AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
-        binding.detector, binding.plan, target)
+        binding.acquisition, target)
     WavefrontSensors._require_exact_wfs_observation_target(
         binding.observation, target, :acquisition)
     return _contract_validate_detector_targets(Base.tail(bindings), target)

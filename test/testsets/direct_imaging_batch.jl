@@ -361,17 +361,15 @@ end
     )
     short_plan = prepare_detector_acquisition(short, selected)
     long_plan = prepare_detector_acquisition(long, selected)
-    @test short_plan.input_values === selected.values
-    @test long_plan.input_values === selected.values
+    @test Detectors.detector_acquisition_input(short_plan).values ===
+        selected.values
+    @test Detectors.detector_acquisition_input(long_plan).values ===
+        selected.values
     short_frame = copy(capture!(
-        short,
-        selected,
         short_plan;
         rng=MersenneTwister(501),
     ))
     long_frame = copy(capture!(
-        long,
-        selected,
         long_plan;
         rng=MersenneTwister(502),
     ))
