@@ -129,6 +129,24 @@ end
     spatial_plan = Optics.spatial_filter_plan(spatial)
     @test all(name -> !(getfield(spatial_plan, name) isa AbstractArray),
         fieldnames(typeof(spatial_plan)))
+
+    foreign_aperture = Telescope(
+        resolution=8,
+        diameter=T(4),
+        central_obstruction=T(0.5),
+        T=T,
+    )
+    foreign_spatial_output = PupilFunction(foreign_aperture; T=T)
+    foreign_amplitude_before = copy(foreign_spatial_output.amplitude)
+    foreign_opd_before = copy(foreign_spatial_output.opd)
+    @test Optics.aperture_revision(foreign_spatial_output) ==
+        Optics.aperture_revision(tel)
+    @test pupil_support(foreign_spatial_output) != pupil_mask(tel)
+    @test_throws InvalidConfiguration prepare_spatial_filter(
+        tel, spatial_filter, spatial_field, foreign_spatial_output)
+    @test foreign_spatial_output.amplitude == foreign_amplitude_before
+    @test foreign_spatial_output.opd == foreign_opd_before
+
     first_spatial = begin
         filter!(spatial)
         (copy(spatial_output.amplitude), copy(spatial_output.opd))

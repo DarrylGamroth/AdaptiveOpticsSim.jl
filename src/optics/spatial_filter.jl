@@ -255,6 +255,8 @@ function prepare_spatial_filter(tel::Telescope,
     aperture_revision(output) == aperture_revision(tel) || throw(
         InvalidConfiguration(
             "spatial-filter output aperture revision does not match the telescope"))
+    all(output.support .== pupil_mask(tel)) || throw(InvalidConfiguration(
+        "spatial-filter output support does not match the telescope aperture"))
     typeof(input.metadata.kind) === PupilPlane || throw(InvalidConfiguration(
         "spatial-filter input must be a pupil-plane ElectricField"))
     typeof(output.metadata.kind) === PupilPlane || throw(InvalidConfiguration(
