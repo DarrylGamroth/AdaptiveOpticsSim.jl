@@ -2,8 +2,9 @@
 # Prepared focal-plane spatial filtering
 #
 # `SpatialFilter` owns only its fixed focal-plane mask definition.
+# `SpatialFilterPlan` owns the reusable numerical and metadata contract.
 # `SpatialFilterWorkspace` owns the single-writer FFT plans and scratch.
-# The input `ElectricField` and output `PupilFunction` remain caller-owned.
+# `PreparedSpatialFilter` binds exact caller-visible input and output products.
 #
 abstract type SpatialFilterShape end
 struct CircularFilter <: SpatialFilterShape end
@@ -30,6 +31,7 @@ end
 
 @inline backend(::SpatialFilter{<:Any,<:Any,<:Any,B}) where {B} = B()
 
+"""Single-writer FFT resources and scratch for spatial filtering."""
 struct SpatialFilterWorkspace{
     C<:AbstractMatrix,
     Pf,
@@ -41,28 +43,80 @@ struct SpatialFilterWorkspace{
     ifft_plan::Pi
 end
 
+"""Run-immutable spatial-filter numerical and optical-plane contract."""
 struct SpatialFilterPlan{
     T<:AbstractFloat,
     P<:SpatialFilterParams,
     I<:OpticalPlaneMetadata,
     O<:OpticalPlaneMetadata,
-    M<:AbstractMatrix{Bool},
 }
     filter_params::P
     input_metadata::I
     output_metadata::O
     active_axes::NTuple{2,UnitRange{Int}}
-    support::M
     wavelength_m::T
+    aperture_revision::UInt
 end
+
+struct _PreparedSpatialFilterToken end
+const _PREPARED_SPATIAL_FILTER_TOKEN = _PreparedSpatialFilterToken()
+
+"""
+    PreparedSpatialFilter
+
+Exact prepared owner for one focal-plane spatial-filter stage. The filter,
+input field, output pupil function, and single-writer workspace are bound for
+the lifetime of this owner. Call `filter!(prepared)` for repeated execution.
+"""
+struct PreparedSpatialFilter{
+    F<:SpatialFilter,
+    I<:ElectricField,
+    O<:PupilFunction,
+    P<:SpatialFilterPlan,
+    W<:SpatialFilterWorkspace,
+}
+    spatial_filter::F
+    input::I
+    output::O
+    plan::P
+    workspace::W
+
+    function PreparedSpatialFilter(
+        ::_PreparedSpatialFilterToken,
+        spatial_filter::F,
+        input::I,
+        output::O,
+        plan::P,
+        workspace::W,
+    ) where {
+        F<:SpatialFilter,
+        I<:ElectricField,
+        O<:PupilFunction,
+        P<:SpatialFilterPlan,
+        W<:SpatialFilterWorkspace,
+    }
+        return new{F,I,O,P,W}(
+            spatial_filter, input, output, plan, workspace)
+    end
+end
+
+"""Return the reusable plan from a prepared spatial-filter owner."""
+@inline spatial_filter_plan(prepared::PreparedSpatialFilter) = prepared.plan
+
+"""Return the single-writer workspace from a prepared spatial-filter owner."""
+@inline spatial_filter_workspace(prepared::PreparedSpatialFilter) =
+    prepared.workspace
+
+"""Return the caller-visible output from a prepared spatial-filter owner."""
+@inline spatial_filter_output(prepared::PreparedSpatialFilter) =
+    prepared.output
 
 """
     SpatialFilter(tel; shape=CircularFilter(), diameter=..., zero_padding=2)
 
 Prepare an immutable focal-plane mask. Repeated filtering additionally uses a
-`SpatialFilterWorkspace`, explicit input `ElectricField`, caller-owned output
-`PupilFunction`, and a `SpatialFilterPlan` returned by
-`prepare_spatial_filter`.
+single-writer workspace, an explicit input `ElectricField`, and a caller-owned
+output `PupilFunction` bound by `prepare_spatial_filter`.
 """
 function SpatialFilter(tel::Telescope;
     shape::SpatialFilterShape=CircularFilter(),
@@ -93,6 +147,33 @@ function SpatialFilterWorkspace(spatial_filter::SpatialFilter)
     ifft_plan = plan_ifft_backend!(filtered_field)
     return SpatialFilterWorkspace(fft_buffer, filtered_field, fft_plan,
         ifft_plan)
+end
+
+function _require_spatial_filter_plan_workspace(
+    plan::SpatialFilterPlan,
+    workspace::SpatialFilterWorkspace,
+)
+    for (storage, label) in (
+        (workspace.fft_buffer, "spatial-filter FFT scratch"),
+        (workspace.filtered_field, "spatial-filter filtered-field scratch"),
+    )
+        size(storage) == plan.input_metadata.dimensions || throw(
+            DimensionMismatchError(
+                "$label dimensions do not match the prepared plan"))
+        eltype(storage) === plan.input_metadata.numeric_type || throw(
+            InvalidConfiguration(
+                "$label numeric type does not match the prepared plan"))
+        typeof(backend(storage)) === typeof(plan.input_metadata.backend) ||
+            throw(InvalidConfiguration(
+                "$label backend does not match the prepared plan"))
+        compute_device(storage) == plan.input_metadata.device || throw(
+            InvalidConfiguration(
+                "$label device does not match the prepared plan"))
+    end
+    Base.mightalias(workspace.fft_buffer, workspace.filtered_field) && throw(
+        InvalidConfiguration(
+            "spatial-filter workspace arrays must not alias"))
+    return workspace
 end
 
 set_spatial_filter!(spatial_filter::SpatialFilter{S}) where {S} =
@@ -171,6 +252,9 @@ function prepare_spatial_filter(tel::Telescope,
     output.metadata.dimensions == size(pupil_mask(tel)) ||
         throw(DimensionMismatchError(
             "spatial-filter output must match the telescope aperture"))
+    aperture_revision(output) == aperture_revision(tel) || throw(
+        InvalidConfiguration(
+            "spatial-filter output aperture revision does not match the telescope"))
     typeof(input.metadata.kind) === PupilPlane || throw(InvalidConfiguration(
         "spatial-filter input must be a pupil-plane ElectricField"))
     typeof(output.metadata.kind) === PupilPlane || throw(InvalidConfiguration(
@@ -197,36 +281,72 @@ function prepare_spatial_filter(tel::Telescope,
     n = spatial_filter.params.pupil_resolution
     axes = (ox + 1:ox + n, oy + 1:oy + n)
     T = eltype(output.opd)
-    return SpatialFilterPlan{
+    plan = SpatialFilterPlan{
         T,typeof(spatial_filter.params),typeof(input.metadata),
         typeof(output.metadata),
-        typeof(pupil_mask(tel)),
     }(
         spatial_filter.params,
         input.metadata,
         output.metadata,
         axes,
-        pupil_mask(tel),
         T(electric_field_wavelength(input)),
+        aperture_revision(tel),
+    )
+    workspace = SpatialFilterWorkspace(spatial_filter)
+    _require_spatial_filter_plan_workspace(plan, workspace)
+    return PreparedSpatialFilter(
+        _PREPARED_SPATIAL_FILTER_TOKEN,
+        spatial_filter,
+        input,
+        output,
+        plan,
+        workspace,
     )
 end
 
-function filter!(output::PupilFunction, input::ElectricField,
-    spatial_filter::SpatialFilter, plan::SpatialFilterPlan,
-    workspace::SpatialFilterWorkspace)
+function _require_prepared_spatial_filter_bindings(
+    prepared::PreparedSpatialFilter,
+    spatial_filter::SpatialFilter,
+    input::ElectricField,
+    output::PupilFunction,
+    workspace::SpatialFilterWorkspace,
+)
+    spatial_filter === prepared.spatial_filter || throw(
+        InvalidConfiguration(
+            "spatial filter does not match its prepared owner"))
+    input === prepared.input || throw(InvalidConfiguration(
+        "spatial-filter input does not match its prepared owner"))
+    output === prepared.output || throw(InvalidConfiguration(
+        "spatial-filter output does not match its prepared owner"))
+    workspace === prepared.workspace || throw(InvalidConfiguration(
+        "spatial-filter workspace does not match its prepared owner"))
+    return nothing
+end
+
+function _filter_prepared_spatial_filter!(
+    prepared::PreparedSpatialFilter,
+    spatial_filter::SpatialFilter,
+    input::ElectricField,
+    output::PupilFunction,
+    workspace::SpatialFilterWorkspace,
+)
+    _require_prepared_spatial_filter_bindings(
+        prepared, spatial_filter, input, output, workspace)
+    plan = prepared.plan
     input.metadata == plan.input_metadata || throw(InvalidConfiguration(
         "ElectricField metadata does not match the prepared spatial-filter plan"))
     output.metadata == plan.output_metadata || throw(InvalidConfiguration(
         "PupilFunction metadata does not match the prepared spatial-filter plan"))
+    aperture_revision(output) == plan.aperture_revision || throw(
+        InvalidConfiguration(
+            "PupilFunction aperture revision does not match the prepared spatial-filter plan"))
     spatial_filter.params == plan.filter_params ||
         throw(InvalidConfiguration(
             "SpatialFilter does not match the prepared spatial-filter plan"))
     size(spatial_filter.mask_shifted) == input.metadata.dimensions ||
         throw(DimensionMismatchError(
             "spatial-filter mask does not match its prepared field"))
-    size(workspace.fft_buffer) == input.metadata.dimensions ||
-        throw(DimensionMismatchError(
-            "spatial-filter workspace does not match its prepared field"))
+    _require_spatial_filter_plan_workspace(plan, workspace)
 
     copyto!(workspace.fft_buffer, input.values)
     execute_fft_plan!(workspace.fft_buffer, workspace.fft_plan)
@@ -236,8 +356,19 @@ function filter!(output::PupilFunction, input::ElectricField,
     opd_per_radian = plan.wavelength_m / (2 * eltype(output.opd)(pi))
     @views begin
         region = workspace.filtered_field[plan.active_axes...]
-        @. output.opd = angle(region) * opd_per_radian * plan.support
+        @. output.opd = angle(region) * opd_per_radian * output.support
         @. output.amplitude = abs(region)
     end
     return output
+end
+
+"""Execute one prepared focal-plane spatial-filter stage."""
+function filter!(prepared::PreparedSpatialFilter)
+    return _filter_prepared_spatial_filter!(
+        prepared,
+        prepared.spatial_filter,
+        prepared.input,
+        prepared.output,
+        prepared.workspace,
+    )
 end

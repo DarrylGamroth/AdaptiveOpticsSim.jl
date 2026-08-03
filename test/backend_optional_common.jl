@@ -4019,11 +4019,10 @@ function run_optional_plane_product_checks(tel::Telescope,
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(spatial_field, wavefront, spatial_formation)
     filtered = PupilFunction(tel; T=T, backend=selector)
-    spatial_plan = prepare_spatial_filter(tel, spatial_filter, spatial_field,
+    prepared_spatial_filter = prepare_spatial_filter(
+        tel, spatial_filter, spatial_field,
         filtered)
-    spatial_workspace = SpatialFilterWorkspace(spatial_filter)
-    filter!(filtered, spatial_field, spatial_filter, spatial_plan,
-        spatial_workspace)
+    filter!(prepared_spatial_filter)
     @test filtered.opd isa BackendArray
     @test filtered.amplitude isa BackendArray
     @test all(isfinite, Array(filtered.opd))
@@ -5610,9 +5609,12 @@ function run_optional_direct_imaging_batch_checks(
     @test prepared.workspace.shift_axis1 isa BackendArray
     @test prepared.workspace.shift_axis2 isa BackendArray
     @test prepared.workspace.fft_plan ===
-        prepared.workspace_bindings.fft_plan
-    @test prepared.fields === prepared.workspace_bindings.fields
-    @test products === prepared.workspace_bindings.output
+        prepared.bindings.fft_plan
+    @test prepared.fields !== prepared.bindings.fields
+    @test all(index ->
+            prepared.fields[index] === prepared.bindings.fields[index],
+        eachindex(prepared.fields))
+    @test products === prepared.bindings.output
     @test all(
         index -> optional_storage_range_contains(
             prepared.workspace.field_stack,

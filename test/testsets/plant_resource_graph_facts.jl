@@ -169,8 +169,8 @@ function plant_resource_graph_path_bytes(path)
         renderer.pupil,
     ))
     workspace = plant_resource_graph_storage_bytes((
-        execution.plan.propagation.state.scratch,
-        execution.plan.unshifted_intensity,
+        execution.workspace.propagation.scratch,
+        execution.workspace.unshifted_intensity,
     ))
     return (; resident, workspace)
 end

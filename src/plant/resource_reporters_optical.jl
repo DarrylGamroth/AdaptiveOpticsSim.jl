@@ -162,14 +162,14 @@ end
 end
 
 @inline function _direct_imaging_workspace_bytes(
-    propagation::FraunhoferPropagation,
+    propagation::FraunhoferPropagationWorkspace,
     unshifted_intensity::AbstractMatrix,
     target::AbstractComputeDevice,
 )
-    _require_distinct_structural_storage(propagation.state.scratch,
+    _require_distinct_structural_storage(propagation.scratch,
         unshifted_intensity, :direct_imaging)
     return _structural_array_target_bytes(
-        (propagation.state.scratch, unshifted_intensity), target,
+        (propagation.scratch, unshifted_intensity), target,
         :workspace_bytes)
 end
 
@@ -189,17 +189,20 @@ end
 end
 
 """
-Report a prepared direct-imaging leaf.  Its plan only aliases the explicit
-input/field/output products and workspace, so those arrays are counted once
-from the leaf fields; the FFT plan itself is intentionally opaque.
+Report a prepared direct-imaging leaf. Its plan retains no caller arrays; the
+exact input/field/output products and workspace arrays are counted once from
+the prepared owner. The FFT plan itself is intentionally opaque.
 """
 function structural_resource_fact(prepared::PreparedDirectImaging,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
     _validate_direct_imaging_resource_bindings(prepared)
     resident = _direct_imaging_resident_bytes(prepared.input, prepared.field,
         prepared.output, target)
-    workspace = _direct_imaging_workspace_bytes(prepared.plan.propagation,
-        prepared.plan.unshifted_intensity, target)
+    workspace = _direct_imaging_workspace_bytes(
+        prepared.workspace.propagation,
+        prepared.workspace.unshifted_intensity,
+        target,
+    )
     return _targeted_structural_resource_fact(
         id, target, resident, workspace)
 end
@@ -268,16 +271,18 @@ function _prepared_path_resource_fact(
         _renderer_structural_resident_bytes(
             materialization.renderer, target), :resident_bytes)
     workspace = _direct_imaging_workspace_bytes(
-        execution.plan.propagation,
-        execution.plan.unshifted_intensity, target)
+        execution.workspace.propagation,
+        execution.workspace.unshifted_intensity,
+        target,
+    )
     return _targeted_structural_resource_fact(
         id, target, resident, workspace)
 end
 
 """
 Report a direct-science prepared path as one owner.  The path owns its input,
-result, direct-imaging products/workspace, and renderer geometry; internal
-plan aliases and the renderer destination are counted only through that owner.
+result, direct-imaging products/workspace, and renderer geometry; exact product
+bindings and the renderer destination are counted only through that owner.
 """
 function structural_resource_fact(path::PreparedPathExecutor,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)

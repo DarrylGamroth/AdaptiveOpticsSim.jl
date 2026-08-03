@@ -125,10 +125,19 @@ Plant.plant_model_definition_style(
             :owner_not_on_device
     end
 
-    mismatched = PreparedDirectImaging(second_pupil, direct.field,
-        direct.output, direct.plan, direct.workspace)
-    @test_throws InvalidConfiguration structural_resource_fact(mismatched,
-        StructuralResourceOwnerID(:direct_science, :invalid_binding), target)
+    rebound = Optics.PreparedDirectImaging(
+        Optics._PREPARED_DIRECT_IMAGING_TOKEN,
+        second_pupil,
+        direct.field,
+        direct.output,
+        direct.plan,
+        direct.workspace,
+    )
+    rebound_fact = structural_resource_fact(rebound,
+        StructuralResourceOwnerID(:direct_science, :rebound), target)
+    @test structural_resident_bytes(rebound_fact) == expected_direct_resident
+    @test structural_workspace_bytes(rebound_fact) ==
+        expected_direct_workspace
 
     unsupported_materialization = PreparedPupilOPDMaterialization(
         Plant._PREPARED_PUPIL_OPD_MATERIALIZATION_TOKEN,

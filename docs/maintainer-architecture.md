@@ -163,10 +163,13 @@ There is no universal
 `process!` verb. Domain operations retain their accepted names.
 
 The target architecture does not directly use Julia's `Memory` as an
-implementation or API type. Homogeneous bounded host storage uses an
+implementation or API type. Homogeneous bounded host storage uses a
 FixedSizeArrays.jl `FixedSizeArray` whose element type is concrete and whose
 final shape is allocated during preparation. A `Vector` may be a cold builder
-but is sealed before execution. Small fixed heterogeneous composition uses
+but is sealed before execution. Because fixed-size arrays still permit element
+replacement, exact prepared owners retain an independent ordered membership
+snapshot and reject replacement before numerical mutation. Small fixed
+heterogeneous composition uses
 concrete tuples or unions. Larger topologies group concrete homogeneous owners
 by execution family and use compact concrete descriptors or purpose-built
 owners without encoding path count in the type. Backend numerical storage
@@ -277,10 +280,13 @@ Examples:
 - `Detector` with `DetectorParams` and `DetectorState`
 - `DetectorAcquisitionPlan` as the cold-path compatibility and buffer contract
   between one frame detector and one immutable intensity-map description
-- `DirectImagingPlan` and `DirectImagingWorkspace` as the fixed-storage,
-  single-writer native image-formation contract; composition returns concrete
-  prepared values accessed through `direct_imaging_output` and
-  `direct_imaging_components` rather than exposing telescope-owned focal state
+- `DirectImagingPlan` as reusable run-immutable image-formation metadata and
+  mapping, `DirectImagingWorkspace` as replaceable single-writer scratch, and
+  `PreparedDirectImaging` as the exact input/field/output/plan/workspace
+  binding; composition seals homogeneous memberships in concrete
+  `FixedSizeVector` storage and returns prepared values accessed through
+  `direct_imaging_output` and `direct_imaging_components` rather than exposing
+  telescope-owned focal state
 - caller-owned `WFSObservation` and `WFSMeasurement` products with explicit
   units, layout/kind, shape, numeric type, backend, and physical-device metadata
 - concrete prepared WFS optical-formation, acquisition, and estimation plans

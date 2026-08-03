@@ -197,6 +197,20 @@ end
         "wfs-lift",
         "backend-smoke",
     )
+    @test Tuple(spec.name for spec in resolve_test_suites(["pe03"])) == (
+        "prepared-execution-contracts",
+        "namespace-authority",
+        "prepared-optics-ownership",
+        "core-optics",
+        "direct-science",
+        "direct-imaging-batch",
+        "plant-preparation",
+        "plant-resource-facts",
+        "optical-analysis",
+        "reference-tutorials",
+        "gate0",
+        "backend-smoke",
+    )
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["control"])) ==
         ("control-primitives", "control-reconstruction")

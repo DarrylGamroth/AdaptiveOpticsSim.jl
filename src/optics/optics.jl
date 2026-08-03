@@ -7,6 +7,7 @@ sampled NCPA, controllable optics, and reusable physical WFS components.
 """
 module Optics
 
+using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
 using LinearAlgebra
 using Statistics

@@ -142,7 +142,7 @@ end
 end
 
 function _require_exact_plant_product_target(
-    products::_FixedOpticalProductVector,
+    products::FixedSizeVector{<:AbstractOpticalProduct},
     target::AbstractComputeDevice,
     label::AbstractString,
 )

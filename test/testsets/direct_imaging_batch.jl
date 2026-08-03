@@ -105,11 +105,14 @@ end
         second_pupil
     @test AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared)[1] ===
         on_axis
-    copied_membership =
-        AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared)._storage
-    copied_membership[1] = off_axis
-    @test AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared)[1] ===
-        on_axis
+    @test prepared.sources isa FixedSizeVector
+    @test prepared.inputs isa FixedSizeVector
+    @test prepared.fields isa FixedSizeVector
+    @test prepared.formation_plans isa FixedSizeVector
+    @test prepared.output.products isa FixedSizeVector
+    @test isconcretetype(eltype(prepared.sources))
+    @test_throws MethodError push!(prepared.sources, off_axis)
+    @test_throws MethodError resize!(prepared.sources, 3)
     copied_sources =
         copy(AdaptiveOpticsSim.Optics.direct_imaging_batch_sources(prepared))
     copied_sources[1] = off_axis
@@ -141,7 +144,7 @@ end
     @test signature.samples[1].wavelength_m == wavelength_m
     @test signature.samples[2].shift_samples == (25, 0)
     @test prepared.workspace.fft_plan ===
-        prepared.workspace_bindings.fft_plan
+        prepared.bindings.fft_plan
     @test parent(prepared.fields[1].values) ===
         prepared.workspace.field_stack
     @test parent(prepared.output[2].values) ===
@@ -181,16 +184,22 @@ end
         counting_plan,
     )
     counted_bindings =
-        AdaptiveOpticsSim.Optics.DirectImagingBatchWorkspaceBindings(
+        AdaptiveOpticsSim.Optics.PreparedDirectImagingBatchBindings(
             counted_workspace.field_stack,
             counted_workspace.output_stack,
             counted_workspace.shift_axis1,
             counted_workspace.shift_axis2,
             counting_plan,
-            prepared.fields,
+            prepared.bindings.sources,
+            prepared.bindings.inputs,
+            prepared.bindings.fields,
+            prepared.bindings.formation_plans,
+            prepared.bindings.products,
             prepared.output,
+            prepared.bindings.sample_params,
         )
     counted = AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch(
+        AdaptiveOpticsSim.Optics._PREPARED_DIRECT_IMAGING_BATCH_TOKEN,
         prepared.signature,
         prepared.sources,
         prepared.inputs,
@@ -391,6 +400,17 @@ end
     @test AdaptiveOpticsSim.Optics.validate_direct_imaging_batch(prepared) ===
         prepared
 
+    original_product = prepared.output.products[1]
+    foreign_product_stack = similar(prepared.workspace.output_stack)
+    foreign_product_values = @view foreign_product_stack[:, :, 1]
+    foreign_product = IntensityMap(
+        original_product.metadata, foreign_product_values)
+    prepared.output.products[1] = foreign_product
+    fill!(prepared.workspace.output_stack, T(43))
+    @test_throws InvalidConfiguration form_direct_image!(prepared)
+    @test all(==(T(43)), prepared.workspace.output_stack)
+    prepared.output.products[1] = original_product
+
     fill!(prepared.workspace.output_stack, T(37))
     saved_shifts = prepared.workspace.shift_axis1
     prepared.workspace.shift_axis1 = zeros(Int, 2)
@@ -410,16 +430,22 @@ end
         prepared.workspace.fft_plan,
     )
     foreign_bindings =
-        AdaptiveOpticsSim.Optics.DirectImagingBatchWorkspaceBindings(
+        AdaptiveOpticsSim.Optics.PreparedDirectImagingBatchBindings(
             prepared.workspace.field_stack,
             foreign_output,
             prepared.workspace.shift_axis1,
             prepared.workspace.shift_axis2,
             prepared.workspace.fft_plan,
-            prepared.fields,
+            prepared.bindings.sources,
+            prepared.bindings.inputs,
+            prepared.bindings.fields,
+            prepared.bindings.formation_plans,
+            prepared.bindings.products,
             prepared.output,
+            prepared.bindings.sample_params,
         )
     foreign_prepared = AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch(
+        AdaptiveOpticsSim.Optics._PREPARED_DIRECT_IMAGING_BATCH_TOKEN,
         prepared.signature,
         prepared.sources,
         prepared.inputs,
@@ -449,6 +475,7 @@ end
         )
     incompatible_fft_prepared =
         AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch(
+            AdaptiveOpticsSim.Optics._PREPARED_DIRECT_IMAGING_BATCH_TOKEN,
             incompatible_fft_signature,
             prepared.sources,
             prepared.inputs,
@@ -456,7 +483,7 @@ end
             prepared.formation_plans,
             prepared.output,
             prepared.workspace,
-            prepared.workspace_bindings,
+            prepared.bindings,
         )
     fill!(prepared.workspace.output_stack, T(43))
     @test_throws InvalidConfiguration form_direct_image!(
@@ -481,6 +508,7 @@ end
         )
     incompatible_model_prepared =
         AdaptiveOpticsSim.Optics.PreparedDirectImagingBatch(
+            AdaptiveOpticsSim.Optics._PREPARED_DIRECT_IMAGING_BATCH_TOKEN,
             incompatible_model_signature,
             prepared.sources,
             prepared.inputs,
@@ -488,7 +516,7 @@ end
             prepared.formation_plans,
             prepared.output,
             prepared.workspace,
-            prepared.workspace_bindings,
+            prepared.bindings,
         )
     fill!(prepared.workspace.output_stack, T(47))
     @test_throws InvalidConfiguration form_direct_image!(

@@ -287,7 +287,8 @@ end
 @inline _path_output_contract(products::Tuple) =
     map(_path_output_contract, products)
 
-function _path_output_contract(products::_FixedOpticalProductVector)
+function _path_output_contract(
+    products::FixedSizeVector{<:AbstractOpticalProduct})
     isempty(products) && throw(PlantPreparationError(:path, :output_plane,
         "prepared optical-path result bundle must not be empty"))
     return map(_path_output_contract, products)
@@ -304,7 +305,8 @@ end
 @inline _first_path_result(products::Tuple{<:Any,Vararg}) =
     _first_path_result(first(products))
 
-function _first_path_result(products::_FixedOpticalProductVector)
+function _first_path_result(
+    products::FixedSizeVector{<:AbstractOpticalProduct})
     isempty(products) && throw(PlantPreparationError(:path, :output_plane,
         "prepared optical-path result bundle must not be empty"))
     return _first_path_result(first(products))
@@ -339,7 +341,8 @@ end
     return _require_path_result_domain(Base.tail(products), selector, device)
 end
 
-function _require_path_result_domain(products::_FixedOpticalProductVector,
+function _require_path_result_domain(
+    products::FixedSizeVector{<:AbstractOpticalProduct},
     selector::AbstractArrayBackend, device::AbstractComputeDevice)
     @inbounds for product in products
         _require_path_result_domain(product, selector, device)

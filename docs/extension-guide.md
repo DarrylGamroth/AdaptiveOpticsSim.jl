@@ -89,12 +89,32 @@ operator itself requires that identity. A reentrant logically immutable FFT or
 backend handle may be part of a plan; a scratch-owning, stream-bound,
 task-bound, or non-reentrant handle belongs to a workspace or prepared owner.
 
+`Optics.AbstractPropagationPlan` is the nominal plan interface for native
+Fraunhofer and Fresnel propagation. Implementations provide
+`Optics.propagation_input_metadata` and
+`Optics.propagation_output_metadata`; domain-specific `propagate_field!`
+methods accept a concrete plan and matching concrete workspace. A prepared
+propagation model retains that plan/workspace pair. Native direct imaging and
+spatial filtering use a stricter exact-owner boundary:
+`Optics.PreparedDirectImaging` binds its input, work field, output, plan, and
+workspace, while `Optics.PreparedSpatialFilter` additionally binds its physical
+filter. Foreign identities, stale metadata, incompatible backend/device
+storage, dimensions, numeric types, or forbidden workspace aliases must raise
+a structured error before product mutation. Plans are reentrant when their
+logically immutable coefficient arrays are not mutated; workspaces and prepared
+owners are single-writer. Recreating a compatible workspace must not change a
+deterministic optical result. Warmed CPU execution remains allocation-free;
+accelerator launch-allocation claims require backend-specific evidence.
+
 New and migrated package or extension implementation does not directly use
 Julia's `Memory` type. Use
 [FixedSizeArrays.jl](https://github.com/JuliaArrays/FixedSizeArrays.jl)'s
 `FixedSizeArray{ConcreteT}` for homogeneous armed host storage; construction
 must reject a non-concrete element type. A `Vector` may be used as a cold
 builder, but preparation must seal it into fixed-size storage before execution.
+Fixed-size storage prevents cardinality changes, not element replacement;
+exact prepared owners must retain an independent ordered membership snapshot
+and reject replacement before numerical mutation.
 Use a concrete tuple or union for small bounded heterogeneous composition. For
 larger topologies, group owners into concrete homogeneous fixed-size arrays by
 execution family and select those groups with compact concrete descriptors or

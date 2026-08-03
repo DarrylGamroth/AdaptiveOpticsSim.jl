@@ -57,41 +57,12 @@ struct DirectImagingBatchProductContract{
     dimensions::NTuple{2,Int}
 end
 
-struct _FixedDirectImagingBatchVector{
-    T,
-    V<:Memory{T},
-} <: AbstractVector{T}
-    _storage::V
-end
-
-Base.size(values::_FixedDirectImagingBatchVector) =
-    size(getfield(values, :_storage))
-Base.axes(values::_FixedDirectImagingBatchVector) =
-    axes(getfield(values, :_storage))
-Base.length(values::_FixedDirectImagingBatchVector) =
-    length(getfield(values, :_storage))
-Base.getindex(values::_FixedDirectImagingBatchVector, index::Int) =
-    @inbounds getfield(values, :_storage)[index]
-Base.IndexStyle(::Type{<:_FixedDirectImagingBatchVector}) = IndexLinear()
-Base.iterate(values::_FixedDirectImagingBatchVector, state...) =
-    iterate(getfield(values, :_storage), state...)
-Base.copy(values::_FixedDirectImagingBatchVector) =
-    collect(getfield(values, :_storage))
-
-function Base.getproperty(
-    values::_FixedDirectImagingBatchVector,
-    name::Symbol,
-)
-    name === :_storage && return collect(getfield(values, :_storage))
-    return getfield(values, name)
-end
-
 """
 Immutable compatibility signature for one prepared direct-imaging batch.
 
-Sample cardinality is deliberately a runtime value. The fixed vector wrapper
-does not encode cardinality in its type, so large source registries do not
-produce one method family per batch size.
+Sample cardinality is deliberately a runtime value. Fixed-size membership does
+not encode cardinality in its type, so large source registries do not produce
+one method family per batch size.
 """
 struct DirectImagingBatchCompatibilitySignature{
     T<:AbstractFloat,
@@ -102,7 +73,7 @@ struct DirectImagingBatchCompatibilitySignature{
     B<:AbstractArrayBackend,
     D<:AbstractComputeDevice,
     P<:DirectImagingBatchProductContract,
-    S<:_FixedDirectImagingBatchVector,
+    S<:FixedSizeVector{DirectImagingBatchSampleParams{T}},
 }
     model_type::Type{M}
     capability::C
@@ -134,35 +105,47 @@ mutable struct DirectImagingBatchWorkspace{
 end
 
 """
-Exact run-immutable bindings for replaceable workspace fields and their
-prepared field/product views.
+Exact run-immutable bindings for replaceable workspace fields and independent
+snapshots of every replaceable fixed-size membership.
 """
-struct DirectImagingBatchWorkspaceBindings{F,O,X,Y,P,V,R}
+struct PreparedDirectImagingBatchBindings{
+    F,O,X,Y,P,S,I,V,L,R,B,Q,
+}
     field_stack::F
     output_stack::O
     shift_axis1::X
     shift_axis2::Y
     fft_plan::P
+    sources::S
+    inputs::I
     fields::V
-    output::R
+    formation_plans::L
+    products::R
+    output::B
+    sample_params::Q
 end
+
+struct _PreparedDirectImagingBatchToken end
+const _PREPARED_DIRECT_IMAGING_BATCH_TOKEN =
+    _PreparedDirectImagingBatchToken()
 
 """
 Prepared native direct-imaging batch.
 
-The fixed input, source, field-view, formation-plan, and output memberships are
-separate from the mutable single-writer workspace. `output` preserves ordinary
-`IntensityMap` products through `OpticalProductBundle`.
+The fixed-cardinality input, source, field-view, formation-plan, and output
+memberships are separate from the mutable single-writer workspace. Independent
+binding snapshots reject element replacement before execution. `output`
+preserves ordinary `IntensityMap` products through `OpticalProductBundle`.
 """
 struct PreparedDirectImagingBatch{
     S<:DirectImagingBatchCompatibilitySignature,
-    R<:_FixedDirectImagingBatchVector,
-    I<:_FixedDirectImagingBatchVector,
-    F<:_FixedDirectImagingBatchVector,
-    P<:_FixedDirectImagingBatchVector,
+    R<:FixedSizeVector,
+    I<:FixedSizeVector,
+    F<:FixedSizeVector,
+    P<:FixedSizeVector,
     O<:OpticalProductBundle,
     W<:DirectImagingBatchWorkspace,
-    B<:DirectImagingBatchWorkspaceBindings,
+    B<:PreparedDirectImagingBatchBindings,
 }
     signature::S
     sources::R
@@ -171,7 +154,39 @@ struct PreparedDirectImagingBatch{
     formation_plans::P
     output::O
     workspace::W
-    workspace_bindings::B
+    bindings::B
+
+    function PreparedDirectImagingBatch(
+        ::_PreparedDirectImagingBatchToken,
+        signature::S,
+        sources::R,
+        inputs::I,
+        fields::F,
+        formation_plans::P,
+        output::O,
+        workspace::W,
+        bindings::B,
+    ) where {
+        S<:DirectImagingBatchCompatibilitySignature,
+        R<:FixedSizeVector,
+        I<:FixedSizeVector,
+        F<:FixedSizeVector,
+        P<:FixedSizeVector,
+        O<:OpticalProductBundle,
+        W<:DirectImagingBatchWorkspace,
+        B<:PreparedDirectImagingBatchBindings,
+    }
+        return new{S,R,I,F,P,O,W,B}(
+            signature,
+            sources,
+            inputs,
+            fields,
+            formation_plans,
+            output,
+            workspace,
+            bindings,
+        )
+    end
 end
 
 @inline direct_imaging_output(prepared::PreparedDirectImagingBatch) =
@@ -219,17 +234,19 @@ function _direct_imaging_batch_sources(
     ))
     first_source = _direct_imaging_batch_source(first(sources), T)
     P = typeof(first_source)
-    frozen = Memory{P}(undef, length(sources))
-    frozen[1] = first_source
-    @inbounds for index in 2:length(sources)
-        source = _direct_imaging_batch_source(sources[index], T)
+    frozen = Vector{P}(undef, length(sources))
+    @inbounds frozen[1] = first_source
+    slot = 2
+    for source_definition in Iterators.drop(sources, 1)
+        source = _direct_imaging_batch_source(source_definition, T)
         typeof(source) === P || throw(InvalidConfiguration(
             "direct-imaging batch sources must have one concrete numeric " *
             "and radiometric storage contract",
         ))
-        frozen[index] = source
+        @inbounds frozen[slot] = source
+        slot += 1
     end
-    return _FixedDirectImagingBatchVector{P,typeof(frozen)}(frozen)
+    return FixedSizeVectorDefault{P}(frozen)
 end
 
 function _direct_imaging_batch_sources(
@@ -238,9 +255,9 @@ function _direct_imaging_batch_sources(
 ) where {T<:AbstractFloat}
     frozen_source = _direct_imaging_batch_source(source, T)
     P = typeof(frozen_source)
-    frozen = Memory{P}(undef, 1)
-    frozen[1] = frozen_source
-    return _FixedDirectImagingBatchVector{P,typeof(frozen)}(frozen)
+    frozen = Vector{P}(undef, 1)
+    @inbounds frozen[1] = frozen_source
+    return FixedSizeVectorDefault{P}(frozen)
 end
 
 function _direct_imaging_batch_sources(
@@ -285,11 +302,9 @@ function _repeat_direct_imaging_batch_input(
     input::PupilFunction,
     count::Int,
 )
-    storage = Memory{typeof(input)}(undef, count)
+    storage = Vector{typeof(input)}(undef, count)
     fill!(storage, input)
-    return _FixedDirectImagingBatchVector{
-        typeof(input),typeof(storage),
-    }(storage)
+    return FixedSizeVectorDefault{typeof(input)}(storage)
 end
 
 function _direct_imaging_batch_inputs(
@@ -299,15 +314,16 @@ function _direct_imaging_batch_inputs(
         "a direct-imaging batch requires at least one pupil input",
     ))
     P = typeof(first(inputs))
-    storage = Memory{P}(undef, length(inputs))
-    @inbounds for index in eachindex(inputs)
-        input = inputs[index]
+    storage = Vector{P}(undef, length(inputs))
+    slot = 1
+    for input in inputs
         typeof(input) === P || throw(InvalidConfiguration(
             "direct-imaging batch pupil inputs must have one concrete storage contract",
         ))
-        storage[index] = input
+        @inbounds storage[slot] = input
+        slot += 1
     end
-    return _FixedDirectImagingBatchVector{P,typeof(storage)}(storage)
+    return FixedSizeVectorDefault{P}(storage)
 end
 
 @inline function _direct_imaging_batch_product_contract(
@@ -405,8 +421,8 @@ end
 function _prepare_direct_imaging_batch(
     ::UnsupportedDirectImagingBatchCapability,
     model_type::Type{<:AbstractPropagationModel},
-    ::_FixedDirectImagingBatchVector,
-    ::_FixedDirectImagingBatchVector;
+    ::FixedSizeVector,
+    ::FixedSizeVector;
     zero_padding::Int,
 )
     throw(UnsupportedAlgorithm(
@@ -418,8 +434,8 @@ end
 function _prepare_direct_imaging_batch(
     capability::StackedFraunhoferDirectImagingBatchCapability,
     model_type::Type{<:FraunhoferPropagation},
-    inputs::_FixedDirectImagingBatchVector,
-    sources::_FixedDirectImagingBatchVector;
+    inputs::FixedSizeVector{<:PupilFunction},
+    sources::FixedSizeVector{<:Source};
     zero_padding::Int,
 )
     zero_padding >= 1 || throw(InvalidConfiguration(
@@ -468,10 +484,10 @@ function _prepare_direct_imaging_batch(
     Field = typeof(first_component.field)
     Formation = typeof(first_component.formation_plan)
     Product = typeof(first_component.output)
-    fields = Memory{Field}(undef, count)
-    formation_plans = Memory{Formation}(undef, count)
+    fields = Vector{Field}(undef, count)
+    formation_plans = Vector{Formation}(undef, count)
     products = Vector{Product}(undef, count)
-    samples = Memory{DirectImagingBatchSampleParams{T}}(undef, count)
+    samples = Vector{DirectImagingBatchSampleParams{T}}(undef, count)
     shift_axis1_host = Vector{Int}(undef, count)
     shift_axis2_host = Vector{Int}(undef, count)
     fields[1] = first_component.field
@@ -540,9 +556,8 @@ function _prepare_direct_imaging_batch(
         shift_axis2,
         fft_plan,
     )
-    fixed_samples = _FixedDirectImagingBatchVector{
-        DirectImagingBatchSampleParams{T},typeof(samples),
-    }(samples)
+    fixed_samples =
+        FixedSizeVectorDefault{DirectImagingBatchSampleParams{T}}(samples)
     signature = DirectImagingBatchCompatibilitySignature(
         model_type,
         capability,
@@ -557,22 +572,34 @@ function _prepare_direct_imaging_batch(
         T,
         count,
     )
-    fixed_fields =
-        _FixedDirectImagingBatchVector{Field,typeof(fields)}(fields)
-    fixed_formation_plans = _FixedDirectImagingBatchVector{
-        Formation,typeof(formation_plans),
-    }(formation_plans)
+    fixed_fields = FixedSizeVectorDefault{Field}(fields)
+    fixed_formation_plans =
+        FixedSizeVectorDefault{Formation}(formation_plans)
     output = OpticalProductBundle(products)
-    workspace_bindings = DirectImagingBatchWorkspaceBindings(
+    bindings = PreparedDirectImagingBatchBindings(
         field_stack,
         output_stack,
         shift_axis1,
         shift_axis2,
         fft_plan,
-        fixed_fields,
+        _fixed_concrete_vector(
+            sources, "direct-imaging batch source bindings"),
+        _fixed_concrete_vector(
+            inputs, "direct-imaging batch input bindings"),
+        _fixed_concrete_vector(
+            fixed_fields, "direct-imaging batch field bindings"),
+        _fixed_concrete_vector(
+            fixed_formation_plans,
+            "direct-imaging batch formation-plan bindings",
+        ),
+        _fixed_concrete_vector(
+            output.products, "direct-imaging batch product bindings"),
         output,
+        _fixed_concrete_vector(
+            fixed_samples, "direct-imaging batch sample bindings"),
     )
     prepared = PreparedDirectImagingBatch(
+        _PREPARED_DIRECT_IMAGING_BATCH_TOKEN,
         signature,
         sources,
         inputs,
@@ -580,7 +607,7 @@ function _prepare_direct_imaging_batch(
         fixed_formation_plans,
         output,
         workspace,
-        workspace_bindings,
+        bindings,
     )
     validate_direct_imaging_batch(prepared)
     return prepared
@@ -588,8 +615,8 @@ end
 
 function _prepare_direct_imaging_batch(
     model_type::Type{<:AbstractPropagationModel},
-    inputs::_FixedDirectImagingBatchVector,
-    sources::_FixedDirectImagingBatchVector;
+    inputs::FixedSizeVector{<:PupilFunction},
+    sources::FixedSizeVector{<:Source};
     zero_padding::Int,
 )
     capability = direct_imaging_batch_capability(model_type)
@@ -702,7 +729,7 @@ function _validate_direct_imaging_batch_workspace(
 )
     signature = prepared.signature
     workspace = prepared.workspace
-    bindings = prepared.workspace_bindings
+    bindings = prepared.bindings
     workspace.field_stack === bindings.field_stack || throw(
         InvalidConfiguration(
             "direct-imaging batch field stack does not match its prepared binding",
@@ -726,12 +753,39 @@ function _validate_direct_imaging_batch_workspace(
     workspace.fft_plan === bindings.fft_plan || throw(InvalidConfiguration(
         "direct-imaging batch FFT plan does not match its prepared binding",
     ))
-    prepared.fields === bindings.fields || throw(InvalidConfiguration(
-        "direct-imaging batch field views do not match their prepared binding",
-    ))
     prepared.output === bindings.output || throw(InvalidConfiguration(
         "direct-imaging batch product views do not match their prepared binding",
     ))
+    _require_exact_fixed_membership(
+        prepared.sources,
+        bindings.sources,
+        "direct-imaging batch source",
+    )
+    _require_exact_fixed_membership(
+        prepared.inputs,
+        bindings.inputs,
+        "direct-imaging batch input",
+    )
+    _require_exact_fixed_membership(
+        prepared.fields,
+        bindings.fields,
+        "direct-imaging batch field",
+    )
+    _require_exact_fixed_membership(
+        prepared.formation_plans,
+        bindings.formation_plans,
+        "direct-imaging batch formation plan",
+    )
+    _require_exact_fixed_membership(
+        prepared.output.products,
+        bindings.products,
+        "direct-imaging batch product",
+    )
+    _require_exact_fixed_membership(
+        signature.samples,
+        bindings.sample_params,
+        "direct-imaging batch sample parameter",
+    )
     n1, n2 = signature.padded_dimensions
     count = signature.sample_count
     T = signature.numeric_type

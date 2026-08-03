@@ -197,9 +197,14 @@ incompatible geometry revisions, backends, or devices.
 - Prepared direct imaging: `prepare_direct_imaging`,
   `prepare_direct_imaging_batch`, `form_direct_image!`,
   `direct_imaging_output`, `direct_imaging_components`, and
-  `focal_plane_pixel_scale_arcsec`. `DirectImagingPlan` and
-  `DirectImagingWorkspace` bind exact caller-owned pupil/field/output storage
-  and single-writer scratch. The output is a source-scaled, cell-integrated
+  `focal_plane_pixel_scale_arcsec`. The qualified-public
+  `Optics.DirectImagingPlan` contains the reusable sampling, field-formation,
+  propagation, metadata, and integer-shift contract without retaining exact
+  caller arrays. `Optics.DirectImagingWorkspace` contains replaceable
+  single-writer propagation and shift scratch. `Optics.PreparedDirectImaging`
+  binds the exact caller-owned input, work field, output product, plan, and
+  workspace; execute only `form_direct_image!(prepared)`. The output is a
+  source-scaled, cell-integrated
   photon-arrival-rate `IntensityMap` on focal-plane angular coordinates before
   exposure; it is not implicitly a normalized PSF. Off-axis placement uses a
   preparation-time-validated, rounded-sample periodic shift on the prepared
@@ -211,10 +216,13 @@ incompatible geometry revisions, backends, or devices.
   one stacked field allocation, one stacked photon-rate allocation, and one
   FFT plan over the optical axes. Their public result remains an
   `OpticalProductBundle` of ordinary wavelength- and direction-specific
-  `IntensityMap` views. Batching does not coherently combine sources, integrate
-  wavelengths, apply detector exposure, copy to host, or regroup paths during
-  warmed execution. The compatibility trait, signature, prepared type, and
-  validation accessors are qualified public API rather than root exports
+  `IntensityMap` views. Fixed-size host memberships keep runtime cardinality
+  out of the type and retain independent exact-binding snapshots so element
+  replacement fails before numerical mutation. Batching does not coherently
+  combine sources, integrate wavelengths, apply detector exposure, copy to
+  host, or regroup paths during warmed execution. The compatibility trait,
+  signature, prepared type, and validation accessors are qualified public API
+  rather than root exports
 - Spectral sources: `SpectralSample`, `SpectralBundle`, `SpectralSource`,
   `with_spectrum`; construct a `SpectralSource` through `with_spectrum` from a
   `Source` or `LGSSource` leaf rather than nesting source expansions. Bundle
@@ -255,7 +263,14 @@ incompatible geometry revisions, backends, or devices.
 - Compatible intensity accumulation: `PreparedIncoherentSum`,
   `prepare_incoherent_sum`, `accumulate_intensity!`
 - Fields and general propagation: `FraunhoferPropagation` and
-  `FresnelPropagation`. Atmosphere-coupled propagation is owned by
+  `FresnelPropagation`. Each is a prepared owner containing a qualified-public
+  `Optics.AbstractPropagationPlan` implementation and a concrete workspace.
+  Fraunhofer plans contain sampling and plane metadata; Fresnel plans also own
+  their logically immutable backend-resident transfer coefficients. FFT
+  handles and transform scratch remain in replaceable single-writer
+  workspaces. Use `Optics.propagation_plan`,
+  `Optics.propagation_workspace`, and the metadata accessors for advanced
+  integration. Atmosphere-coupled propagation is owned by
   `AdaptiveOpticsSim.Atmospheres`
 - Sampled OPD and physical NCPA: `OPDMap` and `NCPA`. `NCPA(opd)` stores only
   the explicit backend-resident optical-path-difference map in metres.
@@ -266,7 +281,11 @@ incompatible geometry revisions, backends, or devices.
   `Misregistration`, and `apply_misregistration`. Import calibration-owned
   `KLBasis` and `ZernikeModalBasis` from `AdaptiveOpticsSim.Calibration`
 - Spatial filtering: `SpatialFilter`, `CircularFilter`, `SquareFilter`,
-  `FoucaultFilter`, `prepare_spatial_filter`, and `filter!`. Because Base also
+  `FoucaultFilter`, `prepare_spatial_filter`, and `filter!`.
+  `prepare_spatial_filter` returns an exact `Optics.PreparedSpatialFilter`;
+  its reusable plan borrows no telescope aperture array, its output
+  `PupilFunction` owns support, and its FFT resources remain in a replaceable
+  single-writer workspace. Because Base also
   exports an unrelated collection operation named `filter!`, call
   `Optics.filter!` or explicitly
   `import AdaptiveOpticsSim.Optics: filter!`

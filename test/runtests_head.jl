@@ -12,6 +12,7 @@ using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
+using FixedSizeArrays: FixedSizeVector
 using LinearAlgebra
 using Random
 using SpecialFunctions

@@ -40,7 +40,6 @@ export PupilFieldFormationPlan, prepare_pupil_field
 export fill_electric_field!, fill_electric_field_async!
 export FraunhoferPropagation, FresnelPropagation
 export propagation_output, propagate_field!, fraunhofer_intensity_from_field!
-export DirectImagingPlan, DirectImagingWorkspace
 export prepare_direct_imaging, form_direct_image!, direct_imaging_output
 export direct_imaging_components, prepare_direct_imaging_batch
 
@@ -49,7 +48,7 @@ export OPDMap
 export Misregistration, apply_misregistration
 export NCPA
 
-export SpatialFilter, SpatialFilterWorkspace, SpatialFilterPlan
+export SpatialFilter
 export CircularFilter, SquareFilter, FoucaultFilter
 export prepare_spatial_filter, filter!
 
@@ -79,6 +78,16 @@ export ZernikePhaseSpot, CurvatureDefocusPair
 public AbstractSource, AbstractTelescope
 public AbstractTelescopeDefinition, TelescopeDefinition, prepare_telescope
 public validate_telescope_target
+public AbstractPropagationModel, AbstractPropagationPlan
+public FraunhoferPropagationPlan, FraunhoferPropagationWorkspace
+public FresnelPropagationPlan, FresnelPropagationWorkspace
+public propagation_plan, propagation_workspace
+public propagation_input_metadata, propagation_output_metadata
+public DirectImagingPlan, DirectImagingWorkspace, PreparedDirectImaging
+public PreparedIncoherentDirectImaging, PreparedBundledDirectImaging
+public direct_imaging_plan, direct_imaging_workspace
+public SpatialFilterPlan, SpatialFilterWorkspace, PreparedSpatialFilter
+public spatial_filter_plan, spatial_filter_workspace, spatial_filter_output
 public AbstractDirectImagingBatchCapability
 public StackedFraunhoferDirectImagingBatchCapability
 public UnsupportedDirectImagingBatchCapability
