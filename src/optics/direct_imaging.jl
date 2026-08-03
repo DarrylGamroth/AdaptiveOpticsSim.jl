@@ -29,62 +29,45 @@ function apply_centering_phase!(style::AcceleratorStyle,
     return field
 end
 
-struct PreparedPupilImagingInput{
-    F<:PupilFieldFormationPlan,
-    M<:OpticalPlaneMetadata,
-    A<:AbstractMatrix,
-    O<:AbstractMatrix,
-}
+struct PupilDirectImagingInputPlan{F<:PupilFieldFormationPlan}
     formation::F
-    metadata::M
-    amplitude::A
-    opd::O
 end
 
-struct PreparedFieldImagingInput{
-    M<:OpticalPlaneMetadata,
-    A<:AbstractMatrix,
-}
-    metadata::M
-    values::A
-end
+struct PreformedFieldDirectImagingStrategy end
 
 """
     DirectImagingPlan
 
-Run-immutable direct-imaging contract bound to exact input, field-work, and
-output storage. The stored integer shift is resolved against the declared axis
-orientation during preparation and preserves the current nearest-sample,
-periodic off-axis model; subpixel interpolation and finite-field loss require a
-different prepared mapping.
+Reusable run-immutable direct-imaging contract. Exact input, field-work,
+output, and workspace identities belong to `PreparedDirectImaging`. The stored
+integer shift is resolved against the declared axis orientation during
+preparation and preserves the current nearest-sample, periodic off-axis model;
+subpixel interpolation and finite-field loss require a different plan.
 """
 struct DirectImagingPlan{
-    I<:Union{PreparedPupilImagingInput,PreparedFieldImagingInput},
+    I<:Union{PupilDirectImagingInputPlan,PreformedFieldDirectImagingStrategy},
     FM<:OpticalPlaneMetadata,
-    FA<:AbstractMatrix,
     OM<:OpticalPlaneMetadata,
-    OA<:AbstractMatrix,
-    P<:FraunhoferPropagation,
-    R<:AbstractMatrix,
+    P<:FraunhoferPropagationPlan,
 }
-    input::I
+    input_plan::I
     field_metadata::FM
-    field_values::FA
     output_metadata::OM
-    output_values::OA
     propagation::P
-    unshifted_intensity::R
     shift_samples::NTuple{2,Int}
 end
 
 """Single-writer propagation and off-axis scratch for direct imaging."""
 struct DirectImagingWorkspace{
-    P<:FraunhoferPropagation,
+    P<:FraunhoferPropagationWorkspace,
     R<:AbstractMatrix,
 }
     propagation::P
     unshifted_intensity::R
 end
+
+struct _PreparedDirectImagingToken end
+const _PREPARED_DIRECT_IMAGING_TOKEN = _PreparedDirectImagingToken()
 
 """
     PreparedDirectImaging
@@ -105,29 +88,101 @@ struct PreparedDirectImaging{
     output::O
     plan::P
     workspace::W
+
+    function PreparedDirectImaging(
+        ::_PreparedDirectImagingToken,
+        input::I,
+        field::F,
+        output::O,
+        plan::P,
+        workspace::W,
+    ) where {
+        I<:Union{PupilFunction,ElectricField},
+        F<:ElectricField,
+        O<:IntensityMap,
+        P<:DirectImagingPlan,
+        W<:DirectImagingWorkspace,
+    }
+        return new{I,F,O,P,W}(input, field, output, plan, workspace)
+    end
 end
+
+struct PreparedDirectImagingCompositionBindings{
+    C<:FixedSizeVector,
+    P<:FixedSizeVector,
+}
+    components::C
+    products::P
+end
+
+struct _PreparedDirectImagingCompositionToken end
+const _PREPARED_DIRECT_IMAGING_COMPOSITION_TOKEN =
+    _PreparedDirectImagingCompositionToken()
 
 """Prepared same-grid incoherent direct-imaging composition."""
 struct PreparedIncoherentDirectImaging{
-    C<:AbstractVector,
-    P<:AbstractVector,
+    C<:FixedSizeVector,
+    P<:FixedSizeVector,
     O<:IntensityMap,
     S<:PreparedIncoherentSum,
+    B<:PreparedDirectImagingCompositionBindings,
 }
     components::C
     products::P
     output::O
     accumulation::S
+    bindings::B
+
+    function PreparedIncoherentDirectImaging(
+        ::_PreparedDirectImagingCompositionToken,
+        components::C,
+        products::P,
+        output::O,
+        accumulation::S,
+        bindings::B,
+    ) where {
+        C<:FixedSizeVector,
+        P<:FixedSizeVector,
+        O<:IntensityMap,
+        S<:PreparedIncoherentSum,
+        B<:PreparedDirectImagingCompositionBindings,
+    }
+        return new{C,P,O,S,B}(
+            components, products, output, accumulation, bindings)
+    end
 end
 
 """Prepared direct-imaging composition whose physical grids remain separate."""
 struct PreparedBundledDirectImaging{
-    C<:AbstractVector,
-    B<:OpticalProductBundle,
+    C<:FixedSizeVector,
+    O<:OpticalProductBundle,
+    B<:PreparedDirectImagingCompositionBindings,
 }
     components::C
-    output::B
+    output::O
+    bindings::B
+
+    function PreparedBundledDirectImaging(
+        ::_PreparedDirectImagingCompositionToken,
+        components::C,
+        output::O,
+        bindings::B,
+    ) where {
+        C<:FixedSizeVector,
+        O<:OpticalProductBundle,
+        B<:PreparedDirectImagingCompositionBindings,
+    }
+        return new{C,O,B}(components, output, bindings)
+    end
 end
+
+
+"""Return the reusable plan from a prepared direct-imaging leaf."""
+@inline direct_imaging_plan(prepared::PreparedDirectImaging) = prepared.plan
+
+"""Return the single-writer workspace from a prepared direct-imaging leaf."""
+@inline direct_imaging_workspace(prepared::PreparedDirectImaging) =
+    prepared.workspace
 
 @inline direct_imaging_output(prepared::PreparedDirectImaging) = prepared.output
 @inline direct_imaging_output(prepared::PreparedIncoherentDirectImaging) =
@@ -258,13 +313,14 @@ function _direct_imaging_shift(output::IntensityMap, src::AbstractSource)
 end
 
 function _prepare_direct_imaging(
-    input_plan::Union{PreparedPupilImagingInput,PreparedFieldImagingInput},
+    input_plan::Union{PupilDirectImagingInputPlan,PreformedFieldDirectImagingStrategy},
     field::ElectricField, output::IntensityMap,
     propagation::FraunhoferPropagation, src::AbstractSource)
-    require_same_plane_grid(output.metadata, propagation.output_metadata;
+    propagation_output = propagation_output_metadata(propagation)
+    require_same_plane_grid(output.metadata, propagation_output;
         label="direct-imaging output", require_numeric_type=false)
     require_compatible_radiometry(output.metadata,
-        propagation.output_metadata; label="direct-imaging output")
+        propagation_output; label="direct-imaging output")
     validate_direct_imaging_output(output)
     eltype(output.values) === real(eltype(field.values)) || throw(
         InvalidConfiguration(
@@ -279,20 +335,16 @@ function _prepare_direct_imaging(
     unshifted = similar(output.values)
     fill!(unshifted, zero(eltype(unshifted)))
     plan = DirectImagingPlan{
-        typeof(input_plan),typeof(field.metadata),typeof(field.values),
-        typeof(output.metadata),typeof(output.values),
-        typeof(propagation),typeof(unshifted),
+        typeof(input_plan),typeof(field.metadata),typeof(output.metadata),
+        typeof(propagation.plan),
     }(
         input_plan,
         field.metadata,
-        field.values,
         output.metadata,
-        output.values,
-        propagation,
-        unshifted,
+        propagation.plan,
         shift_samples,
     )
-    workspace = DirectImagingWorkspace(propagation, unshifted)
+    workspace = DirectImagingWorkspace(propagation.workspace, unshifted)
     return (; plan, workspace)
 end
 
@@ -309,10 +361,17 @@ function _prepare_direct_imaging(pupil::PupilFunction,
     require_leaf_source(src, "direct-imaging source")
     _require_physical_photon_irradiance(src, "direct imaging")
     formation = prepare_pupil_field(pupil, src, field)
-    input_plan = PreparedPupilImagingInput(formation, pupil.metadata,
-        pupil.amplitude, pupil.opd)
-    return _prepare_direct_imaging(input_plan, field, output, propagation,
-        src)
+    input_plan = PupilDirectImagingInputPlan(formation)
+    prepared = _prepare_direct_imaging(input_plan, field, output,
+        propagation, src)
+    return PreparedDirectImaging(
+        _PREPARED_DIRECT_IMAGING_TOKEN,
+        pupil,
+        field,
+        output,
+        prepared.plan,
+        prepared.workspace,
+    )
 end
 
 function prepare_direct_imaging(pupil::PupilFunction,
@@ -327,7 +386,7 @@ end
 
 Prepare direct imaging from an already formed physical pupil-plane electric
 field. The field and output remain caller-owned and are bound exactly to the
-returned plan.
+returned `PreparedDirectImaging` owner.
 """
 function _prepare_direct_imaging(src::Union{Source,LGSSource},
     field::ElectricField, output::IntensityMap,
@@ -345,9 +404,17 @@ function _prepare_direct_imaging(src::Union{Source,LGSSource},
         real(eltype(field.values))(wavelength(src))) || throw(
         InvalidConfiguration(
             "direct-imaging source wavelength must match its input field"))
-    input_plan = PreparedFieldImagingInput(field.metadata, field.values)
-    return _prepare_direct_imaging(input_plan, field, output, propagation,
-        src)
+    input_plan = PreformedFieldDirectImagingStrategy()
+    prepared = _prepare_direct_imaging(input_plan, field, output,
+        propagation, src)
+    return PreparedDirectImaging(
+        _PREPARED_DIRECT_IMAGING_TOKEN,
+        field,
+        field,
+        output,
+        prepared.plan,
+        prepared.workspace,
+    )
 end
 
 
@@ -359,10 +426,8 @@ end
 
 function _require_prepared_direct_output(output::IntensityMap,
     plan::DirectImagingPlan)
-    output.metadata === plan.output_metadata || throw(InvalidConfiguration(
+    output.metadata == plan.output_metadata || throw(InvalidConfiguration(
         "direct-imaging output does not match its prepared plan"))
-    output.values === plan.output_values || throw(InvalidConfiguration(
-        "direct-imaging output storage does not match its prepared plan"))
     validate_plane_storage(output.metadata, output.values;
         label="direct-imaging output")
     return nothing
@@ -370,10 +435,8 @@ end
 
 function _require_prepared_direct_field(field::ElectricField,
     plan::DirectImagingPlan)
-    field.metadata === plan.field_metadata || throw(InvalidConfiguration(
+    field.metadata == plan.field_metadata || throw(InvalidConfiguration(
         "direct-imaging field does not match its prepared plan"))
-    field.values === plan.field_values || throw(InvalidConfiguration(
-        "direct-imaging field storage does not match its prepared plan"))
     validate_plane_storage(field.metadata, field.values;
         label="direct-imaging field")
     return nothing
@@ -381,12 +444,8 @@ end
 
 function _require_prepared_direct_workspace(
     workspace::DirectImagingWorkspace, plan::DirectImagingPlan)
-    workspace.propagation === plan.propagation || throw(
-        InvalidConfiguration(
-            "direct-imaging propagation does not match its prepared plan"))
-    workspace.unshifted_intensity === plan.unshifted_intensity || throw(
-        InvalidConfiguration(
-            "direct-imaging scratch storage does not match its prepared plan"))
+    _require_propagation_plan_workspace(plan.propagation,
+        workspace.propagation)
     size(workspace.unshifted_intensity) ==
         plan.output_metadata.dimensions || throw(DimensionMismatchError(
         "direct-imaging scratch dimensions do not match its prepared plan"))
@@ -396,34 +455,51 @@ function _require_prepared_direct_workspace(
     compute_device(workspace.unshifted_intensity) ==
         plan.output_metadata.device || throw(InvalidConfiguration(
         "direct-imaging scratch device does not match its prepared plan"))
+    typeof(backend(workspace.unshifted_intensity)) ===
+        typeof(plan.output_metadata.backend) || throw(InvalidConfiguration(
+        "direct-imaging scratch backend does not match its prepared plan"))
     return nothing
 end
 
 @inline function _require_prepared_direct_input(
     pupil::PupilFunction,
-    ::ElectricField,
-    input::PreparedPupilImagingInput,
+    field::ElectricField,
+    input_plan::PupilDirectImagingInputPlan,
 )
-    pupil.metadata === input.metadata || throw(InvalidConfiguration(
+    pupil.metadata == input_plan.formation.input_metadata || throw(
+        InvalidConfiguration(
         "direct-imaging pupil does not match its prepared plan"))
-    pupil.amplitude === input.amplitude || throw(InvalidConfiguration(
-        "direct-imaging pupil amplitude storage does not match its prepared plan"))
-    pupil.opd === input.opd || throw(InvalidConfiguration(
-        "direct-imaging pupil OPD storage does not match its prepared plan"))
+    field.metadata == input_plan.formation.output_metadata || throw(
+        InvalidConfiguration(
+            "direct-imaging field does not match its formation plan"))
     return nothing
 end
 
 @inline function _require_prepared_direct_input(
     input_field::ElectricField,
     field::ElectricField,
-    input::PreparedFieldImagingInput,
+    ::PreformedFieldDirectImagingStrategy,
 )
     input_field === field || throw(InvalidConfiguration(
         "preformed direct-imaging input must be its prepared field"))
-    input_field.metadata === input.metadata || throw(InvalidConfiguration(
-        "preformed direct-imaging field metadata does not match its prepared plan"))
-    input_field.values === input.values || throw(InvalidConfiguration(
-        "preformed direct-imaging field storage does not match its prepared plan"))
+    return nothing
+end
+
+function _require_prepared_direct_bindings(
+    prepared::PreparedDirectImaging,
+    input::Union{PupilFunction,ElectricField},
+    field::ElectricField,
+    output::IntensityMap,
+    workspace::DirectImagingWorkspace,
+)
+    input === prepared.input || throw(InvalidConfiguration(
+        "direct-imaging input does not match its prepared owner"))
+    field === prepared.field || throw(InvalidConfiguration(
+        "direct-imaging field does not match its prepared owner"))
+    output === prepared.output || throw(InvalidConfiguration(
+        "direct-imaging output does not match its prepared owner"))
+    workspace === prepared.workspace || throw(InvalidConfiguration(
+        "direct-imaging workspace does not match its prepared owner"))
     return nothing
 end
 
@@ -488,85 +564,54 @@ function _require_exact_direct_imaging_pupil_target(
 end
 
 function _require_exact_direct_imaging_input_target(
-    input::PreparedPupilImagingInput,
+    input_plan::PupilDirectImagingInputPlan,
     target::AbstractComputeDevice,
 )
-    input.formation.input_metadata === input.metadata || throw(
-        InvalidConfiguration(
-            "direct-imaging pupil formation does not match its prepared input"))
     _require_exact_direct_imaging_metadata_target(
-        input.metadata, target, "direct-imaging planned pupil")
-    _require_exact_direct_imaging_array_target(
-        input.amplitude, target, "direct-imaging planned pupil amplitude")
-    _require_exact_direct_imaging_array_target(
-        input.opd, target, "direct-imaging planned pupil OPD")
-    validate_plane_storage(input.metadata, input.amplitude;
-        label="direct-imaging planned pupil amplitude")
-    validate_plane_storage(input.metadata, input.opd;
-        label="direct-imaging planned pupil OPD")
-    return input
+        input_plan.formation.input_metadata,
+        target,
+        "direct-imaging planned pupil",
+    )
+    _require_exact_direct_imaging_metadata_target(
+        input_plan.formation.output_metadata,
+        target,
+        "direct-imaging planned field",
+    )
+    return input_plan
 end
 
-function _require_exact_direct_imaging_input_target(
-    input::PreparedFieldImagingInput,
-    target::AbstractComputeDevice,
-)
-    _require_exact_direct_imaging_metadata_target(
-        input.metadata, target, "direct-imaging planned field")
-    _require_exact_direct_imaging_array_target(
-        input.values, target, "direct-imaging planned field storage")
-    validate_plane_storage(input.metadata, input.values;
-        label="direct-imaging planned field")
-    return input
-end
+@inline _require_exact_direct_imaging_input_target(
+    input_plan::PreformedFieldDirectImagingStrategy,
+    ::AbstractComputeDevice,
+) = input_plan
 
 function _require_exact_direct_imaging_target(
     plan::DirectImagingPlan,
     target::AbstractComputeDevice,
 )
-    _require_exact_direct_imaging_input_target(plan.input, target)
+    _require_exact_direct_imaging_input_target(plan.input_plan, target)
     _require_exact_direct_imaging_metadata_target(
         plan.field_metadata, target, "direct-imaging field")
-    _require_exact_direct_imaging_array_target(
-        plan.field_values, target, "direct-imaging field storage")
-    validate_plane_storage(plan.field_metadata, plan.field_values;
-        label="direct-imaging field")
-
     _require_exact_direct_imaging_metadata_target(
         plan.output_metadata, target, "direct-imaging output")
-    _require_exact_direct_imaging_array_target(
-        plan.output_values, target, "direct-imaging output storage")
-    validate_plane_storage(plan.output_metadata, plan.output_values;
-        label="direct-imaging output")
-
     propagation = plan.propagation
-    propagation.input_metadata === plan.field_metadata || throw(
+    propagation.input_metadata == plan.field_metadata || throw(
         InvalidConfiguration(
             "direct-imaging propagation does not match its prepared field"))
+    require_same_plane_grid(
+        propagation.output_metadata,
+        plan.output_metadata;
+        label="direct-imaging propagation and output",
+        require_numeric_type=false,
+    )
+    require_compatible_radiometry(
+        propagation.output_metadata,
+        plan.output_metadata;
+        label="direct-imaging propagation and output",
+    )
     _require_exact_direct_imaging_metadata_target(
         propagation.output_metadata, target,
         "direct-imaging propagation output")
-    _require_exact_direct_imaging_array_target(
-        propagation.state.scratch, target,
-        "direct-imaging propagation scratch")
-    validate_plane_storage(
-        propagation.output_metadata,
-        propagation.state.scratch;
-        label="direct-imaging propagation scratch",
-    )
-
-    _require_exact_direct_imaging_array_target(
-        plan.unshifted_intensity, target,
-        "direct-imaging unshifted intensity scratch")
-    size(plan.unshifted_intensity) == plan.output_metadata.dimensions || throw(
-        DimensionMismatchError(
-            "direct-imaging unshifted intensity dimensions do not match its output"))
-    eltype(plan.unshifted_intensity) ===
-        plan.output_metadata.numeric_type || throw(InvalidConfiguration(
-        "direct-imaging unshifted intensity numeric type does not match its output"))
-    typeof(backend(plan.unshifted_intensity)) ===
-        typeof(plan.output_metadata.backend) || throw(InvalidConfiguration(
-        "direct-imaging unshifted intensity backend does not match its output"))
     return plan
 end
 
@@ -574,13 +619,30 @@ function _require_exact_direct_imaging_target(
     prepared::PreparedDirectImaging,
     target::AbstractComputeDevice,
 )
+    _require_prepared_direct_bindings(prepared, prepared.input,
+        prepared.field, prepared.output, prepared.workspace)
     _require_prepared_direct_input(
-        prepared.input, prepared.field, prepared.plan.input)
+        prepared.input, prepared.field, prepared.plan.input_plan)
     _require_prepared_direct_field(prepared.field, prepared.plan)
     _require_prepared_direct_output(prepared.output, prepared.plan)
     _require_prepared_direct_workspace(prepared.workspace, prepared.plan)
     _require_exact_direct_imaging_target(prepared.plan, target)
     _require_exact_direct_imaging_owner_input_target(prepared.input, target)
+    _require_exact_direct_imaging_owner_input_target(prepared.field, target)
+    _require_exact_direct_imaging_metadata_target(
+        prepared.output.metadata, target, "direct-imaging output")
+    _require_exact_direct_imaging_array_target(
+        prepared.output.values, target, "direct-imaging output storage")
+    _require_exact_direct_imaging_array_target(
+        prepared.workspace.propagation.scratch,
+        target,
+        "direct-imaging propagation scratch",
+    )
+    _require_exact_direct_imaging_array_target(
+        prepared.workspace.unshifted_intensity,
+        target,
+        "direct-imaging unshifted intensity scratch",
+    )
     return prepared
 end
 
@@ -606,6 +668,7 @@ function _require_exact_direct_imaging_target(
     prepared::PreparedIncoherentDirectImaging,
     target::AbstractComputeDevice,
 )
+    _require_direct_composition_bindings(prepared)
     _require_direct_component_products(prepared.components, prepared.products)
     prepared.output.metadata === prepared.accumulation.output_metadata || throw(
         InvalidConfiguration(
@@ -636,6 +699,7 @@ function _require_exact_direct_imaging_target(
     prepared::PreparedBundledDirectImaging,
     target::AbstractComputeDevice,
 )
+    _require_direct_composition_bindings(prepared)
     _require_direct_component_products(
         prepared.components, prepared.output.products)
     @inbounds for component in prepared.components
@@ -653,15 +717,17 @@ function _require_exact_direct_imaging_target(
 end
 
 function _prepare_direct_field!(field::ElectricField,
-    pupil::PupilFunction, input::PreparedPupilImagingInput)
-    _require_prepared_direct_input(pupil, field, input)
-    fill_electric_field!(field, pupil, input.formation)
+    pupil::PupilFunction, input_plan::PupilDirectImagingInputPlan)
+    _require_prepared_direct_input(pupil, field, input_plan)
+    fill_electric_field!(field, pupil, input_plan.formation)
     return field
 end
 
 function _prepare_direct_field!(field::ElectricField,
-    input_field::ElectricField, input::PreparedFieldImagingInput)
-    _require_prepared_direct_input(input_field, field, input)
+    input_field::ElectricField,
+    input_plan::PreformedFieldDirectImagingStrategy,
+)
+    _require_prepared_direct_input(input_field, field, input_plan)
     return field
 end
 
@@ -670,36 +736,50 @@ function _form_direct_image!(output::IntensityMap, field::ElectricField,
     shifts = plan.shift_samples
     if iszero(shifts[1]) && iszero(shifts[2])
         fraunhofer_intensity_from_field!(output.values, field,
-            workspace.propagation)
+            plan.propagation, workspace.propagation)
     else
         fraunhofer_intensity_from_field!(workspace.unshifted_intensity,
-            field, workspace.propagation)
+            field, plan.propagation, workspace.propagation)
         shift_direct_image!(output.values, workspace.unshifted_intensity,
             shifts)
     end
     return output
 end
 
-"""Form one prepared photon-arrival-rate direct image from a pupil."""
-function form_direct_image!(output::IntensityMap, pupil::PupilFunction,
-    field::ElectricField, plan::DirectImagingPlan{<:PreparedPupilImagingInput},
-    workspace::DirectImagingWorkspace)
-    _require_prepared_direct_output(output, plan)
-    _require_prepared_direct_field(field, plan)
-    _require_prepared_direct_workspace(workspace, plan)
-    _prepare_direct_field!(field, pupil, plan.input)
-    return _form_direct_image!(output, field, plan, workspace)
+function _form_prepared_direct_image!(
+    prepared::PreparedDirectImaging,
+    input::Union{PupilFunction,ElectricField},
+    field::ElectricField,
+    output::IntensityMap,
+    workspace::DirectImagingWorkspace,
+)
+    _require_prepared_direct_execution(
+        prepared, input, field, output, workspace)
+    return _execute_prepared_direct_image!(prepared)
 end
 
-"""Form one prepared photon-arrival-rate direct image from a preformed field."""
-function form_direct_image!(output::IntensityMap, field::ElectricField,
-    plan::DirectImagingPlan{<:PreparedFieldImagingInput},
-    workspace::DirectImagingWorkspace)
+function _require_prepared_direct_execution(
+    prepared::PreparedDirectImaging,
+    input::Union{PupilFunction,ElectricField},
+    field::ElectricField,
+    output::IntensityMap,
+    workspace::DirectImagingWorkspace,
+)
+    _require_prepared_direct_bindings(
+        prepared, input, field, output, workspace)
+    plan = prepared.plan
+    _require_prepared_direct_input(input, field, plan.input_plan)
     _require_prepared_direct_output(output, plan)
     _require_prepared_direct_field(field, plan)
     _require_prepared_direct_workspace(workspace, plan)
-    _prepare_direct_field!(field, field, plan.input)
-    return _form_direct_image!(output, field, plan, workspace)
+    return prepared
+end
+
+function _execute_prepared_direct_image!(prepared::PreparedDirectImaging)
+    plan = prepared.plan
+    _prepare_direct_field!(prepared.field, prepared.input, plan.input_plan)
+    return _form_direct_image!(
+        prepared.output, prepared.field, plan, prepared.workspace)
 end
 
 function prepare_direct_imaging(pupil::PupilFunction,
@@ -707,42 +787,14 @@ function prepare_direct_imaging(pupil::PupilFunction,
     field = ElectricField(pupil, src; zero_padding=zero_padding)
     propagation = FraunhoferPropagation(field)
     output = IntensityMap(field, propagation)
-    prepared = _prepare_direct_imaging(pupil, src, field, output, propagation)
-    return PreparedDirectImaging(pupil, field, output, prepared.plan,
-        prepared.workspace)
+    return _prepare_direct_imaging(pupil, src, field, output, propagation)
 end
 
 function prepare_direct_imaging(src::Union{Source,LGSSource},
     field::ElectricField)
     propagation = FraunhoferPropagation(field)
     output = IntensityMap(field, propagation)
-    prepared = _prepare_direct_imaging(src, field, output, propagation)
-    return PreparedDirectImaging(field, field, output, prepared.plan,
-        prepared.workspace)
-end
-
-@inline function _store_direct_component!(components::Vector{C}, index::Int,
-    component::C) where {C}
-    @inbounds components[index] = component
-    return true
-end
-
-@inline _store_direct_component!(::Vector, ::Int, component) = false
-
-function _widen_direct_components(components::Vector,
-    sources::AbstractVector{<:AbstractSource}, mismatch_index::Int,
-    mismatch::PreparedDirectImaging, pupil::PupilFunction,
-    zero_padding::Int)
-    widened = Vector{PreparedDirectImaging}(undef, length(sources))
-    @inbounds for index in 1:(mismatch_index - 1)
-        widened[index] = components[index]
-    end
-    widened[mismatch_index] = mismatch
-    @inbounds for index in (mismatch_index + 1):length(sources)
-        widened[index] = prepare_direct_imaging(pupil, sources[index];
-            zero_padding=zero_padding)
-    end
-    return widened
+    return _prepare_direct_imaging(src, field, output, propagation)
 end
 
 function _prepare_direct_components(pupil::PupilFunction,
@@ -754,39 +806,19 @@ function _prepare_direct_components(pupil::PupilFunction,
     # is a separate optimization and requires its own fidelity/GPU contract.
     first_component = prepare_direct_imaging(pupil, first(sources);
         zero_padding=zero_padding)
-    components = Vector{typeof(first_component)}(undef, length(sources))
-    components[1] = first_component
-    @inbounds for index in 2:length(sources)
-        component = prepare_direct_imaging(pupil, sources[index];
+    C = typeof(first_component)
+    components = Vector{C}(undef, length(sources))
+    @inbounds components[1] = first_component
+    slot = 2
+    for source in Iterators.drop(sources, 1)
+        component = prepare_direct_imaging(pupil, source;
             zero_padding=zero_padding)
-        if !_store_direct_component!(components, index, component)
-            return _widen_direct_components(components, sources, index, component,
-                pupil, zero_padding)
-        end
+        typeof(component) === C || throw(InvalidConfiguration(
+            "direct-imaging composition must prepare one concrete leaf type; got $(C) and $(typeof(component))"))
+        @inbounds components[slot] = component
+        slot += 1
     end
-    return components
-end
-
-@inline function _store_direct_product!(products::Vector{P}, index::Int,
-    product::P) where {P}
-    @inbounds products[index] = product
-    return true
-end
-
-@inline _store_direct_product!(::Vector, ::Int, product) = false
-
-function _widen_direct_products(products::Vector,
-    components::AbstractVector{<:PreparedDirectImaging}, mismatch_index::Int,
-    mismatch::IntensityMap)
-    widened = Vector{IntensityMap}(undef, length(components))
-    @inbounds for index in 1:(mismatch_index - 1)
-        widened[index] = products[index]
-    end
-    widened[mismatch_index] = mismatch
-    @inbounds for index in (mismatch_index + 1):length(components)
-        widened[index] = direct_imaging_output(components[index])
-    end
-    return widened
+    return FixedSizeVectorDefault{C}(components)
 end
 
 function _direct_imaging_products(
@@ -794,15 +826,18 @@ function _direct_imaging_products(
     isempty(components) && throw(InvalidConfiguration(
         "direct-imaging composition must contain at least one component"))
     first_product = direct_imaging_output(first(components))
-    products = Vector{typeof(first_product)}(undef, length(components))
-    products[1] = first_product
-    @inbounds for index in 2:length(components)
-        product = direct_imaging_output(components[index])
-        if !_store_direct_product!(products, index, product)
-            return _widen_direct_products(products, components, index, product)
-        end
+    P = typeof(first_product)
+    products = Vector{P}(undef, length(components))
+    @inbounds products[1] = first_product
+    slot = 2
+    for component in Iterators.drop(components, 1)
+        product = direct_imaging_output(component)
+        typeof(product) === P || throw(InvalidConfiguration(
+            "direct-imaging composition must produce one concrete product type; got $(P) and $(typeof(product))"))
+        @inbounds products[slot] = product
+        slot += 1
     end
-    return products
+    return FixedSizeVectorDefault{P}(products)
 end
 
 function _similar_direct_output(reference::IntensityMap)
@@ -821,8 +856,20 @@ function prepare_direct_imaging(pupil::PupilFunction, ast::Asterism;
     products = _direct_imaging_products(components)
     output = _similar_direct_output(first(products))
     accumulation = prepare_incoherent_sum(output, products)
-    return PreparedIncoherentDirectImaging(components, products, output,
-        accumulation)
+    bindings = PreparedDirectImagingCompositionBindings(
+        _fixed_concrete_vector(
+            components, "direct-imaging composition components"),
+        _fixed_concrete_vector(
+            products, "direct-imaging composition products"),
+    )
+    return PreparedIncoherentDirectImaging(
+        _PREPARED_DIRECT_IMAGING_COMPOSITION_TOKEN,
+        components,
+        products,
+        output,
+        accumulation,
+        bindings,
+    )
 end
 
 function _spectral_leaf_source(reference::Union{Source,LGSSource}, sample,
@@ -857,7 +904,18 @@ function prepare_direct_imaging(pupil::PupilFunction, src::SpectralSource;
     components = _prepare_direct_components(pupil, sources, zero_padding)
     products = _direct_imaging_products(components)
     output = OpticalProductBundle(products)
-    return PreparedBundledDirectImaging(components, output)
+    bindings = PreparedDirectImagingCompositionBindings(
+        _fixed_concrete_vector(
+            components, "direct-imaging composition components"),
+        _fixed_concrete_vector(
+            products, "direct-imaging composition products"),
+    )
+    return PreparedBundledDirectImaging(
+        _PREPARED_DIRECT_IMAGING_COMPOSITION_TOKEN,
+        components,
+        output,
+        bindings,
+    )
 end
 
 function prepare_direct_imaging(::PupilFunction, src::AbstractSource;
@@ -885,28 +943,64 @@ function _form_direct_components!(
     products::AbstractVector{<:IntensityMap})
     _require_direct_component_products(components, products)
     @inbounds for component in components
-        form_direct_image!(component)
+        _require_prepared_direct_execution(
+            component,
+            component.input,
+            component.field,
+            component.output,
+            component.workspace,
+        )
+    end
+    @inbounds for component in components
+        _execute_prepared_direct_image!(component)
     end
     return nothing
 end
 
+function _require_direct_composition_bindings(
+    prepared::PreparedIncoherentDirectImaging,
+)
+    _require_exact_fixed_membership(
+        prepared.components,
+        prepared.bindings.components,
+        "direct-imaging composition component",
+    )
+    _require_exact_fixed_membership(
+        prepared.products,
+        prepared.bindings.products,
+        "direct-imaging composition product",
+    )
+    return prepared
+end
+
+function _require_direct_composition_bindings(
+    prepared::PreparedBundledDirectImaging,
+)
+    _require_exact_fixed_membership(
+        prepared.components,
+        prepared.bindings.components,
+        "direct-imaging composition component",
+    )
+    _require_exact_fixed_membership(
+        prepared.output.products,
+        prepared.bindings.products,
+        "direct-imaging composition product",
+    )
+    return prepared
+end
+
 function form_direct_image!(prepared::PreparedDirectImaging)
-    return _form_prepared_direct_image!(prepared, prepared.input)
-end
-
-@inline function _form_prepared_direct_image!(prepared::PreparedDirectImaging,
-    input::PupilFunction)
-    return form_direct_image!(prepared.output, input, prepared.field,
-        prepared.plan, prepared.workspace)
-end
-
-@inline function _form_prepared_direct_image!(prepared::PreparedDirectImaging,
-    input::ElectricField)
-    return form_direct_image!(prepared.output, input, prepared.plan,
-        prepared.workspace)
+    return _form_prepared_direct_image!(
+        prepared,
+        prepared.input,
+        prepared.field,
+        prepared.output,
+        prepared.workspace,
+    )
 end
 
 function form_direct_image!(prepared::PreparedIncoherentDirectImaging)
+    _require_direct_composition_bindings(prepared)
     _form_direct_components!(prepared.components, prepared.products)
     accumulate_intensity!(prepared.output, prepared.products,
         prepared.accumulation)
@@ -914,6 +1008,7 @@ function form_direct_image!(prepared::PreparedIncoherentDirectImaging)
 end
 
 function form_direct_image!(prepared::PreparedBundledDirectImaging)
+    _require_direct_composition_bindings(prepared)
     _form_direct_components!(prepared.components, prepared.output.products)
     return prepared.output
 end

@@ -99,11 +99,10 @@ function make_gate0_card(raw::AbstractDict)
             center_even_grid=false, amplitude_scale=1)
         fill_electric_field!(field, wavefront, formation)
         output = PupilFunction(tel)
-        plan = prepare_spatial_filter(tel, spatial_filter, field, output)
-        workspace = SpatialFilterWorkspace(spatial_filter)
-        let output=output, field=field, spatial_filter=spatial_filter,
-            plan=plan, workspace=workspace
-            () -> filter!(output, field, spatial_filter, plan, workspace)
+        prepared = prepare_spatial_filter(
+            tel, spatial_filter, field, output)
+        let prepared=prepared
+            () -> filter!(prepared)
         end
     elseif kind == "atmosphere_direction"
         tel = Telescope(resolution=resolution, diameter=8.0,

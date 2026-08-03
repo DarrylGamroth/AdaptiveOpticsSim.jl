@@ -292,25 +292,42 @@ end
     migration = authority["migration"]
     introduced_root = Set(String.(migration["new_root_exports"]))
     introduced_public = Set(String.(migration["new_domain_public"]))
+    export_to_public = Set(String.(migration["export_to_public"]))
     @test isempty(migration["removed_exports"])
     @test isempty(migration["removed_public"])
+    @test isdisjoint(introduced_public, export_to_public)
     @test all(binding -> owner_by_binding[binding] == ("Root", "exports"),
         introduced_root)
     @test all(introduced_public) do qualified
         owner, binding = split(qualified, '.'; limit=2)
         owner_by_binding[binding] == (owner, "public")
     end
+    @test all(export_to_public) do qualified
+        owner, binding = split(qualified, '.'; limit=2)
+        binding in current["exports"] &&
+            owner_by_binding[binding] == (owner, "public")
+    end
+    export_to_public_bindings = Set(
+        last(split(qualified, '.'; limit=2))
+        for qualified in export_to_public
+    )
 
     existing_target = Set{String}()
     for (binding, (owner, visibility)) in owner_by_binding
         owner == "Plant" && continue
         binding in introduced_root && continue
-        "$owner.$binding" in introduced_public && continue
+        "$owner.$binding" in union(introduced_public,
+            export_to_public) && continue
         push!(existing_target, binding)
     end
-    @test existing_target ==
-        Set([current["exports"]; current["public"]])
-    @test all(binding -> owner_by_binding[binding][2] == "exports",
+    @test existing_target == Set([
+        (binding for binding in current["exports"]
+            if binding ∉ export_to_public_bindings)...;
+        current["public"];
+    ])
+    @test all(binding ->
+            binding in export_to_public_bindings ||
+            owner_by_binding[binding][2] == "exports",
         current["exports"])
     @test all(binding -> owner_by_binding[binding][2] == "public",
         current["public"])
@@ -335,7 +352,8 @@ end
     end
     expected_root_exports = Set(
         binding for binding in current["exports"]
-        if binding ∉ implemented_exports
+        if binding ∉ implemented_exports &&
+            binding ∉ export_to_public_bindings
     )
     union!(expected_root_exports,
         intersect(introduced_root,

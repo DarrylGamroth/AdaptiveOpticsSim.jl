@@ -102,7 +102,7 @@ owned.
 | Coherent field combination | `CoherentFieldCombination()`: compatible complex fields may be combined before intensity formation, so relative phase is retained. |
 | Incoherent intensity addition | `IncoherentIntensityAddition()`: compatible intensity maps may be added elementwise after their grid, spectral, radiometric, backend, and device contracts have been checked. |
 | Non-combinable product | `NonCombinableProduct()`: the product must remain separate unless an explicit physically justified mapping is prepared. |
-| Optical product bundle | `OpticalProductBundle`: a typed, fixed-membership collection that preserves products on incompatible grids or channels without implicit resampling, radiometric conversion, or accumulation. Product membership cannot change after construction; each leaf's caller-owned numerical array remains mutable. |
+| Optical product bundle | `OpticalProductBundle`: a typed, fixed-cardinality collection that preserves products on incompatible grids or channels without implicit resampling, radiometric conversion, or accumulation. Its container cannot grow or shrink; a prepared execution owner independently binds the exact ordered members and rejects replacement before numerical mutation. Each leaf's caller-owned numerical array remains mutable. |
 | Normalized test source | A source carrying `NormalizedTestSource()` radiometry and dimensionless relative power. It is useful for calibration and deterministic tests, but does not claim physical photon irradiance and requires an explicit scale before physical detector acquisition. |
 
 The detector boundary distinguishes photon-rate density from cell-integrated

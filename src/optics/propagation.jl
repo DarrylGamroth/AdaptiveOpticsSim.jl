@@ -1,4 +1,15 @@
+"""Nominal interface for a prepared propagation plan/workspace owner."""
 abstract type AbstractPropagationModel end
+
+"""
+    AbstractPropagationPlan
+
+Nominal interface for a run-immutable optical-propagation contract. Concrete
+plans provide `propagation_input_metadata` and `propagation_output_metadata`.
+They may own immutable backend-resident coefficients, but never FFT scratch or
+a scratch-owning, stream-bound, or otherwise non-reentrant FFT handle.
+"""
+abstract type AbstractPropagationPlan end
 
 struct FraunhoferPropagationParams{T<:AbstractFloat}
     padded_resolution::Int
@@ -7,21 +18,38 @@ struct FraunhoferPropagationParams{T<:AbstractFloat}
     output_sampling_rad::T
 end
 
-struct FraunhoferPropagationState{C<:AbstractMatrix,P}
+"""Run-immutable Fraunhofer sampling and optical-plane contract."""
+struct FraunhoferPropagationPlan{
+    P<:FraunhoferPropagationParams,
+    I<:OpticalPlaneMetadata,
+    O<:OpticalPlaneMetadata,
+} <: AbstractPropagationPlan
+    params::P
+    input_metadata::I
+    output_metadata::O
+end
+
+"""Replaceable single-writer scratch and FFT resource for Fraunhofer propagation."""
+struct FraunhoferPropagationWorkspace{C<:AbstractMatrix,P}
     scratch::C
     fft_plan::P
 end
 
+"""Prepared Fraunhofer propagation plan/workspace pair."""
 struct FraunhoferPropagation{
-    P<:FraunhoferPropagationParams,
-    S<:FraunhoferPropagationState,
-    I<:OpticalPlaneMetadata,
-    O<:OpticalPlaneMetadata,
+    P<:FraunhoferPropagationPlan,
+    W<:FraunhoferPropagationWorkspace,
 } <: AbstractPropagationModel
-    params::P
-    state::S
-    input_metadata::I
-    output_metadata::O
+    plan::P
+    workspace::W
+
+    function FraunhoferPropagation(plan::P, workspace::W) where {
+        P<:FraunhoferPropagationPlan,
+        W<:FraunhoferPropagationWorkspace,
+    }
+        _require_propagation_plan_workspace(plan, workspace)
+        return new{P,W}(plan, workspace)
+    end
 end
 
 struct FresnelPropagationParams{T<:AbstractFloat}
@@ -32,26 +60,62 @@ struct FresnelPropagationParams{T<:AbstractFloat}
     distance_m::T
 end
 
-struct FresnelPropagationState{C<:AbstractMatrix,V<:AbstractVector,M<:AbstractMatrix,Pf,Pi}
+"""Run-immutable Fresnel contract and backend-resident transfer operator."""
+struct FresnelPropagationPlan{
+    P<:FresnelPropagationParams,
+    I<:OpticalPlaneMetadata,
+    O<:OpticalPlaneMetadata,
+    M<:AbstractMatrix,
+} <: AbstractPropagationPlan
+    params::P
+    input_metadata::I
+    output_metadata::O
+    transfer::M
+end
+
+"""Replaceable single-writer scratch and FFT resources for Fresnel propagation."""
+struct FresnelPropagationWorkspace{C<:AbstractMatrix,Pf,Pi}
     spectrum::C
     propagated::C
-    freqs::V
-    transfer::M
     fft_plan::Pf
     ifft_plan::Pi
 end
 
+"""Prepared Fresnel propagation plan/workspace pair."""
 struct FresnelPropagation{
-    P<:FresnelPropagationParams,
-    S<:FresnelPropagationState,
-    I<:OpticalPlaneMetadata,
-    O<:OpticalPlaneMetadata,
+    P<:FresnelPropagationPlan,
+    W<:FresnelPropagationWorkspace,
 } <: AbstractPropagationModel
-    params::P
-    state::S
-    input_metadata::I
-    output_metadata::O
+    plan::P
+    workspace::W
+
+    function FresnelPropagation(plan::P, workspace::W) where {
+        P<:FresnelPropagationPlan,
+        W<:FresnelPropagationWorkspace,
+    }
+        _require_propagation_plan_workspace(plan, workspace)
+        return new{P,W}(plan, workspace)
+    end
 end
+
+"""Return the run-immutable plan held by a prepared propagation owner."""
+@inline propagation_plan(model::AbstractPropagationModel) = model.plan
+
+"""Return the single-writer workspace held by a prepared propagation owner."""
+@inline propagation_workspace(model::AbstractPropagationModel) =
+    model.workspace
+
+"""Return the required input-plane metadata for a propagation plan or owner."""
+@inline propagation_input_metadata(plan::AbstractPropagationPlan) =
+    plan.input_metadata
+
+"""Return the produced output-plane metadata for a propagation plan or owner."""
+@inline propagation_output_metadata(plan::AbstractPropagationPlan) =
+    plan.output_metadata
+@inline propagation_input_metadata(model::AbstractPropagationModel) =
+    propagation_input_metadata(propagation_plan(model))
+@inline propagation_output_metadata(model::AbstractPropagationModel) =
+    propagation_output_metadata(propagation_plan(model))
 
 @kernel function complex_scale_copy_kernel!(out, input, scale, n::Int)
     i, j = @index(Global, NTuple)
@@ -104,6 +168,67 @@ function _fraunhofer_output_metadata(
     )
 end
 
+function _require_propagation_array_contract(
+    storage::AbstractMatrix,
+    metadata::OpticalPlaneMetadata,
+    label::AbstractString,
+)
+    size(storage) == metadata.dimensions || throw(DimensionMismatchError(
+        "$label dimensions do not match the propagation plan"))
+    eltype(storage) === metadata.numeric_type || throw(InvalidConfiguration(
+        "$label numeric type does not match the propagation plan"))
+    typeof(backend(storage)) === typeof(metadata.backend) || throw(
+        InvalidConfiguration(
+            "$label backend does not match the propagation plan"))
+    compute_device(storage) == metadata.device || throw(
+        InvalidConfiguration(
+            "$label device does not match the propagation plan"))
+    return storage
+end
+
+function _require_propagation_plan_workspace(
+    plan::FraunhoferPropagationPlan,
+    workspace::FraunhoferPropagationWorkspace,
+)
+    _require_propagation_array_contract(
+        workspace.scratch,
+        plan.output_metadata,
+        "Fraunhofer workspace scratch",
+    )
+    return workspace
+end
+
+function _require_propagation_plan_workspace(
+    plan::FresnelPropagationPlan,
+    workspace::FresnelPropagationWorkspace,
+)
+    _require_propagation_array_contract(
+        plan.transfer,
+        plan.output_metadata,
+        "Fresnel transfer coefficients",
+    )
+    _require_propagation_array_contract(
+        workspace.spectrum,
+        plan.input_metadata,
+        "Fresnel spectrum workspace",
+    )
+    _require_propagation_array_contract(
+        workspace.propagated,
+        plan.output_metadata,
+        "Fresnel propagated workspace",
+    )
+    Base.mightalias(workspace.spectrum, workspace.propagated) && throw(
+        InvalidConfiguration(
+            "Fresnel spectrum and propagated workspaces must not alias"))
+    Base.mightalias(workspace.spectrum, plan.transfer) && throw(
+        InvalidConfiguration(
+            "Fresnel spectrum workspace and transfer coefficients must not alias"))
+    Base.mightalias(workspace.propagated, plan.transfer) && throw(
+        InvalidConfiguration(
+            "Fresnel propagated workspace and transfer coefficients must not alias"))
+    return workspace
+end
+
 function FraunhoferPropagation(field::ElectricField)
     require_centered_plane_geometry(field.metadata;
         label="Fraunhofer input ElectricField")
@@ -127,15 +252,15 @@ function FraunhoferPropagation(field::ElectricField)
         input_sampling,
         output_sampling,
     )
-    state = FraunhoferPropagationState{typeof(scratch), typeof(fft_plan)}(scratch, fft_plan)
     output_metadata = _fraunhofer_output_metadata(
         field,
         scratch,
         output_sampling,
         field.metadata.coherence,
     )
-    return FraunhoferPropagation(params, state, field.metadata,
-        output_metadata)
+    plan = FraunhoferPropagationPlan(params, field.metadata, output_metadata)
+    workspace = FraunhoferPropagationWorkspace(scratch, fft_plan)
+    return FraunhoferPropagation(plan, workspace)
 end
 
 function FresnelPropagation(field::ElectricField; distance_m::Real,
@@ -165,14 +290,6 @@ function FresnelPropagation(field::ElectricField; distance_m::Real,
         input_sampling,
         T(distance_m),
     )
-    state = FresnelPropagationState{typeof(spectrum), typeof(freqs), typeof(transfer), typeof(fft_plan), typeof(ifft_plan)}(
-        spectrum,
-        propagated,
-        freqs,
-        transfer,
-        fft_plan,
-        ifft_plan,
-    )
     output_metadata = OpticalPlaneMetadata(output_kind, propagated;
         coordinate_domain=MetricCoordinates(),
         sampling=field.metadata.sampling,
@@ -181,21 +298,59 @@ function FresnelPropagation(field::ElectricField; distance_m::Real,
         normalization=field.metadata.normalization,
         spatial_measure=field.metadata.spatial_measure,
         coherence=field.metadata.coherence)
-    model = FresnelPropagation(params, state, field.metadata,
-        output_metadata)
-    build_fresnel_transfer!(model)
-    return model
+    coeff = -T(pi) * params.wavelength * params.distance_m
+    fftfreq!(freqs, params.padded_resolution; d=params.input_sampling_m)
+    build_fresnel_transfer!(execution_style(transfer), transfer, freqs,
+        coeff)
+    plan = FresnelPropagationPlan(params, field.metadata, output_metadata,
+        transfer)
+    workspace = FresnelPropagationWorkspace(spectrum, propagated, fft_plan,
+        ifft_plan)
+    return FresnelPropagation(plan, workspace)
+end
+
+function FraunhoferPropagationWorkspace(
+    plan::FraunhoferPropagationPlan,
+    prototype::AbstractMatrix,
+)
+    _require_propagation_array_contract(
+        prototype, plan.input_metadata, "Fraunhofer workspace prototype")
+    scratch = similar(prototype)
+    workspace = FraunhoferPropagationWorkspace(
+        scratch, plan_fft_backend!(scratch))
+    return _require_propagation_plan_workspace(plan, workspace)
+end
+
+function FresnelPropagationWorkspace(
+    plan::FresnelPropagationPlan,
+    prototype::AbstractMatrix,
+)
+    _require_propagation_array_contract(
+        prototype, plan.input_metadata, "Fresnel workspace prototype")
+    spectrum = similar(prototype)
+    propagated = similar(prototype)
+    workspace = FresnelPropagationWorkspace(
+        spectrum,
+        propagated,
+        plan_fft_backend!(spectrum),
+        plan_ifft_backend!(propagated),
+    )
+    return _require_propagation_plan_workspace(plan, workspace)
 end
 
 function _propagation_size_error(resolution::Int)
     throw(DimensionMismatchError("propagated field size must match propagation resolution $resolution"))
 end
 
-function _require_model_match(field::ElectricField, model::AbstractPropagationModel)
-    field.metadata == model.input_metadata || throw(InvalidConfiguration(
+function _require_plan_match(field::ElectricField, plan::AbstractPropagationPlan)
+    field.metadata == propagation_input_metadata(plan) || throw(InvalidConfiguration(
         "ElectricField metadata does not match the prepared propagation input"))
-    return model
+    return plan
 end
+
+@inline _require_model_match(field::ElectricField,
+    model::AbstractPropagationModel) =
+    (_require_plan_match(field, propagation_plan(model)); model)
 
 function _complex_scale_copy!(::ScalarCPUStyle, out::AbstractMatrix{Complex{T}}, input::AbstractMatrix{Complex{T}}, scale::T) where {T<:AbstractFloat}
     n, m = size(out)
@@ -221,12 +376,6 @@ end
 function _complex_hadamard!(style::AcceleratorStyle, out::AbstractMatrix{Complex{T}}, weights::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     launch_kernel!(style, complex_hadamard_kernel!, out, weights, size(out, 1); ndrange=size(out))
     return out
-end
-
-function build_fresnel_transfer!(model::FresnelPropagation)
-    fftfreq!(model.state.freqs, model.params.padded_resolution; d=model.params.input_sampling_m)
-    coeff = -eltype(model.state.freqs)(pi) * model.params.wavelength * model.params.distance_m
-    return build_fresnel_transfer!(execution_style(model.state.transfer), model.state.transfer, model.state.freqs, coeff)
 end
 
 function build_fresnel_transfer!(::ScalarCPUStyle, transfer::AbstractMatrix{Complex{T}}, freqs::AbstractVector{T}, coeff::T) where {T<:AbstractFloat}
@@ -267,37 +416,51 @@ function propagate_fresnel_field!(out::AbstractMatrix{Complex{T}}, input::Abstra
 end
 
 function propagate_field!(out::AbstractMatrix{Complex{T}},
-    field::ElectricField, model::FraunhoferPropagation) where {T<:AbstractFloat}
-    _require_model_match(field, model)
+    field::ElectricField, plan::FraunhoferPropagationPlan,
+    workspace::FraunhoferPropagationWorkspace) where {T<:AbstractFloat}
+    _require_plan_match(field, plan)
     size(out) == size(field.values) ||
-        _propagation_size_error(model.params.padded_resolution)
+        _propagation_size_error(plan.params.padded_resolution)
     require_same_backend(out, field)
+    _require_propagation_plan_workspace(plan, workspace)
     return propagate_fraunhofer_field!(out, field.values,
-        model.state.scratch, model.state.fft_plan)
+        workspace.scratch, workspace.fft_plan)
 end
+
+@inline propagate_field!(out::AbstractMatrix{Complex{T}},
+    field::ElectricField, model::FraunhoferPropagation) where {
+    T<:AbstractFloat,
+} = propagate_field!(out, field, model.plan, model.workspace)
 
 function propagate_field!(out::ElectricField, field::ElectricField,
     model::FraunhoferPropagation)
-    out.metadata == model.output_metadata || throw(InvalidConfiguration(
+    out.metadata == model.plan.output_metadata || throw(InvalidConfiguration(
         "destination ElectricField metadata does not match the prepared Fraunhofer output"))
     propagate_field!(out.values, field, model)
     return out
 end
 
 function propagate_field!(out::AbstractMatrix{Complex{T}},
-    field::ElectricField, model::FresnelPropagation) where {T<:AbstractFloat}
-    _require_model_match(field, model)
+    field::ElectricField, plan::FresnelPropagationPlan,
+    workspace::FresnelPropagationWorkspace) where {T<:AbstractFloat}
+    _require_plan_match(field, plan)
     size(out) == size(field.values) ||
-        _propagation_size_error(model.params.padded_resolution)
+        _propagation_size_error(plan.params.padded_resolution)
     require_same_backend(out, field)
+    _require_propagation_plan_workspace(plan, workspace)
     return propagate_fresnel_field!(out, field.values,
-        model.state.spectrum, model.state.propagated,
-        model.state.transfer, model.state.fft_plan, model.state.ifft_plan)
+        workspace.spectrum, workspace.propagated,
+        plan.transfer, workspace.fft_plan, workspace.ifft_plan)
 end
+
+@inline propagate_field!(out::AbstractMatrix{Complex{T}},
+    field::ElectricField, model::FresnelPropagation) where {
+    T<:AbstractFloat,
+} = propagate_field!(out, field, model.plan, model.workspace)
 
 function propagate_field!(out::ElectricField, field::ElectricField,
     model::FresnelPropagation)
-    out.metadata == model.output_metadata || throw(InvalidConfiguration(
+    out.metadata == model.plan.output_metadata || throw(InvalidConfiguration(
         "destination ElectricField metadata does not match the prepared Fresnel output"))
     propagate_field!(out.values, field, model)
     return out
@@ -307,7 +470,7 @@ function propagation_output(field::ElectricField,
     model::AbstractPropagationModel)
     _require_model_match(field, model)
     values = similar(field.values)
-    return ElectricField(model.output_metadata, values)
+    return ElectricField(propagation_output_metadata(model), values)
 end
 
 function IntensityMap(field::ElectricField,
@@ -315,40 +478,50 @@ function IntensityMap(field::ElectricField,
     _require_model_match(field, model)
     _require_coherent_field(field.metadata.coherence)
     T = real(eltype(field.values))
-    values = similar(field.values, T, model.output_metadata.dimensions...)
+    output_metadata = propagation_output_metadata(model)
+    values = similar(field.values, T, output_metadata.dimensions...)
     fill!(values, zero(T))
-    metadata = OpticalPlaneMetadata(model.output_metadata.kind, values;
-        coordinate_domain=model.output_metadata.coordinate_domain,
-        sampling=model.output_metadata.sampling,
-        origin=model.output_metadata.origin,
-        centering=model.output_metadata.centering,
-        orientation=model.output_metadata.orientation,
-        spectral=model.output_metadata.spectral,
-        normalization=model.output_metadata.normalization,
-        spatial_measure=model.output_metadata.spatial_measure,
+    metadata = OpticalPlaneMetadata(output_metadata.kind, values;
+        coordinate_domain=output_metadata.coordinate_domain,
+        sampling=output_metadata.sampling,
+        origin=output_metadata.origin,
+        centering=output_metadata.centering,
+        orientation=output_metadata.orientation,
+        spectral=output_metadata.spectral,
+        normalization=output_metadata.normalization,
+        spatial_measure=output_metadata.spatial_measure,
         coherence=IncoherentIntensityAddition(),
-        device=model.output_metadata.device)
+        device=output_metadata.device)
     return IntensityMap(metadata, values)
 end
 
 function fraunhofer_intensity_from_field!(out::AbstractMatrix{T},
-    field::ElectricField, model::FraunhoferPropagation) where {T<:AbstractFloat}
-    _require_model_match(field, model)
+    field::ElectricField, plan::FraunhoferPropagationPlan,
+    workspace::FraunhoferPropagationWorkspace) where {T<:AbstractFloat}
+    _require_plan_match(field, plan)
     size(out) == size(field.values) ||
         throw(DimensionMismatchError("Fraunhofer intensity output must match ElectricField size"))
     require_same_backend(out, field)
-    propagate_fraunhofer_field!(model.state.scratch, field.values,
-        model.state.scratch, model.state.fft_plan)
-    _intensity!(execution_style(out), out, model.state.scratch)
+    _require_propagation_plan_workspace(plan, workspace)
+    propagate_fraunhofer_field!(workspace.scratch, field.values,
+        workspace.scratch, workspace.fft_plan)
+    _intensity!(execution_style(out), out, workspace.scratch)
     return out
 end
 
+@inline fraunhofer_intensity_from_field!(out::AbstractMatrix{T},
+    field::ElectricField, model::FraunhoferPropagation) where {
+    T<:AbstractFloat,
+} = fraunhofer_intensity_from_field!(out, field, model.plan,
+    model.workspace)
+
 function fraunhofer_intensity_from_field!(out::IntensityMap,
     field::ElectricField, model::FraunhoferPropagation)
-    require_same_plane_grid(out.metadata, model.output_metadata;
+    output_metadata = propagation_output_metadata(model)
+    require_same_plane_grid(out.metadata, output_metadata;
         label="Fraunhofer intensity destination",
         require_numeric_type=false)
-    require_compatible_radiometry(out.metadata, model.output_metadata;
+    require_compatible_radiometry(out.metadata, output_metadata;
         label="Fraunhofer intensity destination")
     _require_incoherent_policy(out.metadata.coherence,
         "Fraunhofer intensity destination")

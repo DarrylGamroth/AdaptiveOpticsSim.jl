@@ -472,30 +472,42 @@ function IntensityMap(metadata::OpticalPlaneMetadata,
 end
 
 
-# Owned fixed-membership storage for dynamically sized optical bundles.
-struct _FixedOpticalProductVector{
-    T<:AbstractOpticalProduct,V<:AbstractVector{T},
-} <: AbstractVector{T}
-    _storage::V
+function _fixed_concrete_vector(values::AbstractVector,
+    label::AbstractString)
+    if isempty(values)
+        T = eltype(values)
+        isconcretetype(T) || throw(InvalidConfiguration(
+            "$label must declare a concrete element type when empty"))
+        return FixedSizeVectorDefault{T}(undef, 0)
+    end
+
+    first_value = first(values)
+    T = typeof(first_value)
+    isconcretetype(T) || throw(InvalidConfiguration(
+        "$label must contain concrete values"))
+    owned = Vector{T}(undef, length(values))
+    slot = 1
+    for value in values
+        typeof(value) === T || throw(InvalidConfiguration(
+            "$label must contain one concrete element type; got $(T) and $(typeof(value))"))
+        @inbounds owned[slot] = value
+        slot += 1
+    end
+    return FixedSizeVectorDefault{T}(owned)
 end
 
-Base.size(products::_FixedOpticalProductVector) = size(getfield(products,
-    :_storage))
-Base.axes(products::_FixedOpticalProductVector) = axes(getfield(products,
-    :_storage))
-Base.length(products::_FixedOpticalProductVector) = length(getfield(products,
-    :_storage))
-Base.getindex(products::_FixedOpticalProductVector, index::Int) =
-    @inbounds getfield(products, :_storage)[index]
-Base.IndexStyle(::Type{<:_FixedOpticalProductVector}) = IndexLinear()
-Base.iterate(products::_FixedOpticalProductVector, state...) =
-    iterate(getfield(products, :_storage), state...)
-Base.copy(products::_FixedOpticalProductVector) = copy(getfield(products,
-    :_storage))
-
-function Base.getproperty(products::_FixedOpticalProductVector, name::Symbol)
-    name === :_storage && return copy(getfield(products, :_storage))
-    return getfield(products, name)
+function _require_exact_fixed_membership(
+    actual::FixedSizeVector,
+    prepared::FixedSizeVector,
+    label::AbstractString,
+)
+    length(actual) == length(prepared) || throw(DimensionMismatchError(
+        "$label cardinality changed after preparation"))
+    for (actual_member, prepared_member) in zip(actual, prepared)
+        actual_member === prepared_member || throw(InvalidConfiguration(
+            "$label membership changed after preparation"))
+    end
+    return actual
 end
 
 struct _OpticalProductBundleToken end
@@ -506,14 +518,15 @@ const _OPTICAL_PRODUCT_BUNDLE_TOKEN = _OpticalProductBundleToken()
 
 Preserve prepared optical products that cannot be combined on one physical
 grid. A bundle performs no implicit resampling or radiometric conversion. Its
-membership is fixed at construction, while each product's caller-owned array
-storage remains mutable.
+cardinality is fixed at construction, while each product's caller-owned array
+storage remains mutable. Prepared execution owners retain and validate their
+exact ordered membership independently.
 """
-struct OpticalProductBundle{P<:Union{Tuple,_FixedOpticalProductVector}}
+struct OpticalProductBundle{P<:Union{Tuple,FixedSizeVector}}
     products::P
 
     function OpticalProductBundle(::_OpticalProductBundleToken,
-        products::P) where {P<:Union{Tuple,_FixedOpticalProductVector}}
+        products::P) where {P<:Union{Tuple,FixedSizeVector}}
         return new{P}(products)
     end
 end
@@ -523,8 +536,7 @@ OpticalProductBundle(products::Vararg{AbstractOpticalProduct,N}) where {N} =
 
 function OpticalProductBundle(
     products::AbstractVector{<:AbstractOpticalProduct})
-    owned = copy(products)
-    fixed = _FixedOpticalProductVector{eltype(owned),typeof(owned)}(owned)
+    fixed = _fixed_concrete_vector(products, "optical product bundle")
     return OpticalProductBundle(_OPTICAL_PRODUCT_BUNDLE_TOKEN, fixed)
 end
 
@@ -536,7 +548,10 @@ Base.iterate(bundle::OpticalProductBundle, state...) =
 struct _PreparedIncoherentSumToken end
 const _PREPARED_INCOHERENT_SUM_TOKEN = _PreparedIncoherentSumToken()
 
-struct PreparedIncoherentInputs{M,V}
+struct PreparedIncoherentInputs{
+    M<:Union{Tuple,FixedSizeVector},
+    V<:Union{Tuple,FixedSizeVector},
+}
     metadata::M
     values::V
 end
@@ -586,8 +601,8 @@ function prepare_incoherent_sum(output::IntensityMap,
     first_values = first_input.values
     metadata = Vector{typeof(first_metadata)}(undef, length(inputs))
     values = Vector{typeof(first_values)}(undef, length(inputs))
-    @inbounds for index in eachindex(inputs)
-        input = inputs[index]
+    slot = 1
+    for input in inputs
         _require_homogeneous_prepared_input(typeof(first_metadata),
             typeof(input.metadata))
         _require_homogeneous_prepared_values(typeof(first_values),
@@ -596,11 +611,15 @@ function prepare_incoherent_sum(output::IntensityMap,
             "incoherent intensity input")
         require_incoherent_addition(output.metadata, input.metadata;
             label="incoherent intensity accumulation")
-        metadata[index] = input.metadata
-        values[index] = input.values
+        @inbounds metadata[slot] = input.metadata
+        @inbounds values[slot] = input.values
+        slot += 1
     end
+    fixed_metadata = FixedSizeVectorDefault{typeof(first_metadata)}(metadata)
+    fixed_values = FixedSizeVectorDefault{typeof(first_values)}(values)
     return PreparedIncoherentSum(_PREPARED_INCOHERENT_SUM_TOKEN,
-        output.metadata, PreparedIncoherentInputs(metadata, values))
+        output.metadata,
+        PreparedIncoherentInputs(fixed_metadata, fixed_values))
 end
 
 @inline function _require_homogeneous_prepared_input(
@@ -706,11 +725,11 @@ end
 function _require_prepared_intensity_inputs(output::AbstractArray,
     inputs::AbstractVector{<:IntensityMap}, metadata::AbstractVector,
     values::AbstractVector)
-    @inbounds for index in eachindex(inputs, metadata, values)
-        input = inputs[index]
-        input.metadata === metadata[index] || throw(InvalidConfiguration(
+    for (input, prepared_metadata, prepared_values) in
+        zip(inputs, metadata, values)
+        input.metadata === prepared_metadata || throw(InvalidConfiguration(
             "intensity input does not match its prepared accumulation plan"))
-        input.values === values[index] || throw(InvalidConfiguration(
+        input.values === prepared_values || throw(InvalidConfiguration(
             "intensity input storage does not match its prepared accumulation plan"))
         Base.mightalias(output, input.values) && throw(InvalidConfiguration(
             "incoherent intensity output must not alias an input"))

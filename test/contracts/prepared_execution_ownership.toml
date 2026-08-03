@@ -156,8 +156,8 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 378
-baseline_mixed_type_count = 32
+baseline_type_count = 386
+baseline_mixed_type_count = 29
 
 [[type_inventory.files]]
 path = "ext/AdaptiveOpticsSimAMDGPUExt.jl"
@@ -398,13 +398,16 @@ entries = [
 path = "src/optics/direct_imaging.jl"
 owner = "Optics"
 entries = [
-    ["DirectImagingPlan","struct",8,"plan",["plan","workspace","product","prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["DirectImagingPlan","struct",5,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
     ["DirectImagingWorkspace","struct",2,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
-    ["PreparedBundledDirectImaging","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreformedFieldDirectImagingStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_neutral",true,"PE-03"],
+    ["PreparedBundledDirectImaging","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
     ["PreparedDirectImaging","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
-    ["PreparedFieldImagingInput","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
-    ["PreparedIncoherentDirectImaging","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
-    ["PreparedPupilImagingInput","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreparedDirectImagingCompositionBindings","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreparedIncoherentDirectImaging","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PupilDirectImagingInputPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["_PreparedDirectImagingCompositionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
+    ["_PreparedDirectImagingToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
 ]
 
 [[type_inventory.files]]
@@ -414,8 +417,9 @@ entries = [
     ["DirectImagingBatchProductContract","struct",8,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
     ["DirectImagingBatchSampleParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
     ["DirectImagingBatchWorkspace","mutable_struct",5,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-03"],
-    ["DirectImagingBatchWorkspaceBindings","struct",7,"workspace",["prepared_owner"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
     ["PreparedDirectImagingBatch","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreparedDirectImagingBatchBindings","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["_PreparedDirectImagingBatchToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
 ]
 
 [[type_inventory.files]]
@@ -449,7 +453,6 @@ entries = [
     ["OpticalProductBundle","struct",1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-03"],
     ["PreparedIncoherentInputs","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
     ["PreparedIncoherentSum","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
-    ["_FixedOpticalProductVector","struct",1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-03"],
     ["_OpticalProductBundleToken","struct",0,"product",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
     ["_PreparedIncoherentSumToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
 ]
@@ -458,10 +461,13 @@ entries = [
 path = "src/optics/propagation.jl"
 owner = "Optics"
 entries = [
+    ["AbstractPropagationPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
     ["FraunhoferPropagationParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["FraunhoferPropagationState","struct",2,"state",["plan","workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["FraunhoferPropagationPlan","struct",3,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["FraunhoferPropagationWorkspace","struct",2,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
     ["FresnelPropagationParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["FresnelPropagationState","struct",6,"state",["plan","workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["FresnelPropagationPlan","struct",4,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["FresnelPropagationWorkspace","struct",4,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
 ]
 
 [[type_inventory.files]]
@@ -476,9 +482,11 @@ entries = [
 path = "src/optics/spatial_filter.jl"
 owner = "Optics"
 entries = [
+    ["PreparedSpatialFilter","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
     ["SpatialFilterParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
     ["SpatialFilterPlan","struct",6,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
     ["SpatialFilterWorkspace","struct",4,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["_PreparedSpatialFilterToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
 ]
 
 [[type_inventory.files]]
@@ -1056,7 +1064,7 @@ entries = [
 [direct_memory]
 policy = "ratchet"
 columns = ["category","scope","binding","baseline_line","count","hot_path","backend_relevance","replacement"]
-baseline_total = 344
+baseline_total = 336
 zero_tolerance_gate = "PE-07"
 interpretation = "AST references in package and extension implementation; comments, strings, tests, benchmarks, and dependency internals are excluded"
 
@@ -1076,19 +1084,6 @@ entries = [
     ["constructor","_copy_source_geometry_bindings","bindings",225,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
     ["signature_type","AtmosphereDirectionBatchParams","<constraint>",90,3,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
     ["type_constraint","AtmosphereDirectionBatchParams","<type-parameter>",62,3,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-]
-
-[[direct_memory.files]]
-path = "src/optics/direct_imaging_batch.jl"
-owner = "Optics"
-entries = [
-    ["constructor","_direct_imaging_batch_inputs","storage",302,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_direct_imaging_batch_sources","frozen",222,2,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_prepare_direct_imaging_batch","fields",471,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_prepare_direct_imaging_batch","formation_plans",472,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_prepare_direct_imaging_batch","samples",474,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_repeat_direct_imaging_batch_input","storage",288,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["type_constraint","_FixedDirectImagingBatchVector","<type-parameter>",60,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
 ]
 
 [[direct_memory.files]]
@@ -1612,12 +1607,12 @@ entries = [
 ]
 
 [fixed_size_arrays]
-core_dependency = false
+core_dependency = true
 characterized_version = "1.3.0"
 project = "benchmarks/fixed_size_arrays/Project.toml"
 contract = "benchmarks/contracts/fixed_size_arrays.toml"
 artifact = "benchmarks/results/prepared_execution/2026-08-02-fixed-size-arrays.toml"
-adoption_gate = "first migration slice that uses FixedSizeArray"
+adoption_gate = "PE-03"
 backing_policy = "dependency internals are neither named nor asserted"
 element_policy = "armed homogeneous storage must require a concrete element type"
 

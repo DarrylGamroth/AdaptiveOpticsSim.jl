@@ -482,7 +482,7 @@ end
     @test hil_memory["benchmarks_total"] == memory_count("benchmarks/")
 
     fixed = contract["fixed_size_arrays"]
-    @test fixed["core_dependency"] === false
+    @test fixed["core_dependency"] === true
     @test fixed["characterized_version"] == "1.3.0"
     @test isfile(joinpath(PE_REPOSITORY_ROOT, fixed["project"]))
     @test isfile(joinpath(PE_REPOSITORY_ROOT, fixed["contract"]))

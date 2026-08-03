@@ -74,16 +74,12 @@ end
         (:backend_ifft, (1, 2))
 end
 
-function explicit_direct_image_cycle!(output, field, wavefront, plan,
-    workspace)
-    form_direct_image!(output, wavefront, field, plan, workspace)
-    return output
+function explicit_direct_image_cycle!(prepared)
+    return form_direct_image!(prepared)
 end
 
-function explicit_spatial_filter_cycle!(output, field, spatial_filter, plan,
-    workspace)
-    filter!(output, field, spatial_filter, plan, workspace)
-    return output
+function explicit_spatial_filter_cycle!(prepared)
+    return filter!(prepared)
 end
 
 @testset "API export curation" begin
@@ -386,6 +382,17 @@ end
         @test Base.ispublic(Optics, name)
     end
     for name in (
+        :AbstractPropagationPlan,
+        :FraunhoferPropagationPlan,
+        :FraunhoferPropagationWorkspace,
+        :FresnelPropagationPlan,
+        :FresnelPropagationWorkspace,
+        :DirectImagingPlan,
+        :DirectImagingWorkspace,
+        :PreparedDirectImaging,
+        :SpatialFilterPlan,
+        :SpatialFilterWorkspace,
+        :PreparedSpatialFilter,
         :PreparedDirectImagingBatch,
         :DirectImagingBatchCompatibilitySignature,
         :DirectImagingBatchWorkspace,
@@ -1202,7 +1209,8 @@ end
     @test field.metadata.coordinate_domain isa MetricCoordinates
     @test field.metadata.spectral == MonochromaticChannel(wavelength(src))
     fraunhofer = FraunhoferPropagation(field)
-    @test fraunhofer.output_metadata.coordinate_domain isa AngularCoordinates
+    @test Optics.propagation_output_metadata(fraunhofer).coordinate_domain isa
+        AngularCoordinates
     centered_rate = similar(field.values, Float64)
     fraunhofer_intensity_from_field!(centered_rate, field, fraunhofer)
     direct = prepare_direct_imaging(wavefront, src;
@@ -1266,7 +1274,8 @@ end
     propagated_intensity = similar(propagated.values, Float64)
     @. propagated_intensity = abs2(propagated.values)
     @test propagated_intensity ≈ centered_rate atol=1e-10 rtol=1e-10
-    @test fraunhofer.params.output_sampling_rad ≈ wavelength(src) /
+    @test Optics.propagation_plan(fraunhofer).params.output_sampling_rad ≈
+        wavelength(src) /
         (field.metadata.dimensions[1] * field.metadata.sampling[1])
     @test propagated.metadata.kind isa FocalPlane
 
@@ -1439,19 +1448,23 @@ end
     @test @inferred(optics._require_exact_direct_imaging_target(
         batch, target)) === batch
 
-    wrong_workspace = optics.DirectImagingWorkspace(
-        leaf.workspace.propagation,
+    replacement_workspace = optics.DirectImagingWorkspace(
+        optics.FraunhoferPropagationWorkspace(
+            leaf.plan.propagation,
+            leaf.field.values,
+        ),
         copy(leaf.workspace.unshifted_intensity),
     )
-    wrong_binding = optics.PreparedDirectImaging(
+    replacement_owner = optics.PreparedDirectImaging(
+        optics._PREPARED_DIRECT_IMAGING_TOKEN,
         leaf.input,
         leaf.field,
         leaf.output,
         leaf.plan,
-        wrong_workspace,
+        replacement_workspace,
     )
-    @test_throws InvalidConfiguration optics._require_exact_direct_imaging_target(
-        wrong_binding, target)
+    @test @inferred(optics._require_exact_direct_imaging_target(
+        replacement_owner, target)) === replacement_owner
 
     wrong_target = backends.AcceleratorComputeDevice(CUDABackend(), 0)
     wrong_target_error = try
@@ -1508,10 +1521,8 @@ end
     output = IntensityMap(field, propagation)
     fill!(output.values, 0)
     prepared = prepare_direct_imaging(path_a, src, field, output)
-    explicit_direct_image_cycle!(output, field, path_a, prepared.plan,
-        prepared.workspace)
-    @test @allocated(explicit_direct_image_cycle!(output, field, path_a,
-        prepared.plan, prepared.workspace)) == 0
+    explicit_direct_image_cycle!(prepared)
+    @test @allocated(explicit_direct_image_cycle!(prepared)) == 0
     @test path_b.opd == path_b_before_propagation
     @test !hasproperty(tel, :state)
 
@@ -1525,13 +1536,12 @@ end
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(spatial_field, path_a, spatial_formation)
     spatial_output = PupilFunction(tel)
-    spatial_plan = prepare_spatial_filter(tel, spatial_filter, spatial_field,
+    prepared_spatial_filter = prepare_spatial_filter(
+        tel, spatial_filter, spatial_field,
         spatial_output)
-    spatial_workspace = SpatialFilterWorkspace(spatial_filter)
-    explicit_spatial_filter_cycle!(spatial_output, spatial_field, spatial_filter,
-        spatial_plan, spatial_workspace)
-    @test @allocated(explicit_spatial_filter_cycle!(spatial_output, spatial_field,
-        spatial_filter, spatial_plan, spatial_workspace)) == 0
+    explicit_spatial_filter_cycle!(prepared_spatial_filter)
+    @test @allocated(explicit_spatial_filter_cycle!(
+        prepared_spatial_filter)) == 0
 end
 
 @testset "Optical-plane compatibility validation" begin
@@ -1624,9 +1634,10 @@ end
     wrong_destination_values = Matrix{Float64}(undef, 9, 9)
     wrong_destination_metadata = OpticalPlaneMetadata(FocalPlane(),
         wrong_destination_values;
-        coordinate_domain=propagation.output_metadata.coordinate_domain,
-        sampling=propagation.output_metadata.sampling,
-        spectral=propagation.output_metadata.spectral)
+        coordinate_domain=Optics.propagation_output_metadata(
+            propagation).coordinate_domain,
+        sampling=Optics.propagation_output_metadata(propagation).sampling,
+        spectral=Optics.propagation_output_metadata(propagation).spectral)
     wrong_destination = IntensityMap(wrong_destination_metadata,
         wrong_destination_values)
     @test_throws DimensionMismatchError prepare_direct_imaging(wavefront,

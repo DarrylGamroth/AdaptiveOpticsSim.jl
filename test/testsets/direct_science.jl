@@ -16,8 +16,7 @@ end
     output = IntensityMap(field, propagation)
     prepared = prepare_direct_imaging(pupil, src, field, output)
 
-    formed = @inferred form_direct_image!(output, pupil, field,
-        prepared.plan, prepared.workspace)
+    formed = @inferred form_direct_image!(prepared)
     @test formed === output
     @test output.metadata.kind isa FocalPlane
     @test output.metadata.coordinate_domain isa AngularCoordinates
@@ -26,13 +25,11 @@ end
     @test output.metadata.coherence isa IncoherentIntensityAddition
     @test output.metadata.spectral == MonochromaticChannel(wavelength(src))
     @test sum(output.values) ≈ sum(pupil_photon_rate_map(tel, src))
-    @test @allocated(form_direct_image!(output, pupil, field,
-        prepared.plan, prepared.workspace)) == 0
+    @test @allocated(form_direct_image!(prepared)) == 0
 
     initial_output = copy(output.values)
     apply_opd!(pupil, 20 .* opd)
-    @test form_direct_image!(output, pupil, field,
-        prepared.plan, prepared.workspace) === output
+    @test form_direct_image!(prepared) === output
     @test output.values != initial_output
     @test sum(output.values) ≈ sum(pupil_photon_rate_map(tel, src))
 
@@ -40,38 +37,40 @@ end
     replacement_values = similar(output.values)
     fill!(replacement_values, -1.0)
     replacement_output = IntensityMap(output.metadata, replacement_values)
-    @test_throws InvalidConfiguration form_direct_image!(replacement_output,
-        pupil, field, prepared.plan, prepared.workspace)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Optics.
+        _form_prepared_direct_image!(
+        prepared, pupil, field, replacement_output, prepared.workspace)
     @test replacement_output.values == fill(-1.0, size(replacement_values))
     @test output.values == output_before
 
     replacement_field_values = copy(field.values)
     replacement_field = ElectricField(field.metadata,
         replacement_field_values)
-    @test_throws InvalidConfiguration form_direct_image!(output, pupil,
-        replacement_field, prepared.plan, prepared.workspace)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Optics.
+        _form_prepared_direct_image!(
+        prepared, pupil, replacement_field, output, prepared.workspace)
     @test output.values == output_before
 
     replacement_pupil = PupilFunction(tel)
-    @test_throws InvalidConfiguration form_direct_image!(output,
-        replacement_pupil, field, prepared.plan, prepared.workspace)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Optics.
+        _form_prepared_direct_image!(
+        prepared, replacement_pupil, field, output, prepared.workspace)
     @test output.values == output_before
 
     other_stage = prepare_direct_imaging(pupil, src;
         zero_padding=2)
-    @test_throws InvalidConfiguration form_direct_image!(output, pupil,
-        field, prepared.plan, other_stage.workspace)
+    @test_throws InvalidConfiguration AdaptiveOpticsSim.Optics.
+        _form_prepared_direct_image!(
+        prepared, pupil, field, output, other_stage.workspace)
     @test output.values == output_before
 
     formation = prepare_pupil_field(pupil, src, field)
     fill_electric_field!(field, pupil, formation)
     preformed_output = IntensityMap(field, FraunhoferPropagation(field))
     preformed = prepare_direct_imaging(src, field, preformed_output)
-    @test @inferred(form_direct_image!(preformed_output, field,
-        preformed.plan, preformed.workspace)) === preformed_output
+    @test @inferred(form_direct_image!(preformed)) === preformed_output
     @test preformed_output.values ≈ output.values
-    @test @allocated(form_direct_image!(preformed_output, field,
-        preformed.plan, preformed.workspace)) == 0
+    @test @allocated(form_direct_image!(preformed)) == 0
 
     normalized = Source(band=:custom, wavelength=wavelength(src),
         normalized_power=1.0)
@@ -166,8 +165,8 @@ end
 
     asterism = prepare_direct_imaging(pupil,
         Asterism([on_axis, off_axis]); zero_padding=2)
-    @test asterism.components isa Vector
-    @test asterism.products isa Vector
+    @test asterism.components isa FixedSizeVector
+    @test asterism.products isa FixedSizeVector
     @test isconcretetype(eltype(asterism.components))
     @test isconcretetype(eltype(asterism.products))
     combined = @inferred form_direct_image!(asterism)
@@ -187,12 +186,29 @@ end
         replacement_products, asterism.accumulation)
     @test combined.values == combined_before_rejection
 
+    first_component = asterism.components[1]
+    second_component = asterism.components[2]
+    first_bound_product = asterism.products[1]
+    second_bound_product = asterism.products[2]
+    asterism.components[1] = second_component
+    asterism.components[2] = first_component
+    asterism.products[1] = second_bound_product
+    asterism.products[2] = first_bound_product
+    fill!(combined.values, -3.0)
+    @test_throws InvalidConfiguration form_direct_image!(asterism)
+    @test all(==(-3.0), combined.values)
+    asterism.components[1] = first_component
+    asterism.components[2] = second_component
+    asterism.products[1] = first_bound_product
+    asterism.products[2] = second_bound_product
+    form_direct_image!(asterism)
+
     mixed_lgs = LGSSource(wavelength=wavelength_m,
         photon_irradiance=0.5, coordinates=(one_pixel_arcsec, 90.0))
     mixed_sources = AdaptiveOpticsSim.Optics.AbstractSource[on_axis, mixed_lgs]
     mixed = prepare_direct_imaging(pupil, Asterism(mixed_sources);
         zero_padding=2)
-    @test mixed.components isa Vector
+    @test mixed.components isa FixedSizeVector
     @test isconcretetype(eltype(mixed.components))
     mixed_output = form_direct_image!(mixed)
     mixed_explicit = zeros(eltype(mixed_output.values),
@@ -219,8 +235,8 @@ end
             n_side=5))
     gaussian_prepared = prepare_direct_imaging(pupil,
         extended_source_asterism(gaussian); zero_padding=2)
-    @test gaussian_prepared.components isa Vector
-    @test gaussian_prepared.products isa Vector
+    @test gaussian_prepared.components isa FixedSizeVector
+    @test gaussian_prepared.products isa FixedSizeVector
     @test isconcretetype(eltype(gaussian_prepared.components))
     @test isconcretetype(eltype(gaussian_prepared.products))
     @test length(gaussian_prepared.components) == 25
@@ -244,7 +260,7 @@ end
     dense_prepared = prepare_direct_imaging(PupilFunction(tiny_tel),
         extended_source_asterism(dense_source);
         zero_padding=1)
-    @test dense_prepared.components isa Vector
+    @test dense_prepared.components isa FixedSizeVector
     @test isconcretetype(eltype(dense_prepared.components))
     @test length(dense_prepared.components) == 121
     dense_output = form_direct_image!(dense_prepared)
@@ -267,12 +283,11 @@ end
         SpectralBundle([0.7e-6, 0.9e-6], [0.4, 0.6]))
     spectral = prepare_direct_imaging(pupil, spectral_source;
         zero_padding=2)
-    @test spectral.components isa Vector
+    @test spectral.components isa FixedSizeVector
     @test isconcretetype(eltype(spectral.components))
     products = @inferred form_direct_image!(spectral)
     @test products isa OpticalProductBundle
-    @test products.products isa AbstractVector
-    @test !(products.products isa Vector)
+    @test products.products isa FixedSizeVector
     @test isconcretetype(eltype(products.products))
     @test length(products) == 2
     @test products[1].metadata.sampling != products[2].metadata.sampling

@@ -993,12 +993,11 @@ end
     vector_bundle = OpticalProductBundle(source_products)
     source_products[1] = density_integrated_result
     @test only(vector_bundle.products) === science_path.result
-    @test vector_bundle.products isa AbstractVector
-    @test !(vector_bundle.products isa Vector)
+    @test vector_bundle.products isa FixedSizeVector
+    @test isconcretetype(eltype(vector_bundle.products))
     @test_throws MethodError push!(vector_bundle.products,
         density_integrated_result)
-    @test_throws Base.CanonicalIndexError vector_bundle.products[1] =
-        density_integrated_result
+    @test_throws MethodError resize!(vector_bundle.products, 2)
 
     assert_plant_preparation_error(
         () -> prepared_test_path(science_path.input, [science_path.result]),

@@ -11,9 +11,8 @@
         center_even_grid=false, amplitude_scale=1)
     fill_electric_field!(field, wavefront, formation)
     filtered = PupilFunction(tel)
-    plan = prepare_spatial_filter(tel, sf, field, filtered)
-    workspace = SpatialFilterWorkspace(sf)
-    filter!(filtered, field, sf, plan, workspace)
+    prepared = prepare_spatial_filter(tel, sf, field, filtered)
+    filter!(prepared)
     @test size(filtered.opd) == (8, 8)
     @test size(filtered.amplitude) == (8, 8)
 end

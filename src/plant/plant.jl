@@ -10,6 +10,7 @@ respective package domains and enter through the explicit imports below.
 """
 module Plant
 
+using FixedSizeArrays: FixedSizeVector
 using KernelAbstractions
 using LinearAlgebra
 using Random
@@ -82,7 +83,7 @@ import ..Optics:
     ExpandedSourceComposition,
     ExtendedSource,
     FocalPlane,
-    FraunhoferPropagation,
+    FraunhoferPropagationWorkspace,
     GaussianInfluenceWidth,
     GaussianMechanicalCoupling,
     GaussianInfluenceOperator,
@@ -124,7 +125,6 @@ import ..Optics:
     UnspecifiedNormalization,
     UnspecifiedSpatialMeasure,
     UnspecifiedSpectralCoordinate,
-    _FixedOpticalProductVector,
     _direct_imaging_batch_product_contract,
     _require_exact_direct_imaging_target,
     actuator_model,
