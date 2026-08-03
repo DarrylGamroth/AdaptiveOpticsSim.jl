@@ -140,7 +140,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
     pad = size(wfs.front_end.propagation.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
+    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.estimator.slopes), wfs, pupil, ast)
         sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
@@ -166,7 +166,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
     pad = size(wfs.front_end.propagation.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
+    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.estimator.slopes), wfs, pupil, ast, det, rng)
         sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
@@ -182,7 +182,7 @@ end
 
 @inline sh_uses_accelerator_batched_sensing(::ScalarCPUStyle, ::ShackHartmannWFS) = false
 @inline sh_uses_accelerator_batched_sensing(::AcceleratorStyle, wfs::ShackHartmannWFS) =
-    sh_uses_batched_sensing_plan(wfs)
+    sh_uses_batched_sensing_strategy(wfs)
 
 function measure_sh_asterism_diffractive!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction,
     ast::Asterism, n::Int, n_sub::Int, sub::Int, pad::Int, ox::Int, oy::Int)

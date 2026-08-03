@@ -20,8 +20,8 @@ AMDGPU.functional() ||
     build_input = Float32[1 2; 3 4]
     @test Calibration.prepare_build_matrix(
         build_backend, build_input) == build_input
-    @test Backends.reduction_execution_plan(
-        fft_buffer) isa Backends.HostMirrorReductionPlan
+    @test Backends.reduction_execution_strategy(
+        fft_buffer) isa Backends.HostMirrorReductionStrategy
 
     style = Backends.execution_style(fft_buffer)
     noise = AMDGPU.zeros(Float32, 8)
@@ -38,11 +38,11 @@ AMDGPU.functional() ||
     )
     frame_noise = AMDGPU.zeros(Float32, 2, 2)
     cube_noise = AMDGPU.zeros(Float32, 2, 2, 2)
-    host_plan = AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan()
+    host_strategy = AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy()
     AdaptiveOpticsSim.Detectors._randn_frame_noise!(
-        host_plan, detector, MersenneTwister(33), frame_noise)
+        host_strategy, detector, MersenneTwister(33), frame_noise)
     AdaptiveOpticsSim.Detectors._randn_frame_noise!(
-        host_plan, detector, MersenneTwister(34), cube_noise)
+        host_strategy, detector, MersenneTwister(34), cube_noise)
     @test all(isfinite, Array(frame_noise))
     @test all(isfinite, Array(cube_noise))
 

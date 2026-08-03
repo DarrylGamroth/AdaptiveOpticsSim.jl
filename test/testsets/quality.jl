@@ -185,6 +185,18 @@ end
         "plant-effective-command-routes",
         "plant-path-input-publications",
     )
+    @test Tuple(spec.name for spec in resolve_test_suites(["pe02"])) == (
+        "ka-cpu",
+        "prepared-execution-contracts",
+        "execution-strategies",
+        "namespace-authority",
+        "core-optics",
+        "detector-lifecycle",
+        "wfs-shack-hartmann",
+        "wfs-pyramid-bioedge",
+        "wfs-lift",
+        "backend-smoke",
+    )
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["control"])) ==
         ("control-primitives", "control-reconstruction")

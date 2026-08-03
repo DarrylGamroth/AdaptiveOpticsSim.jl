@@ -428,13 +428,13 @@ end
 
 apply_post_counting_gain!(det::AbstractCountingDetector) = counting_array(det)
 
-@inline counting_output_execution_plan(style::ExecutionStyle,
+@inline counting_output_execution_strategy(style::ExecutionStyle,
     det::AbstractCountingDetector, output::AbstractMatrix) =
-    counting_output_execution_plan(typeof(style), typeof(det), typeof(output))
-@inline counting_output_execution_plan(::Type{<:ExecutionStyle},
-    ::Type{<:AbstractCountingDetector}, ::Type{<:AbstractMatrix}) = DetectorDirectPlan()
+    counting_output_execution_strategy(typeof(style), typeof(det), typeof(output))
+@inline counting_output_execution_strategy(::Type{<:ExecutionStyle},
+    ::Type{<:AbstractCountingDetector}, ::Type{<:AbstractMatrix}) = DetectorDirectStrategy()
 
-function _write_counting_output!(::DetectorDirectPlan, det::AbstractCountingDetector,
+function _write_counting_output!(::DetectorDirectStrategy, det::AbstractCountingDetector,
     output::AbstractMatrix, counts::AbstractMatrix)
     if eltype(output) <: Integer
         write_integer_output!(output, counts)
@@ -444,14 +444,14 @@ function _write_counting_output!(::DetectorDirectPlan, det::AbstractCountingDete
     return output
 end
 
-function _write_counting_output!(::DetectorHostMirrorPlan,
+function _write_counting_output!(::DetectorHostMirrorStrategy,
     det::AbstractCountingDetector, output::AbstractMatrix, counts::AbstractMatrix)
     counts_host = counting_host_buffer(det)
     output_host = counting_output_host_buffer(det)
     output_host === nothing && throw(InvalidConfiguration(
         "counting detector host-mirror output requires a host output buffer"))
     copyto!(counts_host, counts)
-    _write_counting_output!(DetectorDirectPlan(), det, output_host, counts_host)
+    _write_counting_output!(DetectorDirectStrategy(), det, output_host, counts_host)
     copyto!(output, output_host)
     return output
 end
@@ -461,8 +461,8 @@ function write_output!(det::AbstractCountingDetector)
     output === nothing && return counting_array(det)
     counts = counting_array(det)
     style = execution_style(output)
-    plan = counting_output_execution_plan(style, det, output)
-    return _write_counting_output!(plan, det, output, counts)
+    strategy = counting_output_execution_strategy(style, det, output)
+    return _write_counting_output!(strategy, det, output, counts)
 end
 
 function _capture_prevalidated_counting!(det::AbstractCountingDetector,

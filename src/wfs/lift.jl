@@ -1502,9 +1502,9 @@ function qr_condition_ratio(qr_factor, n_modes::Int)
 end
 
 @inline normal_condition_ratio(normal::AbstractMatrix{T}) where {T<:AbstractFloat} =
-    normal_condition_ratio(reduction_execution_plan(normal), normal)
+    normal_condition_ratio(reduction_execution_strategy(normal), normal)
 
-function normal_condition_ratio(::DirectReductionPlan,
+function normal_condition_ratio(::DirectReductionStrategy,
     normal::Array{T,2}) where {T<:AbstractFloat}
     maxabs = zero(T)
     minabs = typemax(T)
@@ -1518,7 +1518,7 @@ function normal_condition_ratio(::DirectReductionPlan,
 end
 
 
-function normal_condition_ratio(::DirectReductionPlan,
+function normal_condition_ratio(::DirectReductionStrategy,
     normal::AbstractMatrix{T}) where {T<:AbstractFloat}
     diagonal = @view normal[diagind(normal)]
     maxabs = maximum(abs, diagonal)
@@ -1527,10 +1527,10 @@ function normal_condition_ratio(::DirectReductionPlan,
     return maxabs / max(minabs, eps(T))
 end
 
-function normal_condition_ratio(::HostMirrorReductionPlan, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+function normal_condition_ratio(::HostMirrorReductionStrategy, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
     host_parent = Array(reduction_parent_source(normal))
     host_normal = reduction_host_view(host_parent, normal)
-    return normal_condition_ratio(DirectReductionPlan(), host_normal)
+    return normal_condition_ratio(DirectReductionStrategy(), host_normal)
 end
 
 @inline function init_weights!(sqrtw::AbstractVector{T}, ::LiFTWeightingDynamic,

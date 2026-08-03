@@ -148,11 +148,11 @@ end
             "AbstractPreparedCurvatureObservationMapping"),
     ))
     strategy_interfaces = Set((
-        ("Atmospheres", "AbstractAtmosphericFieldExecutionPlan"),
-        ("Backends", "AbstractReductionExecutionPlan"),
-        ("Detectors", "AbstractDetectorExecutionPlan"),
-        ("WavefrontSensors", "AbstractGroupedAccumulationPlan"),
-        ("WavefrontSensors", "AbstractShackHartmannWFSSensingPlan"),
+        ("Atmospheres", "AbstractAtmosphericFieldExecutionStrategy"),
+        ("Backends", "AbstractReductionExecutionStrategy"),
+        ("Detectors", "AbstractDetectorExecutionStrategy"),
+        ("WavefrontSensors", "AbstractGroupedAccumulationStrategy"),
+        ("WavefrontSensors", "AbstractShackHartmannWFSSensingStrategy"),
     ))
     deferred_interfaces = Set((
         ("Plant", "_AbstractPreparedMixedSerialEventAcquisition"),
@@ -307,8 +307,9 @@ end
     inventory_by_name = Dict{
         String,
         NamedTuple{
-            (:path, :declaration, :target_roles, :migration_gate),
-            Tuple{String,String,Vector{String},String},
+            (:path, :declaration, :current_role, :target_roles,
+                :migration_gate),
+            Tuple{String,String,String,Vector{String},String},
         },
     }()
     for file in inventory["files"]
@@ -320,6 +321,7 @@ end
             inventory_by_name[name] = (
                 path=path,
                 declaration=String(values["declaration"]),
+                current_role=String(values["current_role"]),
                 target_roles=String.(values["target_roles"]),
                 migration_gate=String(values["migration_gate"]),
             )
@@ -354,8 +356,10 @@ end
         @test !isdefined(owner_modules[owner], Symbol(name))
     end
     for (_, name) in strategy_interfaces
+        @test inventory_by_name[name].current_role == "strategy"
         @test inventory_by_name[name].target_roles == ["strategy"]
         @test inventory_by_name[name].migration_gate == "PE-02"
+        @test endswith(name, "Strategy")
     end
     for (_, name) in deferred_interfaces
         @test inventory_by_name[name].declaration == "abstract_type"

@@ -174,17 +174,19 @@ end
 function _batched_apply_readout_correction!(det::Detector,
     model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3},
     scratch::AbstractArray{T,3}) where {T<:AbstractFloat}
-    plan = detector_execution_plan(typeof(execution_style(cube)), typeof(det))
-    return _batched_apply_readout_correction!(plan, det, model, cube, scratch)
+    strategy = detector_execution_strategy(
+        typeof(execution_style(cube)), typeof(det))
+    return _batched_apply_readout_correction!(
+        strategy, det, model, cube, scratch)
 end
 
-function _batched_apply_readout_correction!(::DetectorDirectPlan, det::Detector,
+function _batched_apply_readout_correction!(::DetectorDirectStrategy, det::Detector,
     model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3},
     scratch::AbstractArray{T,3}) where {T<:AbstractFloat}
     return _batched_apply_readout_correction!(model, cube, scratch)
 end
 
-function _batched_apply_readout_correction!(::DetectorHostMirrorPlan, det::Detector,
+function _batched_apply_readout_correction!(::DetectorHostMirrorStrategy, det::Detector,
     model::FrameReadoutCorrectionModel, cube::AbstractArray{T,3},
     scratch::AbstractArray{T,3}) where {T<:AbstractFloat}
     host = detector_host_cube!(det, cube)

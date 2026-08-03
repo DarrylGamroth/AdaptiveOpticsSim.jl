@@ -164,7 +164,7 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::Pup
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
-    if sh_uses_rocm_safe_sensing_plan(wfs)
+    if sh_uses_rocm_safe_sensing_strategy(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n = _pupil_resolution(pupil)
         n_sub = n_lenslets(wfs)
@@ -217,7 +217,7 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource)
     require_sh_common_spectral_grid(wfs, src)
-    if sh_uses_rocm_safe_sensing_plan(wfs)
+    if sh_uses_rocm_safe_sensing_strategy(wfs)
         fill!(wfs.front_end.propagation.spot_cube_accum, zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
         peak = zero(eltype(wfs.estimator.slopes))
         total_irradiance = photon_irradiance(src)
@@ -262,7 +262,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pup
     if length(ast.sources) == 1
         return sampled_spots_peak!(style, wfs, pupil, ast.sources[1])
     end
-    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
+    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
         return sampled_spots_peak_asterism_stacked!(style, wfs, pupil, ast)
     end
     fill!(wfs.front_end.propagation.spot_cube_accum, zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
@@ -343,7 +343,7 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
     det::AbstractDetector, rng::AbstractRNG)
-    if sh_uses_rocm_safe_sensing_plan(wfs)
+    if sh_uses_rocm_safe_sensing_strategy(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n = _pupil_resolution(pupil)
         n_sub = n_lenslets(wfs)
@@ -405,7 +405,7 @@ end
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource,
     det::AbstractDetector, rng::AbstractRNG)
     require_sh_common_spectral_grid(wfs, src)
-    if sh_uses_rocm_safe_sensing_plan(wfs)
+    if sh_uses_rocm_safe_sensing_strategy(wfs)
         fill!(wfs.front_end.propagation.spot_cube_accum, zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
         total_irradiance = photon_irradiance(src)
         qe_model = quantum_efficiency_model(det)
@@ -455,7 +455,7 @@ function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pup
     if length(ast.sources) == 1
         return sampled_spots_peak!(style, wfs, pupil, ast.sources[1], det, rng)
     end
-    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_plan(wfs)
+    if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
         return sampled_spots_peak_asterism_stacked!(style, wfs, pupil, ast, det, rng)
     end
     accumulate_sh_asterism_spots!(style, wfs, pupil, ast)
@@ -582,7 +582,7 @@ function sh_signal_from_spots!(::ScalarCPUStyle, wfs::ShackHartmannWFS, cutoff::
 end
 
 function sh_signal_from_spots!(style::AcceleratorStyle, wfs::ShackHartmannWFS, cutoff::T) where {T<:AbstractFloat}
-    if sh_uses_host_stats_sensing_plan(wfs)
+    if sh_uses_host_stats_sensing_strategy(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n_sub = n_lenslets(wfs)
         offset = n_sub * n_sub
@@ -607,7 +607,7 @@ function sh_signal_from_spots!(style::AcceleratorStyle, wfs::ShackHartmannWFS, c
         copyto!(wfs.estimator.slopes, host_slopes)
         return wfs.estimator.slopes
     end
-    if sh_uses_device_stats_sensing_plan(wfs)
+    if sh_uses_device_stats_sensing_strategy(wfs)
         return sh_signal_from_spots_device_stats!(style, wfs, cutoff)
     end
     n_sub = n_lenslets(wfs)
@@ -629,7 +629,7 @@ function sh_signal_from_spots_calibrated!(::ScalarCPUStyle, wfs::ShackHartmannWF
 end
 
 function sh_signal_from_spots_calibrated!(style::AcceleratorStyle, wfs::ShackHartmannWFS, cutoff::T) where {T<:AbstractFloat}
-    if sh_uses_host_stats_sensing_plan(wfs)
+    if sh_uses_host_stats_sensing_strategy(wfs)
         sh_refresh_valid_mask_host!(wfs)
         n_sub = n_lenslets(wfs)
         offset = n_sub * n_sub
@@ -656,7 +656,7 @@ function sh_signal_from_spots_calibrated!(style::AcceleratorStyle, wfs::ShackHar
         copyto!(wfs.estimator.slopes, host_slopes)
         return wfs.estimator.slopes
     end
-    if sh_uses_device_stats_sensing_plan(wfs)
+    if sh_uses_device_stats_sensing_strategy(wfs)
         return sh_signal_from_spots_calibrated_device_stats!(style, wfs, cutoff)
     end
     n_sub = n_lenslets(wfs)

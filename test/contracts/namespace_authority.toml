@@ -2446,7 +2446,7 @@ bindings = [
 path = "ext/AdaptiveOpticsSimAMDGPUExt.jl"
 dependency = "AMDGPU"
 adaptive_optics_sim_hooks = [
-    "_detector_value_plan",
+    "_detector_value_strategy",
     "_edge_geometric_slopes!",
     "_fill_phase_psd!",
     "_geometric_slopes!",
@@ -2468,21 +2468,21 @@ adaptive_optics_sim_hooks = [
     "can_apply_device_readout_correction",
     "compute_device_identifier",
     "compute_device_availability",
-    "counting_output_execution_plan",
+    "counting_output_execution_strategy",
     "default_build_backend",
-    "detector_execution_plan",
+    "detector_execution_strategy",
     "disable_scalar_backend!",
     "execute_fft_plan!",
     "gpu_backend_array_type",
     "gpu_backend_loaded",
     "gpu_backend_name",
-    "grouped_accumulation_plan",
+    "grouped_accumulation_strategy",
     "inverse_operator",
     "prepare_build_matrix",
     "randn_backend_async!",
     "randn_phase_noise!",
-    "reduction_execution_plan",
-    "sh_sensing_execution_plan",
+    "reduction_execution_strategy",
+    "sh_sensing_execution_strategy",
     "solve_lift_fallback!",
     "solve_normal_system!",
     "stable_hermitian_right_division",
@@ -2614,7 +2614,7 @@ hooks = [
     "plan_fft_backend!",
     "plan_ifft_backend!",
     "randn_backend_async!",
-    "reduction_execution_plan",
+    "reduction_execution_strategy",
 ]
 
 [[extension_hook_owners]]
@@ -2627,12 +2627,12 @@ hooks = [
 [[extension_hook_owners]]
 owner = "Detectors"
 hooks = [
-    "_detector_value_plan",
+    "_detector_value_strategy",
     "_poisson_noise_frame!",
     "_randn_frame_noise!",
     "can_apply_device_readout_correction",
-    "counting_output_execution_plan",
-    "detector_execution_plan",
+    "counting_output_execution_strategy",
+    "detector_execution_strategy",
 ]
 
 [[extension_hook_owners]]
@@ -2640,8 +2640,8 @@ owner = "WavefrontSensors"
 hooks = [
     "_edge_geometric_slopes!",
     "_geometric_slopes!",
-    "grouped_accumulation_plan",
-    "sh_sensing_execution_plan",
+    "grouped_accumulation_strategy",
+    "sh_sensing_execution_strategy",
     "solve_lift_fallback!",
     "solve_normal_system!",
 ]
