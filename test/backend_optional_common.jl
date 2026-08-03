@@ -2351,6 +2351,23 @@ end
         compute_device(state.storage_frame) == device
 end
 
+function optional_detector_device_model_matrix_allocation_bytes_once(
+    row::DeviceModelMatrixDetectorRow,
+    result,
+    timestamp::PlantTimestamp,
+)
+    return @allocated begin
+        output = device_model_matrix_repeat_detector!(
+            row,
+            result,
+            timestamp,
+        )
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(output),
+        )
+    end
+end
+
 function optional_detector_device_model_matrix_allocation_bytes(
     row::DeviceModelMatrixDetectorRow,
     result,
@@ -2363,16 +2380,12 @@ function optional_detector_device_model_matrix_allocation_bytes(
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(warm_output),
     )
-    return @allocated begin
-        output = device_model_matrix_repeat_detector!(
-            row,
-            result,
-            PlantTimestamp(4_000_000_000),
-        )
-        AdaptiveOpticsSim.Backends.synchronize_backend!(
-            AdaptiveOpticsSim.Backends.execution_style(output),
-        )
-    end
+    # The first invocation of the measurement boundary primes backend compiler
+    # and runtime caches. Assert the steady service iteration that follows it.
+    optional_detector_device_model_matrix_allocation_bytes_once(
+        row, result, PlantTimestamp(4_000_000_000))
+    return optional_detector_device_model_matrix_allocation_bytes_once(
+        row, result, PlantTimestamp(6_000_000_000))
 end
 
 function run_optional_detector_device_model_matrix_checks(
