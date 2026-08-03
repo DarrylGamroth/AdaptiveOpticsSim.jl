@@ -15,14 +15,14 @@ columns = ["owner","name","decision","contract_kind","follow_on_gate","rationale
 allowed_decisions = ["retain","remove_now","reclassify_strategy","defer_removal"]
 allowed_contract_kinds = ["none","plan_protocol","prepared_owner_protocol"]
 entries = [
-    ["Atmospheres","AbstractAtmosphericFieldExecutionPlan","reclassify_strategy","none","PE-02","Zero-size synchronous/asynchronous dispatch selectors own no prepared numerical contract."],
-    ["Backends","AbstractReductionExecutionPlan","reclassify_strategy","none","PE-02","Zero-size direct/host-mirror selectors choose reduction execution without owning prepared coefficients or resources."],
+    ["Atmospheres","AbstractAtmosphericFieldExecutionStrategy","reclassify_strategy","none","PE-02","Zero-size synchronous/asynchronous dispatch selectors own no prepared numerical contract."],
+    ["Backends","AbstractReductionExecutionStrategy","reclassify_strategy","none","PE-02","Zero-size direct/host-mirror selectors choose reduction execution without owning prepared coefficients or resources."],
     ["Calibration","AbstractCalibrationCommandPlan","retain","plan_protocol","PE-01","Actuator and command-basis plans share command-count and command-staging behavior."],
-    ["Detectors","AbstractDetectorExecutionPlan","reclassify_strategy","none","PE-02","Zero-size direct/host-mirror selectors choose detector execution without owning a prepared detector contract."],
+    ["Detectors","AbstractDetectorExecutionStrategy","reclassify_strategy","none","PE-02","Zero-size direct/host-mirror selectors choose detector execution without owning a prepared detector contract."],
     ["WavefrontSensors","AbstractPreparedCurvatureObservationMapping","remove_now","none","PE-01","The closed image-pair and channel-pair mappings share no operation through the abstract root."],
     ["WavefrontSensors","AbstractPreparedFourPupilLGS","retain","plan_protocol","PE-01","No-op, elongation, and sodium-profile plans share prepared application and exact-target validation."],
-    ["WavefrontSensors","AbstractGroupedAccumulationPlan","reclassify_strategy","none","PE-02","Zero-size accumulation selectors choose one reduction implementation and own no prepared mapping or resource."],
-    ["WavefrontSensors","AbstractShackHartmannWFSSensingPlan","reclassify_strategy","none","PE-02","Zero-size sensing selectors choose scalar, batched, or device-statistics execution and own no prepared optical contract."],
+    ["WavefrontSensors","AbstractGroupedAccumulationStrategy","reclassify_strategy","none","PE-02","Zero-size accumulation selectors choose one reduction implementation and own no prepared mapping or resource."],
+    ["WavefrontSensors","AbstractShackHartmannWFSSensingStrategy","reclassify_strategy","none","PE-02","Zero-size sensing selectors choose scalar, batched, or device-statistics execution and own no prepared optical contract."],
     ["Backends","_AbstractPreparedDeviceExecutionContext","retain","prepared_owner_protocol","PE-01","Host and accelerator extensions share exact-device entry, restoration, synchronization, and failure behavior."],
     ["Optics","AbstractDirectImagingInputPlan","remove_now","none","PE-01","The two closed exact-input bindings are concrete prepared-owner variants rather than third-party algorithm plans."],
     ["Plant","AbstractPreparedAcquisitionLifecycle","retain","prepared_owner_protocol","PE-01","Scheduled acquisition implementations share exact state/product binding, lifecycle transitions, target validation, and single-writer semantics."],
@@ -33,6 +33,14 @@ entries = [
     ["Plant","PreparedPupilOPDPublicationRoute","retain","prepared_owner_protocol","PE-01","Direct and remote routes share one authority-owned materialize, transfer, apply, reclaim lifecycle."],
     ["Plant","_PreparedReducedOrderEventResponse","remove_now","none","PE-01","The scalar and array response records share no behavior through the abstract root and are stored concretely in a tuple."],
 ]
+
+[strategy_terminology]
+work_issue = 230
+delivery_state = "implemented"
+policy = "Zero-size implementation selectors use domain-owned Strategy terminology and own no prepared numerical contract."
+families = ["AbstractAtmosphericFieldExecutionStrategy","AbstractReductionExecutionStrategy","AbstractDetectorExecutionStrategy","AbstractGroupedAccumulationStrategy","AbstractShackHartmannWFSSensingStrategy"]
+selectors = ["GeometricFieldSynchronousStrategy","GeometricFieldAsyncStrategy","LayeredFresnelFieldSynchronousStrategy","LayeredFresnelFieldAsyncStrategy","DirectReductionStrategy","HostMirrorReductionStrategy","DetectorDirectStrategy","DetectorHostMirrorStrategy","GroupedDirectAccumulateStrategy","GroupedStackReduceStrategy","GroupedStaged2DStrategy","ShackHartmannWFSScalarStrategy","ShackHartmannWFSBatchedStrategy","ShackHartmannWFSDeviceStatsStrategy","ShackHartmannWFSROCmSafeStrategy","ShackHartmannWFSROCmHostStatsStrategy"]
+selection_functions = ["atmospheric_field_execution_strategy","reduction_execution_strategy","detector_execution_strategy","counting_output_execution_strategy","grouped_accumulation_strategy","sh_sensing_execution_strategy"]
 
 [[interface_contracts]]
 owner = "Calibration"
@@ -197,13 +205,13 @@ entries = [
 path = "src/atmosphere/atmospheric_field_propagation.jl"
 owner = "Atmospheres"
 entries = [
-    ["AbstractAtmosphericFieldExecutionPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
+    ["AbstractAtmosphericFieldExecutionStrategy","abstract_type",-1,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
     ["AtmosphericFieldPropagationParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
     ["AtmosphericFieldPropagationState","struct",2,"state",["plan","workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
-    ["GeometricFieldAsyncPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["GeometricFieldSynchronousPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["LayeredFresnelFieldAsyncPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["LayeredFresnelFieldSynchronousPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["GeometricFieldAsyncStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["GeometricFieldSynchronousStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["LayeredFresnelFieldAsyncStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["LayeredFresnelFieldSynchronousStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
 ]
 
 [[type_inventory.files]]
@@ -285,9 +293,9 @@ entries = [
 path = "src/backends/reductions.jl"
 owner = "Backends"
 entries = [
-    ["AbstractReductionExecutionPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_specific",false,"PE-02"],
-    ["DirectReductionPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_specific",true,"PE-02"],
-    ["HostMirrorReductionPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_specific",true,"PE-02"],
+    ["AbstractReductionExecutionStrategy","abstract_type",-1,"strategy",["strategy"],false,false,"internal",false,"backend_specific",false,"PE-02"],
+    ["DirectReductionStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_specific",true,"PE-02"],
+    ["HostMirrorReductionStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_specific",true,"PE-02"],
 ]
 
 [[type_inventory.files]]
@@ -357,9 +365,9 @@ entries = [
 path = "src/detectors/pipeline.jl"
 owner = "Detectors"
 entries = [
-    ["AbstractDetectorExecutionPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
-    ["DetectorDirectPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["DetectorHostMirrorPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["AbstractDetectorExecutionStrategy","abstract_type",-1,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
+    ["DetectorDirectStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["DetectorHostMirrorStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
 ]
 
 [[type_inventory.files]]
@@ -952,10 +960,10 @@ entries = [
 path = "src/wfs/grouped.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["AbstractGroupedAccumulationPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
-    ["GroupedDirectAccumulatePlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["GroupedStackReducePlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["GroupedStaged2DPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["AbstractGroupedAccumulationStrategy","abstract_type",-1,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
+    ["GroupedDirectAccumulateStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["GroupedStackReduceStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["GroupedStaged2DStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
 ]
 
 [[type_inventory.files]]
@@ -991,15 +999,15 @@ entries = [
 path = "src/wfs/shack_hartmann/setup.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["AbstractShackHartmannWFSSensingPlan","abstract_type",-1,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
+    ["AbstractShackHartmannWFSSensingStrategy","abstract_type",-1,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
     ["ShackHartmannAcquisitionState","mutable_struct",4,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
     ["ShackHartmannEstimatorState","mutable_struct",5,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
-    ["ShackHartmannWFSBatchedPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["ShackHartmannWFSDeviceStatsPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSBatchedStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSDeviceStatsStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
     ["ShackHartmannWFSParams","struct",2,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["ShackHartmannWFSRocmHostStatsPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["ShackHartmannWFSRocmSafePlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
-    ["ShackHartmannWFSScalarPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSROCmHostStatsStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSROCmSafeStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSScalarStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
 ]
 
 [[type_inventory.files]]

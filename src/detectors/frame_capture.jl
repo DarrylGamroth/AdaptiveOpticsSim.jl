@@ -71,62 +71,62 @@ function detector_host_frame!(det::Detector, frame::AbstractMatrix{T}) where {T<
     return host
 end
 
-function _poisson_noise_frame!(::DetectorDirectPlan, det::Detector, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
+function _poisson_noise_frame!(::DetectorDirectStrategy, det::Detector, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
     poisson_noise!(rng, img)
     return img
 end
 
-function _poisson_noise_frame!(::DetectorDirectPlan, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+function _poisson_noise_frame!(::DetectorDirectStrategy, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
     poisson_noise!(rng, cube)
     return cube
 end
 
-function _poisson_noise_frame!(::DetectorHostMirrorPlan, det::Detector, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
+function _poisson_noise_frame!(::DetectorHostMirrorStrategy, det::Detector, rng::AbstractRNG, img::AbstractMatrix{T}) where {T<:AbstractFloat}
     host = detector_host_frame!(det, img)
     _poisson_noise!(ScalarCPUStyle(), rng, host)
     copyto!(img, host)
     return img
 end
 
-function _poisson_noise_frame!(plan::DetectorHostMirrorPlan, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+function _poisson_noise_frame!(strategy::DetectorHostMirrorStrategy, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
     for b in axes(cube, 1)
-        _poisson_noise_frame!(plan, det, rng, @view(cube[b, :, :]))
+        _poisson_noise_frame!(strategy, det, rng, @view(cube[b, :, :]))
     end
     return cube
 end
 
 function poisson_noise_frame!(det::Detector, rng::AbstractRNG, img::AbstractArray{T}) where {T<:AbstractFloat}
-    plan = detector_execution_plan(typeof(execution_style(img)), typeof(det))
-    return _poisson_noise_frame!(plan, det, rng, img)
+    strategy = detector_execution_strategy(typeof(execution_style(img)), typeof(det))
+    return _poisson_noise_frame!(strategy, det, rng, img)
 end
 
-function _randn_frame_noise!(::DetectorDirectPlan, det::Detector, rng::AbstractRNG, out::AbstractMatrix{T}) where {T<:AbstractFloat}
+function _randn_frame_noise!(::DetectorDirectStrategy, det::Detector, rng::AbstractRNG, out::AbstractMatrix{T}) where {T<:AbstractFloat}
     randn_backend!(rng, out)
     return out
 end
 
-function _randn_frame_noise!(::DetectorDirectPlan, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+function _randn_frame_noise!(::DetectorDirectStrategy, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
     randn_backend!(rng, cube)
     return cube
 end
 
-function _randn_frame_noise!(::DetectorHostMirrorPlan, det::Detector, rng::AbstractRNG, out::AbstractMatrix{T}) where {T<:AbstractFloat}
+function _randn_frame_noise!(::DetectorHostMirrorStrategy, det::Detector, rng::AbstractRNG, out::AbstractMatrix{T}) where {T<:AbstractFloat}
     host = detector_host_buffer!(det, T, size(out))
     randn!(rng, host)
     copyto!(out, host)
     return out
 end
 
-function _randn_frame_noise!(plan::DetectorHostMirrorPlan, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
+function _randn_frame_noise!(strategy::DetectorHostMirrorStrategy, det::Detector, rng::AbstractRNG, cube::AbstractArray{T,3}) where {T<:AbstractFloat}
     for b in axes(cube, 1)
-        _randn_frame_noise!(plan, det, rng, @view(cube[b, :, :]))
+        _randn_frame_noise!(strategy, det, rng, @view(cube[b, :, :]))
     end
     return cube
 end
 
 function randn_frame_noise!(det::Detector, rng::AbstractRNG, out::AbstractArray{T}) where {T<:AbstractFloat}
-    plan = detector_execution_plan(typeof(execution_style(out)), typeof(det))
-    return _randn_frame_noise!(plan, det, rng, out)
+    strategy = detector_execution_strategy(typeof(execution_style(out)), typeof(det))
+    return _randn_frame_noise!(strategy, det, rng, out)
 end
 
 function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
@@ -188,14 +188,14 @@ end
 sensor_saturation_limit(det::Detector) = sensor_saturation_limit(det.params.sensor, det)
 sensor_saturation_limit(::FrameSensorType, det::Detector) = det.params.full_well
 
-function _apply_saturation!(::DetectorDirectPlan, det::Detector)
+function _apply_saturation!(::DetectorDirectStrategy, det::Detector)
     full_well = sensor_saturation_limit(det)
     full_well === nothing && return det.state.frame
     clamp_array!(det.state.frame, zero(eltype(det.state.frame)), full_well)
     return det.state.frame
 end
 
-function _apply_saturation!(::DetectorHostMirrorPlan, det::Detector)
+function _apply_saturation!(::DetectorHostMirrorStrategy, det::Detector)
     full_well = sensor_saturation_limit(det)
     full_well === nothing && return det.state.frame
     host = detector_host_frame!(det, det.state.frame)
@@ -218,14 +218,14 @@ function _apply_saturation!(style::AcceleratorStyle, det::Detector)
     return det.state.frame
 end
 
-@inline _detector_value_plan(plan::DetectorDirectPlan, ::ExecutionStyle) = plan
-@inline _detector_value_plan(plan::DetectorHostMirrorPlan, ::ScalarCPUStyle) = plan
-@inline _detector_value_plan(::DetectorHostMirrorPlan, style::AcceleratorStyle) = style
+@inline _detector_value_strategy(strategy::DetectorDirectStrategy, ::ExecutionStyle) = strategy
+@inline _detector_value_strategy(strategy::DetectorHostMirrorStrategy, ::ScalarCPUStyle) = strategy
+@inline _detector_value_strategy(::DetectorHostMirrorStrategy, style::AcceleratorStyle) = style
 
 function apply_saturation!(det::Detector)
     style = execution_style(det.state.frame)
-    plan = detector_execution_plan(typeof(style), typeof(det))
-    return _apply_saturation!(_detector_value_plan(plan, style), det)
+    strategy = detector_execution_strategy(typeof(style), typeof(det))
+    return _apply_saturation!(_detector_value_strategy(strategy, style), det)
 end
 
 apply_sensor_statistics!(sensor::FrameSensorType, det::Detector,
@@ -254,7 +254,7 @@ end
 apply_sensor_readout_noise!(::FrameSensorType, det::Detector,
     rng::AbstractRNG) = det.state.frame
 
-function _apply_quantization!(::DetectorDirectPlan, det::Detector)
+function _apply_quantization!(::DetectorDirectStrategy, det::Detector)
     bits = det.params.bits
     bits === nothing && return det.state.frame
     levels = exp2(eltype(det.state.frame)(bits))
@@ -264,7 +264,7 @@ function _apply_quantization!(::DetectorDirectPlan, det::Detector)
     return det.state.frame
 end
 
-function _apply_quantization!(::DetectorHostMirrorPlan, det::Detector)
+function _apply_quantization!(::DetectorHostMirrorStrategy, det::Detector)
     bits = det.params.bits
     bits === nothing && return det.state.frame
     host = detector_host_frame!(det, det.state.frame)
@@ -299,8 +299,8 @@ end
 
 function apply_quantization!(det::Detector)
     style = execution_style(det.state.frame)
-    plan = detector_execution_plan(typeof(style), typeof(det))
-    return _apply_quantization!(_detector_value_plan(plan, style), det)
+    strategy = detector_execution_strategy(typeof(style), typeof(det))
+    return _apply_quantization!(_detector_value_strategy(strategy, style), det)
 end
 
 subtract_background_map!(::NoBackground, det::Detector) = det.state.frame
@@ -321,11 +321,11 @@ readout_product_shape(det::Detector) = det.params.readout_window === nothing ?
     (length(det.params.readout_window.rows), length(det.params.readout_window.cols))
 
 function _copy_windowed_frame(frame::AbstractMatrix, det::Detector)
-    plan = detector_execution_plan(typeof(execution_style(frame)), typeof(det))
-    return _copy_windowed_frame(plan, frame, det)
+    strategy = detector_execution_strategy(typeof(execution_style(frame)), typeof(det))
+    return _copy_windowed_frame(strategy, frame, det)
 end
 
-function _copy_windowed_frame(::DetectorDirectPlan, frame::AbstractMatrix,
+function _copy_windowed_frame(::DetectorDirectStrategy, frame::AbstractMatrix,
     det::Detector)
     window = det.params.readout_window
     if window === nothing
@@ -335,11 +335,11 @@ function _copy_windowed_frame(::DetectorDirectPlan, frame::AbstractMatrix,
 end
 
 function _copy_windowed_cube(cube::AbstractArray{T,3}, det::Detector) where {T}
-    plan = detector_execution_plan(typeof(execution_style(cube)), typeof(det))
-    return _copy_windowed_cube(plan, cube, det)
+    strategy = detector_execution_strategy(typeof(execution_style(cube)), typeof(det))
+    return _copy_windowed_cube(strategy, cube, det)
 end
 
-function _copy_windowed_cube(::DetectorDirectPlan, cube::AbstractArray{T,3},
+function _copy_windowed_cube(::DetectorDirectStrategy, cube::AbstractArray{T,3},
     det::Detector) where {T}
     window = det.params.readout_window
     if window === nothing
@@ -348,7 +348,7 @@ function _copy_windowed_cube(::DetectorDirectPlan, cube::AbstractArray{T,3},
     return copy(@view(cube[window.rows, window.cols, :]))
 end
 
-function _copy_windowed_frame(::DetectorHostMirrorPlan, frame::AbstractMatrix,
+function _copy_windowed_frame(::DetectorHostMirrorStrategy, frame::AbstractMatrix,
     det::Detector)
     frame_host = Array(frame)
     window = det.params.readout_window
@@ -359,7 +359,7 @@ function _copy_windowed_frame(::DetectorHostMirrorPlan, frame::AbstractMatrix,
     return output
 end
 
-function _copy_windowed_cube(::DetectorHostMirrorPlan, cube::AbstractArray{T,3},
+function _copy_windowed_cube(::DetectorHostMirrorStrategy, cube::AbstractArray{T,3},
     det::Detector) where {T}
     cube_host = Array(cube)
     window = det.params.readout_window
@@ -507,12 +507,12 @@ function apply_readout_correction!(model::FrameReadoutCorrectionModel, cube::Abs
     return cube
 end
 
-function _apply_readout_correction!(::DetectorDirectPlan, model::FrameReadoutCorrectionModel,
+function _apply_readout_correction!(::DetectorDirectStrategy, model::FrameReadoutCorrectionModel,
     frame::AbstractMatrix{T}, det::Detector) where {T<:AbstractFloat}
     return _apply_readout_correction!(execution_style(frame), model, frame, det)
 end
 
-function _apply_readout_correction!(::DetectorDirectPlan, model::FrameReadoutCorrectionModel,
+function _apply_readout_correction!(::DetectorDirectStrategy, model::FrameReadoutCorrectionModel,
     cube::AbstractArray{T,3}, det::Detector) where {T<:AbstractFloat}
     return apply_readout_correction!(model, cube)
 end
@@ -542,7 +542,7 @@ function _apply_readout_correction!(style::AcceleratorStyle, model::FrameReadout
     return apply_readout_correction!(model, frame)
 end
 
-function _apply_readout_correction!(::DetectorHostMirrorPlan, model::FrameReadoutCorrectionModel,
+function _apply_readout_correction!(::DetectorHostMirrorStrategy, model::FrameReadoutCorrectionModel,
     frame::AbstractMatrix{T}, det::Detector) where {T<:AbstractFloat}
     style = execution_style(frame)
     if can_apply_device_readout_correction(style, model)
@@ -558,17 +558,17 @@ can_apply_device_readout_correction(::ScalarCPUStyle, ::FrameReadoutCorrectionMo
 can_apply_device_readout_correction(::AcceleratorStyle, model::FrameReadoutCorrectionModel) =
     supports_batched_readout_correction(model)
 
-function _apply_readout_correction!(plan::DetectorHostMirrorPlan, model::FrameReadoutCorrectionModel,
+function _apply_readout_correction!(strategy::DetectorHostMirrorStrategy, model::FrameReadoutCorrectionModel,
     cube::AbstractArray{T,3}, det::Detector) where {T<:AbstractFloat}
     for b in axes(cube, 1)
-        _apply_readout_correction!(plan, model, @view(cube[b, :, :]), det)
+        _apply_readout_correction!(strategy, model, @view(cube[b, :, :]), det)
     end
     return cube
 end
 
 function apply_readout_correction!(model::FrameReadoutCorrectionModel, frame::AbstractArray{T}, det::Detector) where {T<:AbstractFloat}
-    plan = detector_execution_plan(typeof(execution_style(frame)), typeof(det))
-    return _apply_readout_correction!(plan, model, frame, det)
+    strategy = detector_execution_strategy(typeof(execution_style(frame)), typeof(det))
+    return _apply_readout_correction!(strategy, model, frame, det)
 end
 
 finalize_readout_products!(::FrameSensorType, det::Detector, rng::AbstractRNG, exposure_time::Real) =
@@ -672,7 +672,7 @@ function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSo
     return det.state.frame
 end
 
-function _write_output!(::DetectorDirectPlan, det::Detector, output::AbstractMatrix,
+function _write_output!(::DetectorDirectStrategy, det::Detector, output::AbstractMatrix,
     source::AbstractMatrix)
     if eltype(output) <: Integer
         write_integer_output!(output, source)
@@ -682,7 +682,7 @@ function _write_output!(::DetectorDirectPlan, det::Detector, output::AbstractMat
     return output
 end
 
-function _write_output!(::DetectorHostMirrorPlan, det::Detector,
+function _write_output!(::DetectorHostMirrorStrategy, det::Detector,
     output::AbstractMatrix, source::AbstractMatrix)
     frame_host = detector_host_frame!(det, det.state.frame)
     window = det.params.readout_window
@@ -708,8 +708,8 @@ function write_output!(det::Detector)
         throw(InvalidConfiguration("Detector readout_window requires an allocated output buffer"))
     end
     source = window === nothing ? det.state.frame : @view(det.state.frame[window.rows, window.cols])
-    plan = detector_execution_plan(typeof(execution_style(output)), typeof(det))
-    return _write_output!(plan, det, output, source)
+    strategy = detector_execution_strategy(typeof(execution_style(output)), typeof(det))
+    return _write_output!(strategy, det, output, source)
 end
 
 @inline function require_whole_capture_idle(det::Detector)

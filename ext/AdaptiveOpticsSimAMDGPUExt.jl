@@ -180,46 +180,46 @@ Calibration.prepare_build_matrix(
     ::Calibration.GPUArrayBuildBackend{Backends.AMDGPUBackendTag},
     A::AbstractMatrix,
 ) = Matrix(A)
-WavefrontSensors.grouped_accumulation_plan(
+WavefrontSensors.grouped_accumulation_strategy(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:WavefrontSensors.PyramidWFS},
-) = WavefrontSensors.GroupedStaged2DPlan()
-WavefrontSensors.grouped_accumulation_plan(
+) = WavefrontSensors.GroupedStaged2DStrategy()
+WavefrontSensors.grouped_accumulation_strategy(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:WavefrontSensors.BioEdgeWFS},
-) = WavefrontSensors.GroupedStaged2DPlan()
-function WavefrontSensors.sh_sensing_execution_plan(
+) = WavefrontSensors.GroupedStaged2DStrategy()
+function WavefrontSensors.sh_sensing_execution_strategy(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::WavefrontSensors.ShackHartmannWFS,
 )
-    return WavefrontSensors.ShackHartmannWFSRocmHostStatsPlan()
+    return WavefrontSensors.ShackHartmannWFSROCmHostStatsStrategy()
 end
 
-AdaptiveOpticsSim.Detectors.detector_execution_plan(
+AdaptiveOpticsSim.Detectors.detector_execution_strategy(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.Detectors.Detector},
-) = AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan()
-AdaptiveOpticsSim.Detectors._detector_value_plan(
-    plan::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+) = AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy()
+AdaptiveOpticsSim.Detectors._detector_value_strategy(
+    strategy::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
-) = plan
+) = strategy
 AdaptiveOpticsSim.Detectors.can_apply_device_readout_correction(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::AdaptiveOpticsSim.Detectors.FrameReadoutCorrectionModel,
 ) = false
-AdaptiveOpticsSim.Detectors.counting_output_execution_plan(
+AdaptiveOpticsSim.Detectors.counting_output_execution_strategy(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.Detectors.AbstractCountingDetector},
     ::Type{<:AMDGPU.ROCArray{T,2}},
-) where {T<:Integer} = AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan()
-Backends.reduction_execution_plan(
+) where {T<:Integer} = AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy()
+Backends.reduction_execution_strategy(
     ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
     ::AMDGPU.ROCArray,
-) = Backends.HostMirrorReductionPlan()
+) = Backends.HostMirrorReductionStrategy()
 Backends.randn_backend_async!(::Backends.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 Backends._randn_backend!(::Backends.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
-    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
     det::AdaptiveOpticsSim.Detectors.Detector,
     rng::AbstractRNG,
     out::AMDGPU.ROCArray{T,2},
@@ -228,7 +228,7 @@ function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
     return out
 end
 function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
-    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
     det::AdaptiveOpticsSim.Detectors.Detector,
     rng::AbstractRNG,
     cube::AMDGPU.ROCArray{T,3},
@@ -237,7 +237,7 @@ function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
     return cube
 end
 function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
-    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
     det::AdaptiveOpticsSim.Detectors.Detector,
     rng::AbstractRNG,
     img::AMDGPU.ROCArray{T,2},
@@ -248,7 +248,7 @@ function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
     return img
 end
 function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
-    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
     det::AdaptiveOpticsSim.Detectors.Detector,
     rng::AbstractRNG,
     cube::AMDGPU.ROCArray{T,3},

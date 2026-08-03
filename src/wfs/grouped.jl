@@ -1,8 +1,9 @@
-abstract type AbstractGroupedAccumulationPlan end
+"""Internal zero-size strategy for accumulating grouped WFS source products."""
+abstract type AbstractGroupedAccumulationStrategy end
 
-struct GroupedStackReducePlan <: AbstractGroupedAccumulationPlan end
-struct GroupedDirectAccumulatePlan <: AbstractGroupedAccumulationPlan end
-struct GroupedStaged2DPlan <: AbstractGroupedAccumulationPlan end
+struct GroupedStackReduceStrategy <: AbstractGroupedAccumulationStrategy end
+struct GroupedDirectAccumulateStrategy <: AbstractGroupedAccumulationStrategy end
+struct GroupedStaged2DStrategy <: AbstractGroupedAccumulationStrategy end
 
 @kernel function reduce_grouped_stack_kernel!(out, stack, count::Int, n1::Int, n2::Int)
     i, j = @index(Global, NTuple)
@@ -28,10 +29,10 @@ end
 
 @inline grouped_stack_view(stack::AbstractArray{T,3}, count::Int) where {T} = @view stack[:, :, 1:count]
 
-@inline grouped_accumulation_plan(style::S, wfs::W) where {S<:ExecutionStyle,W<:AbstractWFS} =
-    grouped_accumulation_plan(S, W)
+@inline grouped_accumulation_strategy(style::S, wfs::W) where {S<:ExecutionStyle,W<:AbstractWFS} =
+    grouped_accumulation_strategy(S, W)
 
-@inline grouped_accumulation_plan(::Type{<:ExecutionStyle}, ::Type{<:AbstractWFS}) = GroupedStackReducePlan()
+@inline grouped_accumulation_strategy(::Type{<:ExecutionStyle}, ::Type{<:AbstractWFS}) = GroupedStackReduceStrategy()
 
 function reduce_grouped_stack!(::ScalarCPUStyle, out::AbstractMatrix, stack::AbstractArray{T,3}, count::Int) where {T}
     fill!(out, zero(eltype(out)))
@@ -52,7 +53,7 @@ function reduce_grouped_blocks!(style::AcceleratorStyle, out::AbstractArray{T,3}
     return out
 end
 
-@inline function accumulate_grouped_sources!(::GroupedStackReducePlan, ::ScalarCPUStyle, wfs::AbstractWFS,
+@inline function accumulate_grouped_sources!(::GroupedStackReduceStrategy, ::ScalarCPUStyle, wfs::AbstractWFS,
     out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {T}
     count = length(sources)
     @inbounds for idx in eachindex(sources)
@@ -61,7 +62,7 @@ end
     return reduce_grouped_stack!(ScalarCPUStyle(), out, stack, count)
 end
 
-@inline function accumulate_grouped_sources!(::GroupedStackReducePlan, style::AcceleratorStyle, wfs::AbstractWFS,
+@inline function accumulate_grouped_sources!(::GroupedStackReduceStrategy, style::AcceleratorStyle, wfs::AbstractWFS,
     out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {T}
     count = length(sources)
     @inbounds for idx in eachindex(sources)
@@ -72,13 +73,14 @@ end
 
 @inline function accumulate_grouped_sources!(style::S, wfs::W, out::AbstractMatrix,
     stack::AbstractArray{T,3}, sources, render!, args...) where {S<:ExecutionStyle,W<:AbstractWFS,T}
-    plan = grouped_accumulation_plan(style, wfs)
-    return accumulate_grouped_sources!(plan, style, wfs, out, stack, sources, render!, args...)
+    strategy = grouped_accumulation_strategy(style, wfs)
+    return accumulate_grouped_sources!(
+        strategy, style, wfs, out, stack, sources, render!, args...)
 end
 
 @inline grouped_staging_buffer(wfs::AbstractWFS, out::AbstractMatrix) = out
 
-@inline function accumulate_grouped_sources!(::GroupedStaged2DPlan, ::ScalarCPUStyle, wfs::W,
+@inline function accumulate_grouped_sources!(::GroupedStaged2DStrategy, ::ScalarCPUStyle, wfs::W,
     out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {W<:AbstractWFS,T}
     count = length(sources)
     stage = grouped_staging_buffer(wfs, out)
@@ -89,7 +91,7 @@ end
     return reduce_grouped_stack!(ScalarCPUStyle(), out, stack, count)
 end
 
-@inline function accumulate_grouped_sources!(::GroupedStaged2DPlan, style::AcceleratorStyle, wfs::W,
+@inline function accumulate_grouped_sources!(::GroupedStaged2DStrategy, style::AcceleratorStyle, wfs::W,
     out::AbstractMatrix, stack::AbstractArray{T,3}, sources, render!, args...) where {W<:AbstractWFS,T}
     count = length(sources)
     stage = grouped_staging_buffer(wfs, out)

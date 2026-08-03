@@ -157,7 +157,7 @@
     det_tuple = Detector(integration_time=1.0, noise=(NoisePhoton(), NoiseReadout(0.5)),
         qe=1.0, binning=1)
     @test det_tuple.noise isa NoisePhotonReadout
-    @test AdaptiveOpticsSim.Detectors.detector_execution_plan(AdaptiveOpticsSim.Backends.execution_style(det_tuple.state.frame), det_tuple) isa AdaptiveOpticsSim.Detectors.DetectorDirectPlan
+    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(AdaptiveOpticsSim.Backends.execution_style(det_tuple.state.frame), det_tuple) isa AdaptiveOpticsSim.Detectors.DetectorDirectStrategy
 
     det_sat = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1, full_well=5.0)
     frame_sat = capture!(det_sat, fill(10.0, 4, 4); rng=MersenneTwister(2))

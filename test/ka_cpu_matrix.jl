@@ -467,35 +467,35 @@ end
         scalar_accum = zeros(Float64, 2, 2)
         scalar_stack = zeros(Float64, 2, 2, length(grouped_sources))
         AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
-            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan(),
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy(),
             SCALAR_CPU_STYLE, grouped_wfs,
             scalar_accum, scalar_stack, grouped_sources, fill_grouped_stage!, 2.0)
         @test scalar_accum == fill(12.0, 2, 2)
         ka_accum = zeros(Float64, 2, 2)
         ka_stack = zeros(Float64, 2, 2, length(grouped_sources))
         AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
-            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan(),
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy(),
             KA_CPU_STYLE, grouped_wfs,
             ka_accum, ka_stack, grouped_sources, fill_grouped_stage!, 2.0)
         @test ka_accum == scalar_accum
         staged_scalar = zeros(Float64, 2, 2)
         staged_scalar_stack = zeros(Float64, 2, 2, length(grouped_sources))
         AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
-            AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DPlan(),
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DStrategy(),
             SCALAR_CPU_STYLE, grouped_wfs,
             staged_scalar, staged_scalar_stack, grouped_sources, fill_grouped_stage!, 3.0)
         @test staged_scalar == fill(18.0, 2, 2)
         staged_ka = zeros(Float64, 2, 2)
         staged_ka_stack = zeros(Float64, 2, 2, length(grouped_sources))
         AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
-            AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DPlan(),
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DStrategy(),
             KA_CPU_STYLE, grouped_wfs,
             staged_ka, staged_ka_stack, grouped_sources, fill_grouped_stage!, 3.0)
         @test staged_ka == staged_scalar
         dispatch_accum = zeros(Float64, 2, 2)
         dispatch_stack = zeros(Float64, 2, 2, length(grouped_sources))
-        @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(KA_CPU_STYLE, grouped_wfs) isa
-            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan
+        @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(KA_CPU_STYLE, grouped_wfs) isa
+            AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy
         AdaptiveOpticsSim.WavefrontSensors.accumulate_grouped_sources!(
             KA_CPU_STYLE, grouped_wfs, dispatch_accum, dispatch_stack,
             grouped_sources, fill_grouped_stage!, 1.0)
@@ -528,8 +528,8 @@ end
         @test AdaptiveOpticsSim.Backends.backend_maximum_value(KA_CPU_STYLE, values) == 4.0
         signal = collect(1.0:8.0)
         @test AdaptiveOpticsSim.Backends.packed_valid_pair_mean(KA_CPU_STYLE, signal, mask) ==
-              AdaptiveOpticsSim.Backends.packed_valid_pair_mean(AdaptiveOpticsSim.Backends.DirectReductionPlan(), signal, mask)
-        @test AdaptiveOpticsSim.Backends.packed_valid_pair_mean(AdaptiveOpticsSim.Backends.HostMirrorReductionPlan(), signal, mask) ==
+              AdaptiveOpticsSim.Backends.packed_valid_pair_mean(AdaptiveOpticsSim.Backends.DirectReductionStrategy(), signal, mask)
+        @test AdaptiveOpticsSim.Backends.packed_valid_pair_mean(AdaptiveOpticsSim.Backends.HostMirrorReductionStrategy(), signal, mask) ==
               AdaptiveOpticsSim.Backends.packed_valid_pair_mean(SCALAR_CPU_STYLE, signal, mask)
 
         n_sub = 2

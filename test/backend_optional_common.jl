@@ -5111,14 +5111,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DPlan
-    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DPlan
-    @test typeof(WavefrontSensors.sh_sensing_execution_plan(
+    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DStrategy
+    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DStrategy
+    @test typeof(WavefrontSensors.sh_sensing_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh)) ===
-        WavefrontSensors.ShackHartmannWFSRocmHostStatsPlan
-    @test typeof(WavefrontSensors.sh_sensing_execution_plan(
+        WavefrontSensors.ShackHartmannWFSROCmHostStatsStrategy
+    @test typeof(WavefrontSensors.sh_sensing_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(slopes(sh_large)), sh_large)) ===
-        WavefrontSensors.ShackHartmannWFSRocmHostStatsPlan
+        WavefrontSensors.ShackHartmannWFSROCmHostStatsStrategy
     WavefrontSensors.prepare_sampling!(sh, pupil, src)
     sh_sub = div(tel.params.resolution, WavefrontSensors.n_lenslets(sh))
     sh_pad = size(sh.front_end.propagation.field, 1)
@@ -5129,7 +5129,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         sh_sub)
     @test safe_intensity === sh.front_end.propagation.intensity
     @test all(isfinite, Array(safe_intensity))
-    @test AdaptiveOpticsSim.Detectors.detector_execution_plan(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan
+    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy
     capture_psf = array_backend{T}(undef, 4, 4)
     fill!(capture_psf, T(10))
     captured = capture!(det_capture, capture_psf; rng=MersenneTwister(2))
@@ -5149,14 +5149,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     poisson_method = which(
         AdaptiveOpticsSim.Detectors._poisson_noise_frame!,
         (
-            AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+            AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
             typeof(gpu_poisson_det),
             typeof(MersenneTwister(1)),
             typeof(gpu_poisson_det.state.frame),
         ),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(poisson_method.file))
-    @test AdaptiveOpticsSim.Backends.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.HostMirrorReductionPlan
+    @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.HostMirrorReductionStrategy
     @test AdaptiveOpticsSim.Backends.backend_sum_value(capture_psf) == T(160)
 
     phase_freqs = T[-0.2, -0.1, 0.1, 0.2]
@@ -5199,21 +5199,21 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     randn_method = which(
         AdaptiveOpticsSim.Detectors._randn_frame_noise!,
         (
-            AdaptiveOpticsSim.Detectors.DetectorHostMirrorPlan,
+            AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
             typeof(det),
             typeof(MersenneTwister(1)),
             typeof(det.state.frame),
         ),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(randn_method.file))
-    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
-    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldAsyncPlan
-    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
+    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldAsyncStrategy
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
-    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldAsyncPlan
+    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldAsyncStrategy
     correction_models = (
         ReferencePixelCommonModeCorrection(1, 1),
         ReferenceRowCommonModeCorrection(1),
@@ -5370,19 +5370,19 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan
-    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_plan(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReducePlan
-    @test WavefrontSensors.sh_sensing_execution_plan(AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh) isa WavefrontSensors.ShackHartmannWFSBatchedPlan
-    @test AdaptiveOpticsSim.Detectors.detector_execution_plan(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorDirectPlan
-    @test AdaptiveOpticsSim.Backends.reduction_execution_plan(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionPlan
-    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
+    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy
+    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy
+    @test WavefrontSensors.sh_sensing_execution_strategy(AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh) isa WavefrontSensors.ShackHartmannWFSBatchedStrategy
+    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorDirectStrategy
+    @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionStrategy
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
-    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldAsyncPlan
-    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
+    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldAsyncStrategy
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
-    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldAsyncPlan
+    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldAsyncStrategy
     cpu_tel = Telescope(resolution=16, diameter=8.0f0,
         central_obstruction=0.0f0, T=T, backend=CPUBackend())
     gpu_tel = Telescope(resolution=16, diameter=8.0f0,

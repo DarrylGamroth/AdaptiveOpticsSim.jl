@@ -1302,10 +1302,10 @@ end
         model=GeometricAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
-    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
-    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldSynchronousPlan
+    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldSynchronousStrategy
     geom_field = propagate_atmosphere_field!(geom_prop, atm,
         current_epoch(atm))
     tel_geom = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
@@ -1333,10 +1333,10 @@ end
         model=LayeredFresnelAtmosphericPropagation(T=Float64),
         zero_padding=1,
         T=Float64)
-    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_plan(
+    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
-    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldSynchronousPlan
+    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldSynchronousStrategy
     fresnel_field = propagate_atmosphere_field!(fresnel_prop, fresnel_atm,
         current_epoch(fresnel_atm))
     geom_single = AtmosphericFieldPropagation(fresnel_atm, atm_pupil,

@@ -7,10 +7,11 @@
     end
 end
 
-abstract type AbstractReductionExecutionPlan end
+"""Internal zero-size strategy selecting direct or host-mirror reduction."""
+abstract type AbstractReductionExecutionStrategy end
 
-struct DirectReductionPlan <: AbstractReductionExecutionPlan end
-struct HostMirrorReductionPlan <: AbstractReductionExecutionPlan end
+struct DirectReductionStrategy <: AbstractReductionExecutionStrategy end
+struct HostMirrorReductionStrategy <: AbstractReductionExecutionStrategy end
 
 @inline reduction_parent_source(A::AbstractArray) = A
 @inline reduction_parent_source(A::SubArray) = parent(A)
@@ -23,10 +24,10 @@ struct HostMirrorReductionPlan <: AbstractReductionExecutionPlan end
 @inline reduction_host_view(host_parent::AbstractArray, A::AbstractArray) = host_parent
 @inline reduction_host_view(host_parent::AbstractArray, A::SubArray) = @view(host_parent[parentindices(A)...])
 
-@inline reduction_execution_plan(A::AbstractArray) = reduction_execution_plan(execution_style(A), reduction_parent_source(A))
-@inline reduction_execution_plan(::ScalarCPUStyle, ::AbstractArray) = DirectReductionPlan()
-@inline reduction_execution_plan(::AcceleratorStyle, ::AbstractArray) = DirectReductionPlan()
-@inline reduction_execution_plan(::AcceleratorStyle{<:KernelAbstractions.CPU}, ::Array) = HostMirrorReductionPlan()
+@inline reduction_execution_strategy(A::AbstractArray) = reduction_execution_strategy(execution_style(A), reduction_parent_source(A))
+@inline reduction_execution_strategy(::ScalarCPUStyle, ::AbstractArray) = DirectReductionStrategy()
+@inline reduction_execution_strategy(::AcceleratorStyle, ::AbstractArray) = DirectReductionStrategy()
+@inline reduction_execution_strategy(::AcceleratorStyle{<:KernelAbstractions.CPU}, ::Array) = HostMirrorReductionStrategy()
 
 @inline function ensure_reduction_host_parent(host_parent::AbstractMatrix{T}, src::AbstractMatrix{T}) where {T}
     return size(host_parent) == size(src) ? host_parent : Matrix{T}(undef, size(src)...)
@@ -35,16 +36,16 @@ end
 @inline backend_maximum_value(A::AbstractArray{T}) where {T<:AbstractFloat} = backend_maximum_value(execution_style(A), A)
 @inline backend_maximum_value(::ScalarCPUStyle, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(A)
 @inline backend_maximum_value(style::AcceleratorStyle, A::AbstractArray{T}) where {T<:AbstractFloat} =
-    _backend_maximum_value(reduction_execution_plan(style, reduction_parent_source(A)), A)
-@inline _backend_maximum_value(::DirectReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(A)
-@inline _backend_maximum_value(::HostMirrorReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(Array(A))
+    _backend_maximum_value(reduction_execution_strategy(style, reduction_parent_source(A)), A)
+@inline _backend_maximum_value(::DirectReductionStrategy, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(A)
+@inline _backend_maximum_value(::HostMirrorReductionStrategy, A::AbstractArray{T}) where {T<:AbstractFloat} = maximum(Array(A))
 
 @inline backend_sum_value(A::AbstractArray{T}) where {T<:AbstractFloat} = backend_sum_value(execution_style(A), A)
 @inline backend_sum_value(::ScalarCPUStyle, A::AbstractArray{T}) where {T<:AbstractFloat} = sum(A)
 @inline backend_sum_value(style::AcceleratorStyle, A::AbstractArray{T}) where {T<:AbstractFloat} =
-    _backend_sum_value(reduction_execution_plan(style, reduction_parent_source(A)), A)
-@inline _backend_sum_value(::DirectReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = sum(A)
-@inline _backend_sum_value(::HostMirrorReductionPlan, A::AbstractArray{T}) where {T<:AbstractFloat} = sum(Array(A))
+    _backend_sum_value(reduction_execution_strategy(style, reduction_parent_source(A)), A)
+@inline _backend_sum_value(::DirectReductionStrategy, A::AbstractArray{T}) where {T<:AbstractFloat} = sum(A)
+@inline _backend_sum_value(::HostMirrorReductionStrategy, A::AbstractArray{T}) where {T<:AbstractFloat} = sum(Array(A))
 
 @inline function masked_sum2d(values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     return masked_sum2d(ScalarCPUStyle(), values, valid_mask)
@@ -63,11 +64,13 @@ end
 function masked_sum2d(style::AcceleratorStyle, values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
     valid_mask_host::AbstractMatrix{Bool}, scalar_buffer::AbstractVector{T}, scalar_host::AbstractVector{T},
     host_parent::AbstractMatrix{T}) where {T<:AbstractFloat}
-    plan = reduction_execution_plan(style, reduction_parent_source(values))
-    return masked_sum2d(plan, style, values, valid_mask, valid_mask_host, scalar_buffer, scalar_host, host_parent)
+    strategy = reduction_execution_strategy(
+        style, reduction_parent_source(values))
+    return masked_sum2d(strategy, style, values, valid_mask, valid_mask_host,
+        scalar_buffer, scalar_host, host_parent)
 end
 
-function masked_sum2d(::HostMirrorReductionPlan, style::AcceleratorStyle, values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
+function masked_sum2d(::HostMirrorReductionStrategy, style::AcceleratorStyle, values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
     valid_mask_host::AbstractMatrix{Bool}, scalar_buffer::AbstractVector{T}, scalar_host::AbstractVector{T},
     host_parent::AbstractMatrix{T}) where {T<:AbstractFloat}
     src = reduction_parent_source(values)
@@ -77,7 +80,7 @@ function masked_sum2d(::HostMirrorReductionPlan, style::AcceleratorStyle, values
     return masked_sum2d(ScalarCPUStyle(), host_values, valid_mask_host), refreshed_parent
 end
 
-function masked_sum2d(::DirectReductionPlan, style::AcceleratorStyle, values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
+function masked_sum2d(::DirectReductionStrategy, style::AcceleratorStyle, values::AbstractMatrix{T}, valid_mask::AbstractMatrix{Bool},
     valid_mask_host::AbstractMatrix{Bool}, scalar_buffer::AbstractVector{T}, scalar_host::AbstractVector{T},
     host_parent::AbstractMatrix{T}) where {T<:AbstractFloat}
     n_rows, n_cols = size(valid_mask)
@@ -140,14 +143,14 @@ function packed_valid_pair_mean(::ScalarCPUStyle, signal::AbstractVector{T}, val
 end
 
 function packed_valid_pair_mean(::AcceleratorStyle, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
-    return packed_valid_pair_mean(reduction_execution_plan(signal), signal, valid_mask)
+    return packed_valid_pair_mean(reduction_execution_strategy(signal), signal, valid_mask)
 end
 
-function packed_valid_pair_mean(::HostMirrorReductionPlan, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+function packed_valid_pair_mean(::HostMirrorReductionStrategy, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     return packed_valid_pair_mean(ScalarCPUStyle(), Array(signal), Array(valid_mask))
 end
 
-function packed_valid_pair_mean(::DirectReductionPlan, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+function packed_valid_pair_mean(::DirectReductionStrategy, signal::AbstractVector{T}, valid_mask::AbstractMatrix{Bool}) where {T<:AbstractFloat}
     count = sum(valid_mask)
     return count == 0 ? one(T) : sum(signal) / (T(2) * T(count))
 end

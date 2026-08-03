@@ -281,38 +281,39 @@ function require_sh_common_spectral_grid(
     return wavelength_ref
 end
 
-abstract type AbstractShackHartmannWFSSensingPlan end
-struct ShackHartmannWFSScalarPlan <: AbstractShackHartmannWFSSensingPlan end
-struct ShackHartmannWFSBatchedPlan <: AbstractShackHartmannWFSSensingPlan end
-struct ShackHartmannWFSDeviceStatsPlan <: AbstractShackHartmannWFSSensingPlan end
-struct ShackHartmannWFSRocmSafePlan <: AbstractShackHartmannWFSSensingPlan end
-struct ShackHartmannWFSRocmHostStatsPlan <: AbstractShackHartmannWFSSensingPlan end
+"""Internal zero-size strategy selecting Shack-Hartmann sensing execution."""
+abstract type AbstractShackHartmannWFSSensingStrategy end
+struct ShackHartmannWFSScalarStrategy <: AbstractShackHartmannWFSSensingStrategy end
+struct ShackHartmannWFSBatchedStrategy <: AbstractShackHartmannWFSSensingStrategy end
+struct ShackHartmannWFSDeviceStatsStrategy <: AbstractShackHartmannWFSSensingStrategy end
+struct ShackHartmannWFSROCmSafeStrategy <: AbstractShackHartmannWFSSensingStrategy end
+struct ShackHartmannWFSROCmHostStatsStrategy <: AbstractShackHartmannWFSSensingStrategy end
 
-@inline sh_sensing_execution_plan(style::ExecutionStyle, wfs::ShackHartmannWFS) =
-    sh_sensing_execution_plan(typeof(style), typeof(wfs))
-@inline sh_sensing_execution_plan(::Type{<:ScalarCPUStyle}, ::Type{<:ShackHartmannWFS}) = ShackHartmannWFSScalarPlan()
-@inline sh_sensing_execution_plan(::Type{<:AcceleratorStyle}, ::Type{<:ShackHartmannWFS}) = ShackHartmannWFSBatchedPlan()
-@inline sh_sensing_execution_plan(wfs::ShackHartmannWFS) =
-    sh_sensing_execution_plan(execution_style(wfs.estimator.slopes), wfs)
+@inline sh_sensing_execution_strategy(style::ExecutionStyle, wfs::ShackHartmannWFS) =
+    sh_sensing_execution_strategy(typeof(style), typeof(wfs))
+@inline sh_sensing_execution_strategy(::Type{<:ScalarCPUStyle}, ::Type{<:ShackHartmannWFS}) = ShackHartmannWFSScalarStrategy()
+@inline sh_sensing_execution_strategy(::Type{<:AcceleratorStyle}, ::Type{<:ShackHartmannWFS}) = ShackHartmannWFSBatchedStrategy()
+@inline sh_sensing_execution_strategy(wfs::ShackHartmannWFS) =
+    sh_sensing_execution_strategy(execution_style(wfs.estimator.slopes), wfs)
 
-@inline sh_uses_rocm_safe_sensing_plan(::AbstractShackHartmannWFSSensingPlan) = false
-@inline sh_uses_rocm_safe_sensing_plan(::ShackHartmannWFSRocmSafePlan) = true
-@inline sh_uses_rocm_safe_sensing_plan(wfs::ShackHartmannWFS) =
-    sh_uses_rocm_safe_sensing_plan(sh_sensing_execution_plan(wfs))
-@inline sh_uses_host_stats_sensing_plan(::AbstractShackHartmannWFSSensingPlan) = false
-@inline sh_uses_host_stats_sensing_plan(::ShackHartmannWFSRocmSafePlan) = true
-@inline sh_uses_host_stats_sensing_plan(::ShackHartmannWFSRocmHostStatsPlan) = true
-@inline sh_uses_host_stats_sensing_plan(wfs::ShackHartmannWFS) =
-    sh_uses_host_stats_sensing_plan(sh_sensing_execution_plan(wfs))
-@inline sh_uses_batched_sensing_plan(::AbstractShackHartmannWFSSensingPlan) = false
-@inline sh_uses_batched_sensing_plan(::ShackHartmannWFSBatchedPlan) = true
-@inline sh_uses_batched_sensing_plan(::ShackHartmannWFSDeviceStatsPlan) = true
-@inline sh_uses_batched_sensing_plan(wfs::ShackHartmannWFS) =
-    sh_uses_batched_sensing_plan(sh_sensing_execution_plan(wfs))
-@inline sh_uses_device_stats_sensing_plan(::AbstractShackHartmannWFSSensingPlan) = false
-@inline sh_uses_device_stats_sensing_plan(::ShackHartmannWFSDeviceStatsPlan) = true
-@inline sh_uses_device_stats_sensing_plan(wfs::ShackHartmannWFS) =
-    sh_uses_device_stats_sensing_plan(sh_sensing_execution_plan(wfs))
+@inline sh_uses_rocm_safe_sensing_strategy(::AbstractShackHartmannWFSSensingStrategy) = false
+@inline sh_uses_rocm_safe_sensing_strategy(::ShackHartmannWFSROCmSafeStrategy) = true
+@inline sh_uses_rocm_safe_sensing_strategy(wfs::ShackHartmannWFS) =
+    sh_uses_rocm_safe_sensing_strategy(sh_sensing_execution_strategy(wfs))
+@inline sh_uses_host_stats_sensing_strategy(::AbstractShackHartmannWFSSensingStrategy) = false
+@inline sh_uses_host_stats_sensing_strategy(::ShackHartmannWFSROCmSafeStrategy) = true
+@inline sh_uses_host_stats_sensing_strategy(::ShackHartmannWFSROCmHostStatsStrategy) = true
+@inline sh_uses_host_stats_sensing_strategy(wfs::ShackHartmannWFS) =
+    sh_uses_host_stats_sensing_strategy(sh_sensing_execution_strategy(wfs))
+@inline sh_uses_batched_sensing_strategy(::AbstractShackHartmannWFSSensingStrategy) = false
+@inline sh_uses_batched_sensing_strategy(::ShackHartmannWFSBatchedStrategy) = true
+@inline sh_uses_batched_sensing_strategy(::ShackHartmannWFSDeviceStatsStrategy) = true
+@inline sh_uses_batched_sensing_strategy(wfs::ShackHartmannWFS) =
+    sh_uses_batched_sensing_strategy(sh_sensing_execution_strategy(wfs))
+@inline sh_uses_device_stats_sensing_strategy(::AbstractShackHartmannWFSSensingStrategy) = false
+@inline sh_uses_device_stats_sensing_strategy(::ShackHartmannWFSDeviceStatsStrategy) = true
+@inline sh_uses_device_stats_sensing_strategy(wfs::ShackHartmannWFS) =
+    sh_uses_device_stats_sensing_strategy(sh_sensing_execution_strategy(wfs))
 
 convert_valid_subaperture_policy(policy::GeometryValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
     GeometryValidSubapertures(threshold=T(policy.threshold), T=T)

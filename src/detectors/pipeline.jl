@@ -1,7 +1,8 @@
-abstract type AbstractDetectorExecutionPlan end
+"""Internal zero-size strategy selecting direct or host-mirror detector work."""
+abstract type AbstractDetectorExecutionStrategy end
 
-struct DetectorDirectPlan <: AbstractDetectorExecutionPlan end
-struct DetectorHostMirrorPlan <: AbstractDetectorExecutionPlan end
+struct DetectorDirectStrategy <: AbstractDetectorExecutionStrategy end
+struct DetectorHostMirrorStrategy <: AbstractDetectorExecutionStrategy end
 
 # Marsaglia-Tsang unit-scale Gamma sampler shared by detector multiplication
 # models. Shape values below one use the standard boosting identity.
@@ -27,10 +28,10 @@ struct DetectorHostMirrorPlan <: AbstractDetectorExecutionPlan end
     end
 end
 
-@inline detector_execution_plan(style::ExecutionStyle, det::Detector) =
-    detector_execution_plan(typeof(style), typeof(det))
+@inline detector_execution_strategy(style::ExecutionStyle, det::Detector) =
+    detector_execution_strategy(typeof(style), typeof(det))
 
-@inline detector_execution_plan(::Type{<:ExecutionStyle}, ::Type{<:Detector}) = DetectorDirectPlan()
+@inline detector_execution_strategy(::Type{<:ExecutionStyle}, ::Type{<:Detector}) = DetectorDirectStrategy()
 
 @inline photon_noise_enabled(::Detector{NoiseNone}) = false
 @inline photon_noise_enabled(::Detector{NoisePhoton}) = true
