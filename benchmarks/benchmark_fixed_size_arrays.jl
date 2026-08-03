@@ -117,6 +117,9 @@ function run_characterization(output_path::AbstractString)
     contract = TOML.parsefile(CONTRACT_PATH)
     count = Int(contract["vector_length"])
     shape = Tuple(Int.(contract["matrix_shape"]))
+    cpu_information = Sys.cpu_info()
+    cpu_model = isempty(cpu_information) ?
+        "unknown" : first(cpu_information).model
     observations = [run_fresh_probe() for _ in
         1:Int(contract["fresh_process_runs"])]
     all(observation["correctness_passed"] for observation in observations) ||
@@ -177,7 +180,15 @@ function run_characterization(output_path::AbstractString)
         "repository_head" => git_output("rev-parse", "HEAD"),
         "repository_dirty" => !isempty(git_output(
             "status", "--porcelain", "--untracked-files=normal")),
+        "kernel" => string(Sys.KERNEL),
+        "architecture" => string(Sys.ARCH),
+        "cpu_target" => string(Sys.CPU_NAME),
+        "cpu_model" => cpu_model,
+        "logical_cpu_threads" => Sys.CPU_THREADS,
         "julia_version" => string(VERSION),
+        "julia_threads" => Threads.nthreads(),
+        "julia_cpu_target_env" =>
+            get(ENV, "JULIA_CPU_TARGET", "default"),
         "fixed_size_arrays_version" => string(Base.pkgversion(
             FixedSizeArrays)),
         "resolved_dependencies" => resolved_dependencies(),
