@@ -1,0 +1,92 @@
+correctness_passed = true
+first_construction_samples_ns = [14678052, 14952075, 14403859, 14887605, 15099041]
+fixed_size_arrays_version = "1.3.0"
+fresh_process_runs = 5
+julia_version = "1.12.6"
+load_samples_ns = [10379804, 10644530, 10635663, 10476155, 10496372]
+name = "fixed_size_arrays_prepared_storage"
+repository_dirty = true
+repository_head = "9ebb326ceaed33c99eecf88ec1242b737177980f"
+schema_version = 1
+source_contract = "benchmarks/contracts/fixed_size_arrays.toml"
+
+[element_type_contract]
+any_is_constructible = true
+any_is_rejected = true
+concrete_is_accepted = true
+
+[first_construction_summary]
+maximum_ns = 15099041
+median_ns = 14887605
+minimum_ns = 14403859
+
+[inference]
+copyto = true
+indexed_sum = true
+iterated_sum = true
+
+[load_summary]
+maximum_ns = 10644530
+median_ns = 10496372
+minimum_ns = 10379804
+
+[[resolved_dependencies]]
+direct = false
+name = "Collects"
+uuid = "08986516-18db-4a8b-8eaa-f5ef1828d8f1"
+version = "1.1.0"
+[[resolved_dependencies]]
+direct = true
+name = "FixedSizeArrays"
+uuid = "3821ddf9-e5b5-40d5-8e25-6813ab96b5e2"
+version = "1.3.0"
+
+[[results]]
+correctness_passed = true
+first_construction_ns = 14678052
+load_ns = 10379804
+[[results]]
+correctness_passed = true
+first_construction_ns = 14952075
+load_ns = 10644530
+[[results]]
+correctness_passed = true
+first_construction_ns = 14403859
+load_ns = 10635663
+[[results]]
+correctness_passed = true
+first_construction_ns = 14887605
+load_ns = 10476155
+[[results]]
+correctness_passed = true
+first_construction_ns = 15099041
+load_ns = 10496372
+
+[shape_contract]
+alternate_matrix_dimensions = [65, 64]
+matrix_dimensions = [64, 64]
+matrix_rank_in_type = 2
+push_rejected = true
+resize_rejected = true
+runtime_matrix_shapes_share_type = true
+runtime_vector_lengths_share_type = true
+
+[storage_comparison]
+dependency_backing_inspected = false
+
+    [storage_comparison.fixed_size_array]
+    construction_allocated_bytes = 32808
+    summarysize_bytes = 32800
+
+    [storage_comparison.memory]
+    construction_allocated_bytes = 32808
+    summarysize_bytes = 32784
+
+    [storage_comparison.vector]
+    construction_allocated_bytes = 32840
+    summarysize_bytes = 32808
+
+[warmed_allocated_bytes]
+copyto = 0
+indexing = 0
+iteration = 0
