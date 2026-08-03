@@ -202,7 +202,6 @@ import ..Detectors:
     line_time,
     multi_read_sampling_mode,
     output_frame,
-    prepare_detector_acquisition,
     readout_products,
     readout_ready,
     sample_frame_read!,
@@ -256,6 +255,7 @@ import ..Atmospheres:
 
 import ..AdaptiveOpticsSim:
     AdaptiveOpticsSimError,
+    DimensionMismatchError,
     InvalidConfiguration,
     runtime_rng,
     splitmix64
