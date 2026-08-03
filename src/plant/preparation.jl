@@ -933,7 +933,8 @@ end
 
 function FrameAcquisitionExecution(detector::Detector,
     optical_result::IntensityMap, observation::AbstractArray)
-    _require_frame_acquisition_observation_ownership(detector, observation)
+    _require_frame_acquisition_observation_ownership(detector,
+        optical_result, observation)
     candidate = _prepare_detached_detector_acquisition(detector,
         optical_result)
     return _commit_frame_acquisition_execution!(detector, candidate,
@@ -955,7 +956,8 @@ function _commit_frame_acquisition_execution!(detector::Detector,
     candidate::PreparedDetectorAcquisition,
     observation::AbstractArray)
     _require_frame_acquisition_observation(
-        detector_acquisition_detector(candidate), observation)
+        detector_acquisition_detector(candidate),
+        detector_acquisition_input(candidate), observation)
     acquisition = _rebind_prepared_detector_acquisition(detector, candidate)
     execution = FrameAcquisitionExecution(_FRAME_ACQUISITION_EXECUTION_TOKEN,
         acquisition, observation)
@@ -964,15 +966,17 @@ function _commit_frame_acquisition_execution!(detector::Detector,
 end
 
 function _require_frame_acquisition_observation_ownership(
-    detector::Detector, observation::AbstractArray)
-    Base.mightalias(observation, output_frame(detector)) && throw(
+    detector::Detector, optical_result::IntensityMap,
+    observation::AbstractArray)
+    (_detector_storage_mightalias(detector, observation) ||
+        Base.mightalias(observation, optical_result.values)) && throw(
         PlantPreparationError(:acquisition, :ownership,
-            "caller-owned acquisition observation must not alias detector state"))
+            "caller-owned acquisition observation must not alias detector storage or its optical input"))
     return nothing
 end
 
 function _require_frame_acquisition_observation(detector::Detector,
-    observation::AbstractArray)
+    optical_result::IntensityMap, observation::AbstractArray)
     frame = output_frame(detector)
     size(observation) == size(frame) || throw(PlantPreparationError(
         :acquisition, :shape,
@@ -986,7 +990,8 @@ function _require_frame_acquisition_observation(detector::Detector,
     compute_device(observation) == compute_device(frame) || throw(
         PlantPreparationError(:acquisition, :device,
             "acquisition observation and detector output occupy different devices"))
-    _require_frame_acquisition_observation_ownership(detector, observation)
+    _require_frame_acquisition_observation_ownership(detector,
+        optical_result, observation)
     return nothing
 end
 
@@ -1033,9 +1038,9 @@ function validate_acquisition_execution_binding(
         PlantPreparationError(:acquisition, :prepared_binding,
             "acquisition observation does not match its prepared storage"))
     detector = detector_acquisition_detector(execution.acquisition)
-    _require_frame_acquisition_observation(detector,
-        execution.observation)
     input = detector_acquisition_input(execution.acquisition)
+    _require_frame_acquisition_observation(detector, input,
+        execution.observation)
     path_result.metadata === input.metadata &&
         path_result.values === input.values || throw(
         PlantPreparationError(:acquisition, :prepared_binding,

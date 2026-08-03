@@ -439,6 +439,30 @@ end
         _frame_readout_product_members(products.readout)...)
 end
 
+@inline _storage_mightalias(value, other) = false
+
+@inline function _storage_mightalias(value::AbstractArray,
+    other::AbstractArray)
+    return Base.mightalias(value, other)
+end
+
+@inline _storage_mightalias_any(value, ::Tuple{}) = false
+
+@inline function _storage_mightalias_any(value, members::Tuple)
+    return _storage_mightalias(value, first(members)) ||
+        _storage_mightalias_any(value, Base.tail(members))
+end
+
+@inline function _detector_storage_mightalias(det::Detector,
+    value::AbstractArray)
+    return _storage_mightalias_any(value,
+            _detector_state_members(det.state)) ||
+        _storage_mightalias_any(value,
+            _detector_workspace_members(det.workspace)) ||
+        _storage_mightalias_any(value,
+            _detector_product_members(det.products))
+end
+
 @inline _frame_readout_workspace_binding(::NoFrameReadoutWorkspace) = (;)
 @inline _frame_readout_workspace_binding(workspace::SkipperReadoutWorkspace) =
     (baseline_frame=workspace.baseline_frame, sample_sum=workspace.sample_sum)

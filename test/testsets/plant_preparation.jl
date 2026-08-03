@@ -1113,7 +1113,7 @@ end
     @test wfs_path.result.values == wfs_rate_before
 
     detector = Detector(integration_time=T(0.25), noise=NoiseNone(),
-        qe=one(T), response_model=NullFrameResponse(), T=T)
+        qe=one(T), response_model=NullFrameResponse(), output_type=T, T=T)
     explicit_observation = similar(science_path.result.values)
     fill!(explicit_observation, zero(T))
     explicit_frame_execution = FrameAcquisitionExecution(detector,
@@ -1130,6 +1130,9 @@ end
         (ContractDeviceArray(zeros(T, size(detector_frame)),
             ContractComputeDevice(18)), :device),
         (detector_frame, :ownership),
+        (Detectors.detector_acquisition_products(
+            explicit_frame_execution.acquisition).frame, :ownership),
+        (science_path.result.values, :ownership),
     )
     for (invalid_observation, reason) in invalid_observations
         assert_plant_preparation_error(

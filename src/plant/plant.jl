@@ -177,6 +177,7 @@ import ..Detectors:
     UpTheRampReadoutProducts,
     UpTheRampSampling,
     _copy_windowed_sampling_plane!,
+    _detector_storage_mightalias,
     _raw_sampling_sigma,
     _up_the_ramp_execution_storage,
     _require_exact_detector_acquisition_target,
