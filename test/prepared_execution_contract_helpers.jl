@@ -82,6 +82,9 @@ function pe_source_paths(root::AbstractString)
     return sort!(paths)
 end
 
+pe_normalize_repository_path(path::AbstractString) =
+    replace(String(path), '\\' => '/')
+
 function pe_camel_tokens(name::AbstractString)
     tokens = String[]
     for component in split(strip(name, '_'), '_')
@@ -238,7 +241,7 @@ end
 function pe_type_declarations(root::AbstractString)
     declarations = PETypeDeclaration[]
     for path in pe_source_paths(root)
-        relative_path = relpath(path, root)
+        relative_path = pe_normalize_repository_path(relpath(path, root))
         expression = Meta.parseall(read(path, String); filename=path)
         _pe_collect_declarations!(declarations, expression, relative_path, 1)
     end
@@ -592,7 +595,7 @@ function pe_debt_sites(root::AbstractString)
     memory_sites = PEDebtSite[]
     any_sites = PEDebtSite[]
     for path in pe_source_paths(root)
-        relative_path = relpath(path, root)
+        relative_path = pe_normalize_repository_path(relpath(path, root))
         expression = Meta.parseall(read(path, String); filename=path)
         _pe_scan_expression!(memory_sites, any_sites, expression,
             relative_path, 1, "<top-level>", "<expression>")

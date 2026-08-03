@@ -2,6 +2,11 @@ const PE_CONTRACT_ROOT = joinpath(dirname(@__DIR__), "contracts")
 const PE_REPOSITORY_ROOT = dirname(dirname(@__DIR__))
 
 @testset "PE-00 source scanner semantics" begin
+    @test pe_normalize_repository_path(raw"src\plant\preparation.jl") ==
+        "src/plant/preparation.jl"
+    @test pe_normalize_repository_path("src/plant/preparation.jl") ==
+        "src/plant/preparation.jl"
+
     function scan_snippet(source)
         expression = Meta.parseall(source; filename="synthetic.jl")
         memory_sites = PEDebtSite[]
