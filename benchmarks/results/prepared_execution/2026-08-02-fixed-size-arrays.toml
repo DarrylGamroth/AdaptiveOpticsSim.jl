@@ -1,12 +1,19 @@
+architecture = "x86_64"
 correctness_passed = true
-first_construction_samples_ns = [14895124, 15944800, 14991676, 15388518, 16104880]
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+first_construction_samples_ns = [14850007, 14889632, 15502940, 14824760, 15054290]
 fixed_size_arrays_version = "1.3.0"
 fresh_process_runs = 5
+julia_cpu_target_env = "default"
+julia_threads = 1
 julia_version = "1.12.6"
-load_samples_ns = [10459170, 11106953, 10569487, 10676558, 10491381]
+kernel = "Linux"
+load_samples_ns = [10468967, 10333344, 10400499, 10530322, 10573342]
+logical_cpu_threads = 16
 name = "fixed_size_arrays_prepared_storage"
 repository_dirty = false
-repository_head = "1a79499486532a4a052d8370eabb30c4ac4c78eb"
+repository_head = "22b4b73f3a45e3c4a22e2283cd2ae19da1432f2c"
 schema_version = 1
 source_contract = "benchmarks/contracts/fixed_size_arrays.toml"
 
@@ -16,9 +23,9 @@ any_is_rejected = true
 concrete_is_accepted = true
 
 [first_construction_summary]
-maximum_ns = 16104880
-median_ns = 15388518
-minimum_ns = 14895124
+maximum_ns = 15502940
+median_ns = 14889632
+minimum_ns = 14824760
 
 [inference]
 copyto = true
@@ -26,9 +33,9 @@ indexed_sum = true
 iterated_sum = true
 
 [load_summary]
-maximum_ns = 11106953
-median_ns = 10569487
-minimum_ns = 10459170
+maximum_ns = 10573342
+median_ns = 10468967
+minimum_ns = 10333344
 
 [[resolved_dependencies]]
 direct = false
@@ -43,24 +50,24 @@ version = "1.3.0"
 
 [[results]]
 correctness_passed = true
-first_construction_ns = 14895124
-load_ns = 10459170
+first_construction_ns = 14850007
+load_ns = 10468967
 [[results]]
 correctness_passed = true
-first_construction_ns = 15944800
-load_ns = 11106953
+first_construction_ns = 14889632
+load_ns = 10333344
 [[results]]
 correctness_passed = true
-first_construction_ns = 14991676
-load_ns = 10569487
+first_construction_ns = 15502940
+load_ns = 10400499
 [[results]]
 correctness_passed = true
-first_construction_ns = 15388518
-load_ns = 10676558
+first_construction_ns = 14824760
+load_ns = 10530322
 [[results]]
 correctness_passed = true
-first_construction_ns = 16104880
-load_ns = 10491381
+first_construction_ns = 15054290
+load_ns = 10573342
 
 [shape_contract]
 alternate_matrix_dimensions = [65, 64]

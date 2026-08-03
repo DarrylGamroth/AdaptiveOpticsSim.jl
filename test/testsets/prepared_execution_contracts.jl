@@ -288,11 +288,30 @@ end
     @test isfile(joinpath(PE_REPOSITORY_ROOT, fixed["project"]))
     @test isfile(joinpath(PE_REPOSITORY_ROOT, fixed["contract"]))
     @test isfile(joinpath(PE_REPOSITORY_ROOT, fixed["artifact"]))
+    fixed_contract = TOML.parsefile(joinpath(
+        PE_REPOSITORY_ROOT, fixed["contract"]))
     fixed_artifact = TOML.parsefile(joinpath(
         PE_REPOSITORY_ROOT, fixed["artifact"]))
     @test fixed_artifact["correctness_passed"]
+    @test !fixed_artifact["repository_dirty"]
+    @test length(fixed_artifact["repository_head"]) == 40
+    @test fixed_artifact["julia_version"] ==
+        fixed_contract["julia_version"]
+    @test fixed_artifact["fresh_process_runs"] ==
+        fixed_contract["fresh_process_runs"]
     @test fixed_artifact["fixed_size_arrays_version"] ==
         fixed["characterized_version"]
+    @test fixed_artifact["julia_threads"] == 1
+    @test fixed_artifact["logical_cpu_threads"] > 0
+    for key in (
+        "kernel",
+        "architecture",
+        "cpu_target",
+        "cpu_model",
+        "julia_cpu_target_env",
+    )
+        @test !isempty(fixed_artifact[key])
+    end
     @test all(iszero, values(
         fixed_artifact["warmed_allocated_bytes"]))
     @test all(identity, values(fixed_artifact["inference"]))
