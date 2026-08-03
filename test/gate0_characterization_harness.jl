@@ -125,9 +125,9 @@ function gate0_radiometric_chain(case::ReferenceCase)
     seed = Int(get(case.config["compute"], "seed", 1))
     acquisitions = [prepare_detector_acquisition(detector, rate_map)
         for detector in detectors]
-    frames = [copy(capture!(detector, rate_map, acquisitions[index];
+    frames = [copy(capture!(acquisition;
         rng=MersenneTwister(seed + index - 1)))
-        for (index, detector) in enumerate(detectors)]
+        for (index, acquisition) in enumerate(acquisitions)]
     duration = gate0_legacy_optical_duration(case)
     return cat(Array(photon_rate) .* duration,
         abs2.(field.values) .* duration, Array(image_rate) .* duration,
