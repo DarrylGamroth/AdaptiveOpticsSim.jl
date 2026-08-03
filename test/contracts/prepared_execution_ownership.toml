@@ -1,0 +1,1537 @@
+schema_version = 1
+name = "prepared_execution_ownership"
+status = "characterized_baseline"
+tracker_issue = 225
+work_issue = 227
+source_revision = "9ebb326ceaed33c99eecf88ec1242b737177980f"
+policy_revision = "9ebb326ceaed33c99eecf88ec1242b737177980f"
+scope = ["src","ext"]
+claim = "PE-00 records and ratchets current ownership and type-erasure debt; it does not migrate runtime representation or promote hardware support"
+
+[type_inventory]
+vocabulary_tokens = ["definition","definitions","parameters","params","plan","prepared","product","products","state","strategy","workspace"]
+columns = ["name","declaration","field_count","current_role","target_roles","mutable","persistent_state","product_visibility","exact_binding","backend_relevance","cpu_hot_path","migration_gate"]
+target_roles_semantics = "Canonical destinations for responsibilities carried by the current value; multiple roles identify legacy mixed ownership that must be decomposed"
+allowed_current_roles = ["definition","params","plan","prepared","state","workspace","product","strategy"]
+allowed_target_roles = ["definition","plan","plan_interface","state","workspace","product","prepared_owner","prepared_owner_interface","strategy","binding_token","support"]
+allowed_product_visibility = ["internal","caller_visible"]
+allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
+allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
+baseline_type_count = 381
+baseline_mixed_type_count = 32
+
+[[type_inventory.files]]
+path = "ext/AdaptiveOpticsSimAMDGPUExt.jl"
+owner = "Backends"
+entries = [
+    ["AMDGPUPreparedDeviceExecutionContext","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_specific",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "ext/AdaptiveOpticsSimAcceleratedKernelsExt.jl"
+owner = "Ensembles"
+entries = [
+    ["AcceleratedKernelsSchedulerState","struct",1,"state",["state"],false,true,"internal",false,"backend_neutral",true,"PE-07"],
+]
+
+[[type_inventory.files]]
+path = "ext/AdaptiveOpticsSimAppleAccelerateExt.jl"
+owner = "Backends"
+entries = [
+    ["AdaptiveOpticsAppleFFTPlan","struct",5,"plan",["plan"],false,false,"internal",false,"backend_specific",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "ext/AdaptiveOpticsSimCUDAExt.jl"
+owner = "Backends"
+entries = [
+    ["CUDAPreparedDeviceExecutionContext","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_specific",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "ext/AdaptiveOpticsSimDaggerExt.jl"
+owner = "Ensembles"
+entries = [
+    ["DaggerSchedulerState","struct",0,"state",["state"],false,false,"internal",false,"backend_neutral",false,"PE-07"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/atmospheres.jl"
+owner = "Atmospheres"
+entries = [
+    ["AbstractTimedAtmosphereDefinition","abstract_type",-1,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/atmospheric_field_propagation.jl"
+owner = "Atmospheres"
+entries = [
+    ["AbstractAtmosphericFieldExecutionPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["AtmosphericFieldPropagationParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["AtmosphericFieldPropagationState","struct",2,"state",["plan","workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["GeometricFieldAsyncPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["GeometricFieldSynchronousPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["LayeredFresnelFieldAsyncPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["LayeredFresnelFieldSynchronousPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/definitions.jl"
+owner = "Atmospheres"
+entries = [
+    ["AtmosphereLayerDefinition","struct",5,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["InfiniteMultiLayerAtmosphereDefinition","struct",5,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["KolmogorovAtmosphereDefinition","struct",2,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["MultiLayerAtmosphereDefinition","struct",3,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["_FixedAtmosphereLayerDefinitions","struct",1,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/direction_batch.jl"
+owner = "Atmospheres"
+entries = [
+    ["AtmosphereDirectionBatchParams","struct",10,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["AtmosphereDirectionBatchWorkspace","mutable_struct",5,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["PreparedAtmosphereDirectionBatch","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/infinite_screen.jl"
+owner = "Atmospheres"
+entries = [
+    ["InfiniteLayerParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["InfiniteLayerState","mutable_struct",4,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["InfiniteMultiLayerParams","struct",9,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["InfiniteMultiLayerState","mutable_struct",1,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["InfinitePhaseScreenParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["InfinitePhaseScreenState","mutable_struct",15,"state",["plan","state","workspace"],true,true,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/kolmogorov.jl"
+owner = "Atmospheres"
+entries = [
+    ["KolmogorovParams","struct",3,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["KolmogorovState","mutable_struct",13,"state",["plan","state","workspace"],true,true,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/multilayer.jl"
+owner = "Atmospheres"
+entries = [
+    ["MovingLayerParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["MovingLayerState","mutable_struct",3,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["MultiLayerParams","struct",9,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["MultiLayerState","mutable_struct",1,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/phase_stats.jl"
+owner = "Atmospheres"
+entries = [
+    ["PhaseStatsWorkspace","struct",7,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/atmosphere/source_geometry.jl"
+owner = "Atmospheres"
+entries = [
+    ["AtmosphereTimelineState","mutable_struct",3,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["PreparedAtmosphereDirections","struct",2,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/backends/arrays.jl"
+owner = "Backends"
+entries = [
+    ["_AbstractPreparedDeviceExecutionContext","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_specific",false,"PE-01"],
+    ["_HostPreparedDeviceExecutionContext","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_specific",true,"PE-03"],
+    ["_PreparedArrayTransferCompletionStatus","enum",-1,"prepared",["support"],false,false,"internal",false,"backend_specific",true,"PE-03"],
+    ["_PreparedArrayTransferSubmissionStatus","enum",-1,"prepared",["support"],false,false,"internal",false,"backend_specific",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/backends/reductions.jl"
+owner = "Backends"
+entries = [
+    ["AbstractReductionExecutionPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_specific",false,"PE-01"],
+    ["DirectReductionPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_specific",true,"PE-02"],
+    ["HostMirrorReductionPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_specific",true,"PE-02"],
+]
+
+[[type_inventory.files]]
+path = "src/calibration/gain_sensing_camera.jl"
+owner = "Calibration"
+entries = [
+    ["GSCFFTWorkspace","struct",5,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-07"],
+]
+
+[[type_inventory.files]]
+path = "src/calibration/interaction_matrix.jl"
+owner = "Calibration"
+entries = [
+    ["AbstractCalibrationCommandPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+]
+
+[[type_inventory.files]]
+path = "src/core/workspace.jl"
+owner = "Root"
+entries = [
+    ["Workspace","mutable_struct",5,"workspace",["workspace"],true,false,"internal",false,"backend_neutral",true,"PE-07"],
+]
+
+[[type_inventory.files]]
+path = "src/detectors/detector_acquisition.jl"
+owner = "Detectors"
+entries = [
+    ["DetectorAcquisitionPlan","struct",8,"plan",["plan","prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-04"],
+    ["_DetectorAcquisitionPlanToken","struct",0,"plan",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-04"],
+]
+
+[[type_inventory.files]]
+path = "src/detectors/interface.jl"
+owner = "Detectors"
+entries = [
+    ["AbstractDetectorThermalState","abstract_type",-1,"state",["state"],false,true,"internal",false,"backend_parameterized",true,"PE-04"],
+    ["DetectorParams","struct",19,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["DetectorState","mutable_struct",17,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["DetectorThermalState","mutable_struct",1,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-04"],
+    ["FrameReadoutProducts","abstract_type",-1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["HgCdTeReadoutProducts","type_alias",-1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+    ["MultiReadFrameReadoutProducts","mutable_struct",9,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["NoFrameReadoutProducts","struct",0,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["NoThermalState","struct",0,"state",["state"],false,false,"internal",false,"backend_parameterized",false,"PE-04"],
+    ["SampledFrameReadoutProducts","struct",3,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["SkipperReadoutProducts","struct",2,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+    ["UpTheRampReadoutProducts","mutable_struct",10,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",false,"PE-04"],
+]
+
+[[type_inventory.files]]
+path = "src/detectors/linear_apd.jl"
+owner = "Detectors"
+entries = [
+    ["LinearAPDDetectorParams","struct",7,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["LinearAPDDetectorState","mutable_struct",2,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+]
+
+[[type_inventory.files]]
+path = "src/detectors/mkid_array.jl"
+owner = "Detectors"
+entries = [
+    ["MKIDArrayDetectorParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["MKIDArrayDetectorState","mutable_struct",6,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+]
+
+[[type_inventory.files]]
+path = "src/detectors/pipeline.jl"
+owner = "Detectors"
+entries = [
+    ["AbstractDetectorExecutionPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["DetectorDirectPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["DetectorHostMirrorPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+]
+
+[[type_inventory.files]]
+path = "src/detectors/spad_array.jl"
+owner = "Detectors"
+entries = [
+    ["SPADArrayDetectorParams","struct",6,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["SPADArrayDetectorState","mutable_struct",6,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-04"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/controllable_optics.jl"
+owner = "Optics"
+entries = [
+    ["ModalControllableOpticParams","struct",2,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["ModalControllableOpticState","struct",4,"state",["plan","state","workspace","product"],false,true,"caller_visible",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/deformable_mirror.jl"
+owner = "Optics"
+entries = [
+    ["DeformableMirrorParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["DeformableMirrorState","mutable_struct",9,"state",["plan","state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/direct_imaging.jl"
+owner = "Optics"
+entries = [
+    ["AbstractDirectImagingInputPlan","abstract_type",-1,"plan",["prepared_owner_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["DirectImagingPlan","struct",8,"plan",["plan","workspace","product","prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["DirectImagingWorkspace","struct",2,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["PreparedBundledDirectImaging","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreparedDirectImaging","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreparedFieldImagingInput","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreparedIncoherentDirectImaging","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreparedPupilImagingInput","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/direct_imaging_batch.jl"
+owner = "Optics"
+entries = [
+    ["DirectImagingBatchProductContract","struct",8,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["DirectImagingBatchSampleParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["DirectImagingBatchWorkspace","mutable_struct",5,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["DirectImagingBatchWorkspaceBindings","struct",7,"workspace",["prepared_owner"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
+    ["PreparedDirectImagingBatch","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/electric_field.jl"
+owner = "Optics"
+entries = [
+    ["PupilFieldFormationPlan","struct",7,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/focal_plane_modulation.jl"
+owner = "Optics"
+entries = [
+    ["PreparedFocalPlaneModulation","struct",3,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/microlens_array.jl"
+owner = "Optics"
+entries = [
+    ["MicrolensArrayParams","struct",6,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["PreparedMicrolensPropagation","mutable_struct",30,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/planes.jl"
+owner = "Optics"
+entries = [
+    ["AbstractOpticalProduct","abstract_type",-1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-03"],
+    ["NonCombinableProduct","struct",0,"product",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["OpticalProductBundle","struct",1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-03"],
+    ["PreparedIncoherentInputs","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["PreparedIncoherentSum","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-03"],
+    ["_FixedOpticalProductVector","struct",1,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-03"],
+    ["_OpticalProductBundleToken","struct",0,"product",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
+    ["_PreparedIncoherentSumToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/propagation.jl"
+owner = "Optics"
+entries = [
+    ["FraunhoferPropagationParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["FraunhoferPropagationState","struct",2,"state",["plan","workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["FresnelPropagationParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["FresnelPropagationState","struct",6,"state",["plan","workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/source.jl"
+owner = "Optics"
+entries = [
+    ["LGSSourceParams","struct",10,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["SourceParams","struct",6,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/spatial_filter.jl"
+owner = "Optics"
+entries = [
+    ["SpatialFilterParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["SpatialFilterPlan","struct",6,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+    ["SpatialFilterWorkspace","struct",4,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-03"],
+]
+
+[[type_inventory.files]]
+path = "src/optics/telescope.jl"
+owner = "Optics"
+entries = [
+    ["AbstractTelescopeDefinition","abstract_type",-1,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["TelescopeDefinition","struct",6,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["TelescopeParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/acquisition_lifecycles.jl"
+owner = "Plant"
+entries = [
+    ["AbstractAcquisitionLifecycleDefinition","abstract_type",-1,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["AbstractAcquisitionLifecycleState","abstract_type",-1,"state",["state"],false,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["AbstractPreparedAcquisitionLifecycle","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/autonomous_periodic_optics.jl"
+owner = "Plant"
+entries = [
+    ["AutonomousPeriodicOpticDefinition","struct",4,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["CircularPyramidModulatorState","mutable_struct",10,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["CircularPyramidModulatorWorkspace","mutable_struct",4,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedCircularPyramidModulator","struct",4,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["PreparedCycleAveragedPyramidModulation","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedAutonomousPeriodicOptic","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/command_admission.jl"
+owner = "Plant"
+entries = [
+    ["CommandDispositionWorkspace","mutable_struct",3,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["CommandEndpointState","mutable_struct",17,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedCommandEndpoint","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_CommandEndpointStateBinding","mutable_struct",0,"state",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_CommandTransactionAdmissionPlan","struct",5,"plan",["support"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/command_application.jl"
+owner = "Plant"
+entries = [
+    ["CommandApplicationState","mutable_struct",7,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/command_authority.jl"
+owner = "Plant"
+entries = [
+    ["CommandAuthorityState","mutable_struct",7,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["CommandAuthorityWorkspace","struct",2,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedCommandAuthority","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedCommandAuthorityBinding","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedCommandAuthorityToken","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/command_fanout.jl"
+owner = "Plant"
+entries = [
+    ["_CommandFanoutLaneState","struct",3,"state",["state"],false,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_CommandFanoutLaneWorkspace","mutable_struct",12,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_CommandFanoutState","mutable_struct",4,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_CommandFanoutWorkspace","struct",3,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedCommandFanout","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedCommandFanoutBinding","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedCommandFanoutLane","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/command_publications.jl"
+owner = "Plant"
+entries = [
+    ["PreparedTargetLocalCommandEndpoint","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedTargetLocalControllableOptic","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["TargetLocalCommandEndpointState","mutable_struct",8,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["TargetLocalControllableOpticState","mutable_struct",5,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["TargetLocalControllableOpticWorkspace","struct",2,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/controllable_optics.jl"
+owner = "Plant"
+entries = [
+    ["PreparedControllableOptic","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedControllableOpticPathBindings","struct",6,"prepared",["plan","prepared_owner"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["PreparedControllableOpticPlaneGroup","struct",4,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_PreparedControllableOpticPathBindingsToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedControllableOpticToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedPlantCommandEndpoint","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/controller_routing.jl"
+owner = "Plant"
+entries = [
+    ["PreparedControllerOutputRoute","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedControllerOutputRouting","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedControllerOutputRouteToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedControllerOutputRoutingToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/definitions.jl"
+owner = "Plant"
+entries = [
+    ["AcquisitionDefinition","struct",3,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["ColdPlantModelDefinition","struct",0,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["ControllableOpticDefinition","struct",5,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["OpticalPathDefinition","struct",3,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["PlantDefinition","struct",7,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["SampledAberrationDefinition","struct",7,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["_PlantDefinitionIdentity","mutable_struct",0,"definition",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_UnsupportedPlantModelDefinition","struct",0,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/deformable_mirror.jl"
+owner = "Plant"
+entries = [
+    ["_PlantDeformableMirrorState","mutable_struct",1,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PlantDeformableMirrorWorkspace","mutable_struct",1,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedPlantDeformableMirror","struct",7,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/detector_acquisition_events.jl"
+owner = "Plant"
+entries = [
+    ["AbstractDetectorAcquisitionLifecycleDefinition","abstract_type",-1,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["AbstractDetectorAcquisitionLifecycleState","abstract_type",-1,"state",["state"],false,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["AbstractPreparedDetectorAcquisitionLifecycle","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+    ["GlobalShutterAcquisitionDefinition","struct",3,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["GlobalShutterAcquisitionState","mutable_struct",9,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedGlobalShutterAcquisition","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedGlobalShutterAcquisitionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/device_batching.jl"
+owner = "Plant"
+entries = [
+    ["_PreparedDeviceBatchWFSOpticalPlan","type_alias",-1,"prepared",["prepared_owner_interface"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_PreparedDevicePathBatchImplementation","type_alias",-1,"prepared",["prepared_owner_interface"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_PreparedDirectImagingDevicePathBatch","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedWFSDevicePathBatch","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/direct_measurement_events.jl"
+owner = "Plant"
+entries = [
+    ["DirectMeasurementAcquisitionDefinition","struct",3,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["DirectMeasurementAcquisitionState","mutable_struct",8,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedDirectMeasurementAcquisition","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/effective_command_routes.jl"
+owner = "Plant"
+entries = [
+    ["_DirectEffectiveCommandPublicationRouteState","mutable_struct",5,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_EffectiveCommandPublicationRoutesState","struct",1,"state",["state"],false,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedDirectEffectiveCommandPublicationRoute","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedEffectiveCommandPublicationRoute","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+    ["_PreparedEffectiveCommandPublicationRoutes","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedRemoteEffectiveCommandPublicationRoute","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_RemoteEffectiveCommandPublicationRouteState","mutable_struct",8,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/errors.jl"
+owner = "Plant"
+entries = [
+    ["PlantDefinitionError","struct",3,"definition",["support"],false,false,"internal",false,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/event_composition.jl"
+owner = "Plant"
+entries = [
+    ["AbstractAcquisitionStartDefinition","abstract_type",-1,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["AcquisitionEventDefinition","struct",3,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["OpticalSampleDefinition","struct",3,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["PlantEventLoopDefinition","struct",4,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["PlantEventLoopState","mutable_struct",13,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PlantEventLoopWorkspace","mutable_struct",15,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedDevicePathBatchOwner","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPathExecutionGroup","struct",18,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPlantEventLoop","struct",18,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_AcquisitionEventLifecycleState","type_alias",-1,"state",["state"],false,true,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_AcquisitionStartDefinition","type_alias",-1,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-06"],
+    ["_NoPreparedTriggerTopology","struct",0,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_NoTriggerTopologyState","struct",0,"state",["state"],false,false,"internal",true,"backend_parameterized",false,"PE-06"],
+    ["_NoTriggerTopologyWorkspace","struct",0,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_OpticalPathBatchWorkspace","mutable_struct",11,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PlantEventLoopStateBinding","mutable_struct",0,"state",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PlantEventLoopWorkspaceBinding","mutable_struct",0,"workspace",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedAcquisitionEventLifecycle","type_alias",-1,"prepared",["prepared_owner_interface"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_PreparedControllableOpticPathCouplingGroup","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedDevicePathBatchOwnerBinding","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedDevicePathBatchOwnerToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedPathExecutionGroupAcquisition","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedPlantEventAcquisition","struct",13,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedPlantEventCommandEndpoint","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/handoffs.jl"
+owner = "Plant"
+entries = [
+    ["PreparedCrossDomainHandoff","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_HandoffSlotState","mutable_struct",3,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/illumination.jl"
+owner = "Plant"
+entries = [
+    ["PreparedIlluminationEntry","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedUniformIntensityIllumination","struct",4,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_PreparedIlluminationEntryToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/mixed_serial_event_loop.jl"
+owner = "Plant"
+entries = [
+    ["MixedResourcePlantEventLoopState","mutable_struct",9,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["MixedResourcePlantEventLoopWorkspace","mutable_struct",9,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedMixedResourcePlantEventLoop","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_AbstractPreparedMixedSerialEventAcquisition","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+    ["_PreparedMixedResourcePlantEventLoopBinding","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedMixedSerialEventAcquisition","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedMixedSerialEventCommand","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedMixedSerialPathSchedule","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedMixedSerialTriggeredAcquisition","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/mixed_serial_execution.jl"
+owner = "Plant"
+entries = [
+    ["_AbstractMixedSerialPathWorkspace","abstract_type",-1,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_AbstractPreparedMixedSerialPath","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+    ["_MixedSerialBatchWorkspace","mutable_struct",7,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_MixedSerialExecutionState","mutable_struct",5,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_MixedSerialExecutionWorkspace","struct",5,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_MixedSerialPathWorkspace","struct",1,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedMixedSerialCommandDependency","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedMixedSerialControllableOpticApplication","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedMixedSerialExecution","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedMixedSerialExecutionBinding","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedMixedSerialPath","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/partitions.jl"
+owner = "Plant"
+entries = [
+    ["PreparedAtmosphereAuthority","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPlantPartitions","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedTargetPartition","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedAtmosphereAuthorityToken","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedPlantPartitionsToken","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedTargetPartitionRNGs","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedTargetPartitionToken","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/path_input_publications.jl"
+owner = "Plant"
+entries = [
+    ["PreparedDirectPupilOPDPublicationRoute","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPupilOPDPublicationRoute","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+    ["PreparedRemotePupilOPDPublicationRoute","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_DirectPupilOPDPublicationState","mutable_struct",4,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_RemotePupilOPDPublicationState","mutable_struct",7,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/preparation.jl"
+owner = "Plant"
+entries = [
+    ["PreparedAcquisitionOwner","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedAcquisitionSelection","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPathExecutor","struct",11,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPlant","struct",13,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPupilOPDMaterialization","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedAcquisitionOwnerToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedAcquisitionSelectionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedPathExecutorToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedPlantToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedPupilOPDMaterializationToken","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/product_providers.jl"
+owner = "Plant"
+entries = [
+    ["AcquisitionProductContract","struct",3,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["AcquisitionProducts","struct",3,"product",["product"],false,false,"caller_visible",false,"backend_parameterized",false,"PE-06"],
+    ["CyclicReplayProviderParams","struct",1,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["CyclicReplayProviderState","mutable_struct",1,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedAcquisitionProvider","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedCopiedSyntheticProvider","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedCyclicReplayProvider","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedFullOpticalProvider","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedUnchangedSyntheticProvider","struct",0,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_AbsentProductContract","struct",0,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_AcquisitionProductContractToken","struct",0,"product",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_ArrayProductContract","struct",4,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_OpticalProductContract","struct",2,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_PreparedAcquisitionProviderToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_RefProductContract","struct",1,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_WFSMeasurementProductContract","struct",3,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_WFSObservationProductContract","struct",3,"product",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/pupil_footprint_coupling.jl"
+owner = "Plant"
+entries = [
+    ["PreparedDirectPupilSurfaceCoupling","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedIdentityPupilFootprintCoupling","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPupilFootprintCoupling","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedPupilFootprintCouplingToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/randomness.jl"
+owner = "Plant"
+entries = [
+    ["PreparedAtmosphereRNGs","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedOwnerRNGs","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPlantRNGs","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedRNGStream","struct",3,"prepared",["state","prepared_owner"],false,true,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/reduced_order.jl"
+owner = "Plant"
+entries = [
+    ["HarmonicDisturbanceState","mutable_struct",3,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedHarmonicDisturbance","struct",4,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["PreparedLinearReducedOrderEventProvider","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedLinearReducedOrderProvider","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedReducedOrderCommandResponse","struct",6,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_PreparedArrayReducedOrderEventResponse","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedReducedOrderEventResponse","abstract_type",-1,"prepared",["prepared_owner_interface"],false,false,"internal",true,"backend_parameterized",false,"PE-01"],
+    ["_PreparedScalarReducedOrderEventResponse","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/rolling_frame_transfer_events.jl"
+owner = "Plant"
+entries = [
+    ["FrameTransferAcquisitionDefinition","struct",2,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["FrameTransferAcquisitionState","mutable_struct",13,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedFrameTransferAcquisition","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedRollingShutterAcquisition","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["RollingShutterAcquisitionDefinition","struct",2,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["RollingShutterAcquisitionState","mutable_struct",9,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/sampled_aberrations.jl"
+owner = "Plant"
+entries = [
+    ["PreparedSampledAberration","struct",3,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["PreparedSampledAberrationPathBindings","struct",4,"prepared",["plan","prepared_owner"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedSampledAberrationApplication","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedSampledAberrationPathBindingsToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedSampledAberrationPathPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_PreparedSampledAberrationToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/scheduling.jl"
+owner = "Plant"
+entries = [
+    ["EventGeneratorDefinition","struct",5,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["EventSchedulerState","mutable_struct",8,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["EventSchedulerWorkspace","mutable_struct",6,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedEventScheduler","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/target_local_resources.jl"
+owner = "Plant"
+entries = [
+    ["PreparedTargetLocalAcquisitionResources","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedTargetLocalPathResources","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedTargetLocalAcquisitionResourcesToken","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedTargetLocalPathResourcesToken","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/plant/triggers.jl"
+owner = "Plant"
+entries = [
+    ["PreparedTriggerTopology","struct",16,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["TriggerConsumerDefinition","struct",2,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["TriggerLinkDefinition","struct",6,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["TriggerSourceDefinition","struct",6,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["TriggerTopologyState","mutable_struct",9,"state",["state"],true,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["TriggerTopologyWorkspace","mutable_struct",13,"workspace",["workspace"],true,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedTriggerConsumer","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedTriggerFaultSample","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedTriggerLink","struct",10,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedTriggerSource","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+]
+
+[[type_inventory.files]]
+path = "src/tomography/parameters.jl"
+owner = "Tomography"
+entries = [
+    ["LGSAsterismParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["LGSWFSParams","struct",7,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["TomographyAtmosphereParams","struct",8,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["TomographyDMParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["TomographyParams","struct",3,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/bioedge/setup.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["BioEdgeAcquisitionState","mutable_struct",3,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["BioEdgeEstimatorParams","struct",6,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["BioEdgeEstimatorState","mutable_struct",23,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedBioEdgePropagation","mutable_struct",18,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/bioedge/stages.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["PreparedBioEdgeEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedBioEdgeOpticalBundleFormation","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedBioEdgeOpticalFormation","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/curvature.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["CurvatureAcquisitionState","mutable_struct",1,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["CurvatureEstimatorState","mutable_struct",10,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["CurvatureWFSParams","struct",8,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["PreparedCurvaturePropagation","mutable_struct",13,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/curvature/stages.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["AbstractPreparedCurvatureObservationMapping","abstract_type",-1,"prepared",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["PreparedCurvatureEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedCurvatureOpticalFormation","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedCurvaturePackedChannelAcquisition","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedCurvaturePackedFrameAcquisition","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/focal_plane_modulation.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["AbstractPreparedFourPupilLGS","abstract_type",-1,"prepared",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["NoPreparedFourPupilLGS","struct",0,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedFourPupilElongation","struct",2,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedFourPupilSodiumProfile","struct",1,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/grouped.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["AbstractGroupedAccumulationPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["GroupedDirectAccumulatePlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["GroupedStackReducePlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["GroupedStaged2DPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/lift.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["LiFTForwardWorkspace","struct",16,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["LiFTParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["LiFTState","struct",9,"state",["workspace","product"],false,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedLiFTForwardModel","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/pyramid/setup.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["PreparedPyramidPropagation","mutable_struct",17,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PyramidAcquisitionState","mutable_struct",3,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["PyramidEstimatorParams","struct",7,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["PyramidEstimatorState","mutable_struct",21,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/pyramid/stages.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["PreparedPyramidEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedPyramidOpticalBundleFormation","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedPyramidOpticalFormation","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/shack_hartmann/setup.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["AbstractShackHartmannWFSSensingPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+    ["ShackHartmannAcquisitionState","mutable_struct",4,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["ShackHartmannEstimatorState","mutable_struct",5,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["ShackHartmannWFSBatchedPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSDeviceStatsPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSParams","struct",2,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["ShackHartmannWFSRocmHostStatsPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSRocmSafePlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["ShackHartmannWFSScalarPlan","struct",0,"plan",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/shack_hartmann/stages.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["PreparedShackHartmannEstimator","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedShackHartmannOpticalBundleFormation","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedShackHartmannOpticalFormation","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/stage_contracts.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["PreparedWFSCountingAcquisition","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedWFSDetectorAcquisition","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedWFSMultipleDetectorAcquisition","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/subapertures.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["SubapertureLayoutState","mutable_struct",1,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/zernike.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["PreparedZernikePropagation","mutable_struct",11,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeAcquisitionState","mutable_struct",1,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeEstimatorState","mutable_struct",14,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeWFSParams","struct",9,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/zernike/stages.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["PreparedZernikeEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedZernikeOpticalFormation","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+]
+
+[direct_memory]
+policy = "ratchet"
+columns = ["category","scope","binding","baseline_line","count","hot_path","backend_relevance","replacement"]
+baseline_total = 344
+zero_tolerance_gate = "PE-07"
+interpretation = "AST references in package and extension implementation; comments, strings, tests, benchmarks, and dependency internals are excluded"
+
+[[direct_memory.files]]
+path = "src/atmosphere/definitions.jl"
+owner = "Atmospheres"
+entries = [
+    ["constructor","_cold_atmosphere_layer_definitions","layers",112,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/atmosphere/direction_batch.jl"
+owner = "Atmospheres"
+entries = [
+    ["constructor","_copy_layer_bindings","bindings",248,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_copy_source_bindings","bindings",240,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_copy_source_geometry_bindings","bindings",225,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","AtmosphereDirectionBatchParams","<constraint>",90,3,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["type_constraint","AtmosphereDirectionBatchParams","<type-parameter>",62,3,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/optics/direct_imaging_batch.jl"
+owner = "Optics"
+entries = [
+    ["constructor","_direct_imaging_batch_inputs","storage",302,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_direct_imaging_batch_sources","frozen",222,2,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_direct_imaging_batch","fields",471,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_direct_imaging_batch","formation_plans",472,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_direct_imaging_batch","samples",474,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_repeat_direct_imaging_batch_input","storage",288,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["type_constraint","_FixedDirectImagingBatchVector","<type-parameter>",60,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/command_admission.jl"
+owner = "Plant"
+entries = [
+    ["constructor","CommandEndpointState","<expression>",661,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","CommandEndpointState","accepted_sequences",659,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","CommandEndpointState","slots",657,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_command_disposition_workspace","<expression>",714,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_command_payload_slots","<expression>",590,2,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_command_payload_slots","values",598,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","CommandDispositionWorkspace","dispositions",690,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","CommandEndpointState","accepted_sequences",638,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","CommandEndpointState","calendar",637,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","CommandEndpointState","slots",636,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_ArrayCommandPayloadSlots","values",584,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_ScalarCommandPayloadSlots","staging",579,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_ScalarCommandPayloadSlots","values",578,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/command_authority.jl"
+owner = "Plant"
+entries = [
+    ["constructor","CommandAuthorityWorkspace","dispositions",261,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_command_authority_state","application_states",217,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_command_authority_state","endpoint_states",216,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_command_authority_state","publication_timestamps",221,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_command_authority_state","sequences",219,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","CommandAuthorityState","publication_sequences",53,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","CommandAuthorityState","publication_timestamps",54,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/command_fanout.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_prepare_command_fanout_authority_workspace","dispositions",749,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_commit_selected_command_authority!","<expression>",1502,2,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_commit_selected_command_authority!","publication_timestamps",1513,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_commit_selected_command_authority!","sequences",1513,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_commit_selected_safe_command_authority!","<expression>",1544,2,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_commit_selected_safe_command_authority!","publication_timestamps",1555,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_commit_selected_safe_command_authority!","sequences",1555,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prevalidate_selected_command_silence!","<expression>",1026,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prevalidate_selected_command_silence!","sequences",1036,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_selected_command_fanout_ready","<expression>",994,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_selected_command_fanout_ready","sequences",999,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/command_publications.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_partition_command_endpoint_configurations","prepared",933,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_target_local_command_endpoints","endpoints",1020,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_target_local_command_endpoints","physical_initials",1024,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_target_local_command_endpoints","states",1022,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_target_local_controllable_optic_owners","owners",1121,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/controllable_optics.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_optic_binding_memory","result",495,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_controllable_optics","optics",407,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_plant_command_endpoints","endpoints",374,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedControllableOpticPathBindings","binding_offsets",475,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedControllableOpticPathBindings","group_offsets",476,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedControllableOpticPathBindings","optic_slots",477,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedControllableOpticPathBindings","path_ids",473,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedControllableOpticPathBindings","path_slots",474,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedControllableOpticPathBindings","plane_groups",478,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedControllableOpticPathBindings","binding_offsets",480,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedControllableOpticPathBindings","group_offsets",480,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedControllableOpticPathBindings","optic_slots",480,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedControllableOpticPathBindings","path_ids",480,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedControllableOpticPathBindings","path_slots",480,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedControllableOpticPathBindings","plane_groups",480,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/definitions.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_definition_registry","memory",587,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/detector_acquisition_events.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_empty_detector_read_offsets","<expression>",174,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_even_detector_read_offsets","offsets",181,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedGlobalShutterAcquisition","read_offsets",89,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedGlobalShutterAcquisition","read_offsets",91,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_detector_event_products!","<expression>",245,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_detector_event_products!","offsets",251,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/device_batching.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_collect_device_path_batch_members","inputs",514,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_collect_device_path_batch_members","results",515,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_collect_device_path_batch_members","sources",516,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_collect_wfs_device_path_batch_members","geometry_sources",653,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_collect_wfs_device_path_batch_members","inputs",651,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_collect_wfs_device_path_batch_members","results",652,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_copy_device_path_batch_slots","copied",441,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_device_path_batch_stack_views","views",452,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_device_path_batch_owners","owners",770,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_device_path_batch_owners","path_owner_slots",771,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_collect_device_path_batch_members","groups",501,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_collect_device_path_batch_members","slots",501,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_collect_wfs_device_path_batch_members","groups",636,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_collect_wfs_device_path_batch_members","slots",636,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_device_path_batch_owner","groups",620,2,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_device_path_batch_owners","groups",749,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_direct_imaging_device_path_batch_owner","groups",547,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["type_constraint","_PreparedDirectImagingDevicePathBatch","<type-parameter>",54,3,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["type_constraint","_PreparedWFSDevicePathBatch","<type-parameter>",130,4,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/event_composition.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_event_command_states","applications",1762,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_event_command_states","endpoints",1760,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_event_controllable_optic_states","states",1795,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_optical_path_batch_workspace","<expression>",1895,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_optical_path_batch_workspace","status",1886,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_plant_event_loop_state","acquisition_states",1823,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_plant_event_loop_state","command_shadow_transactions",1819,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_plant_event_loop_state","path_sampled",1829,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_plant_event_loop_state","product_ready_timestamps",1834,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_plant_event_loop_state","product_sequences",1831,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_plant_event_loop_workspace","command_endpoints",1911,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_plant_event_loop_workspace","controllable_optics",1919,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_plant_event_loop_workspace","due_paths",1926,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_plant_event_loop_workspace","workspace",1929,5,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_event_acquisitions","acquisitions",1594,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_event_autonomous_optics","bindings",1445,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_event_command_endpoints","endpoints",1013,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_event_controllable_optics","optics",993,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_event_path_optic_couplings","<expression>",1160,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_event_path_optic_couplings","couplings",1157,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_event_path_optic_couplings","group_memory",1212,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_event_sampled_aberrations","aberrations",1002,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_path_execution_group_acquisitions","acquisitions",1245,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_path_execution_group_autonomous_optic_slots","slots",1267,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_path_execution_groups","groups",1287,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepared_event_actions","actions",982,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopState","acquisitions",1732,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PlantEventLoopState","command_applications",1729,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopState","command_endpoints",1728,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopState","command_shadow_transactions",1730,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopState","controllable_optics",1731,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PlantEventLoopState","path_sampled",1733,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopState","product_ready_timestamps",1735,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopState","product_sequences",1734,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopWorkspace","command_dispositions",1864,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopWorkspace","command_endpoints",1862,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopWorkspace","controllable_optics",1863,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PlantEventLoopWorkspace","due_paths",1871,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopWorkspace","transaction_admissions",1867,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopWorkspace","transaction_claims",1868,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopWorkspace","transaction_endpoint_slots",1866,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PlantEventLoopWorkspace","transaction_staged",1869,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedDevicePathBatchOwner","group_slots",447,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPathExecutionGroup","acquisitions",398,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedPathExecutionGroup","autonomous_optic_slots",399,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPathExecutionGroup","optic_coupling_groups",396,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPathExecutionGroup","optic_couplings",395,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantEventLoop","acquisitions",491,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedPlantEventLoop","actions",481,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantEventLoop","autonomous_optics",492,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantEventLoop","command_endpoints",487,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantEventLoop","device_path_batch_owners",489,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantEventLoop","optics",482,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantEventLoop","path_device_batch_owner_slots",490,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantEventLoop","path_groups",488,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantEventLoop","sampled_aberrations",484,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_OpticalPathBatchWorkspace","due_group_slots",225,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_OpticalPathBatchWorkspace","group_status",227,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedDevicePathBatchOwner","group_slots",450,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_apply_due_path_controllable_optics!","couplings",4346,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","_apply_due_path_controllable_optics!","optics",4346,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_apply_due_path_controllable_optics!","states",4346,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","_due_full_optical_path","due_paths",4510,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_preflight_due_path_consumers","due_paths",4050,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_validate_due_path_materializations!","due_paths",4068,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/handoffs.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_copy_handoff_slots","copied",196,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_handoff_backend_states","states",400,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","prepare_cross_domain_handoff","publications",510,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_cross_domain_handoff","states",511,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedCrossDomainHandoff","backend_states",152,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedCrossDomainHandoff","destination_slots",151,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedCrossDomainHandoff","publications",153,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedCrossDomainHandoff","source_slots",150,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedCrossDomainHandoff","states",154,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","_prepare_handoff_backend_states","destination_slots",383,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_handoff_backend_states","source_slots",383,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_handoff_slot_storage","slots",300,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_nonaliasing_handoff_slots","destination_slots",327,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_nonaliasing_handoff_slots","source_slots",327,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/mixed_serial_event_loop.jl"
+owner = "Plant"
+entries = [
+    ["constructor","MixedResourcePlantEventLoopState","acquisitions",560,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","MixedResourcePlantEventLoopState","path_sampled",566,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","MixedResourcePlantEventLoopState","product_ready_timestamps",571,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","MixedResourcePlantEventLoopState","product_sequences",568,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","MixedResourcePlantEventLoopWorkspace","<expression>",613,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_mixed_serial_path_acquisition_slots","<expression>",323,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_mixed_serial_event_acquisitions","acquisitions",299,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_mixed_serial_event_commands","commands",353,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_mixed_serial_path_schedules","paths",331,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_mixed_serial_triggered_acquisitions","<expression>",400,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","MixedResourcePlantEventLoopState","acquisitions",83,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","MixedResourcePlantEventLoopState","path_sampled",84,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","MixedResourcePlantEventLoopState","product_ready_timestamps",86,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","MixedResourcePlantEventLoopState","product_sequences",85,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","MixedResourcePlantEventLoopWorkspace","command_dispositions",109,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedMixedResourcePlantEventLoop","acquisitions",66,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedMixedResourcePlantEventLoop","actions",63,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedMixedResourcePlantEventLoop","commands",64,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedMixedResourcePlantEventLoop","paths",65,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedMixedResourcePlantEventLoop","triggered_acquisitions",67,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_PreparedMixedSerialPathSchedule","acquisition_slots",22,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_integrate_due_mixed_serial_acquisitions!","due",1706,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_mixed_serial_path_acquisition_slots","acquisitions",314,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","_preflight_due_mixed_serial_acquisitions!","due",1685,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_mixed_serial_path_schedules","acquisitions",326,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/mixed_serial_execution.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_mixed_serial_prepared_optics","optics",122,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_mixed_serial_execution","paths",345,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_mixed_serial_execution_workspace","<expression>",406,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_mixed_serial_execution_workspace","path_workspaces",391,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_MixedSerialExecutionWorkspace","due_paths",79,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_MixedSerialExecutionWorkspace","paths",80,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","_PreparedMixedSerialExecution","paths",41,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","_preflight_mixed_serial_due_paths","due",719,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_mixed_serial_command_dependencies!","<expression>",682,2,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_mixed_serial_command_dependencies!","publication_timestamps",691,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_mixed_serial_command_dependencies!","sequences",691,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_select_mixed_serial_due_paths!","<expression>",472,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_select_mixed_serial_due_paths!","due",448,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/partition_assignments.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_partition_registry","storage",98,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/partitions.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_partition_rng_replay_metadata","owned",641,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_partition_sampled_aberrations","prepared",386,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_target_local_acquisitions","acquisitions",348,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_target_local_paths","paths",310,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_target_local_acquisition_rng_owner_bindings","groups",502,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_target_local_path_rng_owner_bindings","groups",490,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_plant_partitions","partition_binding_groups",716,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_plant_partitions","partitions",746,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_plant_partitions","unbound",702,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","_PreparedTargetPartitionRNGs","acquisitions",72,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","_PreparedTargetPartitionRNGs","paths",71,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/preparation.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_acquisition_rng_owner_bindings","groups",1608,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_canonical_selected_acquisitions","result",1811,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_canonical_selected_paths","result",1831,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_path_rng_owner_bindings","groups",1597,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_acquisition_owners","acquisitions",1585,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_path_executors","paths",1566,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_selected_acquisition_rngs","result",1879,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_selected_path_rngs","result",1860,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_selected_sampled_aberration_path_plans","plans",1892,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedAcquisitionSelection","acquisition_rngs",1747,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedAcquisitionSelection","acquisitions",1744,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedAcquisitionSelection","path_rngs",1746,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedAcquisitionSelection","paths",1743,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedPlant","acquisitions",1316,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedPlant","command_endpoints",1314,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlant","controllable_optics",1310,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedPlant","paths",1315,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","PreparedAcquisitionSelection","acquisition_rngs",1749,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedAcquisitionSelection","acquisitions",1749,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","PreparedAcquisitionSelection","path_rngs",1749,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedAcquisitionSelection","paths",1749,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","PreparedPlant","acquisitions",1319,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","PreparedPlant","command_endpoints",1319,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedPlant","controllable_optics",1319,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","PreparedPlant","paths",1319,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/product_providers.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_owned_replay_corpus","owned",569,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["type_constraint","PreparedCyclicReplayProvider","<type-parameter>",550,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/randomness.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_prepare_owner_rng_groups","groups",330,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_rng_replay_metadata","owned",544,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedPlantRNGs","acquisitions",130,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedPlantRNGs","paths",129,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/resource_facts.jl"
+owner = "Plant"
+entries = [
+    ["signature_type","_memory_structural_array_bytes","memory",356,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","structural_array_bytes","memory",363,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/resource_facts_acquisition.jl"
+owner = "Plant"
+entries = [
+    ["signature_type","_acquisition_optional_array_bytes","Memory",37,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_acquisition_optional_array_bytes","memory",28,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/resource_facts_runtime.jl"
+owner = "Plant"
+entries = [
+    ["signature_type","_structural_memory_element_bytes","memory",24,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/sampled_aberrations.jl"
+owner = "Plant"
+entries = [
+    ["constructor","_prepare_sampled_aberration_path_bindings","couplings",339,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["constructor","_prepare_sampled_aberrations","prepared",155,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedSampledAberrationPathBindings","aberration_slots",179,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedSampledAberrationPathBindings","binding_offsets",178,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedSampledAberrationPathBindings","couplings",180,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["field_type","PreparedSampledAberrationPathBindings","path_ids",177,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedSampledAberrationPathBindings","aberration_slots",182,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedSampledAberrationPathBindings","binding_offsets",182,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","PreparedSampledAberrationPathBindings","couplings",182,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
+    ["signature_type","PreparedSampledAberrationPathBindings","path_ids",182,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/scheduling.jl"
+owner = "Plant"
+entries = [
+    ["constructor","EventSchedulerState","cursors",243,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","EventSchedulerWorkspace","<expression>",275,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_copy_event_generator_definitions","owned",105,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","EventSchedulerState","cursors",231,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","EventSchedulerWorkspace","due_slots",267,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedEventScheduler","definitions",71,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_canonicalize_event_generator_definitions!","definitions",139,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_require_unique_event_ordinals","definitions",114,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[[direct_memory.files]]
+path = "src/plant/triggers.jl"
+owner = "Plant"
+entries = [
+    ["constructor","TriggerTopologyState","has_last_delivery",474,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","TriggerTopologyState","last_delivery",473,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","TriggerTopologyState","link_offsets",472,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","TriggerTopologyState","pending",480,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","TriggerTopologyState","pending_active",481,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","TriggerTopologyState","sequences",470,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","TriggerTopologyState","source_offsets",471,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","TriggerTopologyWorkspace","<expression>",508,9,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_trigger_child_registry","consumer_offsets",1104,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_trigger_child_registry","consumer_slots",1115,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_trigger_child_registry","link_offsets",1103,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","_prepare_trigger_child_registry","link_slots",1114,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_trigger_topology","prepared_consumers",1529,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_trigger_topology","prepared_fault_ids",1549,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_trigger_topology","prepared_links",1525,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_trigger_topology","prepared_sources",1482,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["constructor","prepare_trigger_topology","prepared_trace_entries",1546,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","consumer_child_offsets",323,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","consumer_child_slots",324,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","consumers",320,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","fault_ids",326,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","link_child_offsets",321,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","link_child_slots",322,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","links",319,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","sources",318,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","PreparedTriggerTopology","trace_entries",325,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyState","has_last_ordinary_delivery",460,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyState","last_ordinary_delivery",459,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyState","link_phase_offsets",458,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyState","pending",461,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyState","pending_active",462,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyState","source_phase_offsets",457,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyState","source_sequences",456,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","consumer_occurrences",495,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","fault_observations",501,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","link_samples",497,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","link_selected",498,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","next_has_last_ordinary_delivery",500,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","next_last_ordinary_delivery",499,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","next_link_phase_offsets",496,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","propagation",491,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["field_type","TriggerTopologyWorkspace","staged_deliveries",493,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_trigger_child_registry","consumers",1086,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+    ["signature_type","_prepare_trigger_child_registry","links",1086,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
+]
+
+[stored_any]
+policy = "ratchet"
+columns = ["category","scope","binding","baseline_line","count","hot_path","replacement"]
+baseline_total = 25
+zero_tolerance_gate = "PE-07"
+interpretation = "stored fields, erased collection/reference signatures and returns, explicit or implicit erased constructors and array literals, and prepared Any returns; unconstrained dispatch wildcards are excluded"
+
+[[stored_any.files]]
+path = "src/core/config.jl"
+owner = "Root"
+entries = [
+    ["erased_storage_constructor","config_dict","out",11,3,false,"concrete configuration schema"],
+]
+
+[[stored_any.files]]
+path = "src/plant/command_fanout.jl"
+owner = "Plant"
+entries = [
+    ["any_array_literal","_prepare_command_fanout","lanes",104,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+]
+
+[[stored_any.files]]
+path = "src/plant/controller_routing.jl"
+owner = "Plant"
+entries = [
+    ["any_array_literal","prepare_controller_output_routing","prepared",282,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+]
+
+[[stored_any.files]]
+path = "src/plant/device_batching.jl"
+owner = "Plant"
+entries = [
+    ["any_array_literal","_prepare_device_path_batch_owners","keys",755,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+]
+
+[[stored_any.files]]
+path = "src/plant/event_composition.jl"
+owner = "Plant"
+entries = [
+    ["any_array_literal","_prepare_event_acquisition_parts","lifecycles",1566,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["any_array_literal","_prepare_event_acquisition_parts","owners",1565,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["any_array_literal","_prepare_event_acquisition_parts","products",1567,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["any_array_literal","_prepare_event_acquisition_parts","rngs",1569,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["any_array_literal","_prepare_event_acquisition_parts","sample_providers",1568,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["any_array_literal","_sorted_acquisition_event_definitions","values",604,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["any_array_literal","_sorted_autonomous_periodic_optic_definitions","values",616,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["any_array_literal","_sorted_optical_sample_definitions","values",593,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["erased_storage_constructor","_event_controllable_optic_states","states",1795,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["erased_storage_constructor","_plant_event_loop_workspace","controllable_optics",1919,1,false,"type parameter or concrete execution-family owner"],
+    ["field_stored_any","PlantEventLoopState","controllable_optics",1731,1,true,"type parameter or concrete execution-family owner"],
+    ["field_stored_any","PlantEventLoopWorkspace","controllable_optics",1863,1,true,"type parameter or concrete execution-family owner"],
+    ["field_stored_any","PreparedDevicePathBatchOwner","implementation",448,1,true,"type parameter or concrete execution-family owner"],
+    ["signature_erased_storage","_apply_due_path_controllable_optics!","states",4346,1,true,"concrete tuple or typed cold builder sealed during preparation"],
+]
+
+[[stored_any.files]]
+path = "src/plant/mixed_serial_execution.jl"
+owner = "Plant"
+entries = [
+    ["any_array_literal","_prepare_mixed_serial_controllable_optics","applications",230,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["any_array_literal","_prepare_mixed_serial_controllable_optics","dependencies",231,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+    ["signature_erased_storage","_append_mixed_serial_command_dependencies!","dependencies",206,1,true,"concrete tuple or typed cold builder sealed during preparation"],
+]
+
+[[stored_any.files]]
+path = "src/plant/sampled_aberrations.jl"
+owner = "Plant"
+entries = [
+    ["any_array_literal","_prepare_sampled_aberration_path_plan","applications",425,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+]
+
+[[stored_any.files]]
+path = "src/plant/triggers.jl"
+owner = "Plant"
+entries = [
+    ["any_array_literal","_collect_trigger_definition_values","result",1017,1,false,"concrete tuple or typed cold builder sealed during preparation"],
+]
+
+[fixed_size_arrays]
+core_dependency = false
+characterized_version = "1.3.0"
+project = "benchmarks/fixed_size_arrays/Project.toml"
+contract = "benchmarks/contracts/fixed_size_arrays.toml"
+artifact = "benchmarks/results/prepared_execution/2026-08-02-fixed-size-arrays.toml"
+adoption_gate = "first migration slice that uses FixedSizeArray"
+backing_policy = "dependency internals are neither named nor asserted"
+element_policy = "armed homogeneous storage must require a concrete element type"
+
+[adaptive_optics_hil]
+repository = "https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl.git"
+source_revision = "4ab3c1dc9dae81c34aa4aa6422216e1dab71fcc5"
+adaptive_optics_sim_pin = "f12ae7beceaf460fb6953d4bb07874be5197d4ff"
+import_inventory = "test/contracts/prepared_execution_hil_impact.toml"
+affected_owner_types = ["PreparedPlantEventLoop","PlantEventLoopState","PlantEventLoopWorkspace","PreparedPathExecutor","PreparedCommandEndpoint","CommandEndpointState","CommandDispositionWorkspace","AcquisitionProductContract","AcquisitionProducts"]
+construction_assumptions = ["A plant-backed PreparedCommandBridge retains one exact PreparedPlantEventLoop and constructs PlantEventLoopState and PlantEventLoopWorkspace from that same owner","PreparedExecutionOwnerExecutor specializes on and retains the exact PreparedPlantEventLoop, PlantEventLoopState, and PlantEventLoopWorkspace types and identities for one run","HIL command ports retain PreparedCommandEndpoint, CommandEndpointState, and CommandDispositionWorkspace ownership boundaries","HIL acquisition publishers validate AcquisitionProductContract before copying complete AcquisitionProducts into transport-neutral lease storage","HIL test and benchmark fixtures extend preparation seams and directly construct PreparedPathExecutor values; PE-08 must update these callers without compatibility adapters"]
+
+[evidence_index]
+classes = ["numerical","inference","allocation","storage","package_load","cpu","cuda","amdgpu"]
+
+[[evidence_index.entries]]
+class = "numerical"
+path = "test/reference_data_gate0/manifest.toml"
+claim_limit = "deterministic numerical fixture index only; individual model tolerances govern"
+
+[[evidence_index.entries]]
+class = "inference"
+path = "test/testsets/plant_topology_growth.jl"
+claim_limit = "representative prepared Plant topology inference, not every public call"
+
+[[evidence_index.entries]]
+class = "allocation"
+path = "benchmarks/contracts/gate6_topology_growth.toml"
+claim_limit = "Gate 6 prepared Plant workload only; coverage instrumentation is excluded"
+
+[[evidence_index.entries]]
+class = "storage"
+path = "benchmarks/results/gate6/2026-07-25-topology-growth.toml"
+claim_limit = "Gate 6 topology-growth representation before PE migrations"
+
+[[evidence_index.entries]]
+class = "package_load"
+path = "benchmarks/results/namespace/2026-07-29-namespace-latency.toml"
+claim_limit = "descriptive warm-cache package-load baseline, not a deadline"
+
+[[evidence_index.entries]]
+class = "cpu"
+path = "benchmarks/results/gate7/2026-07-26-gate7-local-cpu.toml"
+claim_limit = "single-host Gate 7 workload only"
+
+[[evidence_index.entries]]
+class = "cuda"
+path = "benchmarks/results/gate7/2026-07-26-gate7-wsl-cuda.toml"
+claim_limit = "single WSL CUDA target and Gate 7 workload only"
+
+[[evidence_index.entries]]
+class = "amdgpu"
+path = "benchmarks/results/gate7/2026-07-26-gate7-local-amdgpu.toml"
+claim_limit = "single local AMDGPU target and Gate 7 workload only"

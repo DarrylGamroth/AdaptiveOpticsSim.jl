@@ -1,0 +1,99 @@
+architecture = "x86_64"
+correctness_passed = true
+cpu_model = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_target = "znver3"
+first_construction_samples_ns = [14850007, 14889632, 15502940, 14824760, 15054290]
+fixed_size_arrays_version = "1.3.0"
+fresh_process_runs = 5
+julia_cpu_target_env = "default"
+julia_threads = 1
+julia_version = "1.12.6"
+kernel = "Linux"
+load_samples_ns = [10468967, 10333344, 10400499, 10530322, 10573342]
+logical_cpu_threads = 16
+name = "fixed_size_arrays_prepared_storage"
+repository_dirty = false
+repository_head = "22b4b73f3a45e3c4a22e2283cd2ae19da1432f2c"
+schema_version = 1
+source_contract = "benchmarks/contracts/fixed_size_arrays.toml"
+
+[element_type_contract]
+any_is_constructible = true
+any_is_rejected = true
+concrete_is_accepted = true
+
+[first_construction_summary]
+maximum_ns = 15502940
+median_ns = 14889632
+minimum_ns = 14824760
+
+[inference]
+copyto = true
+indexed_sum = true
+iterated_sum = true
+
+[load_summary]
+maximum_ns = 10573342
+median_ns = 10468967
+minimum_ns = 10333344
+
+[[resolved_dependencies]]
+direct = false
+name = "Collects"
+uuid = "08986516-18db-4a8b-8eaa-f5ef1828d8f1"
+version = "1.1.0"
+[[resolved_dependencies]]
+direct = true
+name = "FixedSizeArrays"
+uuid = "3821ddf9-e5b5-40d5-8e25-6813ab96b5e2"
+version = "1.3.0"
+
+[[results]]
+correctness_passed = true
+first_construction_ns = 14850007
+load_ns = 10468967
+[[results]]
+correctness_passed = true
+first_construction_ns = 14889632
+load_ns = 10333344
+[[results]]
+correctness_passed = true
+first_construction_ns = 15502940
+load_ns = 10400499
+[[results]]
+correctness_passed = true
+first_construction_ns = 14824760
+load_ns = 10530322
+[[results]]
+correctness_passed = true
+first_construction_ns = 15054290
+load_ns = 10573342
+
+[shape_contract]
+alternate_matrix_dimensions = [65, 64]
+matrix_dimensions = [64, 64]
+matrix_rank_in_type = 2
+push_rejected = true
+resize_rejected = true
+runtime_matrix_shapes_share_type = true
+runtime_vector_lengths_share_type = true
+
+[storage_comparison]
+dependency_backing_inspected = false
+
+    [storage_comparison.fixed_size_array]
+    construction_allocated_bytes = 32808
+    summarysize_bytes = 32800
+
+    [storage_comparison.memory]
+    construction_allocated_bytes = 32808
+    summarysize_bytes = 32784
+
+    [storage_comparison.vector]
+    construction_allocated_bytes = 32840
+    summarysize_bytes = 32808
+
+[warmed_allocated_bytes]
+copyto = 0
+indexing = 0
+iteration = 0

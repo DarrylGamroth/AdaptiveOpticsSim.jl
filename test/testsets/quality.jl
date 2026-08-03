@@ -411,12 +411,17 @@ end
             "plant_device_model_matrix_fixtures.jl",
         ),
         joinpath(dirname(@__DIR__), "plant_test_fixtures.jl"),
+        joinpath(
+            dirname(@__DIR__),
+            "prepared_execution_contract_helpers.jl",
+        ),
         joinpath(dirname(@__DIR__), "wfs_stage_contract_fixtures.jl"),
     ]))
     fixture_users = Tuple(spec.name for spec in TEST_SUITE_SPECS
         if !isempty(spec.fixtures))
     @test fixture_users == (
         "ka-cpu",
+        "prepared-execution-contracts",
         "direct-imaging-batch",
         "atmosphere-direction-batch",
         "plant-device-batching",
