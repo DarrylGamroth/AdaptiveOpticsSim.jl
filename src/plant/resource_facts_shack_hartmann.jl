@@ -106,28 +106,6 @@ function structural_resource_fact(layout::SubapertureLayout,
         (present=false, bytes=UInt64(0)))
 end
 
-function structural_resource_fact(state::DetectorState{
-    <:Any,<:AbstractArray,Nothing,Nothing,NoFrameReadoutProducts},
-    id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    resident = _structural_array_target_bytes((
-        state.frame,
-        state.accum_buffer,
-        state.latent_buffer,
-    ), target, :resident_bytes)
-    workspace = _structural_array_target_bytes((
-        state.presampling_buffer,
-        state.presampling_scratch,
-        state.response_buffer,
-        state.bin_buffer,
-        state.temporal_buffer,
-        state.noise_buffer,
-        state.noise_buffer_host,
-        state.batched_buffer_host,
-    ), target, :workspace_bytes)
-    return _targeted_structural_resource_fact(
-        id, target, resident, workspace)
-end
-
 function structural_resource_fact(workspace::PreparedMicrolensPropagation,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
     workspace_bytes = _structural_array_target_bytes((

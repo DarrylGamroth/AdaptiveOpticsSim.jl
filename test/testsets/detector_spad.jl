@@ -63,6 +63,15 @@ end
     @test isconcretetype(typeof(sensor))
     @test !ismutabletype(typeof(sensor))
     @test !ismutabletype(typeof(detector.params))
+    @test detector.state isa Detectors.CountingDetectorState
+    @test detector.workspace isa Detectors.CountingDetectorWorkspace
+    @test detector.products isa Detectors.CountingDetectorProducts
+    @test isconcretetype(typeof(detector.state))
+    @test isconcretetype(typeof(detector.workspace))
+    @test isconcretetype(typeof(detector.products))
+    @test Detectors.counting_array(detector) === detector.products.counts
+    @test !Base.mightalias(detector.workspace.noise_buffer,
+        detector.products.counts)
 
     metadata = detector_export_metadata(detector)
     @test metadata isa CountingDetectorExportMetadata
@@ -256,12 +265,12 @@ end
     @test capture!(detector, fill(1e9, 2, 3), Xoshiro(9140)) ==
         fill(typemax(UInt16), 2, 3)
 
-    counts = detector.state.counts
+    counts = detector.products.counts
     before = copy(counts)
     @test_throws DimensionMismatchError capture!(detector,
         fill(1.0, 3, 2), Xoshiro(9141))
-    @test detector.state.counts === counts
-    @test detector.state.counts == before
+    @test detector.products.counts === counts
+    @test detector.products.counts == before
 
     for invalid_input in (
         fill(-1.0, 2, 3), fill(Inf, 2, 3), fill(NaN, 2, 3))

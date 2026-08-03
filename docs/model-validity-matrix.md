@@ -63,6 +63,18 @@ hardware validation and do not by themselves promote a production-support
 claim. Accelerator stochastic implementations are not samplewise equivalent to
 CPU unless a family row explicitly proves that equivalence.
 
+The PE-04 detector acquisition refactor changes ownership representation, not
+the detector equations or qualification envelopes below. Focused
+[`prepared_detector_ownership.jl`](../test/testsets/prepared_detector_ownership.jl)
+evidence covers the run-immutable plan, exact prepared owner, separate
+persistent state/workspace/products, deterministic workspace recreation,
+failure-before-mutation behavior, and warmed CPU allocation contract. The
+AMDGPU and WSL CUDA artifacts cited by detector-family rows were recorded before
+that representation change. They continue to qualify the stated physical and
+numerical surfaces at their recorded revisions, but do not by themselves
+qualify the new owner layout; that requires a focused hardware rerun. GPU launch
+allocation is not part of the CPU zero-allocation claim.
+
 ## Frozen Bundle Roots
 
 - OOPAO and pyTomoAO bundles:

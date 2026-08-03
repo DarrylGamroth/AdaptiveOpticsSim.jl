@@ -888,7 +888,7 @@ function select_pyramid_valid_i4q!(wfs::PyramidWFS, pupil::PupilFunction,
         wfs, pupil, src, qe_model)
     sampled = sample_pyramid_intensity!(wfs, pupil, wfs.front_end.propagation.temp)
     frame = detector_calibration_frame!(det, sampled,
-        pyramid_detector_calibration_qe(src, det, eltype(det.state.frame)))
+        pyramid_detector_calibration_qe(src, det, eltype(det.products.frame)))
     resize_pyramid_signal_buffers!(wfs, size(frame, 1))
     return select_pyramid_valid_i4q_from_frame!(execution_style(frame), wfs,
         frame)

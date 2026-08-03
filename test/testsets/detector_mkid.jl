@@ -29,6 +29,15 @@ end
     @test output == fill(UInt16(13), 2, 8)
     @test output_frame(detector) === output
     @test channel_output(detector) === output
+    @test detector.state isa Detectors.CountingDetectorState
+    @test detector.workspace isa Detectors.CountingDetectorWorkspace
+    @test detector.products isa Detectors.CountingDetectorProducts
+    @test isconcretetype(typeof(detector.state))
+    @test isconcretetype(typeof(detector.workspace))
+    @test isconcretetype(typeof(detector.products))
+    @test Detectors.counting_array(detector) === detector.products.counts
+    @test !Base.mightalias(detector.workspace.noise_buffer,
+        detector.products.counts)
     @test isconcretetype(typeof(sensor))
     @test !ismutabletype(typeof(sensor))
     @test !ismutabletype(typeof(detector.params))
@@ -188,17 +197,18 @@ end
     @test capture!(detector, fill(1e9, 2, 3), Xoshiro(9241)) ==
         fill(typemax(UInt16), 2, 3)
 
-    arrays = (detector.state.counts, detector.state.noise_buffer,
-        detector.state.host_buffer, detector.state.output_buffer,
-        detector.state.output_buffer_host)
+    arrays = (detector.products.counts, detector.workspace.noise_buffer,
+        detector.workspace.host_buffer, detector.products.output_buffer,
+        detector.workspace.output_buffer_host)
     snapshots = map(copy, arrays)
     for invalid_input in (
         fill(-1.0, 3, 2), fill(Inf, 3, 2), fill(NaN, 3, 2))
         @test_throws InvalidConfiguration capture!(detector,
             invalid_input, Xoshiro(9242))
-        current_arrays = (detector.state.counts,
-            detector.state.noise_buffer, detector.state.host_buffer,
-            detector.state.output_buffer, detector.state.output_buffer_host)
+        current_arrays = (detector.products.counts,
+            detector.workspace.noise_buffer, detector.workspace.host_buffer,
+            detector.products.output_buffer,
+            detector.workspace.output_buffer_host)
         @test all(current_arrays[index] === arrays[index]
             for index in eachindex(arrays))
         @test all(isequal(current_arrays[index], snapshots[index])

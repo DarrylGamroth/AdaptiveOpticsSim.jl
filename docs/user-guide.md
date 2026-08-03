@@ -308,8 +308,12 @@ path remains common-grid only. Matrix-only
 capture without a source uses the detector's scalar reference QE, which is the
 peak value of a sampled curve.
 The bare-matrix path treats its values as cell-integrated photon-arrival rates;
-use `IntensityMap` plus `DetectorAcquisitionPlan` when spatial-density versus
-cell-integrated semantics must be checked explicitly.
+use `IntensityMap` plus `prepare_detector_acquisition` when spatial-density
+versus cell-integrated semantics must be checked explicitly. Preparation
+returns the exact owner executed by `capture!`; advanced inspection uses the
+qualified-public `Detectors.DetectorAcquisitionPlan`,
+`Detectors.PreparedDetectorAcquisition`, and `Detectors.detector_acquisition_*`
+accessors rather than root exports.
 
 For CMOS, sCMOS, and quantitative low-noise CMOS sensors, compose the generic
 `CMOSSensor` from measured properties. Core does not contain camera names or

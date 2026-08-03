@@ -85,16 +85,16 @@ ccd_sampling_wallclock_time(mode::SkipperSampling, integration_time,
 function apply_sensor_statistics!(sensor::CCDSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     mean_per_frame = effective_cic_per_frame(det)
-    mean_per_frame <= zero(mean_per_frame) && return det.state.frame
-    fill!(det.state.noise_buffer, mean_per_frame)
-    poisson_noise_frame!(det, rng, det.state.noise_buffer)
-    det.state.frame .+= det.state.noise_buffer
-    return det.state.frame
+    mean_per_frame <= zero(mean_per_frame) && return det.products.frame
+    fill!(det.workspace.noise_buffer, mean_per_frame)
+    poisson_noise_frame!(det, rng, det.workspace.noise_buffer)
+    det.products.frame .+= det.workspace.noise_buffer
+    return det.products.frame
 end
 
 function apply_post_readout_gain!(::CCDSensor, det::Detector)
-    det.state.frame .*= det.params.gain
-    return det.state.frame
+    det.products.frame .*= det.params.gain
+    return det.products.frame
 end
 
 function _batched_sensor_statistics!(sensor::CCDSensor, det::Detector,
@@ -123,6 +123,12 @@ function detector_readout_products_type(
     return Union{NoFrameReadoutProducts,SkipperReadoutProducts{A}}
 end
 
+function detector_readout_workspace_type(
+    ::CCDSensor{<:AbstractFloat,<:SkipperSampling}, frame::A,
+    ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    return Union{NoFrameReadoutWorkspace,SkipperReadoutWorkspace{A}}
+end
+
 function _skipper_products_ready(products::SkipperReadoutProducts,
     det::Detector, n_samples::Int)
     return size(products.mean_frame) == readout_product_shape(det) &&
@@ -132,13 +138,29 @@ end
 _skipper_products_ready(::FrameReadoutProducts, det::Detector,
     n_samples::Int) = false
 
+function _skipper_workspace_ready(workspace::SkipperReadoutWorkspace,
+    det::Detector)
+    frame_shape = size(det.products.frame)
+    return size(workspace.baseline_frame) == frame_shape &&
+        size(workspace.sample_sum) == frame_shape
+end
+
+_skipper_workspace_ready(::FrameReadoutWorkspace, ::Detector) = false
+
 function ensure_skipper_products!(det::Detector, n_samples::Int)
     current = readout_products(det)
-    _skipper_products_ready(current, det, n_samples) && return current
-    mean_frame = similar(det.state.frame, readout_product_shape(det)...)
+    _skipper_products_ready(current, det, n_samples) &&
+        _skipper_workspace_ready(det.workspace.readout, det) && return current
+    mean_frame = similar(det.products.frame, readout_product_shape(det)...)
+    baseline_frame = similar(det.products.frame, size(det.products.frame)...)
+    sample_sum = similar(det.products.frame, size(det.products.frame)...)
     fill!(mean_frame, zero(eltype(mean_frame)))
+    fill!(baseline_frame, zero(eltype(baseline_frame)))
+    fill!(sample_sum, zero(eltype(sample_sum)))
     products = SkipperReadoutProducts(mean_frame, n_samples)
-    det.state.readout_products = products
+    workspace = SkipperReadoutWorkspace(baseline_frame, sample_sum)
+    det.products.readout = products
+    det.workspace.readout = workspace
     return products
 end
 
@@ -178,23 +200,24 @@ function finalize_ccd_capture!(mode::SkipperSampling, sensor::CCDSensor,
     finalize_charge_generation!(det, rng, charge_exposure_time)
     finalize_charge_transport!(det, rng)
 
-    copyto!(det.state.response_buffer, det.state.frame)
-    fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))
+    products = ensure_skipper_products!(det, mode.n_samples)
+    workspace = det.workspace.readout
+    copyto!(workspace.baseline_frame, det.products.frame)
+    fill!(workspace.sample_sum, zero(eltype(workspace.sample_sum)))
     sigma = _raw_sampling_sigma(det)
     for _ in 1:mode.n_samples
-        copyto!(det.state.frame, det.state.response_buffer)
-        add_gaussian_noise!(det.state.frame, det, rng, sigma)
-        det.state.accum_buffer .+= det.state.frame
+        copyto!(det.products.frame, workspace.baseline_frame)
+        add_gaussian_noise!(det.products.frame, det, rng, sigma)
+        workspace.sample_sum .+= det.products.frame
     end
-    det.state.frame .= det.state.accum_buffer ./ mode.n_samples
+    det.products.frame .= workspace.sample_sum ./ mode.n_samples
 
     apply_post_readout_gain!(sensor, det)
-    apply_readout_correction!(det.params.correction_model, det.state.frame, det)
+    apply_readout_correction!(det.params.correction_model, det.products.frame, det)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
     update_sensor_persistence!(sensor, det, exposure_time)
 
-    products = ensure_skipper_products!(det, mode.n_samples)
-    _copy_windowed_frame!(products.mean_frame, det.state.frame, det)
-    return det.state.frame
+    _copy_windowed_frame!(products.mean_frame, det.products.frame, det)
+    return det.products.frame
 end

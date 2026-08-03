@@ -6,10 +6,11 @@ struct AcquisitionResourceUnknownQuantumEfficiency <:
     values::Vector{Float64}
 end
 
-struct AcquisitionResourceFakeBackend <: AbstractArrayBackend end
 struct AcquisitionResourceUnsupportedThermalState <:
     AbstractDetectorThermalState end
 struct AcquisitionResourceUnsupportedReadout <: FrameReadoutProducts end
+struct AcquisitionResourceUnsupportedReadoutWorkspace <:
+    FrameReadoutWorkspace end
 struct AcquisitionResourceUnsupportedLifecycle <:
     AbstractPreparedAcquisitionLifecycle end
 struct AcquisitionResourceUnsupportedLifecycleState <:
@@ -134,33 +135,33 @@ end
 
 @testset "Detector readout structural dispatch" begin
     target = HostComputeDevice()
-    wrong_target = AcceleratorComputeDevice(
-        AcquisitionResourceFakeBackend(), UInt32(1))
-    window = FrameWindow(1:2, 1:2)
-
-    memory_bytes = Plant._acquisition_optional_array_bytes(
-        Memory{Float64}(undef, 2), wrong_target, :resident_bytes)
-    @test !memory_bytes.present
-    @test iszero(memory_bytes.bytes)
 
     mean_frame = zeros(Float64, 2, 2)
     skipper = SkipperReadoutProducts(mean_frame, 3)
-    skipper_storage = Plant._detector_readout_storage(
-        skipper, nothing, target)
-    @test skipper_storage.known
-    @test skipper_storage.resident.bytes ==
+    skipper_products = Plant._detector_readout_product_storage(
+        skipper, target)
+    @test skipper_products.known
+    @test skipper_products.resident.bytes ==
         acquisition_resource_array_bytes(mean_frame)
-    @test iszero(skipper_storage.workspace.bytes)
+    @test iszero(skipper_products.workspace.bytes)
+    baseline_frame = zeros(Float64, 2, 2)
+    sample_sum = zeros(Float64, 2, 2)
+    skipper_workspace = Plant._detector_readout_workspace_storage(
+        SkipperReadoutWorkspace(baseline_frame, sample_sum), target)
+    @test skipper_workspace.known
+    @test iszero(skipper_workspace.resident.bytes)
+    @test skipper_workspace.workspace.bytes ==
+        acquisition_resource_sum_bytes((baseline_frame, sample_sum))
 
     reference_frame = zeros(Float64, 2, 2)
     signal_frame = zeros(Float64, 2, 2)
     sampled_cube = zeros(Float64, 2, 2, 3)
     sampled = SampledFrameReadoutProducts(
         reference_frame, signal_frame, sampled_cube)
-    sampled_storage = Plant._detector_readout_storage(
-        sampled, nothing, target)
-    @test sampled_storage.known
-    @test sampled_storage.resident.bytes ==
+    sampled_products = Plant._detector_readout_product_storage(
+        sampled, target)
+    @test sampled_products.known
+    @test sampled_products.resident.bytes ==
         acquisition_resource_sum_bytes(
             (reference_frame, signal_frame, sampled_cube))
 
@@ -169,9 +170,11 @@ end
     signal_cube = zeros(Float64, 2, 2, 2)
     read_cube = zeros(Float64, 2, 2, 4)
     read_times = zeros(Float64, 4)
+    workspace_reference_average = zeros(Float64, 2, 2)
+    workspace_signal_average = zeros(Float64, 2, 2)
     workspace_reference_cube = zeros(Float64, 2, 2, 2)
     workspace_signal_cube = zeros(Float64, 2, 2, 2)
-    multi_read = MultiReadFrameReadoutProducts(
+    multi_read_products = MultiReadFrameReadoutProducts(
         reference_frame,
         signal_frame,
         combined_frame,
@@ -179,6 +182,10 @@ end
         signal_cube,
         read_cube,
         read_times,
+    )
+    multi_read_workspace = MultiReadFrameReadoutWorkspace(
+        workspace_reference_average,
+        workspace_signal_average,
         workspace_reference_cube,
         workspace_signal_cube,
     )
@@ -191,16 +198,23 @@ end
         read_cube,
         read_times,
     ))
-    unwindowed = Plant._detector_readout_storage(
-        multi_read, nothing, target)
-    @test unwindowed.known
-    @test unwindowed.resident.bytes == multi_read_resident
-    @test iszero(unwindowed.workspace.bytes)
-    windowed = Plant._detector_readout_storage(
-        multi_read, window, target)
-    @test windowed.resident.bytes == multi_read_resident
-    @test windowed.workspace.bytes == acquisition_resource_sum_bytes((
-        workspace_reference_cube, workspace_signal_cube))
+    multi_read_product_storage = Plant._detector_readout_product_storage(
+        multi_read_products, target)
+    @test multi_read_product_storage.known
+    @test multi_read_product_storage.resident.bytes == multi_read_resident
+    @test iszero(multi_read_product_storage.workspace.bytes)
+    multi_read_workspace_storage =
+        Plant._detector_readout_workspace_storage(
+            multi_read_workspace, target)
+    @test multi_read_workspace_storage.known
+    @test iszero(multi_read_workspace_storage.resident.bytes)
+    @test multi_read_workspace_storage.workspace.bytes ==
+        acquisition_resource_sum_bytes((
+            workspace_reference_average,
+            workspace_signal_average,
+            workspace_reference_cube,
+            workspace_signal_cube,
+        ))
 
     slope_frame = zeros(Float64, 2, 2)
     intercept_frame = zeros(Float64, 2, 2)
@@ -211,46 +225,50 @@ end
     workspace_intercept = zeros(Float64, 2, 2)
     workspace_integrated = zeros(Float64, 2, 2)
     workspace_cube = zeros(Float64, 2, 2, 3)
-    ramp = UpTheRampReadoutProducts(
+    ramp_products = UpTheRampReadoutProducts(
         slope_frame,
         intercept_frame,
         integrated_frame,
         ramp_cube,
         ramp_times,
-        workspace_slope,
-        workspace_intercept,
-        workspace_integrated,
-        workspace_cube,
         SynthesizedFinalChargeRamp,
     )
-    ramp_storage = Plant._detector_readout_storage(ramp, window, target)
-    @test ramp_storage.known
-    @test ramp_storage.workspace.bytes == acquisition_resource_sum_bytes((
+    ramp_workspace = UpTheRampReadoutWorkspace(
         workspace_slope,
         workspace_intercept,
         workspace_integrated,
         workspace_cube,
-    ))
+    )
+    ramp_product_storage = Plant._detector_readout_product_storage(
+        ramp_products, target)
+    @test ramp_product_storage.known
+    @test ramp_product_storage.resident.bytes ==
+        acquisition_resource_sum_bytes((
+            slope_frame,
+            intercept_frame,
+            integrated_frame,
+            ramp_cube,
+            ramp_times,
+        ))
+    ramp_workspace_storage = Plant._detector_readout_workspace_storage(
+        ramp_workspace, target)
+    @test ramp_workspace_storage.known
+    @test ramp_workspace_storage.workspace.bytes ==
+        acquisition_resource_sum_bytes((
+            workspace_slope,
+            workspace_intercept,
+            workspace_integrated,
+            workspace_cube,
+        ))
 
     @test Plant._detector_thermal_state_storage(NoThermalState())
     @test Plant._detector_thermal_state_storage(DetectorThermalState(80.0))
     @test !Plant._detector_thermal_state_storage(
         AcquisitionResourceUnsupportedThermalState())
-    @test !Plant._detector_readout_storage(
-        AcquisitionResourceUnsupportedReadout(), nothing, target).known
-
-    detector = Detector(
-        integration_time=0.1,
-        noise=NoiseNone(),
-        qe=1.0,
-        response_model=NullFrameResponse(),
-    )
-    standalone_multi_read = Plant._standalone_detector_state_resource_fact(
-        detector.state, multi_read,
-        StructuralResourceOwnerID(:acquisition, :multi_read), target)
-    @test !structural_resource_known(standalone_multi_read)
-    @test structural_resource_unknown_reason(standalone_multi_read) ==
-        :detector_readout_window_required
+    @test !Plant._detector_readout_product_storage(
+        AcquisitionResourceUnsupportedReadout(), target).known
+    @test !Plant._detector_readout_workspace_storage(
+        AcquisitionResourceUnsupportedReadoutWorkspace(), target).known
 
     unsupported_lifecycle = structural_resource_fact(
         AcquisitionResourceUnsupportedLifecycle(),
@@ -287,7 +305,7 @@ end
     fact = structural_resource_fact(prepared, state, id, target)
 
     detector_resident = acquisition_resource_sum_bytes((
-        detector.state.frame,
+        detector.products.frame,
         detector.state.accum_buffer,
         detector.state.latent_buffer,
         detector.params.response_model.kernel,
@@ -295,14 +313,14 @@ end
         detector.params.defect_model.stages[2].mask,
     ))
     detector_workspace = acquisition_resource_sum_bytes((
-        detector.state.presampling_buffer,
-        detector.state.presampling_scratch,
-        detector.state.response_buffer,
-        detector.state.bin_buffer,
-        detector.state.temporal_buffer,
-        detector.state.noise_buffer,
-        detector.state.noise_buffer_host,
-        detector.state.batched_buffer_host,
+        detector.workspace.presampling_buffer,
+        detector.workspace.presampling_scratch,
+        detector.workspace.response_buffer,
+        detector.workspace.bin_buffer,
+        detector.workspace.temporal_buffer,
+        detector.workspace.noise_buffer,
+        detector.workspace.noise_buffer_host,
+        detector.workspace.batched_buffer_host,
     ))
     @test structural_resource_known(fact)
     @test structural_resident_bytes(fact) == detector_resident
@@ -334,6 +352,8 @@ end
         typeof(detector.noise),
         typeof(unsupported_params),
         typeof(detector.state),
+        typeof(detector.workspace),
+        typeof(detector.products),
         typeof(detector.background_flux),
         typeof(detector.background_map),
         CPUBackend,
@@ -341,6 +361,8 @@ end
         detector.noise,
         unsupported_params,
         detector.state,
+        detector.workspace,
+        detector.products,
         detector.background_flux,
         detector.background_map,
     )
@@ -387,7 +409,7 @@ end
     detector_fact = structural_resource_fact(detector, id, target)
     @test structural_resident_bytes(transfer_fact) ==
         structural_resident_bytes(detector_fact) +
-        acquisition_resource_array_bytes(prepared_transfer.storage_frame)
+        acquisition_resource_array_bytes(transfer_state.storage_frame)
     @test structural_workspace_bytes(transfer_fact) ==
         structural_workspace_bytes(detector_fact)
 
@@ -431,7 +453,7 @@ end
         prepared_ramp, ramp_state, id, target)
     ramp_products = prepared_ramp.readout_products
     ramp_resident = acquisition_resource_sum_bytes((
-        ramp_detector.state.frame,
+        ramp_detector.products.frame,
         ramp_detector.state.accum_buffer,
         ramp_detector.state.latent_buffer,
         ramp_products.slope_frame,
@@ -440,16 +462,19 @@ end
         ramp_products.read_cube,
         ramp_products.read_times,
         prepared_ramp.read_offsets,
+        prepared_ramp.read_offset_binding,
     ))
+    @test !Base.mightalias(
+        prepared_ramp.read_offsets, prepared_ramp.read_offset_binding)
     ramp_workspace = acquisition_resource_sum_bytes((
-        ramp_detector.state.presampling_buffer,
-        ramp_detector.state.presampling_scratch,
-        ramp_detector.state.response_buffer,
-        ramp_detector.state.bin_buffer,
-        ramp_detector.state.temporal_buffer,
-        ramp_detector.state.noise_buffer,
-        ramp_detector.state.noise_buffer_host,
-        ramp_detector.state.batched_buffer_host,
+        ramp_detector.workspace.presampling_buffer,
+        ramp_detector.workspace.presampling_scratch,
+        ramp_detector.workspace.response_buffer,
+        ramp_detector.workspace.bin_buffer,
+        ramp_detector.workspace.temporal_buffer,
+        ramp_detector.workspace.noise_buffer,
+        ramp_detector.workspace.noise_buffer_host,
+        ramp_detector.workspace.batched_buffer_host,
     ))
     @test structural_resident_bytes(ramp_fact) == ramp_resident
     @test structural_workspace_bytes(ramp_fact) == ramp_workspace

@@ -52,7 +52,14 @@ Current CPU-supported families:
   and homogeneous ordered direction batching into caller-owned OPD storage;
   CPU batching preserves the serial oracle while accelerator batching keeps
   geometry, pupil support, layer screens, and output on one concrete device
-- detector-family execution on maintained detector surfaces
+- detector-family execution on maintained detector surfaces. Frame acquisition
+  prepares one run-immutable `Detectors.DetectorAcquisitionPlan` and returns an
+  exact `Detectors.PreparedDetectorAcquisition` that binds detector and input
+  identity to separate persistent state, replaceable workspace, and
+  caller-visible products. Armed nondestructive-read schedules use concrete
+  fixed-cardinality `FixedSizeVector` storage. Repeated prepared CPU capture is
+  inferred and allocation-free after warmup; preparation, diagnostics, and
+  failures are outside that allocation claim
 - staged Shack-Hartmann, Pyramid, and BioEdge WFS optical formation,
   detector acquisition, and estimation on maintained validated surfaces;
   geometric variants use explicit direct-measurement paths
@@ -315,6 +322,14 @@ pass. This strengthens the declared single-device execution surface without
 claiming fixed-arrival HIL latency, mixed placement, multi-GPU execution, or
 instrument capacity. CUDA's routine support status remains governed
 separately by the support-boundary rule below.
+
+The detector ownership representation changed after the accelerator artifacts
+above were recorded. Those artifacts remain evidence for detector physics,
+numerical parity, and residency at their recorded revisions, but they do not
+alone requalify `PreparedDetectorAcquisition` and its separated runtime owners.
+A focused AMDGPU or CUDA rerun is required before making that
+revision-specific representation claim. Accelerator kernel-launch allocation
+is measured separately and is not covered by the CPU zero-allocation contract.
 
 Detector qualification candidate `dd16596` passed 244/244 focused AMDGPU
 detector checks. The complete AMDGPU target separately encounters a compiler

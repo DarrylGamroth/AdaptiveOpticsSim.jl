@@ -179,24 +179,27 @@ function plant_resource_graph_acquisition_bytes(acquisition)
     lifecycle = acquisition.lifecycle
     detector = lifecycle.detector
     state = detector.state
+    workspace_owner = detector.workspace
+    products = detector.products
     resident = plant_resource_graph_storage_bytes((
-        state.frame,
+        products.frame,
         state.accum_buffer,
         state.latent_buffer,
-        state.output_buffer,
+        products.output_buffer,
         lifecycle.read_offsets,
+        lifecycle.read_offset_binding,
         acquisition.products.observation,
     ))
     workspace = plant_resource_graph_storage_bytes((
-        state.presampling_buffer,
-        state.presampling_scratch,
-        state.response_buffer,
-        state.bin_buffer,
-        state.temporal_buffer,
-        state.noise_buffer,
-        state.noise_buffer_host,
-        state.batched_buffer_host,
-        state.output_buffer_host,
+        workspace_owner.presampling_buffer,
+        workspace_owner.presampling_scratch,
+        workspace_owner.response_buffer,
+        workspace_owner.bin_buffer,
+        workspace_owner.temporal_buffer,
+        workspace_owner.noise_buffer,
+        workspace_owner.noise_buffer_host,
+        workspace_owner.batched_buffer_host,
+        workspace_owner.output_buffer_host,
     ))
     return (; resident, workspace)
 end
@@ -245,6 +248,9 @@ end
     path_bytes = plant_resource_graph_path_bytes(path)
     acquisition_bytes = plant_resource_graph_acquisition_bytes(
         only(prepared.acquisitions))
+    acquisition_lifecycle = only(prepared.acquisitions).lifecycle
+    @test !Base.mightalias(acquisition_lifecycle.read_offsets,
+        acquisition_lifecycle.read_offset_binding)
     aberration_bytes = Tuple((
         resident=plant_resource_graph_storage_bytes(aberration.opd),
         workspace=UInt64(0),

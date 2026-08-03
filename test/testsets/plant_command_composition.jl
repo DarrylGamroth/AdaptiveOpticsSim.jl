@@ -700,6 +700,11 @@ end
 
     _, timed, timed_state, timed_workspace, timed_first, timed_second =
         command_composition_fixture()
+    duplicate_state_error = captured_command_composition_error() do
+        PlantEventLoopState(timed)
+    end
+    @test duplicate_state_error isa DetectorAcquisitionError
+    @test duplicate_state_error.reason == :state_already_claimed
     overtake_admission_error = captured_command_composition_error() do
         admit_plant_command!(timed, timed_state, timed_workspace,
             PlantCommand(timed_first, 1, PlantTimestamp(100_000_000), 0.1),
@@ -758,10 +763,11 @@ end
         :command_admission_time_regression
     @test command_disposition_count(timed_workspace) == 0
 
-    initial, _, prepared = array_initial_command_fixture()
+    initial, _, first_prepared = array_initial_command_fixture()
+    _, _, second_prepared = array_initial_command_fixture()
     initial .= 0.8
-    first_state = PlantEventLoopState(prepared)
-    second_state = PlantEventLoopState(prepared)
+    first_state = PlantEventLoopState(first_prepared)
+    second_state = PlantEventLoopState(second_prepared)
     first_visible = first_state.controllable_optics[1].visible
     second_visible = second_state.controllable_optics[1].visible
     @test first_visible == [0.1, -0.2]

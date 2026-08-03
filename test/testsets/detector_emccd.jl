@@ -420,11 +420,9 @@ end
     prepared_plan = prepare_detector_acquisition(
         prepared_detector, prepared_map)
     prepared_rng = Xoshiro(3406)
-    @test @inferred(capture!(prepared_detector, prepared_map,
-        prepared_plan, prepared_rng)) isa Matrix{Float64}
+    @test @inferred(capture!(prepared_plan, prepared_rng)) isa Matrix{Float64}
     @test_detector_allocation prepared_detector_capture_allocations(
-        prepared_detector, prepared_map, prepared_plan,
-        prepared_rng) == 0
+        prepared_plan, prepared_rng) == 0
 end
 
 @testset "EMCCD photon-counting and SNR qualification" begin

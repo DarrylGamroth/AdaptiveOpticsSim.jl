@@ -14,8 +14,8 @@ function main(; resolution::Int=24, zero_padding::Int=2)
     sampled_acquisition = prepare_detector_acquisition(sampled, rate_map)
     rng = tutorial_rng()
 
-    frame_native = copy(capture!(native, rate_map, native_acquisition; rng=rng))
-    frame_sampled = copy(capture!(sampled, rate_map, sampled_acquisition; rng=rng))
+    frame_native = copy(capture!(native_acquisition; rng=rng))
+    frame_sampled = copy(capture!(sampled_acquisition; rng=rng))
 
     @info "Detector tutorial complete" native_size=size(frame_native) sampled_size=size(frame_sampled)
     return (

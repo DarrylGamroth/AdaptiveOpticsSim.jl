@@ -2158,20 +2158,22 @@ function run_optional_wfs_device_model_matrix_checks(
         detector_device = compute_device(device_detector.output)
         @test detector_device == device
         @test device_detector.output isa BackendArray
-        @test device_detector.prepared.plan.input_values ===
-            device_detector_input.values
+        @test AdaptiveOpticsSim.Detectors.detector_acquisition_input(
+            device_detector.prepared.acquisition).values ===
+                device_detector_input.values
         @test optional_detector_response_device_resident(
             device_detector.detector.params.response_model,
             device,
             BackendArray,
         )
-        @test optional_detector_state_device_resident(
+        @test optional_detector_runtime_owners_device_resident(
             device_detector.detector,
             device,
             BackendArray,
         )
         @test optional_detector_prepared_storage_device_resident(
             device_detector.prepared,
+            device_detector.state,
             device,
             BackendArray,
         )
@@ -2272,14 +2274,14 @@ end
         compute_device(response.kernel_y) == device
 end
 
-function optional_detector_readout_products_device_resident(
-    products::FrameReadoutProducts,
+function optional_detector_readout_owner_device_resident(
+    owner,
     device,
     BackendArray,
 )
-    for name in fieldnames(typeof(products))
+    for name in fieldnames(typeof(owner))
         name === :read_times && continue
-        value = getfield(products, name)
+        value = getfield(owner, name)
         if value isa AbstractArray
             value isa BackendArray || return false
             compute_device(value) == device || return false
@@ -2288,20 +2290,22 @@ function optional_detector_readout_products_device_resident(
     return true
 end
 
-function optional_detector_state_device_resident(
+function optional_detector_runtime_owners_device_resident(
     detector::Detector,
     device,
     BackendArray,
 )
     state = detector.state
+    workspace = detector.workspace
+    products = detector.products
     arrays = (
-        state.frame,
-        state.presampling_buffer,
-        state.presampling_scratch,
-        state.response_buffer,
-        state.bin_buffer,
-        state.temporal_buffer,
-        state.noise_buffer,
+        products.frame,
+        workspace.presampling_buffer,
+        workspace.presampling_scratch,
+        workspace.response_buffer,
+        workspace.bin_buffer,
+        workspace.temporal_buffer,
+        workspace.noise_buffer,
         state.accum_buffer,
         state.latent_buffer,
     )
@@ -2310,37 +2314,58 @@ function optional_detector_state_device_resident(
             compute_device(array) == device,
         arrays,
     ) || return false
-    state.output_buffer === nothing || (
-        state.output_buffer isa BackendArray &&
-        compute_device(state.output_buffer) == device
+    products.output_buffer === nothing || (
+        products.output_buffer isa BackendArray &&
+        compute_device(products.output_buffer) == device
     ) || return false
-    state.output_buffer_host === nothing || return false
-    return optional_detector_readout_products_device_resident(
-        detector.state.readout_products,
+    workspace.output_buffer_host === nothing || return false
+    return optional_detector_readout_owner_device_resident(
+        detector.products.readout,
         device,
         BackendArray,
-    )
+    ) && optional_detector_readout_owner_device_resident(
+        detector.workspace.readout, device, BackendArray)
 end
 
 @inline optional_detector_prepared_storage_device_resident(
     ::PreparedGlobalShutterAcquisition,
+    ::GlobalShutterAcquisitionState,
     ::Any,
     ::Any,
 ) = true
 
 @inline optional_detector_prepared_storage_device_resident(
     ::PreparedRollingShutterAcquisition,
+    ::RollingShutterAcquisitionState,
     ::Any,
     ::Any,
 ) = true
 
 @inline function optional_detector_prepared_storage_device_resident(
     prepared::PreparedFrameTransferAcquisition,
+    state::FrameTransferAcquisitionState,
     device,
     BackendArray,
 )
-    return prepared.storage_frame isa BackendArray &&
-        compute_device(prepared.storage_frame) == device
+    return state.storage_frame isa BackendArray &&
+        compute_device(state.storage_frame) == device
+end
+
+function optional_detector_device_model_matrix_allocation_bytes_once(
+    row::DeviceModelMatrixDetectorRow,
+    result,
+    timestamp::PlantTimestamp,
+)
+    return @allocated begin
+        output = device_model_matrix_repeat_detector!(
+            row,
+            result,
+            timestamp,
+        )
+        AdaptiveOpticsSim.Backends.synchronize_backend!(
+            AdaptiveOpticsSim.Backends.execution_style(output),
+        )
+    end
 end
 
 function optional_detector_device_model_matrix_allocation_bytes(
@@ -2355,16 +2380,12 @@ function optional_detector_device_model_matrix_allocation_bytes(
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(warm_output),
     )
-    return @allocated begin
-        output = device_model_matrix_repeat_detector!(
-            row,
-            result,
-            PlantTimestamp(4_000_000_000),
-        )
-        AdaptiveOpticsSim.Backends.synchronize_backend!(
-            AdaptiveOpticsSim.Backends.execution_style(output),
-        )
-    end
+    # The first invocation of the measurement boundary primes backend compiler
+    # and runtime caches. Assert the steady service iteration that follows it.
+    optional_detector_device_model_matrix_allocation_bytes_once(
+        row, result, PlantTimestamp(4_000_000_000))
+    return optional_detector_device_model_matrix_allocation_bytes_once(
+        row, result, PlantTimestamp(6_000_000_000))
 end
 
 function run_optional_detector_device_model_matrix_checks(
@@ -2392,22 +2413,25 @@ function run_optional_detector_device_model_matrix_checks(
         @test device isa AdaptiveOpticsSim.Backends.AcceleratorComputeDevice
         @test device_result.map.values isa BackendArray
         @test compute_device(device_result.map.values) == device
-        @test device_result.prepared.plan.input_values ===
-            device_result.map.values
-        @test device_result.prepared.plan.detector_frame ===
-            detector.state.frame
+        @test AdaptiveOpticsSim.Detectors.detector_acquisition_input(
+            device_result.prepared.acquisition).values ===
+                device_result.map.values
+        @test AdaptiveOpticsSim.Detectors.detector_acquisition_products(
+            device_result.prepared.acquisition).frame ===
+                detector.products.frame
         @test optional_detector_response_device_resident(
             detector.params.response_model,
             device,
             BackendArray,
         )
-        @test optional_detector_state_device_resident(
+        @test optional_detector_runtime_owners_device_resident(
             detector,
             device,
             BackendArray,
         )
         @test optional_detector_prepared_storage_device_resident(
             device_result.prepared,
+            device_result.state,
             device,
             BackendArray,
         )
@@ -2505,9 +2529,9 @@ function run_optional_detector_device_model_matrix_checks(
         end
 
         retained_arrays = (
-            detector.state.frame,
-            detector.state.presampling_buffer,
-            detector.state.presampling_scratch,
+            detector.products.frame,
+            detector.workspace.presampling_buffer,
+            detector.workspace.presampling_scratch,
             detector.state.accum_buffer,
         )
         allocation_bytes =
@@ -2516,13 +2540,13 @@ function run_optional_detector_device_model_matrix_checks(
                 device_result,
             )
         @test retained_arrays === (
-            detector.state.frame,
-            detector.state.presampling_buffer,
-            detector.state.presampling_scratch,
+            detector.products.frame,
+            detector.workspace.presampling_buffer,
+            detector.workspace.presampling_scratch,
             detector.state.accum_buffer,
         )
         @test allocation_bytes <= 1024 * 1024
-        @test optional_detector_state_device_resident(
+        @test optional_detector_runtime_owners_device_resident(
             detector,
             device,
             BackendArray,
@@ -2656,9 +2680,9 @@ function run_optional_shared_detector_ipc_checks(
         T=T,
         backend=selector,
     )
-    plan = prepare_detector_acquisition(detector, map)
+    acquisition = prepare_detector_acquisition(detector, map)
     response_mtf_before = detector_mtf(detector, T(0.19), T(0.31))
-    output = capture!(detector, map, plan, Xoshiro(0x7_502))
+    output = capture!(acquisition, Xoshiro(0x7_502))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(output),
     )
@@ -2676,9 +2700,10 @@ function run_optional_shared_detector_ipc_checks(
     @test coupling isa InterpixelCapacitance
     @test coupling.response.kernel isa BackendArray
     @test compute_device(coupling.response.kernel) == device
-    @test optional_detector_state_device_resident(detector, device,
+    @test optional_detector_runtime_owners_device_resident(detector, device,
         BackendArray)
-    @test plan.input_values === map.values
+    @test AdaptiveOpticsSim.Detectors.detector_acquisition_input(
+        acquisition).values === map.values
     @test detector_export_metadata(detector).charge_coupling ==
         :interpixel_capacitance
     @test detector_mtf(detector, T(0.19), T(0.31)) ==
@@ -2803,7 +2828,7 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     @test cartesian_modal.state.coefs isa BackendArray
     @test cartesian_modal.state.modes isa BackendArray
     @test slopes(wfs) isa BackendArray
-    @test det.state.frame isa BackendArray
+    @test det.products.frame isa BackendArray
     @test calibration_det.params.response_model.kernel isa BackendArray
     seed = UInt(0x51a7)
     AdaptiveOpticsSim.WavefrontSensors.detector_calibration_signature(calibration_det, seed)
@@ -3255,21 +3280,21 @@ function run_optional_wfs_stage_contracts(
         (),
     )
     assert_optional_structural_resource_fact(
-        physical_detector.state,
+        physical_detector,
         Plant.StructuralResourceOwnerID(:detector_state, :physical_sh_camera),
         physical_target,
         (
-            physical_detector.state.frame,
+            physical_detector.products.frame,
             physical_detector.state.accum_buffer,
             physical_detector.state.latent_buffer,
         ),
         (
-            physical_detector.state.presampling_buffer,
-            physical_detector.state.presampling_scratch,
-            physical_detector.state.response_buffer,
-            physical_detector.state.bin_buffer,
-            physical_detector.state.temporal_buffer,
-            physical_detector.state.noise_buffer,
+            physical_detector.workspace.presampling_buffer,
+            physical_detector.workspace.presampling_scratch,
+            physical_detector.workspace.response_buffer,
+            physical_detector.workspace.bin_buffer,
+            physical_detector.workspace.temporal_buffer,
+            physical_detector.workspace.noise_buffer,
         ),
     )
 
@@ -3882,8 +3907,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
         backend=selector)
     acquisition = prepare_detector_acquisition(detector, prepared.output)
-    detector_frame = capture!(detector, prepared.output, acquisition;
-        rng=MersenneTwister(301))
+    detector_frame = capture!(acquisition; rng=MersenneTwister(301))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(detector_frame))
     @test detector_frame isa BackendArray
@@ -3894,19 +3918,20 @@ function run_optional_plane_product_checks(tel::Telescope,
         backend=selector)
     @test identical_detector.params === detector.params
     @test identical_detector.state !== detector.state
-    @test_throws InvalidConfiguration capture!(identical_detector,
-        prepared.output, acquisition; rng=MersenneTwister(301))
+    @test !applicable(capture!, identical_detector, prepared.output,
+        acquisition, MersenneTwister(301))
 
     long_detector = Detector(integration_time=T(1.0), noise=NoiseNone(),
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
         backend=selector)
     long_acquisition = prepare_detector_acquisition(long_detector,
         prepared.output)
-    @test acquisition.input_values === prepared.output.values
-    @test long_acquisition.input_values === prepared.output.values
+    @test Detectors.detector_acquisition_input(acquisition).values ===
+        prepared.output.values
+    @test Detectors.detector_acquisition_input(long_acquisition).values ===
+        prepared.output.values
     short_snapshot = copy(Array(detector_frame))
-    long_frame = capture!(long_detector, prepared.output,
-        long_acquisition; rng=MersenneTwister(307))
+    long_frame = capture!(long_acquisition; rng=MersenneTwister(307))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(long_frame))
     @test Array(long_frame) ≈ 2 .* short_snapshot atol=T(2e-5) rtol=T(2e-5)
@@ -3916,12 +3941,11 @@ function run_optional_plane_product_checks(tel::Telescope,
         T=T, backend=selector)
     incremental_acquisition = prepare_detector_acquisition(
         incremental_detector, prepared.output)
-    capture!(incremental_detector, prepared.output,
-        incremental_acquisition; rng=MersenneTwister(305),
+    capture!(incremental_acquisition; rng=MersenneTwister(305),
         integration_duration=T(0.2))
     @test !readout_ready(incremental_detector)
-    incremental_frame = capture!(incremental_detector, prepared.output,
-        incremental_acquisition; rng=MersenneTwister(306),
+    incremental_frame = capture!(incremental_acquisition;
+        rng=MersenneTwister(306),
         integration_duration=T(0.3))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(incremental_frame))
@@ -3934,8 +3958,8 @@ function run_optional_plane_product_checks(tel::Telescope,
         backend=CPUBackend())
     @test_throws InvalidConfiguration prepare_detector_acquisition(
         cpu_detector, prepared.output)
-    @test_throws InvalidConfiguration capture!(cpu_detector,
-        prepared.output, acquisition; rng=MersenneTwister(306))
+    @test !applicable(capture!, cpu_detector, prepared.output,
+        acquisition, MersenneTwister(306))
 
     density_host = zeros(T, 9, 9)
     density_host[3, 5] = T(8)
@@ -3954,8 +3978,8 @@ function run_optional_plane_product_checks(tel::Telescope,
         backend=selector)
     response_acquisition = prepare_detector_acquisition(response_detector,
         density_map)
-    response_frame = capture!(response_detector, density_map,
-        response_acquisition; rng=MersenneTwister(302))
+    response_frame = capture!(response_acquisition;
+        rng=MersenneTwister(302))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(response_frame))
     manual_response = zeros(T, 9, 9)
@@ -3983,8 +4007,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         qe=one(T), response_model=SampledFrameResponse(asymmetric_kernel; T=T),
         T=T, backend=selector)
     edge_acquisition = prepare_detector_acquisition(edge_detector, edge_map)
-    edge_frame = capture!(edge_detector, edge_map, edge_acquisition;
-        rng=MersenneTwister(303))
+    edge_frame = capture!(edge_acquisition; rng=MersenneTwister(303))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(edge_frame))
     @test sum(Array(edge_frame)) ≈ T(0.3) atol=T(2e-6) rtol=T(2e-6)
@@ -4596,10 +4619,10 @@ function run_optional_spad_qualification_checks(
     expected[2, 2] = T(12 / 7)
     expected[1, 2] = expected[2, 1] = expected[2, 3] =
         expected[3, 2] = T(2 / 7)
-    @test deterministic.state.counts isa BackendArray
-    @test deterministic.state.noise_buffer isa BackendArray
+    @test deterministic.products.counts isa BackendArray
+    @test deterministic.workspace.noise_buffer isa BackendArray
     @test deterministic_output isa BackendArray
-    @test Array(deterministic.state.counts) ≈ expected rtol=T(2e-6)
+    @test Array(deterministic.products.counts) ≈ expected rtol=T(2e-6)
     @test Array(deterministic_output) == round.(UInt16, expected)
 
     paralyzable = SPADArrayDetector((1, 3); noise=NoiseNone(),
@@ -4616,10 +4639,10 @@ function run_optional_spad_qualification_checks(
 
     run_optional_spad_moment_checks(B, BackendArray)
 
-    fixed_counts = deterministic.state.counts
+    fixed_counts = deterministic.products.counts
     @test_throws DimensionMismatchError capture!(deterministic,
         BackendArray(zeros(T, 2, 2)), Xoshiro(0x53504147))
-    @test deterministic.state.counts === fixed_counts
+    @test deterministic.products.counts === fixed_counts
     return nothing
 end
 
@@ -4878,7 +4901,7 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
         transfer_state, transfer_readout, rng)
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(transfer_output))
-    @test transfer_prepared.storage_frame isa BackendArray
+    @test transfer_state.storage_frame isa BackendArray
     @test transfer_output isa BackendArray
     @test Array(transfer_output) == fill(T(3), 8, 8)
     return nothing
@@ -5128,7 +5151,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         sh_sub)
     @test safe_intensity === sh.front_end.propagation.intensity
     @test all(isfinite, Array(safe_intensity))
-    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy
+    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy
     capture_psf = array_backend{T}(undef, 4, 4)
     fill!(capture_psf, T(10))
     captured = capture!(det_capture, capture_psf; rng=MersenneTwister(2))
@@ -5151,7 +5174,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
             AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
             typeof(gpu_poisson_det),
             typeof(MersenneTwister(1)),
-            typeof(gpu_poisson_det.state.frame),
+            typeof(gpu_poisson_det.products.frame),
         ),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(poisson_method.file))
@@ -5201,7 +5224,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
             AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
             typeof(det),
             typeof(MersenneTwister(1)),
-            typeof(det.state.frame),
+            typeof(det.products.frame),
         ),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(randn_method.file))
@@ -5372,7 +5395,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy
     @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy
     @test WavefrontSensors.sh_sensing_execution_strategy(AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh) isa WavefrontSensors.ShackHartmannWFSBatchedStrategy
-    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.state.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorDirectStrategy
+    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorDirectStrategy
     @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionStrategy
     @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
@@ -5678,20 +5701,12 @@ function run_optional_direct_imaging_batch_checks(
         prepare_detector_acquisition(short_detector, selected)
     long_acquisition =
         prepare_detector_acquisition(long_detector, selected)
-    @test short_acquisition.input_values === selected.values
-    @test long_acquisition.input_values === selected.values
-    short_frame = capture!(
-        short_detector,
-        selected,
-        short_acquisition;
-        rng=MersenneTwister(611),
-    )
-    long_frame = capture!(
-        long_detector,
-        selected,
-        long_acquisition;
-        rng=MersenneTwister(612),
-    )
+    @test Detectors.detector_acquisition_input(short_acquisition).values ===
+        selected.values
+    @test Detectors.detector_acquisition_input(long_acquisition).values ===
+        selected.values
+    short_frame = capture!(short_acquisition; rng=MersenneTwister(611))
+    long_frame = capture!(long_acquisition; rng=MersenneTwister(612))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(long_frame),
     )
@@ -6020,12 +6035,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         (),
     )
     split_acquisition = prepare_detector_acquisition(split_det, science_rate)
-    split_frame = capture!(
-        split_det,
-        science_rate,
-        split_acquisition;
-        rng=MersenneTwister(17),
-    )
+    split_frame = capture!(split_acquisition; rng=MersenneTwister(17))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(split_frame))
     @test split_frame isa BackendArray
@@ -6039,18 +6049,10 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         shared_detector_a, science_rate)
     shared_acquisition_b = prepare_detector_acquisition(
         shared_detector_b, science_rate)
-    shared_frame_a = capture!(
-        shared_detector_a,
-        science_rate,
-        shared_acquisition_a;
-        rng=MersenneTwister(18),
-    )
-    shared_frame_b = capture!(
-        shared_detector_b,
-        science_rate,
-        shared_acquisition_b;
-        rng=MersenneTwister(18),
-    )
+    shared_frame_a = capture!(shared_acquisition_a;
+        rng=MersenneTwister(18))
+    shared_frame_b = capture!(shared_acquisition_b;
+        rng=MersenneTwister(18))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(shared_frame_a))
     AdaptiveOpticsSim.Backends.synchronize_backend!(

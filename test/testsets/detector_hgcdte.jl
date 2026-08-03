@@ -16,9 +16,10 @@
 
     conventional_detector = Detector(integration_time=1.0,
         noise=NoiseNone(), qe=1.0, binning=2)
-    @test fieldtype(typeof(conventional_detector.state),
-        :readout_products) === NoFrameReadoutProducts
-    @test fieldtype(typeof(det_hgcdte_single.state), :readout_products) !== FrameReadoutProducts
+    @test fieldtype(typeof(conventional_detector.products),
+        :readout) === NoFrameReadoutProducts
+    @test fieldtype(typeof(det_hgcdte_single.products),
+        :readout) !== FrameReadoutProducts
 
     struct DummyReadoutProducts{A,V} <: FrameReadoutProducts
         signal_frame::A

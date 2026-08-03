@@ -46,7 +46,7 @@ end
     apply_persistence &&
         apply_sensor_persistence!(det.params.sensor, det,
             persistence_exposure_time)
-    return det.state.frame
+    return det.products.frame
 end
 
 @inline prepare_signal_frame!(det::Detector, psf::AbstractMatrix,
@@ -56,17 +56,17 @@ end
 function add_poisson_rate!(dest::AbstractMatrix{T}, det::Detector, rng::AbstractRNG, rate) where {T<:AbstractFloat}
     rate_t = T(rate)
     rate_t <= zero(T) && return dest
-    fill!(det.state.noise_buffer, rate_t)
-    poisson_noise_frame!(det, rng, det.state.noise_buffer)
-    dest .+= det.state.noise_buffer
+    fill!(det.workspace.noise_buffer, rate_t)
+    poisson_noise_frame!(det, rng, det.workspace.noise_buffer)
+    dest .+= det.workspace.noise_buffer
     return dest
 end
 
 function add_gaussian_noise!(dest::AbstractMatrix{T}, det::Detector, rng::AbstractRNG, sigma) where {T<:AbstractFloat}
     sigma_t = T(sigma)
     sigma_t <= zero(T) && return dest
-    randn_frame_noise!(det, rng, det.state.noise_buffer)
-    dest .+= sigma_t .* det.state.noise_buffer
+    randn_frame_noise!(det, rng, det.workspace.noise_buffer)
+    dest .+= sigma_t .* det.workspace.noise_buffer
     return dest
 end
 
@@ -75,9 +75,9 @@ function capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
     persistence_exposure_time::Real)
     prepare_signal_frame!(det, psf, exposure_time, qe, apply_persistence,
         persistence_exposure_time)
-    photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.state.frame)
+    photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.products.frame)
     apply_background_flux!(det.background_flux, det, rng, exposure_time)
-    return det.state.frame
+    return det.products.frame
 end
 
 capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
@@ -88,11 +88,11 @@ capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
 @inline function apply_incremental_dark_current!(det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     rate = effective_dark_current(det) * exposure_time
-    return add_poisson_rate!(det.state.frame, det, rng, rate)
+    return add_poisson_rate!(det.products.frame, det, rng, rate)
 end
 
 @inline apply_incremental_sensor_statistics!(::FrameSensorType,
-    det::Detector, rng::AbstractRNG, exposure_time::Real) = det.state.frame
+    det::Detector, rng::AbstractRNG, exposure_time::Real) = det.products.frame
 
 @inline function accumulate_incremental_charge_generation!(det::Detector,
     rng::AbstractRNG, exposure_time::Real)
@@ -104,7 +104,7 @@ end
     apply_dark_defects!(det.params.defect_model, det, exposure_time)
     apply_incremental_sensor_statistics!(det.params.sensor, det, rng,
         exposure_time)
-    return det.state.frame
+    return det.products.frame
 end
 
 function finalize_charge_generation!(det::Detector, rng::AbstractRNG,
@@ -112,7 +112,7 @@ function finalize_charge_generation!(det::Detector, rng::AbstractRNG,
     apply_dark_current!(det, rng, exposure_time)
     apply_dark_defects!(det.params.defect_model, det, exposure_time)
     apply_sensor_statistics!(det.params.sensor, det, rng, exposure_time)
-    return det.state.frame
+    return det.products.frame
 end
 
 function finalize_charge_transport!(det::Detector, rng::AbstractRNG)
@@ -121,7 +121,7 @@ function finalize_charge_transport!(det::Detector, rng::AbstractRNG)
     apply_charge_transfer!(det.params.sensor, det)
     apply_pre_readout_gain!(det.params.sensor, det, rng)
     apply_charge_coupling!(det.params.charge_coupling_model, det)
-    return det.state.frame
+    return det.products.frame
 end
 
 function finalize_electronics_without_persistence!(det::Detector,
@@ -132,17 +132,17 @@ function finalize_electronics_without_persistence!(det::Detector,
     apply_post_readout_gain!(det.params.sensor, det)
     apply_detection_output!(det.params.sensor, det, rng)
     finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
-    apply_readout_correction!(det.params.correction_model, det.state.frame, det)
+    apply_readout_correction!(det.params.correction_model, det.products.frame, det)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
-    return det.state.frame
+    return det.products.frame
 end
 
 function finalize_electronics!(det::Detector, rng::AbstractRNG,
     exposure_time::Real)
     finalize_electronics_without_persistence!(det, rng, exposure_time)
     update_sensor_persistence!(det.params.sensor, det, exposure_time)
-    return det.state.frame
+    return det.products.frame
 end
 
 function finalize_readout_pipeline!(det::Detector, rng::AbstractRNG,

@@ -51,26 +51,26 @@ macro test_detector_allocation(expression)
     end
 end
 
-function prepared_detector_capture_allocations(det, map, plan, rng)
-    capture!(det, map, plan, rng)
-    return @allocated capture!(det, map, plan, rng)
+function prepared_detector_capture_allocations(prepared, rng)
+    capture!(prepared, rng)
+    return @allocated capture!(prepared, rng)
 end
 
-function prepared_detector_readiness_allocations(det, map, plan)
-    AdaptiveOpticsSim.Detectors._require_prepared_whole_acquisition(det, map, plan)
+function prepared_detector_readiness_allocations(prepared)
+    AdaptiveOpticsSim.Detectors._require_prepared_whole_acquisition(prepared)
     return @allocated AdaptiveOpticsSim.Detectors._require_prepared_whole_acquisition(
-        det, map, plan)
+        prepared)
 end
 
 function prepared_first_detector_capture_allocations(builder, map)
     warm_detector = builder()
     warm_plan = prepare_detector_acquisition(warm_detector, map)
-    capture!(warm_detector, map, warm_plan, Xoshiro(2400))
+    capture!(warm_plan, Xoshiro(2400))
 
     detector = builder()
     plan = prepare_detector_acquisition(detector, map)
     rng = Xoshiro(2401)
-    return @allocated capture!(detector, map, plan, rng)
+    return @allocated capture!(plan, rng)
 end
 
 function prepared_detector_exposed_storage_is_zero(det::Detector)
@@ -90,18 +90,18 @@ function prepared_detector_exposed_storage_is_zero(det::Detector)
         products)
 end
 
-function prepared_incremental_capture_allocations(det, map, plan, rng,
+function prepared_incremental_capture_allocations(prepared, rng,
     integration_duration)
-    capture!(det, map, plan; rng=rng, integration_duration=integration_duration)
-    return @allocated capture!(det, map, plan; rng=rng,
+    capture!(prepared; rng=rng, integration_duration=integration_duration)
+    return @allocated capture!(prepared; rng=rng,
         integration_duration=integration_duration)
 end
 
-function prepared_first_incremental_capture_allocations(det, map, plan, rng,
+function prepared_first_incremental_capture_allocations(det, prepared, rng,
     integration_duration)
-    capture!(det, map, plan; rng=rng, integration_duration=integration_duration)
+    capture!(prepared; rng=rng, integration_duration=integration_duration)
     reset_integration!(det)
-    return @allocated capture!(det, map, plan; rng=rng,
+    return @allocated capture!(prepared; rng=rng,
         integration_duration=integration_duration)
 end
 

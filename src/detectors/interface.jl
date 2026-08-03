@@ -18,6 +18,7 @@ abstract type FrameSamplingMode end
 abstract type AbstractFrameTimingModel end
 abstract type FrameReadoutCorrectionModel end
 abstract type FrameReadoutProducts end
+abstract type FrameReadoutWorkspace end
 abstract type AbstractFrameNonlinearityModel end
 abstract type AbstractPersistenceModel end
 abstract type AbstractDetectorThermalModel end
@@ -292,10 +293,17 @@ supports_batched_readout_correction(model::CompositeFrameReadoutCorrection) =
     all(supports_batched_readout_correction, model.stages)
 
 struct NoFrameReadoutProducts <: FrameReadoutProducts end
+struct NoFrameReadoutWorkspace <: FrameReadoutWorkspace end
 
 struct SkipperReadoutProducts{A<:AbstractMatrix} <: FrameReadoutProducts
     mean_frame::A
     sample_count::Int
+end
+
+mutable struct SkipperReadoutWorkspace{A<:AbstractMatrix} <:
+    FrameReadoutWorkspace
+    baseline_frame::A
+    sample_sum::A
 end
 
 # Sampled detector parameters are copied into run-owned storage at every
@@ -922,9 +930,6 @@ struct SampledFrameReadoutProducts{A<:AbstractMatrix,C} <: FrameReadoutProducts
     read_cube::Union{Nothing,C}
 end
 
-# The product bundle is detector state with stable identity. Keeping its buffer
-# bindings const preserves preparation invariants while avoiding repeated
-# boxing when the bundle is retrieved from DetectorState's concrete union.
 mutable struct MultiReadFrameReadoutProducts{A<:AbstractMatrix,C,V} <:
     FrameReadoutProducts
     const reference_frame::Union{Nothing,A}
@@ -934,22 +939,27 @@ mutable struct MultiReadFrameReadoutProducts{A<:AbstractMatrix,C,V} <:
     const signal_cube::Union{Nothing,C}
     const read_cube::Union{Nothing,C}
     const read_times::Union{Nothing,V}
-    const workspace_reference_cube::Union{Nothing,C}
-    const workspace_signal_cube::Union{Nothing,C}
 
     function MultiReadFrameReadoutProducts{A,C,V}(
         reference_frame::Union{Nothing,A}, signal_frame::A,
         combined_frame::A, reference_cube::Union{Nothing,C},
         signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C},
-        read_times::Union{Nothing,V},
-        workspace_reference_cube::Union{Nothing,C},
-        workspace_signal_cube::Union{Nothing,C}) where {
+        read_times::Union{Nothing,V}) where {
         A<:AbstractMatrix,C,V,
     }
         return new{A,C,V}(reference_frame, signal_frame, combined_frame,
-            reference_cube, signal_cube, read_cube, read_times,
-            workspace_reference_cube, workspace_signal_cube)
+            reference_cube, signal_cube, read_cube, read_times)
     end
+end
+
+mutable struct MultiReadFrameReadoutWorkspace{
+    A<:AbstractMatrix,
+    C,
+} <: FrameReadoutWorkspace
+    reference_average::A
+    signal_average::A
+    reference_cube::Union{Nothing,C}
+    signal_cube::C
 end
 
 """
@@ -957,8 +967,8 @@ end
 
 Preallocated products from an up-the-ramp fit. `integrated_frame` is the slope
 multiplied by the integration time and therefore matches ordinary detector
-output units. The `workspace_*` arrays are detector-owned full-frame storage;
-the public products may be windowed views copied into reusable arrays.
+output units. Product arrays may be windowed; full-frame fitting storage belongs
+to `UpTheRampReadoutWorkspace`.
 """
 @enum RampAcquisitionKind::UInt8 begin
     SynthesizedFinalChargeRamp
@@ -976,11 +986,18 @@ mutable struct UpTheRampReadoutProducts{
     integrated_frame::A
     read_cube::C
     read_times::V
-    workspace_slope::A
-    workspace_intercept::A
-    workspace_integrated::A
-    workspace_cube::C
     acquisition_kind::RampAcquisitionKind
+end
+
+
+mutable struct UpTheRampReadoutWorkspace{
+    A<:AbstractMatrix,
+    C<:AbstractArray,
+} <: FrameReadoutWorkspace
+    slope::A
+    intercept::A
+    integrated::A
+    cube::C
 end
 
 @inline function _multi_read_cube_param(reference_cube, signal_cube, read_cube)
@@ -996,20 +1013,11 @@ end
 function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A},
     signal_frame::A, combined_frame::A, reference_cube, signal_cube,
     read_cube, read_times) where {A<:AbstractMatrix}
-    return MultiReadFrameReadoutProducts(reference_frame, signal_frame,
-        combined_frame, reference_cube, signal_cube, read_cube, read_times,
-        reference_cube, signal_cube)
-end
-
-function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A},
-    signal_frame::A, combined_frame::A, reference_cube, signal_cube,
-    read_cube, read_times, workspace_reference_cube,
-    workspace_signal_cube) where {A<:AbstractMatrix}
     C = _multi_read_cube_param(reference_cube, signal_cube, read_cube)
     V = typeof(read_times)
     return MultiReadFrameReadoutProducts{A,C,V}(reference_frame,
         signal_frame, combined_frame, reference_cube, signal_cube, read_cube,
-        read_times, workspace_reference_cube, workspace_signal_cube)
+        read_times)
 end
 
 const HgCdTeReadoutProducts = MultiReadFrameReadoutProducts
@@ -1745,9 +1753,24 @@ struct DetectorParams{T<:AbstractFloat,S<:SensorType,QE<:AbstractQuantumEfficien
     output_type::Union{Nothing,DataType}
 end
 
-mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,OH,P,
-    TS<:AbstractDetectorThermalState}
-    frame::A
+mutable struct DetectorState{
+    T<:AbstractFloat,
+    A<:AbstractMatrix{T},
+    TS<:AbstractDetectorThermalState,
+}
+    accum_buffer::A
+    latent_buffer::A
+    thermal_state::TS
+    integrated_time::T
+    readout_ready::Bool
+end
+
+mutable struct DetectorWorkspace{
+    T<:AbstractFloat,
+    A<:AbstractMatrix{T},
+    OH,
+    RW<:FrameReadoutWorkspace,
+}
     presampling_buffer::A
     presampling_scratch::A
     response_buffer::A
@@ -1756,22 +1779,37 @@ mutable struct DetectorState{T<:AbstractFloat,A<:AbstractMatrix{T},O,OH,P,
     noise_buffer::A
     noise_buffer_host::Matrix{T}
     batched_buffer_host::Array{T,3}
-    accum_buffer::A
-    latent_buffer::A
-    output_buffer::O
     output_buffer_host::OH
-    readout_products::P
-    thermal_state::TS
-    integrated_time::T
-    readout_ready::Bool
+    readout::RW
 end
 
-struct Detector{N<:NoiseModel,P<:DetectorParams,S<:DetectorState,BF<:BackgroundModel,BM<:BackgroundModel,B<:AbstractArrayBackend} <: AbstractFrameDetector
-    noise::N
-    params::P
+mutable struct DetectorProducts{
+    A<:AbstractMatrix,
+    O,
+    P<:FrameReadoutProducts,
+}
+    frame::A
+    output_buffer::O
+    readout::P
+end
+
+mutable struct Detector{
+    N<:NoiseModel,
+    P<:DetectorParams,
+    S<:DetectorState,
+    W<:DetectorWorkspace,
+    O<:DetectorProducts,
+    BF<:BackgroundModel,
+    BM<:BackgroundModel,
+    B<:AbstractArrayBackend,
+} <: AbstractFrameDetector
+    const noise::N
+    const params::P
     state::S
-    background_flux::BF
-    background_map::BM
+    workspace::W
+    products::O
+    const background_flux::BF
+    const background_map::BM
 end
 
 @inline readout_noise(::Detector{<:NoiseNone}) = 0.0
@@ -1779,4 +1817,6 @@ end
 @inline readout_noise(det::Detector{<:NoiseReadout}) = det.noise.sigma
 @inline readout_noise(det::Detector{<:NoisePhotonReadout}) = det.noise.sigma
 
-@inline backend(::Detector{<:Any,<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::Detector{
+    <:Any,<:Any,<:Any,<:Any,<:Any,<:Any,<:Any,B,
+}) where {B} = B()

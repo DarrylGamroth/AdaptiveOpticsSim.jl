@@ -1,20 +1,21 @@
 readout_ready(det::Detector) = det.state.readout_ready
-output_frame(det::Detector) = det.state.output_buffer === nothing ? det.state.frame : det.state.output_buffer
+output_frame(det::Detector) = det.products.output_buffer === nothing ?
+    det.products.frame : det.products.output_buffer
 detector_output_type(det::Detector) = det.params.output_type
-readout_products(det::Detector) = det.state.readout_products
-detector_reference_frame(det::Detector) = detector_reference_frame(det.state.readout_products)
-detector_signal_frame(det::Detector) = detector_signal_frame(det.state.readout_products)
-detector_combined_frame(det::Detector) = detector_combined_frame(det.state.readout_products)
-detector_reference_cube(det::Detector) = detector_reference_cube(det.state.readout_products)
-detector_signal_cube(det::Detector) = detector_signal_cube(det.state.readout_products)
-detector_read_cube(det::Detector) = detector_read_cube(det.state.readout_products)
-detector_read_times(det::Detector) = detector_read_times(det.state.readout_products)
-detector_ramp_slope(det::Detector) = detector_ramp_slope(det.state.readout_products)
-detector_ramp_intercept(det::Detector) = detector_ramp_intercept(det.state.readout_products)
-detector_ramp_cube(det::Detector) = detector_ramp_cube(det.state.readout_products)
-detector_ramp_times(det::Detector) = detector_ramp_times(det.state.readout_products)
+readout_products(det::Detector) = det.products.readout
+detector_reference_frame(det::Detector) = detector_reference_frame(det.products.readout)
+detector_signal_frame(det::Detector) = detector_signal_frame(det.products.readout)
+detector_combined_frame(det::Detector) = detector_combined_frame(det.products.readout)
+detector_reference_cube(det::Detector) = detector_reference_cube(det.products.readout)
+detector_signal_cube(det::Detector) = detector_signal_cube(det.products.readout)
+detector_read_cube(det::Detector) = detector_read_cube(det.products.readout)
+detector_read_times(det::Detector) = detector_read_times(det.products.readout)
+detector_ramp_slope(det::Detector) = detector_ramp_slope(det.products.readout)
+detector_ramp_intercept(det::Detector) = detector_ramp_intercept(det.products.readout)
+detector_ramp_cube(det::Detector) = detector_ramp_cube(det.products.readout)
+detector_ramp_times(det::Detector) = detector_ramp_times(det.products.readout)
 detector_ramp_acquisition(det::Detector) =
-    detector_ramp_acquisition(det.state.readout_products)
+    detector_ramp_acquisition(det.products.readout)
 
 @inline detector_output_value(::Nothing, value) = value
 @inline detector_output_value(::Type{T}, value) where {T<:Integer} =
@@ -72,7 +73,7 @@ end
 thermal_model(det::Detector) = det.params.thermal_model
 thermal_state(det::Detector) = det.state.thermal_state
 
-detector_temperature(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+detector_temperature(det::Detector, ::Type{T}=eltype(det.products.frame)) where {T<:AbstractFloat} =
     detector_temperature_K(det.params.thermal_model, det.state.thermal_state, T)
 
 advance_thermal!(det::Detector, dt) = (advance_thermal!(det.params.thermal_model, det.state.thermal_state, dt); det)
@@ -181,7 +182,7 @@ function effective_qe(model::AbstractQuantumEfficiencyModel, src::SpectralSource
     return total
 end
 
-effective_qe(det::Detector, src::AbstractSource, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+effective_qe(det::Detector, src::AbstractSource, ::Type{T}=eltype(det.products.frame)) where {T<:AbstractFloat} =
     effective_qe(det.params.quantum_efficiency_model, src, T)
 
 reference_qe(model::ScalarQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} = T(model.value)
@@ -227,13 +228,13 @@ function active_cic_per_frame_law(sensor::SensorType,
         cic_per_frame_law(sensor) : model.cic_per_frame_law
 end
 
-effective_dark_current(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+effective_dark_current(det::Detector, ::Type{T}=eltype(det.products.frame)) where {T<:AbstractFloat} =
     T(evaluate_temperature_law(active_dark_current_law(det.params.sensor, det.params.thermal_model), T(det.params.dark_current), detector_temperature(det, T)))
-effective_glow_rate(det::Detector, ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+effective_glow_rate(det::Detector, ::Type{T}=eltype(det.products.frame)) where {T<:AbstractFloat} =
     T(evaluate_temperature_law(active_glow_rate_law(det.params.sensor, det.params.thermal_model),
         configured_glow_rate(det.params.sensor, T), detector_temperature(det, T)))
 effective_cic_per_frame(det::Detector,
-    ::Type{T}=eltype(det.state.frame)) where {T<:AbstractFloat} =
+    ::Type{T}=eltype(det.products.frame)) where {T<:AbstractFloat} =
     T(evaluate_temperature_law(
         active_cic_per_frame_law(det.params.sensor, det.params.thermal_model),
         configured_cic_per_frame(det.params.sensor, T),
@@ -252,7 +253,7 @@ detector_readout_sigma(noise::NoiseReadout, sensor::FrameSensorType, ::Type{T}) 
 detector_readout_sigma(noise::NoisePhotonReadout, sensor::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} =
     T(effective_readout_sigma(sensor, T(noise.sigma)))
 
-function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.state.frame))
+function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.products.frame))
     output = output_frame(det)
     full_well = det.params.full_well === nothing ? nothing : T(det.params.full_well)
     row_window = det.params.readout_window === nothing ? nothing :
@@ -278,7 +279,7 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         detector_noise_symbol(det.noise),
         detector_readout_sigma(det.noise, det.params.sensor, T),
         det.params.output_type,
-        size(det.state.frame),
+        size(det.products.frame),
         size(output),
         response_family(det.params.response_model),
         response_width_px(det.params.response_model, T),
@@ -306,7 +307,7 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         acquisition_mode_symbol(det.params.sensor),
         frame_transfer_time(det.params.sensor, T),
         steady_state_frame_period(det.params.sensor, det.params.integration_time,
-            size(det.state.frame), det.params.readout_window, T),
+            size(det.products.frame), det.params.readout_window, T),
         thermal_model_symbol(det.params.thermal_model),
         detector_temperature(det, T),
         ambient_temperature_K(det.params.thermal_model, T),
@@ -320,8 +321,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         frame_sampling_reads(det.params.sensor),
         frame_sampling_reference_reads(det.params.sensor),
         frame_sampling_signal_reads(det.params.sensor),
-        sampling_read_time(det.params.sensor, size(det.state.frame), det.params.readout_window, T),
-        sampling_wallclock_time(det.params.sensor, det.params.integration_time, size(det.state.frame), det.params.readout_window, T),
+        sampling_read_time(det.params.sensor, size(det.products.frame), det.params.readout_window, T),
+        sampling_wallclock_time(det.params.sensor, det.params.integration_time, size(det.products.frame), det.params.readout_window, T),
         readout_correction_symbol(det.params.correction_model),
         correction_edge_rows(det.params.correction_model),
         correction_edge_cols(det.params.correction_model),
@@ -760,11 +761,25 @@ end
         NoFrameReadoutProducts,
         MultiReadFrameReadoutProducts{A,Nothing,Nothing},
         MultiReadFrameReadoutProducts{A,cube_type,Nothing},
-        MultiReadFrameReadoutProducts{A,cube_type,Vector{T}},
+        MultiReadFrameReadoutProducts{A,cube_type,FixedSizeVectorDefault{T}},
     }
 end
 
 @inline initial_readout_products(::FrameSensorType, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
+
+@inline function detector_readout_workspace_type(sensor::FrameSensorType,
+    frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+    supports_multi_read_readout_products(sensor) ||
+        return NoFrameReadoutWorkspace
+    cube_type = typeof(similar(frame, size(frame, 1), size(frame, 2), 1))
+    return Union{
+        NoFrameReadoutWorkspace,
+        MultiReadFrameReadoutWorkspace{A,cube_type},
+    }
+end
+
+@inline initial_readout_workspace(::FrameSensorType, frame::AbstractMatrix,
+    ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutWorkspace()
 
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Real,AbstractQuantumEfficiencyModel},
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
@@ -885,9 +900,18 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     thermal_state = thermal_state_from_model(thermal, T)
     readout_products_type = detector_readout_products_type(run_sensor, frame, T)
     readout_products = initial_readout_products(run_sensor, frame, T)
-    state = DetectorState{T, typeof(frame), typeof(output_buffer),
-        typeof(output_buffer_host), readout_products_type, typeof(thermal_state)}(
-        frame,
+    readout_workspace_type = detector_readout_workspace_type(
+        run_sensor, frame, T)
+    readout_workspace = initial_readout_workspace(run_sensor, frame, T)
+    state = DetectorState{T,typeof(frame),typeof(thermal_state)}(
+        accum_buffer,
+        latent_buffer,
+        thermal_state,
+        zero(T),
+        true,
+    )
+    workspace = DetectorWorkspace{T,typeof(frame),
+        typeof(output_buffer_host),readout_workspace_type}(
         presampling_buffer,
         presampling_scratch,
         response_buffer,
@@ -896,19 +920,23 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
         noise_buffer,
         noise_buffer_host,
         batched_buffer_host,
-        accum_buffer,
-        latent_buffer,
-        output_buffer,
         output_buffer_host,
-        readout_products,
-        thermal_state,
-        zero(T),
-        true,
+        readout_workspace,
     )
-    return Detector{typeof(noise), typeof(params), typeof(state), typeof(flux_model), typeof(map_model), typeof(selector)}(
+    products = DetectorProducts{typeof(frame),typeof(output_buffer),
+        readout_products_type}(
+        frame,
+        output_buffer,
+        readout_products,
+    )
+    return Detector{typeof(noise),typeof(params),typeof(state),
+        typeof(workspace),typeof(products),typeof(flux_model),
+        typeof(map_model),typeof(selector)}(
         noise,
         params,
         state,
+        workspace,
+        products,
         flux_model,
         map_model,
     )

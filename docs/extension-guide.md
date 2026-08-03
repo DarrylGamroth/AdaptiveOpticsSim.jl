@@ -106,6 +106,31 @@ owners are single-writer. Recreating a compatible workspace must not change a
 deterministic optical result. Warmed CPU execution remains allocation-free;
 accelerator launch-allocation claims require backend-specific evidence.
 
+Frame-detector acquisition uses the concrete contract owned by
+`AdaptiveOpticsSim.Detectors`. `DetectorAcquisitionPlan` retains only
+run-immutable detector parameters, optical metadata, dimensions, radiometric
+scaling, and channel QE. `PreparedDetectorAcquisition` binds the exact detector
+and mutable intensity storage to that plan, persistent `DetectorState`,
+replaceable `DetectorWorkspace`, and caller-visible `DetectorProducts`.
+Qualified accessors named `detector_acquisition_detector`,
+`detector_acquisition_input`, `detector_acquisition_plan`,
+`detector_acquisition_state`, `detector_acquisition_workspace`, and
+`detector_acquisition_products` expose those ownership roles without exporting
+them from the package root. Routine code calls `prepare_detector_acquisition`
+once and executes `capture!(prepared, rng)` or the incremental prepared form;
+there is no compatibility call that separately passes the detector, input, and
+plan.
+
+A frame-detector extension must keep deterministic persistent values out of
+workspace, keep readout fitting scratch out of products, grant one exclusive
+lifecycle-state owner per prepared detector lifecycle, and reject replacement
+or forbidden aliasing of exact bound owners before mutation. Its prepared CPU
+path must remain inferred and allocation-free after warmup. Accelerator support
+requires same-device input, state, workspace, and products, scalar indexing
+disabled, explicit synchronization at the documented completion boundary, and
+numerical parity evidence. Kernel or backend launch allocation is measured
+separately and is not covered by the CPU zero-allocation contract.
+
 New and migrated package or extension implementation does not directly use
 Julia's `Memory` type. Use
 [FixedSizeArrays.jl](https://github.com/JuliaArrays/FixedSizeArrays.jl)'s

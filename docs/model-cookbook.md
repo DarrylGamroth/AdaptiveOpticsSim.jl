@@ -104,9 +104,14 @@ load_detector = Detector(
     noise=NoiseNone(),
     response_model=NullFrameResponse(),
 )
-load_plan = prepare_detector_acquisition(load_detector, detector_rate)
-frame = capture!(load_detector, detector_rate, load_plan; rng)
+load_acquisition = prepare_detector_acquisition(load_detector, detector_rate)
+frame = capture!(load_acquisition, rng)
 ```
+
+Preparation returns the exact detector/input/plan/state/workspace/product
+owner. Reuse that value while the input storage is updated in place; prepare a
+new owner after replacing any bound storage. The run-immutable plan and
+ownership accessors are qualified-public under `Detectors`, not root exports.
 
 This path still applies declared radiometry and exposure. It is not a
 camera-specific profile and does not imply reduced optical fidelity upstream.

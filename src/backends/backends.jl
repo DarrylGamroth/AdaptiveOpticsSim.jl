@@ -9,6 +9,7 @@ module Backends
 
 using AbstractFFTs
 import FFTW
+using FixedSizeArrays: FixedSizeVector
 using KernelAbstractions
 using LinearAlgebra
 using Random

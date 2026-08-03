@@ -695,16 +695,13 @@ function _require_exact_wfs_target(
     plan::PreparedWFSDetectorAcquisition,
     target::AbstractComputeDevice,
 )
-    detector_plan = plan.detector_plan
-    optical_product = IntensityMap(
-        detector_plan.input_metadata, detector_plan.input_values)
+    optical_product = detector_acquisition_input(plan.acquisition)
     validate_wfs_acquisition_binding(
         plan.observation, optical_product, plan)
     _require_exact_wfs_product_target(
         optical_product, target, :acquisition)
     _require_exact_wfs_observation_target(plan.observation, target)
-    _require_exact_detector_acquisition_target(
-        plan.detector, detector_plan, target)
+    _require_exact_detector_acquisition_target(plan.acquisition, target)
     return plan
 end
 
@@ -750,7 +747,7 @@ function _require_exact_wfs_target(
     _require_exact_wfs_product_target(
         plan.packed_rate, target, :acquisition)
     _require_exact_wfs_observation_target(plan.observation, target)
-    _require_exact_wfs_target(plan.detector_plan, target)
+    _require_exact_wfs_target(plan.detector_acquisition, target)
     return plan
 end
 

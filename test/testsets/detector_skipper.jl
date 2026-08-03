@@ -45,8 +45,8 @@ end
     input = fill(20.0, 8, 8)
     output = capture!(detector, input, Xoshiro(9101))
     @test output == fill(20.0, 8, 8)
-    @test detector.state.response_buffer == fill(10.0, 8, 8)
-    @test detector.state.accum_buffer == fill(80.0, 8, 8)
+    @test detector.workspace.readout.baseline_frame == fill(10.0, 8, 8)
+    @test detector.workspace.readout.sample_sum == fill(80.0, 8, 8)
 
     products = readout_products(detector)
     @test products isa SkipperReadoutProducts
@@ -122,7 +122,7 @@ end
         response_model=NullFrameResponse(),
         sensor=CCDSensor(sampling_mode=SkipperSampling(2)))
     capture!(transition, ones(2, 2), Xoshiro(9121))
-    @test transition.state.response_buffer == ones(2, 2)
+    @test transition.workspace.readout.baseline_frame == ones(2, 2)
     capture!(transition, zeros(2, 2);
         rng=Xoshiro(9122), integration_duration=0.5)
     incremental_frame = copy(capture!(

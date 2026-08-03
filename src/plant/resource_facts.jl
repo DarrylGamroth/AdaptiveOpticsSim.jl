@@ -353,6 +353,14 @@ function structural_array_bytes(array::Array,
     return _contiguous_structural_array_bytes(array)
 end
 
+function structural_array_bytes(array::FixedSizeVector,
+    target::AbstractComputeDevice)
+    target == HostComputeDevice() || _structural_resource_error(
+        :array_storage, :wrong_device,
+        "FixedSizeVector storage occupies $(HostComputeDevice()); expected $target")
+    return _contiguous_structural_array_bytes(array)
+end
+
 @inline function _memory_structural_array_bytes(memory::Memory)
     count = _checked_resource_byte_count(length(memory), :array_storage)
     element_bytes = _checked_resource_byte_count(

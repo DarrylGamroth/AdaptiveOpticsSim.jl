@@ -301,11 +301,11 @@ function emccd_artifact_deterministic_contract()
         noise=NoiseNone(), gain=5.0,
         sensor=EMCCDSensor(excess_noise_factor=sqrt(2.0),
             multiplication_model=ConditionalGammaMultiplication()))
-    plan = prepare_detector_acquisition(allocation_detector, prepared_map)
+    acquisition = prepare_detector_acquisition(allocation_detector,
+        prepared_map)
     allocation_rng = Xoshiro(3606)
-    capture!(allocation_detector, prepared_map, plan, allocation_rng)
-    steady_alloc_bytes = @allocated capture!(allocation_detector,
-        prepared_map, plan, allocation_rng)
+    capture!(acquisition, allocation_rng)
+    steady_alloc_bytes = @allocated capture!(acquisition, allocation_rng)
 
     signal = 10.0
     dark = 2.0

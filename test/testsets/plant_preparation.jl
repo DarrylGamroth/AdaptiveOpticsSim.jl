@@ -1079,7 +1079,8 @@ end
     fast_execution = plant_full_execution(fast)
     slow_execution = plant_full_execution(slow)
     wfs_execution = plant_full_execution(wfs)
-    @test fast_execution.detector.state !== slow_execution.detector.state
+    @test Detectors.detector_acquisition_state(fast_execution.acquisition) !==
+        Detectors.detector_acquisition_state(slow_execution.acquisition)
     @test acquisition_observation(fast) !== acquisition_observation(slow)
     @test !Base.mightalias(acquisition_observation(fast),
         acquisition_observation(slow))
@@ -1111,23 +1112,17 @@ end
         T(0.5) * sum(wfs_path.result.values) atol=T(1e-12) rtol=T(1e-12)
     @test wfs_path.result.values == wfs_rate_before
 
-    detector = fast_execution.detector
-    detector_frame = output_frame(detector)
-    explicit_observation = similar(detector_frame)
+    detector = Detector(integration_time=T(0.25), noise=NoiseNone(),
+        qe=one(T), response_model=NullFrameResponse(), output_type=T, T=T)
+    explicit_observation = similar(science_path.result.values)
     fill!(explicit_observation, zero(T))
     explicit_frame_execution = FrameAcquisitionExecution(detector,
         science_path.result, explicit_observation)
+    detector_frame = output_frame(detector)
     explicit_frame_products = AcquisitionProducts(explicit_observation;
         metadata=acquisition_product_metadata(fast))
     @test execute_acquisition!(explicit_frame_products, science_path.result,
         explicit_frame_execution, Xoshiro(16)) === explicit_frame_products
-
-    raw_frame_plan = prepare_detector_acquisition(detector,
-        science_path.result)
-    @test !applicable(FrameAcquisitionExecution, detector, raw_frame_plan,
-        detector_frame)
-    @test_throws MethodError FrameAcquisitionExecution(detector,
-        raw_frame_plan, detector_frame)
 
     invalid_observations = (
         (zeros(T, 1, 1), :shape),
@@ -1135,6 +1130,9 @@ end
         (ContractDeviceArray(zeros(T, size(detector_frame)),
             ContractComputeDevice(18)), :device),
         (detector_frame, :ownership),
+        (Detectors.detector_acquisition_products(
+            explicit_frame_execution.acquisition).frame, :ownership),
+        (science_path.result.values, :ownership),
     )
     for (invalid_observation, reason) in invalid_observations
         assert_plant_preparation_error(
@@ -1144,6 +1142,16 @@ end
             reason,
         )
     end
+    @test execute_acquisition!(explicit_frame_products,
+        science_path.result, explicit_frame_execution,
+        Xoshiro(17)) === explicit_frame_products
+
+    raw_frame_plan = prepare_detector_acquisition(detector,
+        science_path.result)
+    @test !applicable(FrameAcquisitionExecution, detector, raw_frame_plan,
+        detector_frame)
+    @test_throws MethodError FrameAcquisitionExecution(detector,
+        raw_frame_plan, detector_frame)
 
     assert_plant_preparation_error(
         () -> execute_acquisition!(
@@ -1151,7 +1159,7 @@ end
                 metadata=acquisition_product_metadata(fast)),
             science_path.result,
             explicit_frame_execution,
-            Xoshiro(17),
+            Xoshiro(18),
         ),
         :acquisition,
         :prepared_binding,
@@ -1165,7 +1173,7 @@ end
             units=wfs_execution.observation.units,
             product=wfs_execution.observation.metadata))
     @test execute_acquisition!(observation_only_products, wfs.path_result,
-        observation_only_execution, Xoshiro(18)) === observation_only_products
+        observation_only_execution, Xoshiro(19)) === observation_only_products
 
     mismatched_wfs_observation = deepcopy(wfs_execution.observation)
     mismatched_wfs_execution = WFSAcquisitionExecution(
@@ -1192,7 +1200,7 @@ end
                 metadata=observation_only_products.metadata),
             wfs.path_result,
             observation_only_execution,
-            Xoshiro(19),
+            Xoshiro(20),
         ),
         :acquisition,
         :prepared_binding,
@@ -1204,7 +1212,7 @@ end
                 metadata=acquisition_product_metadata(wfs)),
             wfs.path_result,
             wfs_execution,
-            Xoshiro(20),
+            Xoshiro(21),
         ),
         :acquisition,
         :prepared_binding,
@@ -1212,7 +1220,7 @@ end
     assert_plant_preparation_error(
         () -> execute_acquisition!(acquisition_products(fast),
             fast.path_result, nothing,
-            Xoshiro(21)),
+            Xoshiro(22)),
         :acquisition,
         :unsupported_execution,
     )

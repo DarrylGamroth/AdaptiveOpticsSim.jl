@@ -322,8 +322,8 @@ end
 function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     mean_per_frame = effective_cic_per_frame(det)
-    add_poisson_rate!(det.state.frame, det, rng, mean_per_frame)
-    return det.state.frame
+    add_poisson_rate!(det.products.frame, det, rng, mean_per_frame)
+    return det.products.frame
 end
 
 function apply_pre_readout_gain!(sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
@@ -334,25 +334,25 @@ function apply_pre_readout_gain!(::EMOutput, sensor::EMCCDSensor, det::Detector,
     return apply_em_register_gain!(sensor.multiplication_model, sensor, det, rng)
 end
 
-apply_pre_readout_gain!(::ConventionalOutput, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG) = det.state.frame
+apply_pre_readout_gain!(::ConventionalOutput, sensor::EMCCDSensor, det::Detector, rng::AbstractRNG) = det.products.frame
 
 function apply_em_register_gain!(
     model::ClippedGaussianMultiplicationApproximation,
     sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
     return _apply_clipped_gaussian_em_register!(
-        model, sensor, det.state.frame, det.state.noise_buffer,
+        model, sensor, det.products.frame, det.workspace.noise_buffer,
         det.params.gain, rng)
 end
 
 function apply_em_register_gain!(model::ConditionalGammaMultiplication,
     sensor::EMCCDSensor, det::Detector, rng::AbstractRNG)
     return _apply_conditional_gamma_multiplication!(
-        execution_style(det.state.frame), model, sensor,
-        det.state.frame, det.state.noise_buffer, det.params.gain, rng)
+        execution_style(det.products.frame), model, sensor,
+        det.products.frame, det.workspace.noise_buffer, det.params.gain, rng)
 end
 
 function apply_post_readout_gain!(sensor::EMCCDSensor, det::Detector)
-    return det.state.frame
+    return det.products.frame
 end
 
 @inline function em_conditional_noise_factor(
@@ -414,24 +414,24 @@ apply_detection_output!(sensor::EMCCDSensor, det::Detector,
     det, rng)
 
 apply_emccd_detection_output!(::LinearEMMode, det::Detector,
-    rng::AbstractRNG) = det.state.frame
+    rng::AbstractRNG) = det.products.frame
 
 function apply_emccd_detection_output!(mode::PhotonCountingEMMode,
     det::Detector, rng::AbstractRNG)
-    threshold = eltype(det.state.frame)(mode.threshold)
-    efficiency = eltype(det.state.frame)(mode.detection_efficiency)
-    zero_t = zero(eltype(det.state.frame))
-    one_t = one(eltype(det.state.frame))
+    threshold = eltype(det.products.frame)(mode.threshold)
+    efficiency = eltype(det.products.frame)(mode.detection_efficiency)
+    zero_t = zero(eltype(det.products.frame))
+    one_t = one(eltype(det.products.frame))
     if efficiency <= zero_t
-        fill!(det.state.frame, zero_t)
+        fill!(det.products.frame, zero_t)
     elseif efficiency >= one_t
-        @. det.state.frame = ifelse(det.state.frame >= threshold, one_t, zero_t)
+        @. det.products.frame = ifelse(det.products.frame >= threshold, one_t, zero_t)
     else
-        rand_uniform_backend!(rng, det.state.noise_buffer)
-        @. det.state.frame = ifelse(det.state.frame >= threshold,
-            ifelse(det.state.noise_buffer <= efficiency, one_t, zero_t), zero_t)
+        rand_uniform_backend!(rng, det.workspace.noise_buffer)
+        @. det.products.frame = ifelse(det.products.frame >= threshold,
+            ifelse(det.workspace.noise_buffer <= efficiency, one_t, zero_t), zero_t)
     end
-    return det.state.frame
+    return det.products.frame
 end
 
 function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector,

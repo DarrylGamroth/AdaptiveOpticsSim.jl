@@ -179,7 +179,8 @@ end
             detector_row;
             input_map=owned_input,
         )
-        @test owned_detector.prepared.plan.input_values === owned_input.values
+        @test AdaptiveOpticsSim.Detectors.detector_acquisition_input(
+            owned_detector.prepared.acquisition).values === owned_input.values
         @test owned_detector.status_trace == oracle_detector.status_trace
         @test owned_detector.event_times == oracle_detector.event_times
         @test owned_detector.metadata_after.sensor ==
@@ -368,10 +369,10 @@ end
             @test frame_transfer_product_sequence(result.state) == UInt64(1)
             @test acquisition_product_ready_timestamp(result.state) ==
                 result.event_times.readout
-            @test result.prepared.storage_frame !== detector.state.frame
+            @test result.state.storage_frame !== detector.products.frame
             @test !Base.mightalias(
-                result.prepared.storage_frame,
-                detector.state.frame,
+                result.state.storage_frame,
+                detector.products.frame,
             )
         else
             @test result.status_trace == (

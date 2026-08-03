@@ -34,7 +34,7 @@ export CountingDeadTimeModel, NoDeadTime, NonParalyzableDeadTime
 export ParalyzableDeadTime, DutyCycleGate, FirstOrderAfterpulseMeanResponse
 export NearestNeighborCountRedistribution, CompositeCountingMeanResponse
 export capture!, output_frame, channel_output, detector_export_metadata
-export DetectorAcquisitionPlan, prepare_detector_acquisition
+export prepare_detector_acquisition
 export detector_ramp_slope, detector_ramp_intercept
 export detector_ramp_cube, detector_ramp_times
 export readout_ready, reset_integration!, thermal_model
@@ -50,3 +50,7 @@ public StaticCMOSOutputPattern
 public HgCdTeReadout
 public MKIDArrayExportMetadata
 public detector_ramp_acquisition
+public DetectorAcquisitionPlan, PreparedDetectorAcquisition
+public detector_acquisition_detector, detector_acquisition_input
+public detector_acquisition_plan, detector_acquisition_state
+public detector_acquisition_workspace, detector_acquisition_products

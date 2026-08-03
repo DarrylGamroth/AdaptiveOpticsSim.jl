@@ -884,10 +884,10 @@ end
     @test tiny_transfer_error.reason == :unrepresentable_transfer_duration
 
     @test frame_transfer_storage_capacity(prepared) == 1
-    @test !Base.mightalias(prepared.storage_frame, detector.state.frame)
-    @test !Base.mightalias(prepared.storage_frame,
+    @test !Base.mightalias(state.storage_frame, detector.products.frame)
+    @test !Base.mightalias(state.storage_frame,
         detector.state.accum_buffer)
-    @test !Base.mightalias(prepared.storage_frame, output_frame(detector))
+    @test !Base.mightalias(state.storage_frame, output_frame(detector))
 
     first_start = PlantTimestamp(0)
     first_close = PlantTimestamp(1_000_000_000)
@@ -1163,7 +1163,11 @@ end
         @test active_timestamp_error isa PlantScheduleError
         @test active_timestamp_error.reason == :optical_path_batch_active
 
-        foreign_state = PlantEventLoopState(batch_prepared)
+        # Forge only the state-owner identity for this negative-path check.
+        # Constructing a second legitimate state from `batch_prepared` is
+        # forbidden because its detector lifecycles are single-owner.
+        foreign_state = deepcopy(batch_state)
+        foreign_state.binding = batch_state.binding
         foreign_state_error = event_test_error() do
             Plant.optical_path_batch_due_group_count(
                 batch_prepared, foreign_state, batch_workspace, claim)

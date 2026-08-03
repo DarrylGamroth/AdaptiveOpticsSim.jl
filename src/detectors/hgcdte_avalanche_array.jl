@@ -185,8 +185,8 @@ end
 function apply_hgcdte_avalanche_statistics!(
     sensor::HgCdTeAvalancheArraySensor, det::Detector, rng::AbstractRNG)
     return _apply_hgcdte_avalanche_statistics!(
-        sensor.multiplication_model, sensor, det.state.frame,
-        det.state.noise_buffer, rng)
+        sensor.multiplication_model, sensor, det.products.frame,
+        det.workspace.noise_buffer, rng)
 end
 
 function apply_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor,
@@ -197,8 +197,8 @@ end
 
 function apply_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor,
     det::Detector, ::AbstractRNG)
-    det.state.frame .*= sensor.avalanche_gain
-    return det.state.frame
+    det.products.frame .*= sensor.avalanche_gain
+    return det.products.frame
 end
 
 _batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor,

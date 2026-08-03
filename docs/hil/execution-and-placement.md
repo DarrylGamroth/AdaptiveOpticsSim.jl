@@ -365,7 +365,10 @@ reuse the propagated field or photon-arrival-rate product before their independe
 detector integrations and pipelines run.
 
 The current shared-arm runtime gives each direct-science arm a prepared pupil,
-field, photon-arrival-rate output, propagation workspace, and detector plans.
+field, photon-arrival-rate output, propagation workspace, and exact prepared
+detector acquisition owners. Each acquisition keeps its run-immutable plan,
+persistent state, replaceable workspace, and products separate while binding
+them to one detector and one input identity.
 Its primary WFS, primary science, and auxiliary-arm paths also own distinct
 `PupilFunction` products. It still executes the arm loop sequentially, so it
 must not be parallelized by wrapping that loop in `Threads.@threads`. The
@@ -512,16 +515,17 @@ records preparation/compilation latency and generated-code size versus endpoint
 count so low steady-state latency is not purchased with unbounded startup or
 code growth.
 
-The current implemented boundary uses fixed-size homogeneous `Memory`
-registries for declared paths, acquisitions, controllable optics, sampled
+Some current prepared Plant registries still use fixed-size homogeneous
+`Memory` storage for declared paths, acquisitions, controllable optics, sampled
 aberrations, prepared owners, RNG groups, schedule-free selections, and
 event-loop execution groups. That representation established the retained
 Gate 6 topology-growth baseline, but it is not the target architecture.
-[Issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225)
-removes direct `Memory` use and separates plans, persistent state, replaceable
-workspaces, products, and exact prepared bindings. Homogeneous prepared
-host storage will use FixedSizeArrays.jl fixed-size arrays with concrete element
-types; bounded heterogeneous storage will use concrete tuples/unions,
+Detector acquisition has completed its ownership split and now uses concrete
+FixedSizeArrays.jl `FixedSizeVector` storage for armed read-offset schedules;
+the remaining migration continues under
+[issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225).
+Homogeneous prepared host storage will use fixed-size arrays with concrete
+element types; bounded heterogeneous storage will use concrete tuples/unions,
 family-grouped or purpose-built owners, or explicit prepared function barriers.
 A vector may be used during cold construction but is sealed before execution.
 Replacing an erased `Memory` element type with the same erased element type in

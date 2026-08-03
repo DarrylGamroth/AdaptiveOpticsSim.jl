@@ -97,13 +97,13 @@ end
         response_model=NullFrameResponse())
     prepare_detector_buffers!(short, (2, 2))
     prepare_detector_buffers!(long, (2, 2))
-    fill!(short.state.frame, 0.0)
-    fill!(long.state.frame, 0.0)
+    fill!(short.products.frame, 0.0)
+    fill!(long.products.frame, 0.0)
     apply_sensor_statistics!(short.params.sensor, short,
         Xoshiro(9321), 0.25)
     apply_sensor_statistics!(long.params.sensor, long,
         Xoshiro(9321), 0.25)
-    @test short.state.frame == long.state.frame
+    @test short.products.frame == long.products.frame
 end
 
 @testset "InGaAs charge-domain exponential persistence" begin
@@ -189,9 +189,7 @@ end
     rate_map = detector_test_intensity_map(input)
     plan = prepare_detector_acquisition(allocation_detector, rate_map)
     rng = Xoshiro(9351)
-    capture!(allocation_detector, rate_map, plan, rng)
-    @test @inferred(capture!(
-        allocation_detector, rate_map, plan, rng)) isa Matrix{Float64}
-    @test_detector_allocation @allocated(capture!(
-        allocation_detector, rate_map, plan, rng)) == 0
+    capture!(plan, rng)
+    @test @inferred(capture!(plan, rng)) isa Matrix{Float64}
+    @test_detector_allocation @allocated(capture!(plan, rng)) == 0
 end

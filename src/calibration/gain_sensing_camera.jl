@@ -171,7 +171,8 @@ function GainSensingCamera(wfs::WavefrontSensors.PyramidWFS{<:WavefrontSensors.D
         kwargs...)
 end
 
-function GSCDetectorMetadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.state.frame))
+function GSCDetectorMetadata(det::Detector;
+    T::Type{<:AbstractFloat}=eltype(det.products.frame))
     return GSCDetectorMetadata{T}(
         T(det.params.integration_time),
         T(det.params.qe),

@@ -921,40 +921,62 @@ struct _FrameAcquisitionExecutionToken end
 const _FRAME_ACQUISITION_EXECUTION_TOKEN = _FrameAcquisitionExecutionToken()
 
 """Prepared detector capture and copy into a distinct caller-owned frame."""
-struct FrameAcquisitionExecution{D,P,F}
-    detector::D
-    plan::P
+struct FrameAcquisitionExecution{P,F}
+    acquisition::P
     observation::F
 
     function FrameAcquisitionExecution(::_FrameAcquisitionExecutionToken,
-        detector::D, plan::P, observation::F) where {D,P,F}
-        return new{D,P,F}(detector, plan, observation)
+        acquisition::P, observation::F) where {P,F}
+        return new{P,F}(acquisition, observation)
     end
 end
 
 function FrameAcquisitionExecution(detector::Detector,
     optical_result::IntensityMap, observation::AbstractArray)
-    plan = prepare_detector_acquisition(detector, optical_result)
-    return _frame_acquisition_execution(detector, plan, observation)
+    _require_frame_acquisition_observation_ownership(detector,
+        optical_result, observation)
+    candidate = _prepare_detached_detector_acquisition(detector,
+        optical_result)
+    return _commit_frame_acquisition_execution!(detector, candidate,
+        observation)
 end
 
 function FrameAcquisitionExecution(detector::Detector,
     optical_result::IntensityMap)
-    plan = prepare_detector_acquisition(detector, optical_result)
-    observation = similar(output_frame(detector))
+    candidate = _prepare_detached_detector_acquisition(detector,
+        optical_result)
+    observation = similar(output_frame(
+        detector_acquisition_detector(candidate)))
     fill!(observation, zero(eltype(observation)))
-    return _frame_acquisition_execution(detector, plan, observation)
+    return _commit_frame_acquisition_execution!(detector, candidate,
+        observation)
 end
 
-function _frame_acquisition_execution(detector::Detector, plan,
+function _commit_frame_acquisition_execution!(detector::Detector,
+    candidate::PreparedDetectorAcquisition,
     observation::AbstractArray)
-    _require_frame_acquisition_observation(detector, observation)
-    return FrameAcquisitionExecution(_FRAME_ACQUISITION_EXECUTION_TOKEN,
-        detector, plan, observation)
+    _require_frame_acquisition_observation(
+        detector_acquisition_detector(candidate),
+        detector_acquisition_input(candidate), observation)
+    acquisition = _rebind_prepared_detector_acquisition(detector, candidate)
+    execution = FrameAcquisitionExecution(_FRAME_ACQUISITION_EXECUTION_TOKEN,
+        acquisition, observation)
+    _commit_prepared_detector_acquisition!(acquisition)
+    return execution
+end
+
+function _require_frame_acquisition_observation_ownership(
+    detector::Detector, optical_result::IntensityMap,
+    observation::AbstractArray)
+    (_detector_storage_mightalias(detector, observation) ||
+        Base.mightalias(observation, optical_result.values)) && throw(
+        PlantPreparationError(:acquisition, :ownership,
+            "caller-owned acquisition observation must not alias detector storage or its optical input"))
+    return nothing
 end
 
 function _require_frame_acquisition_observation(detector::Detector,
-    observation::AbstractArray)
+    optical_result::IntensityMap, observation::AbstractArray)
     frame = output_frame(detector)
     size(observation) == size(frame) || throw(PlantPreparationError(
         :acquisition, :shape,
@@ -968,9 +990,8 @@ function _require_frame_acquisition_observation(detector::Detector,
     compute_device(observation) == compute_device(frame) || throw(
         PlantPreparationError(:acquisition, :device,
             "acquisition observation and detector output occupy different devices"))
-    Base.mightalias(observation, frame) && throw(PlantPreparationError(
-        :acquisition, :ownership,
-        "caller-owned acquisition observation must not alias detector state"))
+    _require_frame_acquisition_observation_ownership(detector,
+        optical_result, observation)
     return nothing
 end
 
@@ -1016,18 +1037,22 @@ function validate_acquisition_execution_binding(
     products.observation === execution.observation || throw(
         PlantPreparationError(:acquisition, :prepared_binding,
             "acquisition observation does not match its prepared storage"))
-    _require_frame_acquisition_observation(execution.detector,
+    detector = detector_acquisition_detector(execution.acquisition)
+    input = detector_acquisition_input(execution.acquisition)
+    _require_frame_acquisition_observation(detector, input,
         execution.observation)
-    plan = execution.plan
-    path_result.metadata === plan.input_metadata &&
-        path_result.values === plan.input_values || throw(
+    path_result.metadata === input.metadata &&
+        path_result.values === input.values || throw(
         PlantPreparationError(:acquisition, :prepared_binding,
-            "acquisition path result does not match its detector plan"))
-    execution.detector.params === plan.detector_params &&
-        execution.detector.state === plan.detector_state &&
-        execution.detector.state.frame === plan.detector_frame || throw(
-        PlantPreparationError(:acquisition, :prepared_binding,
-            "acquisition detector storage changed after preparation"))
+            "acquisition path result does not match its prepared detector input"))
+    try
+        _require_prepared_acquisition(execution.acquisition)
+    catch error
+        error isa Union{InvalidConfiguration,DimensionMismatchError} ||
+            rethrow()
+        throw(PlantPreparationError(:acquisition, :prepared_binding,
+            "acquisition detector ownership changed after preparation"))
+    end
     return nothing
 end
 
@@ -1261,7 +1286,7 @@ function execute_acquisition!(products::AcquisitionProducts{<:AbstractArray,
     Nothing}, path_result::IntensityMap,
     execution::FrameAcquisitionExecution, rng::AbstractRNG)
     validate_acquisition_execution_binding(execution, path_result, products)
-    frame = capture!(execution.detector, path_result, execution.plan, rng)
+    frame = capture!(execution.acquisition, rng)
     copyto!(products.observation, frame)
     return products
 end

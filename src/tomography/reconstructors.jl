@@ -63,7 +63,7 @@ function PhotonReadoutSlopeNoise(; photons_per_subaperture::Real, readout_sigma:
 end
 
 function PhotonReadoutSlopeNoise(det::Detector; photons_per_subaperture::Real, excess_noise::Real=1.0)
-    T = eltype(det.state.frame)
+    T = eltype(det.products.frame)
     sigma = T(readout_noise(det))
     return PhotonReadoutSlopeNoise(
         photons_per_subaperture=T(photons_per_subaperture),

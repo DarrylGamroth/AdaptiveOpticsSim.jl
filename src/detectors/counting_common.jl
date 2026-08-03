@@ -8,6 +8,33 @@ struct ParalyzableDeadTime{T<:AbstractFloat} <: CountingDeadTimeModel
     dead_time::T
 end
 
+"""Persistent scientific state shared by accumulated-count detectors."""
+struct CountingDetectorState{TS<:AbstractDetectorThermalState}
+    thermal_state::TS
+end
+
+"""Replaceable scratch and host staging for accumulated-count acquisition."""
+mutable struct CountingDetectorWorkspace{
+    T<:AbstractFloat,
+    A<:AbstractMatrix{T},
+    H<:AbstractMatrix{T},
+    OH<:Union{Nothing,AbstractMatrix},
+}
+    noise_buffer::A
+    host_buffer::H
+    output_buffer_host::OH
+end
+
+"""Raw counts and optional converted output from accumulated-count acquisition."""
+mutable struct CountingDetectorProducts{
+    T<:AbstractFloat,
+    A<:AbstractMatrix{T},
+    O<:Union{Nothing,AbstractMatrix},
+}
+    counts::A
+    output_buffer::O
+end
+
 NonParalyzableDeadTime(dead_time::Real) = NonParalyzableDeadTime{Float64}(float(dead_time))
 ParalyzableDeadTime(dead_time::Real) = ParalyzableDeadTime{Float64}(float(dead_time))
 

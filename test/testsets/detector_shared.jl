@@ -27,7 +27,7 @@
     @test AdaptiveOpticsSim.Detectors._require_exact_detector_target(
         short_exposure, host_target) === short_exposure
     @test AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
-        short_exposure, short_plan, host_target) === short_plan
+        short_plan, host_target) === short_plan
     @test_throws InvalidConfiguration begin
         AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
             short_exposure, long_plan, host_target)
@@ -36,7 +36,7 @@
         CUDABackend(), 0)
     wrong_target_error = try
         AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
-            short_exposure, short_plan, wrong_target)
+            short_plan, wrong_target)
         nothing
     catch error
         error
@@ -90,14 +90,14 @@
         background_map=fill(0.05, 4, 4))
     rich_plan = prepare_detector_acquisition(rich_detector, shared_rate)
     @test AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
-        rich_detector, rich_plan, host_target) === rich_plan
+        rich_plan, host_target) === rich_plan
     @test !applicable(DetectorAcquisitionPlan, short_exposure.params,
         shared_rate.metadata, 1.0, 1.0)
     @test !applicable(typeof(short_plan),
         short_exposure.params, shared_rate.metadata, 1.0, 1.0)
-    short_frame = copy(capture!(short_exposure, shared_rate, short_plan;
+    short_frame = copy(capture!(short_plan;
         rng=MersenneTwister(200)))
-    long_frame = copy(capture!(long_exposure, shared_rate, long_plan;
+    long_frame = copy(capture!(long_plan;
         rng=MersenneTwister(200)))
     @test short_frame == rate_values .* 0.125
     @test long_frame == rate_values .* 0.75
@@ -122,7 +122,7 @@
     trusted_plan = prepare_detector_acquisition(trusted_detector,
         trusted_rate)
     trusted_values[1, 1] = -1.0
-    @test capture!(trusted_detector, trusted_rate, trusted_plan;
+    @test capture!(trusted_plan;
         rng=MersenneTwister(201))[1, 1] == -1.0
 
     spectral_rate = detector_test_intensity_map(ones(2, 2);
@@ -132,7 +132,7 @@
         response_model=NullFrameResponse())
     spectral_plan = prepare_detector_acquisition(spectral_detector,
         spectral_rate)
-    @test capture!(spectral_detector, spectral_rate, spectral_plan;
+    @test capture!(spectral_plan;
         rng=MersenneTwister(200)) ≈ fill(1.0, 2, 2)
     @test_throws InvalidConfiguration prepare_detector_acquisition(
         spectral_detector, detector_test_intensity_map(ones(2, 2);
@@ -180,8 +180,8 @@
         qe=0.5, binning=3,
         response_model=SampledFrameResponse(response_kernel))
     density_plan = prepare_detector_acquisition(density_detector, density_rate)
-    density_frame = copy(capture!(density_detector, density_rate,
-        density_plan; rng=MersenneTwister(201)))
+    density_frame = copy(capture!(density_plan;
+        rng=MersenneTwister(201)))
     manual_response = zeros(9, 9)
     manual_response[3, 5] = 4.8
     manual_response[2, 5] = 0.8
@@ -193,8 +193,7 @@
     @test density_frame ≈ manual_binned .* 0.125
     @test sum(density_frame) ≈ sum(density_values) * 0.125
     @test_detector_allocation prepared_detector_capture_allocations(
-        density_detector,
-        density_rate, density_plan, Xoshiro(202)) == 0
+        density_plan, Xoshiro(202)) == 0
 
     cell_rate = detector_test_intensity_map(copy(density_values);
         sampling=(0.5, 0.25), spatial_measure=CellIntegratedMeasure())
@@ -202,7 +201,7 @@
         qe=0.5, binning=3,
         response_model=SampledFrameResponse(response_kernel))
     cell_plan = prepare_detector_acquisition(cell_detector, cell_rate)
-    cell_frame = capture!(cell_detector, cell_rate, cell_plan;
+    cell_frame = capture!(cell_plan;
         rng=MersenneTwister(202))
     @test cell_frame ≈ manual_binned
     @test sum(cell_frame) ≈ sum(density_values)
@@ -215,7 +214,7 @@
         normalized_detector, normalized_map)
     normalized_plan = prepare_detector_acquisition(normalized_detector,
         normalized_map; normalized_to_photon_rate=40.0)
-    @test capture!(normalized_detector, normalized_map, normalized_plan;
+    @test capture!(normalized_plan;
         rng=MersenneTwister(203)) == fill(5.0, 2, 2)
     @test_throws InvalidConfiguration prepare_detector_acquisition(
         normalized_detector, normalized_map; normalized_to_photon_rate=0.0)
@@ -237,7 +236,7 @@
         qe=0.5, response_model=NullFrameResponse())
     external_plan = prepare_detector_acquisition(external_detector,
         external_product)
-    @test capture!(external_detector, external_product, external_plan;
+    @test capture!(external_plan;
         rng=MersenneTwister(2031)) ≈ fill(0.6, 2, 2)
     undeclared_external_metadata = OpticalPlaneMetadata(DetectorPlane(),
         external_values; coordinate_domain=AngularCoordinates(),
@@ -276,23 +275,21 @@
     allocation_plan = prepare_detector_acquisition(allocation_detector,
         shared_rate)
     @test_detector_allocation prepared_detector_capture_allocations(
-        allocation_detector,
-        shared_rate, allocation_plan, Xoshiro(205)) == 0
+        allocation_plan, Xoshiro(205)) == 0
     @test_detector_allocation prepared_detector_readiness_allocations(
-        allocation_detector,
-        shared_rate, allocation_plan) == 0
+        allocation_plan) == 0
 
     busy_prepared_detector = Detector(integration_time=2.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     busy_prepared_plan = prepare_detector_acquisition(
         busy_prepared_detector, shared_rate)
-    capture!(busy_prepared_detector, shared_rate, busy_prepared_plan;
+    capture!(busy_prepared_plan;
         rng=MersenneTwister(2399), integration_duration=0.25)
     busy_integrated_time = busy_prepared_detector.state.integrated_time
     busy_accumulation = copy(busy_prepared_detector.state.accum_buffer)
     @test_throws InvalidConfiguration begin
         AdaptiveOpticsSim.Detectors._require_prepared_whole_acquisition(
-            busy_prepared_detector, shared_rate, busy_prepared_plan)
+            busy_prepared_plan)
     end
     @test busy_prepared_detector.state.integrated_time == busy_integrated_time
     @test busy_prepared_detector.state.accum_buffer == busy_accumulation
@@ -332,7 +329,7 @@
         prepared_plan = prepare_detector_acquisition(prepared_detector,
             prepared_readout_rate)
         @test AdaptiveOpticsSim.Detectors._require_exact_detector_acquisition_target(
-            prepared_detector, prepared_plan, host_target) === prepared_plan
+            prepared_plan, host_target) === prepared_plan
         @test readout_products(prepared_detector) isa FrameReadoutProducts
         @test !(readout_products(prepared_detector) isa
             NoFrameReadoutProducts)
@@ -342,14 +339,20 @@
         @test prepared_metadata.provides_combined_frame
         products = readout_products(prepared_detector)
         if products isa MultiReadFrameReadoutProducts
-            @test isnothing(products.workspace_reference_cube) ||
-                all(iszero, products.workspace_reference_cube)
-            @test all(iszero, products.workspace_signal_cube)
+            workspace = prepared_detector.workspace.readout
+            if workspace isa AdaptiveOpticsSim.Detectors.MultiReadFrameReadoutWorkspace
+                @test isnothing(workspace.reference_cube) ||
+                    all(iszero, workspace.reference_cube)
+                @test all(iszero, workspace.signal_cube)
+            end
         elseif products isa UpTheRampReadoutProducts
-            @test all(iszero, products.workspace_slope)
-            @test all(iszero, products.workspace_intercept)
-            @test all(iszero, products.workspace_integrated)
-            @test all(iszero, products.workspace_cube)
+            workspace = prepared_detector.workspace.readout
+            if workspace isa AdaptiveOpticsSim.Detectors.UpTheRampReadoutWorkspace
+                @test all(iszero, workspace.slope)
+                @test all(iszero, workspace.intercept)
+                @test all(iszero, workspace.integrated)
+                @test all(iszero, workspace.cube)
+            end
         end
         if coverage_instrumented()
             @test_skip "first prepared detector capture allocation assertion is disabled under coverage instrumentation: $label"
@@ -432,10 +435,9 @@
         prepared_readout_rate)
     windowed_cds_plan = prepare_detector_acquisition(windowed_cds,
         prepared_readout_rate)
-    full_cds_frame = copy(capture!(full_cds, prepared_readout_rate,
-        full_cds_plan, MersenneTwister(2402)))
-    windowed_cds_frame = copy(capture!(windowed_cds,
-        prepared_readout_rate, windowed_cds_plan, MersenneTwister(2402)))
+    full_cds_frame = copy(capture!(full_cds_plan, MersenneTwister(2402)))
+    windowed_cds_frame = copy(capture!(windowed_cds_plan,
+        MersenneTwister(2402)))
     @test windowed_cds_frame == full_cds_frame[2:3, 2:3]
     @test detector_reference_frame(windowed_cds) ==
         detector_reference_frame(full_cds)[2:3, 2:3]
@@ -456,7 +458,7 @@
             sampling_mode=AveragedNonDestructiveReads(4)))
     binned_ndr_plan = prepare_detector_acquisition(binned_ndr,
         prepared_readout_rate)
-    @test capture!(binned_ndr, prepared_readout_rate, binned_ndr_plan,
+    @test capture!(binned_ndr_plan,
         MersenneTwister(2403)) == fill(4.0, 2, 2)
 
     replacement_storage = copy(shared_rate.values)
@@ -464,30 +466,38 @@
         replacement_storage)
     @test replacement_storage_map.metadata === shared_rate.metadata
     @test replacement_storage_map.values !== shared_rate.values
-    @test_throws InvalidConfiguration capture!(allocation_detector,
-        replacement_storage_map, allocation_plan; rng=MersenneTwister(205))
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.Detectors._require_prepared_acquisition(
+            allocation_plan, replacement_storage_map)
+    end
     @test_detector_allocation prepared_detector_capture_allocations(
-        allocation_detector,
-        shared_rate, allocation_plan, Xoshiro(205)) == 0
+        allocation_plan, Xoshiro(205)) == 0
     identical_allocation_detector = Detector(integration_time=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     @test identical_allocation_detector.params === allocation_detector.params
     @test identical_allocation_detector.state !== allocation_detector.state
-    @test_throws InvalidConfiguration capture!(identical_allocation_detector,
-        shared_rate, allocation_plan; rng=MersenneTwister(205))
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.Detectors._require_prepared_detector_binding(
+            identical_allocation_detector, allocation_plan)
+    end
     incremental_allocation_detector = Detector(integration_time=4.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     incremental_allocation_plan = prepare_detector_acquisition(
         incremental_allocation_detector, shared_rate)
     @test_detector_allocation prepared_incremental_capture_allocations(
-        incremental_allocation_detector, shared_rate,
         incremental_allocation_plan, Xoshiro(206), 0.5) == 0
 
     mismatched_rate = detector_test_intensity_map(copy(rate_values);
         sampling=(2.0, 1.0))
-    @test_throws InvalidConfiguration capture!(allocation_detector,
-        mismatched_rate, allocation_plan; rng=MersenneTwister(207))
-    @test_throws InvalidConfiguration capture!(long_exposure, shared_rate,
-        allocation_plan; rng=MersenneTwister(207))
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.Detectors._require_prepared_acquisition(
+            allocation_plan, mismatched_rate)
+    end
+    @test_throws InvalidConfiguration begin
+        AdaptiveOpticsSim.Detectors._require_prepared_detector_binding(
+            long_exposure, allocation_plan)
+    end
+    @test !applicable(capture!, allocation_detector, shared_rate,
+        allocation_plan, MersenneTwister(207))
 
 end

@@ -13,6 +13,7 @@ TestSuiteSpec(name::AbstractString, paths::AbstractString...;
 
 const DETECTOR_TEST_SUITE_NAMES = (
     "detector-parameter-ownership",
+    "prepared-detector-ownership",
     "detector-shared",
     "detector-lifecycle",
     "detector-response",
@@ -136,6 +137,11 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec(
         "detector-parameter-ownership",
         "testsets/detector_parameter_ownership.jl";
+        fixtures=("detector_test_fixtures.jl",),
+    ),
+    TestSuiteSpec(
+        "prepared-detector-ownership",
+        "testsets/prepared_detector_ownership.jl";
         fixtures=("detector_test_fixtures.jl",),
     ),
     TestSuiteSpec(
@@ -438,6 +444,7 @@ const TEST_GROUP_SPECS = (
         "gate0",
         "backend-smoke",
     ),
+    "pe04" => ("prepared-detector-ownership",),
     "gate4" => (
         "plant-command-schemas",
         "plant-command-admission",
