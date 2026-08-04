@@ -559,12 +559,12 @@ end
 
 function prepare_sampling_wavelength!(wfs::ShackHartmannWFS,
     pupil_resolution::Int, pupil_diameter_m::Real, wavelength_m::Real)
-    front_end = wfs.optics
-    propagation = microlens_propagation_workspace(front_end.propagation)
+    optics = wfs.optics
+    propagation = microlens_propagation_workspace(optics.propagation)
     sampling_before = (size(propagation.field),
         propagation.effective_padding, propagation.binning_pixel_scale,
         propagation.sampled_n_pix_subap, propagation.phasor_ratio)
-    _prepare_microlens_sampling_wavelength!(front_end, pupil_resolution,
+    _prepare_microlens_sampling_wavelength!(optics, pupil_resolution,
         pupil_diameter_m, wavelength_m)
     sampling_after = (size(propagation.field),
         propagation.effective_padding, propagation.binning_pixel_scale,
