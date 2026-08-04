@@ -99,11 +99,12 @@ function Backends._with_compute_device(
     return AMDGPU.device!(f, _require_amdgpu_device(device))
 end
 
-struct AMDGPUPreparedDeviceExecutionContext <:
-    Backends._AbstractPreparedDeviceExecutionContext
+struct AMDGPUPreparedDeviceExecutionContext{
+    D<:Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend},
+} <: Backends._AbstractPreparedDeviceExecutionContext
     device::AMDGPU.HIPDevice
     stream::AMDGPU.HIPStream
-    compute_device::Backends.AcceleratorComputeDevice
+    compute_device::D
 end
 
 function Backends._prepare_device_execution_context(
