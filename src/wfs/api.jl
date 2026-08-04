@@ -24,6 +24,7 @@ export wfs_measurement_path
 export ShackHartmannDirectFrontEnd
 export ShackHartmannOpticalFrontEnd
 export shack_hartmann_rate_map
+export shack_hartmann_optical_formation
 export PyramidOpticalFrontEnd
 export pyramid_rate_map
 export BioEdgeOpticalFrontEnd
@@ -103,5 +104,14 @@ public WFSMultipleDetectorAcquisitionPlan
 public PreparedWFSDetectorAcquisition
 public PreparedWFSCountingAcquisition
 public PreparedWFSMultipleDetectorAcquisition
+public ShackHartmannWorkspace
+public ShackHartmannProducts
+public ShackHartmannOpticalFormationModel
+public ShackHartmannOpticalFormationPlan
+public ShackHartmannOpticalBundleFormationPlan
+public PreparedShackHartmannOpticalFormation
+public PreparedShackHartmannOpticalBundleFormation
+public ShackHartmannEstimationPlan
+public PreparedShackHartmannEstimator
 public wfs_acquisition_plan
 public validate_wfs_target

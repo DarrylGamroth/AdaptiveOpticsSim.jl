@@ -1829,7 +1829,7 @@ end
     device,
     BackendArray,
 )
-    propagation = plan.front_end.propagation
+    propagation = plan.formation.propagation.workspace
     arrays = (
         propagation.field,
         propagation.phasor,
@@ -3200,12 +3200,12 @@ function run_optional_wfs_stage_contracts(
     physical_wfs = ShackHartmannWFS(tel; n_lenslets=2,
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_rate = shack_hartmann_rate_map(physical_wfs, pupil, src)
-    physical_front_end = ShackHartmannOpticalFrontEnd(
-        physical_wfs.front_end, src)
-    @test !hasfield(typeof(physical_front_end), :sensor)
-    @test physical_front_end.propagation.fft_stack isa BackendArray
+    physical_formation = shack_hartmann_optical_formation(
+        physical_wfs, src)
+    @test !hasfield(typeof(physical_formation), :sensor)
+    @test physical_formation.propagation.workspace.fft_stack isa BackendArray
     physical_optical_plan = prepare_wfs_optical_formation(
-        physical_front_end, pupil, physical_rate)
+        physical_formation, pupil, physical_rate)
     form_wfs_optical_products!(physical_rate, pupil, physical_optical_plan)
     @test physical_rate.values isa BackendArray
     @test all(isfinite, Array(physical_rate.values))
@@ -3215,7 +3215,7 @@ function run_optional_wfs_stage_contracts(
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_field_rate = shack_hartmann_rate_map(physical_field_wfs, field)
     physical_field_plan = prepare_wfs_optical_formation(
-        physical_field_wfs.front_end, field,
+        shack_hartmann_optical_formation(physical_field_wfs), field,
         physical_field_rate)
     form_wfs_optical_products!(physical_field_rate, field,
         physical_field_plan)
@@ -3236,7 +3236,7 @@ function run_optional_wfs_stage_contracts(
     physical_asterism_rate = shack_hartmann_rate_map(
         physical_asterism_wfs, pupil, physical_asterism)
     physical_asterism_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(physical_asterism_wfs.front_end,
+        shack_hartmann_optical_formation(physical_asterism_wfs,
             physical_asterism), pupil, physical_asterism_rate)
     form_wfs_optical_products!(physical_asterism_rate, pupil,
         physical_asterism_plan)
@@ -3266,7 +3266,7 @@ function run_optional_wfs_stage_contracts(
     mixed_backend_rate = shack_hartmann_rate_map(cpu_wfs, pupil, src)
     mixed_optical_error = try
         prepare_wfs_optical_formation(
-            ShackHartmannOpticalFrontEnd(cpu_wfs.front_end, src), pupil,
+            shack_hartmann_optical_formation(cpu_wfs, src), pupil,
             mixed_backend_rate)
         nothing
     catch err
@@ -3329,23 +3329,23 @@ function run_optional_wfs_stage_contracts(
         (),
     )
     assert_optional_structural_resource_fact(
-        physical_wfs.acquisition,
-        Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_acquisition),
+        physical_wfs.products,
+        Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_products),
         physical_target,
-        (physical_wfs.acquisition.exported_spot_cube,),
-        (
-            physical_wfs.acquisition.spot_cube,
-            physical_wfs.acquisition.detector_noise_cube,
-        ),
+        (physical_wfs.products.slopes,
+            physical_wfs.products.exported_spot_cube),
+        (),
     )
     assert_optional_structural_resource_fact(
-        physical_wfs.estimator,
-        Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_state),
+        physical_wfs.workspace,
+        Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_workspace),
         physical_target,
-        (physical_wfs.estimator.slopes,),
+        (),
         (
-            physical_wfs.estimator.spot_stats,
-            physical_wfs.estimator.spot_stats_accum,
+            physical_wfs.workspace.spot_cube,
+            physical_wfs.workspace.detector_noise_cube,
+            physical_wfs.workspace.spot_stats,
+            physical_wfs.workspace.spot_stats_accum,
         ),
     )
     assert_optional_structural_resource_fact(
@@ -5226,13 +5226,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         WavefrontSensors.ShackHartmannWFSROCmHostStatsStrategy
     WavefrontSensors.prepare_sampling!(sh, pupil, src)
     sh_sub = div(tel.params.resolution, WavefrontSensors.n_lenslets(sh))
-    sh_pad = size(sh.front_end.propagation.field, 1)
+    sh_pad = size(sh.formation.propagation.workspace.field, 1)
     sh_offset = div(sh_pad - sh_sub, 2)
     safe_intensity = WavefrontSensors.compute_intensity_safe!(
-        AdaptiveOpticsSim.Backends.execution_style(sh.front_end.propagation.intensity),
+        AdaptiveOpticsSim.Backends.execution_style(
+            sh.formation.propagation.workspace.intensity),
         sh, pupil, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset,
         sh_sub)
-    @test safe_intensity === sh.front_end.propagation.intensity
+    @test safe_intensity === sh.formation.propagation.workspace.intensity
     @test all(isfinite, Array(safe_intensity))
     @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy
     capture_psf = array_backend{T}(undef, 4, 4)
@@ -5518,10 +5519,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     measure!(cpu_sh_stats, cpu_pupil, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh_stats, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
-    cpu_peak = WavefrontSensors.sh_safe_peak_value(cpu_sh_stats.acquisition.spot_cube)
+    cpu_peak = WavefrontSensors.sh_safe_peak_value(cpu_sh_stats.workspace.spot_cube)
     cpu_cutoff = WavefrontSensors.centroid_threshold(cpu_sh_stats) * cpu_peak
     WavefrontSensors.sh_signal_from_spots!(cpu_sh_stats, cpu_cutoff)
-    gpu_peak = WavefrontSensors.sh_safe_peak_value(gpu_sh_stats.acquisition.spot_cube)
+    gpu_peak = WavefrontSensors.sh_safe_peak_value(gpu_sh_stats.workspace.spot_cube)
     gpu_cutoff = WavefrontSensors.centroid_threshold(gpu_sh_stats) * gpu_peak
     WavefrontSensors.sh_signal_from_spots_device_stats!(
         AdaptiveOpticsSim.Backends.execution_style(slopes(gpu_sh_stats)),
@@ -6063,7 +6064,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     spectral_optical_sh = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), T=T, backend=selector)
     WavefrontSensors.sampled_spots_peak!(spectral_optical_sh, pupil, poly)
-    spectral_optical_spots = Array(spectral_optical_sh.acquisition.spot_cube)
+    spectral_optical_spots = Array(spectral_optical_sh.workspace.spot_cube)
     spectral_qe = AdaptiveOpticsSim.Detectors.SampledQuantumEfficiency(
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.2, 0.8])
     spectral_exposure = T(2.5)
@@ -6076,7 +6077,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         spectral_detector, MersenneTwister(149))
     expected_spectral_scale = spectral_exposure *
         T(AdaptiveOpticsSim.Detectors.qe_at(spectral_qe, wavelength(src)))
-    @test Array(spectral_detector_sh.acquisition.spot_cube) ≈
+    @test Array(spectral_detector_sh.workspace.spot_cube) ≈
         spectral_optical_spots .* expected_spectral_scale rtol=5e-5
 
     distinct = with_spectrum(src, SpectralBundle(

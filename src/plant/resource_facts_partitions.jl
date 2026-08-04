@@ -50,9 +50,10 @@ function _target_local_path_resource_fact(
         resident,
         (present=false, bytes=UInt64(0)),
     )
-    layout_fact = structural_resource_fact(plan.front_end.layout, id, target)
+    layout_fact = structural_resource_fact(
+        plan.formation.front_end.layout, id, target)
     propagation_fact = structural_resource_fact(
-        plan.front_end.propagation, id, target)
+        plan.formation.propagation, id, target)
     return _combine_structural_owner_facts(
         id, target, (path_fact, layout_fact, propagation_fact))
 end

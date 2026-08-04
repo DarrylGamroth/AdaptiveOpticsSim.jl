@@ -497,13 +497,13 @@ end
     WavefrontSensors.prepare_sampling!(sh_ast_serial, pupil, ast.sources[1])
     WavefrontSensors.ensure_sh_calibration!(sh_ast_serial, pupil,
         ast.sources[1])
-    fill!(sh_ast_serial.acquisition.detector_noise_cube, zero(eltype(sh_ast_serial.acquisition.detector_noise_cube)))
+    fill!(sh_ast_serial.workspace.detector_noise_cube, zero(eltype(sh_ast_serial.workspace.detector_noise_cube)))
     for src in ast.sources
         WavefrontSensors.sampled_spots_peak!(sh_ast_serial, pupil, src)
-        sh_ast_serial.acquisition.detector_noise_cube .+= sh_ast_serial.acquisition.spot_cube
+        sh_ast_serial.workspace.detector_noise_cube .+= sh_ast_serial.workspace.spot_cube
     end
-    copyto!(sh_ast_serial.acquisition.spot_cube, sh_ast_serial.acquisition.detector_noise_cube)
-    sh_ast_serial_peak = maximum(sh_ast_serial.acquisition.spot_cube)
+    copyto!(sh_ast_serial.workspace.spot_cube, sh_ast_serial.workspace.detector_noise_cube)
+    sh_ast_serial_peak = maximum(sh_ast_serial.workspace.spot_cube)
     WavefrontSensors.sh_signal_from_spots!(sh_ast_serial, sh_ast_serial_peak, slope_extraction_model(sh_ast_serial))
     WavefrontSensors.subtract_reference_and_scale!(sh_ast_serial)
     sh_ast_serial_slopes = copy(slopes(sh_ast_serial))

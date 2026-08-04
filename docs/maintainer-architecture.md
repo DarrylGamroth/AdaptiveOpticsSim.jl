@@ -268,15 +268,17 @@ Examples:
   spatial-measure, and coherent/incoherent combination policy. A
   `PupilFunction` snapshots aperture support and field amplitude and owns the
   mutable OPD for exactly one optical path
-- `WavefrontSensors.ShackHartmannWFS`, owned with its calibration, acquisition,
-  and estimation implementation by the canonical WFS module, composed through
-  one explicit `front_end` and separate
-  calibration, acquisition, and estimator owners. The front end is a
-  propagation-free `ShackHartmannDirectFrontEnd` for geometric sensing or a
-  `ShackHartmannOpticalFrontEnd` containing the immutable `MicrolensArray`,
-  backend/grid-bound `PreparedMicrolensPropagation`, and layout for
-  diffractive sensing. There are no top-level optical field aliases or a
-  whole-WFS optical-owner union
+- `WavefrontSensors.ShackHartmannWFS`, owned with its calibration and
+  estimation implementation by the canonical WFS module. Its `front_end` is
+  a propagation-free physical definition: `ShackHartmannDirectFrontEnd` for
+  geometric sensing or `ShackHartmannOpticalFrontEnd` for diffractive sensing.
+  Diffractive execution composes that definition with a separately prepared
+  microlens plan/workspace owner in `ShackHartmannOpticalFormationModel`.
+  Replaceable `ShackHartmannWorkspace`, caller-visible
+  `ShackHartmannProducts`, and persistent calibration are distinct owners;
+  geometric sensing allocates no spot cube, detector-noise cube, or exported
+  spot product. There are no top-level optical aliases, property forwarding,
+  or whole-WFS optical-owner union
 - frame `Detector` owners with immutable `DetectorParams`, persistent
   `DetectorState`, replaceable `DetectorWorkspace`, and caller-visible
   `DetectorProducts`; frame-readout products and workspace follow the same

@@ -1,10 +1,10 @@
 function apply_lgs_elongation!(::LGSProfileNone,
     wfs::ShackHartmannWFS, ::PupilFunction, src::LGSSource, ::Int)
-    wfs.front_end.propagation.elongation_kernel = apply_elongation!(
-        wfs.front_end.propagation.intensity,
+    wfs.formation.propagation.workspace.elongation_kernel = apply_elongation!(
+        wfs.formation.propagation.workspace.intensity,
         lgs_elongation_factor(src),
-        wfs.front_end.propagation.temp,
-        wfs.front_end.propagation.elongation_kernel,
+        wfs.formation.propagation.workspace.temp,
+        wfs.formation.propagation.workspace.elongation_kernel,
     )
     return wfs
 end
@@ -12,11 +12,11 @@ end
 function apply_lgs_elongation!(::LGSProfileNaProfile, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource, idx::Int)
     ensure_lgs_kernels!(wfs, pupil, src)
     apply_lgs_convolution!(
-        wfs.front_end.propagation.intensity,
-        wfs.front_end.propagation.lgs_kernel_fft,
-        wfs.front_end.propagation.fft_buffer,
-        wfs.front_end.propagation.fft_plan,
-        wfs.front_end.propagation.ifft_plan,
+        wfs.formation.propagation.workspace.intensity,
+        wfs.formation.propagation.workspace.lgs_kernel_fft,
+        wfs.formation.propagation.workspace.fft_buffer,
+        wfs.formation.propagation.workspace.fft_plan,
+        wfs.formation.propagation.workspace.ifft_plan,
         idx,
     )
     return wfs
@@ -24,13 +24,13 @@ end
 
 function ensure_lgs_kernels!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
     dimensions = (_pupil_resolution(pupil), _pupil_resolution(pupil))
-    ensure_lgs_kernels!(wfs.front_end, src, dimensions,
+    ensure_lgs_kernels!(wfs.formation, src, dimensions,
         _pupil_diameter_m(pupil),
         pupil.metadata.sampling, pupil.metadata.origin, wavelength(src))
     return wfs
 end
 
-function ensure_lgs_kernels!(front_end::ShackHartmannOpticalFrontEnd,
+function ensure_lgs_kernels!(front_end::ShackHartmannOpticalFormationModel,
     src::LGSSource,
     pupil_dimensions::NTuple{2,Int}, pupil_diameter::Real,
     pupil_sampling::NTuple{2,<:Real}, pupil_origin::NTuple{2,<:Real},
@@ -39,7 +39,7 @@ function ensure_lgs_kernels!(front_end::ShackHartmannOpticalFrontEnd,
     if na_profile === nothing
         return front_end
     end
-    propagation = front_end.propagation
+    propagation = microlens_propagation_workspace(front_end.propagation)
     pad = size(propagation.intensity, 1)
     n_sub = n_lenslets(front_end)
     pixel_scale = lgs_pixel_scale(
@@ -83,15 +83,15 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernels_fft::Abstr
 end
 
 function lgs_spot_kernels_fft(pupil::PupilFunction, wfs::ShackHartmannWFS, src::LGSSource, pad::Int)
-    return lgs_spot_kernels_fft(_pupil_diameter_m(pupil), wfs.front_end, src,
+    return lgs_spot_kernels_fft(_pupil_diameter_m(pupil), wfs.formation, src,
         pad,
         wavelength(src))
 end
 
 function lgs_spot_kernels_fft(pupil_diameter::Real,
-    front_end::ShackHartmannOpticalFrontEnd, src::LGSSource, pad::Int,
+    front_end::ShackHartmannOpticalFormationModel, src::LGSSource, pad::Int,
     wavelength_m::Real)
-    propagation = front_end.propagation
+    propagation = microlens_propagation_workspace(front_end.propagation)
     T = eltype(propagation.intensity)
     n_sub = n_lenslets(front_end)
     na_profile = src.params.na_profile

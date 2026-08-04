@@ -63,14 +63,18 @@ end
 @inline microlens_numeric_type(
     ::MicrolensArray{<:MicrolensArrayParams{T}}) where {T} = T
 
-"""
-Backend-bound plans and preallocated scratch for microlens propagation.
+"""Run-immutable numerical contract for one microlens propagation grid."""
+struct MicrolensPropagationPlan{T<:AbstractFloat,M<:MicrolensArray}
+    microlens_array::M
+    pupil_samples_per_lenslet::Int
+    numeric_type::Type{T}
+end
 
-This is prepared execution state, not part of the physical `MicrolensArray`
-description. One optical front end owns one instance under a single-writer
-contract.
 """
-mutable struct PreparedMicrolensPropagation{T<:AbstractFloat,
+Backend-bound FFT handles, caches, and replaceable scratch for microlens
+propagation. One prepared owner has exclusive write access to one workspace.
+"""
+mutable struct MicrolensPropagationWorkspace{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     CC<:AbstractArray{Complex{T},3},
     R<:AbstractMatrix{T},
@@ -118,6 +122,20 @@ mutable struct PreparedMicrolensPropagation{T<:AbstractFloat,
     opd_to_cycles::V
     opd_to_cycles_host::Vector{T}
 end
+
+"""Exact plan/workspace owner for microlens propagation execution."""
+struct PreparedMicrolensPropagation{
+    P<:MicrolensPropagationPlan,
+    W<:MicrolensPropagationWorkspace,
+}
+    plan::P
+    workspace::W
+end
+
+@inline microlens_propagation_plan(
+    prepared::PreparedMicrolensPropagation) = prepared.plan
+@inline microlens_propagation_workspace(
+    prepared::PreparedMicrolensPropagation) = prepared.workspace
 
 """
     prepare_microlens_propagation(microlens_array, pupil_resolution;
@@ -174,12 +192,13 @@ function _prepare_microlens_propagation(backend, ::Type{T},
     amp_scales_host = Vector{T}(undef, 1)
     opd_to_cycles = backend{T}(undef, 1)
     opd_to_cycles_host = Vector{T}(undef, 1)
-    propagation = PreparedMicrolensPropagation(field, phasor, fft_buffer,
+    plan = MicrolensPropagationPlan(mla, sub, T)
+    workspace = MicrolensPropagationWorkspace(field, phasor, fft_buffer,
         fft_stack, intensity, intensity_stack, intensity_tmp_stack, temp,
         bin_buffer, spot, sampled_spot_cube, spot_cube_accum, fft_plan,
         fft_stack_plan, ifft_plan, ifft_stack_plan, elongation_kernel,
         lgs_kernel_fft, UInt(0), mla.params.diffraction_padding, 1, sub,
         T(NaN), fft_asterism_stack, fft_asterism_plan, 1, amp_scales,
         amp_scales_host, opd_to_cycles, opd_to_cycles_host)
-    return propagation
+    return PreparedMicrolensPropagation(plan, workspace)
 end

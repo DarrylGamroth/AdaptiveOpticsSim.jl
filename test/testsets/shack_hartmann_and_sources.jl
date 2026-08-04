@@ -84,10 +84,10 @@ end
     sh.front_end.layout.valid_mask[1, 3] = false
     sh.front_end.layout.valid_mask_host[1, 3] = false
     invalid_index = LinearIndices(sh.front_end.layout.valid_mask)[1, 3]
-    fill!(sh.acquisition.spot_cube, 0.0)
-    sh.acquisition.spot_cube[1, 2, 3] = 10.0
-    sh.acquisition.spot_cube[2, 1, 1] = 0.1
-    sh.acquisition.spot_cube[4, 4, 1] = 8.0
+    fill!(sh.workspace.spot_cube, 0.0)
+    sh.workspace.spot_cube[1, 2, 3] = 10.0
+    sh.workspace.spot_cube[2, 1, 1] = 0.1
+    sh.workspace.spot_cube[4, 4, 1] = 8.0
 
     scalar_slopes = WavefrontSensors.sh_signal_from_spots!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh, 0.5)
     n_lenslets = microlens_array(sh.front_end).params.n_lenslets
@@ -103,8 +103,8 @@ end
 
     sh_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     fill!(sh_accel.front_end.layout.valid_mask, true)
-    fill!(sh_accel.acquisition.spot_cube, 0.0)
-    sh_accel.acquisition.spot_cube[1, 2, 3] = 10.0
+    fill!(sh_accel.workspace.spot_cube, 0.0)
+    sh_accel.workspace.spot_cube[1, 2, 3] = 10.0
     accel_slopes = copy(WavefrontSensors.sh_signal_from_spots!(KA_CPU_STYLE, sh_accel, 0.5))
     @test accel_slopes[1] == 1.0
     @test accel_slopes[offset + 1] == 2.0
@@ -112,8 +112,8 @@ end
     sh.calibration.reference_signal_2d .= reshape(
         collect(range(0.1, 3.2; length=2 * offset)), offset, 2)
     sh.calibration.centroid_response = 2.0
-    fill!(sh.acquisition.spot_cube, 0.0)
-    sh.acquisition.spot_cube[1, 2, 3] = 10.0
+    fill!(sh.workspace.spot_cube, 0.0)
+    sh.workspace.spot_cube[1, 2, 3] = 10.0
     calibrated = copy(WavefrontSensors.sh_signal_from_spots_calibrated!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh, 0.5))
     reference = vec(sh.calibration.reference_signal_2d)
     @test calibrated[1] ≈ (1.0 - reference[1]) / 2
@@ -128,8 +128,8 @@ end
 
     sh_accel.calibration.reference_signal_2d .= 0.25
     sh_accel.calibration.centroid_response = 2.0
-    fill!(sh_accel.acquisition.spot_cube, 0.0)
-    sh_accel.acquisition.spot_cube[1, 2, 3] = 10.0
+    fill!(sh_accel.workspace.spot_cube, 0.0)
+    sh_accel.workspace.spot_cube[1, 2, 3] = 10.0
     accel_calibrated = copy(WavefrontSensors.sh_signal_from_spots_calibrated!(KA_CPU_STYLE, sh_accel, 0.5))
     @test accel_calibrated[1] ≈ (1.0 - 0.25) / 2
     @test accel_calibrated[offset + 1] ≈ (2.0 - 0.25) / 2
@@ -170,9 +170,9 @@ end
     sh_ka = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     for wfs in (sh_scalar, sh_ka)
         fill!(wfs.front_end.layout.valid_mask, true)
-        fill!(wfs.acquisition.spot_cube, 0.0)
-        wfs.acquisition.spot_cube[1, 2, 3] = 10.0
-        wfs.acquisition.spot_cube[4, 4, 1] = 8.0
+        fill!(wfs.workspace.spot_cube, 0.0)
+        wfs.workspace.spot_cube[1, 2, 3] = 10.0
+        wfs.workspace.spot_cube[4, 4, 1] = 8.0
     end
     scalar_device_reference = copy(WavefrontSensors.sh_signal_from_spots!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_scalar, 0.5))
     ka_device_stats = copy(WavefrontSensors.sh_signal_from_spots_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
@@ -182,10 +182,10 @@ end
     sh_ka.calibration.reference_signal_2d .= 0.25
     sh_scalar.calibration.centroid_response = 2.0
     sh_ka.calibration.centroid_response = 2.0
-    fill!(sh_scalar.acquisition.spot_cube, 0.0)
-    fill!(sh_ka.acquisition.spot_cube, 0.0)
-    sh_scalar.acquisition.spot_cube[1, 2, 3] = 10.0
-    sh_ka.acquisition.spot_cube[1, 2, 3] = 10.0
+    fill!(sh_scalar.workspace.spot_cube, 0.0)
+    fill!(sh_ka.workspace.spot_cube, 0.0)
+    sh_scalar.workspace.spot_cube[1, 2, 3] = 10.0
+    sh_ka.workspace.spot_cube[1, 2, 3] = 10.0
     scalar_calibrated = copy(WavefrontSensors.sh_signal_from_spots_calibrated!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), sh_scalar, 0.5))
     ka_calibrated = copy(WavefrontSensors.sh_signal_from_spots_calibrated_device_stats!(KA_CPU_STYLE, sh_ka, 0.5))
@@ -195,7 +195,7 @@ end
     sh_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     point_peak = WavefrontSensors.sampled_spots_peak!(sh_det, pupil,
         src, det, MersenneTwister(21))
-    point_spots = copy(sh_det.acquisition.spot_cube)
+    point_spots = copy(sh_det.workspace.spot_cube)
     @test isfinite(point_peak)
     @test point_peak > 0
     sh_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
@@ -228,7 +228,7 @@ end
         mode=Diffractive(), n_pix_subap=4)
     spectral_peak = WavefrontSensors.sampled_spots_peak!(sh_spectral, pupil,
         common_spectral, det, MersenneTwister(22))
-    spectral_spots = copy(sh_spectral.acquisition.spot_cube)
+    spectral_spots = copy(sh_spectral.workspace.spot_cube)
     @test isfinite(spectral_peak)
     @test spectral_peak > 0
     @test spectral_peak ≈ point_peak
@@ -241,7 +241,7 @@ end
         KA_CPU_STYLE, sh_spectral_accel, pupil, common_spectral, det,
         MersenneTwister(22))
     @test spectral_peak_accel ≈ spectral_peak
-    @test sh_spectral_accel.acquisition.spot_cube ≈ spectral_spots
+    @test sh_spectral_accel.workspace.spot_cube ≈ spectral_spots
 
     ext_single = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0)], [1.0]))
     sh_ext_single = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
@@ -383,7 +383,7 @@ end
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
         prepare_sampling!(expected_wfs, pupil, src)
         sampled_spots_peak!(style, expected_wfs, pupil, extended)
-        expected_frame = copy(expected_wfs.acquisition.spot_cube)
+        expected_frame = copy(expected_wfs.workspace.spot_cube)
         expected_detector = Detector(noise=NoiseReadout(0.25), qe=0.8,
             integration_time=0.01, binning=1)
         capture_stack!(expected_detector, expected_frame, similar(expected_frame),
@@ -399,7 +399,7 @@ end
         sampled_spots_peak!(style, actual_wfs, pupil, extended,
             actual_detector, MersenneTwister(777))
 
-        @test actual_wfs.acquisition.spot_cube ≈ expected_frame atol=1e-10 rtol=1e-12
+        @test actual_wfs.workspace.spot_cube ≈ expected_frame atol=1e-10 rtol=1e-12
     end
 
     saturation_wfs = ShackHartmannWFS(tel;
@@ -408,7 +408,7 @@ end
         integration_time=1.0, binning=1, full_well=100.0)
     sampled_spots_peak!(saturation_wfs, pupil, extended,
         saturation_detector, MersenneTwister(778))
-    @test maximum(saturation_wfs.acquisition.spot_cube) == 100.0
+    @test maximum(saturation_wfs.workspace.spot_cube) == 100.0
 
     qe_source = Source(band=:custom, wavelength=0.55e-6,
         photon_irradiance=1.0)
@@ -431,8 +431,8 @@ end
         sampled_spots_peak!(style, scalar_qe_wfs, pupil, qe_source,
             scalar_qe_detector, MersenneTwister(779))
 
-        @test sampled_qe_wfs.acquisition.spot_cube ≈
-            scalar_qe_wfs.acquisition.spot_cube atol=1e-10 rtol=1e-12
+        @test sampled_qe_wfs.workspace.spot_cube ≈
+            scalar_qe_wfs.workspace.spot_cube atol=1e-10 rtol=1e-12
     end
 
     mixed_wavelength = Asterism([
@@ -477,7 +477,7 @@ end
             n_pix_subap=16, diffraction_padding=padding)
         prepare_sampling!(wfs, pupil, src)
         compute_intensity_stack!(style, wfs, pupil, src)
-        @test sum(wfs.front_end.propagation.intensity_stack) ≈ expected_rate atol=1e-10 rtol=1e-12
+        @test sum(wfs.formation.propagation.workspace.intensity_stack) ≈ expected_rate atol=1e-10 rtol=1e-12
     end
 
     ast = Asterism([
@@ -489,7 +489,7 @@ end
         n_pix_subap=16, diffraction_padding=2)
     prepare_sampling!(wfs, pupil, src)
     compute_intensity_asterism_stack!(KA_CPU_STYLE, wfs, pupil, ast)
-    @test sum(wfs.front_end.propagation.intensity_stack) ≈ 3 * expected_rate atol=1e-10 rtol=1e-12
+    @test sum(wfs.formation.propagation.workspace.intensity_stack) ≈ 3 * expected_rate atol=1e-10 rtol=1e-12
 end
 
 @testset "Asterism direct imaging" begin
@@ -580,10 +580,10 @@ end
     @test shifted_single_slopes ≈ shifted_mono_slopes atol=1e-10 rtol=1e-10
     @test common_slopes_1 ≈ common_slopes_2 atol=1e-10 rtol=1e-10
     @test common_slopes_1 ≈ shifted_mono_slopes atol=1e-10 rtol=1e-10
-    @test sh_common.acquisition.spot_cube ≈
-        sh_shifted_mono.acquisition.spot_cube atol=1e-8 rtol=1e-12
-    @test sum(sh_common.acquisition.spot_cube) ≈
-        sum(sh_shifted_mono.acquisition.spot_cube) atol=1e-8 rtol=1e-12
+    @test sh_common.workspace.spot_cube ≈
+        sh_shifted_mono.workspace.spot_cube atol=1e-8 rtol=1e-12
+    @test sum(sh_common.workspace.spot_cube) ≈
+        sum(sh_shifted_mono.workspace.spot_cube) atol=1e-8 rtol=1e-12
     @test sh_shifted_single.calibration.wavelength == λshift
     @test sh_common.calibration.wavelength == λshift
     @test WavefrontSensors.sh_has_common_spectral_grid(sh_common,
@@ -616,11 +616,11 @@ end
 
     det = Detector(noise=NoiseNone(), binning=1)
     spectral_frame = copy(measure!(sh_common, pupil, poly_common, det))
-    @test size(sh_common.acquisition.detector_noise_cube) ==
-        size(sh_common.acquisition.spot_cube)
+    @test size(sh_common.workspace.detector_noise_cube) ==
+        size(sh_common.workspace.spot_cube)
     @test spectral_frame ≈ common_slopes_1 atol=1e-10 rtol=1e-10
-    @test sh_common.acquisition.spot_cube ≈
-        sh_shifted_mono.acquisition.spot_cube atol=1e-8 rtol=1e-12
+    @test sh_common.workspace.spot_cube ≈
+        sh_shifted_mono.workspace.spot_cube atol=1e-8 rtol=1e-12
 
     sampled_qe = SampledQuantumEfficiency(
         [0.9 * λshift, 1.1 * λshift], [0.25, 0.75])
@@ -650,10 +650,10 @@ end
         prepare_sampling!(optical_wfs, pupil, shifted_mono)
         sampled_spots_peak!(style, optical_wfs, pupil, shifted_mono)
 
-        @test spectral_wfs.acquisition.spot_cube ≈
-            monochromatic_wfs.acquisition.spot_cube atol=1e-8 rtol=1e-11
-        @test spectral_wfs.acquisition.spot_cube ≈ (
-            optical_wfs.acquisition.spot_cube .* (effective_qe * exposure)
+        @test spectral_wfs.workspace.spot_cube ≈
+            monochromatic_wfs.workspace.spot_cube atol=1e-8 rtol=1e-11
+        @test spectral_wfs.workspace.spot_cube ≈ (
+            optical_wfs.workspace.spot_cube .* (effective_qe * exposure)
         ) atol=1e-8 rtol=1e-11
     end
 
@@ -675,10 +675,10 @@ end
     sampled_spots_peak!(ScalarCPUStyle(), mixed_scalar_wfs, pupil,
         mixed_source)
     sampled_spots_peak!(KA_CPU_STYLE, mixed_ka_wfs, pupil, mixed_source)
-    @test mixed_ka_wfs.front_end.propagation.opd_to_cycles_host[1] ==
-        mixed_ka_wfs.front_end.propagation.opd_to_cycles_host[2]
-    @test mixed_ka_wfs.acquisition.spot_cube ≈
-        mixed_scalar_wfs.acquisition.spot_cube atol=2e-5 rtol=2e-5
+    @test mixed_ka_wfs.formation.propagation.workspace.opd_to_cycles_host[1] ==
+        mixed_ka_wfs.formation.propagation.workspace.opd_to_cycles_host[2]
+    @test mixed_ka_wfs.workspace.spot_cube ≈
+        mixed_scalar_wfs.workspace.spot_cube atol=2e-5 rtol=2e-5
 
     guard_wfs = ShackHartmannWFS(tel; n_lenslets=8,
         mode=Diffractive())
@@ -686,15 +686,15 @@ end
     measure!(guard_wfs, pupil, poly_common, guard_detector;
         rng=MersenneTwister(791))
     guard_state_before = (
-        slopes=copy(guard_wfs.estimator.slopes),
-        intensity=copy(guard_wfs.front_end.propagation.intensity),
-        spot_cube=copy(guard_wfs.acquisition.spot_cube),
-        exported_spot_cube=copy(guard_wfs.acquisition.exported_spot_cube),
+        slopes=copy(guard_wfs.products.slopes),
+        intensity=copy(guard_wfs.formation.propagation.workspace.intensity),
+        spot_cube=copy(guard_wfs.workspace.spot_cube),
+        exported_spot_cube=copy(guard_wfs.products.exported_spot_cube),
         reference_signal=copy(guard_wfs.calibration.reference_signal_2d),
-        effective_padding=guard_wfs.front_end.propagation.effective_padding,
-        binning_pixel_scale=guard_wfs.front_end.propagation.binning_pixel_scale,
-        sampled_n_pix_subap=guard_wfs.front_end.propagation.sampled_n_pix_subap,
-        phasor_ratio=guard_wfs.front_end.propagation.phasor_ratio,
+        effective_padding=guard_wfs.formation.propagation.workspace.effective_padding,
+        binning_pixel_scale=guard_wfs.formation.propagation.workspace.binning_pixel_scale,
+        sampled_n_pix_subap=guard_wfs.formation.propagation.workspace.sampled_n_pix_subap,
+        phasor_ratio=guard_wfs.formation.propagation.workspace.phasor_ratio,
         calibrated=guard_wfs.calibration.calibrated,
         calibration_wavelength=guard_wfs.calibration.wavelength,
         calibration_signature=guard_wfs.calibration.signature,
@@ -706,21 +706,23 @@ end
     rejection_rng_reference = copy(rejection_rng)
     @test_throws InvalidConfiguration measure!(guard_wfs, pupil, poly_broad,
         guard_detector; rng=rejection_rng)
-    @test isequal(guard_wfs.estimator.slopes, guard_state_before.slopes)
-    @test isequal(guard_wfs.front_end.propagation.intensity, guard_state_before.intensity)
-    @test isequal(guard_wfs.acquisition.spot_cube,
+    @test isequal(guard_wfs.products.slopes, guard_state_before.slopes)
+    @test isequal(guard_wfs.formation.propagation.workspace.intensity,
+        guard_state_before.intensity)
+    @test isequal(guard_wfs.workspace.spot_cube,
         guard_state_before.spot_cube)
-    @test isequal(guard_wfs.acquisition.exported_spot_cube,
+    @test isequal(guard_wfs.products.exported_spot_cube,
         guard_state_before.exported_spot_cube)
     @test isequal(guard_wfs.calibration.reference_signal_2d,
         guard_state_before.reference_signal)
-    @test guard_wfs.front_end.propagation.effective_padding ==
+    @test guard_wfs.formation.propagation.workspace.effective_padding ==
         guard_state_before.effective_padding
-    @test guard_wfs.front_end.propagation.binning_pixel_scale ==
+    @test guard_wfs.formation.propagation.workspace.binning_pixel_scale ==
         guard_state_before.binning_pixel_scale
-    @test guard_wfs.front_end.propagation.sampled_n_pix_subap ==
+    @test guard_wfs.formation.propagation.workspace.sampled_n_pix_subap ==
         guard_state_before.sampled_n_pix_subap
-    @test guard_wfs.front_end.propagation.phasor_ratio == guard_state_before.phasor_ratio
+    @test guard_wfs.formation.propagation.workspace.phasor_ratio ==
+        guard_state_before.phasor_ratio
     @test guard_wfs.calibration.calibrated == guard_state_before.calibrated
     @test guard_wfs.calibration.wavelength ==
         guard_state_before.calibration_wavelength
@@ -752,8 +754,8 @@ end
         selective_sh = ShackHartmannWFS(tel;
             n_lenslets=8, mode=Diffractive())
         prepare_sampling!(selective_sh, pupil, src)
-        fill!(selective_sh.acquisition.spot_cube, 17.0)
-        spot_cube_before = copy(selective_sh.acquisition.spot_cube)
+        fill!(selective_sh.workspace.spot_cube, 17.0)
+        spot_cube_before = copy(selective_sh.workspace.spot_cube)
         selective_detector = Detector(noise=NoiseNone(), qe=selective_qe,
             integration_time=1.0, binning=1,
             response_model=NullFrameResponse())
@@ -762,7 +764,7 @@ end
         @test_throws InvalidConfiguration sampled_spots_peak!(style,
             selective_sh, pupil, selective_source, selective_detector,
             selective_rng)
-        @test isequal(selective_sh.acquisition.spot_cube, spot_cube_before)
+        @test isequal(selective_sh.workspace.spot_cube, spot_cube_before)
         @test rand(selective_rng, UInt64) ==
             rand(selective_rng_reference, UInt64)
     end
@@ -911,10 +913,10 @@ end
     point_slopes = copy(measure!(sh_point, pupil, src))
     ext_point_slopes = copy(measure!(sh_ext_point, pupil, ext_point))
     point_peak = WavefrontSensors.sampled_spots_peak!(sh_point, pupil, src)
-    point_spots = copy(sh_point.acquisition.spot_cube)
+    point_spots = copy(sh_point.workspace.spot_cube)
     ext_peak = WavefrontSensors.sampled_spots_peak!(sh_ext, pupil,
         ext_gauss)
-    extended_spots = copy(sh_ext.acquisition.spot_cube)
+    extended_spots = copy(sh_ext.workspace.spot_cube)
     ext_slopes_1 = copy(measure!(sh_ext, pupil, ext_gauss))
     ext_slopes_2 = copy(measure!(sh_ext, pupil, ext_gauss))
 
@@ -949,7 +951,7 @@ end
 
     det = Detector(noise=NoiseNone(), binning=1)
     sh_det_slopes = measure!(sh_ext, pupil, ext_gauss, det)
-    @test size(sh_ext.acquisition.detector_noise_cube) == size(sh_ext.acquisition.spot_cube)
+    @test size(sh_ext.workspace.detector_noise_cube) == size(sh_ext.workspace.spot_cube)
     @test sh_det_slopes ≈ ext_slopes_1 atol=1e-10 rtol=1e-10
 
     pyr_det = Detector(noise=NoiseNone(), binning=1)

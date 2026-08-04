@@ -310,8 +310,8 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
     pupil::PupilFunction, src::SpectralSource)
     WavefrontSensors.prepare_sampling!(wfs, pupil,
         AdaptiveOpticsSim.Optics.spectral_reference_source(src))
-    fill!(wfs.front_end.propagation.spot_cube_accum,
-        zero(eltype(wfs.front_end.propagation.spot_cube_accum)))
+    fill!(wfs.formation.propagation.workspace.spot_cube_accum,
+        zero(eltype(wfs.formation.propagation.workspace.spot_cube_accum)))
     total_irradiance = AdaptiveOpticsSim.Optics.photon_irradiance(src)
     @inbounds for sample in AdaptiveOpticsSim.Optics.spectral_bundle(src)
         variant = AdaptiveOpticsSim.Optics.source_with_wavelength_and_radiometric_value(
@@ -319,11 +319,12 @@ function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
             eltype(slopes(wfs))(total_irradiance * sample.weight))
         WavefrontSensors.sampled_spots_peak!(
             AdaptiveOpticsSim.Backends.ScalarCPUStyle(), wfs, pupil, variant)
-        wfs.front_end.propagation.spot_cube_accum .+= wfs.acquisition.spot_cube
+        wfs.formation.propagation.workspace.spot_cube_accum .+=
+            wfs.workspace.spot_cube
     end
-    copyto!(wfs.acquisition.spot_cube,
-        wfs.front_end.propagation.spot_cube_accum)
-    return wfs.acquisition.spot_cube
+    copyto!(wfs.workspace.spot_cube,
+        wfs.formation.propagation.workspace.spot_cube_accum)
+    return wfs.workspace.spot_cube
 end
 
 function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
@@ -1230,7 +1231,7 @@ function compute_reference_actual(case::ReferenceCase)
             WavefrontSensors.prepare_sampling!(wfs, pupil, src)
             WavefrontSensors.sampled_spots_peak!(wfs, pupil, src)
         end
-        @views return copy(wfs.acquisition.spot_cube[1, :, :])
+        @views return copy(wfs.workspace.spot_cube[1, :, :])
     elseif case.kind === :pyramid_frame
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
@@ -1587,7 +1588,7 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
         WavefrontSensors.prepare_sampling!(wfs, PupilFunction(tel),
             AdaptiveOpticsSim.Optics.spectral_reference_source(src))
-        pad = size(wfs.front_end.propagation.fft_stack, 1)
+        pad = size(wfs.formation.propagation.workspace.fft_stack, 1)
         factor *= pad * pad
     end
     return factor
