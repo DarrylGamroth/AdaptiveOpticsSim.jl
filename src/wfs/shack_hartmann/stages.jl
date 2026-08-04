@@ -501,7 +501,7 @@ function prepare_wfs_optical_formation(
     _prepare_microlens_sampling_wavelength!(formation, resolution,
         _sh_pupil_diameter(input.metadata), wavelength_m)
     _prepare_sh_source_workspace!(execution_style(_sh_input_storage(input)),
-        formation, formation.front_end.source)
+        formation, input, formation.front_end.source, wavelength_m)
     _require_sh_rate_mosaic(formation, output, wavelength_m,
         pupil_diameter)
     sampling_signature = _sh_sampling_signature(formation)
@@ -522,12 +522,66 @@ function prepare_wfs_optical_formation(
 end
 
 @inline _prepare_sh_source_workspace!(::ExecutionStyle,
-    ::ShackHartmannOpticalFormationModel, source) = nothing
+    ::ShackHartmannOpticalFormationModel, input, source, wavelength_m) =
+    nothing
 
-function _prepare_sh_source_workspace!(::AcceleratorStyle,
-    front_end::ShackHartmannOpticalFormationModel, source::Asterism)
+@inline _prepare_sh_asterism_workspace!(::ExecutionStyle,
+    ::ShackHartmannOpticalFormationModel, ::Asterism) = nothing
+
+function _prepare_sh_asterism_workspace!(::AcceleratorStyle,
+    formation::ShackHartmannOpticalFormationModel, source::Asterism)
     sh_stacked_asterism_compatible(source) &&
-        ensure_sh_asterism_buffers!(front_end, length(source.sources))
+        ensure_sh_asterism_buffers!(formation, length(source.sources))
+    return nothing
+end
+
+function _prepare_sh_source_workspace!(style::ExecutionStyle,
+    formation::ShackHartmannOpticalFormationModel, input::PupilFunction,
+    source::Asterism, wavelength_m::Real)
+    _prepare_sh_asterism_workspace!(style, formation, source)
+    @inbounds for component in source.sources
+        _prepare_sh_source_workspace!(style, formation, input, component,
+            wavelength(component))
+    end
+    return nothing
+end
+
+function _prepare_sh_source_workspace!(::ExecutionStyle,
+    formation::ShackHartmannOpticalFormationModel, input::PupilFunction,
+    source::LGSSource, wavelength_m::Real)
+    return _prepare_sh_lgs_workspace!(lgs_profile(source), formation, input,
+        source, wavelength_m)
+end
+
+function _prepare_sh_source_workspace!(::ExecutionStyle,
+    formation::ShackHartmannOpticalFormationModel, input::PupilFunction,
+    source::ShackHartmannSpectralComponent{<:LGSSource}, wavelength_m::Real)
+    return _prepare_sh_lgs_workspace!(lgs_profile(source.source), formation,
+        input, source.source, wavelength_m)
+end
+
+function _prepare_sh_lgs_workspace!(::LGSProfileNone,
+    formation::ShackHartmannOpticalFormationModel, ::PupilFunction,
+    source::LGSSource, ::Real)
+    workspace = microlens_propagation_workspace(formation.propagation)
+    T = eltype(workspace.elongation_kernel)
+    factor = T(lgs_elongation_factor(source))
+    factor <= one(T) && return nothing
+    sigma = T(0.5) * (factor - one(T))
+    sigma <= zero(T) && return nothing
+    needed = 2 * max(1, ceil(Int, 2 * sigma)) + 1
+    workspace.elongation_kernel =
+        ensure_kernel(workspace.elongation_kernel, needed)
+    return nothing
+end
+
+function _prepare_sh_lgs_workspace!(::LGSProfileNaProfile,
+    formation::ShackHartmannOpticalFormationModel, input::PupilFunction,
+    source::LGSSource, wavelength_m::Real)
+    metadata = input.metadata
+    ensure_lgs_kernels!(formation, source, metadata.dimensions,
+        _sh_pupil_diameter(metadata), metadata.sampling, metadata.origin,
+        wavelength_m)
     return nothing
 end
 

@@ -1913,7 +1913,12 @@ end
     lgs_plan = prepare_wfs_optical_formation(
         shack_hartmann_optical_formation(staged_lgs, lgs), pupil,
         lgs_rate)
+    prepared_elongation_kernel =
+        lgs_plan.workspace.elongation_kernel
+    @test length(prepared_elongation_kernel) >= 3
     form_wfs_optical_products!(lgs_rate, pupil, lgs_plan)
+    @test lgs_plan.workspace.elongation_kernel ===
+        prepared_elongation_kernel
     @test lgs_rate.values ≈ expected_lgs rtol=T(2e-12) atol=T(2e-12)
 
     sodium_lgs = LGSSource(wavelength=wavelength(src),
@@ -1932,7 +1937,10 @@ end
     sodium_plan = prepare_wfs_optical_formation(
         shack_hartmann_optical_formation(staged_sodium, sodium_lgs), pupil,
         sodium_rate)
+    prepared_sodium_kernel = sodium_plan.workspace.lgs_kernel_fft
+    @test size(prepared_sodium_kernel, 3) == 16
     form_wfs_optical_products!(sodium_rate, pupil, sodium_plan)
+    @test sodium_plan.workspace.lgs_kernel_fft === prepared_sodium_kernel
     @test sodium_rate.values ≈ expected_sodium rtol=T(2e-12) atol=T(2e-12)
 
     asterism = Asterism([
