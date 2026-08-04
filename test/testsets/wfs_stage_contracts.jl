@@ -1085,6 +1085,13 @@ end
     @test unsupported_input_plane.stage === :wfs_optics
     @test unsupported_input_plane.reason === :plane_metadata
 
+    unsupported_input = contract_captured_error() do
+        WavefrontSensors.validate_wfs_optical_input(nothing)
+    end
+    @test unsupported_input isa WFSPreparationError
+    @test unsupported_input.stage === :wfs_optics
+    @test unsupported_input.reason === :plane_metadata
+
     unsupported_products = (
         (contract_rate_map(zeros(T, 4, 4);
             kind=ContractUnsupportedPlane()), :plane_metadata),
