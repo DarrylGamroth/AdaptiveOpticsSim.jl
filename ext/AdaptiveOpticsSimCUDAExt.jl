@@ -80,11 +80,12 @@ function Backends._with_compute_device(
     return CUDA.device!(f, _require_cuda_device(device))
 end
 
-struct CUDAPreparedDeviceExecutionContext <:
-    Backends._AbstractPreparedDeviceExecutionContext
+struct CUDAPreparedDeviceExecutionContext{
+    D<:Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+} <: Backends._AbstractPreparedDeviceExecutionContext
     device::CUDA.CuDevice
     stream::CUDA.CuStream
-    compute_device::Backends.AcceleratorComputeDevice
+    compute_device::D
 end
 
 function Backends._prepare_device_execution_context(

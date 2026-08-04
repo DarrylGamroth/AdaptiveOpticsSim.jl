@@ -3987,8 +3987,8 @@ function run_optional_plane_product_checks(tel::Telescope,
         GaussianDiskSourceModel(sigma_arcsec=T(0.02), n_side=5, T=T))
     extended = prepare_direct_imaging(wavefront,
         extended_source_asterism(extended_src); zero_padding=1)
-    @test extended.components isa Vector
-    @test extended.products isa Vector
+    @test extended.components isa FixedSizeVector
+    @test extended.products isa FixedSizeVector
     @test isconcretetype(eltype(extended.components))
     @test isconcretetype(eltype(extended.products))
     @test length(extended.components) == 25
