@@ -1136,7 +1136,7 @@ under `src/wfs/`, and extends generics imported explicitly from that owner.
 
 New physical WFS work should first implement the prepared semantic stages:
 
-- `prepare_wfs_optical_formation(model, input, output)` validates an explicit
+- `prepare_wfs_optics(model, input, output)` validates an explicit
   caller-owned pupil function or electric field and one or more
   detector-plane photon-arrival-rate outputs; the returned concrete prepared
   owner is executed by `form_wfs_optical_products!`
@@ -1157,11 +1157,11 @@ observation storage. `WFSObservation` supports scalar `Ref` storage and arrays
 of any rank, as does `WFSMeasurement`; use concrete tuples for multiple
 observations. Preserve incompatible spectral or branch rate products in
 `OpticalProductBundle`. Bundle membership is fixed at construction; the arrays
-owned by its product leaves remain mutable destinations for prepared optical
-formation.
+owned by its product leaves remain mutable destinations for prepared WFS
+optics.
 
 The qualified nominal plan interfaces are
-`WavefrontSensors.AbstractWFSOpticalFormationPlan`,
+`WavefrontSensors.AbstractWFSOpticsPlan`,
 `WavefrontSensors.AbstractWFSAcquisitionPlan`, and
 `WavefrontSensors.AbstractWFSEstimationPlan`. Subtype the interface for the
 stage contract owned by the implementation, but keep that run-immutable plan
@@ -1186,7 +1186,7 @@ Extensions should call the qualified validation seams
 before returning a prepared owner. Every new prepared owner also implements its
 corresponding exact binding validator:
 
-- `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_optical_formation_binding`
+- `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_optics_binding`
 - `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_acquisition_binding`
 - `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_estimation_binding`
 
@@ -1202,7 +1202,7 @@ are prepared. Repeated execution must not resize, rebuild metadata, query a
 device, copy to the host, or select stages through an abstract container.
 Raise `WFSPreparationError(stage, reason, msg)` for preparation
 incompatibility and for execution-time prepared-binding rejection before any
-destination mutation. The protocol stages are `:optical_formation`,
+destination mutation. The protocol stages are `:wfs_optics`,
 `:acquisition`, and `:estimation`; `reason` is an open extension identifier.
 
 Concrete WFS family types may provide a composed `measure!` workflow over the

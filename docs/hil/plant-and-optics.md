@@ -500,7 +500,7 @@ caller-owned pupil function or electric field
 
 The implemented generic protocol names this boundary directly:
 
-- `prepare_wfs_optical_formation` / `form_wfs_optical_products!`
+- `prepare_wfs_optics` / `form_wfs_optical_products!`
 - `prepare_wfs_acquisition` / `acquire_wfs_observation!`
 - `prepare_wfs_estimation` / `estimate_wfs_measurement!`
 
@@ -894,8 +894,8 @@ product, and hands that product to the path's normal prepared execution.
 declarations rather than inferred behavior. The small native
 `UniformIntensityIllumination` model has CPU and maintained accelerator-path
 evidence through ordinary detector acquisition; a user-defined stateful pupil
-model separately covers explicit time/RNG use and normal downstream optical
-formation on CPU.
+model separately covers explicit time/RNG use and normal downstream WFS
+optics on CPU.
 
 There is no global `is_calibration` propagation branch and no collection of
 `bypass_atmosphere`, `bypass_telescope`, or instrument-selection flags. If a

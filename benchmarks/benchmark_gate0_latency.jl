@@ -145,7 +145,7 @@ function make_gate0_card(raw::AbstractDict)
             mode=Diffractive())
         front_end = PyramidOpticalFrontEnd(wfs, src)
         rate = pyramid_rate_map(front_end, pupil)
-        optical_plan = prepare_wfs_optical_formation(front_end, pupil, rate)
+        optics_plan = prepare_wfs_optics(front_end, pupil, rate)
         detector = Detector(noise=NoiseNone(), integration_time=1.0,
             qe=1.0, response_model=NullFrameResponse())
         observation = WFSObservation(similar(rate.values);
@@ -160,11 +160,11 @@ function make_gate0_card(raw::AbstractDict)
         estimator_plan = prepare_wfs_estimation(wfs, observation,
             measurement)
         rng = runtime_rng(61)
-        let rate=rate, pupil=pupil, optical_plan=optical_plan,
+        let rate=rate, pupil=pupil, optics_plan=optics_plan,
             observation=observation, acquisition_plan=acquisition_plan,
             measurement=measurement, estimator_plan=estimator_plan, rng=rng
             () -> begin
-                form_wfs_optical_products!(rate, pupil, optical_plan)
+                form_wfs_optical_products!(rate, pupil, optics_plan)
                 acquire_wfs_observation!(observation, rate,
                     acquisition_plan, rng)
                 estimate_wfs_measurement!(measurement, observation,
@@ -220,7 +220,7 @@ function make_gate0_card(raw::AbstractDict)
             pupil_samples=Int(raw["pupil_samples"]))
         front_end = ZernikeOpticalFrontEnd(wfs, src)
         rate = zernike_rate_map(front_end, pupil)
-        optical_plan = prepare_wfs_optical_formation(front_end, pupil,
+        optics_plan = prepare_wfs_optics(front_end, pupil,
             rate)
         detector = Detector(noise=NoiseNone(), integration_time=1.0,
             qe=1.0, response_model=NullFrameResponse())
@@ -236,11 +236,11 @@ function make_gate0_card(raw::AbstractDict)
         estimator_plan = prepare_wfs_estimation(wfs, observation,
             measurement; source=src)
         rng = runtime_rng(Int(raw["rng_seed"]))
-        let rate=rate, pupil=pupil, optical_plan=optical_plan,
+        let rate=rate, pupil=pupil, optics_plan=optics_plan,
             observation=observation, acquisition_plan=acquisition_plan,
             measurement=measurement, estimator_plan=estimator_plan, rng=rng
             () -> begin
-                form_wfs_optical_products!(rate, pupil, optical_plan)
+                form_wfs_optical_products!(rate, pupil, optics_plan)
                 acquire_wfs_observation!(observation, rate,
                     acquisition_plan, rng)
                 estimate_wfs_measurement!(measurement, observation,
@@ -257,7 +257,7 @@ function make_gate0_card(raw::AbstractDict)
             pupil_samples=Int(raw["pupil_samples"]))
         front_end = CurvatureOpticalFrontEnd(wfs, src)
         rates = curvature_rate_maps(front_end, pupil)
-        optical_plan = prepare_wfs_optical_formation(front_end, pupil,
+        optics_plan = prepare_wfs_optics(front_end, pupil,
             rates)
         plus_detector = Detector(noise=NoiseNone(), integration_time=0.5,
             qe=1.0, response_model=NullFrameResponse())
@@ -278,11 +278,11 @@ function make_gate0_card(raw::AbstractDict)
         estimator_plan = prepare_wfs_estimation(wfs, observations,
             measurement; branch_rate_scales=(2.0, 1.0))
         rng = runtime_rng(Int(raw["rng_seed"]))
-        let rates=rates, pupil=pupil, optical_plan=optical_plan,
+        let rates=rates, pupil=pupil, optics_plan=optics_plan,
             observations=observations, acquisition_plan=acquisition_plan,
             measurement=measurement, estimator_plan=estimator_plan, rng=rng
             () -> begin
-                form_wfs_optical_products!(rates, pupil, optical_plan)
+                form_wfs_optical_products!(rates, pupil, optics_plan)
                 acquire_wfs_observation!(observations, rates,
                     acquisition_plan, rng)
                 estimate_wfs_measurement!(measurement, observations,

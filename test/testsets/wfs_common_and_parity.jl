@@ -7,7 +7,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :Geometric,
         :WFSObservation,
         :WFSMeasurement,
-        :prepare_wfs_optical_formation,
+        :prepare_wfs_optics,
         :form_wfs_optical_products!,
         :prepare_wfs_acquisition,
         :acquire_wfs_observation!,

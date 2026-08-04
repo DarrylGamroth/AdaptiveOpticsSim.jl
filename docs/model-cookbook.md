@@ -67,7 +67,7 @@ signal = measure!(wfs, pupil, src)
 
 Use `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`, or `ZernikeWFS` when the
 sensing physics changes. A `ShackHartmannWFS` composes a `MicrolensArray`;
-optical formation, detector acquisition, and estimation remain distinct
+WFS optics, detector acquisition, and estimation remain distinct
 stages.
 
 ## Recipe 3: Detector-Backed Sensing

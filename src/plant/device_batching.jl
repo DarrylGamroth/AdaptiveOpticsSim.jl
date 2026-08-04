@@ -70,12 +70,12 @@ struct _PreparedDirectImagingDevicePathBatch{
 end
 
 const _PreparedDeviceBatchWFSOpticalPlan = Union{
-    PreparedShackHartmannOpticalFormation,
-    PreparedShackHartmannOpticalBundleFormation,
-    PreparedPyramidOpticalFormation,
-    PreparedPyramidOpticalBundleFormation,
-    PreparedBioEdgeOpticalFormation,
-    PreparedBioEdgeOpticalBundleFormation,
+    PreparedShackHartmannOptics,
+    PreparedShackHartmannOpticsBundle,
+    PreparedPyramidOptics,
+    PreparedPyramidOpticsBundle,
+    PreparedBioEdgeOptics,
+    PreparedBioEdgeOpticsBundle,
 }
 
 struct _WFSDevicePathBatchKey{
@@ -333,13 +333,13 @@ function _require_device_path_batch_result_device(
 end
 
 @inline function _wfs_device_path_batch_plan_contract(
-    plan::PreparedShackHartmannOpticalFormation,
+    plan::PreparedShackHartmannOptics,
 )
     return (typeof(plan), plan.plan.sampling_signature)
 end
 
 function _wfs_device_path_batch_plan_contract(
-    plan::PreparedShackHartmannOpticalBundleFormation,
+    plan::PreparedShackHartmannOpticsBundle,
 )
     signatures = Tuple(
         component.plan.sampling_signature for component in plan.components)
@@ -362,17 +362,17 @@ end
 end
 
 @inline _wfs_device_path_batch_plan_contract(
-    plan::PreparedPyramidOpticalFormation,
+    plan::PreparedPyramidOptics,
 ) = _four_pupil_device_path_batch_plan_contract(plan)
 
 @inline _wfs_device_path_batch_plan_contract(
-    plan::PreparedBioEdgeOpticalFormation,
+    plan::PreparedBioEdgeOptics,
 ) = _four_pupil_device_path_batch_plan_contract(plan)
 
 function _wfs_device_path_batch_plan_contract(
     plan::Union{
-        PreparedPyramidOpticalBundleFormation,
-        PreparedBioEdgeOpticalBundleFormation,
+        PreparedPyramidOpticsBundle,
+        PreparedBioEdgeOpticsBundle,
     },
 )
     contracts = map(

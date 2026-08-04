@@ -353,7 +353,7 @@ function _require_exact_sh_propagation_target(
             "Shack-Hartmann OPD-to-cycle scales",
         ),
         target,
-        :optical_formation,
+        :wfs_optics,
     )
     return propagation
 end
@@ -370,34 +370,34 @@ function _require_exact_sh_layout_target(
 end
 
 function _require_exact_sh_front_end_target(
-    formation::ShackHartmannOpticalFormationModel,
+    optics::ShackHartmannOptics,
     target::AbstractComputeDevice,
 )
-    _require_exact_sh_propagation_target(formation.propagation, target)
+    _require_exact_sh_propagation_target(optics.propagation, target)
     _require_exact_sh_layout_target(
-        formation.front_end.layout, target, :optical_formation)
-    return formation
+        optics.front_end.layout, target, :wfs_optics)
+    return optics
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedShackHartmannOpticalFormation,
+    plan::PreparedShackHartmannOptics,
     target::AbstractComputeDevice,
 )
-    validate_wfs_optical_formation_binding(
+    validate_wfs_optics_binding(
         plan.output, plan.input, plan)
     _require_exact_wfs_input_target(
-        plan.input, target, :optical_formation)
+        plan.input, target, :wfs_optics)
     _require_exact_wfs_product_target(
-        plan.output, target, :optical_formation)
-    _require_exact_sh_front_end_target(plan.formation, target)
+        plan.output, target, :wfs_optics)
+    _require_exact_sh_front_end_target(plan.optics, target)
     return plan
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedShackHartmannOpticalBundleFormation,
+    plan::PreparedShackHartmannOpticsBundle,
     target::AbstractComputeDevice,
 )
-    validate_wfs_optical_formation_binding(
+    validate_wfs_optics_binding(
         plan.output, plan.input, plan)
     @inbounds for component in plan.components
         _require_exact_wfs_target(component, target)
@@ -415,7 +415,7 @@ function _require_exact_prepared_four_pupil_lgs_target(
     target::AbstractComputeDevice,
 )
     _require_exact_wfs_storage_target(
-        model.kernel, target, :optical_formation,
+        model.kernel, target, :wfs_optics,
         "four-pupil LGS elongation kernel")
     return nothing
 end
@@ -425,7 +425,7 @@ function _require_exact_prepared_four_pupil_lgs_target(
     target::AbstractComputeDevice,
 )
     _require_exact_wfs_storage_target(
-        model.kernel_fft, target, :optical_formation,
+        model.kernel_fft, target, :wfs_optics,
         "four-pupil sodium-profile Fourier kernel")
     return nothing
 end
@@ -436,7 +436,7 @@ function _require_exact_focal_plane_modulation_target(
     label::AbstractString,
 )
     _require_exact_wfs_storage_target(
-        modulation.phases, target, :optical_formation, "$label phases")
+        modulation.phases, target, :wfs_optics, "$label phases")
     return modulation
 end
 
@@ -473,7 +473,7 @@ function _require_exact_pyramid_front_end_target(
             "Pyramid LGS Fourier kernel",
         ),
         target,
-        :optical_formation,
+        :wfs_optics,
     )
     _require_exact_focal_plane_modulation_target(
         front_end.modulation, target, "Pyramid operating modulation")
@@ -484,15 +484,15 @@ function _require_exact_pyramid_front_end_target(
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedPyramidOpticalFormation,
+    plan::PreparedPyramidOptics,
     target::AbstractComputeDevice,
 )
-    validate_wfs_optical_formation_binding(
+    validate_wfs_optics_binding(
         plan.output, plan.input, plan)
     _require_exact_wfs_input_target(
-        plan.input, target, :optical_formation)
+        plan.input, target, :wfs_optics)
     _require_exact_wfs_product_target(
-        plan.output, target, :optical_formation)
+        plan.output, target, :wfs_optics)
     _require_exact_pyramid_front_end_target(plan.front_end, target)
     _require_exact_prepared_four_pupil_lgs_target(
         plan.lgs_model, target)
@@ -500,10 +500,10 @@ function _require_exact_wfs_target(
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedPyramidOpticalBundleFormation,
+    plan::PreparedPyramidOpticsBundle,
     target::AbstractComputeDevice,
 )
-    validate_wfs_optical_formation_binding(
+    validate_wfs_optics_binding(
         plan.output, plan.input, plan)
     @inbounds for component in plan.plans
         _require_exact_wfs_target(component, target)
@@ -546,7 +546,7 @@ function _require_exact_bioedge_front_end_target(
             "BioEdge LGS Fourier kernel",
         ),
         target,
-        :optical_formation,
+        :wfs_optics,
     )
     _require_exact_focal_plane_modulation_target(
         front_end.modulation, target, "BioEdge operating modulation")
@@ -557,15 +557,15 @@ function _require_exact_bioedge_front_end_target(
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedBioEdgeOpticalFormation,
+    plan::PreparedBioEdgeOptics,
     target::AbstractComputeDevice,
 )
-    validate_wfs_optical_formation_binding(
+    validate_wfs_optics_binding(
         plan.output, plan.input, plan)
     _require_exact_wfs_input_target(
-        plan.input, target, :optical_formation)
+        plan.input, target, :wfs_optics)
     _require_exact_wfs_product_target(
-        plan.output, target, :optical_formation)
+        plan.output, target, :wfs_optics)
     _require_exact_bioedge_front_end_target(plan.front_end, target)
     _require_exact_prepared_four_pupil_lgs_target(
         plan.lgs_model, target)
@@ -573,10 +573,10 @@ function _require_exact_wfs_target(
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedBioEdgeOpticalBundleFormation,
+    plan::PreparedBioEdgeOpticsBundle,
     target::AbstractComputeDevice,
 )
-    validate_wfs_optical_formation_binding(
+    validate_wfs_optics_binding(
         plan.output, plan.input, plan)
     @inbounds for component in plan.plans
         _require_exact_wfs_target(component, target)
@@ -608,21 +608,21 @@ function _require_exact_zernike_propagation_target(
             "Zernike nominal frame",
         ),
         target,
-        :optical_formation,
+        :wfs_optics,
     )
     return propagation
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedZernikeOpticalFormation,
+    plan::PreparedZernikeOptics,
     target::AbstractComputeDevice,
 )
-    validate_wfs_optical_formation_binding(
+    validate_wfs_optics_binding(
         plan.output, plan.input, plan)
     _require_exact_wfs_input_target(
-        plan.input, target, :optical_formation)
+        plan.input, target, :wfs_optics)
     _require_exact_wfs_product_target(
-        plan.output, target, :optical_formation)
+        plan.output, target, :wfs_optics)
     _require_exact_zernike_propagation_target(
         plan.front_end.propagation, target)
     return plan
@@ -654,7 +654,7 @@ function _require_exact_curvature_propagation_target(
             "Curvature negative-defocus frame",
         ),
         target,
-        :optical_formation,
+        :wfs_optics,
     )
     _require_exact_curvature_atmospheric_target(
         propagation.atmospheric_propagation, target)
@@ -671,22 +671,22 @@ function _require_exact_curvature_atmospheric_target(
     ::AbstractComputeDevice,
 )
     throw(WFSPreparationError(
-        :optical_formation,
+        :wfs_optics,
         :unsupported_target_validation,
         "cached Curvature atmospheric-field propagation requires its Atmospheres-owned exact-target validator",
     ))
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedCurvatureOpticalFormation,
+    plan::PreparedCurvatureOptics,
     target::AbstractComputeDevice,
 )
-    validate_wfs_optical_formation_binding(
+    validate_wfs_optics_binding(
         plan.output, plan.input, plan)
     _require_exact_wfs_input_target(
-        plan.input, target, :optical_formation)
+        plan.input, target, :wfs_optics)
     _require_exact_wfs_product_target(
-        plan.output, target, :optical_formation)
+        plan.output, target, :wfs_optics)
     _require_exact_curvature_propagation_target(
         plan.front_end.propagation, target)
     return plan
@@ -797,7 +797,7 @@ function _require_exact_sh_mode_target(
     sensor::ShackHartmannWFS{<:Diffractive},
     target::AbstractComputeDevice,
 )
-    _require_exact_sh_front_end_target(sensor.formation, target)
+    _require_exact_sh_front_end_target(sensor.optics, target)
     _require_exact_wfs_array_targets(
         (
             sensor.workspace.spot_cube,
@@ -1081,7 +1081,7 @@ end
     validate_wfs_target(plan, target)
 
 Qualified cold extension seam for exact-target validation of a prepared WFS
-formation, acquisition, or estimation plan. Maintained plans delegate to the
+WFS optics, acquisition, or estimation plan. Maintained plans delegate to the
 fail-closed validators above; custom prepared plans must add a more-specific
 method that enumerates their numerical data-plane storage.
 """

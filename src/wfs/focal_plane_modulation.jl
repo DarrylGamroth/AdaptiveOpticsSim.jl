@@ -2,7 +2,7 @@
 # WFS-specific focal-plane modulation policy and front-end integration
 #
 # Reusable modulation models and prepared optical quadrature are owned by
-# `Optics`; this file retains WFS calibration and optical-formation policy.
+# `Optics`; this file retains WFS calibration and optics policy.
 #
 
 function legacy_modulation_policy(modulation::T,
@@ -42,19 +42,19 @@ end
 function require_modulated_wfs_input(input::PupilFunction)
     validate_wfs_optical_input(input)
     input.metadata.coordinate_domain isa MetricCoordinates ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "modulated WFS pupil input must use metric coordinates"))
     input.metadata.normalization isa DimensionlessNormalization ||
-        throw(WFSPreparationError(:optical_formation, :radiometry,
+        throw(WFSPreparationError(:wfs_optics, :radiometry,
             "PupilFunction amplitude must be dimensionless"))
     input.metadata.spatial_measure isa PointSampledMeasure ||
-        throw(WFSPreparationError(:optical_formation, :radiometry,
+        throw(WFSPreparationError(:wfs_optics, :radiometry,
             "PupilFunction amplitude must be point sampled"))
     input.metadata.coherence isa CoherentFieldCombination ||
-        throw(WFSPreparationError(:optical_formation, :radiometry,
+        throw(WFSPreparationError(:wfs_optics, :radiometry,
             "modulated WFS pupil input must be coherent"))
     input.metadata.spectral isa AchromaticSpectralCoordinate ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "PupilFunction input must be achromatic"))
     return input
 end
@@ -62,19 +62,19 @@ end
 function require_modulated_wfs_input(input::ElectricField)
     validate_wfs_optical_input(input)
     input.metadata.coordinate_domain isa MetricCoordinates ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "modulated WFS electric-field input must use metric coordinates"))
     input.metadata.normalization isa PhotonRateNormalization ||
-        throw(WFSPreparationError(:optical_formation, :radiometry,
+        throw(WFSPreparationError(:wfs_optics, :radiometry,
             "electric-field input must carry photon-rate normalization"))
     input.metadata.spatial_measure isa CellIntegratedMeasure ||
-        throw(WFSPreparationError(:optical_formation, :radiometry,
+        throw(WFSPreparationError(:wfs_optics, :radiometry,
             "electric-field input must carry cell-integrated photon rate"))
     input.metadata.coherence isa CoherentFieldCombination ||
-        throw(WFSPreparationError(:optical_formation, :radiometry,
+        throw(WFSPreparationError(:wfs_optics, :radiometry,
             "modulated WFS electric-field input must be coherent"))
     input.metadata.spectral isa MonochromaticChannel ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "electric-field input must declare one monochromatic channel"))
     return input
 end
@@ -84,8 +84,8 @@ end
 end
 
 function modulated_input_wavelength(input::PupilFunction, source)
-    source === nothing && throw(WFSPreparationError(:optical_formation,
-        :radiometry, "PupilFunction formation requires an illumination source"))
+    source === nothing && throw(WFSPreparationError(:wfs_optics,
+        :radiometry, "WFS optics require an illumination source for PupilFunction input"))
     return wavelength(source)
 end
 
@@ -94,17 +94,17 @@ end
 
 function require_modulated_wfs_domains(front_end, input, output::IntensityMap)
     typeof(input.metadata.backend) === typeof(output.metadata.backend) ||
-        throw(WFSPreparationError(:optical_formation, :backend,
+        throw(WFSPreparationError(:wfs_optics, :backend,
             "modulated WFS input and output backends differ"))
     input.metadata.device == output.metadata.device ||
-        throw(WFSPreparationError(:optical_formation, :device,
+        throw(WFSPreparationError(:wfs_optics, :device,
             "modulated WFS input and output occupy different devices"))
     storage = modulated_wfs_propagation_storage(front_end)
     typeof(input.metadata.backend) === typeof(backend(storage)) ||
-        throw(WFSPreparationError(:optical_formation, :backend,
+        throw(WFSPreparationError(:wfs_optics, :backend,
             "modulated WFS input and propagation backends differ"))
     input.metadata.device == compute_device(storage) ||
-        throw(WFSPreparationError(:optical_formation, :device,
+        throw(WFSPreparationError(:wfs_optics, :device,
             "modulated WFS input and propagation occupy different devices"))
     return nothing
 end
@@ -113,18 +113,18 @@ function require_four_pupil_rate_map(output::IntensityMap, expected_size,
     wavelength_m)
     validate_wfs_optical_products(output)
     output.metadata.coordinate_domain isa NormalizedPupilCoordinates ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "four-pupil detector output must use normalized pupil coordinates"))
     output.metadata.spatial_measure isa CellIntegratedMeasure ||
-        throw(WFSPreparationError(:optical_formation, :radiometry,
+        throw(WFSPreparationError(:wfs_optics, :radiometry,
             "four-pupil detector output must carry cell-integrated rate"))
     size(output.values) == expected_size || throw(WFSPreparationError(
-        :optical_formation, :shape,
+        :wfs_optics, :shape,
         "four-pupil detector output has the wrong prepared dimensions"))
     channel = output.metadata.spectral
     channel isa MonochromaticChannel &&
         channel.wavelength_m == wavelength_m ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "four-pupil detector output wavelength does not match its input"))
     return output
 end
@@ -213,10 +213,10 @@ function prepare_four_pupil_lgs(::LGSProfileNaProfile, source::LGSSource,
     metadata = input.metadata
     resolution = metadata.dimensions[1]
     metadata.dimensions == (resolution, resolution) ||
-        throw(WFSPreparationError(:optical_formation, :shape,
+        throw(WFSPreparationError(:wfs_optics, :shape,
             "LGS pupil input must be square"))
     metadata.sampling[1] == metadata.sampling[2] ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "LGS pupil input requires equal metric sampling on both axes"))
     propagation = front_end.propagation
     pad = size(propagation.field, 1)
@@ -276,7 +276,7 @@ end
     plans::Tuple{P,Vararg{Any,N}}) where {P,N}
     index = length(output) - N
     component_input = four_pupil_bundle_input(input, index)
-    validate_wfs_optical_formation_binding(output[index], component_input,
+    validate_wfs_optics_binding(output[index], component_input,
         first(plans))
     return validate_four_pupil_bundle_binding(output, input,
         Base.tail(plans))

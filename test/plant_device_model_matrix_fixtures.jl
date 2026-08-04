@@ -71,7 +71,7 @@ function device_model_matrix_front_end(
         T,
         backend=backend(telescope),
     )
-    return shack_hartmann_optical_formation(sensor, source)
+    return shack_hartmann_optics(sensor, source)
 end
 
 function device_model_matrix_front_end(
@@ -148,17 +148,17 @@ end
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixShackHartmann,
-    formation::WavefrontSensors.ShackHartmannOpticalFormationModel,
+    optics::WavefrontSensors.ShackHartmannOptics,
     pupil::PupilFunction,
     source::SpectralSource,
-) = shack_hartmann_rate_map(formation, pupil, source)
+) = shack_hartmann_rate_map(optics, pupil, source)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixShackHartmann,
-    formation::WavefrontSensors.ShackHartmannOpticalFormationModel,
+    optics::WavefrontSensors.ShackHartmannOptics,
     pupil::PupilFunction,
     ::AdaptiveOpticsSim.Optics.AbstractSource,
-) = shack_hartmann_rate_map(formation, pupil)
+) = shack_hartmann_rate_map(optics, pupil)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixPyramid,
@@ -202,7 +202,7 @@ function Plant.prepare_path_executor(
         model.family, telescope, source, T, model.variant)
     output = device_model_matrix_rate_map(
         model.family, front_end, pupil, source)
-    plan = prepare_wfs_optical_formation(front_end, pupil, output)
+    plan = prepare_wfs_optics(front_end, pupil, output)
     execution = WFSOpticalPathExecution(plan)
     family = device_model_matrix_family_symbol(model.family)
     return PreparedPathExecutor(

@@ -2,7 +2,7 @@
 # Prepared Pyramid WFS stages
 #
 
-struct PreparedPyramidOpticalFormation{F,I,O,L<:AbstractPreparedFourPupilLGS}
+struct PreparedPyramidOptics{F,I,O,L<:AbstractPreparedFourPupilLGS}
     front_end::F
     input::I
     output::O
@@ -10,7 +10,7 @@ struct PreparedPyramidOpticalFormation{F,I,O,L<:AbstractPreparedFourPupilLGS}
     propagation_revision::UInt
 end
 
-struct PreparedPyramidOpticalBundleFormation{P<:Tuple,I,O}
+struct PreparedPyramidOpticsBundle{P<:Tuple,I,O}
     plans::P
     input::I
     output::O
@@ -39,7 +39,7 @@ end
 @inline function pyramid_output_sampling_factor(
     front_end::PyramidOpticalFrontEnd, pupil_resolution::Int)
     pupil_resolution % front_end.pupil_samples == 0 ||
-        throw(WFSPreparationError(:optical_formation, :shape,
+        throw(WFSPreparationError(:wfs_optics, :shape,
             "pyramid pupil resolution must be divisible by pupil_samples"))
     return div(pupil_resolution, front_end.pupil_samples) *
         front_end.binning
@@ -49,7 +49,7 @@ function pyramid_output_dimensions(front_end::PyramidOpticalFrontEnd,
     pupil_resolution::Int)
     factor = pyramid_output_sampling_factor(front_end, pupil_resolution)
     side = size(front_end.propagation.intensity, 1)
-    side % factor == 0 || throw(WFSPreparationError(:optical_formation,
+    side % factor == 0 || throw(WFSPreparationError(:wfs_optics,
         :shape, "pyramid sampling does not evenly divide the detector plane"))
     output_side = div(side, factor)
     return (output_side, output_side)
@@ -68,8 +68,8 @@ end
 function _require_pyramid_source(front_end::PyramidOpticalFrontEnd,
     ::PupilFunction)
     source = front_end.source
-    source === nothing && throw(WFSPreparationError(:optical_formation,
-        :radiometry, "pyramid PupilFunction formation requires a source"))
+    source === nothing && throw(WFSPreparationError(:wfs_optics,
+        :radiometry, "pyramid WFS optics require a source for PupilFunction input"))
     return _require_single_pyramid_source(source)
 end
 
@@ -77,40 +77,40 @@ end
 
 function _require_single_pyramid_source(source::SpectralSource)
     throw(WFSPreparationError(
-        :optical_formation, :plane_count,
-        "spectral pyramid formation requires an OpticalProductBundle"))
+        :wfs_optics, :plane_count,
+        "spectral pyramid optics require an OpticalProductBundle"))
 end
 
 function _require_single_pyramid_source(source::Asterism)
-    throw(WFSPreparationError(:optical_formation,
+    throw(WFSPreparationError(:wfs_optics,
         :plane_count,
-        "asterism pyramid formation requires path-local pupil inputs"))
+        "asterism pyramid optics require path-local pupil inputs"))
 end
 
 function _require_single_pyramid_source(source::ExtendedSource)
     throw(WFSPreparationError(
-        :optical_formation, :plane_count,
-        "extended pyramid formation requires path-local pupil inputs"))
+        :wfs_optics, :plane_count,
+        "extended pyramid optics require path-local pupil inputs"))
 end
 
 function _require_pyramid_source(front_end::PyramidOpticalFrontEnd,
     ::ElectricField)
     front_end.source === nothing || throw(WFSPreparationError(
-        :optical_formation, :radiometry,
+        :wfs_optics, :radiometry,
         "photon-rate ElectricField input must not also supply a source"))
     return nothing
 end
 
-function prepare_wfs_optical_formation(front_end::PyramidOpticalFrontEnd,
+function prepare_wfs_optics(front_end::PyramidOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField}, output::IntensityMap)
     require_modulated_wfs_input(input)
     _require_pyramid_source(front_end, input)
     resolution = input.metadata.dimensions[1]
     input.metadata.dimensions == (resolution, resolution) ||
-        throw(WFSPreparationError(:optical_formation, :shape,
+        throw(WFSPreparationError(:wfs_optics, :shape,
             "pyramid pupil input must be square"))
     size(front_end.modulation.phases, 1) == resolution ||
-        throw(WFSPreparationError(:optical_formation, :shape,
+        throw(WFSPreparationError(:wfs_optics, :shape,
             "pyramid modulation was prepared for another pupil resolution"))
     expected = pyramid_output_dimensions(front_end, resolution)
     wavelength_m = _pyramid_front_end_wavelength(front_end, input)
@@ -118,14 +118,14 @@ function prepare_wfs_optical_formation(front_end::PyramidOpticalFrontEnd,
     require_modulated_wfs_domains(front_end, input, output)
     eltype(front_end.propagation.intensity) ===
         output.metadata.numeric_type || throw(WFSPreparationError(
-            :optical_formation, :numeric_type,
+            :wfs_optics, :numeric_type,
             "pyramid output precision differs from prepared propagation"))
     lgs_model = prepare_four_pupil_lgs(front_end.source, input, front_end)
-    return PreparedPyramidOpticalFormation(front_end, input, output,
+    return PreparedPyramidOptics(front_end, input, output,
         lgs_model, front_end.propagation.revision)
 end
 
-function prepare_wfs_optical_formation(front_end::PyramidOpticalFrontEnd,
+function prepare_wfs_optics(front_end::PyramidOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField},
     output::OpticalProductBundle)
     return prepare_pyramid_optical_bundle(front_end, input, output,
@@ -137,7 +137,7 @@ function prepare_pyramid_optical_bundle(front_end::PyramidOpticalFrontEnd,
     source::SpectralSource)
     samples = spectral_bundle(source).samples
     length(output) == length(samples) || throw(WFSPreparationError(
-        :optical_formation, :plane_count,
+        :wfs_optics, :plane_count,
         "pyramid spectral output count does not match the source"))
     T = eltype(front_end.propagation.intensity)
     plans = ntuple(length(samples)) do index
@@ -145,14 +145,14 @@ function prepare_pyramid_optical_bundle(front_end::PyramidOpticalFrontEnd,
         component = FourPupilSpectralComponent(source.source,
             T(sample.wavelength),
             T(photon_irradiance(source)) * T(sample.weight))
-        prepare_wfs_optical_formation(
+        prepare_wfs_optics(
             pyramid_front_end_with_source(front_end, component), input,
             output[index])
     end
-    return PreparedPyramidOpticalBundleFormation(plans, input, output)
+    return PreparedPyramidOpticsBundle(plans, input, output)
 end
 
-function prepare_wfs_optical_formation(front_end::PyramidOpticalFrontEnd,
+function prepare_wfs_optics(front_end::PyramidOpticalFrontEnd,
     inputs::Union{Tuple,AbstractVector}, output::OpticalProductBundle)
     return prepare_pyramid_optical_bundle(front_end, inputs, output,
         front_end.source)
@@ -163,24 +163,24 @@ function prepare_pyramid_optical_bundle(front_end::PyramidOpticalFrontEnd,
     source::Union{Asterism,ExtendedSource})
     sources = four_pupil_path_sources(source)
     length(inputs) == length(sources) || throw(WFSPreparationError(
-        :optical_formation, :plane_count,
+        :wfs_optics, :plane_count,
         "pyramid path-local pupil count does not match the source count"))
     length(output) == length(sources) || throw(WFSPreparationError(
-        :optical_formation, :plane_count,
+        :wfs_optics, :plane_count,
         "pyramid path-local output count does not match the source count"))
-    isempty(sources) && throw(WFSPreparationError(:optical_formation,
+    isempty(sources) && throw(WFSPreparationError(:wfs_optics,
         :plane_count, "pyramid path-local source collection is empty"))
     plans = ntuple(length(sources)) do index
-        prepare_wfs_optical_formation(
+        prepare_wfs_optics(
             pyramid_front_end_with_source(front_end, sources[index]),
             inputs[index], output[index])
     end
-    return PreparedPyramidOpticalBundleFormation(plans, inputs, output)
+    return PreparedPyramidOpticsBundle(plans, inputs, output)
 end
 
 function prepare_pyramid_optical_bundle(front_end, input, output, source)
     throw(WFSPreparationError(
-        :optical_formation, :plane_count,
+        :wfs_optics, :plane_count,
         "pyramid product bundles require a spectral or path-expanded source"))
 end
 
@@ -230,7 +230,7 @@ function _pyramid_native_rate!(front_end::PyramidOpticalFrontEnd,
 end
 
 function _apply_prepared_pyramid_lgs!(
-    plan::PreparedPyramidOpticalFormation)
+    plan::PreparedPyramidOptics)
     propagation = plan.front_end.propagation
     apply_prepared_four_pupil_lgs!(plan.lgs_model, propagation.intensity,
         propagation.scratch, propagation.focal_field,
@@ -241,8 +241,8 @@ end
 
 function form_wfs_optical_products!(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
-    plan::PreparedPyramidOpticalFormation)
-    validate_wfs_optical_formation_binding(output, input, plan)
+    plan::PreparedPyramidOptics)
+    validate_wfs_optics_binding(output, input, plan)
     native = _pyramid_native_rate!(plan.front_end, input)
     _apply_prepared_pyramid_lgs!(plan)
     factor = pyramid_output_sampling_factor(plan.front_end,
@@ -251,29 +251,29 @@ function form_wfs_optical_products!(output::IntensityMap,
     return output
 end
 
-function validate_wfs_optical_formation_binding(output::IntensityMap,
+function validate_wfs_optics_binding(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
-    plan::PreparedPyramidOpticalFormation)
+    plan::PreparedPyramidOptics)
     output === plan.output && input === plan.input ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "pyramid optical products do not match prepared storage"))
     plan.front_end.propagation.revision == plan.propagation_revision ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "pyramid propagation sampling changed after preparation"))
     return nothing
 end
 
 function form_wfs_optical_products!(output::OpticalProductBundle, input,
-    plan::PreparedPyramidOpticalBundleFormation)
-    validate_wfs_optical_formation_binding(output, input, plan)
+    plan::PreparedPyramidOpticsBundle)
+    validate_wfs_optics_binding(output, input, plan)
     return form_four_pupil_bundle!(output, input, plan.plans)
 end
 
-function validate_wfs_optical_formation_binding(
+function validate_wfs_optics_binding(
     output::OpticalProductBundle, input,
-    plan::PreparedPyramidOpticalBundleFormation)
+    plan::PreparedPyramidOpticsBundle)
     output === plan.output && input === plan.input ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "pyramid spectral products do not match prepared storage"))
     validate_four_pupil_bundle_binding(output, input, plan.plans)
     return nothing
@@ -294,9 +294,9 @@ function pyramid_path_rate_bundle(front_end::PyramidOpticalFrontEnd,
     source::Union{Asterism,ExtendedSource})
     sources = four_pupil_path_sources(source)
     length(inputs) == length(sources) || throw(WFSPreparationError(
-        :optical_formation, :plane_count,
+        :wfs_optics, :plane_count,
         "pyramid path-local pupil count does not match the source count"))
-    isempty(sources) && throw(WFSPreparationError(:optical_formation,
+    isempty(sources) && throw(WFSPreparationError(:wfs_optics,
         :plane_count, "pyramid path-local source collection is empty"))
     first_map = pyramid_rate_map(
         pyramid_front_end_with_source(front_end, sources[1]), inputs[1])
@@ -311,7 +311,7 @@ function pyramid_path_rate_bundle(front_end::PyramidOpticalFrontEnd,
 end
 
 function pyramid_path_rate_bundle(front_end, inputs, source)
-    throw(WFSPreparationError(:optical_formation, :plane_count,
+    throw(WFSPreparationError(:wfs_optics, :plane_count,
         "path-local pyramid inputs require an Asterism or ExtendedSource"))
 end
 
@@ -331,7 +331,7 @@ end
 
 function _pyramid_rate_map(front_end::PyramidOpticalFrontEnd, input,
     source::Union{Asterism,ExtendedSource})
-    throw(WFSPreparationError(:optical_formation, :plane_count,
+    throw(WFSPreparationError(:wfs_optics, :plane_count,
         "path-expanded pyramid sources require path-local pupil inputs"))
 end
 

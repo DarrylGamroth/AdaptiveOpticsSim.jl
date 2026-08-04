@@ -452,7 +452,7 @@ end
 end
 
 function PyramidOpticalFrontEnd(::PyramidWFS{<:Geometric}, source=nothing)
-    throw(WFSPreparationError(:optical_formation, :unsupported,
+    throw(WFSPreparationError(:wfs_optics, :unsupported,
         "geometric pyramid sensing uses DirectMeasurementPath and has no optical front end"))
 end
 

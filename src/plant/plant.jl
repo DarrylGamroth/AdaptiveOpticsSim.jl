@@ -265,12 +265,12 @@ import ..AdaptiveOpticsSim:
 import ..WavefrontSensors:
     AcquiredObservationPath,
     DirectMeasurementPath,
-    PreparedBioEdgeOpticalBundleFormation,
-    PreparedBioEdgeOpticalFormation,
-    PreparedPyramidOpticalBundleFormation,
-    PreparedPyramidOpticalFormation,
-    PreparedShackHartmannOpticalBundleFormation,
-    PreparedShackHartmannOpticalFormation,
+    PreparedBioEdgeOpticsBundle,
+    PreparedBioEdgeOptics,
+    PreparedPyramidOpticsBundle,
+    PreparedPyramidOptics,
+    PreparedShackHartmannOpticsBundle,
+    PreparedShackHartmannOptics,
     PreparedShackHartmannEstimator,
     PreparedWFSDetectorAcquisition,
     ShackHartmannProducts,
@@ -290,7 +290,7 @@ import ..WavefrontSensors:
     validate_wfs_estimation_binding,
     validate_wfs_measurement,
     validate_wfs_observation,
-    validate_wfs_optical_formation_binding,
+    validate_wfs_optics_binding,
     wfs_measurement_path
 
 include("errors.jl")

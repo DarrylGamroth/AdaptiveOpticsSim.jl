@@ -118,7 +118,7 @@ timer_key = "contract.preparation_boundary + contract.first_use; benchmark harne
 [[allocation_baselines]]
 id = "gate7"
 contract = "benchmarks/contracts/gate7_single_gpu.toml"
-sha256 = "8bbe810518a8dc34a8a62506b55740241f776ee0654ea5bf07b64b0d16fe2eb4"
+sha256 = "e58e869b91a7eca79399812a71d2e61d6aed373e6e64169b9c23b123ab9131c9"
 allocation_budget_keys = ["max_alloc_bytes"]
 seed_keys = ["run_seed"]
 timer_key = "contract.timer"

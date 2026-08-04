@@ -56,7 +56,7 @@ function AOSPlant.prepare_path_executor(
     )
     front_end = ShackHartmannOpticalFrontEnd(sensor.front_end, source)
     output = shack_hartmann_rate_map(front_end, pupil)
-    plan = prepare_wfs_optical_formation(front_end, pupil, output)
+    plan = prepare_wfs_optics(front_end, pupil, output)
     execution = AOSPlant.WFSOpticalPathExecution(plan)
     return AOSPlant.PreparedPathExecutor(
         definition,
@@ -515,7 +515,7 @@ function gate7_submission_proxy(
         "top_level_path_submissions" => path_count,
         "device_owner_submissions" => 0,
         "atmosphere_direction_render_calls" => path_count,
-        "wfs_formation_calls" => path_count,
+        "wfs_optics_calls" => path_count,
     )
 end
 
@@ -535,7 +535,7 @@ function gate7_submission_proxy(
         "top_level_path_submissions" => 0,
         "device_owner_submissions" => owner_count,
         "atmosphere_direction_render_calls" => owner_count,
-        "wfs_formation_calls" => group_count,
+        "wfs_optics_calls" => group_count,
     )
 end
 
@@ -559,9 +559,9 @@ function gate7_submission_proxy_evidence(
     batched_proxy["atmosphere_direction_render_calls"] <
         independent_proxy["atmosphere_direction_render_calls"] ||
         error("Gate 7 batch did not reduce atmosphere render calls")
-    batched_proxy["wfs_formation_calls"] ==
-        independent_proxy["wfs_formation_calls"] ||
-        error("Gate 7 batch changed the modeled WFS formation count")
+    batched_proxy["wfs_optics_calls"] ==
+        independent_proxy["wfs_optics_calls"] ||
+        error("Gate 7 batch changed the modeled WFS optics count")
     return Dict{String,Any}(
         "passed" => true,
         "derivation" =>

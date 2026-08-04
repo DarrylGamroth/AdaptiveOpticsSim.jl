@@ -3,7 +3,7 @@
 #
 # Ownership table (all reports retain the caller-supplied owner ID):
 #
-# - PreparedShackHartmannOpticalFormation, PreparedWFSDetectorAcquisition,
+# - PreparedShackHartmannOptics, PreparedWFSDetectorAcquisition,
 #   DetectorAcquisitionPlan, PreparedShackHartmannEstimator, and
 #   AcquisitionProducts only retain borrowed prepared bindings/products.
 # - IntensityMap, WFSObservation, and WFSMeasurement own their nominated
@@ -22,7 +22,7 @@
 # These prepared wrappers carry exact bindings only. Their referenced
 # front-end, detector, plan, input, output, observation, and measurement
 # storage is reported by its concrete nominated owner below.
-function structural_resource_fact(::PreparedShackHartmannOpticalFormation,
+function structural_resource_fact(::PreparedShackHartmannOptics,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
     return _known_structural_resource_fact(id, target, UInt64(0), UInt64(0))
 end
@@ -138,7 +138,7 @@ function _prepared_path_resource_fact(
     materialization::PreparedPupilOPDMaterialization{
         <:AtmosphereDirectionRenderer},
     execution::WFSOpticalPathExecution{
-        <:PreparedShackHartmannOpticalFormation},
+        <:PreparedShackHartmannOptics},
     id::StructuralResourceOwnerID,
     target::AbstractComputeDevice,
 )
@@ -165,9 +165,9 @@ function _prepared_path_resource_fact(
         id, target, resident,
         (present=false, bytes=UInt64(0)))
     layout_fact = structural_resource_fact(
-        plan.formation.front_end.layout, id, target)
+        plan.optics.front_end.layout, id, target)
     propagation_fact = structural_resource_fact(
-        plan.formation.propagation, id, target)
+        plan.optics.propagation, id, target)
     return _combine_structural_owner_facts(
         id, target, (path_fact, layout_fact, propagation_fact))
 end

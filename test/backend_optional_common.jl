@@ -1825,11 +1825,11 @@ function run_optional_device_path_batch_checks(
 end
 
 @inline function optional_wfs_plan_device_resident(
-    plan::WavefrontSensors.PreparedShackHartmannOpticalFormation,
+    plan::WavefrontSensors.PreparedShackHartmannOptics,
     device,
     BackendArray,
 )
-    propagation = plan.formation.propagation.workspace
+    propagation = plan.optics.propagation.workspace
     arrays = (
         propagation.field,
         propagation.phasor,
@@ -1848,8 +1848,8 @@ end
 
 @inline function optional_wfs_plan_device_resident(
     plan::Union{
-        WavefrontSensors.PreparedPyramidOpticalFormation,
-        WavefrontSensors.PreparedBioEdgeOpticalFormation,
+        WavefrontSensors.PreparedPyramidOptics,
+        WavefrontSensors.PreparedBioEdgeOptics,
     },
     device,
     BackendArray,
@@ -1876,9 +1876,9 @@ end
 
 function optional_wfs_plan_device_resident(
     plan::Union{
-        WavefrontSensors.PreparedShackHartmannOpticalBundleFormation,
-        WavefrontSensors.PreparedPyramidOpticalBundleFormation,
-        WavefrontSensors.PreparedBioEdgeOpticalBundleFormation,
+        WavefrontSensors.PreparedShackHartmannOpticsBundle,
+        WavefrontSensors.PreparedPyramidOpticsBundle,
+        WavefrontSensors.PreparedBioEdgeOpticsBundle,
     },
     device,
     BackendArray,
@@ -3100,7 +3100,7 @@ function run_optional_wfs_stage_contracts(
         coherence=IncoherentIntensityAddition())
     rate = IntensityMap(rate_metadata, rate_values)
     optical_model = ContractRateModel(T(3), T(1e6), rate.metadata)
-    optical_plan = prepare_wfs_optical_formation(optical_model, pupil, rate)
+    optics_plan = prepare_wfs_optics(optical_model, pupil, rate)
 
     detector = Detector(noise=NoiseNone(), integration_time=T(0.4),
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
@@ -3118,7 +3118,7 @@ function run_optional_wfs_stage_contracts(
     rng = Xoshiro(0x574653)
 
     @test @inferred(form_wfs_optical_products!(rate, pupil,
-        optical_plan)) === rate
+        optics_plan)) === rate
     @test @inferred(acquire_wfs_observation!(observation, rate,
         acquisition_plan, rng)) === observation
     @test @inferred(estimate_wfs_measurement!(measurement, observation,
@@ -3162,8 +3162,8 @@ function run_optional_wfs_stage_contracts(
         ContractRateModel(T(2), T(1e6), rate.metadata),
         ContractRateModel(T(5), T(1e6), second_rate.metadata),
     ))
-    bundle_plan = prepare_wfs_optical_formation(bundle_model, pupil, bundle)
-    form_wfs_optical_products!(bundle, pupil, bundle_plan)
+    optics_bundle = prepare_wfs_optics(bundle_model, pupil, bundle)
+    form_wfs_optical_products!(bundle, pupil, optics_bundle)
     second_detector = Detector(noise=NoiseNone(), integration_time=T(0.7),
         qe=T(0.25), response_model=NullFrameResponse(), T=T,
         backend=selector)
@@ -3200,13 +3200,13 @@ function run_optional_wfs_stage_contracts(
     physical_wfs = ShackHartmannWFS(tel; n_lenslets=2,
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_rate = shack_hartmann_rate_map(physical_wfs, pupil, src)
-    physical_formation = shack_hartmann_optical_formation(
+    physical_optics = shack_hartmann_optics(
         physical_wfs, src)
-    @test !hasfield(typeof(physical_formation), :sensor)
-    @test physical_formation.propagation.workspace.fft_stack isa BackendArray
-    physical_optical_plan = prepare_wfs_optical_formation(
-        physical_formation, pupil, physical_rate)
-    form_wfs_optical_products!(physical_rate, pupil, physical_optical_plan)
+    @test !hasfield(typeof(physical_optics), :sensor)
+    @test physical_optics.propagation.workspace.fft_stack isa BackendArray
+    prepared_physical_optics = prepare_wfs_optics(
+        physical_optics, pupil, physical_rate)
+    form_wfs_optical_products!(physical_rate, pupil, prepared_physical_optics)
     @test physical_rate.values isa BackendArray
     @test all(isfinite, Array(physical_rate.values))
     @test sum(Array(physical_rate.values)) > zero(T)
@@ -3214,8 +3214,8 @@ function run_optional_wfs_stage_contracts(
     changed_src = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=photon_irradiance(src), T=T)
     failed_reprepare = try
-        prepare_wfs_optical_formation(
-            shack_hartmann_optical_formation(physical_wfs, changed_src),
+        prepare_wfs_optics(
+            shack_hartmann_optics(physical_wfs, changed_src),
             pupil, physical_rate)
         nothing
     catch err
@@ -3224,7 +3224,7 @@ function run_optional_wfs_stage_contracts(
     @test failed_reprepare isa WFSPreparationError
     @test failed_reprepare.reason === :plane_metadata
     @test form_wfs_optical_products!(physical_rate, pupil,
-        physical_optical_plan) === physical_rate
+        prepared_physical_optics) === physical_rate
 
     sodium_lgs = LGSSource(wavelength=wavelength(src),
         photon_irradiance=T(4),
@@ -3237,8 +3237,8 @@ function run_optional_wfs_stage_contracts(
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     spectral_sodium_rates = shack_hartmann_rate_map(
         spectral_sodium_wfs, pupil, spectral_sodium)
-    spectral_sodium_plan = @inferred prepare_wfs_optical_formation(
-        shack_hartmann_optical_formation(spectral_sodium_wfs,
+    spectral_sodium_plan = @inferred prepare_wfs_optics(
+        shack_hartmann_optics(spectral_sodium_wfs,
             spectral_sodium), pupil, spectral_sodium_rates)
     @test spectral_sodium_plan.components[1].workspace !==
         spectral_sodium_plan.components[2].workspace
@@ -3259,11 +3259,11 @@ function run_optional_wfs_stage_contracts(
     physical_field_wfs = ShackHartmannWFS(tel; n_lenslets=2,
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_field_rate = shack_hartmann_rate_map(physical_field_wfs, field)
-    physical_field_plan = prepare_wfs_optical_formation(
-        shack_hartmann_optical_formation(physical_field_wfs), field,
+    physical_field_front_end = prepare_wfs_optics(
+        shack_hartmann_optics(physical_field_wfs), field,
         physical_field_rate)
     form_wfs_optical_products!(physical_field_rate, field,
-        physical_field_plan)
+        physical_field_front_end)
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(physical_field_rate.values))
     @test physical_field_rate.values isa BackendArray
@@ -3280,8 +3280,8 @@ function run_optional_wfs_stage_contracts(
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_asterism_rate = shack_hartmann_rate_map(
         physical_asterism_wfs, pupil, physical_asterism)
-    physical_asterism_plan = prepare_wfs_optical_formation(
-        shack_hartmann_optical_formation(physical_asterism_wfs,
+    physical_asterism_plan = prepare_wfs_optics(
+        shack_hartmann_optics(physical_asterism_wfs,
             physical_asterism), pupil, physical_asterism_rate)
     form_wfs_optical_products!(physical_asterism_rate, pupil,
         physical_asterism_plan)
@@ -3310,8 +3310,8 @@ function run_optional_wfs_stage_contracts(
         n_pix_subap=2, mode=Diffractive(), T=T)
     mixed_backend_rate = shack_hartmann_rate_map(cpu_wfs, pupil, src)
     mixed_optical_error = try
-        prepare_wfs_optical_formation(
-            shack_hartmann_optical_formation(cpu_wfs, src), pupil,
+        prepare_wfs_optics(
+            shack_hartmann_optics(cpu_wfs, src), pupil,
             mixed_backend_rate)
         nothing
     catch err
@@ -3453,9 +3453,9 @@ function run_optional_wfs_stage_contracts(
         gpu_rate = family === :pyramid ?
             pyramid_rate_map(gpu_front_end, pupil) :
             bioedge_rate_map(gpu_front_end, pupil)
-        cpu_plan = prepare_wfs_optical_formation(cpu_front_end,
+        cpu_plan = prepare_wfs_optics(cpu_front_end,
             four_pupil_cpu, cpu_rate)
-        gpu_plan = prepare_wfs_optical_formation(gpu_front_end, pupil,
+        gpu_plan = prepare_wfs_optics(gpu_front_end, pupil,
             gpu_rate)
         form_wfs_optical_products!(cpu_rate, four_pupil_cpu, cpu_plan)
         form_wfs_optical_products!(gpu_rate, pupil, gpu_plan)
@@ -3476,7 +3476,7 @@ function run_optional_wfs_stage_contracts(
         field_rate = family === :pyramid ?
             pyramid_rate_map(field_front_end, field) :
             bioedge_rate_map(field_front_end, field)
-        field_plan = prepare_wfs_optical_formation(field_front_end, field,
+        field_plan = prepare_wfs_optics(field_front_end, field,
             field_rate)
         form_wfs_optical_products!(field_rate, field, field_plan)
         AdaptiveOpticsSim.Backends.synchronize_backend!(
@@ -3610,7 +3610,7 @@ function run_optional_wfs_stage_contracts(
         spectral_rates = family === :pyramid ?
             pyramid_rate_map(spectral_front_end, pupil) :
             bioedge_rate_map(spectral_front_end, pupil)
-        spectral_plan = prepare_wfs_optical_formation(spectral_front_end,
+        spectral_plan = prepare_wfs_optics(spectral_front_end,
             pupil, spectral_rates)
         form_wfs_optical_products!(spectral_rates, pupil, spectral_plan)
         @test all(product -> product.values isa BackendArray,
@@ -3631,7 +3631,7 @@ function run_optional_wfs_stage_contracts(
         path_rates = family === :pyramid ?
             pyramid_rate_map(path_front_end, path_inputs) :
             bioedge_rate_map(path_front_end, path_inputs)
-        path_plan = prepare_wfs_optical_formation(path_front_end,
+        path_plan = prepare_wfs_optics(path_front_end,
             path_inputs, path_rates)
         form_wfs_optical_products!(path_rates, path_inputs, path_plan)
         @test all(product -> product.values isa BackendArray, path_rates)
@@ -3669,9 +3669,9 @@ function run_optional_wfs_stage_contracts(
             gpu_lgs_rate = family === :pyramid ?
                 pyramid_rate_map(gpu_lgs_front_end, pupil) :
                 bioedge_rate_map(gpu_lgs_front_end, pupil)
-            cpu_lgs_plan = prepare_wfs_optical_formation(
+            cpu_lgs_plan = prepare_wfs_optics(
                 cpu_lgs_front_end, four_pupil_cpu, cpu_lgs_rate)
-            gpu_lgs_plan = prepare_wfs_optical_formation(
+            gpu_lgs_plan = prepare_wfs_optics(
                 gpu_lgs_front_end, pupil, gpu_lgs_rate)
             form_wfs_optical_products!(cpu_lgs_rate, four_pupil_cpu,
                 cpu_lgs_plan)
@@ -3722,10 +3722,10 @@ function run_optional_zernike_curvature_stages(
         ZernikeOpticalFrontEnd(cpu_zernike, source), cpu_pupil)
     gpu_zernike_rate = zernike_rate_map(
         ZernikeOpticalFrontEnd(gpu_zernike, source), gpu_pupil)
-    cpu_zernike_plan = prepare_wfs_optical_formation(
+    cpu_zernike_plan = prepare_wfs_optics(
         ZernikeOpticalFrontEnd(cpu_zernike, source), cpu_pupil,
         cpu_zernike_rate)
-    gpu_zernike_plan = prepare_wfs_optical_formation(
+    gpu_zernike_plan = prepare_wfs_optics(
         ZernikeOpticalFrontEnd(gpu_zernike, source), gpu_pupil,
         gpu_zernike_rate)
     form_wfs_optical_products!(cpu_zernike_rate, cpu_pupil,
@@ -3770,10 +3770,10 @@ function run_optional_zernike_curvature_stages(
         CurvatureOpticalFrontEnd(cpu_curvature, source), cpu_pupil)
     gpu_rates = curvature_rate_maps(
         CurvatureOpticalFrontEnd(gpu_curvature, source), gpu_pupil)
-    cpu_curvature_plan = prepare_wfs_optical_formation(
+    cpu_curvature_plan = prepare_wfs_optics(
         CurvatureOpticalFrontEnd(cpu_curvature, source), cpu_pupil,
         cpu_rates)
-    gpu_curvature_plan = prepare_wfs_optical_formation(
+    gpu_curvature_plan = prepare_wfs_optics(
         CurvatureOpticalFrontEnd(gpu_curvature, source), gpu_pupil,
         gpu_rates)
     form_wfs_optical_products!(cpu_rates, cpu_pupil, cpu_curvature_plan)
@@ -5271,14 +5271,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         WavefrontSensors.ShackHartmannWFSROCmHostStatsStrategy
     WavefrontSensors.prepare_sampling!(sh, pupil, src)
     sh_sub = div(tel.params.resolution, WavefrontSensors.n_lenslets(sh))
-    sh_pad = size(sh.formation.propagation.workspace.field, 1)
+    sh_pad = size(sh.optics.propagation.workspace.field, 1)
     sh_offset = div(sh_pad - sh_sub, 2)
     safe_intensity = WavefrontSensors.compute_intensity_safe!(
         AdaptiveOpticsSim.Backends.execution_style(
-            sh.formation.propagation.workspace.intensity),
+            sh.optics.propagation.workspace.intensity),
         sh, pupil, src, 1, 1, sh_sub, sh_sub, sh_offset, sh_offset,
         sh_sub)
-    @test safe_intensity === sh.formation.propagation.workspace.intensity
+    @test safe_intensity === sh.optics.propagation.workspace.intensity
     @test all(isfinite, Array(safe_intensity))
     @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy
     capture_psf = array_backend{T}(undef, 4, 4)

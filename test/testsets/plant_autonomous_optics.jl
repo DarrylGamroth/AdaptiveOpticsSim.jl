@@ -40,7 +40,7 @@ function Plant.prepare_path_executor(
     )
     front_end = PyramidOpticalFrontEnd(sensor, source)
     output = pyramid_rate_map(front_end, pupil)
-    plan = prepare_wfs_optical_formation(front_end, pupil, output)
+    plan = prepare_wfs_optics(front_end, pupil, output)
     execution = WFSOpticalPathExecution(plan)
     return PreparedPathExecutor(
         definition,

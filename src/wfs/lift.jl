@@ -2,7 +2,7 @@
 # LiFT phase retrieval
 #
 # LiFT fits modal coefficients by matching a separately prepared focal-plane
-# forward model to a caller-owned observation. Optical formation never owns or
+# forward model to a caller-owned observation. Focal-plane propagation never owns or
 # triggers a detector; acquisition timing, QE, and stochastic readout remain at
 # the detector boundary.
 #

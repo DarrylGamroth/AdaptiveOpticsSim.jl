@@ -1,4 +1,4 @@
-function sample_spot!(model::ShackHartmannOpticalFormationModel,
+function sample_spot!(model::ShackHartmannOptics,
     intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
     propagation = microlens_propagation_workspace(model.propagation)
     binning = propagation.binning_pixel_scale
@@ -137,7 +137,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
     n = _pupil_resolution(pupil)
     n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
-    pad = size(wfs.formation.propagation.workspace.field, 1)
+    pad = size(wfs.optics.propagation.workspace.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
@@ -163,7 +163,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
     n = _pupil_resolution(pupil)
     n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
-    pad = size(wfs.formation.propagation.workspace.field, 1)
+    pad = size(wfs.optics.propagation.workspace.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)

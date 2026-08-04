@@ -14,7 +14,7 @@ struct ZernikePropagationBinding{F,Q,U,H,M,N,Pf,Pi}
     revision::UInt
 end
 
-struct PreparedZernikeOpticalFormation{F,I,O,B}
+struct PreparedZernikeOptics{F,I,O,B}
     front_end::F
     input::I
     output::O
@@ -56,16 +56,16 @@ end
 function _require_zernike_front_end_source(
     front_end::ZernikeOpticalFrontEnd, ::PupilFunction)
     source = front_end.source
-    source === nothing && throw(WFSPreparationError(:optical_formation,
-        :radiometry, "Zernike PupilFunction formation requires a source"))
-    require_leaf_source(source, "prepared Zernike optical formation")
+    source === nothing && throw(WFSPreparationError(:wfs_optics,
+        :radiometry, "Zernike WFS optics require a source for PupilFunction input"))
+    require_leaf_source(source, "prepared Zernike optics")
     return source
 end
 
 function _require_zernike_front_end_source(
     front_end::ZernikeOpticalFrontEnd, ::ElectricField)
     front_end.source === nothing || throw(WFSPreparationError(
-        :optical_formation, :radiometry,
+        :wfs_optics, :radiometry,
         "photon-rate ElectricField input must not also supply a Zernike source"))
     return nothing
 end
@@ -80,28 +80,28 @@ end
     ::NormalizedPupilCoordinates) = nothing
 
 function _require_zernike_rate_coordinates(::AbstractPlaneCoordinateDomain)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
         "Zernike detector output must use normalized pupil coordinates"))
 end
 
 @inline _require_zernike_rate_measure(::CellIntegratedMeasure) = nothing
 
 function _require_zernike_rate_measure(::AbstractSpatialMeasure)
-    throw(WFSPreparationError(:optical_formation, :radiometry,
+    throw(WFSPreparationError(:wfs_optics, :radiometry,
         "Zernike detector output must carry cell-integrated rate"))
 end
 
 function _require_zernike_rate_wavelength(channel::MonochromaticChannel,
     wavelength_m)
     channel.wavelength_m == wavelength_m || throw(
-        WFSPreparationError(:optical_formation, :plane_metadata,
+        WFSPreparationError(:wfs_optics, :plane_metadata,
             "Zernike detector output wavelength differs from its input"))
     return nothing
 end
 
 function _require_zernike_rate_wavelength(
     ::AbstractSpectralCoordinate, ::Any)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
         "Zernike detector output wavelength differs from its input"))
 end
 
@@ -111,7 +111,7 @@ function _require_zernike_rate_map(output::IntensityMap,
     _require_zernike_rate_coordinates(output.metadata.coordinate_domain)
     _require_zernike_rate_measure(output.metadata.spatial_measure)
     size(output.values) == expected_dimensions || throw(
-        WFSPreparationError(:optical_formation, :shape,
+        WFSPreparationError(:wfs_optics, :shape,
             "Zernike detector output has the wrong prepared dimensions"))
     _require_zernike_rate_wavelength(output.metadata.spectral, wavelength_m)
     return output
@@ -121,7 +121,7 @@ function _require_zernike_input_geometry(front_end::ZernikeOpticalFrontEnd,
     input::PupilFunction)
     input.metadata.dimensions == (front_end.pupil_resolution,
         front_end.pupil_resolution) || throw(WFSPreparationError(
-        :optical_formation, :shape,
+        :wfs_optics, :shape,
         "Zernike pupil input dimensions differ from the prepared relay"))
     return nothing
 end
@@ -129,12 +129,12 @@ end
 function _require_zernike_input_geometry(front_end::ZernikeOpticalFrontEnd,
     input::ElectricField)
     input.metadata.dimensions == size(front_end.propagation.field) || throw(
-        WFSPreparationError(:optical_formation, :shape,
+        WFSPreparationError(:wfs_optics, :shape,
             "Zernike ElectricField dimensions differ from the prepared diffraction grid"))
     return nothing
 end
 
-function prepare_wfs_optical_formation(front_end::ZernikeOpticalFrontEnd,
+function prepare_wfs_optics(front_end::ZernikeOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField}, output::IntensityMap)
     require_modulated_wfs_input(input)
     _require_zernike_front_end_source(front_end, input)
@@ -145,7 +145,7 @@ function prepare_wfs_optical_formation(front_end::ZernikeOpticalFrontEnd,
     require_modulated_wfs_domains(front_end, input, output)
     eltype(front_end.propagation.pupil_intensity) ===
         output.metadata.numeric_type || throw(WFSPreparationError(
-            :optical_formation, :numeric_type,
+            :wfs_optics, :numeric_type,
             "Zernike output precision differs from prepared propagation"))
     propagation = front_end.propagation
     binding = ZernikePropagationBinding(propagation.field,
@@ -153,7 +153,7 @@ function prepare_wfs_optical_formation(front_end::ZernikeOpticalFrontEnd,
         propagation.phasor, propagation.phase_mask,
         propagation.nominal_frame, propagation.fft_plan,
         propagation.ifft_plan, propagation.revision)
-    return PreparedZernikeOpticalFormation(front_end, input, output,
+    return PreparedZernikeOptics(front_end, input, output,
         binding)
 end
 
@@ -181,9 +181,9 @@ function zernike_rate_map(front_end::ZernikeOpticalFrontEnd,
 end
 
 function _require_zernike_optical_binding(
-    plan::PreparedZernikeOpticalFormation, input, output)
+    plan::PreparedZernikeOptics, input, output)
     input === plan.input && output === plan.output || throw(
-        WFSPreparationError(:optical_formation, :prepared_binding,
+        WFSPreparationError(:wfs_optics, :prepared_binding,
             "Zernike optical products do not match their prepared plan"))
     propagation = plan.front_end.propagation
     binding = plan.binding
@@ -196,13 +196,13 @@ function _require_zernike_optical_binding(
         propagation.fft_plan === binding.fft_plan &&
         propagation.ifft_plan === binding.ifft_plan &&
         propagation.revision == binding.revision || throw(
-        WFSPreparationError(:optical_formation, :prepared_binding,
+        WFSPreparationError(:wfs_optics, :prepared_binding,
             "Zernike propagation storage changed after preparation"))
     return nothing
 end
 
-@inline validate_wfs_optical_formation_binding(output::IntensityMap, input,
-    plan::PreparedZernikeOpticalFormation) =
+@inline validate_wfs_optics_binding(output::IntensityMap, input,
+    plan::PreparedZernikeOptics) =
     _require_zernike_optical_binding(plan, input, output)
 
 function _form_zernike_input_field!(front_end::ZernikeOpticalFrontEnd,
@@ -257,8 +257,8 @@ end
 
 function form_wfs_optical_products!(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
-    plan::PreparedZernikeOpticalFormation)
-    validate_wfs_optical_formation_binding(output, input, plan)
+    plan::PreparedZernikeOptics)
+    validate_wfs_optics_binding(output, input, plan)
     _form_zernike_rate!(output.values, plan.front_end, input)
     return output
 end

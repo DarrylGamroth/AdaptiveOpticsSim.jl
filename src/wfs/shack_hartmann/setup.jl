@@ -34,7 +34,7 @@ end
 Execution composition of an SH front-end definition with replaceable
 microlens execution resources. Prepared stage owners bind this model exactly.
 """
-struct ShackHartmannOpticalFormationModel{F,PR}
+struct ShackHartmannOptics{F,PR}
     front_end::F
     propagation::PR
 end
@@ -50,7 +50,7 @@ struct ShackHartmannDirectFrontEnd{M,L}
 end
 
 """
-Replaceable single-writer scratch for Shack-Hartmann formation, detector
+Replaceable single-writer scratch for Shack-Hartmann optics, detector
 coupling, and estimation. None of these arrays is a caller-visible result or
 persistent calibration state.
 """
@@ -80,7 +80,7 @@ struct ShackHartmannWFS{M<:SensingMode,P<:ShackHartmannWFSParams,
     F,OF,W,PR,C,B<:AbstractArrayBackend} <: AbstractWFS
     params::P
     front_end::F
-    formation::OF
+    optics::OF
     workspace::W
     products::PR
     calibration::C
@@ -114,7 +114,7 @@ function ShackHartmannOpticalFrontEnd(
         threshold_convolution=front_end.threshold_convolution)
 end
 
-function ShackHartmannOpticalFormationModel(
+function ShackHartmannOptics(
     front_end::ShackHartmannOpticalFrontEnd,
     propagation::PreparedMicrolensPropagation,
 )
@@ -134,25 +134,25 @@ function ShackHartmannOpticalFormationModel(
         microlens_numeric_type(front_end.microlens_array) ||
         throw(InvalidConfiguration(
             "prepared microlens propagation precision does not match the front end"))
-    return ShackHartmannOpticalFormationModel{
+    return ShackHartmannOptics{
         typeof(front_end),typeof(propagation)}(front_end, propagation)
 end
 
-function ShackHartmannOpticalFormationModel(
-    model::ShackHartmannOpticalFormationModel, source)
-    return ShackHartmannOpticalFormationModel(
+function ShackHartmannOptics(
+    model::ShackHartmannOptics, source)
+    return ShackHartmannOptics(
         ShackHartmannOpticalFrontEnd(model.front_end, source),
         model.propagation)
 end
 
-@inline backend(model::ShackHartmannOpticalFormationModel) =
+@inline backend(model::ShackHartmannOptics) =
     backend(microlens_propagation_workspace(
         model.propagation).fft_stack)
-@inline microlens_array(model::ShackHartmannOpticalFormationModel) =
+@inline microlens_array(model::ShackHartmannOptics) =
     microlens_array(model.front_end)
-@inline n_lenslets(model::ShackHartmannOpticalFormationModel) =
+@inline n_lenslets(model::ShackHartmannOptics) =
     n_lenslets(model.front_end)
-@inline subaperture_layout(model::ShackHartmannOpticalFormationModel) =
+@inline subaperture_layout(model::ShackHartmannOptics) =
     subaperture_layout(model.front_end)
 @inline backend(front_end::ShackHartmannOpticalFrontEnd) =
     backend(front_end.layout.valid_mask)
@@ -170,7 +170,7 @@ end
     microlens_array(front_end).params.n_lenslets
 @inline subaperture_layout(front_end::ShackHartmannDirectFrontEnd) =
     front_end.layout
-@inline sh_threshold_convolution(model::ShackHartmannOpticalFormationModel) =
+@inline sh_threshold_convolution(model::ShackHartmannOptics) =
     model.front_end.threshold_convolution
 
 """
@@ -234,15 +234,15 @@ function ShackHartmannWFS(tel::Telescope; n_lenslets::Int, threshold::Real=0.1,
         threshold_cog, T)
     calibration = SubapertureCalibration(reference_signal_2d,
         reference_signal_host, extraction)
-    front_end, formation, workspace, exported_spot_cube =
+    front_end, optics, workspace, exported_spot_cube =
         _prepare_sh_mode_storage(mode, backend,
         T, mla, layout, sub, convolution_threshold)
     products = ShackHartmannProducts(slopes, exported_spot_cube)
     wfs = ShackHartmannWFS{
-        typeof(mode),typeof(params),typeof(front_end),typeof(formation),
+        typeof(mode),typeof(params),typeof(front_end),typeof(optics),
         typeof(workspace),typeof(products),typeof(calibration),
         typeof(selector),
-    }(params, front_end, formation, workspace, products, calibration)
+    }(params, front_end, optics, workspace, products, calibration)
     initialize_valid_mask!(wfs, tel, policy)
     return wfs
 end
@@ -280,16 +280,16 @@ function _prepare_sh_mode_storage(::Diffractive, backend,
         spot_stats, spot_stats_accum, slopes_host, centroid_host)
     front_end = ShackHartmannOpticalFrontEnd(mla, layout, nothing;
         threshold_convolution)
-    formation = ShackHartmannOpticalFormationModel(front_end, propagation)
-    return front_end, formation, workspace, similar(spot_cube)
+    optics = ShackHartmannOptics(front_end, propagation)
+    return front_end, optics, workspace, similar(spot_cube)
 end
 
 sensing_mode(::ShackHartmannWFS{M}) where {M} = M()
-@inline shack_hartmann_optical_formation(
-    wfs::ShackHartmannWFS{<:Diffractive}) = wfs.formation
-@inline shack_hartmann_optical_formation(
+@inline shack_hartmann_optics(
+    wfs::ShackHartmannWFS{<:Diffractive}) = wfs.optics
+@inline shack_hartmann_optics(
     wfs::ShackHartmannWFS{<:Diffractive}, source) =
-    ShackHartmannOpticalFormationModel(wfs.formation, source)
+    ShackHartmannOptics(wfs.optics, source)
 @inline n_lenslets(wfs::ShackHartmannWFS) =
     n_lenslets(wfs.front_end)
 @inline subaperture_calibration(wfs::ShackHartmannWFS) = wfs.calibration
@@ -424,15 +424,15 @@ function update_valid_mask!(::ShackHartmannWFS, ::PupilFunction, policy)
 end
 
 @inline function sh_grouped_stack_capacity(
-    formation::ShackHartmannOpticalFormationModel)
-    propagation = microlens_propagation_workspace(formation.propagation)
-    return n_lenslets(formation)^2 * propagation.asterism_capacity
+    optics::ShackHartmannOptics)
+    propagation = microlens_propagation_workspace(optics.propagation)
+    return n_lenslets(optics)^2 * propagation.asterism_capacity
 end
 
-function ensure_sh_buffers!(formation::ShackHartmannOpticalFormationModel,
+function ensure_sh_buffers!(optics::ShackHartmannOptics,
     pad::Int)
-    propagation = microlens_propagation_workspace(formation.propagation)
-    n_spots = n_lenslets(formation)^2
+    propagation = microlens_propagation_workspace(optics.propagation)
+    n_spots = n_lenslets(optics)^2
     if size(propagation.field) != (pad, pad)
         propagation.field = similar(propagation.field, pad, pad)
         propagation.phasor = similar(propagation.phasor, pad, pad)
@@ -442,7 +442,7 @@ function ensure_sh_buffers!(formation::ShackHartmannOpticalFormationModel,
         propagation.intensity = similar(propagation.intensity, pad, pad)
         propagation.intensity_stack = similar(propagation.intensity_stack,
             eltype(propagation.intensity), pad, pad, n_spots)
-        total = sh_grouped_stack_capacity(formation)
+        total = sh_grouped_stack_capacity(optics)
         propagation.intensity_tmp_stack = similar(
             propagation.intensity_tmp_stack, eltype(propagation.intensity),
             pad, pad, total)
@@ -459,7 +459,7 @@ function ensure_sh_buffers!(formation::ShackHartmannOpticalFormationModel,
             propagation.fft_asterism_stack, (1, 2))
         propagation.phasor_ratio = eltype(propagation.intensity)(NaN)
     end
-    return formation
+    return optics
 end
 
 @inline function invalidate_sh_calibration!(wfs::ShackHartmannWFS)
@@ -469,12 +469,12 @@ end
 end
 
 function ensure_sh_asterism_buffers!(
-    formation::ShackHartmannOpticalFormationModel, n_sources::Int)
-    propagation = microlens_propagation_workspace(formation.propagation)
+    optics::ShackHartmannOptics, n_sources::Int)
+    propagation = microlens_propagation_workspace(optics.propagation)
     n_sources > 0 || throw(InvalidConfiguration("asterism must contain at least one source"))
     if n_sources > propagation.asterism_capacity
         pad = size(propagation.fft_stack, 1)
-        n_spots = n_lenslets(formation)^2
+        n_spots = n_lenslets(optics)^2
         total = n_spots * n_sources
         propagation.fft_asterism_stack = similar(
             propagation.fft_asterism_stack, pad, pad, total)
@@ -500,17 +500,17 @@ function ensure_sh_asterism_buffers!(
         propagation.opd_to_cycles_host = Vector{
             eltype(propagation.opd_to_cycles_host)}(undef, n_sources)
     end
-    return formation
+    return optics
 end
 
-function build_sh_phasor!(formation::ShackHartmannOpticalFormationModel,
+function build_sh_phasor!(optics::ShackHartmannOptics,
     ratio::T) where {T<:AbstractFloat}
-    propagation = microlens_propagation_workspace(formation.propagation)
+    propagation = microlens_propagation_workspace(optics.propagation)
     if size(propagation.phasor, 1) == 0
-        return formation
+        return optics
     end
     if isequal(propagation.phasor_ratio, ratio)
-        return formation
+        return optics
     end
     n = size(propagation.phasor, 1)
     scale = -T(π) * (T(n) + one(T) + ratio) / T(n)
@@ -520,7 +520,7 @@ function build_sh_phasor!(formation::ShackHartmannOpticalFormationModel,
     end
     copyto!(propagation.phasor, host)
     propagation.phasor_ratio = ratio
-    return formation
+    return optics
 end
 
 """
@@ -559,7 +559,7 @@ end
 
 function prepare_sampling_wavelength!(wfs::ShackHartmannWFS,
     pupil_resolution::Int, pupil_diameter_m::Real, wavelength_m::Real)
-    front_end = wfs.formation
+    front_end = wfs.optics
     propagation = microlens_propagation_workspace(front_end.propagation)
     sampling_before = (size(propagation.field),
         propagation.effective_padding, propagation.binning_pixel_scale,
@@ -576,11 +576,11 @@ function prepare_sampling_wavelength!(wfs::ShackHartmannWFS,
 end
 
 function _prepare_microlens_sampling_wavelength!(
-    formation::ShackHartmannOpticalFormationModel,
+    optics::ShackHartmannOptics,
     pupil_resolution::Int, pupil_diameter_m::Real, wavelength_m::Real)
-    sampling = _sh_microlens_sampling_configuration(formation,
+    sampling = _sh_microlens_sampling_configuration(optics,
         pupil_resolution, pupil_diameter_m, wavelength_m)
-    propagation = microlens_propagation_workspace(formation.propagation)
+    propagation = microlens_propagation_workspace(optics.propagation)
     padding = sampling.padding
     pad = sampling.padded_subaperture_samples
     binning_pixel_scale = sampling.binning_pixel_scale
@@ -588,7 +588,7 @@ function _prepare_microlens_sampling_wavelength!(
 
     if padding != propagation.effective_padding ||
             pad != size(propagation.field, 1)
-        ensure_sh_buffers!(formation, pad)
+        ensure_sh_buffers!(optics, pad)
         propagation.lgs_kernel_fft = similar(propagation.fft_buffer,
             eltype(propagation.fft_buffer), 0, 0, 0)
         propagation.lgs_kernel_tag = UInt(0)
@@ -601,33 +601,33 @@ function _prepare_microlens_sampling_wavelength!(
         propagation.sampled_spot_cube = similar(
             propagation.sampled_spot_cube,
             eltype(propagation.sampled_spot_cube),
-            n_lenslets(formation)^2, n_pix_subap, n_pix_subap)
+            n_lenslets(optics)^2, n_pix_subap, n_pix_subap)
         propagation.spot_cube_accum = similar(propagation.spot_cube_accum,
             eltype(propagation.spot_cube_accum),
-            n_lenslets(formation)^2, n_pix_subap, n_pix_subap)
+            n_lenslets(optics)^2, n_pix_subap, n_pix_subap)
         propagation.sampled_n_pix_subap = n_pix_subap
     end
 
     propagation.binning_pixel_scale = binning_pixel_scale
     T = eltype(propagation.intensity)
-    half_shift_ratio = microlens_array(formation).params.half_pixel_shift ?
+    half_shift_ratio = microlens_array(optics).params.half_pixel_shift ?
         T(binning_pixel_scale) : zero(T)
-    build_sh_phasor!(formation, half_shift_ratio)
-    return formation
+    build_sh_phasor!(optics, half_shift_ratio)
+    return optics
 end
 
 function _sh_microlens_sampling_configuration(
-    formation::ShackHartmannOpticalFormationModel,
+    optics::ShackHartmannOptics,
     pupil_resolution::Int, pupil_diameter_m::Real, wavelength_m::Real)
-    pupil_resolution % n_lenslets(formation) == 0 ||
+    pupil_resolution % n_lenslets(optics) == 0 ||
         throw(InvalidConfiguration(
             "pupil resolution must be divisible by n_lenslets"))
-    sub = div(pupil_resolution, n_lenslets(formation))
-    microlens = microlens_array(formation)
+    sub = div(pupil_resolution, n_lenslets(optics))
+    microlens = microlens_array(optics)
     padding = microlens.params.diffraction_padding
     pixel_scale_req =
         microlens.params.pixel_scale_arcsec
-    d_subap = pupil_diameter_m / n_lenslets(formation)
+    d_subap = pupil_diameter_m / n_lenslets(optics)
     pixel_scale_init = sh_pixel_scale_init(d_subap, padding, wavelength_m)
 
     if pixel_scale_req !== nothing
@@ -707,19 +707,19 @@ is overwritten by later mutating measurements.
 end
 
 @inline function sh_sampled_spot_cube(wfs::ShackHartmannWFS)
-    return wfs.formation.propagation.workspace.sampled_spot_cube
+    return wfs.optics.propagation.workspace.sampled_spot_cube
 end
 
 @inline function sync_signal_spots_from_sampled!(wfs::ShackHartmannWFS)
     copyto!(wfs.workspace.spot_cube,
-        wfs.formation.propagation.workspace.sampled_spot_cube)
+        wfs.optics.propagation.workspace.sampled_spot_cube)
     return wfs.workspace.spot_cube
 end
 
 @inline function capture_sampled_spot_stack!(wfs::ShackHartmannWFS,
     src::AbstractSource, det::AbstractDetector, rng::AbstractRNG)
     copyto!(wfs.workspace.spot_cube,
-        wfs.formation.propagation.workspace.sampled_spot_cube)
+        wfs.optics.propagation.workspace.sampled_spot_cube)
     capture_stack!(det, wfs.workspace.spot_cube, wfs.workspace.detector_noise_cube,
         src, rng)
     return wfs.workspace.spot_cube

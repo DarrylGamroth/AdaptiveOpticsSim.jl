@@ -353,7 +353,7 @@ end
 
 Prepare direct imaging from an explicit `PupilFunction`, using caller-owned
 `field` work storage and writing caller-owned focal-plane `output`. Physical
-sources only are accepted; optical formation applies no elapsed time.
+sources only are accepted; image formation applies no elapsed time.
 """
 function _prepare_direct_imaging(pupil::PupilFunction,
     src::Union{Source,LGSSource}, field::ElectricField,

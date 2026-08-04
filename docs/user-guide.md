@@ -102,7 +102,7 @@ Typical operations:
 
 - advance and render one atmosphere epoch
 - apply each independent controllable optic
-- execute WFS optical formation, acquisition, and estimation
+- execute WFS optics, acquisition, and estimation
 - reconstruct and update controller state
 - return a model-specific `NamedTuple` or typed readout
 
@@ -813,7 +813,7 @@ spectral-by-spatial-by-directional Cartesian quadrature, prepare the components
 explicitly and accumulate only metadata-compatible intensity products; there is
 not yet a nested convenience API for that product space.
 
-Prepared diffractive Shack–Hartmann formation keeps distinct wavelength grids
+Prepared diffractive Shack–Hartmann optics keep distinct wavelength grids
 as separate native-sampling products in an `OpticalProductBundle`; it never
 index-adds or implicitly resamples them. A single output therefore accepts only
 a source compatible with its declared wavelength and sampling. The legacy
@@ -821,7 +821,7 @@ single-product `measure!` convenience path remains restricted to a common
 wavelength grid. Model bundled channels with independent acquisition mappings
 unless an application prepares an explicit flux-conserving resampler.
 
-Prepared Pyramid and BioEdge formation follows the same photon-arrival-rate
+Prepared Pyramid and BioEdge optics follow the same photon-arrival-rate
 boundary while retaining distinct physical masks. Their zero, circular, and
 sampled focal-plane modulation policies are optical cycle averages in λ/D;
 they contain no exposure time or trigger semantics. A spectral source produces
@@ -864,14 +864,14 @@ calibrated WFS paths.
   - composes an independent `MicrolensArray`, prepared optical workspace,
     layout/calibration, detector acquisition, and estimator state
   - use `ShackHartmannOpticalFrontEnd` and `shack_hartmann_rate_map` with the
-    prepared WFS stage API when optical formation, acquisition, and estimation
+    prepared WFS stage API when WFS optics, acquisition, and estimation
     must be scheduled independently
 - `PyramidWFS`
   - pyramid sensing and modulation studies
   - owned by `AdaptiveOpticsSim.WavefrontSensors`; its physical
     `PyramidPhaseMask` remains in `AdaptiveOpticsSim.Optics`
   - use `PyramidOpticalFrontEnd`, `pyramid_rate_map`, and
-    `set_pyramid_calibration!` when optical formation, acquisition, and
+    `set_pyramid_calibration!` when WFS optics, acquisition, and
     differential estimation must be scheduled independently
 - `BioEdgeWFS`
   - BioEdge variants
