@@ -2151,6 +2151,15 @@ end
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), native_asterism, pupil, asterism)
     expected_asterism = shack_hartmann_detector_image(
         native_asterism.workspace.spot_cube, 4)
+    independently_accumulated = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, T=T)
+    prepare_sampling!(independently_accumulated, pupil,
+        first(asterism.sources))
+    independent_peak = WavefrontSensors.accumulate_sh_asterism_spots!(
+        ScalarCPUStyle(), independently_accumulated, pupil, asterism)
+    @test independent_peak > zero(T)
+    @test independently_accumulated.workspace.spot_cube ≈
+        native_asterism.workspace.spot_cube rtol=T(2e-12) atol=T(2e-12)
     staged_asterism = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     asterism_rate = shack_hartmann_rate_map(staged_asterism, pupil,
@@ -2177,6 +2186,14 @@ end
         modulation=0, T=T)
     bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=0, T=T)
+    geometric_pyramid = PyramidWFS(tel; pupil_samples=4,
+        mode=Geometric(), T=T)
+    geometric_bioedge = BioEdgeWFS(tel; pupil_samples=4,
+        mode=Geometric(), T=T)
+    @test_throws WFSPreparationError PyramidOpticalFrontEnd(
+        geometric_pyramid, source)
+    @test_throws WFSPreparationError BioEdgeOpticalFrontEnd(
+        geometric_bioedge, source)
     @test pyramid.front_end.phase_mask isa PyramidPhaseMask{T}
     @test bioedge.front_end.amplitude_mask isa BioEdgeAmplitudeMask{T}
     @test typeof(pyramid.front_end.phase_mask) !==
