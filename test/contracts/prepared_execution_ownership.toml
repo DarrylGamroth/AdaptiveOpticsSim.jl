@@ -21,6 +21,7 @@ entries = [
     ["Detectors","AbstractDetectorExecutionStrategy","reclassify_strategy","none","PE-02","Zero-size direct/host-mirror selectors choose detector execution without owning a prepared detector contract."],
     ["WavefrontSensors","AbstractPreparedCurvatureObservationMapping","remove_now","none","PE-01","The closed image-pair and channel-pair mappings share no operation through the abstract root."],
     ["WavefrontSensors","AbstractPreparedFourPupilLGS","retain","plan_protocol","PE-01","No-op, elongation, and sodium-profile plans share prepared application and exact-target validation."],
+    ["WavefrontSensors","AbstractWFSAcquisitionPlan","retain","plan_protocol","PE-05","Generic frame, accumulated-count, and static fan-out plans share one run-immutable acquisition contract while exact live owners remain separate."],
     ["WavefrontSensors","AbstractGroupedAccumulationStrategy","reclassify_strategy","none","PE-02","Zero-size accumulation selectors choose one reduction implementation and own no prepared mapping or resource."],
     ["WavefrontSensors","AbstractShackHartmannWFSSensingStrategy","reclassify_strategy","none","PE-02","Zero-size sensing selectors choose scalar, batched, or device-statistics execution and own no prepared optical contract."],
     ["Backends","_AbstractPreparedDeviceExecutionContext","retain","prepared_owner_protocol","PE-01","Host and accelerator extensions share exact-device entry, restoration, synchronization, and failure behavior."],
@@ -71,6 +72,21 @@ failure_behavior = "Preparation and exact-target validation use WFSPreparationEr
 reentrancy = "The plan data is reentrant with distinct intensity and FFT workspaces; one workspace must not have concurrent writers."
 backend_traits = ["execution_style","compute_device"]
 conformance_suites = ["wfs-pyramid-bioedge","prepared-execution-interfaces"]
+
+[[interface_contracts]]
+owner = "WavefrontSensors"
+name = "AbstractWFSAcquisitionPlan"
+visibility = "qualified_public"
+implementations = ["WFSDetectorAcquisitionPlan","WFSCountingAcquisitionPlan","WFSMultipleDetectorAcquisitionPlan"]
+required_methods = ["prepare_wfs_acquisition","wfs_acquisition_plan","acquire_wfs_observation!","validate_wfs_acquisition_binding"]
+conformance_helpers = ["assert_wfs_acquisition_owner_conformance!"]
+valid_defaults = []
+ownership = "The plan retains only run-immutable detector, radiometric, observation, and component-plan metadata; a distinct prepared owner binds exact detector state, workspace, products, optical input, observation, backend, and device."
+aliasing = "Prepared acquisition rejects observation/input aliasing and aliases with detector state, workspace, or products before preparation commits or execution mutates a destination."
+failure_behavior = "WFSPreparationError rejects invalid shape, numeric type, radiometry, backend/device, foreign binding, replacement, and aliasing before observation mutation or RNG advance."
+reentrancy = "Plans are immutable and reentrant; each prepared detector acquisition is single-writer, while independent prepared owners may execute independently."
+backend_traits = ["backend","compute_device"]
+conformance_suites = ["wfs-acquisition-ownership"]
 
 [[interface_contracts]]
 owner = "Backends"
@@ -156,7 +172,7 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 397
+baseline_type_count = 409
 baseline_mixed_type_count = 24
 
 [[type_inventory.files]]
@@ -1048,9 +1064,21 @@ entries = [
 path = "src/wfs/stage_contracts.jl"
 owner = "WavefrontSensors"
 entries = [
+    ["AbstractWFSAcquisitionPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["AbstractWFSEstimationPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["AbstractWFSOpticalFormationPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PreparedWFSCountingAcquisition","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
-    ["PreparedWFSDetectorAcquisition","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
-    ["PreparedWFSMultipleDetectorAcquisition","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedWFSDetectorAcquisition","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedWFSMultipleDetectorAcquisition","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["WFSCountingAcquisitionPlan","struct",3,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["WFSDetectorAcquisitionPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["WFSMultipleDetectorAcquisitionPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["_PreparedWFSCountingAcquisitionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
+    ["_PreparedWFSDetectorAcquisitionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
+    ["_PreparedWFSMultipleDetectorAcquisitionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
+    ["_WFSCountingAcquisitionPlanToken","struct",0,"plan",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
+    ["_WFSDetectorAcquisitionPlanToken","struct",0,"plan",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
+    ["_WFSMultipleDetectorAcquisitionPlanToken","struct",0,"plan",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
 ]
 
 [[type_inventory.files]]

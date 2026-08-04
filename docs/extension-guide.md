@@ -1138,15 +1138,16 @@ New physical WFS work should first implement the prepared semantic stages:
 
 - `prepare_wfs_optical_formation(model, input, output)` validates an explicit
   caller-owned pupil function or electric field and one or more
-  detector-plane photon-arrival-rate outputs; the returned concrete plan is
-  executed by `form_wfs_optical_products!`
+  detector-plane photon-arrival-rate outputs; the returned concrete prepared
+  owner is executed by `form_wfs_optical_products!`
 - `prepare_wfs_acquisition(model, optical_products, observation)` validates
   detector mappings, explicit duration, backend/device placement, and one or
-  more caller-owned `WFSObservation` destinations; the returned concrete plan
-  is executed by `acquire_wfs_observation!` with an explicit caller-owned RNG
+  more caller-owned `WFSObservation` destinations; the returned concrete
+  prepared owner is executed by `acquire_wfs_observation!` with an explicit
+  caller-owned RNG
 - `prepare_wfs_estimation(model, observation, measurement)` validates the
-  estimator and caller-owned `WFSMeasurement`; the returned concrete plan is
-  executed by `estimate_wfs_measurement!` and declares
+  estimator and caller-owned `WFSMeasurement`; the returned concrete prepared
+  owner is executed by `estimate_wfs_measurement!` and declares
   `AcquiredObservationPath()` through `wfs_measurement_path`
 
 A geometric or reduced-order provider may instead prepare estimation directly
@@ -1159,13 +1160,30 @@ observations. Preserve incompatible spectral or branch rate products in
 owned by its product leaves remain mutable destinations for prepared optical
 formation.
 
+The qualified nominal plan interfaces are
+`WavefrontSensors.AbstractWFSOpticalFormationPlan`,
+`WavefrontSensors.AbstractWFSAcquisitionPlan`, and
+`WavefrontSensors.AbstractWFSEstimationPlan`. Subtype the interface for the
+stage contract owned by the implementation, but keep that run-immutable plan
+as one field of a distinct exact prepared owner. A plan may retain validated
+physical coefficients, dimensions, mappings, calibration revisions, and
+backend/device requirements. It must not retain replaceable scratch,
+persistent scientific state, caller-visible products, or incidental exact
+array identity. Generic detector acquisition owners expose their plan through
+the qualified `WavefrontSensors.wfs_acquisition_plan` accessor. Family optical
+and estimator accessors are introduced with their owner migrations rather
+than through a universal stage-plan API. Static detector fan-out validates all
+component contracts and cross-component ownership before it commits any
+detector owner; a later component failure must leave every prior prepared
+owner valid.
+
 Extensions should call the qualified validation seams
 `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_optical_input`,
 `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_optical_products`,
 `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_observation` or
 `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_observations`, and
 `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_measurement` as applicable
-before returning a prepared plan. Every new prepared plan also implements its
+before returning a prepared owner. Every new prepared owner also implements its
 corresponding exact binding validator:
 
 - `AdaptiveOpticsSim.WavefrontSensors.validate_wfs_optical_formation_binding`

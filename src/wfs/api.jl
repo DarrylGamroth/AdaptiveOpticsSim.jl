@@ -94,4 +94,14 @@ public supports_prepared_runtime
 public supports_detector_output
 public supports_stacked_sources
 public supports_grouped_execution
+public AbstractWFSOpticalFormationPlan
+public AbstractWFSAcquisitionPlan
+public AbstractWFSEstimationPlan
+public WFSDetectorAcquisitionPlan
+public WFSCountingAcquisitionPlan
+public WFSMultipleDetectorAcquisitionPlan
+public PreparedWFSDetectorAcquisition
+public PreparedWFSCountingAcquisition
+public PreparedWFSMultipleDetectorAcquisition
+public wfs_acquisition_plan
 public validate_wfs_target

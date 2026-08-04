@@ -130,7 +130,7 @@ end
             rationale=String(values["rationale"]),
         )
     end
-    @test length(decision_rows) == 17
+    @test length(decision_rows) == 18
 
     retained_interfaces = Set((
         ("Backends", "_AbstractPreparedDeviceExecutionContext"),
@@ -140,6 +140,7 @@ end
         ("Plant", "PreparedPupilOPDPublicationRoute"),
         ("Plant", "_PreparedEffectiveCommandPublicationRoute"),
         ("WavefrontSensors", "AbstractPreparedFourPupilLGS"),
+        ("WavefrontSensors", "AbstractWFSAcquisitionPlan"),
     ))
     removed_interfaces = Set((
         ("Optics", "AbstractDirectImagingInputPlan"),
@@ -164,8 +165,10 @@ end
     @test decision_keys("remove_now") == removed_interfaces
     @test decision_keys("reclassify_strategy") == strategy_interfaces
     @test decision_keys("defer_removal") == deferred_interfaces
-    @test all(decision_rows[key].follow_on_gate == "PE-01"
+    @test all(decision_rows[key].follow_on_gate in ("PE-01", "PE-05")
         for key in union(retained_interfaces, removed_interfaces))
+    @test decision_rows[("WavefrontSensors",
+        "AbstractWFSAcquisitionPlan")].follow_on_gate == "PE-05"
     @test all(decision_rows[key].follow_on_gate == "PE-02"
         for key in strategy_interfaces)
     @test all(decision_rows[key].follow_on_gate == "PE-06"

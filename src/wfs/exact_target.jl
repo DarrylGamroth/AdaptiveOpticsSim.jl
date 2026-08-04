@@ -714,12 +714,6 @@ function _require_exact_wfs_target(
     _require_exact_wfs_product_target(
         plan.optical_product, target, :acquisition)
     _require_exact_wfs_observation_target(plan.observation, target)
-    _require_exact_wfs_array_targets(
-        (plan.detector_input, plan.detector_output),
-        ("counting WFS detector input", "counting WFS detector output"),
-        target,
-        :acquisition,
-    )
     _require_exact_counting_detector_target(plan.detector, target)
     return plan
 end
@@ -730,7 +724,7 @@ function _require_exact_wfs_target(
 )
     validate_wfs_acquisition_binding(
         plan.observations, plan.optical_products, plan)
-    @inbounds for component in plan.plans
+    @inbounds for component in plan.acquisitions
         _require_exact_wfs_target(component, target)
     end
     return plan

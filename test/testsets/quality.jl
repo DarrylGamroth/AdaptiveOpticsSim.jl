@@ -164,6 +164,9 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["detectors"])) == DETECTOR_TEST_SUITE_NAMES
     @test Tuple(spec.name for spec in resolve_test_suites(
+        ["wfs-acquisition-ownership"])) ==
+        ("wfs-acquisition-ownership",)
+    @test Tuple(spec.name for spec in resolve_test_suites(
         ["wfs-common"])) == ("wfs-common",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["wfs-shack-hartmann"])) == ("wfs-shack-hartmann",)
@@ -211,12 +214,17 @@ end
         "gate0",
         "backend-smoke",
     )
+    @test Tuple(spec.name for spec in resolve_test_suites(["pe04"])) ==
+        ("prepared-detector-ownership",)
+    @test Tuple(spec.name for spec in resolve_test_suites(["pe05"])) ==
+        ("wfs-acquisition-ownership",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["control"])) ==
         ("control-primitives", "control-reconstruction")
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["sensors"])) == (
             DETECTOR_TEST_SUITE_NAMES...,
+            "wfs-acquisition-ownership",
             "wfs-common",
             "wfs-shack-hartmann",
             "wfs-pyramid-bioedge",

@@ -379,6 +379,49 @@ function validate_wfs_optical_products(product)
 end
 
 """
+    AbstractWFSOpticalFormationPlan
+
+Nominal interface for a run-immutable WFS optical-formation contract. Concrete
+plans retain validated physical and numerical data only; the corresponding
+prepared owner binds exact input, workspace, products, backend, and device.
+Implementations provide the existing `prepare_wfs_optical_formation`,
+`form_wfs_optical_products!`, and `validate_wfs_optical_formation_binding`
+protocol.
+"""
+abstract type AbstractWFSOpticalFormationPlan end
+
+"""
+    AbstractWFSAcquisitionPlan
+
+Nominal interface for a run-immutable WFS acquisition contract. Concrete
+plans contain validated detector/radiometric and observation metadata, while
+prepared owners bind exact detector state, workspace, products, optical input,
+observation, backend, and device. Obtain the plan from a generic prepared
+owner with [`wfs_acquisition_plan`](@ref).
+"""
+abstract type AbstractWFSAcquisitionPlan end
+
+"""
+    AbstractWFSEstimationPlan
+
+Nominal interface for a run-immutable WFS estimation contract. Concrete plans
+retain validated calibration and estimator data only; the corresponding
+prepared owner binds exact observation or direct optical input, workspace,
+measurement product, backend, and device. Implementations provide the existing
+`prepare_wfs_estimation`, `estimate_wfs_measurement!`, and
+`validate_wfs_estimation_binding` protocol.
+"""
+abstract type AbstractWFSEstimationPlan end
+
+"""
+    wfs_acquisition_plan(prepared)
+
+Return the run-immutable acquisition plan bound by a generic prepared WFS
+acquisition owner.
+"""
+function wfs_acquisition_plan end
+
+"""
     prepare_wfs_optical_formation(model, input, output)
     form_wfs_optical_products!(output, input, prepared)
 
@@ -413,13 +456,19 @@ end
     acquire_wfs_observation!(observation, optical_products, prepared, rng)
 
 Preparation and mutating execution protocol for detector acquisition. The
-prepared model owns detector/acquisition state and explicit durations; optical
-inputs remain photon-arrival rates. Concrete tuples express fan-out to multiple
-detectors without a runtime-selected stage graph.
+prepared owner binds detector state, workspace, products, and explicit
+durations; optical inputs remain photon-arrival rates. Concrete tuples express
+fan-out to multiple detectors without a runtime-selected stage graph.
 """
 function prepare_wfs_acquisition(model, optical_products, observation)
     throw(WFSPreparationError(:acquisition, :unsupported,
         "$(typeof(model)) does not implement prepared WFS acquisition"))
+end
+
+function _prepare_wfs_acquisition_candidate(
+    model, optical_products, observation; source=nothing)
+    throw(WFSPreparationError(:acquisition, :unsupported,
+        "$(typeof(model)) does not implement transactional WFS acquisition preparation"))
 end
 
 function acquire_wfs_observation! end
@@ -437,10 +486,70 @@ function validate_wfs_acquisition_binding(observation, optical_products,
         "$(typeof(prepared)) does not validate its prepared acquisition binding"))
 end
 
-"""Prepared detector acquisition shared by detector-backed WFS families."""
-struct PreparedWFSDetectorAcquisition{P,O}
-    acquisition::P
+struct _WFSDetectorAcquisitionPlanToken end
+const _WFS_DETECTOR_ACQUISITION_PLAN_TOKEN =
+    _WFSDetectorAcquisitionPlanToken()
+
+"""Run-immutable WFS contract layered over a frame-detector plan."""
+struct WFSDetectorAcquisitionPlan{
+    P<:DetectorAcquisitionPlan,
+    M<:WFSObservationMetadata,
+} <: AbstractWFSAcquisitionPlan
+    detector_plan::P
+    observation_metadata::M
+
+    function WFSDetectorAcquisitionPlan(
+        ::_WFSDetectorAcquisitionPlanToken, detector_plan::P,
+        observation_metadata::M) where {
+        P<:DetectorAcquisitionPlan,M<:WFSObservationMetadata,
+    }
+        return new{P,M}(detector_plan, observation_metadata)
+    end
+end
+
+struct _PreparedWFSDetectorAcquisitionToken end
+const _PREPARED_WFS_DETECTOR_ACQUISITION_TOKEN =
+    _PreparedWFSDetectorAcquisitionToken()
+
+"""Exact prepared owner for one frame-detector WFS acquisition."""
+struct PreparedWFSDetectorAcquisition{
+    P<:WFSDetectorAcquisitionPlan,
+    A<:PreparedDetectorAcquisition,
+    O<:WFSObservation,
+}
+    plan::P
+    acquisition::A
     observation::O
+
+    function PreparedWFSDetectorAcquisition(
+        ::_PreparedWFSDetectorAcquisitionToken, plan::P,
+        acquisition::A, observation::O) where {
+        P<:WFSDetectorAcquisitionPlan,A<:PreparedDetectorAcquisition,
+        O<:WFSObservation,
+    }
+        return new{P,A,O}(plan, acquisition, observation)
+    end
+end
+
+@inline wfs_acquisition_plan(
+    prepared::PreparedWFSDetectorAcquisition) = prepared.plan
+
+@inline function _wfs_storage_mightalias(
+    first::AbstractArray, second::AbstractArray)
+    return Base.mightalias(first, second)
+end
+
+@inline _wfs_storage_mightalias(first, second) = false
+
+function _require_wfs_detector_observation_ownership(
+    detector::Detector, optical_product::IntensityMap,
+    observation::WFSObservation)
+    storage = observation.storage
+    (_detector_storage_mightalias(detector, storage) ||
+        _wfs_storage_mightalias(storage, optical_product.values)) && throw(
+        WFSPreparationError(:acquisition, :ownership,
+            "WFS observation must not alias detector storage or its optical input"))
+    return nothing
 end
 
 function _validate_wfs_detector_observation_contract(
@@ -452,8 +561,9 @@ function _validate_wfs_detector_observation_contract(
         throw(WFSPreparationError(:acquisition, :shape,
             "WFS observation storage must match the prepared detector output"))
     output_type = detector_output_type(detector)
+    detector_output = output_frame(detector)
     expected_type = output_type === nothing ?
-        eltype(detector.products.frame) : output_type
+        eltype(detector_output) : output_type
     observation.metadata.numeric_type === expected_type ||
         throw(WFSPreparationError(:acquisition, :numeric_type,
             "WFS observation element type must match the detector output"))
@@ -461,13 +571,13 @@ function _validate_wfs_detector_observation_contract(
         throw(WFSPreparationError(:acquisition, :backend,
             "WFS observation and detector backends differ"))
     compute_device(observation.storage) ==
-        compute_device(detector.products.frame) ||
+        compute_device(detector_output) ||
         throw(WFSPreparationError(:acquisition, :device,
             "WFS observation and detector output occupy different devices"))
     return nothing
 end
 
-function prepare_wfs_acquisition(detector::Detector,
+function _prepare_wfs_acquisition_candidate(detector::Detector,
     optical_product::IntensityMap, observation::WFSObservation;
     source=nothing)
     validate_wfs_optical_products(optical_product)
@@ -475,10 +585,39 @@ function prepare_wfs_acquisition(detector::Detector,
     observation.metadata.numeric_type <: Real ||
         throw(WFSPreparationError(:acquisition, :numeric_type,
             "WFS detector observations require real sample storage"))
-    _validate_wfs_detector_observation_contract(
+    _require_wfs_detector_observation_ownership(
         detector, optical_product, observation)
-    acquisition = prepare_detector_acquisition(detector, optical_product)
-    return PreparedWFSDetectorAcquisition(acquisition, observation)
+    candidate = _prepare_detached_detector_acquisition(
+        detector, optical_product)
+    candidate_detector = detector_acquisition_detector(candidate)
+    _validate_wfs_detector_observation_contract(
+        candidate_detector, optical_product, observation)
+    _require_wfs_detector_observation_ownership(
+        candidate_detector, optical_product, observation)
+    acquisition = _rebind_prepared_detector_acquisition(detector, candidate)
+    plan = WFSDetectorAcquisitionPlan(
+        _WFS_DETECTOR_ACQUISITION_PLAN_TOKEN,
+        detector_acquisition_plan(acquisition), observation.metadata)
+    prepared = PreparedWFSDetectorAcquisition(
+        _PREPARED_WFS_DETECTOR_ACQUISITION_TOKEN,
+        plan, acquisition, observation)
+    return prepared
+end
+
+@inline function _commit_wfs_acquisition_candidate!(
+    prepared::PreparedWFSDetectorAcquisition, ::Detector,
+    ::IntensityMap, ::WFSObservation)
+    _commit_prepared_detector_acquisition!(prepared.acquisition)
+    return prepared
+end
+
+function prepare_wfs_acquisition(detector::Detector,
+    optical_product::IntensityMap, observation::WFSObservation;
+    source=nothing)
+    candidate = _prepare_wfs_acquisition_candidate(
+        detector, optical_product, observation; source=source)
+    return _commit_wfs_acquisition_candidate!(
+        candidate, detector, optical_product, observation)
 end
 
 function acquire_wfs_observation!(observation::WFSObservation,
@@ -494,10 +633,16 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
     optical_product::IntensityMap, plan::PreparedWFSDetectorAcquisition)
     observation === plan.observation || throw(WFSPreparationError(
         :acquisition, :prepared_binding,
-        "WFS observation does not match prepared storage"))
+            "WFS observation does not match prepared storage"))
+    observation.metadata === plan.plan.observation_metadata || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "WFS observation metadata changed after preparation"))
+    detector_acquisition_plan(plan.acquisition) ===
+        plan.plan.detector_plan || throw(WFSPreparationError(
+            :acquisition, :prepared_binding,
+            "WFS detector acquisition plan changed after preparation"))
     prepared_input = detector_acquisition_input(plan.acquisition)
-    optical_product.metadata === prepared_input.metadata &&
-        optical_product.values === prepared_input.values || throw(
+    optical_product === prepared_input || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
             "WFS optical product does not match its prepared detector input"))
     try
@@ -511,17 +656,70 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
     return nothing
 end
 
-"""Prepared acquisition for an accumulated-count detector."""
-struct PreparedWFSCountingAcquisition{D,I,O,S,T,A,F,B}
+struct _WFSCountingAcquisitionPlanToken end
+const _WFS_COUNTING_ACQUISITION_PLAN_TOKEN =
+    _WFSCountingAcquisitionPlanToken()
+
+"""Run-immutable radiometric contract for accumulated-count WFS acquisition."""
+struct WFSCountingAcquisitionPlan{
+    I<:OpticalPlaneMetadata,
+    O<:WFSObservationMetadata,
+    T<:AbstractFloat,
+} <: AbstractWFSAcquisitionPlan
+    input_metadata::I
+    observation_metadata::O
+    source_throughput::T
+
+    function WFSCountingAcquisitionPlan(
+        ::_WFSCountingAcquisitionPlanToken, input_metadata::I,
+        observation_metadata::O,
+        source_throughput::T) where {
+        I<:OpticalPlaneMetadata,O<:WFSObservationMetadata,T<:AbstractFloat,
+    }
+        return new{I,O,T}(
+            input_metadata, observation_metadata, source_throughput)
+    end
+end
+
+struct _PreparedWFSCountingAcquisitionToken end
+const _PREPARED_WFS_COUNTING_ACQUISITION_TOKEN =
+    _PreparedWFSCountingAcquisitionToken()
+
+"""Exact prepared owner for one accumulated-count WFS acquisition."""
+struct PreparedWFSCountingAcquisition{
+    P<:WFSCountingAcquisitionPlan,
+    D<:AbstractCountingDetector,
+    I<:IntensityMap,
+    O<:WFSObservation,
+    S,
+    W,
+    R,
+    B,
+}
+    plan::P
     detector::D
     optical_product::I
     observation::O
-    source::S
-    source_throughput::T
-    detector_input::A
-    detector_output::F
+    state::S
+    workspace::W
+    products::R
     detector_binding::B
+
+    function PreparedWFSCountingAcquisition(
+        ::_PreparedWFSCountingAcquisitionToken, plan::P,
+        detector::D, optical_product::I, observation::O,
+        state::S, workspace::W, products::R,
+        detector_binding::B) where {
+        P<:WFSCountingAcquisitionPlan,D<:AbstractCountingDetector,
+        I<:IntensityMap,O<:WFSObservation,S,W,R,B,
+    }
+        return new{P,D,I,O,S,W,R,B}(plan, detector, optical_product,
+            observation, state, workspace, products, detector_binding)
+    end
 end
+
+@inline wfs_acquisition_plan(
+    prepared::PreparedWFSCountingAcquisition) = prepared.plan
 
 @inline function _counting_wfs_detector_binding(
     detector::AbstractCountingDetector)
@@ -543,6 +741,30 @@ end
         counting_output_host_buffer(detector) === binding.output_buffer_host ||
         throw(WFSPreparationError(:acquisition, :prepared_binding,
             "counting detector state, workspace, or products changed after WFS preparation"))
+    return nothing
+end
+
+@inline function _counting_wfs_storage_mightalias(
+    detector::AbstractCountingDetector, value::AbstractArray)
+    output = counting_output_buffer(detector)
+    output_host = counting_output_host_buffer(detector)
+    return _wfs_storage_mightalias(value, counting_array(detector)) ||
+        _wfs_storage_mightalias(value, counting_noise_buffer(detector)) ||
+        _wfs_storage_mightalias(value, counting_host_buffer(detector)) ||
+        _wfs_storage_mightalias(value, output) ||
+        _wfs_storage_mightalias(value, output_host)
+end
+
+function _require_counting_wfs_storage_ownership(
+    detector::AbstractCountingDetector, optical_product::IntensityMap,
+    observation::WFSObservation)
+    input = optical_product.values
+    output = observation.storage
+    (_counting_wfs_storage_mightalias(detector, input) ||
+        _counting_wfs_storage_mightalias(detector, output) ||
+        _wfs_storage_mightalias(input, output)) && throw(
+        WFSPreparationError(:acquisition, :ownership,
+            "counting WFS input and observation must not alias detector storage or each other"))
     return nothing
 end
 
@@ -602,7 +824,8 @@ function _require_counting_wfs_measure(::AbstractSpatialMeasure)
         "counting WFS inputs must carry cell-integrated photon rate"))
 end
 
-function prepare_wfs_acquisition(detector::AbstractCountingDetector,
+function _prepare_wfs_acquisition_candidate(
+    detector::AbstractCountingDetector,
     optical_product::IntensityMap, observation::WFSObservation;
     source=nothing)
     validate_wfs_optical_products(optical_product)
@@ -624,26 +847,56 @@ function prepare_wfs_acquisition(detector::AbstractCountingDetector,
         WFSPreparationError(:acquisition, :device,
             "counting detector and WFS rate product occupy different devices"))
     _require_finite_nonnegative_intensity(input)
-    ensure_buffers!(detector, size(input))
-    output = output_frame(detector)
-    size(observation.storage) == size(output) || throw(WFSPreparationError(
+    size(observation.storage) == size(input) || throw(WFSPreparationError(
         :acquisition, :shape,
         "counting WFS observation storage must match detector output"))
-    observation.metadata.numeric_type === eltype(output) || throw(
+    output_type = detector_output_type(detector)
+    expected_type = output_type === nothing ? eltype(counting_array(detector)) :
+        output_type
+    observation.metadata.numeric_type === expected_type || throw(
         WFSPreparationError(:acquisition, :numeric_type,
             "counting WFS observation element type must match detector output"))
     typeof(backend(observation.storage)) === typeof(backend(detector)) ||
         throw(WFSPreparationError(:acquisition, :backend,
             "counting WFS observation and detector backends differ"))
-    compute_device(observation.storage) == compute_device(output) || throw(
+    compute_device(observation.storage) ==
+        compute_device(counting_array(detector)) || throw(
         WFSPreparationError(:acquisition, :device,
             "counting WFS observation and detector output occupy different devices"))
+    _require_counting_wfs_storage_ownership(
+        detector, optical_product, observation)
     output_type = eltype(counting_array(detector))
     source_throughput = source === nothing ? one(output_type) :
         counting_source_throughput(detector, source, output_type)
-    return PreparedWFSCountingAcquisition(detector, optical_product,
-        observation, source, source_throughput, counting_array(detector),
-        output, _counting_wfs_detector_binding(detector))
+    plan = WFSCountingAcquisitionPlan(
+        _WFS_COUNTING_ACQUISITION_PLAN_TOKEN,
+        optical_product.metadata, observation.metadata,
+        source_throughput)
+    return plan
+end
+
+function _commit_wfs_acquisition_candidate!(
+    plan::WFSCountingAcquisitionPlan,
+    detector::AbstractCountingDetector,
+    optical_product::IntensityMap, observation::WFSObservation)
+    input = optical_product.values
+    ensure_buffers!(detector, size(input))
+    return PreparedWFSCountingAcquisition(
+        _PREPARED_WFS_COUNTING_ACQUISITION_TOKEN,
+        plan, detector, optical_product, observation,
+        counting_detector_state(detector),
+        counting_detector_workspace(detector),
+        counting_detector_products(detector),
+        _counting_wfs_detector_binding(detector))
+end
+
+function prepare_wfs_acquisition(detector::AbstractCountingDetector,
+    optical_product::IntensityMap, observation::WFSObservation;
+    source=nothing)
+    candidate = _prepare_wfs_acquisition_candidate(
+        detector, optical_product, observation; source=source)
+    return _commit_wfs_acquisition_candidate!(
+        candidate, detector, optical_product, observation)
 end
 
 function acquire_wfs_observation!(observation::WFSObservation,
@@ -651,7 +904,7 @@ function acquire_wfs_observation!(observation::WFSObservation,
     plan::PreparedWFSCountingAcquisition, rng::AbstractRNG)
     validate_wfs_acquisition_binding(observation, optical_product, plan)
     frame = _capture_prevalidated_counting!(plan.detector,
-        optical_product.values, plan.source_throughput, rng)
+        optical_product.values, plan.plan.source_throughput, rng)
     copyto!(observation.storage, frame)
     return observation
 end
@@ -662,20 +915,117 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
         optical_product === plan.optical_product || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
             "counting WFS storage does not match its prepared acquisition"))
-    counting_array(plan.detector) === plan.detector_input &&
-        output_frame(plan.detector) === plan.detector_output || throw(
+    counting_detector_state(plan.detector) === plan.state &&
+        counting_detector_workspace(plan.detector) === plan.workspace &&
+        counting_detector_products(plan.detector) === plan.products || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
-            "counting detector storage changed after WFS preparation"))
+            "counting detector owner changed after WFS preparation"))
+    optical_product.metadata === plan.plan.input_metadata &&
+        size(optical_product.values) == plan.plan.input_metadata.dimensions &&
+        observation.metadata === plan.plan.observation_metadata || throw(
+        WFSPreparationError(:acquisition, :prepared_binding,
+            "counting WFS plan metadata changed after preparation"))
     _require_counting_wfs_detector_binding(
         plan.detector, plan.detector_binding)
+    _require_counting_wfs_storage_ownership(
+        plan.detector, optical_product, observation)
     return nothing
 end
 
-"""Prepared static fan-out from a concrete product tuple to detector tuple."""
-struct PreparedWFSMultipleDetectorAcquisition{P,I,O}
-    plans::P
+struct _WFSMultipleDetectorAcquisitionPlanToken end
+const _WFS_MULTIPLE_DETECTOR_ACQUISITION_PLAN_TOKEN =
+    _WFSMultipleDetectorAcquisitionPlanToken()
+
+"""Run-immutable static fan-out of concrete WFS acquisition plans."""
+struct WFSMultipleDetectorAcquisitionPlan{
+    P<:Tuple,
+} <: AbstractWFSAcquisitionPlan
+    component_plans::P
+
+    function WFSMultipleDetectorAcquisitionPlan(
+        ::_WFSMultipleDetectorAcquisitionPlanToken,
+        component_plans::P) where {P<:Tuple}
+        return new{P}(component_plans)
+    end
+end
+
+struct _PreparedWFSMultipleDetectorAcquisitionToken end
+const _PREPARED_WFS_MULTIPLE_DETECTOR_ACQUISITION_TOKEN =
+    _PreparedWFSMultipleDetectorAcquisitionToken()
+
+"""Exact prepared owner for a static tuple of WFS acquisitions."""
+struct PreparedWFSMultipleDetectorAcquisition{
+    P<:WFSMultipleDetectorAcquisitionPlan,
+    A<:Tuple,
+    I<:Tuple,
+    O<:Tuple,
+}
+    plan::P
+    acquisitions::A
     optical_products::I
     observations::O
+
+    function PreparedWFSMultipleDetectorAcquisition(
+        ::_PreparedWFSMultipleDetectorAcquisitionToken,
+        plan::P, acquisitions::A, optical_products::I,
+        observations::O) where {
+        P<:WFSMultipleDetectorAcquisitionPlan,A<:Tuple,
+        I<:Tuple,O<:Tuple,
+    }
+        return new{P,A,I,O}(
+            plan, acquisitions, optical_products, observations)
+    end
+end
+
+@inline wfs_acquisition_plan(
+    prepared::PreparedWFSMultipleDetectorAcquisition) = prepared.plan
+
+@inline function _wfs_detector_storage_mightalias(
+    detector::Detector, value::AbstractArray)
+    return _detector_storage_mightalias(detector, value)
+end
+
+@inline _wfs_detector_storage_mightalias(detector, value) = false
+
+@inline function _wfs_detector_storage_mightalias(
+    detector::AbstractCountingDetector, value::AbstractArray)
+    return _counting_wfs_storage_mightalias(detector, value)
+end
+
+function _require_multiple_wfs_acquisition_ownership(
+    detectors::Tuple, optical_products::Tuple, observations::Tuple)
+    count = length(detectors)
+    @inbounds for first_index in 1:count
+        first_detector = detectors[first_index]
+        first_observation = observations[first_index].storage
+        first_input = optical_products[first_index].values
+        for second_index in (first_index + 1):count
+            first_detector === detectors[second_index] && throw(
+                WFSPreparationError(:acquisition, :ownership,
+                    "multiple-detector WFS acquisition requires distinct detector owners"))
+            _wfs_storage_mightalias(first_observation,
+                observations[second_index].storage) && throw(
+                WFSPreparationError(:acquisition, :ownership,
+                    "multiple-detector WFS observations must not alias"))
+        end
+        for component_index in 1:count
+            component_input = optical_products[component_index].values
+            component_observation = observations[component_index].storage
+            component_detector = detectors[component_index]
+            (_wfs_storage_mightalias(first_observation, component_input) ||
+                _wfs_detector_storage_mightalias(
+                    component_detector, first_observation) ||
+                _wfs_detector_storage_mightalias(
+                    component_detector, first_input)) && throw(
+                WFSPreparationError(:acquisition, :ownership,
+                    "multiple-detector WFS inputs, observations, and detector storage must be disjoint"))
+            _wfs_storage_mightalias(
+                first_input, component_observation) && throw(
+                WFSPreparationError(:acquisition, :ownership,
+                    "multiple-detector WFS observations must not alias an optical input"))
+        end
+    end
+    return nothing
 end
 
 function prepare_wfs_acquisition(detectors::Tuple,
@@ -685,13 +1035,24 @@ function prepare_wfs_acquisition(detectors::Tuple,
     length(detectors) == length(optical_products) == length(observations) ||
         throw(WFSPreparationError(:acquisition, :plane_count,
             "detector, optical-product, and observation counts must match"))
-    plans = map(detectors, optical_products, observations) do detector,
+    _require_multiple_wfs_acquisition_ownership(
+        detectors, optical_products, observations)
+    candidates = map(detectors, optical_products, observations) do detector,
             product, observation
-        prepare_wfs_acquisition(detector, product, observation;
+        _prepare_wfs_acquisition_candidate(detector, product, observation;
             source=source)
     end
-    return PreparedWFSMultipleDetectorAcquisition(plans,
-        optical_products, observations)
+    acquisitions = map(candidates, detectors, optical_products,
+        observations) do candidate, detector, product, observation
+        _commit_wfs_acquisition_candidate!(
+            candidate, detector, product, observation)
+    end
+    plan = WFSMultipleDetectorAcquisitionPlan(
+        _WFS_MULTIPLE_DETECTOR_ACQUISITION_PLAN_TOKEN,
+        map(wfs_acquisition_plan, acquisitions))
+    return PreparedWFSMultipleDetectorAcquisition(
+        _PREPARED_WFS_MULTIPLE_DETECTOR_ACQUISITION_TOKEN,
+        plan, acquisitions, optical_products, observations)
 end
 
 @inline _acquire_multiple_wfs_observations!(::Tuple{}, ::Tuple{},
@@ -709,13 +1070,24 @@ function acquire_wfs_observation!(observations::Tuple,
     optical_products::Tuple,
     plan::PreparedWFSMultipleDetectorAcquisition, rng::AbstractRNG)
     validate_wfs_acquisition_binding(observations, optical_products, plan)
-    _acquire_multiple_wfs_observations!(plan.plans, observations,
+    _acquire_multiple_wfs_observations!(plan.acquisitions, observations,
         optical_products, rng)
     return observations
 end
 
 @inline _validate_multiple_wfs_acquisition_bindings(::Tuple{}, ::Tuple{},
     ::Tuple{}) = nothing
+
+@inline _require_multiple_wfs_plan_bindings(::Tuple{}, ::Tuple{}) = nothing
+
+@inline function _require_multiple_wfs_plan_bindings(
+    component_plans::Tuple, acquisitions::Tuple)
+    first(component_plans) === wfs_acquisition_plan(first(acquisitions)) ||
+        throw(WFSPreparationError(:acquisition, :prepared_binding,
+            "multiple-detector WFS component plan changed after preparation"))
+    return _require_multiple_wfs_plan_bindings(
+        Base.tail(component_plans), Base.tail(acquisitions))
+end
 
 @inline function _validate_multiple_wfs_acquisition_bindings(plans::Tuple,
     observations::Tuple, optical_products::Tuple)
@@ -732,7 +1104,9 @@ function validate_wfs_acquisition_binding(observations::Tuple,
         optical_products === plan.optical_products || throw(
         WFSPreparationError(:acquisition, :prepared_binding,
             "multiple-detector WFS storage does not match its prepared acquisition"))
-    _validate_multiple_wfs_acquisition_bindings(plan.plans, observations,
+    _require_multiple_wfs_plan_bindings(
+        plan.plan.component_plans, plan.acquisitions)
+    _validate_multiple_wfs_acquisition_bindings(plan.acquisitions, observations,
         optical_products)
     return nothing
 end
