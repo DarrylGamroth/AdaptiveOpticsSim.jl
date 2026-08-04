@@ -228,17 +228,23 @@ function _build_microlens_propagation(array_source, ::Type{T},
 end
 
 function _prepare_microlens_propagation_like(
-    prepared::PreparedMicrolensPropagation{
-        <:MicrolensPropagationPlan{T,M},W}) where {
-        T<:AbstractFloat,M<:MicrolensArray,W<:MicrolensPropagationWorkspace}
+    prepared::P) where {
+        T<:AbstractFloat,
+        M<:MicrolensArray,
+        W<:MicrolensPropagationWorkspace,
+        P<:PreparedMicrolensPropagation{<:MicrolensPropagationPlan{T,M},W},
+    }
     plan = microlens_propagation_plan(prepared)
     workspace = microlens_propagation_workspace(prepared)
     device = compute_device(workspace.field)
     array_source = _SimilarMicrolensArraySource(workspace.field)
-    return _with_compute_device(device) do
+    candidate = _with_compute_device(device) do
         _build_microlens_propagation(array_source, T,
             plan.microlens_array, plan.pupil_samples_per_lenslet)
     end
+    candidate isa P || throw(InvalidConfiguration(
+        "cloning a microlens propagation owner changed its concrete prepared representation"))
+    return candidate
 end
 
 function _replace_microlens_propagation_workspace!(
