@@ -1910,7 +1910,7 @@ end
     staged_lgs = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     lgs_rate = shack_hartmann_rate_map(staged_lgs, pupil, lgs)
-    lgs_plan = prepare_wfs_optical_formation(
+    lgs_plan = @inferred prepare_wfs_optical_formation(
         shack_hartmann_optical_formation(staged_lgs, lgs), pupil,
         lgs_rate)
     prepared_elongation_kernel =
@@ -1919,6 +1919,12 @@ end
     form_wfs_optical_products!(lgs_rate, pupil, lgs_plan)
     @test lgs_plan.workspace.elongation_kernel ===
         prepared_elongation_kernel
+    if coverage_enabled
+        @test_skip "LGS optical-stage allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(lgs_rate, pupil,
+            lgs_plan)) == 0
+    end
     @test lgs_rate.values ≈ expected_lgs rtol=T(2e-12) atol=T(2e-12)
 
     sodium_lgs = LGSSource(wavelength=wavelength(src),
@@ -1934,13 +1940,19 @@ end
     staged_sodium = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     sodium_rate = shack_hartmann_rate_map(staged_sodium, pupil, sodium_lgs)
-    sodium_plan = prepare_wfs_optical_formation(
+    sodium_plan = @inferred prepare_wfs_optical_formation(
         shack_hartmann_optical_formation(staged_sodium, sodium_lgs), pupil,
         sodium_rate)
     prepared_sodium_kernel = sodium_plan.workspace.lgs_kernel_fft
     @test size(prepared_sodium_kernel, 3) == 16
     form_wfs_optical_products!(sodium_rate, pupil, sodium_plan)
     @test sodium_plan.workspace.lgs_kernel_fft === prepared_sodium_kernel
+    if coverage_enabled
+        @test_skip "sodium-LGS optical-stage allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(sodium_rate, pupil,
+            sodium_plan)) == 0
+    end
     @test sodium_rate.values ≈ expected_sodium rtol=T(2e-12) atol=T(2e-12)
 
     asterism = Asterism([

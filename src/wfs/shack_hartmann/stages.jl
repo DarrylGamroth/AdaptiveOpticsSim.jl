@@ -566,12 +566,8 @@ function _prepare_sh_lgs_workspace!(::LGSProfileNone,
     workspace = microlens_propagation_workspace(formation.propagation)
     T = eltype(workspace.elongation_kernel)
     factor = T(lgs_elongation_factor(source))
-    factor <= one(T) && return nothing
-    sigma = T(0.5) * (factor - one(T))
-    sigma <= zero(T) && return nothing
-    needed = 2 * max(1, ceil(Int, 2 * sigma)) + 1
     workspace.elongation_kernel =
-        ensure_kernel(workspace.elongation_kernel, needed)
+        prepare_elongation_kernel!(workspace.elongation_kernel, factor)
     return nothing
 end
 
@@ -967,7 +963,7 @@ function _apply_sh_lgs_spot_model!(::LGSProfileNone,
     source::LGSSource,
     wavelength_m::Real)
     workspace = microlens_propagation_workspace(sensor.propagation)
-    workspace.elongation_kernel = apply_elongation_stack!(
+    workspace.elongation_kernel = apply_prepared_elongation_stack!(
         workspace.intensity_stack, lgs_elongation_factor(source),
         workspace.intensity_tmp_stack, workspace.elongation_kernel)
     return nothing
