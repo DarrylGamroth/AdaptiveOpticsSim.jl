@@ -1114,6 +1114,36 @@ end
     @test empty_products_error.stage === :wfs_optics
     @test empty_products_error.reason === :plane_count
 
+    empty_tuple_error = contract_captured_error() do
+        WavefrontSensors.validate_wfs_optical_products(())
+    end
+    @test empty_tuple_error isa WFSPreparationError
+    @test empty_tuple_error.stage === :wfs_optics
+    @test empty_tuple_error.reason === :plane_count
+
+    unsupported_product_error = contract_captured_error() do
+        WavefrontSensors.validate_wfs_optical_products(
+            ContractOpticalProduct())
+    end
+    @test unsupported_product_error isa WFSPreparationError
+    @test unsupported_product_error.stage === :wfs_optics
+    @test unsupported_product_error.reason === :plane_metadata
+
+    unsupported_model_error = contract_captured_error() do
+        prepare_wfs_optics(nothing, pupil, rate)
+    end
+    @test unsupported_model_error isa WFSPreparationError
+    @test unsupported_model_error.stage === :wfs_optics
+    @test unsupported_model_error.reason === :unsupported
+
+    unsupported_binding_error = contract_captured_error() do
+        WavefrontSensors.validate_wfs_optics_binding(rate, pupil, nothing)
+    end
+    @test unsupported_binding_error isa WFSPreparationError
+    @test unsupported_binding_error.stage === :wfs_optics
+    @test unsupported_binding_error.reason ===
+        :unsupported_binding_validation
+
     incompatible_products = (
         contract_rate_map(zeros(T, 4, 4);
             sampling=(T(2), T(2))),
@@ -1431,12 +1461,33 @@ end
     @test all(iszero, invalid_sensor.products.slopes)
 
     prepare_sampling!(native, pupil, src)
-    sampled_spots_peak!(native, pupil, src)
+    point_peak = sampled_spots_peak!(native, pupil, src)
+    point_spots = copy(native.workspace.spot_cube)
     expected_rate = shack_hartmann_detector_image(
         WavefrontSensors.sh_sampled_spot_cube(native), 4)
     ordering_cube = reshape(T.(1:16), 16, 1, 1)
     @test shack_hartmann_detector_image(ordering_cube, 4) ==
         reshape(T.(1:16), 4, 4)
+
+    common_spectral = with_spectrum(src, SpectralBundle(
+        T[wavelength(src), wavelength(src)], T[0.25, 0.75]; T=T))
+    common_spectral_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, T=T)
+    common_spectral_peak = WavefrontSensors.sampled_spots_peak!(
+        common_spectral_sensor, pupil, common_spectral)
+    @test common_spectral_peak ≈ point_peak rtol=T(2e-12) atol=T(2e-12)
+    @test common_spectral_sensor.workspace.spot_cube ≈ point_spots
+
+    path_source = Source(band=:custom, wavelength=wavelength(src),
+        coordinates=(T(0.1), T(-0.05)), photon_irradiance=T(4), T=T)
+    path_sources = Asterism([src, path_source])
+    path_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, T=T)
+    path_detector = Detector(noise=NoiseNone(), integration_time=one(T),
+        qe=one(T), T=T)
+    path_slopes = measure!(path_sensor, pupil, path_sources, path_detector;
+        rng=Xoshiro(0x5a))
+    @test all(isfinite, path_slopes)
 
     rate = shack_hartmann_rate_map(staged, pupil, src)
     optics = shack_hartmann_optics(staged, src)
@@ -1982,6 +2033,16 @@ end
             lgs_plan)) == 0
     end
     @test lgs_rate.values ≈ expected_lgs rtol=T(2e-12) atol=T(2e-12)
+
+    masked_lgs_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, T=T)
+    prepare_sampling!(masked_lgs_sensor, pupil, lgs)
+    WavefrontSensors.update_subaperture_layout!(
+        masked_lgs_sensor.front_end.layout, falses(16, 16))
+    masked_lgs_peak = WavefrontSensors.sampled_spots_peak!(
+        ScalarCPUStyle(), masked_lgs_sensor, pupil, lgs)
+    @test iszero(masked_lgs_peak)
+    @test all(iszero, masked_lgs_sensor.workspace.spot_cube)
 
     sodium_lgs = LGSSource(wavelength=wavelength(src),
         photon_irradiance=T(6),
