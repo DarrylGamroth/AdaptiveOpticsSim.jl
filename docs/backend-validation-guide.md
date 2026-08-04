@@ -260,7 +260,7 @@ Shared smoke scaffolding lives in:
 
 Use
 [`profile_direct_imaging_batch_submissions.jl`](../scripts/profile_direct_imaging_batch_submissions.jl)
-under a vendor profiler to compare `batch` with `independent` formation for the
+under a vendor profiler to compare `batch` with `independent` WFS optics execution for the
 same ordered physical samples. Its positional arguments are backend, execution
 mode, sample count, warmup count, and measured count. The script reports the
 prepared FFT-execution count as an operation-count proxy; it is not a latency,
@@ -292,7 +292,7 @@ The reduced maintained smoke covers:
   exact transition/readout sequence, response/MTF metadata, independent
   response-before-exposure numerics, and bounded warmed host allocation are
   checked directly
-- prepared physical Shack-Hartmann optical formation, detector acquisition,
+- prepared physical Shack-Hartmann optics, detector acquisition,
   and centroid estimation on device-resident arrays
 - same-grid legacy spectral diffractive SH plus prepared native-grid bundle
   retention and fail-closed single-output rejection for distinct wavelengths
@@ -423,7 +423,7 @@ buffers; windowed readout-product construction retains its existing allocation
 behavior. Nearest-neighbor count redistribution and the rest of the maintained detector array math
 remain backend kernels.
 
-On the normal point-source path, prepared Shack-Hartmann field formation, FFTs,
+On the normal point-source path, prepared Shack-Hartmann optics, FFTs,
 spot sampling, detector acquisition, and centroid estimation remain batched on
 the device. The explicit optical front end keeps distinct wavelengths as
 device-resident `OpticalProductBundle` leaves on their native angular grids;
@@ -833,7 +833,7 @@ All predeclared absolute, allocation, parity, residency, synchronization, and
 submission-proxy gates passed. Batched-to-independent median p95 was `1.050`
 on AMDGPU and `0.911` on CUDA against the `1.5` ceiling. The owner reduced the
 prepared atmosphere-render proxy from two calls to one while retaining two
-WFS formations. The [artifact catalog](../benchmarks/results/gate7/manifest.toml)
+WFS optics executions. The [artifact catalog](../benchmarks/results/gate7/manifest.toml)
 retains raw HdrHistograms, run dispersion, first use, GC, exact project and
 manifest hashes, package/runtime/driver/device identity, and explicit scope
 exclusions. These are synchronized self-paced service-cost distributions, not

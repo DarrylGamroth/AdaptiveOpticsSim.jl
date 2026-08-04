@@ -60,7 +60,7 @@ Current CPU-supported families:
   fixed-cardinality `FixedSizeVector` storage. Repeated prepared CPU capture is
   inferred and allocation-free after warmup; preparation, diagnostics, and
   failures are outside that allocation claim
-- staged Shack-Hartmann, Pyramid, and BioEdge WFS optical formation,
+- staged Shack-Hartmann, Pyramid, and BioEdge WFS optics,
   detector acquisition, and estimation on maintained validated surfaces;
   geometric variants use explicit direct-measurement paths
 - explicit closed-loop numerical composition and the model-specific AO188/AO3k
@@ -372,7 +372,7 @@ Additional production-supported frozen OOPAO equivalence surfaces:
 
 - diffractive Pyramid ramp from the committed OOPAO reference bundle
 - diffractive BioEdge ramp from the committed OOPAO reference bundle
-- prepared Pyramid/BioEdge pupil-function and electric-field formation,
+- prepared Pyramid/BioEdge WFS optics for pupil-function and electric-field inputs,
   spectral and path-local source bundles, LGS elongation/sodium profiles,
   exact-once detector exposure, and revision-bound differential estimation
 

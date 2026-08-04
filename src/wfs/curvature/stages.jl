@@ -68,7 +68,7 @@ struct CurvaturePropagationBinding{H,F,D,I,C,P,M,Q}
     revision::UInt
 end
 
-struct PreparedCurvatureOpticalFormation{F,I,O,B}
+struct PreparedCurvatureOptics{F,I,O,B}
     front_end::F
     input::I
     output::O
@@ -217,16 +217,16 @@ end
 function _require_curvature_front_end_source(
     front_end::CurvatureOpticalFrontEnd, ::PupilFunction)
     source = front_end.source
-    source === nothing && throw(WFSPreparationError(:optical_formation,
-        :radiometry, "Curvature PupilFunction formation requires a source"))
-    require_leaf_source(source, "prepared Curvature optical formation")
+    source === nothing && throw(WFSPreparationError(:wfs_optics,
+        :radiometry, "Curvature WFS optics require a source for PupilFunction input"))
+    require_leaf_source(source, "prepared Curvature optics")
     return source
 end
 
 function _require_curvature_front_end_source(
     front_end::CurvatureOpticalFrontEnd, ::ElectricField)
     front_end.source === nothing || throw(WFSPreparationError(
-        :optical_formation, :radiometry,
+        :wfs_optics, :radiometry,
         "photon-rate ElectricField input must not also supply a Curvature source"))
     return nothing
 end
@@ -241,7 +241,7 @@ function _require_curvature_input_geometry(
     front_end::CurvatureOpticalFrontEnd, input::PupilFunction)
     input.metadata.dimensions == (front_end.pupil_resolution,
         front_end.pupil_resolution) || throw(WFSPreparationError(
-        :optical_formation, :shape,
+        :wfs_optics, :shape,
         "Curvature pupil input dimensions differ from the prepared relay"))
     return nothing
 end
@@ -249,7 +249,7 @@ end
 function _require_curvature_input_geometry(
     front_end::CurvatureOpticalFrontEnd, input::ElectricField)
     input.metadata.dimensions == size(front_end.propagation.phasor) || throw(
-        WFSPreparationError(:optical_formation, :shape,
+        WFSPreparationError(:wfs_optics, :shape,
             "Curvature ElectricField dimensions differ from the prepared diffraction grid"))
     return nothing
 end
@@ -259,7 +259,7 @@ end
 
 function _require_curvature_rate_coordinates(
     ::AbstractPlaneCoordinateDomain, label::AbstractString)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
         "$label must use normalized pupil coordinates"))
 end
 
@@ -268,21 +268,21 @@ end
 
 function _require_curvature_rate_measure(
     ::AbstractSpatialMeasure, label::AbstractString)
-    throw(WFSPreparationError(:optical_formation, :radiometry,
+    throw(WFSPreparationError(:wfs_optics, :radiometry,
         "$label must carry cell-integrated photon rate"))
 end
 
 function _require_curvature_rate_wavelength(channel::MonochromaticChannel,
     wavelength_m, label::AbstractString)
     channel.wavelength_m == wavelength_m || throw(
-        WFSPreparationError(:optical_formation, :plane_metadata,
+        WFSPreparationError(:wfs_optics, :plane_metadata,
             "$label wavelength differs from its input"))
     return nothing
 end
 
 function _require_curvature_rate_wavelength(
     ::AbstractSpectralCoordinate, ::Any, label::AbstractString)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
         "$label wavelength differs from its input"))
 end
 
@@ -293,14 +293,14 @@ function _require_curvature_rate_product(product::IntensityMap,
         label)
     _require_curvature_rate_measure(product.metadata.spatial_measure, label)
     size(product.values) == expected_dimensions || throw(
-        WFSPreparationError(:optical_formation, :shape,
+        WFSPreparationError(:wfs_optics, :shape,
             "$label has the wrong prepared dimensions"))
     _require_curvature_rate_wavelength(product.metadata.spectral,
         wavelength_m, label)
     return product
 end
 
-function prepare_wfs_optical_formation(front_end::CurvatureOpticalFrontEnd,
+function prepare_wfs_optics(front_end::CurvatureOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField},
     output::Tuple{<:IntensityMap,<:IntensityMap})
     require_modulated_wfs_input(input)
@@ -313,14 +313,14 @@ function prepare_wfs_optical_formation(front_end::CurvatureOpticalFrontEnd,
     _require_curvature_rate_product(output[2], dimensions, wavelength_m,
         "negative-defocus Curvature product")
     output[1].values === output[2].values && throw(WFSPreparationError(
-        :optical_formation, :prepared_binding,
+        :wfs_optics, :prepared_binding,
         "Curvature branch products require distinct storage"))
     require_modulated_wfs_domains(front_end, input, output[1])
     require_modulated_wfs_domains(front_end, input, output[2])
     T = eltype(front_end.propagation.intensity_stack)
     output[1].metadata.numeric_type === T &&
         output[2].metadata.numeric_type === T || throw(
-        WFSPreparationError(:optical_formation, :numeric_type,
+        WFSPreparationError(:wfs_optics, :numeric_type,
             "Curvature output precision differs from prepared propagation"))
     propagation = front_end.propagation
     binding = CurvaturePropagationBinding(propagation.phasor,
@@ -329,7 +329,7 @@ function prepare_wfs_optical_formation(front_end::CurvatureOpticalFrontEnd,
         propagation.cropped_minus, propagation.fft_stack_plan,
         propagation.frame_plus, propagation.frame_minus,
         propagation.revision)
-    return PreparedCurvatureOpticalFormation(front_end, input, output,
+    return PreparedCurvatureOptics(front_end, input, output,
         binding)
 end
 
@@ -362,9 +362,9 @@ function curvature_rate_maps(front_end::CurvatureOpticalFrontEnd,
 end
 
 function _require_curvature_optical_binding(
-    plan::PreparedCurvatureOpticalFormation, input, output)
+    plan::PreparedCurvatureOptics, input, output)
     input === plan.input && output === plan.output || throw(
-        WFSPreparationError(:optical_formation, :prepared_binding,
+        WFSPreparationError(:wfs_optics, :prepared_binding,
             "Curvature optical products do not match their prepared plan"))
     propagation = plan.front_end.propagation
     binding = plan.binding
@@ -378,14 +378,14 @@ function _require_curvature_optical_binding(
         propagation.frame_plus === binding.frame_plus &&
         propagation.frame_minus === binding.frame_minus &&
         propagation.revision == binding.revision || throw(
-        WFSPreparationError(:optical_formation, :prepared_binding,
+        WFSPreparationError(:wfs_optics, :prepared_binding,
             "Curvature propagation storage changed after preparation"))
     return nothing
 end
 
-@inline validate_wfs_optical_formation_binding(
+@inline validate_wfs_optics_binding(
     output::Tuple{<:IntensityMap,<:IntensityMap}, input,
-    plan::PreparedCurvatureOpticalFormation) =
+    plan::PreparedCurvatureOptics) =
     _require_curvature_optical_binding(plan, input, output)
 
 function _form_curvature_branch_fields!(::ScalarCPUStyle,
@@ -516,8 +516,8 @@ end
 function form_wfs_optical_products!(
     output::Tuple{<:IntensityMap,<:IntensityMap},
     input::Union{PupilFunction,ElectricField},
-    plan::PreparedCurvatureOpticalFormation)
-    validate_wfs_optical_formation_binding(output, input, plan)
+    plan::PreparedCurvatureOptics)
+    validate_wfs_optics_binding(output, input, plan)
     style = execution_style(output[1].values)
     _form_curvature_branch_fields!(style, plan.front_end, input)
     propagation = plan.front_end.propagation

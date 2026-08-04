@@ -11,7 +11,7 @@ export observation_metadata
 export measurement_storage
 export measurement_units
 export measurement_metadata
-export prepare_wfs_optical_formation
+export prepare_wfs_optics
 export form_wfs_optical_products!
 export prepare_wfs_acquisition
 export acquire_wfs_observation!
@@ -24,7 +24,7 @@ export wfs_measurement_path
 export ShackHartmannDirectFrontEnd
 export ShackHartmannOpticalFrontEnd
 export shack_hartmann_rate_map
-export shack_hartmann_optical_formation
+export shack_hartmann_optics
 export PyramidOpticalFrontEnd
 export pyramid_rate_map
 export BioEdgeOpticalFrontEnd
@@ -96,7 +96,7 @@ public supports_prepared_runtime
 public supports_detector_output
 public supports_stacked_sources
 public supports_grouped_execution
-public AbstractWFSOpticalFormationPlan
+public AbstractWFSOpticsPlan
 public AbstractWFSAcquisitionPlan
 public AbstractWFSEstimationPlan
 public WFSDetectorAcquisitionPlan
@@ -107,11 +107,11 @@ public PreparedWFSCountingAcquisition
 public PreparedWFSMultipleDetectorAcquisition
 public ShackHartmannWorkspace
 public ShackHartmannProducts
-public ShackHartmannOpticalFormationModel
-public ShackHartmannOpticalFormationPlan
-public ShackHartmannOpticalBundleFormationPlan
-public PreparedShackHartmannOpticalFormation
-public PreparedShackHartmannOpticalBundleFormation
+public ShackHartmannOptics
+public ShackHartmannOpticsPlan
+public ShackHartmannOpticsBundlePlan
+public PreparedShackHartmannOptics
+public PreparedShackHartmannOpticsBundle
 public ShackHartmannEstimationPlan
 public PreparedShackHartmannEstimator
 public wfs_acquisition_plan

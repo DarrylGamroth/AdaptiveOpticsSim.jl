@@ -267,7 +267,7 @@ end
 end
 
 function _require_wfs_input_plane(::AbstractOpticalPlaneKind)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
         "WFS optical input must be declared on a pupil plane"))
 end
 
@@ -288,21 +288,21 @@ function validate_wfs_optical_input(input::ElectricField)
 end
 
 function validate_wfs_optical_input(input)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
-        "WFS optical formation requires a PupilFunction or pupil-plane ElectricField"))
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
+        "WFS optics require a PupilFunction or pupil-plane ElectricField"))
 end
 
 @inline _require_wfs_output_plane(::DetectorPlane) = nothing
 
 function _require_wfs_output_plane(::AbstractOpticalPlaneKind)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
         "WFS optical output must be declared on a detector plane"))
 end
 
 @inline _require_wfs_rate_normalization(::PhotonRateNormalization) = nothing
 
 function _require_wfs_rate_normalization(::AbstractOpticalNormalization)
-    throw(WFSPreparationError(:optical_formation, :radiometry,
+    throw(WFSPreparationError(:wfs_optics, :radiometry,
         "WFS detector-facing optical output must use photon-rate normalization"))
 end
 
@@ -310,14 +310,14 @@ end
 @inline _require_wfs_rate_measure(::CellIntegratedMeasure) = nothing
 
 function _require_wfs_rate_measure(::AbstractSpatialMeasure)
-    throw(WFSPreparationError(:optical_formation, :radiometry,
+    throw(WFSPreparationError(:wfs_optics, :radiometry,
         "WFS detector-facing optical output must declare spatial-density or cell-integrated measure"))
 end
 
 @inline _require_wfs_rate_coherence(::IncoherentIntensityAddition) = nothing
 
 function _require_wfs_rate_coherence(::AbstractCombinationPolicy)
-    throw(WFSPreparationError(:optical_formation, :radiometry,
+    throw(WFSPreparationError(:wfs_optics, :radiometry,
         "WFS detector-facing optical output must declare incoherent-intensity semantics"))
 end
 
@@ -325,7 +325,7 @@ end
 @inline _require_wfs_rate_spectral(::IntegratedSpectralChannel) = nothing
 
 function _require_wfs_rate_spectral(::AbstractSpectralCoordinate)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
         "WFS detector-facing optical output requires a monochromatic or integrated spectral channel"))
 end
 
@@ -347,9 +347,9 @@ end
 
 function validate_wfs_optical_products(
     products::AbstractVector{<:AbstractOpticalProduct})
-    isempty(products) && throw(WFSPreparationError(:optical_formation,
+    isempty(products) && throw(WFSPreparationError(:wfs_optics,
         :plane_count,
-        "WFS optical formation requires at least one detector-facing product"))
+        "WFS optics require at least one detector-facing product"))
     @inbounds for product in products
         validate_wfs_optical_products(product)
     end
@@ -357,8 +357,8 @@ function validate_wfs_optical_products(
 end
 
 @inline validate_wfs_optical_products(::Tuple{}) = throw(WFSPreparationError(
-    :optical_formation, :plane_count,
-    "WFS optical formation requires at least one detector-facing product"))
+    :wfs_optics, :plane_count,
+    "WFS optics require at least one detector-facing product"))
 
 @inline function validate_wfs_optical_products(products::Tuple)
     validate_wfs_optical_products(first(products))
@@ -374,21 +374,21 @@ end
 end
 
 function validate_wfs_optical_products(product)
-    throw(WFSPreparationError(:optical_formation, :plane_metadata,
+    throw(WFSPreparationError(:wfs_optics, :plane_metadata,
         "WFS optical products must be IntensityMap values or a concrete tuple/bundle of them"))
 end
 
 """
-    AbstractWFSOpticalFormationPlan
+    AbstractWFSOpticsPlan
 
-Nominal interface for a run-immutable WFS optical-formation contract. Concrete
+Nominal interface for a run-immutable WFS optics contract. Concrete
 plans retain validated physical and numerical data only; the corresponding
 prepared owner binds exact input, workspace, products, backend, and device.
-Implementations provide the existing `prepare_wfs_optical_formation`,
-`form_wfs_optical_products!`, and `validate_wfs_optical_formation_binding`
+Implementations provide the existing `prepare_wfs_optics`,
+`form_wfs_optical_products!`, and `validate_wfs_optics_binding`
 protocol.
 """
-abstract type AbstractWFSOpticalFormationPlan end
+abstract type AbstractWFSOpticsPlan end
 
 """
     AbstractWFSAcquisitionPlan
@@ -422,7 +422,7 @@ acquisition owner.
 function wfs_acquisition_plan end
 
 """
-    prepare_wfs_optical_formation(model, input, output)
+    prepare_wfs_optics(model, input, output)
     form_wfs_optical_products!(output, input, prepared)
 
 Preparation and mutating execution protocol for a WFS optical front end.
@@ -430,25 +430,25 @@ Implementations consume an explicit `PupilFunction` or pupil-plane
 `ElectricField` and write caller-owned detector-plane photon-arrival-rate
 products. Preparation performs all fallible structural validation.
 """
-function prepare_wfs_optical_formation(model, input, output)
-    throw(WFSPreparationError(:optical_formation, :unsupported,
-        "$(typeof(model)) does not implement prepared WFS optical formation"))
+function prepare_wfs_optics(model, input, output)
+    throw(WFSPreparationError(:wfs_optics, :unsupported,
+        "$(typeof(model)) does not implement prepared WFS optics"))
 end
 
 function form_wfs_optical_products! end
 
 """
-    validate_wfs_optical_formation_binding(output, input, prepared)
+    validate_wfs_optics_binding(output, input, prepared)
 
-Validate without mutation that a prepared WFS optical plan is bound to the
+Validate without mutation that a prepared WFS optics plan is bound to the
 exact input and output supplied by a containing prepared plant path. WFS
-extensions that provide a prepared optical plan must implement this qualified
+extensions that provide a prepared WFS optics plan must implement this qualified
 extension seam alongside `form_wfs_optical_products!`.
 """
-function validate_wfs_optical_formation_binding(output, input, prepared)
-    throw(WFSPreparationError(:optical_formation,
+function validate_wfs_optics_binding(output, input, prepared)
+    throw(WFSPreparationError(:wfs_optics,
         :unsupported_binding_validation,
-        "$(typeof(prepared)) does not validate its prepared optical binding"))
+        "$(typeof(prepared)) does not validate its prepared WFS optics binding"))
 end
 
 """

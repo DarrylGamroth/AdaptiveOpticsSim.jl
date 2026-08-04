@@ -477,7 +477,7 @@ end
             n_pix_subap=16, diffraction_padding=padding)
         prepare_sampling!(wfs, pupil, src)
         compute_intensity_stack!(style, wfs, pupil, src)
-        @test sum(wfs.formation.propagation.workspace.intensity_stack) ≈ expected_rate atol=1e-10 rtol=1e-12
+        @test sum(wfs.optics.propagation.workspace.intensity_stack) ≈ expected_rate atol=1e-10 rtol=1e-12
     end
 
     ast = Asterism([
@@ -489,7 +489,7 @@ end
         n_pix_subap=16, diffraction_padding=2)
     prepare_sampling!(wfs, pupil, src)
     compute_intensity_asterism_stack!(KA_CPU_STYLE, wfs, pupil, ast)
-    @test sum(wfs.formation.propagation.workspace.intensity_stack) ≈ 3 * expected_rate atol=1e-10 rtol=1e-12
+    @test sum(wfs.optics.propagation.workspace.intensity_stack) ≈ 3 * expected_rate atol=1e-10 rtol=1e-12
 end
 
 @testset "Asterism direct imaging" begin
@@ -675,8 +675,8 @@ end
     sampled_spots_peak!(ScalarCPUStyle(), mixed_scalar_wfs, pupil,
         mixed_source)
     sampled_spots_peak!(KA_CPU_STYLE, mixed_ka_wfs, pupil, mixed_source)
-    @test mixed_ka_wfs.formation.propagation.workspace.opd_to_cycles_host[1] ==
-        mixed_ka_wfs.formation.propagation.workspace.opd_to_cycles_host[2]
+    @test mixed_ka_wfs.optics.propagation.workspace.opd_to_cycles_host[1] ==
+        mixed_ka_wfs.optics.propagation.workspace.opd_to_cycles_host[2]
     @test mixed_ka_wfs.workspace.spot_cube ≈
         mixed_scalar_wfs.workspace.spot_cube atol=2e-5 rtol=2e-5
 
@@ -687,14 +687,14 @@ end
         rng=MersenneTwister(791))
     guard_state_before = (
         slopes=copy(guard_wfs.products.slopes),
-        intensity=copy(guard_wfs.formation.propagation.workspace.intensity),
+        intensity=copy(guard_wfs.optics.propagation.workspace.intensity),
         spot_cube=copy(guard_wfs.workspace.spot_cube),
         exported_spot_cube=copy(guard_wfs.products.exported_spot_cube),
         reference_signal=copy(guard_wfs.calibration.reference_signal_2d),
-        effective_padding=guard_wfs.formation.propagation.workspace.effective_padding,
-        binning_pixel_scale=guard_wfs.formation.propagation.workspace.binning_pixel_scale,
-        sampled_n_pix_subap=guard_wfs.formation.propagation.workspace.sampled_n_pix_subap,
-        phasor_ratio=guard_wfs.formation.propagation.workspace.phasor_ratio,
+        effective_padding=guard_wfs.optics.propagation.workspace.effective_padding,
+        binning_pixel_scale=guard_wfs.optics.propagation.workspace.binning_pixel_scale,
+        sampled_n_pix_subap=guard_wfs.optics.propagation.workspace.sampled_n_pix_subap,
+        phasor_ratio=guard_wfs.optics.propagation.workspace.phasor_ratio,
         calibrated=guard_wfs.calibration.calibrated,
         calibration_wavelength=guard_wfs.calibration.wavelength,
         calibration_signature=guard_wfs.calibration.signature,
@@ -707,7 +707,7 @@ end
     @test_throws InvalidConfiguration measure!(guard_wfs, pupil, poly_broad,
         guard_detector; rng=rejection_rng)
     @test isequal(guard_wfs.products.slopes, guard_state_before.slopes)
-    @test isequal(guard_wfs.formation.propagation.workspace.intensity,
+    @test isequal(guard_wfs.optics.propagation.workspace.intensity,
         guard_state_before.intensity)
     @test isequal(guard_wfs.workspace.spot_cube,
         guard_state_before.spot_cube)
@@ -715,13 +715,13 @@ end
         guard_state_before.exported_spot_cube)
     @test isequal(guard_wfs.calibration.reference_signal_2d,
         guard_state_before.reference_signal)
-    @test guard_wfs.formation.propagation.workspace.effective_padding ==
+    @test guard_wfs.optics.propagation.workspace.effective_padding ==
         guard_state_before.effective_padding
-    @test guard_wfs.formation.propagation.workspace.binning_pixel_scale ==
+    @test guard_wfs.optics.propagation.workspace.binning_pixel_scale ==
         guard_state_before.binning_pixel_scale
-    @test guard_wfs.formation.propagation.workspace.sampled_n_pix_subap ==
+    @test guard_wfs.optics.propagation.workspace.sampled_n_pix_subap ==
         guard_state_before.sampled_n_pix_subap
-    @test guard_wfs.formation.propagation.workspace.phasor_ratio ==
+    @test guard_wfs.optics.propagation.workspace.phasor_ratio ==
         guard_state_before.phasor_ratio
     @test guard_wfs.calibration.calibrated == guard_state_before.calibrated
     @test guard_wfs.calibration.wavelength ==

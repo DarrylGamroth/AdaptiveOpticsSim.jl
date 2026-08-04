@@ -3,21 +3,21 @@
 
 function compute_intensity!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int)
-    opd_to_cycles = eltype(wfs.formation.propagation.workspace.intensity)(2) / wavelength(src)
-    amp_scale = sqrt(eltype(wfs.formation.propagation.workspace.intensity)(photon_irradiance(src) *
+    opd_to_cycles = eltype(wfs.optics.propagation.workspace.intensity)(2) / wavelength(src)
+    amp_scale = sqrt(eltype(wfs.optics.propagation.workspace.intensity)(photon_irradiance(src) *
         (_pupil_diameter_m(pupil) / _pupil_resolution(pupil))^2))
-    fill!(wfs.formation.propagation.workspace.field, zero(eltype(wfs.formation.propagation.workspace.field)))
+    fill!(wfs.optics.propagation.workspace.field, zero(eltype(wfs.optics.propagation.workspace.field)))
     amplitude = pupil.amplitude
-    @views @. wfs.formation.propagation.workspace.field[ox+1:ox+sub, oy+1:oy+sub] =
+    @views @. wfs.optics.propagation.workspace.field[ox+1:ox+sub, oy+1:oy+sub] =
         amp_scale * amplitude[xs:xe, ys:ye] *
         cispi(opd_to_cycles * pupil.opd[xs:xe, ys:ye])
-    @. wfs.formation.propagation.workspace.field *= wfs.formation.propagation.workspace.phasor
-    copyto!(wfs.formation.propagation.workspace.fft_buffer, wfs.formation.propagation.workspace.field)
-    execute_fft_plan!(wfs.formation.propagation.workspace.fft_buffer, wfs.formation.propagation.workspace.fft_plan)
-    intensity_scale = sh_fft_intensity_scale(eltype(wfs.formation.propagation.workspace.intensity),
-        size(wfs.formation.propagation.workspace.fft_buffer, 1))
-    @. wfs.formation.propagation.workspace.intensity = abs2(wfs.formation.propagation.workspace.fft_buffer) * intensity_scale
-    return wfs.formation.propagation.workspace.intensity
+    @. wfs.optics.propagation.workspace.field *= wfs.optics.propagation.workspace.phasor
+    copyto!(wfs.optics.propagation.workspace.fft_buffer, wfs.optics.propagation.workspace.field)
+    execute_fft_plan!(wfs.optics.propagation.workspace.fft_buffer, wfs.optics.propagation.workspace.fft_plan)
+    intensity_scale = sh_fft_intensity_scale(eltype(wfs.optics.propagation.workspace.intensity),
+        size(wfs.optics.propagation.workspace.fft_buffer, 1))
+    @. wfs.optics.propagation.workspace.intensity = abs2(wfs.optics.propagation.workspace.fft_buffer) * intensity_scale
+    return wfs.optics.propagation.workspace.intensity
 end
 
 @inline function compute_intensity_safe!(style::ExecutionStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
@@ -103,58 +103,58 @@ end
 end
 
 function compute_intensity_stack!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
-    pad = size(wfs.formation.propagation.workspace.fft_stack, 1)
+    pad = size(wfs.optics.propagation.workspace.fft_stack, 1)
     n_sub = n_lenslets(wfs)
     sub = div(_pupil_resolution(pupil), n_sub)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    T = eltype(wfs.formation.propagation.workspace.intensity)
+    T = eltype(wfs.optics.propagation.workspace.intensity)
     opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_irradiance(src) *
         (_pupil_diameter_m(pupil) / _pupil_resolution(pupil))^2))
     amplitude = pupil.amplitude
-    fill!(wfs.formation.propagation.workspace.fft_stack, zero(eltype(wfs.formation.propagation.workspace.fft_stack)))
+    fill!(wfs.optics.propagation.workspace.fft_stack, zero(eltype(wfs.optics.propagation.workspace.fft_stack)))
     idx = 1
     @inbounds for j in 1:n_sub, i in 1:n_sub
         if wfs.front_end.layout.valid_mask[i, j]
             for y in 1:sub, x in 1:sub
                 px = (i - 1) * sub + x
                 py = (j - 1) * sub + y
-                wfs.formation.propagation.workspace.fft_stack[ox + x, oy + y, idx] = amp_scale * amplitude[px, py] *
-                    cispi(opd_to_cycles * pupil.opd[px, py]) * wfs.formation.propagation.workspace.phasor[ox + x, oy + y]
+                wfs.optics.propagation.workspace.fft_stack[ox + x, oy + y, idx] = amp_scale * amplitude[px, py] *
+                    cispi(opd_to_cycles * pupil.opd[px, py]) * wfs.optics.propagation.workspace.phasor[ox + x, oy + y]
             end
         end
         idx += 1
     end
-    execute_fft_plan!(wfs.formation.propagation.workspace.fft_stack, wfs.formation.propagation.workspace.fft_stack_plan)
+    execute_fft_plan!(wfs.optics.propagation.workspace.fft_stack, wfs.optics.propagation.workspace.fft_stack_plan)
     intensity_scale = sh_fft_intensity_scale(T, pad)
-    @inbounds for idx in axes(wfs.formation.propagation.workspace.fft_stack, 3), y in axes(wfs.formation.propagation.workspace.fft_stack, 2), x in axes(wfs.formation.propagation.workspace.fft_stack, 1)
-        wfs.formation.propagation.workspace.intensity_stack[x, y, idx] =
-            abs2(wfs.formation.propagation.workspace.fft_stack[x, y, idx]) * intensity_scale
+    @inbounds for idx in axes(wfs.optics.propagation.workspace.fft_stack, 3), y in axes(wfs.optics.propagation.workspace.fft_stack, 2), x in axes(wfs.optics.propagation.workspace.fft_stack, 1)
+        wfs.optics.propagation.workspace.intensity_stack[x, y, idx] =
+            abs2(wfs.optics.propagation.workspace.fft_stack[x, y, idx]) * intensity_scale
     end
-    return wfs.formation.propagation.workspace.intensity_stack
+    return wfs.optics.propagation.workspace.intensity_stack
 end
 
 function compute_intensity_stack!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
-    pad = size(wfs.formation.propagation.workspace.fft_stack, 1)
+    pad = size(wfs.optics.propagation.workspace.fft_stack, 1)
     n_sub = n_lenslets(wfs)
     sub = div(_pupil_resolution(pupil), n_sub)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    T = eltype(wfs.formation.propagation.workspace.intensity)
+    T = eltype(wfs.optics.propagation.workspace.intensity)
     opd_to_cycles = T(2) / wavelength(src)
     amp_scale = sqrt(T(photon_irradiance(src) *
         (_pupil_diameter_m(pupil) / _pupil_resolution(pupil))^2))
-    launch_kernel_async!(style, sh_field_stack_kernel!, wfs.formation.propagation.workspace.fft_stack, wfs.front_end.layout.valid_mask,
-        pupil.amplitude, pupil.opd, wfs.formation.propagation.workspace.phasor, amp_scale, opd_to_cycles, n_sub, sub, ox, oy,
+    launch_kernel_async!(style, sh_field_stack_kernel!, wfs.optics.propagation.workspace.fft_stack, wfs.front_end.layout.valid_mask,
+        pupil.amplitude, pupil.opd, wfs.optics.propagation.workspace.phasor, amp_scale, opd_to_cycles, n_sub, sub, ox, oy,
         _pupil_resolution(pupil), pad; ndrange=(pad, pad, n_sub, n_sub))
     synchronize_backend!(style)
-    execute_fft_plan!(wfs.formation.propagation.workspace.fft_stack, wfs.formation.propagation.workspace.fft_stack_plan)
+    execute_fft_plan!(wfs.optics.propagation.workspace.fft_stack, wfs.optics.propagation.workspace.fft_stack_plan)
     intensity_scale = sh_fft_intensity_scale(T, pad)
-    launch_kernel!(style, complex_abs2_stack_kernel!, wfs.formation.propagation.workspace.intensity_stack, wfs.formation.propagation.workspace.fft_stack,
+    launch_kernel!(style, complex_abs2_stack_kernel!, wfs.optics.propagation.workspace.intensity_stack, wfs.optics.propagation.workspace.fft_stack,
         intensity_scale, pad, n_sub * n_sub;
-        ndrange=size(wfs.formation.propagation.workspace.intensity_stack))
-    return wfs.formation.propagation.workspace.intensity_stack
+        ndrange=size(wfs.optics.propagation.workspace.intensity_stack))
+    return wfs.optics.propagation.workspace.intensity_stack
 end
 
 @inline sh_stacked_asterism_compatible(ast::Asterism) =
@@ -163,18 +163,18 @@ end
 function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, ast::Asterism)
     require_sh_asterism_common_wavelength(ast)
     n_src = length(ast.sources)
-    ensure_sh_asterism_buffers!(wfs.formation, n_src)
-    pad = size(wfs.formation.propagation.workspace.fft_stack, 1)
+    ensure_sh_asterism_buffers!(wfs.optics, n_src)
+    pad = size(wfs.optics.propagation.workspace.fft_stack, 1)
     n_sub = n_lenslets(wfs)
     n_spots = n_sub * n_sub
     sub = div(_pupil_resolution(pupil), n_sub)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    T = eltype(wfs.formation.propagation.workspace.intensity)
-    amp_scales = wfs.formation.propagation.workspace.amp_scales
-    host_amp_scales = wfs.formation.propagation.workspace.amp_scales_host
-    opd_to_cycles = wfs.formation.propagation.workspace.opd_to_cycles
-    host_opd_to_cycles = wfs.formation.propagation.workspace.opd_to_cycles_host
+    T = eltype(wfs.optics.propagation.workspace.intensity)
+    amp_scales = wfs.optics.propagation.workspace.amp_scales
+    host_amp_scales = wfs.optics.propagation.workspace.amp_scales_host
+    opd_to_cycles = wfs.optics.propagation.workspace.opd_to_cycles
+    host_opd_to_cycles = wfs.optics.propagation.workspace.opd_to_cycles_host
     @inbounds for i in eachindex(ast.sources)
         src = ast.sources[i]
         host_amp_scales[i] = sqrt(T(photon_irradiance(src) *
@@ -184,22 +184,22 @@ function compute_intensity_asterism_stack!(style::AcceleratorStyle, wfs::ShackHa
     copyto!(amp_scales, host_amp_scales)
     copyto!(opd_to_cycles, host_opd_to_cycles)
     total = n_spots * n_src
-    fft_view = @view wfs.formation.propagation.workspace.fft_asterism_stack[:, :, 1:total]
-    intensity_view = @view wfs.formation.propagation.workspace.intensity_tmp_stack[:, :, 1:total]
+    fft_view = @view wfs.optics.propagation.workspace.fft_asterism_stack[:, :, 1:total]
+    intensity_view = @view wfs.optics.propagation.workspace.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.front_end.layout.valid_mask,
-        pupil.amplitude, pupil.opd, wfs.formation.propagation.workspace.phasor, amp_scales, opd_to_cycles,
+        pupil.amplitude, pupil.opd, wfs.optics.propagation.workspace.phasor, amp_scales, opd_to_cycles,
         n_sub, sub, ox, oy, _pupil_resolution(pupil), pad, n_spots, n_src;
         ndrange=(pad, pad, n_src, n_sub, n_sub))
     synchronize_backend!(style)
-    execute_fft_plan!(fft_view, wfs.formation.propagation.workspace.fft_asterism_plan)
+    execute_fft_plan!(fft_view, wfs.optics.propagation.workspace.fft_asterism_plan)
     intensity_scale = sh_fft_intensity_scale(T, pad)
     phase = begin_kernel_phase(style)
     queue_kernel!(phase, complex_abs2_stack_kernel!, intensity_view, fft_view,
         intensity_scale, pad, total; ndrange=size(intensity_view))
-    queue_kernel!(phase, reduce_grouped_blocks_kernel!, wfs.formation.propagation.workspace.intensity_stack, intensity_view,
-        n_spots, n_src, size(wfs.formation.propagation.workspace.intensity_stack, 1), size(wfs.formation.propagation.workspace.intensity_stack, 2); ndrange=size(wfs.formation.propagation.workspace.intensity_stack))
+    queue_kernel!(phase, reduce_grouped_blocks_kernel!, wfs.optics.propagation.workspace.intensity_stack, intensity_view,
+        n_spots, n_src, size(wfs.optics.propagation.workspace.intensity_stack, 1), size(wfs.optics.propagation.workspace.intensity_stack, 2); ndrange=size(wfs.optics.propagation.workspace.intensity_stack))
     finish_kernel_phase!(phase)
-    return wfs.formation.propagation.workspace.intensity_stack
+    return wfs.optics.propagation.workspace.intensity_stack
 end
 
 @inline sh_spectral_component_qe(::Nothing, sample,
@@ -215,18 +215,18 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle,
     grid_wavelength = require_sh_common_spectral_grid(wfs, src)
     bundle = spectral_bundle(src)
     n_src = length(bundle)
-    ensure_sh_asterism_buffers!(wfs.formation, n_src)
-    pad = size(wfs.formation.propagation.workspace.fft_stack, 1)
+    ensure_sh_asterism_buffers!(wfs.optics, n_src)
+    pad = size(wfs.optics.propagation.workspace.fft_stack, 1)
     n_sub = n_lenslets(wfs)
     n_spots = n_sub * n_sub
     sub = div(_pupil_resolution(pupil), n_sub)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
-    T = eltype(wfs.formation.propagation.workspace.intensity)
-    amp_scales = wfs.formation.propagation.workspace.amp_scales
-    host_amp_scales = wfs.formation.propagation.workspace.amp_scales_host
-    opd_to_cycles = wfs.formation.propagation.workspace.opd_to_cycles
-    host_opd_to_cycles = wfs.formation.propagation.workspace.opd_to_cycles_host
+    T = eltype(wfs.optics.propagation.workspace.intensity)
+    amp_scales = wfs.optics.propagation.workspace.amp_scales
+    host_amp_scales = wfs.optics.propagation.workspace.amp_scales_host
+    opd_to_cycles = wfs.optics.propagation.workspace.opd_to_cycles
+    host_opd_to_cycles = wfs.optics.propagation.workspace.opd_to_cycles_host
     base_photon_rate = T(photon_irradiance(src) * (_pupil_diameter_m(pupil) / _pupil_resolution(pupil))^2)
     @inbounds for i in eachindex(bundle.samples)
         sample = bundle.samples[i]
@@ -238,22 +238,22 @@ function compute_intensity_spectral_stack!(style::AcceleratorStyle,
     copyto!(amp_scales, host_amp_scales)
     copyto!(opd_to_cycles, host_opd_to_cycles)
     total = n_spots * n_src
-    fft_view = @view wfs.formation.propagation.workspace.fft_asterism_stack[:, :, 1:total]
-    intensity_view = @view wfs.formation.propagation.workspace.intensity_tmp_stack[:, :, 1:total]
+    fft_view = @view wfs.optics.propagation.workspace.fft_asterism_stack[:, :, 1:total]
+    intensity_view = @view wfs.optics.propagation.workspace.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_field_asterism_stack_kernel!, fft_view, wfs.front_end.layout.valid_mask,
-        pupil.amplitude, pupil.opd, wfs.formation.propagation.workspace.phasor, amp_scales, opd_to_cycles,
+        pupil.amplitude, pupil.opd, wfs.optics.propagation.workspace.phasor, amp_scales, opd_to_cycles,
         n_sub, sub, ox, oy, _pupil_resolution(pupil), pad, n_spots, n_src;
         ndrange=(pad, pad, n_src, n_sub, n_sub))
     synchronize_backend!(style)
-    execute_fft_plan!(fft_view, wfs.formation.propagation.workspace.fft_asterism_plan)
+    execute_fft_plan!(fft_view, wfs.optics.propagation.workspace.fft_asterism_plan)
     intensity_scale = sh_fft_intensity_scale(T, pad)
     phase = begin_kernel_phase(style)
     queue_kernel!(phase, complex_abs2_stack_kernel!, intensity_view, fft_view,
         intensity_scale, pad, total; ndrange=size(intensity_view))
-    queue_kernel!(phase, reduce_grouped_blocks_kernel!, wfs.formation.propagation.workspace.intensity_stack, intensity_view,
-        n_spots, n_src, size(wfs.formation.propagation.workspace.intensity_stack, 1), size(wfs.formation.propagation.workspace.intensity_stack, 2); ndrange=size(wfs.formation.propagation.workspace.intensity_stack))
+    queue_kernel!(phase, reduce_grouped_blocks_kernel!, wfs.optics.propagation.workspace.intensity_stack, intensity_view,
+        n_spots, n_src, size(wfs.optics.propagation.workspace.intensity_stack, 1), size(wfs.optics.propagation.workspace.intensity_stack, 2); ndrange=size(wfs.optics.propagation.workspace.intensity_stack))
     finish_kernel_phase!(phase)
-    return wfs.formation.propagation.workspace.intensity_stack
+    return wfs.optics.propagation.workspace.intensity_stack
 end
 
 compute_intensity_spectral_stack!(style::AcceleratorStyle,
@@ -275,13 +275,13 @@ end
 end
 
 function sample_spot_stack!(::ScalarCPUStyle,
-    formation::ShackHartmannOpticalFormationModel)
-    propagation = microlens_propagation_workspace(formation.propagation)
+    optics::ShackHartmannOptics)
+    propagation = microlens_propagation_workspace(optics.propagation)
     n_spots = size(propagation.sampled_spot_cube, 1)
     @inbounds for idx in 1:n_spots
         copy_stack_plane_to_matrix!(propagation.intensity,
             propagation.intensity_stack, idx)
-        sample_spot!(formation, propagation.intensity)
+        sample_spot!(optics, propagation.intensity)
         copy_matrix_to_stack_plane!(propagation.sampled_spot_cube, idx,
             propagation.spot)
     end
@@ -289,8 +289,8 @@ function sample_spot_stack!(::ScalarCPUStyle,
 end
 
 function sample_spot_stack!(style::AcceleratorStyle,
-    formation::ShackHartmannOpticalFormationModel)
-    propagation = microlens_propagation_workspace(formation.propagation)
+    optics::ShackHartmannOptics)
+    propagation = microlens_propagation_workspace(optics.propagation)
     pad = size(propagation.intensity_stack, 1)
     binning = propagation.binning_pixel_scale
     @assert pad % binning == 0
@@ -298,10 +298,10 @@ function sample_spot_stack!(style::AcceleratorStyle,
     n_out = size(propagation.sampled_spot_cube, 2)
     ox = div(n_out - n_binned, 2)
     oy = div(n_out - n_binned, 2)
-    n_sub = n_lenslets(formation)
+    n_sub = n_lenslets(optics)
     launch_kernel!(style, sh_sample_spot_stack_kernel!,
         propagation.sampled_spot_cube, propagation.intensity_stack,
-        formation.front_end.layout.valid_mask, binning, n_sub, n_binned, n_out, ox,
+        optics.front_end.layout.valid_mask, binning, n_sub, n_binned, n_out, ox,
         oy;
         ndrange=(n_sub, n_sub, n_out, n_out))
     return propagation.sampled_spot_cube
@@ -312,12 +312,12 @@ end
 function accumulate_sh_asterism_spots!(style::ExecutionStyle, wfs::ShackHartmannWFS,
     pupil::PupilFunction, ast::Asterism)
     require_sh_asterism_common_wavelength(ast)
-    fill!(wfs.formation.propagation.workspace.spot_cube_accum, zero(eltype(wfs.formation.propagation.workspace.spot_cube_accum)))
+    fill!(wfs.optics.propagation.workspace.spot_cube_accum, zero(eltype(wfs.optics.propagation.workspace.spot_cube_accum)))
     @inbounds for src in ast.sources
         sampled_spots_peak!(style, wfs, pupil, src)
-        wfs.formation.propagation.workspace.spot_cube_accum .+= wfs.workspace.spot_cube
+        wfs.optics.propagation.workspace.spot_cube_accum .+= wfs.workspace.spot_cube
     end
-    copyto!(wfs.workspace.spot_cube, wfs.formation.propagation.workspace.spot_cube_accum)
+    copyto!(wfs.workspace.spot_cube, wfs.optics.propagation.workspace.spot_cube_accum)
     return sh_safe_peak_value(wfs.workspace.spot_cube)
 end
 
@@ -374,7 +374,7 @@ end
 
 function sampled_spots_peak_asterism_stacked!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, ast::Asterism)
     compute_intensity_asterism_stack!(style, wfs, pupil, ast)
-    sample_spot_stack!(style, wfs.formation)
+    sample_spot_stack!(style, wfs.optics)
     sync_signal_spots_from_sampled!(wfs)
     return sh_safe_peak_value(wfs.workspace.spot_cube)
 end

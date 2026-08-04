@@ -273,7 +273,7 @@ Examples:
   a propagation-free physical definition: `ShackHartmannDirectFrontEnd` for
   geometric sensing or `ShackHartmannOpticalFrontEnd` for diffractive sensing.
   Diffractive execution composes that definition with a separately prepared
-  microlens plan/workspace owner in `ShackHartmannOpticalFormationModel`.
+  microlens plan/workspace owner in `ShackHartmannOptics`.
   Replaceable `ShackHartmannWorkspace`, caller-visible
   `ShackHartmannProducts`, and persistent calibration are distinct owners;
   geometric sensing allocates no spot cube, detector-noise cube, or exported
@@ -298,7 +298,7 @@ Examples:
   telescope-owned focal state
 - caller-owned `WFSObservation` and `WFSMeasurement` products with explicit
   units, layout/kind, shape, numeric type, backend, and physical-device metadata
-- concrete prepared WFS optical-formation, acquisition, and estimation plans
+- concrete prepared WFS optics, acquisition, and estimation plans
   connected through six dispatch functions rather than a universal stage graph
 - direct `execute_path!` and `execute_acquisition!` dispatch over concrete
   prepared owners; there is no abstract executor collection, closure field,
@@ -317,14 +317,14 @@ This gives:
 
 The generic WFS stage protocol exists independently of the `AbstractWFS`
 object layout. Its qualified nominal plan roots are
-`AbstractWFSOpticalFormationPlan`, `AbstractWFSAcquisitionPlan`, and
+`AbstractWFSOpticsPlan`, `AbstractWFSAcquisitionPlan`, and
 `AbstractWFSEstimationPlan`; each concrete plan is run-immutable and remains a
 separate field of an exact single-writer prepared owner. Generic frame,
 accumulated-count, and static fan-out acquisition already follow that split
 and expose their plan through `wfs_acquisition_plan`. Family optical and
 estimator owners migrate under the same contract in PE-05B through PE-05F;
 there is no universal stage graph or compatibility owner. Shack-Hartmann
-separates microlens formation, acquisition, and
+separates microlens optics, acquisition, and
 estimation over caller-owned products. Its geometric and diffractive signals
 share one explicit
 `[axis 1; axis 2]`, Julia-column-major lenslet convention; OOPAO row-major
@@ -455,7 +455,7 @@ The maintained ownership model is:
 - WFS and detector pipelines separate persistent state, replaceable scratch,
   and caller-visible sampled/readout products; direct writes into a declared
   product remain valid and do not make that product workspace
-- optical formation produces photon-arrival rates or explicitly dimensionless
+- the WFS optics stage produces photon-arrival rates or explicitly dimensionless
   products; the exact prepared detector owner validates its bound input and
   runtime owners, applies presampling response before physical-pixel
   integration, and integrates its explicit exposure exactly once

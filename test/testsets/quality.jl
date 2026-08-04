@@ -60,8 +60,8 @@ end
     @test batched["device_owner_submissions"] == 1
     @test batched["atmosphere_direction_render_calls"] <
         independent["atmosphere_direction_render_calls"]
-    @test batched["wfs_formation_calls"] ==
-        independent["wfs_formation_calls"]
+    @test batched["wfs_optics_calls"] ==
+        independent["wfs_optics_calls"]
 
     gpu_boundaries = [
         "independent_device_ready",

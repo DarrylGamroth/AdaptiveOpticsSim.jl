@@ -26,6 +26,15 @@ struct ContractRateModel{T<:AbstractFloat,M}
     output_metadata::M
 end
 
+# Test-local extension values exercise the generic WFS optics rejection
+# contracts independently of the package's built-in domain values.
+struct ContractUnsupportedPlane <: AbstractOpticalPlaneKind end
+struct ContractUnsupportedNormalization <: AbstractOpticalNormalization end
+struct ContractUnsupportedSpatialMeasure <: AbstractSpatialMeasure end
+struct ContractUnsupportedCombinationPolicy <: AbstractCombinationPolicy end
+struct ContractUnsupportedSpectralCoordinate <: AbstractSpectralCoordinate end
+struct ContractOpticalProduct <: AbstractOpticalProduct end
+
 struct ContractRatePlan{M,I,O}
     model::M
     input::I
@@ -34,23 +43,23 @@ end
 
 function _contract_require_optical_domains(input, output)
     typeof(input.metadata.backend) === typeof(output.metadata.backend) ||
-        throw(WFSPreparationError(:optical_formation, :backend,
+        throw(WFSPreparationError(:wfs_optics, :backend,
             "contract fixture input and output backends differ"))
     input.metadata.device == output.metadata.device ||
-        throw(WFSPreparationError(:optical_formation, :device,
+        throw(WFSPreparationError(:wfs_optics, :device,
             "contract fixture input and output devices differ"))
     return nothing
 end
 
-function WavefrontSensors.prepare_wfs_optical_formation(
+function WavefrontSensors.prepare_wfs_optics(
     model::ContractRateModel, input, output::IntensityMap)
     WavefrontSensors.validate_wfs_optical_input(input)
     WavefrontSensors.validate_wfs_optical_products(output)
     output.metadata === model.output_metadata ||
-        throw(WFSPreparationError(:optical_formation, :plane_metadata,
+        throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "contract fixture output metadata does not match its model"))
     input.metadata.dimensions == output.metadata.dimensions ||
-        throw(WFSPreparationError(:optical_formation, :shape,
+        throw(WFSPreparationError(:wfs_optics, :shape,
             "contract fixture input and output dimensions differ"))
     _contract_require_optical_domains(input, output)
     return ContractRatePlan(model, input, output)
@@ -60,12 +69,12 @@ end
     input::PupilFunction, plan::ContractRatePlan)
     output.metadata === plan.output.metadata &&
         output.values === plan.output.values ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "contract fixture rate output does not match its prepared storage"))
     input.metadata === plan.input.metadata &&
         input.amplitude === plan.input.amplitude &&
         input.opd === plan.input.opd ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "contract fixture pupil input does not match its prepared storage"))
     return nothing
 end
@@ -74,10 +83,10 @@ end
     input::ElectricField, plan::ContractRatePlan)
     output.metadata === plan.output.metadata &&
         output.values === plan.output.values ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "contract fixture rate output does not match its prepared storage"))
     input.metadata === plan.input.metadata && input.values === plan.input.values ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "contract fixture electric-field input does not match its prepared storage"))
     return nothing
 end
@@ -100,7 +109,7 @@ function WavefrontSensors.form_wfs_optical_products!(output::IntensityMap,
     return output
 end
 
-function WavefrontSensors.validate_wfs_optical_formation_binding(
+function WavefrontSensors.validate_wfs_optics_binding(
     output::IntensityMap, input, plan::ContractRatePlan)
     _contract_require_rate_binding(output, input, plan)
     return nothing
@@ -119,23 +128,23 @@ end
 @inline _contract_prepare_rate_plans(::Tuple{}, input, ::Tuple{}) = ()
 
 function _contract_prepare_rate_plans(::Tuple{}, input, outputs::Tuple)
-    throw(WFSPreparationError(:optical_formation, :plane_count,
+    throw(WFSPreparationError(:wfs_optics, :plane_count,
         "contract fixture has more optical outputs than models"))
 end
 
 function _contract_prepare_rate_plans(models::Tuple, input, ::Tuple{})
-    throw(WFSPreparationError(:optical_formation, :plane_count,
+    throw(WFSPreparationError(:wfs_optics, :plane_count,
         "contract fixture has fewer optical outputs than models"))
 end
 
 function _contract_prepare_rate_plans(models::Tuple, input, outputs::Tuple)
-    plan = prepare_wfs_optical_formation(first(models), input, first(outputs))
+    plan = prepare_wfs_optics(first(models), input, first(outputs))
     return (plan,
         _contract_prepare_rate_plans(Base.tail(models), input,
             Base.tail(outputs))...)
 end
 
-function WavefrontSensors.prepare_wfs_optical_formation(
+function WavefrontSensors.prepare_wfs_optics(
     model::ContractBundleRateModel, input, output::OpticalProductBundle)
     WavefrontSensors.validate_wfs_optical_input(input)
     WavefrontSensors.validate_wfs_optical_products(output)
@@ -155,22 +164,22 @@ end
 function WavefrontSensors.form_wfs_optical_products!(
     output::OpticalProductBundle, input, plan::ContractBundleRatePlan)
     output.products === plan.output.products ||
-        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "contract fixture optical bundle does not match its prepared leaves"))
     _contract_form_rate_plans!(plan.plans, output.products, input)
     return output
 end
 
-function WavefrontSensors.validate_wfs_optical_formation_binding(
+function WavefrontSensors.validate_wfs_optics_binding(
     output::OpticalProductBundle, input, plan::ContractBundleRatePlan)
     output.products === plan.output.products || throw(WFSPreparationError(
-        :optical_formation, :prepared_binding,
+        :wfs_optics, :prepared_binding,
         "contract fixture optical bundle does not match its prepared leaves"))
     @inbounds for index in eachindex(plan.plans)
         component_input =
             AdaptiveOpticsSim.WavefrontSensors.four_pupil_bundle_input(
                 input, index)
-        WavefrontSensors.validate_wfs_optical_formation_binding(
+        WavefrontSensors.validate_wfs_optics_binding(
             output[index], component_input, plan.plans[index])
     end
     return nothing
@@ -803,9 +812,9 @@ function WavefrontSensors.validate_wfs_target(
     plan::ContractRatePlan,
     target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
     WavefrontSensors._require_exact_wfs_input_target(
-        plan.input, target, :optical_formation)
+        plan.input, target, :wfs_optics)
     WavefrontSensors._require_exact_wfs_product_target(
-        plan.output, target, :optical_formation)
+        plan.output, target, :wfs_optics)
     return plan
 end
 
@@ -813,9 +822,9 @@ function WavefrontSensors.validate_wfs_target(
     plan::ContractBundleRatePlan,
     target::AdaptiveOpticsSim.Backends.AbstractComputeDevice)
     WavefrontSensors._require_exact_wfs_input_target(
-        plan.input, target, :optical_formation)
+        plan.input, target, :wfs_optics)
     WavefrontSensors._require_exact_wfs_product_target(
-        plan.output, target, :optical_formation)
+        plan.output, target, :wfs_optics)
     @inbounds for component in plan.plans
         WavefrontSensors.validate_wfs_target(component, target)
     end
@@ -1035,9 +1044,9 @@ function WavefrontSensors.validate_wfs_target(
     return plan
 end
 
-function run_contract_stages!(optical_output, optical_input, optical_plan,
+function run_contract_stages!(optical_output, optical_input, optics_plan,
     observation, acquisition_plan, rng, measurement, estimator_plan)
-    form_wfs_optical_products!(optical_output, optical_input, optical_plan)
+    form_wfs_optical_products!(optical_output, optical_input, optics_plan)
     acquire_wfs_observation!(observation, optical_output, acquisition_plan,
         rng)
     estimate_wfs_measurement!(measurement, observation, estimator_plan)

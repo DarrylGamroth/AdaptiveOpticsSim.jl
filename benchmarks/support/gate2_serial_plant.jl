@@ -94,7 +94,7 @@ function AOSPlant.prepare_path_executor(
         AOS.WavefrontSensors.ShackHartmannOpticalFrontEnd(
             sensor.front_end, source)
     result = AOS.WavefrontSensors.shack_hartmann_rate_map(front_end, pupil)
-    plan = AOS.WavefrontSensors.prepare_wfs_optical_formation(
+    plan = AOS.WavefrontSensors.prepare_wfs_optics(
         front_end, pupil, result)
     execution = AOSPlant.WFSOpticalPathExecution(plan)
     return AOSPlant.PreparedPathExecutor(
@@ -138,7 +138,7 @@ function AOSPlant.prepare_path_executor(
     )
     front_end = AOS.WavefrontSensors.PyramidOpticalFrontEnd(sensor, source)
     result = AOS.WavefrontSensors.pyramid_rate_map(front_end, pupil)
-    plan = AOS.WavefrontSensors.prepare_wfs_optical_formation(
+    plan = AOS.WavefrontSensors.prepare_wfs_optics(
         front_end, pupil, result)
     execution = AOSPlant.WFSOpticalPathExecution(plan)
     return AOSPlant.PreparedPathExecutor(

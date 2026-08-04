@@ -510,12 +510,12 @@ end
 end
 
 @inline function _prepared_pyramid_modulation(
-    plan::PreparedPyramidOpticalFormation)
+    plan::PreparedPyramidOptics)
     return plan.front_end.modulation
 end
 
 function _prepared_pyramid_modulation(
-    plan::PreparedPyramidOpticalBundleFormation)
+    plan::PreparedPyramidOpticsBundle)
     modulation = _prepared_pyramid_modulation(first(plan.plans))
     @inbounds for component in Base.tail(plan.plans)
         _prepared_pyramid_modulation(component) === modulation || throw(

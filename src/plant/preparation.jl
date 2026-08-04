@@ -908,7 +908,7 @@ end
 
 @inline function validate_path_execution_binding(
     execution::WFSOpticalPathExecution, input, result)
-    return validate_wfs_optical_formation_binding(result, input,
+    return validate_wfs_optics_binding(result, input,
         execution.plan)
 end
 

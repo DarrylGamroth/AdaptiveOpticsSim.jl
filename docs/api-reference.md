@@ -243,7 +243,7 @@ incompatible geometry revisions, backends, or devices.
   accumulation. Detector acquisition is channel-specific and requires a
   monochromatic or integrated channel; sampled QE requires the monochromatic
   case
-- Prepared diffractive Shack–Hartmann formation writes same-grid sources to
+- Prepared diffractive Shack–Hartmann optics write same-grid sources to
   one rate mosaic and retains distinct wavelength grids as native-sampling
   leaves in an `OpticalProductBundle`. Passing a distinct-grid source to one
   output is rejected; the legacy single-product `measure!` path remains
@@ -1250,7 +1250,7 @@ evaluates the QE model at `wavelength(src)`. For `SpectralSource`, it uses the
 flux-weighted effective QE over the spectral bundle. Pyramid frame-detector
 paths specialize this boundary by applying sampled QE per wavelength before
 incoherent optical-rate accumulation. Prepared diffractive Shack–Hartmann
-formation instead retains distinct wavelength-rate products in a bundle so
+optics instead retain distinct wavelength-rate products in a bundle so
 acquisition can apply channel-specific QE without an implicit grid conversion;
 its legacy single-product path accumulates only contributions on one common
 grid.
@@ -1491,12 +1491,12 @@ components. Migrated bindings are not forwarded through the root.
 - Product accessors: `observation_storage`, `observation_units`,
   `observation_metadata`, `measurement_storage`, `measurement_units`,
   `measurement_metadata`
-- Prepared stage protocols: `prepare_wfs_optical_formation` /
+- Prepared stage protocols: `prepare_wfs_optics` /
   `form_wfs_optical_products!`, `prepare_wfs_acquisition` /
   `acquire_wfs_observation!`, and `prepare_wfs_estimation` /
   `estimate_wfs_measurement!`
 - Qualified plan and owner API:
-  `WavefrontSensors.AbstractWFSOpticalFormationPlan`,
+  `WavefrontSensors.AbstractWFSOpticsPlan`,
   `WavefrontSensors.AbstractWFSAcquisitionPlan`,
   `WavefrontSensors.AbstractWFSEstimationPlan`, the generic detector
   acquisition plan/prepared-owner types, and
@@ -1516,17 +1516,17 @@ components. Migrated bindings are not forwarded through the root.
 - Shack-Hartmann optical composition: `Optics` owns `MicrolensArrayParams`,
   `MicrolensArray`, `prepare_microlens_propagation`, and `microlens_array`;
   `WavefrontSensors` owns `ShackHartmannDirectFrontEnd`,
-  `ShackHartmannOpticalFrontEnd`, `shack_hartmann_optical_formation`, and
+  `ShackHartmannOpticalFrontEnd`, `shack_hartmann_optics`, and
   `shack_hartmann_rate_map`. The
   microlens array is the immutable regular-array model and its numerical
   sampling policy. `MicrolensPropagationPlan` is run-immutable;
   `MicrolensPropagationWorkspace` owns backend/grid-bound FFT handles and
   reusable optical scratch; `PreparedMicrolensPropagation` pairs them for one
-  single-writer execution. A `ShackHartmannOpticalFormationModel` composes
+  single-writer execution. A `ShackHartmannOptics` composes
   that prepared owner with a propagation-free diffractive front-end
   definition, and can be assembled without constructing or retaining a
   `ShackHartmannWFS`. `ShackHartmannWFS.front_end` is always the physical
-  definition; `ShackHartmannWFS.formation` is `nothing` for geometric sensing
+  definition; `ShackHartmannWFS.optics` is `nothing` for geometric sensing
   and the explicit execution composition for diffractive sensing. The
   superseded
   top-level `microlens_array`, `optical_workspace`, and `layout` fields are not

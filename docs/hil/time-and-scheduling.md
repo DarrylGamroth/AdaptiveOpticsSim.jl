@@ -460,7 +460,7 @@ Each physical optical sample is a declared photon-arrival-rate product, not a fr
 already scaled by a telescope step. The prepared acquisition quadrature owns
 the sample duration or weight used to integrate that rate over the half-open
 exposure or row-band interval. Its weights account for the interval exactly
-once; neither atmosphere advancement nor optical formation contributes another
+once; neither atmosphere advancement nor optical propagation contributes another
 elapsed-time factor. A normalized synthetic or reduced-order product declares
 its explicit conversion before it enters a physical detector pipeline.
 

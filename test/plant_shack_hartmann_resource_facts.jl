@@ -18,9 +18,9 @@ function sh_resource_fixture()
         mode=Diffractive(),
         T=Float32,
     )
-    front_end = shack_hartmann_optical_formation(sensor, source)
-    output = shack_hartmann_rate_map(front_end, pupil)
-    optical_formation = prepare_wfs_optical_formation(front_end, pupil,
+    optics = shack_hartmann_optics(sensor, source)
+    output = shack_hartmann_rate_map(optics, pupil)
+    wfs_optics = prepare_wfs_optics(optics, pupil,
         output)
     set_subaperture_calibration!(sensor.calibration,
         zeros(Float32, size(sensor.calibration.reference_signal_2d));
@@ -35,7 +35,7 @@ function sh_resource_fixture()
     estimator = prepare_wfs_estimation(sensor, observation, measurement)
     products = AcquisitionProducts(observation, measurement;
         metadata=(kind=:shack_hartmann,))
-    return (; sensor, output, optical_formation, detector, observation,
+    return (; sensor, output, wfs_optics, detector, observation,
         acquisition, measurement, estimator, products)
 end
 
@@ -43,13 +43,13 @@ end
     target = HostComputeDevice()
     fixture = sh_resource_fixture()
     sensor = fixture.sensor
-    propagation = sensor.formation.propagation
+    propagation = sensor.optics.propagation
     propagation_workspace = propagation.workspace
     detector_state = fixture.detector.state
 
     wrappers = (
-        (fixture.optical_formation,
-            StructuralResourceOwnerID(:wfs_optical_formation, :sh)),
+        (fixture.wfs_optics,
+            StructuralResourceOwnerID(:wfs_wfs_optics, :sh)),
         (fixture.acquisition,
             StructuralResourceOwnerID(:detector_acquisition, :sh)),
         (Detectors.detector_acquisition_plan(

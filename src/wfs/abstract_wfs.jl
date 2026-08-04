@@ -7,7 +7,7 @@ end
 
 """
 Wavefront sensors implement `measure!(wfs, pupil[, source])` and may extend the
-prepared optical-formation, acquisition, and estimation protocols.
+prepared WFS optics, acquisition, and estimation protocols.
 
 Optional detector coupling, runtime preparation, stacked-source support, and
 grouped execution are expressed through capability queries rather than

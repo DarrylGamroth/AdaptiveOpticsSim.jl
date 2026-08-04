@@ -568,9 +568,9 @@ function Plant.prepare_path_executor(
         mode=Diffractive(),
         T=T,
         backend=backend(telescope))
-    formation = shack_hartmann_optical_formation(sensor, source)
-    output = shack_hartmann_rate_map(formation, pupil)
-    plan = prepare_wfs_optical_formation(formation, pupil, output)
+    optics = shack_hartmann_optics(sensor, source)
+    output = shack_hartmann_rate_map(optics, pupil)
+    plan = prepare_wfs_optics(optics, pupil, output)
     execution = WFSOpticalPathExecution(plan)
     return PreparedPathExecutor(
         definition,
@@ -589,7 +589,7 @@ function Plant.prepare_path_executor(
         propagation_model=:microlens_fraunhofer,
         model_revisions=(definition=model.revision,
             layout=WavefrontSensors.subaperture_layout_revision(
-                formation.front_end.layout)),
+                optics.front_end.layout)),
     )
 end
 
