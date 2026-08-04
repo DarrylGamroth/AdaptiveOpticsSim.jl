@@ -1078,6 +1078,42 @@ end
         @test err.stage === :wfs_optics
     end
 
+    unsupported_input_plane = contract_captured_error() do
+        WavefrontSensors._require_wfs_input_plane(ContractUnsupportedPlane())
+    end
+    @test unsupported_input_plane isa WFSPreparationError
+    @test unsupported_input_plane.stage === :wfs_optics
+    @test unsupported_input_plane.reason === :plane_metadata
+
+    unsupported_products = (
+        (contract_rate_map(zeros(T, 4, 4);
+            kind=ContractUnsupportedPlane()), :plane_metadata),
+        (contract_rate_map(zeros(T, 4, 4);
+            normalization=ContractUnsupportedNormalization()), :radiometry),
+        (contract_rate_map(zeros(T, 4, 4);
+            spatial_measure=ContractUnsupportedSpatialMeasure()), :radiometry),
+        (contract_rate_map(zeros(T, 4, 4);
+            coherence=ContractUnsupportedCombinationPolicy()), :radiometry),
+        (contract_rate_map(zeros(T, 4, 4);
+            spectral=ContractUnsupportedSpectralCoordinate()), :plane_metadata),
+    )
+    for (unsupported_product, reason) in unsupported_products
+        err = contract_captured_error() do
+            WavefrontSensors.validate_wfs_optical_products(unsupported_product)
+        end
+        @test err isa WFSPreparationError
+        @test err.stage === :wfs_optics
+        @test err.reason === reason
+    end
+
+    empty_products = ContractOpticalProduct[]
+    empty_products_error = contract_captured_error() do
+        WavefrontSensors.validate_wfs_optical_products(empty_products)
+    end
+    @test empty_products_error isa WFSPreparationError
+    @test empty_products_error.stage === :wfs_optics
+    @test empty_products_error.reason === :plane_count
+
     incompatible_products = (
         contract_rate_map(zeros(T, 4, 4);
             sampling=(T(2), T(2))),
@@ -1383,6 +1419,17 @@ end
     @test microlens_array(staged.front_end) === staged.front_end.microlens_array
     @test !applicable(microlens_array, staged)
     @test !applicable(subaperture_layout, staged)
+
+    invalid_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, T=T)
+    WavefrontSensors.update_subaperture_layout!(
+        invalid_sensor.front_end.layout, falses(16, 16))
+    fill!(invalid_sensor.workspace.spot_cube, one(T))
+    fill!(invalid_sensor.products.slopes, T(NaN))
+    WavefrontSensors.sh_signal_from_spots!(ScalarCPUStyle(),
+        invalid_sensor, zero(T))
+    @test all(iszero, invalid_sensor.products.slopes)
+
     prepare_sampling!(native, pupil, src)
     sampled_spots_peak!(native, pupil, src)
     expected_rate = shack_hartmann_detector_image(

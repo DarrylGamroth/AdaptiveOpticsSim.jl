@@ -26,6 +26,15 @@ struct ContractRateModel{T<:AbstractFloat,M}
     output_metadata::M
 end
 
+# Test-local extension values exercise the generic WFS optics rejection
+# contracts independently of the package's built-in domain values.
+struct ContractUnsupportedPlane <: AbstractOpticalPlaneKind end
+struct ContractUnsupportedNormalization <: AbstractOpticalNormalization end
+struct ContractUnsupportedSpatialMeasure <: AbstractSpatialMeasure end
+struct ContractUnsupportedCombinationPolicy <: AbstractCombinationPolicy end
+struct ContractUnsupportedSpectralCoordinate <: AbstractSpectralCoordinate end
+struct ContractOpticalProduct <: AbstractOpticalProduct end
+
 struct ContractRatePlan{M,I,O}
     model::M
     input::I
