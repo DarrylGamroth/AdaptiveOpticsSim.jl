@@ -1,6 +1,6 @@
-function sample_spot!(front_end::ShackHartmannOpticalFormationModel,
+function sample_spot!(model::ShackHartmannOpticalFormationModel,
     intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    propagation = microlens_propagation_workspace(front_end.propagation)
+    propagation = microlens_propagation_workspace(model.propagation)
     binning = propagation.binning_pixel_scale
     spot_in = intensity
     if binning > 1

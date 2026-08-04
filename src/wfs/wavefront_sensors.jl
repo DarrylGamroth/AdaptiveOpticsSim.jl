@@ -116,6 +116,8 @@ import ..Optics:
     PyramidPhaseMask,
     ZernikePhaseSpot,
     _prepare_microlens_propagation,
+    _prepare_microlens_propagation_like,
+    _replace_microlens_propagation_workspace!,
     _pupil_cell_area,
     _pupil_diameter_m,
     _pupil_resolution,

@@ -30,18 +30,18 @@ function ensure_lgs_kernels!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::L
     return wfs
 end
 
-function ensure_lgs_kernels!(front_end::ShackHartmannOpticalFormationModel,
+function ensure_lgs_kernels!(model::ShackHartmannOpticalFormationModel,
     src::LGSSource,
     pupil_dimensions::NTuple{2,Int}, pupil_diameter::Real,
     pupil_sampling::NTuple{2,<:Real}, pupil_origin::NTuple{2,<:Real},
     wavelength_m::Real)
     na_profile = src.params.na_profile
     if na_profile === nothing
-        return front_end
+        return model
     end
-    propagation = microlens_propagation_workspace(front_end.propagation)
+    propagation = microlens_propagation_workspace(model.propagation)
     pad = size(propagation.intensity, 1)
-    n_sub = n_lenslets(front_end)
+    n_sub = n_lenslets(model)
     pixel_scale = lgs_pixel_scale(
         pupil_diameter / n_sub,
         propagation.effective_padding,
@@ -59,17 +59,17 @@ function ensure_lgs_kernels!(front_end::ShackHartmannOpticalFormationModel,
         pupil_origin;
         wavelength_m,
         model=:per_subaperture,
-        threshold=sh_threshold_convolution(front_end),
+        threshold=sh_threshold_convolution(model),
     )
     if size(propagation.lgs_kernel_fft, 1) == pad &&
         size(propagation.lgs_kernel_fft, 3) == n_sub * n_sub &&
         propagation.lgs_kernel_tag == tag
-        return front_end
+        return model
     end
     propagation.lgs_kernel_fft = lgs_spot_kernels_fft(
-        pupil_diameter, front_end, src, pad, wavelength_m)
+        pupil_diameter, model, src, pad, wavelength_m)
     propagation.lgs_kernel_tag = tag
-    return front_end
+    return model
 end
 
 function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernels_fft::AbstractArray{Complex{T},3},
@@ -89,11 +89,11 @@ function lgs_spot_kernels_fft(pupil::PupilFunction, wfs::ShackHartmannWFS, src::
 end
 
 function lgs_spot_kernels_fft(pupil_diameter::Real,
-    front_end::ShackHartmannOpticalFormationModel, src::LGSSource, pad::Int,
+    model::ShackHartmannOpticalFormationModel, src::LGSSource, pad::Int,
     wavelength_m::Real)
-    propagation = microlens_propagation_workspace(front_end.propagation)
+    propagation = microlens_propagation_workspace(model.propagation)
     T = eltype(propagation.intensity)
-    n_sub = n_lenslets(front_end)
+    n_sub = n_lenslets(model)
     na_profile = src.params.na_profile
     altitudes = na_profile[1, :]
     weights = na_profile[2, :]
@@ -102,7 +102,7 @@ function lgs_spot_kernels_fft(pupil_diameter::Real,
     end
 
     pixel_scale = lgs_pixel_scale(
-        pupil_diameter / n_lenslets(front_end),
+        pupil_diameter / n_lenslets(model),
         propagation.effective_padding,
         wavelength_m,
     )
@@ -129,7 +129,7 @@ function lgs_spot_kernels_fft(pupil_diameter::Real,
             x_subap[ix], y_subap[iy], ref_vec)
         peak = maximum(kernel)
         if peak > 0
-            cutoff = sh_threshold_convolution(front_end) * peak
+            cutoff = sh_threshold_convolution(model) * peak
             @inbounds for j in axes(kernel, 2), i in axes(kernel, 1)
                 if kernel[i, j] < cutoff
                     kernel[i, j] = zero(T)

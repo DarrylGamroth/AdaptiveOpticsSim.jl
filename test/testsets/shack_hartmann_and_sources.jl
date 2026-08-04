@@ -34,7 +34,7 @@ end
     measure!(sh, pupil, src)
     image = wfs_detector_image(sh)
     @test size(image) == (128, 128)
-    @test size(WavefrontSensors.sh_exported_spot_cube(sh)) == (16 * 16, 8, 8)
+    @test size(shack_hartmann_spot_cube(sh)) == (16 * 16, 8, 8)
 end
 
 @testset "Shack-Hartmann signal extraction branches" begin

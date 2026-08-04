@@ -487,7 +487,7 @@ function _require_sh_output_wavelength(::AbstractSpectralCoordinate,
         "Shack-Hartmann rate output must declare a monochromatic channel"))
 end
 
-function prepare_wfs_optical_formation(
+function _prepare_sh_optical_formation_candidate(
     formation::ShackHartmannOpticalFormationModel, input,
     output::IntensityMap)
     validate_wfs_optical_input(input)
@@ -519,6 +519,36 @@ function prepare_wfs_optical_formation(
         _sh_microlens_workspace_binding(workspace),
         _sh_layout_storage_binding(formation.front_end.layout),
         input.metadata.backend, input.metadata.device)
+end
+
+function _sh_independent_formation(
+    formation::ShackHartmannOpticalFormationModel{F,PR}, source) where {F,PR}
+    sourced = _sh_front_end_with_source(formation, source)
+    propagation = _prepare_microlens_propagation_like(sourced.propagation)
+    return ShackHartmannOpticalFormationModel(sourced.front_end,
+        propagation)
+end
+
+function _sh_commit_formation_candidate!(
+    formation::ShackHartmannOpticalFormationModel,
+    candidate::PreparedShackHartmannOpticalFormation{P}) where {P}
+    workspace = microlens_propagation_workspace(formation.propagation)
+    _replace_microlens_propagation_workspace!(workspace,
+        candidate.workspace)
+    return PreparedShackHartmannOpticalFormation(candidate.plan, formation,
+        workspace, candidate.input, candidate.output,
+        _sh_microlens_workspace_binding(workspace),
+        candidate.layout_binding, candidate.backend, candidate.device)
+end
+
+function prepare_wfs_optical_formation(
+    formation::ShackHartmannOpticalFormationModel, input,
+    output::IntensityMap)
+    candidate_formation = _sh_independent_formation(formation,
+        formation.front_end.source)
+    candidate = _prepare_sh_optical_formation_candidate(
+        candidate_formation, input, output)
+    return _sh_commit_formation_candidate!(formation, candidate)
 end
 
 @inline _prepare_sh_source_workspace!(::ExecutionStyle,
@@ -599,8 +629,8 @@ function prepare_wfs_optical_formation(
     first_component = ShackHartmannSpectralComponent(source.source,
         T(first_sample.wavelength),
         T(photon_irradiance(source)) * T(first_sample.weight))
-    first_plan = prepare_wfs_optical_formation(
-        _sh_front_end_with_source(formation, first_component),
+    first_formation = _sh_independent_formation(formation, first_component)
+    first_plan = _prepare_sh_optical_formation_candidate(first_formation,
         input, output[1])
     components = Vector{typeof(first_plan)}(undef, length(samples))
     components[1] = first_plan
@@ -609,13 +639,9 @@ function prepare_wfs_optical_formation(
         component = ShackHartmannSpectralComponent(source.source,
             T(sample.wavelength),
             T(photon_irradiance(source)) * T(sample.weight))
-        component_formation = _sh_front_end_with_source(formation, component)
-        components[index] = prepare_wfs_optical_formation(component_formation,
-            input, output[index])
-        components[index].plan.sampling_signature ==
-            first_plan.plan.sampling_signature ||
-            throw(WFSPreparationError(:optical_formation, :plane_count,
-                "spectral Shack-Hartmann components require separate microlens workspaces when their prepared FFT sampling differs"))
+        component_formation = _sh_independent_formation(formation, component)
+        components[index] = _prepare_sh_optical_formation_candidate(
+            component_formation, input, output[index])
     end
     fixed_components = FixedSizeVectorDefault{typeof(first_plan)}(components)
     plan_values = FixedSizeVectorDefault{
@@ -1339,16 +1365,16 @@ function shack_hartmann_rate_map(
 end
 
 function shack_hartmann_rate_map(
-    front_end::ShackHartmannOpticalFormationModel,
+    model::ShackHartmannOpticalFormationModel,
     input::Union{PupilFunction,ElectricField}, source::SpectralSource)
     samples = spectral_bundle(source).samples
-    T = eltype(front_end.propagation.workspace.intensity)
+    T = eltype(model.propagation.workspace.intensity)
     first_sample = first(samples)
     first_component = ShackHartmannSpectralComponent(source.source,
         T(first_sample.wavelength),
         T(photon_irradiance(source)) * T(first_sample.weight))
     first_map = shack_hartmann_rate_map(
-        _sh_front_end_with_source(front_end, first_component), input)
+        _sh_front_end_with_source(model, first_component), input)
     maps = Vector{typeof(first_map)}(undef, length(samples))
     maps[1] = first_map
     @inbounds for index in 2:length(samples)
@@ -1357,7 +1383,7 @@ function shack_hartmann_rate_map(
             T(sample.wavelength),
             T(photon_irradiance(source)) * T(sample.weight))
         maps[index] = shack_hartmann_rate_map(
-            _sh_front_end_with_source(front_end, component), input)
+            _sh_front_end_with_source(model, component), input)
     end
     return OpticalProductBundle(maps)
 end
@@ -1370,21 +1396,24 @@ function shack_hartmann_rate_map(sensor::ShackHartmannWFS{<:Diffractive},
     return shack_hartmann_rate_map(front_end, input)
 end
 
-function shack_hartmann_rate_map(front_end::ShackHartmannOpticalFormationModel,
+function shack_hartmann_rate_map(model::ShackHartmannOpticalFormationModel,
     input::Union{PupilFunction,ElectricField}, source=nothing)
-    resolved_front_end = source === nothing ? front_end :
-        _sh_front_end_with_source(front_end, source)
-    wavelength_m = _sh_front_end_wavelength(resolved_front_end, input)
-    _prepare_microlens_sampling_wavelength!(resolved_front_end,
+    resolved_model = source === nothing ? model :
+        _sh_front_end_with_source(model, source)
+    sampling_model = _sh_independent_formation(resolved_model,
+        resolved_model.front_end.source)
+    wavelength_m = _sh_front_end_wavelength(sampling_model, input)
+    _prepare_microlens_sampling_wavelength!(sampling_model,
         input.metadata.dimensions[1],
         _sh_pupil_diameter(input.metadata), wavelength_m)
-    propagation = microlens_propagation_workspace(resolved_front_end.propagation)
-    n = n_lenslets(resolved_front_end) * propagation.sampled_n_pix_subap
+    propagation = microlens_propagation_workspace(
+        sampling_model.propagation)
+    n = n_lenslets(sampling_model) * propagation.sampled_n_pix_subap
     T = eltype(propagation.intensity)
     values = similar(_sh_input_storage(input), T, n, n)
     fill!(values, zero(T))
     pixel_scale_arcsec = sh_pixel_scale_init(
-        _sh_pupil_diameter(input.metadata) / n_lenslets(resolved_front_end),
+        _sh_pupil_diameter(input.metadata) / n_lenslets(sampling_model),
         propagation.effective_padding, wavelength_m) *
         propagation.binning_pixel_scale
     pixel_scale_rad = T(pixel_scale_arcsec / ARCSEC_PER_RAD)

@@ -176,7 +176,9 @@ function run_profile(; backend_name::AbstractString="cpu", branch_name::Abstract
     println("  low_order_lenslets: ", params.low_order_lenslets)
     println("  dm_n_act: ", params.n_act)
     println("  n_control_modes: ", params.n_control_modes)
-    println("  wfs_frame_shape: ", size(scenario.high_wfs.acquisition.spot_cube))
+    println("  wfs_frame_shape: ",
+        size(AdaptiveOpticsSim.WavefrontSensors.shack_hartmann_spot_cube(
+            scenario.high_wfs)))
     return nothing
 end
 

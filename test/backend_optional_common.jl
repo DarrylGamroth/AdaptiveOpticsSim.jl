@@ -3211,6 +3211,51 @@ function run_optional_wfs_stage_contracts(
     @test all(isfinite, Array(physical_rate.values))
     @test sum(Array(physical_rate.values)) > zero(T)
 
+    changed_src = Source(band=:custom, wavelength=T(0.8e-6),
+        photon_irradiance=photon_irradiance(src), T=T)
+    failed_reprepare = try
+        prepare_wfs_optical_formation(
+            shack_hartmann_optical_formation(physical_wfs, changed_src),
+            pupil, physical_rate)
+        nothing
+    catch err
+        err
+    end
+    @test failed_reprepare isa WFSPreparationError
+    @test failed_reprepare.reason === :plane_metadata
+    @test form_wfs_optical_products!(physical_rate, pupil,
+        physical_optical_plan) === physical_rate
+
+    sodium_lgs = LGSSource(wavelength=wavelength(src),
+        photon_irradiance=T(4),
+        na_profile=T[80_000 90_000 100_000; 0.2 0.6 0.2],
+        laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
+    spectral_sodium = with_spectrum(sodium_lgs, SpectralBundle(
+        T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6];
+        T=T))
+    spectral_sodium_wfs = ShackHartmannWFS(tel; n_lenslets=2,
+        n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
+    spectral_sodium_rates = shack_hartmann_rate_map(
+        spectral_sodium_wfs, pupil, spectral_sodium)
+    spectral_sodium_plan = @inferred prepare_wfs_optical_formation(
+        shack_hartmann_optical_formation(spectral_sodium_wfs,
+            spectral_sodium), pupil, spectral_sodium_rates)
+    @test spectral_sodium_plan.components[1].workspace !==
+        spectral_sodium_plan.components[2].workspace
+    @test spectral_sodium_plan.components[1].workspace.lgs_kernel_fft isa
+        BackendArray
+    @test spectral_sodium_plan.components[2].workspace.lgs_kernel_fft isa
+        BackendArray
+    @test compute_device(
+        spectral_sodium_plan.components[1].workspace.lgs_kernel_fft) ==
+        compute_device(pupil.opd)
+    @test form_wfs_optical_products!(spectral_sodium_rates, pupil,
+        spectral_sodium_plan) === spectral_sodium_rates
+    @test all(isfinite, Array(spectral_sodium_rates[1].values))
+    @test all(isfinite, Array(spectral_sodium_rates[2].values))
+    @test sum(Array(spectral_sodium_rates[1].values)) > zero(T)
+    @test sum(Array(spectral_sodium_rates[2].values)) > zero(T)
+
     physical_field_wfs = ShackHartmannWFS(tel; n_lenslets=2,
         n_pix_subap=2, mode=Diffractive(), T=T, backend=selector)
     physical_field_rate = shack_hartmann_rate_map(physical_field_wfs, field)
@@ -5505,8 +5550,8 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     gpu_pupil = PupilFunction(gpu_tel; T=T, backend=backend)
     measure!(cpu_sh, cpu_pupil, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
-    cpu_export = Array(WavefrontSensors.sh_exported_spot_cube(cpu_sh))
-    gpu_export = Array(WavefrontSensors.sh_exported_spot_cube(gpu_sh))
+    cpu_export = Array(shack_hartmann_spot_cube(cpu_sh))
+    gpu_export = Array(shack_hartmann_spot_cube(gpu_sh))
     cpu_frame = Array(AdaptiveOpticsSim.WavefrontSensors.wfs_output_frame(cpu_sh, cpu_det))
     gpu_frame = Array(AdaptiveOpticsSim.WavefrontSensors.wfs_output_frame(gpu_sh, gpu_det))
     @test size(gpu_export) == size(cpu_export)

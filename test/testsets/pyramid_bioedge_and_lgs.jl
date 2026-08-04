@@ -114,7 +114,8 @@ end
             WavefrontSensors.ensure_lgs_kernels! :
             WavefrontSensors.ensure_lgs_kernel!
         kernel_state = family === :shack_hartmann ?
-            wfs.front_end.propagation : wfs.front_end.propagation
+            wfs.formation.propagation.workspace :
+            wfs.front_end.propagation
 
         ensure_kernel!(wfs, pupil, src)
         original_tag = kernel_state.lgs_kernel_tag

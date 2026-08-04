@@ -63,6 +63,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :ShackHartmannOpticalFrontEnd,
         :SubapertureLayout,
         :SubapertureCalibration,
+        :shack_hartmann_spot_cube,
         :shack_hartmann_detector_image,
         :PyramidWFS,
         :BioEdgeWFS,

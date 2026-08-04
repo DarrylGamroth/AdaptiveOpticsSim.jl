@@ -1553,7 +1553,8 @@ components. Migrated bindings are not forwarded through the root.
   `MeanValidFluxNormalization`, `IncidenceFluxNormalization`
 - Measurement and WFS images: `measure!`, `pyramid_modulation_frame!`,
   `valid_subaperture_mask`, `camera_frame`, `wfs_detector_image`,
-  `shack_hartmann_detector_image`, `shack_hartmann_detector_image!`
+  `shack_hartmann_spot_cube`, `shack_hartmann_detector_image`,
+  `shack_hartmann_detector_image!`
 - LiFT forward and observation contracts: `PreparedLiFTForwardModel`,
   `prepare_lift_forward_model`, `lift_forward_output`,
   `evaluate_lift_forward!`, `predict_lift_observation!`,

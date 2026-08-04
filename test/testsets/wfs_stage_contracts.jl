@@ -1424,6 +1424,9 @@ end
         spectral=rate.metadata.spectral)
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
         formation, pupil, wrong_rate_sampling)
+    @test @inferred(form_wfs_optical_products!(rate, pupil,
+        optical_plan)) === rate
+    @test rate.values == expected_rate
     wrong_rate_measure = contract_rate_map(copy(rate.values);
         sampling=rate.metadata.sampling,
         spectral=rate.metadata.spectral,
@@ -1890,14 +1893,20 @@ end
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
         shack_hartmann_optical_formation(spectral_sensor, spectral), pupil,
         spectral_rates[1])
-    incompatible_spectral_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+    resampled_spectral_sensor = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, pixel_scale_arcsec=T(0.04), T=T)
-    incompatible_spectral_rates = shack_hartmann_rate_map(
-        incompatible_spectral_sensor, pupil, spectral)
-    @test_throws WFSPreparationError prepare_wfs_optical_formation(
+    resampled_spectral_rates = shack_hartmann_rate_map(
+        resampled_spectral_sensor, pupil, spectral)
+    resampled_spectral_plan = @inferred prepare_wfs_optical_formation(
         shack_hartmann_optical_formation(
-            incompatible_spectral_sensor, spectral),
-        pupil, incompatible_spectral_rates)
+            resampled_spectral_sensor, spectral),
+        pupil, resampled_spectral_rates)
+    @test resampled_spectral_plan.components[1].workspace !==
+        resampled_spectral_plan.components[2].workspace
+    form_wfs_optical_products!(resampled_spectral_rates, pupil,
+        resampled_spectral_plan)
+    @test all(isfinite, resampled_spectral_rates[1].values)
+    @test all(isfinite, resampled_spectral_rates[2].values)
 
     lgs = LGSSource(wavelength=wavelength(src),
         photon_irradiance=T(6), elongation_factor=T(1.8), T=T)
@@ -1954,6 +1963,72 @@ end
             sodium_plan)) == 0
     end
     @test sodium_rate.values ≈ expected_sodium rtol=T(2e-12) atol=T(2e-12)
+
+    spectral_sodium = with_spectrum(sodium_lgs, SpectralBundle(
+        T[0.9 * wavelength(sodium_lgs), 1.1 * wavelength(sodium_lgs)],
+        T[0.4, 0.6]; T=T))
+    spectral_sodium_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, T=T)
+    spectral_sodium_rates = shack_hartmann_rate_map(
+        spectral_sodium_sensor, pupil, spectral_sodium)
+    spectral_sodium_plan = @inferred prepare_wfs_optical_formation(
+        shack_hartmann_optical_formation(spectral_sodium_sensor,
+            spectral_sodium), pupil, spectral_sodium_rates)
+    @test spectral_sodium_plan.components[1].workspace !==
+        spectral_sodium_plan.components[2].workspace
+    @test spectral_sodium_plan.components[1].workspace.lgs_kernel_fft !==
+        spectral_sodium_plan.components[2].workspace.lgs_kernel_fft
+    form_wfs_optical_products!(spectral_sodium_rates, pupil,
+        spectral_sodium_plan)
+    if coverage_enabled
+        @test_skip "spectral sodium-LGS optical-stage allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(spectral_sodium_rates,
+            pupil, spectral_sodium_plan)) == 0
+    end
+    @inbounds for index in 1:length(spectral_sodium_rates)
+        sample = Optics.spectral_bundle(spectral_sodium).samples[index]
+        component = Optics.source_with_wavelength_and_radiometric_value(
+            sodium_lgs, T(sample.wavelength),
+            T(photon_irradiance(sodium_lgs)) * T(sample.weight))
+        reference_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+            mode=Diffractive(), n_pix_subap=4, T=T)
+        reference_rate = shack_hartmann_rate_map(reference_sensor, pupil,
+            component)
+        reference_plan = prepare_wfs_optical_formation(
+            shack_hartmann_optical_formation(reference_sensor, component),
+            pupil, reference_rate)
+        form_wfs_optical_products!(reference_rate, pupil, reference_plan)
+        @test isapprox(spectral_sodium_rates[index].values,
+            reference_rate.values; rtol=T(2e-12), atol=T(2e-12))
+    end
+
+    transactional_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, pixel_scale_arcsec=T(0.04),
+        T=T)
+    transactional_formation = shack_hartmann_optical_formation(
+        transactional_sensor, src)
+    transactional_rate = shack_hartmann_rate_map(
+        transactional_formation, pupil)
+    transactional_plan = prepare_wfs_optical_formation(
+        transactional_formation, pupil, transactional_rate)
+    form_wfs_optical_products!(transactional_rate, pupil,
+        transactional_plan)
+    transactional_expected = copy(transactional_rate.values)
+    other_source = Source(band=:custom, wavelength=T(0.8e-6),
+        photon_irradiance=photon_irradiance(src), T=T)
+    failed_reprepare = try
+        prepare_wfs_optical_formation(
+            shack_hartmann_optical_formation(transactional_sensor,
+                other_source), pupil, transactional_rate)
+        nothing
+    catch err
+        err
+    end
+    @test failed_reprepare isa WFSPreparationError
+    @test @inferred(form_wfs_optical_products!(transactional_rate, pupil,
+        transactional_plan)) === transactional_rate
+    @test transactional_rate.values == transactional_expected
 
     asterism = Asterism([
         Source(band=:custom, wavelength=wavelength(src),
