@@ -140,12 +140,18 @@ function _shack_hartmann_detector_image!(style::AcceleratorStyle{B}, ::Accelerat
     return image
 end
 
-@inline shack_hartmann_detector_image(wfs::ShackHartmannWFS; kwargs...) =
+@inline shack_hartmann_detector_image(
+    wfs::ShackHartmannWFS{<:Diffractive}; kwargs...) =
     shack_hartmann_detector_image(shack_hartmann_spot_cube(wfs),
         n_lenslets(wfs); kwargs...)
-@inline wfs_detector_image(wfs::ShackHartmannWFS; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
-@inline wfs_detector_image(wfs::ShackHartmannWFS, ::Nothing; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
-@inline wfs_detector_image(wfs::ShackHartmannWFS, det::AbstractDetector; kwargs...) =
+@inline wfs_detector_image(
+    wfs::ShackHartmannWFS{<:Diffractive}; kwargs...) =
+    shack_hartmann_detector_image(wfs; kwargs...)
+@inline wfs_detector_image(
+    wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing; kwargs...) =
+    shack_hartmann_detector_image(wfs; kwargs...)
+@inline wfs_detector_image(wfs::ShackHartmannWFS{<:Diffractive},
+    det::AbstractDetector; kwargs...) =
     shack_hartmann_detector_image(wfs; output_type=detector_output_type(det), kwargs...)
 
 @inline wfs_output_frame(wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing) =

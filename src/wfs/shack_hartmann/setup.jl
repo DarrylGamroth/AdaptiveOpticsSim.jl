@@ -578,7 +578,47 @@ end
 function _prepare_microlens_sampling_wavelength!(
     formation::ShackHartmannOpticalFormationModel,
     pupil_resolution::Int, pupil_diameter_m::Real, wavelength_m::Real)
+    sampling = _sh_microlens_sampling_configuration(formation,
+        pupil_resolution, pupil_diameter_m, wavelength_m)
     propagation = microlens_propagation_workspace(formation.propagation)
+    padding = sampling.padding
+    pad = sampling.padded_subaperture_samples
+    binning_pixel_scale = sampling.binning_pixel_scale
+    n_pix_subap = sampling.spot_samples_per_axis
+
+    if padding != propagation.effective_padding ||
+            pad != size(propagation.field, 1)
+        ensure_sh_buffers!(formation, pad)
+        propagation.lgs_kernel_fft = similar(propagation.fft_buffer,
+            eltype(propagation.fft_buffer), 0, 0, 0)
+        propagation.lgs_kernel_tag = UInt(0)
+        propagation.effective_padding = padding
+    end
+
+    if n_pix_subap != propagation.sampled_n_pix_subap
+        propagation.spot = similar(propagation.spot,
+            n_pix_subap, n_pix_subap)
+        propagation.sampled_spot_cube = similar(
+            propagation.sampled_spot_cube,
+            eltype(propagation.sampled_spot_cube),
+            n_lenslets(formation)^2, n_pix_subap, n_pix_subap)
+        propagation.spot_cube_accum = similar(propagation.spot_cube_accum,
+            eltype(propagation.spot_cube_accum),
+            n_lenslets(formation)^2, n_pix_subap, n_pix_subap)
+        propagation.sampled_n_pix_subap = n_pix_subap
+    end
+
+    propagation.binning_pixel_scale = binning_pixel_scale
+    T = eltype(propagation.intensity)
+    half_shift_ratio = microlens_array(formation).params.half_pixel_shift ?
+        T(binning_pixel_scale) : zero(T)
+    build_sh_phasor!(formation, half_shift_ratio)
+    return formation
+end
+
+function _sh_microlens_sampling_configuration(
+    formation::ShackHartmannOpticalFormationModel,
+    pupil_resolution::Int, pupil_diameter_m::Real, wavelength_m::Real)
     pupil_resolution % n_lenslets(formation) == 0 ||
         throw(InvalidConfiguration(
             "pupil resolution must be divisible by n_lenslets"))
@@ -627,34 +667,13 @@ function _prepare_microlens_sampling_wavelength!(
         throw(InvalidConfiguration("n_pix_subap must be even"))
     end
 
-    if padding != propagation.effective_padding ||
-            pad != size(propagation.field, 1)
-        ensure_sh_buffers!(formation, pad)
-        propagation.lgs_kernel_fft = similar(propagation.fft_buffer,
-            eltype(propagation.fft_buffer), 0, 0, 0)
-        propagation.lgs_kernel_tag = UInt(0)
-        propagation.effective_padding = padding
-    end
-
-    if n_pix_subap != propagation.sampled_n_pix_subap
-        propagation.spot = similar(propagation.spot,
-            n_pix_subap, n_pix_subap)
-        propagation.sampled_spot_cube = similar(
-            propagation.sampled_spot_cube,
-            eltype(propagation.sampled_spot_cube),
-            n_lenslets(formation)^2, n_pix_subap, n_pix_subap)
-        propagation.spot_cube_accum = similar(propagation.spot_cube_accum,
-            eltype(propagation.spot_cube_accum),
-            n_lenslets(formation)^2, n_pix_subap, n_pix_subap)
-        propagation.sampled_n_pix_subap = n_pix_subap
-    end
-
-    propagation.binning_pixel_scale = binning_pixel_scale
-    T = eltype(propagation.intensity)
-    half_shift_ratio = microlens.params.half_pixel_shift ?
-        T(binning_pixel_scale) : zero(T)
-    build_sh_phasor!(formation, half_shift_ratio)
-    return formation
+    return (
+        padding=padding,
+        padded_subaperture_samples=pad,
+        binning_pixel_scale=binning_pixel_scale,
+        spot_samples_per_axis=n_pix_subap,
+        pixel_scale_arcsec=pixel_scale_init * binning_pixel_scale,
+    )
 end
 
 
@@ -675,14 +694,15 @@ function ensure_sh_acquisition_buffers!(wfs::ShackHartmannWFS,
 end
 
 """
-    shack_hartmann_spot_cube(wfs)
+    shack_hartmann_spot_cube(wfs::ShackHartmannWFS{<:Diffractive})
 
 Return the caller-visible lenslet spot cube written by the most recent
 diffractive Shack–Hartmann measurement. Its dimensions are
 `(n_lenslets^2, n_axis_1, n_axis_2)`. The returned array is owned by `wfs` and
 is overwritten by later mutating measurements.
 """
-@inline function shack_hartmann_spot_cube(wfs::ShackHartmannWFS)
+@inline function shack_hartmann_spot_cube(
+    wfs::ShackHartmannWFS{<:Diffractive})
     return wfs.products.exported_spot_cube
 end
 

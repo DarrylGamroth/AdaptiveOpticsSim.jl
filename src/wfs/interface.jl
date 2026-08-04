@@ -70,9 +70,9 @@ Return the detector-image product for a wavefront sensor.
 
 For WFS families with a native 2-D camera frame, this returns `camera_frame(wfs)`
 when no detector is provided and `output_frame(det)` after detector-coupled
-measurement when a detector is provided. Shack-Hartmann WFS objects store
-detector-coupled lenslet spots as a cube, so this accessor returns a tiled 2-D
-detector mosaic.
+measurement when a detector is provided. Diffractive Shack-Hartmann WFS
+objects store detector-coupled lenslet spots as a cube, so this accessor
+returns a tiled 2-D detector mosaic.
 """
 function wfs_detector_image(wfs::AbstractWFS)
     frame = camera_frame(wfs)

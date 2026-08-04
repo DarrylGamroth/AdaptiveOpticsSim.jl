@@ -1400,23 +1400,16 @@ function shack_hartmann_rate_map(model::ShackHartmannOpticalFormationModel,
     input::Union{PupilFunction,ElectricField}, source=nothing)
     resolved_model = source === nothing ? model :
         _sh_front_end_with_source(model, source)
-    sampling_model = _sh_independent_formation(resolved_model,
-        resolved_model.front_end.source)
-    wavelength_m = _sh_front_end_wavelength(sampling_model, input)
-    _prepare_microlens_sampling_wavelength!(sampling_model,
+    wavelength_m = _sh_front_end_wavelength(resolved_model, input)
+    sampling = _sh_microlens_sampling_configuration(resolved_model,
         input.metadata.dimensions[1],
         _sh_pupil_diameter(input.metadata), wavelength_m)
-    propagation = microlens_propagation_workspace(
-        sampling_model.propagation)
-    n = n_lenslets(sampling_model) * propagation.sampled_n_pix_subap
+    propagation = microlens_propagation_workspace(resolved_model.propagation)
+    n = n_lenslets(resolved_model) * sampling.spot_samples_per_axis
     T = eltype(propagation.intensity)
     values = similar(_sh_input_storage(input), T, n, n)
     fill!(values, zero(T))
-    pixel_scale_arcsec = sh_pixel_scale_init(
-        _sh_pupil_diameter(input.metadata) / n_lenslets(sampling_model),
-        propagation.effective_padding, wavelength_m) *
-        propagation.binning_pixel_scale
-    pixel_scale_rad = T(pixel_scale_arcsec / ARCSEC_PER_RAD)
+    pixel_scale_rad = T(sampling.pixel_scale_arcsec / ARCSEC_PER_RAD)
     metadata = OpticalPlaneMetadata(DetectorPlane(), values;
         coordinate_domain=AngularCoordinates(),
         sampling=(pixel_scale_rad, pixel_scale_rad),
