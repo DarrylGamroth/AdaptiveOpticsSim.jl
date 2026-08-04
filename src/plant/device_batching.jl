@@ -335,14 +335,14 @@ end
 @inline function _wfs_device_path_batch_plan_contract(
     plan::PreparedShackHartmannOpticalFormation,
 )
-    return (typeof(plan), plan.sampling_signature)
+    return (typeof(plan), plan.plan.sampling_signature)
 end
 
 function _wfs_device_path_batch_plan_contract(
     plan::PreparedShackHartmannOpticalBundleFormation,
 )
     signatures = Tuple(
-        component.sampling_signature for component in plan.plans)
+        component.plan.sampling_signature for component in plan.components)
     return (typeof(plan), signatures)
 end
 

@@ -116,8 +116,10 @@
     @test wfs_detector_image(bio) === bio.acquisition.state.camera_frame
     @test wfs_detector_image(zwfs) === zwfs.acquisition.state.camera_frame
     @test wfs_detector_image(curv) === curv.acquisition.state.camera_frame
+    @test_throws MethodError shack_hartmann_spot_cube(wfs)
+    @test_throws InvalidConfiguration wfs_detector_image(wfs)
     sh_image = wfs_detector_image(wfs_diffractive; gap=1)
-    sh_cube = WavefrontSensors.sh_exported_spot_cube(wfs_diffractive)
+    sh_cube = shack_hartmann_spot_cube(wfs_diffractive)
     @test ndims(sh_image) == 2
     n_lenslets = microlens_array(wfs_diffractive.front_end).params.n_lenslets
     @test size(sh_image) == (n_lenslets * size(sh_cube, 2) + n_lenslets - 1,

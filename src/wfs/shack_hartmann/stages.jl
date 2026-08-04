@@ -2,15 +2,40 @@
 # Prepared Shack-Hartmann stage composition
 #
 
-struct PreparedShackHartmannOpticalFormation{F,I,O,S}
-    front_end::F
-    input::I
-    output::O
-    sampling_signature::S
+"""Run-immutable physical and numerical contract for one SH rate plane."""
+struct ShackHartmannOpticalFormationPlan{M,S,T<:AbstractFloat,SS} <:
+        AbstractWFSOpticalFormationPlan
+    microlens_array::M
+    source::S
+    threshold_convolution::T
+    wavelength_m::T
+    sampling_signature::SS
 end
 
-struct PreparedShackHartmannOpticalBundleFormation{P<:AbstractVector,I,O}
+"""Exact live owner for one prepared SH optical-formation execution."""
+struct PreparedShackHartmannOpticalFormation{P,F,W,I,O,R,L,B,D}
+    plan::P
+    formation::F
+    workspace::W
+    input::I
+    output::O
+    workspace_binding::R
+    layout_binding::L
+    backend::B
+    device::D
+end
+
+"""Fixed-membership spectral SH formation plan."""
+struct ShackHartmannOpticalBundleFormationPlan{P<:FixedSizeVector} <:
+        AbstractWFSOpticalFormationPlan
     plans::P
+end
+
+"""Exact live owner for fixed-membership spectral SH formation."""
+struct PreparedShackHartmannOpticalBundleFormation{
+    P,C<:FixedSizeVector,I,O}
+    plan::P
+    components::C
     input::I
     output::O
 end
@@ -26,12 +51,28 @@ end
 @inline photon_irradiance(source::ShackHartmannSpectralComponent) =
     source.photon_rate_m2_s
 
-struct PreparedShackHartmannEstimator{W,I,M,P<:AbstractWFSMeasurementPath,C}
-    sensor::W
-    input::I
-    measurement::M
+"""Run-immutable Shack-Hartmann estimation and calibration contract."""
+struct ShackHartmannEstimationPlan{
+    E,P<:AbstractWFSMeasurementPath,C} <: AbstractWFSEstimationPlan
+    extraction::E
     path::P
     calibration_binding::C
+    n_lenslets::Int
+    n_pixels_per_lenslet::Int
+end
+
+"""Exact live owner for one prepared Shack-Hartmann estimator."""
+struct PreparedShackHartmannEstimator{P,W,WS,PR,I,M,WB,PB,B,D}
+    plan::P
+    sensor::W
+    workspace::WS
+    products::PR
+    input::I
+    measurement::M
+    workspace_binding::WB
+    products_binding::PB
+    backend::B
+    device::D
 end
 
 struct ShackHartmannCalibrationBinding{
@@ -49,19 +90,119 @@ struct ShackHartmannLayoutBinding
     revision::UInt
 end
 
-@inline wfs_measurement_path(plan::PreparedShackHartmannEstimator) = plan.path
+@inline wfs_measurement_path(prepared::PreparedShackHartmannEstimator) =
+    prepared.plan.path
+
+@inline function _sh_microlens_workspace_binding(workspace)
+    return (
+        workspace.field,
+        workspace.phasor,
+        workspace.fft_buffer,
+        workspace.fft_stack,
+        workspace.intensity,
+        workspace.intensity_stack,
+        workspace.intensity_tmp_stack,
+        workspace.temp,
+        workspace.bin_buffer,
+        workspace.spot,
+        workspace.sampled_spot_cube,
+        workspace.spot_cube_accum,
+        workspace.fft_plan,
+        workspace.fft_stack_plan,
+        workspace.ifft_plan,
+        workspace.ifft_stack_plan,
+        workspace.elongation_kernel,
+        workspace.lgs_kernel_fft,
+        workspace.fft_asterism_stack,
+        workspace.fft_asterism_plan,
+        workspace.amp_scales,
+        workspace.amp_scales_host,
+        workspace.opd_to_cycles,
+        workspace.opd_to_cycles_host,
+    )
+end
+
+@inline function _sh_layout_storage_binding(layout::SubapertureLayout)
+    return (layout.valid_mask, layout.valid_mask_host,
+        layout.valid_indices_host)
+end
+
+@inline function _sh_estimator_workspace_binding(workspace)
+    return (workspace.spot_cube, workspace.detector_noise_cube,
+        workspace.spot_stats, workspace.spot_stats_accum,
+        workspace.slopes_host, workspace.centroid_host)
+end
+
+@inline _sh_estimator_workspace_binding(::Nothing) = ()
+
+@inline function _sh_estimator_owner_binding(sensor::ShackHartmannWFS)
+    return (_sh_estimator_workspace_binding(sensor.workspace),
+        _sh_layout_storage_binding(sensor.front_end.layout))
+end
+
+@inline function _sh_products_binding(products)
+    return (products.slopes, products.exported_spot_cube)
+end
+
+@inline _sh_input_storages(input::PupilFunction) =
+    (input.amplitude, input.opd)
+@inline _sh_input_storages(input::ElectricField) = (input.values,)
+@inline _sh_input_storages(input::WFSObservation) = (input.storage,)
+
+@inline _sh_mightalias_any(::AbstractArray, ::Tuple{}) = false
+@inline function _sh_mightalias_any(value::AbstractArray, values::Tuple)
+    return _wfs_storage_mightalias(value, first(values)) ||
+        _sh_mightalias_any(value, Base.tail(values))
+end
+
+@inline _sh_any_alias(::Tuple{}, ::Tuple) = false
+@inline function _sh_any_alias(values::Tuple, resources::Tuple)
+    return _sh_mightalias_any(first(values), resources) ||
+        _sh_any_alias(Base.tail(values), resources)
+end
+
+@inline function _require_sh_formation_aliases(input, output::IntensityMap,
+    workspace, layout::SubapertureLayout)
+    input_storages = _sh_input_storages(input)
+    resources = (_sh_microlens_workspace_binding(workspace)...,
+        layout.valid_mask, layout.valid_mask_host)
+    (_sh_mightalias_any(output.values, input_storages) ||
+        _sh_mightalias_any(output.values, resources) ||
+        _sh_any_alias(input_storages, resources)) &&
+        throw(WFSPreparationError(:optical_formation, :aliasing,
+            "Shack-Hartmann input, rate product, layout, and workspace storage must not alias"))
+    return nothing
+end
+
+@inline function _require_sh_estimation_aliases(sensor::ShackHartmannWFS,
+    input, measurement::WFSMeasurement)
+    input_storages = _sh_input_storages(input)
+    resources = (_sh_estimator_workspace_binding(sensor.workspace)...,
+        sensor.products.slopes,
+        sensor.products.exported_spot_cube,
+        sensor.front_end.layout.valid_mask,
+        sensor.front_end.layout.valid_mask_host,
+        sensor.calibration.reference_signal_2d,
+        sensor.calibration.reference_signal_host)
+    (_sh_mightalias_any(measurement.storage, input_storages) ||
+        _sh_mightalias_any(measurement.storage, resources) ||
+        _sh_any_alias(input_storages, resources)) &&
+        throw(WFSPreparationError(:estimation, :aliasing,
+            "Shack-Hartmann estimator input, measurement, calibration, workspace, and products must not alias"))
+    return nothing
+end
 
 @inline function _sh_pupil_diameter(metadata::OpticalPlaneMetadata)
     return metadata.sampling[1] * metadata.dimensions[1]
 end
 
 @inline function _sh_sampling_signature(
-    front_end::ShackHartmannOpticalFrontEnd)
-    workspace = front_end.propagation
+    formation::ShackHartmannOpticalFormationModel)
+    workspace = microlens_propagation_workspace(formation.propagation)
     return (size(workspace.fft_stack), workspace.effective_padding,
         workspace.binning_pixel_scale, workspace.sampled_n_pix_subap,
         workspace.phasor_ratio,
-        subaperture_layout_revision(front_end.layout))
+        subaperture_layout_revision(formation.front_end.layout))
 end
 
 @inline function _sh_output_wavelength(source::AbstractSource)
@@ -85,16 +226,16 @@ function require_sh_common_spectral_grid(source::SpectralSource)
     return wavelength_ref
 end
 
-@inline function _sh_front_end_wavelength(front_end::ShackHartmannOpticalFrontEnd,
+@inline function _sh_front_end_wavelength(formation::ShackHartmannOpticalFormationModel,
     input::PupilFunction)
-    source = front_end.source
+    source = formation.front_end.source
     source === nothing && throw(WFSPreparationError(:optical_formation,
         :radiometry,
         "dimensionless PupilFunction input requires an illumination source"))
     return _sh_output_wavelength(source)
 end
 
-@inline function _sh_front_end_wavelength(::ShackHartmannOpticalFrontEnd,
+@inline function _sh_front_end_wavelength(::ShackHartmannOpticalFormationModel,
     input::ElectricField)
     return _sh_monochromatic_wavelength(input.metadata.spectral)
 end
@@ -108,9 +249,9 @@ function _sh_monochromatic_wavelength(::AbstractSpectralCoordinate)
         "Shack-Hartmann electric-field input must declare a monochromatic channel"))
 end
 
-function _require_sh_front_end_input(front_end::ShackHartmannOpticalFrontEnd,
+function _require_sh_front_end_input(formation::ShackHartmannOpticalFormationModel,
     input::PupilFunction)
-    front_end.source === nothing && throw(WFSPreparationError(
+    formation.front_end.source === nothing && throw(WFSPreparationError(
         :optical_formation, :radiometry,
         "PupilFunction formation requires a source"))
     _require_sh_pupil_semantics(input, :optical_formation)
@@ -128,9 +269,9 @@ function _require_sh_pupil_semantics(input::PupilFunction, stage::Symbol)
     return nothing
 end
 
-function _require_sh_front_end_input(front_end::ShackHartmannOpticalFrontEnd,
+function _require_sh_front_end_input(formation::ShackHartmannOpticalFormationModel,
     input::ElectricField)
-    front_end.source === nothing || throw(WFSPreparationError(
+    formation.front_end.source === nothing || throw(WFSPreparationError(
         :optical_formation, :radiometry,
         "photon-rate ElectricField input must not also supply a source"))
     _require_sh_metric_coordinates(input.metadata.coordinate_domain,
@@ -228,7 +369,7 @@ function _require_sh_field_measure(::AbstractSpatialMeasure)
         "electric-field input must carry cell-integrated photon rate"))
 end
 
-function _require_sh_stage_domains(front_end::ShackHartmannOpticalFrontEnd,
+function _require_sh_stage_domains(formation::ShackHartmannOpticalFormationModel,
     input, output::IntensityMap)
     typeof(input.metadata.backend) === typeof(output.metadata.backend) ||
         throw(WFSPreparationError(:optical_formation, :backend,
@@ -236,20 +377,22 @@ function _require_sh_stage_domains(front_end::ShackHartmannOpticalFrontEnd,
     input.metadata.device == output.metadata.device ||
         throw(WFSPreparationError(:optical_formation, :device,
             "Shack-Hartmann input and output occupy different devices"))
-    propagation_storage = front_end.propagation.fft_stack
+    workspace = microlens_propagation_workspace(formation.propagation)
+    propagation_storage = workspace.fft_stack
     typeof(input.metadata.backend) === typeof(backend(propagation_storage)) ||
         throw(WFSPreparationError(:optical_formation, :backend,
             "Shack-Hartmann input and microlens propagation backends differ"))
     input.metadata.device == compute_device(propagation_storage) ||
         throw(WFSPreparationError(:optical_formation, :device,
             "Shack-Hartmann input and microlens propagation occupy different devices"))
-    typeof(input.metadata.backend) === typeof(backend(front_end.layout.valid_mask)) ||
+    typeof(input.metadata.backend) ===
+        typeof(backend(formation.front_end.layout.valid_mask)) ||
         throw(WFSPreparationError(:optical_formation, :backend,
             "Shack-Hartmann input and subaperture-layout backends differ"))
-    input.metadata.device == compute_device(front_end.layout.valid_mask) ||
+    input.metadata.device == compute_device(formation.front_end.layout.valid_mask) ||
         throw(WFSPreparationError(:optical_formation, :device,
             "Shack-Hartmann input and subaperture layout occupy different devices"))
-    propagation_type = eltype(front_end.propagation.intensity)
+    propagation_type = eltype(workspace.intensity)
     _sh_input_numeric_type(input) === propagation_type ||
         throw(WFSPreparationError(:optical_formation, :numeric_type,
             "Shack-Hartmann input type must match prepared propagation precision"))
@@ -285,10 +428,11 @@ function _require_sh_layout_geometry(layout::SubapertureLayout,
     return resolution, pupil_diameter
 end
 
-function _require_sh_rate_mosaic(front_end::ShackHartmannOpticalFrontEnd,
+function _require_sh_rate_mosaic(formation::ShackHartmannOpticalFormationModel,
     output::IntensityMap, wavelength_m::Real, pupil_diameter_m::Real)
-    n_sub = n_lenslets(front_end)
-    n_pix = front_end.propagation.sampled_n_pix_subap
+    workspace = microlens_propagation_workspace(formation.propagation)
+    n_sub = n_lenslets(formation)
+    n_pix = workspace.sampled_n_pix_subap
     size(output.values) == (n_sub * n_pix, n_sub * n_pix) ||
         throw(WFSPreparationError(:optical_formation, :shape,
             "Shack-Hartmann rate output must be an n_lenslets-by-n_lenslets tiled spot mosaic"))
@@ -298,11 +442,11 @@ function _require_sh_rate_mosaic(front_end::ShackHartmannOpticalFrontEnd,
         :optical_formation)
     _require_sh_centered_geometry(output.metadata, "rate output",
         :optical_formation)
-    T = eltype(front_end.propagation.intensity)
+    T = eltype(workspace.intensity)
     expected_scale_arcsec = sh_pixel_scale_init(
         pupil_diameter_m / n_sub,
-        front_end.propagation.effective_padding, wavelength_m) *
-        front_end.propagation.binning_pixel_scale
+        workspace.effective_padding, wavelength_m) *
+        workspace.binning_pixel_scale
     expected_scale_rad = T(expected_scale_arcsec / ARCSEC_PER_RAD)
     output.metadata.sampling == (expected_scale_rad, expected_scale_rad) ||
         throw(WFSPreparationError(:optical_formation, :plane_metadata,
@@ -343,44 +487,138 @@ function _require_sh_output_wavelength(::AbstractSpectralCoordinate,
         "Shack-Hartmann rate output must declare a monochromatic channel"))
 end
 
-function prepare_wfs_optical_formation(
-    front_end::ShackHartmannOpticalFrontEnd, input,
+function _prepare_sh_optical_formation_candidate(
+    formation::ShackHartmannOpticalFormationModel, input,
     output::IntensityMap)
     validate_wfs_optical_input(input)
     validate_wfs_optical_products(output)
-    _require_sh_front_end_input(front_end, input)
-    _require_sh_stage_domains(front_end, input, output)
+    _require_sh_front_end_input(formation, input)
+    _require_sh_stage_domains(formation, input, output)
     resolution, pupil_diameter = _require_sh_layout_geometry(
-        front_end.layout, n_lenslets(front_end), input,
+        formation.front_end.layout, n_lenslets(formation), input,
         :optical_formation)
-    wavelength_m = _sh_front_end_wavelength(front_end, input)
-    _prepare_microlens_sampling_wavelength!(front_end, resolution,
+    wavelength_m = _sh_front_end_wavelength(formation, input)
+    _prepare_microlens_sampling_wavelength!(formation, resolution,
         _sh_pupil_diameter(input.metadata), wavelength_m)
     _prepare_sh_source_workspace!(execution_style(_sh_input_storage(input)),
-        front_end, front_end.source)
-    _require_sh_rate_mosaic(front_end, output, wavelength_m,
+        formation, input, formation.front_end.source, wavelength_m)
+    _require_sh_rate_mosaic(formation, output, wavelength_m,
         pupil_diameter)
-    return PreparedShackHartmannOpticalFormation(front_end, input, output,
-        _sh_sampling_signature(front_end))
+    sampling_signature = _sh_sampling_signature(formation)
+    T = eltype(microlens_propagation_workspace(
+        formation.propagation).intensity)
+    plan = ShackHartmannOpticalFormationPlan(
+        formation.front_end.microlens_array, formation.front_end.source,
+        T(formation.front_end.threshold_convolution), T(wavelength_m),
+        sampling_signature)
+    workspace = microlens_propagation_workspace(formation.propagation)
+    _require_sh_formation_aliases(input, output, workspace,
+        formation.front_end.layout)
+    return PreparedShackHartmannOpticalFormation(plan, formation,
+        workspace, input, output,
+        _sh_microlens_workspace_binding(workspace),
+        _sh_layout_storage_binding(formation.front_end.layout),
+        input.metadata.backend, input.metadata.device)
+end
+
+function _sh_independent_formation(
+    formation::ShackHartmannOpticalFormationModel{F,PR}, source) where {F,PR}
+    sourced = _sh_front_end_with_source(formation, source)
+    propagation = _prepare_microlens_propagation_like(sourced.propagation)
+    return ShackHartmannOpticalFormationModel(sourced.front_end,
+        propagation)
+end
+
+function _sh_commit_formation_candidate!(
+    formation::ShackHartmannOpticalFormationModel,
+    candidate::PreparedShackHartmannOpticalFormation{P}) where {P}
+    workspace = microlens_propagation_workspace(formation.propagation)
+    _replace_microlens_propagation_workspace!(workspace,
+        candidate.workspace)
+    return PreparedShackHartmannOpticalFormation(candidate.plan, formation,
+        workspace, candidate.input, candidate.output,
+        _sh_microlens_workspace_binding(workspace),
+        candidate.layout_binding, candidate.backend, candidate.device)
+end
+
+function prepare_wfs_optical_formation(
+    formation::ShackHartmannOpticalFormationModel, input,
+    output::IntensityMap)
+    candidate_formation = _sh_independent_formation(formation,
+        formation.front_end.source)
+    candidate = _prepare_sh_optical_formation_candidate(
+        candidate_formation, input, output)
+    return _sh_commit_formation_candidate!(formation, candidate)
 end
 
 @inline _prepare_sh_source_workspace!(::ExecutionStyle,
-    ::ShackHartmannOpticalFrontEnd, source) = nothing
+    ::ShackHartmannOpticalFormationModel, input, source, wavelength_m) =
+    nothing
 
-function _prepare_sh_source_workspace!(::AcceleratorStyle,
-    front_end::ShackHartmannOpticalFrontEnd, source::Asterism)
+@inline _prepare_sh_asterism_workspace!(::ExecutionStyle,
+    ::ShackHartmannOpticalFormationModel, ::Asterism) = nothing
+
+function _prepare_sh_asterism_workspace!(::AcceleratorStyle,
+    formation::ShackHartmannOpticalFormationModel, source::Asterism)
     sh_stacked_asterism_compatible(source) &&
-        ensure_sh_asterism_buffers!(front_end, length(source.sources))
+        ensure_sh_asterism_buffers!(formation, length(source.sources))
+    return nothing
+end
+
+function _prepare_sh_source_workspace!(style::ExecutionStyle,
+    formation::ShackHartmannOpticalFormationModel, input::PupilFunction,
+    source::Asterism, wavelength_m::Real)
+    _prepare_sh_asterism_workspace!(style, formation, source)
+    @inbounds for component in source.sources
+        _prepare_sh_source_workspace!(style, formation, input, component,
+            wavelength(component))
+    end
+    return nothing
+end
+
+function _prepare_sh_source_workspace!(::ExecutionStyle,
+    formation::ShackHartmannOpticalFormationModel, input::PupilFunction,
+    source::LGSSource, wavelength_m::Real)
+    return _prepare_sh_lgs_workspace!(lgs_profile(source), formation, input,
+        source, wavelength_m)
+end
+
+function _prepare_sh_source_workspace!(::ExecutionStyle,
+    formation::ShackHartmannOpticalFormationModel, input::PupilFunction,
+    source::ShackHartmannSpectralComponent{<:LGSSource}, wavelength_m::Real)
+    return _prepare_sh_lgs_workspace!(lgs_profile(source.source), formation,
+        input, source.source, wavelength_m)
+end
+
+function _prepare_sh_lgs_workspace!(::LGSProfileNone,
+    formation::ShackHartmannOpticalFormationModel, ::PupilFunction,
+    source::LGSSource, ::Real)
+    workspace = microlens_propagation_workspace(formation.propagation)
+    T = eltype(workspace.elongation_kernel)
+    factor = T(lgs_elongation_factor(source))
+    workspace.elongation_kernel =
+        prepare_elongation_kernel!(workspace.elongation_kernel, factor)
+    return nothing
+end
+
+function _prepare_sh_lgs_workspace!(::LGSProfileNaProfile,
+    formation::ShackHartmannOpticalFormationModel, input::PupilFunction,
+    source::LGSSource, wavelength_m::Real)
+    metadata = input.metadata
+    ensure_lgs_kernels!(formation, source, metadata.dimensions,
+        _sh_pupil_diameter(metadata), metadata.sampling, metadata.origin,
+        wavelength_m)
     return nothing
 end
 
 function prepare_wfs_optical_formation(
-    front_end::ShackHartmannOpticalFrontEnd{
-        <:Any,<:Any,<:Any,<:Any,<:SpectralSource}, input,
-    output::OpticalProductBundle)
+    formation::ShackHartmannOpticalFormationModel{
+        <:ShackHartmannOpticalFrontEnd{
+            M,L,FT,<:SpectralSource}}, input,
+    output::OpticalProductBundle) where {M,L,FT}
     validate_wfs_optical_input(input)
     validate_wfs_optical_products(output)
-    source = front_end.source
+    source = formation.front_end.source
     samples = spectral_bundle(source).samples
     length(output) == length(samples) || throw(WFSPreparationError(
         :optical_formation, :plane_count,
@@ -391,45 +629,72 @@ function prepare_wfs_optical_formation(
     first_component = ShackHartmannSpectralComponent(source.source,
         T(first_sample.wavelength),
         T(photon_irradiance(source)) * T(first_sample.weight))
-    first_plan = prepare_wfs_optical_formation(
-        _sh_front_end_with_source(front_end, first_component),
+    first_formation = _sh_independent_formation(formation, first_component)
+    first_plan = _prepare_sh_optical_formation_candidate(first_formation,
         input, output[1])
-    plans = Vector{typeof(first_plan)}(undef, length(samples))
-    plans[1] = first_plan
+    components = Vector{typeof(first_plan)}(undef, length(samples))
+    components[1] = first_plan
     @inbounds for index in 2:length(samples)
         sample = samples[index]
         component = ShackHartmannSpectralComponent(source.source,
             T(sample.wavelength),
             T(photon_irradiance(source)) * T(sample.weight))
-        component_front_end = _sh_front_end_with_source(front_end, component)
-        plans[index] = prepare_wfs_optical_formation(component_front_end,
-            input, output[index])
-        plans[index].sampling_signature == first_plan.sampling_signature ||
-            throw(WFSPreparationError(:optical_formation, :plane_count,
-                "spectral Shack-Hartmann components require separate microlens workspaces when their prepared FFT sampling differs"))
+        component_formation = _sh_independent_formation(formation, component)
+        components[index] = _prepare_sh_optical_formation_candidate(
+            component_formation, input, output[index])
     end
-    return PreparedShackHartmannOpticalBundleFormation(plans, input, output)
+    fixed_components = FixedSizeVectorDefault{typeof(first_plan)}(components)
+    plan_values = FixedSizeVectorDefault{
+        typeof(first_plan.plan)}(map(component -> component.plan,
+            components))
+    plan = ShackHartmannOpticalBundleFormationPlan(plan_values)
+    return PreparedShackHartmannOpticalBundleFormation(plan,
+        fixed_components, input, output)
 end
 
 @inline function _sh_front_end_with_source(
-    front_end::ShackHartmannOpticalFrontEnd, source)
-    return ShackHartmannOpticalFrontEnd(front_end.microlens_array,
-        front_end.propagation, front_end.layout, source;
-        threshold_convolution=front_end.threshold_convolution)
+    formation::ShackHartmannOpticalFormationModel, source)
+    return ShackHartmannOpticalFormationModel(formation, source)
 end
 
 @inline function _require_sh_optical_binding(output::IntensityMap, input,
-    plan::PreparedShackHartmannOpticalFormation)
-    output.metadata === plan.output.metadata &&
-        output.values === plan.output.values ||
+    prepared::PreparedShackHartmannOpticalFormation)
+    output.metadata === prepared.output.metadata &&
+        output.values === prepared.output.values ||
         throw(WFSPreparationError(:optical_formation, :prepared_binding,
             "Shack-Hartmann rate output does not match prepared storage"))
-    input === plan.input || throw(WFSPreparationError(:optical_formation,
+    input === prepared.input || throw(WFSPreparationError(:optical_formation,
         :prepared_binding,
         "Shack-Hartmann pupil input does not match prepared storage"))
-    _sh_sampling_signature(plan.front_end) == plan.sampling_signature ||
+    formation = prepared.formation
+    plan = prepared.plan
+    workspace = microlens_propagation_workspace(formation.propagation)
+    workspace === prepared.workspace &&
+        _sh_microlens_workspace_binding(workspace) ===
+            prepared.workspace_binding ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "Shack-Hartmann microlens workspace was replaced after preparation"))
+    _sh_layout_storage_binding(formation.front_end.layout) ===
+        prepared.layout_binding ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "Shack-Hartmann layout storage was replaced after preparation"))
+    formation.front_end.microlens_array === plan.microlens_array &&
+        formation.front_end.source === plan.source &&
+        isequal(formation.front_end.threshold_convolution,
+            plan.threshold_convolution) ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "Shack-Hartmann optical definition changed after preparation"))
+    _sh_sampling_signature(formation) == plan.sampling_signature ||
         throw(WFSPreparationError(:optical_formation, :prepared_binding,
             "Shack-Hartmann microlens sampling no longer matches its prepared plan"))
+    input.metadata.backend === prepared.backend &&
+        output.metadata.backend === prepared.backend &&
+        input.metadata.device == prepared.device &&
+        output.metadata.device == prepared.device ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "Shack-Hartmann backend or device binding changed after preparation"))
+    _require_sh_formation_aliases(input, output, workspace,
+        formation.front_end.layout)
     return nothing
 end
 
@@ -506,9 +771,9 @@ end
 end
 
 function _form_sh_explicit_stack!(::ScalarCPUStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::PupilFunction,
+    sensor::ShackHartmannOpticalFormationModel, input::PupilFunction,
     source::AbstractSource, wavelength_m)
-    workspace = sensor.propagation
+    workspace = microlens_propagation_workspace(sensor.propagation)
     n = input.metadata.dimensions[1]
     n_sub = n_lenslets(sensor)
     sub = div(n, n_sub)
@@ -523,7 +788,7 @@ function _form_sh_explicit_stack!(::ScalarCPUStyle,
     fill!(workspace.fft_stack, zero(eltype(workspace.fft_stack)))
     index = 1
     @inbounds for j in 1:n_sub, i in 1:n_sub
-        if sensor.layout.valid_mask[i, j]
+        if sensor.front_end.layout.valid_mask[i, j]
             for y in 1:sub, x in 1:sub
                 px = (i - 1) * sub + x
                 py = (j - 1) * sub + y
@@ -540,9 +805,9 @@ function _form_sh_explicit_stack!(::ScalarCPUStyle,
 end
 
 function _form_sh_explicit_stack!(style::AcceleratorStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::PupilFunction,
+    sensor::ShackHartmannOpticalFormationModel, input::PupilFunction,
     source::AbstractSource, wavelength_m)
-    workspace = sensor.propagation
+    workspace = microlens_propagation_workspace(sensor.propagation)
     n = input.metadata.dimensions[1]
     n_sub = n_lenslets(sensor)
     sub = div(n, n_sub)
@@ -555,7 +820,7 @@ function _form_sh_explicit_stack!(style::AcceleratorStyle,
     amp_scale = sqrt(T(photon_irradiance(source)) * pupil_cell_area)
     opd_to_cycles = T(2) / T(wavelength_m)
     launch_kernel_async!(style, sh_explicit_pupil_stack_kernel!,
-        workspace.fft_stack, sensor.layout.valid_mask, input.amplitude,
+        workspace.fft_stack, sensor.front_end.layout.valid_mask, input.amplitude,
         input.opd, workspace.phasor, amp_scale, opd_to_cycles, n_sub, sub,
         ox, oy, n, pad; ndrange=(pad, pad, n_sub, n_sub))
     synchronize_backend!(style)
@@ -563,9 +828,9 @@ function _form_sh_explicit_stack!(style::AcceleratorStyle,
 end
 
 function _form_sh_explicit_stack!(::ScalarCPUStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::ElectricField, ::Nothing,
+    sensor::ShackHartmannOpticalFormationModel, input::ElectricField, ::Nothing,
     wavelength_m)
-    workspace = sensor.propagation
+    workspace = microlens_propagation_workspace(sensor.propagation)
     n = input.metadata.dimensions[1]
     n_sub = n_lenslets(sensor)
     sub = div(n, n_sub)
@@ -575,7 +840,7 @@ function _form_sh_explicit_stack!(::ScalarCPUStyle,
     fill!(workspace.fft_stack, zero(eltype(workspace.fft_stack)))
     index = 1
     @inbounds for j in 1:n_sub, i in 1:n_sub
-        if sensor.layout.valid_mask[i, j]
+        if sensor.front_end.layout.valid_mask[i, j]
             for y in 1:sub, x in 1:sub
                 px = (i - 1) * sub + x
                 py = (j - 1) * sub + y
@@ -590,9 +855,9 @@ function _form_sh_explicit_stack!(::ScalarCPUStyle,
 end
 
 function _form_sh_explicit_stack!(style::AcceleratorStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::ElectricField, ::Nothing,
+    sensor::ShackHartmannOpticalFormationModel, input::ElectricField, ::Nothing,
     wavelength_m)
-    workspace = sensor.propagation
+    workspace = microlens_propagation_workspace(sensor.propagation)
     n = input.metadata.dimensions[1]
     n_sub = n_lenslets(sensor)
     sub = div(n, n_sub)
@@ -600,7 +865,7 @@ function _form_sh_explicit_stack!(style::AcceleratorStyle,
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     launch_kernel_async!(style, sh_explicit_field_stack_kernel!,
-        workspace.fft_stack, sensor.layout.valid_mask, input.values,
+        workspace.fft_stack, sensor.front_end.layout.valid_mask, input.values,
         workspace.phasor, n_sub, sub, ox, oy, n, pad;
         ndrange=(pad, pad, n_sub, n_sub))
     synchronize_backend!(style)
@@ -608,10 +873,10 @@ function _form_sh_explicit_stack!(style::AcceleratorStyle,
 end
 
 function _form_sh_explicit_asterism_serial!(style::ExecutionStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::PupilFunction,
+    sensor::ShackHartmannOpticalFormationModel, input::PupilFunction,
     source::Asterism)
     wavelength(source)
-    workspace = sensor.propagation
+    workspace = microlens_propagation_workspace(sensor.propagation)
     fill!(workspace.spot_cube_accum,
         zero(eltype(workspace.spot_cube_accum)))
     @inbounds for component in source.sources
@@ -625,17 +890,17 @@ function _form_sh_explicit_asterism_serial!(style::ExecutionStyle,
 end
 
 @inline _form_sh_explicit_asterism!(style::ScalarCPUStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::PupilFunction,
+    sensor::ShackHartmannOpticalFormationModel, input::PupilFunction,
     source::Asterism) =
     _form_sh_explicit_asterism_serial!(style, sensor, input, source)
 
 function _form_sh_explicit_asterism!(style::AcceleratorStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::PupilFunction,
+    sensor::ShackHartmannOpticalFormationModel, input::PupilFunction,
     source::Asterism)
     sh_stacked_asterism_compatible(source) ||
         return _form_sh_explicit_asterism_serial!(style, sensor, input,
             source)
-    workspace = sensor.propagation
+    workspace = microlens_propagation_workspace(sensor.propagation)
     n_src = length(source.sources)
     n = input.metadata.dimensions[1]
     n_sub = n_lenslets(sensor)
@@ -659,7 +924,7 @@ function _form_sh_explicit_asterism!(style::AcceleratorStyle,
     fft_view = @view workspace.fft_asterism_stack[:, :, 1:total]
     intensity_view = @view workspace.intensity_tmp_stack[:, :, 1:total]
     launch_kernel_async!(style, sh_explicit_pupil_asterism_stack_kernel!,
-        fft_view, sensor.layout.valid_mask, input.amplitude, input.opd,
+        fft_view, sensor.front_end.layout.valid_mask, input.amplitude, input.opd,
         workspace.phasor, workspace.amp_scales, workspace.opd_to_cycles,
         n_sub, sub, ox, oy, n, pad, n_spots, n_src;
         ndrange=(pad, pad, n_src, n_sub, n_sub))
@@ -681,18 +946,18 @@ function _form_sh_explicit_asterism!(style::AcceleratorStyle,
 end
 
 @inline _form_sh_explicit_stack!(style::ScalarCPUStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::PupilFunction,
+    sensor::ShackHartmannOpticalFormationModel, input::PupilFunction,
     source::Asterism,
     wavelength_m) = _form_sh_explicit_asterism!(style, sensor, input, source)
 
 @inline _form_sh_explicit_stack!(style::AcceleratorStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input::PupilFunction,
+    sensor::ShackHartmannOpticalFormationModel, input::PupilFunction,
     source::Asterism,
     wavelength_m) = _form_sh_explicit_asterism!(style, sensor, input, source)
 
 function _finish_sh_explicit_stack!(style::ExecutionStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input, source)
-    workspace = sensor.propagation
+    sensor::ShackHartmannOpticalFormationModel, input, source)
+    workspace = microlens_propagation_workspace(sensor.propagation)
     execute_fft_plan!(workspace.fft_stack, workspace.fft_stack_plan)
     T = eltype(workspace.intensity_stack)
     pad = size(workspace.fft_stack, 1)
@@ -704,41 +969,41 @@ function _finish_sh_explicit_stack!(style::ExecutionStyle,
 end
 
 @inline _apply_sh_source_spot_model!(::ExecutionStyle,
-    ::ShackHartmannOpticalFrontEnd, input, source) = nothing
+    ::ShackHartmannOpticalFormationModel, input, source) = nothing
 
 @inline function _apply_sh_source_spot_model!(style::ExecutionStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input, source::LGSSource)
+    sensor::ShackHartmannOpticalFormationModel, input, source::LGSSource)
     return _apply_sh_lgs_spot_model!(lgs_profile(source), style, sensor,
         input, source, wavelength(source))
 end
 
 @inline function _apply_sh_source_spot_model!(style::ExecutionStyle,
-    sensor::ShackHartmannOpticalFrontEnd, input,
+    sensor::ShackHartmannOpticalFormationModel, input,
     source::ShackHartmannSpectralComponent{<:LGSSource})
     return _apply_sh_lgs_spot_model!(lgs_profile(source.source), style,
         sensor, input, source.source, wavelength(source))
 end
 
 function _apply_sh_lgs_spot_model!(::LGSProfileNone,
-    ::ExecutionStyle, sensor::ShackHartmannOpticalFrontEnd, input,
+    ::ExecutionStyle, sensor::ShackHartmannOpticalFormationModel, input,
     source::LGSSource,
     wavelength_m::Real)
-    workspace = sensor.propagation
-    workspace.elongation_kernel = apply_elongation_stack!(
+    workspace = microlens_propagation_workspace(sensor.propagation)
+    workspace.elongation_kernel = apply_prepared_elongation_stack!(
         workspace.intensity_stack, lgs_elongation_factor(source),
         workspace.intensity_tmp_stack, workspace.elongation_kernel)
     return nothing
 end
 
 function _apply_sh_lgs_spot_model!(::LGSProfileNaProfile,
-    ::ExecutionStyle, sensor::ShackHartmannOpticalFrontEnd, input,
+    ::ExecutionStyle, sensor::ShackHartmannOpticalFormationModel, input,
     source::LGSSource,
     wavelength_m::Real)
     metadata = input.metadata
     ensure_lgs_kernels!(sensor, source, metadata.dimensions,
         _sh_pupil_diameter(metadata), metadata.sampling, metadata.origin,
         wavelength_m)
-    workspace = sensor.propagation
+    workspace = microlens_propagation_workspace(sensor.propagation)
     apply_lgs_convolution_stack!(workspace.intensity_stack,
         workspace.lgs_kernel_fft, workspace.fft_stack,
         workspace.fft_stack_plan, workspace.ifft_stack_plan)
@@ -746,9 +1011,9 @@ function _apply_sh_lgs_spot_model!(::LGSProfileNaProfile,
 end
 
 function _sh_stack_intensity!(::ScalarCPUStyle,
-    sensor::ShackHartmannOpticalFrontEnd,
+    sensor::ShackHartmannOpticalFormationModel,
     intensity_scale, ::Int)
-    workspace = sensor.propagation
+    workspace = microlens_propagation_workspace(sensor.propagation)
     @inbounds for index in axes(workspace.fft_stack, 3),
             y in axes(workspace.fft_stack, 2),
             x in axes(workspace.fft_stack, 1)
@@ -759,8 +1024,8 @@ function _sh_stack_intensity!(::ScalarCPUStyle,
 end
 
 function _sh_stack_intensity!(style::AcceleratorStyle,
-    sensor::ShackHartmannOpticalFrontEnd, intensity_scale, pad::Int)
-    workspace = sensor.propagation
+    sensor::ShackHartmannOpticalFormationModel, intensity_scale, pad::Int)
+    workspace = microlens_propagation_workspace(sensor.propagation)
     launch_kernel!(style, complex_abs2_stack_kernel!,
         workspace.intensity_stack, workspace.fft_stack,
         intensity_scale, pad, n_lenslets(sensor)^2;
@@ -769,36 +1034,44 @@ function _sh_stack_intensity!(style::AcceleratorStyle,
 end
 
 function form_wfs_optical_products!(output::IntensityMap, input,
-    plan::PreparedShackHartmannOpticalFormation)
-    _require_sh_optical_binding(output, input, plan)
-    front_end = plan.front_end
-    wavelength_m = _sh_front_end_wavelength(front_end, input)
+    prepared::PreparedShackHartmannOpticalFormation)
+    _require_sh_optical_binding(output, input, prepared)
+    formation = prepared.formation
+    wavelength_m = _sh_front_end_wavelength(formation, input)
     _form_sh_explicit_stack!(execution_style(_sh_input_storage(input)),
-        front_end, input, front_end.source,
+        formation, input, formation.front_end.source,
         wavelength_m)
     shack_hartmann_detector_image!(output.values,
-        front_end.propagation.sampled_spot_cube, n_lenslets(front_end))
+        prepared.workspace.sampled_spot_cube, n_lenslets(formation))
     return output
 end
 
 function form_wfs_optical_products!(output::OpticalProductBundle, input,
-    plan::PreparedShackHartmannOpticalBundleFormation)
-    validate_wfs_optical_formation_binding(output, input, plan)
-    @inbounds for index in eachindex(plan.plans)
-        form_wfs_optical_products!(output[index], input, plan.plans[index])
+    prepared::PreparedShackHartmannOpticalBundleFormation)
+    validate_wfs_optical_formation_binding(output, input, prepared)
+    @inbounds for index in eachindex(prepared.components)
+        form_wfs_optical_products!(output[index], input,
+            prepared.components[index])
     end
     return output
 end
 
 function validate_wfs_optical_formation_binding(
     output::OpticalProductBundle, input,
-    plan::PreparedShackHartmannOpticalBundleFormation)
-    output === plan.output && input === plan.input ||
+    prepared::PreparedShackHartmannOpticalBundleFormation)
+    output === prepared.output && input === prepared.input ||
         throw(WFSPreparationError(:optical_formation, :prepared_binding,
             "spectral Shack-Hartmann products do not match prepared storage"))
-    @inbounds for index in eachindex(plan.plans)
+    length(prepared.plan.plans) == length(prepared.components) ||
+        throw(WFSPreparationError(:optical_formation, :prepared_binding,
+            "spectral Shack-Hartmann plan membership changed"))
+    @inbounds for index in eachindex(prepared.components)
+        prepared.components[index].plan === prepared.plan.plans[index] ||
+            throw(WFSPreparationError(:optical_formation,
+                :prepared_binding,
+                "spectral Shack-Hartmann component plan was replaced"))
         validate_wfs_optical_formation_binding(output[index], input,
-            plan.plans[index])
+            prepared.components[index])
     end
     return nothing
 end
@@ -910,23 +1183,29 @@ function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Diffractive},
     _require_sh_floating_measurement(measurement)
     _require_sh_measurement_semantics(sensor, measurement)
     _require_sh_storage_domain(:estimation, observation.metadata,
-        sensor.acquisition.spot_cube, "observation")
+        sensor.workspace.spot_cube, "observation")
     _require_sh_storage_domain(:estimation, measurement.metadata,
-        sensor.estimator.slopes, "measurement")
+        sensor.products.slopes, "measurement")
     _require_sh_storage_domain(:estimation, observation.metadata,
         sensor.front_end.layout.valid_mask, "observation/layout")
     n_sub = n_lenslets(sensor)
-    n_pix = sensor.front_end.propagation.sampled_n_pix_subap
+    n_pix = sensor.formation.propagation.workspace.sampled_n_pix_subap
     size(observation.storage) == (n_sub * n_pix, n_sub * n_pix) ||
         throw(WFSPreparationError(:estimation, :shape,
             "Shack-Hartmann estimator requires a tiled lenslet mosaic"))
-    size(measurement.storage) == size(sensor.estimator.slopes) ||
+    size(measurement.storage) == size(sensor.products.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "Shack-Hartmann measurement storage has the wrong slope shape"))
     calibration_binding = _prepare_sh_calibration_binding(sensor)
     ensure_sh_acquisition_buffers!(sensor, n_pix)
-    return PreparedShackHartmannEstimator(sensor, observation, measurement,
-        AcquiredObservationPath(), calibration_binding)
+    _require_sh_estimation_aliases(sensor, observation, measurement)
+    plan = ShackHartmannEstimationPlan(slope_extraction_model(sensor),
+        AcquiredObservationPath(), calibration_binding, n_sub, n_pix)
+    return PreparedShackHartmannEstimator(plan, sensor, sensor.workspace,
+        sensor.products, observation, measurement,
+        _sh_estimator_owner_binding(sensor),
+        _sh_products_binding(sensor.products), measurement.metadata.backend,
+        measurement.metadata.device)
 end
 
 @kernel function sh_unpack_mosaic_kernel!(spot_cube, mosaic, n_sub::Int,
@@ -956,34 +1235,67 @@ function _unpack_sh_mosaic!(style::AcceleratorStyle, spot_cube, mosaic,
     return spot_cube
 end
 
+function _require_sh_estimation_binding(measurement::WFSMeasurement,
+    input, prepared::PreparedShackHartmannEstimator)
+    measurement === prepared.measurement && input === prepared.input ||
+        throw(WFSPreparationError(:estimation, :prepared_binding,
+            "Shack-Hartmann estimator storage does not match its prepared owner"))
+    sensor = prepared.sensor
+    sensor.workspace === prepared.workspace &&
+        sensor.products === prepared.products &&
+        _sh_estimator_owner_binding(sensor) ===
+            prepared.workspace_binding &&
+        _sh_products_binding(prepared.products) ===
+            prepared.products_binding ||
+        throw(WFSPreparationError(:estimation, :prepared_binding,
+            "Shack-Hartmann estimator workspace or products were replaced after preparation"))
+    measurement.metadata.backend === prepared.backend &&
+        input.metadata.backend === prepared.backend &&
+        measurement.metadata.device == prepared.device &&
+        input.metadata.device == prepared.device ||
+        throw(WFSPreparationError(:estimation, :prepared_binding,
+            "Shack-Hartmann estimator backend or device binding changed after preparation"))
+    _require_sh_estimation_aliases(sensor, input, measurement)
+    return sensor
+end
+
 function estimate_wfs_measurement!(measurement::WFSMeasurement,
     observation::WFSObservation,
-    plan::PreparedShackHartmannEstimator{
-        <:Any,<:Any,<:Any,<:AcquiredObservationPath,<:Any})
-    measurement === plan.measurement && observation === plan.input ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "Shack-Hartmann estimator storage does not match its plan"))
-    sensor = plan.sensor
+    prepared::PreparedShackHartmannEstimator{
+        <:ShackHartmannEstimationPlan{
+            E,<:AcquiredObservationPath}}) where {E}
+    sensor = _require_sh_estimation_binding(measurement, observation,
+        prepared)
+    plan = prepared.plan
     _require_sh_calibration_binding(sensor, plan.calibration_binding)
-    n_sub = n_lenslets(sensor)
-    n_pix = sensor.front_end.propagation.sampled_n_pix_subap
+    n_sub = plan.n_lenslets
+    n_pix = plan.n_pixels_per_lenslet
     style = execution_style(observation.storage)
-    _unpack_sh_mosaic!(style, sensor.acquisition.spot_cube,
+    _unpack_sh_mosaic!(style, prepared.workspace.spot_cube,
         observation.storage, n_sub, n_pix)
-    peak = sh_safe_peak_value(sensor.acquisition.spot_cube)
+    peak = sh_safe_peak_value(prepared.workspace.spot_cube)
     sh_signal_from_spots_calibrated!(sensor, peak,
-        slope_extraction_model(sensor))
-    copyto!(measurement.storage, sensor.estimator.slopes)
+        plan.extraction)
+    copyto!(measurement.storage, prepared.products.slopes)
     return measurement
 end
 
 function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
-    plan::PreparedShackHartmannEstimator)
-    measurement === plan.measurement && input === plan.input || throw(
-        WFSPreparationError(:estimation, :prepared_binding,
-            "Shack-Hartmann estimator storage does not match its plan"))
+    prepared::PreparedShackHartmannEstimator)
+    sensor = _require_sh_estimation_binding(measurement, input, prepared)
+    binding = prepared.plan.calibration_binding
+    _require_sh_estimation_state_binding(sensor, binding)
     return nothing
 end
+
+
+@inline _require_sh_estimation_state_binding(sensor::ShackHartmannWFS,
+    binding::ShackHartmannCalibrationBinding) =
+    _require_sh_calibration_binding(sensor, binding)
+
+@inline _require_sh_estimation_state_binding(sensor::ShackHartmannWFS,
+    binding::ShackHartmannLayoutBinding) =
+    _require_sh_layout_binding(sensor, binding)
 
 function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Geometric},
     input::PupilFunction, measurement::WFSMeasurement)
@@ -996,17 +1308,24 @@ function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Geometric},
     _require_sh_measurement_semantics(sensor, measurement)
     _require_sh_floating_measurement(measurement)
     _require_sh_storage_domain(:estimation, input.metadata,
-        sensor.estimator.slopes, "geometric input")
+        sensor.products.slopes, "geometric input")
     _require_sh_storage_domain(:estimation, input.metadata,
         sensor.front_end.layout.valid_mask, "geometric input/layout")
     _require_sh_storage_domain(:estimation, measurement.metadata,
-        sensor.estimator.slopes, "geometric measurement")
-    size(measurement.storage) == size(sensor.estimator.slopes) ||
+        sensor.products.slopes, "geometric measurement")
+    size(measurement.storage) == size(sensor.products.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "geometric Shack-Hartmann measurement storage has the wrong slope shape"))
-    return PreparedShackHartmannEstimator(sensor, input, measurement,
-        DirectMeasurementPath(), ShackHartmannLayoutBinding(
-            subaperture_layout_revision(sensor.front_end.layout)))
+    binding = ShackHartmannLayoutBinding(
+        subaperture_layout_revision(sensor.front_end.layout))
+    _require_sh_estimation_aliases(sensor, input, measurement)
+    plan = ShackHartmannEstimationPlan(slope_extraction_model(sensor),
+        DirectMeasurementPath(), binding, n_lenslets(sensor), 0)
+    return PreparedShackHartmannEstimator(plan, sensor, sensor.workspace,
+        sensor.products, input, measurement,
+        _sh_estimator_owner_binding(sensor),
+        _sh_products_binding(sensor.products), measurement.metadata.backend,
+        measurement.metadata.device)
 end
 
 
@@ -1018,16 +1337,15 @@ end
 
 function estimate_wfs_measurement!(measurement::WFSMeasurement,
     input::PupilFunction,
-    plan::PreparedShackHartmannEstimator{
-        <:Any,<:Any,<:Any,<:DirectMeasurementPath,<:Any})
-    measurement === plan.measurement && input === plan.input ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "geometric Shack-Hartmann estimator storage does not match its plan"))
-    sensor = plan.sensor
-    _require_sh_layout_binding(sensor, plan.calibration_binding)
-    geometric_wavefront_slopes!(sensor.estimator.slopes, input.opd,
+    prepared::PreparedShackHartmannEstimator{
+        <:ShackHartmannEstimationPlan{
+            E,<:DirectMeasurementPath}}) where {E}
+    sensor = _require_sh_estimation_binding(measurement, input, prepared)
+    _require_sh_layout_binding(sensor,
+        prepared.plan.calibration_binding)
+    geometric_wavefront_slopes!(prepared.products.slopes, input.opd,
         sensor.front_end.layout.valid_mask, input.metadata.sampling)
-    copyto!(measurement.storage, sensor.estimator.slopes)
+    copyto!(measurement.storage, prepared.products.slopes)
     return measurement
 end
 
@@ -1042,21 +1360,21 @@ function shack_hartmann_rate_map(
     sensor::ShackHartmannWFS{<:Diffractive},
     input::Union{PupilFunction,ElectricField}, source::SpectralSource)
     return shack_hartmann_rate_map(
-        ShackHartmannOpticalFrontEnd(sensor.front_end, source), input,
+        ShackHartmannOpticalFormationModel(sensor.formation, source), input,
         source)
 end
 
 function shack_hartmann_rate_map(
-    front_end::ShackHartmannOpticalFrontEnd,
+    model::ShackHartmannOpticalFormationModel,
     input::Union{PupilFunction,ElectricField}, source::SpectralSource)
     samples = spectral_bundle(source).samples
-    T = eltype(front_end.propagation.intensity)
+    T = eltype(model.propagation.workspace.intensity)
     first_sample = first(samples)
     first_component = ShackHartmannSpectralComponent(source.source,
         T(first_sample.wavelength),
         T(photon_irradiance(source)) * T(first_sample.weight))
     first_map = shack_hartmann_rate_map(
-        _sh_front_end_with_source(front_end, first_component), input)
+        _sh_front_end_with_source(model, first_component), input)
     maps = Vector{typeof(first_map)}(undef, length(samples))
     maps[1] = first_map
     @inbounds for index in 2:length(samples)
@@ -1065,7 +1383,7 @@ function shack_hartmann_rate_map(
             T(sample.wavelength),
             T(photon_irradiance(source)) * T(sample.weight))
         maps[index] = shack_hartmann_rate_map(
-            _sh_front_end_with_source(front_end, component), input)
+            _sh_front_end_with_source(model, component), input)
     end
     return OpticalProductBundle(maps)
 end
@@ -1073,29 +1391,25 @@ end
 
 function shack_hartmann_rate_map(sensor::ShackHartmannWFS{<:Diffractive},
     input::Union{PupilFunction,ElectricField}, source=nothing)
-    front_end = source === nothing ? sensor.front_end :
-        ShackHartmannOpticalFrontEnd(sensor.front_end, source)
+    front_end = source === nothing ? sensor.formation :
+        ShackHartmannOpticalFormationModel(sensor.formation, source)
     return shack_hartmann_rate_map(front_end, input)
 end
 
-function shack_hartmann_rate_map(front_end::ShackHartmannOpticalFrontEnd,
+function shack_hartmann_rate_map(model::ShackHartmannOpticalFormationModel,
     input::Union{PupilFunction,ElectricField}, source=nothing)
-    resolved_front_end = source === nothing ? front_end :
-        _sh_front_end_with_source(front_end, source)
-    wavelength_m = _sh_front_end_wavelength(resolved_front_end, input)
-    _prepare_microlens_sampling_wavelength!(resolved_front_end,
+    resolved_model = source === nothing ? model :
+        _sh_front_end_with_source(model, source)
+    wavelength_m = _sh_front_end_wavelength(resolved_model, input)
+    sampling = _sh_microlens_sampling_configuration(resolved_model,
         input.metadata.dimensions[1],
         _sh_pupil_diameter(input.metadata), wavelength_m)
-    propagation = resolved_front_end.propagation
-    n = n_lenslets(resolved_front_end) * propagation.sampled_n_pix_subap
+    propagation = microlens_propagation_workspace(resolved_model.propagation)
+    n = n_lenslets(resolved_model) * sampling.spot_samples_per_axis
     T = eltype(propagation.intensity)
     values = similar(_sh_input_storage(input), T, n, n)
     fill!(values, zero(T))
-    pixel_scale_arcsec = sh_pixel_scale_init(
-        _sh_pupil_diameter(input.metadata) / n_lenslets(resolved_front_end),
-        propagation.effective_padding, wavelength_m) *
-        propagation.binning_pixel_scale
-    pixel_scale_rad = T(pixel_scale_arcsec / ARCSEC_PER_RAD)
+    pixel_scale_rad = T(sampling.pixel_scale_arcsec / ARCSEC_PER_RAD)
     metadata = OpticalPlaneMetadata(DetectorPlane(), values;
         coordinate_domain=AngularCoordinates(),
         sampling=(pixel_scale_rad, pixel_scale_rad),

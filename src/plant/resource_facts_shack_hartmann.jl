@@ -8,9 +8,9 @@
 #   AcquisitionProducts only retain borrowed prepared bindings/products.
 # - IntensityMap, WFSObservation, and WFSMeasurement own their nominated
 #   caller-visible product storage.
-# - Shack--Hartmann acquisition/estimator/calibration/layout states own the
-#   arrays named below. Each exact-device fact selects only storage resident on
-#   that device, including explicit host mirrors in a separate host fact.
+# - Shack--Hartmann workspace, products, calibration, and layout own the arrays
+#   named below. Each exact-device fact selects only storage resident on that
+#   device, including explicit host mirrors in a separate host fact.
 # - PreparedMicrolensPropagation owns reusable numerical work arrays. FFT
 #   plans remain opaque library storage and are never inferred here.
 #
@@ -66,26 +66,24 @@ function structural_resource_fact(measurement::WFSMeasurement{<:AbstractArray},
         (present=false, bytes=UInt64(0)))
 end
 
-function structural_resource_fact(state::ShackHartmannAcquisitionState,
+function structural_resource_fact(workspace::ShackHartmannWorkspace,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
-    resident = _structural_array_target_bytes(
-        (state.exported_spot_cube,), target, :resident_bytes)
-    workspace = _structural_array_target_bytes(
-        (state.spot_cube, state.detector_noise_cube), target,
+    workspace_bytes = _structural_array_target_bytes(
+        (workspace.spot_cube, workspace.detector_noise_cube,
+            workspace.spot_stats, workspace.spot_stats_accum,
+            workspace.slopes_host, workspace.centroid_host), target,
         :workspace_bytes)
     return _targeted_structural_resource_fact(
-        id, target, resident, workspace)
+        id, target, (present=false, bytes=UInt64(0)), workspace_bytes)
 end
 
-function structural_resource_fact(state::ShackHartmannEstimatorState,
+function structural_resource_fact(products::ShackHartmannProducts,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
     resident = _structural_array_target_bytes(
-        (state.slopes,), target, :resident_bytes)
-    workspace = _structural_array_target_bytes(
-        (state.spot_stats, state.spot_stats_accum, state.slopes_host,
-            state.centroid_host), target, :workspace_bytes)
+        (products.slopes, products.exported_spot_cube), target,
+        :resident_bytes)
     return _targeted_structural_resource_fact(
-        id, target, resident, workspace)
+        id, target, resident, (present=false, bytes=UInt64(0)))
 end
 
 function structural_resource_fact(calibration::SubapertureCalibration,
@@ -106,8 +104,9 @@ function structural_resource_fact(layout::SubapertureLayout,
         (present=false, bytes=UInt64(0)))
 end
 
-function structural_resource_fact(workspace::PreparedMicrolensPropagation,
+function structural_resource_fact(prepared::PreparedMicrolensPropagation,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
+    workspace = microlens_propagation_workspace(prepared)
     workspace_bytes = _structural_array_target_bytes((
         workspace.field,
         workspace.phasor,
@@ -166,9 +165,9 @@ function _prepared_path_resource_fact(
         id, target, resident,
         (present=false, bytes=UInt64(0)))
     layout_fact = structural_resource_fact(
-        plan.front_end.layout, id, target)
+        plan.formation.front_end.layout, id, target)
     propagation_fact = structural_resource_fact(
-        plan.front_end.propagation, id, target)
+        plan.formation.propagation, id, target)
     return _combine_structural_owner_facts(
         id, target, (path_fact, layout_fact, propagation_fact))
 end

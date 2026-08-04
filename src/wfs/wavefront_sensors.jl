@@ -8,6 +8,7 @@ detector response and acquisition physics remain owned by `Detectors`.
 """
 module WavefrontSensors
 
+using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
 using LinearAlgebra
 using Random
@@ -115,6 +116,8 @@ import ..Optics:
     PyramidPhaseMask,
     ZernikePhaseSpot,
     _prepare_microlens_propagation,
+    _prepare_microlens_propagation_like,
+    _replace_microlens_propagation_workspace!,
     _pupil_cell_area,
     _pupil_diameter_m,
     _pupil_resolution,
@@ -132,6 +135,9 @@ import ..Optics:
     is_leaf_source,
     is_lgs_source,
     microlens_array,
+    microlens_numeric_type,
+    microlens_propagation_plan,
+    microlens_propagation_workspace,
     modulation_point_count,
     photon_irradiance,
     prepare_focal_plane_modulation,

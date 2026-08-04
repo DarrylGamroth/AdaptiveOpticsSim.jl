@@ -12,7 +12,7 @@ include("shack_hartmann/signals.jl")
 include("shack_hartmann/lgs.jl")
 include("shack_hartmann/stages.jl")
 
-@inline slopes(wfs::ShackHartmannWFS) = wfs.estimator.slopes
+@inline slopes(wfs::ShackHartmannWFS) = wfs.products.slopes
 @inline valid_subaperture_mask(wfs::ShackHartmannWFS) =
     wfs.front_end.layout.valid_mask
 @inline reference_signal(wfs::ShackHartmannWFS) = wfs.calibration.reference_signal_2d
@@ -140,17 +140,28 @@ function _shack_hartmann_detector_image!(style::AcceleratorStyle{B}, ::Accelerat
     return image
 end
 
-@inline shack_hartmann_detector_image(wfs::ShackHartmannWFS; kwargs...) =
-    shack_hartmann_detector_image(sh_exported_spot_cube(wfs), n_lenslets(wfs); kwargs...)
-@inline wfs_detector_image(wfs::ShackHartmannWFS; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
-@inline wfs_detector_image(wfs::ShackHartmannWFS, ::Nothing; kwargs...) = shack_hartmann_detector_image(wfs; kwargs...)
-@inline wfs_detector_image(wfs::ShackHartmannWFS, det::AbstractDetector; kwargs...) =
+@inline shack_hartmann_detector_image(
+    wfs::ShackHartmannWFS{<:Diffractive}; kwargs...) =
+    shack_hartmann_detector_image(shack_hartmann_spot_cube(wfs),
+        n_lenslets(wfs); kwargs...)
+@inline wfs_detector_image(
+    wfs::ShackHartmannWFS{<:Diffractive}; kwargs...) =
+    shack_hartmann_detector_image(wfs; kwargs...)
+@inline wfs_detector_image(
+    wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing; kwargs...) =
+    shack_hartmann_detector_image(wfs; kwargs...)
+@inline wfs_detector_image(wfs::ShackHartmannWFS{<:Diffractive},
+    det::AbstractDetector; kwargs...) =
     shack_hartmann_detector_image(wfs; output_type=detector_output_type(det), kwargs...)
 
-@inline wfs_output_frame(wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
-@inline wfs_output_frame(wfs::ShackHartmannWFS{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
-@inline wfs_output_frame_prototype(wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing) = sh_exported_spot_cube(wfs)
-@inline wfs_output_frame_prototype(wfs::ShackHartmannWFS{<:Diffractive}, det::AbstractDetector) = sh_exported_spot_cube(wfs)
+@inline wfs_output_frame(wfs::ShackHartmannWFS{<:Diffractive}, ::Nothing) =
+    shack_hartmann_spot_cube(wfs)
+@inline wfs_output_frame(wfs::ShackHartmannWFS{<:Diffractive},
+    ::AbstractDetector) = shack_hartmann_spot_cube(wfs)
+@inline wfs_output_frame_prototype(wfs::ShackHartmannWFS{<:Diffractive},
+    ::Nothing) = shack_hartmann_spot_cube(wfs)
+@inline wfs_output_frame_prototype(wfs::ShackHartmannWFS{<:Diffractive},
+    ::AbstractDetector) = shack_hartmann_spot_cube(wfs)
 @inline function wfs_output_metadata(wfs::ShackHartmannWFS)
     layout = wfs.front_end.layout
     calibration = subaperture_calibration(wfs)

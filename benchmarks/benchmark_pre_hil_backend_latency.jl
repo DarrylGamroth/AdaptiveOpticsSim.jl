@@ -176,7 +176,7 @@ function assert_backend_residency(ctx::RevoltLikeHILContext)
     arrays = Dict(
         "pupil_opd" => ctx.pupil.opd,
         "dm_coefficients" => ctx.dm.state.coefs,
-        "wfs_spot_cube" => ctx.wfs.acquisition.spot_cube,
+        "wfs_spot_cube" => shack_hartmann_spot_cube(ctx.wfs),
         "output_frame" => ctx.tiled_frame,
     )
     if PRE_HIL_BACKEND_NAME == "cpu"

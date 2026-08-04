@@ -312,25 +312,26 @@ function _require_exact_sh_propagation_target(
     propagation::PreparedMicrolensPropagation,
     target::AbstractComputeDevice,
 )
+    workspace = microlens_propagation_workspace(propagation)
     _require_exact_wfs_array_targets(
         (
-            propagation.field,
-            propagation.phasor,
-            propagation.fft_buffer,
-            propagation.fft_stack,
-            propagation.intensity,
-            propagation.intensity_stack,
-            propagation.intensity_tmp_stack,
-            propagation.temp,
-            propagation.bin_buffer,
-            propagation.spot,
-            propagation.sampled_spot_cube,
-            propagation.spot_cube_accum,
-            propagation.elongation_kernel,
-            propagation.lgs_kernel_fft,
-            propagation.fft_asterism_stack,
-            propagation.amp_scales,
-            propagation.opd_to_cycles,
+            workspace.field,
+            workspace.phasor,
+            workspace.fft_buffer,
+            workspace.fft_stack,
+            workspace.intensity,
+            workspace.intensity_stack,
+            workspace.intensity_tmp_stack,
+            workspace.temp,
+            workspace.bin_buffer,
+            workspace.spot,
+            workspace.sampled_spot_cube,
+            workspace.spot_cube_accum,
+            workspace.elongation_kernel,
+            workspace.lgs_kernel_fft,
+            workspace.fft_asterism_stack,
+            workspace.amp_scales,
+            workspace.opd_to_cycles,
         ),
         (
             "Shack-Hartmann field",
@@ -369,13 +370,13 @@ function _require_exact_sh_layout_target(
 end
 
 function _require_exact_sh_front_end_target(
-    front_end::ShackHartmannOpticalFrontEnd,
+    formation::ShackHartmannOpticalFormationModel,
     target::AbstractComputeDevice,
 )
-    _require_exact_sh_propagation_target(front_end.propagation, target)
+    _require_exact_sh_propagation_target(formation.propagation, target)
     _require_exact_sh_layout_target(
-        front_end.layout, target, :optical_formation)
-    return front_end
+        formation.front_end.layout, target, :optical_formation)
+    return formation
 end
 
 function _require_exact_wfs_target(
@@ -388,7 +389,7 @@ function _require_exact_wfs_target(
         plan.input, target, :optical_formation)
     _require_exact_wfs_product_target(
         plan.output, target, :optical_formation)
-    _require_exact_sh_front_end_target(plan.front_end, target)
+    _require_exact_sh_front_end_target(plan.formation, target)
     return plan
 end
 
@@ -398,7 +399,7 @@ function _require_exact_wfs_target(
 )
     validate_wfs_optical_formation_binding(
         plan.output, plan.input, plan)
-    @inbounds for component in plan.plans
+    @inbounds for component in plan.components
         _require_exact_wfs_target(component, target)
     end
     return plan
@@ -771,12 +772,11 @@ function _require_exact_sh_estimator_state_target(
     sensor::ShackHartmannWFS,
     target::AbstractComputeDevice,
 )
-    estimator = sensor.estimator
     _require_exact_wfs_array_targets(
         (
-            estimator.slopes,
-            estimator.spot_stats,
-            estimator.spot_stats_accum,
+            sensor.products.slopes,
+            sensor.workspace.spot_stats,
+            sensor.workspace.spot_stats_accum,
             sensor.calibration.reference_signal_2d,
             sensor.front_end.layout.valid_mask,
         ),
@@ -797,13 +797,12 @@ function _require_exact_sh_mode_target(
     sensor::ShackHartmannWFS{<:Diffractive},
     target::AbstractComputeDevice,
 )
-    _require_exact_sh_front_end_target(sensor.front_end, target)
-    acquisition = sensor.acquisition
+    _require_exact_sh_front_end_target(sensor.formation, target)
     _require_exact_wfs_array_targets(
         (
-            acquisition.spot_cube,
-            acquisition.exported_spot_cube,
-            acquisition.detector_noise_cube,
+            sensor.workspace.spot_cube,
+            sensor.products.exported_spot_cube,
+            sensor.workspace.detector_noise_cube,
         ),
         (
             "Shack-Hartmann spot cube",

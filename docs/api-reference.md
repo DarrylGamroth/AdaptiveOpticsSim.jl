@@ -1516,20 +1516,24 @@ components. Migrated bindings are not forwarded through the root.
 - Shack-Hartmann optical composition: `Optics` owns `MicrolensArrayParams`,
   `MicrolensArray`, `prepare_microlens_propagation`, and `microlens_array`;
   `WavefrontSensors` owns `ShackHartmannDirectFrontEnd`,
-  `ShackHartmannOpticalFrontEnd`, and `shack_hartmann_rate_map`. The
+  `ShackHartmannOpticalFrontEnd`, `shack_hartmann_optical_formation`, and
+  `shack_hartmann_rate_map`. The
   microlens array is the immutable regular-array model and its numerical
-  sampling policy; prepared propagation holds only the backend/grid-bound FFT
-  plans and reusable optical scratch. A diffractive front end can be assembled
-  directly from that model, propagation state, and a
-  `SubapertureLayout` without constructing or retaining a `ShackHartmannWFS`.
-  `ShackHartmannWFS.front_end` is the real composed component: it is a
-  propagation-free `ShackHartmannDirectFrontEnd` for geometric sensing and a
-  `ShackHartmannOpticalFrontEnd` for diffractive sensing. The superseded
+  sampling policy. `MicrolensPropagationPlan` is run-immutable;
+  `MicrolensPropagationWorkspace` owns backend/grid-bound FFT handles and
+  reusable optical scratch; `PreparedMicrolensPropagation` pairs them for one
+  single-writer execution. A `ShackHartmannOpticalFormationModel` composes
+  that prepared owner with a propagation-free diffractive front-end
+  definition, and can be assembled without constructing or retaining a
+  `ShackHartmannWFS`. `ShackHartmannWFS.front_end` is always the physical
+  definition; `ShackHartmannWFS.formation` is `nothing` for geometric sensing
+  and the explicit execution composition for diffractive sensing. The
+  superseded
   top-level `microlens_array`, `optical_workspace`, and `layout` fields are not
   emulated, and `microlens_array` accepts the owning front end rather than the
   whole sensor.
-  The concrete `PreparedMicrolensPropagation` implementation type is
-  intentionally qualified rather than exported; callers obtain it through the
+  The plan, workspace, prepared-owner, and accessor vocabulary is
+  qualified-public from `Optics`; callers normally obtain it through the
   preparation function.
 - Curvature optical composition and readout: `Optics.CurvatureDefocusPair`,
   `CurvatureOpticalFrontEnd`, `curvature_rate_maps`,
@@ -1549,7 +1553,8 @@ components. Migrated bindings are not forwarded through the root.
   `MeanValidFluxNormalization`, `IncidenceFluxNormalization`
 - Measurement and WFS images: `measure!`, `pyramid_modulation_frame!`,
   `valid_subaperture_mask`, `camera_frame`, `wfs_detector_image`,
-  `shack_hartmann_detector_image`, `shack_hartmann_detector_image!`
+  `shack_hartmann_spot_cube`, `shack_hartmann_detector_image`,
+  `shack_hartmann_detector_image!`
 - LiFT forward and observation contracts: `PreparedLiFTForwardModel`,
   `prepare_lift_forward_model`, `lift_forward_output`,
   `evaluate_lift_forward!`, `predict_lift_observation!`,

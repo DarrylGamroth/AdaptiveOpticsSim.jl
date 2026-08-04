@@ -60,24 +60,36 @@ end
     return kernel
 end
 
-function apply_elongation!(intensity::AbstractMatrix{T}, factor::Real, tmp::AbstractMatrix{T},
-    kernel::AbstractVector{T}) where {T<:AbstractFloat}
-    if factor <= 1
-        return kernel
-    end
-    sigma = T(0.5) * (T(factor) - one(T))
-    if sigma <= 0
-        return kernel
-    end
-    half = max(1, ceil(Int, 2 * sigma))
+@inline function _elongation_kernel_half(factor::T) where {T<:AbstractFloat}
+    factor <= one(T) && return 0
+    sigma = T(0.5) * (factor - one(T))
+    sigma <= zero(T) && return 0
+    return max(1, ceil(Int, 2 * sigma))
+end
+
+function prepare_elongation_kernel!(kernel::AbstractVector{T},
+    factor::Real) where {T<:AbstractFloat}
+    typed_factor = T(factor)
+    half = _elongation_kernel_half(typed_factor)
+    half == 0 && return kernel
     needed = 2 * half + 1
     kernel = ensure_kernel(kernel, needed)
+    sigma = T(0.5) * (typed_factor - one(T))
     host_kernel = Vector{T}(undef, needed)
     @inbounds for k in -half:half
-        host_kernel[k + half + 1] = exp(-T(0.5) * (T(k) / sigma)^2)
+        host_kernel[k + half + 1] =
+            exp(-T(0.5) * (T(k) / sigma)^2)
     end
     host_kernel ./= sum(host_kernel)
     @views copyto!(kernel[1:needed], host_kernel)
+    return kernel
+end
+
+function apply_elongation!(intensity::AbstractMatrix{T}, factor::Real, tmp::AbstractMatrix{T},
+    kernel::AbstractVector{T}) where {T<:AbstractFloat}
+    half = _elongation_kernel_half(T(factor))
+    half == 0 && return kernel
+    kernel = prepare_elongation_kernel!(kernel, factor)
 
     n1, n2 = size(intensity)
     _apply_elongation!(execution_style(intensity), intensity, tmp, kernel, half, n1, n2)
@@ -87,22 +99,21 @@ end
 
 function apply_elongation_stack!(intensity_stack::AbstractArray{T,3}, factor::Real, tmp::AbstractArray{T,3},
     kernel::AbstractVector{T}) where {T<:AbstractFloat}
-    if factor <= 1
-        return kernel
-    end
-    sigma = T(0.5) * (T(factor) - one(T))
-    if sigma <= 0
-        return kernel
-    end
-    half = max(1, ceil(Int, 2 * sigma))
-    needed = 2 * half + 1
-    kernel = ensure_kernel(kernel, needed)
-    host_kernel = Vector{T}(undef, needed)
-    @inbounds for k in -half:half
-        host_kernel[k + half + 1] = exp(-T(0.5) * (T(k) / sigma)^2)
-    end
-    host_kernel ./= sum(host_kernel)
-    @views copyto!(kernel[1:needed], host_kernel)
+    half = _elongation_kernel_half(T(factor))
+    half == 0 && return kernel
+    kernel = prepare_elongation_kernel!(kernel, factor)
+
+    return apply_prepared_elongation_stack!(intensity_stack, factor, tmp,
+        kernel)
+end
+
+function apply_prepared_elongation_stack!(
+    intensity_stack::AbstractArray{T,3}, factor::Real,
+    tmp::AbstractArray{T,3}, kernel::AbstractVector{T}) where {T<:AbstractFloat}
+    half = _elongation_kernel_half(T(factor))
+    half == 0 && return kernel
+    length(kernel) >= 2 * half + 1 || throw(InvalidConfiguration(
+        "prepared elongation kernel capacity is too small"))
 
     n1, n2, n3 = size(intensity_stack)
     _apply_elongation_stack!(execution_style(intensity_stack), intensity_stack, tmp, kernel, half, n1, n2, n3)

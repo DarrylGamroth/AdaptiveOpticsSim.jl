@@ -1229,7 +1229,13 @@ end
         pixel_scale_arcsec=0, T=T)
     mla32 = MicrolensArray(; n_lenslets=4, n_pix_subap=4, T=Float32)
     propagation32 = prepare_microlens_propagation(mla32, 16)
-    @test eltype(propagation32.intensity) === Float32
+    @test propagation32 isa Optics.PreparedMicrolensPropagation
+    @test Optics.microlens_propagation_plan(propagation32) isa
+        Optics.MicrolensPropagationPlan
+    @test Optics.microlens_propagation_workspace(propagation32) isa
+        Optics.MicrolensPropagationWorkspace
+    @test eltype(Optics.microlens_propagation_workspace(
+        propagation32).intensity) === Float32
     configured_extraction = CenterOfGravityExtraction(T(0.125); T=T)
     @test_throws UnsupportedAlgorithm CenterOfGravityExtraction(T(0.125);
         window=ones(T, 3, 3), T=T)
@@ -1253,7 +1259,9 @@ end
     @test !hasfield(typeof(geometric), :microlens_array)
     @test !hasfield(typeof(geometric), :optical_workspace)
     @test !hasfield(typeof(geometric), :layout)
-    @test geometric.acquisition === nothing
+    @test geometric.formation === nothing
+    @test geometric.workspace === nothing
+    @test geometric.products.exported_spot_cube === nothing
     measure!(geometric, pupil)
     if coverage_enabled
         @test_skip "geometric allocation assertion is disabled under coverage instrumentation"
@@ -1262,10 +1270,13 @@ end
     end
     direct_measurement = WFSMeasurement(similar(slopes(geometric));
         units=:radian, kind=:geometric_slopes)
-    direct_plan = prepare_wfs_estimation(geometric, pupil,
+    direct_plan = @inferred prepare_wfs_estimation(geometric, pupil,
         direct_measurement)
+    @test direct_plan isa WavefrontSensors.PreparedShackHartmannEstimator
+    @test direct_plan.plan isa WavefrontSensors.ShackHartmannEstimationPlan
     @test wfs_measurement_path(direct_plan) isa DirectMeasurementPath
-    estimate_wfs_measurement!(direct_measurement, pupil, direct_plan)
+    @test @inferred(estimate_wfs_measurement!(direct_measurement, pupil,
+        direct_plan)) === direct_measurement
     @test all(isfinite, direct_measurement.storage)
     @test any(!iszero, direct_measurement.storage)
     raw_geometric = similar(direct_measurement.storage)
@@ -1365,6 +1376,10 @@ end
     staged = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
         n_pix_subap=4, T=T)
     @test staged.front_end isa ShackHartmannOpticalFrontEnd
+    @test !hasfield(typeof(staged.front_end), :propagation)
+    @test staged.formation isa
+        WavefrontSensors.ShackHartmannOpticalFormationModel
+    @test staged.formation.front_end === staged.front_end
     @test microlens_array(staged.front_end) === staged.front_end.microlens_array
     @test !applicable(microlens_array, staged)
     @test !applicable(subaperture_layout, staged)
@@ -1377,9 +1392,20 @@ end
         reshape(T.(1:16), 4, 4)
 
     rate = shack_hartmann_rate_map(staged, pupil, src)
-    front_end = ShackHartmannOpticalFrontEnd(staged.front_end, src)
-    optical_plan = prepare_wfs_optical_formation(front_end, pupil, rate)
-    form_wfs_optical_products!(rate, pupil, optical_plan)
+    formation = shack_hartmann_optical_formation(staged, src)
+    @test formation isa WavefrontSensors.ShackHartmannOpticalFormationModel
+    @test formation.front_end !== staged.front_end
+    @test formation.front_end.microlens_array === staged.front_end.microlens_array
+    @test formation.propagation === staged.formation.propagation
+    optical_plan = @inferred prepare_wfs_optical_formation(
+        formation, pupil, rate)
+    @test optical_plan isa
+        WavefrontSensors.PreparedShackHartmannOpticalFormation
+    @test optical_plan.plan isa
+        WavefrontSensors.ShackHartmannOpticalFormationPlan
+    @test optical_plan.plan isa AbstractWFSOpticalFormationPlan
+    @test @inferred(form_wfs_optical_products!(rate, pupil,
+        optical_plan)) === rate
     @test rate.values == expected_rate
     @test pupil.opd == pupil_before
     @test rate.metadata.normalization isa PhotonRateNormalization
@@ -1391,36 +1417,39 @@ end
         coordinate_domain=MetricCoordinates(),
         spectral=rate.metadata.spectral)
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        front_end, pupil, wrong_rate_coordinates)
+        formation, pupil, wrong_rate_coordinates)
     wrong_rate_sampling = contract_rate_map(copy(rate.values);
         sampling=(T(2) * rate.metadata.sampling[1],
             rate.metadata.sampling[2]),
         spectral=rate.metadata.spectral)
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        front_end, pupil, wrong_rate_sampling)
+        formation, pupil, wrong_rate_sampling)
+    @test @inferred(form_wfs_optical_products!(rate, pupil,
+        optical_plan)) === rate
+    @test rate.values == expected_rate
     wrong_rate_measure = contract_rate_map(copy(rate.values);
         sampling=rate.metadata.sampling,
         spectral=rate.metadata.spectral,
         spatial_measure=SpatialDensityMeasure())
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        front_end, pupil, wrong_rate_measure)
+        formation, pupil, wrong_rate_measure)
     wrong_rate_orientation = contract_rate_map(copy(rate.values);
         sampling=rate.metadata.sampling,
         spectral=rate.metadata.spectral,
         orientation=PlaneAxisOrientation((:y, :x)))
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        front_end, pupil, wrong_rate_orientation)
+        formation, pupil, wrong_rate_orientation)
     wrong_input_orientation = contract_pupil_function(pupil;
         orientation=PlaneAxisOrientation((:y, :x)))
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        front_end, wrong_input_orientation, rate)
+        formation, wrong_input_orientation, rate)
     lower_precision_tel = Telescope(resolution=16, diameter=Float32(8),
         central_obstruction=Float32(0), T=Float32)
     lower_precision_pupil = PupilFunction(lower_precision_tel; T=Float32)
-    lower_precision_rate = shack_hartmann_rate_map(front_end,
+    lower_precision_rate = shack_hartmann_rate_map(formation,
         lower_precision_pupil)
     precision_error = try
-        prepare_wfs_optical_formation(front_end, lower_precision_pupil,
+        prepare_wfs_optical_formation(formation, lower_precision_pupil,
             lower_precision_rate)
         nothing
     catch err
@@ -1433,7 +1462,7 @@ end
         diffraction_padding=2, n_pix_subap=4, T=T)
     independent_propagation = prepare_microlens_propagation(
         independent_mla, 16; T=T)
-    @test independent_propagation isa PreparedMicrolensPropagation
+    @test independent_propagation isa Optics.PreparedMicrolensPropagation
     independent_mask = Bool[
         true false false true
         false true false false
@@ -1487,12 +1516,23 @@ end
     WavefrontSensors.update_subaperture_layout!(independent_layout,
         pupil.amplitude .> zero(T), GeometryValidSubapertures(
             threshold=T(0.1), T=T))
-    independent_front_end = ShackHartmannOpticalFrontEnd(independent_mla,
-        independent_propagation, independent_layout, src)
-    @test !hasfield(typeof(independent_front_end), :sensor)
-    independent_rate = shack_hartmann_rate_map(independent_front_end, pupil)
+    foreign_mla = MicrolensArray(; n_lenslets=4,
+        diffraction_padding=2, n_pix_subap=4, half_pixel_shift=true, T=T)
+    foreign_propagation = prepare_microlens_propagation(
+        foreign_mla, 16; T=T)
+    @test_throws InvalidConfiguration begin
+        WavefrontSensors.ShackHartmannOpticalFormationModel(
+            ShackHartmannOpticalFrontEnd(independent_mla,
+                independent_layout, src), foreign_propagation)
+    end
+    independent_formation = WavefrontSensors.ShackHartmannOpticalFormationModel(
+        ShackHartmannOpticalFrontEnd(independent_mla,
+            independent_layout, src), independent_propagation)
+    @test !hasfield(typeof(independent_formation), :sensor)
+    @test !hasfield(typeof(independent_formation.front_end), :propagation)
+    independent_rate = shack_hartmann_rate_map(independent_formation, pupil)
     independent_plan = prepare_wfs_optical_formation(
-        independent_front_end, pupil, independent_rate)
+        independent_formation, pupil, independent_rate)
     form_wfs_optical_products!(independent_rate, pupil, independent_plan)
     @test independent_rate.values == rate.values
     independent_rate_before_layout_update = copy(independent_rate.values)
@@ -1502,7 +1542,26 @@ end
         independent_rate, pupil, independent_plan)
     @test independent_rate.values == independent_rate_before_layout_update
     independent_plan = prepare_wfs_optical_formation(
-        independent_front_end, pupil, independent_rate)
+        independent_formation, pupil, independent_rate)
+
+    independent_workspace = Optics.microlens_propagation_workspace(
+        independent_propagation)
+    independent_workspace.intensity = copy(independent_workspace.intensity)
+    independent_rate_before_workspace_replacement =
+        copy(independent_rate.values)
+    workspace_replacement_error = try
+        form_wfs_optical_products!(independent_rate, pupil,
+            independent_plan)
+        nothing
+    catch err
+        err
+    end
+    @test workspace_replacement_error isa WFSPreparationError
+    @test workspace_replacement_error.reason === :prepared_binding
+    @test independent_rate.values ==
+        independent_rate_before_workspace_replacement
+    independent_plan = prepare_wfs_optical_formation(
+        independent_formation, pupil, independent_rate)
 
     calibration_reference = reshape(T.(1:32), 16, 2)
     calibration_reference_host = fill(T(-1), length(calibration_reference))
@@ -1547,7 +1606,7 @@ end
         mode=Diffractive(), n_pix_subap=4, T=T)
     field_rate = shack_hartmann_rate_map(field_sensor, field)
     field_plan = prepare_wfs_optical_formation(
-        field_sensor.front_end, field, field_rate)
+        shack_hartmann_optical_formation(field_sensor), field, field_rate)
     form_wfs_optical_products!(field_rate, field, field_plan)
     @test field_rate.values ≈ rate.values atol=T(2e-12) rtol=T(2e-12)
     if coverage_enabled
@@ -1690,11 +1749,17 @@ end
         units=:electron_count, layout=:packed_channels)
     @test_throws WFSPreparationError prepare_wfs_estimation(staged,
         wrong_estimator_observation, measurement)
-    estimator_plan = prepare_wfs_estimation(staged, short_observation,
+    estimator_plan = @inferred prepare_wfs_estimation(
+        staged, short_observation,
         measurement)
+    @test estimator_plan isa
+        WavefrontSensors.PreparedShackHartmannEstimator
+    @test estimator_plan.plan isa
+        WavefrontSensors.ShackHartmannEstimationPlan
+    @test estimator_plan.plan isa AbstractWFSEstimationPlan
     @test wfs_measurement_path(estimator_plan) isa AcquiredObservationPath
-    estimate_wfs_measurement!(measurement, short_observation,
-        estimator_plan)
+    @test @inferred(estimate_wfs_measurement!(measurement,
+        short_observation, estimator_plan)) === measurement
     @test all(isfinite, measurement.storage)
     if coverage_enabled
         @test_skip "estimator allocation assertion is disabled under coverage instrumentation"
@@ -1715,6 +1780,33 @@ end
     @test measurement.storage == measurement_before_layout_update
     estimator_plan = prepare_wfs_estimation(staged, short_observation,
         measurement)
+
+    staged.workspace.centroid_host = copy(staged.workspace.centroid_host)
+    measurement_before_workspace_replacement = copy(measurement.storage)
+    estimator_workspace_error = try
+        estimate_wfs_measurement!(measurement, short_observation,
+            estimator_plan)
+        nothing
+    catch err
+        err
+    end
+    @test estimator_workspace_error isa WFSPreparationError
+    @test estimator_workspace_error.reason === :prepared_binding
+    @test measurement.storage == measurement_before_workspace_replacement
+    estimator_plan = prepare_wfs_estimation(staged, short_observation,
+        measurement)
+
+    aliased_measurement = WFSMeasurement(staged.products.slopes;
+        units=:pixel, kind=:centroid_slopes)
+    alias_error = try
+        prepare_wfs_estimation(staged, short_observation,
+            aliased_measurement)
+        nothing
+    catch err
+        err
+    end
+    @test alias_error isa WFSPreparationError
+    @test alias_error.reason === :aliasing
 
     staged.calibration.centroid_response = T(2)
     @test_throws WFSPreparationError estimate_wfs_measurement!(measurement,
@@ -1739,7 +1831,7 @@ end
         photon_irradiance=4.0, T=Float64)
     mixed_rate = shack_hartmann_rate_map(mixed_sensor, mixed_pupil,
         mixed_source)
-    mixed_front_end = ShackHartmannOpticalFrontEnd(mixed_sensor.front_end,
+    mixed_front_end = shack_hartmann_optical_formation(mixed_sensor,
         mixed_source)
     mixed_plan = prepare_wfs_optical_formation(mixed_front_end, mixed_pupil,
         mixed_rate)
@@ -1786,22 +1878,35 @@ end
     @test spectral_rates[1].metadata.sampling !=
         spectral_rates[2].metadata.sampling
     spectral_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(spectral_sensor.front_end, spectral), pupil,
+        shack_hartmann_optical_formation(spectral_sensor, spectral), pupil,
         spectral_rates)
+    @test spectral_plan isa
+        WavefrontSensors.PreparedShackHartmannOpticalBundleFormation
+    @test spectral_plan.plan isa
+        WavefrontSensors.ShackHartmannOpticalBundleFormationPlan
+    @test spectral_plan.plan isa AbstractWFSOpticalFormationPlan
+    @test spectral_plan.plan.plans isa FixedSizeVector
+    @test spectral_plan.components isa FixedSizeVector
     form_wfs_optical_products!(spectral_rates, pupil, spectral_plan)
     @test sum(spectral_rates[1].values) /
         sum(spectral_rates[2].values) ≈ T(2 / 3) rtol=T(2e-6)
     @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(spectral_sensor.front_end, spectral), pupil,
+        shack_hartmann_optical_formation(spectral_sensor, spectral), pupil,
         spectral_rates[1])
-    incompatible_spectral_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+    resampled_spectral_sensor = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, pixel_scale_arcsec=T(0.04), T=T)
-    incompatible_spectral_rates = shack_hartmann_rate_map(
-        incompatible_spectral_sensor, pupil, spectral)
-    @test_throws WFSPreparationError prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(
-            incompatible_spectral_sensor.front_end, spectral),
-        pupil, incompatible_spectral_rates)
+    resampled_spectral_rates = shack_hartmann_rate_map(
+        resampled_spectral_sensor, pupil, spectral)
+    resampled_spectral_plan = @inferred prepare_wfs_optical_formation(
+        shack_hartmann_optical_formation(
+            resampled_spectral_sensor, spectral),
+        pupil, resampled_spectral_rates)
+    @test resampled_spectral_plan.components[1].workspace !==
+        resampled_spectral_plan.components[2].workspace
+    form_wfs_optical_products!(resampled_spectral_rates, pupil,
+        resampled_spectral_plan)
+    @test all(isfinite, resampled_spectral_rates[1].values)
+    @test all(isfinite, resampled_spectral_rates[2].values)
 
     lgs = LGSSource(wavelength=wavelength(src),
         photon_irradiance=T(6), elongation_factor=T(1.8), T=T)
@@ -1810,14 +1915,25 @@ end
     prepare_sampling!(native_lgs, pupil, lgs)
     WavefrontSensors.sampled_spots_peak!(native_lgs, pupil, lgs)
     expected_lgs = shack_hartmann_detector_image(
-        native_lgs.acquisition.spot_cube, 4)
+        native_lgs.workspace.spot_cube, 4)
     staged_lgs = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     lgs_rate = shack_hartmann_rate_map(staged_lgs, pupil, lgs)
-    lgs_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(staged_lgs.front_end, lgs), pupil,
+    lgs_plan = @inferred prepare_wfs_optical_formation(
+        shack_hartmann_optical_formation(staged_lgs, lgs), pupil,
         lgs_rate)
+    prepared_elongation_kernel =
+        lgs_plan.workspace.elongation_kernel
+    @test length(prepared_elongation_kernel) >= 3
     form_wfs_optical_products!(lgs_rate, pupil, lgs_plan)
+    @test lgs_plan.workspace.elongation_kernel ===
+        prepared_elongation_kernel
+    if coverage_enabled
+        @test_skip "LGS optical-stage allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(lgs_rate, pupil,
+            lgs_plan)) == 0
+    end
     @test lgs_rate.values ≈ expected_lgs rtol=T(2e-12) atol=T(2e-12)
 
     sodium_lgs = LGSSource(wavelength=wavelength(src),
@@ -1829,15 +1945,90 @@ end
     prepare_sampling!(native_sodium, pupil, sodium_lgs)
     WavefrontSensors.sampled_spots_peak!(native_sodium, pupil, sodium_lgs)
     expected_sodium = shack_hartmann_detector_image(
-        native_sodium.acquisition.spot_cube, 4)
+        native_sodium.workspace.spot_cube, 4)
     staged_sodium = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     sodium_rate = shack_hartmann_rate_map(staged_sodium, pupil, sodium_lgs)
-    sodium_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(staged_sodium.front_end, sodium_lgs), pupil,
+    sodium_plan = @inferred prepare_wfs_optical_formation(
+        shack_hartmann_optical_formation(staged_sodium, sodium_lgs), pupil,
         sodium_rate)
+    prepared_sodium_kernel = sodium_plan.workspace.lgs_kernel_fft
+    @test size(prepared_sodium_kernel, 3) == 16
     form_wfs_optical_products!(sodium_rate, pupil, sodium_plan)
+    @test sodium_plan.workspace.lgs_kernel_fft === prepared_sodium_kernel
+    if coverage_enabled
+        @test_skip "sodium-LGS optical-stage allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(sodium_rate, pupil,
+            sodium_plan)) == 0
+    end
     @test sodium_rate.values ≈ expected_sodium rtol=T(2e-12) atol=T(2e-12)
+
+    spectral_sodium = with_spectrum(sodium_lgs, SpectralBundle(
+        T[0.9 * wavelength(sodium_lgs), 1.1 * wavelength(sodium_lgs)],
+        T[0.4, 0.6]; T=T))
+    spectral_sodium_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, T=T)
+    spectral_sodium_rates = shack_hartmann_rate_map(
+        spectral_sodium_sensor, pupil, spectral_sodium)
+    spectral_sodium_plan = @inferred prepare_wfs_optical_formation(
+        shack_hartmann_optical_formation(spectral_sodium_sensor,
+            spectral_sodium), pupil, spectral_sodium_rates)
+    @test spectral_sodium_plan.components[1].workspace !==
+        spectral_sodium_plan.components[2].workspace
+    @test spectral_sodium_plan.components[1].workspace.lgs_kernel_fft !==
+        spectral_sodium_plan.components[2].workspace.lgs_kernel_fft
+    form_wfs_optical_products!(spectral_sodium_rates, pupil,
+        spectral_sodium_plan)
+    if coverage_enabled
+        @test_skip "spectral sodium-LGS optical-stage allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(spectral_sodium_rates,
+            pupil, spectral_sodium_plan)) == 0
+    end
+    @inbounds for index in 1:length(spectral_sodium_rates)
+        sample = Optics.spectral_bundle(spectral_sodium).samples[index]
+        component = Optics.source_with_wavelength_and_radiometric_value(
+            sodium_lgs, T(sample.wavelength),
+            T(photon_irradiance(sodium_lgs)) * T(sample.weight))
+        reference_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+            mode=Diffractive(), n_pix_subap=4, T=T)
+        reference_rate = shack_hartmann_rate_map(reference_sensor, pupil,
+            component)
+        reference_plan = prepare_wfs_optical_formation(
+            shack_hartmann_optical_formation(reference_sensor, component),
+            pupil, reference_rate)
+        form_wfs_optical_products!(reference_rate, pupil, reference_plan)
+        @test isapprox(spectral_sodium_rates[index].values,
+            reference_rate.values; rtol=T(2e-12), atol=T(2e-12))
+    end
+
+    transactional_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+        mode=Diffractive(), n_pix_subap=4, pixel_scale_arcsec=T(0.04),
+        T=T)
+    transactional_formation = shack_hartmann_optical_formation(
+        transactional_sensor, src)
+    transactional_rate = shack_hartmann_rate_map(
+        transactional_formation, pupil)
+    transactional_plan = prepare_wfs_optical_formation(
+        transactional_formation, pupil, transactional_rate)
+    form_wfs_optical_products!(transactional_rate, pupil,
+        transactional_plan)
+    transactional_expected = copy(transactional_rate.values)
+    other_source = Source(band=:custom, wavelength=T(0.8e-6),
+        photon_irradiance=photon_irradiance(src), T=T)
+    failed_reprepare = try
+        prepare_wfs_optical_formation(
+            shack_hartmann_optical_formation(transactional_sensor,
+                other_source), pupil, transactional_rate)
+        nothing
+    catch err
+        err
+    end
+    @test failed_reprepare isa WFSPreparationError
+    @test @inferred(form_wfs_optical_products!(transactional_rate, pupil,
+        transactional_plan)) === transactional_rate
+    @test transactional_rate.values == transactional_expected
 
     asterism = Asterism([
         Source(band=:custom, wavelength=wavelength(src),
@@ -1851,13 +2042,13 @@ end
     WavefrontSensors.sampled_spots_peak_asterism_stacked!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), native_asterism, pupil, asterism)
     expected_asterism = shack_hartmann_detector_image(
-        native_asterism.acquisition.spot_cube, 4)
+        native_asterism.workspace.spot_cube, 4)
     staged_asterism = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
     asterism_rate = shack_hartmann_rate_map(staged_asterism, pupil,
         asterism)
     asterism_plan = prepare_wfs_optical_formation(
-        ShackHartmannOpticalFrontEnd(staged_asterism.front_end, asterism), pupil,
+        shack_hartmann_optical_formation(staged_asterism, asterism), pupil,
         asterism_rate)
     form_wfs_optical_products!(asterism_rate, pupil, asterism_plan)
     @test asterism_rate.values ≈ expected_asterism rtol=T(2e-12) atol=T(2e-12)
@@ -2675,7 +2866,7 @@ end
 
     sensor = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
-    front_end = ShackHartmannOpticalFrontEnd(sensor.front_end, source)
+    front_end = shack_hartmann_optical_formation(sensor, source)
     rate = shack_hartmann_rate_map(front_end, pupil)
     formation = prepare_wfs_optical_formation(front_end, pupil, rate)
     @test WavefrontSensors._require_exact_wfs_target(

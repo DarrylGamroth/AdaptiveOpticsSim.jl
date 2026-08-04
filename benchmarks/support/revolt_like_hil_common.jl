@@ -218,7 +218,9 @@ function revolt_like_sense!(ctx::RevoltLikeHILContext)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.wfs.acquisition.spot_cube))
+    spots = shack_hartmann_spot_cube(ctx.wfs)
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(spots))
     return nothing
 end
 
@@ -228,7 +230,8 @@ function revolt_like_mosaic!(ctx::RevoltLikeHILContext)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.acquisition.spot_cube, ctx.n_lenslets, ctx.roi)
+    revolt_tile_spot_cube!(ctx.tiled_frame,
+        shack_hartmann_spot_cube(ctx.wfs), ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
     return nothing
 end
@@ -240,9 +243,11 @@ function revolt_like_step!(ctx::RevoltLikeHILContext)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    revolt_tile_spot_cube!(ctx.tiled_frame, ctx.wfs.acquisition.spot_cube, ctx.n_lenslets, ctx.roi)
+    spots = shack_hartmann_spot_cube(ctx.wfs)
+    revolt_tile_spot_cube!(ctx.tiled_frame, spots, ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.dm.state.coefs))
-    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.wfs.acquisition.spot_cube))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(spots))
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
     return nothing
 end

@@ -18,7 +18,7 @@ function sh_resource_fixture()
         mode=Diffractive(),
         T=Float32,
     )
-    front_end = ShackHartmannOpticalFrontEnd(sensor.front_end, source)
+    front_end = shack_hartmann_optical_formation(sensor, source)
     output = shack_hartmann_rate_map(front_end, pupil)
     optical_formation = prepare_wfs_optical_formation(front_end, pupil,
         output)
@@ -31,7 +31,7 @@ function sh_resource_fixture()
         units=:detected_electrons, layout=:lenslet_mosaic)
     acquisition = prepare_wfs_acquisition(detector, output, observation)
     measurement = WFSMeasurement(zeros(Float32,
-        size(sensor.estimator.slopes)); units=:pixel, kind=:centroid_slopes)
+        size(sensor.products.slopes)); units=:pixel, kind=:centroid_slopes)
     estimator = prepare_wfs_estimation(sensor, observation, measurement)
     products = AcquisitionProducts(observation, measurement;
         metadata=(kind=:shack_hartmann,))
@@ -43,7 +43,8 @@ end
     target = HostComputeDevice()
     fixture = sh_resource_fixture()
     sensor = fixture.sensor
-    propagation = sensor.front_end.propagation
+    propagation = sensor.formation.propagation
+    propagation_workspace = propagation.workspace
     detector_state = fixture.detector.state
 
     wrappers = (
@@ -85,26 +86,24 @@ end
     ))
     @test structural_workspace_bytes(products_fact) == UInt64(0)
 
-    acquisition_fact = structural_resource_fact(sensor.acquisition,
-        StructuralResourceOwnerID(:wfs_estimator, :acquisition_state), target)
-    @test structural_resident_bytes(acquisition_fact) == sh_resource_bytes((
-        sensor.acquisition.exported_spot_cube,
+    products_fact = structural_resource_fact(sensor.products,
+        StructuralResourceOwnerID(:wfs_estimator, :products), target)
+    @test structural_resident_bytes(products_fact) == sh_resource_bytes((
+        sensor.products.slopes,
+        sensor.products.exported_spot_cube,
     ))
-    @test structural_workspace_bytes(acquisition_fact) == sh_resource_bytes((
-        sensor.acquisition.spot_cube,
-        sensor.acquisition.detector_noise_cube,
-    ))
+    @test structural_workspace_bytes(products_fact) == UInt64(0)
 
-    estimator_fact = structural_resource_fact(sensor.estimator,
-        StructuralResourceOwnerID(:wfs_estimator, :state), target)
-    @test structural_resident_bytes(estimator_fact) == sh_resource_bytes((
-        sensor.estimator.slopes,
-    ))
-    @test structural_workspace_bytes(estimator_fact) == sh_resource_bytes((
-        sensor.estimator.spot_stats,
-        sensor.estimator.spot_stats_accum,
-        sensor.estimator.slopes_host,
-        sensor.estimator.centroid_host,
+    workspace_fact = structural_resource_fact(sensor.workspace,
+        StructuralResourceOwnerID(:wfs_estimator, :workspace), target)
+    @test structural_resident_bytes(workspace_fact) == UInt64(0)
+    @test structural_workspace_bytes(workspace_fact) == sh_resource_bytes((
+        sensor.workspace.spot_cube,
+        sensor.workspace.detector_noise_cube,
+        sensor.workspace.spot_stats,
+        sensor.workspace.spot_stats_accum,
+        sensor.workspace.slopes_host,
+        sensor.workspace.centroid_host,
     ))
 
     calibration_fact = structural_resource_fact(sensor.calibration,
@@ -130,29 +129,29 @@ end
     ))
     @test iszero(structural_workspace_bytes(detector_fact))
 
-    workspace_fact = structural_resource_fact(propagation,
+    propagation_fact = structural_resource_fact(propagation,
         StructuralResourceOwnerID(:workspace, :microlens), target)
-    @test structural_resident_bytes(workspace_fact) == UInt64(0)
-    @test structural_workspace_bytes(workspace_fact) == sh_resource_bytes((
-        propagation.field,
-        propagation.phasor,
-        propagation.fft_buffer,
-        propagation.fft_stack,
-        propagation.intensity,
-        propagation.intensity_stack,
-        propagation.intensity_tmp_stack,
-        propagation.temp,
-        propagation.bin_buffer,
-        propagation.spot,
-        propagation.sampled_spot_cube,
-        propagation.spot_cube_accum,
-        propagation.elongation_kernel,
-        propagation.lgs_kernel_fft,
-        propagation.fft_asterism_stack,
-        propagation.amp_scales,
-        propagation.amp_scales_host,
-        propagation.opd_to_cycles,
-        propagation.opd_to_cycles_host,
+    @test structural_resident_bytes(propagation_fact) == UInt64(0)
+    @test structural_workspace_bytes(propagation_fact) == sh_resource_bytes((
+        propagation_workspace.field,
+        propagation_workspace.phasor,
+        propagation_workspace.fft_buffer,
+        propagation_workspace.fft_stack,
+        propagation_workspace.intensity,
+        propagation_workspace.intensity_stack,
+        propagation_workspace.intensity_tmp_stack,
+        propagation_workspace.temp,
+        propagation_workspace.bin_buffer,
+        propagation_workspace.spot,
+        propagation_workspace.sampled_spot_cube,
+        propagation_workspace.spot_cube_accum,
+        propagation_workspace.elongation_kernel,
+        propagation_workspace.lgs_kernel_fft,
+        propagation_workspace.fft_asterism_stack,
+        propagation_workspace.amp_scales,
+        propagation_workspace.amp_scales_host,
+        propagation_workspace.opd_to_cycles,
+        propagation_workspace.opd_to_cycles_host,
     ))
 
     unsupported = Detector(integration_time=1f0, noise=NoiseNone(),
@@ -170,8 +169,8 @@ end
     for (owner, id) in (
         (fixture.output,
             StructuralResourceOwnerID(:acquisition_product, :wrong_output)),
-        (sensor.acquisition,
-            StructuralResourceOwnerID(:wfs_estimator, :wrong_acquisition)),
+        (sensor.workspace,
+            StructuralResourceOwnerID(:wfs_estimator, :wrong_workspace)),
         (detector_state,
             StructuralResourceOwnerID(:detector_state, :wrong_camera)),
         (propagation,

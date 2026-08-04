@@ -71,7 +71,7 @@ function device_model_matrix_front_end(
         T,
         backend=backend(telescope),
     )
-    return ShackHartmannOpticalFrontEnd(sensor.front_end, source)
+    return shack_hartmann_optical_formation(sensor, source)
 end
 
 function device_model_matrix_front_end(
@@ -148,17 +148,17 @@ end
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixShackHartmann,
-    front_end::ShackHartmannOpticalFrontEnd,
+    formation::WavefrontSensors.ShackHartmannOpticalFormationModel,
     pupil::PupilFunction,
     source::SpectralSource,
-) = shack_hartmann_rate_map(front_end, pupil, source)
+) = shack_hartmann_rate_map(formation, pupil, source)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixShackHartmann,
-    front_end::ShackHartmannOpticalFrontEnd,
+    formation::WavefrontSensors.ShackHartmannOpticalFormationModel,
     pupil::PupilFunction,
     ::AdaptiveOpticsSim.Optics.AbstractSource,
-) = shack_hartmann_rate_map(front_end, pupil)
+) = shack_hartmann_rate_map(formation, pupil)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixPyramid,

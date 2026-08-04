@@ -1,6 +1,6 @@
-function sample_spot!(front_end::ShackHartmannOpticalFrontEnd,
+function sample_spot!(model::ShackHartmannOpticalFormationModel,
     intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
-    propagation = front_end.propagation
+    propagation = microlens_propagation_workspace(model.propagation)
     binning = propagation.binning_pixel_scale
     spot_in = intensity
     if binning > 1
@@ -21,9 +21,9 @@ function sample_spot!(front_end::ShackHartmannOpticalFrontEnd,
 end
 
 function measure!(mode::Geometric, wfs::ShackHartmannWFS, pupil::PupilFunction)
-    geometric_slopes!(wfs.estimator.slopes, pupil.opd,
+    geometric_slopes!(wfs.products.slopes, pupil.opd,
         wfs.front_end.layout.valid_mask)
-    return wfs.estimator.slopes
+    return wfs.products.slopes
 end
 
 function measure!(::Geometric, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource)
@@ -80,7 +80,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
     peak = sampled_spots_peak!(wfs, pupil, src)
     sync_exported_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
-    return wfs.estimator.slopes
+    return wfs.products.slopes
 end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource)
@@ -90,7 +90,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
     peak = sampled_spots_peak!(wfs, pupil, src)
     sync_exported_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
-    return wfs.estimator.slopes
+    return wfs.products.slopes
 end
 
 """
@@ -115,7 +115,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
     peak = sampled_spots_peak!(wfs, pupil, src, det, rng)
     sync_exported_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
-    return wfs.estimator.slopes
+    return wfs.products.slopes
 end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource,
@@ -126,7 +126,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
     peak = sampled_spots_peak!(wfs, pupil, src, det, rng)
     sync_exported_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
-    return wfs.estimator.slopes
+    return wfs.products.slopes
 end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, ast::Asterism)
@@ -137,17 +137,17 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
     n = _pupil_resolution(pupil)
     n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
-    pad = size(wfs.front_end.propagation.field, 1)
+    pad = size(wfs.formation.propagation.workspace.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
-        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.estimator.slopes), wfs, pupil, ast)
+        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.products.slopes), wfs, pupil, ast)
         sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
-        return wfs.estimator.slopes
+        return wfs.products.slopes
     end
-    style = execution_style(wfs.estimator.slopes)
+    style = execution_style(wfs.products.slopes)
     if sh_uses_accelerator_batched_sensing(style, wfs)
         return measure_sh_asterism_batched!(style, wfs, pupil, ast)
     end
@@ -163,17 +163,17 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
     n = _pupil_resolution(pupil)
     n_sub = n_lenslets(wfs)
     sub = div(n, n_sub)
-    pad = size(wfs.front_end.propagation.field, 1)
+    pad = size(wfs.formation.propagation.workspace.field, 1)
     ox = div(pad - sub, 2)
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
-        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.estimator.slopes), wfs, pupil, ast, det, rng)
+        peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.products.slopes), wfs, pupil, ast, det, rng)
         sync_exported_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
-        return wfs.estimator.slopes
+        return wfs.products.slopes
     end
-    style = execution_style(wfs.estimator.slopes)
+    style = execution_style(wfs.products.slopes)
     if sh_uses_accelerator_batched_sensing(style, wfs)
         return measure_sh_asterism_batched!(style, wfs, pupil, ast, det, rng)
     end
