@@ -1495,6 +1495,13 @@ components. Migrated bindings are not forwarded through the root.
   `form_wfs_optical_products!`, `prepare_wfs_acquisition` /
   `acquire_wfs_observation!`, and `prepare_wfs_estimation` /
   `estimate_wfs_measurement!`
+- Qualified plan and owner API:
+  `WavefrontSensors.AbstractWFSOpticalFormationPlan`,
+  `WavefrontSensors.AbstractWFSAcquisitionPlan`,
+  `WavefrontSensors.AbstractWFSEstimationPlan`, the generic detector
+  acquisition plan/prepared-owner types, and
+  `WavefrontSensors.wfs_acquisition_plan`. These names are public but not
+  exported; ordinary workflows use the prepared stage protocols above.
 - Estimation paths: `AbstractWFSMeasurementPath`,
   `AcquiredObservationPath`, `DirectMeasurementPath`,
   `wfs_measurement_path`

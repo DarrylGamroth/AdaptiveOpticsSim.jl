@@ -2992,6 +2992,89 @@ function run_optional_zernike_normalization(
     return nothing
 end
 
+function run_optional_generic_wfs_acquisition_checks(
+    ::Type{B}, BackendArray) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag,
+}
+    selector = backend_selector(B)
+    T = Float32
+    rate_values = BackendArray(reshape(T.(1:4), 2, 2))
+    metadata = OpticalPlaneMetadata(DetectorPlane(), rate_values;
+        coordinate_domain=NormalizedPupilCoordinates(),
+        sampling=(T(0.25), T(0.25)),
+        spectral=MonochromaticChannel(T(0.75e-6)),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition())
+    rate = IntensityMap(metadata, rate_values)
+
+    detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+        qe=one(T), response_model=NullFrameResponse(), T=T,
+        backend=selector)
+    observation = WFSObservation(similar(rate_values);
+        units=:electron_count, layout=:detector_frame)
+    acquisition = prepare_wfs_acquisition(detector, rate, observation)
+    @test WavefrontSensors.wfs_acquisition_plan(acquisition) isa
+        WavefrontSensors.WFSDetectorAcquisitionPlan
+    @test validate_wfs_target(acquisition, compute_device(rate_values)) ===
+        acquisition
+    @test @inferred(acquire_wfs_observation!(
+        observation, rate, acquisition, Xoshiro(0x50453541))) === observation
+    synchronize_backend!(execution_style(observation.storage))
+    @test observation.storage isa BackendArray
+    @test Array(observation.storage) == Array(rate_values) .* T(0.25)
+
+    spad = SPADArrayDetector((2, 2); integration_time=T(0.5),
+        noise=NoiseNone(), sensor=SPADArraySensor(
+            active_area_detection_efficiency=one(T),
+            dark_count_rate=zero(T), fill_factor=one(T), T=T),
+        T=T, backend=selector)
+    counting_observation = WFSObservation(similar(rate_values);
+        units=:photon_count, layout=:counting_channels)
+    counting = prepare_wfs_acquisition(spad, rate, counting_observation)
+    @test WavefrontSensors.wfs_acquisition_plan(counting) isa
+        WavefrontSensors.WFSCountingAcquisitionPlan
+    @test validate_wfs_target(counting, compute_device(rate_values)) ===
+        counting
+    @test @inferred(acquire_wfs_observation!(counting_observation, rate,
+        counting, Xoshiro(0x50453542))) === counting_observation
+    synchronize_backend!(execution_style(counting_observation.storage))
+    @test counting_observation.storage isa BackendArray
+    @test Array(counting_observation.storage) ==
+        Array(rate_values) .* T(0.5)
+
+    second_rate_values = copy(rate_values)
+    second_rate = IntensityMap(metadata, second_rate_values)
+    second_detector = Detector(noise=NoiseNone(),
+        integration_time=T(0.5), qe=one(T),
+        response_model=NullFrameResponse(), T=T, backend=selector)
+    second_observation = WFSObservation(similar(rate_values);
+        units=:electron_count, layout=:detector_frame)
+    fanout = prepare_wfs_acquisition((detector, second_detector),
+        (rate, second_rate), (observation, second_observation))
+    @test WavefrontSensors.wfs_acquisition_plan(fanout) isa
+        WavefrontSensors.WFSMultipleDetectorAcquisitionPlan
+    @test validate_wfs_target(fanout, compute_device(rate_values)) === fanout
+    @test @inferred(acquire_wfs_observation!(
+        (observation, second_observation), (rate, second_rate), fanout,
+        Xoshiro(0x50453543))) === (observation, second_observation)
+    synchronize_backend!(execution_style(second_observation.storage))
+    @test Array(second_observation.storage) ==
+        Array(second_rate_values) .* T(0.5)
+
+    aliased_observation = WFSObservation(rate.values;
+        units=:electron_count, layout=:detector_frame)
+    alias_error = try
+        prepare_wfs_acquisition(detector, rate, aliased_observation)
+        nothing
+    catch error
+        error
+    end
+    @test alias_error isa WFSPreparationError
+    @test alias_error.reason === :ownership
+    return nothing
+end
+
 function run_optional_wfs_stage_contracts(
     ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
@@ -5844,6 +5927,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_lgs_convolution_normalization(B)
     run_optional_sodium_profile_wfs(B, backend)
     run_optional_zernike_normalization(B, backend)
+    run_optional_generic_wfs_acquisition_checks(B, backend)
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_spad_qualification_checks(B, backend)
     run_optional_prepared_plant_checks(B, backend)

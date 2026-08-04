@@ -314,7 +314,15 @@ This gives:
 - hot-path mutation without repeated allocation
 
 The generic WFS stage protocol exists independently of the `AbstractWFS`
-object layout. Shack-Hartmann separates microlens formation, acquisition, and
+object layout. Its qualified nominal plan roots are
+`AbstractWFSOpticalFormationPlan`, `AbstractWFSAcquisitionPlan`, and
+`AbstractWFSEstimationPlan`; each concrete plan is run-immutable and remains a
+separate field of an exact single-writer prepared owner. Generic frame,
+accumulated-count, and static fan-out acquisition already follow that split
+and expose their plan through `wfs_acquisition_plan`. Family optical and
+estimator owners migrate under the same contract in PE-05B through PE-05F;
+there is no universal stage graph or compatibility owner. Shack-Hartmann
+separates microlens formation, acquisition, and
 estimation over caller-owned products. Its geometric and diffractive signals
 share one explicit
 `[axis 1; axis 2]`, Julia-column-major lenslet convention; OOPAO row-major

@@ -90,6 +90,12 @@ channel_output(det::AbstractCountingDetector) =
     counting_output_buffer(det) === nothing ? counting_array(det) : counting_output_buffer(det)
 output_frame(det::AbstractCountingDetector) = channel_output(det)
 
+@inline counting_detector_state(det::AbstractCountingDetector) = det.state
+@inline counting_detector_workspace(det::AbstractCountingDetector) =
+    det.workspace
+@inline counting_detector_products(det::AbstractCountingDetector) =
+    det.products
+
 counting_sensor(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_sensor overload for $(typeof(det))"))
 counting_gate_model(det::AbstractCountingDetector) =

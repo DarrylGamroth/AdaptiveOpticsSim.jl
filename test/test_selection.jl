@@ -225,6 +225,10 @@ const TEST_SUITE_SPECS = (
         fixtures=("detector_test_fixtures.jl",),
     ),
     TestSuiteSpec(
+        "wfs-acquisition-ownership",
+        "testsets/wfs_acquisition_ownership.jl",
+    ),
+    TestSuiteSpec(
         "wfs-common",
         "testsets/wfs_common_and_parity.jl",
         "testsets/wfs_stage_contracts.jl",
@@ -401,6 +405,7 @@ const TEST_GROUP_SPECS = (
     "calibration" => ("calibration-workflows",),
     "sensors" => (
         DETECTOR_TEST_SUITE_NAMES...,
+        "wfs-acquisition-ownership",
         "wfs-common",
         "wfs-shack-hartmann",
         "wfs-pyramid-bioedge",
@@ -445,6 +450,7 @@ const TEST_GROUP_SPECS = (
         "backend-smoke",
     ),
     "pe04" => ("prepared-detector-ownership",),
+    "pe05" => ("wfs-acquisition-ownership",),
     "gate4" => (
         "plant-command-schemas",
         "plant-command-admission",
@@ -501,6 +507,7 @@ const TEST_CI_SHARD_SPECS = (
         "control-primitives",
         "control-reconstruction",
         DETECTOR_TEST_SUITE_NAMES...,
+        "wfs-acquisition-ownership",
         "wfs-common",
         "wfs-shack-hartmann",
         "wfs-pyramid-bioedge",

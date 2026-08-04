@@ -600,6 +600,16 @@ new_domain_public = [
     "Detectors.HgCdTeReadout",
     "Detectors.MKIDArrayExportMetadata",
     "Detectors.detector_ramp_acquisition",
+    "WavefrontSensors.AbstractWFSOpticalFormationPlan",
+    "WavefrontSensors.AbstractWFSAcquisitionPlan",
+    "WavefrontSensors.AbstractWFSEstimationPlan",
+    "WavefrontSensors.WFSDetectorAcquisitionPlan",
+    "WavefrontSensors.WFSCountingAcquisitionPlan",
+    "WavefrontSensors.WFSMultipleDetectorAcquisitionPlan",
+    "WavefrontSensors.PreparedWFSDetectorAcquisition",
+    "WavefrontSensors.PreparedWFSCountingAcquisition",
+    "WavefrontSensors.PreparedWFSMultipleDetectorAcquisition",
+    "WavefrontSensors.wfs_acquisition_plan",
     "WavefrontSensors.validate_wfs_target",
 ]
 export_to_public = [
@@ -1267,6 +1277,16 @@ public = [
     "supports_detector_output",
     "supports_stacked_sources",
     "supports_grouped_execution",
+    "AbstractWFSOpticalFormationPlan",
+    "AbstractWFSAcquisitionPlan",
+    "AbstractWFSEstimationPlan",
+    "WFSDetectorAcquisitionPlan",
+    "WFSCountingAcquisitionPlan",
+    "WFSMultipleDetectorAcquisitionPlan",
+    "PreparedWFSDetectorAcquisition",
+    "PreparedWFSCountingAcquisition",
+    "PreparedWFSMultipleDetectorAcquisition",
+    "wfs_acquisition_plan",
     "validate_wfs_target",
 ]
 

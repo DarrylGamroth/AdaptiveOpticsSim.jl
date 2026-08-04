@@ -662,7 +662,8 @@ end
     @test missing_mkid_source.reason === :radiometry
     mkid_plan = prepare_wfs_acquisition(mkid, rate, mkid_observation;
         source=source)
-    @test mkid_plan.source_throughput === one(T)
+    @test WavefrontSensors.wfs_acquisition_plan(
+        mkid_plan).source_throughput === one(T)
     acquire_wfs_observation!(mkid_observation, rate, mkid_plan, rng)
     @test mkid_observation.storage == rate_values .* T(0.5)
 
@@ -674,8 +675,8 @@ end
         units=:photon_count, layout=:counting_channels)
     source_free_mkid_plan = prepare_wfs_acquisition(source_free_mkid,
         rate, source_free_mkid_observation)
-    @test source_free_mkid_plan.source === nothing
-    @test source_free_mkid_plan.source_throughput === one(T)
+    @test WavefrontSensors.wfs_acquisition_plan(
+        source_free_mkid_plan).source_throughput === one(T)
     acquire_wfs_observation!(source_free_mkid_observation, rate,
         source_free_mkid_plan, rng)
     @test source_free_mkid_observation.storage == rate_values .* T(0.5)
