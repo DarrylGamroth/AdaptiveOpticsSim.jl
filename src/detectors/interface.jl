@@ -1,7 +1,15 @@
 abstract type NoiseModel end
-abstract type SensorType end
-abstract type FrameSensorType <: SensorType end
-abstract type CountingSensorType <: SensorType end
+
+"""
+    AbstractSensor
+
+Nominal interface for detector sensor descriptions. Concrete values carry the
+technology-specific charge, counting, and readout behavior used by a detector;
+they are runtime model values, not Julia type objects or mutable detector state.
+"""
+abstract type AbstractSensor end
+abstract type AbstractFrameSensor <: AbstractSensor end
+abstract type AbstractCountingSensor <: AbstractSensor end
 
 abstract type AbstractFrameDetector <: AbstractDetector end
 abstract type AbstractCountingDetector <: AbstractDetector end
@@ -27,11 +35,11 @@ abstract type AbstractTemperatureLaw end
 abstract type AbstractQuantumEfficiencyModel end
 abstract type AbstractTemporalFrameSource end
 abstract type AbstractRollingShutterExposureMode end
-abstract type AvalancheFrameSensorType <: FrameSensorType end
-abstract type HgCdTeSensorType <: FrameSensorType end
-abstract type HgCdTeAvalancheArraySensorType <: HgCdTeSensorType end
-abstract type SPADArraySensorType <: CountingSensorType end
-abstract type MKIDArraySensorType <: CountingSensorType end
+abstract type AbstractAvalancheFrameSensor <: AbstractFrameSensor end
+abstract type AbstractHgCdTeSensor <: AbstractFrameSensor end
+abstract type AbstractHgCdTeAvalancheArraySensor <: AbstractHgCdTeSensor end
+abstract type AbstractSPADArraySensor <: AbstractCountingSensor end
+abstract type AbstractMKIDArraySensor <: AbstractCountingSensor end
 
 supports_detector_thermal_model(::AbstractFrameDetector) = false
 supports_detector_thermal_model(det::AbstractCountingDetector) = !is_null_thermal_model(thermal_model(det))
@@ -43,31 +51,31 @@ supports_first_order_afterpulse_mean_response(det::AbstractCountingDetector) = _
 supports_nearest_neighbor_count_redistribution(det::AbstractCountingDetector) = _supports_nearest_neighbor_count_redistribution(counting_mean_response_model(det))
 supports_paralyzable_dead_time(det::AbstractCountingDetector) = is_paralyzable_dead_time(counting_dead_time_model(det))
 
-detector_sensor_symbol(sensor::SensorType) =
+detector_sensor_symbol(sensor::AbstractSensor) =
     throw(InvalidConfiguration("missing detector_sensor_symbol overload for $(typeof(sensor))"))
 
-supports_clock_induced_charge(::FrameSensorType) = false
-supports_column_readout_noise(::FrameSensorType) = false
-supports_avalanche_gain(::FrameSensorType) = false
-supports_avalanche_gain(::AvalancheFrameSensorType) = true
-supports_avalanche_gain(::HgCdTeAvalancheArraySensorType) = true
-supports_sensor_glow(::FrameSensorType) = false
-supports_detector_defect_maps(::FrameSensorType) = false
-supports_detector_persistence(::FrameSensorType) = false
-supports_detector_nonlinearity(::FrameSensorType) = false
-supports_shutter_timing(::FrameSensorType) = false
-supports_photon_number_resolving(::SensorType) = false
-supports_photon_counting(::SensorType) = false
-supports_energy_resolving(::SensorType) = false
-supports_raw_digital_output(::SensorType) = false
-supports_nondestructive_reads(::FrameSensorType) = false
-supports_up_the_ramp(::FrameSensorType) = false
-supports_reference_read_subtraction(::FrameSensorType) = false
-supports_readout_correction(::FrameSensorType) = false
-supports_read_cube(::FrameSensorType) = false
-supports_detector_response(::SensorType, ::AbstractDetectorResponse) = false
-supports_detector_response(::FrameSensorType, ::AbstractFrameResponse) = true
-supports_multi_read_readout_products(::FrameSensorType) = false
+supports_clock_induced_charge(::AbstractFrameSensor) = false
+supports_column_readout_noise(::AbstractFrameSensor) = false
+supports_avalanche_gain(::AbstractFrameSensor) = false
+supports_avalanche_gain(::AbstractAvalancheFrameSensor) = true
+supports_avalanche_gain(::AbstractHgCdTeAvalancheArraySensor) = true
+supports_sensor_glow(::AbstractFrameSensor) = false
+supports_detector_defect_maps(::AbstractFrameSensor) = false
+supports_detector_persistence(::AbstractFrameSensor) = false
+supports_detector_nonlinearity(::AbstractFrameSensor) = false
+supports_shutter_timing(::AbstractFrameSensor) = false
+supports_photon_number_resolving(::AbstractSensor) = false
+supports_photon_counting(::AbstractSensor) = false
+supports_energy_resolving(::AbstractSensor) = false
+supports_raw_digital_output(::AbstractSensor) = false
+supports_nondestructive_reads(::AbstractFrameSensor) = false
+supports_up_the_ramp(::AbstractFrameSensor) = false
+supports_reference_read_subtraction(::AbstractFrameSensor) = false
+supports_readout_correction(::AbstractFrameSensor) = false
+supports_read_cube(::AbstractFrameSensor) = false
+supports_detector_response(::AbstractSensor, ::AbstractDetectorResponse) = false
+supports_detector_response(::AbstractFrameSensor, ::AbstractFrameResponse) = true
+supports_multi_read_readout_products(::AbstractFrameSensor) = false
 
 struct SingleRead <: FrameSamplingMode end
 
@@ -121,20 +129,20 @@ struct FrameWindow
     end
 end
 
-frame_sampling_symbol(sensor::FrameSensorType) = frame_sampling_symbol(multi_read_sampling_mode(sensor))
-frame_sampling_reads(sensor::FrameSensorType) = frame_sampling_reads(multi_read_sampling_mode(sensor))
-frame_sampling_reference_reads(sensor::FrameSensorType) = frame_sampling_reference_reads(multi_read_sampling_mode(sensor))
-frame_sampling_signal_reads(sensor::FrameSensorType) = frame_sampling_signal_reads(multi_read_sampling_mode(sensor))
-sampling_read_time(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
-sampling_read_time(sensor::FrameSensorType, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
+frame_sampling_symbol(sensor::AbstractFrameSensor) = frame_sampling_symbol(multi_read_sampling_mode(sensor))
+frame_sampling_reads(sensor::AbstractFrameSensor) = frame_sampling_reads(multi_read_sampling_mode(sensor))
+frame_sampling_reference_reads(sensor::AbstractFrameSensor) = frame_sampling_reference_reads(multi_read_sampling_mode(sensor))
+frame_sampling_signal_reads(sensor::AbstractFrameSensor) = frame_sampling_signal_reads(multi_read_sampling_mode(sensor))
+sampling_read_time(::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
+sampling_read_time(sensor::AbstractFrameSensor, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
     sampling_read_time(sensor, T)
-sampling_wallclock_time(::FrameSensorType, integration_time, ::Type{T}) where {T<:AbstractFloat} = T(integration_time)
-sampling_wallclock_time(sensor::FrameSensorType, integration_time, frame_size::Tuple{Int,Int},
+sampling_wallclock_time(::AbstractFrameSensor, integration_time, ::Type{T}) where {T<:AbstractFloat} = T(integration_time)
+sampling_wallclock_time(sensor::AbstractFrameSensor, integration_time, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
     sampling_wallclock_time(sensor, integration_time, T)
-acquisition_mode_symbol(::FrameSensorType) = :standard
-frame_transfer_time(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
-steady_state_frame_period(sensor::FrameSensorType, integration_time,
+acquisition_mode_symbol(::AbstractFrameSensor) = :standard
+frame_transfer_time(::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
+steady_state_frame_period(sensor::AbstractFrameSensor, integration_time,
     frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
     ::Type{T}) where {T<:AbstractFloat} =
     sampling_wallclock_time(sensor, integration_time, frame_size, window, T)
@@ -404,7 +412,7 @@ detector_defect_symbol(::PixelResponseNonuniformity) = :prnu
 detector_defect_symbol(::DarkSignalNonuniformity) = :dsnu
 detector_defect_symbol(::BadPixelMask) = :bad_pixel_mask
 detector_defect_symbol(::CompositeDetectorDefectModel) = :composite
-default_detector_defect_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) = NullDetectorDefectModel()
+default_detector_defect_model(::AbstractFrameSensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) = NullDetectorDefectModel()
 
 struct GlobalShutter <: AbstractFrameTimingModel end
 
@@ -428,7 +436,7 @@ timing_model_symbol(::GlobalShutter) = :global_shutter
 timing_model_symbol(::RollingShutter) = :rolling_shutter
 is_global_shutter(::AbstractFrameTimingModel) = false
 is_global_shutter(::GlobalShutter) = true
-default_frame_timing_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = GlobalShutter()
+default_frame_timing_model(::AbstractFrameSensor; T::Type{<:AbstractFloat}=Float64) = GlobalShutter()
 
 struct FunctionFrameSource{F} <: AbstractTemporalFrameSource
     f::F
@@ -490,7 +498,7 @@ nonlinearity_symbol(::NullFrameNonlinearity) = :none
 nonlinearity_symbol(::SaturatingFrameNonlinearity) = :saturating
 is_null_frame_nonlinearity(::AbstractFrameNonlinearityModel) = false
 is_null_frame_nonlinearity(::NullFrameNonlinearity) = true
-default_frame_nonlinearity_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64) = NullFrameNonlinearity()
+default_frame_nonlinearity_model(::AbstractFrameSensor; T::Type{<:AbstractFloat}=Float64) = NullFrameNonlinearity()
 
 struct NullPersistence <: AbstractPersistenceModel end
 
@@ -713,7 +721,7 @@ function evaluate_temperature_law(law::ExponentialTemperatureLaw, base_value, de
     return base_value * exp(law.exponent_per_K * (detector_temperature - law.reference_temperature_K))
 end
 
-default_thermal_model(::SensorType; T::Type{<:AbstractFloat}=Float64) = NullDetectorThermalModel()
+default_thermal_model(::AbstractSensor; T::Type{<:AbstractFloat}=Float64) = NullDetectorThermalModel()
 supports_dynamic_thermal_state(::AbstractDetectorThermalModel) = false
 supports_dynamic_thermal_state(::FirstOrderThermalModel) = true
 
@@ -814,9 +822,9 @@ function validate_thermal_model(model::FirstOrderThermalModel)
     return model
 end
 
-resolve_thermal_model(sensor::SensorType, ::Nothing; T::Type{<:AbstractFloat}) =
+resolve_thermal_model(sensor::AbstractSensor, ::Nothing; T::Type{<:AbstractFloat}) =
     default_thermal_model(sensor; T=T)
-resolve_thermal_model(sensor::SensorType, model::AbstractDetectorThermalModel; T::Type{<:AbstractFloat}) = model
+resolve_thermal_model(sensor::AbstractSensor, model::AbstractDetectorThermalModel; T::Type{<:AbstractFloat}) = model
 
 thermal_state_from_model(::NullDetectorThermalModel, ::Type{T}) where {T<:AbstractFloat} = NoThermalState()
 thermal_state_from_model(::FixedTemperature, ::Type{T}) where {T<:AbstractFloat} = NoThermalState()
@@ -1327,9 +1335,9 @@ function detector_mtf(model::RectangularPixelAperture,
     return abs(response_x * response_y)
 end
 
-default_response_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
+default_response_model(::AbstractFrameSensor; T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend()) =
     NullFrameResponse()
-default_charge_coupling_model(::FrameSensorType; T::Type{<:AbstractFloat}=Float64,
+default_charge_coupling_model(::AbstractFrameSensor; T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend()) = NullChargeCoupling()
 
 charge_coupling_symbol(::NullChargeCoupling) = :none
@@ -1727,7 +1735,7 @@ end
     end
 end
 
-struct DetectorParams{T<:AbstractFloat,S<:SensorType,QE<:AbstractQuantumEfficiencyModel,R<:AbstractFrameResponse,
+struct DetectorParams{T<:AbstractFloat,S<:AbstractSensor,QE<:AbstractQuantumEfficiencyModel,R<:AbstractFrameResponse,
     CC<:AbstractChargeCouplingModel,
     D<:AbstractDetectorDefectModel,FT<:AbstractFrameTimingModel,
     C<:FrameReadoutCorrectionModel,NL<:AbstractFrameNonlinearityModel,

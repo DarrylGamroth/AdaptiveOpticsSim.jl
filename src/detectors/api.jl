@@ -1,7 +1,7 @@
 export Detector
 export LinearAPDDetector, SPADArrayDetector, MKIDArrayDetector
 export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
-export SensorType, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
+export AbstractSensor, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
 export HgCdTeSensor
 export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput
 export emccd_snr

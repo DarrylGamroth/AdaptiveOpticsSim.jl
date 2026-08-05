@@ -1167,8 +1167,8 @@ not the moved detector bindings.
   `SPADArrayDetector`, and `MKIDArrayDetector`
 - Noise: `NoiseModel`, `NoiseNone`, `NoisePhoton`, `NoiseReadout`,
   `NoisePhotonReadout`
-- Conventional sensor families: `SensorType`, `CCDSensor`, `CMOSSensor`,
-  `EMCCDSensor`, `InGaAsSensor`, and `HgCdTeSensor`
+- Sensor-description protocol and frame-sensor models: `AbstractSensor`,
+  `CCDSensor`, `CMOSSensor`, `EMCCDSensor`, `InGaAsSensor`, and `HgCdTeSensor`
 - Linear-avalanche area sensor: `HgCdTeAvalancheArraySensor`; its avalanche
   parameters and multiplication policy remain distinct from the qualified-public
   `Detectors.HgCdTeReadout` sampling configuration shared with

@@ -229,7 +229,7 @@ function _require_rolling_sensor(::CMOSSensor)
     return nothing
 end
 
-function _require_rolling_sensor(sensor::FrameSensorType)
+function _require_rolling_sensor(sensor::AbstractFrameSensor)
     _detector_acquisition_event_error(:unsupported_sensor,
         "rolling-shutter event acquisition requires a CMOS-family frame " *
         "sensor; got $(typeof(sensor))")
@@ -662,7 +662,7 @@ end
     return _require_frame_transfer_mode(sensor.acquisition_mode)
 end
 
-function _require_frame_transfer_sensor(sensor::FrameSensorType)
+function _require_frame_transfer_sensor(sensor::AbstractFrameSensor)
     _detector_acquisition_event_error(:unsupported_sensor,
         "frame-transfer event acquisition requires an EMCCD sensor; got $(typeof(sensor))")
 end

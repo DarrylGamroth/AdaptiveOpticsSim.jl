@@ -104,10 +104,10 @@ abstract type _DetectorEventReadoutStyle end
 struct _PostExposureDetectorReadout <: _DetectorEventReadoutStyle end
 struct _ScheduledUpTheRampReadout <: _DetectorEventReadoutStyle end
 
-@inline _detector_event_readout_style(::FrameSensorType) =
+@inline _detector_event_readout_style(::AbstractFrameSensor) =
     _PostExposureDetectorReadout()
 
-@inline _detector_event_readout_style(sensor::HgCdTeSensorType) =
+@inline _detector_event_readout_style(sensor::AbstractHgCdTeSensor) =
     _hgcdte_detector_event_readout_style(multi_read_sampling_mode(sensor))
 @inline _hgcdte_detector_event_readout_style(::FrameSamplingMode) =
     _PostExposureDetectorReadout()
@@ -307,13 +307,13 @@ function _quantized_plant_duration(seconds::Real, label::AbstractString,
 end
 
 @inline function _prepare_detector_read_offsets(
-    ::_PostExposureDetectorReadout, ::FrameSensorType,
+    ::_PostExposureDetectorReadout, ::AbstractFrameSensor,
     ::Detector, ::GlobalShutterAcquisitionDefinition)
     return _empty_detector_read_offsets()
 end
 
 function _prepare_detector_read_offsets(::_ScheduledUpTheRampReadout,
-    sensor::HgCdTeSensorType, det::Detector,
+    sensor::AbstractHgCdTeSensor, det::Detector,
     definition::GlobalShutterAcquisitionDefinition)
     mode = multi_read_sampling_mode(sensor)
     offsets = _even_detector_read_offsets(definition.exposure_duration,
@@ -574,7 +574,7 @@ end
 end
 
 @inline function _apply_scheduled_hgcdte_interval_statistics!(
-    ::HgCdTeSensorType, det::Detector, ::AbstractRNG)
+    ::AbstractHgCdTeSensor, det::Detector, ::AbstractRNG)
     return det.products.frame
 end
 

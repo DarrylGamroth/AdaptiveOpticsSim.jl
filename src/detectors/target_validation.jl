@@ -293,7 +293,7 @@ end
 end
 
 function _require_exact_detector_sensor_target(
-    sensor::FrameSensorType, ::AbstractComputeDevice)
+    sensor::AbstractFrameSensor, ::AbstractComputeDevice)
     throw(InvalidConfiguration(
         "no exact-target validator is defined for frame-detector sensor " *
         "$(typeof(sensor))"))

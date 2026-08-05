@@ -302,7 +302,7 @@ function _require_cmos_output_shape(model::StaticCMOSOutputPattern,
     return nothing
 end
 
-@inline _require_sensor_frame_shape(::FrameSensorType,
+@inline _require_sensor_frame_shape(::AbstractFrameSensor,
     ::Tuple{Int,Int}) = nothing
 
 @inline function _require_sensor_frame_shape(sensor::CMOSSensor,
@@ -347,12 +347,12 @@ function _require_prepared_detector_storage(det::Detector,
     return nothing
 end
 
-@inline _require_sensor_sampling_configuration(::FrameSensorType,
+@inline _require_sensor_sampling_configuration(::AbstractFrameSensor,
     ::Tuple{Int,Int}, ::Union{Nothing,FrameWindow}, ::Real,
     ::Type{<:AbstractFloat}) = nothing
 
 @inline function _require_sensor_sampling_configuration(
-    sensor::HgCdTeSensorType, frame_shape::Tuple{Int,Int},
+    sensor::AbstractHgCdTeSensor, frame_shape::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, exposure_time::Real,
     ::Type{T}) where {T<:AbstractFloat}
     return _require_hgcdte_sampling_configuration(
@@ -361,11 +361,11 @@ end
 end
 
 @inline _require_hgcdte_sampling_configuration(::FrameSamplingMode,
-    ::HgCdTeSensorType, ::Tuple{Int,Int},
+    ::AbstractHgCdTeSensor, ::Tuple{Int,Int},
     ::Union{Nothing,FrameWindow}, ::Real, ::Type{<:AbstractFloat}) = nothing
 
 @inline function _require_hgcdte_sampling_configuration(
-    mode::UpTheRampSampling, sensor::HgCdTeSensorType,
+    mode::UpTheRampSampling, sensor::AbstractHgCdTeSensor,
     frame_shape::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
     exposure_time::Real, ::Type{T}) where {T<:AbstractFloat}
     validate_up_the_ramp_schedule(sensor, frame_shape, window, mode,

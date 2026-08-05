@@ -91,7 +91,7 @@ capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
     return add_poisson_rate!(det.products.frame, det, rng, rate)
 end
 
-@inline apply_incremental_sensor_statistics!(::FrameSensorType,
+@inline apply_incremental_sensor_statistics!(::AbstractFrameSensor,
     det::Detector, rng::AbstractRNG, exposure_time::Real) = det.products.frame
 
 @inline function accumulate_incremental_charge_generation!(det::Detector,

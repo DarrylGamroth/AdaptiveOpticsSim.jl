@@ -78,7 +78,7 @@ end
 
 struct EMCCDSensor{T<:AbstractFloat,M<:AbstractEMGainModel,
     O<:AbstractEMCCDOperatingMode,P<:AbstractEMCCDOutputPath,
-    A<:AbstractEMCCDAcquisitionMode} <: AvalancheFrameSensorType
+    A<:AbstractEMCCDAcquisitionMode} <: AbstractAvalancheFrameSensor
     excess_noise_factor::T
     clock_induced_charge_per_frame::T
     multiplication_model::M

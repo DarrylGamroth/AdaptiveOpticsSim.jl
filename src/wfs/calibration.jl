@@ -140,7 +140,7 @@ function detector_sampling_calibration_signature(mode::SkipperSampling,
     return hash(mode.n_samples, sig)
 end
 
-@inline detector_sensor_calibration_signature(sensor::FrameSensorType,
+@inline detector_sensor_calibration_signature(sensor::AbstractFrameSensor,
     sig::UInt) = hash(typeof(sensor), sig)
 
 function detector_sensor_calibration_signature(sensor::CCDSensor,
@@ -151,7 +151,7 @@ function detector_sensor_calibration_signature(sensor::CCDSensor,
 end
 
 function detector_hgcdte_readout_calibration_signature(
-    sensor::HgCdTeSensorType, sig::UInt)
+    sensor::AbstractHgCdTeSensor, sig::UInt)
     readout = hgcdte_readout(sensor)
     sig = hash(readout.read_time, sig)
     sig = hash(persistence_model(sensor), sig)
@@ -326,35 +326,35 @@ function require_wfs_calibration_sensor(sensor::CMOSSensor)
 end
 
 @inline require_wfs_hgcdte_sampling(::SingleRead,
-    ::HgCdTeSensorType, ::Detector) = nothing
+    ::AbstractHgCdTeSensor, ::Detector) = nothing
 @inline require_wfs_hgcdte_sampling(::AveragedNonDestructiveReads,
-    ::HgCdTeSensorType, ::Detector) = nothing
+    ::AbstractHgCdTeSensor, ::Detector) = nothing
 @inline require_wfs_hgcdte_sampling(::CorrelatedDoubleSampling,
-    ::HgCdTeSensorType, ::Detector) = nothing
+    ::AbstractHgCdTeSensor, ::Detector) = nothing
 @inline require_wfs_hgcdte_sampling(::FowlerSampling,
-    ::HgCdTeSensorType, ::Detector) = nothing
+    ::AbstractHgCdTeSensor, ::Detector) = nothing
 
 @inline function require_wfs_hgcdte_sampling(mode::UpTheRampSampling,
-    sensor::HgCdTeSensorType, det::Detector)
+    sensor::AbstractHgCdTeSensor, det::Detector)
     validate_up_the_ramp_schedule(sensor, det, mode,
         det.params.integration_time)
     return nothing
 end
 
 function require_wfs_hgcdte_sampling(::FrameSamplingMode,
-    ::HgCdTeSensorType, ::Detector)
+    ::AbstractHgCdTeSensor, ::Detector)
     throw(InvalidConfiguration(
         "detector-coupled WFS calibration does not support this HgCdTe sampling mode"))
 end
 
 @inline require_wfs_calibration_sensor(
-    ::HgCdTeSensorType) = nothing
+    ::AbstractHgCdTeSensor) = nothing
 
-@inline require_wfs_calibration_schedule(::FrameSensorType,
+@inline require_wfs_calibration_schedule(::AbstractFrameSensor,
     ::Detector) = nothing
 
 @inline function require_wfs_calibration_schedule(
-    sensor::HgCdTeSensorType, det::Detector)
+    sensor::AbstractHgCdTeSensor, det::Detector)
     require_wfs_hgcdte_sampling(
         multi_read_sampling_mode(sensor), sensor, det)
     return nothing
@@ -380,7 +380,7 @@ function require_wfs_calibration_sensor(sensor::EMCCDSensor)
     return nothing
 end
 
-function require_wfs_calibration_sensor(::FrameSensorType)
+function require_wfs_calibration_sensor(::AbstractFrameSensor)
     throw(InvalidConfiguration(
         "detector-coupled WFS calibration does not support this frame sensor"))
 end

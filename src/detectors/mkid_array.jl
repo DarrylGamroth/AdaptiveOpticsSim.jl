@@ -79,7 +79,7 @@ passband. Matrix-only capture assumes its input was spectrally prefiltered.
 struct MKIDArraySensor{
     T<:AbstractFloat,
     D<:CountingDeadTimeModel,
-} <: MKIDArraySensorType
+} <: AbstractMKIDArraySensor
     qe::T
     dark_count_rate::T
     fill_factor::T
@@ -126,7 +126,7 @@ end
 
 struct MKIDArrayDetectorParams{
     T<:AbstractFloat,
-    S<:MKIDArraySensorType,
+    S<:AbstractMKIDArraySensor,
     G<:AbstractCountingGateModel,
     TM<:AbstractDetectorThermalModel,
 }
@@ -243,7 +243,7 @@ function _build_mkid_array_detector(noise::NoiseModel;
     integration_time::Real,
     gate_model::AbstractCountingGateModel,
     thermal_model::AbstractDetectorThermalModel,
-    sensor::MKIDArraySensorType,
+    sensor::AbstractMKIDArraySensor,
     output_type::Union{Nothing,DataType},
     T::Type{<:AbstractFloat},
     backend)
@@ -323,7 +323,7 @@ function convert_mkid_sensor(sensor::MKIDArraySensor{T},
     return sensor
 end
 
-function convert_mkid_sensor(sensor::MKIDArraySensorType,
+function convert_mkid_sensor(sensor::AbstractMKIDArraySensor,
     ::Type{T}) where {T<:AbstractFloat}
     return MKIDArraySensor(
         qe=sensor.qe,
