@@ -746,7 +746,7 @@ end
 
     pyr_det = Detector(noise=NoiseNone(), binning=1)
     pyr_det_slopes = measure!(pyr_broad, pupil, poly_broad, pyr_det)
-    @test size(output_frame(pyr_det)) == size(pyr_broad.acquisition.state.camera_frame)
+    @test size(output_frame(pyr_det)) == size(pyr_broad.acquisition.products.frame)
     @test pyr_det_slopes ≈ broad_pyr_1 atol=1e-10 rtol=1e-10
 
     selective_bundle = SpectralBundle(
@@ -800,7 +800,7 @@ end
     spectral_spad_pyramid = PyramidWFS(tel;
         pupil_samples=8, mode=Diffractive(), modulation=1.0)
     spectral_spad = SPADArrayDetector(
-        size(spectral_spad_pyramid.acquisition.state.camera_frame);
+        size(spectral_spad_pyramid.acquisition.products.frame);
         integration_time=1.0,
         noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=1.0, dark_count_rate=0.0,
@@ -809,7 +809,7 @@ end
         selective_source, spectral_spad; rng=MersenneTwister(782))
     @test all(isfinite, spectral_spad_slopes)
     @test size(output_frame(spectral_spad)) ==
-        size(spectral_spad_pyramid.acquisition.state.camera_frame)
+        size(spectral_spad_pyramid.acquisition.products.frame)
 
     reset_opd!(pupil)
 end
@@ -944,10 +944,10 @@ end
     pyr_ext_point = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_ext = PyramidWFS(tel; pupil_samples=8, mode=Diffractive(), modulation=1.0)
     pyr_point_slopes = copy(measure!(pyr_point, pupil, src))
-    pyramid_point_intensity = copy(pyr_point.front_end.propagation.intensity)
+    pyramid_point_intensity = copy(pyr_point.front_end.propagation.workspace.intensity)
     pyr_ext_point_slopes = copy(measure!(pyr_ext_point, pupil, ext_point))
     pyr_ext_slopes_1 = copy(measure!(pyr_ext, pupil, ext_gauss))
-    pyramid_extended_intensity = copy(pyr_ext.front_end.propagation.intensity)
+    pyramid_extended_intensity = copy(pyr_ext.front_end.propagation.workspace.intensity)
     pyr_ext_slopes_2 = copy(measure!(pyr_ext, pupil, ext_gauss))
 
     @test pyr_ext_point_slopes ≈ pyr_point_slopes atol=1e-10 rtol=1e-10
@@ -965,7 +965,7 @@ end
 
     pyr_det = Detector(noise=NoiseNone(), binning=1)
     pyr_det_slopes = measure!(pyr_ext, pupil, ext_gauss, pyr_det)
-    @test size(output_frame(pyr_det)) == size(pyr_ext.acquisition.state.camera_frame)
+    @test size(output_frame(pyr_det)) == size(pyr_ext.acquisition.products.frame)
     @test pyr_det_slopes ≈ pyr_ext_slopes_1 atol=1e-10 rtol=1e-10
 
     reset_opd!(pupil)

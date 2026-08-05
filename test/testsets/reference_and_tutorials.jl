@@ -242,8 +242,8 @@ end
     extended = run_tutorial_example("extended_source_sensing.jl")
     @test extended.n_samples == 25
     @test extended.sh_extended_rate ≈ extended.sh_point_rate rtol=1e-12
-    @test extended.pyramid_extended_rate ≈
-        extended.pyramid_point_rate rtol=1e-12
+    @test extended.pyramid_extended_counts ≈
+        extended.pyramid_point_counts rtol=1e-12
     @test extended.sh_extended_peak <= extended.sh_point_peak * (1 + 1e-12)
     # Direct WFS propagation does not yet apply each quadrature component's
     # angular offset to detector-plane morphology.

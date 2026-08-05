@@ -1245,7 +1245,8 @@ function compute_reference_actual(case::ReferenceCase)
         if haskey(case.config, "opd")
             apply_reference_opd!(pupil, case.config["opd"])
         end
-        intensity = WavefrontSensors.pyramid_propagation(wfs).intensity
+        intensity =
+            WavefrontSensors.pyramid_propagation_workspace(wfs).intensity
         if src isa SpectralSource
             WavefrontSensors.accumulate_pyramid_spectral_intensity!(
                 AdaptiveOpticsSim.Backends.execution_style(intensity), wfs, pupil,
@@ -1307,7 +1308,8 @@ function compute_reference_actual(case::ReferenceCase)
         elseif haskey(case.config, "opd")
             apply_reference_opd!(pupil, case.config["opd"], basis)
         end
-        frame = similar(WavefrontSensors.pyramid_propagation(wfs).intensity)
+        frame = similar(
+            WavefrontSensors.pyramid_propagation_workspace(wfs).intensity)
         pyramid_modulation_frame!(frame, wfs, pupil, src)
         return copy(frame)
     elseif case.kind === :transfer_function_rejection

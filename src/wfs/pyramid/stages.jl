@@ -2,16 +2,41 @@
 # Prepared Pyramid WFS stages
 #
 
-struct PreparedPyramidOptics{F,I,O,L<:AbstractPreparedFourPupilLGS}
-    front_end::F
-    input::I
-    output::O
+"""
+Run-immutable physical and numerical contract for one pyramid detector-plane
+photon-arrival-rate map.
+"""
+struct PyramidOpticsPlan{P,O,C,S,L<:AbstractPreparedFourPupilLGS} <:
+        AbstractWFSOpticsPlan
+    propagation::P
+    operating_modulation::O
+    calibration_modulation::C
+    source::S
     lgs_model::L
     propagation_revision::UInt
 end
 
-struct PreparedPyramidOpticsBundle{P<:Tuple,I,O}
+"""Exact live owner for one prepared pyramid optics execution."""
+struct PreparedPyramidOptics{P,F,W,I,O,R,B,D}
+    plan::P
+    front_end::F
+    workspace::W
+    input::I
+    output::O
+    workspace_binding::R
+    backend::B
+    device::D
+end
+
+"""Run-immutable contract for one fixed Pyramid optics-product bundle."""
+struct PyramidOpticsBundlePlan{P<:Tuple} <: AbstractWFSOpticsPlan
     plans::P
+end
+
+"""Exact live owner for one prepared Pyramid optics-product bundle."""
+struct PreparedPyramidOpticsBundle{P,C<:Tuple,I,O}
+    plan::P
+    components::C
     input::I
     output::O
 end
@@ -29,17 +54,61 @@ struct PyramidCalibrationBinding{T<:AbstractFloat,R,A}
     valid_support::A
 end
 
-struct PreparedPyramidEstimator{W,I,M,P<:AbstractWFSMeasurementPath,C,S,T}
-    sensor::W
-    input::I
-    measurement::M
+"""Run-immutable pyramid differential-estimation contract."""
+struct PyramidEstimationPlan{E,P<:AbstractWFSMeasurementPath,C,S,T} <:
+        AbstractWFSEstimationPlan
+    params::E
     path::P
     calibration_binding::C
     source::S
     normalization_scale::T
 end
 
-@inline wfs_measurement_path(plan::PreparedPyramidEstimator) = plan.path
+"""Exact live owner for one prepared pyramid estimator."""
+struct PreparedPyramidEstimator{P,W,ST,WS,PR,I,M,SB,WB,PB,B,D}
+    plan::P
+    sensor::W
+    state::ST
+    workspace::WS
+    products::PR
+    input::I
+    measurement::M
+    state_binding::SB
+    workspace_binding::WB
+    products_binding::PB
+    backend::B
+    device::D
+end
+
+@inline wfs_measurement_path(prepared::PreparedPyramidEstimator) =
+    prepared.plan.path
+
+@inline function _pyramid_propagation_workspace_binding(workspace)
+    return (workspace.field, workspace.focal_field, workspace.pupil_field,
+        workspace.pyramid_mask, workspace.phasor, workspace.intensity,
+        workspace.temp, workspace.scratch, workspace.asterism_stack,
+        workspace.fft_plan, workspace.ifft_plan,
+        workspace.elongation_kernel, workspace.lgs_kernel_fft)
+end
+
+@inline modulated_wfs_propagation_storage(
+    front_end::PyramidOpticalFrontEnd) =
+    pyramid_propagation_workspace(front_end).field
+
+@inline function _pyramid_estimator_state_binding(state)
+    return (state.valid_mask, state.optical_gain, state.valid_i4q,
+        state.reference_signal_2d)
+end
+
+@inline function _pyramid_estimator_workspace_binding(workspace)
+    return (workspace.valid_i4q_host, workspace.valid_signal,
+        workspace.valid_signal_indices, workspace.valid_signal_indices_host,
+        workspace.valid_signal_count, workspace.valid_flux_sum_buffer,
+        workspace.valid_flux_sum_host, workspace.valid_flux_i4q_host,
+        workspace.flux_i4q, workspace.signal_2d)
+end
+
+@inline _pyramid_estimator_products_binding(products) = (products.slopes,)
 
 @inline function pyramid_output_sampling_factor(
     front_end::PyramidOpticalFrontEnd, pupil_resolution::Int)
@@ -53,7 +122,7 @@ end
 function pyramid_output_dimensions(front_end::PyramidOpticalFrontEnd,
     pupil_resolution::Int)
     factor = pyramid_output_sampling_factor(front_end, pupil_resolution)
-    side = size(front_end.propagation.intensity, 1)
+    side = size(pyramid_propagation_workspace(front_end).intensity, 1)
     side % factor == 0 || throw(WFSPreparationError(:wfs_optics,
         :shape, "pyramid sampling does not evenly divide the detector plane"))
     output_side = div(side, factor)
@@ -121,13 +190,20 @@ function prepare_wfs_optics(front_end::PyramidOpticalFrontEnd,
     wavelength_m = _pyramid_front_end_wavelength(front_end, input)
     require_four_pupil_rate_map(output, expected, wavelength_m)
     require_modulated_wfs_domains(front_end, input, output)
-    eltype(front_end.propagation.intensity) ===
+    eltype(pyramid_propagation_workspace(front_end).intensity) ===
         output.metadata.numeric_type || throw(WFSPreparationError(
             :wfs_optics, :numeric_type,
             "pyramid output precision differs from prepared propagation"))
     lgs_model = prepare_four_pupil_lgs(front_end.source, input, front_end)
-    return PreparedPyramidOptics(front_end, input, output,
-        lgs_model, front_end.propagation.revision)
+    propagation = front_end.propagation
+    propagation_plan = pyramid_propagation_plan(propagation)
+    workspace = pyramid_propagation_workspace(propagation)
+    plan = PyramidOpticsPlan(propagation_plan, front_end.modulation,
+        front_end.calibration_modulation,
+        front_end.source, lgs_model, workspace.revision)
+    return PreparedPyramidOptics(plan, front_end, workspace, input, output,
+        _pyramid_propagation_workspace_binding(workspace),
+        input.metadata.backend, input.metadata.device)
 end
 
 function prepare_wfs_optics(front_end::PyramidOpticalFrontEnd,
@@ -144,7 +220,7 @@ function prepare_pyramid_optical_bundle(front_end::PyramidOpticalFrontEnd,
     length(output) == length(samples) || throw(WFSPreparationError(
         :wfs_optics, :plane_count,
         "pyramid spectral output count does not match the source"))
-    T = eltype(front_end.propagation.intensity)
+    T = eltype(pyramid_propagation_workspace(front_end).intensity)
     plans = ntuple(length(samples)) do index
         sample = samples[index]
         component = FourPupilSpectralComponent(source.source,
@@ -154,7 +230,9 @@ function prepare_pyramid_optical_bundle(front_end::PyramidOpticalFrontEnd,
             pyramid_front_end_with_source(front_end, component), input,
             output[index])
     end
-    return PreparedPyramidOpticsBundle(plans, input, output)
+    return PreparedPyramidOpticsBundle(
+        PyramidOpticsBundlePlan(map(component -> component.plan, plans)),
+        plans, input, output)
 end
 
 function prepare_wfs_optics(front_end::PyramidOpticalFrontEnd,
@@ -180,7 +258,9 @@ function prepare_pyramid_optical_bundle(front_end::PyramidOpticalFrontEnd,
             pyramid_front_end_with_source(front_end, sources[index]),
             inputs[index], output[index])
     end
-    return PreparedPyramidOpticsBundle(plans, inputs, output)
+    return PreparedPyramidOpticsBundle(
+        PyramidOpticsBundlePlan(map(component -> component.plan, plans)),
+        plans, inputs, output)
 end
 
 function prepare_pyramid_optical_bundle(front_end, input, output, source)
@@ -191,7 +271,7 @@ end
 
 function _pyramid_native_rate!(front_end::PyramidOpticalFrontEnd,
     input::PupilFunction)
-    propagation = front_end.propagation
+    propagation = pyramid_propagation_workspace(front_end)
     source = front_end.source
     resolution = size(input.opd, 1)
     pad = size(propagation.field, 1)
@@ -216,7 +296,7 @@ end
 
 function _pyramid_native_rate!(front_end::PyramidOpticalFrontEnd,
     input::ElectricField)
-    propagation = front_end.propagation
+    propagation = pyramid_propagation_workspace(front_end)
     resolution = size(input.values, 1)
     pad = size(propagation.field, 1)
     offset = div(pad - resolution, 2)
@@ -236,8 +316,8 @@ end
 
 function _apply_prepared_pyramid_lgs!(
     plan::PreparedPyramidOptics)
-    propagation = plan.front_end.propagation
-    apply_prepared_four_pupil_lgs!(plan.lgs_model, propagation.intensity,
+    propagation = plan.workspace
+    apply_prepared_four_pupil_lgs!(plan.plan.lgs_model, propagation.intensity,
         propagation.scratch, propagation.focal_field,
         propagation.fft_plan, propagation.pupil_field,
         propagation.ifft_plan)
@@ -262,16 +342,28 @@ function validate_wfs_optics_binding(output::IntensityMap,
     output === plan.output && input === plan.input ||
         throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "pyramid optical products do not match prepared storage"))
-    plan.front_end.propagation.revision == plan.propagation_revision ||
+    workspace = pyramid_propagation_workspace(plan.front_end)
+    workspace === plan.workspace &&
+        _pyramid_propagation_workspace_binding(workspace) ===
+            plan.workspace_binding &&
+        workspace.revision == plan.plan.propagation_revision ||
         throw(WFSPreparationError(:wfs_optics, :prepared_binding,
-            "pyramid propagation sampling changed after preparation"))
+            "pyramid propagation workspace changed after preparation"))
+    plan.front_end.propagation.plan === plan.plan.propagation &&
+        plan.front_end.phase_mask === plan.plan.propagation.phase_mask &&
+        plan.front_end.modulation === plan.plan.operating_modulation &&
+        plan.front_end.calibration_modulation ===
+            plan.plan.calibration_modulation &&
+        plan.front_end.source === plan.plan.source ||
+        throw(WFSPreparationError(:wfs_optics, :prepared_binding,
+            "pyramid optics definition changed after preparation"))
     return nothing
 end
 
 function form_wfs_optical_products!(output::OpticalProductBundle, input,
     plan::PreparedPyramidOpticsBundle)
     validate_wfs_optics_binding(output, input, plan)
-    return form_four_pupil_bundle!(output, input, plan.plans)
+    return form_four_pupil_bundle!(output, input, plan.components)
 end
 
 function validate_wfs_optics_binding(
@@ -280,7 +372,7 @@ function validate_wfs_optics_binding(
     output === plan.output && input === plan.input ||
         throw(WFSPreparationError(:wfs_optics, :prepared_binding,
             "pyramid spectral products do not match prepared storage"))
-    validate_four_pupil_bundle_binding(output, input, plan.plans)
+    validate_four_pupil_bundle_binding(output, input, plan.components)
     return nothing
 end
 
@@ -344,7 +436,7 @@ function _pyramid_rate_map(front_end::PyramidOpticalFrontEnd, input, source)
     wavelength_m = _pyramid_front_end_wavelength(front_end, input)
     dimensions = pyramid_output_dimensions(front_end,
         input.metadata.dimensions[1])
-    T = eltype(front_end.propagation.intensity)
+    T = eltype(pyramid_propagation_workspace(front_end).intensity)
     values = similar(_modulated_input_storage(input), T, dimensions...)
     fill!(values, zero(T))
     factor = pyramid_output_sampling_factor(front_end,
@@ -372,7 +464,7 @@ end
 function _pyramid_spectral_rate_bundle(front_end::PyramidOpticalFrontEnd,
     input, source::SpectralSource)
     samples = spectral_bundle(source).samples
-    T = eltype(front_end.propagation.intensity)
+    T = eltype(pyramid_propagation_workspace(front_end).intensity)
     function component_map(sample)
         component = FourPupilSpectralComponent(source.source,
             T(sample.wavelength),
@@ -414,12 +506,27 @@ function _require_pyramid_calibration(sensor::PyramidWFS,
     return nothing
 end
 
+function _prepare_pyramid_estimator_owner(sensor::PyramidWFS, input,
+    measurement::WFSMeasurement, path::AbstractWFSMeasurementPath,
+    calibration_binding, source, normalization_scale)
+    state = pyramid_estimator_state(sensor)
+    workspace = pyramid_estimator_workspace(sensor)
+    products = pyramid_estimator_products(sensor)
+    plan = PyramidEstimationPlan(sensor.estimator.params, path,
+        calibration_binding, source, normalization_scale)
+    return PreparedPyramidEstimator(plan, sensor, state, workspace, products,
+        input, measurement, _pyramid_estimator_state_binding(state),
+        _pyramid_estimator_workspace_binding(workspace),
+        _pyramid_estimator_products_binding(products),
+        measurement.metadata.backend, measurement.metadata.device)
+end
+
 function _require_pyramid_estimation_geometry(sensor::PyramidWFS,
     frame_size::Int)
     iseven(frame_size) || throw(WFSPreparationError(:estimation, :shape,
         "pyramid observations require an even detector-frame size"))
-    nominal = sensor.acquisition.state.nominal_detector_resolution
-    binning = sensor.acquisition.binning
+    nominal = pyramid_acquisition_workspace(sensor).nominal_detector_resolution
+    binning = pyramid_acquisition_plan(sensor).binning
     nominal > 0 || throw(WFSPreparationError(:estimation, :shape,
         "pyramid nominal detector resolution has not been prepared"))
     nominal % binning == 0 || throw(WFSPreparationError(:estimation, :shape,
@@ -467,38 +574,36 @@ function prepare_wfs_estimation(sensor::PyramidWFS{<:Diffractive},
         throw(WFSPreparationError(:estimation, :numeric_type,
             "pyramid measurement storage must be floating point"))
     _require_wfs_storage_domain(:estimation, observation.metadata,
-        sensor.estimator.state.signal_2d, "pyramid observation")
+        pyramid_estimator_workspace(sensor).signal_2d, "pyramid observation")
     _require_wfs_storage_domain(:estimation, measurement.metadata,
-        sensor.estimator.state.slopes, "pyramid measurement")
+        pyramid_estimator_products(sensor).slopes, "pyramid measurement")
     _require_pyramid_estimation_geometry(sensor, frame_size)
     resize_pyramid_signal_buffers!(sensor, frame_size)
-    size(measurement.storage) == size(sensor.estimator.state.slopes) ||
+    size(measurement.storage) == size(pyramid_estimator_products(sensor).slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "pyramid measurement storage has the wrong slope shape"))
     _require_pyramid_estimation_source(
         sensor.estimator.params.normalization, source)
-    scale = eltype(sensor.estimator.state.slopes)(normalization_scale)
+    scale = eltype(pyramid_estimator_products(sensor).slopes)(normalization_scale)
     isfinite(scale) && scale >= zero(scale) || throw(WFSPreparationError(
         :estimation, :radiometry,
         "pyramid normalization scale must be finite and nonnegative"))
     binding = _pyramid_calibration_binding(sensor)
-    return PreparedPyramidEstimator(sensor, observation, measurement,
+    return _prepare_pyramid_estimator_owner(sensor, observation, measurement,
         AcquiredObservationPath(), binding, source, scale)
 end
 
 function estimate_wfs_measurement!(measurement::WFSMeasurement,
     observation::WFSObservation,
-    plan::PreparedPyramidEstimator{
-        <:Any,<:Any,<:Any,<:AcquiredObservationPath})
-    measurement === plan.measurement && observation === plan.input ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "pyramid estimator storage does not match its plan"))
+    plan::PreparedPyramidEstimator)
+    validate_wfs_estimation_binding(measurement, observation, plan)
     sensor = plan.sensor
-    _require_pyramid_calibration(sensor, plan.calibration_binding)
+    _require_pyramid_calibration(sensor, plan.plan.calibration_binding)
     pyramid_signal!(execution_style(observation.storage), sensor,
-        observation.storage, plan.source, plan.normalization_scale)
-    @. sensor.estimator.state.slopes *= sensor.estimator.state.optical_gain
-    copyto!(measurement.storage, sensor.estimator.state.slopes)
+        observation.storage, plan.plan.source, plan.plan.normalization_scale)
+    slopes = pyramid_estimator_products(sensor).slopes
+    @. slopes *= sensor.estimator.state.optical_gain
+    copyto!(measurement.storage, slopes)
     return measurement
 end
 
@@ -507,6 +612,18 @@ function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
     measurement === plan.measurement && input === plan.input || throw(
         WFSPreparationError(:estimation, :prepared_binding,
             "pyramid estimator storage does not match its plan"))
+    state = pyramid_estimator_state(plan.sensor)
+    workspace = pyramid_estimator_workspace(plan.sensor)
+    products = pyramid_estimator_products(plan.sensor)
+    state === plan.state && workspace === plan.workspace &&
+        products === plan.products &&
+        _pyramid_estimator_state_binding(state) === plan.state_binding &&
+        _pyramid_estimator_workspace_binding(workspace) ===
+            plan.workspace_binding &&
+        _pyramid_estimator_products_binding(products) ===
+            plan.products_binding || throw(WFSPreparationError(
+                :estimation, :prepared_binding,
+                "pyramid estimator state, workspace, or products changed after preparation"))
     return nothing
 end
 
@@ -528,30 +645,28 @@ function prepare_wfs_estimation(sensor::PyramidWFS{<:Geometric},
         throw(WFSPreparationError(:estimation, :numeric_type,
             "geometric pyramid measurement storage must be floating point"))
     _require_wfs_storage_domain(:estimation, input.metadata,
-        sensor.estimator.state.slopes, "geometric pyramid input")
+        pyramid_estimator_products(sensor).slopes, "geometric pyramid input")
     _require_wfs_storage_domain(:estimation, measurement.metadata,
-        sensor.estimator.state.slopes, "geometric pyramid measurement")
-    size(measurement.storage) == size(sensor.estimator.state.slopes) ||
+        pyramid_estimator_products(sensor).slopes, "geometric pyramid measurement")
+    size(measurement.storage) == size(pyramid_estimator_products(sensor).slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "geometric pyramid measurement has the wrong slope shape"))
-    return PreparedPyramidEstimator(sensor, input, measurement,
+    return _prepare_pyramid_estimator_owner(sensor, input, measurement,
         DirectMeasurementPath(), nothing, nothing,
-        one(eltype(sensor.estimator.state.slopes)))
+        one(eltype(pyramid_estimator_products(sensor).slopes)))
 end
 
 function estimate_wfs_measurement!(measurement::WFSMeasurement,
     input::PupilFunction,
-    plan::PreparedPyramidEstimator{
-        <:Any,<:Any,<:Any,<:DirectMeasurementPath})
-    measurement === plan.measurement && input === plan.input ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "geometric pyramid estimator storage does not match its plan"))
+    plan::PreparedPyramidEstimator)
+    validate_wfs_estimation_binding(measurement, input, plan)
     sensor = plan.sensor
     state = sensor.estimator.state
-    geometric_slopes!(state.slopes, input.opd, state.valid_mask)
+    products = pyramid_estimator_products(sensor)
+    geometric_slopes!(products.slopes, input.opd, state.valid_mask)
     gain = inv(1 + sensor.estimator.params.geometric_modulation_radius)
-    @. state.slopes = gain * state.slopes * state.optical_gain
-    copyto!(measurement.storage, state.slopes)
+    @. products.slopes = gain * products.slopes * state.optical_gain
+    copyto!(measurement.storage, products.slopes)
     return measurement
 end
 
@@ -566,7 +681,8 @@ function set_pyramid_calibration!(sensor::PyramidWFS,
     reference_host = Array(reference)
     all(isfinite, reference_host) || throw(InvalidConfiguration(
         "pyramid calibration reference must contain only finite values"))
-    wavelength_value = eltype(state.slopes)(wavelength_m)
+    wavelength_value = eltype(pyramid_estimator_products(sensor).slopes)(
+        wavelength_m)
     isfinite(wavelength_value) && wavelength_value > zero(wavelength_value) ||
         throw(InvalidConfiguration(
             "pyramid calibration wavelength must be finite and positive"))

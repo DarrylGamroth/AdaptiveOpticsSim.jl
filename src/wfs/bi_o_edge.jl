@@ -12,7 +12,7 @@ include("bi_o_edge/stages.jl")
 
 @inline valid_subaperture_mask(wfs::BiOEdgeWFS) = wfs.estimator.state.valid_mask
 @inline reference_signal(wfs::BiOEdgeWFS) = wfs.estimator.state.reference_signal_2d
-@inline slopes(wfs::BiOEdgeWFS) = wfs.estimator.state.slopes
+@inline slopes(wfs::BiOEdgeWFS) = bi_o_edge_estimator_products(wfs).slopes
 @inline wfs_calibration_signature(wfs::BiOEdgeWFS) =
     wfs.estimator.state.calibration_signature
 

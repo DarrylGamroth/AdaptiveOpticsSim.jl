@@ -884,16 +884,26 @@ end
     reference; kwargs...) = set_bi_o_edge_calibration!(sensor, reference;
     kwargs...)
 
+@inline contract_four_pupil_propagation(front_end) =
+    WavefrontSensors.four_pupil_propagation_workspace(front_end)
+
+@inline contract_four_pupil_acquisition_frame(::Val{:pyramid}, sensor) =
+    WavefrontSensors.pyramid_acquisition_products(sensor).frame
+@inline contract_four_pupil_acquisition_frame(::Val{:bi_o_edge}, sensor) =
+    WavefrontSensors.bi_o_edge_acquisition_products(sensor).frame
+
 @inline function contract_four_pupil_resize_calibration!(::Val{:pyramid},
     sensor)
     resize_pyramid_signal_buffers!(sensor,
-        div(size(sensor.acquisition.state.camera_frame, 1), 2))
+        div(size(contract_four_pupil_acquisition_frame(
+            Val(:pyramid), sensor), 1), 2))
 end
 
 @inline function contract_four_pupil_resize_calibration!(::Val{:bi_o_edge},
     sensor)
     resize_bi_o_edge_signal_buffers!(sensor,
-        size(sensor.acquisition.state.camera_frame, 1), 2)
+        size(contract_four_pupil_acquisition_frame(
+            Val(:bi_o_edge), sensor), 1), 2)
 end
 
 @inline contract_four_pupil_prepare_sampling!(::Val{:pyramid}, sensor,
@@ -2225,9 +2235,11 @@ end
     @test bi_o_edge.front_end.amplitude_mask isa BiOEdgeAmplitudeMask{T}
     @test typeof(pyramid.front_end.phase_mask) !==
         typeof(bi_o_edge.front_end.amplitude_mask)
-    @test all(isapprox.(abs.(pyramid.front_end.propagation.pyramid_mask),
+    @test all(isapprox.(abs.(contract_four_pupil_propagation(
+        pyramid.front_end).pyramid_mask),
         one(T); atol=T(8) * eps(T), rtol=zero(T)))
-    @test any(iszero, abs.(bi_o_edge.front_end.propagation.bi_o_edge_masks))
+    @test any(iszero, abs.(contract_four_pupil_propagation(
+        bi_o_edge.front_end).bi_o_edge_masks))
     @test !hasfield(typeof(pyramid.front_end), :amplitude_mask)
     @test !hasfield(typeof(bi_o_edge.front_end), :phase_mask)
 
@@ -2290,7 +2302,9 @@ end
             mode=Diffractive(), modulation=0, T=T)
         front_end = contract_four_pupil_front_end(family, staged, source)
         rate = contract_four_pupil_rate_map(family, front_end, pupil)
-        optics_plan = prepare_wfs_optics(front_end, pupil, rate)
+        optics_plan = @inferred prepare_wfs_optics(front_end, pupil, rate)
+        @test @inferred(contract_four_pupil_propagation(front_end)) ===
+            optics_plan.workspace
         @test @inferred(WavefrontSensors.wfs_optical_products(optics_plan)) === rate
         form_wfs_optical_products!(rate, pupil, optics_plan)
         @test pupil.opd == pupil_before
@@ -2300,7 +2314,8 @@ end
         @test rate.metadata.spatial_measure isa CellIntegratedMeasure
         @test rate.metadata.coherence isa IncoherentIntensityAddition
 
-        native_expected = similar(front_end.propagation.intensity)
+        native_expected = similar(
+            contract_four_pupil_propagation(front_end).intensity)
         contract_four_pupil_native!(family, native_expected, staged, pupil,
             source)
         expected_rate = similar(rate.values)
@@ -2428,8 +2443,8 @@ end
         @test measurement_device_error isa WFSPreparationError
         @test measurement_device_error.reason === :device
 
-        estimator_plan = prepare_wfs_estimation(staged, observation,
-            measurement)
+        estimator_plan = @inferred prepare_wfs_estimation(staged,
+            observation, measurement)
         @test wfs_measurement_path(estimator_plan) isa
             AcquiredObservationPath
         estimate_wfs_measurement!(measurement, observation, estimator_plan)
@@ -2454,6 +2469,27 @@ end
         estimate_wfs_measurement!(floating_measurement, floating_observation,
             floating_plan)
         @test quantized_measurement.storage == floating_measurement.storage
+
+        for (owner, field) in (
+            (staged.estimator.state, :valid_mask),
+            (staged.estimator.workspace, :signal_2d),
+            (staged.estimator.products, :slopes),
+        )
+            original = getfield(owner, field)
+            setfield!(owner, field, copy(original))
+            fill!(measurement.storage, T(42))
+            measurement_before_replacement = copy(measurement.storage)
+            replacement_error = contract_captured_error() do
+                estimate_wfs_measurement!(measurement, observation,
+                    estimator_plan)
+            end
+            @test replacement_error isa WFSPreparationError
+            @test replacement_error.reason === :prepared_binding
+            @test measurement.storage == measurement_before_replacement
+            setfield!(owner, field, original)
+            estimate_wfs_measurement!(measurement, observation,
+                estimator_plan)
+        end
 
         measurement_before_recalibration = copy(measurement.storage)
         contract_four_pupil_set_calibration!(family, staged, reference;
@@ -2589,6 +2625,39 @@ end
     end
 
     for family in (Val(:pyramid), Val(:bi_o_edge))
+        trajectory_pupil = PupilFunction(tel; T=T)
+        first_sensor = contract_four_pupil_sensor(family, tel;
+            pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
+        second_sensor = contract_four_pupil_sensor(family, tel;
+            pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
+        first_front_end = contract_four_pupil_front_end(family,
+            first_sensor, source)
+        second_front_end = contract_four_pupil_front_end(family,
+            second_sensor, source)
+        first_workspace = contract_four_pupil_propagation(first_front_end)
+        second_workspace = contract_four_pupil_propagation(second_front_end)
+        @test first_workspace !== second_workspace
+        @test typeof(first_workspace) === typeof(second_workspace)
+        first_rate = contract_four_pupil_rate_map(family, first_front_end,
+            trajectory_pupil)
+        second_rate = contract_four_pupil_rate_map(family, second_front_end,
+            trajectory_pupil)
+        first_plan = prepare_wfs_optics(first_front_end, trajectory_pupil,
+            first_rate)
+        second_plan = prepare_wfs_optics(second_front_end, trajectory_pupil,
+            second_rate)
+        @test typeof(first_plan.plan) === typeof(second_plan.plan)
+        for step in 1:3
+            @. trajectory_pupil.opd = T(step) * T(1e-9) * pupil.opd
+            form_wfs_optical_products!(first_rate, trajectory_pupil,
+                first_plan)
+            form_wfs_optical_products!(second_rate, trajectory_pupil,
+                second_plan)
+            @test first_rate.values == second_rate.values
+        end
+    end
+
+    for family in (Val(:pyramid), Val(:bi_o_edge))
         zero_sensor = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         circular_sensor = contract_four_pupil_sensor(family, tel;
@@ -2687,9 +2756,9 @@ end
             heterogeneous_source)
         rates = contract_four_pupil_rate_map(family, front_end, path_inputs)
         plan = prepare_wfs_optics(front_end, path_inputs, rates)
-        @test plan.plans isa Tuple
-        @test typeof(plan.plans[1].lgs_model) !==
-            typeof(plan.plans[2].lgs_model)
+        @test plan.components isa Tuple
+        @test typeof(plan.components[1].plan.lgs_model) !==
+            typeof(plan.components[2].plan.lgs_model)
         form_wfs_optical_products!(rates, path_inputs, plan)
         @test all(product -> sum(product.values) > zero(T), rates)
         if coverage_enabled
@@ -2707,7 +2776,8 @@ end
         rate = contract_four_pupil_rate_map(family, front_end, pupil)
         plan = prepare_wfs_optics(front_end, pupil, rate)
         form_wfs_optical_products!(rate, pupil, plan)
-        native_expected = similar(front_end.propagation.intensity)
+        native_expected = similar(
+            contract_four_pupil_propagation(front_end).intensity)
         contract_four_pupil_native!(family, native_expected, sensor, pupil,
             lgs)
         expected_rate = similar(rate.values)
@@ -2718,6 +2788,8 @@ end
         if coverage_enabled
             @test_skip "four-pupil LGS allocation assertion is disabled under coverage instrumentation"
         else
+            plan = prepare_wfs_optics(front_end, pupil, rate)
+            form_wfs_optical_products!(rate, pupil, plan)
             @test @allocated(form_wfs_optical_products!(rate, pupil,
                 plan)) == 0
         end

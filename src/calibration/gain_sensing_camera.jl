@@ -167,8 +167,8 @@ propagation workspace through the user API.
 """
 function GainSensingCamera(wfs::WavefrontSensors.PyramidWFS{<:WavefrontSensors.Diffractive},
     basis::AbstractArray; kwargs...)
-    return GainSensingCamera(wfs.front_end.propagation.pyramid_mask, basis;
-        kwargs...)
+    propagation = WavefrontSensors.pyramid_propagation_workspace(wfs)
+    return GainSensingCamera(propagation.pyramid_mask, basis; kwargs...)
 end
 
 function GSCDetectorMetadata(det::Detector;

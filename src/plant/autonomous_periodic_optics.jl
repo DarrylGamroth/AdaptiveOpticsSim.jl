@@ -516,8 +516,8 @@ end
 
 function _prepared_pyramid_modulation(
     plan::PreparedPyramidOpticsBundle)
-    modulation = _prepared_pyramid_modulation(first(plan.plans))
-    @inbounds for component in Base.tail(plan.plans)
+    modulation = _prepared_pyramid_modulation(first(plan.components))
+    @inbounds for component in Base.tail(plan.components)
         _prepared_pyramid_modulation(component) === modulation || throw(
             PlantPreparationError(:autonomous_periodic_optic,
                 :prepared_binding,
