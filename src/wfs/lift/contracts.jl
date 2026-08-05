@@ -1083,12 +1083,6 @@ function _require_lift_estimation_aliases(lift::PreparedLiFTEstimator)
     return lift
 end
 
-
-@inline _lift_initial_mightalias_any(::Nothing, ::Tuple) = false
-@inline _lift_initial_mightalias_any(initial::AbstractArray,
-    resources::Tuple) = _lift_mightalias_any(initial, resources)
-@inline _lift_initial_mightalias_any(::Any, ::Tuple) = false
-
 function _require_lift_estimator(lift::PreparedLiFTEstimator)
     _require_lift_forward_owner(lift.forward)
     lift.observation.metadata.contract == lift.plan.observation_contract ||
