@@ -51,7 +51,7 @@ function scheduled_hgcdte_avalanche_fixture(seed)
     map = detector_test_intensity_map(values;
         kind=DetectorPlane())
     detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
@@ -60,7 +60,7 @@ function scheduled_hgcdte_avalanche_fixture(seed)
             excess_noise_factor=1.5,
             multiplication_model=
                 ClippedGaussianAvalancheMultiplicationApproximation(),
-            read_time=0.0,
+            read_duration=0.0,
             sampling_mode=UpTheRampSampling(3)),
     )
     definition = GlobalShutterAcquisitionDefinition(
@@ -85,7 +85,7 @@ end
         :hgcdte_linear_avalanche_array
 
     exact_detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         gain=3.0,
@@ -112,7 +112,7 @@ end
         expected_fourth =
             3expected_variance^2 * (1 + 2 / shape)
         detector = Detector(
-            integration_time=1.0,
+            exposure_duration=1.0,
             qe=1.0,
             noise=NoiseNone(),
             response_model=NullFrameResponse(),
@@ -136,7 +136,7 @@ end
     approximate_variance = approximate_charge *
         approximate_gain^2 * (approximate_factor - 1)
     approximate_detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
@@ -167,7 +167,7 @@ end
 @testset "HgCdTe linear-avalanche ordering and response" begin
     input = fill(10.0, 4, 4)
     signal_with_read_noise = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseReadout(2.0),
         gain=3.0,
@@ -177,7 +177,7 @@ end
             excess_noise_factor=1.0),
     )
     read_noise_only = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseReadout(2.0),
         gain=3.0,
@@ -193,7 +193,7 @@ end
     @test signal_output ≈ fill(120.0, 4, 4) + noise_output rtol=0.0 atol=256eps(Float64)
 
     glow_base = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
@@ -201,7 +201,7 @@ end
             avalanche_gain=1.0, glow_rate=8.0),
     )
     glow_gained = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
@@ -214,7 +214,7 @@ end
     @test gained_glow == 5base_glow
 
     saturated = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         full_well=100.0,
@@ -255,20 +255,20 @@ end
     @test sum(ipc_output) == 100.0
 
     windowed = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
         readout_window=FrameWindow(2:3, 2:3),
         sensor=HgCdTeAvalancheArraySensor(
             avalanche_gain=2.0,
-            read_time=0.25,
+            read_duration=0.25,
             sampling_mode=CorrelatedDoubleSampling()),
     )
     @test capture!(windowed, fill(4.0, 4, 4), Xoshiro(6135)) ==
         fill(8.0, 2, 2)
     metadata = detector_export_metadata(windowed)
-    @test metadata.sampling_wallclock_time == 1.5
+    @test metadata.sampling_acquisition_duration == 1.5
     @test metadata.frame_response == :none
     @test metadata.charge_coupling == :none
 end
@@ -277,7 +277,7 @@ end
     values = fill(64.0, 16, 16)
     map = detector_test_intensity_map(values)
     detector = Detector(
-        integration_time=0.25,
+        exposure_duration=0.25,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
@@ -295,7 +295,7 @@ end
         plan, rng) == 0
 
     gamma_detector = Detector(
-        integration_time=0.25,
+        exposure_duration=0.25,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),

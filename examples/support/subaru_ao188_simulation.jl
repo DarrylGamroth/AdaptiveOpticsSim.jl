@@ -83,7 +83,7 @@ function AO188CurvatureSimulationParams(; kwargs...)
     atmosphere_step = get(nt, :atmosphere_step, 1e-3)
     high_detector_exposure = get(nt, :high_detector_exposure, atmosphere_step)
     high_detector = get(nt, :high_detector,
-        AO188LinearAPDConfig(T=T0, integration_time=high_detector_exposure))
+        AO188LinearAPDConfig(T=T0, exposure_duration=high_detector_exposure))
     rest = Base.structdiff(nt, (; high_order_sensor_model=nothing, source_band=nothing, high_detector=nothing))
     return AO188SimulationParams(; source_band=:I, high_order_sensor_model=AO188CurvatureModel(T=T0),
         high_detector=high_detector, rest...)
@@ -134,7 +134,7 @@ end
 abstract type AO188DetectorConfig end
 
 struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:AbstractSensor,R<:Union{Nothing,FrameResponseModel},C<:FrameReadoutCorrectionModel,TM<:Union{Nothing,AbstractDetectorThermalModel}} <: AO188DetectorConfig
-    integration_time::T
+    exposure_duration::T
     qe::T
     psf_sampling::Int
     binning::Int
@@ -149,7 +149,7 @@ end
 
 function AO188WFSDetectorConfig(;
     T::Type{<:AbstractFloat}=Float32,
-    integration_time::Real=1e-3,
+    exposure_duration::Real=1e-3,
     qe::Real=0.9,
     psf_sampling::Int=1,
     binning::Int=1,
@@ -161,10 +161,10 @@ function AO188WFSDetectorConfig(;
     correction_model::FrameReadoutCorrectionModel=NullFrameReadoutCorrection(),
     thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,
 )
-    integration_time_t = validated_ao188_duration(integration_time, T,
-        "detector integration_time")
+    exposure_duration_t = validated_ao188_duration(exposure_duration, T,
+        "detector exposure_duration")
     return AO188WFSDetectorConfig{T,typeof(convert_noise(noise, T)),typeof(sensor),typeof(response_model),typeof(correction_model),typeof(thermal_model)}(
-        integration_time_t,
+        exposure_duration_t,
         T(qe),
         psf_sampling,
         binning,
@@ -180,7 +180,7 @@ end
 
 struct AO188LinearAPDConfig{T<:AbstractFloat,N<:NoiseModel} <:
     AO188DetectorConfig
-    integration_time::T
+    exposure_duration::T
     qe::T
     avalanche_gain::T
     excess_noise_factor::T
@@ -191,7 +191,7 @@ end
 
 function AO188LinearAPDConfig(;
     T::Type{<:AbstractFloat}=Float32,
-    integration_time::Real=1e-3,
+    exposure_duration::Real=1e-3,
     qe::Real=0.9,
     avalanche_gain::Real=1.0,
     excess_noise_factor::Real=1.0,
@@ -199,10 +199,10 @@ function AO188LinearAPDConfig(;
     conversion_gain::Real=1.0,
     noise::NoiseModel=NoisePhoton(),
 )
-    integration_time_t = validated_ao188_duration(integration_time, T,
-        "linear-APD integration_time")
+    exposure_duration_t = validated_ao188_duration(exposure_duration, T,
+        "linear-APD exposure_duration")
     return AO188LinearAPDConfig{T,typeof(convert_noise(noise, T))}(
-        integration_time_t,
+        exposure_duration_t,
         T(qe),
         T(avalanche_gain),
         T(excess_noise_factor),
@@ -215,7 +215,7 @@ end
 function detector_from_config(cfg::AO188WFSDetectorConfig{T}; backend::AbstractArrayBackend=CPUBackend()) where {T<:AbstractFloat}
     return Detector(
         cfg.noise;
-        integration_time=cfg.integration_time,
+        exposure_duration=cfg.exposure_duration,
         qe=cfg.qe,
         psf_sampling=cfg.psf_sampling,
         binning=cfg.binning,
@@ -235,7 +235,7 @@ function detector_from_config(cfg::AO188LinearAPDConfig{T},
     backend::AbstractArrayBackend=CPUBackend()) where {T<:AbstractFloat}
     return LinearAPDDetector(
         topology=LinearAPDChannelBank(n_channels),
-        integration_time=cfg.integration_time,
+        exposure_duration=cfg.exposure_duration,
         qe=cfg.qe,
         avalanche_gain=cfg.avalanche_gain,
         excess_noise_factor=cfg.excess_noise_factor,
@@ -341,7 +341,7 @@ function AO188SimulationParams(;
     latency::AO188LatencyModel=AO188LatencyModel(),
     high_detector::Union{Nothing,AO188DetectorConfig}=AO188WFSDetectorConfig(
         T=T,
-        integration_time=high_detector_exposure,
+        exposure_duration=high_detector_exposure,
         qe=0.9,
         psf_sampling=1,
         binning=1,
@@ -352,7 +352,7 @@ function AO188SimulationParams(;
     ),
     low_detector::AO188WFSDetectorConfig=AO188WFSDetectorConfig(
         T=T,
-        integration_time=low_detector_exposure,
+        exposure_duration=low_detector_exposure,
         qe=0.95,
         psf_sampling=1,
         binning=1,

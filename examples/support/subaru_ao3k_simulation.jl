@@ -26,7 +26,7 @@ function AO3kSimulationParams(; kwargs...)
     high_detector_exposure = get(nt, :high_detector_exposure, atmosphere_step)
     high_detector = get(nt, :high_detector, SubaruAO188Simulation.AO188WFSDetectorConfig(
         T=T0,
-        integration_time=high_detector_exposure,
+        exposure_duration=high_detector_exposure,
         qe=0.9,
         psf_sampling=1,
         binning=1,
@@ -35,7 +35,7 @@ function AO3kSimulationParams(; kwargs...)
         noise=NoiseReadout(0.1),
         sensor=HgCdTeAvalancheArraySensor(
             glow_rate=0.02,
-            read_time=high_detector_exposure / 4,
+            read_duration=high_detector_exposure / 4,
             sampling_mode=CorrelatedDoubleSampling(),
             T=T0),
         correction_model=ReferencePixelCommonModeCorrection(4, 4),

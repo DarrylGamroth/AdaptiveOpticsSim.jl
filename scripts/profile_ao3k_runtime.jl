@@ -76,11 +76,11 @@ end
 
 function _resolve_sampling(name::AbstractString, T::Type{<:AbstractFloat})
     lowered = lowercase(name)
-    lowered == "default" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
-    lowered == "single" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=SingleRead(), T=T), "single"
-    lowered == "ndr4" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=AveragedNonDestructiveReads(4), T=T), "ndr4"
-    lowered == "cds" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
-    lowered == "fowler8" && return HgCdTeSensor(read_time=T(2.5e-4), sampling_mode=FowlerSampling(8), T=T), "fowler8"
+    lowered == "default" && return HgCdTeSensor(read_duration=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
+    lowered == "single" && return HgCdTeSensor(read_duration=T(2.5e-4), sampling_mode=SingleRead(), T=T), "single"
+    lowered == "ndr4" && return HgCdTeSensor(read_duration=T(2.5e-4), sampling_mode=AveragedNonDestructiveReads(4), T=T), "ndr4"
+    lowered == "cds" && return HgCdTeSensor(read_duration=T(2.5e-4), sampling_mode=CorrelatedDoubleSampling(), T=T), "cds"
+    lowered == "fowler8" && return HgCdTeSensor(read_duration=T(2.5e-4), sampling_mode=FowlerSampling(8), T=T), "fowler8"
     error("unsupported sampling mode '$name'; use default, single, ndr4, cds, or fowler8")
 end
 
@@ -186,7 +186,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     T = Float32
     params = AO3kSimulationParams(; cfg.kwargs..., high_detector=AO188WFSDetectorConfig(
         T=T,
-        integration_time=1e-3,
+        exposure_duration=1e-3,
         qe=0.9,
         psf_sampling=1,
         binning=1,
@@ -195,7 +195,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
         noise=NoiseReadout(0.1),
         sensor=HgCdTeSensor(
             glow_rate=T(0.02),
-            read_time=sensor.readout.read_time,
+            read_duration=sensor.readout.read_duration,
             sampling_mode=sensor.readout.sampling_mode,
             persistence_model=sensor.persistence_model,
             T=T),
@@ -231,7 +231,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     high_reference_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_reference_cube(high_detector)
     high_signal_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_signal_cube(high_detector)
     high_read_cube = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_read_cube(high_detector)
-    high_read_times = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_read_times(high_detector)
+    high_read_offsets_s = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_read_offsets_s(high_detector)
 
     println("ao3k_runtime_profile")
     println("  backend: ", backend_label)
@@ -279,7 +279,7 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  high_reference_cube_shape: ", isnothing(high_reference_cube) ? nothing : size(high_reference_cube))
     println("  high_signal_cube_shape: ", isnothing(high_signal_cube) ? nothing : size(high_signal_cube))
     println("  high_read_cube_shape: ", isnothing(high_read_cube) ? nothing : size(high_read_cube))
-    println("  high_read_times_length: ", isnothing(high_read_times) ? nothing : length(high_read_times))
+    println("  high_read_offsets_s_length: ", isnothing(high_read_offsets_s) ? nothing : length(high_read_offsets_s))
     return nothing
 end
 

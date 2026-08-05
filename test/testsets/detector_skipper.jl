@@ -1,6 +1,6 @@
 function skipper_noise_samples(n_samples::Int, seed::Int)
     detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=NoiseReadout(4.0),
         qe=1.0,
         sensor=CCDSensor(
@@ -32,7 +32,7 @@ end
         sampling_mode=SkipperSampling(2), sample_duration=Inf)
 
     detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=NoiseNone(),
         qe=1.0,
         gain=2.0,
@@ -64,8 +64,8 @@ end
     @test metadata.sampling_reads == 8
     @test metadata.sampling_reference_reads == 0
     @test metadata.sampling_signal_reads == 8
-    @test metadata.sampling_read_time == 2e-6
-    @test metadata.sampling_wallclock_time == 1.0 + 16e-6
+    @test metadata.sampling_read_duration == 2e-6
+    @test metadata.sampling_acquisition_duration == 1.0 + 16e-6
     @test metadata.provides_signal_frame
     @test !metadata.provides_read_cube
     @test supports_nondestructive_reads(detector.params.sensor)
@@ -102,7 +102,7 @@ end
 @testset "Skipper CCD prepared execution" begin
     input = fill(2.0, 16, 16)
     detector = Detector(
-        integration_time=0.5,
+        exposure_duration=0.5,
         noise=NoiseReadout(0.25),
         qe=1.0,
         sensor=CCDSensor(
@@ -116,7 +116,7 @@ end
         capture!(detector, input, rng)) == 0
 
     transition = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=NoiseNone(),
         qe=1.0,
         response_model=NullFrameResponse(),

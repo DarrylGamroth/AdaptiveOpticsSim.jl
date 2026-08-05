@@ -345,9 +345,9 @@ end
     rate_map = form_direct_image!(imaging)
     rate_before = copy(rate_map.values)
 
-    short = Detector(integration_time=0.25, noise=NoiseNone(), qe=0.5,
+    short = Detector(exposure_duration=0.25, noise=NoiseNone(), qe=0.5,
         response_model=NullFrameResponse(), sensor=CMOSSensor())
-    long = Detector(integration_time=1.5, noise=NoiseNone(), qe=0.5,
+    long = Detector(exposure_duration=1.5, noise=NoiseNone(), qe=0.5,
         response_model=NullFrameResponse())
     short_plan = prepare_detector_acquisition(short, rate_map)
     long_plan = prepare_detector_acquisition(long, rate_map)
@@ -363,7 +363,7 @@ end
     @test rate_map.values == rate_before
 
     response_kernel = [0.0 0.125 0.0; 0.125 0.5 0.125; 0.0 0.125 0.0]
-    skipper = Detector(integration_time=0.5, noise=NoiseReadout(0.05), qe=0.25,
+    skipper = Detector(exposure_duration=0.5, noise=NoiseReadout(0.05), qe=0.25,
         response_model=SampledFrameResponse(response_kernel),
         sensor=CCDSensor(sampling_mode=SkipperSampling(3)))
     skipper_plan = prepare_detector_acquisition(skipper, rate_map)
@@ -385,7 +385,7 @@ end
         spatial_measure=CellIntegratedMeasure(),
         coherence=IncoherentIntensityAddition())
     normalized_map = IntensityMap(normalized_metadata, normalized_values)
-    external = Detector(integration_time=0.5, noise=NoiseNone(), qe=0.25,
+    external = Detector(exposure_duration=0.5, noise=NoiseNone(), qe=0.25,
         response_model=NullFrameResponse())
     @test_throws InvalidConfiguration prepare_detector_acquisition(external,
         normalized_map)

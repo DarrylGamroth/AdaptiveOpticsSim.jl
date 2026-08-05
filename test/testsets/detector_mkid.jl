@@ -22,7 +22,7 @@ end
         wavelength_passband_m=(0.8e-6, 1.4e-6))
     sensor = MKIDArraySensor(qe=0.7, dark_count_rate=0.0,
         fill_factor=0.9, characteristics=characteristics)
-    detector = MKIDArrayDetector(integration_time=2.0, noise=NoiseNone(),
+    detector = MKIDArrayDetector(exposure_duration=2.0, noise=NoiseNone(),
         sensor=sensor, output_type=UInt16)
     output = capture!(detector, fill(10.0, 2, 8), Xoshiro(9201))
 
@@ -79,10 +79,10 @@ end
 end
 
 @testset "MKID deterministic radiometry and passband" begin
-    detector = MKIDArrayDetector(integration_time=2.0, noise=NoiseNone(),
+    detector = MKIDArrayDetector(exposure_duration=2.0, noise=NoiseNone(),
         gate_model=DutyCycleGate(0.25), sensor=MKIDArraySensor(
             qe=0.5, dark_count_rate=4.0, fill_factor=0.8))
-    @test counting_exposure_time(detector) == 0.5
+    @test counting_live_duration(detector) == 0.5
     @test capture!(detector, fill(10.0, 2, 8), Xoshiro(9210)) ==
         fill(4.0, 2, 8)
     @test supports_counting_gating(detector)
@@ -138,7 +138,7 @@ end
         (ParalyzableDeadTime(dead_time),
             x -> (x / dead_time) * exp(-x)),
     )
-        detector = MKIDArrayDetector(integration_time=1.0,
+        detector = MKIDArrayDetector(exposure_duration=1.0,
             noise=NoiseNone(), sensor=MKIDArraySensor(qe=1.0,
                 dark_count_rate=0.0, fill_factor=1.0,
                 dead_time_model=model))
@@ -170,7 +170,7 @@ end
         (MKIDArrayDetector(noise=NoisePhoton(),
             sensor=MKIDArraySensor(qe=1.0)),
             fill(20.0, dimensions), 20.0),
-        (MKIDArrayDetector(integration_time=2.0, noise=NoisePhoton(),
+        (MKIDArrayDetector(exposure_duration=2.0, noise=NoisePhoton(),
             sensor=MKIDArraySensor(qe=0.0, dark_count_rate=6.0)),
             zeros(dimensions), 12.0),
         (MKIDArrayDetector(noise=NoisePhoton(),
@@ -219,7 +219,7 @@ end
 
     for bad in (0.0, -1.0, Inf, NaN)
         @test_throws InvalidConfiguration MKIDArrayDetector(
-            integration_time=bad)
+            exposure_duration=bad)
     end
     for bad in (-0.1, 1.1, Inf, NaN)
         @test_throws InvalidConfiguration MKIDArraySensor(qe=bad)
@@ -256,7 +256,7 @@ end
         noise=NoiseReadout(1.0))
 
     function replay_detector()
-        return MKIDArrayDetector(integration_time=0.5,
+        return MKIDArrayDetector(exposure_duration=0.5,
             noise=NoisePhoton(), gate_model=DutyCycleGate(0.75),
             sensor=MKIDArraySensor(qe=0.7, dark_count_rate=0.25,
                 dead_time_model=NonParalyzableDeadTime(1e-3)))

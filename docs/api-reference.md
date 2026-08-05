@@ -392,7 +392,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `exposure_close_timestamp`, `integrated_through_timestamp`,
   `readout_complete_timestamp`, `acquisition_readiness_timestamp`,
   `nondestructive_read_count`, `nondestructive_read_offset`,
-  `next_nondestructive_read_timestamp`,
+  `next_nondestructive_read_durationstamp`,
   `prepare_global_shutter_acquisition`, `begin_exposure!`,
   `accumulate_exposure_interval!`, `take_nondestructive_read!`,
   `close_exposure!`, `complete_readout!`, and
@@ -408,7 +408,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `next_rolling_band_open_timestamp`,
   `next_rolling_band_close_timestamp`, and
   `prepare_rolling_shutter_acquisition`. The detector's `RollingShutter`
-  timing model supplies line time, row-group size, and rolling-exposure or
+  timing model supplies line duration, row-group size, and rolling-exposure or
   global-reset semantics; the ordinary event transition functions above are
   specialized for the prepared rolling lifecycle
 - Frame-transfer definition and qualified event lifecycle:
@@ -1229,7 +1229,7 @@ not the moved detector bindings.
 - Runtime functions: `capture!`, `output_frame`, `channel_output`,
   `detector_export_metadata`, `readout_ready`, `reset_integration!`,
   `thermal_model`, `detector_ramp_slope`, `detector_ramp_intercept`,
-  `detector_ramp_cube`, `detector_ramp_times`
+  `detector_ramp_cube`, `detector_ramp_read_offsets_s`
 - Prepared intensity-map acquisition: exported
   `prepare_detector_acquisition`; qualified-public
   `Detectors.DetectorAcquisitionPlan`,
@@ -1344,7 +1344,7 @@ not a separate reduced-order detector type or a camera profile.
 `SPADArrayDetector((rows, columns); ...)` is the maintained fixed-shape
 Geiger-mode area-counting surface. Its deterministic order is cell-integrated
 photon-arrival rate times active-area detection efficiency, fill factor, live
-integration time, and source throughput; plus integrated dark counts; followed
+exposure duration, and source throughput; plus integrated dark counts; followed
 by the selected dead-time mean law and deterministic mean-response stages. An
 optional `NoisePhoton()` stage then draws a Poisson count from that adjusted
 expectation. This last step is a bounded accumulated-count surrogate, not the
@@ -1361,7 +1361,7 @@ model does not emit photon timestamps or avalanche events.
 
 `MKIDArrayDetector` is the maintained MKID surface for accumulated-count HIL
 use. Its observable is one expected-count or sampled-count image. The shared
-pipeline applies quantum efficiency, fill factor, live integration time, source
+pipeline applies quantum efficiency, fill factor, live duration, source
 throughput, dark counts, an optional dead-time mean law, optional Poisson
 sampling, and output conversion. It does not apply SPAD afterpulse or
 nearest-neighbor redistribution stages.
@@ -1432,21 +1432,21 @@ without retaining an `n`-plane read cube. This bounds memory independently of
 sample count and keeps the warmed repeated-capture path allocation-free. The
 current model assumes independent read samples. Configure CCD clock-induced
 charge with `clock_induced_charge_per_frame`; unlike dark current, it is not
-scaled by integration time. `CCDSensor.sample_duration` is the duration of one
+scaled by exposure duration. `CCDSensor.sample_duration` is the duration of one
 configured full-frame nondestructive sample. It is not a sampling period or an
 electronics integration-window model.
 
 `UpTheRampSampling(n)` is available on `HgCdTeSensor` and on the
 linear-avalanche HgCdTe sensor. It retains `n` evenly spaced
 nondestructive reads, fits an intercept and slope, and returns
-`slope * integration_time` so ordinary `capture!` output units do not change.
+`slope * exposure_duration` so ordinary `capture!` output units do not change.
 Use `detector_ramp_slope(det)`, `detector_ramp_intercept(det)`,
-`detector_ramp_cube(det)`, and `detector_ramp_times(det)` for diagnostics.
+`detector_ramp_cube(det)`, and `detector_ramp_read_offsets_s(det)` for diagnostics.
 `Detectors.detector_ramp_acquisition(det)` returns
 `:synthesized_final_charge` for this direct convenience or
 `:scheduled_evolving_charge` for a Plant event acquisition.
-Reads start at exposure time zero and end at the configured integration time;
-`read_time` must fit within the resulting cadence. Full-frame and windowed
+The first read offset is zero and the final read offset equals the configured exposure duration;
+`read_duration` must fit within the resulting cadence. Full-frame and windowed
 repeated capture reuse
 their products after warmup.
 
@@ -1461,7 +1461,7 @@ saturation-aware fitting, or correlated 1/f-noise estimation.
 
 `EMCCDSensor(...; acquisition_mode=FrameTransferAcquisition(...))` models frame
 transfer as timing only. With `readout_rate_hz` configured, metadata reports
-the pixel-read duration, one-frame output latency in `sampling_wallclock_time`,
+the pixel-read duration, one-frame output latency in `sampling_acquisition_duration`,
 and the overlapped `steady_state_frame_period`. `SequentialAcquisition()` is
 the default. Neither acquisition policy changes the presampling response or its
 derived MTF, QE, charge multiplication, or detector noise.

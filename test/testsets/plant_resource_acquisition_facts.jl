@@ -169,7 +169,7 @@ end
     reference_cube = zeros(Float64, 2, 2, 2)
     signal_cube = zeros(Float64, 2, 2, 2)
     read_cube = zeros(Float64, 2, 2, 4)
-    read_times = zeros(Float64, 4)
+    read_offsets_s = zeros(Float64, 4)
     workspace_reference_average = zeros(Float64, 2, 2)
     workspace_signal_average = zeros(Float64, 2, 2)
     workspace_reference_cube = zeros(Float64, 2, 2, 2)
@@ -181,7 +181,7 @@ end
         reference_cube,
         signal_cube,
         read_cube,
-        read_times,
+        read_offsets_s,
     )
     multi_read_workspace = MultiReadFrameReadoutWorkspace(
         workspace_reference_average,
@@ -196,7 +196,7 @@ end
         reference_cube,
         signal_cube,
         read_cube,
-        read_times,
+        read_offsets_s,
     ))
     multi_read_product_storage = Plant._detector_readout_product_storage(
         multi_read_products, target)
@@ -290,7 +290,7 @@ end
         PixelResponseNonuniformity(fill(0.9, 4, 4)),
         BadPixelMask(falses(4, 4)))
     detector = Detector(
-        integration_time=0.25,
+        exposure_duration=0.25,
         noise=NoiseNone(),
         qe=1.0,
         response_model=response,
@@ -328,7 +328,7 @@ end
 
     params = detector.params
     unsupported_params = DetectorParams(
-        params.integration_time,
+        params.exposure_duration,
         params.qe,
         params.psf_sampling,
         params.binning,
@@ -391,7 +391,7 @@ end
         acquisition_resource_array_bytes(prepared_direct.integrated_sample)
 
     detector = Detector(
-        integration_time=0.1,
+        exposure_duration=0.1,
         noise=NoiseNone(),
         qe=1.0,
         response_model=NullFrameResponse(),
@@ -414,7 +414,7 @@ end
         structural_workspace_bytes(detector_fact)
 
     rolling_detector = Detector(
-        integration_time=0.1,
+        exposure_duration=0.1,
         noise=NoiseNone(),
         qe=1.0,
         response_model=NullFrameResponse(),
@@ -435,12 +435,12 @@ end
         structural_workspace_bytes(rolling_detector_fact)
 
     ramp_detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=NoiseNone(),
         qe=1.0,
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(
-            read_time=0.1,
+            read_duration=0.1,
             sampling_mode=UpTheRampSampling(3)),
     )
     ramp_map = acquisition_resource_intensity_map(fill(1.0, 2, 2))
@@ -460,7 +460,7 @@ end
         ramp_products.intercept_frame,
         ramp_products.integrated_frame,
         ramp_products.read_cube,
-        ramp_products.read_times,
+        ramp_products.read_offsets_s,
         prepared_ramp.read_offsets,
         prepared_ramp.read_offset_binding,
     ))

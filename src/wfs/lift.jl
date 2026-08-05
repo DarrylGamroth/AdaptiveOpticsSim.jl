@@ -240,13 +240,13 @@ end
 
 """Expected detected counts formed using an explicit exposure and QE."""
 struct LiFTExpectedCounts{T<:AbstractFloat} <: AbstractLiFTObservationDomain
-    exposure_time_s::T
+    exposure_duration_s::T
     quantum_efficiency::T
 end
 
-function LiFTExpectedCounts(exposure_time_s::Real;
+function LiFTExpectedCounts(exposure_duration_s::Real;
     quantum_efficiency::Real=1.0)
-    exposure, qe = promote(float(exposure_time_s), float(quantum_efficiency))
+    exposure, qe = promote(float(exposure_duration_s), float(quantum_efficiency))
     _require_lift_exposure_qe(exposure, qe, "LiFT expected-count observation")
     return LiFTExpectedCounts{typeof(exposure)}(exposure, qe)
 end
@@ -286,7 +286,7 @@ end
     ::Type{T}) where {T<:AbstractFloat} = one(T)
 @inline lift_observation_to_rate_scale(domain::LiFTExpectedCounts,
     ::Type{T}) where {T<:AbstractFloat} =
-    inv(T(domain.exposure_time_s) * T(domain.quantum_efficiency))
+    inv(T(domain.exposure_duration_s) * T(domain.quantum_efficiency))
 @inline lift_observation_to_rate_scale(domain::LiFTNormalizedIntensity,
     ::Type{T}) where {T<:AbstractFloat} = T(domain.photon_rate_per_unit)
 
@@ -295,7 +295,7 @@ end
     inv(T(domain.noise_equivalent_exposure_s) * T(domain.quantum_efficiency))
 @inline lift_shot_variance_rate_scale(domain::LiFTExpectedCounts,
     ::Type{T}) where {T<:AbstractFloat} =
-    inv(T(domain.exposure_time_s) * T(domain.quantum_efficiency))
+    inv(T(domain.exposure_duration_s) * T(domain.quantum_efficiency))
 @inline lift_shot_variance_rate_scale(domain::LiFTNormalizedIntensity,
     ::Type{T}) where {T<:AbstractFloat} =
     inv(T(domain.noise_equivalent_exposure_s) * T(domain.quantum_efficiency))

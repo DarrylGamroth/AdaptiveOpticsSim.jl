@@ -939,7 +939,7 @@ At minimum the companion reports:
   failures with their distinct clock domains
 - frame-port and command-schedule occupancy, headroom, drops, and coalescing
 - command age and effective optic-state version at each optical sample
-- GPU kernel, synchronization, explicit copy, and host-transfer time
+- GPU kernel, synchronization, explicit copy, and host-transfer duration
 - allocation, GC, context-switch, migration, and configured causal counters
 - the selected shed, coalesce, stop, or failure decision
 

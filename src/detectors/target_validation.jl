@@ -65,7 +65,7 @@ const _MULTI_READ_TARGET_VALIDATION_FIELDS = (
     :reference_cube,
     :signal_cube,
     :read_cube,
-    :read_times,
+    :read_offsets_s,
 )
 
 const _RAMP_READOUT_TARGET_VALIDATION_FIELDS = (
@@ -73,7 +73,7 @@ const _RAMP_READOUT_TARGET_VALIDATION_FIELDS = (
     :intercept_frame,
     :integrated_frame,
     :read_cube,
-    :read_times,
+    :read_offsets_s,
     :acquisition_kind,
 )
 
@@ -396,7 +396,7 @@ function _require_exact_detector_readout_products_target(
         target, "detector multi-read signal cube")
     _require_exact_optional_detector_array_target(products.read_cube,
         target, "detector multi-read read cube")
-    # `read_times` is a host read-schedule vector, not a data-plane array.
+    # `read_offsets_s` is a host read-schedule vector, not a data-plane array.
     return products
 end
 
@@ -412,7 +412,7 @@ function _require_exact_detector_readout_products_target(
         target, "detector ramp integrated frame")
     _require_exact_detector_array_target(
         products.read_cube, target, "detector ramp read cube")
-    # `read_times` and `acquisition_kind` are host schedule configuration.
+    # `read_offsets_s` and `acquisition_kind` are host schedule configuration.
     return products
 end
 
@@ -524,7 +524,7 @@ function _require_exact_detector_target(
 
     # Deliberate host staging: workspace.noise_buffer_host,
     # workspace.batched_buffer_host, and workspace.output_buffer_host. Thermal
-    # state, integration time, readiness, and all remaining params are host
+    # state, exposure duration, readiness, and all remaining params are host
     # configuration or scalars.
     return detector
 end

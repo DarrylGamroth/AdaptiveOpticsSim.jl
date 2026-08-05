@@ -281,7 +281,7 @@ end
         :UpTheRampSampling,
         :FrameTransferAcquisition,
         :detector_ramp_cube,
-        :detector_ramp_times,
+        :detector_ramp_read_offsets_s,
         :InterpixelCapacitance,
         :LinearAPDDetector,
         :SPADArrayDetector,

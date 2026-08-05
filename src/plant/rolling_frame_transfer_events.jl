@@ -12,7 +12,7 @@ struct _GlobalResetEventMode <: _RollingShutterEventMode end
         readiness_delay=PlantDuration(0))
 
 Immutable virtual-time definition for one rolling-shutter frame. The detector's
-prepared `RollingShutter` timing model supplies the row-band size, line time,
+prepared `RollingShutter` timing model supplies the row-band size, line duration,
 and rolling-exposure versus global-reset semantics. The definition supplies the
 nominal per-band exposure and the delay between complete-frame readout and the
 next accepted frame start.
@@ -263,10 +263,10 @@ function _prepare_rolling_shutter_acquisition(
     _require_prepared_acquisition(acquisition)
     T = eltype(det.products.frame)
     exposure_seconds = plant_duration_seconds(definition.exposure_duration, T)
-    isequal(det.params.integration_time, exposure_seconds) ||
+    isequal(det.params.exposure_duration, exposure_seconds) ||
         _detector_acquisition_event_error(:exposure_duration,
-            "detector integration time must exactly match the prepared rolling-shutter duration")
-    line_duration = _quantized_plant_duration(timing.line_time,
+            "detector exposure duration must exactly match the prepared rolling-shutter duration")
+    line_duration = _quantized_plant_duration(timing.line_duration,
         "rolling-shutter line duration", :invalid_line_duration,
         :unrepresentable_line_duration)
     row_count = size(det.products.frame, 1)
@@ -694,10 +694,10 @@ function _prepare_frame_transfer_acquisition(
     _require_prepared_acquisition(acquisition)
     T = eltype(det.products.frame)
     exposure_seconds = plant_duration_seconds(definition.exposure_duration, T)
-    isequal(det.params.integration_time, exposure_seconds) ||
+    isequal(det.params.exposure_duration, exposure_seconds) ||
         _detector_acquisition_event_error(:exposure_duration,
-            "detector integration time must exactly match the prepared frame-transfer duration")
-    transfer_duration = _quantized_plant_duration(mode.transfer_time,
+            "detector exposure duration must exactly match the prepared frame-transfer duration")
+    transfer_duration = _quantized_plant_duration(mode.transfer_duration,
         "frame-transfer duration", :invalid_transfer_duration,
         :unrepresentable_transfer_duration)
     plan = detector_acquisition_plan(acquisition)

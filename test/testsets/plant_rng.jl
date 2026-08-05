@@ -169,7 +169,7 @@ function Plant.prepare_acquisition_provider(
 )
     require_path_result(path)
     T = eltype(path.result.values)
-    detector = Detector(integration_time=T(model.exposure),
+    detector = Detector(exposure_duration=T(model.exposure),
         noise=NoisePhotonReadout(T(model.readout_sigma)), qe=one(T),
         response_model=NullFrameResponse(), T=T,
         backend=path.key.backend)
@@ -189,7 +189,7 @@ function Plant.prepare_acquisition_provider(
 )
     require_path_result(path)
     T = eltype(path.result.values)
-    detector = Detector(integration_time=T(model.exposure),
+    detector = Detector(exposure_duration=T(model.exposure),
         noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
         T=T, backend=path.key.backend)
     execution = FrameAcquisitionExecution(detector, path.result)

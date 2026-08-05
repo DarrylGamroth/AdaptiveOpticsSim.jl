@@ -203,7 +203,7 @@ function detector_output_shape(det::Detector, input_shape::Tuple{Int,Int})
     return window === nothing ? (n_out, m_out) : (length(window.rows), length(window.cols))
 end
 
-function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real,
+function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_duration::Real,
     qe, rate_scale) where {T}
     n_in, m_in = size(psf)
     sampling = det.params.psf_sampling
@@ -217,7 +217,7 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real,
     else
         copyto!(det.workspace.bin_buffer, optical_rate)
     end
-    @. det.workspace.bin_buffer *= qe * exposure_time * rate_scale
+    @. det.workspace.bin_buffer *= qe * exposure_duration * rate_scale
     if binning > 1
         bin2d!(det.products.frame, det.workspace.bin_buffer, binning)
     else
@@ -226,9 +226,9 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real,
     return det.products.frame
 end
 
-fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real,
-    qe) where {T} = fill_frame!(det, psf, exposure_time, qe,
+fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_duration::Real,
+    qe) where {T} = fill_frame!(det, psf, exposure_duration, qe,
         one(eltype(det.products.frame)))
-fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_time::Real) where {T} =
-    fill_frame!(det, psf, exposure_time, det.params.qe)
-fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T} = fill_frame!(det, psf, det.params.integration_time)
+fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_duration::Real) where {T} =
+    fill_frame!(det, psf, exposure_duration, det.params.qe)
+fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T} = fill_frame!(det, psf, det.params.exposure_duration)

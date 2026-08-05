@@ -139,11 +139,11 @@ struct CurvaturePackedAcquisition{D,R,S,T<:AbstractFloat}
 end
 
 @inline _curvature_detector_duration(detector::Detector) =
-    detector.params.integration_time
+    detector.params.exposure_duration
 @inline _curvature_detector_duration(detector::AbstractCountingDetector) =
-    counting_integration_time(detector)
+    counting_exposure_duration(detector)
 @inline _curvature_detector_duration(detector::LinearAPDDetector) =
-    detector.params.integration_time
+    detector.params.exposure_duration
 
 @inline _curvature_branch_durations(::Nothing, duration::T) where {
     T<:AbstractFloat,

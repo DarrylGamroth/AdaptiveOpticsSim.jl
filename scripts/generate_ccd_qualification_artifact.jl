@@ -69,19 +69,19 @@ function ccd_artifact_cases()
     cases = Dict{String,Any}[]
     push!(cases, ccd_artifact_poisson_case(
         "shot",
-        Detector(integration_time=0.5, qe=0.8, noise=NoisePhoton(),
+        Detector(exposure_duration=0.5, qe=0.8, noise=NoisePhoton(),
             sensor=CCDSensor()),
         signal_input, 3101, 20.0,
     ))
     push!(cases, ccd_artifact_poisson_case(
         "dark",
-        Detector(integration_time=2.0, qe=1.0, dark_current=12.0,
+        Detector(exposure_duration=2.0, qe=1.0, dark_current=12.0,
             noise=NoiseNone(), sensor=CCDSensor()),
         zero_input, 3102, 24.0,
     ))
     push!(cases, ccd_artifact_poisson_case(
         "clock_induced_charge",
-        Detector(integration_time=7.0, qe=1.0, noise=NoiseNone(),
+        Detector(exposure_duration=7.0, qe=1.0, noise=NoiseNone(),
             sensor=CCDSensor(clock_induced_charge_per_frame=3.5)),
         zero_input, 3103, 3.5,
     ))
@@ -90,7 +90,7 @@ function ccd_artifact_cases()
     read_variance = read_sigma^2
     push!(cases, ccd_artifact_moment_case(
         "read_noise",
-        Detector(integration_time=1.0, qe=1.0,
+        Detector(exposure_duration=1.0, qe=1.0,
             noise=NoiseReadout(read_sigma), sensor=CCDSensor()),
         zero_input, 3104, 0.0, read_variance,
         3 * read_variance^2,
@@ -101,7 +101,7 @@ function ccd_artifact_cases()
     combined_variance = combined_poisson_mean + combined_sigma^2
     push!(cases, ccd_artifact_moment_case(
         "combined",
-        Detector(integration_time=0.5, qe=0.8, dark_current=12.0,
+        Detector(exposure_duration=0.5, qe=0.8, dark_current=12.0,
             noise=NoisePhotonReadout(combined_sigma),
             sensor=CCDSensor(clock_induced_charge_per_frame=2.0)),
         signal_input, 3105, combined_poisson_mean, combined_variance,
@@ -112,22 +112,22 @@ end
 
 function ccd_artifact_deterministic_contract()
     zero_input = zeros(16, 16)
-    short = Detector(integration_time=0.1, noise=NoiseNone(), qe=1.0,
+    short = Detector(exposure_duration=0.1, noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=3.0))
-    long = Detector(integration_time=10.0, noise=NoiseNone(), qe=1.0,
+    long = Detector(exposure_duration=10.0, noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=3.0))
     cic_exposure_invariant =
         capture!(short, zero_input, Xoshiro(3201)) ==
         capture!(long, zero_input, Xoshiro(3201))
 
-    read_time_rejected = try
+    read_duration_rejected = try
         CCDSensor(sample_duration=1e-3)
         false
     catch err
         err isa InvalidConfiguration
     end
 
-    allocation_detector = Detector(integration_time=1.0,
+    allocation_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=0.75))
     allocation_rng = Xoshiro(3202)
@@ -138,14 +138,14 @@ function ccd_artifact_deterministic_contract()
 
     return Dict{String,Any}(
         "cic_exposure_invariant" => cic_exposure_invariant,
-        "single_read_read_time_rejected" => read_time_rejected,
+        "single_read_read_duration_rejected" => read_duration_rejected,
         "default_response_is_null" => metadata.frame_response == :none,
         "default_supports_mtf" =>
             AdaptiveOpticsSim.Detectors.supports_detector_mtf(
                 allocation_detector),
         "sampling_mode" => String(metadata.sampling_mode),
-        "sampling_read_time_is_absent" =>
-            isnothing(metadata.sampling_read_time),
+        "sampling_read_duration_is_absent" =>
+            isnothing(metadata.sampling_read_duration),
         "steady_alloc_bytes" => steady_alloc_bytes,
         "allocation_gate_passed" => steady_alloc_bytes == 0,
     )
@@ -170,10 +170,10 @@ function generate_ccd_qualification_artifact()
         case["variance_passed"], cases)
     all_deterministic_passed =
         deterministic["cic_exposure_invariant"] &&
-        deterministic["single_read_read_time_rejected"] &&
+        deterministic["single_read_read_duration_rejected"] &&
         deterministic["default_response_is_null"] &&
         !deterministic["default_supports_mtf"] &&
-        deterministic["sampling_read_time_is_absent"] &&
+        deterministic["sampling_read_duration_is_absent"] &&
         deterministic["allocation_gate_passed"]
 
     cpu = first(Sys.cpu_info())

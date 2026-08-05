@@ -24,11 +24,11 @@ function main(; resolution::Int=24)
     pyr_ext = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
     pyr_point_detector = AdaptiveOpticsSim.Detectors.Detector(
         noise=AdaptiveOpticsSim.Detectors.NoiseNone(), qe=1.0,
-        integration_time=1.0,
+        exposure_duration=1.0,
         response_model=AdaptiveOpticsSim.Detectors.NullFrameResponse())
     pyr_extended_detector = AdaptiveOpticsSim.Detectors.Detector(
         noise=AdaptiveOpticsSim.Detectors.NoiseNone(), qe=1.0,
-        integration_time=1.0,
+        exposure_duration=1.0,
         response_model=AdaptiveOpticsSim.Detectors.NullFrameResponse())
     pyr_point_slopes = copy(measure!(pyr_point, pupil, src,
         pyr_point_detector))

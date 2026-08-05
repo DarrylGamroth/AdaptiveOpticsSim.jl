@@ -43,7 +43,7 @@ function cmos_moment_bounds(sample_count, variance;
 end
 
 @testset "CMOS-family detector" begin
-    det_cmos = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_cmos = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))
     frame_cmos = copy(capture!(det_cmos, zeros(8, 8); rng=MersenneTwister(12)))
     @test !all(iszero, frame_cmos)
@@ -76,7 +76,7 @@ end
     dsnu_map = fill(0.25, 4, 4)
     bad_mask = falses(4, 4)
     bad_mask[2, 3] = true
-    det_cmos_structured = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_cmos_structured = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(output_model=StaticCMOSOutputPattern(2, [1.0, 2.0], [0.0, 10.0]),
             timing_model=RollingShutter(1e-3)),
         response_model=NullFrameResponse(),
@@ -95,8 +95,8 @@ end
     @test structured_meta.has_dsnu
     @test structured_meta.has_bad_pixels
     @test structured_meta.timing_model == :rolling_shutter
-    @test structured_meta.timing_line_time == 1e-3
-    @test structured_meta.sampling_wallclock_time == 1.004
+    @test structured_meta.timing_line_duration == 1e-3
+    @test structured_meta.sampling_acquisition_duration == 1.004
     @test supports_detector_defect_maps(det_cmos_structured.params.sensor)
     @test supports_shutter_timing(det_cmos_structured.params.sensor)
     @test_throws InvalidConfiguration CMOSSensor(timing_model=RollingShutter(-1.0))
@@ -114,24 +114,24 @@ end
     @test_throws UnsupportedAlgorithm CMOSSensor(
         output_model=UnsupportedCMOSOutput())
 
-    rolling_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    rolling_det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(timing_model=RollingShutter(0.25)),
         response_model=NullFrameResponse())
     rolling_source = InPlaceFrameSource((out, t) -> fill!(out, t), (4, 4))
     rolling_rng = MersenneTwister(127)
     rolling_frame = capture!(rolling_det, rolling_source, rolling_rng)
     @test rolling_frame == repeat(reshape([0.0, 0.25, 0.5, 0.75], :, 1), 1, 4)
-    @test detector_export_metadata(rolling_det).sampling_wallclock_time == 2.0
+    @test detector_export_metadata(rolling_det).sampling_acquisition_duration == 2.0
     @test_detector_allocation @allocated(
         capture!(rolling_det, rolling_source, rolling_rng)) == 0
 
     global_exposure_calls = Tuple{Float64,Float64}[]
     global_exposure_source = FunctionExposureFrameSource(
-        (start_time, exposure_time) -> begin
-            push!(global_exposure_calls, (start_time, exposure_time))
-            fill(exposure_time, 2, 2)
+        (start_time, exposure_duration) -> begin
+            push!(global_exposure_calls, (start_time, exposure_duration))
+            fill(exposure_duration, 2, 2)
         end)
-    global_exposure_det = Detector(integration_time=2.0,
+    global_exposure_det = Detector(exposure_duration=2.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     global_exposure_frame = capture!(global_exposure_det,
         global_exposure_source; rng=MersenneTwister(1271))
@@ -140,11 +140,11 @@ end
 
     rolling_exposure_calls = Tuple{Float64,Float64}[]
     rolling_exposure_source = InPlaceExposureFrameSource(
-        (out, start_time, exposure_time) -> begin
-            push!(rolling_exposure_calls, (start_time, exposure_time))
-            fill!(out, start_time + exposure_time)
+        (out, start_time, exposure_duration) -> begin
+            push!(rolling_exposure_calls, (start_time, exposure_duration))
+            fill!(out, start_time + exposure_duration)
         end, (4, 4))
-    rolling_exposure_det = Detector(integration_time=1.0,
+    rolling_exposure_det = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0,
         sensor=CMOSSensor(timing_model=RollingShutter(0.25;
             row_group_size=2)), response_model=NullFrameResponse())
@@ -154,7 +154,7 @@ end
     @test rolling_exposure_frame ==
         repeat(reshape([1.0, 1.0, 1.25, 1.25], :, 1), 1, 4)
 
-    global_reset_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    global_reset_det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(timing_model=RollingShutter(0.25; exposure_mode=GlobalResetExposure())),
         response_model=NullFrameResponse())
     constant_source = FunctionFrameSource(t -> ones(4, 4))
@@ -162,8 +162,8 @@ end
     @test global_reset_frame == repeat(reshape([1.0, 1.25, 1.5, 1.75], :, 1), 1, 4)
     @test global_reset_det.params.timing_model.exposure_mode == GlobalResetExposure()
 
-    interval_source = FunctionExposureFrameSource((start_time, exposure_time) ->
-        fill(start_time <= 1.4 < start_time + exposure_time ? 10.0 : 0.0, 4, 4))
+    interval_source = FunctionExposureFrameSource((start_time, exposure_duration) ->
+        fill(start_time <= 1.4 < start_time + exposure_duration ? 10.0 : 0.0, 4, 4))
     rolling_interval_frame = capture!(rolling_det, interval_source; rng=MersenneTwister(132))
     @test rolling_interval_frame[1:2, :] == zeros(2, 4)
     @test rolling_interval_frame[3:4, :] == fill(10.0, 2, 4)
@@ -177,7 +177,7 @@ end
     @test pulse_frame[1:2, :] == zeros(2, 4)
     @test pulse_frame[3:4, :] == fill(10.0, 2, 4)
 
-    windowed_rolling = Detector(integration_time=1.0, noise=NoiseNone(),
+    windowed_rolling = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(0.25)),
         readout_window=FrameWindow(3:4, 1:2))
@@ -187,10 +187,10 @@ end
     @test windowed_frame ==
         repeat(reshape([0.5, 0.75], :, 1), 1, 2)
     windowed_metadata = detector_export_metadata(windowed_rolling)
-    @test windowed_metadata.sampling_wallclock_time == 2.0
+    @test windowed_metadata.sampling_acquisition_duration == 2.0
     @test windowed_metadata.output_size == (2, 2)
 
-    mtf_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    mtf_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0,
         response_model=GaussianPixelResponse(response_width_px=0.7),
         sensor=CMOSSensor(timing_model=RollingShutter(0.25)))
@@ -198,7 +198,7 @@ end
     capture!(mtf_detector, ones(4, 4), Xoshiro(135))
     @test detector_mtf(mtf_detector, 0.17, -0.09) == expected_mtf
 
-    exact_pipeline = Detector(integration_time=1.0, noise=NoiseNone(),
+    exact_pipeline = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, gain=2.0, full_well=5.0, bits=3, output_type=UInt8,
         response_model=NullFrameResponse(),
         sensor=CMOSSensor(output_model=StaticCMOSOutputPattern(

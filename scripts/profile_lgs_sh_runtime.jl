@@ -101,7 +101,7 @@ function run_profile(; backend_name::AbstractString="cpu",
     det = SubaruAO188Simulation.detector_from_config(
         AO188WFSDetectorConfig(
             T=T,
-            integration_time=1e-3,
+            exposure_duration=1e-3,
             qe=0.9,
             psf_sampling=1,
             binning=1,

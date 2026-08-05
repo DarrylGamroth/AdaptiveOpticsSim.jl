@@ -53,7 +53,7 @@ end
 function hgcdte_gaussian_case(id, mode, seed, expected_sigma)
     variance = expected_sigma^2
     detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseReadout(4.0),
         response_model=NullFrameResponse(),
@@ -90,14 +90,14 @@ function hgcdte_moment_cases()
             sigma * sqrt(12 * 15 / (16 * 17))),
         hgcdte_poisson_case(
             "dark_current",
-            Detector(integration_time=2.0, qe=1.0,
+            Detector(exposure_duration=2.0, qe=1.0,
                 dark_current=5.0, noise=NoiseNone(),
                 response_model=NullFrameResponse(),
                 sensor=HgCdTeSensor()),
             5106, 10.0),
         hgcdte_poisson_case(
             "readout_glow",
-            Detector(integration_time=1.0, qe=1.0,
+            Detector(exposure_duration=1.0, qe=1.0,
                 noise=NoiseNone(), response_model=NullFrameResponse(),
                 sensor=HgCdTeSensor(glow_rate=7.0)),
             5107, 7.0),
@@ -119,12 +119,12 @@ function hgcdte_irregular_scheduled_ramp_contract()
     rate = 1.0e9
     values = fill(rate, 2, 2)
     detector = Detector(
-        integration_time=1.0e-8,
+        exposure_duration=1.0e-8,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(
-            read_time=0.0,
+            read_duration=0.0,
             sampling_mode=UpTheRampSampling(4)),
     )
     definition = GlobalShutterAcquisitionDefinition(PlantDuration(10))
@@ -151,7 +151,7 @@ function hgcdte_irregular_scheduled_ramp_contract()
     Plant.close_exposure!(prepared, state, close)
     Plant.take_nondestructive_read!(prepared, state, close, rng)
     output = Plant.complete_readout!(prepared, state, close, rng)
-    return detector_ramp_times(detector) ==
+    return detector_ramp_read_offsets_s(detector) ==
             [0.0, 3.0e-9, 6.0e-9, 1.0e-8] &&
         all(isapprox.(detector_ramp_slope(detector), rate;
             rtol=8eps(Float64), atol=0.0)) &&
@@ -173,7 +173,7 @@ function hgcdte_deterministic_contract()
     )
     sampling_modes_passed = all(modes) do mode
         detector = Detector(
-            integration_time=2.0,
+            exposure_duration=2.0,
             qe=1.0,
             noise=NoiseNone(),
             response_model=NullFrameResponse(),
@@ -183,12 +183,12 @@ function hgcdte_deterministic_contract()
     end
 
     direct_ramp = Detector(
-        integration_time=2.0,
+        exposure_duration=2.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(
-            read_time=0.1,
+            read_duration=0.1,
             sampling_mode=UpTheRampSampling(5)),
     )
     direct_output = capture!(direct_ramp, input, Xoshiro(5203))
@@ -196,18 +196,18 @@ function hgcdte_deterministic_contract()
         direct_output == fill(6.0, 4, 4) &&
         detector_ramp_slope(direct_ramp) == fill(3.0, 4, 4) &&
         detector_ramp_intercept(direct_ramp) == zeros(4, 4) &&
-        detector_ramp_times(direct_ramp) ==
+        detector_ramp_read_offsets_s(direct_ramp) ==
             [0.0, 0.5, 1.0, 1.5, 2.0] &&
         Detectors.detector_ramp_acquisition(direct_ramp) ==
             :synthesized_final_charge
 
     windowed = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(
-            read_time=0.25,
+            read_duration=0.25,
             sampling_mode=CorrelatedDoubleSampling()),
         readout_window=Detectors.FrameWindow(2:3, 2:3),
     )
@@ -215,9 +215,9 @@ function hgcdte_deterministic_contract()
         Xoshiro(5204))
     window_preserves_full_frame_timing =
         windowed_output == fill(4.0, 2, 2) &&
-        detector_export_metadata(windowed).sampling_read_time == 0.25 &&
-        detector_export_metadata(windowed).sampling_wallclock_time == 1.5 &&
-        detector_ramp_times(windowed) === nothing
+        detector_export_metadata(windowed).sampling_read_duration == 0.25 &&
+        detector_export_metadata(windowed).sampling_acquisition_duration == 1.5 &&
+        detector_ramp_read_offsets_s(windowed) === nothing
 
     response = GaussianPixelResponse(response_width_px=0.7)
     response_detector = Detector(
@@ -270,7 +270,7 @@ function hgcdte_deterministic_contract()
         zeros(2, 2), Xoshiro(5211)) == fill(2.0, 2, 2)
 
     shared_readout = Detectors.HgCdTeReadout(
-        read_time=0.1, sampling_mode=FowlerSampling(2))
+        read_duration=0.1, sampling_mode=FowlerSampling(2))
     architecture_separated =
         detector_export_metadata(Detector(
             sensor=HgCdTeSensor(shared_readout))).sensor == :hgcdte &&

@@ -79,7 +79,7 @@ using AdaptiveOpticsSim.WavefrontSensors
 
 detector = Detector(
     noise=NoiseReadout(1.0),
-    integration_time=1.0,
+    exposure_duration=1.0,
     qe=1.0,
     binning=1,
 )
@@ -99,7 +99,7 @@ frame-detector boundary but omit optional physical effects:
 
 ```julia
 load_detector = Detector(
-    integration_time=1e-3,
+    exposure_duration=1e-3,
     qe=1.0,
     noise=NoiseNone(),
     response_model=NullFrameResponse(),
@@ -125,7 +125,7 @@ counting_wfs = CurvatureWFS(
     readout_model=CurvatureChannelReadout(),
 )
 spad = SPADArrayDetector((2, 64);
-    integration_time=1.0,
+    exposure_duration=1.0,
     noise=NoiseNone(),
     sensor=SPADArraySensor(
         active_area_detection_efficiency=0.5,

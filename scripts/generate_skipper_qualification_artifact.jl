@@ -48,7 +48,7 @@ end
 
 function skipper_deterministic_contract()
     detector = Detector(
-        integration_time=1.0, noise=NoiseNone(), qe=1.0,
+        exposure_duration=1.0, noise=NoiseNone(), qe=1.0,
         gain=2.0, full_well=10.0,
         sensor=CCDSensor(
             sampling_mode=SkipperSampling(8),
@@ -70,7 +70,7 @@ function skipper_deterministic_contract()
     end
 
     allocation_detector = Detector(
-        integration_time=0.5, noise=NoiseReadout(0.25), qe=1.0,
+        exposure_duration=0.5, noise=NoiseReadout(0.25), qe=1.0,
         sensor=CCDSensor(
             sampling_mode=SkipperSampling(16),
             sample_duration=1e-6),
@@ -106,11 +106,11 @@ function skipper_deterministic_contract()
             AdaptiveOpticsSim.Detectors.detector_read_cube(detector) ===
                 nothing,
         "sample_count_passed" => products.sample_count == 8,
-        "sample_duration_seconds" => metadata.sampling_read_time,
-        "sampling_wallclock_seconds" => metadata.sampling_wallclock_time,
+        "sample_duration_seconds" => metadata.sampling_read_duration,
+        "sampling_acquisition_duration_s" => metadata.sampling_acquisition_duration,
         "timing_passed" =>
-            metadata.sampling_read_time == 2e-6 &&
-            metadata.sampling_wallclock_time == 1.0 + 16e-6,
+            metadata.sampling_read_duration == 2e-6 &&
+            metadata.sampling_acquisition_duration == 1.0 + 16e-6,
         "batched_capture_rejected" => batched_rejected,
         "batched_input_unmodified" => cube == original,
         "deterministic_replay_passed" => replay_passed,
@@ -181,7 +181,7 @@ function generate_skipper_qualification_artifact()
                 "fixed-count nondestructive samples of one retained CCD charge packet",
                 "independent Gaussian read noise and streaming arithmetic mean",
                 "fixed frame-sized readout-product storage",
-                "explicit per-sample duration and total sampling wall-clock duration",
+                "explicit per-sample duration and total sampling duration",
             ],
             "excluded" => [
                 "correlated 1/f read noise",

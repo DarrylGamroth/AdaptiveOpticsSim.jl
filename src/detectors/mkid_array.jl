@@ -130,7 +130,7 @@ struct MKIDArrayDetectorParams{
     G<:AbstractCountingGateModel,
     TM<:AbstractDetectorThermalModel,
 }
-    integration_time::T
+    exposure_duration::T
     gate_model::G
     thermal_model::TM
     sensor::S
@@ -160,7 +160,7 @@ counting_gate_model(det::MKIDArrayDetector) = det.params.gate_model
 counting_dead_time_model(det::MKIDArrayDetector) =
     det.params.sensor.dead_time_model
 counting_mean_response_model(::MKIDArrayDetector) = NullCountingMeanResponse()
-counting_integration_time(det::MKIDArrayDetector) = det.params.integration_time
+counting_exposure_duration(det::MKIDArrayDetector) = det.params.exposure_duration
 counting_layout(::MKIDArrayDetector) = :pixel_counts
 counting_output_type(det::MKIDArrayDetector) = det.params.output_type
 counting_array(det::MKIDArrayDetector) = det.products.counts
@@ -240,17 +240,17 @@ end
 dark_count_law(::MKIDArrayDetector) = NullTemperatureLaw()
 
 function _build_mkid_array_detector(noise::NoiseModel;
-    integration_time::Real,
+    exposure_duration::Real,
     gate_model::AbstractCountingGateModel,
     thermal_model::AbstractDetectorThermalModel,
     sensor::AbstractMKIDArraySensor,
     output_type::Union{Nothing,DataType},
     T::Type{<:AbstractFloat},
     backend)
-    typed_integration_time = T(integration_time)
-    isfinite(typed_integration_time) && typed_integration_time > zero(T) ||
+    typed_exposure_duration = T(exposure_duration)
+    isfinite(typed_exposure_duration) && typed_exposure_duration > zero(T) ||
         throw(InvalidConfiguration(
-            "MKIDArrayDetector integration_time must be finite and > 0"))
+            "MKIDArrayDetector exposure_duration must be finite and > 0"))
     converted = convert_noise(noise, T)
     validated = validate_counting_noise(converted)
     gate = validate_gate_model(convert_gate_model(gate_model, T))
@@ -258,7 +258,7 @@ function _build_mkid_array_detector(noise::NoiseModel;
     typed_sensor = convert_mkid_sensor(sensor, T)
     params = MKIDArrayDetectorParams{
         T,typeof(typed_sensor),typeof(gate),typeof(thermal)}(
-        typed_integration_time,
+        typed_exposure_duration,
         gate,
         thermal,
         typed_sensor,
@@ -299,7 +299,7 @@ Accumulated-count image detector backed by `MKIDArraySensor`. The detector uses
 the shared counting pipeline and preallocated buffers. It exports an image, not
 a per-photon event stream or a set of per-photon energy estimates.
 """
-function MKIDArrayDetector(; integration_time::Real=1.0,
+function MKIDArrayDetector(; exposure_duration::Real=1.0,
     noise::NoiseModel=NoisePhoton(),
     sensor::MKIDArraySensor=MKIDArraySensor(),
     output_type::Union{Nothing,DataType}=nothing,
@@ -309,7 +309,7 @@ function MKIDArrayDetector(; integration_time::Real=1.0,
     backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
     return _build_mkid_array_detector(noise;
-        integration_time=integration_time,
+        exposure_duration=exposure_duration,
         gate_model=gate_model,
         thermal_model=thermal_model,
         sensor=sensor,

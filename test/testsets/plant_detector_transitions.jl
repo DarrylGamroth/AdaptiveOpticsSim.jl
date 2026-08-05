@@ -63,7 +63,7 @@ end
         PlantDuration(1_000_000_000);
         readout_duration=PlantDuration(20),
         readiness_delay=PlantDuration(30))
-    detector = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0)
+    detector = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0)
     prepared = prepare_global_shutter_acquisition(detector, map, definition)
     state = GlobalShutterAcquisitionState(prepared)
 
@@ -71,16 +71,16 @@ end
     @test detector_acquisition_sequence(state) == 0
     @test nondestructive_read_count(prepared) == 0
     @test_throws DetectorAcquisitionError nondestructive_read_offset(prepared, 1)
-    @test isnothing(next_nondestructive_read_timestamp(prepared, state))
+    @test isnothing(next_nondestructive_read_durationstamp(prepared, state))
 
-    mismatch = Detector(integration_time=0.5, noise=NoiseNone())
+    mismatch = Detector(exposure_duration=0.5, noise=NoiseNone())
     mismatch_error = caught_detector_acquisition_error() do
         prepare_global_shutter_acquisition(mismatch, map, definition)
     end
     @test mismatch_error isa DetectorAcquisitionError
     @test mismatch_error.reason == :exposure_duration
 
-    rolling = Detector(integration_time=1.0, noise=NoiseNone(),
+    rolling = Detector(exposure_duration=1.0, noise=NoiseNone(),
         sensor=CMOSSensor(timing_model=RollingShutter(1e-6)))
     @test size(rolling.products.frame) == (1, 1)
     rolling_error = caught_detector_acquisition_error() do
@@ -91,8 +91,8 @@ end
     @test size(rolling.products.frame) == (1, 1)
 
     quantized_sensor = HgCdTeSensor(
-        sampling_mode=UpTheRampSampling(4), read_time=0.0)
-    quantized_detector = Detector(integration_time=1e-8,
+        sampling_mode=UpTheRampSampling(4), read_duration=0.0)
+    quantized_detector = Detector(exposure_duration=1e-8,
         noise=NoiseNone(), sensor=quantized_sensor)
     quantized_map = plant_detector_intensity_map(ones(2, 2))
     quantized_definition = GlobalShutterAcquisitionDefinition(
@@ -102,17 +102,17 @@ end
     @test nondestructive_read_count(quantized) == 4
     @test Tuple(plant_nanoseconds(nondestructive_read_offset(quantized, i))
         for i in 1:4) == (0, 3, 6, 10)
-    @test detector_ramp_times(quantized_detector) == [0.0, 3e-9, 6e-9, 1e-8]
+    @test detector_ramp_read_offsets_s(quantized_detector) == [0.0, 3e-9, 6e-9, 1e-8]
     capture!(quantized_detector, ones(2, 2); rng=Xoshiro(99))
-    @test detector_ramp_times(quantized_detector)[2] > 3e-9
+    @test detector_ramp_read_offsets_s(quantized_detector)[2] > 3e-9
     quantized_state = GlobalShutterAcquisitionState(quantized)
     begin_exposure!(quantized, quantized_state, PlantTimestamp(0))
-    @test detector_ramp_times(quantized_detector) ==
+    @test detector_ramp_read_offsets_s(quantized_detector) ==
         [0.0, 3e-9, 6e-9, 1e-8]
 
-    spacing_detector = Detector(integration_time=1e-9, noise=NoiseNone(),
+    spacing_detector = Detector(exposure_duration=1e-9, noise=NoiseNone(),
         sensor=HgCdTeSensor(
-            sampling_mode=UpTheRampSampling(3), read_time=0.0))
+            sampling_mode=UpTheRampSampling(3), read_duration=0.0))
     spacing_error = caught_detector_acquisition_error() do
         prepare_global_shutter_acquisition(spacing_detector,
             plant_detector_intensity_map(ones(2, 2)),
@@ -121,18 +121,18 @@ end
     @test spacing_error isa DetectorAcquisitionError
     @test spacing_error.reason == :unrepresentable_read_schedule
 
-    read_time_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    read_duration_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         sensor=HgCdTeSensor(
-            sampling_mode=UpTheRampSampling(3), read_time=0.1))
+            sampling_mode=UpTheRampSampling(3), read_duration=0.1))
     readout_error = caught_detector_acquisition_error() do
-        prepare_global_shutter_acquisition(read_time_detector,
+        prepare_global_shutter_acquisition(read_duration_detector,
             plant_detector_intensity_map(ones(2, 2)),
             GlobalShutterAcquisitionDefinition(PlantDuration(1_000_000_000);
                 readout_duration=PlantDuration(99_999_999)))
     end
     @test readout_error isa DetectorAcquisitionError
     @test readout_error.reason == :readout_duration
-    exact_readout = prepare_global_shutter_acquisition(read_time_detector,
+    exact_readout = prepare_global_shutter_acquisition(read_duration_detector,
         plant_detector_intensity_map(ones(2, 2)),
         GlobalShutterAcquisitionDefinition(PlantDuration(1_000_000_000);
             readout_duration=PlantDuration(100_000_000)))
@@ -145,7 +145,7 @@ end
     values = reshape(collect(1.0:25.0), 5, 5)
     map = plant_detector_intensity_map(values)
     detector_keywords = (
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=0.6,
         noise=NoiseNone(),
         response_model=SampledFrameResponse(kernel),
@@ -257,7 +257,7 @@ end
     @test detector_acquisition_status(state) == DetectorAcquisitionReady
     @test readout_ready(event_detector)
 
-    other_detector = Detector(integration_time=1.0, noise=NoiseNone())
+    other_detector = Detector(exposure_duration=1.0, noise=NoiseNone())
     other_map = plant_detector_intensity_map(ones(2, 2))
     other_prepared = prepare_global_shutter_acquisition(other_detector,
         other_map, GlobalShutterAcquisitionDefinition(
@@ -272,10 +272,10 @@ end
 @testset "Scheduled evolving-charge up-the-ramp reads" begin
     values = fill(1.0, 4, 4)
     map = plant_detector_intensity_map(values)
-    detector = Detector(integration_time=1.0, qe=1.0,
+    detector = Detector(exposure_duration=1.0, qe=1.0,
         noise=NoiseNone(),
         sensor=HgCdTeSensor(
-            sampling_mode=UpTheRampSampling(3), read_time=0.0),
+            sampling_mode=UpTheRampSampling(3), read_duration=0.0),
         readout_window=FrameWindow(2:3, 2:3))
     definition = GlobalShutterAcquisitionDefinition(
         PlantDuration(1_000_000_000);
@@ -290,9 +290,9 @@ end
     middle = start + PlantDuration(500_000_000)
     close = start + PlantDuration(1_000_000_000)
 
-    @test isnothing(next_nondestructive_read_timestamp(prepared, state))
+    @test isnothing(next_nondestructive_read_durationstamp(prepared, state))
     begin_exposure!(prepared, state, start)
-    @test next_nondestructive_read_timestamp(prepared, state) == start
+    @test next_nondestructive_read_durationstamp(prepared, state) == start
     missed_initial = caught_detector_acquisition_error() do
         accumulate_exposure_interval!(prepared, state, start,
             start + PlantDuration(1), rng)
@@ -305,24 +305,24 @@ end
     invalid_read_rng = Xoshiro(502)
     reference_read_rng = Xoshiro(502)
     ramp_cube_before = copy(detector_ramp_cube(detector))
-    wrong_read_time = caught_detector_acquisition_error() do
+    wrong_read_duration = caught_detector_acquisition_error() do
         take_nondestructive_read!(prepared, state,
             start + PlantDuration(1), invalid_read_rng)
     end
-    @test wrong_read_time isa DetectorAcquisitionError
-    @test wrong_read_time.reason == :nondestructive_read_not_due
+    @test wrong_read_duration isa DetectorAcquisitionError
+    @test wrong_read_duration.reason == :nondestructive_read_not_due
     @test detector_ramp_cube(detector) == ramp_cube_before
     @test rand(invalid_read_rng) == rand(reference_read_rng)
 
     take_nondestructive_read!(prepared, state, start, rng)
-    @test next_nondestructive_read_timestamp(prepared, state) == middle
+    @test next_nondestructive_read_durationstamp(prepared, state) == middle
     @test all(iszero, detector_ramp_cube(detector)[:, :, 1])
     incomplete_read = caught_detector_acquisition_error() do
         take_nondestructive_read!(prepared, state, middle, rng)
     end
     @test incomplete_read isa DetectorAcquisitionError
     @test incomplete_read.reason == :incomplete_integration
-    @test next_nondestructive_read_timestamp(prepared, state) == middle
+    @test next_nondestructive_read_durationstamp(prepared, state) == middle
     crossed_read = caught_detector_acquisition_error() do
         accumulate_exposure_interval!(prepared, state, start,
             middle + PlantDuration(1), rng)
@@ -350,7 +350,7 @@ end
     @test all(==(2.0), detector.state.accum_buffer)
 
     take_nondestructive_read!(prepared, state, close, rng)
-    @test isnothing(next_nondestructive_read_timestamp(prepared, state))
+    @test isnothing(next_nondestructive_read_durationstamp(prepared, state))
     @test all(==(2.0), detector_ramp_cube(detector)[:, :, 3])
     output = complete_readout!(prepared, state,
         close + PlantDuration(100), rng)
@@ -358,7 +358,7 @@ end
     @test all(isapprox.(
         detector_ramp_intercept(detector), -1 / 6; atol=1e-15, rtol=0))
     @test all(==(2.0), output)
-    @test detector_ramp_times(detector) == [0.0, 0.5, 1.0]
+    @test detector_ramp_read_offsets_s(detector) == [0.0, 0.5, 1.0]
     @test !readout_ready(detector)
     mark_acquisition_ready!(prepared, state, close + PlantDuration(300))
     @test readout_ready(detector)
@@ -367,12 +367,12 @@ end
 @testset "Ramp snapshots retain prior avalanche realization" begin
     values = fill(4.0, 2, 2)
     map = plant_detector_intensity_map(values)
-    detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         sensor=HgCdTeAvalancheArraySensor(
             avalanche_gain=1.0,
             excess_noise_factor=1.4,
             sampling_mode=UpTheRampSampling(3),
-            read_time=0.0,
+            read_duration=0.0,
         ))
     definition = GlobalShutterAcquisitionDefinition(
         PlantDuration(1_000_000_000))
@@ -401,7 +401,7 @@ end
 @testset "Detector event inference and warmed allocation" begin
     values = fill(2.0, 8, 8)
     map = plant_detector_intensity_map(values)
-    detector = Detector(integration_time=1.0, qe=0.5,
+    detector = Detector(exposure_duration=1.0, qe=0.5,
         noise=NoiseNone())
     definition = GlobalShutterAcquisitionDefinition(
         PlantDuration(1_000_000_000))
@@ -417,9 +417,9 @@ end
             rng, PlantTimestamp(2_000_000_000))) == 0
     end
 
-    ramp_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    ramp_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         sensor=HgCdTeSensor(
-            sampling_mode=UpTheRampSampling(3), read_time=0.0))
+            sampling_mode=UpTheRampSampling(3), read_duration=0.0))
     ramp_map = plant_detector_intensity_map(fill(1.0, 8, 8))
     ramp_prepared = prepare_global_shutter_acquisition(ramp_detector,
         ramp_map, definition)

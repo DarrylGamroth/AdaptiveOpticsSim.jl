@@ -39,19 +39,19 @@ end
 @inline photon_noise_enabled(::Detector{<:NoisePhotonReadout}) = true
 
 @inline function prepare_signal_frame!(det::Detector, psf::AbstractMatrix,
-    exposure_time::Real, qe, apply_persistence::Bool,
-    persistence_exposure_time::Real)
-    fill_frame!(det, psf, exposure_time, qe)
-    apply_signal_defects!(det.params.defect_model, det, exposure_time)
+    exposure_duration::Real, qe, apply_persistence::Bool,
+    persistence_exposure_duration::Real)
+    fill_frame!(det, psf, exposure_duration, qe)
+    apply_signal_defects!(det.params.defect_model, det, exposure_duration)
     apply_persistence &&
         apply_sensor_persistence!(det.params.sensor, det,
-            persistence_exposure_time)
+            persistence_exposure_duration)
     return det.products.frame
 end
 
 @inline prepare_signal_frame!(det::Detector, psf::AbstractMatrix,
-    exposure_time::Real, qe=det.params.qe) =
-    prepare_signal_frame!(det, psf, exposure_time, qe, true, exposure_time)
+    exposure_duration::Real, qe=det.params.qe) =
+    prepare_signal_frame!(det, psf, exposure_duration, qe, true, exposure_duration)
 
 function add_poisson_rate!(dest::AbstractMatrix{T}, det::Detector, rng::AbstractRNG, rate) where {T<:AbstractFloat}
     rate_t = T(rate)
@@ -71,47 +71,47 @@ function add_gaussian_noise!(dest::AbstractMatrix{T}, det::Detector, rng::Abstra
 end
 
 function capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
-    rng::AbstractRNG, exposure_time::Real, qe, apply_persistence::Bool,
-    persistence_exposure_time::Real)
-    prepare_signal_frame!(det, psf, exposure_time, qe, apply_persistence,
-        persistence_exposure_time)
+    rng::AbstractRNG, exposure_duration::Real, qe, apply_persistence::Bool,
+    persistence_exposure_duration::Real)
+    prepare_signal_frame!(det, psf, exposure_duration, qe, apply_persistence,
+        persistence_exposure_duration)
     photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.products.frame)
-    apply_background_flux!(det.background_flux, det, rng, exposure_time)
+    apply_background_flux!(det.background_flux, det, rng, exposure_duration)
     return det.products.frame
 end
 
 capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
-    rng::AbstractRNG, exposure_time::Real, qe=det.params.qe) =
-    capture_signal_pipeline!(det, psf, rng, exposure_time, qe, true,
-        exposure_time)
+    rng::AbstractRNG, exposure_duration::Real, qe=det.params.qe) =
+    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe, true,
+        exposure_duration)
 
 @inline function apply_incremental_dark_current!(det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
-    rate = effective_dark_current(det) * exposure_time
+    rng::AbstractRNG, exposure_duration::Real)
+    rate = effective_dark_current(det) * exposure_duration
     return add_poisson_rate!(det.products.frame, det, rng, rate)
 end
 
 @inline apply_incremental_sensor_statistics!(::AbstractFrameSensor,
-    det::Detector, rng::AbstractRNG, exposure_time::Real) = det.products.frame
+    det::Detector, rng::AbstractRNG, exposure_duration::Real) = det.products.frame
 
 @inline function accumulate_incremental_charge_generation!(det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
+    rng::AbstractRNG, exposure_duration::Real)
     # The current thermal state represents the start of this interval. Thermal
     # Evolution occurs after the interval is accumulated, so the elapsed
     # integration duration is the quadrature interval for temperature-dependent
     # generated charge.
-    apply_incremental_dark_current!(det, rng, exposure_time)
-    apply_dark_defects!(det.params.defect_model, det, exposure_time)
+    apply_incremental_dark_current!(det, rng, exposure_duration)
+    apply_dark_defects!(det.params.defect_model, det, exposure_duration)
     apply_incremental_sensor_statistics!(det.params.sensor, det, rng,
-        exposure_time)
+        exposure_duration)
     return det.products.frame
 end
 
 function finalize_charge_generation!(det::Detector, rng::AbstractRNG,
-    exposure_time::Real)
-    apply_dark_current!(det, rng, exposure_time)
-    apply_dark_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_statistics!(det.params.sensor, det, rng, exposure_time)
+    exposure_duration::Real)
+    apply_dark_current!(det, rng, exposure_duration)
+    apply_dark_defects!(det.params.defect_model, det, exposure_duration)
+    apply_sensor_statistics!(det.params.sensor, det, rng, exposure_duration)
     return det.products.frame
 end
 
@@ -126,12 +126,12 @@ end
 
 function finalize_electronics_without_persistence!(det::Detector,
     rng::AbstractRNG,
-    exposure_time::Real)
+    exposure_duration::Real)
     apply_readout_noise!(det, rng)
     apply_sensor_readout_noise!(det.params.sensor, det, rng)
     apply_post_readout_gain!(det.params.sensor, det)
     apply_detection_output!(det.params.sensor, det, rng)
-    finalize_readout_products!(det.params.sensor, det, rng, exposure_time)
+    finalize_readout_products!(det.params.sensor, det, rng, exposure_duration)
     apply_readout_correction!(det.params.correction_model, det.products.frame, det)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
@@ -139,19 +139,19 @@ function finalize_electronics_without_persistence!(det::Detector,
 end
 
 function finalize_electronics!(det::Detector, rng::AbstractRNG,
-    exposure_time::Real)
-    finalize_electronics_without_persistence!(det, rng, exposure_time)
-    update_sensor_persistence!(det.params.sensor, det, exposure_time)
+    exposure_duration::Real)
+    finalize_electronics_without_persistence!(det, rng, exposure_duration)
+    update_sensor_persistence!(det.params.sensor, det, exposure_duration)
     return det.products.frame
 end
 
 function finalize_readout_pipeline!(det::Detector, rng::AbstractRNG,
-    exposure_time::Real, charge_exposure_time::Real)
-    finalize_charge_generation!(det, rng, charge_exposure_time)
+    exposure_duration::Real, charge_exposure_duration::Real)
+    finalize_charge_generation!(det, rng, charge_exposure_duration)
     finalize_charge_transport!(det, rng)
-    return finalize_electronics!(det, rng, exposure_time)
+    return finalize_electronics!(det, rng, exposure_duration)
 end
 
 finalize_readout_pipeline!(det::Detector, rng::AbstractRNG,
-    exposure_time::Real) =
-    finalize_readout_pipeline!(det, rng, exposure_time, exposure_time)
+    exposure_duration::Real) =
+    finalize_readout_pipeline!(det, rng, exposure_duration, exposure_duration)

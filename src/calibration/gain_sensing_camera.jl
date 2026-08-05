@@ -17,7 +17,7 @@
 # not inject spurious gain estimates.
 #
 struct GSCDetectorMetadata{T<:AbstractFloat}
-    integration_time::T
+    exposure_duration::T
     qe::T
     psf_sampling::Int
     binning::Int
@@ -174,7 +174,7 @@ end
 function GSCDetectorMetadata(det::Detector;
     T::Type{<:AbstractFloat}=eltype(det.products.frame))
     return GSCDetectorMetadata{T}(
-        T(det.params.integration_time),
+        T(det.params.exposure_duration),
         T(det.params.qe),
         det.params.psf_sampling,
         det.params.binning,
@@ -203,7 +203,7 @@ function Base.show(io::IO, ::MIME"text/plain", gsc::GainSensingCamera)
     metadata = gsc.detector_metadata
     if metadata !== nothing
         print(io, ", detector=(")
-        print(io, "integration_time=", metadata.integration_time)
+        print(io, "exposure_duration=", metadata.exposure_duration)
         print(io, ", qe=", metadata.qe)
         print(io, ", psf_sampling=", metadata.psf_sampling)
         print(io, ", binning=", metadata.binning)

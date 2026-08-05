@@ -60,7 +60,7 @@ end
 
 @testset "InGaAs deterministic frame pipeline" begin
     detector = Detector(
-        integration_time=2.0,
+        exposure_duration=2.0,
         noise=NoiseNone(),
         qe=0.5,
         gain=2.0,
@@ -78,7 +78,7 @@ end
 
 @testset "InGaAs glow and dark-current moments" begin
     detector = Detector(
-        integration_time=2.0,
+        exposure_duration=2.0,
         noise=NoiseNone(),
         qe=1.0,
         dark_current=1.5,
@@ -89,10 +89,10 @@ end
         detector, zeros(128, 128), Xoshiro(9320))))
     test_ingaas_poisson_moments(samples, 8.0)
 
-    short = Detector(integration_time=0.25, noise=NoiseNone(), qe=1.0,
+    short = Detector(exposure_duration=0.25, noise=NoiseNone(), qe=1.0,
         sensor=InGaAsSensor(glow_rate=20.0),
         response_model=NullFrameResponse())
-    long = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0,
+    long = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0,
         sensor=InGaAsSensor(glow_rate=20.0),
         response_model=NullFrameResponse())
     prepare_detector_buffers!(short, (2, 2))
@@ -109,7 +109,7 @@ end
 @testset "InGaAs charge-domain exponential persistence" begin
     function persistence_detector(gain)
         return Detector(
-            integration_time=1.0,
+            exposure_duration=1.0,
             noise=NoiseNone(),
             qe=1.0,
             gain=gain,
@@ -161,7 +161,7 @@ end
 @testset "InGaAs replay, inference, and prepared allocation" begin
     function replay_detector()
         return Detector(
-            integration_time=0.5,
+            exposure_duration=0.5,
             noise=NoisePhotonReadout(0.25),
             qe=0.75,
             dark_current=0.5,
@@ -179,7 +179,7 @@ end
     @test first.state.latent_buffer == second.state.latent_buffer
 
     allocation_detector = Detector(
-        integration_time=0.5,
+        exposure_duration=0.5,
         noise=NoiseNone(),
         qe=1.0,
         sensor=InGaAsSensor(

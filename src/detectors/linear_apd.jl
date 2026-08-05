@@ -29,7 +29,7 @@ linear_apd_topology_symbol(::SingleElementLinearAPD) = :single_element
 linear_apd_topology_symbol(::LinearAPDChannelBank) = :channel_bank
 
 struct LinearAPDDetectorParams{T<:AbstractFloat,TP<:AbstractLinearAPDTopology}
-    integration_time::T
+    exposure_duration::T
     qe::T
     avalanche_gain::T
     excess_noise_factor::T
@@ -51,7 +51,7 @@ end
 """
     LinearAPDDetector(;
         topology=SingleElementLinearAPD(),
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         avalanche_gain=1.0,
         excess_noise_factor=1.0,
@@ -86,7 +86,7 @@ end
 
 function LinearAPDDetector(;
     topology::AbstractLinearAPDTopology=SingleElementLinearAPD(),
-    integration_time::Real=1.0,
+    exposure_duration::Real=1.0,
     qe::Real=1.0,
     avalanche_gain::Real=1.0,
     excess_noise_factor::Real=1.0,
@@ -96,15 +96,15 @@ function LinearAPDDetector(;
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend(),
 )
-    integration_time_t = T(integration_time)
+    exposure_duration_t = T(exposure_duration)
     qe_t = T(qe)
     avalanche_gain_t = T(avalanche_gain)
     excess_noise_factor_t = T(excess_noise_factor)
     dark_current_t = T(dark_current)
     conversion_gain_t = T(conversion_gain)
-    isfinite(integration_time_t) && integration_time_t > zero(T) ||
+    isfinite(exposure_duration_t) && exposure_duration_t > zero(T) ||
         throw(InvalidConfiguration(
-            "LinearAPDDetector integration_time must be finite and > 0"))
+            "LinearAPDDetector exposure_duration must be finite and > 0"))
     isfinite(qe_t) && zero(T) <= qe_t <= one(T) ||
         throw(InvalidConfiguration(
             "LinearAPDDetector qe must be finite and lie in [0, 1]"))
@@ -130,7 +130,7 @@ function LinearAPDDetector(;
     fill!(channels, zero(T))
     fill!(noise_buffer, zero(T))
     params = LinearAPDDetectorParams{T,typeof(topology)}(
-        integration_time_t, qe_t, avalanche_gain_t, excess_noise_factor_t,
+        exposure_duration_t, qe_t, avalanche_gain_t, excess_noise_factor_t,
         dark_current_t, conversion_gain_t, topology)
     workspace = LinearAPDDetectorWorkspace{T,typeof(noise_buffer)}(
         noise_buffer)
@@ -181,8 +181,8 @@ function finalize_linear_apd_capture!(det::LinearAPDDetector,
     rng::AbstractRNG)
     channels = det.products.channels
     T = eltype(channels)
-    @. channels = channels * (det.params.qe * det.params.integration_time) +
-        det.params.dark_current * det.params.integration_time
+    @. channels = channels * (det.params.qe * det.params.exposure_duration) +
+        det.params.dark_current * det.params.exposure_duration
     linear_apd_photon_noise_enabled(det) && poisson_noise!(rng, channels)
     apply_linear_apd_avalanche!(det, rng)
     sigma = linear_apd_readout_sigma(det.noise, T)
@@ -219,7 +219,7 @@ capture!(det::LinearAPDDetector, photon_flux::Real,
     rng::AbstractRNG) = capture!(det, photon_flux; rng=rng)
 
 struct LinearAPDExportMetadata{T<:AbstractFloat}
-    integration_time::T
+    exposure_duration::T
     qe::T
     avalanche_gain::T
     excess_noise_factor::T
@@ -233,7 +233,7 @@ end
 function detector_export_metadata(det::LinearAPDDetector;
     T::Type{<:AbstractFloat}=eltype(det.products.channels))
     return LinearAPDExportMetadata{T}(
-        T(det.params.integration_time), T(det.params.qe),
+        T(det.params.exposure_duration), T(det.params.qe),
         T(det.params.avalanche_gain), T(det.params.excess_noise_factor),
         T(det.params.dark_current), T(det.params.conversion_gain),
         linear_apd_topology_symbol(det.params.topology),

@@ -12,7 +12,7 @@
         return abs(response) / sum(frame)
     end
 
-    det_mtf = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_mtf = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=GaussianPixelResponse(response_width_px=0.75))
     impulse = zeros(9, 9)
     impulse[5, 5] = 1.0
@@ -37,7 +37,7 @@
     @test_throws InvalidConfiguration GaussianPixelResponse(response_width_px=0.0)
 
     sampled_kernel = [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0]
-    sampled_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    sampled_det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=SampledFrameResponse(sampled_kernel))
     sampled_frame = capture!(sampled_det, impulse; rng=MersenneTwister(6))
     @test sum(sampled_frame) ≈ 1.0 atol=1e-6
@@ -67,7 +67,7 @@
         fill(0.2, 3, 3); normalize=false)
 
     asymmetric_kernel = [0.0 0.0 0.0; 0.1 0.2 0.7; 0.0 0.0 0.0]
-    asymmetric_det = Detector(integration_time=1.0, noise=NoiseNone(),
+    asymmetric_det = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, binning=1,
         response_model=SampledFrameResponse(asymmetric_kernel))
     center_impulse = zeros(9, 9)
@@ -110,7 +110,7 @@
     @test all(isfinite, stack_sampled)
     @test stack_sampled[1, :, :] ≈ sampled_frame atol=1e-6
     @test stack_sampled[2, :, :] ≈ sampled_frame atol=1e-6
-    det_stack_adc = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_stack_adc = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         bits=8, full_well=10.0, output_type=UInt16)
     cube_stack_adc = fill(10.0, 2, 4, 4)
     stack_adc = AdaptiveOpticsSim.Detectors.capture_stack!(det_stack_adc, cube_stack_adc, similar(cube_stack_adc);
@@ -118,7 +118,7 @@
     @test stack_adc === cube_stack_adc
     @test all(stack_adc .== 255.0)
 
-    rect_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    rect_det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=RectangularPixelAperture(pitch_x_px=2.0, pitch_y_px=2.0,
             fill_factor_x=0.6, fill_factor_y=0.8))
     rect_frame = capture!(rect_det, impulse; rng=MersenneTwister(4))
@@ -155,7 +155,7 @@
     @test_throws InvalidConfiguration GaussianPixelResponse(truncate_at=Inf)
 
     ipc_kernel = [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]
-    ipc_det = Detector(integration_time=1.0, noise=NoisePhoton(), qe=1.0,
+    ipc_det = Detector(exposure_duration=1.0, noise=NoisePhoton(), qe=1.0,
         response_model=NullFrameResponse(),
         charge_coupling_model=InterpixelCapacitance(ipc_kernel))
     ipc_input = zeros(9, 9)
@@ -169,7 +169,7 @@
     @test ipc_meta.charge_coupling_support_rows == 3
     @test ipc_meta.charge_coupling_support_cols == 3
 
-    det_window_stack = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_window_stack = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         readout_window=FrameWindow(2:8, 2:8))
     cube_window = Array{Float64}(undef, 2, size(impulse, 1), size(impulse, 2))
     cube_window[1, :, :] .= impulse
@@ -193,7 +193,7 @@
         )),
     )
     for correction_model in corrected_stack_models
-        corrected_stack_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        corrected_stack_det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
             sensor=HgCdTeSensor(sampling_mode=SingleRead()),
             correction_model=correction_model)
         corrected_stack_in = Array{Float64}(undef, 2, 5, 5)
@@ -203,11 +203,11 @@
         corrected_stack = AdaptiveOpticsSim.Detectors.capture_stack!(corrected_stack_det, corrected_stack_in,
             similar(corrected_stack_in); rng=MersenneTwister(10))
         @test size(corrected_stack) == size(corrected_stack_in)
-        corrected_frame_1 = capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        corrected_frame_1 = capture!(Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
                 sensor=HgCdTeSensor(sampling_mode=SingleRead()),
                 correction_model=correction_model),
             @view(corrected_stack_ref[1, :, :]); rng=MersenneTwister(10))
-        corrected_frame_2 = capture!(Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        corrected_frame_2 = capture!(Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
                 sensor=HgCdTeSensor(sampling_mode=SingleRead()),
                 correction_model=correction_model),
             @view(corrected_stack_ref[2, :, :]); rng=MersenneTwister(10))
@@ -215,11 +215,11 @@
         @test corrected_stack[2, :, :] ≈ corrected_frame_2 atol=1e-12 rtol=1e-12
     end
 
-    det_cmos_batched = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_cmos_batched = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=CMOSSensor(column_readout_sigma=1.0))
     @test_throws InvalidConfiguration AdaptiveOpticsSim.Detectors.capture_stack!(det_cmos_batched, cube_mtf, scratch_mtf; rng=MersenneTwister(10))
 
-    det_generalized = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2,
+    det_generalized = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2,
         bits=8, full_well=10.0, output_type=UInt8)
     input_generalized = zeros(Float64, 2, 8, 8)
     input_generalized[1, 4, 4] = 10.0

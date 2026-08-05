@@ -152,7 +152,7 @@ function Plant.prepare_acquisition_provider(
     Plant.require_path_result(path)
     T = eltype(path.result.values)
     detector = Detector(
-        integration_time=T(model.exposure_s),
+        exposure_duration=T(model.exposure_s),
         noise=NoiseNone(),
         qe=one(T),
         gain=one(T),

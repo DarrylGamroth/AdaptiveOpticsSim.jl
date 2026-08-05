@@ -87,7 +87,7 @@ function emccd_artifact_multiplication_cases()
     exponential_gain = 12.0
     exponential_seed = 3401
     exponential = emccd_artifact_samples(
-        Detector(integration_time=1.0, qe=1.0, noise=NoiseNone(),
+        Detector(exposure_duration=1.0, qe=1.0, noise=NoiseNone(),
             gain=exponential_gain,
             sensor=EMCCDSensor(excess_noise_factor=sqrt(2.0),
                 multiplication_model=ConditionalGammaMultiplication())),
@@ -107,7 +107,7 @@ function emccd_artifact_multiplication_cases()
     erlang_gain = 5.0
     erlang_seed = 3402
     erlang = emccd_artifact_samples(
-        Detector(integration_time=1.0, qe=1.0, noise=NoiseNone(),
+        Detector(exposure_duration=1.0, qe=1.0, noise=NoiseNone(),
             gain=erlang_gain,
             sensor=EMCCDSensor(excess_noise_factor=sqrt(2.0),
                 multiplication_model=ConditionalGammaMultiplication())),
@@ -132,7 +132,7 @@ function emccd_artifact_multiplication_cases()
         fractional_charge * fractional_gain^2 * fractional_factor2
     fractional_seed = 3403
     fractional = emccd_artifact_samples(
-        Detector(integration_time=1.0, qe=1.0, noise=NoiseNone(),
+        Detector(exposure_duration=1.0, qe=1.0, noise=NoiseNone(),
             gain=fractional_gain,
             sensor=EMCCDSensor(excess_noise_factor=1.4,
                 multiplication_model=ConditionalGammaMultiplication())),
@@ -148,7 +148,7 @@ function emccd_artifact_multiplication_cases()
     approximate_variance = approximate_charge * approximate_gain^2
     approximate_seed = 3404
     approximate = emccd_artifact_samples(
-        Detector(integration_time=1.0, qe=1.0, noise=NoiseNone(),
+        Detector(exposure_duration=1.0, qe=1.0, noise=NoiseNone(),
             gain=approximate_gain,
             sensor=EMCCDSensor(excess_noise_factor=sqrt(2.0),
                 multiplication_model=
@@ -166,7 +166,7 @@ function emccd_artifact_multiplication_cases()
     cic_variance = 2 * cic_mean * cic_gain^2
     cic_seed = 3405
     cic = emccd_artifact_samples(
-        Detector(integration_time=0.25, qe=1.0, noise=NoiseNone(),
+        Detector(exposure_duration=0.25, qe=1.0, noise=NoiseNone(),
             gain=cic_gain,
             sensor=EMCCDSensor(excess_noise_factor=sqrt(2.0),
                 clock_induced_charge_per_frame=cic_mean,
@@ -186,7 +186,7 @@ function emccd_artifact_photon_counting_cases()
     for (case_index, incident_mean) in enumerate((0.05, 0.5, 2.0))
         seed = 3500 + case_index
         samples = emccd_artifact_samples(
-            Detector(integration_time=1.0, qe=1.0,
+            Detector(exposure_duration=1.0, qe=1.0,
                 noise=NoisePhoton(), gain=10.0,
                 sensor=EMCCDSensor(excess_noise_factor=1.0,
                     multiplication_model=
@@ -226,11 +226,11 @@ end
 
 function emccd_artifact_deterministic_contract()
     zero_input = zeros(16, 16)
-    short = Detector(integration_time=0.1, qe=1.0,
+    short = Detector(exposure_duration=0.1, qe=1.0,
         noise=NoiseNone(), gain=5.0,
         sensor=EMCCDSensor(excess_noise_factor=1.0,
             clock_induced_charge_per_frame=3.0))
-    long = Detector(integration_time=10.0, qe=1.0,
+    long = Detector(exposure_duration=10.0, qe=1.0,
         noise=NoiseNone(), gain=5.0,
         sensor=EMCCDSensor(excess_noise_factor=1.0,
             clock_induced_charge_per_frame=3.0))
@@ -238,20 +238,20 @@ function emccd_artifact_deterministic_contract()
         capture!(short, zero_input, Xoshiro(3601)) ==
         capture!(long, zero_input, Xoshiro(3601))
 
-    input_limited = Detector(integration_time=1.0, qe=1.0,
+    input_limited = Detector(exposure_duration=1.0, qe=1.0,
         noise=NoiseNone(), gain=5.0, full_well=10.0,
         sensor=EMCCDSensor(excess_noise_factor=1.0,
             register_full_well=100.0))
     input_limit_passed = capture!(input_limited,
         fill(50.0, 4, 4), Xoshiro(3602)) == fill(50.0, 4, 4)
-    register_limited = Detector(integration_time=1.0, qe=1.0,
+    register_limited = Detector(exposure_duration=1.0, qe=1.0,
         noise=NoiseNone(), gain=5.0, full_well=30.0,
         sensor=EMCCDSensor(excess_noise_factor=1.0,
             register_full_well=100.0))
     register_limit_passed = capture!(register_limited,
         fill(50.0, 4, 4), Xoshiro(3603)) == fill(100.0, 4, 4)
 
-    conventional = Detector(integration_time=1.0, qe=1.0,
+    conventional = Detector(exposure_duration=1.0, qe=1.0,
         noise=NoiseNone(), gain=20.0, full_well=10.0,
         sensor=EMCCDSensor(output_path=ConventionalOutput(),
             em_gain_range=(1.0, 2.0)))
@@ -275,29 +275,29 @@ function emccd_artifact_deterministic_contract()
     end
 
     timing_input = fill(2.0, 4, 4)
-    sequential = Detector(integration_time=1.0, qe=1.0,
+    sequential = Detector(exposure_duration=1.0, qe=1.0,
         noise=NoiseNone(), gain=1.0,
         sensor=EMCCDSensor(readout_rate_hz=1000.0,
             acquisition_mode=SequentialAcquisition()))
-    frame_transfer = Detector(integration_time=1.0, qe=1.0,
+    frame_transfer = Detector(exposure_duration=1.0, qe=1.0,
         noise=NoiseNone(), gain=1.0,
         sensor=EMCCDSensor(readout_rate_hz=1000.0,
             acquisition_mode=FrameTransferAcquisition(
-                transfer_time=0.002)))
+                transfer_duration=0.002)))
     same_optical_output = capture!(sequential, timing_input,
         Xoshiro(3605)) == capture!(frame_transfer, timing_input,
         Xoshiro(3605))
     sequential_metadata = detector_export_metadata(sequential)
     transfer_metadata = detector_export_metadata(frame_transfer)
     timing_passed =
-        sequential_metadata.sampling_wallclock_time == 1.016 &&
+        sequential_metadata.sampling_acquisition_duration == 1.016 &&
         sequential_metadata.steady_state_frame_period == 1.016 &&
-        transfer_metadata.sampling_wallclock_time == 1.018 &&
+        transfer_metadata.sampling_acquisition_duration == 1.018 &&
         transfer_metadata.steady_state_frame_period == 1.002
 
     prepared_values = fill(8.0, 16, 16)
     prepared_map = emccd_artifact_intensity_map(prepared_values)
-    allocation_detector = Detector(integration_time=0.25, qe=1.0,
+    allocation_detector = Detector(exposure_duration=0.25, qe=1.0,
         noise=NoiseNone(), gain=5.0,
         sensor=EMCCDSensor(excess_noise_factor=sqrt(2.0),
             multiplication_model=ConditionalGammaMultiplication()))

@@ -218,11 +218,11 @@ end
     CCDSensor(T=T)
 @inline event_composition_sensor(::EventFrameTransferEMCCD,
     ::Type{T}) where {T} = EMCCDSensor(
-    acquisition_mode=FrameTransferAcquisition(transfer_time=T(0.02), T=T),
+    acquisition_mode=FrameTransferAcquisition(transfer_duration=T(0.02), T=T),
     T=T)
 @inline event_composition_sensor(::EventHgCdTeRamp, ::Type{T}) where {T} =
     HgCdTeSensor(sampling_mode=UpTheRampSampling(3),
-        read_time=zero(T), T=T)
+        read_duration=zero(T), T=T)
 
 function Plant.prepare_acquisition_provider(
     model::EventCompositionAcquisitionModel,
@@ -231,7 +231,7 @@ function Plant.prepare_acquisition_provider(
 )
     require_path_result(path)
     T = eltype(path.result.values)
-    detector = Detector(integration_time=T(model.exposure),
+    detector = Detector(exposure_duration=T(model.exposure),
         noise=NoiseNone(), qe=one(T), gain=one(T),
         response_model=NullFrameResponse(),
         sensor=event_composition_sensor(model.kind, T), T=T,
@@ -763,7 +763,7 @@ end
     definition = RollingShutterAcquisitionDefinition(exposure;
         readiness_delay=PlantDuration(17))
 
-    detector = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0,
+    detector = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0,
         response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(0.2;
             row_group_size=2)))
@@ -772,7 +772,7 @@ end
         definition)
     state = RollingShutterAcquisitionState(prepared)
 
-    tiny_line_detector = Detector(integration_time=1.0,
+    tiny_line_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(1.0e-12;
             row_group_size=2)))
@@ -804,7 +804,7 @@ end
     @test rolling_opened_band_count(state) == 2
 
     # Restart on a fresh owner for the complete constant-rate oracle.
-    oracle_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    oracle_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(0.2;
             row_group_size=2)))
@@ -820,7 +820,7 @@ end
         DetectorAcquisitionReady
     @test detector_mtf(oracle_detector, 0.15, -0.2) == mtf_before
 
-    reset_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    reset_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(0.2;
             row_group_size=2, exposure_mode=GlobalResetExposure())))
@@ -860,10 +860,10 @@ end
 @testset "Frame-transfer storage and overlapping acquisition" begin
     values = ones(3, 3)
     map = event_test_intensity_map(values)
-    detector = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0,
+    detector = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0,
         gain=1.0, response_model=NullFrameResponse(),
         sensor=EMCCDSensor(acquisition_mode=FrameTransferAcquisition(
-            transfer_time=0.1)))
+            transfer_duration=0.1)))
     prepared = prepare_frame_transfer_acquisition(detector, map,
         FrameTransferAcquisitionDefinition(PlantDuration(1_000_000_000);
             readout_duration=PlantDuration(800_000_000)))
@@ -871,11 +871,11 @@ end
     rng = Xoshiro(710)
     mtf_before = detector_mtf(detector, 0.2, 0.1)
 
-    tiny_transfer_detector = Detector(integration_time=1.0,
+    tiny_transfer_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, gain=1.0,
         response_model=NullFrameResponse(),
         sensor=EMCCDSensor(acquisition_mode=FrameTransferAcquisition(
-            transfer_time=1.0e-12)))
+            transfer_duration=1.0e-12)))
     tiny_transfer_error = event_test_error() do
         prepare_frame_transfer_acquisition(tiny_transfer_detector, map,
             FrameTransferAcquisitionDefinition(PlantDuration(1_000_000_000)))
@@ -908,10 +908,10 @@ end
     @test regression isa DetectorAcquisitionError
     @test regression.reason == :time_regression
 
-    slow_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    slow_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, gain=1.0, response_model=NullFrameResponse(),
         sensor=EMCCDSensor(acquisition_mode=FrameTransferAcquisition(
-            transfer_time=0.1)))
+            transfer_duration=0.1)))
     slow_prepared = prepare_frame_transfer_acquisition(slow_detector, map,
         FrameTransferAcquisitionDefinition(PlantDuration(1_000_000_000);
             readout_duration=PlantDuration(1_500_000_000)))

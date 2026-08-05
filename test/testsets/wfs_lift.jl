@@ -180,7 +180,7 @@ end
         mode_ids=(1, 2), numerical=true)
     binned_observation = LiFTObservation(binned_forward,
         copy(frame_binned); domain=LiFTExpectedCounts(
-            det_binned.params.integration_time;
+            det_binned.params.exposure_duration;
             quantum_efficiency=det_binned.params.qe))
     coeffs_binned = WavefrontSensors.reconstruct(
         lift_binned, binned_observation)
@@ -233,16 +233,16 @@ end
         check_convergence=false)
     @test lift_weighted.state.weight_buffer ≈ vec(expected_weights)
 
-    exposure_time = 0.25
+    exposure_duration = 0.25
     quantum_efficiency = 0.8
     rate_domain = LiFTPhotonRate(
-        noise_equivalent_exposure_s=exposure_time,
+        noise_equivalent_exposure_s=exposure_duration,
         quantum_efficiency=quantum_efficiency)
-    count_domain = LiFTExpectedCounts(exposure_time;
+    count_domain = LiFTExpectedCounts(exposure_duration;
         quantum_efficiency=quantum_efficiency)
     rate_observation = LiFTObservation(adaptive_forward,
         copy(adaptive_target); domain=rate_domain)
-    count_values = adaptive_target .* (exposure_time * quantum_efficiency)
+    count_values = adaptive_target .* (exposure_duration * quantum_efficiency)
     count_observation = LiFTObservation(adaptive_forward,
         count_values; domain=count_domain)
     rate_estimator = LiFT(adaptive_forward; iterations=3,

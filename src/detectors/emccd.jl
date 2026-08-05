@@ -39,7 +39,7 @@ struct ConventionalOutput <: AbstractEMCCDOutputPath end
 struct SequentialAcquisition <: AbstractEMCCDAcquisitionMode end
 
 """
-    FrameTransferAcquisition(; transfer_time=0, T=Float64)
+    FrameTransferAcquisition(; transfer_duration=0, T=Float64)
 
 EMCCD acquisition timing in which the image area is rapidly shifted into a
 storage area and storage readout overlaps the next integration. This affects
@@ -48,15 +48,15 @@ response, charge multiplication, or noise.
 """
 struct FrameTransferAcquisition{T<:AbstractFloat} <:
     AbstractEMCCDAcquisitionMode
-    transfer_time::T
+    transfer_duration::T
 end
 
-FrameTransferAcquisition(transfer_time::Real) =
+FrameTransferAcquisition(transfer_duration::Real) =
     validate_emccd_acquisition_mode(
-        FrameTransferAcquisition{Float64}(float(transfer_time)))
-FrameTransferAcquisition(; transfer_time::Real=0.0,
+        FrameTransferAcquisition{Float64}(float(transfer_duration)))
+FrameTransferAcquisition(; transfer_duration::Real=0.0,
     T::Type{<:AbstractFloat}=Float64) =
-    validate_emccd_acquisition_mode(FrameTransferAcquisition{T}(T(transfer_time)))
+    validate_emccd_acquisition_mode(FrameTransferAcquisition{T}(T(transfer_duration)))
 
 struct PhotonCountingEMMode{T<:AbstractFloat} <: AbstractEMCCDOperatingMode
     threshold::T
@@ -210,58 +210,58 @@ acquisition_mode_symbol(sensor::EMCCDSensor) =
 emccd_acquisition_mode_symbol(::SequentialAcquisition) = :sequential
 emccd_acquisition_mode_symbol(::FrameTransferAcquisition) = :frame_transfer
 
-frame_transfer_time(sensor::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} =
-    emccd_frame_transfer_time(sensor.acquisition_mode, T)
-emccd_frame_transfer_time(::SequentialAcquisition,
+frame_transfer_duration(sensor::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} =
+    emccd_frame_transfer_duration(sensor.acquisition_mode, T)
+emccd_frame_transfer_duration(::SequentialAcquisition,
     ::Type{T}) where {T<:AbstractFloat} = nothing
-emccd_frame_transfer_time(mode::FrameTransferAcquisition,
-    ::Type{T}) where {T<:AbstractFloat} = T(mode.transfer_time)
+emccd_frame_transfer_duration(mode::FrameTransferAcquisition,
+    ::Type{T}) where {T<:AbstractFloat} = T(mode.transfer_duration)
 
 _emccd_readout_pixels(frame_size::Tuple{Int,Int}, ::Nothing) =
     frame_size[1] * frame_size[2]
 _emccd_readout_pixels(frame_size::Tuple{Int,Int}, window::FrameWindow) =
     length(window.rows) * length(window.cols)
 
-function sampling_read_time(sensor::EMCCDSensor, frame_size::Tuple{Int,Int},
+function sampling_read_duration(sensor::EMCCDSensor, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
     sensor.readout_rate_hz === nothing && return nothing
     return T(_emccd_readout_pixels(frame_size, window)) /
         T(sensor.readout_rate_hz)
 end
 
-sampling_read_time(::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
+sampling_read_duration(::EMCCDSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
 
-function sampling_wallclock_time(sensor::EMCCDSensor, integration_time,
+function sampling_acquisition_duration(sensor::EMCCDSensor, exposure_duration,
     frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
     ::Type{T}) where {T<:AbstractFloat}
-    readout_time = sampling_read_time(sensor, frame_size, window, T)
-    readout_time === nothing && return nothing
+    readout_duration = sampling_read_duration(sensor, frame_size, window, T)
+    readout_duration === nothing && return nothing
     return emccd_first_frame_latency(sensor.acquisition_mode,
-        T(integration_time), readout_time)
+        T(exposure_duration), readout_duration)
 end
 
-sampling_wallclock_time(::EMCCDSensor, integration_time,
+sampling_acquisition_duration(::EMCCDSensor, exposure_duration,
     ::Type{T}) where {T<:AbstractFloat} = nothing
 
-emccd_first_frame_latency(::SequentialAcquisition, integration_time,
-    readout_time) = integration_time + readout_time
-emccd_first_frame_latency(mode::FrameTransferAcquisition, integration_time,
-    readout_time) = integration_time + mode.transfer_time + readout_time
+emccd_first_frame_latency(::SequentialAcquisition, exposure_duration,
+    readout_duration) = exposure_duration + readout_duration
+emccd_first_frame_latency(mode::FrameTransferAcquisition, exposure_duration,
+    readout_duration) = exposure_duration + mode.transfer_duration + readout_duration
 
-function steady_state_frame_period(sensor::EMCCDSensor, integration_time,
+function steady_state_frame_period(sensor::EMCCDSensor, exposure_duration,
     frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
     ::Type{T}) where {T<:AbstractFloat}
-    readout_time = sampling_read_time(sensor, frame_size, window, T)
-    readout_time === nothing && return nothing
+    readout_duration = sampling_read_duration(sensor, frame_size, window, T)
+    readout_duration === nothing && return nothing
     return emccd_steady_state_frame_period(sensor.acquisition_mode,
-        T(integration_time), readout_time)
+        T(exposure_duration), readout_duration)
 end
 
-emccd_steady_state_frame_period(::SequentialAcquisition, integration_time,
-    readout_time) = integration_time + readout_time
+emccd_steady_state_frame_period(::SequentialAcquisition, exposure_duration,
+    readout_duration) = exposure_duration + readout_duration
 emccd_steady_state_frame_period(mode::FrameTransferAcquisition,
-    integration_time, readout_time) =
-    max(integration_time, readout_time) + mode.transfer_time
+    exposure_duration, readout_duration) =
+    max(exposure_duration, readout_duration) + mode.transfer_duration
 
 convert_em_gain_model(model::ClippedGaussianMultiplicationApproximation,
     ::Type{T}) where {T<:AbstractFloat} =
@@ -293,7 +293,7 @@ convert_emccd_acquisition_mode(::SequentialAcquisition, ::Type{T}) where
     {T<:AbstractFloat} = SequentialAcquisition()
 convert_emccd_acquisition_mode(mode::FrameTransferAcquisition,
     ::Type{T}) where {T<:AbstractFloat} =
-    FrameTransferAcquisition{T}(T(mode.transfer_time))
+    FrameTransferAcquisition{T}(T(mode.transfer_duration))
 convert_emccd_acquisition_mode(mode::AbstractEMCCDAcquisitionMode,
     ::Type{T}) where {T<:AbstractFloat} = mode
 validate_emccd_acquisition_mode(::SequentialAcquisition) = SequentialAcquisition()
@@ -312,15 +312,15 @@ validate_emccd_acquisition_mode(mode::AbstractEMCCDAcquisitionMode) =
         "unsupported EMCCD acquisition mode $(typeof(mode))"))
 
 function validate_emccd_acquisition_mode(mode::FrameTransferAcquisition)
-    isfinite(mode.transfer_time) &&
-        mode.transfer_time >= zero(mode.transfer_time) ||
+    isfinite(mode.transfer_duration) &&
+        mode.transfer_duration >= zero(mode.transfer_duration) ||
         throw(InvalidConfiguration(
-            "FrameTransferAcquisition transfer_time must be finite and >= 0"))
+            "FrameTransferAcquisition transfer_duration must be finite and >= 0"))
     return mode
 end
 
 function apply_sensor_statistics!(sensor::EMCCDSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
+    rng::AbstractRNG, exposure_duration::Real)
     mean_per_frame = effective_cic_per_frame(det)
     add_poisson_rate!(det.products.frame, det, rng, mean_per_frame)
     return det.products.frame
@@ -436,7 +436,7 @@ end
 
 function _batched_sensor_statistics!(sensor::EMCCDSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
-    exposure_time::Real)
+    exposure_duration::Real)
     mean_per_frame = effective_cic_per_frame(det)
     if mean_per_frame > zero(mean_per_frame)
         fill!(scratch, mean_per_frame)

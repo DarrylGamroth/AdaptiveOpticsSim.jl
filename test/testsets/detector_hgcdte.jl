@@ -1,6 +1,9 @@
 @testset "HgCdTe detector families" begin
+    @test !isdefined(AdaptiveOpticsSim.Detectors, :detector_ramp_times)
+    @test !isdefined(AdaptiveOpticsSim, :detector_ramp_times)
+
     zero_psf = zeros(4, 4)
-    det_hgcdte_single = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+    det_hgcdte_single = Detector(exposure_duration=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor())
     frame_hgcdte_single = copy(capture!(det_hgcdte_single, zero_psf; rng=MersenneTwister(16)))
     single_products = readout_products(det_hgcdte_single)
@@ -12,9 +15,9 @@
     @test detector_reference_cube(det_hgcdte_single) === nothing
     @test detector_signal_cube(det_hgcdte_single) !== nothing
     @test detector_read_cube(det_hgcdte_single) === nothing
-    @test detector_read_times(det_hgcdte_single) === nothing
+    @test detector_read_offsets_s(det_hgcdte_single) === nothing
 
-    conventional_detector = Detector(integration_time=1.0,
+    conventional_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, binning=2)
     @test fieldtype(typeof(conventional_detector.products),
         :readout) === NoFrameReadoutProducts
@@ -23,10 +26,10 @@
 
     struct DummyReadoutProducts{A,V} <: FrameReadoutProducts
         signal_frame::A
-        read_times::V
+        read_offsets_s::V
     end
     AdaptiveOpticsSim.Detectors.detector_signal_frame(products::DummyReadoutProducts) = products.signal_frame
-    AdaptiveOpticsSim.Detectors.detector_read_times(products::DummyReadoutProducts) = products.read_times
+    AdaptiveOpticsSim.Detectors.detector_read_offsets_s(products::DummyReadoutProducts) = products.read_offsets_s
 
     dummy_products = DummyReadoutProducts(fill(3.0, 2, 2), [0.25, 0.5])
     @test detector_reference_frame(dummy_products) === nothing
@@ -35,9 +38,9 @@
     @test detector_reference_cube(dummy_products) === nothing
     @test detector_signal_cube(dummy_products) === nothing
     @test detector_read_cube(dummy_products) === nothing
-    @test detector_read_times(dummy_products) == [0.25, 0.5]
+    @test detector_read_offsets_s(dummy_products) == [0.25, 0.5]
 
-    det_hgcdte_ndr = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+    det_hgcdte_ndr = Detector(exposure_duration=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=AveragedNonDestructiveReads(4)))
     frame_hgcdte_ndr = copy(capture!(det_hgcdte_ndr, zero_psf; rng=MersenneTwister(16)))
@@ -61,8 +64,8 @@
     @test hgcdte_meta.read_cube_reads == 4
     @test detector_combined_frame(det_hgcdte_ndr) == frame_hgcdte_ndr
     @test size(detector_signal_cube(det_hgcdte_ndr)) == (4, 4, 4)
-    @test length(detector_read_times(det_hgcdte_ndr)) == 4
-    det_hgcdte_cds = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+    @test length(detector_read_offsets_s(det_hgcdte_ndr)) == 4
+    det_hgcdte_cds = Detector(exposure_duration=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=CorrelatedDoubleSampling()))
     frame_hgcdte_cds = copy(capture!(det_hgcdte_cds, zero_psf; rng=MersenneTwister(16)))
@@ -80,7 +83,7 @@
     @test size(detector_signal_cube(det_hgcdte_cds)) == (4, 4, 1)
     @test detector_combined_frame(det_hgcdte_cds) ≈
         detector_signal_frame(det_hgcdte_cds) .- detector_reference_frame(det_hgcdte_cds)
-    det_hgcdte_fowler = Detector(integration_time=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
+    det_hgcdte_fowler = Detector(exposure_duration=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=FowlerSampling(8)))
     frame_hgcdte_fowler = copy(capture!(det_hgcdte_fowler, zero_psf; rng=MersenneTwister(16)))
@@ -96,9 +99,9 @@
         detector_signal_frame(det_hgcdte_fowler) .- detector_reference_frame(det_hgcdte_fowler)
 
     ramp_input = fill(5.0, 4, 4)
-    ramp_detector = Detector(integration_time=2.0, noise=NoiseNone(),
+    ramp_detector = Detector(exposure_duration=2.0, noise=NoiseNone(),
         qe=1.0, gain=1.0, response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(read_time=0.1,
+        sensor=HgCdTeSensor(read_duration=0.1,
             sampling_mode=UpTheRampSampling(5)))
     ramp_rng = MersenneTwister(161)
     ramp_frame = copy(capture!(ramp_detector, ramp_input, ramp_rng))
@@ -114,15 +117,15 @@
         detector_read_cube(ramp_detector)
     @test detector_ramp_cube(ramp_detector) ===
         detector_read_cube(ramp_detector)
-    @test detector_ramp_times(ramp_detector) ===
-        detector_read_times(ramp_detector)
+    @test detector_ramp_read_offsets_s(ramp_detector) ===
+        detector_read_offsets_s(ramp_detector)
     @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(
         ramp_detector) == :synthesized_final_charge
     @test_throws InvalidConfiguration begin
         AdaptiveOpticsSim.Detectors.ensure_up_the_ramp_products!(
             ramp_detector, 5; acquisition=:invalid)
     end
-    @test detector_read_times(ramp_detector) == [0.0, 0.5, 1.0, 1.5, 2.0]
+    @test detector_read_offsets_s(ramp_detector) == [0.0, 0.5, 1.0, 1.5, 2.0]
     @test vec(Array(detector_read_cube(ramp_detector)[1, 1, :])) ==
         [0.0, 2.5, 5.0, 7.5, 10.0]
     ramp_meta = detector_export_metadata(ramp_detector)
@@ -130,8 +133,8 @@
     @test ramp_meta.sampling_reads == 5
     @test ramp_meta.sampling_reference_reads == 0
     @test ramp_meta.sampling_signal_reads == 5
-    @test ramp_meta.sampling_read_time == 0.1
-    @test ramp_meta.sampling_wallclock_time == 2.1
+    @test ramp_meta.sampling_read_duration == 0.1
+    @test ramp_meta.sampling_acquisition_duration == 2.1
     @test ramp_meta.provides_signal_frame
     @test ramp_meta.provides_combined_frame
     @test ramp_meta.provides_signal_cube
@@ -149,10 +152,10 @@
     @test_throws InvalidConfiguration capture_stack!(ramp_detector,
         ramp_stack, similar(ramp_stack), MersenneTwister(161))
 
-    ramp_window_detector = Detector(integration_time=2.0,
+    ramp_window_detector = Detector(exposure_duration=2.0,
         noise=NoiseNone(), qe=1.0, gain=1.0,
         response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(read_time=0.1,
+        sensor=HgCdTeSensor(read_duration=0.1,
             sampling_mode=UpTheRampSampling(5)),
         readout_window=FrameWindow(2:3, 2:4))
     ramp_window_rng = MersenneTwister(162)
@@ -170,10 +173,10 @@
             ramp_window_rng)) == 0
     end
 
-    ramp_noise_detector = Detector(integration_time=1.0,
+    ramp_noise_detector = Detector(exposure_duration=1.0,
         noise=NoiseReadout(4.0), qe=1.0, gain=1.0,
         response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(read_time=0.01,
+        sensor=HgCdTeSensor(read_duration=0.01,
             sampling_mode=UpTheRampSampling(16)))
     ramp_noise_frame = copy(capture!(ramp_noise_detector, zeros(64, 64);
         rng=MersenneTwister(163)))
@@ -188,9 +191,9 @@
         sampling_mode=UpTheRampSampling(4))
     @test_throws InvalidConfiguration HgCdTeSensor(
         sampling_mode=SkipperSampling(4))
-    invalid_ramp_schedule = Detector(integration_time=1.0,
+    invalid_ramp_schedule = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0,
-        sensor=HgCdTeSensor(read_time=0.3,
+        sensor=HgCdTeSensor(read_duration=0.3,
             sampling_mode=UpTheRampSampling(5)))
     @test_throws InvalidConfiguration capture!(invalid_ramp_schedule,
         ones(4, 4); rng=MersenneTwister(164))
@@ -208,52 +211,52 @@
     @test isapprox(ndr_std, 2.0; rtol=0.15)
     @test isapprox(cds_std, 4.0 * sqrt(2.0); rtol=0.15)
     @test isapprox(fowler_std, 2.0; rtol=0.15)
-    det_hgcdte_timed_single = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_timed_single = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0,
-        sensor=HgCdTeSensor(read_time=1.0))
+        sensor=HgCdTeSensor(read_duration=1.0))
     frame_hgcdte_timed_single = copy(capture!(det_hgcdte_timed_single, zero_psf; rng=MersenneTwister(17)))
-    det_hgcdte_timed_cds = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_timed_cds = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0,
-        sensor=HgCdTeSensor(read_time=1.0,
+        sensor=HgCdTeSensor(read_duration=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
     frame_hgcdte_timed_cds = copy(capture!(det_hgcdte_timed_cds, zero_psf; rng=MersenneTwister(17)))
     @test sum(frame_hgcdte_timed_cds) > sum(frame_hgcdte_timed_single)
-    det_hgcdte_timed_glow = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_timed_glow = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=3.0, gain=1.0,
         response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(glow_rate=2.0, read_time=1.0,
+        sensor=HgCdTeSensor(glow_rate=2.0, read_duration=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
     frame_hgcdte_timed_glow = copy(capture!(det_hgcdte_timed_glow, zero_psf; rng=MersenneTwister(17)))
-    det_hgcdte_timed_noglow = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_timed_noglow = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=3.0, gain=1.0,
         response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(read_time=1.0,
+        sensor=HgCdTeSensor(read_duration=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
     frame_hgcdte_timed_noglow = copy(capture!(det_hgcdte_timed_noglow, zero_psf; rng=MersenneTwister(17)))
     @test sum(frame_hgcdte_timed_glow) > sum(frame_hgcdte_timed_noglow)
     timed_meta = detector_export_metadata(det_hgcdte_timed_cds)
-    @test timed_meta.sampling_read_time == 1.0
-    @test timed_meta.sampling_wallclock_time == 3.0
-    det_hgcdte_windowed = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
-        gain=1.0, sensor=HgCdTeSensor(read_time=1.0,
+    @test timed_meta.sampling_read_duration == 1.0
+    @test timed_meta.sampling_acquisition_duration == 3.0
+    det_hgcdte_windowed = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+        gain=1.0, sensor=HgCdTeSensor(read_duration=1.0,
             sampling_mode=CorrelatedDoubleSampling()),
         readout_window=FrameWindow(2:3, 2:3))
     capture!(det_hgcdte_windowed, fill(10.0, 4, 4); rng=MersenneTwister(18))
     windowed_meta = detector_export_metadata(det_hgcdte_windowed)
-    @test windowed_meta.sampling_read_time == 1.0
-    @test windowed_meta.sampling_wallclock_time == 3.0
+    @test windowed_meta.sampling_read_duration == 1.0
+    @test windowed_meta.sampling_acquisition_duration == 3.0
     @test detector_combined_frame(det_hgcdte_windowed) !== nothing
     @test size(detector_reference_cube(det_hgcdte_windowed)) == (2, 2, 1)
     @test size(detector_signal_cube(det_hgcdte_windowed)) == (2, 2, 1)
     @test size(detector_signal_frame(det_hgcdte_windowed)) == (2, 2)
     @test size(detector_read_cube(det_hgcdte_windowed)) == (2, 2, 2)
-    @test detector_read_times(det_hgcdte_windowed) == [1.0, 2.0]
+    @test detector_read_offsets_s(det_hgcdte_windowed) == [1.0, 2.0]
     @test detector_combined_frame(det_hgcdte_windowed) ≈
         detector_signal_frame(det_hgcdte_windowed) .- detector_reference_frame(det_hgcdte_windowed)
-    det_hgcdte_windowed_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_windowed_corrected = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0,
         response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(read_time=1.0,
+        sensor=HgCdTeSensor(read_duration=1.0,
             sampling_mode=CorrelatedDoubleSampling()),
         readout_window=FrameWindow(2:3, 2:3),
         correction_model=CompositeFrameReadoutCorrection((
@@ -268,7 +271,7 @@
     @test detector_combined_frame(det_hgcdte_windowed_corrected) ≈
         detector_signal_frame(det_hgcdte_windowed_corrected) .- detector_reference_frame(det_hgcdte_windowed_corrected)
     @test size(detector_read_cube(det_hgcdte_windowed_corrected)) == (2, 2, 2)
-    det_hgcdte_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_corrected = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferencePixelCommonModeCorrection(1, 1))
@@ -281,7 +284,7 @@
 
     calibration_input = reshape(collect(1.0:64.0), 8, 8)
     calibration_sensor = HgCdTeSensor(
-        read_time=0.1, sampling_mode=CorrelatedDoubleSampling())
+        read_duration=0.1, sampling_mode=CorrelatedDoubleSampling())
     calibration_correction = ReferencePixelCommonModeCorrection(1, 1)
     calibration_detector = Detector(noise=NoiseNone(), qe=1.0, gain=3.0,
         sensor=calibration_sensor, response_model=NullFrameResponse(),
@@ -300,13 +303,13 @@
     @test readout_products(calibration_detector) isa NoFrameReadoutProducts
 
     ramp_calibration_sensor = HgCdTeSensor(
-        read_time=0.1,
+        read_duration=0.1,
         sampling_mode=UpTheRampSampling(4))
-    ramp_calibration_detector = Detector(integration_time=1.0,
+    ramp_calibration_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, gain=3.0,
         sensor=ramp_calibration_sensor, response_model=NullFrameResponse(),
         correction_model=calibration_correction)
-    ramp_capture_detector = Detector(integration_time=1.0,
+    ramp_capture_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, gain=3.0,
         sensor=ramp_calibration_sensor, response_model=NullFrameResponse(),
         correction_model=calibration_correction)
@@ -320,10 +323,10 @@
     @test readout_ready(ramp_calibration_detector)
     @test readout_products(ramp_calibration_detector) isa NoFrameReadoutProducts
 
-    invalid_ramp_calibration = Detector(integration_time=1.0,
+    invalid_ramp_calibration = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, gain=3.0,
         sensor=HgCdTeSensor(
-            read_time=0.4, sampling_mode=UpTheRampSampling(4)),
+            read_duration=0.4, sampling_mode=UpTheRampSampling(4)),
         response_model=NullFrameResponse(),
         correction_model=calibration_correction)
     @test_throws InvalidConfiguration begin
@@ -335,19 +338,19 @@
             invalid_ramp_calibration, calibration_input, 1.0)
     end
 
-    det_hgcdte_row_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_row_corrected = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceRowCommonModeCorrection(1))
     row_corrected = capture!(det_hgcdte_row_corrected, row_pattern; rng=MersenneTwister(20))
     @test maximum(abs, row_corrected) < 1e-6
-    det_hgcdte_col_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_col_corrected = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceColumnCommonModeCorrection(1))
     col_corrected = capture!(det_hgcdte_col_corrected, col_pattern; rng=MersenneTwister(21))
     @test maximum(abs, col_corrected) < 1e-6
-    det_hgcdte_output_corrected = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_output_corrected = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=ReferenceOutputCommonModeCorrection(2; edge_rows=1, edge_cols=1))
@@ -357,7 +360,7 @@
     @test output_meta.readout_correction == :reference_output_common_mode
     @test output_meta.correction_group_cols == 2
     @test maximum(abs, output_corrected) < 1e-6
-    det_hgcdte_composite = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    det_hgcdte_composite = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(),
         response_model=NullFrameResponse(),
         correction_model=CompositeFrameReadoutCorrection((
@@ -371,7 +374,7 @@
     @test maximum(abs, composite_corrected) < 1e-6
 
     shared_readout = AdaptiveOpticsSim.Detectors.HgCdTeReadout(
-        glow_rate=0.25, read_time=0.01,
+        glow_rate=0.25, read_duration=0.01,
         sampling_mode=FowlerSampling(2))
     @test HgCdTeSensor(shared_readout).readout === shared_readout
     @test HgCdTeAvalancheArraySensor(shared_readout;
@@ -390,13 +393,13 @@
         AdaptiveOpticsSim.Detectors.NullPersistence
 
     conventional_saturation = Detector(
-        integration_time=1.0, noise=NoiseNone(), qe=1.0,
+        exposure_duration=1.0, noise=NoiseNone(), qe=1.0,
         full_well=100.0, sensor=HgCdTeSensor())
     @test capture!(conventional_saturation, fill(150.0, 2, 2);
         rng=Xoshiro(2301)) == fill(100.0, 2, 2)
 
     conventional_nonlinearity = Detector(
-        integration_time=1.0, noise=NoiseNone(), qe=1.0,
+        exposure_duration=1.0, noise=NoiseNone(), qe=1.0,
         response_model=NullFrameResponse(),
         nonlinearity_model=SaturatingFrameNonlinearity(0.1),
         sensor=HgCdTeSensor())
@@ -404,7 +407,7 @@
         rng=Xoshiro(2302)) == fill(5.0, 2, 2)
 
     conventional_persistence = Detector(
-        integration_time=1.0, noise=NoiseNone(), qe=1.0,
+        exposure_duration=1.0, noise=NoiseNone(), qe=1.0,
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(
             persistence_model=ExponentialPersistence(0.5, 0.0)))
@@ -420,9 +423,9 @@
     @test_throws InvalidConfiguration HgCdTeAvalancheArraySensor(
         excess_noise_factor=Inf)
     @test_throws InvalidConfiguration HgCdTeSensor(glow_rate=-1.0)
-    @test_throws InvalidConfiguration HgCdTeSensor(read_time=-1.0)
+    @test_throws InvalidConfiguration HgCdTeSensor(read_duration=-1.0)
     @test_throws InvalidConfiguration HgCdTeSensor(glow_rate=NaN)
-    @test_throws InvalidConfiguration HgCdTeSensor(read_time=Inf)
+    @test_throws InvalidConfiguration HgCdTeSensor(read_duration=Inf)
     @test_throws InvalidConfiguration HgCdTeSensor(
         sampling_mode=AveragedNonDestructiveReads(0))
     @test_throws InvalidConfiguration HgCdTeSensor(

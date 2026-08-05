@@ -344,7 +344,7 @@ end
     selected = products[2]
     selected_before = copy(selected.values)
     short = Detector(
-        integration_time=T(0.25),
+        exposure_duration=T(0.25),
         noise=NoiseNone(),
         qe=T(0.5),
         response_model=NullFrameResponse(),
@@ -352,7 +352,7 @@ end
         T=T,
     )
     long = Detector(
-        integration_time=T(1.5),
+        exposure_duration=T(1.5),
         noise=NoiseNone(),
         qe=T(0.5),
         response_model=NullFrameResponse(),

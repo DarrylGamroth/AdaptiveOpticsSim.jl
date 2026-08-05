@@ -45,7 +45,7 @@ function mkid_poisson_cases()
                 sensor=MKIDArraySensor(qe=1.0)),
             fill(20.0, dimensions), 20.0, 9260),
         mkid_poisson_case("dark_only",
-            MKIDArrayDetector(integration_time=2.0, noise=NoisePhoton(),
+            MKIDArrayDetector(exposure_duration=2.0, noise=NoisePhoton(),
                 sensor=MKIDArraySensor(qe=0.0, dark_count_rate=6.0)),
             zeros(dimensions), 12.0, 9261),
         mkid_poisson_case("photon_and_dark",
@@ -109,13 +109,13 @@ function mkid_rate_map(values, source)
 end
 
 function mkid_deterministic_contract()
-    radiometry = MKIDArrayDetector(integration_time=2.0,
+    radiometry = MKIDArrayDetector(exposure_duration=2.0,
         noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
         sensor=MKIDArraySensor(qe=0.5, fill_factor=0.8))
     radiometry_output = copy(capture!(radiometry,
         fill(10.0, 2, 8), Xoshiro(9280)))
 
-    gated_dark = MKIDArrayDetector(integration_time=2.0,
+    gated_dark = MKIDArrayDetector(exposure_duration=2.0,
         noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
         sensor=MKIDArraySensor(qe=0.0, dark_count_rate=4.0))
     gated_dark_output = copy(capture!(gated_dark,
@@ -181,7 +181,7 @@ function mkid_deterministic_contract()
     end for index in eachindex(arrays))
 
     function replay_detector()
-        return MKIDArrayDetector(integration_time=0.5,
+        return MKIDArrayDetector(exposure_duration=0.5,
             noise=NoisePhoton(), gate_model=DutyCycleGate(0.75),
             sensor=MKIDArraySensor(qe=0.7, dark_count_rate=0.25,
                 dead_time_model=NonParalyzableDeadTime(1e-3)))

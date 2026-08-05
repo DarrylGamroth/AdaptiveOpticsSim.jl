@@ -187,7 +187,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "detector_capture_none") do
         rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
-        det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=2, T=T, backend=backend)
+        det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=2, T=T, backend=backend)
         acquisition = prepare_detector_acquisition(det, rate_map)
         frame = capture!(acquisition; rng=rng)
         @assert frame isa BackendArray
@@ -196,7 +196,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "detector_capture_noise") do
         rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
-        det = Detector(noise=(NoisePhoton(), NoiseReadout(T(1e-3))), integration_time=1.0, qe=1.0,
+        det = Detector(noise=(NoisePhoton(), NoiseReadout(T(1e-3))), exposure_duration=1.0, qe=1.0,
             binning=2, background_flux=T(0.5), dark_current=T(0.1), T=T, backend=backend)
         acquisition = prepare_detector_acquisition(det, rate_map)
         frame = capture!(acquisition; rng=rng)
@@ -513,7 +513,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             Source(band=:I, magnitude=0.0, coordinates=(1.0, 45.0), T=T),
         ])
         wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
+        det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)
         slopes = measure!(wfs, pupil, ast, det; rng=rng)
         @assert slopes isa BackendArray
         return slopes
@@ -526,9 +526,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         gpu_src = Source(band=:I, magnitude=0.0, T=T)
         cpu_wfs = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
         gpu_wfs = ShackHartmannWFS(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        cpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+        cpu_det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
             sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
-        gpu_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+        gpu_det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
             sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
 
         cpu_pupil = PupilFunction(cpu_tel; T=T, backend=CPUBackend())
@@ -580,7 +580,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "measure_pyramid_detector") do
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
+        det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)
         slopes = measure!(wfs, pupil, src, det; rng=rng)
         @assert slopes isa BackendArray
         return slopes
@@ -609,7 +609,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "measure_zernike_detector") do
         wfs = ZernikeWFS(tel; pupil_samples=4, T=T, backend=backend)
-        det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
+        det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)
         slopes = measure!(wfs, pupil, src, det; rng=rng)
         @assert slopes isa BackendArray
         return slopes
@@ -638,7 +638,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         atm = KolmogorovAtmosphere(step_tel; r0=0.2, L0=25.0, T=T, backend=backend)
         dm = DeformableMirror(step_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         wfs = ShackHartmannWFS(step_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1, T=T, backend=backend)
+        det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)
         step_pupil = PupilFunction(step_tel; T=T, backend=backend)
         renderer = prepare_atmosphere_renderer(atm, step_tel, src)
         epoch = advance_by!(atm, atmosphere_step; rng=rng)

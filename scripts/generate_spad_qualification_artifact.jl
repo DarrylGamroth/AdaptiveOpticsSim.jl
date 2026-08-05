@@ -44,7 +44,7 @@ function spad_poisson_cases()
                     active_area_detection_efficiency=1.0)),
             fill(20.0, dimensions), 20.0, 9160),
         spad_poisson_case("dark_only",
-            SPADArrayDetector(dimensions; integration_time=2.0,
+            SPADArrayDetector(dimensions; exposure_duration=2.0,
                 noise=NoisePhoton(), sensor=SPADArraySensor(
                     active_area_detection_efficiency=0.0,
                     dark_count_rate=6.0)),
@@ -102,14 +102,14 @@ function spad_dead_time_curves()
 end
 
 function spad_deterministic_contract()
-    radiometry = SPADArrayDetector((2, 8); integration_time=2.0,
+    radiometry = SPADArrayDetector((2, 8); exposure_duration=2.0,
         noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
         sensor=SPADArraySensor(active_area_detection_efficiency=0.5,
             fill_factor=0.8))
     radiometry_output = copy(capture!(radiometry,
         fill(10.0, 2, 8), Xoshiro(9180)))
 
-    gated_dark = SPADArrayDetector((1, 1); integration_time=2.0,
+    gated_dark = SPADArrayDetector((1, 1); exposure_duration=2.0,
         noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
         sensor=SPADArraySensor(active_area_detection_efficiency=0.0,
             dark_count_rate=4.0))
@@ -133,7 +133,7 @@ function spad_deterministic_contract()
     afterpulse_output = copy(capture!(afterpulse,
         fill(4.0, 2, 8), Xoshiro(9183)))
 
-    ordered_pipeline = SPADArrayDetector((1, 1); integration_time=2.0,
+    ordered_pipeline = SPADArrayDetector((1, 1); exposure_duration=2.0,
         noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
         sensor=SPADArraySensor(
             active_area_detection_efficiency=0.5,
@@ -181,7 +181,7 @@ function spad_deterministic_contract()
     end
 
     function replay_detector()
-        return SPADArrayDetector((16, 16); integration_time=0.5,
+        return SPADArrayDetector((16, 16); exposure_duration=0.5,
             noise=NoisePhoton(), gate_model=DutyCycleGate(0.75),
             sensor=SPADArraySensor(active_area_detection_efficiency=0.7,
                 dark_count_rate=0.25,
@@ -292,7 +292,7 @@ function generate_spad_qualification_artifact()
             "input" => "cell-integrated photon-arrival rate in photons per second per array cell",
             "output" => "accumulated expected counts or sampled counts per integration",
             "live_time_equation" =>
-                "live_time = duty_cycle * integration_time",
+                "live_time = duty_cycle * exposure_duration",
             "pipeline_order" => "radiometry and dark expectation; dead-time mean law; deterministic mean response; optional Poisson surrogate; output conversion",
             "nonparalyzable_mean_law" => "mu / (1 + mu * tau / live_time)",
             "paralyzable_mean_law" => "mu * exp(-mu * tau / live_time)",

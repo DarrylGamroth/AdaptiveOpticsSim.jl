@@ -61,29 +61,29 @@ configured_cic_per_frame(sensor::CCDSensor,
 effective_readout_sigma(sensor::CCDSensor, sigma) =
     effective_readout_sigma(sensor.sampling_mode, sigma)
 
-sampling_read_time(sensor::CCDSensor, ::Type{T}) where {T<:AbstractFloat} =
-    ccd_sampling_read_time(sensor.sampling_mode, sensor.sample_duration, T)
-ccd_sampling_read_time(::SingleRead, sample_duration,
+sampling_read_duration(sensor::CCDSensor, ::Type{T}) where {T<:AbstractFloat} =
+    ccd_sampling_read_duration(sensor.sampling_mode, sensor.sample_duration, T)
+ccd_sampling_read_duration(::SingleRead, sample_duration,
     ::Type{T}) where {T<:AbstractFloat} =
     nothing
-ccd_sampling_read_time(::SkipperSampling, sample_duration,
+ccd_sampling_read_duration(::SkipperSampling, sample_duration,
     ::Type{T}) where {T<:AbstractFloat} =
     T(sample_duration)
 
-function sampling_wallclock_time(sensor::CCDSensor, integration_time,
+function sampling_acquisition_duration(sensor::CCDSensor, exposure_duration,
     ::Type{T}) where {T<:AbstractFloat}
-    return ccd_sampling_wallclock_time(sensor.sampling_mode, integration_time,
+    return ccd_sampling_acquisition_duration(sensor.sampling_mode, exposure_duration,
         sensor.sample_duration, T)
 end
 
-ccd_sampling_wallclock_time(::SingleRead, integration_time, sample_duration,
-    ::Type{T}) where {T<:AbstractFloat} = T(integration_time)
-ccd_sampling_wallclock_time(mode::SkipperSampling, integration_time,
+ccd_sampling_acquisition_duration(::SingleRead, exposure_duration, sample_duration,
+    ::Type{T}) where {T<:AbstractFloat} = T(exposure_duration)
+ccd_sampling_acquisition_duration(mode::SkipperSampling, exposure_duration,
     sample_duration, ::Type{T}) where {T<:AbstractFloat} =
-    T(integration_time) + T(mode.n_samples) * T(sample_duration)
+    T(exposure_duration) + T(mode.n_samples) * T(sample_duration)
 
 function apply_sensor_statistics!(sensor::CCDSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
+    rng::AbstractRNG, exposure_duration::Real)
     mean_per_frame = effective_cic_per_frame(det)
     mean_per_frame <= zero(mean_per_frame) && return det.products.frame
     fill!(det.workspace.noise_buffer, mean_per_frame)
@@ -99,7 +99,7 @@ end
 
 function _batched_sensor_statistics!(sensor::CCDSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
-    exposure_time::Real)
+    exposure_duration::Real)
     mean_per_frame = effective_cic_per_frame(det)
     mean_per_frame <= zero(mean_per_frame) && return cube
     fill!(scratch, mean_per_frame)
@@ -178,26 +178,26 @@ end
 end
 
 function _finalize_capture!(sensor::CCDSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
+    rng::AbstractRNG, exposure_duration::Real)
     return finalize_ccd_capture!(sensor.sampling_mode, sensor, det, rng,
-        exposure_time, exposure_time)
+        exposure_duration, exposure_duration)
 end
 
 function _finalize_incremental_capture!(sensor::CCDSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
+    rng::AbstractRNG, exposure_duration::Real)
     return finalize_ccd_capture!(sensor.sampling_mode, sensor, det, rng,
-        exposure_time, zero(exposure_time))
+        exposure_duration, zero(exposure_duration))
 end
 
 finalize_ccd_capture!(::SingleRead, sensor::CCDSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real, charge_exposure_time::Real) =
-    finalize_readout_pipeline!(det, rng, exposure_time,
-        charge_exposure_time)
+    rng::AbstractRNG, exposure_duration::Real, charge_exposure_duration::Real) =
+    finalize_readout_pipeline!(det, rng, exposure_duration,
+        charge_exposure_duration)
 
 function finalize_ccd_capture!(mode::SkipperSampling, sensor::CCDSensor,
-    det::Detector, rng::AbstractRNG, exposure_time::Real,
-    charge_exposure_time::Real)
-    finalize_charge_generation!(det, rng, charge_exposure_time)
+    det::Detector, rng::AbstractRNG, exposure_duration::Real,
+    charge_exposure_duration::Real)
+    finalize_charge_generation!(det, rng, charge_exposure_duration)
     finalize_charge_transport!(det, rng)
 
     products = ensure_skipper_products!(det, mode.n_samples)
@@ -216,7 +216,7 @@ function finalize_ccd_capture!(mode::SkipperSampling, sensor::CCDSensor,
     apply_readout_correction!(det.params.correction_model, det.products.frame, det)
     apply_quantization!(det)
     subtract_background_map!(det.background_map, det)
-    update_sensor_persistence!(sensor, det, exposure_time)
+    update_sensor_persistence!(sensor, det, exposure_duration)
 
     _copy_windowed_frame!(products.mean_frame, det.products.frame, det)
     return det.products.frame

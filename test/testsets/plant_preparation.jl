@@ -624,7 +624,7 @@ function Plant.prepare_acquisition_provider(
 )
     _require_test_path(model.requirement, path)
     T = eltype(path.result.values)
-    detector = Detector(integration_time=T(model.exposure),
+    detector = Detector(exposure_duration=T(model.exposure),
         noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
         T=T, backend=path.key.backend)
     execution = FrameAcquisitionExecution(detector, path.result)
@@ -642,7 +642,7 @@ function Plant.prepare_acquisition_provider(
 )
     require_path_result(path)
     T = eltype(path.result.values)
-    detector = Detector(integration_time=T(model.exposure),
+    detector = Detector(exposure_duration=T(model.exposure),
         noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
         T=T, backend=path.key.backend)
     observation = WFSObservation(similar(path.result.values);
@@ -1116,7 +1116,7 @@ end
         T(0.5) * sum(wfs_path.result.values) atol=T(1e-12) rtol=T(1e-12)
     @test wfs_path.result.values == wfs_rate_before
 
-    detector = Detector(integration_time=T(0.25), noise=NoiseNone(),
+    detector = Detector(exposure_duration=T(0.25), noise=NoiseNone(),
         qe=one(T), response_model=NullFrameResponse(), output_type=T, T=T)
     explicit_observation = similar(science_path.result.values)
     fill!(explicit_observation, zero(T))

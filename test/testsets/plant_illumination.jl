@@ -287,7 +287,7 @@ function Plant.prepare_acquisition_provider(
     definition::AcquisitionDefinition, path::PreparedPathExecutor)
     require_path_result(path)
     T = eltype(path.result.values)
-    detector = Detector(integration_time=T(model.exposure_s),
+    detector = Detector(exposure_duration=T(model.exposure_s),
         noise=NoiseNone(), qe=T(model.quantum_efficiency),
         response_model=NullFrameResponse(), T=T, backend=path.key.backend)
     execution = Plant.FrameAcquisitionExecution(detector,

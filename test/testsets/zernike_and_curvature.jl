@@ -129,12 +129,12 @@ end
                            0.0 0.2 0.8;
                            0.0 0.0 0.0]
     reference = copy(measure!(reference_wfs, pupil, src,
-        Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+        Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
             response_model=SampledFrameResponse(asymmetric_response))))
     scaled_wfs = ZernikeWFS(tel; pupil_samples=8,
         normalization=IncidenceFluxNormalization())
     scaled = copy(measure!(scaled_wfs, pupil, src,
-        Detector(noise=NoiseNone(), integration_time=0.5, qe=0.25,
+        Detector(noise=NoiseNone(), exposure_duration=0.5, qe=0.25,
             response_model=SampledFrameResponse(asymmetric_response))))
     @test norm(reference) > 1e-6
     @test scaled ≈ reference atol=1e-12 rtol=1e-12
@@ -165,7 +165,7 @@ end
 
     for response in responses
         wfs = ZernikeWFS(tel; pupil_samples=8)
-        det = Detector(noise=NoiseNone(), integration_time=0.4, qe=0.3,
+        det = Detector(noise=NoiseNone(), exposure_duration=0.4, qe=0.3,
             response_model=response)
         flat = copy(measure!(wfs, pupil, src, det))
         @test all(iszero, flat)
@@ -416,14 +416,14 @@ end
     @test counting_flat ≈ zero.(counting_flat) atol=1e-10
     @test_throws InvalidConfiguration measure!(counting, pupil, src, det)
     apd = LinearAPDDetector(topology=LinearAPDChannelBank(128),
-        integration_time=1.0, qe=1.0, avalanche_gain=1.0,
+        exposure_duration=1.0, qe=1.0, avalanche_gain=1.0,
         dark_current=0.0, noise=NoiseNone())
     counting_apd = copy(measure!(counting, pupil, src, apd))
     @test counting_apd ≈ counting_flat atol=1e-10
     @test detector_export_metadata(apd).n_channels ==
         length(wfs_optical_rate_storage(counting))
     spad = SPADArrayDetector(size(wfs_optical_rate_storage(counting));
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=1.0, dark_count_rate=0.0, fill_factor=1.0),
     )
@@ -432,7 +432,7 @@ end
     @test detector_export_metadata(spad).readout.output_size ==
         size(wfs_optical_rate_storage(counting))
     mkid = MKIDArrayDetector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=NoiseNone(),
         sensor=MKIDArraySensor(qe=1.0, dark_count_rate=0.0, fill_factor=1.0,
             characteristics=MKIDArrayCharacteristics(
@@ -509,7 +509,7 @@ end
     sampled_qe_wfs = CurvatureWFS(tel; pupil_samples=8,
         defocus_rms_nm=500.0)
     sampled_qe_det = Detector(noise=NoiseNone(),
-        qe=wavelength_dependent_qe, integration_time=1.0, binning=1)
+        qe=wavelength_dependent_qe, exposure_duration=1.0, binning=1)
     sampled_qe_slopes = copy(measure!(sampled_qe_wfs, pupil,
         common_qe_ast, atm, sampled_qe_det; rng=MersenneTwister(23)))
     sampled_qe_frame = copy(output_frame(sampled_qe_det))
@@ -517,7 +517,7 @@ end
     scalar_qe_wfs = CurvatureWFS(tel; pupil_samples=8,
         defocus_rms_nm=500.0)
     scalar_qe_det = Detector(noise=NoiseNone(), qe=0.35,
-        integration_time=1.0, binning=1)
+        exposure_duration=1.0, binning=1)
     scalar_qe_slopes = copy(measure!(scalar_qe_wfs, pupil,
         common_qe_ast, atm, scalar_qe_det; rng=MersenneTwister(23)))
     @test sum(sampled_qe_frame) > 0

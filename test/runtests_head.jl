@@ -458,7 +458,7 @@ function moving_closed_loop_trace(;
     imat = interaction_matrix(dm, wfs, calibration_pupil, src;
         amplitude=1e-8)
     recon = ModalReconstructor(imat; gain=0.2)
-    wfs_det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    wfs_det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1)
     pupil = PupilFunction(tel)
     atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
     prepare_runtime_wfs!(wfs, pupil, src)

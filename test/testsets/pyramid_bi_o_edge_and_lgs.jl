@@ -626,13 +626,13 @@ end
 
     pyr_sampled_qe = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_sampled_qe_det = Detector(noise=NoiseNone(),
-        qe=wavelength_dependent_qe, integration_time=1.0, binning=1)
+        qe=wavelength_dependent_qe, exposure_duration=1.0, binning=1)
     measure!(pyr_sampled_qe, pupil, common_qe_ast, pyr_sampled_qe_det;
         rng=MersenneTwister(21))
     pyr_sampled_qe_frame = copy(output_frame(pyr_sampled_qe_det))
     pyr_scalar_qe = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_scalar_qe_det = Detector(noise=NoiseNone(), qe=0.35,
-        integration_time=1.0, binning=1)
+        exposure_duration=1.0, binning=1)
     measure!(pyr_scalar_qe, pupil, common_qe_ast, pyr_scalar_qe_det;
         rng=MersenneTwister(21))
     @test sum(pyr_sampled_qe_frame) > 0
@@ -640,13 +640,13 @@ end
 
     bio_sampled_qe = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_sampled_qe_det = Detector(noise=NoiseNone(),
-        qe=wavelength_dependent_qe, integration_time=1.0, binning=1)
+        qe=wavelength_dependent_qe, exposure_duration=1.0, binning=1)
     measure!(bio_sampled_qe, pupil, common_qe_ast, bio_sampled_qe_det;
         rng=MersenneTwister(22))
     bio_sampled_qe_frame = copy(output_frame(bio_sampled_qe_det))
     bio_scalar_qe = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_scalar_qe_det = Detector(noise=NoiseNone(), qe=0.35,
-        integration_time=1.0, binning=1)
+        exposure_duration=1.0, binning=1)
     measure!(bio_scalar_qe, pupil, common_qe_ast, bio_scalar_qe_det;
         rng=MersenneTwister(22))
     @test sum(bio_sampled_qe_frame) > 0
@@ -689,28 +689,28 @@ end
                                0.0 0.2 0.8;
                                0.0 0.0 0.0]
         reference = copy(measure!(make_wfs(), pupil, src,
-            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+            Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
                 response_model=SampledFrameResponse(asymmetric_response))))
         scaled = copy(measure!(make_wfs(), pupil, src,
-            Detector(noise=NoiseNone(), integration_time=0.5, qe=0.25,
+            Detector(noise=NoiseNone(), exposure_duration=0.5, qe=0.25,
                 response_model=SampledFrameResponse(asymmetric_response))))
         @test norm(reference) > 1e-6
         @test scaled ≈ reference atol=1e-12 rtol=1e-12
 
         gained = copy(measure!(make_wfs(), pupil, src,
-            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+            Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
                 gain=4.0,
                 response_model=SampledFrameResponse(asymmetric_response))))
         @test gained ≈ reference atol=1e-12 rtol=1e-12
 
         hgcdte_reference = copy(measure!(make_wfs(), pupil, src,
-            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+            Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
                 gain=1.0,
                 sensor=HgCdTeAvalancheArraySensor(avalanche_gain=1.0,
                     sampling_mode=CorrelatedDoubleSampling()),
                 response_model=SampledFrameResponse(asymmetric_response))))
         hgcdte_gained = copy(measure!(make_wfs(), pupil, src,
-            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+            Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
                 gain=3.0,
                 sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
                     sampling_mode=CorrelatedDoubleSampling()),
@@ -753,7 +753,7 @@ end
     undetectable = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=0.0, normalization=IncidenceFluxNormalization())
     @test all(iszero, measure!(undetectable, pupil, src,
-        Detector(noise=NoiseNone(), integration_time=0.5, qe=0.0)))
+        Detector(noise=NoiseNone(), exposure_duration=0.5, qe=0.0)))
 
     flat_tel = Telescope(resolution=32, diameter=8.0,
         central_obstruction=0.0)
@@ -771,7 +771,7 @@ end
     sampled_qe = SampledQuantumEfficiency(
         [0.50e-6, 0.57e-6, 0.61e-6, 0.70e-6],
         [0.1, 0.2, 0.9, 0.7])
-    spectral_detector = Detector(noise=NoiseNone(), integration_time=0.4,
+    spectral_detector = Detector(noise=NoiseNone(), exposure_duration=0.4,
         qe=sampled_qe)
     spectral_detected = PyramidWFS(flat_tel; pupil_samples=4,
         mode=Diffractive(), modulation=1.0,
@@ -795,7 +795,7 @@ end
         mode=Diffractive(), modulation=1.0,
         normalization=IncidenceFluxNormalization())
     qe_reference = copy(measure!(qe_reference_wfs, aberrated_qe_pupil,
-        spectral_lgs, Detector(noise=NoiseNone(), integration_time=1.0,
+        spectral_lgs, Detector(noise=NoiseNone(), exposure_duration=1.0,
             qe=sampled_qe)))
     scaled_qe = SampledQuantumEfficiency(
         [0.50e-6, 0.57e-6, 0.61e-6, 0.70e-6],
@@ -804,7 +804,7 @@ end
         mode=Diffractive(), modulation=1.0,
         normalization=IncidenceFluxNormalization())
     qe_scaled = copy(measure!(qe_scaled_wfs, aberrated_qe_pupil,
-        spectral_lgs, Detector(noise=NoiseNone(), integration_time=0.5,
+        spectral_lgs, Detector(noise=NoiseNone(), exposure_duration=0.5,
             qe=scaled_qe)))
     @test norm(qe_reference) > 1e-6
     @test qe_scaled ≈ qe_reference atol=1e-12 rtol=1e-12
@@ -830,7 +830,7 @@ end
                 modulation=1.0) :
             BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=1.0)
-        det = Detector(noise=NoiseNone(), integration_time=0.4, qe=0.3,
+        det = Detector(noise=NoiseNone(), exposure_duration=0.4, qe=0.3,
             response_model=response)
         flat = copy(measure!(wfs, pupil, src, det))
         @test all(iszero, flat)
@@ -951,10 +951,10 @@ end
         composite_correction, hgcdte_seed) == 0
 
     ramp_correction = ReferencePixelCommonModeCorrection(1, 1)
-    ramp_detector = Detector(noise=NoiseNone(), integration_time=1.0,
+    ramp_detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
         gain=3.0,
         sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
-            read_time=0.1, sampling_mode=UpTheRampSampling(4)),
+            read_duration=0.1, sampling_mode=UpTheRampSampling(4)),
         correction_model=ramp_correction)
     @test detector_calibration_signature_allocation_bytes(
         ramp_detector, hgcdte_seed) == 0
@@ -970,10 +970,10 @@ end
         sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
             sampling_mode=CorrelatedDoubleSampling()),
         correction_model=hgcdte_correction)
-    ramp_read_time_detector = Detector(noise=NoiseNone(),
-        integration_time=1.0, gain=3.0,
+    ramp_read_duration_detector = Detector(noise=NoiseNone(),
+        exposure_duration=1.0, gain=3.0,
         sensor=HgCdTeAvalancheArraySensor(avalanche_gain=2.0,
-            read_time=0.2, sampling_mode=UpTheRampSampling(4)),
+            read_duration=0.2, sampling_mode=UpTheRampSampling(4)),
         correction_model=ramp_correction)
     @test detector_calibration_signature(gain_signature_detector,
         hgcdte_seed) != detector_calibration_signature(correction_one,
@@ -981,11 +981,11 @@ end
     @test detector_calibration_signature(avalanche_signature_detector,
         hgcdte_seed) != detector_calibration_signature(correction_one,
         hgcdte_seed)
-    @test detector_calibration_signature(ramp_read_time_detector,
+    @test detector_calibration_signature(ramp_read_duration_detector,
         hgcdte_seed) != detector_calibration_signature(ramp_detector,
         hgcdte_seed)
 
-    windowed = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+    windowed = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
         readout_window=FrameWindow(1:2, 1:2))
     @test_throws InvalidConfiguration measure!(
         PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
@@ -1002,7 +1002,7 @@ end
             defect_model=DarkSignalNonuniformity(ones(8, 8))),
         Detector(noise=NoiseNone(),
             sensor=HgCdTeAvalancheArraySensor(
-                read_time=0.4, sampling_mode=UpTheRampSampling(4))),
+                read_duration=0.4, sampling_mode=UpTheRampSampling(4))),
     )
     for detector in unsupported_calibration_detectors
         @test_throws InvalidConfiguration measure!(
@@ -1044,7 +1044,7 @@ end
         @test_throws UnsupportedAlgorithm measure!(
             BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive()),
             pupil, expanded,
-            Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0))
+            Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0))
     end
 end
 

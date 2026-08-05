@@ -37,7 +37,7 @@ PlantTimestamp(nanoseconds::Integer) = PlantTimestamp(
     PlantDuration(nanoseconds)
 
 One nonnegative elapsed interval in integer nanoseconds. A duration is not an
-absolute timestamp, a sample period, or a floating-point integration time.
+absolute timestamp, a sample period, or a floating-point exposure duration.
 """
 struct PlantDuration
     nanoseconds::Int64

@@ -120,12 +120,12 @@ function Plant.prepare_target_local_acquisition_provider(
         EMCCDSensor(
             excess_noise_factor=one(T),
             acquisition_mode=FrameTransferAcquisition(
-                transfer_time=T(0.004)),
+                transfer_duration=T(0.004)),
             T=T,
         )
     elseif model.mode === :up_the_ramp
         HgCdTeSensor(
-            read_time=zero(T),
+            read_duration=zero(T),
             sampling_mode=UpTheRampSampling(3),
             T=T,
         )
@@ -133,7 +133,7 @@ function Plant.prepare_target_local_acquisition_provider(
         error("unsupported mixed serial event detector mode $(model.mode)")
     end
     detector = Detector(
-        integration_time=T(model.exposure_s),
+        exposure_duration=T(model.exposure_s),
         noise=NoiseNone(),
         qe=one(T),
         gain=one(T),

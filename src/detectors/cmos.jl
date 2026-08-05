@@ -203,12 +203,12 @@ validate_cmos_output_model(model::AbstractCMOSOutputModel) =
     throw(UnsupportedAlgorithm(
         "unsupported CMOS output model $(typeof(model))"))
 
-function sampling_wallclock_time(sensor::CMOSSensor, integration_time, frame_size::Tuple{Int,Int},
+function sampling_acquisition_duration(sensor::CMOSSensor, exposure_duration, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat}
-    is_global_shutter(sensor.timing_model) && return T(integration_time)
+    is_global_shutter(sensor.timing_model) && return T(exposure_duration)
     band_count = cld(frame_size[1], sensor.timing_model.row_group_size)
-    return T(integration_time) +
-        T(band_count) * T(sensor.timing_model.line_time)
+    return T(exposure_duration) +
+        T(band_count) * T(sensor.timing_model.line_duration)
 end
 
 function apply_sensor_readout_noise!(sensor::CMOSSensor, det::Detector,

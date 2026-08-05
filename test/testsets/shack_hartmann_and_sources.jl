@@ -394,7 +394,7 @@ end
         sampled_spots_peak!(style, expected_wfs, pupil, extended)
         expected_frame = copy(expected_wfs.workspace.spot_cube)
         expected_detector = Detector(noise=NoiseReadout(0.25), qe=0.8,
-            integration_time=0.01, binning=1)
+            exposure_duration=0.01, binning=1)
         capture_stack!(expected_detector, expected_frame, similar(expected_frame),
             detector_source, MersenneTwister(777))
         zero_invalid_sh_spot_cube!(style, expected_frame,
@@ -404,7 +404,7 @@ end
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
         prepare_sampling!(actual_wfs, pupil, src)
         actual_detector = Detector(noise=NoiseReadout(0.25), qe=0.8,
-            integration_time=0.01, binning=1)
+            exposure_duration=0.01, binning=1)
         sampled_spots_peak!(style, actual_wfs, pupil, extended,
             actual_detector, MersenneTwister(777))
 
@@ -414,7 +414,7 @@ end
     saturation_wfs = ShackHartmannWFS(tel;
         n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
     saturation_detector = Detector(noise=NoiseNone(), qe=1.0,
-        integration_time=1.0, binning=1, full_well=100.0)
+        exposure_duration=1.0, binning=1, full_well=100.0)
     sampled_spots_peak!(saturation_wfs, pupil, extended,
         saturation_detector, MersenneTwister(778))
     @test maximum(saturation_wfs.workspace.spot_cube) == 100.0
@@ -428,7 +428,7 @@ end
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
         prepare_sampling!(sampled_qe_wfs, pupil, qe_source)
         sampled_qe_detector = Detector(noise=NoiseNone(), qe=sampled_qe,
-            integration_time=1.0, binning=1)
+            exposure_duration=1.0, binning=1)
         sampled_spots_peak!(style, sampled_qe_wfs, pupil, qe_source,
             sampled_qe_detector, MersenneTwister(779))
 
@@ -436,7 +436,7 @@ end
             n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
         prepare_sampling!(scalar_qe_wfs, pupil, qe_source)
         scalar_qe_detector = Detector(noise=NoiseNone(), qe=0.5,
-            integration_time=1.0, binning=1)
+            exposure_duration=1.0, binning=1)
         sampled_spots_peak!(style, scalar_qe_wfs, pupil, qe_source,
             scalar_qe_detector, MersenneTwister(779))
 
@@ -639,7 +639,7 @@ end
         spectral_wfs = ShackHartmannWFS(tel; n_lenslets=8,
             mode=Diffractive())
         spectral_detector = Detector(noise=NoiseNone(), qe=sampled_qe,
-            integration_time=exposure, binning=1,
+            exposure_duration=exposure, binning=1,
             response_model=NullFrameResponse())
         prepare_sampling!(spectral_wfs, pupil, poly_common)
         sampled_spots_peak!(style, spectral_wfs, pupil, poly_common,
@@ -648,7 +648,7 @@ end
         monochromatic_wfs = ShackHartmannWFS(tel; n_lenslets=8,
             mode=Diffractive())
         monochromatic_detector = Detector(noise=NoiseNone(), qe=sampled_qe,
-            integration_time=exposure, binning=1,
+            exposure_duration=exposure, binning=1,
             response_model=NullFrameResponse())
         prepare_sampling!(monochromatic_wfs, pupil, shifted_mono)
         sampled_spots_peak!(style, monochromatic_wfs, pupil, shifted_mono,
@@ -766,7 +766,7 @@ end
         fill!(selective_sh.workspace.spot_cube, 17.0)
         spot_cube_before = copy(selective_sh.workspace.spot_cube)
         selective_detector = Detector(noise=NoiseNone(), qe=selective_qe,
-            integration_time=1.0, binning=1,
+            exposure_duration=1.0, binning=1,
             response_model=NullFrameResponse())
         selective_rng = MersenneTwister(780)
         selective_rng_reference = copy(selective_rng)
@@ -781,7 +781,7 @@ end
     selective_pyramid = PyramidWFS(tel;
         pupil_samples=8, mode=Diffractive(), modulation=1.0)
     selective_pyramid_detector = Detector(noise=NoiseNone(), qe=selective_qe,
-        integration_time=1.0, binning=1,
+        exposure_duration=1.0, binning=1,
         response_model=NullFrameResponse())
     measure!(selective_pyramid, pupil, selective_source,
         selective_pyramid_detector; rng=MersenneTwister(781))
@@ -790,7 +790,7 @@ end
     transmitted_pyramid = PyramidWFS(tel;
         pupil_samples=8, mode=Diffractive(), modulation=1.0)
     transmitted_pyramid_detector = Detector(noise=NoiseNone(), qe=1.0,
-        integration_time=1.0, binning=1,
+        exposure_duration=1.0, binning=1,
         response_model=NullFrameResponse())
     measure!(transmitted_pyramid, pupil, transmitted_source,
         transmitted_pyramid_detector; rng=MersenneTwister(781))
@@ -801,7 +801,7 @@ end
         pupil_samples=8, mode=Diffractive(), modulation=1.0)
     spectral_spad = SPADArrayDetector(
         size(spectral_spad_pyramid.acquisition.products.frame);
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=1.0, dark_count_rate=0.0,
             fill_factor=1.0))

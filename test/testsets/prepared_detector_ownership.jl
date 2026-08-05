@@ -62,7 +62,7 @@ function pe04_frame_detector(;
     readout_window=nothing,
 )
     return Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=noise,
         qe=1.0,
         sensor=sensor,
@@ -273,7 +273,7 @@ end
 
     transfer_detector = pe04_frame_detector(sensor=EMCCDSensor(
         excess_noise_factor=1.0,
-        acquisition_mode=FrameTransferAcquisition(transfer_time=0.01)))
+        acquisition_mode=FrameTransferAcquisition(transfer_duration=0.01)))
     transfer_owner = prepare_detector_acquisition(transfer_detector, input)
     transfer_owners = (transfer_detector.state, transfer_detector.workspace,
         transfer_detector.products)
@@ -306,7 +306,7 @@ end
         skipper.workspace.readout.baseline_frame)
 
     fowler = pe04_frame_detector(sensor=HgCdTeSensor(
-        read_time=0.1, sampling_mode=FowlerSampling(2)),
+        read_duration=0.1, sampling_mode=FowlerSampling(2)),
         readout_window=FrameWindow(2:3, 2:3))
     fowler_prepared = prepare_detector_acquisition(fowler, input)
     capture!(fowler_prepared, Xoshiro(23051))
@@ -317,10 +317,10 @@ end
     pe04_assert_owner_storage_contract(fowler.workspace.readout)
     @test :reference_average ∉ fieldnames(typeof(fowler.products.readout))
     @test :signal_average ∉ fieldnames(typeof(fowler.products.readout))
-    @test detector_read_times(fowler) isa FixedSizeVector
+    @test detector_read_offsets_s(fowler) isa FixedSizeVector
 
     ramp = pe04_frame_detector(sensor=HgCdTeSensor(
-        read_time=0.1, sampling_mode=UpTheRampSampling(3)),
+        read_duration=0.1, sampling_mode=UpTheRampSampling(3)),
         readout_window=FrameWindow(2:3, 2:3))
     ramp_prepared = prepare_detector_acquisition(ramp, input)
     capture!(ramp_prepared, Xoshiro(23052))
@@ -332,7 +332,7 @@ end
     @test :cube ∉ fieldnames(typeof(ramp.products.readout))
     @test :slope_frame ∉ fieldnames(typeof(ramp.workspace.readout))
     @test :read_cube ∉ fieldnames(typeof(ramp.workspace.readout))
-    @test detector_read_times(ramp) isa FixedSizeVector
+    @test detector_read_offsets_s(ramp) isa FixedSizeVector
     @test !Base.mightalias(ramp.products.readout.slope_frame,
         ramp.workspace.readout.slope)
 
@@ -386,7 +386,7 @@ end
 
     transfer_detector = pe04_frame_detector(sensor=EMCCDSensor(
         excess_noise_factor=1.0,
-        acquisition_mode=FrameTransferAcquisition(transfer_time=0.01)))
+        acquisition_mode=FrameTransferAcquisition(transfer_duration=0.01)))
     transfer = prepare_frame_transfer_acquisition(
         transfer_detector,
         input,

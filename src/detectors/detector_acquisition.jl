@@ -353,11 +353,11 @@ end
 
 @inline function _require_sensor_sampling_configuration(
     sensor::AbstractHgCdTeSensor, frame_shape::Tuple{Int,Int},
-    window::Union{Nothing,FrameWindow}, exposure_time::Real,
+    window::Union{Nothing,FrameWindow}, exposure_duration::Real,
     ::Type{T}) where {T<:AbstractFloat}
     return _require_hgcdte_sampling_configuration(
         multi_read_sampling_mode(sensor),
-        sensor, frame_shape, window, exposure_time, T)
+        sensor, frame_shape, window, exposure_duration, T)
 end
 
 @inline _require_hgcdte_sampling_configuration(::FrameSamplingMode,
@@ -367,9 +367,9 @@ end
 @inline function _require_hgcdte_sampling_configuration(
     mode::UpTheRampSampling, sensor::AbstractHgCdTeSensor,
     frame_shape::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
-    exposure_time::Real, ::Type{T}) where {T<:AbstractFloat}
+    exposure_duration::Real, ::Type{T}) where {T<:AbstractFloat}
     validate_up_the_ramp_schedule(sensor, frame_shape, window, mode,
-        exposure_time, T)
+        exposure_duration, T)
     return nothing
 end
 
@@ -381,7 +381,7 @@ end
     _require_sensor_frame_shape(det.params.sensor, frame_shape)
     _require_detector_output_configuration(det)
     _require_sensor_sampling_configuration(det.params.sensor, frame_shape,
-        det.params.readout_window, det.params.integration_time,
+        det.params.readout_window, det.params.exposure_duration,
         eltype(det.products.frame))
     return nothing
 end
@@ -412,12 +412,12 @@ end
     products::MultiReadFrameReadoutProducts)
     return (products.reference_frame, products.signal_frame,
         products.combined_frame, products.reference_cube,
-        products.signal_cube, products.read_cube, products.read_times)
+        products.signal_cube, products.read_cube, products.read_offsets_s)
 end
 @inline function _frame_readout_product_members(
     products::UpTheRampReadoutProducts)
     return (products.slope_frame, products.intercept_frame,
-        products.integrated_frame, products.read_cube, products.read_times,
+        products.integrated_frame, products.read_cube, products.read_offsets_s,
         products.acquisition_kind)
 end
 
@@ -494,14 +494,14 @@ end
         combined_frame=products.combined_frame,
         reference_cube=products.reference_cube,
         signal_cube=products.signal_cube, read_cube=products.read_cube,
-        read_times=products.read_times)
+        read_offsets_s=products.read_offsets_s)
 end
 @inline function _frame_readout_product_binding(
     products::UpTheRampReadoutProducts)
     return (slope_frame=products.slope_frame,
         intercept_frame=products.intercept_frame,
         integrated_frame=products.integrated_frame,
-        read_cube=products.read_cube, read_times=products.read_times)
+        read_cube=products.read_cube, read_offsets_s=products.read_offsets_s)
 end
 
 @inline function _detector_state_binding(state::DetectorState)
@@ -611,8 +611,8 @@ end
         "multi-read signal-cube product")
     _require_exact_binding(products.read_cube, binding.read_cube,
         "multi-read read-cube product")
-    _require_exact_binding(products.read_times, binding.read_times,
-        "multi-read time product")
+    _require_exact_binding(products.read_offsets_s, binding.read_offsets_s,
+        "multi-read duration product")
     return nothing
 end
 
@@ -626,7 +626,7 @@ end
         binding.integrated_frame, "ramp integrated-frame product")
     _require_exact_binding(products.read_cube, binding.read_cube,
         "ramp read-cube product")
-    _require_exact_binding(products.read_times, binding.read_times,
+    _require_exact_binding(products.read_offsets_s, binding.read_offsets_s,
         "ramp time product")
     return nothing
 end

@@ -215,7 +215,7 @@ Prepared frame acquisition applies operations in this order:
 1. validate the photon-arrival-rate product and its spatial measure
 2. apply presampling detector response on the optical grid
 3. integrate represented cells into physical pixels
-4. apply wavelength-dependent QE and explicit exposure time exactly once
+4. apply wavelength-dependent QE and explicit exposure duration exactly once
 5. apply charge-domain effects, stochastic response, binning, and readout
 6. publish a complete product at the detector lifecycle's readiness event
 
