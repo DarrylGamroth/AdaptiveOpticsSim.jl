@@ -55,31 +55,73 @@ end
     end
 end
 
-struct CurvaturePropagationBinding{H,F,D,I,C,P,M,Q}
-    phasor::H
-    field_stack::F
-    defocus_stack::D
-    intensity_stack::I
-    cropped_plus::C
-    cropped_minus::C
-    fft_plan::P
-    frame_plus::M
-    frame_minus::Q
-    revision::UInt
+struct CurvatureOpticsPlan{P,S} <: AbstractWFSOpticsPlan
+    propagation::P
+    source::S
 end
 
-struct PreparedCurvatureOptics{F,I,O,B}
+struct PreparedCurvatureOptics{P,F,W,I,O,R,B,D}
+    plan::P
     front_end::F
+    workspace::W
     input::I
     output::O
-    binding::B
+    workspace_binding::R
+    backend::B
+    device::D
 end
 
 @inline wfs_optical_products(prepared::PreparedCurvatureOptics) =
     prepared.output
 
 @inline modulated_wfs_propagation_storage(
-    front_end::CurvatureOpticalFrontEnd) = front_end.propagation.field_stack
+    front_end::CurvatureOpticalFrontEnd) =
+    curvature_propagation_workspace(front_end).field_stack
+
+@inline function _curvature_propagation_workspace_binding(workspace)
+    return (workspace.phasor, workspace.field_stack, workspace.defocus_stack,
+        workspace.intensity_stack, workspace.cropped_plus,
+        workspace.cropped_minus, workspace.frame_plus,
+        workspace.frame_minus, workspace.fft_stack_plan)
+end
+
+@inline function _curvature_estimator_state_binding(state)
+    return (state.valid_mask, state.reference_signal_2d)
+end
+
+@inline function _curvature_estimator_workspace_binding(workspace)
+    return (workspace.reduced_plus, workspace.reduced_minus,
+        workspace.signal_2d)
+end
+
+@inline _curvature_estimator_products_binding(products) = (products.signal,)
+
+@inline _curvature_input_storages(input::PupilFunction) =
+    (input.amplitude, input.opd, input.support)
+@inline _curvature_input_storages(input::ElectricField) = (input.values,)
+
+@inline _curvature_mightalias_any(value, ::Tuple{}) = false
+@inline function _curvature_mightalias_any(value, values::Tuple)
+    return _wfs_storage_mightalias(value, first(values)) ||
+        _curvature_mightalias_any(value, Base.tail(values))
+end
+
+@inline _curvature_any_alias(::Tuple{}) = false
+@inline function _curvature_any_alias(values::Tuple)
+    remaining = Base.tail(values)
+    return _curvature_mightalias_any(first(values), remaining) ||
+        _curvature_any_alias(remaining)
+end
+
+function _require_curvature_optics_aliases(input, output, workspace)
+    storages = (_curvature_input_storages(input)...,
+        output[1].values, output[2].values,
+        _curvature_propagation_workspace_binding(workspace)...)
+    _curvature_any_alias(storages) && throw(WFSPreparationError(
+        :wfs_optics, :aliasing,
+        "Curvature input, branch products, and propagation workspace must not alias"))
+    return nothing
+end
 
 """
     CurvaturePackedAcquisition(detector; readout_model, source,
@@ -190,30 +232,72 @@ struct CurvatureChannelPairMapping{C}
     channels::C
 end
 
-struct PreparedCurvatureEstimator{W,I,M,P<:AbstractWFSMeasurementPath,C,G,T}
-    sensor::W
-    input::I
-    measurement::M
+@inline _curvature_mapping_storages(mapping::CurvatureImagePairMapping) =
+    (mapping.plus, mapping.minus)
+@inline _curvature_mapping_storages(mapping::CurvatureChannelPairMapping) =
+    (mapping.channels,)
+
+struct CurvatureEstimationPlan{E,P<:AbstractWFSMeasurementPath,C,G,T} <:
+        AbstractWFSEstimationPlan
+    params::E
     path::P
     calibration_binding::C
     mapping::G
     branch_rate_scales::NTuple{2,T}
 end
 
-@inline wfs_measurement_path(plan::PreparedCurvatureEstimator) = plan.path
+struct PreparedCurvatureEstimator{P,W,ST,WS,PR,I,M,SB,WB,PB,B,D}
+    plan::P
+    sensor::W
+    state::ST
+    workspace::WS
+    products::PR
+    input::I
+    measurement::M
+    state_binding::SB
+    workspace_binding::WB
+    products_binding::PB
+    backend::B
+    device::D
+end
+
+@inline wfs_measurement_path(prepared::PreparedCurvatureEstimator) =
+    prepared.plan.path
+
+function _prepare_curvature_estimator(sensor::CurvatureWFS, input,
+    measurement::WFSMeasurement, mapping, scales)
+    state = curvature_estimator_state(sensor)
+    workspace = curvature_estimator_workspace(sensor)
+    products = curvature_estimator_products(sensor)
+    binding = _curvature_calibration_binding(sensor)
+    storages = (_curvature_mapping_storages(mapping)...,
+        measurement.storage, _curvature_estimator_state_binding(state)...,
+        _curvature_estimator_workspace_binding(workspace)...,
+        _curvature_estimator_products_binding(products)...)
+    _curvature_any_alias(storages) && throw(WFSPreparationError(
+        :estimation, :aliasing,
+        "Curvature observation, measurement, calibration, workspace, and product storage must not alias"))
+    path = AcquiredObservationPath()
+    plan = CurvatureEstimationPlan(curvature_estimator_params(sensor), path,
+        binding, mapping, scales)
+    return PreparedCurvatureEstimator(plan, sensor, state, workspace,
+        products, input, measurement,
+        _curvature_estimator_state_binding(state),
+        _curvature_estimator_workspace_binding(workspace),
+        _curvature_estimator_products_binding(products),
+        measurement.metadata.backend, measurement.metadata.device)
+end
 
 function CurvatureOpticalFrontEnd(sensor::CurvatureWFS, source=nothing)
     front_end = sensor.front_end
     return CurvatureOpticalFrontEnd(front_end.defocus_pair,
-        front_end.propagation, front_end.pupil_resolution,
-        front_end.pupil_samples, front_end.readout_crop_resolution,
-        front_end.readout_pixels_per_sample, front_end.branch_response,
-        source)
+        front_end.propagation, source)
 end
 
 @inline function curvature_branch_dimensions(
     front_end::CurvatureOpticalFrontEnd)
-    side = front_end.pupil_samples * front_end.readout_pixels_per_sample
+    plan = curvature_propagation_plan(front_end.propagation)
+    side = plan.pupil_samples * plan.readout_pixels_per_sample
     return (side, side)
 end
 
@@ -242,8 +326,9 @@ end
 
 function _require_curvature_input_geometry(
     front_end::CurvatureOpticalFrontEnd, input::PupilFunction)
-    input.metadata.dimensions == (front_end.pupil_resolution,
-        front_end.pupil_resolution) || throw(WFSPreparationError(
+    plan = curvature_propagation_plan(front_end.propagation)
+    input.metadata.dimensions == (plan.pupil_resolution,
+        plan.pupil_resolution) || throw(WFSPreparationError(
         :wfs_optics, :shape,
         "Curvature pupil input dimensions differ from the prepared relay"))
     return nothing
@@ -251,7 +336,8 @@ end
 
 function _require_curvature_input_geometry(
     front_end::CurvatureOpticalFrontEnd, input::ElectricField)
-    input.metadata.dimensions == size(front_end.propagation.phasor) || throw(
+    workspace = curvature_propagation_workspace(front_end)
+    input.metadata.dimensions == size(workspace.phasor) || throw(
         WFSPreparationError(:wfs_optics, :shape,
             "Curvature ElectricField dimensions differ from the prepared diffraction grid"))
     return nothing
@@ -320,20 +406,18 @@ function prepare_wfs_optics(front_end::CurvatureOpticalFrontEnd,
         "Curvature branch products require distinct storage"))
     require_modulated_wfs_domains(front_end, input, output[1])
     require_modulated_wfs_domains(front_end, input, output[2])
-    T = eltype(front_end.propagation.intensity_stack)
+    workspace = curvature_propagation_workspace(front_end)
+    T = eltype(workspace.intensity_stack)
     output[1].metadata.numeric_type === T &&
         output[2].metadata.numeric_type === T || throw(
         WFSPreparationError(:wfs_optics, :numeric_type,
             "Curvature output precision differs from prepared propagation"))
-    propagation = front_end.propagation
-    binding = CurvaturePropagationBinding(propagation.phasor,
-        propagation.field_stack, propagation.defocus_stack,
-        propagation.intensity_stack, propagation.cropped_plus,
-        propagation.cropped_minus, propagation.fft_stack_plan,
-        propagation.frame_plus, propagation.frame_minus,
-        propagation.revision)
-    return PreparedCurvatureOptics(front_end, input, output,
-        binding)
+    _require_curvature_optics_aliases(input, output, workspace)
+    propagation_plan = curvature_propagation_plan(front_end.propagation)
+    plan = CurvatureOpticsPlan(propagation_plan, front_end.source)
+    return PreparedCurvatureOptics(plan, front_end, workspace, input, output,
+        _curvature_propagation_workspace_binding(workspace),
+        input.metadata.backend, input.metadata.device)
 end
 
 function curvature_rate_maps(sensor::CurvatureWFS,
@@ -346,9 +430,11 @@ function curvature_rate_maps(front_end::CurvatureOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField})
     wavelength_m = _curvature_front_end_wavelength(front_end, input)
     dimensions = curvature_branch_dimensions(front_end)
-    T = eltype(front_end.propagation.intensity_stack)
-    sampling_value = T(front_end.readout_crop_resolution /
-        (front_end.pupil_resolution * dimensions[1]))
+    plan = curvature_propagation_plan(front_end.propagation)
+    workspace = curvature_propagation_workspace(front_end)
+    T = eltype(workspace.intensity_stack)
+    sampling_value = T(plan.readout_crop_resolution /
+        (plan.pupil_resolution * dimensions[1]))
     function branch_map()
         values = similar(_modulated_input_storage(input), T, dimensions...)
         fill!(values, zero(T))
@@ -365,22 +451,23 @@ function curvature_rate_maps(front_end::CurvatureOpticalFrontEnd,
 end
 
 function _require_curvature_optical_binding(
-    plan::PreparedCurvatureOptics, input, output)
-    input === plan.input && output === plan.output || throw(
+    prepared::PreparedCurvatureOptics, input, output)
+    input === prepared.input && output === prepared.output || throw(
         WFSPreparationError(:wfs_optics, :prepared_binding,
             "Curvature optical products do not match their prepared plan"))
-    propagation = plan.front_end.propagation
-    binding = plan.binding
-    propagation.phasor === binding.phasor &&
-        propagation.field_stack === binding.field_stack &&
-        propagation.defocus_stack === binding.defocus_stack &&
-        propagation.intensity_stack === binding.intensity_stack &&
-        propagation.cropped_plus === binding.cropped_plus &&
-        propagation.cropped_minus === binding.cropped_minus &&
-        propagation.fft_stack_plan === binding.fft_plan &&
-        propagation.frame_plus === binding.frame_plus &&
-        propagation.frame_minus === binding.frame_minus &&
-        propagation.revision == binding.revision || throw(
+    workspace = prepared.workspace
+    prepared.backend === input.metadata.backend &&
+        prepared.device == input.metadata.device || throw(
+        WFSPreparationError(:wfs_optics, :prepared_binding,
+            "Curvature optical input target changed after preparation"))
+    prepared.plan.propagation === curvature_propagation_plan(
+        prepared.front_end.propagation) &&
+        prepared.front_end.defocus_pair ===
+            prepared.plan.propagation.defocus_pair &&
+        prepared.front_end.source === prepared.plan.source &&
+        workspace === curvature_propagation_workspace(prepared.front_end) &&
+        _curvature_propagation_workspace_binding(workspace) ===
+            prepared.workspace_binding || throw(
         WFSPreparationError(:wfs_optics, :prepared_binding,
             "Curvature propagation storage changed after preparation"))
     return nothing
@@ -393,37 +480,39 @@ end
 
 function _form_curvature_branch_fields!(::ScalarCPUStyle,
     front_end::CurvatureOpticalFrontEnd, input::PupilFunction)
-    propagation = front_end.propagation
-    T = eltype(propagation.intensity_stack)
-    n = front_end.pupil_resolution
-    pad = size(propagation.field_stack, 1)
+    plan = curvature_propagation_plan(front_end.propagation)
+    workspace = curvature_propagation_workspace(front_end)
+    T = eltype(workspace.intensity_stack)
+    n = plan.pupil_resolution
+    pad = size(workspace.field_stack, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     cell_area = T(input.metadata.sampling[1] * input.metadata.sampling[2])
     amplitude_scale = sqrt(T(photon_irradiance(front_end.source)) *
         cell_area)
     opd_to_cycles = T(2) / T(wavelength(front_end.source))
-    fill!(propagation.field_stack, zero(eltype(propagation.field_stack)))
+    fill!(workspace.field_stack, zero(eltype(workspace.field_stack)))
     @inbounds for y in 1:n, x in 1:n
         value = amplitude_scale * input.amplitude[x, y] *
             cispi(opd_to_cycles * input.opd[x, y])
         xx = ox + x
         yy = oy + y
-        common = value * propagation.phasor[xx, yy]
-        propagation.field_stack[xx, yy, 1] = common *
-            propagation.defocus_stack[xx, yy, 1]
-        propagation.field_stack[xx, yy, 2] = common *
-            propagation.defocus_stack[xx, yy, 2]
+        common = value * workspace.phasor[xx, yy]
+        workspace.field_stack[xx, yy, 1] = common *
+            workspace.defocus_stack[xx, yy, 1]
+        workspace.field_stack[xx, yy, 2] = common *
+            workspace.defocus_stack[xx, yy, 2]
     end
-    return propagation.field_stack
+    return workspace.field_stack
 end
 
 function _form_curvature_branch_fields!(style::AcceleratorStyle,
     front_end::CurvatureOpticalFrontEnd, input::PupilFunction)
-    propagation = front_end.propagation
-    T = eltype(propagation.intensity_stack)
-    n = front_end.pupil_resolution
-    pad = size(propagation.field_stack, 1)
+    plan = curvature_propagation_plan(front_end.propagation)
+    workspace = curvature_propagation_workspace(front_end)
+    T = eltype(workspace.intensity_stack)
+    n = plan.pupil_resolution
+    pad = size(workspace.field_stack, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     cell_area = T(input.metadata.sampling[1] * input.metadata.sampling[2])
@@ -431,60 +520,61 @@ function _form_curvature_branch_fields!(style::AcceleratorStyle,
         cell_area)
     opd_to_cycles = T(2) / T(wavelength(front_end.source))
     launch_kernel!(style, curvature_branch_field_from_pupil_kernel!,
-        propagation.field_stack, input.amplitude, input.opd,
-        propagation.defocus_stack, propagation.phasor, amplitude_scale,
+        workspace.field_stack, input.amplitude, input.opd,
+        workspace.defocus_stack, workspace.phasor, amplitude_scale,
         opd_to_cycles, ox, oy, n, pad;
-        ndrange=size(propagation.field_stack))
-    return propagation.field_stack
+        ndrange=size(workspace.field_stack))
+    return workspace.field_stack
 end
 
 function _form_curvature_branch_fields!(style::ExecutionStyle,
     front_end::CurvatureOpticalFrontEnd, input::ElectricField)
-    propagation = front_end.propagation
-    return _form_curvature_field_input!(style, propagation, input)
+    workspace = curvature_propagation_workspace(front_end)
+    return _form_curvature_field_input!(style, workspace, input)
 end
 
-function _form_curvature_field_input!(::ScalarCPUStyle, propagation,
+function _form_curvature_field_input!(::ScalarCPUStyle, workspace,
     input::ElectricField)
-    pad = size(propagation.field_stack, 1)
-    @inbounds for branch in axes(propagation.field_stack, 3), y in 1:pad,
+    pad = size(workspace.field_stack, 1)
+    @inbounds for branch in axes(workspace.field_stack, 3), y in 1:pad,
             x in 1:pad
-        propagation.field_stack[x, y, branch] = input.values[x, y] *
-            propagation.defocus_stack[x, y, branch] *
-            propagation.phasor[x, y]
+        workspace.field_stack[x, y, branch] = input.values[x, y] *
+            workspace.defocus_stack[x, y, branch] *
+            workspace.phasor[x, y]
     end
-    return propagation.field_stack
+    return workspace.field_stack
 end
 
 function _form_curvature_field_input!(style::AcceleratorStyle,
-    propagation, input::ElectricField)
+    workspace, input::ElectricField)
     phase = begin_kernel_phase(style)
     queue_kernel!(phase, curvature_branch_field_from_input_kernel!,
-        propagation.field_stack, input.values, propagation.defocus_stack,
-        propagation.phasor, size(propagation.field_stack, 1),
-        size(propagation.field_stack, 3);
-        ndrange=size(propagation.field_stack))
+        workspace.field_stack, input.values, workspace.defocus_stack,
+        workspace.phasor, size(workspace.field_stack, 1),
+        size(workspace.field_stack, 3);
+        ndrange=size(workspace.field_stack))
     finish_kernel_phase!(phase)
-    return propagation.field_stack
+    return workspace.field_stack
 end
 
 function _sample_curvature_rate_planes!(::ScalarCPUStyle, output,
     front_end::CurvatureOpticalFrontEnd)
-    propagation = front_end.propagation
-    crop_n = front_end.readout_crop_resolution
-    pad = size(propagation.intensity_stack, 1)
+    plan = curvature_propagation_plan(front_end.propagation)
+    workspace = curvature_propagation_workspace(front_end)
+    crop_n = plan.readout_crop_resolution
+    pad = size(workspace.intensity_stack, 1)
     ox = div(pad - crop_n, 2)
     oy = div(pad - crop_n, 2)
     factor = div(crop_n, size(output[1].values, 1))
-    copyto!(propagation.cropped_plus,
-        @view(propagation.intensity_stack[
+    copyto!(workspace.cropped_plus,
+        @view(workspace.intensity_stack[
             ox+1:ox+crop_n, oy+1:oy+crop_n, 1]))
-    copyto!(propagation.cropped_minus,
-        @view(propagation.intensity_stack[
+    copyto!(workspace.cropped_minus,
+        @view(workspace.intensity_stack[
             ox+1:ox+crop_n, oy+1:oy+crop_n, 2]))
-    bin2d!(output[1].values, propagation.cropped_plus, factor)
-    bin2d!(output[2].values, propagation.cropped_minus, factor)
-    response = front_end.branch_response
+    bin2d!(output[1].values, workspace.cropped_plus, factor)
+    bin2d!(output[2].values, workspace.cropped_minus, factor)
+    response = plan.branch_response
     @. output[1].values = response.plus_throughput * output[1].values +
         response.plus_background
     @. output[2].values = response.minus_throughput * output[2].values +
@@ -494,21 +584,22 @@ end
 
 function _sample_curvature_rate_planes!(style::AcceleratorStyle, output,
     front_end::CurvatureOpticalFrontEnd)
-    propagation = front_end.propagation
-    crop_n = front_end.readout_crop_resolution
-    pad = size(propagation.intensity_stack, 1)
+    plan = curvature_propagation_plan(front_end.propagation)
+    workspace = curvature_propagation_workspace(front_end)
+    crop_n = plan.readout_crop_resolution
+    pad = size(workspace.intensity_stack, 1)
     ox = div(pad - crop_n, 2)
     oy = div(pad - crop_n, 2)
     factor = div(crop_n, size(output[1].values, 1))
-    response = front_end.branch_response
+    response = plan.branch_response
     phase = begin_kernel_phase(style)
     queue_kernel!(phase, curvature_sample_branch_kernel!,
-        output[1].values, propagation.intensity_stack, ox, oy, factor, 1,
+        output[1].values, workspace.intensity_stack, ox, oy, factor, 1,
         response.plus_throughput, response.plus_background,
         size(output[1].values, 1), size(output[1].values, 2);
         ndrange=size(output[1].values))
     queue_kernel!(phase, curvature_sample_branch_kernel!,
-        output[2].values, propagation.intensity_stack, ox, oy, factor, 2,
+        output[2].values, workspace.intensity_stack, ox, oy, factor, 2,
         response.minus_throughput, response.minus_background,
         size(output[2].values, 1), size(output[2].values, 2);
         ndrange=size(output[2].values))
@@ -523,9 +614,9 @@ function form_wfs_optical_products!(
     validate_wfs_optics_binding(output, input, plan)
     style = execution_style(output[1].values)
     _form_curvature_branch_fields!(style, plan.front_end, input)
-    propagation = plan.front_end.propagation
-    fraunhofer_intensity_stack!(propagation.intensity_stack,
-        propagation.field_stack, propagation.fft_stack_plan)
+    workspace = plan.workspace
+    fraunhofer_intensity_stack!(workspace.intensity_stack,
+        workspace.field_stack, workspace.fft_stack_plan)
     _sample_curvature_rate_planes!(style, output, plan.front_end)
     return output
 end
@@ -859,7 +950,7 @@ function validate_wfs_acquisition_binding(observation::WFSObservation,
 end
 
 function _curvature_calibration_binding(sensor::CurvatureWFS)
-    state = sensor.estimator.state
+    state = curvature_estimator_state(sensor)
     state.calibrated || throw(WFSPreparationError(:estimation, :estimator,
         "Curvature estimation requires explicit calibration"))
     return CurvatureCalibrationBinding(state.calibration_revision,
@@ -869,7 +960,7 @@ end
 
 function _require_curvature_calibration(sensor::CurvatureWFS,
     binding::CurvatureCalibrationBinding)
-    state = sensor.estimator.state
+    state = curvature_estimator_state(sensor)
     state.calibrated &&
         state.calibration_revision == binding.revision &&
         state.calibration_wavelength == binding.wavelength_m &&
@@ -893,14 +984,15 @@ function _require_curvature_measurement(sensor::CurvatureWFS,
     measurement.metadata.numeric_type <: AbstractFloat || throw(
         WFSPreparationError(:estimation, :numeric_type,
             "Curvature measurement storage must be floating point"))
-    measurement.metadata.numeric_type === eltype(sensor.estimator.state.slopes) ||
+    products = curvature_estimator_products(sensor)
+    measurement.metadata.numeric_type === eltype(products.signal) ||
         throw(WFSPreparationError(:estimation, :numeric_type,
             "Curvature measurement precision differs from its estimator"))
-    size(measurement.storage) == size(sensor.estimator.state.slopes) || throw(
+    size(measurement.storage) == size(products.signal) || throw(
         WFSPreparationError(:estimation, :shape,
             "Curvature measurement has the wrong signal-vector dimensions"))
     _require_wfs_storage_domain(:estimation, measurement.metadata,
-        sensor.estimator.state.slopes, "Curvature measurement")
+        products.signal, "Curvature measurement")
     return measurement
 end
 
@@ -914,17 +1006,19 @@ function _require_curvature_image_observation(sensor::CurvatureWFS,
     length(dimensions) == 2 && dimensions[1] == dimensions[2] || throw(
         WFSPreparationError(:estimation, :shape,
             "$label must be a square detector image"))
-    dimensions[1] % sensor.params.pupil_samples == 0 || throw(
+    params = curvature_estimator_params(sensor)
+    workspace = curvature_estimator_workspace(sensor)
+    dimensions[1] % params.pupil_samples == 0 || throw(
         WFSPreparationError(:estimation, :shape,
             "$label sampling must evenly reduce to the Curvature pupil grid"))
     _require_wfs_storage_domain(:estimation, observation.metadata,
-        sensor.estimator.state.reduced_plus, label)
-    return div(dimensions[1], sensor.params.pupil_samples)
+        workspace.reduced_plus, label)
+    return div(dimensions[1], params.pupil_samples)
 end
 
 function _curvature_rate_scales(sensor::CurvatureWFS,
     values::Tuple{A,B}) where {A<:Real,B<:Real}
-    T = eltype(sensor.estimator.state.slopes)
+    T = eltype(curvature_estimator_products(sensor).signal)
     scales = (T(values[1]), T(values[2]))
     all(value -> isfinite(value) && value > zero(T), scales) || throw(
         WFSPreparationError(:estimation, :radiometry,
@@ -953,9 +1047,8 @@ function prepare_wfs_estimation(sensor::CurvatureWFS,
     mapping = CurvatureImagePairMapping(observations[1].storage,
         observations[2].storage, plus_reduction, minus_reduction)
     scales = _curvature_rate_scales(sensor, branch_rate_scales)
-    binding = _curvature_calibration_binding(sensor)
-    return PreparedCurvatureEstimator(sensor, observations, measurement,
-        AcquiredObservationPath(), binding, mapping, scales)
+    return _prepare_curvature_estimator(sensor, observations, measurement,
+        mapping, scales)
 end
 
 function prepare_wfs_estimation(sensor::CurvatureWFS,
@@ -973,24 +1066,28 @@ function prepare_wfs_estimation(sensor::CurvatureWFS,
             throw(WFSPreparationError(:estimation, :shape,
                 "packed Curvature regions require a 2N-by-N frame"))
         side = dimensions[2]
-        side % sensor.params.pupil_samples == 0 || throw(
+        params = curvature_estimator_params(sensor)
+        workspace = curvature_estimator_workspace(sensor)
+        side % params.pupil_samples == 0 || throw(
             WFSPreparationError(:estimation, :shape,
                 "packed Curvature regions must reduce to the pupil grid"))
         _require_wfs_storage_domain(:estimation, observation.metadata,
-            sensor.estimator.state.reduced_plus,
+            workspace.reduced_plus,
             "packed Curvature observation")
         plus = @view observation.storage[1:side, :]
         minus = @view observation.storage[side+1:2*side, :]
-        reduction = div(side, sensor.params.pupil_samples)
+        reduction = div(side, params.pupil_samples)
         mapping = CurvatureImagePairMapping(plus, minus, reduction,
             reduction)
     elseif isequal(layout, :curvature_branch_channels)
         dimensions = observation.metadata.dimensions
-        dimensions == (2, sensor.params.pupil_samples^2) || throw(
+        params = curvature_estimator_params(sensor)
+        workspace = curvature_estimator_workspace(sensor)
+        dimensions == (2, params.pupil_samples^2) || throw(
             WFSPreparationError(:estimation, :shape,
                 "packed Curvature channels require a 2-by-N² observation"))
         _require_wfs_storage_domain(:estimation, observation.metadata,
-            sensor.estimator.state.reduced_plus,
+            workspace.reduced_plus,
             "packed Curvature observation")
         mapping = CurvatureChannelPairMapping(observation.storage)
     else
@@ -998,16 +1095,15 @@ function prepare_wfs_estimation(sensor::CurvatureWFS,
             "Curvature estimator requires branch regions, channels, or a separate observation pair"))
     end
     scales = _curvature_rate_scales(sensor, branch_rate_scales)
-    binding = _curvature_calibration_binding(sensor)
-    return PreparedCurvatureEstimator(sensor, observation, measurement,
-        AcquiredObservationPath(), binding, mapping, scales)
+    return _prepare_curvature_estimator(sensor, observation, measurement,
+        mapping, scales)
 end
 
 function _reduce_curvature_observations!(::ScalarCPUStyle,
     sensor::CurvatureWFS, mapping::CurvatureImagePairMapping, scales)
-    state = sensor.estimator.state
-    T = eltype(state.reduced_plus)
-    n_sub = sensor.params.pupil_samples
+    workspace = curvature_estimator_workspace(sensor)
+    T = eltype(workspace.reduced_plus)
+    n_sub = curvature_estimator_params(sensor).pupil_samples
     @inbounds for j in 1:n_sub, i in 1:n_sub
         plus = zero(T)
         minus = zero(T)
@@ -1021,33 +1117,33 @@ function _reduce_curvature_observations!(::ScalarCPUStyle,
             minus += T(mapping.minus[(i - 1) * mapping.minus_reduction + ii,
                 (j - 1) * mapping.minus_reduction + jj])
         end
-        state.reduced_plus[i, j] = plus * scales[1]
-        state.reduced_minus[i, j] = minus * scales[2]
+        workspace.reduced_plus[i, j] = plus * scales[1]
+        workspace.reduced_minus[i, j] = minus * scales[2]
     end
     return nothing
 end
 
 function _reduce_curvature_observations!(style::AcceleratorStyle,
     sensor::CurvatureWFS, mapping::CurvatureImagePairMapping, scales)
-    state = sensor.estimator.state
+    workspace = curvature_estimator_workspace(sensor)
     launch_kernel!(style, curvature_reduce_observation_pair_kernel!,
-        state.reduced_plus, state.reduced_minus, mapping.plus, mapping.minus,
+        workspace.reduced_plus, workspace.reduced_minus, mapping.plus, mapping.minus,
         mapping.plus_reduction, mapping.minus_reduction, scales[1],
-        scales[2], sensor.params.pupil_samples;
-        ndrange=size(state.reduced_plus))
+        scales[2], curvature_estimator_params(sensor).pupil_samples;
+        ndrange=size(workspace.reduced_plus))
     return nothing
 end
 
 function _reduce_curvature_observations!(::ScalarCPUStyle,
     sensor::CurvatureWFS, mapping::CurvatureChannelPairMapping, scales)
-    state = sensor.estimator.state
-    T = eltype(state.reduced_plus)
-    n_sub = sensor.params.pupil_samples
+    workspace = curvature_estimator_workspace(sensor)
+    T = eltype(workspace.reduced_plus)
+    n_sub = curvature_estimator_params(sensor).pupil_samples
     @inbounds for i in 1:n_sub, j in 1:n_sub
         index = (i - 1) * n_sub + j
-        state.reduced_plus[i, j] = T(mapping.channels[1, index]) *
+        workspace.reduced_plus[i, j] = T(mapping.channels[1, index]) *
             scales[1]
-        state.reduced_minus[i, j] = T(mapping.channels[2, index]) *
+        workspace.reduced_minus[i, j] = T(mapping.channels[2, index]) *
             scales[2]
     end
     return nothing
@@ -1055,34 +1151,50 @@ end
 
 function _reduce_curvature_observations!(style::AcceleratorStyle,
     sensor::CurvatureWFS, mapping::CurvatureChannelPairMapping, scales)
-    state = sensor.estimator.state
+    workspace = curvature_estimator_workspace(sensor)
     launch_kernel!(style, curvature_unpack_channel_pair_kernel!,
-        state.reduced_plus, state.reduced_minus, mapping.channels,
-        scales[1], scales[2], sensor.params.pupil_samples;
-        ndrange=size(state.reduced_plus))
+        workspace.reduced_plus, workspace.reduced_minus, mapping.channels,
+        scales[1], scales[2], curvature_estimator_params(sensor).pupil_samples;
+        ndrange=size(workspace.reduced_plus))
     return nothing
 end
 
 function estimate_wfs_measurement!(measurement::WFSMeasurement, input,
-    plan::PreparedCurvatureEstimator)
-    measurement === plan.measurement && input === plan.input || throw(
-        WFSPreparationError(:estimation, :prepared_binding,
-            "Curvature estimator storage does not match its plan"))
-    sensor = plan.sensor
+    prepared::PreparedCurvatureEstimator)
+    validate_wfs_estimation_binding(measurement, input, prepared)
+    sensor = prepared.sensor
+    plan = prepared.plan
     _require_curvature_calibration(sensor, plan.calibration_binding)
-    style = execution_style(sensor.estimator.state.reduced_plus)
+    style = execution_style(prepared.workspace.reduced_plus)
     _reduce_curvature_observations!(style, sensor, plan.mapping,
         plan.branch_rate_scales)
     _estimate_curvature_from_reduced!(style, sensor)
-    copyto!(measurement.storage, sensor.estimator.state.slopes)
+    copyto!(measurement.storage, prepared.products.signal)
     return measurement
 end
 
 function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
-    plan::PreparedCurvatureEstimator)
-    measurement === plan.measurement && input === plan.input || throw(
+    prepared::PreparedCurvatureEstimator)
+    measurement === prepared.measurement && input === prepared.input || throw(
         WFSPreparationError(:estimation, :prepared_binding,
             "Curvature estimator storage does not match its plan"))
+    state = curvature_estimator_state(prepared.sensor)
+    workspace = curvature_estimator_workspace(prepared.sensor)
+    products = curvature_estimator_products(prepared.sensor)
+    prepared.plan.params === curvature_estimator_params(prepared.sensor) &&
+        state === prepared.state && workspace === prepared.workspace &&
+        products === prepared.products &&
+        _curvature_estimator_state_binding(state) === prepared.state_binding &&
+        _curvature_estimator_workspace_binding(workspace) ===
+            prepared.workspace_binding &&
+        _curvature_estimator_products_binding(products) ===
+            prepared.products_binding || throw(WFSPreparationError(
+        :estimation, :prepared_binding,
+        "Curvature estimator ownership changed after preparation"))
+    measurement.metadata.backend === prepared.backend &&
+        measurement.metadata.device == prepared.device || throw(
+        WFSPreparationError(:estimation, :prepared_binding,
+            "Curvature estimator execution target changed after preparation"))
     return nothing
 end
 
@@ -1095,7 +1207,9 @@ end
 function set_curvature_calibration!(sensor::CurvatureWFS,
     reference::AbstractMatrix; wavelength_m::Real,
     signature::UInt=UInt(0))
-    state = sensor.estimator.state
+    state = curvature_estimator_state(sensor)
+    workspace = curvature_estimator_workspace(sensor)
+    products = curvature_estimator_products(sensor)
     size(reference) == size(state.reference_signal_2d) || throw(
         InvalidConfiguration(
             "Curvature calibration reference has the wrong dimensions"))
@@ -1115,8 +1229,8 @@ function set_curvature_calibration!(sensor::CurvatureWFS,
         InvalidConfiguration(
             "Curvature calibration wavelength must be finite and positive"))
     copyto!(state.reference_signal_2d, reference)
-    fill!(state.signal_2d, zero(T))
-    fill!(state.slopes, zero(T))
+    fill!(workspace.signal_2d, zero(T))
+    fill!(products.signal, zero(T))
     state.calibrated = true
     state.calibration_wavelength = wavelength_value
     state.calibration_signature = signature

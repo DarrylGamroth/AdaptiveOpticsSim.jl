@@ -126,6 +126,10 @@ public ZernikeOpticsPlan
 public PreparedZernikeOptics
 public ZernikeEstimationPlan
 public PreparedZernikeEstimator
+public CurvatureOpticsPlan
+public PreparedCurvatureOptics
+public CurvatureEstimationPlan
+public PreparedCurvatureEstimator
 public wfs_optical_products
 public wfs_acquisition_plan
 public validate_wfs_target

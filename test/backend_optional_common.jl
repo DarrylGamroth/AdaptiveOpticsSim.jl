@@ -3886,7 +3886,7 @@ function run_optional_zernike_curvature_stages(
     @test isapprox(linear_host, expected_linear;
         rtol=T(3e-5), atol=T(3e-5))
 
-    curvature_reference = similar(gpu_curvature.estimator.state.signal_2d)
+    curvature_reference = similar(gpu_curvature.estimator.workspace.signal_2d)
     fill!(curvature_reference, zero(T))
     set_curvature_calibration!(gpu_curvature, curvature_reference;
         wavelength_m=wavelength(source), signature=UInt(0x4355))

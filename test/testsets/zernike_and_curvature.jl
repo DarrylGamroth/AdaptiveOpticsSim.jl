@@ -13,7 +13,7 @@ end
 @inline wfs_optical_rate_storage(wfs::ZernikeWFS) =
     wfs.acquisition.products.frame
 @inline wfs_optical_rate_storage(wfs) =
-    wfs.acquisition.state.camera_frame
+    wfs.acquisition.products.frame
 
 @testset "Zernike WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
@@ -297,7 +297,7 @@ end
         wfs = CurvatureWFS(tel; pupil_samples=2,
             diffraction_padding=padding)
         curvature_intensity!(style, wfs, pupil, src)
-        @test sum(wfs.front_end.propagation.intensity_stack) ≈
+        @test sum(wfs.front_end.propagation.workspace.intensity_stack) ≈
             expected_two_branch_rate atol=1e-10 rtol=1e-12
         if padding == 1
             @test sum(wfs_optical_rate_storage(wfs)) ≈
@@ -397,17 +397,17 @@ end
     imbalanced_flat = copy(measure!(imbalanced, pupil, src))
     @test imbalanced_flat ≈ zero.(imbalanced_flat) atol=1e-10
     plus_mean = mean(@view wfs_optical_rate_storage(imbalanced)[
-        1:imbalanced.params.pupil_samples, :])
+        1:imbalanced.estimator.params.pupil_samples, :])
     minus_mean = mean(@view wfs_optical_rate_storage(imbalanced)[
-        imbalanced.params.pupil_samples+1:end, :])
+        imbalanced.estimator.params.pupil_samples+1:end, :])
     @test plus_mean > minus_mean
     @test_throws InvalidConfiguration CurvatureBranchResponse(plus_throughput=-1.0)
 
     oversampled = CurvatureWFS(tel; pupil_samples=8, readout_crop_resolution=16, readout_pixels_per_sample=2)
     oversampled_flat = copy(measure!(oversampled, pupil, src))
     @test size(wfs_optical_rate_storage(oversampled)) == (32, 16)
-    @test size(oversampled.front_end.propagation.frame_plus) == (16, 16)
-    @test size(oversampled.estimator.state.reduced_plus) == (8, 8)
+    @test size(oversampled.front_end.propagation.workspace.frame_plus) == (16, 16)
+    @test size(oversampled.estimator.workspace.reduced_plus) == (8, 8)
     @test oversampled_flat ≈ zero.(oversampled_flat) atol=1e-10
     @test_throws InvalidConfiguration CurvatureWFS(tel; pupil_samples=8, readout_crop_resolution=18, readout_pixels_per_sample=2)
 
