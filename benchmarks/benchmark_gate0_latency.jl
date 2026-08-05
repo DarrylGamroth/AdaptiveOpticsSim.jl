@@ -299,9 +299,6 @@ function make_gate0_card(raw::AbstractDict)
         basis = copy(@view zernike.modes[:, :, 2:n_modes+1])
         diversity = 40e-9 .* @view(zernike.modes[:, :, n_modes + 2])
         object_kernel = [0.0 1.0 0.0; 1.0 4.0 1.0; 0.0 1.0 0.0]
-        forward = prepare_lift_forward_model(tel, src, basis;
-            diversity_opd=diversity, focal_resolution=resolution,
-            object_kernel=object_kernel)
         rng = MersenneTwister(Int(raw["rng_seed"]))
         truth_coefficients = randn(rng, n_modes) .* 10e-9
         truth_opd = copy(diversity)
@@ -309,21 +306,24 @@ function make_gate0_card(raw::AbstractDict)
             @views @. truth_opd += truth_coefficients[mode_id] *
                 basis[:, :, mode_id]
         end
-        rate = copy(intensity_values(evaluate_lift_forward!(forward,
-            truth_opd)))
+        forward = prepare_lift_forward_model(tel, src, basis, truth_opd;
+            diversity_opd=diversity, focal_resolution=resolution,
+            object_kernel=object_kernel)
+        rate = copy(intensity_values(evaluate_lift_forward!(forward)))
         domain = LiFTExpectedCounts(0.002; quantum_efficiency=0.8)
         counts = similar(rate)
         @. counts = rate * 0.002 * 0.8
         observation = LiFTObservation(forward, counts; domain=domain)
-        estimator = LiFT(forward; iterations=Int(raw["iterations"]),
-            mode_ids=1:n_modes, numerical=false,
-            solve_mode=LiFTSolveNormalEquations())
         coefficients = zeros(n_modes)
-        let coefficients=coefficients, estimator=estimator,
-            observation=observation
-            () -> WavefrontSensors.reconstruct!(
-                coefficients, estimator, observation;
-                optimize_norm=:none, check_convergence=false)
+        estimator = prepare_lift_estimator(LiFT(
+                iterations=Int(raw["iterations"]), mode_ids=1:n_modes,
+                jacobian_method=LiFTAnalyticJacobian(),
+                solve_mode=LiFTSolveNormalEquations(),
+                flux_normalization=LiFTFixedFlux(),
+                check_convergence=false),
+            forward, observation, coefficients)
+        let estimator=estimator
+            () -> WavefrontSensors.reconstruct!(estimator)
         end
     else
         throw(ArgumentError("unsupported Gate 0 latency-card kind '$kind'"))

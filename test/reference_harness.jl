@@ -1424,13 +1424,19 @@ function compute_reference_actual(case::ReferenceCase)
         mode_ids = Int.(get(compute_cfg, "mode_ids", collect(1:size(basis, 3))))
         rate_scale = Float64(get(compute_cfg, "flux_norm", 1.0))
         coeffs = Float64.(get(compute_cfg, "coefficients", zeros(length(mode_ids))))
-        forward = prepare_lift_forward_model(tel, src, basis;
+        forward = prepare_lift_forward_model(tel, src, basis, diversity;
             diversity_opd=diversity, focal_resolution=img_resolution,
             zero_padding=det.params.psf_sampling)
-        lift = LiFT(forward;
+        rate = copy(intensity_values(evaluate_lift_forward!(forward)))
+        observation = LiFTObservation(forward, rate)
+        definition = LiFT(
             iterations=Int(get(compute_cfg, "iterations", 3)),
             mode_ids=mode_ids,
-            numerical=numerical)
+            jacobian_method=numerical ? LiFTNumericalJacobian() :
+                LiFTAnalyticJacobian())
+        product = zeros(Float64, length(mode_ids))
+        lift = prepare_lift_estimator(definition, forward, observation,
+            product)
         H = WavefrontSensors.lift_interaction_matrix(lift, coeffs;
             rate_scale=rate_scale)
         stack = Array{Float64}(undef, img_resolution, img_resolution, length(mode_ids))

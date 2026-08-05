@@ -13,12 +13,14 @@ function main(; resolution::Int=24, zero_padding::Int=2)
     image = copy(intensity_values(form_direct_image!(imaging)))
     diversity = similar(pupil.opd)
     fill!(diversity, zero(eltype(diversity)))
-    forward = prepare_lift_forward_model(tel, src, basis;
+    forward = prepare_lift_forward_model(tel, src, basis, pupil.opd;
         diversity_opd=diversity, zero_padding=zero_padding)
-    lift = LiFT(forward; iterations=3, numerical=false)
     observation = LiFTObservation(forward, image)
-    coeffs_fit = WavefrontSensors.reconstruct(lift, observation;
-        coeffs0=zeros(4))
+    coeffs_fit = zeros(eltype(image), 4)
+    lift = prepare_lift_estimator(LiFT(iterations=3,
+            jacobian_method=LiFTAnalyticJacobian()), forward, observation,
+        coeffs_fit)
+    WavefrontSensors.reconstruct!(lift)
 
     @info "LiFT tutorial complete" n_modes=length(coeffs_true)
     return (

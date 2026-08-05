@@ -246,7 +246,8 @@ end
         @test Base.isexported(WavefrontSensors, name)
     end
     for name in (
-        :PreparedLiFTForwardModel,
+        :PreparedLiFTForward,
+        :PreparedLiFTEstimator,
         :LiFTObservation,
         :LiFTIdentityMapping,
         :LiFTFrameMapping,
@@ -254,6 +255,7 @@ end
         :LiFTExpectedCounts,
         :LiFTNormalizedIntensity,
         :prepare_lift_forward_model,
+        :prepare_lift_estimator,
         :evaluate_lift_forward!,
         :predict_lift_observation!,
         :lift_forward_output,

@@ -379,10 +379,15 @@ two independent detectors or an explicitly packed single-detector mapping; its
 remaining propagation, acquisition, and estimator owner split is the next
 family gate. No synthetic state view or monolithic optical-owner adapter is
 retained.
-LiFT separately owns a prepared focal-plane forward model, caller-provided
-`LiFTObservation`, and iterative estimator state. Its prepared modal subset and
-observation contract are cold-path bindings; repeated estimation neither owns
-nor triggers detector acquisition. LiFT reconstruction is the qualified-only
+LiFT separately owns a shareable run-immutable `LiFTForwardPlan`, replaceable
+per-owner `LiFTForwardWorkspace`, exact prepared forward input and output,
+caller-provided `LiFTObservation`, run-immutable `LiFTEstimationPlan`,
+replaceable iteration workspace, caller-owned coefficient result, and immutable
+diagnostic snapshots. `LiFT` is only the cold estimator definition. Each
+`PreparedLiFTEstimator` receives independent propagation and linear-algebra
+scratch even when several estimators share the same forward plan. Modal subset
+and observation contract are cold-path bindings; repeated estimation neither
+owns nor triggers detector acquisition. LiFT reconstruction is the qualified-only
 `WavefrontSensors.reconstruct!`/`WavefrontSensors.reconstruct` generic, not
 `Control.reconstruct!`/`Control.reconstruct`.
 

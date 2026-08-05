@@ -1583,17 +1583,26 @@ components. Migrated bindings are not forwarded through the root.
   and `wfs_detector_image`
 - Prepared WFS optical-product access: the qualified-public
   `WavefrontSensors.wfs_optical_products`
-- LiFT forward and observation contracts: `PreparedLiFTForwardModel`,
+- LiFT forward and observation contracts: `PreparedLiFTForward`,
   `prepare_lift_forward_model`, `lift_forward_output`,
   `evaluate_lift_forward!`, `predict_lift_observation!`,
   `LiFTObservation`, `lift_observation_contract`,
   `LiFTIdentityMapping`, `LiFTFrameMapping`, `LiFTPhotonRate`,
   `LiFTExpectedCounts`, and `LiFTNormalizedIntensity`
-- LiFT estimation: `LiFT`, the qualified-only
+- LiFT estimation: cold `LiFT`, `PreparedLiFTEstimator`,
+  `prepare_lift_estimator`, the qualified-only
   `WavefrontSensors.reconstruct!` and `WavefrontSensors.reconstruct`
   generics, `diagnostics`,
   `LiFTSolveAuto`, `LiFTSolveQR`, `LiFTSolveNormalEquations`,
-  `LiFTLevenbergMarquardt`, and `LiFTAdaptiveLevenbergMarquardt`
+  `LiFTLevenbergMarquardt`, `LiFTAdaptiveLevenbergMarquardt`,
+  `LiFTInitialModelWeighting`, `LiFTIterativeModelWeighting`,
+  `LiFTReadNoiseWeighting`, `LiFTVarianceMapWeighting`,
+  `LiFTTotalFluxNormalization`, `LiFTPeakIntensityNormalization`, and
+  `LiFTFixedFlux`
+- Qualified LiFT ownership accessors: `WavefrontSensors.lift_forward_plan`,
+  `WavefrontSensors.lift_forward_workspace`,
+  `WavefrontSensors.lift_estimation_plan`, and
+  `WavefrontSensors.lift_estimation_workspace`
 
 `WavefrontSensors.wfs_optical_products(prepared)` returns the exact typed
 photon-arrival-rate product or products bound by a prepared WFS optics owner.
@@ -1622,16 +1631,28 @@ destinations and an explicit RNG at acquisition. A direct geometric or
 reduced-order estimator declares `DirectMeasurementPath()` and allocates no
 fictitious rate plane, observation, or detector workspace. Shack-Hartmann,
 Pyramid, Bi-O-edge, Zernike, and Curvature implement the generic contract. LiFT
-intentionally remains outside the ordinary `AbstractWFS` hierarchy: prepare
-its focal-plane model independently, bind caller-owned acquired values with
-`LiFTObservation`, and then run `WavefrontSensors.reconstruct!`. This generic
-is deliberately distinct from the control-reconstruction generic exported at
-the package root. Modal selection is a cold-path
-`LiFT(...; mode_ids=...)` choice rather than a per-frame argument. The forward
+intentionally remains outside the ordinary `AbstractWFS` hierarchy. Prepare an
+exact forward owner with `prepare_lift_forward_model`, bind caller-owned
+acquired values with `LiFTObservation`, bind a cold `LiFT` definition and an
+exact coefficient result with `prepare_lift_estimator`, and then run
+`WavefrontSensors.reconstruct!`. Each prepared estimator receives independent
+forward and linear-algebra workspaces even when estimators share one immutable
+forward plan. An optional full-basis `initial_coefficients` input is bound at
+preparation and copied into iteration scratch on each reconstruction; the
+selected coefficient result remains a distinct caller-owned product. This
+reconstruction interface is deliberately distinct from the control-reconstruction
+generic exported at the package root. Modal selection is a cold-path
+`LiFT(...; mode_ids=...)` choice rather than a per-frame argument; its
+fixed-size storage does not specialize on modal cardinality. The forward
 output is a cell-integrated photon-arrival rate; count or normalized
 observations require an explicit observation-domain conversion. Neither
 forward evaluation nor estimation reads telescope cadence or invokes a
 detector.
+
+Forward preparation snapshots array-backed frame-response/MTF parameters, and
+estimator preparation snapshots a supplied variance map. These arrays are
+plan-owned after preparation; later mutation of the caller's configuration
+arrays does not change prepared execution.
 
 LiFT modal arrays are dimensionless OPD shapes. Reconstructed coefficients and
 the prepared diversity OPD are in metres; their assembled modal sum is the OPD
