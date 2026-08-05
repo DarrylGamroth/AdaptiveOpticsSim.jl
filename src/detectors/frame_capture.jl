@@ -181,7 +181,7 @@ function apply_background_flux!(background::BackgroundFrame, det::Detector, rng:
 end
 
 function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_duration::Real)
-    dark_signal = effective_dark_current(det) * effective_dark_current_time(det.params.sensor, exposure_duration)
+    dark_signal = effective_dark_current(det) * effective_dark_current_duration(det.params.sensor, exposure_duration)
     return add_poisson_rate!(det.products.frame, det, rng, dark_signal)
 end
 
@@ -600,26 +600,28 @@ validated_temporal_frame(frame) =
     throw(InvalidConfiguration("FunctionFrameSource must return an AbstractMatrix"))
 
 function initial_temporal_frame(source::FunctionFrameSource, det::Detector,
-    time, exposure_duration)
-    return validated_temporal_frame(source.f(time))
+    sample_offset_s, exposure_duration)
+    return validated_temporal_frame(source.f(sample_offset_s))
 end
 
 function initial_temporal_frame(source::InPlaceFrameSource, det::Detector,
-    time, exposure_duration)
+    sample_offset_s, exposure_duration)
     frame = ensure_temporal_buffer!(det, source.frame_size)
-    sample_frame!(frame, source, time)
+    sample_frame!(frame, source, sample_offset_s)
     return frame
 end
 
 function initial_temporal_frame(source::FunctionExposureFrameSource,
-    det::Detector, time, exposure_duration)
-    return validated_temporal_frame(source.f(time, exposure_duration))
+    det::Detector, start_offset_s, exposure_duration)
+    return validated_temporal_frame(source.f(start_offset_s,
+        exposure_duration))
 end
 
 function initial_temporal_frame(source::InPlaceExposureFrameSource,
-    det::Detector, time, exposure_duration)
+    det::Detector, start_offset_s, exposure_duration)
     frame = ensure_temporal_buffer!(det, source.frame_size)
-    sample_exposure_frame!(frame, source, time, exposure_duration)
+    sample_exposure_frame!(frame, source, start_offset_s,
+        exposure_duration)
     return frame
 end
 
@@ -636,11 +638,11 @@ function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSo
     return det.products.frame
 end
 
-rolling_exposure_start(::RollingExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
+rolling_exposure_start_offset_s(::RollingExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
     T(line_index) * T(line_duration)
 rolling_exposure_duration(::RollingExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
     T(exposure_duration)
-rolling_exposure_start(::GlobalResetExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
+rolling_exposure_start_offset_s(::GlobalResetExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
     zero(T)
 rolling_exposure_duration(::GlobalResetExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
     T(exposure_duration) + T(line_index) * T(line_duration)
@@ -657,9 +659,9 @@ function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSo
     for row_lo in (firstindex(det.products.frame, 1) + group_size):group_size:n_rows
         row_hi = min(row_lo + group_size - 1, n_rows)
         line_index = div(row_lo - 1, group_size)
-        sample_time = rolling_exposure_start(timing.exposure_mode, line_index, timing.line_duration, exposure_duration, value_type)
+        sample_offset_s = rolling_exposure_start_offset_s(timing.exposure_mode, line_index, timing.line_duration, exposure_duration, value_type)
         group_exposure = rolling_exposure_duration(timing.exposure_mode, line_index, timing.line_duration, exposure_duration, value_type)
-        sample_exposure_frame!(scratch, source, sample_time, group_exposure)
+        sample_exposure_frame!(scratch, source, sample_offset_s, group_exposure)
         fill_frame!(det, scratch, group_exposure)
         @views det.state.accum_buffer[row_lo:row_hi, :] .= det.products.frame[row_lo:row_hi, :]
     end
@@ -786,7 +788,7 @@ end
 
 Accumulate one positive `integration_duration` in seconds from a cell-integrated
 photon-arrival-rate matrix. This frame-step convenience finalizes automatically
-when the configured integration duration is reached. `integration_duration`
+when the configured exposure duration is reached. `integration_duration`
 is neither an absolute timestamp nor the period between consecutive samples;
 scheduled detector events own their timestamps and completion semantics.
 """
@@ -807,7 +809,7 @@ function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
     tolerance = T(8) * eps(det.params.exposure_duration) *
         max(one(T), abs(det.params.exposure_duration))
     dt <= remaining + tolerance || throw(InvalidConfiguration(
-        "integration_duration exceeds the remaining detector integration " *
+        "integration_duration exceeds the remaining detector exposure " *
         "duration"))
     dt = min(dt, remaining)
 

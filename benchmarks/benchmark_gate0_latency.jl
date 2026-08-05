@@ -146,7 +146,7 @@ function make_gate0_card(raw::AbstractDict)
         front_end = PyramidOpticalFrontEnd(wfs, src)
         rate = pyramid_rate_map(front_end, pupil)
         optics_plan = prepare_wfs_optics(front_end, pupil, rate)
-        detector = Detector(noise=NoiseNone(), integration_time=1.0,
+        detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
             qe=1.0, response_model=NullFrameResponse())
         observation = WFSObservation(similar(rate.values);
             units=:electron_count, layout=:four_pupil_mosaic)
@@ -180,9 +180,9 @@ function make_gate0_card(raw::AbstractDict)
         gate0_opd_ramp!(pupil)
         imaging = prepare_direct_imaging(pupil, src; zero_padding=zero_padding)
         rate_map = direct_imaging_output(imaging)
-        detector_a = Detector(noise=NoiseNone(), integration_time=0.003,
+        detector_a = Detector(noise=NoiseNone(), exposure_duration=0.003,
             qe=0.8)
-        detector_b = Detector(noise=NoiseNone(), integration_time=0.007,
+        detector_b = Detector(noise=NoiseNone(), exposure_duration=0.007,
             qe=0.8)
         rng_a = runtime_rng(Int(raw["rng_seed_a"]))
         rng_b = runtime_rng(Int(raw["rng_seed_b"]))
@@ -222,7 +222,7 @@ function make_gate0_card(raw::AbstractDict)
         rate = zernike_rate_map(front_end, pupil)
         optics_plan = prepare_wfs_optics(front_end, pupil,
             rate)
-        detector = Detector(noise=NoiseNone(), integration_time=1.0,
+        detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
             qe=1.0, response_model=NullFrameResponse())
         observation = WFSObservation(similar(rate.values);
             units=:electron_count, layout=:zernike_pupil_image)
@@ -259,9 +259,9 @@ function make_gate0_card(raw::AbstractDict)
         rates = curvature_rate_maps(front_end, pupil)
         optics_plan = prepare_wfs_optics(front_end, pupil,
             rates)
-        plus_detector = Detector(noise=NoiseNone(), integration_time=0.5,
+        plus_detector = Detector(noise=NoiseNone(), exposure_duration=0.5,
             qe=1.0, response_model=NullFrameResponse())
-        minus_detector = Detector(noise=NoiseNone(), integration_time=1.0,
+        minus_detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
             qe=1.0, response_model=NullFrameResponse())
         plus_observation = WFSObservation(similar(rates[1].values);
             units=:electron_count, layout=:curvature_branch_image)

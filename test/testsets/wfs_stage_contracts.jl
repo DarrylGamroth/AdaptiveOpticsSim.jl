@@ -485,10 +485,9 @@ end
     packed_detector = Detector(noise=NoiseNone(),
         exposure_duration=T(0.5), qe=T(0.4),
         response_model=NullFrameResponse(), T=T)
-    @test_throws InvalidConfiguration CurvaturePackedAcquisition(
-        packed_detector; branch_durations=:invalid)
-    packed_model = CurvaturePackedAcquisition(packed_detector;
-        branch_durations=(T(0.5), T(0.5)))
+    @test_throws MethodError CurvaturePackedAcquisition(
+        packed_detector; branch_durations=(T(0.5), T(0.5)))
+    packed_model = CurvaturePackedAcquisition(packed_detector)
     packed_observation = WFSObservation(zeros(T, 8, 4);
         units=:electron_count, layout=:curvature_branch_regions)
     packed_plan = prepare_wfs_acquisition(packed_model, rates,
@@ -663,14 +662,6 @@ end
     end
     @test counting_radiometry_error isa WFSPreparationError
     @test counting_radiometry_error.reason === :radiometry
-
-    duration_model = CurvaturePackedAcquisition(packed_detector;
-        branch_durations=(T(0.5), T(0.6)))
-    duration_error = contract_captured_error() do
-        prepare_wfs_acquisition(duration_model, rates, packed_observation)
-    end
-    @test duration_error isa WFSPreparationError
-    @test duration_error.reason === :duration
 
     scale_error = contract_captured_error() do
         prepare_wfs_estimation(sensor, observations, measurement;

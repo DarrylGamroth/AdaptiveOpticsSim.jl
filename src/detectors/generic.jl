@@ -431,8 +431,8 @@ function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend
 end
 
 effective_readout_sigma(::AbstractFrameSensor, sigma) = sigma
-effective_dark_current_time(::AbstractFrameSensor, exposure_duration) = exposure_duration
-effective_sensor_glow_time(::AbstractFrameSensor, exposure_duration) = exposure_duration
+effective_dark_current_duration(::AbstractFrameSensor, exposure_duration) = exposure_duration
+effective_sensor_glow_duration(::AbstractFrameSensor, exposure_duration) = exposure_duration
 persistence_model(::AbstractFrameSensor) = NullPersistence()
 
 line_duration(::AbstractFrameTimingModel, ::Type{T}) where {T<:AbstractFloat} = nothing

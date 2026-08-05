@@ -399,20 +399,21 @@ function _sampling_read_cube(sensor::AbstractFrameSensor, reference_cube::Union{
     return _sampling_read_cube!(cube, sensor, reference_cube, signal_cube)
 end
 
-function _sampling_read_offsets_s!(times::AbstractVector{T}, sensor::AbstractFrameSensor,
+function _sampling_read_offsets_s!(offsets_s::AbstractVector{T},
+    sensor::AbstractFrameSensor,
     det::Detector, n_reads::Int) where {T}
-    read_dt = sampling_read_duration(sensor, size(det.products.frame), det.params.readout_window, T)
+    read_duration = sampling_read_duration(sensor, size(det.products.frame), det.params.readout_window, T)
     for read_idx in 1:n_reads
-        times[read_idx] = T(read_idx) * read_dt
+        offsets_s[read_idx] = T(read_idx) * read_duration
     end
-    return times
+    return offsets_s
 end
 
 function _sampling_read_offsets_s(sensor::AbstractFrameSensor, det::Detector, n_reads::Int)
     n_reads <= 0 && return nothing
     T = eltype(det.products.frame)
-    times = Vector{T}(undef, n_reads)
-    return _sampling_read_offsets_s!(times, sensor, det, n_reads)
+    offsets_s = Vector{T}(undef, n_reads)
+    return _sampling_read_offsets_s!(offsets_s, sensor, det, n_reads)
 end
 
 @inline _require_multi_read_buffer(buffer, ::Symbol) = buffer
@@ -610,15 +611,15 @@ function validate_up_the_ramp_schedule(sensor::AbstractFrameSensor, det::Detecto
         det.params.readout_window, mode, exposure_duration, T)
 end
 
-function _fill_up_the_ramp_times!(times::AbstractVector{T},
+function _fill_up_the_ramp_read_offsets_s!(offsets_s::AbstractVector{T},
     exposure_duration::Real) where {T<:AbstractFloat}
-    n_reads = length(times)
+    n_reads = length(offsets_s)
     dt = T(exposure_duration) / T(n_reads - 1)
-    for read_idx in eachindex(times)
-        times[read_idx] = T(read_idx - firstindex(times)) * dt
+    for read_idx in eachindex(offsets_s)
+        offsets_s[read_idx] = T(read_idx - firstindex(offsets_s)) * dt
     end
-    times[end] = T(exposure_duration)
-    return times
+    offsets_s[end] = T(exposure_duration)
+    return offsets_s
 end
 
 function _sample_up_the_ramp_cube!(cube::AbstractArray{T,3},
@@ -793,7 +794,7 @@ function finalize_up_the_ramp_readout_products!(mode::UpTheRampSampling,
     products = ensure_up_the_ramp_products!(det, mode.n_reads)
     slope, intercept, integrated, cube = _up_the_ramp_execution_storage(
         products, det.workspace.readout)
-    _fill_up_the_ramp_times!(products.read_offsets_s, exposure_duration)
+    _fill_up_the_ramp_read_offsets_s!(products.read_offsets_s, exposure_duration)
     _sample_up_the_ramp_cube!(cube, sensor, det,
         _raw_sampling_sigma(det), rng)
     _fit_up_the_ramp!(execution_style(integrated),

@@ -129,14 +129,14 @@ sampling_read_duration(sensor::AbstractHgCdTeSensor, ::Tuple{Int,Int},
 function sampling_acquisition_duration(sensor::AbstractHgCdTeSensor,
     exposure_duration, ::Type{T}) where {T<:AbstractFloat}
     mode = multi_read_sampling_mode(sensor)
-    read_count = hgcdte_wallclock_read_count(mode)
+    read_count = hgcdte_acquisition_read_count(mode)
     read_count === nothing && return nothing
     return T(exposure_duration) + T(read_count) * sampling_read_duration(sensor, T)
 end
 
-@inline hgcdte_wallclock_read_count(mode::FrameSamplingMode) =
+@inline hgcdte_acquisition_read_count(mode::FrameSamplingMode) =
     frame_sampling_reads(mode)
-@inline hgcdte_wallclock_read_count(::UpTheRampSampling) = 1
+@inline hgcdte_acquisition_read_count(::UpTheRampSampling) = 1
 
 sampling_acquisition_duration(sensor::AbstractHgCdTeSensor, exposure_duration,
     ::Tuple{Int,Int}, ::Union{Nothing,FrameWindow},
@@ -146,29 +146,29 @@ sampling_acquisition_duration(sensor::AbstractHgCdTeSensor, exposure_duration,
 effective_readout_sigma(sensor::AbstractHgCdTeSensor, sigma) =
     effective_readout_sigma(multi_read_sampling_mode(sensor), sigma)
 
-function effective_dark_current_time(sensor::AbstractHgCdTeSensor, exposure_duration)
+function effective_dark_current_duration(sensor::AbstractHgCdTeSensor, exposure_duration)
     mode = multi_read_sampling_mode(sensor)
-    return effective_hgcdte_generated_charge_time(
+    return effective_hgcdte_generated_charge_duration(
         mode, hgcdte_readout(sensor).read_duration, exposure_duration)
 end
 
-function effective_hgcdte_generated_charge_time(
+function effective_hgcdte_generated_charge_duration(
     mode::FrameSamplingMode, read_duration, exposure_duration)
     reads = frame_sampling_reads(mode)
     reads === nothing && return exposure_duration
     return exposure_duration + reads * read_duration
 end
 
-@inline effective_hgcdte_generated_charge_time(
+@inline effective_hgcdte_generated_charge_duration(
     ::UpTheRampSampling, _read_duration, exposure_duration) = exposure_duration
 
-effective_sensor_glow_time(sensor::AbstractHgCdTeSensor, exposure_duration) =
-    effective_dark_current_time(sensor, exposure_duration)
+effective_sensor_glow_duration(sensor::AbstractHgCdTeSensor, exposure_duration) =
+    effective_dark_current_duration(sensor, exposure_duration)
 
 function _apply_hgcdte_glow!(sensor::AbstractHgCdTeSensor, det::Detector,
     rng::AbstractRNG, exposure_duration::Real)
     rate = effective_glow_rate(det) *
-        effective_sensor_glow_time(sensor, exposure_duration)
+        effective_sensor_glow_duration(sensor, exposure_duration)
     return add_poisson_rate!(det.products.frame, det, rng, rate)
 end
 
@@ -224,7 +224,7 @@ function _batched_hgcdte_glow!(sensor::AbstractHgCdTeSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
     exposure_duration::Real)
     rate = effective_glow_rate(det) *
-        effective_sensor_glow_time(sensor, exposure_duration)
+        effective_sensor_glow_duration(sensor, exposure_duration)
     rate <= zero(rate) && return cube
     fill!(scratch, rate)
     poisson_noise_frame!(det, rng, scratch)

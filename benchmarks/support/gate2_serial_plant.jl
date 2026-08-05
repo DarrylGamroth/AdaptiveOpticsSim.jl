@@ -169,7 +169,7 @@ function AOSPlant.prepare_acquisition_provider(
     AOSPlant.require_path_result(path)
     T = eltype(AOSPlant._first_path_result(path.result).values)
     detector = AOS.Detectors.Detector(
-        integration_time=T(model.exposure_s),
+        exposure_duration=T(model.exposure_s),
         noise=AOS.Detectors.NoiseNone(),
         qe=T(model.quantum_efficiency),
         response_model=AOS.Detectors.NullFrameResponse(),

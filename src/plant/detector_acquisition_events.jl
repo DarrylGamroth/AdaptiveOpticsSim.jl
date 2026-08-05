@@ -241,7 +241,7 @@ end
     return @inbounds prepared.read_offsets[index]
 end
 
-@inline function next_nondestructive_read_durationstamp(
+@inline function next_nondestructive_read_timestamp(
     prepared::PreparedGlobalShutterAcquisition,
     state::GlobalShutterAcquisitionState)
     _require_detector_event_binding(prepared, state)

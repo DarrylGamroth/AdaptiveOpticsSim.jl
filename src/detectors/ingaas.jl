@@ -54,7 +54,7 @@ end
 function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector,
     rng::AbstractRNG, exposure_duration::Real)
     rate = effective_glow_rate(det) *
-        effective_sensor_glow_time(sensor, exposure_duration)
+        effective_sensor_glow_duration(sensor, exposure_duration)
     rate <= zero(rate) && return det.products.frame
     fill!(det.workspace.noise_buffer, rate)
     poisson_noise!(rng, det.workspace.noise_buffer)
@@ -113,7 +113,7 @@ function _batched_sensor_statistics!(sensor::InGaAsSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
     exposure_duration::Real)
     rate = effective_glow_rate(det) *
-        effective_sensor_glow_time(sensor, exposure_duration)
+        effective_sensor_glow_duration(sensor, exposure_duration)
     rate <= zero(rate) && return cube
     fill!(scratch, rate)
     poisson_noise!(rng, scratch)

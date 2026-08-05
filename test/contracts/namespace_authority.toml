@@ -669,7 +669,7 @@ removed_public = []
 
 [plant_surface]
 source = "src/plant/api.jl"
-sha256 = "2471535934602a0501fb622941f24fde6c329e84e32f31154bba93e64b4d23ba"
+sha256 = "6b8915c58cd7e5358d431e53255e92c14c95c342283aa1be7bb78661db2913c2"
 disposition = "already canonical; preserve exactly during the namespace refactor"
 
 [terminology]
@@ -2108,7 +2108,7 @@ public = [
     "acquisition_readiness_timestamp",
     "nondestructive_read_count",
     "nondestructive_read_offset",
-    "next_nondestructive_read_durationstamp",
+    "next_nondestructive_read_timestamp",
     "rolling_band_count",
     "rolling_band_rows",
     "rolling_opened_band_count",

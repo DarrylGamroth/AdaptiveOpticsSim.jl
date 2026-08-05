@@ -664,19 +664,20 @@ rng = runtime_rng(3)
 frame = capture!(det, pulse; rng=rng)
 ```
 
-This path samples each rolling-shutter row group at its own readout time, so it
-can show transient illumination and rolling-shutter artifacts. Static
+This path samples each rolling-shutter row group at its own exposure-start
+offset in seconds, so it can show transient illumination and rolling-shutter
+artifacts. Static
 `capture!(det, image)` remains the preferred path when the scene does not vary
 during the exposure.
 
 For transient sources where the flux rate depends on the full exposure
 interval, use `InPlaceExposureFrameSource` or `FunctionExposureFrameSource`.
-These receive `start_time` and `exposure_duration`, which is important for
+These receive `start_offset_s` and `exposure_duration`, which is important for
 global-reset rolling readout:
 
 ```julia
-pulse = FunctionExposureFrameSource((start_time, exposure_duration) -> begin
-    active = start_time <= 50e-6 < start_time + exposure_duration
+pulse = FunctionExposureFrameSource((start_offset_s, exposure_duration) -> begin
+    active = start_offset_s <= 50e-6 < start_offset_s + exposure_duration
     return fill(active ? 1.0 : 0.0, 64, 64)
 end)
 ```

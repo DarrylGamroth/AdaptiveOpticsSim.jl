@@ -127,8 +127,8 @@ end
 
     global_exposure_calls = Tuple{Float64,Float64}[]
     global_exposure_source = FunctionExposureFrameSource(
-        (start_time, exposure_duration) -> begin
-            push!(global_exposure_calls, (start_time, exposure_duration))
+        (start_offset_s, exposure_duration) -> begin
+            push!(global_exposure_calls, (start_offset_s, exposure_duration))
             fill(exposure_duration, 2, 2)
         end)
     global_exposure_det = Detector(exposure_duration=2.0,
@@ -140,9 +140,9 @@ end
 
     rolling_exposure_calls = Tuple{Float64,Float64}[]
     rolling_exposure_source = InPlaceExposureFrameSource(
-        (out, start_time, exposure_duration) -> begin
-            push!(rolling_exposure_calls, (start_time, exposure_duration))
-            fill!(out, start_time + exposure_duration)
+        (out, start_offset_s, exposure_duration) -> begin
+            push!(rolling_exposure_calls, (start_offset_s, exposure_duration))
+            fill!(out, start_offset_s + exposure_duration)
         end, (4, 4))
     rolling_exposure_det = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0,
@@ -162,8 +162,8 @@ end
     @test global_reset_frame == repeat(reshape([1.0, 1.25, 1.5, 1.75], :, 1), 1, 4)
     @test global_reset_det.params.timing_model.exposure_mode == GlobalResetExposure()
 
-    interval_source = FunctionExposureFrameSource((start_time, exposure_duration) ->
-        fill(start_time <= 1.4 < start_time + exposure_duration ? 10.0 : 0.0, 4, 4))
+    interval_source = FunctionExposureFrameSource((start_offset_s, exposure_duration) ->
+        fill(start_offset_s <= 1.4 < start_offset_s + exposure_duration ? 10.0 : 0.0, 4, 4))
     rolling_interval_frame = capture!(rolling_det, interval_source; rng=MersenneTwister(132))
     @test rolling_interval_frame[1:2, :] == zeros(2, 4)
     @test rolling_interval_frame[3:4, :] == fill(10.0, 2, 4)

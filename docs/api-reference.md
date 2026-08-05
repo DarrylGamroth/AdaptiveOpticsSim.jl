@@ -392,7 +392,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   `exposure_close_timestamp`, `integrated_through_timestamp`,
   `readout_complete_timestamp`, `acquisition_readiness_timestamp`,
   `nondestructive_read_count`, `nondestructive_read_offset`,
-  `next_nondestructive_read_durationstamp`,
+  `next_nondestructive_read_timestamp`,
   `prepare_global_shutter_acquisition`, `begin_exposure!`,
   `accumulate_exposure_interval!`, `take_nondestructive_read!`,
   `close_exposure!`, `complete_readout!`, and

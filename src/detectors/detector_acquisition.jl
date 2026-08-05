@@ -612,7 +612,7 @@ end
     _require_exact_binding(products.read_cube, binding.read_cube,
         "multi-read read-cube product")
     _require_exact_binding(products.read_offsets_s, binding.read_offsets_s,
-        "multi-read duration product")
+        "multi-read offset product")
     return nothing
 end
 
@@ -627,7 +627,7 @@ end
     _require_exact_binding(products.read_cube, binding.read_cube,
         "ramp read-cube product")
     _require_exact_binding(products.read_offsets_s, binding.read_offsets_s,
-        "ramp time product")
+        "ramp read-offset product")
     return nothing
 end
 

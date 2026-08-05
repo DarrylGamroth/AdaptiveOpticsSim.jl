@@ -56,7 +56,7 @@ end
     T,<:FrameTransferEMCCDKind}) where {T}
     return AOS.Detectors.EMCCDSensor(
         acquisition_mode=AOS.Detectors.FrameTransferAcquisition(
-        transfer_time=model.transfer_s, T=T), T=T)
+        transfer_duration=model.transfer_s, T=T), T=T)
 end
 
 @inline function multi_rate_sensor(model::MultiRateAcquisitionModel{
@@ -64,7 +64,7 @@ end
     return AOS.Detectors.HgCdTeSensor(
         sampling_mode=AOS.Detectors.UpTheRampSampling(
             model.nondestructive_reads),
-        read_time=zero(T), T=T)
+        read_duration=zero(T), T=T)
 end
 
 function AOSPlant.prepare_acquisition_provider(
@@ -75,7 +75,7 @@ function AOSPlant.prepare_acquisition_provider(
     AOSPlant.require_path_result(path)
     T = eltype(AOSPlant._first_path_result(path.result).values)
     detector = AOS.Detectors.Detector(
-        integration_time=T(model.exposure_s),
+        exposure_duration=T(model.exposure_s),
         noise=AOS.Detectors.NoiseNone(),
         qe=T(model.quantum_efficiency),
         gain=one(T),

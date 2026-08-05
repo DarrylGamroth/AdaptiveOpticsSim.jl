@@ -71,7 +71,7 @@ end
     @test detector_acquisition_sequence(state) == 0
     @test nondestructive_read_count(prepared) == 0
     @test_throws DetectorAcquisitionError nondestructive_read_offset(prepared, 1)
-    @test isnothing(next_nondestructive_read_durationstamp(prepared, state))
+    @test isnothing(next_nondestructive_read_timestamp(prepared, state))
 
     mismatch = Detector(exposure_duration=0.5, noise=NoiseNone())
     mismatch_error = caught_detector_acquisition_error() do
@@ -290,9 +290,9 @@ end
     middle = start + PlantDuration(500_000_000)
     close = start + PlantDuration(1_000_000_000)
 
-    @test isnothing(next_nondestructive_read_durationstamp(prepared, state))
+    @test isnothing(next_nondestructive_read_timestamp(prepared, state))
     begin_exposure!(prepared, state, start)
-    @test next_nondestructive_read_durationstamp(prepared, state) == start
+    @test next_nondestructive_read_timestamp(prepared, state) == start
     missed_initial = caught_detector_acquisition_error() do
         accumulate_exposure_interval!(prepared, state, start,
             start + PlantDuration(1), rng)
@@ -315,14 +315,14 @@ end
     @test rand(invalid_read_rng) == rand(reference_read_rng)
 
     take_nondestructive_read!(prepared, state, start, rng)
-    @test next_nondestructive_read_durationstamp(prepared, state) == middle
+    @test next_nondestructive_read_timestamp(prepared, state) == middle
     @test all(iszero, detector_ramp_cube(detector)[:, :, 1])
     incomplete_read = caught_detector_acquisition_error() do
         take_nondestructive_read!(prepared, state, middle, rng)
     end
     @test incomplete_read isa DetectorAcquisitionError
     @test incomplete_read.reason == :incomplete_integration
-    @test next_nondestructive_read_durationstamp(prepared, state) == middle
+    @test next_nondestructive_read_timestamp(prepared, state) == middle
     crossed_read = caught_detector_acquisition_error() do
         accumulate_exposure_interval!(prepared, state, start,
             middle + PlantDuration(1), rng)
@@ -350,7 +350,7 @@ end
     @test all(==(2.0), detector.state.accum_buffer)
 
     take_nondestructive_read!(prepared, state, close, rng)
-    @test isnothing(next_nondestructive_read_durationstamp(prepared, state))
+    @test isnothing(next_nondestructive_read_timestamp(prepared, state))
     @test all(==(2.0), detector_ramp_cube(detector)[:, :, 3])
     output = complete_readout!(prepared, state,
         close + PlantDuration(100), rng)

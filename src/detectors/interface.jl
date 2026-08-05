@@ -456,33 +456,35 @@ struct InPlaceExposureFrameSource{F} <: AbstractTemporalFrameSource
     frame_size::Tuple{Int,Int}
 end
 
-function sample_frame!(dest::AbstractMatrix, source::FunctionFrameSource, time)
-    frame = source.f(time)
+function sample_frame!(dest::AbstractMatrix, source::FunctionFrameSource,
+    sample_offset_s)
+    frame = source.f(sample_offset_s)
     size(frame) == size(dest) || throw(DimensionMismatchError("temporal frame source returned an unexpected frame size"))
     copyto!(dest, frame)
     return dest
 end
 
-function sample_frame!(dest::AbstractMatrix, source::InPlaceFrameSource, time)
+function sample_frame!(dest::AbstractMatrix, source::InPlaceFrameSource,
+    sample_offset_s)
     size(dest) == source.frame_size || throw(DimensionMismatchError("temporal frame source destination has an unexpected frame size"))
-    source.f(dest, time)
+    source.f(dest, sample_offset_s)
     return dest
 end
 
-sample_exposure_frame!(dest::AbstractMatrix, source::AbstractTemporalFrameSource, start_time, exposure_duration) =
-    sample_frame!(dest, source, start_time)
+sample_exposure_frame!(dest::AbstractMatrix, source::AbstractTemporalFrameSource, start_offset_s, exposure_duration) =
+    sample_frame!(dest, source, start_offset_s)
 
-function sample_exposure_frame!(dest::AbstractMatrix, source::FunctionExposureFrameSource, start_time, exposure_duration)
-    frame = source.f(start_time, exposure_duration)
+function sample_exposure_frame!(dest::AbstractMatrix, source::FunctionExposureFrameSource, start_offset_s, exposure_duration)
+    frame = source.f(start_offset_s, exposure_duration)
     size(frame) == size(dest) || throw(DimensionMismatchError("temporal exposure frame source returned an unexpected frame size"))
     copyto!(dest, frame)
     return dest
 end
 
-function sample_exposure_frame!(dest::AbstractMatrix, source::InPlaceExposureFrameSource, start_time, exposure_duration)
+function sample_exposure_frame!(dest::AbstractMatrix, source::InPlaceExposureFrameSource, start_offset_s, exposure_duration)
     size(dest) == source.frame_size ||
         throw(DimensionMismatchError("temporal exposure frame source destination has an unexpected frame size"))
-    source.f(dest, start_time, exposure_duration)
+    source.f(dest, start_offset_s, exposure_duration)
     return dest
 end
 

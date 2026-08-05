@@ -3083,7 +3083,7 @@ end
 @inline function _first_acquisition_boundary_timestamp(
     prepared::PreparedGlobalShutterAcquisition,
     state::GlobalShutterAcquisitionState)
-    next_read = next_nondestructive_read_durationstamp(prepared, state)
+    next_read = next_nondestructive_read_timestamp(prepared, state)
     next_read === nothing && return state.exposure_close
     return min(next_read, state.exposure_close)
 end
@@ -3156,7 +3156,7 @@ end
     prepared::PreparedGlobalShutterAcquisition,
     state::GlobalShutterAcquisitionState, timestamp::PlantTimestamp,
     rng::AbstractRNG)
-    next_read = next_nondestructive_read_durationstamp(prepared, state)
+    next_read = next_nondestructive_read_timestamp(prepared, state)
     next_read == timestamp || return nothing
     take_nondestructive_read!(prepared, state, timestamp, rng)
     return nothing
@@ -3328,10 +3328,10 @@ function _process_acquisition_lifecycle_boundary!(
     state::GlobalShutterAcquisitionState, timestamp::PlantTimestamp,
     rng::AbstractRNG)
     _integrate_event_acquisition_to!(prepared, state, timestamp, rng)
-    next_read = next_nondestructive_read_durationstamp(prepared, state)
+    next_read = next_nondestructive_read_timestamp(prepared, state)
     if next_read !== nothing && next_read == timestamp
         take_nondestructive_read!(prepared, state, timestamp, rng)
-        following_read = next_nondestructive_read_durationstamp(prepared, state)
+        following_read = next_nondestructive_read_timestamp(prepared, state)
         following = following_read === nothing ? state.exposure_close :
             min(following_read, state.exposure_close)
         return _AcquisitionBoundaryResult(_RescheduleAcquisitionBoundary,

@@ -89,7 +89,7 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
     low_fidelity_map = IntensityMap(low_fidelity_metadata,
         low_fidelity_values)
     low_fidelity = Detector(
-        integration_time=1e-3,
+        exposure_duration=1e-3,
         qe=1.0,
         noise=NoiseNone(),
         sensor=CCDSensor(T=T),
@@ -105,7 +105,7 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
     ]; T=T)
 
     cmos = Detector(
-        integration_time=1e-3,
+        exposure_duration=1e-3,
         qe=0.8,
         noise=NoisePhotonReadout(1.2),
         full_well=30_000,
@@ -116,7 +116,7 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
         T=T,
     )
     cmos_response_ipc = Detector(
-        integration_time=1e-3,
+        exposure_duration=1e-3,
         qe=0.8,
         noise=NoisePhotonReadout(1.2),
         full_well=30_000,
@@ -128,7 +128,7 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
         T=T,
     )
     ccd = Detector(
-        integration_time=1e-3,
+        exposure_duration=1e-3,
         qe=0.9,
         noise=NoisePhotonReadout(2.0),
         full_well=100_000,
@@ -138,7 +138,7 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
         T=T,
     )
     emccd = Detector(
-        integration_time=1e-3,
+        exposure_duration=1e-3,
         qe=0.9,
         noise=NoisePhotonReadout(20.0),
         gain=100,
@@ -150,20 +150,21 @@ function detector_hil_cards(n::Int=DETECTOR_HIL_SIZE)
         T=T,
     )
     hgcdte = Detector(
-        integration_time=1e-3,
+        exposure_duration=1e-3,
         qe=0.7,
         noise=NoisePhotonReadout(1.0),
         full_well=100_000,
         bits=16,
         sensor=HgCdTeAvalancheArraySensor(avalanche_gain=20,
-            excess_noise_factor=1.2, glow_rate=0.01, read_time=2e-5,
+            excess_noise_factor=1.2, glow_rate=0.01,
+            read_duration=2e-5,
             sampling_mode=CorrelatedDoubleSampling(), T=T),
         response_model=NullFrameResponse(),
         charge_coupling_model=ipc,
         T=T,
     )
     skipper = Detector(
-        integration_time=1e-3,
+        exposure_duration=1e-3,
         qe=0.9,
         noise=NoisePhotonReadout(3.0),
         full_well=100_000,
@@ -200,7 +201,7 @@ end
 
 detector_hil_input_values(card::DetectorHILCard) = card.input
 detector_hil_input_values(card::PreparedDetectorHILCard) =
-    intensity_values(detector_acquisition_input(card.acquisition))
+    intensity_values(Detectors.detector_acquisition_input(card.acquisition))
 
 function bytes_sha256(values::AbstractArray)
     bytes = reinterpret(UInt8, vec(values))
@@ -226,7 +227,7 @@ function detector_hil_correctness(card::PreparedDetectorHILCard,
     values = detector_hil_input_values(card)
     metadata = detector_export_metadata(card.detector)
     expected = similar(values)
-    scale = eltype(values)(metadata.integration_time * metadata.qe)
+    scale = eltype(values)(metadata.exposure_duration * metadata.qe)
     @. expected = values * scale
     observed = output_frame(card.detector)
     maximum_absolute_error = maximum(abs, observed .- expected)
@@ -240,7 +241,7 @@ function detector_hil_correctness(card::PreparedDetectorHILCard,
         "input_unmodified" => input_unmodified,
         "maximum_absolute_error" => maximum_absolute_error,
         "output_sha256" => bytes_sha256(observed),
-        "oracle" => "input_rate * quantum_efficiency * integration_time",
+        "oracle" => "input_rate * quantum_efficiency * exposure_duration",
     )
 end
 
@@ -373,7 +374,7 @@ function detector_card_metadata(card)
         "sampling_mode" => String(metadata.sampling_mode),
         "sampling_reads" => something(metadata.sampling_reads, 0),
         "output_type" => string(metadata.output_type),
-        "integration_time_s" => metadata.integration_time,
+        "exposure_duration_s" => metadata.exposure_duration,
         "quantum_efficiency" => metadata.qe,
         "detector_defects" => String(metadata.detector_defects),
         "nonlinearity_model" => String(metadata.nonlinearity_model),
@@ -392,7 +393,7 @@ function require_compatible_detector_baseline!(card_id::String,
     baseline_detector = baseline["detector"]
     for key in ("sensor", "noise", "frame_size", "output_size",
         "frame_response", "charge_coupling", "sampling_mode",
-        "sampling_reads", "output_type", "integration_time_s",
+        "sampling_reads", "output_type", "exposure_duration_s",
         "quantum_efficiency", "detector_defects", "nonlinearity_model")
         get(baseline_detector, key, nothing) == current[key] || error(
             "baseline detector configuration mismatch for $(card_id) field $(key)")
@@ -641,7 +642,7 @@ function run_detector_hil_latency_benchmarks()
     end
 
     artifact = Dict{String,Any}(
-        "schema_version" => 3,
+        "schema_version" => 4,
         "benchmark" => "detector_hil_latency",
         "evidence_class" => "warmed self-paced in-process detector service time",
         "contract" => contract,

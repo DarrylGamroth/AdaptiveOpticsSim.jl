@@ -177,8 +177,8 @@ function cmos_artifact_deterministic_contract()
         sensor=CMOSSensor(timing_model=RollingShutter(0.25;
             row_group_size=2)))
     rolling_source = InPlaceExposureFrameSource(
-        (out, start_time, exposure_duration) ->
-            fill!(out, start_time + exposure_duration), (4, 4))
+        (out, start_offset_s, exposure_duration) ->
+            fill!(out, start_offset_s + exposure_duration), (4, 4))
     rolling_exposure_passed =
         capture!(rolling_detector, rolling_source, Xoshiro(4202)) ==
         repeat(reshape([1.0, 1.0, 1.25, 1.25], :, 1), 1, 4)

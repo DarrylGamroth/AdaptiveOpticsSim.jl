@@ -68,7 +68,7 @@ function _batched_background_flux!(background::BackgroundFrame, det::Detector, c
 end
 
 function _batched_dark_current!(det::Detector, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG, exposure_duration::Real)
-    dark_signal = effective_dark_current(det) * effective_dark_current_time(det.params.sensor, exposure_duration)
+    dark_signal = effective_dark_current(det) * effective_dark_current_duration(det.params.sensor, exposure_duration)
     if dark_signal <= 0
         return cube
     end
