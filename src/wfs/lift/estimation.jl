@@ -293,17 +293,6 @@ function lift_interaction_matrix(lift::PreparedLiFTEstimator,
         rate_scale=rate_scale)
 end
 
-function _require_lift_estimator(lift::PreparedLiFTEstimator)
-    _require_lift_forward_owner(lift.forward)
-    lift.observation.metadata.contract == lift.plan.observation_contract ||
-        throw(InvalidConfiguration(
-            "LiFT observation contract changed after estimator preparation"))
-    lift.forward.plan.observation_contract == lift.plan.observation_contract ||
-        throw(InvalidConfiguration(
-            "LiFT forward plan changed after estimator preparation"))
-    return lift
-end
-
 @inline _require_lift_weighting(::LiFTWeightingMode,
     ::LiFTObservationMetadata, ::Type{<:AbstractFloat}) = nothing
 
@@ -396,7 +385,7 @@ function reconstruct!(lift::PreparedLiFTEstimator)
     normal = lift.workspace.normal_buffer
     factor = lift.workspace.factor_buffer
     rhs = lift.workspace.rhs_buffer
-    mode_ids_buf = lift.workspace.mode_id_buffer
+    mode_ids_buf = lift.plan.mode_ids_device
     diag = lift.workspace.diagnostics
     style = execution_style(H)
     effective_mode = effective_solve_mode(style, lift.plan.solve_mode)

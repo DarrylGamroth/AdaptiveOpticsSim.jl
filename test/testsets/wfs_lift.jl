@@ -29,6 +29,14 @@ function replace_lift_optical_rate_workspace(workspace, optical_rate)
         workspace.opd_work_buffer)
 end
 
+function replace_lift_rhs_workspace(workspace, rhs)
+    return WavefrontSensors.LiFTEstimationWorkspace(
+        workspace.observation_rate_buffer, workspace.residual_buffer,
+        workspace.weight_buffer, workspace.H_buffer,
+        workspace.normal_buffer, workspace.factor_buffer, rhs,
+        workspace.full_coefficients_buffer, workspace.diagnostics)
+end
+
 @testset "LiFT" begin
     @test Docs.hasdoc(WavefrontSensors, :evaluate_lift_forward!)
     fixed_damping = LiFTLevenbergMarquardt(lambda0=Float32(1e-4))
@@ -109,6 +117,8 @@ end
     @test !hasfield(typeof(lift), :telescope)
     @test observation.values !== intensity_values(lift_forward_output(forward))
     @test collect(lift.plan.mode_ids) == [1, 2]
+    @test hasfield(typeof(lift.plan), :mode_ids_device)
+    @test !hasfield(typeof(lift.workspace), :mode_id_buffer)
     @test typeof(LiFT(mode_ids=1:2).mode_ids) ===
         typeof(LiFT(mode_ids=1:3).mode_ids)
     @test_throws InvalidConfiguration LiFT(mode_ids=())
@@ -432,6 +442,13 @@ end
     malformed_output_snapshot = copy(forward.output.values)
     @test_throws InvalidConfiguration evaluate_lift_forward!(malformed_forward)
     @test forward.output.values == malformed_output_snapshot
+    plan_aliased_forward = PreparedLiFTForward(forward.plan,
+        forward.workspace, forward.plan.diversity_opd, forward.output,
+        forward.backend, forward.device)
+    plan_aliased_output_snapshot = copy(forward.output.values)
+    @test_throws InvalidConfiguration evaluate_lift_forward!(
+        plan_aliased_forward)
+    @test forward.output.values == plan_aliased_output_snapshot
     workspace_output = IntensityMap(forward.output.metadata,
         forward.workspace.optical_rate_buffer)
     workspace_output_snapshot = copy(workspace_output.values)
@@ -450,6 +467,80 @@ end
     @test_throws DimensionMismatchError evaluate_lift_forward!(
         malformed_workspace_forward)
     @test forward.output.values == malformed_workspace_snapshot
+
+    malformed_estimation_workspace = replace_lift_rhs_workspace(
+        lift.workspace, zeros(3))
+    malformed_estimator = PreparedLiFTEstimator(lift.forward, lift.plan,
+        malformed_estimation_workspace, lift.observation, lift.coefficients,
+        lift.initial_coefficients, lift.backend, lift.device)
+    malformed_estimation_coefficients = copy(lift.coefficients)
+    malformed_estimation_scratch =
+        copy(lift.workspace.full_coefficients_buffer)
+    @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
+        malformed_estimator)
+    @test lift.coefficients == malformed_estimation_coefficients
+    @test lift.workspace.full_coefficients_buffer ==
+        malformed_estimation_scratch
+
+    aliased_estimation_workspace = replace_lift_rhs_workspace(
+        lift.workspace, lift.coefficients)
+    aliased_estimator = PreparedLiFTEstimator(lift.forward, lift.plan,
+        aliased_estimation_workspace, lift.observation, lift.coefficients,
+        lift.initial_coefficients, lift.backend, lift.device)
+    aliased_estimator_coefficients = copy(lift.coefficients)
+    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
+        aliased_estimator)
+    @test lift.coefficients == aliased_estimator_coefficients
+
+    malformed_observation = WavefrontSensors.LiFTObservation(
+        lift.observation.metadata, zeros(7, 8))
+    malformed_observation_estimator = PreparedLiFTEstimator(lift.forward,
+        lift.plan, lift.workspace, malformed_observation, lift.coefficients,
+        lift.initial_coefficients, lift.backend, lift.device)
+    malformed_observation_coefficients = copy(lift.coefficients)
+    @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
+        malformed_observation_estimator)
+    @test lift.coefficients == malformed_observation_coefficients
+
+    resized_coefficients = zeros(2)
+    resized_coefficients_estimator = prepare_lift_estimator(
+        LiFT(iterations=1, mode_ids=(1, 2),
+            solve_mode=LiFTSolveNormalEquations()),
+        forward, observation, resized_coefficients)
+    resize!(resized_coefficients, 1)
+    resized_coefficients_scratch = copy(
+        resized_coefficients_estimator.workspace.full_coefficients_buffer)
+    @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
+        resized_coefficients_estimator)
+    @test resized_coefficients_estimator.workspace.full_coefficients_buffer ==
+        resized_coefficients_scratch
+
+    resized_initial = zeros(3)
+    resized_initial_estimator = prepare_lift_estimator(
+        LiFT(iterations=1, mode_ids=(1, 2),
+            solve_mode=LiFTSolveNormalEquations()),
+        forward, observation, zeros(2); initial_coefficients=resized_initial)
+    resize!(resized_initial, 2)
+    resized_initial_coefficients = copy(resized_initial_estimator.coefficients)
+    @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
+        resized_initial_estimator)
+    @test resized_initial_estimator.coefficients ==
+        resized_initial_coefficients
+
+    malformed_mode_ids_device = zeros(Int, 3)
+    malformed_estimation_plan = WavefrontSensors.LiFTEstimationPlan(
+        lift.plan.iterations, lift.plan.jacobian_method,
+        lift.plan.solve_mode, lift.plan.damping, lift.plan.mode_ids,
+        malformed_mode_ids_device, lift.plan.weighting,
+        lift.plan.model_scaling, lift.plan.check_convergence,
+        lift.plan.observation_contract)
+    malformed_plan_estimator = PreparedLiFTEstimator(lift.forward,
+        malformed_estimation_plan, lift.workspace, lift.observation,
+        lift.coefficients, lift.initial_coefficients, lift.backend, lift.device)
+    malformed_plan_coefficients = copy(lift.coefficients)
+    @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
+        malformed_plan_estimator)
+    @test lift.coefficients == malformed_plan_coefficients
 
     concurrent_first = prepare_test_lift(forward, allocation_observation;
         iterations=1, mode_ids=(1, 2),
