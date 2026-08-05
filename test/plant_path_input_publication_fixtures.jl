@@ -447,7 +447,7 @@ function path_input_publication_test_path(
     target = partition_target(getfield(partitions, :assignment), id)
     partition = prepared_partition(partitions, target)
     for path in prepared_paths(partition)
-        path_id(path.definition) == id && return path
+        path_id(path) == id && return path
     end
     error("missing prepared path-input publication test path $id")
 end
