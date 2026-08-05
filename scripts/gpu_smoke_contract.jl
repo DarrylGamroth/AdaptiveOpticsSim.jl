@@ -543,7 +543,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
         @assert size(gpu_export) == size(cpu_export)
         @assert isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
-        return gpu_frame
+        return gpu_export
     end
 
     record_gpu_smoke!(failures, "measure_pyramid_geometric") do
