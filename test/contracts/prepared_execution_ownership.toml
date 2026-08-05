@@ -172,7 +172,7 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 449
+baseline_type_count = 457
 baseline_mixed_type_count = 8
 
 [[type_inventory.files]]
@@ -614,7 +614,15 @@ entries = [
     ["PreparedControllableOptic","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["PreparedControllableOpticPathBindings","struct",6,"prepared",["plan","prepared_owner"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
     ["PreparedControllableOpticPlaneGroup","struct",4,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-06"],
+    ["_ControllableOpticStateFamily","struct",1,"state",["state"],false,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_ControllableOpticStateRegistry","struct",2,"state",["state"],false,true,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_ControllableOpticWorkspaceFamily","struct",1,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_ControllableOpticWorkspaceRegistry","struct",2,"workspace",["workspace"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedControllableOpticFamily","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedControllableOpticFamilyType","struct",0,"prepared",["support"],false,false,"internal",false,"backend_neutral",false,"PE-06"],
     ["_PreparedControllableOpticPathBindingsToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedControllableOpticRegistry","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedControllableOpticSlot","struct",2,"prepared",["support"],false,false,"internal",false,"backend_neutral",true,"PE-06"],
     ["_PreparedControllableOpticToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
     ["_PreparedPlantCommandEndpoint","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
 ]

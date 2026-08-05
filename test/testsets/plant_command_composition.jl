@@ -544,6 +544,18 @@ end
     @test plant_event_controllable_optic_count(result.prepared) == 2
     @test plant_event_command_endpoint_count(result.prepared) == 2
     @test length(Plant.prepared_controllable_optics(result.plant)) == 2
+    optic_registry = getfield(result.plant, :controllable_optics)
+    @test optic_registry isa Plant._PreparedControllableOpticRegistry
+    @test length(optic_registry.groups) == 1
+    @test only(optic_registry.groups).values isa FixedSizeVector
+    @test length(only(optic_registry.groups).values) == 2
+    @test result.prepared.optics === optic_registry
+    @test result.state.controllable_optics.slots === optic_registry.slots
+    @test result.workspace.controllable_optics.slots === optic_registry.slots
+    @test only(result.state.controllable_optics.groups).values isa
+        FixedSizeVector
+    @test only(result.workspace.controllable_optics.groups).values isa
+        FixedSizeVector
     @test length(Plant.prepared_command_endpoints(result.plant)) == 2
     @test Plant.prepared_controllable_optic(result.plant, :woofer) ===
         Plant.prepared_controllable_optics(result.plant)[2]
