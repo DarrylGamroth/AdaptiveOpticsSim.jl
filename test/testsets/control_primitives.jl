@@ -258,8 +258,8 @@ end
     products = readout(simulation)
     @test products.command === simulation.command
     @test length(products.signals) == 2
-    @test length(products.wfs_frames) == 2
-    @test length(products.wfs_metadata) == 2
+    @test length(products.wfs_detector_outputs) == 2
+    @test length(products.wfs_detector_metadata) == 2
     timing = runtime_timing(
         simulation;
         warmup=1,
@@ -309,8 +309,8 @@ end
     @test curvature.high_wfs isa CurvatureWFS
     @test curvature.high_detector isa LinearAPDDetector
     step!(curvature)
-    @test size(readout(curvature).wfs_frames[1]) ==
-        (2, curvature_params.high_order_samples^2)
+    @test size(readout(curvature).wfs_detector_outputs[1]) ==
+        (2 * curvature_params.high_order_samples^2,)
 
     ao3k_params = AO3kSimulationParams(
         T=Float32,

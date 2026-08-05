@@ -52,9 +52,11 @@ function _sync_simulation!(::Type{B}, simulation) where {B<:AdaptiveOpticsSim.Ba
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(simulation.command))
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(simulation.high_wfs)))
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(simulation.low_wfs)))
-    high_frame, low_frame = readout(simulation).wfs_frames
-    isnothing(high_frame) || AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(high_frame))
-    isnothing(low_frame) || AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(low_frame))
+    high_output, low_output = readout(simulation).wfs_detector_outputs
+    isnothing(high_output) || AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(high_output))
+    isnothing(low_output) || AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(low_output))
     return nothing
 end
 
@@ -219,8 +221,8 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     end; warmup=resolved_warmup, gc_before=false)
     phase = subaru_ao188_phase_timing(simulation; warmup=resolved_warmup, samples=resolved_samples, gc_before=false)
     simulation_output = readout(simulation)
-    high_metadata, low_metadata = simulation_output.wfs_metadata
-    high_frame, low_frame = simulation_output.wfs_frames
+    high_metadata, low_metadata = simulation_output.wfs_detector_metadata
+    high_output, low_output = simulation_output.wfs_detector_outputs
     high_slopes, low_slopes = simulation_output.signals
     high_detector = simulation.high_detector
     high_reference_frame = isnothing(high_detector) ? nothing : AdaptiveOpticsSim.Detectors.detector_reference_frame(high_detector)
@@ -255,8 +257,10 @@ function run_profile(; backend_name::AbstractString="cpu", scale_name::AbstractS
     println("  pupil_resolution: ", params.resolution)
     println("  high_order_samples: ", params.high_order_samples)
     println("  n_control_modes: ", params.n_control_modes)
-    println("  high_frame_shape: ", isnothing(high_frame) ? nothing : size(high_frame))
-    println("  low_frame_shape: ", isnothing(low_frame) ? nothing : size(low_frame))
+    println("  high_detector_output_shape: ",
+        isnothing(high_output) ? nothing : size(high_output))
+    println("  low_detector_output_shape: ",
+        isnothing(low_output) ? nothing : size(low_output))
     println("  high_slopes_length: ", length(high_slopes))
     println("  low_slopes_length: ", length(low_slopes))
     println("  command_length: ", length(simulation.command))

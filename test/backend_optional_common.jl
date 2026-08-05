@@ -5552,12 +5552,8 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     measure!(gpu_sh, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
     cpu_export = Array(shack_hartmann_spot_cube(cpu_sh))
     gpu_export = Array(shack_hartmann_spot_cube(gpu_sh))
-    cpu_frame = Array(output_frame(cpu_det))
-    gpu_frame = Array(output_frame(gpu_det))
     @test size(gpu_export) == size(cpu_export)
     @test isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
-    @test size(gpu_frame) == size(cpu_frame)
-    @test isapprox(gpu_frame, cpu_frame; rtol=1f-5, atol=1f-4)
     cpu_sh_stats = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend(),
         valid_subaperture_policy=FluxThresholdValidSubapertures(light_ratio=0.5f0))
     gpu_sh_stats = ShackHartmannWFS(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend,

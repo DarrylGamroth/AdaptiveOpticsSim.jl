@@ -267,20 +267,22 @@ type used for the exported frame:
 
 ```julia
 using AdaptiveOpticsSim.Detectors
+using AdaptiveOpticsSim.WavefrontSensors
 
+frame_wfs = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
 det = Detector(noise=NoiseNone(), full_well=30_000.0, bits=12, output_type=UInt16)
 rng = runtime_rng(0)
-measure!(wfs, pupil, src, det; rng=rng)
-adu = output_frame(det)
+measure!(frame_wfs, pupil, src, det; rng=rng)
+adu = wfs_detector_image(frame_wfs, det)
 ```
 
 Here `adu` is the detector's actual `UInt16` output containing 12-bit ADU
-values. Its shape follows the detector acquisition path; the legacy
-Shack-Hartmann path retains one lenslet-spot cube, while frame-style WFS paths
-produce a matrix. For a compatible two-dimensional output,
-`wfs_detector_image(wfs, det)` returns that same detector storage. Quantized
-detectors require a fixed positive `full_well`; the capture path never
-rescales each frame by its own peak.
+values. `wfs_detector_image` is available only when the compatible detector
+publishes a two-dimensional output. The legacy Shack-Hartmann convenience path
+does not publish a detector-owned image; use the prepared optics, acquisition,
+and `WFSObservation` contracts for stage-correct HIL composition. Quantized
+detectors require a fixed positive `full_well`; the capture path never rescales
+each frame by its own peak.
 
 Detector QE may be a scalar or a sampled QE curve. Scalar QE is the simplest
 and fastest path. Use a sampled curve when the source spectrum matters:

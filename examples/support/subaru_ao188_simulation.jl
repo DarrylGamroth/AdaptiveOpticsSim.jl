@@ -628,12 +628,20 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
     return tel, low_tel, src, dm, low_dm, high_wfs, low_wfs
 end
 
-_high_order_wfs_frame(simulation::AO188Simulation) =
-    isnothing(simulation.high_detector) ? nothing :
-    output_frame(simulation.high_detector)
-_high_order_wfs_metadata(simulation::AO188Simulation) =
-    isnothing(simulation.high_detector) ? nothing :
-    detector_export_metadata(simulation.high_detector)
+@inline _high_order_detector_output(::ShackHartmannWFS, ::Nothing) =
+    nothing
+@inline _high_order_detector_output(wfs::ShackHartmannWFS,
+    _) = shack_hartmann_spot_cube(wfs)
+@inline _high_order_detector_output(_, det) = _detector_output(det)
+
+@inline _detector_output(::Nothing) = nothing
+@inline _detector_output(det::LinearAPDDetector) =
+    channel_output(det)
+@inline _detector_output(det) = output_frame(det)
+
+@inline _high_order_detector_metadata(_, ::Nothing) = nothing
+@inline _high_order_detector_metadata(_, det) =
+    detector_export_metadata(det)
 
 function _measure_high!(surrogate::AO188Simulation, rng::AbstractRNG)
     if isnothing(surrogate.high_detector)
@@ -876,12 +884,14 @@ function ao188_readout(simulation::AO188Simulation)
             slopes(simulation.high_wfs),
             slopes(simulation.low_wfs),
         ),
-        wfs_frames=(
-            _high_order_wfs_frame(simulation),
+        wfs_detector_outputs=(
+            _high_order_detector_output(
+                simulation.high_wfs, simulation.high_detector),
             output_frame(simulation.low_detector),
         ),
-        wfs_metadata=(
-            _high_order_wfs_metadata(simulation),
+        wfs_detector_metadata=(
+            _high_order_detector_metadata(
+                simulation.high_wfs, simulation.high_detector),
             detector_export_metadata(simulation.low_detector),
         ),
     )
