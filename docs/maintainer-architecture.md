@@ -365,14 +365,20 @@ optical gain, and a calibration revision that invalidates stale prepared plans.
 Geometric Pyramid and Bi-O-edge declare `DirectMeasurementPath()` and construct
 neither propagation nor acquisition workspace.
 
-Zernike and Curvature now follow the same ownership boundary. Their optical
-front ends own only physical descriptions and single-writer prepared
-propagation state; detector acquisition owns observation state; and estimators
-own valid support, reference state, normalization, and calibration revisions.
+Zernike keeps its physical focal-plane phase spot under `Optics`. Its composed
+front end binds that component to an immutable propagation plan and a
+replaceable backend-bound FFT workspace. Convenience acquisition separately
+owns an immutable sampling plan and caller-visible frame. It requires no
+placeholder workspace because sampling writes directly into that product. The
+normalized-pupil estimator separates immutable parameters,
+persistent support/reference calibration state, replaceable reduction scratch,
+and its caller-visible signal product. Exact prepared owners reject replacement
+of any bound role or calibration revision before destination mutation.
 Curvature exposes a fixed positive-/negative-defocus rate tuple that can feed
-two independent detectors or an explicitly packed single-detector mapping.
-Convenience execution coordinates these same explicit component owners; no
-synthetic state view or monolithic optical-owner adapter is retained.
+two independent detectors or an explicitly packed single-detector mapping; its
+remaining propagation, acquisition, and estimator owner split is the next
+family gate. No synthetic state view or monolithic optical-owner adapter is
+retained.
 LiFT separately owns a prepared focal-plane forward model, caller-provided
 `LiFTObservation`, and iterative estimator state. Its prepared modal subset and
 observation contract are cold-path bindings; repeated estimation neither owns

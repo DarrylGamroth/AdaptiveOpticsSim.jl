@@ -172,8 +172,8 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 432
-baseline_mixed_type_count = 15
+baseline_type_count = 439
+baseline_mixed_type_count = 12
 
 [[type_inventory.files]]
 path = "ext/AdaptiveOpticsSimAMDGPUExt.jl"
@@ -1115,18 +1115,25 @@ entries = [
 path = "src/wfs/zernike.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["PreparedZernikePropagation","mutable_struct",11,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
-    ["ZernikeAcquisitionState","mutable_struct",1,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
-    ["ZernikeEstimatorState","mutable_struct",14,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-05"],
-    ["ZernikeWFSParams","struct",9,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["PreparedZernikePropagation","struct",2,"prepared",["prepared_owner"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeAcquisitionPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_neutral",true,"PE-05"],
+    ["ZernikeAcquisitionProducts","mutable_struct",1,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeEstimatorParams","struct",5,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["ZernikeEstimatorProducts","mutable_struct",1,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeEstimatorState","mutable_struct",6,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeEstimatorWorkspace","mutable_struct",6,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikePropagationPlan","struct",4,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikePropagationWorkspace","mutable_struct",9,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]
 path = "src/wfs/zernike/stages.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["PreparedZernikeEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
-    ["PreparedZernikeOptics","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedZernikeEstimator","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedZernikeOptics","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["ZernikeEstimationPlan","struct",5,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeOpticsPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
 ]
 
 [direct_memory]

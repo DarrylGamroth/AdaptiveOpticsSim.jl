@@ -2,23 +2,25 @@
 # Prepared Zernike WFS stages
 #
 
-struct ZernikePropagationBinding{F,Q,U,H,M,N,Pf,Pi}
-    field::F
-    focal_field::Q
-    pupil_field::U
-    phasor::H
-    phase_mask::M
-    nominal_frame::N
-    fft_plan::Pf
-    ifft_plan::Pi
-    revision::UInt
+"""
+Run-immutable physical and numerical contract for one Zernike detector-plane
+photon-arrival-rate map.
+"""
+struct ZernikeOpticsPlan{P,S} <: AbstractWFSOpticsPlan
+    propagation::P
+    source::S
 end
 
-struct PreparedZernikeOptics{F,I,O,B}
+"""Exact live owner for one prepared Zernike optics execution."""
+struct PreparedZernikeOptics{P,F,W,I,O,R,B,D}
+    plan::P
     front_end::F
+    workspace::W
     input::I
     output::O
-    binding::B
+    workspace_binding::R
+    backend::B
+    device::D
 end
 
 @inline wfs_optical_products(prepared::PreparedZernikeOptics) =
@@ -32,29 +34,110 @@ struct ZernikeCalibrationBinding{T<:AbstractFloat,R,A}
     valid_support::A
 end
 
-struct PreparedZernikeEstimator{E,I,M,P<:AbstractWFSMeasurementPath,C,S,T}
-    estimator::E
-    input::I
-    measurement::M
+"""Run-immutable normalized-pupil estimation contract."""
+struct ZernikeEstimationPlan{E,P<:AbstractWFSMeasurementPath,C,S,T} <:
+        AbstractWFSEstimationPlan
+    params::E
     path::P
     calibration_binding::C
     source::S
     normalization_scale::T
 end
 
-@inline wfs_measurement_path(plan::PreparedZernikeEstimator) = plan.path
+"""Exact live owner for one prepared Zernike estimator."""
+struct PreparedZernikeEstimator{P,W,ST,WS,PR,I,M,SB,WB,PB,B,D}
+    plan::P
+    sensor::W
+    state::ST
+    workspace::WS
+    products::PR
+    input::I
+    measurement::M
+    state_binding::SB
+    workspace_binding::WB
+    products_binding::PB
+    backend::B
+    device::D
+end
+
+@inline wfs_measurement_path(prepared::PreparedZernikeEstimator) =
+    prepared.plan.path
+
+@inline function _zernike_propagation_workspace_binding(workspace)
+    return (workspace.field, workspace.focal_field, workspace.pupil_field,
+        workspace.phasor, workspace.phase_mask, workspace.pupil_intensity,
+        workspace.nominal_frame, workspace.fft_plan, workspace.ifft_plan)
+end
+
+@inline function _zernike_estimator_state_binding(state)
+    return (state.valid_mask, state.reference_signal_2d)
+end
+
+@inline function _zernike_estimator_workspace_binding(workspace)
+    return (workspace.valid_signal_indices, workspace.signal_2d,
+        workspace.normalization_frame, workspace.normalization_partials,
+        workspace.normalization_sum, workspace.normalization_sum_host)
+end
+
+@inline _zernike_estimator_products_binding(products) = (products.signal,)
+
+@inline _zernike_input_storages(input::PupilFunction) =
+    (input.amplitude, input.opd, input.support)
+@inline _zernike_input_storages(input::ElectricField) = (input.values,)
+
+@inline _zernike_mightalias_any(value, ::Tuple{}) = false
+@inline function _zernike_mightalias_any(value, values::Tuple)
+    return _wfs_storage_mightalias(value, first(values)) ||
+        _zernike_mightalias_any(value, Base.tail(values))
+end
+
+@inline _zernike_any_alias(::Tuple{}) = false
+@inline function _zernike_any_alias(values::Tuple)
+    remaining = Base.tail(values)
+    return _zernike_mightalias_any(first(values), remaining) ||
+        _zernike_any_alias(remaining)
+end
+
+function _require_zernike_optics_aliases(input, output, workspace)
+    storages = (_zernike_input_storages(input)..., output.values,
+        _zernike_propagation_workspace_binding(workspace)...)
+    _zernike_any_alias(storages) && throw(WFSPreparationError(
+        :wfs_optics, :aliasing,
+        "Zernike input, rate product, and propagation workspace must not alias"))
+    return nothing
+end
+
+function _require_zernike_estimation_aliases(sensor::ZernikeWFS,
+    observation::WFSObservation, measurement::WFSMeasurement)
+    state = zernike_estimator_state(sensor)
+    workspace = zernike_estimator_workspace(sensor)
+    products = zernike_estimator_products(sensor)
+    storages = (observation.storage, measurement.storage,
+        _zernike_estimator_state_binding(state)...,
+        _zernike_estimator_workspace_binding(workspace)...,
+        _zernike_estimator_products_binding(products)...)
+    _zernike_any_alias(storages) && throw(WFSPreparationError(
+        :estimation, :aliasing,
+        "Zernike observation, measurement, calibration, workspace, and product storage must not alias"))
+    return nothing
+end
+
+@inline modulated_wfs_propagation_storage(
+    front_end::ZernikeOpticalFrontEnd) =
+    zernike_propagation_workspace(front_end).field
 
 function ZernikeOpticalFrontEnd(sensor::ZernikeWFS, source=nothing)
     front_end = sensor.front_end
     return ZernikeOpticalFrontEnd(front_end.phase_spot,
-        front_end.propagation, front_end.pupil_resolution,
-        front_end.pupil_diameter_m, front_end.pupil_samples,
-        front_end.binning, source)
+        front_end.propagation, front_end.binning, source)
 end
 
-@inline zernike_rate_dimensions(front_end::ZernikeOpticalFrontEnd) =
-    (div(front_end.pupil_samples, front_end.binning),
-        div(front_end.pupil_samples, front_end.binning))
+@inline function zernike_rate_dimensions(front_end::ZernikeOpticalFrontEnd)
+    pupil_samples = zernike_propagation_plan(
+        front_end.propagation).pupil_samples
+    return (div(pupil_samples, front_end.binning),
+        div(pupil_samples, front_end.binning))
+end
 
 function _require_zernike_front_end_source(
     front_end::ZernikeOpticalFrontEnd, ::PupilFunction)
@@ -122,8 +205,10 @@ end
 
 function _require_zernike_input_geometry(front_end::ZernikeOpticalFrontEnd,
     input::PupilFunction)
-    input.metadata.dimensions == (front_end.pupil_resolution,
-        front_end.pupil_resolution) || throw(WFSPreparationError(
+    pupil_resolution = zernike_propagation_plan(
+        front_end.propagation).pupil_resolution
+    input.metadata.dimensions == (pupil_resolution,
+        pupil_resolution) || throw(WFSPreparationError(
         :wfs_optics, :shape,
         "Zernike pupil input dimensions differ from the prepared relay"))
     return nothing
@@ -131,7 +216,8 @@ end
 
 function _require_zernike_input_geometry(front_end::ZernikeOpticalFrontEnd,
     input::ElectricField)
-    input.metadata.dimensions == size(front_end.propagation.field) || throw(
+    workspace = zernike_propagation_workspace(front_end)
+    input.metadata.dimensions == size(workspace.field) || throw(
         WFSPreparationError(:wfs_optics, :shape,
             "Zernike ElectricField dimensions differ from the prepared diffraction grid"))
     return nothing
@@ -146,18 +232,18 @@ function prepare_wfs_optics(front_end::ZernikeOpticalFrontEnd,
     _require_zernike_rate_map(output, zernike_rate_dimensions(front_end),
         wavelength_m)
     require_modulated_wfs_domains(front_end, input, output)
-    eltype(front_end.propagation.pupil_intensity) ===
+    workspace = zernike_propagation_workspace(front_end)
+    eltype(workspace.pupil_intensity) ===
         output.metadata.numeric_type || throw(WFSPreparationError(
             :wfs_optics, :numeric_type,
             "Zernike output precision differs from prepared propagation"))
+    _require_zernike_optics_aliases(input, output, workspace)
     propagation = front_end.propagation
-    binding = ZernikePropagationBinding(propagation.field,
-        propagation.focal_field, propagation.pupil_field,
-        propagation.phasor, propagation.phase_mask,
-        propagation.nominal_frame, propagation.fft_plan,
-        propagation.ifft_plan, propagation.revision)
-    return PreparedZernikeOptics(front_end, input, output,
-        binding)
+    propagation_plan = zernike_propagation_plan(propagation)
+    plan = ZernikeOpticsPlan(propagation_plan, front_end.source)
+    return PreparedZernikeOptics(plan, front_end, workspace, input, output,
+        _zernike_propagation_workspace_binding(workspace),
+        input.metadata.backend, input.metadata.device)
 end
 
 function zernike_rate_map(sensor::ZernikeWFS,
@@ -169,10 +255,11 @@ function zernike_rate_map(front_end::ZernikeOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField})
     wavelength_m = _zernike_front_end_wavelength(front_end, input)
     dimensions = zernike_rate_dimensions(front_end)
-    T = eltype(front_end.propagation.pupil_intensity)
+    propagation_plan = zernike_propagation_plan(front_end.propagation)
+    T = eltype(zernike_propagation_workspace(front_end).pupil_intensity)
     values = similar(_modulated_input_storage(input), T, dimensions...)
     fill!(values, zero(T))
-    normalized_sampling = T(front_end.binning / front_end.pupil_samples)
+    normalized_sampling = T(front_end.binning / propagation_plan.pupil_samples)
     metadata = OpticalPlaneMetadata(DetectorPlane(), values;
         coordinate_domain=NormalizedPupilCoordinates(),
         sampling=(normalized_sampling, normalized_sampling),
@@ -184,21 +271,23 @@ function zernike_rate_map(front_end::ZernikeOpticalFrontEnd,
 end
 
 function _require_zernike_optical_binding(
-    plan::PreparedZernikeOptics, input, output)
-    input === plan.input && output === plan.output || throw(
+    prepared::PreparedZernikeOptics, input, output)
+    input === prepared.input && output === prepared.output || throw(
         WFSPreparationError(:wfs_optics, :prepared_binding,
             "Zernike optical products do not match their prepared plan"))
-    propagation = plan.front_end.propagation
-    binding = plan.binding
-    propagation.field === binding.field &&
-        propagation.focal_field === binding.focal_field &&
-        propagation.pupil_field === binding.pupil_field &&
-        propagation.phasor === binding.phasor &&
-        propagation.phase_mask === binding.phase_mask &&
-        propagation.nominal_frame === binding.nominal_frame &&
-        propagation.fft_plan === binding.fft_plan &&
-        propagation.ifft_plan === binding.ifft_plan &&
-        propagation.revision == binding.revision || throw(
+    workspace = prepared.workspace
+    prepared.backend === input.metadata.backend &&
+        prepared.device == input.metadata.device || throw(
+        WFSPreparationError(:wfs_optics, :prepared_binding,
+            "Zernike optical input target changed after preparation"))
+    prepared.plan.propagation ===
+        zernike_propagation_plan(prepared.front_end.propagation) &&
+        prepared.front_end.phase_spot ===
+            prepared.plan.propagation.phase_spot &&
+        prepared.front_end.source === prepared.plan.source &&
+        workspace === zernike_propagation_workspace(prepared.front_end) &&
+        _zernike_propagation_workspace_binding(workspace) ===
+            prepared.workspace_binding || throw(
         WFSPreparationError(:wfs_optics, :prepared_binding,
             "Zernike propagation storage changed after preparation"))
     return nothing
@@ -210,9 +299,10 @@ end
 
 function _form_zernike_input_field!(front_end::ZernikeOpticalFrontEnd,
     input::PupilFunction)
-    propagation = front_end.propagation
+    propagation = zernike_propagation_workspace(front_end)
+    propagation_plan = zernike_propagation_plan(front_end.propagation)
     T = eltype(propagation.pupil_intensity)
-    n = front_end.pupil_resolution
+    n = propagation_plan.pupil_resolution
     pad = size(propagation.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
@@ -228,13 +318,15 @@ end
 
 function _form_zernike_input_field!(front_end::ZernikeOpticalFrontEnd,
     input::ElectricField)
-    copyto!(front_end.propagation.field, input.values)
-    return front_end.propagation.field
+    workspace = zernike_propagation_workspace(front_end)
+    copyto!(workspace.field, input.values)
+    return workspace.field
 end
 
 function _form_zernike_rate!(output::AbstractMatrix,
     front_end::ZernikeOpticalFrontEnd, input)
-    propagation = front_end.propagation
+    propagation = zernike_propagation_workspace(front_end)
+    propagation_plan = zernike_propagation_plan(front_end.propagation)
     _form_zernike_input_field!(front_end, input)
     copyto!(propagation.focal_field, propagation.field)
     @. propagation.focal_field *= propagation.phasor
@@ -242,13 +334,13 @@ function _form_zernike_rate!(output::AbstractMatrix,
     @. propagation.focal_field *= propagation.phase_mask
     copyto!(propagation.pupil_field, propagation.focal_field)
     execute_fft_plan!(propagation.pupil_field, propagation.ifft_plan)
-    n = front_end.pupil_resolution
+    n = propagation_plan.pupil_resolution
     pad = size(propagation.pupil_field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     @views @. propagation.pupil_intensity =
         abs2(propagation.pupil_field[ox+1:ox+n, oy+1:oy+n])
-    sampling = div(n, front_end.pupil_samples)
+    sampling = div(n, propagation_plan.pupil_samples)
     bin2d!(propagation.nominal_frame, propagation.pupil_intensity, sampling)
     if front_end.binning == 1
         copyto!(output, propagation.nominal_frame)
@@ -267,7 +359,7 @@ function form_wfs_optical_products!(output::IntensityMap,
 end
 
 function _zernike_calibration_binding(sensor::ZernikeWFS)
-    state = sensor.estimator.state
+    state = zernike_estimator_state(sensor)
     state.calibrated || throw(WFSPreparationError(:estimation, :estimator,
         "Zernike estimation requires explicit calibration"))
     return ZernikeCalibrationBinding(state.calibration_revision,
@@ -277,7 +369,7 @@ end
 
 function _require_zernike_calibration(estimator,
     binding::ZernikeCalibrationBinding)
-    state = estimator.estimator.state
+    state = zernike_estimator_state(estimator)
     state.calibrated &&
         state.calibration_revision == binding.revision &&
         state.calibration_wavelength == binding.wavelength_m &&
@@ -287,6 +379,21 @@ function _require_zernike_calibration(estimator,
         WFSPreparationError(:estimation, :prepared_binding,
             "Zernike calibration changed after estimator preparation"))
     return nothing
+end
+
+function _prepare_zernike_estimator_owner(sensor::ZernikeWFS, input,
+    measurement::WFSMeasurement, path::AbstractWFSMeasurementPath,
+    calibration_binding, source, normalization_scale)
+    state = zernike_estimator_state(sensor)
+    workspace = zernike_estimator_workspace(sensor)
+    products = zernike_estimator_products(sensor)
+    plan = ZernikeEstimationPlan(zernike_estimator_params(sensor), path,
+        calibration_binding, source, normalization_scale)
+    return PreparedZernikeEstimator(plan, sensor, state, workspace, products,
+        input, measurement, _zernike_estimator_state_binding(state),
+        _zernike_estimator_workspace_binding(workspace),
+        _zernike_estimator_products_binding(products),
+        measurement.metadata.backend, measurement.metadata.device)
 end
 
 @inline _require_zernike_estimation_source(
@@ -326,36 +433,40 @@ function prepare_wfs_estimation(sensor::ZernikeWFS,
     measurement.metadata.numeric_type <: AbstractFloat || throw(
         WFSPreparationError(:estimation, :numeric_type,
             "Zernike measurement storage must be floating point"))
-    state = sensor.estimator.state
-    observation.metadata.dimensions == size(state.signal_2d) || throw(
+    state = zernike_estimator_state(sensor)
+    workspace = zernike_estimator_workspace(sensor)
+    products = zernike_estimator_products(sensor)
+    observation.metadata.dimensions == size(workspace.signal_2d) || throw(
         WFSPreparationError(:estimation, :shape,
             "Zernike observation has the wrong pupil-image dimensions"))
-    size(measurement.storage) == size(state.slopes) || throw(
+    size(measurement.storage) == size(products.signal) || throw(
         WFSPreparationError(:estimation, :shape,
             "Zernike measurement has the wrong signal-vector dimensions"))
     _require_wfs_storage_domain(:estimation, observation.metadata,
-        state.signal_2d, "Zernike observation")
+        workspace.signal_2d, "Zernike observation")
     _require_wfs_storage_domain(:estimation, measurement.metadata,
-        state.slopes, "Zernike measurement")
-    measurement.metadata.numeric_type === eltype(state.slopes) || throw(
+        products.signal, "Zernike measurement")
+    measurement.metadata.numeric_type === eltype(products.signal) || throw(
         WFSPreparationError(:estimation, :numeric_type,
             "Zernike measurement precision differs from its estimator"))
-    _require_zernike_estimation_source(sensor.params.normalization, source)
-    T = eltype(state.slopes)
+    _require_zernike_estimation_aliases(sensor, observation, measurement)
+    params = zernike_estimator_params(sensor)
+    _require_zernike_estimation_source(params.normalization, source)
+    T = eltype(products.signal)
     scale = T(normalization_scale)
     isfinite(scale) && scale >= zero(T) || throw(WFSPreparationError(
         :estimation, :radiometry,
         "Zernike normalization scale must be finite and nonnegative"))
     binding = _zernike_calibration_binding(sensor)
-    return PreparedZernikeEstimator(sensor, observation, measurement,
+    return _prepare_zernike_estimator_owner(sensor, observation, measurement,
         AcquiredObservationPath(), binding, source, scale)
 end
 
 @inline function _zernike_incidence_multiplier(sensor::ZernikeWFS,
     source::AbstractSource, normalization_scale)
-    T = eltype(sensor.estimator.state.slopes)
-    pupil_sample = T(sensor.params.pupil_diameter_m) /
-        T(sensor.params.pupil_resolution)
+    params = zernike_estimator_params(sensor)
+    T = eltype(zernike_estimator_products(sensor).signal)
+    pupil_sample = T(params.pupil_diameter_m) / T(params.pupil_resolution)
     irradiance = T(_require_physical_photon_irradiance(source,
         "Zernike incidence normalization"))
     return irradiance * abs2(pupil_sample) * normalization_scale /
@@ -365,7 +476,7 @@ end
 function _zernike_scalar_normalization(::MeanValidFluxNormalization,
     sensor::ZernikeWFS, frame::AbstractMatrix, source,
     normalization_scale::S) where {S<:AbstractFloat}
-    state = sensor.estimator.state
+    state = zernike_estimator_state(sensor)
     summed = zero(S)
     @inbounds for j in axes(frame, 2), i in axes(frame, 1)
         state.valid_mask[i, j] && (summed += S(frame[i, j]))
@@ -376,12 +487,13 @@ end
 function _zernike_scalar_normalization(::IncidenceFluxNormalization,
     sensor::ZernikeWFS, frame::AbstractMatrix, source,
     normalization_scale::S) where {S<:AbstractFloat}
-    state = sensor.estimator.state
+    state = zernike_estimator_state(sensor)
+    workspace = zernike_estimator_workspace(sensor)
     summed = zero(S)
-    @inbounds for j in axes(state.normalization_frame, 2),
-            i in axes(state.normalization_frame, 1)
+    @inbounds for j in axes(workspace.normalization_frame, 2),
+            i in axes(workspace.normalization_frame, 1)
         state.valid_mask[i, j] &&
-            (summed += state.normalization_frame[i, j])
+            (summed += workspace.normalization_frame[i, j])
     end
     return summed * _zernike_incidence_multiplier(sensor, source,
         normalization_scale)
@@ -391,44 +503,48 @@ function _estimate_zernike_signal!(::ScalarCPUStyle, sensor::ZernikeWFS,
     frame::AbstractMatrix{F}, source, normalization_scale::S) where {
     F<:Real,S<:AbstractFloat,
 }
-    state = sensor.estimator.state
+    params = zernike_estimator_params(sensor)
+    state = zernike_estimator_state(sensor)
+    workspace = zernike_estimator_workspace(sensor)
+    products = zernike_estimator_products(sensor)
     count = zernike_normalization_count(sensor)
-    fill!(state.signal_2d, zero(S))
-    count == 0 && (fill!(state.slopes, zero(S)); return state.slopes)
+    fill!(workspace.signal_2d, zero(S))
+    count == 0 && (fill!(products.signal, zero(S)); return products.signal)
     normalization = _zernike_scalar_normalization(
-        sensor.params.normalization, sensor, frame, source,
+        params.normalization, sensor, frame, source,
         normalization_scale)
     usable = isfinite(normalization) && normalization > eps(S)
     if !usable
-        fill!(state.slopes, zero(S))
-        return state.slopes
+        fill!(products.signal, zero(S))
+        return products.signal
     end
     @inbounds for j in axes(frame, 2), i in axes(frame, 1)
         if state.valid_mask[i, j]
-            state.signal_2d[i, j] = S(frame[i, j]) / normalization -
+            workspace.signal_2d[i, j] = S(frame[i, j]) / normalization -
                 state.reference_signal_2d[i, j]
         end
     end
-    @inbounds for index in eachindex(state.valid_signal_indices)
-        state.slopes[index] =
-            state.signal_2d[state.valid_signal_indices[index]]
+    @inbounds for index in eachindex(workspace.valid_signal_indices)
+        products.signal[index] =
+            workspace.signal_2d[workspace.valid_signal_indices[index]]
     end
-    return state.slopes
+    return products.signal
 end
 
 function _queue_zernike_stage_normalization!(phase::KernelLaunchPhase,
     normalization::MeanValidFluxNormalization, sensor::ZernikeWFS,
     frame, source, normalization_scale)
     queue_zernike_masked_sum!(phase, sensor, frame)
-    T = eltype(sensor.estimator.state.slopes)
+    T = eltype(zernike_estimator_products(sensor).signal)
     return inv(T(zernike_normalization_count(sensor))), true
 end
 
 function _queue_zernike_stage_normalization!(phase::KernelLaunchPhase,
     normalization::IncidenceFluxNormalization, sensor::ZernikeWFS,
     frame, source, normalization_scale)
+    workspace = zernike_estimator_workspace(sensor)
     queue_zernike_masked_sum!(phase, sensor,
-        sensor.estimator.state.normalization_frame)
+        workspace.normalization_frame)
     return _zernike_incidence_multiplier(sensor, source,
         normalization_scale), false
 end
@@ -436,26 +552,29 @@ end
 function _estimate_zernike_signal!(style::AcceleratorStyle,
     sensor::ZernikeWFS, frame::AbstractMatrix{F}, source,
     normalization_scale::S) where {F<:Real,S<:AbstractFloat}
-    state = sensor.estimator.state
+    params = zernike_estimator_params(sensor)
+    state = zernike_estimator_state(sensor)
+    workspace = zernike_estimator_workspace(sensor)
+    products = zernike_estimator_products(sensor)
     count = zernike_normalization_count(sensor)
     if count == 0
-        fill!(state.signal_2d, zero(S))
-        fill!(state.slopes, zero(S))
-        return state.slopes
+        fill!(workspace.signal_2d, zero(S))
+        fill!(products.signal, zero(S))
+        return products.signal
     end
     phase = begin_kernel_phase(style)
     multiplier, clamp_to_epsilon = _queue_zernike_stage_normalization!(
-        phase, sensor.params.normalization, sensor, frame, source,
+        phase, params.normalization, sensor, frame, source,
         normalization_scale)
-    queue_kernel!(phase, zernike_signal_kernel!, state.signal_2d, frame,
+    queue_kernel!(phase, zernike_signal_kernel!, workspace.signal_2d, frame,
         state.valid_mask, state.reference_signal_2d,
-        state.normalization_sum, multiplier, clamp_to_epsilon,
+        workspace.normalization_sum, multiplier, clamp_to_epsilon,
         size(frame, 1), size(frame, 2); ndrange=size(frame))
-    queue_kernel!(phase, gather_zernike_signal_kernel!, state.slopes,
-        state.signal_2d, state.valid_signal_indices, count;
+    queue_kernel!(phase, gather_zernike_signal_kernel!, products.signal,
+        workspace.signal_2d, workspace.valid_signal_indices, count;
         ndrange=count)
     finish_kernel_phase!(phase)
-    return state.slopes
+    return products.signal
 end
 
 function estimate_wfs_measurement!(measurement::WFSMeasurement,
@@ -463,11 +582,12 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement,
     measurement === plan.measurement && observation === plan.input || throw(
         WFSPreparationError(:estimation, :prepared_binding,
             "Zernike estimator storage does not match its plan"))
-    sensor = plan.estimator
-    _require_zernike_calibration(sensor, plan.calibration_binding)
+    validate_wfs_estimation_binding(measurement, observation, plan)
+    sensor = plan.sensor
+    _require_zernike_calibration(sensor, plan.plan.calibration_binding)
     _estimate_zernike_signal!(execution_style(observation.storage), sensor,
-        observation.storage, plan.source, plan.normalization_scale)
-    copyto!(measurement.storage, sensor.estimator.state.slopes)
+        observation.storage, plan.plan.source, plan.plan.normalization_scale)
+    copyto!(measurement.storage, zernike_estimator_products(sensor).signal)
     return measurement
 end
 
@@ -476,13 +596,29 @@ function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
     measurement === plan.measurement && input === plan.input || throw(
         WFSPreparationError(:estimation, :prepared_binding,
             "Zernike estimator storage does not match its plan"))
+    state = zernike_estimator_state(plan.sensor)
+    workspace = zernike_estimator_workspace(plan.sensor)
+    products = zernike_estimator_products(plan.sensor)
+    state === plan.state && workspace === plan.workspace &&
+        products === plan.products &&
+        _zernike_estimator_state_binding(state) === plan.state_binding &&
+        _zernike_estimator_workspace_binding(workspace) ===
+            plan.workspace_binding &&
+        _zernike_estimator_products_binding(products) ===
+            plan.products_binding &&
+        plan.backend === measurement.metadata.backend &&
+        plan.device == measurement.metadata.device || throw(
+        WFSPreparationError(:estimation, :prepared_binding,
+            "Zernike estimator state, workspace, products, or target changed after preparation"))
     return nothing
 end
 
 function set_zernike_calibration!(sensor::ZernikeWFS,
     reference::AbstractMatrix; wavelength_m::Real,
     signature::UInt=UInt(0))
-    state = sensor.estimator.state
+    state = zernike_estimator_state(sensor)
+    workspace = zernike_estimator_workspace(sensor)
+    products = zernike_estimator_products(sensor)
     size(reference) == size(state.reference_signal_2d) || throw(
         InvalidConfiguration(
             "Zernike calibration reference has the wrong dimensions"))
@@ -502,8 +638,8 @@ function set_zernike_calibration!(sensor::ZernikeWFS,
         InvalidConfiguration(
             "Zernike calibration wavelength must be finite and positive"))
     copyto!(state.reference_signal_2d, reference)
-    fill!(state.signal_2d, zero(T))
-    fill!(state.slopes, zero(T))
+    fill!(workspace.signal_2d, zero(T))
+    fill!(products.signal, zero(T))
     state.calibrated = true
     state.calibration_wavelength = wavelength_value
     state.calibration_signature = signature

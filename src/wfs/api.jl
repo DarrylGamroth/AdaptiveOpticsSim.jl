@@ -122,6 +122,10 @@ public PreparedBiOEdgeOptics
 public PreparedBiOEdgeOpticsBundle
 public BiOEdgeEstimationPlan
 public PreparedBiOEdgeEstimator
+public ZernikeOpticsPlan
+public PreparedZernikeOptics
+public ZernikeEstimationPlan
+public PreparedZernikeEstimator
 public wfs_optical_products
 public wfs_acquisition_plan
 public validate_wfs_target

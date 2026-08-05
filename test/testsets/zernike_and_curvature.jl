@@ -10,6 +10,8 @@ function zernike_signal_allocations(wfs, pupil, src, frame,
         normalization_scale)
 end
 
+@inline wfs_optical_rate_storage(wfs::ZernikeWFS) =
+    wfs.acquisition.products.frame
 @inline wfs_optical_rate_storage(wfs) =
     wfs.acquisition.state.camera_frame
 
@@ -30,6 +32,30 @@ end
     @test all(isfinite, flat_slopes)
     @test all(>=(0.0), wfs_optical_rate_storage(wfs))
     @test flat_slopes ≈ zero.(flat_slopes) atol=1e-10
+
+    incompatible_tel = Telescope(resolution=16, diameter=8.0,
+        central_obstruction=0.0)
+    incompatible_pupil = PupilFunction(incompatible_tel)
+    fill!(incompatible_pupil.opd, 1e-8)
+    incompatible_opd_before = copy(incompatible_pupil.opd)
+    calibration_before = (
+        calibrated=wfs.estimator.state.calibrated,
+        revision=wfs.estimator.state.calibration_revision,
+        wavelength=wfs.estimator.state.calibration_wavelength,
+        signature=wfs.estimator.state.calibration_signature,
+        valid_mask=copy(wfs.estimator.state.valid_mask),
+        reference=copy(wfs.estimator.state.reference_signal_2d),
+        signal=copy(wfs.estimator.products.signal),
+    )
+    @test_throws DimensionMismatchError measure!(wfs, incompatible_pupil, src)
+    @test incompatible_pupil.opd == incompatible_opd_before
+    @test wfs.estimator.state.calibrated == calibration_before.calibrated
+    @test wfs.estimator.state.calibration_revision == calibration_before.revision
+    @test wfs.estimator.state.calibration_wavelength == calibration_before.wavelength
+    @test wfs.estimator.state.calibration_signature == calibration_before.signature
+    @test wfs.estimator.state.valid_mask == calibration_before.valid_mask
+    @test wfs.estimator.state.reference_signal_2d == calibration_before.reference
+    @test wfs.estimator.products.signal == calibration_before.signal
 
     det = Detector(noise=NoiseNone(), binning=1)
     det_slopes = copy(measure!(wfs, pupil, src, det))
@@ -70,8 +96,8 @@ end
             max(sum(frame[valid]) / count(valid), eps(eltype(frame)))
         else
             photon_rate = pupil_photon_rate_map(tel, src)
-            nominal = similar(wfs.front_end.propagation.nominal_frame)
-            sampled = similar(wfs.estimator.state.normalization_frame)
+            nominal = similar(wfs.front_end.propagation.workspace.nominal_frame)
+            sampled = similar(wfs.estimator.workspace.normalization_frame)
             sample_zernike_frame!(sampled, nominal, wfs, photon_rate, pupil)
             sum(sampled[valid]) / count(valid) * normalization_scale
         end
@@ -238,9 +264,10 @@ end
         diffraction_padding=2)
     zernike_pupil_intensity!(full_zernike, full_pupil, src)
     zernike_pupil_intensity!(attenuated_zernike, attenuated_pupil, src)
-    full_zernike_rate = sum(full_zernike.front_end.propagation.pupil_intensity)
+    full_zernike_rate = sum(
+        full_zernike.front_end.propagation.workspace.pupil_intensity)
     @test full_zernike_rate > 0
-    @test sum(attenuated_zernike.front_end.propagation.pupil_intensity) ≈
+    @test sum(attenuated_zernike.front_end.propagation.workspace.pupil_intensity) ≈
         transmission * full_zernike_rate rtol=1e-12
 
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
