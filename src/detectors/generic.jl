@@ -188,41 +188,41 @@ effective_qe(det::Detector, src::AbstractSource, ::Type{T}=eltype(det.products.f
 reference_qe(model::ScalarQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} = T(model.value)
 reference_qe(model::SampledQuantumEfficiency, ::Type{T}) where {T<:AbstractFloat} = T(maximum(model.values))
 
-configured_glow_rate(::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = zero(T)
-configured_cic_per_frame(::FrameSensorType, ::Type{T}) where {
+configured_glow_rate(::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = zero(T)
+configured_cic_per_frame(::AbstractFrameSensor, ::Type{T}) where {
     T<:AbstractFloat} = zero(T)
 
-dark_current_law(::SensorType) = NullTemperatureLaw()
-glow_rate_law(::SensorType) = NullTemperatureLaw()
-cic_per_frame_law(::SensorType) = NullTemperatureLaw()
+dark_current_law(::AbstractSensor) = NullTemperatureLaw()
+glow_rate_law(::AbstractSensor) = NullTemperatureLaw()
+cic_per_frame_law(::AbstractSensor) = NullTemperatureLaw()
 
-active_dark_current_law(sensor::SensorType, ::NullDetectorThermalModel) = dark_current_law(sensor)
-active_glow_rate_law(sensor::SensorType, ::NullDetectorThermalModel) = glow_rate_law(sensor)
-active_cic_per_frame_law(sensor::SensorType, ::NullDetectorThermalModel) =
+active_dark_current_law(sensor::AbstractSensor, ::NullDetectorThermalModel) = dark_current_law(sensor)
+active_glow_rate_law(sensor::AbstractSensor, ::NullDetectorThermalModel) = glow_rate_law(sensor)
+active_cic_per_frame_law(sensor::AbstractSensor, ::NullDetectorThermalModel) =
     cic_per_frame_law(sensor)
 
-function active_dark_current_law(sensor::SensorType, model::FixedTemperature)
+function active_dark_current_law(sensor::AbstractSensor, model::FixedTemperature)
     return is_null_temperature_law(model.dark_current_law) ? dark_current_law(sensor) : model.dark_current_law
 end
 
-function active_dark_current_law(sensor::SensorType, model::FirstOrderThermalModel)
+function active_dark_current_law(sensor::AbstractSensor, model::FirstOrderThermalModel)
     return is_null_temperature_law(model.dark_current_law) ? dark_current_law(sensor) : model.dark_current_law
 end
 
-function active_glow_rate_law(sensor::SensorType, model::FixedTemperature)
+function active_glow_rate_law(sensor::AbstractSensor, model::FixedTemperature)
     return is_null_temperature_law(model.glow_rate_law) ? glow_rate_law(sensor) : model.glow_rate_law
 end
 
-function active_glow_rate_law(sensor::SensorType, model::FirstOrderThermalModel)
+function active_glow_rate_law(sensor::AbstractSensor, model::FirstOrderThermalModel)
     return is_null_temperature_law(model.glow_rate_law) ? glow_rate_law(sensor) : model.glow_rate_law
 end
 
-function active_cic_per_frame_law(sensor::SensorType, model::FixedTemperature)
+function active_cic_per_frame_law(sensor::AbstractSensor, model::FixedTemperature)
     return is_null_temperature_law(model.cic_per_frame_law) ?
         cic_per_frame_law(sensor) : model.cic_per_frame_law
 end
 
-function active_cic_per_frame_law(sensor::SensorType,
+function active_cic_per_frame_law(sensor::AbstractSensor,
     model::FirstOrderThermalModel)
     return is_null_temperature_law(model.cic_per_frame_law) ?
         cic_per_frame_law(sensor) : model.cic_per_frame_law
@@ -241,16 +241,16 @@ effective_cic_per_frame(det::Detector,
         detector_temperature(det, T)))
 effective_persistence_model(det::Detector) = persistence_model(det.params.sensor)
 
-sensor_is_frame_based(::SensorType) = false
-sensor_is_frame_based(::FrameSensorType) = true
-sensor_is_counting(::SensorType) = false
-sensor_is_counting(::CountingSensorType) = true
+sensor_is_frame_based(::AbstractSensor) = false
+sensor_is_frame_based(::AbstractFrameSensor) = true
+sensor_is_counting(::AbstractSensor) = false
+sensor_is_counting(::AbstractCountingSensor) = true
 
-detector_readout_sigma(::NoiseNone, ::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
-detector_readout_sigma(::NoisePhoton, ::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} = nothing
-detector_readout_sigma(noise::NoiseReadout, sensor::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} =
+detector_readout_sigma(::NoiseNone, ::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
+detector_readout_sigma(::NoisePhoton, ::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
+detector_readout_sigma(noise::NoiseReadout, sensor::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} =
     T(effective_readout_sigma(sensor, T(noise.sigma)))
-detector_readout_sigma(noise::NoisePhotonReadout, sensor::FrameSensorType, ::Type{T}) where {T<:AbstractFloat} =
+detector_readout_sigma(noise::NoisePhotonReadout, sensor::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} =
     T(effective_readout_sigma(sensor, T(noise.sigma)))
 
 function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype(det.products.frame))
@@ -430,10 +430,10 @@ function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend
         OWNED_DETECTOR_PARAMETER, background)
 end
 
-effective_readout_sigma(::FrameSensorType, sigma) = sigma
-effective_dark_current_time(::FrameSensorType, exposure_time) = exposure_time
-effective_sensor_glow_time(::FrameSensorType, exposure_time) = exposure_time
-persistence_model(::FrameSensorType) = NullPersistence()
+effective_readout_sigma(::AbstractFrameSensor, sigma) = sigma
+effective_dark_current_time(::AbstractFrameSensor, exposure_time) = exposure_time
+effective_sensor_glow_time(::AbstractFrameSensor, exposure_time) = exposure_time
+persistence_model(::AbstractFrameSensor) = NullPersistence()
 
 line_time(::AbstractFrameTimingModel, ::Type{T}) where {T<:AbstractFloat} = nothing
 line_time(model::RollingShutter, ::Type{T}) where {T<:AbstractFloat} = T(model.line_time)
@@ -660,43 +660,43 @@ end
 # Built-in frame sensors other than CMOS contain only scalar or immutable
 # configuration. Sensor extensions that retain mutable sampled parameters must
 # overload this boundary and return run-owned storage.
-@inline owned_frame_sensor(sensor::FrameSensorType, ::Type{T},
+@inline owned_frame_sensor(sensor::AbstractFrameSensor, ::Type{T},
     ::AbstractArrayBackend) where {T<:AbstractFloat} = sensor
 
-validate_sensor_gain(::FrameSensorType, gain) = nothing
+validate_sensor_gain(::AbstractFrameSensor, gain) = nothing
 
-validate_frame_detector_sensor(::FrameSensorType) = nothing
+validate_frame_detector_sensor(::AbstractFrameSensor) = nothing
 
-function validate_frame_detector_sensor(sensor::CountingSensorType)
+function validate_frame_detector_sensor(sensor::AbstractCountingSensor)
     throw(InvalidConfiguration("Detector currently models frame-based sensors only; use a sensor-side readout model for $(detector_sensor_symbol(sensor))"))
 end
 
-function validate_detector_response(sensor::SensorType, response_model::AbstractDetectorResponse)
+function validate_detector_response(sensor::AbstractSensor, response_model::AbstractDetectorResponse)
     supports_detector_response(sensor, response_model) && return response_model
     throw(InvalidConfiguration("response model $(typeof(response_model)) is not supported for sensor $(typeof(sensor))"))
 end
 
-resolve_detector_defect_model(sensor::FrameSensorType, ::Nothing; T::Type{<:AbstractFloat}, backend) =
+resolve_detector_defect_model(sensor::AbstractFrameSensor, ::Nothing; T::Type{<:AbstractFloat}, backend) =
     default_detector_defect_model(sensor; T=T, backend=backend)
-resolve_detector_defect_model(sensor::FrameSensorType, model::AbstractDetectorDefectModel; T::Type{<:AbstractFloat}, backend) = model
+resolve_detector_defect_model(sensor::AbstractFrameSensor, model::AbstractDetectorDefectModel; T::Type{<:AbstractFloat}, backend) = model
 
-validate_detector_defect(sensor::FrameSensorType, model::AbstractDetectorDefectModel) = model
+validate_detector_defect(sensor::AbstractFrameSensor, model::AbstractDetectorDefectModel) = model
 
-resolve_frame_timing_model(sensor::FrameSensorType, ::Nothing; T::Type{<:AbstractFloat}) =
+resolve_frame_timing_model(sensor::AbstractFrameSensor, ::Nothing; T::Type{<:AbstractFloat}) =
     default_frame_timing_model(sensor; T=T)
-resolve_frame_timing_model(sensor::FrameSensorType, model::AbstractFrameTimingModel; T::Type{<:AbstractFloat}) = model
+resolve_frame_timing_model(sensor::AbstractFrameSensor, model::AbstractFrameTimingModel; T::Type{<:AbstractFloat}) = model
 
-function validate_frame_timing(sensor::FrameSensorType, model::AbstractFrameTimingModel)
+function validate_frame_timing(sensor::AbstractFrameSensor, model::AbstractFrameTimingModel)
     supports_shutter_timing(sensor) && return model
     is_global_shutter(model) && return model
     throw(InvalidConfiguration("frame timing $(typeof(model)) is not supported for sensor $(typeof(sensor))"))
 end
 
-resolve_frame_nonlinearity_model(sensor::FrameSensorType, ::Nothing; T::Type{<:AbstractFloat}) =
+resolve_frame_nonlinearity_model(sensor::AbstractFrameSensor, ::Nothing; T::Type{<:AbstractFloat}) =
     default_frame_nonlinearity_model(sensor; T=T)
-resolve_frame_nonlinearity_model(sensor::FrameSensorType, model::AbstractFrameNonlinearityModel; T::Type{<:AbstractFloat}) = model
+resolve_frame_nonlinearity_model(sensor::AbstractFrameSensor, model::AbstractFrameNonlinearityModel; T::Type{<:AbstractFloat}) = model
 
-function validate_frame_nonlinearity(sensor::FrameSensorType, model::AbstractFrameNonlinearityModel)
+function validate_frame_nonlinearity(sensor::AbstractFrameSensor, model::AbstractFrameNonlinearityModel)
     supports_detector_nonlinearity(sensor) && return model
     is_null_frame_nonlinearity(model) && return model
     throw(InvalidConfiguration("frame nonlinearity $(typeof(model)) is not supported for sensor $(typeof(sensor))"))
@@ -725,24 +725,24 @@ function validate_readout_correction_model(model::CompositeFrameReadoutCorrectio
     return CompositeFrameReadoutCorrection(tuple(stages...))
 end
 
-resolve_correction_model(sensor::SensorType, ::Nothing) = NullFrameReadoutCorrection()
-resolve_correction_model(sensor::SensorType, correction_model::FrameReadoutCorrectionModel) = correction_model
+resolve_correction_model(sensor::AbstractSensor, ::Nothing) = NullFrameReadoutCorrection()
+resolve_correction_model(sensor::AbstractSensor, correction_model::FrameReadoutCorrectionModel) = correction_model
 
-function validate_readout_correction(sensor::SensorType, correction_model::FrameReadoutCorrectionModel)
+function validate_readout_correction(sensor::AbstractSensor, correction_model::FrameReadoutCorrectionModel)
     supports_readout_correction(sensor) && return correction_model
     is_null_readout_correction(correction_model) && return correction_model
     throw(InvalidConfiguration("readout correction $(typeof(correction_model)) is not supported for sensor $(typeof(sensor))"))
 end
 
-resolve_response_model(sensor::SensorType, ::Nothing; T::Type{<:AbstractFloat}, backend) =
+resolve_response_model(sensor::AbstractSensor, ::Nothing; T::Type{<:AbstractFloat}, backend) =
     default_response_model(sensor; T=T, backend=backend)
-resolve_response_model(sensor::SensorType, response_model::AbstractFrameResponse; T::Type{<:AbstractFloat}, backend) =
+resolve_response_model(sensor::AbstractSensor, response_model::AbstractFrameResponse; T::Type{<:AbstractFloat}, backend) =
     response_model
 
-resolve_charge_coupling_model(sensor::FrameSensorType, ::Nothing;
+resolve_charge_coupling_model(sensor::AbstractFrameSensor, ::Nothing;
     T::Type{<:AbstractFloat}, backend) =
     default_charge_coupling_model(sensor; T=T, backend=backend)
-resolve_charge_coupling_model(::FrameSensorType, model::AbstractChargeCouplingModel;
+resolve_charge_coupling_model(::AbstractFrameSensor, model::AbstractChargeCouplingModel;
     T::Type{<:AbstractFloat}, backend) = model
 
 function resolve_output_type(bits::Union{Nothing,Int}, output_type::Union{Nothing,DataType})
@@ -754,7 +754,7 @@ function resolve_output_type(bits::Union{Nothing,Int}, output_type::Union{Nothin
     return nothing
 end
 
-@inline function detector_readout_products_type(sensor::FrameSensorType, frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
+@inline function detector_readout_products_type(sensor::AbstractFrameSensor, frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
     supports_multi_read_readout_products(sensor) || return NoFrameReadoutProducts
     cube_type = typeof(similar(frame, size(frame, 1), size(frame, 2), 1))
     return Union{
@@ -765,9 +765,9 @@ end
     }
 end
 
-@inline initial_readout_products(::FrameSensorType, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
+@inline initial_readout_products(::AbstractFrameSensor, frame::AbstractMatrix, ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutProducts()
 
-@inline function detector_readout_workspace_type(sensor::FrameSensorType,
+@inline function detector_readout_workspace_type(sensor::AbstractFrameSensor,
     frame::A, ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
     supports_multi_read_readout_products(sensor) ||
         return NoFrameReadoutWorkspace
@@ -778,12 +778,12 @@ end
     }
 end
 
-@inline initial_readout_workspace(::FrameSensorType, frame::AbstractMatrix,
+@inline initial_readout_workspace(::AbstractFrameSensor, frame::AbstractMatrix,
     ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutWorkspace()
 
 function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Real,AbstractQuantumEfficiencyModel},
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
-    bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::SensorType,
+    bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::AbstractSensor,
     response_model::Union{Nothing,FrameResponseModel},
     charge_coupling_model::Union{Nothing,AbstractChargeCouplingModel},
     defect_model::Union{Nothing,AbstractDetectorDefectModel},
@@ -945,7 +945,7 @@ end
 function Detector(; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEfficiencyModel}=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
-    full_well::Union{Nothing,Real}=nothing, sensor::SensorType=CCDSensor(),
+    full_well::Union{Nothing,Real}=nothing, sensor::AbstractSensor=CCDSensor(),
     response_model::Union{Nothing,FrameResponseModel}=nothing,
     charge_coupling_model::Union{Nothing,AbstractChargeCouplingModel}=nothing,
     defect_model::Union{Nothing,AbstractDetectorDefectModel}=nothing,
@@ -972,7 +972,7 @@ end
 function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEfficiencyModel}=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
-    sensor::SensorType=CCDSensor(), response_model::Union{Nothing,FrameResponseModel}=nothing,
+    sensor::AbstractSensor=CCDSensor(), response_model::Union{Nothing,FrameResponseModel}=nothing,
     charge_coupling_model::Union{Nothing,AbstractChargeCouplingModel}=nothing,
     defect_model::Union{Nothing,AbstractDetectorDefectModel}=nothing,
     timing_model::Union{Nothing,AbstractFrameTimingModel}=nothing,

@@ -88,7 +88,7 @@ end
 end
 
 struct CMOSSensor{T<:AbstractFloat,RN<:AbstractCMOSReadNoiseModel,
-    O<:AbstractCMOSOutputModel,M<:AbstractFrameTimingModel} <: FrameSensorType
+    O<:AbstractCMOSOutputModel,M<:AbstractFrameTimingModel} <: AbstractFrameSensor
     column_readout_sigma::T
     row_readout_sigma::T
     readout_noise_model::RN

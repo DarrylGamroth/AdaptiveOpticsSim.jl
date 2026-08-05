@@ -7,7 +7,7 @@ Skipper nondestructive sample and must remain zero for conventional
 `SingleRead` operation. Whole-acquisition readout and readiness timing belongs
 to the Plant acquisition definition.
 """
-struct CCDSensor{T<:AbstractFloat,M<:FrameSamplingMode} <: FrameSensorType
+struct CCDSensor{T<:AbstractFloat,M<:FrameSamplingMode} <: AbstractFrameSensor
     clock_induced_charge_per_frame::T
     sample_duration::T
     sampling_mode::M

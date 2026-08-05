@@ -53,8 +53,8 @@ function apply_frame_nonlinearity!(model::SaturatingFrameNonlinearity, det::Dete
     return det.products.frame
 end
 
-apply_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.products.frame
-update_sensor_persistence!(::FrameSensorType, det::Detector, exposure_time::Real) = det.products.frame
+apply_sensor_persistence!(::AbstractFrameSensor, det::Detector, exposure_time::Real) = det.products.frame
+update_sensor_persistence!(::AbstractFrameSensor, det::Detector, exposure_time::Real) = det.products.frame
 
 function detector_host_buffer!(det::Detector, ::Type{T}, dims::Tuple{Int,Int}) where {T<:AbstractFloat}
     host = det.workspace.noise_buffer_host
@@ -186,7 +186,7 @@ function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Rea
 end
 
 sensor_saturation_limit(det::Detector) = sensor_saturation_limit(det.params.sensor, det)
-sensor_saturation_limit(::FrameSensorType, det::Detector) = det.params.full_well
+sensor_saturation_limit(::AbstractFrameSensor, det::Detector) = det.params.full_well
 
 function _apply_saturation!(::DetectorDirectStrategy, det::Detector)
     full_well = sensor_saturation_limit(det)
@@ -228,14 +228,14 @@ function apply_saturation!(det::Detector)
     return _apply_saturation!(_detector_value_strategy(strategy, style), det)
 end
 
-apply_sensor_statistics!(sensor::FrameSensorType, det::Detector,
+apply_sensor_statistics!(sensor::AbstractFrameSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real) = det.products.frame
 
-apply_pre_readout_gain!(::FrameSensorType, det::Detector, rng::AbstractRNG) = det.products.frame
-apply_post_readout_gain!(::FrameSensorType, det::Detector) = det.products.frame
-apply_detection_output!(::FrameSensorType, det::Detector,
+apply_pre_readout_gain!(::AbstractFrameSensor, det::Detector, rng::AbstractRNG) = det.products.frame
+apply_post_readout_gain!(::AbstractFrameSensor, det::Detector) = det.products.frame
+apply_detection_output!(::AbstractFrameSensor, det::Detector,
     rng::AbstractRNG) = det.products.frame
-apply_charge_transfer!(::FrameSensorType, det::Detector) = det.products.frame
+apply_charge_transfer!(::AbstractFrameSensor, det::Detector) = det.products.frame
 reset_readout_products!(det::Detector) = (det.products.readout = NoFrameReadoutProducts(); det)
 
 apply_readout_noise!(det::Detector{NoiseNone}, rng::AbstractRNG) = det.products.frame
@@ -251,7 +251,7 @@ function apply_readout_noise!(det::Detector{<:NoisePhotonReadout}, rng::Abstract
     return add_gaussian_noise!(det.products.frame, det, rng, sigma)
 end
 
-apply_sensor_readout_noise!(::FrameSensorType, det::Detector,
+apply_sensor_readout_noise!(::AbstractFrameSensor, det::Detector,
     rng::AbstractRNG) = det.products.frame
 
 function _apply_quantization!(::DetectorDirectStrategy, det::Detector)
@@ -571,10 +571,10 @@ function apply_readout_correction!(model::FrameReadoutCorrectionModel, frame::Ab
     return _apply_readout_correction!(strategy, model, frame, det)
 end
 
-finalize_readout_products!(::FrameSensorType, det::Detector, rng::AbstractRNG, exposure_time::Real) =
+finalize_readout_products!(::AbstractFrameSensor, det::Detector, rng::AbstractRNG, exposure_time::Real) =
     reset_readout_products!(det)
 
-function _finalize_capture!(::FrameSensorType, det::Detector, rng::AbstractRNG,
+function _finalize_capture!(::AbstractFrameSensor, det::Detector, rng::AbstractRNG,
     exposure_time::Real)
     return finalize_readout_pipeline!(det, rng, exposure_time)
 end
@@ -583,7 +583,7 @@ function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
     return _finalize_capture!(det.params.sensor, det, rng, exposure_time)
 end
 
-function _finalize_incremental_capture!(::FrameSensorType, det::Detector,
+function _finalize_incremental_capture!(::AbstractFrameSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     return finalize_readout_pipeline!(det, rng, exposure_time,
         zero(exposure_time))

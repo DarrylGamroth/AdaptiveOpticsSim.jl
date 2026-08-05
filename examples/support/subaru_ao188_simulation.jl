@@ -133,7 +133,7 @@ end
 
 abstract type AO188DetectorConfig end
 
-struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:SensorType,R<:Union{Nothing,FrameResponseModel},C<:FrameReadoutCorrectionModel,TM<:Union{Nothing,AbstractDetectorThermalModel}} <: AO188DetectorConfig
+struct AO188WFSDetectorConfig{T<:AbstractFloat,N<:NoiseModel,S<:AbstractSensor,R<:Union{Nothing,FrameResponseModel},C<:FrameReadoutCorrectionModel,TM<:Union{Nothing,AbstractDetectorThermalModel}} <: AO188DetectorConfig
     integration_time::T
     qe::T
     psf_sampling::Int
@@ -156,7 +156,7 @@ function AO188WFSDetectorConfig(;
     gain::Real=1.0,
     dark_current::Real=0.0,
     noise::NoiseModel=NoisePhotonReadout(0.3),
-    sensor::SensorType=CCDSensor(),
+    sensor::AbstractSensor=CCDSensor(),
     response_model::Union{Nothing,FrameResponseModel}=nothing,
     correction_model::FrameReadoutCorrectionModel=NullFrameReadoutCorrection(),
     thermal_model::Union{Nothing,AbstractDetectorThermalModel}=nothing,

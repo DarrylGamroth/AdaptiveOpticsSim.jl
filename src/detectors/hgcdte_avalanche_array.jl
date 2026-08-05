@@ -40,7 +40,7 @@ struct HgCdTeAvalancheArraySensor{
     M<:AbstractHgCdTeAvalancheMultiplication,
     R<:HgCdTeReadout,
     P<:AbstractPersistenceModel,
-} <: HgCdTeAvalancheArraySensorType
+} <: AbstractHgCdTeAvalancheArraySensor
     avalanche_gain::T
     excess_noise_factor::T
     multiplication_model::M

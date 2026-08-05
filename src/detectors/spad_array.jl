@@ -11,7 +11,7 @@ struct SPADArraySensor{
     T<:AbstractFloat,
     D<:CountingDeadTimeModel,
     C<:CountingMeanResponseModel,
-} <: SPADArraySensorType
+} <: AbstractSPADArraySensor
     active_area_detection_efficiency::T
     dark_count_rate::T
     fill_factor::T
@@ -45,7 +45,7 @@ end
 
 struct SPADArrayDetectorParams{
     T<:AbstractFloat,
-    S<:SPADArraySensorType,
+    S<:AbstractSPADArraySensor,
     G<:AbstractCountingGateModel,
     TM<:AbstractDetectorThermalModel,
 }
@@ -113,7 +113,7 @@ function _build_spad_array_detector(dimensions::Tuple{Int,Int}, noise::NoiseMode
     integration_time::Real,
     gate_model::AbstractCountingGateModel,
     thermal_model::AbstractDetectorThermalModel,
-    sensor::SPADArraySensorType,
+    sensor::AbstractSPADArraySensor,
     output_type::Union{Nothing,DataType},
     T::Type{<:AbstractFloat},
     backend)
@@ -188,7 +188,7 @@ end
 
 convert_spad_sensor(sensor::SPADArraySensor{T}, ::Type{T}) where {T<:AbstractFloat} = sensor
 
-function convert_spad_sensor(sensor::SPADArraySensorType, ::Type{T}) where {T<:AbstractFloat}
+function convert_spad_sensor(sensor::AbstractSPADArraySensor, ::Type{T}) where {T<:AbstractFloat}
     return SPADArraySensor(
         active_area_detection_efficiency=sensor.active_area_detection_efficiency,
         dark_count_rate=sensor.dark_count_rate,

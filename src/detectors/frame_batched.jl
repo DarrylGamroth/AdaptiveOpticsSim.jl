@@ -21,7 +21,7 @@ function _require_batched_detector_compat(det::Detector, cube::AbstractArray, sc
     return nothing
 end
 
-_require_batched_sensor_compat(::FrameSensorType) = nothing
+_require_batched_sensor_compat(::AbstractFrameSensor) = nothing
 
 _batched_frame_shape(cube::AbstractArray{T,3}) where {T} = (size(cube, 2), size(cube, 3))
 _batched_frame_map(map::AbstractMatrix) = reshape(map, 1, size(map, 1), size(map, 2))
@@ -132,14 +132,14 @@ function _batched_frame_nonlinearity!(model::SaturatingFrameNonlinearity, cube::
     return cube
 end
 
-_batched_pre_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray,
+_batched_pre_readout_gain!(::AbstractFrameSensor, det::Detector, cube::AbstractArray,
     scratch::AbstractArray, rng::AbstractRNG) = cube
-_batched_sensor_statistics!(sensor::FrameSensorType, det::Detector,
+_batched_sensor_statistics!(sensor::AbstractFrameSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
     exposure_time::Real) = cube
 
-_batched_post_readout_gain!(::FrameSensorType, det::Detector, cube::AbstractArray) = cube
-_batched_detection_output!(::FrameSensorType, det::Detector,
+_batched_post_readout_gain!(::AbstractFrameSensor, det::Detector, cube::AbstractArray) = cube
+_batched_detection_output!(::AbstractFrameSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_readout_noise!(det::Detector{NoiseNone}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 _batched_readout_noise!(det::Detector{NoisePhoton}, cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
@@ -418,7 +418,7 @@ function _batched_readout_noise!(det::Detector{<:NoisePhotonReadout}, cube::Abst
     return cube
 end
 
-_batched_sensor_readout_noise!(::FrameSensorType, det::Detector,
+_batched_sensor_readout_noise!(::AbstractFrameSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG) = cube
 
 function _batched_quantization!(det::Detector, cube::AbstractArray)
@@ -523,7 +523,7 @@ function _batched_apply_response!(style::AcceleratorStyle, model::RectangularPix
     return cube
 end
 
-_batched_charge_transfer!(::FrameSensorType, det::Detector, cube::AbstractArray,
+_batched_charge_transfer!(::AbstractFrameSensor, det::Detector, cube::AbstractArray,
     scratch::AbstractArray) = cube
 
 _batched_apply_charge_coupling!(::ExecutionStyle, ::NullChargeCoupling,

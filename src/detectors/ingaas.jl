@@ -11,7 +11,7 @@ model. It is updated after charge nonlinearity, saturation, and coupling and
 before read noise, conversion gain, correction, quantization, and background
 subtraction.
 """
-struct InGaAsSensor{T<:AbstractFloat,P<:AbstractPersistenceModel} <: FrameSensorType
+struct InGaAsSensor{T<:AbstractFloat,P<:AbstractPersistenceModel} <: AbstractFrameSensor
     glow_rate::T
     persistence_model::P
 end

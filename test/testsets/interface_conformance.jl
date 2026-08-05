@@ -40,15 +40,27 @@
         wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0])
     infinite_atm = InfiniteMultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
         wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0], screen_resolution=33, stencil_size=35)
-    @test CCDSensor <: FrameSensorType
-    @test CMOSSensor <: FrameSensorType
-    @test AvalancheFrameSensorType <: FrameSensorType
-    @test HgCdTeSensorType <: FrameSensorType
-    @test HgCdTeAvalancheArraySensorType <: HgCdTeSensorType
-    @test EMCCDSensor <: AvalancheFrameSensorType
-    @test InGaAsSensor <: FrameSensorType
-    @test HgCdTeSensor <: HgCdTeSensorType
-    @test HgCdTeAvalancheArraySensor <: HgCdTeAvalancheArraySensorType
+    @test CCDSensor <: AbstractFrameSensor
+    @test CMOSSensor <: AbstractFrameSensor
+    @test AbstractAvalancheFrameSensor <: AbstractFrameSensor
+    @test AbstractHgCdTeSensor <: AbstractFrameSensor
+    @test AbstractHgCdTeAvalancheArraySensor <: AbstractHgCdTeSensor
+    @test EMCCDSensor <: AbstractAvalancheFrameSensor
+    @test InGaAsSensor <: AbstractFrameSensor
+    @test HgCdTeSensor <: AbstractHgCdTeSensor
+    @test HgCdTeAvalancheArraySensor <: AbstractHgCdTeAvalancheArraySensor
+    for removed_sensor_root in (
+        :SensorType,
+        :FrameSensorType,
+        :CountingSensorType,
+        :AvalancheFrameSensorType,
+        :HgCdTeSensorType,
+        :HgCdTeAvalancheArraySensorType,
+        :SPADArraySensorType,
+        :MKIDArraySensorType,
+    )
+        @test !isdefined(AdaptiveOpticsSim.Detectors, removed_sensor_root)
+    end
     @test !supports_avalanche_gain(CCDSensor())
     @test !supports_sensor_glow(CMOSSensor())
     @test supports_detector_defect_maps(CMOSSensor())
@@ -71,8 +83,8 @@
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceRowCommonModeCorrection()) == :reference_row_common_mode
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceColumnCommonModeCorrection()) == :reference_column_common_mode
     @test AdaptiveOpticsSim.Detectors.readout_correction_symbol(ReferenceOutputCommonModeCorrection(4)) == :reference_output_common_mode
-    @test SPADArraySensorType <: CountingSensorType
-    @test MKIDArraySensorType <: CountingSensorType
+    @test AbstractSPADArraySensor <: AbstractCountingSensor
+    @test AbstractMKIDArraySensor <: AbstractCountingSensor
     @test supports_photon_counting(mkid.params.sensor)
     @test !supports_energy_resolving(mkid.params.sensor)
     @test !supports_photon_number_resolving(mkid.params.sensor)

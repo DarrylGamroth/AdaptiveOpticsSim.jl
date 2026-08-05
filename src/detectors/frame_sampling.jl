@@ -1,4 +1,4 @@
-@inline multi_read_sampling_mode(sensor::FrameSensorType) = SingleRead()
+@inline multi_read_sampling_mode(sensor::AbstractFrameSensor) = SingleRead()
 
 _raw_sampling_sigma(det::Detector{<:NoiseReadout}) = det.noise.sigma
 _raw_sampling_sigma(det::Detector{<:NoisePhotonReadout}) = det.noise.sigma
@@ -168,7 +168,7 @@ end
 _multi_read_workspace_ready(::FrameReadoutWorkspace, ::Detector,
     ::Int, ::Int) = false
 
-function _ensure_multi_read_products!(sensor::FrameSensorType, det::Detector)
+function _ensure_multi_read_products!(sensor::AbstractFrameSensor, det::Detector)
     current = readout_products(det)
     frame = det.products.frame
     n_ref = frame_sampling_reference_reads(sensor)
@@ -234,10 +234,10 @@ end
         workspace.reference_cube, workspace.signal_cube
 end
 
-@inline prepare_frame_readout_state!(::FrameSensorType,
+@inline prepare_frame_readout_state!(::AbstractFrameSensor,
     det::Detector) = det
 
-function sample_frame_read!(::FrameSensorType, det::Detector, target::AbstractMatrix, baseline::AbstractMatrix,
+function sample_frame_read!(::AbstractFrameSensor, det::Detector, target::AbstractMatrix, baseline::AbstractMatrix,
     sigma, rng::AbstractRNG)
     copyto!(target, baseline)
     add_gaussian_noise!(target, det, rng, sigma)
@@ -246,7 +246,7 @@ function sample_frame_read!(::FrameSensorType, det::Detector, target::AbstractMa
     return target
 end
 
-function _sampling_reference_cube!(cube::AbstractArray{T,3}, sensor::FrameSensorType,
+function _sampling_reference_cube!(cube::AbstractArray{T,3}, sensor::AbstractFrameSensor,
     det::Detector, sigma, rng::AbstractRNG, baseline::AbstractMatrix{T}) where {T}
     n_ref = frame_sampling_reference_reads(sensor)
     for read_idx in 1:n_ref
@@ -257,7 +257,7 @@ function _sampling_reference_cube!(cube::AbstractArray{T,3}, sensor::FrameSensor
     return cube
 end
 
-function _sampling_reference_cube(sensor::FrameSensorType, det::Detector, sigma, rng::AbstractRNG)
+function _sampling_reference_cube(sensor::AbstractFrameSensor, det::Detector, sigma, rng::AbstractRNG)
     n_ref = frame_sampling_reference_reads(sensor)
     n_ref <= 0 && return nothing
     cube = similar(det.products.frame, size(det.products.frame)..., n_ref)
@@ -265,7 +265,7 @@ function _sampling_reference_cube(sensor::FrameSensorType, det::Detector, sigma,
     return _sampling_reference_cube!(cube, sensor, det, sigma, rng, baseline)
 end
 
-function _sampling_signal_cube!(cube::AbstractArray{T,3}, sensor::FrameSensorType,
+function _sampling_signal_cube!(cube::AbstractArray{T,3}, sensor::AbstractFrameSensor,
     det::Detector, sigma, rng::AbstractRNG, baseline::AbstractMatrix{T}) where {T}
     n_sig = frame_sampling_signal_reads(sensor)
     for read_idx in 1:n_sig
@@ -275,7 +275,7 @@ function _sampling_signal_cube!(cube::AbstractArray{T,3}, sensor::FrameSensorTyp
     return cube
 end
 
-function _sampling_signal_cube(sensor::FrameSensorType, det::Detector, sigma, rng::AbstractRNG)
+function _sampling_signal_cube(sensor::AbstractFrameSensor, det::Detector, sigma, rng::AbstractRNG)
     n_sig = frame_sampling_signal_reads(sensor)
     cube = similar(det.products.frame, size(det.products.frame)..., n_sig)
     baseline = similar(det.products.frame, size(det.products.frame)...)
@@ -371,7 +371,7 @@ function _copy_windowed_sampling_plane!(style::AcceleratorStyle,
         first(window.rows), first(window.cols))
 end
 
-function _sampling_read_cube!(cube::AbstractArray{T,3}, ::FrameSensorType,
+function _sampling_read_cube!(cube::AbstractArray{T,3}, ::AbstractFrameSensor,
     ::Nothing, signal_cube::AbstractArray{T,3}) where {T}
     for read_idx in axes(signal_cube, 3)
         _copy_sampling_plane!(cube, read_idx, signal_cube, read_idx)
@@ -379,7 +379,7 @@ function _sampling_read_cube!(cube::AbstractArray{T,3}, ::FrameSensorType,
     return cube
 end
 
-function _sampling_read_cube!(cube::AbstractArray{T,3}, ::FrameSensorType,
+function _sampling_read_cube!(cube::AbstractArray{T,3}, ::AbstractFrameSensor,
     reference_cube::AbstractArray{T,3}, signal_cube::AbstractArray{T,3}) where {T}
     for read_idx in axes(reference_cube, 3)
         _copy_sampling_plane!(cube, read_idx, reference_cube, read_idx)
@@ -391,7 +391,7 @@ function _sampling_read_cube!(cube::AbstractArray{T,3}, ::FrameSensorType,
     return cube
 end
 
-function _sampling_read_cube(sensor::FrameSensorType, reference_cube::Union{Nothing,AbstractArray{T,3}},
+function _sampling_read_cube(sensor::AbstractFrameSensor, reference_cube::Union{Nothing,AbstractArray{T,3}},
     signal_cube::AbstractArray{T,3}) where {T}
     n_reads = frame_sampling_reads(sensor)
     n_reads <= 1 && return nothing
@@ -399,7 +399,7 @@ function _sampling_read_cube(sensor::FrameSensorType, reference_cube::Union{Noth
     return _sampling_read_cube!(cube, sensor, reference_cube, signal_cube)
 end
 
-function _sampling_read_times!(times::AbstractVector{T}, sensor::FrameSensorType,
+function _sampling_read_times!(times::AbstractVector{T}, sensor::AbstractFrameSensor,
     det::Detector, n_reads::Int) where {T}
     read_dt = sampling_read_time(sensor, size(det.products.frame), det.params.readout_window, T)
     for read_idx in 1:n_reads
@@ -408,7 +408,7 @@ function _sampling_read_times!(times::AbstractVector{T}, sensor::FrameSensorType
     return times
 end
 
-function _sampling_read_times(sensor::FrameSensorType, det::Detector, n_reads::Int)
+function _sampling_read_times(sensor::AbstractFrameSensor, det::Detector, n_reads::Int)
     n_reads <= 0 && return nothing
     T = eltype(det.products.frame)
     times = Vector{T}(undef, n_reads)
@@ -422,20 +422,20 @@ function _require_multi_read_buffer(::Nothing, label::Symbol)
         "prepared multi-read products require $(label) storage"))
 end
 
-function finalize_multi_read_readout_products!(sensor::FrameSensorType,
+function finalize_multi_read_readout_products!(sensor::AbstractFrameSensor,
     det::Detector, rng::AbstractRNG)
     products = _ensure_multi_read_products!(sensor, det)
     return _finalize_multi_read_readout_products!(products, sensor, det, rng)
 end
 
 function _finalize_multi_read_readout_products!(::FrameReadoutProducts,
-    ::FrameSensorType, ::Detector, ::AbstractRNG)
+    ::AbstractFrameSensor, ::Detector, ::AbstractRNG)
     throw(InvalidConfiguration(
         "prepared detector is missing multi-read readout products"))
 end
 
 function _finalize_multi_read_readout_products!(
-    products::MultiReadFrameReadoutProducts, sensor::FrameSensorType,
+    products::MultiReadFrameReadoutProducts, sensor::AbstractFrameSensor,
     det::Detector, rng::AbstractRNG)
     sigma = _raw_sampling_sigma(det)
     baseline = det.workspace.response_buffer
@@ -592,7 +592,7 @@ end
         workspace.cube
 end
 
-function validate_up_the_ramp_schedule(sensor::FrameSensorType,
+function validate_up_the_ramp_schedule(sensor::AbstractFrameSensor,
     frame_shape::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
     mode::UpTheRampSampling, exposure_time::Real,
     ::Type{T}) where {T<:AbstractFloat}
@@ -603,7 +603,7 @@ function validate_up_the_ramp_schedule(sensor::FrameSensorType,
     return read_spacing
 end
 
-function validate_up_the_ramp_schedule(sensor::FrameSensorType, det::Detector,
+function validate_up_the_ramp_schedule(sensor::AbstractFrameSensor, det::Detector,
     mode::UpTheRampSampling, exposure_time::Real)
     T = eltype(det.products.frame)
     return validate_up_the_ramp_schedule(sensor, size(det.products.frame),
@@ -622,7 +622,7 @@ function _fill_up_the_ramp_times!(times::AbstractVector{T},
 end
 
 function _sample_up_the_ramp_cube!(cube::AbstractArray{T,3},
-    sensor::FrameSensorType, det::Detector, sigma, rng::AbstractRNG) where {T}
+    sensor::AbstractFrameSensor, det::Detector, sigma, rng::AbstractRNG) where {T}
     n_reads = size(cube, 3)
     denominator = T(n_reads - 1)
     for read_idx in 1:n_reads
@@ -787,7 +787,7 @@ function finalize_scheduled_up_the_ramp_readout_products!(
 end
 
 function finalize_up_the_ramp_readout_products!(mode::UpTheRampSampling,
-    sensor::FrameSensorType, det::Detector, rng::AbstractRNG,
+    sensor::AbstractFrameSensor, det::Detector, rng::AbstractRNG,
     exposure_time::Real)
     validate_up_the_ramp_schedule(sensor, det, mode, exposure_time)
     products = ensure_up_the_ramp_products!(det, mode.n_reads)

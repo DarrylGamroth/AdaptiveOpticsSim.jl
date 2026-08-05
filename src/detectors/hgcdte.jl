@@ -44,7 +44,7 @@ technology or camera profiles.
 struct HgCdTeSensor{
     R<:HgCdTeReadout,
     P<:AbstractPersistenceModel,
-} <: HgCdTeSensorType
+} <: AbstractHgCdTeSensor
     readout::R
     persistence_model::P
 end
@@ -96,37 +96,37 @@ validate_hgcdte_sampling_mode(::FrameSamplingMode) =
 @inline hgcdte_readout(sensor::HgCdTeSensor) = sensor.readout
 
 detector_sensor_symbol(::HgCdTeSensor) = :hgcdte
-supports_sensor_glow(::HgCdTeSensorType) = true
-supports_nondestructive_reads(::HgCdTeSensorType) = true
-supports_up_the_ramp(::HgCdTeSensorType) = true
-supports_reference_read_subtraction(::HgCdTeSensorType) = true
-supports_readout_correction(::HgCdTeSensorType) = true
-supports_read_cube(::HgCdTeSensorType) = true
-supports_multi_read_readout_products(::HgCdTeSensorType) = true
-supports_detector_nonlinearity(::HgCdTeSensorType) = true
-supports_detector_persistence(::HgCdTeSensorType) = true
+supports_sensor_glow(::AbstractHgCdTeSensor) = true
+supports_nondestructive_reads(::AbstractHgCdTeSensor) = true
+supports_up_the_ramp(::AbstractHgCdTeSensor) = true
+supports_reference_read_subtraction(::AbstractHgCdTeSensor) = true
+supports_readout_correction(::AbstractHgCdTeSensor) = true
+supports_read_cube(::AbstractHgCdTeSensor) = true
+supports_multi_read_readout_products(::AbstractHgCdTeSensor) = true
+supports_detector_nonlinearity(::AbstractHgCdTeSensor) = true
+supports_detector_persistence(::AbstractHgCdTeSensor) = true
 
-default_response_model(::HgCdTeSensorType;
+default_response_model(::AbstractHgCdTeSensor;
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend()) = NullFrameResponse()
 
-@inline configured_glow_rate(sensor::HgCdTeSensorType,
+@inline configured_glow_rate(sensor::AbstractHgCdTeSensor,
     ::Type{T}) where {T<:AbstractFloat} =
     T(hgcdte_readout(sensor).glow_rate)
-@inline multi_read_sampling_mode(sensor::HgCdTeSensorType) =
+@inline multi_read_sampling_mode(sensor::AbstractHgCdTeSensor) =
     hgcdte_readout(sensor).sampling_mode
-@inline persistence_model(sensor::HgCdTeSensorType) =
+@inline persistence_model(sensor::AbstractHgCdTeSensor) =
     sensor.persistence_model
 
-sampling_read_time(sensor::HgCdTeSensorType,
+sampling_read_time(sensor::AbstractHgCdTeSensor,
     ::Type{T}) where {T<:AbstractFloat} =
     T(hgcdte_readout(sensor).read_time)
 
-sampling_read_time(sensor::HgCdTeSensorType, ::Tuple{Int,Int},
+sampling_read_time(sensor::AbstractHgCdTeSensor, ::Tuple{Int,Int},
     ::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
     sampling_read_time(sensor, T)
 
-function sampling_wallclock_time(sensor::HgCdTeSensorType,
+function sampling_wallclock_time(sensor::AbstractHgCdTeSensor,
     integration_time, ::Type{T}) where {T<:AbstractFloat}
     mode = multi_read_sampling_mode(sensor)
     read_count = hgcdte_wallclock_read_count(mode)
@@ -138,15 +138,15 @@ end
     frame_sampling_reads(mode)
 @inline hgcdte_wallclock_read_count(::UpTheRampSampling) = 1
 
-sampling_wallclock_time(sensor::HgCdTeSensorType, integration_time,
+sampling_wallclock_time(sensor::AbstractHgCdTeSensor, integration_time,
     ::Tuple{Int,Int}, ::Union{Nothing,FrameWindow},
     ::Type{T}) where {T<:AbstractFloat} =
     sampling_wallclock_time(sensor, integration_time, T)
 
-effective_readout_sigma(sensor::HgCdTeSensorType, sigma) =
+effective_readout_sigma(sensor::AbstractHgCdTeSensor, sigma) =
     effective_readout_sigma(multi_read_sampling_mode(sensor), sigma)
 
-function effective_dark_current_time(sensor::HgCdTeSensorType, exposure_time)
+function effective_dark_current_time(sensor::AbstractHgCdTeSensor, exposure_time)
     mode = multi_read_sampling_mode(sensor)
     return effective_hgcdte_generated_charge_time(
         mode, hgcdte_readout(sensor).read_time, exposure_time)
@@ -162,10 +162,10 @@ end
 @inline effective_hgcdte_generated_charge_time(
     ::UpTheRampSampling, _read_time, exposure_time) = exposure_time
 
-effective_sensor_glow_time(sensor::HgCdTeSensorType, exposure_time) =
+effective_sensor_glow_time(sensor::AbstractHgCdTeSensor, exposure_time) =
     effective_dark_current_time(sensor, exposure_time)
 
-function _apply_hgcdte_glow!(sensor::HgCdTeSensorType, det::Detector,
+function _apply_hgcdte_glow!(sensor::AbstractHgCdTeSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     rate = effective_glow_rate(det) *
         effective_sensor_glow_time(sensor, exposure_time)
@@ -176,7 +176,7 @@ apply_sensor_statistics!(sensor::HgCdTeSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real) =
     _apply_hgcdte_glow!(sensor, det, rng, exposure_time)
 
-function apply_incremental_sensor_statistics!(sensor::HgCdTeSensorType,
+function apply_incremental_sensor_statistics!(sensor::AbstractHgCdTeSensor,
     det::Detector, rng::AbstractRNG, exposure_time::Real)
     rate = effective_glow_rate(det) * exposure_time
     return add_poisson_rate!(det.products.frame, det, rng, rate)
@@ -207,20 +207,20 @@ function update_hgcdte_persistence!(model::ExponentialPersistence,
     return det.state.latent_buffer
 end
 
-apply_sensor_persistence!(sensor::HgCdTeSensorType, det::Detector,
+apply_sensor_persistence!(sensor::AbstractHgCdTeSensor, det::Detector,
     exposure_time::Real) =
     apply_hgcdte_persistence!(persistence_model(sensor), det, exposure_time)
 
-update_sensor_persistence!(sensor::HgCdTeSensorType, det::Detector,
+update_sensor_persistence!(sensor::AbstractHgCdTeSensor, det::Detector,
     exposure_time::Real) =
     update_hgcdte_persistence!(persistence_model(sensor), det, exposure_time)
 
-function apply_post_readout_gain!(::HgCdTeSensorType, det::Detector)
+function apply_post_readout_gain!(::AbstractHgCdTeSensor, det::Detector)
     det.products.frame .*= det.params.gain
     return det.products.frame
 end
 
-function _batched_hgcdte_glow!(sensor::HgCdTeSensorType, det::Detector,
+function _batched_hgcdte_glow!(sensor::AbstractHgCdTeSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
     exposure_time::Real)
     rate = effective_glow_rate(det) *
@@ -237,10 +237,10 @@ _batched_sensor_statistics!(sensor::HgCdTeSensor, det::Detector,
     exposure_time::Real) =
     _batched_hgcdte_glow!(sensor, det, cube, scratch, rng, exposure_time)
 
-_batched_post_readout_gain!(::HgCdTeSensorType, det::Detector,
+_batched_post_readout_gain!(::AbstractHgCdTeSensor, det::Detector,
     cube::AbstractArray) = (cube .*= det.params.gain; cube)
 
-@inline _require_batched_sensor_compat(sensor::HgCdTeSensorType) =
+@inline _require_batched_sensor_compat(sensor::AbstractHgCdTeSensor) =
     require_batched_hgcdte_sampling(multi_read_sampling_mode(sensor))
 @inline require_batched_hgcdte_sampling(::FrameSamplingMode) = nothing
 require_batched_hgcdte_sampling(::UpTheRampSampling) =
@@ -268,7 +268,7 @@ function _hgcdte_readout_products_type(::FrameSamplingMode, frame::A,
     }
 end
 
-function detector_readout_products_type(sensor::HgCdTeSensorType, frame::A,
+function detector_readout_products_type(sensor::AbstractHgCdTeSensor, frame::A,
     ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
     return _hgcdte_readout_products_type(
         multi_read_sampling_mode(sensor), frame, T)
@@ -292,53 +292,53 @@ function _hgcdte_readout_workspace_type(::FrameSamplingMode, frame::A,
     }
 end
 
-function detector_readout_workspace_type(sensor::HgCdTeSensorType, frame::A,
+function detector_readout_workspace_type(sensor::AbstractHgCdTeSensor, frame::A,
     ::Type{T}) where {T<:AbstractFloat,A<:AbstractMatrix{T}}
     return _hgcdte_readout_workspace_type(
         multi_read_sampling_mode(sensor), frame, T)
 end
 
 @inline function prepare_frame_readout_state!(
-    sensor::HgCdTeSensorType, det::Detector)
+    sensor::AbstractHgCdTeSensor, det::Detector)
     return prepare_hgcdte_readout_state!(
         multi_read_sampling_mode(sensor), sensor, det)
 end
 
 @inline function prepare_hgcdte_readout_state!(::FrameSamplingMode,
-    sensor::HgCdTeSensorType, det::Detector)
+    sensor::AbstractHgCdTeSensor, det::Detector)
     _ensure_multi_read_products!(sensor, det)
     return det
 end
 
 @inline function prepare_hgcdte_readout_state!(mode::UpTheRampSampling,
-    ::HgCdTeSensorType, det::Detector)
+    ::AbstractHgCdTeSensor, det::Detector)
     ensure_up_the_ramp_products!(det, mode.n_reads)
     return det
 end
 
-function finalize_readout_products!(sensor::HgCdTeSensorType,
+function finalize_readout_products!(sensor::AbstractHgCdTeSensor,
     det::Detector, rng::AbstractRNG, exposure_time::Real)
     return finalize_hgcdte_readout_products!(
         multi_read_sampling_mode(sensor), sensor, det, rng, exposure_time)
 end
 
 finalize_hgcdte_readout_products!(::FrameSamplingMode,
-    sensor::HgCdTeSensorType, det::Detector, rng::AbstractRNG,
+    sensor::AbstractHgCdTeSensor, det::Detector, rng::AbstractRNG,
     ::Real) = finalize_multi_read_readout_products!(sensor, det, rng)
 
 finalize_hgcdte_readout_products!(mode::UpTheRampSampling,
-    sensor::HgCdTeSensorType, det::Detector, rng::AbstractRNG,
+    sensor::AbstractHgCdTeSensor, det::Detector, rng::AbstractRNG,
     exposure_time::Real) =
     finalize_up_the_ramp_readout_products!(
         mode, sensor, det, rng, exposure_time)
 
-function _finalize_capture!(::HgCdTeSensorType, det::Detector,
+function _finalize_capture!(::AbstractHgCdTeSensor, det::Detector,
     rng::AbstractRNG, exposure_time::Real)
     return finalize_hgcdte_capture!(
         det, rng, exposure_time, exposure_time)
 end
 
-function _finalize_incremental_capture!(::HgCdTeSensorType,
+function _finalize_incremental_capture!(::AbstractHgCdTeSensor,
     det::Detector, rng::AbstractRNG, exposure_time::Real)
     return finalize_hgcdte_capture!(
         det, rng, exposure_time, zero(exposure_time))
