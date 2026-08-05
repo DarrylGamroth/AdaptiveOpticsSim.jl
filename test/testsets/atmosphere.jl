@@ -53,7 +53,7 @@ end
         L0=T(25),
         fractional_cn2=T[0.7, 0.3],
         wind_speed=T[8, 3],
-        wind_direction=T[15, 120],
+        wind_direction_deg=T[15, 120],
         altitude=T[0, 8_000],
         layer_ids=(:ground, :high),
         T=T,
@@ -89,7 +89,7 @@ end
         L0=T(25),
         fractional_cn2=T[1],
         wind_speed=T[0],
-        wind_direction=T[0],
+        wind_direction_deg=T[0],
         altitude=T[0],
         layer_ids=(:ground,),
         screen_resolution=5,
@@ -107,7 +107,7 @@ end
         r0=T(0.2),
         fractional_cn2=T[1],
         wind_speed=T[0],
-        wind_direction=T[0],
+        wind_direction_deg=T[0],
         altitude=T[0],
         layer_ids=nothing,
         T=T,
@@ -116,7 +116,7 @@ end
         r0=T(0.2),
         fractional_cn2=T[0.5, 0.5],
         wind_speed=T[0, 0],
-        wind_direction=T[0, 0],
+        wind_direction_deg=T[0, 0],
         altitude=T[0, 1],
         layer_ids=(:duplicate, :duplicate),
         T=T,
@@ -125,7 +125,7 @@ end
         r0=T(0.2),
         fractional_cn2=T[0.4, 0.4],
         wind_speed=T[0, 0],
-        wind_direction=T[0, 0],
+        wind_direction_deg=T[0, 0],
         altitude=T[0, 1],
         layer_ids=(:ground, :high),
         T=T,
@@ -134,7 +134,7 @@ end
         r0=T(0.2),
         fractional_cn2=T[1],
         wind_speed=T[0],
-        wind_direction=T[0],
+        wind_direction_deg=T[0],
         altitude=T[0],
         layer_ids=(:ground,),
         screen_resolution=true,
@@ -165,7 +165,7 @@ end
         r0=0.2,
         fractional_cn2=[0.6, 0.4],
         wind_speed=[4.0, 2.0],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     onaxis_renderer = prepare_atmosphere_renderer(atm, tel, onaxis)
@@ -240,7 +240,7 @@ end
         r0=0.2,
         fractional_cn2=[0.6, 0.4],
         wind_speed=[4.0, 2.0],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     other_epoch = advance_to!(other, 0.75; rng=MersenneTwister(102))
@@ -392,7 +392,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
         screen_resolution=33,
         stencil_size=35,
@@ -430,7 +430,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
         screen_resolution=33,
         stencil_size=35,
@@ -447,7 +447,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[50.0],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
         screen_resolution=33,
         stencil_size=35,
@@ -466,7 +466,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[500.0],
-        wind_direction=[90.0],
+        wind_direction_deg=[90.0],
         altitude=[0.0],
         screen_resolution=33,
         stencil_size=35,
@@ -481,7 +481,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[diagonal_speed],
-        wind_direction=[45.0],
+        wind_direction_deg=[45.0],
         altitude=[0.0],
         screen_resolution=33,
         stencil_size=35,
@@ -502,7 +502,7 @@ end
             L0=25.0,
             fractional_cn2=[0.7, 0.3],
             wind_speed=[6.0, 3.0],
-            wind_direction=[0.0, 120.0],
+            wind_direction_deg=[0.0, 120.0],
             altitude=[0.0, 5000.0],
             screen_resolution=33,
             stencil_size=35,
@@ -531,7 +531,7 @@ end
             L0=25.0,
             fractional_cn2=[0.5, 0.5],
             wind_speed=[10.0, 6.0],
-            wind_direction=[0.0, 90.0],
+            wind_direction_deg=[0.0, 90.0],
             altitude=[0.0, 5000.0],
             screen_resolution=33,
             stencil_size=35,
@@ -556,7 +556,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[wind_speed_px],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
     )
     infinite = InfiniteMultiLayerAtmosphere(tel;
@@ -564,7 +564,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[wind_speed_px],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
         screen_resolution=33,
         stencil_size=35,
@@ -619,7 +619,7 @@ end
             L0=25.0,
             fractional_cn2=[1.0],
             wind_speed=[0.0],
-            wind_direction=[0.0],
+            wind_direction_deg=[0.0],
             altitude=[5000.0],
             kwargs...,
         )
@@ -662,7 +662,7 @@ end
             L0=25.0,
             fractional_cn2=[0.7, 0.3],
             wind_speed=[6.0, 3.0],
-            wind_direction=[0.0, 120.0],
+            wind_direction_deg=[0.0, 120.0],
             altitude=[0.0, 5000.0],
             kwargs...,
         )
@@ -696,7 +696,7 @@ end
                 L0=25.0,
                 fractional_cn2=fractions,
                 wind_speed=fill(0.0, length(fractions)),
-                wind_direction=fill(0.0, length(fractions)),
+                wind_direction_deg=fill(0.0, length(fractions)),
                 altitude=fill(0.0, length(fractions)),
                 kwargs...,
             )
@@ -799,7 +799,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[one_pixel_speed],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
     )
     advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(3))
@@ -818,7 +818,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
     )
     advance_by!(stationary, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(4))
@@ -831,7 +831,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[quarter_pixel_speed],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
     )
     advance_by!(subpixel, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(5))
@@ -850,7 +850,7 @@ end
                 L0=25.0,
                 fractional_cn2=fractions,
                 wind_speed=fill(0.0, length(fractions)),
-                wind_direction=fill(0.0, length(fractions)),
+                wind_direction_deg=fill(0.0, length(fractions)),
                 altitude=fill(0.0, length(fractions)),
             )
             advance_by!(atm_local, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(s))
@@ -871,7 +871,7 @@ end
         resolution=16,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[one_pixel_speed, quarter_pixel_speed],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     replay_b = moving_atmosphere_trace(
@@ -880,7 +880,7 @@ end
         resolution=16,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[one_pixel_speed, quarter_pixel_speed],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     replay_c = moving_atmosphere_trace(
@@ -889,7 +889,7 @@ end
         resolution=16,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[one_pixel_speed, quarter_pixel_speed],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     @test replay_a == replay_b

@@ -203,7 +203,7 @@ function prepare_gate7_operation(
         L0=T(workload["outer_scale_m"]),
         fractional_cn2=T.(workload["fractional_cn2"]),
         wind_speed=T.(workload["wind_speed_m_s"]),
-        wind_direction=T.(workload["wind_direction_deg"]),
+        wind_direction_deg=T.(workload["wind_direction_deg"]),
         altitude=T.(workload["layer_altitude_m"]),
         layer_ids=(:ground, :high),
         T=T,

@@ -1320,7 +1320,7 @@ end
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[8.0, 4.0],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(1))
@@ -1351,7 +1351,7 @@ end
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
     )
     advance_by!(fresnel_atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(2))
@@ -1695,7 +1695,9 @@ end
     expected = falses(32, 32)
     build_mask!(expected, AnnularAperture(inner_radius=0.25, outer_radius=1.0))
     @test pupil_mask(tel) == expected
-    apply_spiders!(tel; thickness=0.4, angles=[0.0, 90.0])
+    apply_spiders!(tel; thickness=0.4, angles_deg=[0.0, 90.0])
+    @test_throws UndefKeywordError apply_spiders!(tel;
+        thickness=0.4, angles=[0.0, 90.0])
     manual = copy(expected)
     apply_mask!(manual, SpiderMask(thickness=0.1, angle_rad=0.0))
     apply_mask!(manual, SpiderMask(thickness=0.1, angle_rad=pi / 2))
@@ -1718,6 +1720,42 @@ end
     AdaptiveOpticsSim.WavefrontSensors.set_valid_subapertures!(
         valid2, pupil, 0.5)
     @test valid2 == valid
+end
+
+@testset "Public angle-unit keywords" begin
+    telescope = Telescope(
+        resolution=8,
+        diameter=1.0,
+        central_obstruction=0.0,
+    )
+    atmosphere_arguments = (
+        r0=0.2,
+        fractional_cn2=[1.0],
+        wind_speed=[0.0],
+        altitude=[0.0],
+    )
+    @test_throws UndefKeywordError MultiLayerAtmosphere(
+        telescope;
+        atmosphere_arguments...,
+        wind_direction=[0.0],
+    )
+    @test_throws UndefKeywordError MultiLayerAtmosphereDefinition(;
+        atmosphere_arguments...,
+        wind_direction=[0.0],
+        layer_ids=(:ground,),
+    )
+
+    misregistration = Misregistration(
+        anamorphosis_angle_deg=30.0,
+        tangential_scaling=1.1,
+        radial_scaling=0.9,
+    )
+    @test anamorphosis_angle_deg(misregistration) ≈ 30.0
+    @test misregistration_component(
+        misregistration, :anamorphosis_angle_deg) ≈ 30.0
+    @test_throws MethodError Misregistration(anamorphosis_angle=30.0)
+    @test_throws InvalidConfiguration misregistration_component(
+        misregistration, :anamorphosis_angle)
 end
 
 @testset "Zernike basis" begin

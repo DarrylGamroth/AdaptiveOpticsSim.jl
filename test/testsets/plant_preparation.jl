@@ -126,7 +126,7 @@ function run_selected_acquisition_materialization_tests()
         L0=T(25),
         fractional_cn2=T[0.65, 0.35],
         wind_speed=T[7, 3],
-        wind_direction=T[15, 110],
+        wind_direction_deg=T[15, 110],
         altitude=T[0, 6_000],
         layer_ids=(:ground, :high),
         T=T,
@@ -284,7 +284,7 @@ function run_selected_acquisition_materialization_tests()
         L0=T(25),
         fractional_cn2=T[0.65, 0.35],
         wind_speed=T[7, 3],
-        wind_direction=T[15, 110],
+        wind_direction_deg=T[15, 110],
         altitude=T[0, 6_000],
         T=T,
     )

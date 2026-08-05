@@ -46,7 +46,7 @@ atm = MultiLayerAtmosphere(
     L0=25.0,
     fractional_cn2=[0.6, 0.4],
     wind_speed=[8.0, 12.0],
-    wind_direction=[0.0, 90.0],
+    wind_direction_deg=[0.0, 90.0],
     altitude=[0.0, 5000.0],
 )
 wfs = ShackHartmannWFS(

@@ -975,7 +975,7 @@ end
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     revision = AdaptiveOpticsSim.Optics.aperture_revision(tel)
     base_sum = sum(pupil_mask(tel))
-    apply_spiders!(tel; thickness=0.5, angles=[0.0, 90.0])
+    apply_spiders!(tel; thickness=0.5, angles_deg=[0.0, 90.0])
     @test sum(pupil_mask(tel)) < base_sum
     @test AdaptiveOpticsSim.Optics.aperture_revision(tel) == revision + 1
     revision = AdaptiveOpticsSim.Optics.aperture_revision(tel)

@@ -37,9 +37,9 @@
         readout_model=CurvatureChannelReadout())
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
     moving_atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
-        wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0])
+        wind_speed=[0.0], wind_direction_deg=[0.0], altitude=[0.0])
     infinite_atm = InfiniteMultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
-        wind_speed=[0.0], wind_direction=[0.0], altitude=[0.0], screen_resolution=33, stencil_size=35)
+        wind_speed=[0.0], wind_direction_deg=[0.0], altitude=[0.0], screen_resolution=33, stencil_size=35)
     @test CCDSensor <: AbstractFrameSensor
     @test CMOSSensor <: AbstractFrameSensor
     @test AbstractAvalancheFrameSensor <: AbstractFrameSensor

@@ -479,8 +479,10 @@ end
     @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
         malformed_estimator)
     @test lift.coefficients == malformed_estimation_coefficients
-    @test lift.workspace.full_coefficients_buffer ==
-        malformed_estimation_scratch
+    @test isequal(
+        lift.workspace.full_coefficients_buffer,
+        malformed_estimation_scratch,
+    )
 
     aliased_estimation_workspace = replace_lift_rhs_workspace(
         lift.workspace, lift.coefficients)
@@ -512,8 +514,10 @@ end
         resized_coefficients_estimator.workspace.full_coefficients_buffer)
     @test_throws DimensionMismatchError WavefrontSensors.reconstruct!(
         resized_coefficients_estimator)
-    @test resized_coefficients_estimator.workspace.full_coefficients_buffer ==
-        resized_coefficients_scratch
+    @test isequal(
+        resized_coefficients_estimator.workspace.full_coefficients_buffer,
+        resized_coefficients_scratch,
+    )
 
     resized_initial = zeros(3)
     resized_initial_estimator = prepare_lift_estimator(

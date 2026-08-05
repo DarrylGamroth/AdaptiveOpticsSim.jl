@@ -109,7 +109,7 @@ function make_gate0_card(raw::AbstractDict)
             central_obstruction=0.0)
         atmosphere = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0,
             fractional_cn2=[0.6, 0.4], wind_speed=[7.0, 13.0],
-            wind_direction=[0.0, 120.0], altitude=[0.0, 6000.0])
+            wind_direction_deg=[0.0, 120.0], altitude=[0.0, 6000.0])
         src = Source(band=:I, magnitude=0.0, coordinates=(3.0, 45.0))
         rng = runtime_rng(Int(raw["rng_seed"]))
         duration = 1e-3

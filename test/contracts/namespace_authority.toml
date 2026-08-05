@@ -728,6 +728,9 @@ canonical_glossary_terms = [
     "Sample period",
     "Zernike phase spot",
     "Curvature defocus pair",
+    "Atmosphere wind direction",
+    "Telescope-spider position angle",
+    "Deformable-mirror misregistration",
 ]
 
 [physical_ownership]

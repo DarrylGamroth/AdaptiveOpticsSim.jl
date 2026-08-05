@@ -298,11 +298,11 @@ end
     return pitch / sqrt(-convert(T, 2) * log(coupling))
 end
 
-function _apply_ad_misregistration(x, y, shift_x, shift_y, rotation_deg, anamorphosis_angle,
+function _apply_ad_misregistration(x, y, shift_x, shift_y, rotation_deg, anamorphosis_angle_deg,
     tangential_scaling, radial_scaling)
-    T = typeof(x + y + shift_x + shift_y + rotation_deg + anamorphosis_angle +
+    T = typeof(x + y + shift_x + shift_y + rotation_deg + anamorphosis_angle_deg +
                tangential_scaling + radial_scaling)
-    theta = convert(T, pi / 180) * anamorphosis_angle
+    theta = convert(T, pi / 180) * anamorphosis_angle_deg
     sin_theta, cos_theta = sincos(theta)
     phi = convert(T, pi / 180) * rotation_deg
     sin_phi, cos_phi = sincos(phi)

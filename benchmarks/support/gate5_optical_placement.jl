@@ -316,7 +316,7 @@ function gate5_plant_definition(
         L0=Float64(raw["outer_scale_m"]),
         fractional_cn2=[1.0],
         wind_speed=[0.0],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
         layer_ids=(:ground,),
     )
@@ -652,7 +652,7 @@ function validate_finite_support(raw::AbstractDict)
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
         layer_ids=(:ground,),
     )

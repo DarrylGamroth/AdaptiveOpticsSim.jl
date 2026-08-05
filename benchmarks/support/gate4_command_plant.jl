@@ -245,7 +245,7 @@ function command_plant_definition(raw::AbstractDict;
         L0=T(raw["outer_scale_m"]),
         fractional_cn2=T[1],
         wind_speed=T[0],
-        wind_direction=T[0],
+        wind_direction_deg=T[0],
         altitude=T[0],
         layer_ids=(:ground,),
         T=T,

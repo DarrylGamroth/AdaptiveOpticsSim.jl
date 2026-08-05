@@ -139,7 +139,7 @@ end
             L0=25.0,
             fractional_cn2=(0.4, 0.6),
             wind_speed=(5.0, 10.0),
-            wind_direction=(0.0, 90.0),
+            wind_direction_deg=(0.0, 90.0),
             altitude=(5000.0, 0.0),
             layer_ids=(:high, :ground),
         ),

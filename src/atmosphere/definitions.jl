@@ -3,7 +3,7 @@ struct AtmosphereLayerDefinition{T<:AbstractFloat}
     id::AtmosphereLayerID
     cn2_fraction::T
     wind_speed::T
-    wind_direction::T
+    wind_direction_deg::T
     altitude::T
 end
 
@@ -91,7 +91,7 @@ function _cold_atmosphere_layer_definitions(
     ::Type{T};
     fractional_cn2,
     wind_speed,
-    wind_direction,
+    wind_direction_deg,
     altitude,
     layer_ids,
 ) where {T<:AbstractFloat}
@@ -102,8 +102,8 @@ function _cold_atmosphere_layer_definitions(
         "fractional_cn2 cannot be empty"))
     length(wind_speed) == n_layers || throw(InvalidConfiguration(
         "wind_speed length must match fractional_cn2"))
-    length(wind_direction) == n_layers || throw(InvalidConfiguration(
-        "wind_direction length must match fractional_cn2"))
+    length(wind_direction_deg) == n_layers || throw(InvalidConfiguration(
+        "wind_direction_deg length must match fractional_cn2"))
     length(altitude) == n_layers || throw(InvalidConfiguration(
         "altitude length must match fractional_cn2"))
     length(layer_ids) == n_layers || throw(InvalidConfiguration(
@@ -117,8 +117,8 @@ function _cold_atmosphere_layer_definitions(
                 "atmosphere Cn2 fraction"),
             _converted_nonnegative_finite(wind_speed[index], T,
                 "atmosphere wind speed"),
-            _converted_finite(wind_direction[index], T,
-                "atmosphere wind direction"),
+            _converted_finite(wind_direction_deg[index], T,
+                "atmosphere wind direction in degrees"),
             _converted_nonnegative_finite(altitude[index], T,
                 "atmosphere layer altitude"),
         )
@@ -135,7 +135,7 @@ function MultiLayerAtmosphereDefinition(;
     L0::Real=25.0,
     fractional_cn2,
     wind_speed,
-    wind_direction,
+    wind_direction_deg,
     altitude,
     layer_ids,
     T::Type{<:AbstractFloat}=Float64,
@@ -143,7 +143,7 @@ function MultiLayerAtmosphereDefinition(;
     layers = _cold_atmosphere_layer_definitions(T;
         fractional_cn2,
         wind_speed,
-        wind_direction,
+        wind_direction_deg,
         altitude,
         layer_ids,
     )
@@ -183,7 +183,7 @@ function InfiniteMultiLayerAtmosphereDefinition(;
     L0::Real=25.0,
     fractional_cn2,
     wind_speed,
-    wind_direction,
+    wind_direction_deg,
     altitude,
     layer_ids,
     screen_resolution=nothing,
@@ -193,7 +193,7 @@ function InfiniteMultiLayerAtmosphereDefinition(;
     layers = _cold_atmosphere_layer_definitions(T;
         fractional_cn2,
         wind_speed,
-        wind_direction,
+        wind_direction_deg,
         altitude,
         layer_ids,
     )
@@ -214,8 +214,8 @@ end
 @inline _definition_wind_speeds(definition) =
     map(layer -> layer.wind_speed, definition.layers)
 
-@inline _definition_wind_directions(definition) =
-    map(layer -> layer.wind_direction, definition.layers)
+@inline _definition_wind_directions_deg(definition) =
+    map(layer -> layer.wind_direction_deg, definition.layers)
 
 @inline _definition_altitudes(definition) =
     map(layer -> layer.altitude, definition.layers)
@@ -246,7 +246,7 @@ function _prepare_timed_atmosphere(
         L0=definition.L0,
         fractional_cn2=_definition_cn2_fractions(definition),
         wind_speed=_definition_wind_speeds(definition),
-        wind_direction=_definition_wind_directions(definition),
+        wind_direction_deg=_definition_wind_directions_deg(definition),
         altitude=_definition_altitudes(definition),
         layer_ids=_definition_layer_ids(definition),
         T,
@@ -268,7 +268,7 @@ function _prepare_timed_atmosphere(
         L0=definition.L0,
         fractional_cn2=_definition_cn2_fractions(definition),
         wind_speed=_definition_wind_speeds(definition),
-        wind_direction=_definition_wind_directions(definition),
+        wind_direction_deg=_definition_wind_directions_deg(definition),
         altitude=_definition_altitudes(definition),
         layer_ids=_definition_layer_ids(definition),
         screen_resolution,

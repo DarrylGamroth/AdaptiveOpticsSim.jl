@@ -363,9 +363,9 @@ end
 
         scalar_spiders = copy(scalar_pupil)
         ka_spiders = copy(ka_pupil)
-        angles = [0.0, 45.0, 90.0]
-        AdaptiveOpticsSim.Optics._apply_spiders!(SCALAR_CPU_STYLE, scalar_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
-        AdaptiveOpticsSim.Optics._apply_spiders!(KA_CPU_STYLE, ka_spiders, angles, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
+        angles_deg = [0.0, 45.0, 90.0]
+        AdaptiveOpticsSim.Optics._apply_spiders!(SCALAR_CPU_STYLE, scalar_spiders, angles_deg, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
+        AdaptiveOpticsSim.Optics._apply_spiders!(KA_CPU_STYLE, ka_spiders, angles_deg, 0.1, 0.0, 0.0, 8.5, 8.5, 8.0, 16)
         mark_ka_cpu_kernel!(:spider_mask_kernel!)
         @test ka_spiders == scalar_spiders
 

@@ -309,7 +309,7 @@ function conjugate_geometry_atmosphere(telescope::Telescope)
         L0=T(25),
         fractional_cn2=T[1],
         wind_speed=T[0],
-        wind_direction=T[0],
+        wind_direction_deg=T[0],
         altitude=T[0],
         layer_ids=(:ground,),
         T=T,

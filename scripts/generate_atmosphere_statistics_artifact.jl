@@ -22,7 +22,7 @@ function ensemble_std(tel::Telescope, constructor, fractions; nsamp::Int=16, kwa
             L0=25.0,
             fractional_cn2=fractions,
             wind_speed=fill(0.0, length(fractions)),
-            wind_direction=fill(0.0, length(fractions)),
+            wind_direction_deg=fill(0.0, length(fractions)),
             altitude=fill(0.0, length(fractions)),
             kwargs...,
         )
@@ -43,7 +43,7 @@ function trajectory_std_windows(; seed::Integer=79, steps::Int=24)
         L0=25.0,
         fractional_cn2=[0.5, 0.5],
         wind_speed=[10.0, 6.0],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
         screen_resolution=33,
         stencil_size=35,
@@ -71,7 +71,7 @@ function periodicity_metrics()
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[wind_speed_px],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
     )
     infinite = InfiniteMultiLayerAtmosphere(tel;
@@ -79,7 +79,7 @@ function periodicity_metrics()
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[wind_speed_px],
-        wind_direction=[0.0],
+        wind_direction_deg=[0.0],
         altitude=[0.0],
         screen_resolution=33,
         stencil_size=35,

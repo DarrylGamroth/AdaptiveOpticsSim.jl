@@ -479,7 +479,7 @@ end
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[8.0, 4.0],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(3))

@@ -355,7 +355,7 @@ function command_composition_fixture(; reverse_order::Bool=false,
     telescope = Telescope(resolution=8, diameter=T(8),
         central_obstruction=zero(T), T=T)
     atmosphere = MultiLayerAtmosphere(telescope; r0=T(0.2), L0=T(25),
-        fractional_cn2=T[1], wind_speed=T[0], wind_direction=T[0],
+        fractional_cn2=T[1], wind_speed=T[0], wind_direction_deg=T[0],
         altitude=T[0], layer_ids=(:ground,), T=T)
     source = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=T(100), T=T)
@@ -411,7 +411,7 @@ function array_initial_command_fixture()
     telescope = Telescope(resolution=8, diameter=T(8),
         central_obstruction=zero(T), T=T)
     atmosphere = MultiLayerAtmosphere(telescope; r0=T(0.2), L0=T(25),
-        fractional_cn2=T[1], wind_speed=T[0], wind_direction=T[0],
+        fractional_cn2=T[1], wind_speed=T[0], wind_direction_deg=T[0],
         altitude=T[0], layer_ids=(:ground,), T=T)
     source = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=T(100), T=T)
