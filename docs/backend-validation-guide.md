@@ -406,7 +406,7 @@ The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
 detector-processed export surface that previously regressed on CUDA:
 
 - null-noise diffractive SH with detector capture
-- CPU vs GPU comparison of the Shack-Hartmann exported spot-cube path in
+- CPU vs GPU comparison of the internal legacy Shack-Hartmann spot diagnostic in
   [`shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
 
 This keeps the detector-processed lenslet-spot storage under backend parity

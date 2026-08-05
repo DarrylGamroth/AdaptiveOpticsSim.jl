@@ -806,7 +806,7 @@ function _require_exact_sh_mode_target(
         ),
         (
             "Shack-Hartmann spot cube",
-            "Shack-Hartmann exported spot cube",
+            "Shack-Hartmann internal legacy spot diagnostic",
             "Shack-Hartmann detector-noise cube",
         ),
         target,
