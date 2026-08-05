@@ -1533,6 +1533,13 @@ components. Migrated bindings are not forwarded through the root.
   `WavefrontSensors.PreparedZernikeOptics`,
   `WavefrontSensors.ZernikeEstimationPlan`, and
   `WavefrontSensors.PreparedZernikeEstimator`.
+- Curvature optical composition: `Optics.CurvatureDefocusPair`,
+  `CurvatureOpticalFrontEnd`, `curvature_rate_maps`, and
+  `set_curvature_calibration!`. Qualified prepared-execution seams are
+  `WavefrontSensors.CurvatureOpticsPlan`,
+  `WavefrontSensors.PreparedCurvatureOptics`,
+  `WavefrontSensors.CurvatureEstimationPlan`, and
+  `WavefrontSensors.PreparedCurvatureEstimator`.
 - Shack-Hartmann optical composition: `Optics` owns `MicrolensArrayParams`,
   `MicrolensArray`, `prepare_microlens_propagation`, and `microlens_array`;
   `WavefrontSensors` owns `ShackHartmannDirectFrontEnd`,

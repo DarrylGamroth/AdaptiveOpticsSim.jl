@@ -88,7 +88,8 @@
     @test supports_photon_counting(mkid.params.sensor)
     @test !supports_energy_resolving(mkid.params.sensor)
     @test !supports_photon_number_resolving(mkid.params.sensor)
-    @test curv_count.params.readout_model isa CurvatureChannelReadout
+    @test curv_count.acquisition.plan.readout_model isa
+        CurvatureChannelReadout
 
     # IF-SRC
     assert_source_interface(src)

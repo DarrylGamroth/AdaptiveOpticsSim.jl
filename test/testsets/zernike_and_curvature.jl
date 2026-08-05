@@ -13,7 +13,7 @@ end
 @inline wfs_optical_rate_storage(wfs::ZernikeWFS) =
     wfs.acquisition.products.frame
 @inline wfs_optical_rate_storage(wfs) =
-    wfs.acquisition.state.camera_frame
+    wfs.acquisition.products.frame
 
 @testset "Zernike WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
@@ -297,7 +297,7 @@ end
         wfs = CurvatureWFS(tel; pupil_samples=2,
             diffraction_padding=padding)
         curvature_intensity!(style, wfs, pupil, src)
-        @test sum(wfs.front_end.propagation.intensity_stack) ≈
+        @test sum(wfs.front_end.propagation.workspace.intensity_stack) ≈
             expected_two_branch_rate atol=1e-10 rtol=1e-12
         if padding == 1
             @test sum(wfs_optical_rate_storage(wfs)) ≈
@@ -307,6 +307,69 @@ end
                 expected_two_branch_rate
         end
     end
+end
+
+@testset "Curvature KernelAbstractions CPU stage parity" begin
+    T = Float64
+    tel = Telescope(resolution=8, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    pupil = PupilFunction(tel; T=T)
+    pupil.opd .= reshape(T.(1:64), 8, 8) .* T(1e-10)
+    source = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(10), T=T)
+
+    scalar_sensor = CurvatureWFS(tel; pupil_samples=2, T=T)
+    accelerated_sensor = CurvatureWFS(tel; pupil_samples=2, T=T)
+    @test backend(accelerated_sensor) isa CPUBackend
+    scalar_front_end = CurvatureOpticalFrontEnd(scalar_sensor, source)
+    accelerated_front_end = CurvatureOpticalFrontEnd(
+        accelerated_sensor, source)
+
+    scalar_fields = copy(
+        WavefrontSensors._form_curvature_branch_fields!(
+            ScalarCPUStyle(), scalar_front_end, pupil))
+    accelerated_fields = copy(
+        WavefrontSensors._form_curvature_branch_fields!(
+            KA_CPU_STYLE, accelerated_front_end, pupil))
+    @test accelerated_fields ≈ scalar_fields rtol=T(2e-12) atol=T(2e-12)
+
+    scalar_rates = curvature_rate_maps(scalar_front_end, pupil)
+    accelerated_rates = curvature_rate_maps(accelerated_front_end, pupil)
+    scalar_workspace = scalar_sensor.front_end.propagation.workspace
+    accelerated_workspace = accelerated_sensor.front_end.propagation.workspace
+    intensity = reshape(T.(1:length(scalar_workspace.intensity_stack)),
+        size(scalar_workspace.intensity_stack))
+    copyto!(scalar_workspace.intensity_stack, intensity)
+    copyto!(accelerated_workspace.intensity_stack, intensity)
+    WavefrontSensors._sample_curvature_rate_planes!(
+        ScalarCPUStyle(), scalar_rates, scalar_front_end)
+    WavefrontSensors._sample_curvature_rate_planes!(
+        KA_CPU_STYLE, accelerated_rates, accelerated_front_end)
+    @test accelerated_rates[1].values ≈ scalar_rates[1].values
+    @test accelerated_rates[2].values ≈ scalar_rates[2].values
+
+    padding = scalar_sensor.front_end.propagation.plan.defocus_pair.diffraction_padding
+    field = ElectricField(pupil, source; zero_padding=padding, T=T)
+    field_plan = prepare_pupil_field(pupil, source, field;
+        center_even_grid=false)
+    fill_electric_field!(field, pupil, field_plan)
+    scalar_field_stack = copy(
+        WavefrontSensors._form_curvature_field_input!(
+            ScalarCPUStyle(), scalar_workspace, field))
+    accelerated_field_stack = copy(
+        WavefrontSensors._form_curvature_field_input!(
+            KA_CPU_STYLE, accelerated_workspace, field))
+    @test accelerated_field_stack ≈ scalar_field_stack
+
+    set_curvature_calibration!(accelerated_sensor, zeros(T, 2, 2);
+        wavelength_m=wavelength(source), signature=UInt(0x4b414350))
+    observation = WFSObservation(zeros(T, 2, 4);
+        units=:photon_count, layout=:curvature_branch_channels)
+    measurement = WFSMeasurement(zeros(T, 4);
+        units=:dimensionless, kind=:curvature_signal)
+    estimator = prepare_wfs_estimation(
+        accelerated_sensor, observation, measurement)
+    @test validate_wfs_target(estimator, HostComputeDevice()) === estimator
 end
 
 @testset "Curvature WFS" begin
@@ -397,17 +460,17 @@ end
     imbalanced_flat = copy(measure!(imbalanced, pupil, src))
     @test imbalanced_flat ≈ zero.(imbalanced_flat) atol=1e-10
     plus_mean = mean(@view wfs_optical_rate_storage(imbalanced)[
-        1:imbalanced.params.pupil_samples, :])
+        1:imbalanced.estimator.params.pupil_samples, :])
     minus_mean = mean(@view wfs_optical_rate_storage(imbalanced)[
-        imbalanced.params.pupil_samples+1:end, :])
+        imbalanced.estimator.params.pupil_samples+1:end, :])
     @test plus_mean > minus_mean
     @test_throws InvalidConfiguration CurvatureBranchResponse(plus_throughput=-1.0)
 
     oversampled = CurvatureWFS(tel; pupil_samples=8, readout_crop_resolution=16, readout_pixels_per_sample=2)
     oversampled_flat = copy(measure!(oversampled, pupil, src))
     @test size(wfs_optical_rate_storage(oversampled)) == (32, 16)
-    @test size(oversampled.front_end.propagation.frame_plus) == (16, 16)
-    @test size(oversampled.estimator.state.reduced_plus) == (8, 8)
+    @test size(oversampled.front_end.propagation.workspace.frame_plus) == (16, 16)
+    @test size(oversampled.estimator.workspace.reduced_plus) == (8, 8)
     @test oversampled_flat ≈ zero.(oversampled_flat) atol=1e-10
     @test_throws InvalidConfiguration CurvatureWFS(tel; pupil_samples=8, readout_crop_resolution=18, readout_pixels_per_sample=2)
 

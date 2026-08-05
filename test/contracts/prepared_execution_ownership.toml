@@ -172,8 +172,8 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 439
-baseline_mixed_type_count = 12
+baseline_type_count = 446
+baseline_mixed_type_count = 9
 
 [[type_inventory.files]]
 path = "ext/AdaptiveOpticsSimAMDGPUExt.jl"
@@ -982,18 +982,25 @@ entries = [
 path = "src/wfs/curvature.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["CurvatureAcquisitionState","mutable_struct",1,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
-    ["CurvatureEstimatorState","mutable_struct",10,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-05"],
-    ["CurvatureWFSParams","struct",8,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["PreparedCurvaturePropagation","mutable_struct",13,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["CurvatureAcquisitionPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_neutral",true,"PE-05"],
+    ["CurvatureAcquisitionProducts","mutable_struct",1,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["CurvatureEstimatorParams","struct",2,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["CurvatureEstimatorProducts","mutable_struct",1,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["CurvatureEstimatorState","mutable_struct",6,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["CurvatureEstimatorWorkspace","mutable_struct",3,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["CurvaturePropagationPlan","struct",6,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["CurvaturePropagationWorkspace","mutable_struct",9,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedCurvaturePropagation","struct",2,"prepared",["prepared_owner"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]
 path = "src/wfs/curvature/stages.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["PreparedCurvatureEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
-    ["PreparedCurvatureOptics","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["CurvatureEstimationPlan","struct",5,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["CurvatureOpticsPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedCurvatureEstimator","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedCurvatureOptics","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedCurvaturePackedChannelAcquisition","struct",9,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedCurvaturePackedFrameAcquisition","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
 ]

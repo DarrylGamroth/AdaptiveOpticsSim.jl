@@ -353,8 +353,8 @@ end
     sensor = CurvatureWFS(tel; pupil_samples=4,
         readout_pixels_per_sample=1, T=T)
     @test !hasfield(typeof(sensor), :state)
-    @test sensor.front_end.propagation !== sensor.acquisition.state
-    @test sensor.acquisition.state !== sensor.estimator.state
+    @test sensor.front_end.propagation.workspace !== sensor.acquisition.products
+    @test sensor.acquisition.products !== sensor.estimator.state
     front_end = CurvatureOpticalFrontEnd(sensor, source)
     @test front_end.defocus_pair isa CurvatureDefocusPair{T}
     @test front_end.source === source
@@ -395,17 +395,26 @@ end
         @test err.stage === :wfs_optics
         @test err.reason === reason
     end
+    aliased_rate = IntensityMap(rates[1].metadata,
+        sensor.front_end.propagation.workspace.frame_plus)
+    alias_error = contract_captured_error() do
+        prepare_wfs_optics(front_end, pupil, (aliased_rate, rates[2]))
+    end
+    @test alias_error isa WFSPreparationError
+    @test alias_error.reason === :aliasing
     optics_plan = prepare_wfs_optics(front_end, pupil, rates)
+    @test optics_plan.plan isa CurvatureOpticsPlan
+    @test optics_plan.workspace === sensor.front_end.propagation.workspace
     @test @inferred(WavefrontSensors.wfs_optical_products(optics_plan)) === rates
     form_wfs_optical_products!(rates, pupil, optics_plan)
     @test pupil.opd == pupil_before
 
     AdaptiveOpticsSim.WavefrontSensors.curvature_intensity!(sensor, pupil, source)
-    @test rates[1].values ≈ sensor.front_end.propagation.frame_plus rtol=T(2e-12) atol=T(2e-12)
-    @test rates[2].values ≈ sensor.front_end.propagation.frame_minus rtol=T(2e-12) atol=T(2e-12)
+    @test rates[1].values ≈ sensor.front_end.propagation.workspace.frame_plus rtol=T(2e-12) atol=T(2e-12)
+    @test rates[2].values ≈ sensor.front_end.propagation.workspace.frame_minus rtol=T(2e-12) atol=T(2e-12)
 
     field = ElectricField(pupil, source;
-        zero_padding=sensor.params.diffraction_padding, T=T)
+        zero_padding=sensor.front_end.propagation.plan.defocus_pair.diffraction_padding, T=T)
     field_plan = prepare_pupil_field(pupil, source, field;
         center_even_grid=false)
     fill_electric_field!(field, pupil, field_plan)
@@ -573,14 +582,25 @@ end
     reference = zeros(T, size(sensor.estimator.state.reference_signal_2d))
     set_curvature_calibration!(sensor, reference;
         wavelength_m=wavelength(source), signature=UInt(0x43555256))
-    copyto!(sensor.estimator.state.reduced_plus, rates[1].values)
-    copyto!(sensor.estimator.state.reduced_minus, rates[2].values)
+    aliased_measurement = WFSMeasurement(sensor.estimator.products.signal;
+        units=:dimensionless, kind=:curvature_signal)
+    estimator_alias_error = contract_captured_error() do
+        prepare_wfs_estimation(sensor, observations, aliased_measurement)
+    end
+    @test estimator_alias_error isa WFSPreparationError
+    @test estimator_alias_error.reason === :aliasing
+    copyto!(sensor.estimator.workspace.reduced_plus, rates[1].values)
+    copyto!(sensor.estimator.workspace.reduced_minus, rates[2].values)
     expected_signal = copy(
         AdaptiveOpticsSim.WavefrontSensors.curvature_signal_from_planes!(sensor))
     measurement = WFSMeasurement(similar(slopes(sensor));
         units=:dimensionless, kind=:curvature_signal)
     estimator_plan = prepare_wfs_estimation(sensor, observations,
         measurement; branch_rate_scales=(T(10), T(20 / 3)))
+    @test estimator_plan.plan isa CurvatureEstimationPlan
+    @test estimator_plan.state === sensor.estimator.state
+    @test estimator_plan.workspace === sensor.estimator.workspace
+    @test estimator_plan.products === sensor.estimator.products
     @test wfs_measurement_path(estimator_plan) isa AcquiredObservationPath
     estimate_wfs_measurement!(measurement, observations, estimator_plan)
     @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
@@ -721,6 +741,28 @@ end
     @test counting_binding_error.reason === :prepared_binding
     @test counting_observation.storage == counting_before_replacement
     @test rand(rng) == rand(counting_rng_before_replacement)
+
+    optics_output_before_replacement =
+        (copy(rates[1].values), copy(rates[2].values))
+    sensor.front_end.propagation.workspace.phasor =
+        similar(sensor.front_end.propagation.workspace.phasor)
+    optics_binding_error = contract_captured_error() do
+        form_wfs_optical_products!(rates, pupil, optics_plan)
+    end
+    @test optics_binding_error isa WFSPreparationError
+    @test optics_binding_error.reason === :prepared_binding
+    @test rates[1].values == optics_output_before_replacement[1]
+    @test rates[2].values == optics_output_before_replacement[2]
+
+    measurement_before_replacement = copy(measurement.storage)
+    sensor.estimator.workspace.signal_2d =
+        similar(sensor.estimator.workspace.signal_2d)
+    estimator_binding_error = contract_captured_error() do
+        estimate_wfs_measurement!(measurement, observations, estimator_plan)
+    end
+    @test estimator_binding_error isa WFSPreparationError
+    @test estimator_binding_error.reason === :prepared_binding
+    @test measurement.storage == measurement_before_replacement
 end
 
 @testset "Prepared photon-counting WFS acquisition" begin

@@ -629,19 +629,19 @@ function _require_exact_wfs_target(
 end
 
 function _require_exact_curvature_propagation_target(
-    propagation::PreparedCurvaturePropagation,
+    workspace::CurvaturePropagationWorkspace,
     target::AbstractComputeDevice,
 )
     _require_exact_wfs_array_targets(
         (
-            propagation.phasor,
-            propagation.field_stack,
-            propagation.defocus_stack,
-            propagation.intensity_stack,
-            propagation.cropped_plus,
-            propagation.cropped_minus,
-            propagation.frame_plus,
-            propagation.frame_minus,
+            workspace.phasor,
+            workspace.field_stack,
+            workspace.defocus_stack,
+            workspace.intensity_stack,
+            workspace.cropped_plus,
+            workspace.cropped_minus,
+            workspace.frame_plus,
+            workspace.frame_minus,
         ),
         (
             "Curvature phasor",
@@ -656,25 +656,7 @@ function _require_exact_curvature_propagation_target(
         target,
         :wfs_optics,
     )
-    _require_exact_curvature_atmospheric_target(
-        propagation.atmospheric_propagation, target)
-    return propagation
-end
-
-@inline _require_exact_curvature_atmospheric_target(
-    ::Nothing,
-    ::AbstractComputeDevice,
-) = nothing
-
-function _require_exact_curvature_atmospheric_target(
-    propagation::AtmosphericFieldPropagation,
-    ::AbstractComputeDevice,
-)
-    throw(WFSPreparationError(
-        :wfs_optics,
-        :unsupported_target_validation,
-        "cached Curvature atmospheric-field propagation requires its Atmospheres-owned exact-target validator",
-    ))
+    return workspace
 end
 
 function _require_exact_wfs_target(
@@ -688,7 +670,7 @@ function _require_exact_wfs_target(
     _require_exact_wfs_product_target(
         plan.output, target, :wfs_optics)
     _require_exact_curvature_propagation_target(
-        plan.front_end.propagation, target)
+        plan.workspace, target)
     return plan
 end
 
@@ -1085,36 +1067,38 @@ function _require_exact_wfs_target(
         plan.measurement, plan.input, plan)
     _require_exact_wfs_observation_target(plan.input, target, :estimation)
     _require_exact_wfs_measurement_target(plan.measurement, target)
-    _require_exact_curvature_mapping_target(plan.mapping, target)
-    _require_exact_curvature_propagation_target(
-        plan.sensor.front_end.propagation, target)
-    _require_exact_wfs_storage_target(
-        plan.sensor.acquisition.state.camera_frame,
-        target,
-        :estimation,
-        "Curvature acquisition camera frame",
-    )
-    state = plan.sensor.estimator.state
+    _require_exact_curvature_mapping_target(plan.plan.mapping, target)
+    state = plan.state
+    workspace = plan.workspace
+    products = plan.products
     _require_exact_wfs_array_targets(
         (
             state.valid_mask,
-            state.slopes,
-            state.reduced_plus,
-            state.reduced_minus,
-            state.signal_2d,
             state.reference_signal_2d,
         ),
         (
             "Curvature valid mask",
-            "Curvature slopes",
-            "Curvature reduced positive-defocus image",
-            "Curvature reduced negative-defocus image",
-            "Curvature signal",
             "Curvature calibration reference",
         ),
         target,
         :estimation,
     )
+    _require_exact_wfs_array_targets(
+        (
+            workspace.reduced_plus,
+            workspace.reduced_minus,
+            workspace.signal_2d,
+        ),
+        (
+            "Curvature reduced positive-defocus image",
+            "Curvature reduced negative-defocus image",
+            "Curvature signal",
+        ),
+        target,
+        :estimation,
+    )
+    _require_exact_wfs_storage_target(products.signal, target,
+        :estimation, "Curvature signal product")
     return plan
 end
 
