@@ -63,13 +63,10 @@ export measure!
 export pyramid_modulation_frame
 export pyramid_modulation_frame!
 export valid_subaperture_mask
-export camera_frame
 export wfs_detector_image
 export slopes
 export wfs_calibration_signature
 export prepare_runtime_wfs!
-export shack_hartmann_detector_image
-export shack_hartmann_detector_image!
 export shack_hartmann_spot_cube
 export n_valid_subapertures
 export LiFT

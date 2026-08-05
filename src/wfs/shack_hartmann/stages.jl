@@ -1046,7 +1046,7 @@ function form_wfs_optical_products!(output::IntensityMap, input,
     _form_sh_explicit_stack!(execution_style(_sh_input_storage(input)),
         optics, input, optics.front_end.source,
         wavelength_m)
-    shack_hartmann_detector_image!(output.values,
+    _tile_shack_hartmann_spot_cube!(output.values,
         prepared.workspace.sampled_spot_cube, n_lenslets(optics))
     return output
 end

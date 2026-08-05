@@ -20,7 +20,7 @@ import AdaptiveOpticsSim.Calibration: BuildBackend, CPUBuildBackend,
 import AdaptiveOpticsSim.Backends: execution_style, synchronize_backend!
 import AdaptiveOpticsSim.Detectors: convert_noise, validate_noise
 import AdaptiveOpticsSim.WavefrontSensors: prepare_sampling!,
-    ensure_sh_calibration!, wfs_output_frame, prepare_runtime_wfs!,
+    ensure_sh_calibration!, prepare_runtime_wfs!,
     wfs_output_metadata
 
 export AO188ActuatorSupportModel, CircularActuatorSupport
@@ -252,9 +252,10 @@ function high_detector_from_config(cfg::AO188DetectorConfig, wfs;
     return detector_from_config(cfg; backend=backend)
 end
 
-function high_detector_from_config(cfg::AO188LinearAPDConfig, wfs;
+function high_detector_from_config(cfg::AO188LinearAPDConfig,
+    wfs::CurvatureWFS;
     backend::AbstractArrayBackend=CPUBackend())
-    return detector_from_config(cfg, length(camera_frame(wfs));
+    return detector_from_config(cfg, wfs_output_metadata(wfs).n_channels;
         backend=backend)
 end
 
@@ -628,10 +629,10 @@ function _ao188_calibration_objects(params::AO188SimulationParams{T}) where {T<:
 end
 
 _high_order_wfs_frame(simulation::AO188Simulation) =
-    isnothing(simulation.high_detector) ? camera_frame(simulation.high_wfs) :
-    wfs_output_frame(simulation.high_wfs, simulation.high_detector)
+    isnothing(simulation.high_detector) ? nothing :
+    output_frame(simulation.high_detector)
 _high_order_wfs_metadata(simulation::AO188Simulation) =
-    isnothing(simulation.high_detector) ? wfs_output_metadata(simulation.high_wfs) :
+    isnothing(simulation.high_detector) ? nothing :
     detector_export_metadata(simulation.high_detector)
 
 function _measure_high!(surrogate::AO188Simulation, rng::AbstractRNG)
@@ -877,7 +878,7 @@ function ao188_readout(simulation::AO188Simulation)
         ),
         wfs_frames=(
             _high_order_wfs_frame(simulation),
-            wfs_output_frame(simulation.low_wfs, simulation.low_detector),
+            output_frame(simulation.low_detector),
         ),
         wfs_metadata=(
             _high_order_wfs_metadata(simulation),

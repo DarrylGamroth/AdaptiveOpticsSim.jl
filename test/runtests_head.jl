@@ -232,7 +232,6 @@ function assert_wfs_interface(wfs, tel)
     @test slopes(wfs) isa AbstractVector
     @test supports_valid_subaperture_mask(wfs) == !isnothing(valid_subaperture_mask(wfs))
     @test supports_reference_signal(wfs) == !isnothing(reference_signal(wfs))
-    @test supports_camera_frame(wfs) == !isnothing(camera_frame(wfs))
 end
 
 function assert_detector_interface(det, psf)

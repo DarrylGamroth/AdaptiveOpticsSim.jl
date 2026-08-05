@@ -1551,10 +1551,11 @@ components. Migrated bindings are not forwarded through the root.
   not `ShackHartmannWFS`)
 - WFS normalization policies:
   `MeanValidFluxNormalization`, `IncidenceFluxNormalization`
-- Measurement and WFS images: `measure!`, `pyramid_modulation_frame!`,
-  `valid_subaperture_mask`, `camera_frame`, `wfs_detector_image`,
-  `shack_hartmann_spot_cube`, `shack_hartmann_detector_image`,
-  `shack_hartmann_detector_image!`
+- Measurement and detector products: `measure!`,
+  `pyramid_modulation_frame!`, `valid_subaperture_mask`,
+  `wfs_detector_image`, and `shack_hartmann_spot_cube`
+- Prepared WFS optical-product access: the qualified-public
+  `WavefrontSensors.wfs_optical_products`
 - LiFT forward and observation contracts: `PreparedLiFTForwardModel`,
   `prepare_lift_forward_model`, `lift_forward_output`,
   `evaluate_lift_forward!`, `predict_lift_observation!`,
@@ -1567,10 +1568,13 @@ components. Migrated bindings are not forwarded through the root.
   `LiFTSolveAuto`, `LiFTSolveQR`, `LiFTSolveNormalEquations`,
   `LiFTLevenbergMarquardt`, and `LiFTAdaptiveLevenbergMarquardt`
 
-The maintained HIL image boundary is `wfs_detector_image(...)`. For
-Shack-Hartmann sensors this returns a detector-like lenslet mosaic assembled
-from the spot cube; frame-style WFS families return their maintained camera or
-detector frame.
+`WavefrontSensors.wfs_optical_products(prepared)` returns the exact typed
+photon-arrival-rate product or products bound by a prepared WFS optics owner.
+It never implies detector acquisition. After detector-coupled acquisition,
+`wfs_detector_image(wfs, detector)` returns the detector's actual output only
+when that output is two-dimensional. Use `Detectors.output_frame(detector)`
+for non-image detector products and `observation_storage(observation)` for a
+prepared `WFSObservation`. No detector-free camera-frame accessor is provided.
 
 The prepared stage API is a static composition protocol, not an optical graph.
 An optical front end accepts a caller-owned `PupilFunction` or pupil-plane

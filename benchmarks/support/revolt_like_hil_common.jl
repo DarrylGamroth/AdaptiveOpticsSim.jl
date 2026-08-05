@@ -131,7 +131,8 @@ end
 function revolt_tile_spot_cube!(mosaic::AbstractMatrix{T}, spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
     size(spot_cube, 2) == roi && size(spot_cube, 3) == roi ||
         throw(DimensionMismatch("spot cube ROI does not match requested mosaic ROI"))
-    return shack_hartmann_detector_image!(mosaic, spot_cube, n_lenslets)
+    return WavefrontSensors._tile_shack_hartmann_spot_cube!(
+        mosaic, spot_cube, n_lenslets)
 end
 
 function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", config_dir::AbstractString,

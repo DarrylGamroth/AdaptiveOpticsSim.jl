@@ -25,6 +25,19 @@ function contract_captured_error(f)
     end
 end
 
+function contract_shack_hartmann_rate_values(spot_cube::AbstractArray,
+    n_lenslets::Integer; gap::Integer=0, gap_value=0)
+    n_sub = Int(n_lenslets)
+    gap_px = Int(gap)
+    n_axis_1, n_axis_2 = size(spot_cube, 2), size(spot_cube, 3)
+    rate_values = similar(spot_cube,
+        n_sub * n_axis_1 + (n_sub - 1) * gap_px,
+        n_sub * n_axis_2 + (n_sub - 1) * gap_px)
+    return WavefrontSensors._tile_shack_hartmann_spot_cube!(
+        rate_values, spot_cube, n_sub; gap=gap_px,
+        gap_value)
+end
+
 function contract_sampled_response(input::AbstractMatrix{T},
     kernel::AbstractMatrix{T}) where {T<:AbstractFloat}
     output = zeros(T, size(input))
@@ -97,7 +110,7 @@ end
         @test err.reason === reason
     end
     optics_plan = prepare_wfs_optics(front_end, pupil, rate)
-    @test @inferred(wfs_optical_products(optics_plan)) === rate
+    @test @inferred(WavefrontSensors.wfs_optical_products(optics_plan)) === rate
     form_wfs_optical_products!(rate, pupil, optics_plan)
     @test pupil.opd == pupil_before
 
@@ -118,7 +131,7 @@ end
     field_rate = zernike_rate_map(field_front_end, field)
     prepared_field = prepare_wfs_optics(field_front_end, field,
         field_rate)
-    @test @inferred(wfs_optical_products(prepared_field)) === field_rate
+    @test @inferred(WavefrontSensors.wfs_optical_products(prepared_field)) === field_rate
     form_wfs_optical_products!(field_rate, field, prepared_field)
     @test field_rate.values ≈ rate.values rtol=T(2e-12) atol=T(2e-12)
     @test_throws WFSPreparationError prepare_wfs_optics(
@@ -280,7 +293,7 @@ end
         @test err.reason === reason
     end
     optics_plan = prepare_wfs_optics(front_end, pupil, rates)
-    @test @inferred(wfs_optical_products(optics_plan)) === rates
+    @test @inferred(WavefrontSensors.wfs_optical_products(optics_plan)) === rates
     form_wfs_optical_products!(rates, pupil, optics_plan)
     @test pupil.opd == pupil_before
 
@@ -298,7 +311,7 @@ end
     field_rates = curvature_rate_maps(field_front_end, field)
     prepared_field = prepare_wfs_optics(field_front_end, field,
         field_rates)
-    @test @inferred(wfs_optical_products(prepared_field)) === field_rates
+    @test @inferred(WavefrontSensors.wfs_optical_products(prepared_field)) === field_rates
     form_wfs_optical_products!(field_rates, field, prepared_field)
     @test field_rates[1].values ≈ rates[1].values rtol=T(2e-12) atol=T(2e-12)
     @test field_rates[2].values ≈ rates[2].values rtol=T(2e-12) atol=T(2e-12)
@@ -1196,7 +1209,7 @@ end
     rate = contract_rate_map(zeros(T, 6, 6))
     optical_model = ContractRateModel(T(5), T(1e6), rate.metadata)
     optics_plan = prepare_wfs_optics(optical_model, pupil, rate)
-    @test @inferred(wfs_optical_products(optics_plan)) === rate
+    @test @inferred(WavefrontSensors.wfs_optical_products(optics_plan)) === rate
 
     detector = Detector(noise=NoiseNone(), integration_time=T(0.4),
         qe=T(0.5), response_model=NullFrameResponse(), T=T)
@@ -1475,10 +1488,10 @@ end
     prepare_sampling!(native, pupil, src)
     point_peak = sampled_spots_peak!(native, pupil, src)
     point_spots = copy(native.workspace.spot_cube)
-    expected_rate = shack_hartmann_detector_image(
+    expected_rate = contract_shack_hartmann_rate_values(
         WavefrontSensors.sh_sampled_spot_cube(native), 4)
     ordering_cube = reshape(T.(1:16), 16, 1, 1)
-    @test shack_hartmann_detector_image(ordering_cube, 4) ==
+    @test contract_shack_hartmann_rate_values(ordering_cube, 4) ==
         reshape(T.(1:16), 4, 4)
 
     common_spectral = with_spectrum(src, SpectralBundle(
@@ -1997,7 +2010,7 @@ end
     @test spectral_plan.plan isa AbstractWFSOpticsPlan
     @test spectral_plan.plan.plans isa FixedSizeVector
     @test spectral_plan.components isa FixedSizeVector
-    @test @inferred(wfs_optical_products(spectral_plan)) === spectral_rates
+    @test @inferred(WavefrontSensors.wfs_optical_products(spectral_plan)) === spectral_rates
     form_wfs_optical_products!(spectral_rates, pupil, spectral_plan)
     @test sum(spectral_rates[1].values) /
         sum(spectral_rates[2].values) ≈ T(2 / 3) rtol=T(2e-6)
@@ -2025,7 +2038,7 @@ end
         mode=Diffractive(), n_pix_subap=4, T=T)
     prepare_sampling!(native_lgs, pupil, lgs)
     WavefrontSensors.sampled_spots_peak!(native_lgs, pupil, lgs)
-    expected_lgs = shack_hartmann_detector_image(
+    expected_lgs = contract_shack_hartmann_rate_values(
         native_lgs.workspace.spot_cube, 4)
     staged_lgs = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
@@ -2065,7 +2078,7 @@ end
         mode=Diffractive(), n_pix_subap=4, T=T)
     prepare_sampling!(native_sodium, pupil, sodium_lgs)
     WavefrontSensors.sampled_spots_peak!(native_sodium, pupil, sodium_lgs)
-    expected_sodium = shack_hartmann_detector_image(
+    expected_sodium = contract_shack_hartmann_rate_values(
         native_sodium.workspace.spot_cube, 4)
     staged_sodium = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
@@ -2162,7 +2175,7 @@ end
     prepare_sampling!(native_asterism, pupil, first(asterism.sources))
     WavefrontSensors.sampled_spots_peak_asterism_stacked!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), native_asterism, pupil, asterism)
-    expected_asterism = shack_hartmann_detector_image(
+    expected_asterism = contract_shack_hartmann_rate_values(
         native_asterism.workspace.spot_cube, 4)
     independently_accumulated = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
@@ -2275,7 +2288,7 @@ end
         front_end = contract_four_pupil_front_end(family, staged, source)
         rate = contract_four_pupil_rate_map(family, front_end, pupil)
         optics_plan = prepare_wfs_optics(front_end, pupil, rate)
-        @test @inferred(wfs_optical_products(optics_plan)) === rate
+        @test @inferred(WavefrontSensors.wfs_optical_products(optics_plan)) === rate
         form_wfs_optical_products!(rate, pupil, optics_plan)
         @test pupil.opd == pupil_before
         @test rate.metadata.coordinate_domain isa
@@ -2305,7 +2318,7 @@ end
             field)
         prepared_field = prepare_wfs_optics(field_front_end,
             field, field_rate)
-        @test @inferred(wfs_optical_products(prepared_field)) === field_rate
+        @test @inferred(WavefrontSensors.wfs_optical_products(prepared_field)) === field_rate
         form_wfs_optical_products!(field_rate, field, prepared_field)
         @test field_rate.values ≈ rate.values rtol=T(2e-12) atol=T(2e-12)
         @test_throws WFSPreparationError prepare_wfs_optics(
@@ -2618,7 +2631,7 @@ end
         @test length(spectral_rates) == 2
         spectral_plan = prepare_wfs_optics(spectral_front_end,
             pupil, spectral_rates)
-        @test @inferred(wfs_optical_products(spectral_plan)) ===
+        @test @inferred(WavefrontSensors.wfs_optical_products(spectral_plan)) ===
             spectral_rates
         form_wfs_optical_products!(spectral_rates, pupil, spectral_plan)
         @test sum(spectral_rates[1].values) /
@@ -2634,7 +2647,7 @@ end
         @test length(path_rates) == 2
         path_plan = prepare_wfs_optics(path_front_end,
             path_inputs, path_rates)
-        @test @inferred(wfs_optical_products(path_plan)) === path_rates
+        @test @inferred(WavefrontSensors.wfs_optical_products(path_plan)) === path_rates
         form_wfs_optical_products!(path_rates, path_inputs, path_plan)
         @test sum(path_rates[1].values) /
             sum(path_rates[2].values) ≈ T(3 / 7) rtol=T(2e-12)
@@ -2780,7 +2793,7 @@ end
         ContractRateModel(T(7), T(1e6), second_rate.metadata),
     ))
     optics_bundle = prepare_wfs_optics(bundle_model, pupil, bundle)
-    @test @inferred(wfs_optical_products(optics_bundle)) === bundle
+    @test @inferred(WavefrontSensors.wfs_optical_products(optics_bundle)) === bundle
     @test @inferred(form_wfs_optical_products!(bundle, pupil,
         optics_bundle)) === bundle
     @test first_rate.metadata.spectral == MonochromaticChannel(T(0.6e-6))
@@ -3013,7 +3026,7 @@ end
     optics = shack_hartmann_optics(sensor, source)
     rate = shack_hartmann_rate_map(optics, pupil)
     prepared_optics = prepare_wfs_optics(optics, pupil, rate)
-    @test @inferred(wfs_optical_products(prepared_optics)) === rate
+    @test @inferred(WavefrontSensors.wfs_optical_products(prepared_optics)) === rate
     @test WavefrontSensors._require_exact_wfs_target(
         prepared_optics, target) === prepared_optics
 
@@ -3104,7 +3117,7 @@ end
     zernike_rate = zernike_rate_map(zernike_front_end, pupil)
     zernike_optics = prepare_wfs_optics(
         zernike_front_end, pupil, zernike_rate)
-    @test @inferred(wfs_optical_products(zernike_optics)) === zernike_rate
+    @test @inferred(WavefrontSensors.wfs_optical_products(zernike_optics)) === zernike_rate
     @test WavefrontSensors._require_exact_wfs_target(
         zernike_optics, target) === zernike_optics
     zernike_observation = WFSObservation(similar(zernike_rate.values);
@@ -3129,7 +3142,7 @@ end
     curvature_rates = curvature_rate_maps(curvature_front_end, pupil)
     curvature_optics = prepare_wfs_optics(
         curvature_front_end, pupil, curvature_rates)
-    @test @inferred(wfs_optical_products(curvature_optics)) ===
+    @test @inferred(WavefrontSensors.wfs_optical_products(curvature_optics)) ===
         curvature_rates
     @test WavefrontSensors._require_exact_wfs_target(
         curvature_optics, target) === curvature_optics
@@ -3143,7 +3156,7 @@ end
             family, four_pupil_front_end, pupil)
         four_pupil_optics = prepare_wfs_optics(
             four_pupil_front_end, pupil, four_pupil_rate)
-        @test @inferred(wfs_optical_products(four_pupil_optics)) ===
+        @test @inferred(WavefrontSensors.wfs_optical_products(four_pupil_optics)) ===
             four_pupil_rate
         @test WavefrontSensors._require_exact_wfs_target(
             four_pupil_optics, target) === four_pupil_optics

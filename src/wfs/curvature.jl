@@ -1052,15 +1052,9 @@ end
     wfs.estimator.state.valid_mask
 @inline reference_signal(wfs::CurvatureWFS) =
     wfs.estimator.state.reference_signal_2d
-@inline camera_frame(wfs::CurvatureWFS) =
-    wfs.acquisition.state.camera_frame
 @inline wfs_calibration_signature(wfs::CurvatureWFS) =
     wfs.estimator.state.calibration_signature
 
-@inline wfs_output_frame(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::CurvatureWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::CurvatureWFS, det::AbstractDetector) = camera_frame(wfs)
 @inline wfs_output_metadata(wfs::CurvatureWFS) = wfs_output_metadata(wfs.params.readout_model, wfs)
 @inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing
 @inline wfs_output_metadata(::CurvatureChannelReadout, wfs::CurvatureWFS) =

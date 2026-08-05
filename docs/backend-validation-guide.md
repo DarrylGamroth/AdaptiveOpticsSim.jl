@@ -409,10 +409,10 @@ detector/export surface that previously regressed on CUDA:
 - CPU vs GPU comparison of:
   - the Shack-Hartmann exported spot-cube path in
     [`shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
-  - the family-neutral [`wfs_output_frame`](../src/wfs/interface.jl) helper
+  - the actual detector output returned by `Detectors.output_frame`
 
-This keeps the public exported-pixel surface under backend parity coverage, not
-just the slope output.
+This keeps both the optical spot storage and acquired detector output under
+backend parity coverage, not just the slope output.
 
 ### AMDGPU host-mirror boundaries
 
