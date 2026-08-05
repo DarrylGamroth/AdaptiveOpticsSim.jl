@@ -189,7 +189,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=2, T=T, backend=backend)
         acquisition = prepare_detector_acquisition(det, rate_map)
-        frame = capture!(det, rate_map, acquisition; rng=rng)
+        frame = capture!(acquisition; rng=rng)
         @assert frame isa BackendArray
         return frame
     end
@@ -199,7 +199,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         det = Detector(noise=(NoisePhoton(), NoiseReadout(T(1e-3))), integration_time=1.0, qe=1.0,
             binning=2, background_flux=T(0.5), dark_current=T(0.1), T=T, backend=backend)
         acquisition = prepare_detector_acquisition(det, rate_map)
-        frame = capture!(det, rate_map, acquisition; rng=rng)
+        frame = capture!(acquisition; rng=rng)
         @assert frame isa BackendArray
         return frame
     end
@@ -649,7 +649,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         imaging = prepare_direct_imaging(step_pupil, src; zero_padding=2)
         rate_map = form_direct_image!(imaging)
         acquisition = prepare_detector_acquisition(det, rate_map)
-        frame = capture!(det, rate_map, acquisition; rng=rng)
+        frame = capture!(acquisition; rng=rng)
         @assert slopes isa BackendArray
         @assert frame isa BackendArray
         return frame
