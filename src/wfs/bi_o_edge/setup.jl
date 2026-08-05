@@ -190,7 +190,7 @@ end
 """
     BiOEdgeWFS(tel; ...)
 
-Construct a BiOEdge wavefront sensor.
+Construct a Bi-O-edge wavefront sensor.
 
 The diffractive model forms four edge-filtered pupil images using complementary
 focal-plane Bi-O-edge masks. Slopes are then built from the resulting
