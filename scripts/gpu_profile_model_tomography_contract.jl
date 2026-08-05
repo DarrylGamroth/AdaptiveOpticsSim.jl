@@ -19,36 +19,36 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
     TH = AdaptiveOpticsSim.Backends.gpu_build_type(high_accuracy)
     build_backend = AdaptiveOpticsSim.Calibration.GPUArrayBuildBackend(B)
 
-    n_lenslet = 3
+    n_lenslets = 3
     n_lgs = 2
     n_fit_src = 2
     n_dm = 2
-    grid_side = 2 * n_lenslet
+    grid_side = 2 * n_lenslets
 
     atm_tomo = TomographyAtmosphereParams(
         zenith_angle_deg=TB(0.0),
-        altitude_km=TB[0.0, 10.0],
+        layer_altitudes_m=TB[0.0, 10_000.0],
         L0=TB(25.0),
         r0_zenith=TB(0.2),
         fractional_cn2=TB[0.6, 0.4],
-        wavelength=TB(500e-9),
+        reference_wavelength_m=TB(500e-9),
         wind_direction_deg=TB[0.0, 45.0],
         wind_speed=TB[10.0, 20.0],
     )
     lgs = LGSAsterismParams(
         radius_arcsec=TB(7.6),
-        wavelength=TB(589e-9),
+        wavelength_m=TB(589e-9),
         base_height_m=TB(90_000.0),
         n_lgs=n_lgs,
     )
     lgswfs = LGSWFSParams(
-        diameter=TB(8.0),
-        n_lenslet=n_lenslet,
+        pupil_diameter_m=TB(8.0),
+        n_lenslets=n_lenslets,
         n_px=8,
         field_stop_size_arcsec=TB(2.0),
-        valid_lenslet_map=trues(n_lenslet, n_lenslet),
-        lenslet_rotation_rad=zeros(TB, n_lenslet^2),
-        lenslet_offset=zeros(TB, 2, n_lenslet^2),
+        valid_lenslet_map=trues(n_lenslets, n_lenslets),
+        lenslet_grid_rotations_rad=zeros(TB, n_lgs),
+        lenslet_grid_offsets_fraction=zeros(TB, 2, n_lgs),
     )
     tomo = TomographyParams(
         n_fit_src=n_fit_src,
@@ -57,7 +57,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
     )
     tdm = TomographyDMParams(
         heights_m=collect(TB, range(TB(0.0), length=n_dm, step=TB(6000.0))),
-        pitch_m=fill(TB(8.0 / n_lenslet), n_dm),
+        pitch_m=fill(TB(8.0 / n_lenslets), n_dm),
         cross_coupling=TB(0.2),
         n_actuators=fill(grid_side, n_dm),
         valid_actuators=trues(grid_side, grid_side),
@@ -81,28 +81,28 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
 
     atm_tomo_hi = TomographyAtmosphereParams(
         zenith_angle_deg=TH(0.0),
-        altitude_km=TH[0.0, 10.0],
+        layer_altitudes_m=TH[0.0, 10_000.0],
         L0=TH(25.0),
         r0_zenith=TH(0.2),
         fractional_cn2=TH[0.6, 0.4],
-        wavelength=TH(500e-9),
+        reference_wavelength_m=TH(500e-9),
         wind_direction_deg=TH[0.0, 45.0],
         wind_speed=TH[10.0, 20.0],
     )
     lgs_hi = LGSAsterismParams(
         radius_arcsec=TH(7.6),
-        wavelength=TH(589e-9),
+        wavelength_m=TH(589e-9),
         base_height_m=TH(90_000.0),
         n_lgs=n_lgs,
     )
     lgswfs_hi = LGSWFSParams(
-        diameter=TH(8.0),
-        n_lenslet=n_lenslet,
+        pupil_diameter_m=TH(8.0),
+        n_lenslets=n_lenslets,
         n_px=8,
         field_stop_size_arcsec=TH(2.0),
-        valid_lenslet_map=trues(n_lenslet, n_lenslet),
-        lenslet_rotation_rad=zeros(TH, n_lenslet^2),
-        lenslet_offset=zeros(TH, 2, n_lenslet^2),
+        valid_lenslet_map=trues(n_lenslets, n_lenslets),
+        lenslet_grid_rotations_rad=zeros(TH, n_lgs),
+        lenslet_grid_offsets_fraction=zeros(TH, 2, n_lgs),
     )
     tomo_hi = TomographyParams(
         n_fit_src=n_fit_src,
@@ -111,7 +111,7 @@ function run_gpu_model_tomography_profile(::Type{B}) where {B<:AdaptiveOpticsSim
     )
     tdm_hi = TomographyDMParams(
         heights_m=collect(TH, range(TH(0.0), length=n_dm, step=TH(6000.0))),
-        pitch_m=fill(TH(8.0 / n_lenslet), n_dm),
+        pitch_m=fill(TH(8.0 / n_lenslets), n_dm),
         cross_coupling=TH(0.2),
         n_actuators=fill(grid_side, n_dm),
         valid_actuators=trues(grid_side, grid_side),

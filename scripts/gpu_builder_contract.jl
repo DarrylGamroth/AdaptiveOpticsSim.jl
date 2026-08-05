@@ -33,28 +33,28 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
 
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=T(0.0),
-        altitude_km=T[0.0],
+        layer_altitudes_m=T[0.0],
         L0=T(25.0),
         r0_zenith=T(0.2),
         fractional_cn2=T[1.0],
-        wavelength=T(500e-9),
+        reference_wavelength_m=T(500e-9),
         wind_direction_deg=T[0.0],
         wind_speed=T[10.0],
     )
     lgs = LGSAsterismParams(
         radius_arcsec=T(7.6),
-        wavelength=T(589e-9),
+        wavelength_m=T(589e-9),
         base_height_m=T(90_000.0),
         n_lgs=1,
     )
     wfs = LGSWFSParams(
-        diameter=T(8.0),
-        n_lenslet=1,
+        pupil_diameter_m=T(8.0),
+        n_lenslets=1,
         n_px=8,
         field_stop_size_arcsec=T(2.0),
         valid_lenslet_map=trues(1, 1),
-        lenslet_rotation_rad=zeros(T, 1),
-        lenslet_offset=zeros(T, 2, 1),
+        lenslet_grid_rotations_rad=zeros(T, 1),
+        lenslet_grid_offsets_fraction=zeros(T, 2, 1),
     )
     tomo = TomographyParams(
         n_fit_src=1,

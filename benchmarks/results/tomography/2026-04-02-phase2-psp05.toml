@@ -12,7 +12,7 @@ refresh_timeout_s = 120
 routine_refresh_required = true
 
 [candidate.representative]
-n_lenslet = 4
+n_lenslets = 4
 n_lgs = 3
 n_fit_src = 3
 n_dm = 2

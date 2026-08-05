@@ -127,6 +127,43 @@ end
     @test reference_lift_img_resolution(tel, det, Dict{String,Any}("img_resolution" => 12)) == 12
 end
 
+@testset "PyTomoAO tomography adapter units" begin
+    atmosphere = build_reference_tomography_atmosphere(Dict{String,Any}(
+        "zenith_angle_deg" => 30.0,
+        "altitude_km" => [5.0, 10.0],
+        "L0" => 25.0,
+        "r0_zenith" => 0.2,
+        "fractional_cn2" => [0.6, 0.4],
+        "wavelength" => 500e-9,
+        "wind_direction_deg" => [0.0, 90.0],
+        "wind_speed" => [5.0, 10.0],
+    ))
+    @test atmosphere.layer_altitudes_m == [5_000.0, 10_000.0]
+    @test atmosphere.reference_wavelength_m == 500e-9
+
+    asterism = build_reference_tomography_asterism(Dict{String,Any}(
+        "radius_arcsec" => 30.0,
+        "wavelength" => 589e-9,
+        "base_height_m" => 90_000.0,
+        "n_lgs" => 2,
+    ))
+    @test asterism.wavelength_m == 589e-9
+
+    wfs = build_reference_tomography_wfs(Dict{String,Any}(
+        "diameter" => 8.0,
+        "n_lenslet" => 2,
+        "n_px" => 4,
+        "field_stop_size_arcsec" => 2.0,
+        "valid_lenslet_map" => [[true, true], [true, true]],
+        "lenslet_rotation_rad" => [0.0, 0.1],
+        "lenslet_offset" => [[0.125, -0.25], [0.25, -0.125]],
+    ))
+    @test wfs.pupil_diameter_m == 8.0
+    @test wfs.n_lenslets == 2
+    @test wfs.lenslet_grid_rotations_rad == [0.0, 0.1]
+    @test wfs.lenslet_grid_offsets_fraction == [0.125 -0.25; 0.25 -0.125]
+end
+
 @testset "Reference harness fixture" begin
     root = mktempdir()
     create_reference_fixture(root)

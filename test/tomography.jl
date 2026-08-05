@@ -1,25 +1,27 @@
 @testset "Tomography Parameters and Geometry" begin
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=30.0,
-        altitude_km=[5.0, 10.0, 15.0],
+        layer_altitudes_m=[5_000.0, 10_000.0, 15_000.0],
         L0=30.0,
         r0_zenith=0.15,
         fractional_cn2=[0.5, 0.3, 0.2],
-        wavelength=500e-9,
+        reference_wavelength_m=500e-9,
         wind_direction_deg=[90.0, 45.0, 180.0],
         wind_speed=[10.0, 20.0, 15.0],
     )
     @test isapprox(zenith_angle_rad(atm), deg2rad(30.0))
     @test zenith_angle_deg(atm) ≈ 30.0
     @test isapprox(airmass(atm), inv(cosd(30.0)))
-    @test layer_altitude_m(atm) ≈ [5000.0, 10000.0, 15000.0] .* airmass(atm)
+    @test atm.layer_altitudes_m == [5_000.0, 10_000.0, 15_000.0]
+    @test atm.reference_wavelength_m == 500e-9
+    @test layer_slant_ranges_m(atm) ≈ [5000.0, 10000.0, 15000.0] .* airmass(atm)
     @test wind_direction_rad(atm) ≈ deg2rad.([90.0, 45.0, 180.0])
     @test wind_direction_deg(atm) ≈ [90.0, 45.0, 180.0]
     vx, vy = wind_velocity_components(atm)
     @test vx ≈ [0.0, 20cosd(45.0), -15.0]
     @test vy ≈ [10.0, 20sind(45.0), 0.0]
 
-    lgs = LGSAsterismParams(radius_arcsec=30.0, wavelength=589e-9, base_height_m=90_000.0, n_lgs=4)
+    lgs = LGSAsterismParams(radius_arcsec=30.0, wavelength_m=589e-9, base_height_m=90_000.0, n_lgs=4)
     dirs = lgs_directions(lgs)
     @test size(dirs) == (4, 2)
     @test all(isapprox.(dirs[:, 1], fill(30.0 * π / (180 * 3600), 4)))
@@ -27,6 +29,7 @@
     @test size(vectors) == (3, 4)
     @test all(vectors[3, :] .== 1.0)
     @test isapprox(lgs_height_m(lgs, atm), 90_000.0 * airmass(atm))
+    @test lgs.wavelength_m == 589e-9
 
     tomo = TomographyParams(n_fit_src=3, fov_optimization_arcsec=4.0)
     zenith, azimuth = optimization_geometry(tomo)
@@ -35,8 +38,8 @@
     @test maximum(zenith) > 0
 
     wfs = LGSWFSParams(
-        diameter=8.2,
-        n_lenslet=40,
+        pupil_diameter_m=8.2,
+        n_lenslets=40,
         n_px=16,
         field_stop_size_arcsec=2.5,
         valid_lenslet_map=Bool[
@@ -44,15 +47,46 @@
             0 1 0
             1 0 1
         ],
-        lenslet_rotation_rad=zeros(4),
-        lenslet_offset=zeros(2, 4),
+        lenslet_grid_rotations_rad=zeros(4),
+        lenslet_grid_offsets_fraction=zeros(2, 4),
     )
     @test n_valid_subapertures(wfs) == 5
     @test size(valid_lenslet_support(wfs)) == (7, 7)
-    @test support_diameter(wfs) ≈ 8.2 * 7 / 40
+    @test lenslet_grid_support_diameter_m(wfs) ≈ 8.2 * 7 / 40
+    @test wfs.n_lenslets == 40
+    @test wfs.pupil_diameter_m == 8.2
     gamma, grid_mask = sparse_gradient_matrix(valid_lenslet_support(wfs))
     @test size(gamma, 1) == 2 * n_valid_subapertures(wfs)
     @test count(grid_mask) > 0
+
+    registered_wfs = LGSWFSParams(
+        pupil_diameter_m=8.0,
+        n_lenslets=2,
+        n_px=4,
+        field_stop_size_arcsec=2.0,
+        valid_lenslet_map=trues(2, 2),
+        lenslet_grid_rotations_rad=[0.0],
+        lenslet_grid_offsets_fraction=reshape([0.125, -0.25], 2, 1),
+    )
+    registration_diameter_m = lenslet_grid_support_diameter_m(registered_wfs)
+    registered_x, registered_y = AdaptiveOpticsSim.Tomography._guide_star_grid(
+        1,
+        registration_diameter_m,
+        only(registered_wfs.lenslet_grid_rotations_rad),
+        registered_wfs.lenslet_grid_offsets_fraction[1, 1],
+        registered_wfs.lenslet_grid_offsets_fraction[2, 1],
+    )
+    @test only(registered_x) == -0.125 * registration_diameter_m
+    @test only(registered_y) == 0.25 * registration_diameter_m
+    @test_throws DimensionMismatchError AdaptiveOpticsSim.Tomography._active_guide_grid_params(
+        zeros(2), zeros(2), zeros(2), 1)
+
+    @test :altitude_km ∉ propertynames(atm)
+    @test :wavelength ∉ propertynames(lgs)
+    @test :diameter ∉ propertynames(wfs)
+    @test :n_lenslet ∉ propertynames(wfs)
+    @test :lenslet_rotation_rad ∉ propertynames(wfs)
+    @test :lenslet_offset ∉ propertynames(wfs)
 
     dm = TomographyDMParams(
         heights_m=[0.0, 1000.0],
@@ -71,11 +105,11 @@
     @test_throws InvalidConfiguration TomographyParams(n_fit_src=2, fov_optimization_arcsec=0.0)
     @test_throws InvalidConfiguration TomographyAtmosphereParams(
         zenith_angle_deg=0.0,
-        altitude_km=[0.0, 1.0],
+        layer_altitudes_m=[0.0, 1_000.0],
         L0=25.0,
         r0_zenith=0.2,
         fractional_cn2=[0.6, 0.3],
-        wavelength=500e-9,
+        reference_wavelength_m=500e-9,
         wind_direction_deg=[0.0, 90.0],
         wind_speed=[5.0, 10.0],
     )
@@ -89,23 +123,23 @@ end
 
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=0.0,
-        altitude_km=[0.0],
+        layer_altitudes_m=[0.0],
         L0=25.0,
         r0_zenith=0.2,
         fractional_cn2=[1.0],
-        wavelength=500e-9,
+        reference_wavelength_m=500e-9,
         wind_direction_deg=[0.0],
         wind_speed=[10.0],
     )
-    lgs = LGSAsterismParams(radius_arcsec=7.6, wavelength=589e-9, base_height_m=90_000.0, n_lgs=1)
+    lgs = LGSAsterismParams(radius_arcsec=7.6, wavelength_m=589e-9, base_height_m=90_000.0, n_lgs=1)
     wfs = LGSWFSParams(
-        diameter=8.0,
-        n_lenslet=1,
+        pupil_diameter_m=8.0,
+        n_lenslets=1,
         n_px=8,
         field_stop_size_arcsec=2.0,
         valid_lenslet_map=trues(1, 1),
-        lenslet_rotation_rad=zeros(1),
-        lenslet_offset=zeros(2, 1),
+        lenslet_grid_rotations_rad=zeros(1),
+        lenslet_grid_offsets_fraction=zeros(2, 1),
     )
     tomo = TomographyParams(n_fit_src=1, fov_optimization_arcsec=0.0)
     dm = TomographyDMParams(
@@ -272,23 +306,23 @@ end
 
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=0.0,
-        altitude_km=[0.0],
+        layer_altitudes_m=[0.0],
         L0=25.0,
         r0_zenith=0.2,
         fractional_cn2=[1.0],
-        wavelength=500e-9,
+        reference_wavelength_m=500e-9,
         wind_direction_deg=[0.0],
         wind_speed=[10.0],
     )
-    lgs = LGSAsterismParams(radius_arcsec=7.6, wavelength=589e-9, base_height_m=90_000.0, n_lgs=1)
+    lgs = LGSAsterismParams(radius_arcsec=7.6, wavelength_m=589e-9, base_height_m=90_000.0, n_lgs=1)
     wfs = LGSWFSParams(
-        diameter=8.0,
-        n_lenslet=1,
+        pupil_diameter_m=8.0,
+        n_lenslets=1,
         n_px=8,
         field_stop_size_arcsec=2.0,
         valid_lenslet_map=trues(1, 1),
-        lenslet_rotation_rad=zeros(1),
-        lenslet_offset=zeros(2, 1),
+        lenslet_grid_rotations_rad=zeros(1),
+        lenslet_grid_offsets_fraction=zeros(2, 1),
     )
     tomo = TomographyParams(n_fit_src=1, fov_optimization_arcsec=0.0)
     model_recon = build_reconstructor(ModelBasedTomography(), atm, lgs, wfs, tomo, dm)

@@ -3,28 +3,28 @@ include(joinpath(@__DIR__, "common.jl"))
 function compact_tomography_setup()
     atmosphere = TomographyAtmosphereParams(
         zenith_angle_deg=0.0,
-        altitude_km=[0.0],
+        layer_altitudes_m=[0.0],
         L0=25.0,
         r0_zenith=0.2,
         fractional_cn2=[1.0],
-        wavelength=5.0e-7,
+        reference_wavelength_m=5.0e-7,
         wind_direction_deg=[0.0],
         wind_speed=[10.0],
     )
     asterism = LGSAsterismParams(
         radius_arcsec=7.6,
-        wavelength=5.89e-7,
+        wavelength_m=5.89e-7,
         base_height_m=9.0e4,
         n_lgs=1,
     )
     wfs = LGSWFSParams(
-        diameter=8.0,
-        n_lenslet=2,
+        pupil_diameter_m=8.0,
+        n_lenslets=2,
         n_px=4,
         field_stop_size_arcsec=2.0,
         valid_lenslet_map=Bool[1 1; 1 1],
-        lenslet_rotation_rad=[0.0],
-        lenslet_offset=zeros(2, 1),
+        lenslet_grid_rotations_rad=[0.0],
+        lenslet_grid_offsets_fraction=zeros(2, 1),
     )
     tomography = TomographyParams(
         n_fit_src=1,
