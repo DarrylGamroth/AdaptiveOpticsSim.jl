@@ -158,10 +158,18 @@ end
 
     pyr_default = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
     pyr_rooftop = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
-        rooftop=0.5, theta_rotation=0.2)
+        rooftop=0.5, phase_mask_rotation_rad=0.2)
     pyr_old = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0, old_mask=true)
     @test pyr_default.front_end.propagation.pyramid_mask != pyr_rooftop.front_end.propagation.pyramid_mask
     @test pyr_default.front_end.propagation.pyramid_mask != pyr_old.front_end.propagation.pyramid_mask
+    @test pyr_rooftop.front_end.phase_mask.rotation_rad == 0.2
+
+    @test_throws InvalidConfiguration PyramidWFS(tel;
+        pupil_samples=4, phase_mask_rotation_rad=NaN)
+    @test_throws InvalidConfiguration PyramidWFS(tel;
+        pupil_samples=4, modulation_phase_offset_rad=NaN)
+    @test_throws InvalidConfiguration BiOEdgeWFS(tel;
+        pupil_samples=4, modulation_phase_offset_rad=NaN)
 
     bio_plain = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
     bio_gray = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,

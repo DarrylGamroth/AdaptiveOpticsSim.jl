@@ -885,6 +885,8 @@ calibrated WFS paths.
   - pyramid sensing and modulation studies
   - owned by `AdaptiveOpticsSim.WavefrontSensors`; its physical
     `PyramidPhaseMask` remains in `AdaptiveOpticsSim.Optics`
+  - use `phase_mask_rotation_rad` and `modulation_phase_offset_rad` for the
+    independent physical-mask rotation and circular-quadrature origin
   - use `PyramidOpticalFrontEnd`, `pyramid_rate_map`, and
     `set_pyramid_calibration!` when WFS optics, acquisition, and
     differential estimation must be scheduled independently
@@ -894,6 +896,7 @@ calibrated WFS paths.
     `BiOEdgeAmplitudeMask` remains in `AdaptiveOpticsSim.Optics`
   - use `BiOEdgeOpticalFrontEnd`, `bi_o_edge_rate_map`, and
     `set_bi_o_edge_calibration!` for the corresponding staged path
+  - use `modulation_phase_offset_rad` for the circular-quadrature origin
 - `CurvatureWFS`
   - curvature sensing
 - `ZernikeWFS`

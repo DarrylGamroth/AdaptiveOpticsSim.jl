@@ -1,6 +1,6 @@
 struct AutonomousPyramidPathModel{T<:AbstractFloat}
     radius::T
-    phase_offset::T
+    phase_offset_rad::T
     samples::Int
 end
 
@@ -32,7 +32,7 @@ function Plant.prepare_path_executor(
         mode=Diffractive(),
         modulation=model.radius,
         modulation_points=model.samples,
-        delta_theta=model.phase_offset,
+        modulation_phase_offset_rad=model.phase_offset_rad,
         calib_modulation=model.radius,
         diffraction_padding=2,
         T=T,
@@ -226,7 +226,7 @@ end
 function autonomous_pyramid_fixture(;
     radius=1.25,
     frequency_hz=5.0,
-    phase_offset=0.25,
+    phase_offset_rad=0.25,
     enabled=UInt8(1),
     radius_silence_policy=CommandSilencePolicy(),
     safe_radius=nothing,
@@ -259,7 +259,7 @@ function autonomous_pyramid_fixture(;
     schemas = autonomous_pyramid_schemas(; radius_silence_policy)
     optic = autonomous_pyramid_optic(schemas)
     path = OpticalPathDefinition(:pyramid, source,
-        AutonomousPyramidPathModel(T(radius), T(phase_offset), 8))
+        AutonomousPyramidPathModel(T(radius), T(phase_offset_rad), 8))
     acquisition = AcquisitionDefinition(:camera, :pyramid,
         AutonomousPyramidAcquisitionModel(T(exposure_ns) / T(1e9)))
     definition = PlantDefinition(;
@@ -274,7 +274,7 @@ function autonomous_pyramid_fixture(;
             capacity=4, safe_command=safe_radius),
         CommandEndpointConfiguration(:mod_frequency, T(frequency_hz);
             capacity=4),
-        CommandEndpointConfiguration(:mod_phase, T(phase_offset);
+        CommandEndpointConfiguration(:mod_phase, T(phase_offset_rad);
             capacity=4),
         CommandEndpointConfiguration(:mod_enabled, enabled;
             capacity=4),

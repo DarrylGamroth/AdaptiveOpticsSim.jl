@@ -1671,6 +1671,12 @@ response of the sensor that will actually acquire data. A user-sampled
 modulation path is retained for both operations rather than replaced by a
 generated circle.
 
+Untyped optical angles state radians explicitly. Use
+`phase_mask_rotation_rad` for the Pyramid mask-coordinate rotation and
+`modulation_phase_offset_rad` for the circular Pyramid or Bi-O-edge quadrature
+origin. The reusable `CircularModulation` policy stores that origin as
+`phase_offset_rad`.
+
 `ZernikeOpticalFrontEnd` separates the immutable phase-shifting
 `ZernikePhaseSpot` and prepared re-imaged-pupil propagation from detector
 acquisition and the referenced pupil estimator. `zernike_rate_map` allocates a

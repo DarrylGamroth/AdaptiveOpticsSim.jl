@@ -53,7 +53,7 @@ function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::Pyr
     r = (T(n_sub) + T(sep)) * wfs.front_end.phase_mask.mask_scale / 2
     sx = wfs.estimator.state.shift_x
     sy = wfs.estimator.state.shift_y
-    θ = wfs.front_end.phase_mask.theta_rotation
+    θ = wfs.front_end.phase_mask.rotation_rad
     cθ = cos(θ)
     sθ = sin(θ)
     @inbounds for i in 1:n, j in 1:n

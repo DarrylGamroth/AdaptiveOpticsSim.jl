@@ -1275,7 +1275,7 @@ end
         @test ka_cpu_close(ka_mask, scalar_mask)
 
         modulation_policy = CircularModulation(2.0;
-            samples=5, phase_offset=0.3)
+            samples=5, phase_offset_rad=0.3)
         scalar_modulation =
             AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
                 modulation_policy, 8, zeros(8, 8), Float64)
