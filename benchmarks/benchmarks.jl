@@ -84,51 +84,41 @@ function bench_closed_loop_workload_timing()
     )
 end
 
-function bench_lift(numerical::Bool)
+function prepare_lift_benchmark(numerical::Bool)
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     basis = rand(16, 16, 6)
     diversity = zeros(16, 16)
-    forward = prepare_lift_forward_model(tel, src, basis;
+    forward = prepare_lift_forward_model(tel, src, basis, diversity;
         diversity_opd=diversity, focal_resolution=16)
-    lift = LiFT(forward; iterations=1, mode_ids=1:3,
-        numerical=numerical)
-    coeffs = zeros(6)
+    rate = copy(intensity_values(evaluate_lift_forward!(forward)))
+    observation = LiFTObservation(forward, rate)
+    product = zeros(3)
+    definition = LiFT(iterations=1, mode_ids=1:3,
+        jacobian_method=numerical ? LiFTNumericalJacobian() :
+            LiFTAnalyticJacobian())
+    lift = prepare_lift_estimator(definition, forward, observation, product)
+    return lift, zeros(6)
+end
+
+function bench_lift(numerical::Bool)
+    lift, coeffs = prepare_lift_benchmark(numerical)
     return @benchmark AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix(
         $lift, $coeffs)
 end
 
 function bench_lift_inplace(numerical::Bool)
-    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    src = Source(band=:I, magnitude=0.0)
-    basis = rand(16, 16, 6)
-    diversity = zeros(16, 16)
-    forward = prepare_lift_forward_model(tel, src, basis;
-        diversity_opd=diversity, focal_resolution=16)
-    lift = LiFT(forward; iterations=1, mode_ids=1:3,
-        numerical=numerical)
-    coeffs = zeros(6)
-    H = lift.state.H_buffer
+    lift, coeffs = prepare_lift_benchmark(numerical)
+    H = lift.workspace.H_buffer
     return @benchmark AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
         $H, $lift, $coeffs)
 end
 
 function alloc_checks()
-    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    src = Source(band=:I, magnitude=0.0)
-    basis = rand(16, 16, 6)
-    diversity = zeros(16, 16)
-    forward_a = prepare_lift_forward_model(tel, src, basis;
-        diversity_opd=diversity, focal_resolution=16)
-    forward_n = prepare_lift_forward_model(tel, src, basis;
-        diversity_opd=diversity, focal_resolution=16)
-    lift_a = LiFT(forward_a; iterations=1, mode_ids=1:3,
-        numerical=false)
-    lift_n = LiFT(forward_n; iterations=1, mode_ids=1:3,
-        numerical=true)
-    coeffs = zeros(6)
-    H_a = lift_a.state.H_buffer
-    H_n = lift_n.state.H_buffer
+    lift_a, coeffs = prepare_lift_benchmark(false)
+    lift_n, _ = prepare_lift_benchmark(true)
+    H_a = lift_a.workspace.H_buffer
+    H_n = lift_n.workspace.H_buffer
     AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
         H_a, lift_a, coeffs)
     AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(

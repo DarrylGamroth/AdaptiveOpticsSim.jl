@@ -5072,7 +5072,7 @@ function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:Ab
     normal = transpose(H_host) * H_host
     λ = AdaptiveOpticsSim.WavefrontSensors.damping_lambda(damping, normal)
     expected = (normal + λ * I) \ (transpose(H_host) * residual_host)
-    diag = AdaptiveOpticsSim.WavefrontSensors.LiFTDiagnostics(
+    diag = AdaptiveOpticsSim.WavefrontSensors.LiFTDiagnosticsWorkspace(
         T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
     AdaptiveOpticsSim.WavefrontSensors.solve_lift_fallback!(
         diag, rhs, H, residual, damping)
@@ -5107,17 +5107,37 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     lift_object_kernel = array_backend(lift_object_kernel_host)
 
     cpu_forward = prepare_lift_forward_model(cpu_tel, lift_src,
-        basis_host; diversity_opd=copy(diversity_host), focal_resolution=8,
+        basis_host, truth_opd_host; diversity_opd=copy(diversity_host), focal_resolution=8,
         object_kernel=lift_object_kernel_host)
     lift_forward = prepare_lift_forward_model(lift_tel, lift_src,
-        lift_basis; diversity_opd=lift_diversity, focal_resolution=8,
+        lift_basis, truth_opd; diversity_opd=lift_diversity, focal_resolution=8,
         object_kernel=lift_object_kernel)
-    cpu_rate = copy(intensity_values(evaluate_lift_forward!(cpu_forward,
-        truth_opd_host)))
-    lift_rate = copy(intensity_values(evaluate_lift_forward!(lift_forward,
-        truth_opd)))
+    cpu_rate = copy(intensity_values(evaluate_lift_forward!(cpu_forward)))
+    lift_rate = copy(intensity_values(evaluate_lift_forward!(lift_forward)))
     @test lift_rate isa array_backend
     @test Array(lift_rate) ≈ cpu_rate rtol=T(2e-4) atol=T(1e-3)
+
+    cpu_response = GaussianPixelResponse(response_width_px=T(0.6), T=T,
+        backend=CPUBackend())
+    lift_response = GaussianPixelResponse(response_width_px=T(0.6), T=T,
+        backend=selector)
+    cpu_response_forward = prepare_lift_forward_model(cpu_tel, lift_src,
+        basis_host, truth_opd_host; diversity_opd=copy(diversity_host),
+        focal_resolution=8,
+        mapping=LiFTFrameMapping(response=cpu_response))
+    lift_response_forward = prepare_lift_forward_model(lift_tel, lift_src,
+        lift_basis, truth_opd; diversity_opd=lift_diversity,
+        focal_resolution=8,
+        mapping=LiFTFrameMapping(response=lift_response))
+    cpu_response_rate = copy(intensity_values(evaluate_lift_forward!(
+        cpu_response_forward)))
+    lift_response_rate = copy(intensity_values(evaluate_lift_forward!(
+        lift_response_forward)))
+    prepared_response = WavefrontSensors.lift_forward_plan(
+        lift_response_forward).mapping.response
+    @test prepared_response.kernel !== lift_response.kernel
+    @test prepared_response.kernel isa array_backend
+    @test Array(lift_response_rate) ≈ cpu_response_rate rtol=T(2e-4) atol=T(1e-3)
 
     exposure = T(0.002)
     quantum_efficiency = T(0.8)
@@ -5142,25 +5162,25 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
         normalized_values; domain=normalized_domain)
 
     for numerical in (false, true)
-        rate_estimator = LiFT(lift_forward; iterations=2,
-            mode_ids=(1, 2), numerical,
-            solve_mode=LiFTSolveNormalEquations())
-        count_estimator = LiFT(lift_forward; iterations=2,
-            mode_ids=(1, 2), numerical,
-            solve_mode=LiFTSolveNormalEquations())
-        normalized_estimator = LiFT(lift_forward; iterations=2,
-            mode_ids=(1, 2), numerical,
-            solve_mode=LiFTSolveNormalEquations())
-        rate_coefficients = WavefrontSensors.reconstruct(
-            rate_estimator, rate_observation;
-            optimize_norm=:none, check_convergence=false)
-        count_coefficients = WavefrontSensors.reconstruct(count_estimator,
-            count_observation; optimize_norm=:none,
+        definition = LiFT(iterations=2, mode_ids=(1, 2),
+            jacobian_method=numerical ? LiFTNumericalJacobian() :
+                LiFTAnalyticJacobian(),
+            solve_mode=LiFTSolveNormalEquations(),
+            model_scaling=LiFTPhysicalRatePreservation(),
             check_convergence=false)
+        rate_product = similar(lift_rate, T, 2)
+        count_product = similar(lift_rate, T, 2)
+        normalized_product = similar(lift_rate, T, 2)
+        rate_estimator = prepare_lift_estimator(definition, lift_forward,
+            rate_observation, rate_product)
+        count_estimator = prepare_lift_estimator(definition, lift_forward,
+            count_observation, count_product)
+        normalized_estimator = prepare_lift_estimator(definition,
+            lift_forward, normalized_observation, normalized_product)
+        rate_coefficients = WavefrontSensors.reconstruct(rate_estimator)
+        count_coefficients = WavefrontSensors.reconstruct(count_estimator)
         normalized_coefficients = WavefrontSensors.reconstruct(
-            normalized_estimator,
-            normalized_observation; optimize_norm=:none,
-            check_convergence=false)
+            normalized_estimator)
         @test rate_coefficients isa array_backend
         @test all(isfinite, Array(rate_coefficients))
         @test isapprox(Array(count_coefficients), Array(rate_coefficients);
@@ -5169,10 +5189,14 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
             Array(rate_coefficients); rtol=T(5e-4), atol=T(1e-11))
     end
 
-    cpu_analytic = LiFT(cpu_forward; iterations=2, mode_ids=(1, 2),
+    analytic_definition = LiFT(iterations=2, mode_ids=(1, 2),
         solve_mode=LiFTSolveNormalEquations())
-    gpu_analytic = LiFT(lift_forward; iterations=2, mode_ids=(1, 2),
-        solve_mode=LiFTSolveNormalEquations())
+    cpu_observation = LiFTObservation(cpu_forward, cpu_rate)
+    cpu_analytic = prepare_lift_estimator(analytic_definition, cpu_forward,
+        cpu_observation, zeros(T, 2))
+    gpu_analytic_product = similar(lift_rate, T, 2)
+    gpu_analytic = prepare_lift_estimator(analytic_definition, lift_forward,
+        rate_observation, gpu_analytic_product)
     cpu_H = AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix(
         cpu_analytic,
         zeros(T, 3))
@@ -5181,30 +5205,38 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
         array_backend(zeros(T, 3)))
     @test Array(gpu_H) ≈ cpu_H rtol=T(5e-4) atol=T(1e3)
 
+    variance = similar(lift_rate)
+    fill!(variance, one(T))
+    variance_product = similar(lift_rate, T, 2)
+    variance_estimator = prepare_lift_estimator(
+        LiFT(mode_ids=(1, 2),
+            weighting=LiFTVarianceMapWeighting(variance)),
+        lift_forward, rate_observation, variance_product)
+    prepared_variance = WavefrontSensors.lift_estimation_plan(
+        variance_estimator).weighting.variance
+    @test prepared_variance !== variance
+    @test prepared_variance isa array_backend
+    fill!(variance, T(2))
+    @test all(isone, Array(prepared_variance))
+
     predicted_counts = similar(lift_rate)
-    predict_lift_observation!(predicted_counts, lift_forward, truth_opd,
-        count_domain)
+    predict_lift_observation!(predicted_counts, lift_forward, count_domain)
     @test isapprox(Array(predicted_counts), Array(count_values);
         rtol=T(2e-5), atol=T(1e-3))
     @test_throws InvalidConfiguration LiFTObservation(lift_forward,
         Array(lift_rate))
     @test_throws InvalidConfiguration prepare_lift_forward_model(lift_tel,
-        lift_src, basis_host; diversity_opd=lift_diversity,
+        lift_src, basis_host, truth_opd; diversity_opd=lift_diversity,
         focal_resolution=8)
-    @test_throws InvalidConfiguration WavefrontSensors.reconstruct(
-        gpu_analytic,
-        rate_observation; R_n=ones(T, 8, 8))
+    @test_throws InvalidConfiguration prepare_lift_estimator(
+        LiFT(mode_ids=(1, 2),
+            weighting=LiFTVarianceMapWeighting(ones(T, 8, 8))),
+        lift_forward, rate_observation, gpu_analytic_product)
     host_lift_coefficients = zeros(T, 3)
-    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
-        host_lift_coefficients,
-        gpu_analytic, rate_observation)
+    @test_throws InvalidConfiguration prepare_lift_estimator(
+        LiFT(mode_ids=1:3), lift_forward, rate_observation,
+        host_lift_coefficients)
     @test host_lift_coefficients == zeros(T, 3)
-    device_lift_coefficients = similar(lift_basis, T, 3)
-    fill!(device_lift_coefficients, zero(T))
-    @test_throws InvalidConfiguration WavefrontSensors.reconstruct!(
-        device_lift_coefficients,
-        gpu_analytic, rate_observation; coeffs0=zeros(T, 3))
-    @test Array(device_lift_coefficients) == zeros(T, 3)
 
     convolution_source_host = reshape(T.(1:64), 8, 8)
     convolution_source = array_backend(convolution_source_host)

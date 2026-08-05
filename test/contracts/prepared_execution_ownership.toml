@@ -172,8 +172,8 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 446
-baseline_mixed_type_count = 9
+baseline_type_count = 449
+baseline_mixed_type_count = 8
 
 [[type_inventory.files]]
 path = "ext/AdaptiveOpticsSimAMDGPUExt.jl"
@@ -1026,13 +1026,16 @@ entries = [
 ]
 
 [[type_inventory.files]]
-path = "src/wfs/lift.jl"
+path = "src/wfs/lift/contracts.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["LiFTForwardWorkspace","struct",16,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
-    ["LiFTParams","struct",4,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["LiFTState","struct",9,"state",["workspace","product"],false,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
-    ["PreparedLiFTForwardModel","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["LiFTDiagnosticsWorkspace","mutable_struct",7,"workspace",["workspace"],true,false,"internal",false,"backend_neutral",true,"PE-05"],
+    ["LiFTEstimationPlan","struct",10,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["LiFTEstimationWorkspace","struct",9,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["LiFTForwardPlan","struct",12,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["LiFTForwardWorkspace","struct",15,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedLiFTEstimator","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedLiFTForward","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]

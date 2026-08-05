@@ -201,14 +201,16 @@ end
 
     diversity = fill(eltype(pupil.opd)(1e-9), size(pupil.opd))
     lift_basis = basis_from_m2c(dm, tel, basis.M2C)
-    lift_forward = prepare_lift_forward_model(tel, src, lift_basis;
+    lift_forward = prepare_lift_forward_model(tel, src, lift_basis,
+        diversity;
         diversity_opd=diversity, focal_resolution=8)
-    lift = LiFT(lift_forward; iterations=2, numerical=true)
     psf_in = reference_direct_image(tel, src; zero_padding=1)
     lift_observation = LiFTObservation(lift_forward, copy(psf_in))
     coeffs = zeros(eltype(psf_in), 2)
-    WavefrontSensors.reconstruct!(coeffs, lift, lift_observation;
-        check_convergence=false)
+    lift = prepare_lift_estimator(LiFT(iterations=2, mode_ids=1:2,
+            jacobian_method=LiFTNumericalJacobian(),
+            check_convergence=false), lift_forward, lift_observation, coeffs)
+    WavefrontSensors.reconstruct!(lift)
     @test length(coeffs) == 2
     @test diagnostics(lift).residual_norm >= 0
 end

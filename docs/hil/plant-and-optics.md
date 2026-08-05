@@ -583,7 +583,7 @@ The intended family decomposition is:
 | Bi-O-edge | modulation policy, complementary edge filters, and pupil relay | calibrated edge-image differences |
 | Zernike | phase-shifting focal-plane spot and pupil relay | referenced and normalized pupil-intensity estimator |
 | Curvature | prepared intra-/extra-focal propagation branches | calibrated branch-difference estimator |
-| LiFT | focal-plane forward model supplied independently of acquisition | iterative phase-retrieval estimator over an acquired observation |
+| LiFT | shareable focal-plane forward plan with an exact prepared input/output/workspace owner, supplied independently of acquisition | independently prepared iterative phase-retrieval owner over an exact acquired observation and coefficient result |
 
 Pyramid and Bi-O-edge may share prepared modulation and focal-plane-filter
 machinery where their semantics are genuinely identical, but their physical
@@ -591,13 +591,17 @@ optics remain distinct. Curvature acquisition must permit separate branch
 detectors as well as packed regions or channels on one detector. LiFT is not
 forced into the ordinary `AbstractWFS` hierarchy; its observation acquisition,
 forward model, and inverse estimator are independently composable.
-Its prepared forward model publishes a cell-integrated focal-plane photon rate
-and binds deterministic spatial preprocessing without exposure or QE. A
+Its `LiFTForwardPlan` freezes the physical/numerical model and observation
+contract; every `PreparedLiFTForward` or `PreparedLiFTEstimator` receives an
+independent single-writer propagation workspace. The prepared forward publishes
+a cell-integrated focal-plane photon rate and binds deterministic spatial
+preprocessing without exposure or QE. A
 caller-owned `LiFTObservation` declares whether acquired values are photon
 rates, expected detected counts, or normalized intensity, including the
 explicit conversion back to the estimator's canonical photon-rate domain.
-Modal selection is prepared with the estimator and is not supplied on each
-reconstruction call.
+Modal selection, Jacobian, solve, damping, inverse-variance weighting,
+normalization, and convergence policies are prepared with the estimator and
+are not supplied on each reconstruction call.
 
 The maintained Curvature front end publishes a fixed tuple ordered as positive
 then negative defocus. Separate detector acquisitions may have different
