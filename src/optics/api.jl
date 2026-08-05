@@ -72,7 +72,7 @@ export SampledModulation
 export MicrolensArrayParams, MicrolensArray
 export microlens_array, prepare_microlens_propagation
 
-export PyramidPhaseMask, BioEdgeAmplitudeMask
+export PyramidPhaseMask, BiOEdgeAmplitudeMask
 export ZernikePhaseSpot, CurvatureDefocusPair
 
 public AbstractSource, AbstractTelescope

@@ -590,15 +590,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return slopes
     end
 
-    record_gpu_smoke!(failures, "measure_bioedge_geometric") do
-        wfs = BioEdgeWFS(tel; pupil_samples=4, modulation=0.0, T=T, backend=backend)
+    record_gpu_smoke!(failures, "measure_bi_o_edge_geometric") do
+        wfs = BiOEdgeWFS(tel; pupil_samples=4, modulation=0.0, T=T, backend=backend)
         slopes = measure!(wfs, pupil)
         @assert slopes isa BackendArray
         return slopes
     end
 
-    record_gpu_smoke!(failures, "measure_bioedge_diffractive") do
-        wfs = BioEdgeWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
+    record_gpu_smoke!(failures, "measure_bi_o_edge_diffractive") do
+        wfs = BiOEdgeWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
         slopes = measure!(wfs, pupil, src)
         @assert slopes isa BackendArray
         return slopes

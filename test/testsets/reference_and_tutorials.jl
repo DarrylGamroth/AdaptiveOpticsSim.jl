@@ -254,7 +254,7 @@ end
     @test length(tomography.commands) == 4
     @test all(isfinite, tomography.commands)
 
-    for name in ("closed_loop_shack_hartmann.jl", "closed_loop_pyramid.jl", "closed_loop_bioedge.jl", "closed_loop_zernike.jl")
+    for name in ("closed_loop_shack_hartmann.jl", "closed_loop_pyramid.jl", "closed_loop_bi_o_edge.jl", "closed_loop_zernike.jl")
         loop = run_tutorial_example(name)
         @test length(loop.residual_before) == length(loop.residual_after)
         @test all(isfinite, loop.residual_before)

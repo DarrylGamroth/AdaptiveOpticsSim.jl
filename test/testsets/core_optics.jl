@@ -198,7 +198,7 @@ end
         :microlens_array,
         :prepare_microlens_propagation,
         :PyramidPhaseMask,
-        :BioEdgeAmplitudeMask,
+        :BiOEdgeAmplitudeMask,
         :ZernikePhaseSpot,
         :CurvatureDefocusPair,
     )
@@ -222,13 +222,13 @@ end
     @test Base.isexported(WavefrontSensors, :shack_hartmann_rate_map)
     for name in (
         :PyramidWFS,
-        :BioEdgeWFS,
+        :BiOEdgeWFS,
         :PyramidOpticalFrontEnd,
-        :BioEdgeOpticalFrontEnd,
+        :BiOEdgeOpticalFrontEnd,
         :pyramid_rate_map,
-        :bioedge_rate_map,
+        :bi_o_edge_rate_map,
         :set_pyramid_calibration!,
-        :set_bioedge_calibration!,
+        :set_bi_o_edge_calibration!,
         :pyramid_modulation_frame,
         :pyramid_modulation_frame!,
     )
@@ -304,9 +304,9 @@ end
     @test Base.isexported(Control, :FactorizedReconstructor)
     @test Base.isexported(Control, :ControlledReconstructor)
     @test !Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
-    @test !Base.isexported(AdaptiveOpticsSim, :BioEdgeWFS)
+    @test !Base.isexported(AdaptiveOpticsSim, :BiOEdgeWFS)
     @test Base.isexported(WavefrontSensors, :PyramidWFS)
-    @test Base.isexported(WavefrontSensors, :BioEdgeWFS)
+    @test Base.isexported(WavefrontSensors, :BiOEdgeWFS)
     @test !Base.isexported(AdaptiveOpticsSim, :ZernikeWFS)
     @test !Base.isexported(AdaptiveOpticsSim, :CurvatureWFS)
     @test !isdefined(AdaptiveOpticsSim, :ZernikeWFS)

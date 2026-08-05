@@ -580,12 +580,12 @@ The intended family decomposition is:
 |---|---|---|
 | Shack-Hartmann | independent microlens array and lenslet propagation | centroid, correlation, matched-filter, or other spot estimator |
 | Pyramid | modulation policy, pyramid focal-plane optic, and pupil relay | calibrated normalized pupil-image differences |
-| BioEdge | modulation policy, complementary edge filters, and pupil relay | calibrated edge-image differences |
+| Bi-O-edge | modulation policy, complementary edge filters, and pupil relay | calibrated edge-image differences |
 | Zernike | phase-shifting focal-plane spot and pupil relay | referenced and normalized pupil-intensity estimator |
 | Curvature | prepared intra-/extra-focal propagation branches | calibrated branch-difference estimator |
 | LiFT | focal-plane forward model supplied independently of acquisition | iterative phase-retrieval estimator over an acquired observation |
 
-Pyramid and BioEdge may share prepared modulation and focal-plane-filter
+Pyramid and Bi-O-edge may share prepared modulation and focal-plane-filter
 machinery where their semantics are genuinely identical, but their physical
 optics remain distinct. Curvature acquisition must permit separate branch
 detectors as well as packed regions or channels on one detector. LiFT is not

@@ -1,7 +1,7 @@
 #
-# BioEdge wavefront sensing
+# Bi-O-edge wavefront sensing
 #
-# BioEdge is implemented here as a four-edge/Foucault-style pupil-plane sensor.
+# Bi-O-edge is implemented here as a four-edge/Foucault-style pupil-plane sensor.
 # The diffractive path:
 #
 # 1. propagates the pupil field to the focal plane
@@ -11,7 +11,7 @@
 #
 # Modulation, detector binning, and asterism batching follow the same pattern
 # as the Pyramid implementation, but the focal-plane filtering is performed
-# with the BioEdge mask family rather than a pyramid phase ramp.
+# with the Bi-O-edge mask family rather than a pyramid phase ramp.
 #
 @kernel function edge_mask_kernel!(mask, pupil, n::Int)
     i, j = @index(Global, NTuple)
@@ -32,7 +32,7 @@
     end
 end
 
-@kernel function bioedge_phasor_kernel!(phasor, scale, n::Int)
+@kernel function bi_o_edge_phasor_kernel!(phasor, scale, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         phase = scale * (i + j - 2)
@@ -40,7 +40,7 @@ end
     end
 end
 
-@kernel function bioedge_masks_kernel!(masks, one_c, zero_c, half::Int, n::Int)
+@kernel function bi_o_edge_masks_kernel!(masks, one_c, zero_c, half::Int, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         left = j <= half
@@ -63,7 +63,7 @@ end
     end
 end
 
-@kernel function gather_bioedge_slopes_kernel!(slopes, signal_2d, valid_signal_indices, count::Int, y_offset::Int)
+@kernel function gather_bi_o_edge_slopes_kernel!(slopes, signal_2d, valid_signal_indices, count::Int, y_offset::Int)
     idx = @index(Global, Linear)
     if idx <= count
         src = @inbounds valid_signal_indices[idx]
@@ -75,7 +75,7 @@ end
 end
 
 """Immutable differential-estimator configuration."""
-struct BioEdgeEstimatorParams{T<:AbstractFloat,N<:WFSNormalization}
+struct BiOEdgeEstimatorParams{T<:AbstractFloat,N<:WFSNormalization}
     pupil_samples::Int
     pupil_resolution::Int
     pupil_diameter_m::T
@@ -84,8 +84,8 @@ struct BioEdgeEstimatorParams{T<:AbstractFloat,N<:WFSNormalization}
     normalization::N
 end
 
-"""Single-writer FFT and scratch state for BioEdge propagation."""
-mutable struct PreparedBioEdgePropagation{T<:AbstractFloat,
+"""Single-writer FFT and scratch state for Bi-O-edge propagation."""
+mutable struct PreparedBiOEdgePropagation{T<:AbstractFloat,
     C<:AbstractMatrix{Complex{T}},
     C3<:AbstractArray{Complex{T},3},
     R<:AbstractMatrix{T},
@@ -97,7 +97,7 @@ mutable struct PreparedBioEdgePropagation{T<:AbstractFloat,
     field::C
     focal_field::C
     pupil_field::C
-    bioedge_masks::C3
+    bi_o_edge_masks::C3
     phasor::C
     intensity::R
     temp::R
@@ -114,8 +114,8 @@ mutable struct PreparedBioEdgePropagation{T<:AbstractFloat,
     revision::UInt
 end
 
-"""A physically distinct BioEdge front end with prepared modulation."""
-struct BioEdgeOpticalFrontEnd{O<:BioEdgeAmplitudeMask,M,C,P,S}
+"""A physically distinct Bi-O-edge front end with prepared modulation."""
+struct BiOEdgeOpticalFrontEnd{O<:BiOEdgeAmplitudeMask,M,C,P,S}
     amplitude_mask::O
     modulation::M
     calibration_modulation::C
@@ -125,19 +125,19 @@ struct BioEdgeOpticalFrontEnd{O<:BioEdgeAmplitudeMask,M,C,P,S}
     source::S
 end
 
-mutable struct BioEdgeAcquisitionState{T<:AbstractFloat,R<:AbstractMatrix{T}}
+mutable struct BiOEdgeAcquisitionState{T<:AbstractFloat,R<:AbstractMatrix{T}}
     binned_intensity::R
     camera_frame::R
     nominal_detector_resolution::Int
 end
 
-struct BioEdgeDetectorAcquisition{S}
+struct BiOEdgeDetectorAcquisition{S}
     binning::Int
     state::S
 end
 
-"""Mutable support, calibration, and output storage for BioEdge estimation."""
-mutable struct BioEdgeEstimatorState{T<:AbstractFloat,
+"""Mutable support, calibration, and output storage for Bi-O-edge estimation."""
+mutable struct BiOEdgeEstimatorState{T<:AbstractFloat,
     A<:AbstractMatrix{Bool},V<:AbstractVector{T},I<:AbstractVector{Int},
     R<:AbstractMatrix{T}}
     valid_mask::A
@@ -165,39 +165,39 @@ mutable struct BioEdgeEstimatorState{T<:AbstractFloat,
     calibration_revision::UInt
 end
 
-struct BioEdgeDifferentialEstimator{P<:BioEdgeEstimatorParams,S}
+struct BiOEdgeDifferentialEstimator{P<:BiOEdgeEstimatorParams,S}
     params::P
     state::S
 end
 
-struct BioEdgeWFS{M<:SensingMode,F,A,E,B<:AbstractArrayBackend} <: AbstractWFS
+struct BiOEdgeWFS{M<:SensingMode,F,A,E,B<:AbstractArrayBackend} <: AbstractWFS
     front_end::F
     acquisition::A
     estimator::E
 end
 
-@inline backend(::BioEdgeWFS{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
+@inline backend(::BiOEdgeWFS{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
 
-@inline bioedge_propagation(wfs::BioEdgeWFS{<:Diffractive}) =
+@inline bi_o_edge_propagation(wfs::BiOEdgeWFS{<:Diffractive}) =
     wfs.front_end.propagation
-@inline bioedge_amplitude_mask(wfs::BioEdgeWFS{<:Diffractive}) =
+@inline bi_o_edge_amplitude_mask(wfs::BiOEdgeWFS{<:Diffractive}) =
     wfs.front_end.amplitude_mask
-@inline bioedge_operating_modulation(wfs::BioEdgeWFS{<:Diffractive}) =
+@inline bi_o_edge_operating_modulation(wfs::BiOEdgeWFS{<:Diffractive}) =
     wfs.front_end.modulation
-@inline bioedge_calibration_modulation(wfs::BioEdgeWFS{<:Diffractive}) =
+@inline bi_o_edge_calibration_modulation(wfs::BiOEdgeWFS{<:Diffractive}) =
     wfs.front_end.calibration_modulation
 
 """
-    BioEdgeWFS(tel; ...)
+    BiOEdgeWFS(tel; ...)
 
-Construct a BioEdge wavefront sensor.
+Construct a Bi-O-edge wavefront sensor.
 
 The diffractive model forms four edge-filtered pupil images using complementary
-focal-plane BioEdge masks. Slopes are then built from the resulting
+focal-plane Bi-O-edge masks. Slopes are then built from the resulting
 left/right and top/bottom differential signals after optional binning and
 modulation averaging.
 """
-function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
+function BiOEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
     light_ratio::Real=0.0, modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
     normalization::WFSNormalization=MeanValidFluxNormalization(),
     calib_modulation::Real=min(50.0, tel.params.resolution / 2 - 1),
@@ -219,17 +219,17 @@ function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
     end
     if pupil_samples % binning != 0
         throw(InvalidConfiguration(
-            "BioEdge binning must evenly divide pupil_samples"))
+            "Bi-O-edge binning must evenly divide pupil_samples"))
     end
     grey_length_val = grey_length === false ? false : T(grey_length)
-    estimator_params = BioEdgeEstimatorParams{T,typeof(normalization)}(
+    estimator_params = BiOEdgeEstimatorParams{T,typeof(normalization)}(
         pupil_samples,
         tel.params.resolution,
         T(tel.params.diameter),
         T(threshold),
         T(light_ratio),
         normalization)
-    amplitude_mask = BioEdgeAmplitudeMask{T}(
+    amplitude_mask = BiOEdgeAmplitudeMask{T}(
         T(grey_width),
         grey_length_val,
         diffraction_padding,
@@ -262,7 +262,7 @@ function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
     edge_mask_binned = similar(edge_mask)
     optical_gain = similar(slopes)
     fill!(optical_gain, one(T))
-    estimator_state = BioEdgeEstimatorState{
+    estimator_state = BiOEdgeEstimatorState{
         T,
         typeof(valid_mask),
         typeof(slopes),
@@ -293,25 +293,25 @@ function BioEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
         UInt(0),
         UInt(0),
     )
-    estimator = BioEdgeDifferentialEstimator(estimator_params,
+    estimator = BiOEdgeDifferentialEstimator(estimator_params,
         estimator_state)
-    front_end, acquisition = prepare_bioedge_mode(mode, backend, T, tel,
+    front_end, acquisition = prepare_bi_o_edge_mode(mode, backend, T, tel,
         amplitude_mask, operating_policy, calibration_policy, pupil_samples,
         binning)
-    wfs = BioEdgeWFS{
+    wfs = BiOEdgeWFS{
         typeof(mode),typeof(front_end),typeof(acquisition),typeof(estimator),
         typeof(selector),
     }(front_end, acquisition, estimator)
-    initialize_bioedge_masks!(wfs, tel)
-    prepare_bioedge_front_end!(mode, wfs)
+    initialize_bi_o_edge_masks!(wfs, tel)
+    prepare_bi_o_edge_front_end!(mode, wfs)
     return wfs
 end
 
-@inline prepare_bioedge_mode(::Geometric, backend, ::Type{T}, tel,
+@inline prepare_bi_o_edge_mode(::Geometric, backend, ::Type{T}, tel,
     amplitude_mask, operating_policy, calibration_policy, pupil_samples,
     binning) where {T} = (nothing, nothing)
 
-function prepare_bioedge_mode(::Diffractive, backend, ::Type{T}, tel,
+function prepare_bi_o_edge_mode(::Diffractive, backend, ::Type{T}, tel,
     amplitude_mask, operating_policy, calibration_policy, pupil_samples,
     binning) where {T<:AbstractFloat}
     pad = tel.params.resolution * amplitude_mask.diffraction_padding
@@ -336,7 +336,7 @@ function prepare_bioedge_mode(::Diffractive, backend, ::Type{T}, tel,
     ifft_plan = plan_ifft_backend!(pupil_field)
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0)
-    propagation = PreparedBioEdgePropagation(field, focal_field, pupil_field,
+    propagation = PreparedBiOEdgePropagation(field, focal_field, pupil_field,
         masks, phasor, intensity, temp, scratch, asterism_stack, fft_buffer,
         fft_plan, ifft_plan, elongation_kernel, lgs_kernel_fft, UInt(0), pad,
         1, UInt(0))
@@ -344,50 +344,50 @@ function prepare_bioedge_mode(::Diffractive, backend, ::Type{T}, tel,
         tel.params.resolution, field, T)
     prepared_calibration = prepare_focal_plane_modulation(
         calibration_policy, tel.params.resolution, field, T)
-    front_end = BioEdgeOpticalFrontEnd(amplitude_mask, prepared_modulation,
+    front_end = BiOEdgeOpticalFrontEnd(amplitude_mask, prepared_modulation,
         prepared_calibration, propagation, pupil_samples, binning, nothing)
     binned_intensity = similar(intensity)
     nominal = max(1,
         round(Int, pupil_samples * pad / tel.params.resolution))
     camera_frame = backend{T}(undef, 2 * nominal, 2 * nominal)
-    acquisition = BioEdgeDetectorAcquisition(binning,
-        BioEdgeAcquisitionState(binned_intensity, camera_frame, nominal))
+    acquisition = BiOEdgeDetectorAcquisition(binning,
+        BiOEdgeAcquisitionState(binned_intensity, camera_frame, nominal))
     return front_end, acquisition
 end
 
-@inline prepare_bioedge_front_end!(::Geometric, ::BioEdgeWFS) = nothing
+@inline prepare_bi_o_edge_front_end!(::Geometric, ::BiOEdgeWFS) = nothing
 
-function prepare_bioedge_front_end!(::Diffractive, wfs::BioEdgeWFS)
-    build_bioedge_phasor!(wfs.front_end.propagation.phasor)
-    build_bioedge_masks!(wfs)
+function prepare_bi_o_edge_front_end!(::Diffractive, wfs::BiOEdgeWFS)
+    build_bi_o_edge_phasor!(wfs.front_end.propagation.phasor)
+    build_bi_o_edge_masks!(wfs)
     return nothing
 end
 
-function BioEdgeOpticalFrontEnd(sensor::BioEdgeWFS{<:Diffractive},
+function BiOEdgeOpticalFrontEnd(sensor::BiOEdgeWFS{<:Diffractive},
     source=nothing)
     front_end = sensor.front_end
-    return BioEdgeOpticalFrontEnd(front_end.amplitude_mask,
+    return BiOEdgeOpticalFrontEnd(front_end.amplitude_mask,
         front_end.modulation, front_end.calibration_modulation,
         front_end.propagation, front_end.pupil_samples, front_end.binning,
         source)
 end
 
-@inline function bioedge_front_end_with_source(
-    front_end::BioEdgeOpticalFrontEnd, source)
-    return BioEdgeOpticalFrontEnd(front_end.amplitude_mask,
+@inline function bi_o_edge_front_end_with_source(
+    front_end::BiOEdgeOpticalFrontEnd, source)
+    return BiOEdgeOpticalFrontEnd(front_end.amplitude_mask,
         front_end.modulation, front_end.calibration_modulation,
         front_end.propagation, front_end.pupil_samples, front_end.binning,
         source)
 end
 
-function BioEdgeOpticalFrontEnd(::BioEdgeWFS{<:Geometric}, source=nothing)
+function BiOEdgeOpticalFrontEnd(::BiOEdgeWFS{<:Geometric}, source=nothing)
     throw(WFSPreparationError(:wfs_optics, :unsupported,
-        "geometric BioEdge sensing uses DirectMeasurementPath and has no optical front end"))
+        "geometric Bi-O-edge sensing uses DirectMeasurementPath and has no optical front end"))
 end
 
-sensing_mode(::BioEdgeWFS{M}) where {M} = M()
+sensing_mode(::BiOEdgeWFS{M}) where {M} = M()
 
-function initialize_bioedge_masks!(wfs::BioEdgeWFS,
+function initialize_bi_o_edge_masks!(wfs::BiOEdgeWFS,
     tel::Telescope)
     set_valid_subapertures!(wfs.estimator.state.valid_mask,
         pupil_mask(tel), wfs.estimator.params.threshold)
@@ -399,13 +399,13 @@ function initialize_bioedge_masks!(wfs::BioEdgeWFS,
     return wfs
 end
 
-function update_valid_mask!(wfs::BioEdgeWFS, pupil::PupilFunction)
+function update_valid_mask!(wfs::BiOEdgeWFS, pupil::PupilFunction)
     set_valid_subapertures!(wfs.estimator.state.valid_mask,
         pupil.support, wfs.estimator.params.threshold)
     return wfs
 end
 
-function update_edge_mask!(wfs::BioEdgeWFS, pupil::PupilFunction)
+function update_edge_mask!(wfs::BiOEdgeWFS, pupil::PupilFunction)
     Base.require_one_based_indexing(wfs.estimator.state.edge_mask, pupil.support)
     _update_edge_mask!(execution_style(wfs.estimator.state.edge_mask),
         wfs.estimator.state.edge_mask, pupil.support,
@@ -444,12 +444,12 @@ function _update_edge_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Bool},
     return mask
 end
 
-@inline ensure_bioedge_lgs_kernel!(::LGSProfileNone, wfs::BioEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
-@inline ensure_bioedge_lgs_kernel!(::LGSProfileNaProfile, wfs::BioEdgeWFS, pupil::PupilFunction, src::LGSSource) =
+@inline ensure_bi_o_edge_lgs_kernel!(::LGSProfileNone, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
+@inline ensure_bi_o_edge_lgs_kernel!(::LGSProfileNaProfile, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource) =
     ensure_lgs_kernel!(wfs, pupil, src)
-@inline ensure_bioedge_lgs_kernel!(profile, wfs::BioEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
+@inline ensure_bi_o_edge_lgs_kernel!(profile, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
 
-@inline function apply_bioedge_lgs_profile!(::LGSProfileNone, wfs::BioEdgeWFS, src::LGSSource,
+@inline function apply_bi_o_edge_lgs_profile!(::LGSProfileNone, wfs::BiOEdgeWFS, src::LGSSource,
     lgs_fft_buffer, lgs_ifft_buffer)
     wfs.front_end.propagation.elongation_kernel = apply_elongation!(
         wfs.front_end.propagation.temp,
@@ -460,7 +460,7 @@ end
     return wfs.front_end.propagation.temp
 end
 
-@inline function apply_bioedge_lgs_profile!(::LGSProfileNaProfile, wfs::BioEdgeWFS, src::LGSSource,
+@inline function apply_bi_o_edge_lgs_profile!(::LGSProfileNaProfile, wfs::BiOEdgeWFS, src::LGSSource,
     lgs_fft_buffer, lgs_ifft_buffer)
     apply_lgs_convolution!(
         wfs.front_end.propagation.temp,
@@ -473,15 +473,15 @@ end
     return wfs.front_end.propagation.temp
 end
 
-@inline apply_bioedge_lgs_profile!(profile, wfs::BioEdgeWFS, src::LGSSource, lgs_fft_buffer, lgs_ifft_buffer) =
+@inline apply_bi_o_edge_lgs_profile!(profile, wfs::BiOEdgeWFS, src::LGSSource, lgs_fft_buffer, lgs_ifft_buffer) =
     wfs.front_end.propagation.temp
 
-function build_bioedge_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
-    _build_bioedge_phasor!(execution_style(phasor), phasor)
+function build_bi_o_edge_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    _build_bi_o_edge_phasor!(execution_style(phasor), phasor)
     return phasor
 end
 
-function _build_bioedge_phasor!(::ScalarCPUStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+function _build_bi_o_edge_phasor!(::ScalarCPUStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     n = size(phasor, 1)
     scale = -T(pi) * (n + 1) / n
     @inbounds for i in 1:n, j in 1:n
@@ -491,28 +491,28 @@ function _build_bioedge_phasor!(::ScalarCPUStyle, phasor::AbstractMatrix{Complex
     return phasor
 end
 
-function _build_bioedge_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+function _build_bi_o_edge_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     n = size(phasor, 1)
     scale = -T(pi) * (n + 1) / n
-    launch_kernel!(style, bioedge_phasor_kernel!, phasor, scale, n; ndrange=size(phasor))
+    launch_kernel!(style, bi_o_edge_phasor_kernel!, phasor, scale, n; ndrange=size(phasor))
     return phasor
 end
 
-function build_bioedge_masks!(wfs::BioEdgeWFS)
-    masks = wfs.front_end.propagation.bioedge_masks
-    copyto!(masks, host_bioedge_masks(wfs))
+function build_bi_o_edge_masks!(wfs::BiOEdgeWFS)
+    masks = wfs.front_end.propagation.bi_o_edge_masks
+    copyto!(masks, host_bi_o_edge_masks(wfs))
     return masks
 end
 
-function host_bioedge_masks(wfs::BioEdgeWFS)
+function host_bi_o_edge_masks(wfs::BiOEdgeWFS)
     T = eltype(wfs.estimator.state.slopes)
-    n = size(wfs.front_end.propagation.bioedge_masks, 1)
+    n = size(wfs.front_end.propagation.bi_o_edge_masks, 1)
     host = Array{Complex{T}}(undef, n, n, 4)
-    build_bioedge_masks_host!(host, wfs)
+    build_bi_o_edge_masks_host!(host, wfs)
     return host
 end
 
-function build_bioedge_masks_host!(masks::AbstractArray{Complex{T},3}, wfs::BioEdgeWFS) where {T<:AbstractFloat}
+function build_bi_o_edge_masks_host!(masks::AbstractArray{Complex{T},3}, wfs::BiOEdgeWFS) where {T<:AbstractFloat}
     n = size(masks, 1)
     half = n ÷ 2
     bw = zeros(T, n)
@@ -555,7 +555,7 @@ end
 segment_values(a::T, b::T, n::Int) where {T<:AbstractFloat} =
     n == 1 ? reshape(fill(a, 1), :) : range(a, b; length=n)
 
-function _build_bioedge_masks!(::ScalarCPUStyle, masks::AbstractArray{Complex{T},3}, ::Type{T}) where {T<:AbstractFloat}
+function _build_bi_o_edge_masks!(::ScalarCPUStyle, masks::AbstractArray{Complex{T},3}, ::Type{T}) where {T<:AbstractFloat}
     one_c = complex(one(T), zero(T))
     zero_c = complex(zero(T), zero(T))
     n = size(masks, 1)
@@ -571,22 +571,22 @@ function _build_bioedge_masks!(::ScalarCPUStyle, masks::AbstractArray{Complex{T}
     return masks
 end
 
-function _build_bioedge_masks!(style::AcceleratorStyle, masks::AbstractArray{Complex{T},3}, ::Type{T}) where {T<:AbstractFloat}
+function _build_bi_o_edge_masks!(style::AcceleratorStyle, masks::AbstractArray{Complex{T},3}, ::Type{T}) where {T<:AbstractFloat}
     n = size(masks, 1)
     half = n ÷ 2
     one_c = complex(one(T), zero(T))
     zero_c = complex(zero(T), zero(T))
-    launch_kernel!(style, bioedge_masks_kernel!, masks, one_c, zero_c, half, n; ndrange=(n, n))
+    launch_kernel!(style, bi_o_edge_masks_kernel!, masks, one_c, zero_c, half, n; ndrange=(n, n))
     return masks
 end
 
-function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, pupil::PupilFunction)
+function ensure_bi_o_edge_buffers!(wfs::BiOEdgeWFS, pad::Int, pupil::PupilFunction)
     if size(wfs.front_end.propagation.field) != (pad, pad)
         wfs.front_end.propagation.revision += UInt(1)
         wfs.front_end.propagation.field = similar(wfs.front_end.propagation.field, pad, pad)
         wfs.front_end.propagation.focal_field = similar(wfs.front_end.propagation.focal_field, pad, pad)
         wfs.front_end.propagation.pupil_field = similar(wfs.front_end.propagation.pupil_field, pad, pad)
-        wfs.front_end.propagation.bioedge_masks = similar(wfs.front_end.propagation.bioedge_masks, pad, pad, 4)
+        wfs.front_end.propagation.bi_o_edge_masks = similar(wfs.front_end.propagation.bi_o_edge_masks, pad, pad, 4)
         wfs.front_end.propagation.phasor = similar(wfs.front_end.propagation.phasor, pad, pad)
         wfs.front_end.propagation.intensity = similar(wfs.front_end.propagation.intensity, 2 * pad, 2 * pad)
         wfs.front_end.propagation.temp = similar(wfs.front_end.propagation.temp, pad, pad)
@@ -603,13 +603,13 @@ function ensure_bioedge_buffers!(wfs::BioEdgeWFS, pad::Int, pupil::PupilFunction
         wfs.front_end.propagation.effective_resolution = pad
         wfs.estimator.state.calibrated = false
         wfs.estimator.state.calibration_revision += UInt(1)
-        build_bioedge_phasor!(wfs.front_end.propagation.phasor)
-        build_bioedge_masks!(wfs)
+        build_bi_o_edge_phasor!(wfs.front_end.propagation.phasor)
+        build_bi_o_edge_masks!(wfs)
     end
     return wfs
 end
 
-function ensure_bioedge_asterism_stack!(wfs::BioEdgeWFS, n_src::Int)
+function ensure_bi_o_edge_asterism_stack!(wfs::BiOEdgeWFS, n_src::Int)
     n_src >= 1 || throw(InvalidConfiguration("asterism source count must be >= 1"))
     dims = size(wfs.front_end.propagation.intensity)
     if size(wfs.front_end.propagation.asterism_stack, 1) != dims[1] || size(wfs.front_end.propagation.asterism_stack, 2) != dims[2] ||
@@ -621,21 +621,21 @@ function ensure_bioedge_asterism_stack!(wfs::BioEdgeWFS, n_src::Int)
     return wfs.front_end.propagation.asterism_stack
 end
 
-@inline grouped_staging_buffer(wfs::BioEdgeWFS, out::AbstractMatrix) = wfs.front_end.propagation.intensity
+@inline grouped_staging_buffer(wfs::BiOEdgeWFS, out::AbstractMatrix) = wfs.front_end.propagation.intensity
 
-function accumulate_bioedge_asterism_intensity!(::ScalarCPUStyle, wfs::BioEdgeWFS, pupil::PupilFunction, ast::Asterism)
+function accumulate_bi_o_edge_asterism_intensity!(::ScalarCPUStyle, wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism)
     count = length(ast.sources)
-    stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, wfs.front_end.propagation.intensity, stack, ast.sources, bioedge_intensity!, wfs, pupil)
+    stack = grouped_stack_view(ensure_bi_o_edge_asterism_stack!(wfs, count), count)
+    return accumulate_grouped_sources!(ScalarCPUStyle(), wfs, wfs.front_end.propagation.intensity, stack, ast.sources, bi_o_edge_intensity!, wfs, pupil)
 end
 
-function accumulate_bioedge_asterism_intensity!(style::AcceleratorStyle, wfs::BioEdgeWFS, pupil::PupilFunction, ast::Asterism)
+function accumulate_bi_o_edge_asterism_intensity!(style::AcceleratorStyle, wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism)
     count = length(ast.sources)
-    stack = grouped_stack_view(ensure_bioedge_asterism_stack!(wfs, count), count)
-    return accumulate_grouped_sources!(style, wfs, wfs.front_end.propagation.intensity, stack, ast.sources, bioedge_intensity!, wfs, pupil)
+    stack = grouped_stack_view(ensure_bi_o_edge_asterism_stack!(wfs, count), count)
+    return accumulate_grouped_sources!(style, wfs, wfs.front_end.propagation.intensity, stack, ast.sources, bi_o_edge_intensity!, wfs, pupil)
 end
 
-function prepare_bioedge_sampling!(wfs::BioEdgeWFS, pupil::PupilFunction)
+function prepare_bi_o_edge_sampling!(wfs::BiOEdgeWFS, pupil::PupilFunction)
     binning = wfs.acquisition.binning
     if binning < 1
         throw(InvalidConfiguration("binning must be >= 1"))
@@ -647,16 +647,16 @@ function prepare_bioedge_sampling!(wfs::BioEdgeWFS, pupil::PupilFunction)
         pad = Int(round((n_sub * 2 + wfs.front_end.amplitude_mask.n_pix_separation + 2 * edge) * _pupil_resolution(pupil) / n_sub))
     end
     if pad < _pupil_resolution(pupil)
-        throw(InvalidConfiguration("bioedge padding must be >= telescope resolution"))
+        throw(InvalidConfiguration("bi_o_edge padding must be >= telescope resolution"))
     end
     if pad % binning != 0
-        throw(InvalidConfiguration("bioedge binning must evenly divide padded resolution"))
+        throw(InvalidConfiguration("bi_o_edge binning must evenly divide padded resolution"))
     end
     n = _pupil_resolution(pupil)
     if n % binning != 0
         throw(InvalidConfiguration("binning must evenly divide telescope resolution"))
     end
-    ensure_bioedge_buffers!(wfs, pad, pupil)
+    ensure_bi_o_edge_buffers!(wfs, pad, pupil)
     n_binned = div(n, binning)
     if n_binned != wfs.estimator.state.binned_resolution
         wfs.estimator.state.binned_phase = similar(wfs.estimator.state.binned_phase, n_binned, n_binned)
@@ -697,7 +697,7 @@ function _bin_edge_mask!(style::AcceleratorStyle, out::AbstractMatrix{Bool}, mas
     return out
 end
 
-function sample_bioedge_phase!(wfs::BioEdgeWFS, phase::AbstractMatrix{T}) where {T<:AbstractFloat}
+function sample_bi_o_edge_phase!(wfs::BiOEdgeWFS, phase::AbstractMatrix{T}) where {T<:AbstractFloat}
     binning = wfs.acquisition.binning
     if binning == 1
         return phase, wfs.estimator.state.edge_mask
@@ -707,33 +707,33 @@ function sample_bioedge_phase!(wfs::BioEdgeWFS, phase::AbstractMatrix{T}) where 
     return wfs.estimator.state.binned_phase, wfs.estimator.state.edge_mask_binned
 end
 
-@inline resize_bioedge_signal_buffers!(wfs::BioEdgeWFS,
-    frame_rows::Int) = resize_bioedge_signal_buffers!(wfs, frame_rows, 1)
+@inline resize_bi_o_edge_signal_buffers!(wfs::BiOEdgeWFS,
+    frame_rows::Int) = resize_bi_o_edge_signal_buffers!(wfs, frame_rows, 1)
 
-@inline resize_bioedge_signal_buffers!(wfs::BioEdgeWFS,
+@inline resize_bi_o_edge_signal_buffers!(wfs::BiOEdgeWFS,
     frame_rows::Int, ::AbstractDetector) =
-    resize_bioedge_signal_buffers!(wfs, frame_rows)
+    resize_bi_o_edge_signal_buffers!(wfs, frame_rows)
 
-@inline resize_bioedge_signal_buffers!(wfs::BioEdgeWFS,
-    frame_rows::Int, det::Detector) = resize_bioedge_signal_buffers!(wfs,
+@inline resize_bi_o_edge_signal_buffers!(wfs::BiOEdgeWFS,
+    frame_rows::Int, det::Detector) = resize_bi_o_edge_signal_buffers!(wfs,
     frame_rows, det.params.psf_sampling * det.params.binning)
 
-function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int,
+function resize_bi_o_edge_signal_buffers!(wfs::BiOEdgeWFS, frame_rows::Int,
     detector_reduction::Int)
     nominal = wfs.acquisition.state.nominal_detector_resolution
     detector_reduction >= 1 || throw(InvalidConfiguration(
-        "BioEdge detector sampling reduction must be >= 1"))
+        "Bi-O-edge detector sampling reduction must be >= 1"))
     nominal_pixels = max(1,
         round(Int, nominal / (2 * wfs.acquisition.binning)))
     nominal_pixels % detector_reduction == 0 || throw(InvalidConfiguration(
-        "detector sampling and binning must preserve an integer BioEdge pupil image"))
+        "detector sampling and binning must preserve an integer Bi-O-edge pupil image"))
     n_pixels = div(nominal_pixels, detector_reduction)
     n_pixels >= 1 || throw(InvalidConfiguration(
-        "detector sampling and binning removed every BioEdge pupil sample"))
+        "detector sampling and binning removed every Bi-O-edge pupil sample"))
     iseven(frame_rows) || throw(InvalidConfiguration(
-        "BioEdge camera frame must have even dimensions for symmetric pupil extraction"))
+        "Bi-O-edge camera frame must have even dimensions for symmetric pupil extraction"))
     frame_rows >= 2 * n_pixels || throw(InvalidConfiguration(
-        "BioEdge camera frame does not contain four complete pupil images"))
+        "Bi-O-edge camera frame does not contain four complete pupil images"))
     calibration_storage_changed = false
     if size(wfs.estimator.state.valid_i4q) != (n_pixels, n_pixels)
         wfs.estimator.state.valid_i4q = similar(wfs.estimator.state.valid_i4q, n_pixels, n_pixels)
@@ -762,7 +762,7 @@ function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int,
     if size(wfs.acquisition.state.camera_frame) != (frame_rows, frame_rows)
         wfs.acquisition.state.camera_frame = similar(wfs.acquisition.state.camera_frame, frame_rows, frame_rows)
     end
-    update_bioedge_valid_signal!(wfs)
+    update_bi_o_edge_valid_signal!(wfs)
     if calibration_storage_changed
         wfs.estimator.state.calibrated = false
         wfs.estimator.state.calibration_revision += UInt(1)
@@ -770,23 +770,23 @@ function resize_bioedge_signal_buffers!(wfs::BioEdgeWFS, frame_rows::Int,
     return wfs
 end
 
-@inline function require_bioedge_frame_geometry(wfs::BioEdgeWFS,
+@inline function require_bi_o_edge_frame_geometry(wfs::BiOEdgeWFS,
     frame::AbstractMatrix)
     n_rows, n_cols = size(frame)
     n_rows == n_cols || throw(DimensionMismatchError(
-        "BioEdge camera frame must be square"))
+        "Bi-O-edge camera frame must be square"))
     iseven(n_rows) || throw(InvalidConfiguration(
-        "BioEdge camera frame must have even dimensions for symmetric pupil extraction"))
+        "Bi-O-edge camera frame must have even dimensions for symmetric pupil extraction"))
     n_pixels = size(wfs.estimator.state.signal_2d, 2)
     n_rows >= 2 * n_pixels || throw(DimensionMismatchError(
-        "BioEdge camera frame does not contain four complete pupil images"))
+        "Bi-O-edge camera frame does not contain four complete pupil images"))
     return div(n_rows, 2)
 end
 
-function sample_bioedge_intensity!(wfs::BioEdgeWFS, pupil::PupilFunction, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
+function sample_bi_o_edge_intensity!(wfs::BiOEdgeWFS, pupil::PupilFunction, intensity::AbstractMatrix{T}) where {T<:AbstractFloat}
     sub = div(_pupil_resolution(pupil), wfs.estimator.params.pupil_samples)
     if size(intensity, 1) % sub != 0
-        throw(InvalidConfiguration("bioedge intensity size must be divisible by telescope pixels per subaperture"))
+        throw(InvalidConfiguration("bi_o_edge intensity size must be divisible by telescope pixels per subaperture"))
     end
     n_camera = div(size(intensity, 1), sub)
     if size(wfs.acquisition.state.camera_frame) != (n_camera, n_camera)
@@ -798,7 +798,7 @@ function sample_bioedge_intensity!(wfs::BioEdgeWFS, pupil::PupilFunction, intens
         target = div(wfs.acquisition.state.nominal_detector_resolution, wfs.acquisition.binning)
         factor = div(size(frame, 1), target)
         if factor < 1 || size(frame, 1) % target != 0
-            throw(InvalidConfiguration("bioedge detector binning is not compatible with the sampled frame"))
+            throw(InvalidConfiguration("bi_o_edge detector binning is not compatible with the sampled frame"))
         end
         if size(wfs.acquisition.state.binned_intensity) != (target, target)
             wfs.acquisition.state.binned_intensity = similar(wfs.acquisition.state.binned_intensity, target, target)
@@ -808,6 +808,6 @@ function sample_bioedge_intensity!(wfs::BioEdgeWFS, pupil::PupilFunction, intens
     else
         bin2d!(wfs.acquisition.state.camera_frame, intensity, sub)
     end
-    resize_bioedge_signal_buffers!(wfs, size(frame, 1))
+    resize_bi_o_edge_signal_buffers!(wfs, size(frame, 1))
     return frame
 end

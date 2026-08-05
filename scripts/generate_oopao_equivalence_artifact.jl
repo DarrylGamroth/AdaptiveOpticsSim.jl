@@ -98,7 +98,7 @@ function update_manifest!(artifact_path::AbstractString)
     artifacts = get!(manifest, "artifacts", Any[])
     kept = Any[item for item in artifacts if get(item, "id", "") != "OOPAO-EQUIV-2026-04-09"]
     push!(kept, Dict(
-        "purpose" => "production external-equivalence artifact for frozen OOPAO pyramid and bioedge surfaces",
+        "purpose" => "production external-equivalence artifact for frozen OOPAO Pyramid and Bi-O-edge surfaces",
         "id" => "OOPAO-EQUIV-2026-04-09",
         "path" => basename(artifact_path),
     ))

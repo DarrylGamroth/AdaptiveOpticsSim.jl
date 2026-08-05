@@ -1,8 +1,8 @@
 #
-# Prepared BioEdge WFS stages
+# Prepared Bi-O-edge WFS stages
 #
 
-struct PreparedBioEdgeOptics{F,I,O,L<:AbstractPreparedFourPupilLGS}
+struct PreparedBiOEdgeOptics{F,I,O,L<:AbstractPreparedFourPupilLGS}
     front_end::F
     input::I
     output::O
@@ -10,13 +10,13 @@ struct PreparedBioEdgeOptics{F,I,O,L<:AbstractPreparedFourPupilLGS}
     propagation_revision::UInt
 end
 
-struct PreparedBioEdgeOpticsBundle{P<:Tuple,I,O}
+struct PreparedBiOEdgeOpticsBundle{P<:Tuple,I,O}
     plans::P
     input::I
     output::O
 end
 
-struct BioEdgeCalibrationBinding{T<:AbstractFloat,R,A}
+struct BiOEdgeCalibrationBinding{T<:AbstractFloat,R,A}
     revision::UInt
     wavelength_m::T
     signature::UInt
@@ -24,7 +24,7 @@ struct BioEdgeCalibrationBinding{T<:AbstractFloat,R,A}
     valid_support::A
 end
 
-struct PreparedBioEdgeEstimator{W,I,M,P<:AbstractWFSMeasurementPath,C,S,T}
+struct PreparedBiOEdgeEstimator{W,I,M,P<:AbstractWFSMeasurementPath,C,S,T}
     sensor::W
     input::I
     measurement::M
@@ -34,67 +34,67 @@ struct PreparedBioEdgeEstimator{W,I,M,P<:AbstractWFSMeasurementPath,C,S,T}
     normalization_scale::T
 end
 
-@inline wfs_measurement_path(plan::PreparedBioEdgeEstimator) = plan.path
+@inline wfs_measurement_path(plan::PreparedBiOEdgeEstimator) = plan.path
 
-@inline function bioedge_output_sampling_factor(
-    front_end::BioEdgeOpticalFrontEnd, pupil_resolution::Int)
+@inline function bi_o_edge_output_sampling_factor(
+    front_end::BiOEdgeOpticalFrontEnd, pupil_resolution::Int)
     pupil_resolution % front_end.pupil_samples == 0 ||
         throw(WFSPreparationError(:wfs_optics, :shape,
-            "BioEdge pupil resolution must be divisible by pupil_samples"))
+            "Bi-O-edge pupil resolution must be divisible by pupil_samples"))
     pupil_sample = div(pupil_resolution, front_end.pupil_samples)
     return front_end.binning == 1 ? pupil_sample :
         2 * pupil_sample * front_end.binning
 end
 
-function bioedge_output_dimensions(front_end::BioEdgeOpticalFrontEnd,
+function bi_o_edge_output_dimensions(front_end::BiOEdgeOpticalFrontEnd,
     pupil_resolution::Int)
-    factor = bioedge_output_sampling_factor(front_end, pupil_resolution)
+    factor = bi_o_edge_output_sampling_factor(front_end, pupil_resolution)
     side = size(front_end.propagation.intensity, 1)
     side % factor == 0 || throw(WFSPreparationError(:wfs_optics,
-        :shape, "BioEdge sampling does not evenly divide the detector plane"))
+        :shape, "Bi-O-edge sampling does not evenly divide the detector plane"))
     output_side = div(side, factor)
     return (output_side, output_side)
 end
 
-@inline function _bioedge_front_end_wavelength(
-    front_end::BioEdgeOpticalFrontEnd, input::PupilFunction)
+@inline function _bi_o_edge_front_end_wavelength(
+    front_end::BiOEdgeOpticalFrontEnd, input::PupilFunction)
     return modulated_input_wavelength(input, front_end.source)
 end
 
-@inline function _bioedge_front_end_wavelength(
-    ::BioEdgeOpticalFrontEnd, input::ElectricField)
+@inline function _bi_o_edge_front_end_wavelength(
+    ::BiOEdgeOpticalFrontEnd, input::ElectricField)
     return modulated_input_wavelength(input)
 end
 
-function _require_bioedge_source(front_end::BioEdgeOpticalFrontEnd,
+function _require_bi_o_edge_source(front_end::BiOEdgeOpticalFrontEnd,
     ::PupilFunction)
     source = front_end.source
     source === nothing && throw(WFSPreparationError(:wfs_optics,
-        :radiometry, "BioEdge WFS optics require a source for PupilFunction input"))
-    return _require_single_bioedge_source(source)
+        :radiometry, "Bi-O-edge WFS optics require a source for PupilFunction input"))
+    return _require_single_bi_o_edge_source(source)
 end
 
-@inline _require_single_bioedge_source(source) = source
+@inline _require_single_bi_o_edge_source(source) = source
 
-function _require_single_bioedge_source(source::SpectralSource)
+function _require_single_bi_o_edge_source(source::SpectralSource)
     throw(WFSPreparationError(
         :wfs_optics, :plane_count,
-        "spectral BioEdge optics require an OpticalProductBundle"))
+        "spectral Bi-O-edge optics require an OpticalProductBundle"))
 end
 
-function _require_single_bioedge_source(source::Asterism)
+function _require_single_bi_o_edge_source(source::Asterism)
     throw(WFSPreparationError(:wfs_optics,
         :plane_count,
-        "asterism BioEdge optics require path-local pupil inputs"))
+        "asterism Bi-O-edge optics require path-local pupil inputs"))
 end
 
-function _require_single_bioedge_source(source::ExtendedSource)
+function _require_single_bi_o_edge_source(source::ExtendedSource)
     throw(WFSPreparationError(
         :wfs_optics, :plane_count,
-        "extended BioEdge optics require path-local pupil inputs"))
+        "extended Bi-O-edge optics require path-local pupil inputs"))
 end
 
-function _require_bioedge_source(front_end::BioEdgeOpticalFrontEnd,
+function _require_bi_o_edge_source(front_end::BiOEdgeOpticalFrontEnd,
     ::ElectricField)
     front_end.source === nothing || throw(WFSPreparationError(
         :wfs_optics, :radiometry,
@@ -102,44 +102,44 @@ function _require_bioedge_source(front_end::BioEdgeOpticalFrontEnd,
     return nothing
 end
 
-function prepare_wfs_optics(front_end::BioEdgeOpticalFrontEnd,
+function prepare_wfs_optics(front_end::BiOEdgeOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField}, output::IntensityMap)
     require_modulated_wfs_input(input)
-    _require_bioedge_source(front_end, input)
+    _require_bi_o_edge_source(front_end, input)
     resolution = input.metadata.dimensions[1]
     input.metadata.dimensions == (resolution, resolution) ||
         throw(WFSPreparationError(:wfs_optics, :shape,
-            "BioEdge pupil input must be square"))
+            "Bi-O-edge pupil input must be square"))
     size(front_end.modulation.phases, 1) == resolution ||
         throw(WFSPreparationError(:wfs_optics, :shape,
-            "BioEdge modulation was prepared for another pupil resolution"))
-    expected = bioedge_output_dimensions(front_end, resolution)
-    wavelength_m = _bioedge_front_end_wavelength(front_end, input)
+            "Bi-O-edge modulation was prepared for another pupil resolution"))
+    expected = bi_o_edge_output_dimensions(front_end, resolution)
+    wavelength_m = _bi_o_edge_front_end_wavelength(front_end, input)
     require_four_pupil_rate_map(output, expected, wavelength_m)
     require_modulated_wfs_domains(front_end, input, output)
     eltype(front_end.propagation.intensity) ===
         output.metadata.numeric_type || throw(WFSPreparationError(
             :wfs_optics, :numeric_type,
-            "BioEdge output precision differs from prepared propagation"))
+            "Bi-O-edge output precision differs from prepared propagation"))
     lgs_model = prepare_four_pupil_lgs(front_end.source, input, front_end)
-    return PreparedBioEdgeOptics(front_end, input, output,
+    return PreparedBiOEdgeOptics(front_end, input, output,
         lgs_model, front_end.propagation.revision)
 end
 
-function prepare_wfs_optics(front_end::BioEdgeOpticalFrontEnd,
+function prepare_wfs_optics(front_end::BiOEdgeOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField},
     output::OpticalProductBundle)
-    return prepare_bioedge_optical_bundle(front_end, input, output,
+    return prepare_bi_o_edge_optical_bundle(front_end, input, output,
         front_end.source)
 end
 
-function prepare_bioedge_optical_bundle(front_end::BioEdgeOpticalFrontEnd,
+function prepare_bi_o_edge_optical_bundle(front_end::BiOEdgeOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField}, output::OpticalProductBundle,
     source::SpectralSource)
     samples = spectral_bundle(source).samples
     length(output) == length(samples) || throw(WFSPreparationError(
         :wfs_optics, :plane_count,
-        "BioEdge spectral output count does not match the source"))
+        "Bi-O-edge spectral output count does not match the source"))
     T = eltype(front_end.propagation.intensity)
     plans = ntuple(length(samples)) do index
         sample = samples[index]
@@ -147,45 +147,45 @@ function prepare_bioedge_optical_bundle(front_end::BioEdgeOpticalFrontEnd,
             T(sample.wavelength),
             T(photon_irradiance(source)) * T(sample.weight))
         prepare_wfs_optics(
-            bioedge_front_end_with_source(front_end, component), input,
+            bi_o_edge_front_end_with_source(front_end, component), input,
             output[index])
     end
-    return PreparedBioEdgeOpticsBundle(plans, input, output)
+    return PreparedBiOEdgeOpticsBundle(plans, input, output)
 end
 
-function prepare_wfs_optics(front_end::BioEdgeOpticalFrontEnd,
+function prepare_wfs_optics(front_end::BiOEdgeOpticalFrontEnd,
     inputs::Union{Tuple,AbstractVector}, output::OpticalProductBundle)
-    return prepare_bioedge_optical_bundle(front_end, inputs, output,
+    return prepare_bi_o_edge_optical_bundle(front_end, inputs, output,
         front_end.source)
 end
 
-function prepare_bioedge_optical_bundle(front_end::BioEdgeOpticalFrontEnd,
+function prepare_bi_o_edge_optical_bundle(front_end::BiOEdgeOpticalFrontEnd,
     inputs::Union{Tuple,AbstractVector}, output::OpticalProductBundle,
     source::Union{Asterism,ExtendedSource})
     sources = four_pupil_path_sources(source)
     length(inputs) == length(sources) || throw(WFSPreparationError(
         :wfs_optics, :plane_count,
-        "BioEdge path-local pupil count does not match the source count"))
+        "Bi-O-edge path-local pupil count does not match the source count"))
     length(output) == length(sources) || throw(WFSPreparationError(
         :wfs_optics, :plane_count,
-        "BioEdge path-local output count does not match the source count"))
+        "Bi-O-edge path-local output count does not match the source count"))
     isempty(sources) && throw(WFSPreparationError(:wfs_optics,
-        :plane_count, "BioEdge path-local source collection is empty"))
+        :plane_count, "Bi-O-edge path-local source collection is empty"))
     plans = ntuple(length(sources)) do index
         prepare_wfs_optics(
-            bioedge_front_end_with_source(front_end, sources[index]),
+            bi_o_edge_front_end_with_source(front_end, sources[index]),
             inputs[index], output[index])
     end
-    return PreparedBioEdgeOpticsBundle(plans, inputs, output)
+    return PreparedBiOEdgeOpticsBundle(plans, inputs, output)
 end
 
-function prepare_bioedge_optical_bundle(front_end, input, output, source)
+function prepare_bi_o_edge_optical_bundle(front_end, input, output, source)
     throw(WFSPreparationError(
         :wfs_optics, :plane_count,
-        "BioEdge product bundles require a spectral or path-expanded source"))
+        "Bi-O-edge product bundles require a spectral or path-expanded source"))
 end
 
-function _bioedge_native_rate!(front_end::BioEdgeOpticalFrontEnd,
+function _bi_o_edge_native_rate!(front_end::BiOEdgeOpticalFrontEnd,
     input::PupilFunction, lgs_model::AbstractPreparedFourPupilLGS)
     propagation = front_end.propagation
     source = front_end.source
@@ -205,13 +205,13 @@ function _bioedge_native_rate!(front_end::BioEdgeOpticalFrontEnd,
             input.amplitude * front_end.modulation.phases[:, :, point] *
             cispi(opd_to_cycles * input.opd)
         copyto!(propagation.focal_field, propagation.field)
-        accumulate_bioedge_masked_pupils!(propagation.intensity, front_end,
+        accumulate_bi_o_edge_masked_pupils!(propagation.intensity, front_end,
             lgs_model)
     end
     return propagation.intensity
 end
 
-function _bioedge_native_rate!(front_end::BioEdgeOpticalFrontEnd,
+function _bi_o_edge_native_rate!(front_end::BiOEdgeOpticalFrontEnd,
     input::ElectricField, lgs_model::AbstractPreparedFourPupilLGS)
     propagation = front_end.propagation
     resolution = size(input.values, 1)
@@ -226,7 +226,7 @@ function _bioedge_native_rate!(front_end::BioEdgeOpticalFrontEnd,
             offset+1:offset+resolution] = weight * input.values *
             front_end.modulation.phases[:, :, point]
         copyto!(propagation.focal_field, propagation.field)
-        accumulate_bioedge_masked_pupils!(propagation.intensity, front_end,
+        accumulate_bi_o_edge_masked_pupils!(propagation.intensity, front_end,
             lgs_model)
     end
     return propagation.intensity
@@ -234,10 +234,10 @@ end
 
 function form_wfs_optical_products!(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
-    plan::PreparedBioEdgeOptics)
+    plan::PreparedBiOEdgeOptics)
     validate_wfs_optics_binding(output, input, plan)
-    native = _bioedge_native_rate!(plan.front_end, input, plan.lgs_model)
-    factor = bioedge_output_sampling_factor(plan.front_end,
+    native = _bi_o_edge_native_rate!(plan.front_end, input, plan.lgs_model)
+    factor = bi_o_edge_output_sampling_factor(plan.front_end,
         input.metadata.dimensions[1])
     bin2d!(output.values, native, factor)
     return output
@@ -245,96 +245,96 @@ end
 
 function validate_wfs_optics_binding(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
-    plan::PreparedBioEdgeOptics)
+    plan::PreparedBiOEdgeOptics)
     output === plan.output && input === plan.input ||
         throw(WFSPreparationError(:wfs_optics, :prepared_binding,
-            "BioEdge optical products do not match prepared storage"))
+            "Bi-O-edge optical products do not match prepared storage"))
     plan.front_end.propagation.revision == plan.propagation_revision ||
         throw(WFSPreparationError(:wfs_optics, :prepared_binding,
-            "BioEdge propagation sampling changed after preparation"))
+            "Bi-O-edge propagation sampling changed after preparation"))
     return nothing
 end
 
 function form_wfs_optical_products!(output::OpticalProductBundle, input,
-    plan::PreparedBioEdgeOpticsBundle)
+    plan::PreparedBiOEdgeOpticsBundle)
     validate_wfs_optics_binding(output, input, plan)
     return form_four_pupil_bundle!(output, input, plan.plans)
 end
 
 function validate_wfs_optics_binding(
     output::OpticalProductBundle, input,
-    plan::PreparedBioEdgeOpticsBundle)
+    plan::PreparedBiOEdgeOpticsBundle)
     output === plan.output && input === plan.input ||
         throw(WFSPreparationError(:wfs_optics, :prepared_binding,
-            "BioEdge spectral products do not match prepared storage"))
+            "Bi-O-edge spectral products do not match prepared storage"))
     validate_four_pupil_bundle_binding(output, input, plan.plans)
     return nothing
 end
 
-function bioedge_rate_map(sensor::BioEdgeWFS{<:Diffractive},
+function bi_o_edge_rate_map(sensor::BiOEdgeWFS{<:Diffractive},
     inputs::Union{Tuple,AbstractVector}, source)
-    return bioedge_rate_map(BioEdgeOpticalFrontEnd(sensor, source), inputs)
+    return bi_o_edge_rate_map(BiOEdgeOpticalFrontEnd(sensor, source), inputs)
 end
 
-function bioedge_rate_map(front_end::BioEdgeOpticalFrontEnd,
+function bi_o_edge_rate_map(front_end::BiOEdgeOpticalFrontEnd,
     inputs::Union{Tuple,AbstractVector})
-    return bioedge_path_rate_bundle(front_end, inputs, front_end.source)
+    return bi_o_edge_path_rate_bundle(front_end, inputs, front_end.source)
 end
 
-function bioedge_path_rate_bundle(front_end::BioEdgeOpticalFrontEnd,
+function bi_o_edge_path_rate_bundle(front_end::BiOEdgeOpticalFrontEnd,
     inputs::Union{Tuple,AbstractVector},
     source::Union{Asterism,ExtendedSource})
     sources = four_pupil_path_sources(source)
     length(inputs) == length(sources) || throw(WFSPreparationError(
         :wfs_optics, :plane_count,
-        "BioEdge path-local pupil count does not match the source count"))
+        "Bi-O-edge path-local pupil count does not match the source count"))
     isempty(sources) && throw(WFSPreparationError(:wfs_optics,
-        :plane_count, "BioEdge path-local source collection is empty"))
-    first_map = bioedge_rate_map(
-        bioedge_front_end_with_source(front_end, sources[1]), inputs[1])
+        :plane_count, "Bi-O-edge path-local source collection is empty"))
+    first_map = bi_o_edge_rate_map(
+        bi_o_edge_front_end_with_source(front_end, sources[1]), inputs[1])
     maps = Vector{typeof(first_map)}(undef, length(sources))
     maps[1] = first_map
     @inbounds for index in 2:length(sources)
-        maps[index] = bioedge_rate_map(
-            bioedge_front_end_with_source(front_end, sources[index]),
+        maps[index] = bi_o_edge_rate_map(
+            bi_o_edge_front_end_with_source(front_end, sources[index]),
             inputs[index])
     end
     return OpticalProductBundle(maps)
 end
 
-function bioedge_path_rate_bundle(front_end, inputs, source)
+function bi_o_edge_path_rate_bundle(front_end, inputs, source)
     throw(WFSPreparationError(:wfs_optics, :plane_count,
-        "path-local BioEdge inputs require an Asterism or ExtendedSource"))
+        "path-local Bi-O-edge inputs require an Asterism or ExtendedSource"))
 end
 
-function bioedge_rate_map(sensor::BioEdgeWFS{<:Diffractive},
+function bi_o_edge_rate_map(sensor::BiOEdgeWFS{<:Diffractive},
     input::Union{PupilFunction,ElectricField}, source=nothing)
-    return bioedge_rate_map(BioEdgeOpticalFrontEnd(sensor, source), input)
+    return bi_o_edge_rate_map(BiOEdgeOpticalFrontEnd(sensor, source), input)
 end
 
-function bioedge_rate_map(front_end::BioEdgeOpticalFrontEnd,
+function bi_o_edge_rate_map(front_end::BiOEdgeOpticalFrontEnd,
     input::Union{PupilFunction,ElectricField})
-    return _bioedge_rate_map(front_end, input, front_end.source)
+    return _bi_o_edge_rate_map(front_end, input, front_end.source)
 end
 
-@inline _bioedge_rate_map(front_end::BioEdgeOpticalFrontEnd, input,
+@inline _bi_o_edge_rate_map(front_end::BiOEdgeOpticalFrontEnd, input,
     source::SpectralSource) =
-    _bioedge_spectral_rate_bundle(front_end, input, source)
+    _bi_o_edge_spectral_rate_bundle(front_end, input, source)
 
-function _bioedge_rate_map(front_end::BioEdgeOpticalFrontEnd, input,
+function _bi_o_edge_rate_map(front_end::BiOEdgeOpticalFrontEnd, input,
     source::Union{Asterism,ExtendedSource})
     throw(WFSPreparationError(:wfs_optics, :plane_count,
-        "path-expanded BioEdge sources require path-local pupil inputs"))
+        "path-expanded Bi-O-edge sources require path-local pupil inputs"))
 end
 
-function _bioedge_rate_map(front_end::BioEdgeOpticalFrontEnd, input, source)
-    wavelength_m = _bioedge_front_end_wavelength(front_end, input)
-    dimensions = bioedge_output_dimensions(front_end,
+function _bi_o_edge_rate_map(front_end::BiOEdgeOpticalFrontEnd, input, source)
+    wavelength_m = _bi_o_edge_front_end_wavelength(front_end, input)
+    dimensions = bi_o_edge_output_dimensions(front_end,
         input.metadata.dimensions[1])
     T = eltype(front_end.propagation.intensity)
     values = similar(_modulated_input_storage(input), T, dimensions...)
     fill!(values, zero(T))
-    factor = bioedge_output_sampling_factor(front_end,
+    factor = bi_o_edge_output_sampling_factor(front_end,
         input.metadata.dimensions[1])
     normalized_sampling = T(factor / input.metadata.dimensions[1])
     metadata = OpticalPlaneMetadata(DetectorPlane(), values;
@@ -347,16 +347,16 @@ function _bioedge_rate_map(front_end::BioEdgeOpticalFrontEnd, input, source)
     return IntensityMap(metadata, values)
 end
 
-@inline _require_bioedge_estimation_source(::WFSNormalization, source) =
+@inline _require_bi_o_edge_estimation_source(::WFSNormalization, source) =
     nothing
 
-function _require_bioedge_estimation_source(
+function _require_bi_o_edge_estimation_source(
     ::IncidenceFluxNormalization, ::Nothing)
     throw(WFSPreparationError(:estimation, :radiometry,
-        "incidence-normalized BioEdge estimation requires a source"))
+        "incidence-normalized Bi-O-edge estimation requires a source"))
 end
 
-function _bioedge_spectral_rate_bundle(front_end::BioEdgeOpticalFrontEnd,
+function _bi_o_edge_spectral_rate_bundle(front_end::BiOEdgeOpticalFrontEnd,
     input, source::SpectralSource)
     samples = spectral_bundle(source).samples
     T = eltype(front_end.propagation.intensity)
@@ -364,9 +364,9 @@ function _bioedge_spectral_rate_bundle(front_end::BioEdgeOpticalFrontEnd,
         component = FourPupilSpectralComponent(source.source,
             T(sample.wavelength),
             T(photon_irradiance(source)) * T(sample.weight))
-        component_front_end = bioedge_front_end_with_source(front_end,
+        component_front_end = bi_o_edge_front_end_with_source(front_end,
             component)
-        return bioedge_rate_map(component_front_end, input)
+        return bi_o_edge_rate_map(component_front_end, input)
     end
     first_map = component_map(first(samples))
     maps = Vector{typeof(first_map)}(undef, length(samples))
@@ -377,18 +377,18 @@ function _bioedge_spectral_rate_bundle(front_end::BioEdgeOpticalFrontEnd,
     return OpticalProductBundle(maps)
 end
 
-function _bioedge_calibration_binding(sensor::BioEdgeWFS)
+function _bi_o_edge_calibration_binding(sensor::BiOEdgeWFS)
     state = sensor.estimator.state
     state.calibrated || throw(WFSPreparationError(:estimation, :estimator,
-        "BioEdge estimation requires explicit calibration"))
-    return BioEdgeCalibrationBinding(state.calibration_revision,
+        "Bi-O-edge estimation requires explicit calibration"))
+    return BiOEdgeCalibrationBinding(state.calibration_revision,
         state.calibration_wavelength,
         state.calibration_signature, state.reference_signal_2d,
         state.valid_i4q)
 end
 
-function _require_bioedge_calibration(sensor::BioEdgeWFS,
-    binding::BioEdgeCalibrationBinding)
+function _require_bi_o_edge_calibration(sensor::BiOEdgeWFS,
+    binding::BiOEdgeCalibrationBinding)
     state = sensor.estimator.state
     state.calibrated &&
         state.calibration_revision == binding.revision &&
@@ -397,126 +397,126 @@ function _require_bioedge_calibration(sensor::BioEdgeWFS,
         state.reference_signal_2d === binding.reference_signal &&
         state.valid_i4q === binding.valid_support ||
         throw(WFSPreparationError(:estimation, :prepared_binding,
-            "BioEdge calibration changed after estimator preparation"))
+            "Bi-O-edge calibration changed after estimator preparation"))
     return nothing
 end
 
-function _require_bioedge_estimation_geometry(sensor::BioEdgeWFS,
+function _require_bi_o_edge_estimation_geometry(sensor::BiOEdgeWFS,
     frame_size::Int)
     iseven(frame_size) || throw(WFSPreparationError(:estimation, :shape,
-        "BioEdge observations require an even detector-frame size"))
+        "Bi-O-edge observations require an even detector-frame size"))
     nominal = sensor.acquisition.state.nominal_detector_resolution
     binning = sensor.acquisition.binning
     nominal > 0 || throw(WFSPreparationError(:estimation, :shape,
-        "BioEdge nominal detector resolution has not been prepared"))
+        "Bi-O-edge nominal detector resolution has not been prepared"))
     nominal % binning == 0 || throw(WFSPreparationError(:estimation, :shape,
-        "BioEdge binning does not divide the nominal detector resolution"))
+        "Bi-O-edge binning does not divide the nominal detector resolution"))
     sampled_rows = binning == 1 ? 2 * nominal : div(nominal, binning)
     sampled_rows % frame_size == 0 || throw(WFSPreparationError(
         :estimation, :shape,
-        "detector sampling does not evenly divide the BioEdge frame"))
+        "detector sampling does not evenly divide the Bi-O-edge frame"))
     return div(sampled_rows, frame_size)
 end
 
-function prepare_wfs_estimation(sensor::BioEdgeWFS{<:Diffractive},
+function prepare_wfs_estimation(sensor::BiOEdgeWFS{<:Diffractive},
     observation::WFSObservation, measurement::WFSMeasurement;
     source=nothing, normalization_scale::Real=1)
     validate_wfs_observation(observation)
     validate_wfs_measurement(measurement)
     isequal(observation.metadata.layout, :four_pupil_mosaic) ||
         throw(WFSPreparationError(:estimation, :detector_mapping,
-            "BioEdge estimator requires :four_pupil_mosaic layout"))
+            "Bi-O-edge estimator requires :four_pupil_mosaic layout"))
     isequal(measurement.metadata.kind, :differential_slopes) ||
         throw(WFSPreparationError(:estimation, :estimator,
-            "BioEdge measurement kind must be :differential_slopes"))
+            "Bi-O-edge measurement kind must be :differential_slopes"))
     isequal(measurement.units, :dimensionless) ||
         throw(WFSPreparationError(:estimation, :units,
-            "BioEdge differential slopes are dimensionless"))
+            "Bi-O-edge differential slopes are dimensionless"))
     frame_size = _require_real_square_wfs_observation(observation,
-        "BioEdge")
+        "Bi-O-edge")
     measurement.metadata.numeric_type <: AbstractFloat ||
         throw(WFSPreparationError(:estimation, :numeric_type,
-            "BioEdge measurement storage must be floating point"))
+            "Bi-O-edge measurement storage must be floating point"))
     _require_wfs_storage_domain(:estimation, observation.metadata,
-        sensor.estimator.state.signal_2d, "BioEdge observation")
+        sensor.estimator.state.signal_2d, "Bi-O-edge observation")
     _require_wfs_storage_domain(:estimation, measurement.metadata,
-        sensor.estimator.state.slopes, "BioEdge measurement")
-    detector_reduction = _require_bioedge_estimation_geometry(sensor,
+        sensor.estimator.state.slopes, "Bi-O-edge measurement")
+    detector_reduction = _require_bi_o_edge_estimation_geometry(sensor,
         frame_size)
-    resize_bioedge_signal_buffers!(sensor, frame_size, detector_reduction)
+    resize_bi_o_edge_signal_buffers!(sensor, frame_size, detector_reduction)
     size(measurement.storage) == size(sensor.estimator.state.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
-            "BioEdge measurement storage has the wrong slope shape"))
-    _require_bioedge_estimation_source(
+            "Bi-O-edge measurement storage has the wrong slope shape"))
+    _require_bi_o_edge_estimation_source(
         sensor.estimator.params.normalization, source)
     scale = eltype(sensor.estimator.state.slopes)(normalization_scale)
     isfinite(scale) && scale >= zero(scale) || throw(WFSPreparationError(
         :estimation, :radiometry,
-        "BioEdge normalization scale must be finite and nonnegative"))
-    binding = _bioedge_calibration_binding(sensor)
-    return PreparedBioEdgeEstimator(sensor, observation, measurement,
+        "Bi-O-edge normalization scale must be finite and nonnegative"))
+    binding = _bi_o_edge_calibration_binding(sensor)
+    return PreparedBiOEdgeEstimator(sensor, observation, measurement,
         AcquiredObservationPath(), binding, source, scale)
 end
 
 function estimate_wfs_measurement!(measurement::WFSMeasurement,
     observation::WFSObservation,
-    plan::PreparedBioEdgeEstimator{
+    plan::PreparedBiOEdgeEstimator{
         <:Any,<:Any,<:Any,<:AcquiredObservationPath})
     measurement === plan.measurement && observation === plan.input ||
         throw(WFSPreparationError(:estimation, :prepared_binding,
-            "BioEdge estimator storage does not match its plan"))
+            "Bi-O-edge estimator storage does not match its plan"))
     sensor = plan.sensor
-    _require_bioedge_calibration(sensor, plan.calibration_binding)
-    bioedge_signal!(execution_style(observation.storage), sensor,
+    _require_bi_o_edge_calibration(sensor, plan.calibration_binding)
+    bi_o_edge_signal!(execution_style(observation.storage), sensor,
         observation.storage, plan.source, plan.normalization_scale)
     copyto!(measurement.storage, sensor.estimator.state.slopes)
     return measurement
 end
 
 function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
-    plan::PreparedBioEdgeEstimator)
+    plan::PreparedBiOEdgeEstimator)
     measurement === plan.measurement && input === plan.input || throw(
         WFSPreparationError(:estimation, :prepared_binding,
-            "BioEdge estimator storage does not match its plan"))
+            "Bi-O-edge estimator storage does not match its plan"))
     return nothing
 end
 
-function prepare_wfs_estimation(sensor::BioEdgeWFS{<:Geometric},
+function prepare_wfs_estimation(sensor::BiOEdgeWFS{<:Geometric},
     input::PupilFunction, measurement::WFSMeasurement)
     require_modulated_wfs_input(input)
     validate_wfs_measurement(measurement)
     input.metadata.dimensions == (sensor.estimator.params.pupil_resolution,
         sensor.estimator.params.pupil_resolution) ||
         throw(WFSPreparationError(:estimation, :shape,
-            "geometric BioEdge input has the wrong pupil dimensions"))
+            "geometric Bi-O-edge input has the wrong pupil dimensions"))
     isequal(measurement.metadata.kind, :geometric_slopes) ||
         throw(WFSPreparationError(:estimation, :estimator,
-            "geometric BioEdge measurement kind must be :geometric_slopes"))
+            "geometric Bi-O-edge measurement kind must be :geometric_slopes"))
     isequal(measurement.units, :metre) || throw(WFSPreparationError(
         :estimation, :units,
-        "geometric BioEdge OPD differences are expressed in metres"))
+        "geometric Bi-O-edge OPD differences are expressed in metres"))
     measurement.metadata.numeric_type <: AbstractFloat ||
         throw(WFSPreparationError(:estimation, :numeric_type,
-            "geometric BioEdge measurement storage must be floating point"))
+            "geometric Bi-O-edge measurement storage must be floating point"))
     _require_wfs_storage_domain(:estimation, input.metadata,
-        sensor.estimator.state.slopes, "geometric BioEdge input")
+        sensor.estimator.state.slopes, "geometric Bi-O-edge input")
     _require_wfs_storage_domain(:estimation, measurement.metadata,
-        sensor.estimator.state.slopes, "geometric BioEdge measurement")
+        sensor.estimator.state.slopes, "geometric Bi-O-edge measurement")
     size(measurement.storage) == size(sensor.estimator.state.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
-            "geometric BioEdge measurement has the wrong slope shape"))
-    return PreparedBioEdgeEstimator(sensor, input, measurement,
+            "geometric Bi-O-edge measurement has the wrong slope shape"))
+    return PreparedBiOEdgeEstimator(sensor, input, measurement,
         DirectMeasurementPath(), nothing, nothing,
         one(eltype(sensor.estimator.state.slopes)))
 end
 
 function estimate_wfs_measurement!(measurement::WFSMeasurement,
     input::PupilFunction,
-    plan::PreparedBioEdgeEstimator{
+    plan::PreparedBiOEdgeEstimator{
         <:Any,<:Any,<:Any,<:DirectMeasurementPath})
     measurement === plan.measurement && input === plan.input ||
         throw(WFSPreparationError(:estimation, :prepared_binding,
-            "geometric BioEdge estimator storage does not match its plan"))
+            "geometric Bi-O-edge estimator storage does not match its plan"))
     sensor = plan.sensor
     state = sensor.estimator.state
     edge_geometric_slopes!(state.slopes, input.opd, state.valid_mask,
@@ -526,31 +526,31 @@ function estimate_wfs_measurement!(measurement::WFSMeasurement,
     return measurement
 end
 
-function set_bioedge_calibration!(sensor::BioEdgeWFS,
+function set_bi_o_edge_calibration!(sensor::BiOEdgeWFS,
     reference::AbstractMatrix; wavelength_m::Real,
     signature::UInt=UInt(0), valid_support=nothing)
     state = sensor.estimator.state
     size(reference) == size(state.reference_signal_2d) ||
         throw(DimensionMismatchError(
-            "BioEdge reference dimensions do not match estimator storage"))
+            "Bi-O-edge reference dimensions do not match estimator storage"))
     require_same_backend(state.reference_signal_2d, reference)
     reference_host = Array(reference)
     all(isfinite, reference_host) || throw(InvalidConfiguration(
-        "BioEdge calibration reference must contain only finite values"))
+        "Bi-O-edge calibration reference must contain only finite values"))
     wavelength_value = eltype(state.slopes)(wavelength_m)
     isfinite(wavelength_value) && wavelength_value > zero(wavelength_value) ||
         throw(InvalidConfiguration(
-            "BioEdge calibration wavelength must be finite and positive"))
-    support_host = _prepare_bioedge_calibration_support(sensor, valid_support)
+            "Bi-O-edge calibration wavelength must be finite and positive"))
+    support_host = _prepare_bi_o_edge_calibration_support(sensor, valid_support)
     copyto!(state.reference_signal_2d, reference_host)
     if support_host === nothing
         fill!(state.valid_i4q, true)
     else
         copyto!(state.valid_i4q, support_host)
     end
-    update_bioedge_valid_signal!(sensor)
-    update_bioedge_valid_signal_indices!(sensor)
-    resize_bioedge_slope_buffers!(sensor)
+    update_bi_o_edge_valid_signal!(sensor)
+    update_bi_o_edge_valid_signal_indices!(sensor)
+    resize_bi_o_edge_slope_buffers!(sensor)
     state.calibration_wavelength = wavelength_value
     state.calibration_signature = signature
     state.calibrated = true
@@ -558,29 +558,29 @@ function set_bioedge_calibration!(sensor::BioEdgeWFS,
     return sensor
 end
 
-function _prepare_bioedge_calibration_support(sensor::BioEdgeWFS, ::Nothing)
+function _prepare_bi_o_edge_calibration_support(sensor::BiOEdgeWFS, ::Nothing)
     if !iszero(sensor.estimator.params.light_ratio)
         throw(InvalidConfiguration(
-            "nonzero BioEdge light_ratio requires explicit valid_support"))
+            "nonzero Bi-O-edge light_ratio requires explicit valid_support"))
     end
     return nothing
 end
 
-function _prepare_bioedge_calibration_support(sensor::BioEdgeWFS,
+function _prepare_bi_o_edge_calibration_support(sensor::BiOEdgeWFS,
     valid_support::AbstractMatrix{Bool})
     state = sensor.estimator.state
     size(valid_support) == size(state.valid_i4q) ||
         throw(DimensionMismatchError(
-            "BioEdge calibration support has the wrong dimensions"))
+            "Bi-O-edge calibration support has the wrong dimensions"))
     require_same_backend(state.valid_i4q, valid_support)
     support_host = Array(valid_support)
     any(support_host) || throw(InvalidConfiguration(
-        "BioEdge calibration support must select at least one sample"))
+        "Bi-O-edge calibration support must select at least one sample"))
     return support_host
 end
 
-function _prepare_bioedge_calibration_support(sensor::BioEdgeWFS,
+function _prepare_bi_o_edge_calibration_support(sensor::BiOEdgeWFS,
     valid_support)
     throw(InvalidConfiguration(
-        "BioEdge calibration support must be a Boolean matrix"))
+        "Bi-O-edge calibration support must be a Boolean matrix"))
 end

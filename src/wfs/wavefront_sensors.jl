@@ -111,7 +111,7 @@ import ..Optics:
     SampledModulation,
     Source,
     Telescope,
-    BioEdgeAmplitudeMask,
+    BiOEdgeAmplitudeMask,
     CurvatureDefocusPair,
     PyramidPhaseMask,
     ZernikePhaseSpot,
@@ -278,7 +278,7 @@ include("subapertures.jl")
 include("shack_hartmann.jl")
 include("focal_plane_modulation.jl")
 include("pyramid.jl")
-include("bioedge.jl")
+include("bi_o_edge.jl")
 include("zernike.jl")
 include("curvature.jl")
 include("lift.jl")

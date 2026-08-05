@@ -1,7 +1,7 @@
 #
 # Prepared focal-plane modulation
 #
-# Pyramid and BioEdge sensors may use the same pupil-plane tip/tilt path while
+# Pyramid and Bi-O-edge sensors may use the same pupil-plane tip/tilt path while
 # retaining independent focal-plane masks and propagation workspaces. The
 # weights below are optical quadrature weights: they average instantaneous
 # intensities over one modulation cycle and never represent elapsed exposure.

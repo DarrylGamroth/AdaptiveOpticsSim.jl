@@ -511,8 +511,8 @@ function _require_exact_wfs_target(
     return plan
 end
 
-function _require_exact_bioedge_front_end_target(
-    front_end::BioEdgeOpticalFrontEnd,
+function _require_exact_bi_o_edge_front_end_target(
+    front_end::BiOEdgeOpticalFrontEnd,
     target::AbstractComputeDevice,
 )
     propagation = front_end.propagation
@@ -521,7 +521,7 @@ function _require_exact_bioedge_front_end_target(
             propagation.field,
             propagation.focal_field,
             propagation.pupil_field,
-            propagation.bioedge_masks,
+            propagation.bi_o_edge_masks,
             propagation.phasor,
             propagation.intensity,
             propagation.temp,
@@ -532,32 +532,32 @@ function _require_exact_bioedge_front_end_target(
             propagation.lgs_kernel_fft,
         ),
         (
-            "BioEdge field",
-            "BioEdge focal field",
-            "BioEdge pupil field",
-            "BioEdge amplitude masks",
-            "BioEdge phasor",
-            "BioEdge intensity",
-            "BioEdge temporary image",
-            "BioEdge scratch image",
-            "BioEdge asterism stack",
-            "BioEdge FFT buffer",
-            "BioEdge elongation kernel",
-            "BioEdge LGS Fourier kernel",
+            "Bi-O-edge field",
+            "Bi-O-edge focal field",
+            "Bi-O-edge pupil field",
+            "Bi-O-edge amplitude masks",
+            "Bi-O-edge phasor",
+            "Bi-O-edge intensity",
+            "Bi-O-edge temporary image",
+            "Bi-O-edge scratch image",
+            "Bi-O-edge asterism stack",
+            "Bi-O-edge FFT buffer",
+            "Bi-O-edge elongation kernel",
+            "Bi-O-edge LGS Fourier kernel",
         ),
         target,
         :wfs_optics,
     )
     _require_exact_focal_plane_modulation_target(
-        front_end.modulation, target, "BioEdge operating modulation")
+        front_end.modulation, target, "Bi-O-edge operating modulation")
     _require_exact_focal_plane_modulation_target(
         front_end.calibration_modulation, target,
-        "BioEdge calibration modulation")
+        "Bi-O-edge calibration modulation")
     return front_end
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedBioEdgeOptics,
+    plan::PreparedBiOEdgeOptics,
     target::AbstractComputeDevice,
 )
     validate_wfs_optics_binding(
@@ -566,14 +566,14 @@ function _require_exact_wfs_target(
         plan.input, target, :wfs_optics)
     _require_exact_wfs_product_target(
         plan.output, target, :wfs_optics)
-    _require_exact_bioedge_front_end_target(plan.front_end, target)
+    _require_exact_bi_o_edge_front_end_target(plan.front_end, target)
     _require_exact_prepared_four_pupil_lgs_target(
         plan.lgs_model, target)
     return plan
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedBioEdgeOpticsBundle,
+    plan::PreparedBiOEdgeOpticsBundle,
     target::AbstractComputeDevice,
 )
     validate_wfs_optics_binding(
@@ -896,8 +896,8 @@ function _require_exact_wfs_target(
     return plan
 end
 
-function _require_exact_bioedge_estimator_state_target(
-    state::BioEdgeEstimatorState,
+function _require_exact_bi_o_edge_estimator_state_target(
+    state::BiOEdgeEstimatorState,
     target::AbstractComputeDevice,
 )
     _require_exact_wfs_array_targets(
@@ -917,19 +917,19 @@ function _require_exact_bioedge_estimator_state_target(
             state.edge_mask_binned,
         ),
         (
-            "BioEdge valid mask",
-            "BioEdge edge mask",
-            "BioEdge slopes",
-            "BioEdge optical gain",
-            "BioEdge valid I4Q mask",
-            "BioEdge valid-signal mask",
-            "BioEdge valid-signal indices",
-            "BioEdge flux-sum buffer",
-            "BioEdge I4Q flux",
-            "BioEdge signal",
-            "BioEdge calibration reference",
-            "BioEdge binned phase",
-            "BioEdge binned edge mask",
+            "Bi-O-edge valid mask",
+            "Bi-O-edge edge mask",
+            "Bi-O-edge slopes",
+            "Bi-O-edge optical gain",
+            "Bi-O-edge valid I4Q mask",
+            "Bi-O-edge valid-signal mask",
+            "Bi-O-edge valid-signal indices",
+            "Bi-O-edge flux-sum buffer",
+            "Bi-O-edge I4Q flux",
+            "Bi-O-edge signal",
+            "Bi-O-edge calibration reference",
+            "Bi-O-edge binned phase",
+            "Bi-O-edge binned edge mask",
         ),
         target,
         :estimation,
@@ -938,22 +938,22 @@ function _require_exact_bioedge_estimator_state_target(
 end
 
 function _require_exact_wfs_target(
-    plan::PreparedBioEdgeEstimator,
+    plan::PreparedBiOEdgeEstimator,
     target::AbstractComputeDevice,
 )
     validate_wfs_estimation_binding(
         plan.measurement, plan.input, plan)
     _require_exact_wfs_estimator_input_target(plan.input, target)
     _require_exact_wfs_measurement_target(plan.measurement, target)
-    _require_exact_bioedge_estimator_state_target(
+    _require_exact_bi_o_edge_estimator_state_target(
         plan.sensor.estimator.state, target)
     if plan.sensor.front_end !== nothing
-        _require_exact_bioedge_front_end_target(
+        _require_exact_bi_o_edge_front_end_target(
             plan.sensor.front_end, target)
         acquisition = plan.sensor.acquisition.state
         _require_exact_wfs_array_targets(
             (acquisition.binned_intensity, acquisition.camera_frame),
-            ("BioEdge binned intensity", "BioEdge camera frame"),
+            ("Bi-O-edge binned intensity", "Bi-O-edge camera frame"),
             target,
             :estimation,
         )

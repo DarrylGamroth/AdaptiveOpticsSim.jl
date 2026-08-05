@@ -65,7 +65,7 @@ render_atmosphere!(pupil, renderer, atm, epoch)
 signal = measure!(wfs, pupil, src)
 ```
 
-Use `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`, or `ZernikeWFS` when the
+Use `PyramidWFS`, `BiOEdgeWFS`, `CurvatureWFS`, or `ZernikeWFS` when the
 sensing physics changes. A `ShackHartmannWFS` composes a `MicrolensArray`;
 WFS optics, detector acquisition, and estimation remain distinct
 stages.

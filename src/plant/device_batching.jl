@@ -74,8 +74,8 @@ const _PreparedDeviceBatchWFSOpticalPlan = Union{
     PreparedShackHartmannOpticsBundle,
     PreparedPyramidOptics,
     PreparedPyramidOpticsBundle,
-    PreparedBioEdgeOptics,
-    PreparedBioEdgeOpticsBundle,
+    PreparedBiOEdgeOptics,
+    PreparedBiOEdgeOpticsBundle,
 }
 
 struct _WFSDevicePathBatchKey{
@@ -366,13 +366,13 @@ end
 ) = _four_pupil_device_path_batch_plan_contract(plan)
 
 @inline _wfs_device_path_batch_plan_contract(
-    plan::PreparedBioEdgeOptics,
+    plan::PreparedBiOEdgeOptics,
 ) = _four_pupil_device_path_batch_plan_contract(plan)
 
 function _wfs_device_path_batch_plan_contract(
     plan::Union{
         PreparedPyramidOpticsBundle,
-        PreparedBioEdgeOpticsBundle,
+        PreparedBiOEdgeOpticsBundle,
     },
 )
     contracts = map(

@@ -265,8 +265,8 @@ import ..AdaptiveOpticsSim:
 import ..WavefrontSensors:
     AcquiredObservationPath,
     DirectMeasurementPath,
-    PreparedBioEdgeOpticsBundle,
-    PreparedBioEdgeOptics,
+    PreparedBiOEdgeOpticsBundle,
+    PreparedBiOEdgeOptics,
     PreparedPyramidOpticsBundle,
     PreparedPyramidOptics,
     PreparedShackHartmannOpticsBundle,

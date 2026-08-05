@@ -71,7 +71,7 @@ aliasing = "Intensity, elongation scratch, and FFT work buffers are distinct exa
 failure_behavior = "Preparation and exact-target validation use WFSPreparationError before optical-product mutation; execution requires prepared compatible storage."
 reentrancy = "The plan data is reentrant with distinct intensity and FFT workspaces; one workspace must not have concurrent writers."
 backend_traits = ["execution_style","compute_device"]
-conformance_suites = ["wfs-pyramid-bioedge","prepared-execution-interfaces"]
+conformance_suites = ["wfs-pyramid-bi-o-edge","prepared-execution-interfaces"]
 
 [[interface_contracts]]
 owner = "WavefrontSensors"
@@ -951,22 +951,22 @@ entries = [
 ]
 
 [[type_inventory.files]]
-path = "src/wfs/bioedge/setup.jl"
+path = "src/wfs/bi_o_edge/setup.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["BioEdgeAcquisitionState","mutable_struct",3,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
-    ["BioEdgeEstimatorParams","struct",6,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
-    ["BioEdgeEstimatorState","mutable_struct",23,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-05"],
-    ["PreparedBioEdgePropagation","mutable_struct",18,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["BiOEdgeAcquisitionState","mutable_struct",3,"state",["workspace","product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["BiOEdgeEstimatorParams","struct",6,"params",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+    ["BiOEdgeEstimatorState","mutable_struct",23,"state",["state","workspace","product"],true,true,"caller_visible",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedBiOEdgePropagation","mutable_struct",18,"prepared",["plan","workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]
-path = "src/wfs/bioedge/stages.jl"
+path = "src/wfs/bi_o_edge/stages.jl"
 owner = "WavefrontSensors"
 entries = [
-    ["PreparedBioEdgeEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
-    ["PreparedBioEdgeOptics","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
-    ["PreparedBioEdgeOpticsBundle","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedBiOEdgeEstimator","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedBiOEdgeOptics","struct",5,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedBiOEdgeOpticsBundle","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]

@@ -108,7 +108,7 @@ the Gate 9A mixed-resource planner or Gate 9B multi-GPU partitioning.
 
 The maintained Gate 7 envelope implements these clauses for one accelerator
 owner and compatible co-resident direct-science, Shack-Hartmann, Pyramid, and
-BioEdge path families plus the declared conventional-detector matrix. The
+Bi-O-edge path families plus the declared conventional-detector matrix. The
 [Gate 7 artifact catalog](../../benchmarks/results/gate7/manifest.toml)
 records paired CPU, AMDGPU, and CUDA evidence for a representative two-path
 diffractive Shack-Hartmann workload. Device-ready, host-ready, and

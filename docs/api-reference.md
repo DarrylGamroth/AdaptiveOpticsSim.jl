@@ -292,7 +292,7 @@ incompatible geometry revisions, backends, or devices.
 - Controllable optics: `DeformableMirror`, `ModalControllableOptic`,
   `TipTiltMirror`, `FocusStage`, `set_command!`, and `update_surface!`
 - Reusable WFS optics: focal-plane modulation models, `MicrolensArray`,
-  `PyramidPhaseMask`, `BioEdgeAmplitudeMask`, `ZernikePhaseSpot`, and
+  `PyramidPhaseMask`, `BiOEdgeAmplitudeMask`, `ZernikePhaseSpot`, and
   `CurvatureDefocusPair`. Composed WFS front ends, detector acquisition, and
   estimators remain outside `Optics`
 
@@ -463,7 +463,7 @@ adds concrete single-writer owners without implicit atmosphere advancement:
   Event-loop preparation automatically binds compatible, co-resident,
   equal-schedule accelerator paths into exact capability groups. Native
   Fraunhofer direct science shares atmosphere and optical batches. Maintained
-  Shack-Hartmann, Pyramid, or BioEdge groups share the retained device context
+  Shack-Hartmann, Pyramid, or Bi-O-edge groups share the retained device context
   and atmosphere-direction batch while invoking the exact family's existing
   lenslet/modulation/spectral pipeline in canonical member order. Original
   path-local products remain device resident, and return establishes backend
@@ -1263,7 +1263,7 @@ copy. Treat the resulting parameter arrays as immutable and rebuild the model
 or detector to change them; direct mutation of detector parameter fields is
 unsupported. WFS calibration keys use the identity of this frozen storage, so
 warmed CPU and GPU checks are constant-time and do not copy device arrays to
-the host. Detector-aware Pyramid, BioEdge, and Zernike reference frames apply
+the host. Detector-aware Pyramid, Bi-O-edge, and Zernike reference frames apply
 the same deterministic presampling, sampling, QE/exposure, binning, PRNU, and
 bad-pixel-throughput path as ordinary signal acquisition, followed by a
 configured built-in homogeneous reference-pixel correction. Noiseless
@@ -1479,9 +1479,9 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 ```
 
-`WavefrontSensors` owns the complete Shack–Hartmann, Pyramid, BioEdge,
+`WavefrontSensors` owns the complete Shack–Hartmann, Pyramid, Bi-O-edge,
 Zernike, and Curvature families as well as the common contracts.
-`MicrolensArray`, `PyramidPhaseMask`, `BioEdgeAmplitudeMask`,
+`MicrolensArray`, `PyramidPhaseMask`, `BiOEdgeAmplitudeMask`,
 `ZernikePhaseSpot`, and `CurvatureDefocusPair` remain independent `Optics`
 components. Migrated bindings are not forwarded through the root.
 
@@ -1508,7 +1508,7 @@ components. Migrated bindings are not forwarded through the root.
 - Contract failure: `WFSPreparationError`, whose `stage` and open
   extension-defined `reason` fields identify rejected preparation contracts or
   execution-time prepared-binding violations before mutation
-- Module-owned WFS families: `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`,
+- Module-owned WFS families: `ShackHartmannWFS`, `PyramidWFS`, `BiOEdgeWFS`,
   `ZernikeWFS`, `CurvatureWFS`
 - Zernike optical composition: `Optics.ZernikePhaseSpot`,
   `ZernikeOpticalFrontEnd`, `zernike_rate_map`, and
@@ -1590,7 +1590,7 @@ execution. Mutating execution receives explicit caller-owned products and
 destinations and an explicit RNG at acquisition. A direct geometric or
 reduced-order estimator declares `DirectMeasurementPath()` and allocates no
 fictitious rate plane, observation, or detector workspace. Shack-Hartmann,
-Pyramid, BioEdge, Zernike, and Curvature implement the generic contract. LiFT
+Pyramid, Bi-O-edge, Zernike, and Curvature implement the generic contract. LiFT
 intentionally remains outside the ordinary `AbstractWFS` hierarchy: prepare
 its focal-plane model independently, bind caller-owned acquired values with
 `LiFTObservation`, and then run `WavefrontSensors.reconstruct!`. This generic
@@ -1621,16 +1621,16 @@ requires an explicit finite calibration installed with
 centroid response, output units, wavelength, signature, and reference storage
 and rejects later recalibration before mutating its output.
 
-`PyramidOpticalFrontEnd` and `BioEdgeOpticalFrontEnd` bind their distinct
+`PyramidOpticalFrontEnd` and `BiOEdgeOpticalFrontEnd` bind their distinct
 physical masks, a prepared `NoModulation`, `CircularModulation`, or
 `SampledModulation` policy, reusable propagation storage, and a source. Use
-`pyramid_rate_map` or `bioedge_rate_map` to allocate the caller-owned
+`pyramid_rate_map` or `bi_o_edge_rate_map` to allocate the caller-owned
 four-pupil rate product, then prepare and execute it with the generic optical
 stage functions. Spectral sources return an `OpticalProductBundle`. An
 `Asterism` or `ExtendedSource` requires one explicit pupil input per rendered
 direction and also returns a bundle; no direction-dependent pupils are added
 by array index. Install acquired-estimator references with
-`set_pyramid_calibration!` or `set_bioedge_calibration!`. The setters validate
+`set_pyramid_calibration!` or `set_bi_o_edge_calibration!`. The setters validate
 finite storage and advance a revision, so a prepared estimator must be rebuilt
 after recalibration. Acquired differential estimation requires a real, square
 `:four_pupil_mosaic` on the same backend and compute device as the estimator.

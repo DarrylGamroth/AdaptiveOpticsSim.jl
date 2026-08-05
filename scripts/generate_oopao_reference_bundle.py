@@ -18,9 +18,10 @@ import numpy as np
 
 DEFAULT_OOPAO_REPO = "https://github.com/cheritier/OOPAO.git"
 DEFAULT_OOPAO_REF = "085d5e50ace0d20fe13cc2da20129d5400166973"
+OOPAO_BI_O_EDGE_KIND = "bioedge_slopes"
 
 Atmosphere = None
-BioEdge = None
+OOPAOBiOEdge = None
 Detector = None
 DeformableMirror = None
 GainSensingCamera = None
@@ -63,12 +64,13 @@ def prepare_oopao_checkout(args: argparse.Namespace) -> tuple[Path, str, tempfil
 
 
 def bootstrap_oopao(checkout: Path) -> None:
-    global Atmosphere, BioEdge, Detector, GainSensingCamera, LiFT
+    global Atmosphere, OOPAOBiOEdge, Detector, GainSensingCamera, LiFT
     global Pyramid, ShackHartmann, Source, Telescope, strehlMeter, DeformableMirror
 
     sys.path.insert(0, str(checkout))
     from OOPAO.Atmosphere import Atmosphere as _Atmosphere
-    from OOPAO.BioEdge import BioEdge as _BioEdge
+    # OOPAO's upstream module and class retain their historical spelling.
+    from OOPAO.BioEdge import BioEdge as _OOPAOBiOEdge
     from OOPAO.DeformableMirror import DeformableMirror as _DeformableMirror
     from OOPAO.Detector import Detector as _Detector
     from OOPAO.GainSensingCamera import GainSensingCamera as _GainSensingCamera
@@ -80,7 +82,7 @@ def bootstrap_oopao(checkout: Path) -> None:
     from OOPAO.tools.tools import strehlMeter as _strehlMeter
 
     Atmosphere = _Atmosphere
-    BioEdge = _BioEdge
+    OOPAOBiOEdge = _OOPAOBiOEdge
     DeformableMirror = _DeformableMirror
     Detector = _Detector
     GainSensingCamera = _GainSensingCamera
@@ -261,8 +263,8 @@ def make_reference_wfs(kind: str, tel: Telescope):
             psfCentering=True,
             postProcessing="slopesMaps",
         )
-    if kind == "bioedge_slopes":
-        return BioEdge(
+    if kind == OOPAO_BI_O_EDGE_KIND:
+        return OOPAOBiOEdge(
             nSubap=4,
             telescope=tel,
             modulation=1.0,
@@ -481,11 +483,11 @@ def pyramid_case(root: Path) -> dict:
     }
 
 
-def bioedge_case(root: Path) -> dict:
+def bi_o_edge_case(root: Path) -> dict:
     tel = make_telescope(resolution=24, diameter=8.0, sampling_time=1e-3, central_obstruction=0.0)
     src = make_source(band="I", magnitude=0.0)
     src ** tel
-    wfs = BioEdge(
+    wfs = OOPAOBiOEdge(
         nSubap=4,
         telescope=tel,
         modulation=1.0,
@@ -501,7 +503,7 @@ def bioedge_case(root: Path) -> dict:
     rel = "bioedge_diffractive_ramp.txt"
     write_array(root / rel, data)
     return {
-        "kind": "bioedge_slopes",
+        "kind": OOPAO_BI_O_EDGE_KIND,
         "data": rel,
         "shape": [int(data.size)],
         "atol": 2e-3,
@@ -599,7 +601,7 @@ def modal_tiptilt_case(root: Path, *, case_id: str, kind: str, mode_index: int, 
                     "psf_centering": True,
                     "n_pix_separation": 4,
                     "binning": 2,
-                    **({"n_pix_edge": 2} if kind == "bioedge_slopes" else {}),
+                    **({"n_pix_edge": 2} if kind == OOPAO_BI_O_EDGE_KIND else {}),
                 }
             ),
         },
@@ -813,7 +815,7 @@ def composite_tiptilt_dm_case(root: Path, *, case_id: str, kind: str, tip_amplit
                     "psf_centering": True,
                     "n_pix_separation": 4,
                     "binning": 2,
-                    **({"n_pix_edge": 2} if kind == "bioedge_slopes" else {}),
+                    **({"n_pix_edge": 2} if kind == OOPAO_BI_O_EDGE_KIND else {}),
                 }
             ),
         },
@@ -1147,9 +1149,9 @@ def closed_loop_trace_case(root: Path, *, case_id: str, kind: str) -> dict:
         ],
         dtype=np.float64,
     )
-    if kind == "bioedge_slopes":
+    if kind == OOPAO_BI_O_EDGE_KIND:
         forcing_coeffs = forcing_coeffs[:4, :]
-    gain = 0.2 if kind == "bioedge_slopes" else 0.4
+    gain = 0.2 if kind == OOPAO_BI_O_EDGE_KIND else 0.4
     frame_delay = 2
     calibration_amplitude = 1e-9
     zero_padding = 2
@@ -1194,12 +1196,12 @@ def closed_loop_trace_case(root: Path, *, case_id: str, kind: str) -> dict:
         wfs_section["n_lenslets"] = 4
         wfs_section["pixel_scale"] = 0.06
         wfs_section["n_pix_subap"] = 8
-    elif kind in ("pyramid_slopes", "bioedge_slopes"):
+    elif kind in ("pyramid_slopes", OOPAO_BI_O_EDGE_KIND):
         wfs_section["pupil_samples"] = 4
         wfs_section["modulation"] = 1.0
         wfs_section["n_pix_separation"] = 4
         wfs_section["n_pix_edge"] = 0 if kind == "pyramid_slopes" else 2
-        if kind == "bioedge_slopes":
+        if kind == OOPAO_BI_O_EDGE_KIND:
             wfs_section["grey_width"] = 0.0
             wfs_section["grey_length"] = False
             wfs_section["binning"] = 2
@@ -1612,18 +1614,18 @@ def main() -> None:
                 tip_amplitude=5e-9,
                 dm_command=composite_dm_command,
             ),
-            "bioedge_diffractive_ramp": bioedge_case(root),
+            "bioedge_diffractive_ramp": bi_o_edge_case(root),
             "bioedge_diffractive_tip_mode": modal_tiptilt_case(
                 root,
                 case_id="bioedge_diffractive_tip_mode",
-                kind="bioedge_slopes",
+                kind=OOPAO_BI_O_EDGE_KIND,
                 mode_index=1,
                 amplitude=5e-9,
             ),
             "bioedge_diffractive_tiptilt_dm": composite_tiptilt_dm_case(
                 root,
                 case_id="bioedge_diffractive_tiptilt_dm",
-                kind="bioedge_slopes",
+                kind=OOPAO_BI_O_EDGE_KIND,
                 tip_amplitude=5e-9,
                 dm_command=composite_dm_command,
             ),
@@ -1632,7 +1634,7 @@ def main() -> None:
             "lift_interaction_matrix": lift_case(root),
             "closed_loop_shack_hartmann_trace": closed_loop_trace_case(root, case_id="closed_loop_shack_hartmann_trace", kind="shack_hartmann_slopes"),
             "closed_loop_pyramid_trace": closed_loop_trace_case(root, case_id="closed_loop_pyramid_trace", kind="pyramid_slopes"),
-            "closed_loop_bioedge_trace": closed_loop_trace_case(root, case_id="closed_loop_bioedge_trace", kind="bioedge_slopes"),
+            "closed_loop_bioedge_trace": closed_loop_trace_case(root, case_id="closed_loop_bioedge_trace", kind=OOPAO_BI_O_EDGE_KIND),
             "gsc_closed_loop_trace": gsc_closed_loop_trace_case(root),
             "gsc_atmosphere_replay_trace_bounded": gsc_atmosphere_replay_trace_case(
                 root,

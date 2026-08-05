@@ -34,7 +34,7 @@ Bare `Pkg.test()` runs every registered suite in
 - KernelAbstractions CPU parity and tomography
 - core optics, direct science, and atmosphere
 - control primitives, reconstruction, and explicit model compositions
-- detector, WFS-common, Shack–Hartmann, Pyramid/BioEdge,
+- detector, WFS-common, Shack–Hartmann, Pyramid/Bi-O-edge,
   Zernike/Curvature, and LiFT suites
 - plant topology, canonical time, deterministic scheduling, trigger
   distribution, detector transitions, preparation, product providers, RNG
@@ -281,7 +281,7 @@ The reduced maintained smoke covers:
   path-local products, conventional detector lifecycle parity, and completed
   return before path publication
 - Plant-integrated ownership of compatible equal-rate Shack-Hartmann, Pyramid,
-  or BioEdge paths on one concrete accelerator, with one retained device
+  or Bi-O-edge paths on one concrete accelerator, with one retained device
   context and atmosphere-direction batch while each exact family keeps its
   existing prepared lenslet/modulation/spectral pipeline
 - exact fallback for singleton, unequal-rate or unequal-origin, mixed-family,

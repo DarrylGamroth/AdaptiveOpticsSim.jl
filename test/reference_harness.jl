@@ -51,6 +51,7 @@ end
 
 const LEGACY_SH_INDEX_GRID_REFERENCE_ID =
     "shack_hartmann_polychromatic_frame"
+const OOPAO_BI_O_EDGE_KIND = :bioedge_slopes
 
 @inline uses_legacy_sh_index_grid_reference(case::ReferenceCase) =
     case.baseline === :specula &&
@@ -1122,9 +1123,9 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             binning=Int(get(cfg, "binning", 1)),
             mode=mode,
         )
-    elseif kind === :bioedge_slopes
+    elseif kind === OOPAO_BI_O_EDGE_KIND
         pupil_samples = Int(cfg["pupil_samples"])
-        return BioEdgeWFS(tel;
+        return BiOEdgeWFS(tel;
             pupil_samples=pupil_samples,
             threshold=threshold,
             modulation=Float64(get(cfg, "modulation", 0.0)),
@@ -1194,7 +1195,8 @@ function compute_reference_actual(case::ReferenceCase)
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
         return copy(reference_direct_image(pupil, src;
             zero_padding=zero_padding))
-    elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes, :bioedge_slopes, :zernike_signal, :curvature_signal)
+    elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes,
+        OOPAO_BI_O_EDGE_KIND, :zernike_signal, :curvature_signal)
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
         src = build_reference_measurement_source(case.config["source"])
