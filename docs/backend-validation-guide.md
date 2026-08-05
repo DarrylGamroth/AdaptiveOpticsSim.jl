@@ -403,16 +403,16 @@ extend `Backends`. It is an extension ownership/load check, not a claim of the
 full CUDA/AMDGPU numerical hardware matrix on Metal.
 
 The full GPU smoke matrix now also pins the exact batched Shack-Hartmann
-detector/export surface that previously regressed on CUDA:
+detector-processed export surface that previously regressed on CUDA:
 
 - null-noise diffractive SH with detector capture
-- CPU vs GPU comparison of:
-  - the Shack-Hartmann exported spot-cube path in
-    [`shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
-  - the family-neutral [`wfs_output_frame`](../src/wfs/interface.jl) helper
+- CPU vs GPU comparison of the internal legacy Shack-Hartmann spot diagnostic in
+  [`shack_hartmann.jl`](../src/wfs/shack_hartmann.jl)
 
-This keeps the public exported-pixel surface under backend parity coverage, not
-just the slope output.
+This keeps the detector-processed lenslet-spot storage under backend parity
+coverage, not just the slope output. It does not misidentify the legacy
+detector object's nominal frame storage as the Shack-Hartmann acquisition
+product.
 
 ### AMDGPU host-mirror boundaries
 

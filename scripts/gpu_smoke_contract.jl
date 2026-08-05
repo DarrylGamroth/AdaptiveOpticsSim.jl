@@ -189,7 +189,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         rate_map = gpu_direct_image(tel, src; zero_padding=2, T=T)
         det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=2, T=T, backend=backend)
         acquisition = prepare_detector_acquisition(det, rate_map)
-        frame = capture!(det, rate_map, acquisition; rng=rng)
+        frame = capture!(acquisition; rng=rng)
         @assert frame isa BackendArray
         return frame
     end
@@ -199,7 +199,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         det = Detector(noise=(NoisePhoton(), NoiseReadout(T(1e-3))), integration_time=1.0, qe=1.0,
             binning=2, background_flux=T(0.5), dark_current=T(0.1), T=T, backend=backend)
         acquisition = prepare_detector_acquisition(det, rate_map)
-        frame = capture!(det, rate_map, acquisition; rng=rng)
+        frame = capture!(acquisition; rng=rng)
         @assert frame isa BackendArray
         return frame
     end
@@ -536,18 +536,14 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         measure!(cpu_wfs, cpu_pupil, cpu_src, cpu_det; rng=rng)
         measure!(gpu_wfs, gpu_pupil, gpu_src, gpu_det; rng=rng)
 
-        cpu_export = Array(shack_hartmann_spot_cube(cpu_wfs))
-        gpu_export = Array(shack_hartmann_spot_cube(gpu_wfs))
-        cpu_frame = Array(AdaptiveOpticsSim.WavefrontSensors.wfs_output_frame(
-            cpu_wfs, cpu_det))
-        gpu_frame = Array(AdaptiveOpticsSim.WavefrontSensors.wfs_output_frame(
-            gpu_wfs, gpu_det))
+        cpu_export = Array(
+            WavefrontSensors._legacy_shack_hartmann_spot_cube(cpu_wfs))
+        gpu_export = Array(
+            WavefrontSensors._legacy_shack_hartmann_spot_cube(gpu_wfs))
 
         @assert size(gpu_export) == size(cpu_export)
-        @assert size(gpu_frame) == size(cpu_frame)
         @assert isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
-        @assert isapprox(gpu_frame, cpu_frame; rtol=1f-5, atol=1f-4)
-        return gpu_frame
+        return gpu_export
     end
 
     record_gpu_smoke!(failures, "measure_pyramid_geometric") do
@@ -653,7 +649,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         imaging = prepare_direct_imaging(step_pupil, src; zero_padding=2)
         rate_map = form_direct_image!(imaging)
         acquisition = prepare_detector_acquisition(det, rate_map)
-        frame = capture!(det, rate_map, acquisition; rng=rng)
+        frame = capture!(acquisition; rng=rng)
         @assert slopes isa BackendArray
         @assert frame isa BackendArray
         return frame

@@ -90,7 +90,7 @@ end
         StructuralResourceOwnerID(:wfs_estimator, :products), target)
     @test structural_resident_bytes(products_fact) == sh_resource_bytes((
         sensor.products.slopes,
-        sensor.products.exported_spot_cube,
+        sensor.products.legacy_spot_cube,
     ))
     @test structural_workspace_bytes(products_fact) == UInt64(0)
 

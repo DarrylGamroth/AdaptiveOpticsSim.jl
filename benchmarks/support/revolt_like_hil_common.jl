@@ -131,7 +131,8 @@ end
 function revolt_tile_spot_cube!(mosaic::AbstractMatrix{T}, spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
     size(spot_cube, 2) == roi && size(spot_cube, 3) == roi ||
         throw(DimensionMismatch("spot cube ROI does not match requested mosaic ROI"))
-    return shack_hartmann_detector_image!(mosaic, spot_cube, n_lenslets)
+    return WavefrontSensors._tile_shack_hartmann_spot_cube!(
+        mosaic, spot_cube, n_lenslets)
 end
 
 function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", config_dir::AbstractString,
@@ -218,7 +219,7 @@ function revolt_like_sense!(ctx::RevoltLikeHILContext)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    spots = shack_hartmann_spot_cube(ctx.wfs)
+    spots = WavefrontSensors._legacy_shack_hartmann_spot_cube(ctx.wfs)
     AdaptiveOpticsSim.Backends.synchronize_backend!(
         AdaptiveOpticsSim.Backends.execution_style(spots))
     return nothing
@@ -231,7 +232,8 @@ function revolt_like_mosaic!(ctx::RevoltLikeHILContext)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
     revolt_tile_spot_cube!(ctx.tiled_frame,
-        shack_hartmann_spot_cube(ctx.wfs), ctx.n_lenslets, ctx.roi)
+        WavefrontSensors._legacy_shack_hartmann_spot_cube(ctx.wfs),
+        ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
     return nothing
 end
@@ -243,7 +245,7 @@ function revolt_like_step!(ctx::RevoltLikeHILContext)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
     measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    spots = shack_hartmann_spot_cube(ctx.wfs)
+    spots = WavefrontSensors._legacy_shack_hartmann_spot_cube(ctx.wfs)
     revolt_tile_spot_cube!(ctx.tiled_frame, spots, ctx.n_lenslets, ctx.roi)
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.dm.state.coefs))
     AdaptiveOpticsSim.Backends.synchronize_backend!(

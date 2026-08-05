@@ -63,8 +63,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :ShackHartmannOpticalFrontEnd,
         :SubapertureLayout,
         :SubapertureCalibration,
-        :shack_hartmann_spot_cube,
-        :shack_hartmann_detector_image,
         :PyramidWFS,
         :BiOEdgeWFS,
         :PyramidOpticalFrontEnd,
@@ -107,7 +105,12 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     @test !(@inferred supports_stacked_sources(sensor, nothing))
     @test !(@inferred supports_grouped_execution(sensor, nothing))
     @test @inferred(valid_subaperture_mask(sensor)) === nothing
-    @test @inferred(camera_frame(sensor)) === nothing
+    @test Base.ispublic(WavefrontSensors, :wfs_optical_products)
+    @test !Base.isexported(WavefrontSensors, :wfs_optical_products)
+    @test !isdefined(WavefrontSensors, :camera_frame)
+    @test !isdefined(WavefrontSensors, :shack_hartmann_detector_image)
+    @test !isdefined(WavefrontSensors, :shack_hartmann_detector_image!)
+    @test !isdefined(WavefrontSensors, :shack_hartmann_spot_cube)
 
     observation = @inferred WFSObservation(zeros(Float32, 2, 3);
         units=:electron_count, layout=:detector_frame)

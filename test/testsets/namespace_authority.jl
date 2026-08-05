@@ -293,8 +293,12 @@ end
     introduced_root = Set(String.(migration["new_root_exports"]))
     introduced_public = Set(String.(migration["new_domain_public"]))
     export_to_public = Set(String.(migration["export_to_public"]))
-    @test isempty(migration["removed_exports"])
-    @test isempty(migration["removed_public"])
+    removed_exports = Set(String.(migration["removed_exports"]))
+    removed_public = Set(String.(migration["removed_public"]))
+    @test removed_exports ⊆ Set(String.(current["exports"]))
+    @test removed_public ⊆ Set(String.(current["public"]))
+    @test isdisjoint(removed_exports, introduced_root)
+    @test isdisjoint(removed_public, introduced_public)
     @test isdisjoint(introduced_public, export_to_public)
     @test all(binding -> owner_by_binding[binding] == ("Root", "exports"),
         introduced_root)
@@ -322,14 +326,17 @@ end
     end
     @test existing_target == Set([
         (binding for binding in current["exports"]
-            if binding ∉ export_to_public_bindings)...;
-        current["public"];
+            if binding ∉ export_to_public_bindings &&
+                binding ∉ removed_exports)...;
+        (binding for binding in current["public"]
+            if binding ∉ removed_public)...;
     ])
-    @test all(binding ->
+    @test all(binding -> binding in removed_exports ||
             binding in export_to_public_bindings ||
             owner_by_binding[binding][2] == "exports",
         current["exports"])
-    @test all(binding -> owner_by_binding[binding][2] == "public",
+    @test all(binding -> binding in removed_public ||
+            owner_by_binding[binding][2] == "public",
         current["public"])
 
     implemented_exports = Set{String}()
@@ -353,14 +360,15 @@ end
     expected_root_exports = Set(
         binding for binding in current["exports"]
         if binding ∉ implemented_exports &&
-            binding ∉ export_to_public_bindings
+            binding ∉ export_to_public_bindings &&
+            binding ∉ removed_exports
     )
     union!(expected_root_exports,
         intersect(introduced_root,
             union(implemented_owners, partial_owners)))
     expected_root_public = Set(
         binding for binding in current["public"]
-        if binding ∉ implemented_public
+        if binding ∉ implemented_public && binding ∉ removed_public
     )
 
     declared_root = declared_surface(current_path)

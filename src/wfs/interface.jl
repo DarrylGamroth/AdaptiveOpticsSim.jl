@@ -54,43 +54,27 @@ calibration state.
 function wfs_calibration_signature end
 
 """
-    camera_frame(wfs::AbstractWFS)
-
-Return the maintained internal camera/readout frame for detector-like WFS
-families, or `nothing` when the family does not expose a stable camera-frame
-surface.
-"""
-@inline camera_frame(::AbstractWFS) = nothing
-
-"""
-    wfs_detector_image(wfs)
     wfs_detector_image(wfs, det)
 
-Return the detector-image product for a wavefront sensor.
-
-For WFS families with a native 2-D camera frame, this returns `camera_frame(wfs)`
-when no detector is provided and `output_frame(det)` after detector-coupled
-measurement when a detector is provided. Diffractive Shack-Hartmann WFS
-objects store detector-coupled lenslet spots as a cube, so this accessor
-returns a tiled 2-D detector mosaic.
+Return the current two-dimensional output storage of a detector compatible
+with `wfs`. The caller must first perform detector-coupled acquisition. Use
+`Detectors.output_frame(det)` directly for non-image detector products.
 """
-function wfs_detector_image(wfs::AbstractWFS)
-    frame = camera_frame(wfs)
-    isnothing(frame) && throw(InvalidConfiguration("WFS of type $(typeof(wfs)) does not expose a detector image"))
+function wfs_detector_image(wfs::AbstractWFS, det::AbstractDetector)
+    supports_detector_output(wfs, det) ||
+        throw(InvalidConfiguration(
+            "WFS of type $(typeof(wfs)) does not support detector output " *
+            "from $(typeof(det))"))
+    frame = output_frame(det)
+    ndims(frame) == 2 ||
+        throw(InvalidConfiguration(
+            "detector output for WFS of type $(typeof(wfs)) is not a " *
+            "two-dimensional image; use Detectors.output_frame(det)"))
     return frame
 end
 
-@inline wfs_detector_image(::AbstractWFS, det::AbstractDetector) = output_frame(det)
-
 @inline supports_valid_subaperture_mask(wfs::AbstractWFS) = !isnothing(valid_subaperture_mask(wfs))
 @inline supports_reference_signal(wfs::AbstractWFS) = !isnothing(reference_signal(wfs))
-@inline supports_camera_frame(wfs::AbstractWFS) = !isnothing(camera_frame(wfs))
-
-@inline wfs_output_frame(wfs::AbstractWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame(::AbstractWFS, detector::AbstractDetector) =
-    output_frame(detector)
-@inline wfs_output_frame_prototype(wfs::AbstractWFS, detector) =
-    wfs_output_frame(wfs, detector)
 @inline wfs_output_metadata(::AbstractWFS) = nothing
 
 """

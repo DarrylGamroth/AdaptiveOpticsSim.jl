@@ -78,7 +78,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
     prepare_sampling!(wfs, pupil, src)
     ensure_sh_calibration!(wfs, pupil, src)
     peak = sampled_spots_peak!(wfs, pupil, src)
-    sync_exported_spots!(wfs)
+    sync_legacy_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
     return wfs.products.slopes
 end
@@ -88,7 +88,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
     prepare_sampling!(wfs, pupil, src)
     ensure_sh_calibration!(wfs, pupil, src)
     peak = sampled_spots_peak!(wfs, pupil, src)
-    sync_exported_spots!(wfs)
+    sync_legacy_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
     return wfs.products.slopes
 end
@@ -113,7 +113,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
     prepare_sampling!(wfs, pupil, src)
     ensure_sh_calibration!(wfs, pupil, src)
     peak = sampled_spots_peak!(wfs, pupil, src, det, rng)
-    sync_exported_spots!(wfs)
+    sync_legacy_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
     return wfs.products.slopes
 end
@@ -124,7 +124,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
     prepare_sampling!(wfs, pupil, src)
     ensure_sh_calibration!(wfs, pupil, src)
     peak = sampled_spots_peak!(wfs, pupil, src, det, rng)
-    sync_exported_spots!(wfs)
+    sync_legacy_spots!(wfs)
     sh_signal_from_spots_calibrated!(wfs, peak, slope_extraction_model(wfs))
     return wfs.products.slopes
 end
@@ -142,7 +142,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.products.slopes), wfs, pupil, ast)
-        sync_exported_spots!(wfs)
+        sync_legacy_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.products.slopes
@@ -168,7 +168,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
     oy = div(pad - sub, 2)
     if sh_stacked_asterism_compatible(ast) && sh_uses_batched_sensing_strategy(wfs)
         peak = sampled_spots_peak_asterism_stacked!(execution_style(wfs.products.slopes), wfs, pupil, ast, det, rng)
-        sync_exported_spots!(wfs)
+        sync_legacy_spots!(wfs)
         sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
         subtract_reference_and_scale!(wfs)
         return wfs.products.slopes

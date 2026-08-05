@@ -789,15 +789,9 @@ end
     wfs.estimator.state.valid_mask
 @inline reference_signal(wfs::ZernikeWFS) =
     wfs.estimator.state.reference_signal_2d
-@inline camera_frame(wfs::ZernikeWFS) =
-    wfs.acquisition.state.camera_frame
 @inline wfs_calibration_signature(wfs::ZernikeWFS) =
     wfs.estimator.state.calibration_signature
 
-@inline wfs_output_frame(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::ZernikeWFS, ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::ZernikeWFS, det::AbstractDetector) = camera_frame(wfs)
 @inline supports_prepared_runtime(::ZernikeWFS, src::AbstractSource) =
     is_leaf_source(src)
 @inline supports_detector_output(::ZernikeWFS, ::AbstractDetector) = true

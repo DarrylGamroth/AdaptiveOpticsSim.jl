@@ -801,12 +801,12 @@ function _require_exact_sh_mode_target(
     _require_exact_wfs_array_targets(
         (
             sensor.workspace.spot_cube,
-            sensor.products.exported_spot_cube,
+            sensor.products.legacy_spot_cube,
             sensor.workspace.detector_noise_cube,
         ),
         (
             "Shack-Hartmann spot cube",
-            "Shack-Hartmann exported spot cube",
+            "Shack-Hartmann internal legacy spot diagnostic",
             "Shack-Hartmann detector-noise cube",
         ),
         target,

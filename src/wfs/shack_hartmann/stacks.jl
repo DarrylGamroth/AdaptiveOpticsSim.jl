@@ -349,7 +349,7 @@ function capture_sh_qe_weighted_spots!(style::ExecutionStyle,
 end
 
 function finalize_sh_asterism_slopes!(wfs::ShackHartmannWFS, peak)
-    sync_exported_spots!(wfs)
+    sync_legacy_spots!(wfs)
     sh_signal_from_spots!(wfs, peak, slope_extraction_model(wfs))
     subtract_reference_and_scale!(wfs)
     return wfs.products.slopes

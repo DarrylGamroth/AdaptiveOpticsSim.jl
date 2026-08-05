@@ -40,6 +40,11 @@ struct PreparedShackHartmannOpticsBundle{
     output::O
 end
 
+@inline wfs_optical_products(prepared::PreparedShackHartmannOptics) =
+    prepared.output
+@inline wfs_optical_products(prepared::PreparedShackHartmannOpticsBundle) =
+    prepared.output
+
 struct ShackHartmannSpectralComponent{S,T<:AbstractFloat} <: AbstractSource
     source::S
     wavelength_m::T
@@ -141,7 +146,7 @@ end
 end
 
 @inline function _sh_products_binding(products)
-    return (products.slopes, products.exported_spot_cube)
+    return (products.slopes, products.legacy_spot_cube)
 end
 
 @inline _sh_input_storages(input::PupilFunction) =
@@ -179,7 +184,7 @@ end
     input_storages = _sh_input_storages(input)
     resources = (_sh_estimator_workspace_binding(sensor.workspace)...,
         sensor.products.slopes,
-        sensor.products.exported_spot_cube,
+        sensor.products.legacy_spot_cube,
         sensor.front_end.layout.valid_mask,
         sensor.front_end.layout.valid_mask_host,
         sensor.calibration.reference_signal_2d,
@@ -1041,7 +1046,7 @@ function form_wfs_optical_products!(output::IntensityMap, input,
     _form_sh_explicit_stack!(execution_style(_sh_input_storage(input)),
         optics, input, optics.front_end.source,
         wavelength_m)
-    shack_hartmann_detector_image!(output.values,
+    _tile_shack_hartmann_spot_cube!(output.values,
         prepared.workspace.sampled_spot_cube, n_lenslets(optics))
     return output
 end

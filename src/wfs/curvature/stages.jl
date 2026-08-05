@@ -75,6 +75,9 @@ struct PreparedCurvatureOptics{F,I,O,B}
     binding::B
 end
 
+@inline wfs_optical_products(prepared::PreparedCurvatureOptics) =
+    prepared.output
+
 @inline modulated_wfs_propagation_storage(
     front_end::CurvatureOpticalFrontEnd) = front_end.propagation.field_stack
 

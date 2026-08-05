@@ -25,16 +25,19 @@ end
     @test isempty(findall(flux_mask .& .!geom_mask))
 end
 
-@testset "Shack-Hartmann resized detector mosaic" begin
+@testset "Shack-Hartmann optical rate map" begin
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.1)
     pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=7.0)
     sh = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
-    prepare_runtime_wfs!(sh, pupil, src)
-    measure!(sh, pupil, src)
-    image = wfs_detector_image(sh)
-    @test size(image) == (128, 128)
-    @test size(shack_hartmann_spot_cube(sh)) == (16 * 16, 8, 8)
+    rate = shack_hartmann_rate_map(sh, pupil, src)
+    prepared = prepare_wfs_optics(shack_hartmann_optics(sh, src),
+        pupil, rate)
+    form_wfs_optical_products!(rate, pupil, prepared)
+    @test WavefrontSensors.wfs_optical_products(prepared) === rate
+    @test size(rate.values) == (128, 128)
+    @test size(prepared.workspace.sampled_spot_cube) ==
+        (16 * 16, 8, 8)
 end
 
 @testset "Shack-Hartmann signal extraction branches" begin
@@ -689,7 +692,7 @@ end
         slopes=copy(guard_wfs.products.slopes),
         intensity=copy(guard_wfs.optics.propagation.workspace.intensity),
         spot_cube=copy(guard_wfs.workspace.spot_cube),
-        exported_spot_cube=copy(guard_wfs.products.exported_spot_cube),
+        legacy_spot_cube=copy(guard_wfs.products.legacy_spot_cube),
         reference_signal=copy(guard_wfs.calibration.reference_signal_2d),
         effective_padding=guard_wfs.optics.propagation.workspace.effective_padding,
         binning_pixel_scale=guard_wfs.optics.propagation.workspace.binning_pixel_scale,
@@ -711,8 +714,8 @@ end
         guard_state_before.intensity)
     @test isequal(guard_wfs.workspace.spot_cube,
         guard_state_before.spot_cube)
-    @test isequal(guard_wfs.products.exported_spot_cube,
-        guard_state_before.exported_spot_cube)
+    @test isequal(guard_wfs.products.legacy_spot_cube,
+        guard_state_before.legacy_spot_cube)
     @test isequal(guard_wfs.calibration.reference_signal_2d,
         guard_state_before.reference_signal)
     @test guard_wfs.optics.propagation.workspace.effective_padding ==

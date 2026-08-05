@@ -21,6 +21,9 @@ struct PreparedZernikeOptics{F,I,O,B}
     binding::B
 end
 
+@inline wfs_optical_products(prepared::PreparedZernikeOptics) =
+    prepared.output
+
 struct ZernikeCalibrationBinding{T<:AbstractFloat,R,A}
     revision::UInt
     wavelength_m::T

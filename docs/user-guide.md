@@ -267,18 +267,22 @@ type used for the exported frame:
 
 ```julia
 using AdaptiveOpticsSim.Detectors
+using AdaptiveOpticsSim.WavefrontSensors
 
+frame_wfs = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
 det = Detector(noise=NoiseNone(), full_well=30_000.0, bits=12, output_type=UInt16)
 rng = runtime_rng(0)
-measure!(wfs, pupil, src, det; rng=rng)
-adu = wfs_detector_image(wfs, det)
+measure!(frame_wfs, pupil, src, det; rng=rng)
+adu = wfs_detector_image(frame_wfs, det)
 ```
 
-Here `adu` is a `UInt16` image containing 12-bit ADU values. For
-Shack-Hartmann sensors this is the lenslet spot mosaic; for frame-style WFSs it
-is the maintained detector/readout frame. Quantized detectors require a fixed
-positive `full_well`; the capture path never rescales each frame by its own
-peak.
+Here `adu` is the detector's actual `UInt16` output containing 12-bit ADU
+values. `wfs_detector_image` is available only when the compatible detector
+publishes a two-dimensional output. The legacy Shack-Hartmann convenience path
+does not publish a detector-owned image; use the prepared optics, acquisition,
+and `WFSObservation` contracts for stage-correct HIL composition. Quantized
+detectors require a fixed positive `full_well`; the capture path never rescales
+each frame by its own peak.
 
 Detector QE may be a scalar or a sampled QE curve. Scalar QE is the simplest
 and fastest path. Use a sampled curve when the source spectrum matters:
@@ -726,8 +730,13 @@ for _ in 1:5
 end
 
 slopes_vec = slopes(wfs)
-frame = camera_frame(wfs)
 ```
+
+This detector-free loop produces a WFS measurement, not a camera frame. Use a
+prepared WFS optics owner and
+`WavefrontSensors.wfs_optical_products(prepared)` when the detector-facing
+photon-arrival-rate product is required, or attach a detector and inspect its
+acquired output.
 
 `DeformableMirror` keeps the concise public Gaussian inputs:
 

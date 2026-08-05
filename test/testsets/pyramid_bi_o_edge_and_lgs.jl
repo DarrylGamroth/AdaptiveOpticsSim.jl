@@ -473,14 +473,11 @@ end
     sh_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     sh_det_slopes = measure!(sh_det, pupil, ngs, det)
     @test length(sh_det_slopes) == 2 * 4 * 4
-    sh_det_image = wfs_detector_image(sh_det, det; gap=1)
-    @test ndims(sh_det_image) == 2
+    @test_throws InvalidConfiguration wfs_detector_image(sh_det, det)
     sh_adu_det = Detector(noise=NoiseNone(), binning=1, full_well=30_000.0, bits=12, output_type=UInt16)
     sh_adu = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     measure!(sh_adu, pupil, ngs, sh_adu_det; rng=MersenneTwister(15))
-    sh_adu_image = wfs_detector_image(sh_adu, sh_adu_det; gap=1)
-    @test sh_adu_image isa Matrix{UInt16}
-    @test maximum(sh_adu_image) <= 0x0fff
+    @test_throws InvalidConfiguration wfs_detector_image(sh_adu, sh_adu_det)
     pyr_det = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_det_slopes = measure!(pyr_det, pupil, ngs, det)
     @test length(pyr_det_slopes) == 2 * 4 * 4

@@ -14,16 +14,8 @@ include("pyramid/stages.jl")
 @inline valid_subaperture_mask(wfs::PyramidWFS) = wfs.estimator.state.valid_mask
 @inline reference_signal(wfs::PyramidWFS) = wfs.estimator.state.reference_signal_2d
 @inline slopes(wfs::PyramidWFS) = wfs.estimator.state.slopes
-@inline camera_frame(wfs::PyramidWFS{<:Diffractive}) =
-    wfs.acquisition.state.camera_frame
-@inline camera_frame(::PyramidWFS{<:Geometric}) = nothing
 @inline wfs_calibration_signature(wfs::PyramidWFS) =
     wfs.estimator.state.calibration_signature
-
-@inline wfs_output_frame_prototype(wfs::PyramidWFS{<:Diffractive},
-    ::Nothing) = camera_frame(wfs)
-@inline wfs_output_frame_prototype(wfs::PyramidWFS{<:Diffractive},
-    det::AbstractDetector) = camera_frame(wfs)
 
 @inline supports_prepared_runtime(::PyramidWFS, ::AbstractSource) = true
 @inline supports_prepared_runtime(::PyramidWFS, ::Asterism) = true
