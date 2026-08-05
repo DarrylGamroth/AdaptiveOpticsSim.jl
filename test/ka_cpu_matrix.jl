@@ -417,25 +417,25 @@ end
         @test ka_edge_slopes == scalar_edge_slopes
 
         spot_cube = reshape(collect(1.0:36.0), 4, 3, 3)
-        scalar_image = Matrix{Float64}(undef, 7, 7)
-        ka_image = similar(scalar_image)
-        WavefrontSensors._shack_hartmann_detector_image!(
-            SCALAR_CPU_STYLE, SCALAR_CPU_STYLE, scalar_image, spot_cube, 2, 3, 3, 1, -1.0)
-        WavefrontSensors._shack_hartmann_detector_image!(
-            KA_CPU_STYLE, KA_CPU_STYLE, ka_image, spot_cube, 2, 3, 3, 1, -1.0)
-        mark_ka_cpu_kernel!(:shack_hartmann_detector_image_copy_kernel!)
-        @test ka_image == scalar_image
+        scalar_rate_map = Matrix{Float64}(undef, 7, 7)
+        ka_rate_map = similar(scalar_rate_map)
+        WavefrontSensors._tile_shack_hartmann_spot_cube!(
+            SCALAR_CPU_STYLE, SCALAR_CPU_STYLE, scalar_rate_map, spot_cube, 2, 3, 3, 1, -1.0)
+        WavefrontSensors._tile_shack_hartmann_spot_cube!(
+            KA_CPU_STYLE, KA_CPU_STYLE, ka_rate_map, spot_cube, 2, 3, 3, 1, -1.0)
+        mark_ka_cpu_kernel!(:_shack_hartmann_rate_map_copy_kernel!)
+        @test ka_rate_map == scalar_rate_map
 
-        scalar_converted_image = Matrix{Float32}(undef, 7, 7)
-        ka_converted_image = similar(scalar_converted_image)
-        WavefrontSensors._shack_hartmann_detector_image!(
-            SCALAR_CPU_STYLE, SCALAR_CPU_STYLE, scalar_converted_image, spot_cube,
+        scalar_converted_rate_map = Matrix{Float32}(undef, 7, 7)
+        ka_converted_rate_map = similar(scalar_converted_rate_map)
+        WavefrontSensors._tile_shack_hartmann_spot_cube!(
+            SCALAR_CPU_STYLE, SCALAR_CPU_STYLE, scalar_converted_rate_map, spot_cube,
             2, 3, 3, 1, -1.0)
-        WavefrontSensors._shack_hartmann_detector_image!(
-            KA_CPU_STYLE, KA_CPU_STYLE, ka_converted_image, spot_cube,
+        WavefrontSensors._tile_shack_hartmann_spot_cube!(
+            KA_CPU_STYLE, KA_CPU_STYLE, ka_converted_rate_map, spot_cube,
             2, 3, 3, 1, -1.0)
-        mark_ka_cpu_kernel!(:shack_hartmann_detector_image_kernel!)
-        @test ka_converted_image == scalar_converted_image
+        mark_ka_cpu_kernel!(:_shack_hartmann_rate_map_kernel!)
+        @test ka_converted_rate_map == scalar_converted_rate_map
     end
 
     @testset "Grouped and Shack-Hartmann stack kernels" begin
