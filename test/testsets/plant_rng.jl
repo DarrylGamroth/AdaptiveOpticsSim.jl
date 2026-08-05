@@ -279,7 +279,7 @@ end
 
 function rng_test_group(plant::PreparedPlant, id::Symbol)
     @inbounds for index in eachindex(prepared_acquisitions(plant))
-        acquisition_id(prepared_acquisitions(plant)[index].definition) ==
+        acquisition_id(prepared_acquisitions(plant)[index]) ==
             AcquisitionID(id) && return plant.rngs.acquisitions[index]
     end
     error("missing test acquisition RNG group")
@@ -418,6 +418,9 @@ end
             selection, current_epoch(prepared_atmosphere(plant)))
         selected_owner_count = length(prepared_paths(selection)) +
             length(prepared_acquisitions(selection))
+        # Exact owner-family execution is allocation-free. The remaining
+        # bounded boxing comes from erased `PreparedPlantRNGs.paths` and
+        # `.acquisitions` storage; #287 owns that RNG-state migration.
         @test allocation_bytes <= 256 * selected_owner_count
     end
 end

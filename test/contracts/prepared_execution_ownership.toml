@@ -172,7 +172,7 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 457
+baseline_type_count = 467
 baseline_mixed_type_count = 8
 
 [[type_inventory.files]]
@@ -819,14 +819,24 @@ entries = [
 path = "src/plant/preparation.jl"
 owner = "Plant"
 entries = [
-    ["PreparedAcquisitionOwner","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedAcquisitionOwner","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["PreparedAcquisitionSelection","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
-    ["PreparedPathExecutor","struct",11,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["PreparedPathExecutor","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["PreparedPlant","struct",13,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["PreparedPupilOPDMaterialization","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedAcquisitionFamily","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedAcquisitionFamilyType","struct",0,"prepared",["support"],false,false,"internal",false,"backend_neutral",false,"PE-06"],
+    ["_PreparedAcquisitionOwnerSelection","struct",2,"prepared",["support"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["_PreparedAcquisitionOwnerToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedAcquisitionRegistry","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["_PreparedAcquisitionSelectionToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedAcquisitionSlot","struct",2,"prepared",["support"],false,false,"internal",false,"backend_neutral",true,"PE-06"],
+    ["_PreparedPathFamily","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedPathFamilyType","struct",0,"prepared",["support"],false,false,"internal",false,"backend_neutral",false,"PE-06"],
     ["_PreparedPathExecutorToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
+    ["_PreparedPathRegistry","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedPathSelection","struct",2,"prepared",["support"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedPathSlot","struct",2,"prepared",["support"],false,false,"internal",false,"backend_neutral",true,"PE-06"],
     ["_PreparedPlantToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
     ["_PreparedPupilOPDMaterializationToken","mutable_struct",0,"prepared",["binding_token"],true,false,"internal",true,"backend_neutral",false,"PE-06"],
 ]
@@ -1157,7 +1167,7 @@ entries = [
 [direct_memory]
 policy = "ratchet"
 columns = ["category","scope","binding","baseline_line","count","hot_path","backend_relevance","replacement"]
-baseline_total = 330
+baseline_total = 312
 zero_tolerance_gate = "PE-07"
 interpretation = "AST references in package and extension implementation; comments, strings, tests, benchmarks, and dependency internals are excluded"
 
@@ -1462,30 +1472,12 @@ path = "src/plant/preparation.jl"
 owner = "Plant"
 entries = [
     ["constructor","_acquisition_rng_owner_bindings","groups",1608,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_canonical_selected_acquisitions","result",1811,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_canonical_selected_paths","result",1831,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
     ["constructor","_path_rng_owner_bindings","groups",1597,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_prepare_acquisition_owners","acquisitions",1585,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["constructor","_prepare_path_executors","paths",1566,1,false,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["constructor","_selected_acquisition_rngs","result",1879,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["constructor","_selected_path_rngs","result",1860,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
     ["constructor","_selected_sampled_aberration_path_plans","plans",1892,1,false,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["field_type","PreparedAcquisitionSelection","acquisition_rngs",1747,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["field_type","PreparedAcquisitionSelection","acquisitions",1744,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["field_type","PreparedAcquisitionSelection","path_rngs",1746,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["field_type","PreparedAcquisitionSelection","paths",1743,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["field_type","PreparedPlant","acquisitions",1316,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
     ["field_type","PreparedPlant","command_endpoints",1314,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
     ["field_type","PreparedPlant","controllable_optics",1310,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["field_type","PreparedPlant","paths",1315,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["signature_type","PreparedAcquisitionSelection","acquisition_rngs",1749,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["signature_type","PreparedAcquisitionSelection","acquisitions",1749,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["signature_type","PreparedAcquisitionSelection","path_rngs",1749,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
-    ["signature_type","PreparedAcquisitionSelection","paths",1749,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["signature_type","PreparedPlant","acquisitions",1319,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
     ["signature_type","PreparedPlant","command_endpoints",1319,1,true,"host_ownership_storage","FixedSizeArray{ConcreteT} for host ownership metadata"],
     ["signature_type","PreparedPlant","controllable_optics",1319,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
-    ["signature_type","PreparedPlant","paths",1319,1,true,"host_ownership_storage","concrete execution-family groups or a purpose-built owner"],
 ]
 
 [[direct_memory.files]]

@@ -377,16 +377,16 @@ function run_optional_target_partition_checks(::Type{B}, BackendArray) where {
     mixed_accelerator = prepared_partition(mixed, target)
     @test length(target_local_controllable_optic_owners(
         accelerator_partition)) == 1
-    @test Tuple(path_id(path.definition) for path in
+    @test Tuple(path_id(path) for path in
         prepared_paths(accelerator_partition)) ==
         (OpticalPathID(:alpha), OpticalPathID(:beta))
-    @test Tuple(path_id(path.definition) for path in
+    @test Tuple(path_id(path) for path in
         prepared_paths(mixed_host)) == (OpticalPathID(:alpha),)
-    @test Tuple(path_id(path.definition) for path in
+    @test Tuple(path_id(path) for path in
         prepared_paths(mixed_accelerator)) == (OpticalPathID(:beta),)
-    @test Tuple(acquisition_id(acquisition.definition) for acquisition in
+    @test Tuple(acquisition_id(acquisition) for acquisition in
         prepared_acquisitions(mixed_host)) == (AcquisitionID(:alpha_camera),)
-    @test Tuple(acquisition_id(acquisition.definition) for acquisition in
+    @test Tuple(acquisition_id(acquisition) for acquisition in
         prepared_acquisitions(mixed_accelerator)) ==
         (AcquisitionID(:beta_camera),)
 
@@ -1168,11 +1168,11 @@ function run_optional_prepared_plant_checks(::Type{B},
     @test Plant._require_exact_prepared_plant_target(
         cpu_plant, host_target) === cpu_plant
     @test Plant._require_exact_prepared_plant_target(plant, target) === plant
-    @test Tuple(path_id(path.definition) for path in prepared_paths(cpu_plant)) ==
-        Tuple(path_id(path.definition) for path in prepared_paths(plant))
-    @test Tuple(acquisition_id(owner.definition)
+    @test Tuple(path_id(path) for path in prepared_paths(cpu_plant)) ==
+        Tuple(path_id(path) for path in prepared_paths(plant))
+    @test Tuple(acquisition_id(owner)
         for owner in prepared_acquisitions(cpu_plant)) ==
-        Tuple(acquisition_id(owner.definition)
+        Tuple(acquisition_id(owner)
             for owner in prepared_acquisitions(plant))
     @test Tuple(sampled_aberration_id(aberration)
         for aberration in prepared_sampled_aberrations(cpu_plant)) ==

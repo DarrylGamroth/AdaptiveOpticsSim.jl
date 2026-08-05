@@ -1,16 +1,32 @@
+using InteractiveUtils: code_native
+
 struct TopologyGrowthPathModel end
 struct TopologyGrowthAcquisitionModel end
+struct TopologyGrowthPathFamilyModel{N} end
+struct TopologyGrowthAcquisitionFamilyModel{N} end
+struct TopologyGrowthExecutionFamily{N} end
 
 struct TopologyGrowthMaterialization{P}
     destination::P
 end
 
-struct TopologyGrowthPathExecution{P,R}
+function topology_growth_native_generic_apply_count(function_value,
+    argument_types)
+    native = sprint() do io
+        code_native(io, function_value, argument_types;
+            debuginfo=:none, binary=false)
+    end
+    return count("jl_apply_generic", native)
+end
+
+struct TopologyGrowthPathExecution{F,P,R}
+    family::F
     input::P
     result::R
 end
 
-struct TopologyGrowthAcquisitionExecution{R,O}
+struct TopologyGrowthAcquisitionExecution{F,R,O}
+    family::F
     source::R
     destination::O
 end
@@ -19,6 +35,12 @@ Plant.plant_model_definition_style(::Type{TopologyGrowthPathModel}) =
     ColdPlantModelDefinition()
 Plant.plant_model_definition_style(
     ::Type{TopologyGrowthAcquisitionModel}) =
+    ColdPlantModelDefinition()
+Plant.plant_model_definition_style(
+    ::Type{<:TopologyGrowthPathFamilyModel}) =
+    ColdPlantModelDefinition()
+Plant.plant_model_definition_style(
+    ::Type{<:TopologyGrowthAcquisitionFamilyModel}) =
     ColdPlantModelDefinition()
 
 function Plant.validate_path_materialization_binding(
@@ -98,15 +120,17 @@ end
 function Plant.execute_path!(
     result::IntensityMap,
     input::PupilFunction,
-    execution::TopologyGrowthPathExecution,
-)
+    execution::TopologyGrowthPathExecution{
+        TopologyGrowthExecutionFamily{N}},
+) where {N}
     Plant.validate_path_execution_binding(execution, input, result)
-    @. result.values = input.opd + one(eltype(result.values))
+    family_value = convert(eltype(result.values), N)
+    @. result.values = input.opd + family_value
     return result
 end
 
-function Plant.prepare_path_executor(
-    ::TopologyGrowthPathModel,
+function topology_growth_prepare_path_executor(
+    family,
     definition::OpticalPathDefinition,
     source::AbstractSource,
     telescope::Telescope,
@@ -131,7 +155,7 @@ function Plant.prepare_path_executor(
         coherence=IncoherentIntensityAddition(),
     )
     result = IntensityMap(metadata, values)
-    execution = TopologyGrowthPathExecution(pupil, result)
+    execution = TopologyGrowthPathExecution(family, pupil, result)
     return PreparedPathExecutor(
         definition,
         source,
@@ -146,6 +170,32 @@ function Plant.prepare_path_executor(
         propagation_model=:test_typed_handoff,
         model_revisions=UInt(1),
     )
+end
+
+function Plant.prepare_path_executor(
+    ::TopologyGrowthPathModel,
+    definition::OpticalPathDefinition,
+    source::AbstractSource,
+    telescope::Telescope,
+    atmosphere::AbstractTimedAtmosphere,
+    context,
+)
+    return topology_growth_prepare_path_executor(
+        TopologyGrowthExecutionFamily{1}(), definition, source, telescope,
+        atmosphere, context)
+end
+
+function Plant.prepare_path_executor(
+    ::TopologyGrowthPathFamilyModel{N},
+    definition::OpticalPathDefinition,
+    source::AbstractSource,
+    telescope::Telescope,
+    atmosphere::AbstractTimedAtmosphere,
+    context,
+) where {N}
+    return topology_growth_prepare_path_executor(
+        TopologyGrowthExecutionFamily{N}(), definition, source, telescope,
+        atmosphere, context)
 end
 
 function Plant.validate_acquisition_execution_binding(
@@ -175,17 +225,19 @@ end
 function Plant.execute_acquisition!(
     products::AcquisitionProducts{<:AbstractMatrix,Nothing},
     path_result::IntensityMap,
-    execution::TopologyGrowthAcquisitionExecution,
+    execution::TopologyGrowthAcquisitionExecution{
+        TopologyGrowthExecutionFamily{N}},
     ::AbstractRNG,
-)
+) where {N}
     Plant.validate_acquisition_execution_binding(
         execution, path_result, products)
-    copyto!(products.observation, path_result.values)
+    family_value = convert(eltype(products.observation), 100 * N)
+    @. products.observation = path_result.values + family_value
     return products
 end
 
-function Plant.prepare_acquisition_provider(
-    ::TopologyGrowthAcquisitionModel,
+function topology_growth_prepare_acquisition_provider(
+    family,
     ::AcquisitionDefinition,
     path::PreparedPathExecutor,
 )
@@ -193,7 +245,8 @@ function Plant.prepare_acquisition_provider(
     observation = similar(path.result.values)
     fill!(observation, zero(eltype(observation)))
     execution =
-        TopologyGrowthAcquisitionExecution(path.result, observation)
+        TopologyGrowthAcquisitionExecution(
+            family, path.result, observation)
     products = AcquisitionProducts(
         observation;
         metadata=(
@@ -204,9 +257,42 @@ function Plant.prepare_acquisition_provider(
     )
     return prepare_full_optical_provider(execution, products)
 end
+function Plant.prepare_acquisition_provider(
+    ::TopologyGrowthAcquisitionModel,
+    definition::AcquisitionDefinition,
+    path::PreparedPathExecutor,
+)
+    return topology_growth_prepare_acquisition_provider(
+        TopologyGrowthExecutionFamily{1}(), definition, path)
+end
 
-function topology_growth_fixture(path_count::Integer)
+function Plant.prepare_acquisition_provider(
+    ::TopologyGrowthAcquisitionFamilyModel{N},
+    definition::AcquisitionDefinition,
+    path::PreparedPathExecutor,
+) where {N}
+    return topology_growth_prepare_acquisition_provider(
+        TopologyGrowthExecutionFamily{N}(), definition, path)
+end
+
+function topology_growth_fixture(path_count::Integer; family_count::Int=1,
+    path_families=nothing, acquisition_families=nothing)
     path_count > 0 || error("topology-growth path count must be positive")
+    1 <= family_count <= path_count ||
+        error("topology-growth family count must be within path count")
+    path_family_indices = path_families === nothing ?
+        [mod1(index, family_count) for index in 1:path_count] :
+        collect(Int, path_families)
+    acquisition_family_indices = acquisition_families === nothing ?
+        copy(path_family_indices) : collect(Int, acquisition_families)
+    length(path_family_indices) == path_count ||
+        error("topology-growth path-family count must match path count")
+    length(acquisition_family_indices) == path_count ||
+        error("topology-growth acquisition-family count must match path count")
+    all(index -> 1 <= index <= family_count, path_family_indices) ||
+        error("topology-growth path-family index is outside family count")
+    all(index -> 1 <= index <= family_count, acquisition_family_indices) ||
+        error("topology-growth acquisition-family index is outside family count")
     T = Float64
     telescope = Telescope(
         resolution=5,
@@ -233,14 +319,19 @@ function topology_growth_fixture(path_count::Integer)
     )
     paths = OpticalPathDefinition[
         OpticalPathDefinition(
-            Symbol(:path_, index), source, TopologyGrowthPathModel())
+            Symbol(:path_, index), source,
+            family_count == 1 ? TopologyGrowthPathModel() :
+            TopologyGrowthPathFamilyModel{
+                path_family_indices[index]}())
         for index in 1:path_count
     ]
     acquisitions = AcquisitionDefinition[
         AcquisitionDefinition(
             Symbol(:acquisition_, index),
             path_id(paths[index]),
-            TopologyGrowthAcquisitionModel(),
+            family_count == 1 ? TopologyGrowthAcquisitionModel() :
+            TopologyGrowthAcquisitionFamilyModel{
+                acquisition_family_indices[index]}(),
         )
         for index in 1:path_count
     ]
@@ -263,6 +354,8 @@ function topology_growth_fixture(path_count::Integer)
         plant,
         selection,
         atmosphere=prepared_atmosphere(plant),
+        path_family_indices,
+        acquisition_family_indices,
     )
 end
 
@@ -293,7 +386,7 @@ function topology_growth_any_value_count(function_value, argument_types)
 end
 
 @testset "Count-invariant prepared plant topology" begin
-    path_counts = (4, 8, 16)
+    path_counts = (1, 4, 8, 16)
     fixtures = map(topology_growth_fixture, path_counts)
 
     for field in (:definition, :plant, :selection)
@@ -311,18 +404,41 @@ end
             AbstractVector{OpticalPathDefinition}
         @test acquisition_definitions(definition) isa
             AbstractVector{AcquisitionDefinition}
-        @test prepared_paths(plant) isa Memory{PreparedPathExecutor}
+        @test prepared_paths(plant) isa Plant._PreparedPathRegistry
         @test prepared_acquisitions(plant) isa
-            Memory{PreparedAcquisitionOwner}
-        @test prepared_paths(selection) isa Memory{PreparedPathExecutor}
+            Plant._PreparedAcquisitionRegistry
+        @test prepared_paths(selection) isa Plant._PreparedPathSelection
         @test prepared_acquisitions(selection) isa
-            Memory{PreparedAcquisitionOwner}
+            Plant._PreparedAcquisitionOwnerSelection
+        @test all(group -> group.values isa
+            FixedSizeVector{<:PreparedPathExecutor}, plant.paths.groups)
+        @test all(group -> group.values isa
+            FixedSizeVector{<:PreparedAcquisitionOwner},
+            plant.acquisitions.groups)
+        @test length(plant.paths.groups) == 1
+        @test length(plant.acquisitions.groups) == 1
         @test plant.rngs.paths isa Memory{PreparedOwnerRNGs}
         @test plant.rngs.acquisitions isa Memory{PreparedOwnerRNGs}
         @test length(prepared_paths(plant)) == path_count
         @test length(prepared_acquisitions(plant)) == path_count
         @test length(prepared_paths(selection)) == path_count
         @test length(prepared_acquisitions(selection)) == path_count
+        @test !hasfield(eltype(plant.paths.groups[1].values), :definition)
+        @test !hasfield(eltype(plant.acquisitions.groups[1].values),
+            :definition)
+        for path in prepared_paths(selection)
+            @test prepared_path(plant, path_id(path)) === path
+            @test Plant._prepared_path_definition(plant.paths, path) ===
+                path_definitions(definition)[Int(path.definition_slot)]
+        end
+        for owner in prepared_acquisitions(selection)
+            @test prepared_acquisition(plant, acquisition_id(owner)) ===
+                owner
+            @test Plant._prepared_acquisition_definition(
+                plant.acquisitions, owner) ===
+                acquisition_definitions(definition)[
+                    Int(owner.definition_slot)]
+        end
     end
 
     largest = last(fixtures)
@@ -332,7 +448,7 @@ end
         @test all(==(1.0), path_result(path).values)
     end
     for owner in prepared_acquisitions(largest.selection)
-        @test all(==(1.0), acquisition_observation(owner))
+        @test all(==(101.0), acquisition_observation(owner))
     end
 
     representative_path = first(prepared_paths(largest.plant))
@@ -371,4 +487,131 @@ end
         representative_execution,
         representative_rng,
     )) === representative_products
+end
+
+function assert_topology_growth_descriptor_routing(fixture)
+    execute_acquisition_selection_at!(fixture.selection, 0.0)
+    plant = fixture.plant
+    for index in eachindex(fixture.path_family_indices)
+        path = prepared_path(plant, Symbol(:path_, index))
+        path_slot = plant.paths.slots[index]
+        @test Plant._prepared_path_value(plant.paths, path_slot) === path
+        @test path_id(path) == OpticalPathID(Symbol(:path_, index))
+        @test all(==(Float64(fixture.path_family_indices[index])),
+            path_result(path).values)
+
+        owner = prepared_acquisition(
+            plant, Symbol(:acquisition_, index))
+        acquisition_slot = plant.acquisitions.slots[index]
+        @test Plant._prepared_acquisition_value(
+            plant.acquisitions, acquisition_slot) === owner
+        @test acquisition_id(owner) ==
+            AcquisitionID(Symbol(:acquisition_, index))
+        @test acquisition_path_id(owner) == path_id(path)
+        expected = Float64(fixture.path_family_indices[index] +
+            100 * fixture.acquisition_family_indices[index])
+        @test all(==(expected), acquisition_observation(owner))
+    end
+    return fixture
+end
+
+topology_growth_group_family_indices(groups, family) =
+    map(groups) do group
+        family_type = typeof(family(first(group.values)))
+        return only(family_type.parameters)
+    end
+
+@testset "Mixed exact execution-family code generation" begin
+    homogeneous = topology_growth_fixture(4)
+    mixed = topology_growth_fixture(6; family_count=6,
+        path_families=(4, 1, 6, 2, 5, 3),
+        acquisition_families=(2, 6, 3, 1, 5, 4))
+    reordered = topology_growth_fixture(6; family_count=6,
+        path_families=(3, 5, 2, 6, 1, 4),
+        acquisition_families=(4, 1, 5, 3, 6, 2))
+    extended = topology_growth_fixture(7; family_count=6,
+        path_families=(4, 1, 6, 2, 5, 3, 4),
+        acquisition_families=(2, 6, 3, 1, 5, 4, 2))
+
+    @test length(mixed.plant.paths.groups) == 6
+    @test length(mixed.plant.acquisitions.groups) == 6
+    @test typeof(mixed.plant.paths) != typeof(homogeneous.plant.paths)
+    @test typeof(mixed.plant.acquisitions) !=
+        typeof(homogeneous.plant.acquisitions)
+    path_group_indices = map(fixture ->
+        topology_growth_group_family_indices(
+            fixture.plant.paths.groups, path -> path.execution.family),
+        (mixed, reordered, extended))
+    acquisition_group_indices = map(fixture ->
+        topology_growth_group_family_indices(
+            fixture.plant.acquisitions.groups,
+            owner -> owner.provider.implementation.execution.family),
+        (mixed, reordered, extended))
+    @test path_group_indices[1] == path_group_indices[2] ==
+        path_group_indices[3]
+    @test acquisition_group_indices[1] == acquisition_group_indices[2] ==
+        acquisition_group_indices[3]
+    path_group_types_match = typeof(mixed.plant.paths.groups) ==
+        typeof(reordered.plant.paths.groups) ==
+        typeof(extended.plant.paths.groups)
+    acquisition_group_types_match =
+        typeof(mixed.plant.acquisitions.groups) ==
+        typeof(reordered.plant.acquisitions.groups) ==
+        typeof(extended.plant.acquisitions.groups)
+    path_registry_types_match = typeof(mixed.plant.paths) ==
+        typeof(reordered.plant.paths) == typeof(extended.plant.paths)
+    acquisition_registry_types_match =
+        typeof(mixed.plant.acquisitions) ==
+        typeof(reordered.plant.acquisitions) ==
+        typeof(extended.plant.acquisitions)
+    plant_types_match = typeof(mixed.plant) == typeof(reordered.plant) ==
+        typeof(extended.plant)
+    selection_types_match = typeof(mixed.selection) ==
+        typeof(reordered.selection) == typeof(extended.selection)
+    @test path_group_types_match
+    @test acquisition_group_types_match
+    @test path_registry_types_match
+    @test acquisition_registry_types_match
+    @test plant_types_match
+    @test selection_types_match
+
+    assert_topology_growth_descriptor_routing(mixed)
+    assert_topology_growth_descriptor_routing(reordered)
+    assert_topology_growth_descriptor_routing(extended)
+
+    selection = mixed.selection
+    atmosphere = prepared_atmosphere(mixed.plant)
+    epoch = current_epoch(atmosphere)
+    Plant._validate_selection_epoch!(selection, atmosphere, epoch)
+    path_rngs = mixed.plant.rngs.paths[
+        Int(selection.path_rng_slots[1])]
+    acquisition_rngs = mixed.plant.rngs.acquisitions[
+        Int(selection.acquisition_rng_slots[1])]
+    path_groups = mixed.plant.paths.groups
+    acquisition_groups = mixed.plant.acquisitions.groups
+
+    @test topology_growth_native_generic_apply_count(
+        Plant._selected_path_materialize_family!, Tuple{
+            typeof(path_groups),
+            Int,
+            Int,
+            typeof(path_rngs),
+            typeof(atmosphere),
+            typeof(epoch),
+        }) == 0
+    @test topology_growth_native_generic_apply_count(
+        Plant._selected_path_execute_family!, Tuple{
+            typeof(path_groups),
+            Int,
+            Int,
+            typeof(path_rngs),
+        }) == 0
+    @test topology_growth_native_generic_apply_count(
+        Plant._selected_acquisition_execute_family!, Tuple{
+            typeof(acquisition_groups),
+            Int,
+            Int,
+            typeof(acquisition_rngs),
+        }) == 0
+
 end

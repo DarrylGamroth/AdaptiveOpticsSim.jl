@@ -660,8 +660,9 @@ concrete prepared propagation/front-end workspace used to update `result`.
 An input may begin at a declared pupil-function, electric-field, or intensity
 entry boundary; it need not represent the entrance pupil.
 """
-struct PreparedPathExecutor{D,S,T,A,X,I,R,M,E,K<:PathResultKey}
-    definition::D
+struct PreparedPathExecutor{S,T,A,X,I,R,M,E,K<:PathResultKey}
+    definition_slot::UInt32
+    id::OpticalPathID
     source::S
     telescope::T
     atmosphere::A
@@ -674,19 +675,21 @@ struct PreparedPathExecutor{D,S,T,A,X,I,R,M,E,K<:PathResultKey}
     key::K
 
     function PreparedPathExecutor(::_PreparedPathExecutorToken,
-        definition::D, source::S, telescope::T, atmosphere::A, context::X,
+        definition_slot::UInt32, id::OpticalPathID, source::S,
+        telescope::T, atmosphere::A, context::X, rng_token::RNGOwnerToken,
         input::I, result::R, materialization::M, execution::E,
         key::K) where {
-        D,S,T,A,X,I,R,M,E,K<:PathResultKey,
+        S,T,A,X,I,R,M,E,K<:PathResultKey,
     }
-        return new{D,S,T,A,X,I,R,M,E,K}(definition, source, telescope,
-            atmosphere, context, RNGOwnerToken(), input, result,
+        return new{S,T,A,X,I,R,M,E,K}(definition_slot, id, source,
+            telescope, atmosphere, context, rng_token, input, result,
             materialization, execution, key)
     end
 end
 
 @inline _rng_owner_binding_token(path::PreparedPathExecutor) =
     path.rng_token
+@inline path_id(path::PreparedPathExecutor) = path.id
 
 function PreparedPathExecutor(definition::OpticalPathDefinition,
     source::AbstractSource, telescope::AbstractTelescope,
@@ -733,9 +736,9 @@ function PreparedPathExecutor(definition::OpticalPathDefinition,
         selector,
         device,
     )
-    return PreparedPathExecutor(_PREPARED_PATH_EXECUTOR_TOKEN, definition,
-        source, telescope, atmosphere, context, input, result,
-        materialization, execution, key)
+    return PreparedPathExecutor(_PREPARED_PATH_EXECUTOR_TOKEN, UInt32(0),
+        path_id(definition), source, telescope, atmosphere, context,
+        RNGOwnerToken(), input, result, materialization, execution, key)
 end
 
 @inline path_input(path::PreparedPathExecutor) = path.input
@@ -1127,8 +1130,10 @@ borrows one exact prepared path result as read-only input and owns separate
 caller-visible observation/measurement products plus the provider's detector,
 WFS, reduced-order, payload, or replay state.
 """
-struct PreparedAcquisitionOwner{D,K<:PathResultKey,R,X,P}
-    definition::D
+struct PreparedAcquisitionOwner{K<:PathResultKey,R,X,P}
+    definition_slot::UInt32
+    id::AcquisitionID
+    path_id::OpticalPathID
     path_key::K
     path_result::R
     context::X
@@ -1136,15 +1141,21 @@ struct PreparedAcquisitionOwner{D,K<:PathResultKey,R,X,P}
     provider::P
 
     function PreparedAcquisitionOwner(::_PreparedAcquisitionOwnerToken,
-        definition::D, path_key::K, path_result::R, context::X,
-        provider::P) where {D,K<:PathResultKey,R,X,P}
-        return new{D,K,R,X,P}(definition, path_key, path_result, context,
-            RNGOwnerToken(), provider)
+        definition_slot::UInt32, id::AcquisitionID,
+        path_id::OpticalPathID,
+        path_key::K, path_result::R, context::X,
+        rng_token::RNGOwnerToken, provider::P) where {
+        K<:PathResultKey,R,X,P,
+    }
+        return new{K,R,X,P}(definition_slot, id, path_id, path_key,
+            path_result, context, rng_token, provider)
     end
 end
 
 @inline _rng_owner_binding_token(owner::PreparedAcquisitionOwner) =
     owner.rng_token
+@inline acquisition_id(owner::PreparedAcquisitionOwner) = owner.id
+@inline acquisition_path_id(owner::PreparedAcquisitionOwner) = owner.path_id
 
 @inline acquisition_provider(owner::PreparedAcquisitionOwner) = owner.provider
 @inline acquisition_provider_style(owner::PreparedAcquisitionOwner) =
@@ -1229,12 +1240,14 @@ end
 
 function PreparedAcquisitionOwner(definition::AcquisitionDefinition,
     path::PreparedPathExecutor, provider::PreparedAcquisitionProvider)
-    acquisition_path_id(definition) == path_id(path.definition) || throw(
+    acquisition_path_id(definition) == path_id(path) || throw(
         PlantPreparationError(:acquisition, :unknown_path,
-            "acquisition $(definition.id) does not reference prepared path $(path.definition.id)"))
+            "acquisition $(definition.id) does not reference prepared path $(path_id(path))"))
     validate_acquisition_provider_binding(provider, path.result)
     return PreparedAcquisitionOwner(_PREPARED_ACQUISITION_OWNER_TOKEN,
-        definition, path.key, path.result, path.context, provider)
+        UInt32(0), acquisition_id(definition),
+        acquisition_path_id(definition), path.key, path.result,
+        path.context, RNGOwnerToken(), provider)
 end
 
 @inline function _execute_acquisition_in_context!(
@@ -1314,6 +1327,468 @@ function execute_acquisition!(products::AcquisitionProducts{O,M},
     return products
 end
 
+"""Compact definition-order location in exact path-family storage."""
+struct _PreparedPathSlot
+    family_slot::UInt32
+    member_slot::UInt32
+end
+
+"""Fixed-capacity prepared paths with one exact executable owner type."""
+struct _PreparedPathFamily{
+    O<:PreparedPathExecutor,
+    V<:FixedSizeVector{O},
+}
+    values::V
+end
+
+"""
+Definition-order view over exact prepared path execution families.
+
+The family tuple type depends only on the distinct normalized executable
+owner types. Cold exact-type collection and identity keys make family-group
+order process-canonical and independent of definition order;
+owner cardinality and definition order remain value-level data in `slots`,
+with each owner retaining its stable identity.
+"""
+struct _PreparedPathRegistry{
+    D<:_FixedPlantRegistry{OpticalPathDefinition},
+    G<:Tuple,
+    S<:FixedSizeVector{_PreparedPathSlot},
+}
+    definitions::D
+    groups::G
+    slots::S
+end
+
+Base.size(registry::_PreparedPathRegistry) = (length(registry.slots),)
+Base.axes(registry::_PreparedPathRegistry) = axes(registry.slots)
+Base.length(registry::_PreparedPathRegistry) = length(registry.slots)
+Base.keys(registry::_PreparedPathRegistry) = eachindex(registry.slots)
+Base.eachindex(registry::_PreparedPathRegistry) = eachindex(registry.slots)
+Base.firstindex(registry::_PreparedPathRegistry) =
+    firstindex(registry.slots)
+Base.lastindex(registry::_PreparedPathRegistry) = lastindex(registry.slots)
+
+@noinline function _prepared_path_slot_error(family::Int, member::Int)
+    throw(BoundsError((family_slot=family, member_slot=member)))
+end
+
+@inline function _prepared_path_family_value(
+    ::Tuple{}, family::Int, member::Int)
+    return _prepared_path_slot_error(family, member)
+end
+
+@inline function _prepared_path_family_value(
+    groups::Tuple, family::Int, member::Int)
+    family == 1 && return @inbounds groups[1].values[member]
+    return _prepared_path_family_value(
+        Base.tail(groups), family - 1, member)
+end
+
+@inline function _prepared_path_value(
+    registry::_PreparedPathRegistry, slot::_PreparedPathSlot)
+    return _prepared_path_family_value(registry.groups,
+        Int(slot.family_slot), Int(slot.member_slot))
+end
+
+@inline function Base.getindex(registry::_PreparedPathRegistry, index::Int)
+    checkbounds(registry.slots, index)
+    return _prepared_path_value(registry, @inbounds(registry.slots[index]))
+end
+
+@inline function Base.iterate(registry::_PreparedPathRegistry, state::Int=1)
+    state > length(registry) && return nothing
+    return (@inbounds registry[state], state + 1)
+end
+
+@inline function _prepared_path_definition(
+    registry::_PreparedPathRegistry, path::PreparedPathExecutor)
+    slot = Int(path.definition_slot)
+    checkbounds(registry.definitions, slot)
+    definition = @inbounds registry.definitions[slot]
+    path_id(definition) == path_id(path) || throw(PlantPreparationError(
+        :path, :prepared_binding,
+        "prepared path definition slot does not match its stable identity"))
+    return definition
+end
+
+struct _PreparedPathFamilyType{O<:PreparedPathExecutor} end
+
+@inline _prepared_path_family_matches(
+    ::_PreparedPathFamilyType{O}, ::Type{O}) where {
+    O<:PreparedPathExecutor,
+} = true
+
+@inline _prepared_path_family_matches(
+    ::_PreparedPathFamilyType, ::Type{<:PreparedPathExecutor}) = false
+
+function _prepared_path_owner_types(paths)
+    Base.@nospecialize paths
+    owner_types = DataType[]
+    @inbounds for path in paths
+        owner_type = typeof(path)::DataType
+        present = false
+        for existing in owner_types
+            if existing === owner_type
+                present = true
+                break
+            end
+        end
+        present && continue
+        push!(owner_types, owner_type)
+    end
+    sort!(owner_types; by=_prepared_owner_family_order_key)
+    return _require_unique_prepared_path_family_order_keys(owner_types)
+end
+
+@inline _prepared_owner_family_order_key(owner_type::Type) =
+    (hash(owner_type, UInt(0)), objectid(owner_type))
+
+function _require_unique_prepared_path_family_order_keys(owner_types)
+    length(owner_types) <= 1 && return owner_types
+    previous_type = owner_types[1]
+    previous_key = _prepared_owner_family_order_key(previous_type)
+    @inbounds for index in 2:length(owner_types)
+        owner_type = owner_types[index]
+        key = _prepared_owner_family_order_key(owner_type)
+        key == previous_key && owner_type !== previous_type && throw(
+            PlantPreparationError(:path, :family_type_key_collision,
+                "distinct prepared path owner types have the same process-local family key"))
+        previous_type = owner_type
+        previous_key = key
+    end
+    return owner_types
+end
+
+function _prepared_path_family_types(paths)
+    owner_types = _prepared_path_owner_types(paths)
+    families = ()
+    for owner_type in owner_types
+        family_type = Core.apply_type(_PreparedPathFamilyType, owner_type)
+        families = (families..., family_type())
+    end
+    return families
+end
+
+function _prepare_path_family(
+    ::_PreparedPathFamilyType{O}, paths) where {O<:PreparedPathExecutor}
+    Base.@nospecialize paths
+    count = 0
+    @inbounds for path in paths
+        typeof(path) === O && (count += 1)
+    end
+    values = Vector{O}(undef, count)
+    next = 1
+    @inbounds for path in paths
+        typeof(path) === O || continue
+        values[next] = path
+        next += 1
+    end
+    fixed = FixedSizeVectorDefault{O}(values)
+    return _PreparedPathFamily{O,typeof(fixed)}(fixed)
+end
+
+@inline _prepare_path_families(::Tuple{}, paths) = ()
+
+function _prepare_path_families(families::Tuple, paths)
+    Base.@nospecialize paths
+    first = _prepare_path_family(families[1], paths)
+    rest = _prepare_path_families(Base.tail(families), paths)
+    return (first, rest...)
+end
+
+@inline function _prepared_path_family_index(
+    ::Tuple{}, ::Type{<:PreparedPathExecutor}, ::Int=1)
+    return 0
+end
+
+@inline function _prepared_path_family_index(
+    families::Tuple, ::Type{O}, index::Int=1,
+) where {O<:PreparedPathExecutor}
+    _prepared_path_family_matches(families[1], O) && return index
+    return _prepared_path_family_index(
+        Base.tail(families), O, index + 1)
+end
+
+function _prepare_path_slots(families::Tuple, paths)
+    Base.@nospecialize paths
+    length(families) <= typemax(UInt32) || throw(PlantPreparationError(
+        :path, :family_capacity,
+        "prepared path family count exceeds UInt32 capacity"))
+    counts = zeros(UInt32, length(families))
+    slots = Vector{_PreparedPathSlot}(undef, length(paths))
+    @inbounds for index in eachindex(paths)
+        family = _prepared_path_family_index(families, typeof(paths[index]))
+        iszero(family) && throw(PlantPreparationError(
+            :path, :missing_family,
+            "prepared path has no exact executable family"))
+        counts[family] == typemax(UInt32) && throw(PlantPreparationError(
+            :path, :family_capacity,
+            "prepared path family exceeds UInt32 capacity"))
+        counts[family] += UInt32(1)
+        slots[index] = _PreparedPathSlot(UInt32(family), counts[family])
+    end
+    return FixedSizeVectorDefault{_PreparedPathSlot}(slots)
+end
+
+function _require_prepared_path_slots(groups::Tuple, slots)
+    @inbounds for slot in slots
+        family = Int(slot.family_slot)
+        1 <= family <= length(groups) ||
+            _prepared_path_slot_error(family, Int(slot.member_slot))
+        checkbounds(groups[family].values, Int(slot.member_slot))
+    end
+    return slots
+end
+
+function _prepare_path_registry(definitions, paths)
+    Base.@nospecialize paths
+    family_types = _prepared_path_family_types(paths)
+    groups = _prepare_path_families(family_types, paths)
+    slots = _prepare_path_slots(family_types, paths)
+    _require_prepared_path_slots(groups, slots)
+    return _PreparedPathRegistry(definitions, groups, slots)
+end
+
+"""Compact definition-order location in exact acquisition-family storage."""
+struct _PreparedAcquisitionSlot
+    family_slot::UInt32
+    member_slot::UInt32
+end
+
+"""Fixed-capacity acquisitions with one exact executable owner type."""
+struct _PreparedAcquisitionFamily{
+    O<:PreparedAcquisitionOwner,
+    V<:FixedSizeVector{O},
+}
+    values::V
+end
+
+"""
+Definition-order view over exact prepared acquisition families.
+
+Cold exact-type collection and identity keys make family-group order
+process-canonical and independent of definition order. Definition-order
+traversal is retained by `slots`, and each owner retains its stable identity.
+"""
+struct _PreparedAcquisitionRegistry{
+    D<:_FixedPlantRegistry{AcquisitionDefinition},
+    G<:Tuple,
+    S<:FixedSizeVector{_PreparedAcquisitionSlot},
+}
+    definitions::D
+    groups::G
+    slots::S
+end
+
+Base.size(registry::_PreparedAcquisitionRegistry) =
+    (length(registry.slots),)
+Base.axes(registry::_PreparedAcquisitionRegistry) = axes(registry.slots)
+Base.length(registry::_PreparedAcquisitionRegistry) = length(registry.slots)
+Base.keys(registry::_PreparedAcquisitionRegistry) = eachindex(registry.slots)
+Base.eachindex(registry::_PreparedAcquisitionRegistry) =
+    eachindex(registry.slots)
+Base.firstindex(registry::_PreparedAcquisitionRegistry) =
+    firstindex(registry.slots)
+Base.lastindex(registry::_PreparedAcquisitionRegistry) =
+    lastindex(registry.slots)
+
+@noinline function _prepared_acquisition_slot_error(
+    family::Int, member::Int)
+    throw(BoundsError((family_slot=family, member_slot=member)))
+end
+
+@inline function _prepared_acquisition_family_value(
+    ::Tuple{}, family::Int, member::Int)
+    return _prepared_acquisition_slot_error(family, member)
+end
+
+@inline function _prepared_acquisition_family_value(
+    groups::Tuple, family::Int, member::Int)
+    family == 1 && return @inbounds groups[1].values[member]
+    return _prepared_acquisition_family_value(
+        Base.tail(groups), family - 1, member)
+end
+
+@inline function _prepared_acquisition_value(
+    registry::_PreparedAcquisitionRegistry, slot::_PreparedAcquisitionSlot)
+    return _prepared_acquisition_family_value(registry.groups,
+        Int(slot.family_slot), Int(slot.member_slot))
+end
+
+@inline function Base.getindex(
+    registry::_PreparedAcquisitionRegistry, index::Int)
+    checkbounds(registry.slots, index)
+    return _prepared_acquisition_value(
+        registry, @inbounds(registry.slots[index]))
+end
+
+
+@inline function Base.iterate(
+    registry::_PreparedAcquisitionRegistry, state::Int=1)
+    state > length(registry) && return nothing
+    return (@inbounds registry[state], state + 1)
+end
+
+@inline function _prepared_acquisition_definition(
+    registry::_PreparedAcquisitionRegistry,
+    owner::PreparedAcquisitionOwner)
+    slot = Int(owner.definition_slot)
+    checkbounds(registry.definitions, slot)
+    definition = @inbounds registry.definitions[slot]
+    acquisition_id(definition) == acquisition_id(owner) || throw(
+        PlantPreparationError(:acquisition, :prepared_binding,
+            "prepared acquisition definition slot does not match its stable identity"))
+    acquisition_path_id(definition) == acquisition_path_id(owner) || throw(
+        PlantPreparationError(:acquisition, :prepared_binding,
+            "prepared acquisition definition slot does not match its path identity"))
+    return definition
+end
+
+struct _PreparedAcquisitionFamilyType{O<:PreparedAcquisitionOwner} end
+
+@inline _prepared_acquisition_family_matches(
+    ::_PreparedAcquisitionFamilyType{O}, ::Type{O}) where {
+    O<:PreparedAcquisitionOwner,
+} = true
+
+@inline _prepared_acquisition_family_matches(
+    ::_PreparedAcquisitionFamilyType,
+    ::Type{<:PreparedAcquisitionOwner}) = false
+
+function _prepared_acquisition_owner_types(acquisitions)
+    Base.@nospecialize acquisitions
+    owner_types = DataType[]
+    @inbounds for owner in acquisitions
+        owner_type = typeof(owner)::DataType
+        present = false
+        for existing in owner_types
+            if existing === owner_type
+                present = true
+                break
+            end
+        end
+        present && continue
+        push!(owner_types, owner_type)
+    end
+    sort!(owner_types; by=_prepared_owner_family_order_key)
+    return _require_unique_prepared_acquisition_family_order_keys(owner_types)
+end
+
+function _require_unique_prepared_acquisition_family_order_keys(owner_types)
+    length(owner_types) <= 1 && return owner_types
+    previous_type = owner_types[1]
+    previous_key = _prepared_owner_family_order_key(previous_type)
+    @inbounds for index in 2:length(owner_types)
+        owner_type = owner_types[index]
+        key = _prepared_owner_family_order_key(owner_type)
+        key == previous_key && owner_type !== previous_type && throw(
+            PlantPreparationError(:acquisition,
+                :family_type_key_collision,
+                "distinct prepared acquisition owner types have the same process-local family key"))
+        previous_type = owner_type
+        previous_key = key
+    end
+    return owner_types
+end
+
+function _prepared_acquisition_family_types(acquisitions)
+    owner_types = _prepared_acquisition_owner_types(acquisitions)
+    families = ()
+    for owner_type in owner_types
+        family_type =
+            Core.apply_type(_PreparedAcquisitionFamilyType, owner_type)
+        families = (families..., family_type())
+    end
+    return families
+end
+
+function _prepare_acquisition_family(
+    ::_PreparedAcquisitionFamilyType{O}, acquisitions,
+) where {O<:PreparedAcquisitionOwner}
+    Base.@nospecialize acquisitions
+    count = 0
+    @inbounds for owner in acquisitions
+        typeof(owner) === O && (count += 1)
+    end
+    values = Vector{O}(undef, count)
+    next = 1
+    @inbounds for owner in acquisitions
+        typeof(owner) === O || continue
+        values[next] = owner
+        next += 1
+    end
+    fixed = FixedSizeVectorDefault{O}(values)
+    return _PreparedAcquisitionFamily{O,typeof(fixed)}(fixed)
+end
+
+@inline _prepare_acquisition_families(::Tuple{}, acquisitions) = ()
+
+function _prepare_acquisition_families(families::Tuple, acquisitions)
+    Base.@nospecialize acquisitions
+    first = _prepare_acquisition_family(families[1], acquisitions)
+    rest = _prepare_acquisition_families(
+        Base.tail(families), acquisitions)
+    return (first, rest...)
+end
+
+@inline function _prepared_acquisition_family_index(
+    ::Tuple{}, ::Type{<:PreparedAcquisitionOwner}, ::Int=1)
+    return 0
+end
+
+@inline function _prepared_acquisition_family_index(
+    families::Tuple, ::Type{O}, index::Int=1,
+) where {O<:PreparedAcquisitionOwner}
+    _prepared_acquisition_family_matches(families[1], O) && return index
+    return _prepared_acquisition_family_index(
+        Base.tail(families), O, index + 1)
+end
+
+function _prepare_acquisition_slots(families::Tuple, acquisitions)
+    Base.@nospecialize acquisitions
+    length(families) <= typemax(UInt32) || throw(PlantPreparationError(
+        :acquisition, :family_capacity,
+        "prepared acquisition family count exceeds UInt32 capacity"))
+    counts = zeros(UInt32, length(families))
+    slots = Vector{_PreparedAcquisitionSlot}(undef, length(acquisitions))
+    @inbounds for index in eachindex(acquisitions)
+        family = _prepared_acquisition_family_index(
+            families, typeof(acquisitions[index]))
+        iszero(family) && throw(PlantPreparationError(
+            :acquisition, :missing_family,
+            "prepared acquisition has no exact executable family"))
+        counts[family] == typemax(UInt32) && throw(PlantPreparationError(
+            :acquisition, :family_capacity,
+            "prepared acquisition family exceeds UInt32 capacity"))
+        counts[family] += UInt32(1)
+        slots[index] = _PreparedAcquisitionSlot(
+            UInt32(family), counts[family])
+    end
+    return FixedSizeVectorDefault{_PreparedAcquisitionSlot}(slots)
+end
+
+function _require_prepared_acquisition_slots(groups::Tuple, slots)
+    @inbounds for slot in slots
+        family = Int(slot.family_slot)
+        1 <= family <= length(groups) ||
+            _prepared_acquisition_slot_error(
+                family, Int(slot.member_slot))
+        checkbounds(groups[family].values, Int(slot.member_slot))
+    end
+    return slots
+end
+
+function _prepare_acquisition_registry(definitions, acquisitions)
+    Base.@nospecialize acquisitions
+    family_types =
+        _prepared_acquisition_family_types(acquisitions)
+    groups = _prepare_acquisition_families(family_types, acquisitions)
+    slots = _prepare_acquisition_slots(family_types, acquisitions)
+    _require_prepared_acquisition_slots(groups, slots)
+    return _PreparedAcquisitionRegistry(definitions, groups, slots)
+end
+
 struct _PreparedPlantToken end
 const _PREPARED_PLANT_TOKEN = _PreparedPlantToken()
 
@@ -1330,6 +1805,8 @@ struct PreparedPlant{
     O<:_PreparedControllableOpticRegistry,
     S,
     B,
+    P<:_PreparedPathRegistry,
+    Q<:_PreparedAcquisitionRegistry,
     R<:PreparedPlantRNGs,
 }
     definition::D
@@ -1342,8 +1819,8 @@ struct PreparedPlant{
     sampled_aberrations::S
     sampled_aberration_path_bindings::B
     command_endpoints::Memory{_PreparedPlantCommandEndpoint}
-    paths::Memory{PreparedPathExecutor}
-    acquisitions::Memory{PreparedAcquisitionOwner}
+    paths::P
+    acquisitions::Q
     rngs::R
 
     function PreparedPlant(::_PreparedPlantToken, definition::D,
@@ -1356,8 +1833,8 @@ struct PreparedPlant{
         sampled_aberrations::S,
         sampled_bindings::B,
         command_endpoints::Memory{_PreparedPlantCommandEndpoint},
-        paths::Memory{PreparedPathExecutor},
-        acquisitions::Memory{PreparedAcquisitionOwner},
+        paths::P,
+        acquisitions::Q,
         rngs::R,
     ) where {
         D<:PlantDefinition,
@@ -1368,6 +1845,8 @@ struct PreparedPlant{
         O<:_PreparedControllableOpticRegistry,
         S,
         B,
+        P<:_PreparedPathRegistry,
+        Q<:_PreparedAcquisitionRegistry,
         R<:PreparedPlantRNGs,
     }
         _prepared_device_execution_compute_device(context) == target ||
@@ -1375,7 +1854,7 @@ struct PreparedPlant{
                 "prepared execution context does not match the exact plant target"))
         validate_telescope_target(telescope, target)
         validate_timed_atmosphere_target(atmosphere, target)
-        plant = new{D,C,X,T,A,O,S,B,R}(
+        plant = new{D,C,X,T,A,O,S,B,P,Q,R}(
             definition,
             target,
             context,
@@ -1418,7 +1897,7 @@ end
 function prepared_path(plant::PreparedPlant, id)
     resolved = _as_optical_path_id(id)
     for path in plant.paths
-        path_id(path.definition) == resolved && return path
+        path_id(path) == resolved && return path
     end
     throw(PlantPreparationError(:path, :unknown_id,
         "prepared plant has no optical path $resolved"))
@@ -1427,7 +1906,7 @@ end
 function prepared_acquisition(plant::PreparedPlant, id)
     resolved = _as_acquisition_id(id)
     for acquisition in plant.acquisitions
-        acquisition_id(acquisition.definition) == resolved &&
+        acquisition_id(acquisition) == resolved &&
             return acquisition
     end
     throw(PlantPreparationError(:acquisition, :unknown_id,
@@ -1487,9 +1966,9 @@ function _require_prepared_path_executor(prepared::PreparedPathExecutor,
     definition::OpticalPathDefinition, source::AbstractSource,
     telescope::AbstractTelescope, atmosphere::AbstractAtmosphere,
     context)
-    prepared.definition === definition || throw(PlantPreparationError(
+    path_id(prepared) == path_id(definition) || throw(PlantPreparationError(
         :path, :prepared_binding,
-        "prepared path does not retain its exact definition"))
+        "prepared path does not retain its declared stable identity"))
     prepared.source === source || throw(PlantPreparationError(:path,
         :prepared_binding,
         "prepared path does not retain its run-owned frozen source"))
@@ -1509,6 +1988,37 @@ function _require_prepared_path_executor(prepared::PreparedPathExecutor,
     validate_path_execution_binding(prepared.execution, prepared.input,
         prepared.result)
     return prepared
+end
+
+function _seal_prepared_path_executor(
+    prepared::PreparedPathExecutor,
+    definition::OpticalPathDefinition,
+    definition_slot::UInt32,
+)
+    iszero(definition_slot) && throw(PlantPreparationError(
+        :path, :definition_slot,
+        "prepared path definition slot must be positive"))
+    iszero(prepared.definition_slot) || throw(PlantPreparationError(
+        :path, :definition_slot,
+        "path model preparation returned an already sealed owner"))
+    path_id(prepared) == path_id(definition) || throw(
+        PlantPreparationError(:path, :prepared_binding,
+            "prepared path stable identity changed before sealing"))
+    return PreparedPathExecutor(
+        _PREPARED_PATH_EXECUTOR_TOKEN,
+        definition_slot,
+        path_id(prepared),
+        prepared.source,
+        prepared.telescope,
+        prepared.atmosphere,
+        prepared.context,
+        prepared.rng_token,
+        prepared.input,
+        prepared.result,
+        prepared.materialization,
+        prepared.execution,
+        prepared.key,
+    )
 end
 
 
@@ -1550,9 +2060,13 @@ end
 function _require_prepared_acquisition_owner(
     prepared::PreparedAcquisitionOwner,
     definition::AcquisitionDefinition, path::PreparedPathExecutor)
-    prepared.definition === definition || throw(PlantPreparationError(
+    acquisition_id(prepared) == acquisition_id(definition) || throw(
+        PlantPreparationError(
         :acquisition, :prepared_binding,
-        "prepared acquisition does not retain its exact definition"))
+        "prepared acquisition does not retain its declared stable identity"))
+    acquisition_path_id(prepared) == acquisition_path_id(definition) ||
+        throw(PlantPreparationError(:acquisition, :prepared_binding,
+            "prepared acquisition does not retain its declared path identity"))
     prepared.path_key === path.key || throw(PlantPreparationError(
         :acquisition, :prepared_binding,
         "prepared acquisition does not retain the exact path-result key"))
@@ -1565,6 +2079,36 @@ function _require_prepared_acquisition_owner(
     validate_acquisition_provider_binding(prepared.provider,
         prepared.path_result)
     return prepared
+end
+
+function _seal_prepared_acquisition_owner(
+    prepared::PreparedAcquisitionOwner,
+    definition::AcquisitionDefinition,
+    definition_slot::UInt32,
+)
+    iszero(definition_slot) && throw(PlantPreparationError(
+        :acquisition, :definition_slot,
+        "prepared acquisition definition slot must be positive"))
+    iszero(prepared.definition_slot) || throw(PlantPreparationError(
+        :acquisition, :definition_slot,
+        "acquisition preparation returned an already sealed owner"))
+    acquisition_id(prepared) == acquisition_id(definition) || throw(
+        PlantPreparationError(:acquisition, :prepared_binding,
+            "prepared acquisition stable identity changed before sealing"))
+    acquisition_path_id(prepared) == acquisition_path_id(definition) ||
+        throw(PlantPreparationError(:acquisition, :prepared_binding,
+            "prepared acquisition path identity changed before sealing"))
+    return PreparedAcquisitionOwner(
+        _PREPARED_ACQUISITION_OWNER_TOKEN,
+        definition_slot,
+        acquisition_id(prepared),
+        acquisition_path_id(prepared),
+        prepared.path_key,
+        prepared.path_result,
+        prepared.context,
+        prepared.rng_token,
+        prepared.provider,
+    )
 end
 
 function _require_prepared_acquisition_owner(prepared,
@@ -1596,53 +2140,65 @@ end
 
 function _prepare_path_executors(definitions::AbstractVector, telescope,
     atmosphere, context)
-    paths = Memory{PreparedPathExecutor}(undef, length(definitions))
+    length(definitions) <= typemax(UInt32) || throw(PlantPreparationError(
+        :path, :capacity,
+        "prepared path count exceeds UInt32 capacity"))
+    paths = PreparedPathExecutor[]
+    sizehint!(paths, length(definitions))
     @inbounds for index in eachindex(definitions)
-        paths[index] = prepare_path_executor(
-            definitions[index], telescope, atmosphere, context)
+        definition = definitions[index]
+        prepared = prepare_path_executor(
+            definition, telescope, atmosphere, context)
+        push!(paths, _seal_prepared_path_executor(
+            prepared, definition, UInt32(index)))
     end
-    return paths
+    return _prepare_path_registry(definitions, paths)
 end
 
 @inline function _prepared_path_for_acquisition(definition,
-    paths::AbstractVector)
+    paths::_PreparedPathRegistry)
     id = acquisition_path_id(definition)
     for path in paths
-        path_id(path.definition) == id && return path
+        path_id(path) == id && return path
     end
     throw(PlantPreparationError(:acquisition, :unknown_path,
         "acquisition $(definition.id) references an unprepared path $id"))
 end
 
 function _prepare_acquisition_owners(definitions::AbstractVector, paths)
-    acquisitions =
-        Memory{PreparedAcquisitionOwner}(undef, length(definitions))
+    length(definitions) <= typemax(UInt32) || throw(PlantPreparationError(
+        :acquisition, :capacity,
+        "prepared acquisition count exceeds UInt32 capacity"))
+    acquisitions = PreparedAcquisitionOwner[]
+    sizehint!(acquisitions, length(definitions))
     @inbounds for index in eachindex(definitions)
         definition = definitions[index]
         path = _prepared_path_for_acquisition(definition, paths)
-        acquisitions[index] =
-            _prepare_acquisition_owner_in_context(definition, path)
+        prepared = _prepare_acquisition_owner_in_context(definition, path)
+        push!(acquisitions, _seal_prepared_acquisition_owner(
+            prepared, definition, UInt32(index)))
     end
-    return acquisitions
+    return _prepare_acquisition_registry(definitions, acquisitions)
 end
 
-function _path_rng_owner_bindings(paths::AbstractVector)
+function _path_rng_owner_bindings(paths::_PreparedPathRegistry)
     groups = Memory{Tuple}(undef, length(paths))
     @inbounds for index in eachindex(paths)
         path = paths[index]
         groups[index] = _rng_owner_bindings(path, :path,
-            path_id(path.definition).name,
+            path_id(path).name,
             _path_rng_owner_roles(path.execution, path.materialization))
     end
     return groups
 end
 
-function _acquisition_rng_owner_bindings(acquisitions::AbstractVector)
+function _acquisition_rng_owner_bindings(
+    acquisitions::_PreparedAcquisitionRegistry)
     groups = Memory{Tuple}(undef, length(acquisitions))
     @inbounds for index in eachindex(acquisitions)
         acquisition = acquisitions[index]
         groups[index] = _rng_owner_bindings(acquisition, :acquisition,
-            acquisition_id(acquisition.definition).name,
+            acquisition_id(acquisition).name,
             _acquisition_rng_owner_roles(
                 acquisition.provider.implementation))
     end
@@ -1657,7 +2213,8 @@ function _append_rng_binding_groups!(destination, groups)
 end
 
 function _prepare_plant_rngs(atmosphere::AbstractTimedAtmosphere,
-    paths::AbstractVector, acquisitions::AbstractVector, run_seed::UInt64,
+    paths::_PreparedPathRegistry,
+    acquisitions::_PreparedAcquisitionRegistry, run_seed::UInt64,
     version::RNGDerivationVersion)
     atmosphere_bindings = _atmosphere_rng_owner_bindings(atmosphere)
     path_bindings = _path_rng_owner_bindings(paths)
@@ -1761,6 +2318,82 @@ struct _PreparedAcquisitionSelectionToken end
 const _PREPARED_ACQUISITION_SELECTION_TOKEN =
     _PreparedAcquisitionSelectionToken()
 
+"""Canonical descriptor view into one plant-owned path registry."""
+struct _PreparedPathSelection{
+    P<:PreparedPlant,
+    S<:FixedSizeVector{_PreparedPathSlot},
+}
+    plant::P
+    slots::S
+end
+
+Base.size(selection::_PreparedPathSelection) = (length(selection.slots),)
+Base.axes(selection::_PreparedPathSelection) = axes(selection.slots)
+Base.length(selection::_PreparedPathSelection) = length(selection.slots)
+Base.keys(selection::_PreparedPathSelection) = eachindex(selection.slots)
+Base.eachindex(selection::_PreparedPathSelection) =
+    eachindex(selection.slots)
+Base.firstindex(selection::_PreparedPathSelection) =
+    firstindex(selection.slots)
+Base.lastindex(selection::_PreparedPathSelection) =
+    lastindex(selection.slots)
+Base.:(==)(left::_PreparedPathSelection, right::_PreparedPathSelection) =
+    left.plant === right.plant && left.slots == right.slots
+
+@inline function Base.getindex(
+    selection::_PreparedPathSelection, index::Int)
+    checkbounds(selection.slots, index)
+    registry = getfield(selection.plant, :paths)
+    return _prepared_path_value(
+        registry, @inbounds(selection.slots[index]))
+end
+
+@inline function Base.iterate(
+    selection::_PreparedPathSelection, state::Int=1)
+    state > length(selection) && return nothing
+    return (@inbounds selection[state], state + 1)
+end
+
+"""Canonical descriptor view into one plant-owned acquisition registry."""
+struct _PreparedAcquisitionOwnerSelection{
+    P<:PreparedPlant,
+    S<:FixedSizeVector{_PreparedAcquisitionSlot},
+}
+    plant::P
+    slots::S
+end
+
+Base.size(selection::_PreparedAcquisitionOwnerSelection) =
+    (length(selection.slots),)
+Base.axes(selection::_PreparedAcquisitionOwnerSelection) =
+    axes(selection.slots)
+Base.length(selection::_PreparedAcquisitionOwnerSelection) =
+    length(selection.slots)
+Base.keys(selection::_PreparedAcquisitionOwnerSelection) =
+    eachindex(selection.slots)
+Base.eachindex(selection::_PreparedAcquisitionOwnerSelection) =
+    eachindex(selection.slots)
+Base.firstindex(selection::_PreparedAcquisitionOwnerSelection) =
+    firstindex(selection.slots)
+Base.lastindex(selection::_PreparedAcquisitionOwnerSelection) =
+    lastindex(selection.slots)
+Base.:(==)(left::_PreparedAcquisitionOwnerSelection,
+    right::_PreparedAcquisitionOwnerSelection) =
+    left.plant === right.plant && left.slots == right.slots
+
+@inline function Base.getindex(
+    selection::_PreparedAcquisitionOwnerSelection, index::Int)
+    checkbounds(selection.slots, index)
+    registry = getfield(selection.plant, :acquisitions)
+    return _prepared_acquisition_value(
+        registry, @inbounds(selection.slots[index]))
+end
+@inline function Base.iterate(
+    selection::_PreparedAcquisitionOwnerSelection, state::Int=1)
+    state > length(selection) && return nothing
+    return (@inbounds selection[state], state + 1)
+end
+
 """
     PreparedAcquisitionSelection
 
@@ -1768,33 +2401,47 @@ Cold, canonical selection of acquisition owners and the unique optical paths
 required by their full-optical providers. Reduced-order and synthetic/replay
 providers do not select an otherwise unused path. The selected paths and
 acquisitions use stable-ID order regardless of declaration or caller-selection
-order. This value owns no schedule or independent RNG state; it retains exact
-references to the selected plant-owned RNG groups.
+order. This value owns no schedule or independent RNG state; fixed declaration
+slots resolve the exact selected plant-owned RNG groups.
 """
-struct PreparedAcquisitionSelection{P<:PreparedPlant,B}
+struct PreparedAcquisitionSelection{
+    P<:PreparedPlant,
+    V,
+    W,
+    B,
+    Q<:FixedSizeVector{UInt32},
+    R<:FixedSizeVector{UInt32},
+}
     plant::P
-    paths::Memory{PreparedPathExecutor}
-    acquisitions::Memory{PreparedAcquisitionOwner}
+    paths::V
+    acquisitions::W
     sampled_aberration_path_plans::B
-    path_rngs::Memory{PreparedOwnerRNGs}
-    acquisition_rngs::Memory{PreparedOwnerRNGs}
+    path_rng_slots::Q
+    acquisition_rng_slots::R
 
     function PreparedAcquisitionSelection(
         ::_PreparedAcquisitionSelectionToken,
         plant::P,
-        paths::Memory{PreparedPathExecutor},
-        acquisitions::Memory{PreparedAcquisitionOwner},
+        paths::V,
+        acquisitions::W,
         sampled_aberration_path_plans::B,
-        path_rngs::Memory{PreparedOwnerRNGs},
-        acquisition_rngs::Memory{PreparedOwnerRNGs},
-    ) where {P<:PreparedPlant,B}
-        return new{P,B}(
+        path_rng_slots::Q,
+        acquisition_rng_slots::R,
+    ) where {
+        P<:PreparedPlant,
+        V,
+        W,
+        B,
+        Q<:FixedSizeVector{UInt32},
+        R<:FixedSizeVector{UInt32},
+    }
+        return new{P,V,W,B,Q,R}(
             plant,
             paths,
             acquisitions,
             sampled_aberration_path_plans,
-            path_rngs,
-            acquisition_rngs,
+            path_rng_slots,
+            acquisition_rng_slots,
         )
     end
 end
@@ -1827,10 +2474,10 @@ function _requested_acquisition_ids(ids)
 end
 
 function _canonical_selected_acquisitions(plant::PreparedPlant, requested)
-    selected = PreparedAcquisitionOwner[]
-    for acquisition in plant.acquisitions
-        acquisition_id(acquisition.definition) in requested &&
-            push!(selected, acquisition)
+    selected = Int[]
+    for index in eachindex(plant.acquisitions)
+        owner = plant.acquisitions[index]
+        acquisition_id(owner) in requested && push!(selected, index)
     end
     length(selected) == length(requested) || begin
         for id in requested
@@ -1839,36 +2486,45 @@ function _canonical_selected_acquisitions(plant::PreparedPlant, requested)
         throw(PlantPreparationError(:acquisition, :unknown_id,
             "acquisition selection contains an unknown identity"))
     end
-    sort!(selected; by=acquisition ->
-        acquisition_id(acquisition.definition).name)
-    result = Memory{PreparedAcquisitionOwner}(undef, length(selected))
-    copyto!(result, selected)
-    return result
+    sort!(selected; by=index ->
+        acquisition_id(plant.acquisitions[index]).name)
+    slots = Vector{_PreparedAcquisitionSlot}(undef, length(selected))
+    @inbounds for index in eachindex(selected)
+        slots[index] = plant.acquisitions.slots[selected[index]]
+    end
+    fixed = FixedSizeVectorDefault{_PreparedAcquisitionSlot}(slots)
+    _require_prepared_acquisition_slots(
+        plant.acquisitions.groups, fixed)
+    return _PreparedAcquisitionOwnerSelection(plant, fixed)
 end
 
 function _canonical_selected_paths(plant::PreparedPlant,
-    acquisitions::AbstractVector)
+    acquisitions::_PreparedAcquisitionOwnerSelection)
     requested = Set{OpticalPathID}()
     for acquisition in acquisitions
         _request_provider_path!(requested, acquisition,
             acquisition_provider_style(acquisition))
     end
-    selected = PreparedPathExecutor[]
-    for path in plant.paths
-        path_id(path.definition) in requested && push!(selected, path)
+    selected = Int[]
+    for index in eachindex(plant.paths)
+        path_id(plant.paths[index]) in requested && push!(selected, index)
     end
     length(selected) == length(requested) || throw(PlantPreparationError(
         :path, :prepared_binding,
         "selected acquisitions do not resolve to their prepared paths"))
-    sort!(selected; by=path -> path_id(path.definition).name)
-    result = Memory{PreparedPathExecutor}(undef, length(selected))
-    copyto!(result, selected)
-    return result
+    sort!(selected; by=index -> path_id(plant.paths[index]).name)
+    slots = Vector{_PreparedPathSlot}(undef, length(selected))
+    @inbounds for index in eachindex(selected)
+        slots[index] = plant.paths.slots[selected[index]]
+    end
+    fixed = FixedSizeVectorDefault{_PreparedPathSlot}(slots)
+    _require_prepared_path_slots(plant.paths.groups, fixed)
+    return _PreparedPathSelection(plant, fixed)
 end
 
 @inline function _request_provider_path!(requested,
     acquisition::PreparedAcquisitionOwner, ::FullOpticalProviderStyle)
-    push!(requested, acquisition_path_id(acquisition.definition))
+    push!(requested, acquisition_path_id(acquisition))
     return requested
 end
 
@@ -1881,45 +2537,48 @@ end
 
 function _prepared_path_rngs(plant::PreparedPlant,
     path::PreparedPathExecutor)
-    @inbounds for index in eachindex(plant.paths)
+    index = Int(path.definition_slot)
+    1 <= index <= length(plant.paths) &&
         plant.paths[index] === path && return plant.rngs.paths[index]
-    end
     throw(PlantPreparationError(:rng, :prepared_binding,
         "selected path has no exact prepared RNG owner"))
 end
 
-function _selected_path_rngs(plant::PreparedPlant,
-    paths::AbstractVector)
-    result = Memory{PreparedOwnerRNGs}(undef, length(paths))
+function _selected_path_rng_slots(plant::PreparedPlant,
+    paths::_PreparedPathSelection)
+    slots = Vector{UInt32}(undef, length(paths))
     @inbounds for index in eachindex(paths)
-        result[index] = _prepared_path_rngs(plant, paths[index])
+        path = paths[index]
+        _prepared_path_rngs(plant, path)
+        slots[index] = path.definition_slot
     end
-    return result
+    return FixedSizeVectorDefault{UInt32}(slots)
 end
 
 function _prepared_acquisition_rngs(plant::PreparedPlant,
     acquisition::PreparedAcquisitionOwner)
-    @inbounds for index in eachindex(plant.acquisitions)
+    index = Int(acquisition.definition_slot)
+    1 <= index <= length(plant.acquisitions) &&
         plant.acquisitions[index] === acquisition &&
-            return plant.rngs.acquisitions[index]
-    end
+        return plant.rngs.acquisitions[index]
     throw(PlantPreparationError(:rng, :prepared_binding,
         "selected acquisition has no exact prepared RNG owner"))
 end
 
-function _selected_acquisition_rngs(plant::PreparedPlant,
-    acquisitions::AbstractVector)
-    result = Memory{PreparedOwnerRNGs}(undef, length(acquisitions))
+function _selected_acquisition_rng_slots(plant::PreparedPlant,
+    acquisitions::_PreparedAcquisitionOwnerSelection)
+    slots = Vector{UInt32}(undef, length(acquisitions))
     @inbounds for index in eachindex(acquisitions)
-        result[index] =
-            _prepared_acquisition_rngs(plant, acquisitions[index])
+        owner = acquisitions[index]
+        _prepared_acquisition_rngs(plant, owner)
+        slots[index] = owner.definition_slot
     end
-    return result
+    return FixedSizeVectorDefault{UInt32}(slots)
 end
 
 function _selected_sampled_aberration_path_plans(
     plant::PreparedPlant,
-    paths::AbstractVector,
+    paths::_PreparedPathSelection,
 )
     bindings = plant.sampled_aberration_path_bindings
     plans = Memory{_PreparedSampledAberrationPathPlan}(
@@ -1928,7 +2587,7 @@ function _selected_sampled_aberration_path_plans(
         plans[index] = _prepare_sampled_aberration_path_plan(
             plant.sampled_aberrations,
             bindings,
-            path_id(paths[index].definition),
+            path_id(paths[index]),
         )
     end
     return plans
@@ -1940,11 +2599,13 @@ function _prepare_acquisition_selection(plant::PreparedPlant, ids)
     paths = _canonical_selected_paths(plant, acquisitions)
     sampled_aberration_path_plans =
         _selected_sampled_aberration_path_plans(plant, paths)
-    path_rngs = _selected_path_rngs(plant, paths)
-    acquisition_rngs = _selected_acquisition_rngs(plant, acquisitions)
+    path_rng_slots = _selected_path_rng_slots(plant, paths)
+    acquisition_rng_slots = _selected_acquisition_rng_slots(
+        plant, acquisitions)
     return PreparedAcquisitionSelection(
         _PREPARED_ACQUISITION_SELECTION_TOKEN, plant, paths, acquisitions,
-        sampled_aberration_path_plans, path_rngs, acquisition_rngs)
+        sampled_aberration_path_plans, path_rng_slots,
+        acquisition_rng_slots)
 end
 
 """
@@ -1981,10 +2642,42 @@ Base.@noinline function _require_selected_path_binding(
     return nothing
 end
 
+@inline function _selected_path_family_operation!(operation,
+    ::Tuple{}, family::Int, member::Int, arguments::Tuple)
+    return _prepared_path_slot_error(family, member)
+end
+
+@inline function _selected_path_family_operation!(operation,
+    groups::Tuple, family::Int, member::Int, arguments::Tuple)
+    family == 1 && return operation(
+        @inbounds(groups[1].values[member]), arguments)
+    return _selected_path_family_operation!(operation, Base.tail(groups),
+        family - 1, member, arguments)
+end
+
+@inline function _selected_path_binding!(path, arguments::Tuple)
+    atmosphere, context = arguments
+    return _require_selected_path_binding(path, atmosphere, context)
+end
+
+@inline function _selected_path_materialization!(path, arguments::Tuple)
+    atmosphere, epoch = arguments
+    return _validate_selected_materialization(path, atmosphere, epoch)
+end
+
+@inline function _selected_path_operation!(operation,
+    selection::_PreparedPathSelection, index::Int, arguments::Tuple)
+    slot = @inbounds selection.slots[index]
+    groups = getfield(selection.plant, :paths).groups
+    return _selected_path_family_operation!(operation, groups,
+        Int(slot.family_slot), Int(slot.member_slot), arguments)
+end
+
 function _require_selected_path_bindings(
-    paths::AbstractVector, atmosphere, context)
-    for path in paths
-        _require_selected_path_binding(path, atmosphere, context)
+    paths::_PreparedPathSelection, atmosphere, context)
+    @inbounds for index in eachindex(paths)
+        _selected_path_operation!(_selected_path_binding!, paths, index,
+            (atmosphere, context))
     end
     return nothing
 end
@@ -1999,10 +2692,38 @@ Base.@noinline function _require_selected_acquisition_binding(
     return nothing
 end
 
+@inline function _selected_acquisition_family_operation!(operation,
+    ::Tuple{}, family::Int, member::Int, arguments::Tuple)
+    return _prepared_acquisition_slot_error(family, member)
+end
+
+@inline function _selected_acquisition_family_operation!(operation,
+    groups::Tuple, family::Int, member::Int, arguments::Tuple)
+    family == 1 && return operation(
+        @inbounds(groups[1].values[member]), arguments)
+    return _selected_acquisition_family_operation!(operation,
+        Base.tail(groups), family - 1, member, arguments)
+end
+
+@inline function _selected_acquisition_binding!(owner, arguments::Tuple)
+    context = arguments[1]
+    return _require_selected_acquisition_binding(owner, context)
+end
+
+@inline function _selected_acquisition_operation!(operation,
+    selection::_PreparedAcquisitionOwnerSelection, index::Int,
+    arguments::Tuple)
+    slot = @inbounds selection.slots[index]
+    groups = getfield(selection.plant, :acquisitions).groups
+    return _selected_acquisition_family_operation!(operation, groups,
+        Int(slot.family_slot), Int(slot.member_slot), arguments)
+end
+
 function _require_selected_acquisition_bindings(
-    acquisitions::AbstractVector, context)
-    for acquisition in acquisitions
-        _require_selected_acquisition_binding(acquisition, context)
+    acquisitions::_PreparedAcquisitionOwnerSelection, context)
+    @inbounds for index in eachindex(acquisitions)
+        _selected_acquisition_operation!(_selected_acquisition_binding!,
+            acquisitions, index, (context,))
     end
     return nothing
 end
@@ -2014,22 +2735,70 @@ function _require_selection_bindings(selection::PreparedAcquisitionSelection)
     _require_selected_acquisition_bindings(selection.acquisitions, context)
     validate_atmosphere_rng_binding(selection.plant.rngs.atmosphere,
         atmosphere)
-    _require_selected_rng_owner_bindings(selection.paths,
-        selection.path_rngs)
-    _require_selected_rng_owner_bindings(selection.acquisitions,
-        selection.acquisition_rngs)
+    _require_selected_path_rng_owner_bindings(selection.plant,
+        selection.paths,
+        selection.path_rng_slots)
+    _require_selected_acquisition_rng_owner_bindings(selection.plant,
+        selection.acquisitions,
+        selection.acquisition_rng_slots)
     return atmosphere
 end
 
-function _require_selected_rng_owner_bindings(owners::AbstractVector,
-    rngs::AbstractVector)
-    length(owners) == length(rngs) || throw(PlantPreparationError(
+function _require_selected_path_rng_owner_bindings(plant, owners, slots)
+    length(owners) == length(slots) || throw(PlantPreparationError(
         :rng, :owner_topology,
         "selected RNG-owner topology does not match selected owners"))
+    groups = getfield(owners.plant, :paths).groups
     @inbounds for index in eachindex(owners)
-        _require_selected_rng_owner_binding(rngs[index], owners[index])
+        slot = owners.slots[index]
+        rngs = plant.rngs.paths[Int(slots[index])]
+        _selected_path_rng_binding_family!(groups,
+            Int(slot.family_slot), Int(slot.member_slot), rngs)
     end
     return nothing
+end
+
+function _require_selected_acquisition_rng_owner_bindings(
+    plant, owners, slots)
+    length(owners) == length(slots) || throw(PlantPreparationError(
+        :rng, :owner_topology,
+        "selected RNG-owner topology does not match selected owners"))
+    groups = getfield(owners.plant, :acquisitions).groups
+    @inbounds for index in eachindex(owners)
+        slot = owners.slots[index]
+        rngs = plant.rngs.acquisitions[Int(slots[index])]
+        _selected_acquisition_rng_binding_family!(groups,
+            Int(slot.family_slot), Int(slot.member_slot), rngs)
+    end
+    return nothing
+end
+
+@inline function _selected_path_rng_binding_family!(
+    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs)
+    return _prepared_path_slot_error(family, member)
+end
+
+Base.@noinline function _selected_path_rng_binding_family!(
+    groups::Tuple, family::Int, member::Int,
+    rngs::PreparedOwnerRNGs)
+    family == 1 && return _require_selected_rng_owner_binding(
+        rngs, @inbounds(groups[1].values[member]))
+    return _selected_path_rng_binding_family!(Base.tail(groups),
+        family - 1, member, rngs)
+end
+
+@inline function _selected_acquisition_rng_binding_family!(
+    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs)
+    return _prepared_acquisition_slot_error(family, member)
+end
+
+Base.@noinline function _selected_acquisition_rng_binding_family!(
+    groups::Tuple, family::Int, member::Int,
+    rngs::PreparedOwnerRNGs)
+    family == 1 && return _require_selected_rng_owner_binding(
+        rngs, @inbounds(groups[1].values[member]))
+    return _selected_acquisition_rng_binding_family!(Base.tail(groups),
+        family - 1, member, rngs)
 end
 
 Base.@noinline function _require_selected_rng_owner_binding(
@@ -2045,10 +2814,11 @@ Base.@noinline function _validate_selected_materialization(
     return nothing
 end
 
-function _validate_selected_materializations(paths::AbstractVector,
+function _validate_selected_materializations(paths::_PreparedPathSelection,
     atmosphere, epoch)
-    for path in paths
-        _validate_selected_materialization(path, atmosphere, epoch)
+    @inbounds for index in eachindex(paths)
+        _selected_path_operation!(_selected_path_materialization!, paths,
+            index, (atmosphere, epoch))
     end
     return nothing
 end
@@ -2060,14 +2830,34 @@ Base.@noinline function _materialize_selected_path!(
     return nothing
 end
 
-function _materialize_selected_paths!(paths::AbstractVector,
-    rngs::AbstractVector, atmosphere, epoch)
-    length(paths) == length(rngs) || throw(PlantPreparationError(
+@inline function _selected_path_materialize_family!(
+    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs,
+    atmosphere, epoch)
+    return _prepared_path_slot_error(family, member)
+end
+
+Base.@noinline function _selected_path_materialize_family!(
+    groups::Tuple, family::Int, member::Int,
+    rngs::PreparedOwnerRNGs, atmosphere, epoch)
+    family == 1 && return _materialize_selected_path!(
+        @inbounds(groups[1].values[member]), rngs, atmosphere, epoch)
+    return _selected_path_materialize_family!(Base.tail(groups),
+        family - 1, member, rngs, atmosphere, epoch)
+end
+
+function _materialize_selected_paths!(plant,
+    paths::_PreparedPathSelection, rng_slots::FixedSizeVector{UInt32},
+    atmosphere, epoch)
+    length(paths) == length(rng_slots) || throw(PlantPreparationError(
         :rng, :owner_topology,
         "selected path RNG topology does not match selected paths"))
+    groups = getfield(paths.plant, :paths).groups
     @inbounds for index in eachindex(paths)
-        _materialize_selected_path!(
-            paths[index], rngs[index], atmosphere, epoch)
+        slot = paths.slots[index]
+        rngs = plant.rngs.paths[Int(rng_slots[index])]
+        _selected_path_materialize_family!(groups,
+            Int(slot.family_slot), Int(slot.member_slot), rngs,
+            atmosphere, epoch)
     end
     return nothing
 end
@@ -2078,15 +2868,34 @@ Base.@noinline function _apply_selected_sampled_aberration!(
     return nothing
 end
 
+@inline function _selected_path_sampled_aberration_family!(
+    ::Tuple{}, family::Int, member::Int,
+    plan)
+    return _prepared_path_slot_error(family, member)
+end
+
+Base.@noinline function _selected_path_sampled_aberration_family!(
+    groups::Tuple, family::Int, member::Int,
+    plan)
+    family == 1 && return _apply_selected_sampled_aberration!(
+        @inbounds(groups[1].values[member]), plan)
+    return _selected_path_sampled_aberration_family!(Base.tail(groups),
+        family - 1, member, plan)
+end
+
 function _apply_selected_sampled_aberrations!(
-    paths::AbstractVector,
+    paths::_PreparedPathSelection,
     plans::AbstractVector,
 )
     length(paths) == length(plans) || throw(PlantPreparationError(
         :sampled_aberration, :binding_topology,
         "selected sampled-aberration plans do not match selected paths"))
+    groups = getfield(paths.plant, :paths).groups
     @inbounds for index in eachindex(paths)
-        _apply_selected_sampled_aberration!(paths[index], plans[index])
+        slot = paths.slots[index]
+        plan = plans[index]
+        _selected_path_sampled_aberration_family!(groups,
+            Int(slot.family_slot), Int(slot.member_slot), plan)
     end
     return nothing
 end
@@ -2097,13 +2906,31 @@ Base.@noinline function _execute_selected_path!(
     return nothing
 end
 
-function _execute_selected_paths!(paths::AbstractVector,
-    rngs::AbstractVector)
-    length(paths) == length(rngs) || throw(PlantPreparationError(
+@inline function _selected_path_execute_family!(
+    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs)
+    return _prepared_path_slot_error(family, member)
+end
+
+Base.@noinline function _selected_path_execute_family!(
+    groups::Tuple, family::Int, member::Int,
+    rngs::PreparedOwnerRNGs)
+    family == 1 && return _execute_selected_path!(
+        @inbounds(groups[1].values[member]), rngs)
+    return _selected_path_execute_family!(Base.tail(groups),
+        family - 1, member, rngs)
+end
+
+function _execute_selected_paths!(plant,
+    paths::_PreparedPathSelection, rng_slots::FixedSizeVector{UInt32})
+    length(paths) == length(rng_slots) || throw(PlantPreparationError(
         :rng, :owner_topology,
         "selected path RNG topology does not match selected paths"))
+    groups = getfield(paths.plant, :paths).groups
     @inbounds for index in eachindex(paths)
-        _execute_selected_path!(paths[index], rngs[index])
+        slot = paths.slots[index]
+        rngs = plant.rngs.paths[Int(rng_slots[index])]
+        _selected_path_execute_family!(groups,
+            Int(slot.family_slot), Int(slot.member_slot), rngs)
     end
     return nothing
 end
@@ -2114,14 +2941,33 @@ Base.@noinline function _execute_selected_acquisition!(
     return nothing
 end
 
+@inline function _selected_acquisition_execute_family!(
+    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs)
+    return _prepared_acquisition_slot_error(family, member)
+end
+
+Base.@noinline function _selected_acquisition_execute_family!(
+    groups::Tuple, family::Int, member::Int,
+    rngs::PreparedOwnerRNGs)
+    family == 1 && return _execute_selected_acquisition!(
+        @inbounds(groups[1].values[member]), rngs)
+    return _selected_acquisition_execute_family!(Base.tail(groups),
+        family - 1, member, rngs)
+end
+
 function _execute_selected_acquisitions!(
-    acquisitions::AbstractVector, rngs::AbstractVector)
-    length(acquisitions) == length(rngs) || throw(PlantPreparationError(
+    plant,
+    acquisitions::_PreparedAcquisitionOwnerSelection,
+    rng_slots::FixedSizeVector{UInt32})
+    length(acquisitions) == length(rng_slots) || throw(PlantPreparationError(
         :rng, :owner_topology,
         "selected acquisition RNG topology does not match selected owners"))
+    groups = getfield(acquisitions.plant, :acquisitions).groups
     @inbounds for index in eachindex(acquisitions)
-        _execute_selected_acquisition!(
-            acquisitions[index], rngs[index])
+        slot = acquisitions.slots[index]
+        rngs = plant.rngs.acquisitions[Int(rng_slots[index])]
+        _selected_acquisition_execute_family!(groups,
+            Int(slot.family_slot), Int(slot.member_slot), rngs)
     end
     return nothing
 end
@@ -2144,15 +2990,17 @@ end
 
 function _execute_selected_epoch!(selection::PreparedAcquisitionSelection,
     atmosphere::AbstractTimedAtmosphere, epoch::AtmosphereEpoch)
-    _materialize_selected_paths!(selection.paths, selection.path_rngs,
-        atmosphere, epoch)
+    _materialize_selected_paths!(selection.plant, selection.paths,
+        selection.path_rng_slots, atmosphere, epoch)
     _apply_selected_sampled_aberrations!(
         selection.paths,
         selection.sampled_aberration_path_plans,
     )
-    _execute_selected_paths!(selection.paths, selection.path_rngs)
-    _execute_selected_acquisitions!(selection.acquisitions,
-        selection.acquisition_rngs)
+    _execute_selected_paths!(selection.plant, selection.paths,
+        selection.path_rng_slots)
+    _execute_selected_acquisitions!(selection.plant,
+        selection.acquisitions,
+        selection.acquisition_rng_slots)
     return selection
 end
 

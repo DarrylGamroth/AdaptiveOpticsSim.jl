@@ -565,7 +565,7 @@ function prepare_autonomous_periodic_optic(
     fidelity::AbstractAutonomousOpticFidelity)
     throw(PlantPreparationError(:autonomous_periodic_optic,
         :unsupported_binding,
-        "prepared autonomous optic $(typeof(implementation)) does not bind path $(path_id(path.definition)) with fidelity $(typeof(fidelity))"))
+        "prepared autonomous optic $(typeof(implementation)) does not bind path $(path_id(path)) with fidelity $(typeof(fidelity))"))
 end
 
 function evaluate_autonomous_periodic_optic!(

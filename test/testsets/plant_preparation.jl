@@ -172,10 +172,10 @@ function run_selected_acquisition_materialization_tests()
         [:slow_science, :ngs_frame, :fast_science, :lgs_frame])
 
     @test selection isa Plant.PreparedAcquisitionSelection
-    @test Tuple(map(path -> path_id(path.definition),
+    @test Tuple(map(path_id,
         prepared_paths(selection))) ==
         (OpticalPathID(:lgs), OpticalPathID(:ngs), OpticalPathID(:science))
-    @test Tuple(map(owner -> acquisition_id(owner.definition),
+    @test Tuple(map(acquisition_id,
         prepared_acquisitions(selection))) == (
         AcquisitionID(:fast_science),
         AcquisitionID(:lgs_frame),
@@ -236,12 +236,12 @@ function run_selected_acquisition_materialization_tests()
         run_seed=0x6000)
     reordered_selection = prepare_acquisition_selection(reordered_plant,
         (:ngs_frame, :slow_science, :lgs_frame, :fast_science))
-    @test map(path -> path_id(path.definition),
+    @test map(path_id,
         prepared_paths(reordered_selection)) == map(
-        path -> path_id(path.definition), prepared_paths(selection))
-    @test map(owner -> acquisition_id(owner.definition),
+        path_id, prepared_paths(selection))
+    @test map(acquisition_id,
         prepared_acquisitions(reordered_selection)) == map(
-        owner -> acquisition_id(owner.definition),
+        acquisition_id,
         prepared_acquisitions(selection))
     execute_acquisition_selection_at!(
         reordered_selection, epoch_time(epoch))
@@ -318,10 +318,10 @@ function run_selected_acquisition_materialization_tests()
             selection, allocation_epoch)
         selected_owner_count = length(prepared_paths(selection)) +
             length(prepared_acquisitions(selection))
-        # Whole-plant registries cross one heterogeneous dispatch barrier per
-        # owner so topology cardinality does not enter the prepared type.
-        # Concrete path and acquisition kernels remain allocation-free; this
-        # gate bounds only the Julia 1.12 barrier boxing.
+        # Exact path and acquisition family kernels remain allocation-free.
+        # This gate bounds the remaining boxing from erased
+        # `PreparedPlantRNGs.paths` and `.acquisitions` storage; #287 replaces
+        # those RNG registries with concrete family-grouped state.
         @test allocation_bytes <= 256 * selected_owner_count
     end
 
@@ -769,9 +769,9 @@ end
     @test wrong_target_error.operation == :validate_prepared_plant_target
     @test wrong_target_error.reason == :wrong_device
     @test wrong_target_error.device == wrong_target
-    @test prepared_paths(plant) isa Memory{PreparedPathExecutor}
+    @test prepared_paths(plant) isa Plant._PreparedPathRegistry
     @test prepared_acquisitions(plant) isa
-        Memory{PreparedAcquisitionOwner}
+        Plant._PreparedAcquisitionRegistry
     @test length(prepared_paths(plant)) == 2
     @test length(prepared_acquisitions(plant)) == 3
     @test isconcretetype(typeof(prepared_paths(plant)))
@@ -1072,7 +1072,7 @@ end
         model_revisions=wfs_path.key.revisions.model,
     )
 
-    @test !applicable(PreparedPathExecutor, science_path.definition,
+    @test !applicable(PreparedPathExecutor, science_definition,
         science_path.source, science_path.telescope, science_path.input,
         science_path.result, science_path.execution, science_path.key)
 
@@ -1229,7 +1229,7 @@ end
         :unsupported_execution,
     )
 
-    @test !applicable(PreparedAcquisitionOwner, fast.definition,
+    @test !applicable(PreparedAcquisitionOwner, fast_definition,
         fast.path_key, fast.path_result, fast.provider)
     @test !applicable(PreparedPlant, plant.definition, plant.paths,
         plant.acquisitions)
