@@ -1,7 +1,8 @@
-# The baseline-comparable full-composition plus focused KA CPU report and the
-# Apple platform extension report upload independently. Diagnostic shard
-# coverage runs do not upload partial reports because they change Julia's
-# attributed line universe.
+# The exact union of the four required Linux shard reports and the Apple
+# platform extension report upload independently. The aggregate workflow
+# fails closed unless every shard report is present and valid. During the
+# CI-01 transition it also requires, but does not upload, the full-plus-KA
+# baseline and verifies exact line-state equivalence before the core upload.
 #
 # Core source project and patch coverage are merge-blocking. Optional
 # extensions are target-specific, so their patch status is informational;

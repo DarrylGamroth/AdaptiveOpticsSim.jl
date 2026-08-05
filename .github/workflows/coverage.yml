@@ -56,8 +56,21 @@ jobs:
       - name: Run bounded test shard with coverage
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(coverage=true, test_args=[ENV["ADAPTIVEOPTICS_TEST_SHARD"]])'
 
+      - name: Process shard coverage
+        uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: src,ext
+
+      - name: Upload shard coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adaptiveopticssim-coverage-${{ matrix.shard }}
+          path: lcov.info
+          if-no-files-found: error
+          retention-days: 3
+
   project-coverage:
-    name: Project coverage / full composition
+    name: Transition baseline / full composition plus KA
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.draft == false
@@ -95,10 +108,95 @@ jobs:
         with:
           directories: src,ext
 
-      - name: Upload project coverage to Codecov
+      - name: Upload transition baseline coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adaptiveopticssim-coverage-transition-baseline
+          path: lcov.info
+          if-no-files-found: error
+          retention-days: 3
+
+  aggregate-coverage:
+    name: Aggregate project coverage
+    needs:
+      - shard-coverage
+      - project-coverage
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require every coverage producer
+        env:
+          SHARD_RESULT: ${{ needs.shard-coverage.result }}
+          BASELINE_RESULT: ${{ needs.project-coverage.result }}
+        run: |
+          test "$SHARD_RESULT" = "success"
+          test "$BASELINE_RESULT" = "success"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download ci-foundations coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: adaptiveopticssim-coverage-ci-foundations
+          path: coverage/ci-foundations
+
+      - name: Download ci-sensors-control coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: adaptiveopticssim-coverage-ci-sensors-control
+          path: coverage/ci-sensors-control
+
+      - name: Download ci-plant-runtime coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: adaptiveopticssim-coverage-ci-plant-runtime
+          path: coverage/ci-plant-runtime
+
+      - name: Download ci-plant-optics coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: adaptiveopticssim-coverage-ci-plant-optics
+          path: coverage/ci-plant-optics
+
+      - name: Download transition baseline coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: adaptiveopticssim-coverage-transition-baseline
+          path: coverage/transition-baseline
+
+      - name: Validate coverage comparator
+        run: python3 test/ci/test_compare_lcov.py
+
+      - name: Compare shard union with transition baseline
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if test -n "$PR_BASE_SHA"; then
+            BASE_SHA="$PR_BASE_SHA"
+          else
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          python3 test/ci/compare_lcov.py \
+            --repo-root . \
+            --artifact-root coverage \
+            --base-sha "$BASE_SHA" \
+            --shard coverage/ci-foundations/lcov.info \
+            --shard coverage/ci-sensors-control/lcov.info \
+            --shard coverage/ci-plant-runtime/lcov.info \
+            --shard coverage/ci-plant-optics/lcov.info \
+            --baseline coverage/transition-baseline/lcov.info
+
+      - name: Upload aggregate project coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
-          files: lcov.info
+          files: coverage/ci-foundations/lcov.info,coverage/ci-sensors-control/lcov.info,coverage/ci-plant-runtime/lcov.info,coverage/ci-plant-optics/lcov.info
           disable_search: true
           fail_ci_if_error: true
           name: adaptiveopticssim-project

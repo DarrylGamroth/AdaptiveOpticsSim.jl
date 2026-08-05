@@ -20,8 +20,9 @@ jobs:
   full-composition:
     name: Full composition / Linux
     if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.draft == false
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -263,7 +264,16 @@ jobs:
       - name: Verify backend-neutral package load
         run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/backend_neutral.jl
 
-      - name: Run full CPU suite with AppleAccelerate
+      - name: Run focused AppleAccelerate validation
+        if: github.event_name == 'pull_request'
+        env:
+          ADAPTIVEOPTICS_APPLE_FOCUSED_ONLY: "true"
+        run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/runtests.jl
+
+      - name: Run full Apple/root interaction with AppleAccelerate
+        if: >-
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch'
         run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/runtests.jl
 
       - name: Run Apple FFT coverage
@@ -273,6 +283,9 @@ jobs:
 
       - name: Instantiate Metal extension test environment
         run: julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
+
+      - name: Run Metal extension validation
+        run: julia --project=test/metal --startup-file=no test/metal/runtests.jl
 
       - name: Run Metal extension load coverage
         run: julia --project=test/metal --startup-file=no --code-coverage=user test/metal/runtests.jl
