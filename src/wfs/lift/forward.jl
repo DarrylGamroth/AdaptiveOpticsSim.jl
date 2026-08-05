@@ -1,3 +1,38 @@
+@inline _apply_lift_mapping!(::LiFTIdentityMapping,
+    ::LiFTForwardWorkspace, optical_rate::AbstractMatrix) = optical_rate
+
+@inline function _apply_lift_response!(::NullFrameResponse,
+    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
+    copyto!(workspace.response_buffer, optical_rate)
+    return workspace.response_buffer
+end
+
+@inline function _apply_lift_response!(response::AbstractFrameResponse,
+    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
+    copyto!(workspace.response_buffer, optical_rate)
+    apply_response!(execution_style(workspace.response_buffer), response,
+        workspace.response_buffer, workspace.response_scratch)
+    return workspace.response_buffer
+end
+
+function _apply_lift_mapping!(mapping::LiFTFrameMapping,
+    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
+    response_rate = _apply_lift_response!(mapping.response, workspace,
+        optical_rate)
+    if mapping.sampling > 1
+        bin2d!(workspace.sampling_buffer, response_rate, mapping.sampling)
+    else
+        copyto!(workspace.sampling_buffer, response_rate)
+    end
+    if mapping.binning > 1
+        bin2d!(workspace.mapped_rate_buffer, workspace.sampling_buffer,
+            mapping.binning)
+    else
+        copyto!(workspace.mapped_rate_buffer, workspace.sampling_buffer)
+    end
+    return workspace.mapped_rate_buffer
+end
+
 function _lift_rate_values_from_opd!(forward::PreparedLiFTForward,
     opd::AbstractMatrix; rate_scale::Real=1.0)
     model = forward.plan
@@ -20,13 +55,20 @@ function _lift_rate_values_from_opd!(forward::PreparedLiFTForward,
         workspace.optical_rate_buffer)
 end
 
+"""
+    evaluate_lift_forward!(forward; rate_scale=1)
+
+Evaluate the prepared LiFT forward model from its bound pupil-plane OPD input.
+The returned `IntensityMap` contains cell-integrated photon-arrival rate on the
+prepared observation grid after object convolution and deterministic spatial
+preprocessing. No exposure, QE, noise, or readout operation is applied.
+"""
 function evaluate_lift_forward!(forward::PreparedLiFTForward;
     rate_scale::Real=1.0)
     _require_lift_forward_owner(forward)
     values = _lift_rate_values_from_opd!(forward, forward.input;
         rate_scale=rate_scale)
-    values === forward.output.values || throw(InvalidConfiguration(
-        "LiFT forward workspace output does not match its prepared contract"))
+    copyto!(forward.output.values, values)
     return forward.output
 end
 
@@ -48,6 +90,11 @@ function predict_lift_observation!(dest::AbstractMatrix,
     compute_device(dest) == compute_device(forward.output.values) || throw(
         InvalidConfiguration(
             "LiFT prediction destination must occupy the prepared compute device"))
+    _lift_mightalias_any(dest,
+        (forward.input, forward.output.values,
+            _lift_forward_workspace_arrays(forward.workspace)...)) && throw(
+        InvalidConfiguration(
+            "LiFT prediction destination must not alias its prepared owner"))
     rate = _lift_rate_values_from_opd!(forward, forward.input)
     T = eltype(rate)
     native_scale = inv(lift_observation_to_rate_scale(domain, T))

@@ -187,21 +187,21 @@ struct LiFTVarianceMapWeighting{M<:AbstractMatrix} <: LiFTWeightingMode
     variance::M
 end
 
-abstract type LiFTFluxNormalization end
-struct LiFTTotalFluxNormalization <: LiFTFluxNormalization end
-struct LiFTPeakIntensityNormalization <: LiFTFluxNormalization end
-struct LiFTFixedFlux <: LiFTFluxNormalization end
+abstract type LiFTModelScaling end
+struct LiFTTotalRateMatching <: LiFTModelScaling end
+struct LiFTPeakRateMatching <: LiFTModelScaling end
+struct LiFTPhysicalRatePreservation <: LiFTModelScaling end
 
 """Cold configuration for one LiFT phase-retrieval estimator."""
 struct LiFT{J<:LiFTJacobianMethod,S<:LiFTSolveMode,D<:LiFTDampingMode,
-    I,W<:LiFTWeightingMode,N<:LiFTFluxNormalization}
+    I,W<:LiFTWeightingMode,N<:LiFTModelScaling}
     iterations::Int
     jacobian_method::J
     solve_mode::S
     damping::D
     mode_ids::I
     weighting::W
-    flux_normalization::N
+    model_scaling::N
     check_convergence::Bool
 end
 
@@ -210,7 +210,7 @@ function LiFT(; iterations::Int=5,
     solve_mode::LiFTSolveMode=LiFTSolveAuto(),
     damping::LiFTDampingMode=LiFTDampingNone(), mode_ids=nothing,
     weighting::LiFTWeightingMode=LiFTReadNoiseWeighting(),
-    flux_normalization::LiFTFluxNormalization=LiFTTotalFluxNormalization(),
+    model_scaling::LiFTModelScaling=LiFTTotalRateMatching(),
     check_convergence::Bool=true)
     iterations >= 1 || throw(InvalidConfiguration(
         "LiFT iterations must be >= 1"))
@@ -227,21 +227,21 @@ function LiFT(; iterations::Int=5,
         values
     end
     return LiFT{typeof(jacobian_method),typeof(solve_mode),typeof(damping),
-        typeof(prepared_mode_ids),typeof(weighting),typeof(flux_normalization)}(
+        typeof(prepared_mode_ids),typeof(weighting),typeof(model_scaling)}(
         iterations, jacobian_method, solve_mode, damping, prepared_mode_ids,
-        weighting, flux_normalization, check_convergence)
+        weighting, model_scaling, check_convergence)
 end
 
 struct LiFTEstimationPlan{J<:LiFTJacobianMethod,S<:LiFTSolveMode,
     D<:LiFTDampingMode,I<:FixedSizeVector,W<:LiFTWeightingMode,
-    N<:LiFTFluxNormalization,C<:LiFTObservationContract}
+    N<:LiFTModelScaling,C<:LiFTObservationContract}
     iterations::Int
     jacobian_method::J
     solve_mode::S
     damping::D
     mode_ids::I
     weighting::W
-    flux_normalization::N
+    model_scaling::N
     check_convergence::Bool
     observation_contract::C
 end
@@ -267,7 +267,7 @@ struct LiFTDiagnostics{T<:AbstractFloat}
     used_fallback::Bool
 end
 
-mutable struct LiFTIterationWorkspace{T<:AbstractFloat}
+mutable struct LiFTDiagnosticsWorkspace{T<:AbstractFloat}
     residual_norm::T
     weighted_residual_norm::T
     update_norm::T
@@ -338,7 +338,7 @@ struct LiFTEstimationWorkspace{T<:AbstractFloat,
     rhs_buffer::V
     full_coefficients_buffer::V
     mode_id_buffer::I
-    iteration::LiFTIterationWorkspace{T}
+    diagnostics::LiFTDiagnosticsWorkspace{T}
 end
 
 struct PreparedLiFTEstimator{F<:PreparedLiFTForward,
@@ -422,11 +422,6 @@ function _lift_output_dimensions(focal_resolution::Int,
     resolution = div(focal_resolution, divisor)
     return (resolution, resolution)
 end
-
-@inline _lift_output_values(::LiFTIdentityMapping,
-    workspace::LiFTForwardWorkspace) = workspace.optical_rate_buffer
-@inline _lift_output_values(::LiFTFrameMapping,
-    workspace::LiFTForwardWorkspace) = workspace.mapped_rate_buffer
 
 @inline _require_lift_response_backend(::NullFrameResponse,
     ::AbstractMatrix) = nothing
@@ -551,7 +546,9 @@ function _prepare_lift_forward(plan::LiFTForwardPlan,
     workspace = _allocate_lift_forward_workspace(plan.pupil_amplitude,
         size(plan.pupil_amplitude, 1), plan.focal_resolution,
         plan.zero_padding, plan.object_kernel, plan.mapping)
-    output_values = _lift_output_values(plan.mapping, workspace)
+    output_values = similar(plan.pupil_amplitude,
+        plan.observation_contract.rate_metadata.numeric_type,
+        plan.observation_contract.rate_metadata.dimensions...)
     output = IntensityMap(plan.observation_contract.rate_metadata,
         output_values)
     forward = PreparedLiFTForward(plan, workspace, input, output,
@@ -565,7 +562,9 @@ function _prepare_lift_forward(plan::LiFTForwardPlan)
         plan.zero_padding, plan.object_kernel, plan.mapping)
     input = similar(plan.pupil_amplitude)
     copyto!(input, plan.diversity_opd)
-    output_values = _lift_output_values(plan.mapping, workspace)
+    output_values = similar(plan.pupil_amplitude,
+        plan.observation_contract.rate_metadata.numeric_type,
+        plan.observation_contract.rate_metadata.dimensions...)
     output = IntensityMap(plan.observation_contract.rate_metadata,
         output_values)
     forward = PreparedLiFTForward(plan, workspace, input, output,
@@ -583,6 +582,125 @@ end
         workspace.convolution_scratch, workspace.opd_work_buffer)
 end
 
+function _require_lift_workspace_array(array::AbstractArray,
+    ::Type{E}, dimensions::Tuple, plan::LiFTForwardPlan,
+    label::AbstractString) where {E<:Number}
+    size(array) == dimensions || throw(DimensionMismatchError(
+        "$label dimensions do not match the LiFT forward plan"))
+    eltype(array) === E || throw(InvalidConfiguration(
+        "$label numeric type does not match the LiFT forward plan"))
+    typeof(backend(array)) === typeof(backend(plan.pupil_amplitude)) || throw(
+        InvalidConfiguration(
+            "$label backend does not match the LiFT forward plan"))
+    compute_device(array) == compute_device(plan.pupil_amplitude) || throw(
+        InvalidConfiguration(
+            "$label device does not match the LiFT forward plan"))
+    return array
+end
+
+@inline function _require_lift_absent_workspace(value,
+    label::AbstractString)
+    value === nothing || throw(InvalidConfiguration(
+        "$label must be absent for this LiFT forward plan"))
+    return nothing
+end
+
+function _require_lift_mapping_workspace(::LiFTIdentityMapping,
+    workspace::LiFTForwardWorkspace, ::LiFTForwardPlan,
+    ::Type{<:AbstractFloat})
+    _require_lift_absent_workspace(workspace.response_buffer,
+        "LiFT response workspace")
+    _require_lift_absent_workspace(workspace.response_scratch,
+        "LiFT response scratch")
+    _require_lift_absent_workspace(workspace.sampling_buffer,
+        "LiFT sampling workspace")
+    _require_lift_absent_workspace(workspace.mapped_rate_buffer,
+        "LiFT mapped-rate workspace")
+    return workspace
+end
+
+function _require_lift_mapping_workspace(mapping::LiFTFrameMapping,
+    workspace::LiFTForwardWorkspace, plan::LiFTForwardPlan,
+    ::Type{T}) where {T<:AbstractFloat}
+    focal_dimensions = (plan.focal_resolution, plan.focal_resolution)
+    sampled_resolution = div(plan.focal_resolution, mapping.sampling)
+    sampled_dimensions = (sampled_resolution, sampled_resolution)
+    output_dimensions = plan.observation_contract.rate_metadata.dimensions
+    _require_lift_workspace_array(workspace.response_buffer, T,
+        focal_dimensions, plan, "LiFT response workspace")
+    _require_lift_workspace_array(workspace.response_scratch, T,
+        focal_dimensions, plan, "LiFT response scratch")
+    _require_lift_workspace_array(workspace.sampling_buffer, T,
+        sampled_dimensions, plan, "LiFT sampling workspace")
+    _require_lift_workspace_array(workspace.mapped_rate_buffer, T,
+        output_dimensions, plan, "LiFT mapped-rate workspace")
+    return workspace
+end
+
+function _require_lift_convolution_workspace(::Nothing,
+    workspace::LiFTForwardWorkspace, ::LiFTForwardPlan,
+    ::Type{<:AbstractFloat})
+    _require_lift_absent_workspace(workspace.convolution_buffer,
+        "LiFT convolution workspace")
+    _require_lift_absent_workspace(workspace.convolution_scratch,
+        "LiFT convolution scratch")
+    return workspace
+end
+
+function _require_lift_convolution_workspace(::Union{
+        LiFTDenseObjectKernel,LiFTSeparableObjectKernel},
+    workspace::LiFTForwardWorkspace, plan::LiFTForwardPlan,
+    ::Type{T}) where {T<:AbstractFloat}
+    dimensions = (plan.focal_resolution, plan.focal_resolution)
+    _require_lift_workspace_array(workspace.convolution_buffer, T,
+        dimensions, plan, "LiFT convolution workspace")
+    _require_lift_workspace_array(workspace.convolution_scratch, T,
+        dimensions, plan, "LiFT convolution scratch")
+    return workspace
+end
+
+function _require_lift_forward_workspace(plan::LiFTForwardPlan,
+    workspace::LiFTForwardWorkspace)
+    T = eltype(plan.pupil_amplitude)
+    pupil_dimensions = size(plan.pupil_amplitude)
+    padded_resolution = lift_pad_size(size(plan.pupil_amplitude, 1),
+        plan.zero_padding)
+    padded_dimensions = (padded_resolution, padded_resolution)
+    focal_dimensions = (plan.focal_resolution, plan.focal_resolution)
+    field_resolution = plan.focal_resolution *
+        lift_oversampling(plan.zero_padding)
+    field_dimensions = (field_resolution, field_resolution)
+    output_dimensions = plan.observation_contract.rate_metadata.dimensions
+    propagation = workspace.propagation
+    _require_lift_workspace_array(propagation.pupil_field, Complex{T},
+        padded_dimensions, plan, "LiFT propagation pupil-field workspace")
+    _require_lift_workspace_array(propagation.fft_buffer, Complex{T},
+        padded_dimensions, plan, "LiFT propagation FFT workspace")
+    _require_lift_workspace_array(propagation.psf_buffer, T,
+        padded_dimensions, plan, "LiFT propagation intensity workspace")
+    _require_lift_workspace_array(workspace.optical_rate_buffer, T,
+        focal_dimensions, plan, "LiFT optical-rate workspace")
+    _require_lift_workspace_array(workspace.amplitude_buffer, T,
+        pupil_dimensions, plan, "LiFT amplitude workspace")
+    _require_lift_workspace_array(workspace.field_scratch, T,
+        field_dimensions, plan, "LiFT field-intensity scratch")
+    _require_lift_workspace_array(workspace.focal_buffer, Complex{T},
+        field_dimensions, plan, "LiFT focal-field workspace")
+    _require_lift_workspace_array(workspace.mode_buffer, Complex{T},
+        field_dimensions, plan, "LiFT mode-field workspace")
+    _require_lift_workspace_array(workspace.conjugate_field_buffer,
+        Complex{T}, field_dimensions, plan,
+        "LiFT conjugate-field workspace")
+    _require_lift_workspace_array(workspace.output_work_buffer, T,
+        output_dimensions, plan, "LiFT output scratch")
+    _require_lift_workspace_array(workspace.opd_work_buffer, T,
+        pupil_dimensions, plan, "LiFT OPD workspace")
+    _require_lift_mapping_workspace(plan.mapping, workspace, plan, T)
+    _require_lift_convolution_workspace(plan.object_kernel, workspace,
+        plan, T)
+    return workspace
+end
+
 @inline _lift_mightalias_any(::AbstractArray, ::Tuple{}) = false
 @inline function _lift_mightalias_any(value::AbstractArray, values::Tuple)
     return _wfs_storage_mightalias(value, first(values)) ||
@@ -591,13 +709,23 @@ end
 
 function _require_lift_forward_owner(forward::PreparedLiFTForward)
     _require_lift_forward_input(forward.plan, forward.input)
+    _require_lift_forward_workspace(forward.plan, forward.workspace)
     forward.output.metadata == forward.plan.observation_contract.rate_metadata ||
         throw(InvalidConfiguration(
             "LiFT forward output metadata does not match its prepared plan"))
-    forward.output.values === _lift_output_values(
-        forward.plan.mapping, forward.workspace) || throw(
+    size(forward.output.values) ==
+        forward.plan.observation_contract.rate_metadata.dimensions || throw(
+        DimensionMismatchError(
+            "LiFT forward output does not match its prepared dimensions"))
+    eltype(forward.output.values) ===
+        forward.plan.observation_contract.rate_metadata.numeric_type || throw(
         InvalidConfiguration(
-            "LiFT forward output does not match its prepared workspace"))
+            "LiFT forward output does not use its prepared numeric type"))
+    typeof(backend(forward.output.values)) === typeof(forward.backend) || throw(
+        InvalidConfiguration("LiFT forward output backend binding changed"))
+    compute_device(forward.output.values) == forward.device || throw(
+        InvalidConfiguration(
+            "LiFT forward output compute-device binding changed"))
     typeof(forward.backend) === typeof(backend(forward.input)) || throw(
         InvalidConfiguration("LiFT forward backend binding changed"))
     forward.device == compute_device(forward.input) || throw(
@@ -605,7 +733,12 @@ function _require_lift_forward_owner(forward::PreparedLiFTForward)
     _lift_mightalias_any(forward.input,
         _lift_forward_workspace_arrays(forward.workspace)) && throw(
         InvalidConfiguration(
-            "LiFT forward input must not alias its output or workspace"))
+            "LiFT forward input must not alias its workspace"))
+    (_wfs_storage_mightalias(forward.input, forward.output.values) ||
+        _lift_mightalias_any(forward.output.values,
+            _lift_forward_workspace_arrays(forward.workspace))) && throw(
+        InvalidConfiguration(
+            "LiFT forward input, output, and workspace must not alias"))
     return forward
 end
 
@@ -668,7 +801,6 @@ function prepare_lift_forward_model(tel::Telescope,
             "LiFT forward OPD and telescope must occupy the same compute device"))
     _require_lift_mapping_backend(mapping, prototype)
     prepared_mapping = _prepare_lift_mapping(mapping)
-    _lift_output_dimensions(focal_resolution, prepared_mapping)
 
     pupil = copy(pupil_mask(tel))
     reflectivity = pupil_reflectivity(tel)
@@ -677,9 +809,11 @@ function prepare_lift_forward_model(tel::Telescope,
     owned_basis = copy(basis)
     diversity = _copy_lift_array(prototype, diversity_opd, T)
     kernel = _prepare_lift_object_kernel(object_kernel, prototype, T)
+    output_dimensions = _lift_output_dimensions(focal_resolution,
+        prepared_mapping)
+    output_values = similar(prototype, T, output_dimensions...)
     workspace = _allocate_lift_forward_workspace(prototype, resolution,
         focal_resolution, zero_padding, kernel, prepared_mapping)
-    output_values = _lift_output_values(prepared_mapping, workspace)
     contract = LiFTObservationContract(
         OpticalPlaneMetadata(FocalPlane(), output_values;
             coordinate_domain=AngularCoordinates(),
@@ -798,13 +932,15 @@ function prepare_lift_estimator(definition::LiFT,
     full_coefficients = similar(residual, T, size(plan.basis, 3))
     mode_ids_device = similar(rhs, Int, mode_count)
     copyto!(mode_ids_device, collect(prepared_mode_ids))
-    iteration = LiFTIterationWorkspace(T(NaN), T(NaN), T(NaN), T(NaN), zero(T),
+    diagnostics_workspace = LiFTDiagnosticsWorkspace(
+        T(NaN), T(NaN), T(NaN), T(NaN), zero(T),
         false, false)
     workspace = LiFTEstimationWorkspace(observation_rate, residual, weights,
-        H, normal, factor, rhs, full_coefficients, mode_ids_device, iteration)
+        H, normal, factor, rhs, full_coefficients, mode_ids_device,
+        diagnostics_workspace)
     estimation_plan = LiFTEstimationPlan(definition.iterations,
         definition.jacobian_method, definition.solve_mode, definition.damping,
-        prepared_mode_ids, prepared_weighting, definition.flux_normalization,
+        prepared_mode_ids, prepared_weighting, definition.model_scaling,
         definition.check_convergence, plan.observation_contract)
     estimator = PreparedLiFTEstimator(estimator_forward, estimation_plan,
         workspace, observation, coefficients, initial_coefficients,
@@ -879,11 +1015,11 @@ end
 
 """Return the diagnostics from the most recent LiFT reconstruction."""
 function diagnostics(lift::PreparedLiFTEstimator)
-    iteration = lift.workspace.iteration
-    return LiFTDiagnostics(iteration.residual_norm,
-        iteration.weighted_residual_norm, iteration.update_norm,
-        iteration.condition_ratio, iteration.regularization,
-        iteration.used_qr, iteration.used_fallback)
+    workspace = lift.workspace.diagnostics
+    return LiFTDiagnostics(workspace.residual_norm,
+        workspace.weighted_residual_norm, workspace.update_norm,
+        workspace.condition_ratio, workspace.regularization,
+        workspace.used_qr, workspace.used_fallback)
 end
 
 """Return the run-immutable plan from a prepared LiFT estimator."""

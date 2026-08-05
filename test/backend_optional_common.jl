@@ -5072,7 +5072,7 @@ function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:Ab
     normal = transpose(H_host) * H_host
     λ = AdaptiveOpticsSim.WavefrontSensors.damping_lambda(damping, normal)
     expected = (normal + λ * I) \ (transpose(H_host) * residual_host)
-    diag = AdaptiveOpticsSim.WavefrontSensors.LiFTIterationWorkspace(
+    diag = AdaptiveOpticsSim.WavefrontSensors.LiFTDiagnosticsWorkspace(
         T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
     AdaptiveOpticsSim.WavefrontSensors.solve_lift_fallback!(
         diag, rhs, H, residual, damping)
@@ -5166,7 +5166,8 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
             jacobian_method=numerical ? LiFTNumericalJacobian() :
                 LiFTAnalyticJacobian(),
             solve_mode=LiFTSolveNormalEquations(),
-            flux_normalization=LiFTFixedFlux(), check_convergence=false)
+            model_scaling=LiFTPhysicalRatePreservation(),
+            check_convergence=false)
         rate_product = similar(lift_rate, T, 2)
         count_product = similar(lift_rate, T, 2)
         normalized_product = similar(lift_rate, T, 2)

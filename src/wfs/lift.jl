@@ -7,5 +7,5 @@
 
 include("lift/kernels.jl")
 include("lift/contracts.jl")
-include("lift/estimation.jl")
 include("lift/forward.jl")
+include("lift/estimation.jl")

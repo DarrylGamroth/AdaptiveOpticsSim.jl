@@ -95,9 +95,9 @@ export LiFTInitialModelWeighting
 export LiFTIterativeModelWeighting
 export LiFTReadNoiseWeighting
 export LiFTVarianceMapWeighting
-export LiFTTotalFluxNormalization
-export LiFTPeakIntensityNormalization
-export LiFTFixedFlux
+export LiFTTotalRateMatching
+export LiFTPeakRateMatching
+export LiFTPhysicalRatePreservation
 
 public supports_prepared_runtime
 public supports_detector_output

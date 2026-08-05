@@ -536,9 +536,9 @@ new_domain_exports = [
     "WavefrontSensors.LiFTIterativeModelWeighting",
     "WavefrontSensors.LiFTReadNoiseWeighting",
     "WavefrontSensors.LiFTVarianceMapWeighting",
-    "WavefrontSensors.LiFTTotalFluxNormalization",
-    "WavefrontSensors.LiFTPeakIntensityNormalization",
-    "WavefrontSensors.LiFTFixedFlux",
+    "WavefrontSensors.LiFTTotalRateMatching",
+    "WavefrontSensors.LiFTPeakRateMatching",
+    "WavefrontSensors.LiFTPhysicalRatePreservation",
 ]
 new_domain_public = [
     "Backends.AbstractComputeDeviceAvailability",
@@ -1358,9 +1358,9 @@ exports = [
     "LiFTIterativeModelWeighting",
     "LiFTReadNoiseWeighting",
     "LiFTVarianceMapWeighting",
-    "LiFTTotalFluxNormalization",
-    "LiFTPeakIntensityNormalization",
-    "LiFTFixedFlux",
+    "LiFTTotalRateMatching",
+    "LiFTPeakRateMatching",
+    "LiFTPhysicalRatePreservation",
 ]
 public = [
     "supports_prepared_runtime",

@@ -319,7 +319,7 @@ function make_gate0_card(raw::AbstractDict)
                 iterations=Int(raw["iterations"]), mode_ids=1:n_modes,
                 jacobian_method=LiFTAnalyticJacobian(),
                 solve_mode=LiFTSolveNormalEquations(),
-                flux_normalization=LiFTFixedFlux(),
+                model_scaling=LiFTPhysicalRatePreservation(),
                 check_convergence=false),
             forward, observation, coefficients)
         let estimator=estimator

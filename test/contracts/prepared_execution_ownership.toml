@@ -1029,11 +1029,11 @@ entries = [
 path = "src/wfs/lift/contracts.jl"
 owner = "WavefrontSensors"
 entries = [
+    ["LiFTDiagnosticsWorkspace","mutable_struct",7,"workspace",["workspace"],true,false,"internal",false,"backend_neutral",true,"PE-05"],
     ["LiFTEstimationPlan","struct",9,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["LiFTEstimationWorkspace","struct",10,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["LiFTForwardPlan","struct",12,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["LiFTForwardWorkspace","struct",15,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
-    ["LiFTIterationWorkspace","mutable_struct",7,"workspace",["workspace"],true,false,"internal",false,"backend_neutral",true,"PE-05"],
     ["PreparedLiFTEstimator","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedLiFTForward","struct",6,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
 ]

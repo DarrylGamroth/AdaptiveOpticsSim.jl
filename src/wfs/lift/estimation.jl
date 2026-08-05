@@ -154,42 +154,6 @@ function lift_residual!(style::AcceleratorStyle, dest::AbstractVector,
     return dest
 end
 
-@inline _apply_lift_mapping!(::LiFTIdentityMapping,
-    ::LiFTForwardWorkspace, optical_rate::AbstractMatrix) = optical_rate
-
-@inline function _apply_lift_response!(::NullFrameResponse,
-    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
-    copyto!(workspace.response_buffer, optical_rate)
-    return workspace.response_buffer
-end
-
-@inline function _apply_lift_response!(response::AbstractFrameResponse,
-    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
-    copyto!(workspace.response_buffer, optical_rate)
-    apply_response!(execution_style(workspace.response_buffer), response,
-        workspace.response_buffer, workspace.response_scratch)
-    return workspace.response_buffer
-end
-
-function _apply_lift_mapping!(mapping::LiFTFrameMapping,
-    workspace::LiFTForwardWorkspace, optical_rate::AbstractMatrix)
-    response_rate = _apply_lift_response!(mapping.response, workspace,
-        optical_rate)
-    if mapping.sampling > 1
-        bin2d!(workspace.sampling_buffer, response_rate,
-            mapping.sampling)
-    else
-        copyto!(workspace.sampling_buffer, response_rate)
-    end
-    if mapping.binning > 1
-        bin2d!(workspace.mapped_rate_buffer, workspace.sampling_buffer,
-            mapping.binning)
-    else
-        copyto!(workspace.mapped_rate_buffer, workspace.sampling_buffer)
-    end
-    return workspace.mapped_rate_buffer
-end
-
 """
     lift_interaction_matrix!(H, lift, coefficients; rate_scale=1)
 
@@ -366,7 +330,7 @@ function _copy_lift_observation_rate!(dest::AbstractMatrix{T},
     return dest
 end
 
-function normalize_lift_model!(::LiFTTotalFluxNormalization,
+function scale_lift_model!(::LiFTTotalRateMatching,
     model_rate::AbstractMatrix{T}, observation_rate::AbstractMatrix{T}) where {T}
     denominator = backend_sum_value(model_rate)
     scale = denominator > zero(T) ?
@@ -375,7 +339,7 @@ function normalize_lift_model!(::LiFTTotalFluxNormalization,
     return scale, abs(denominator * scale)
 end
 
-function normalize_lift_model!(::LiFTPeakIntensityNormalization,
+function scale_lift_model!(::LiFTPeakRateMatching,
     model_rate::AbstractMatrix{T}, observation_rate::AbstractMatrix{T}) where {T}
     denominator = backend_maximum_value(model_rate)
     scale = denominator > zero(T) ?
@@ -384,7 +348,7 @@ function normalize_lift_model!(::LiFTPeakIntensityNormalization,
     return scale, abs(backend_sum_value(model_rate))
 end
 
-function normalize_lift_model!(::LiFTFixedFlux,
+function scale_lift_model!(::LiFTPhysicalRatePreservation,
     model_rate::AbstractMatrix{T}, ::AbstractMatrix{T}) where {T}
     return one(T), abs(backend_sum_value(model_rate))
 end
@@ -433,7 +397,7 @@ function reconstruct!(lift::PreparedLiFTEstimator)
     factor = lift.workspace.factor_buffer
     rhs = lift.workspace.rhs_buffer
     mode_ids_buf = lift.workspace.mode_id_buffer
-    diag = lift.workspace.iteration
+    diag = lift.workspace.diagnostics
     style = execution_style(H)
     effective_mode = effective_solve_mode(style, lift.plan.solve_mode)
     λ_state = initial_damping_state(lift.plan.damping, T)
@@ -442,8 +406,8 @@ function reconstruct!(lift::PreparedLiFTEstimator)
     for iter in 1:lift.plan.iterations
         current_opd = prepare_opd!(lift, coeffs)
         model_rate = _lift_rate_values_from_opd!(lift.forward, current_opd)
-        scale, model_photon_rate = normalize_lift_model!(
-            lift.plan.flux_normalization, model_rate, observation_rate)
+        scale, model_photon_rate = scale_lift_model!(
+            lift.plan.model_scaling, model_rate, observation_rate)
         objective_scale = max(model_photon_rate, one(T))
         lift_residual!(residual, observation_rate, model_rate)
         diag.residual_norm = norm(residual)
@@ -512,7 +476,7 @@ end
 @inline effective_solve_mode(::AcceleratorStyle, ::LiFTSolveAuto) = LiFTSolveNormalEquations()
 @inline effective_solve_mode(::ExecutionStyle, mode::LiFTSolveMode) = mode
 
-function solve_lift_fallback!(diag::LiFTIterationWorkspace{T}, rhs::AbstractVector{T},
+function solve_lift_fallback!(diag::LiFTDiagnosticsWorkspace{T}, rhs::AbstractVector{T},
     H::AbstractMatrix{T}, residual::AbstractVector{T}, damping::LiFTDampingMode) where {T<:AbstractFloat}
     λ = fallback_damping_lambda(damping, T, H)
     F = svd(H; full=false)
@@ -561,7 +525,7 @@ The preferred path is Cholesky on the normal matrix. If the factorization is
 ill-conditioned, the implementation adds diagonal loading and eventually falls
 back to the SVD-based solve.
 """
-function solve_normal_system!(diag::LiFTIterationWorkspace{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
+function solve_normal_system!(diag::LiFTDiagnosticsWorkspace{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
     normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     ::LiFTDampingNone) where {T<:AbstractFloat}
     copyto!(factor, normal)
@@ -585,7 +549,7 @@ function solve_normal_system!(diag::LiFTIterationWorkspace{T}, rhs::AbstractVect
     return rhs
 end
 
-function solve_normal_system!(diag::LiFTIterationWorkspace{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
+function solve_normal_system!(diag::LiFTDiagnosticsWorkspace{T}, rhs::AbstractVector{T}, factor::AbstractMatrix{T},
     normal::AbstractMatrix{T}, H::AbstractMatrix{T}, residual::AbstractVector{T},
     damping::LiFTLevenbergMarquardt) where {T<:AbstractFloat}
     copyto!(factor, normal)
@@ -608,7 +572,7 @@ function solve_normal_system!(diag::LiFTIterationWorkspace{T}, rhs::AbstractVect
     return rhs
 end
 
-function solve_lift_system!(diag::LiFTIterationWorkspace{T}, residual::AbstractVector{T}, rhs::AbstractVector{T},
+function solve_lift_system!(diag::LiFTDiagnosticsWorkspace{T}, residual::AbstractVector{T}, rhs::AbstractVector{T},
     H::AbstractMatrix{T}, normal::AbstractMatrix{T}, factor::AbstractMatrix{T},
     effective_mode::LiFTSolveQR, damping::LiFTDampingMode) where {T<:AbstractFloat}
     diag.used_qr = true
@@ -631,7 +595,7 @@ function solve_lift_system!(diag::LiFTIterationWorkspace{T}, residual::AbstractV
     end
 end
 
-function solve_lift_system!(diag::LiFTIterationWorkspace{T}, residual::AbstractVector{T}, rhs::AbstractVector{T},
+function solve_lift_system!(diag::LiFTDiagnosticsWorkspace{T}, residual::AbstractVector{T}, rhs::AbstractVector{T},
     H::AbstractMatrix{T}, normal::AbstractMatrix{T}, factor::AbstractMatrix{T},
     effective_mode::LiFTSolveMode, damping::LiFTDampingMode) where {T<:AbstractFloat}
     diag.used_qr = false
@@ -642,7 +606,7 @@ function solve_lift_system!(diag::LiFTIterationWorkspace{T}, residual::AbstractV
     return rhs
 end
 
-function handle_lift_qr_error!(::SingularException, diag::LiFTIterationWorkspace, rhs::AbstractVector,
+function handle_lift_qr_error!(::SingularException, diag::LiFTDiagnosticsWorkspace, rhs::AbstractVector,
     factor::AbstractMatrix, normal::AbstractMatrix, H::AbstractMatrix, residual::AbstractVector,
     damping::LiFTDampingMode)
     diag.used_qr = false
@@ -651,7 +615,7 @@ function handle_lift_qr_error!(::SingularException, diag::LiFTIterationWorkspace
     return rhs
 end
 
-function handle_lift_qr_error!(err, diag::LiFTIterationWorkspace, rhs::AbstractVector,
+function handle_lift_qr_error!(err, diag::LiFTDiagnosticsWorkspace, rhs::AbstractVector,
     factor::AbstractMatrix, normal::AbstractMatrix, H::AbstractMatrix, residual::AbstractVector,
     damping::LiFTDampingMode)
     throw(err)
@@ -904,13 +868,3 @@ function weight_vector!(out::AbstractVector{T}, ::AbstractMatrix{T},
     variance_scale = lift_observation_to_rate_scale(metadata.domain, T)^2
     return lift_inverse_variance!(out, mode.variance, variance_scale, zero(T))
 end
-
-"""
-    evaluate_lift_forward!(forward; rate_scale=1)
-
-Evaluate the prepared LiFT forward model from an OPD map in metres.
-
-The returned `IntensityMap` contains cell-integrated photon-arrival rate on the
-prepared observation grid after object convolution and deterministic spatial
-preprocessing. No exposure, QE, noise, or readout operation is applied.
-"""

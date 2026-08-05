@@ -18,7 +18,19 @@ function prepare_test_lift(forward, observation; mode_ids=nothing, kwargs...)
         coefficients)
 end
 
+function replace_lift_optical_rate_workspace(workspace, optical_rate)
+    return WavefrontSensors.LiFTForwardWorkspace(workspace.propagation,
+        optical_rate, workspace.amplitude_buffer, workspace.field_scratch,
+        workspace.focal_buffer, workspace.mode_buffer,
+        workspace.conjugate_field_buffer, workspace.response_buffer,
+        workspace.response_scratch, workspace.sampling_buffer,
+        workspace.mapped_rate_buffer, workspace.output_work_buffer,
+        workspace.convolution_buffer, workspace.convolution_scratch,
+        workspace.opd_work_buffer)
+end
+
 @testset "LiFT" begin
+    @test Docs.hasdoc(WavefrontSensors, :evaluate_lift_forward!)
     fixed_damping = LiFTLevenbergMarquardt(lambda0=Float32(1e-4))
     @test fixed_damping isa LiFTLevenbergMarquardt{Float64}
     @test fixed_damping.lambda0 == Float64(Float32(1e-4))
@@ -44,7 +56,7 @@ end
     expected_fallback = (transpose(fallback_H) * fallback_H +
         fallback_lambda * I) \ (transpose(fallback_H) * fallback_residual)
     fallback_rhs = zeros(2)
-    fallback_diagnostics = WavefrontSensors.LiFTIterationWorkspace(
+    fallback_diagnostics = WavefrontSensors.LiFTDiagnosticsWorkspace(
         NaN, NaN, NaN, NaN, 0.0, false, false)
     WavefrontSensors.solve_lift_fallback!(fallback_diagnostics,
         fallback_rhs, fallback_H, fallback_residual, fallback_policy)
@@ -59,6 +71,9 @@ end
     diversity = zeros(8, 8)
     forward = prepare_lift_forward_model(tel, src, basis, diversity;
         diversity_opd=diversity, focal_resolution=8)
+    @test forward.output.values !== forward.workspace.optical_rate_buffer
+    @test !AdaptiveOpticsSim.WavefrontSensors._wfs_storage_mightalias(
+        forward.output.values, forward.workspace.optical_rate_buffer)
     psf = reference_direct_image(tel, src; zero_padding=1)
     observation = LiFTObservation(forward, copy(psf))
     lift = prepare_test_lift(forward, observation; iterations=2,
@@ -126,7 +141,8 @@ end
         allocation_observation; iterations=1, mode_ids=(1, 2),
         jacobian_method=LiFTAnalyticJacobian(),
         solve_mode=LiFTSolveNormalEquations(),
-        flux_normalization=LiFTFixedFlux(), check_convergence=false)
+        model_scaling=LiFTPhysicalRatePreservation(),
+        check_convergence=false)
     allocation_coefficients = allocation_lift.workspace.full_coefficients_buffer
     allocation_H = allocation_lift.workspace.H_buffer
     @test (@inferred WavefrontSensors.reconstruct!(allocation_lift)) ===
@@ -200,7 +216,8 @@ end
     initialized_product = zeros(2)
     initialized_lift = prepare_lift_estimator(
         LiFT(iterations=1, solve_mode=LiFTSolveNormalEquations(),
-            flux_normalization=LiFTFixedFlux(), check_convergence=false),
+            model_scaling=LiFTPhysicalRatePreservation(),
+            check_convergence=false),
         adaptive_forward, adaptive_observation, initialized_product;
         initial_coefficients=copy(adaptive_truth))
     WavefrontSensors.reconstruct!(initialized_lift)
@@ -238,6 +255,8 @@ end
     response_forward = prepare_lift_forward_model(tel, src, basis, diversity;
         diversity_opd=diversity, focal_resolution=8,
         mapping=response_mapping)
+    @test response_forward.output.values !==
+        response_forward.workspace.mapped_rate_buffer
     response_model_rate = copy(intensity_values(evaluate_lift_forward!(
         response_forward)))
     prepared_response = WavefrontSensors.lift_forward_plan(
@@ -321,11 +340,13 @@ end
         count_values; domain=count_domain)
     rate_estimator = prepare_test_lift(adaptive_forward, rate_observation;
         iterations=3, solve_mode=LiFTSolveNormalEquations(),
-        flux_normalization=LiFTFixedFlux(), check_convergence=false)
+        model_scaling=LiFTPhysicalRatePreservation(),
+        check_convergence=false)
     count_estimator = prepare_test_lift(adaptive_forward,
         count_observation; iterations=3,
         solve_mode=LiFTSolveNormalEquations(),
-        flux_normalization=LiFTFixedFlux(), check_convergence=false)
+        model_scaling=LiFTPhysicalRatePreservation(),
+        check_convergence=false)
     rate_estimate = WavefrontSensors.reconstruct(rate_estimator)
     count_estimate = WavefrontSensors.reconstruct(count_estimator)
     @test count_estimate ≈ rate_estimate rtol=1e-11 atol=1e-18
@@ -334,6 +355,14 @@ end
     predict_lift_observation!(predicted_counts, adaptive_forward,
         count_domain)
     @test predicted_counts ≈ count_values rtol=1e-12
+    prediction_output_snapshot = copy(adaptive_forward.output.values)
+    @test_throws InvalidConfiguration predict_lift_observation!(
+        adaptive_forward.output.values, adaptive_forward, count_domain)
+    @test adaptive_forward.output.values == prediction_output_snapshot
+    prediction_input_snapshot = copy(adaptive_forward.input)
+    @test_throws InvalidConfiguration predict_lift_observation!(
+        adaptive_forward.input, adaptive_forward, count_domain)
+    @test adaptive_forward.input == prediction_input_snapshot
     normalized_domain = LiFTNormalizedIntensity(sum(adaptive_target))
     predicted_normalized = similar(adaptive_target)
     predict_lift_observation!(predicted_normalized, adaptive_forward,
@@ -403,15 +432,35 @@ end
     malformed_output_snapshot = copy(forward.output.values)
     @test_throws InvalidConfiguration evaluate_lift_forward!(malformed_forward)
     @test forward.output.values == malformed_output_snapshot
+    workspace_output = IntensityMap(forward.output.metadata,
+        forward.workspace.optical_rate_buffer)
+    workspace_output_snapshot = copy(workspace_output.values)
+    malformed_workspace_output = PreparedLiFTForward(forward.plan,
+        forward.workspace, forward.input, workspace_output, forward.backend,
+        forward.device)
+    @test_throws InvalidConfiguration evaluate_lift_forward!(
+        malformed_workspace_output)
+    @test workspace_output.values == workspace_output_snapshot
+    malformed_workspace = replace_lift_optical_rate_workspace(
+        forward.workspace, zeros(7, 8))
+    malformed_workspace_forward = PreparedLiFTForward(forward.plan,
+        malformed_workspace, forward.input, forward.output, forward.backend,
+        forward.device)
+    malformed_workspace_snapshot = copy(forward.output.values)
+    @test_throws DimensionMismatchError evaluate_lift_forward!(
+        malformed_workspace_forward)
+    @test forward.output.values == malformed_workspace_snapshot
 
     concurrent_first = prepare_test_lift(forward, allocation_observation;
         iterations=1, mode_ids=(1, 2),
         solve_mode=LiFTSolveNormalEquations(),
-        flux_normalization=LiFTFixedFlux(), check_convergence=false)
+        model_scaling=LiFTPhysicalRatePreservation(),
+        check_convergence=false)
     concurrent_second = prepare_test_lift(forward, allocation_observation;
         iterations=1, mode_ids=(1, 2),
         solve_mode=LiFTSolveNormalEquations(),
-        flux_normalization=LiFTFixedFlux(), check_convergence=false)
+        model_scaling=LiFTPhysicalRatePreservation(),
+        check_convergence=false)
     first_task = Threads.@spawn WavefrontSensors.reconstruct!(concurrent_first)
     second_task = Threads.@spawn WavefrontSensors.reconstruct!(concurrent_second)
     fetch(first_task)

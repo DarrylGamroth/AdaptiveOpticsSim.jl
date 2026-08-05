@@ -1597,8 +1597,8 @@ components. Migrated bindings are not forwarded through the root.
   `LiFTLevenbergMarquardt`, `LiFTAdaptiveLevenbergMarquardt`,
   `LiFTInitialModelWeighting`, `LiFTIterativeModelWeighting`,
   `LiFTReadNoiseWeighting`, `LiFTVarianceMapWeighting`,
-  `LiFTTotalFluxNormalization`, `LiFTPeakIntensityNormalization`, and
-  `LiFTFixedFlux`
+  `LiFTTotalRateMatching`, `LiFTPeakRateMatching`, and
+  `LiFTPhysicalRatePreservation`
 - Qualified LiFT ownership accessors: `WavefrontSensors.lift_forward_plan`,
   `WavefrontSensors.lift_forward_workspace`,
   `WavefrontSensors.lift_estimation_plan`, and
