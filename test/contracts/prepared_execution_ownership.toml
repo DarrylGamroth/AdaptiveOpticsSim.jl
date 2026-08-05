@@ -20,7 +20,7 @@ entries = [
     ["Calibration","AbstractCalibrationCommandPlan","retain","plan_protocol","PE-01","Actuator and command-basis plans share command-count and command-staging behavior."],
     ["Detectors","AbstractDetectorExecutionStrategy","reclassify_strategy","none","PE-02","Zero-size direct/host-mirror selectors choose detector execution without owning a prepared detector contract."],
     ["WavefrontSensors","AbstractPreparedCurvatureObservationMapping","remove_now","none","PE-01","The closed image-pair and channel-pair mappings share no operation through the abstract root."],
-    ["WavefrontSensors","AbstractPreparedFourPupilLGS","retain","plan_protocol","PE-01","No-op, elongation, and sodium-profile plans share prepared application and exact-target validation."],
+    ["WavefrontSensors","AbstractPreparedFourPupilLGS","retain","plan_protocol","PE-01","No-op, elongation, and sodium-layer-profile plans share prepared application and exact-target validation."],
     ["WavefrontSensors","AbstractWFSAcquisitionPlan","retain","plan_protocol","PE-05","Generic frame, accumulated-count, and static fan-out plans share one run-immutable acquisition contract while exact live owners remain separate."],
     ["WavefrontSensors","AbstractGroupedAccumulationStrategy","reclassify_strategy","none","PE-02","Zero-size accumulation selectors choose one reduction implementation and own no prepared mapping or resource."],
     ["WavefrontSensors","AbstractShackHartmannWFSSensingStrategy","reclassify_strategy","none","PE-02","Zero-size sensing selectors choose scalar, batched, or device-statistics execution and own no prepared optical contract."],
@@ -62,7 +62,7 @@ conformance_suites = ["calibration-workflows","prepared-execution-interfaces"]
 owner = "WavefrontSensors"
 name = "AbstractPreparedFourPupilLGS"
 visibility = "internal"
-implementations = ["NoPreparedFourPupilLGS","PreparedFourPupilElongation","PreparedFourPupilSodiumProfile"]
+implementations = ["NoPreparedFourPupilLGS","PreparedFourPupilElongation","PreparedFourPupilSodiumLayerProfile"]
 required_methods = ["apply_prepared_four_pupil_lgs!","_require_exact_prepared_four_pupil_lgs_target"]
 conformance_helpers = ["assert_prepared_four_pupil_lgs_conformance!"]
 valid_defaults = []
@@ -996,7 +996,7 @@ entries = [
     ["AbstractPreparedFourPupilLGS","abstract_type",-1,"prepared",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
     ["NoPreparedFourPupilLGS","struct",0,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PreparedFourPupilElongation","struct",2,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
-    ["PreparedFourPupilSodiumProfile","struct",1,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedFourPupilSodiumLayerProfile","struct",1,"prepared",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]

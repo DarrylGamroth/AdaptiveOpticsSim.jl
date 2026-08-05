@@ -9,7 +9,8 @@ include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao188_simulat
 using .SubaruAO188Simulation
 
 const _backend_arg = isempty(ARGS) ? "cpu" : lowercase(ARGS[1])
-const _profile_arg = length(ARGS) >= 2 ? lowercase(ARGS[2]) : "none"
+const _sodium_layer_model_arg = length(ARGS) >= 2 ? lowercase(ARGS[2]) :
+    "none"
 
 if _backend_arg == "cuda"
     import CUDA
@@ -44,15 +45,15 @@ function _sync_wfs!(::Type{B}, wfs) where {B<:AdaptiveOpticsSim.Backends.GPUBack
     return nothing
 end
 
-function _na_profile(T::Type{<:AbstractFloat})
-    return T[
-        88000 89500 90500 91500 93000;
-        0.10  0.25  0.30  0.25  0.10;
-    ]
+function _sodium_layer_profile(T::Type{<:AbstractFloat})
+    return SodiumLayerProfile(
+        T[88_000, 89_500, 90_500, 91_500, 93_000],
+        T[0.10, 0.25, 0.30, 0.25, 0.10])
 end
 
-function _resolve_lgs(profile_name::AbstractString, T::Type{<:AbstractFloat})
-    lowered = lowercase(profile_name)
+function _resolve_lgs(sodium_layer_model::AbstractString,
+    T::Type{<:AbstractFloat})
+    lowered = lowercase(sodium_layer_model)
     if lowered == "none"
         src = LGSSource(
             magnitude=8.0,
@@ -64,24 +65,26 @@ function _resolve_lgs(profile_name::AbstractString, T::Type{<:AbstractFloat})
             T=T,
         )
         return src, "none"
-    elseif lowered == "na" || lowered == "na_profile"
+    elseif lowered == "sodium_layer"
         src = LGSSource(
             magnitude=8.0,
             wavelength=589e-9,
             altitude=90000.0,
             elongation_factor=1.6,
             laser_coordinates=(5.0, 0.0),
-            na_profile=_na_profile(T),
+            sodium_layer_profile=_sodium_layer_profile(T),
             fwhm_spot_up=1.0,
             photon_irradiance=one(T),
             T=T,
         )
-        return src, "na_profile"
+        return src, "sodium_layer"
     end
-    error("unsupported LGS profile '$profile_name'; use none or na")
+    error("unsupported sodium-layer model '$sodium_layer_model'; " *
+        "use none or sodium_layer")
 end
 
-function run_profile(; backend_name::AbstractString="cpu", profile_name::AbstractString="none",
+function run_profile(; backend_name::AbstractString="cpu",
+    sodium_layer_model::AbstractString="none",
     samples::Int=20, warmup::Int=5)
     backend, backend_tag, backend_label = _resolve_backend(backend_name)
     T = Float32
@@ -93,7 +96,7 @@ function run_profile(; backend_name::AbstractString="cpu", profile_name::Abstrac
         T=T,
         backend=backend,
     )
-    src, lgs_label = _resolve_lgs(profile_name, T)
+    src, sodium_layer_label = _resolve_lgs(sodium_layer_model, T)
     wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
     det = SubaruAO188Simulation.detector_from_config(
         AO188WFSDetectorConfig(
@@ -128,15 +131,17 @@ function run_profile(; backend_name::AbstractString="cpu", profile_name::Abstrac
 
     println("lgs_sh_runtime_profile")
     println("  backend: ", backend_label)
-    println("  lgs_profile: ", lgs_label)
+    println("  sodium_layer_model: ", sodium_layer_label)
     println("  build_time_ns: ", build_time_ns)
     println("  measure_mean_ns: ", timing.mean_ns)
     println("  measure_p95_ns: ", timing.p95_ns)
     println("  frame_rate_hz: ", 1.0e9 / timing.mean_ns)
     println("  spot_cube_shape: ",
         size(WavefrontSensors._legacy_shack_hartmann_spot_cube(wfs)))
-    println("  has_na_profile: ", AdaptiveOpticsSim.Optics.lgs_has_profile(src))
+    println("  has_sodium_layer_profile: ",
+        AdaptiveOpticsSim.Optics.sodium_layer_profile(src) !== nothing)
     return nothing
 end
 
-run_profile(; backend_name=_backend_arg, profile_name=_profile_arg)
+run_profile(; backend_name=_backend_arg,
+    sodium_layer_model=_sodium_layer_model_arg)

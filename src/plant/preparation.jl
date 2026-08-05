@@ -139,7 +139,8 @@ end
 
 @inline function _leaf_source_geometry_key(src::LGSSource)
     params = src.params
-    profile = isnothing(params.na_profile) ? nothing : copy(params.na_profile)
+    profile = isnothing(params.sodium_layer_profile) ? nothing :
+        copy(params.sodium_layer_profile)
     return (
         kind=LGSSource,
         direction_arcsec=coordinates_xy_arcsec(src),
@@ -147,7 +148,7 @@ end
         laser_coordinates_m=params.laser_coordinates,
         elongation_factor=params.elongation_factor,
         uplink_fwhm_arcsec=params.fwhm_spot_up,
-        sodium_profile=profile,
+        sodium_layer_profile=profile,
     )
 end
 

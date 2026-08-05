@@ -584,18 +584,20 @@ end
 function _prepare_sh_source_workspace!(::ExecutionStyle,
     optics::ShackHartmannOptics, input::PupilFunction,
     source::LGSSource, wavelength_m::Real)
-    return _prepare_sh_lgs_workspace!(lgs_profile(source), optics, input,
+    return _prepare_sh_lgs_workspace!(sodium_layer_profile_style(source),
+        optics, input,
         source, wavelength_m)
 end
 
 function _prepare_sh_source_workspace!(::ExecutionStyle,
     optics::ShackHartmannOptics, input::PupilFunction,
     source::ShackHartmannSpectralComponent{<:LGSSource}, wavelength_m::Real)
-    return _prepare_sh_lgs_workspace!(lgs_profile(source.source), optics,
+    return _prepare_sh_lgs_workspace!(
+        sodium_layer_profile_style(source.source), optics,
         input, source.source, wavelength_m)
 end
 
-function _prepare_sh_lgs_workspace!(::LGSProfileNone,
+function _prepare_sh_lgs_workspace!(::NoSodiumLayerProfileStyle,
     optics::ShackHartmannOptics, ::PupilFunction,
     source::LGSSource, ::Real)
     workspace = microlens_propagation_workspace(optics.propagation)
@@ -606,7 +608,7 @@ function _prepare_sh_lgs_workspace!(::LGSProfileNone,
     return nothing
 end
 
-function _prepare_sh_lgs_workspace!(::LGSProfileNaProfile,
+function _prepare_sh_lgs_workspace!(::SampledSodiumLayerProfileStyle,
     optics::ShackHartmannOptics, input::PupilFunction,
     source::LGSSource, wavelength_m::Real)
     metadata = input.metadata
@@ -978,18 +980,20 @@ end
 
 @inline function _apply_sh_source_spot_model!(style::ExecutionStyle,
     sensor::ShackHartmannOptics, input, source::LGSSource)
-    return _apply_sh_lgs_spot_model!(lgs_profile(source), style, sensor,
+    return _apply_sh_lgs_spot_model!(sodium_layer_profile_style(source),
+        style, sensor,
         input, source, wavelength(source))
 end
 
 @inline function _apply_sh_source_spot_model!(style::ExecutionStyle,
     sensor::ShackHartmannOptics, input,
     source::ShackHartmannSpectralComponent{<:LGSSource})
-    return _apply_sh_lgs_spot_model!(lgs_profile(source.source), style,
+    return _apply_sh_lgs_spot_model!(
+        sodium_layer_profile_style(source.source), style,
         sensor, input, source.source, wavelength(source))
 end
 
-function _apply_sh_lgs_spot_model!(::LGSProfileNone,
+function _apply_sh_lgs_spot_model!(::NoSodiumLayerProfileStyle,
     ::ExecutionStyle, sensor::ShackHartmannOptics, input,
     source::LGSSource,
     wavelength_m::Real)
@@ -1000,7 +1004,7 @@ function _apply_sh_lgs_spot_model!(::LGSProfileNone,
     return nothing
 end
 
-function _apply_sh_lgs_spot_model!(::LGSProfileNaProfile,
+function _apply_sh_lgs_spot_model!(::SampledSodiumLayerProfileStyle,
     ::ExecutionStyle, sensor::ShackHartmannOptics, input,
     source::LGSSource,
     wavelength_m::Real)

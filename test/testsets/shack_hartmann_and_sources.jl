@@ -290,19 +290,21 @@ end
     @test isfinite(lgs_peak_accel)
     @test lgs_peak_accel >= 0
 
-    na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
-    lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile,
+    sodium_layer_profile = SodiumLayerProfile(
+        [80_000.0, 90_000.0, 100_000.0], [0.2, 0.6, 0.2])
+    sodium_lgs = LGSSource(elongation_factor=1.2,
+        sodium_layer_profile=sodium_layer_profile,
         fwhm_spot_up=1.0, photon_irradiance=1.0)
-    sh_lgs_profile_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    WavefrontSensors.prepare_sampling!(sh_lgs_profile_accel, pupil,
-        lgs_profile)
+    sh_sodium_lgs_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    WavefrontSensors.prepare_sampling!(sh_sodium_lgs_accel, pupil,
+        sodium_lgs)
     @test WavefrontSensors.sampled_spots_peak!(KA_CPU_STYLE,
-        sh_lgs_profile_accel, pupil, lgs_profile) >= 0
-    sh_lgs_profile_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    WavefrontSensors.prepare_sampling!(sh_lgs_profile_det_accel, pupil,
-        lgs_profile)
+        sh_sodium_lgs_accel, pupil, sodium_lgs) >= 0
+    sh_sodium_lgs_det_accel = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
+    WavefrontSensors.prepare_sampling!(sh_sodium_lgs_det_accel, pupil,
+        sodium_lgs)
     @test WavefrontSensors.sampled_spots_peak!(
-        KA_CPU_STYLE, sh_lgs_profile_det_accel, pupil, lgs_profile, det,
+        KA_CPU_STYLE, sh_sodium_lgs_det_accel, pupil, sodium_lgs, det,
         MersenneTwister(25)) >= 0
 end
 
@@ -310,29 +312,33 @@ end
     tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
     pupil = PupilFunction(tel)
-    profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
-    shifted_profile = [80000.0 90000.0 100000.0; 0.1 0.6 0.3]
-    base = LGSSource(na_profile=profile, laser_coordinates=(0.0, 0.0),
+    profile = SodiumLayerProfile(
+        [80_000.0, 90_000.0, 100_000.0], [0.2, 0.6, 0.2])
+    shifted_profile = SodiumLayerProfile(
+        [80_000.0, 90_000.0, 100_000.0], [0.1, 0.6, 0.3])
+    base = LGSSource(sodium_layer_profile=profile,
+        laser_coordinates=(0.0, 0.0),
         fwhm_spot_up=0.8, elongation_factor=1.2,
         photon_irradiance=1.0)
-    changed_elongation = LGSSource(na_profile=profile,
+    changed_elongation = LGSSource(sodium_layer_profile=profile,
         laser_coordinates=(0.0, 0.0), fwhm_spot_up=0.8,
         elongation_factor=1.3, photon_irradiance=1.0)
-    changed_launch = LGSSource(na_profile=profile,
+    changed_launch = LGSSource(sodium_layer_profile=profile,
         laser_coordinates=(1.5, -0.5), fwhm_spot_up=0.8,
         elongation_factor=1.2, photon_irradiance=1.0)
-    changed_uplink_width = LGSSource(na_profile=profile,
+    changed_uplink_width = LGSSource(sodium_layer_profile=profile,
         laser_coordinates=(0.0, 0.0), fwhm_spot_up=1.1,
         elongation_factor=1.2, photon_irradiance=1.0)
-    changed_geometry = LGSSource(na_profile=profile,
+    changed_geometry = LGSSource(sodium_layer_profile=profile,
         laser_coordinates=(1.5, -0.5), fwhm_spot_up=1.1,
         elongation_factor=1.4, photon_irradiance=1.0)
-    changed_profile = LGSSource(na_profile=shifted_profile,
+    changed_profile = LGSSource(sodium_layer_profile=shifted_profile,
         laser_coordinates=(1.5, -0.5), fwhm_spot_up=1.1,
         elongation_factor=1.4, photon_irradiance=1.0)
     reshaped_profile = LGSSource(
-        na_profile=[80000.0 90000.0 90000.0 100000.0;
-            0.2 0.3 0.3 0.2],
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, 90_000.0, 90_000.0, 100_000.0],
+            [0.2, 0.3, 0.3, 0.2]),
         laser_coordinates=(0.0, 0.0), fwhm_spot_up=0.8,
         elongation_factor=1.2, photon_irradiance=1.0)
 

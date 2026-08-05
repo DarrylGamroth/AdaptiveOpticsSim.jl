@@ -2072,7 +2072,8 @@ end
 
     sodium_lgs = LGSSource(wavelength=wavelength(src),
         photon_irradiance=T(6),
-        na_profile=T[80_000 90_000 100_000; 0.2 0.6 0.2],
+        sodium_layer_profile=SodiumLayerProfile(
+            T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
         laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     native_sodium = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
@@ -2673,7 +2674,8 @@ end
         photon_irradiance=T(6), elongation_factor=T(1.8), T=T)
     sodium_lgs = LGSSource(wavelength=wavelength(source),
         photon_irradiance=T(6),
-        na_profile=T[80_000 90_000 100_000; 0.2 0.6 0.2],
+        sodium_layer_profile=SodiumLayerProfile(
+            T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
         laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     heterogeneous_source = Asterism(AbstractSource[source, simple_lgs])
     for family in (Val(:pyramid), Val(:bi_o_edge))

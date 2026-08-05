@@ -444,12 +444,11 @@ function _update_edge_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Bool},
     return mask
 end
 
-@inline ensure_bi_o_edge_lgs_kernel!(::LGSProfileNone, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
-@inline ensure_bi_o_edge_lgs_kernel!(::LGSProfileNaProfile, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource) =
+@inline ensure_bi_o_edge_lgs_kernel!(::NoSodiumLayerProfileStyle, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
+@inline ensure_bi_o_edge_lgs_kernel!(::SampledSodiumLayerProfileStyle, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource) =
     ensure_lgs_kernel!(wfs, pupil, src)
-@inline ensure_bi_o_edge_lgs_kernel!(profile, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource) = wfs
 
-@inline function apply_bi_o_edge_lgs_profile!(::LGSProfileNone, wfs::BiOEdgeWFS, src::LGSSource,
+@inline function apply_bi_o_edge_sodium_layer_profile!(::NoSodiumLayerProfileStyle, wfs::BiOEdgeWFS, src::LGSSource,
     lgs_fft_buffer, lgs_ifft_buffer)
     wfs.front_end.propagation.elongation_kernel = apply_elongation!(
         wfs.front_end.propagation.temp,
@@ -460,7 +459,7 @@ end
     return wfs.front_end.propagation.temp
 end
 
-@inline function apply_bi_o_edge_lgs_profile!(::LGSProfileNaProfile, wfs::BiOEdgeWFS, src::LGSSource,
+@inline function apply_bi_o_edge_sodium_layer_profile!(::SampledSodiumLayerProfileStyle, wfs::BiOEdgeWFS, src::LGSSource,
     lgs_fft_buffer, lgs_ifft_buffer)
     apply_lgs_convolution!(
         wfs.front_end.propagation.temp,
@@ -472,9 +471,6 @@ end
     )
     return wfs.front_end.propagation.temp
 end
-
-@inline apply_bi_o_edge_lgs_profile!(profile, wfs::BiOEdgeWFS, src::LGSSource, lgs_fft_buffer, lgs_ifft_buffer) =
-    wfs.front_end.propagation.temp
 
 function build_bi_o_edge_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     _build_bi_o_edge_phasor!(execution_style(phasor), phasor)

@@ -822,6 +822,12 @@ spectral-by-spatial-by-directional Cartesian quadrature, prepare the components
 explicitly and accumulate only metadata-compatible intensity products; there is
 not yet a nested convenience API for that product space.
 
+Use `SodiumLayerProfile(altitudes_m, relative_weights)` when an `LGSSource`
+needs a sampled sodium-layer return model. The altitude samples are in metres;
+the weights are nonnegative relative photon returns. Pass it as
+`LGSSource(sodium_layer_profile=profile)`. Omit the profile for a finite-height
+LGS represented by its scalar `altitude` and simple elongation factor.
+
 Prepared diffractive Shack–Hartmann optics keep distinct wavelength grids
 as separate native-sampling products in an `OpticalProductBundle`; it never
 index-adds or implicitly resamples them. A single output therefore accepts only
@@ -850,7 +856,7 @@ Reprepare an optical plan after changing the front-end propagation sampling.
 A single diffractive Shack–Hartmann, Pyramid, Bi-O-edge, or atmosphere-aware
 Curvature acquisition also requires every asterism leaf to share one optical
 calibration signature. In particular, mixed NGS/LGS lists and LGS leaves with
-different elongation or sodium-profile geometry belong on independently
+different elongation or sodium-layer-profile geometry belong on independently
 calibrated WFS paths.
 
 ## Choosing Components

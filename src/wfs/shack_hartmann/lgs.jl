@@ -1,4 +1,4 @@
-function apply_lgs_elongation!(::LGSProfileNone,
+function apply_lgs_elongation!(::NoSodiumLayerProfileStyle,
     wfs::ShackHartmannWFS, ::PupilFunction, src::LGSSource, ::Int)
     wfs.optics.propagation.workspace.elongation_kernel = apply_elongation!(
         wfs.optics.propagation.workspace.intensity,
@@ -9,7 +9,7 @@ function apply_lgs_elongation!(::LGSProfileNone,
     return wfs
 end
 
-function apply_lgs_elongation!(::LGSProfileNaProfile, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource, idx::Int)
+function apply_lgs_elongation!(::SampledSodiumLayerProfileStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource, idx::Int)
     ensure_lgs_kernels!(wfs, pupil, src)
     apply_lgs_convolution!(
         wfs.optics.propagation.workspace.intensity,
@@ -35,8 +35,8 @@ function ensure_lgs_kernels!(model::ShackHartmannOptics,
     pupil_dimensions::NTuple{2,Int}, pupil_diameter::Real,
     pupil_sampling::NTuple{2,<:Real}, pupil_origin::NTuple{2,<:Real},
     wavelength_m::Real)
-    na_profile = src.params.na_profile
-    if na_profile === nothing
+    profile = src.params.sodium_layer_profile
+    if profile === nothing
         return model
     end
     propagation = microlens_propagation_workspace(model.propagation)
@@ -94,9 +94,9 @@ function lgs_spot_kernels_fft(pupil_diameter::Real,
     propagation = microlens_propagation_workspace(model.propagation)
     T = eltype(propagation.intensity)
     n_sub = n_lenslets(model)
-    na_profile = src.params.na_profile
-    altitudes = na_profile[1, :]
-    weights = na_profile[2, :]
+    profile = src.params.sodium_layer_profile
+    altitudes = profile.altitudes_m
+    weights = profile.relative_weights
     if length(altitudes) == 0
         return similar(propagation.fft_buffer, Complex{T}, 0, 0, 0)
     end

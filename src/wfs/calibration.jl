@@ -8,10 +8,13 @@ function lgs_optical_signature(src::LGSSource, sig::UInt)
     sig = hash(params.elongation_factor, sig)
     sig = hash(params.laser_coordinates, sig)
     sig = hash(params.fwhm_spot_up, sig)
-    profile = params.na_profile
+    profile = params.sodium_layer_profile
     if profile !== nothing
-        sig = hash(size(profile), sig)
-        @inbounds for value in profile
+        sig = hash(length(profile.altitudes_m), sig)
+        @inbounds for value in profile.altitudes_m
+            sig = hash(value, sig)
+        end
+        @inbounds for value in profile.relative_weights
             sig = hash(value, sig)
         end
     end

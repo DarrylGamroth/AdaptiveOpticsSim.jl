@@ -2889,7 +2889,7 @@ function run_optional_lgs_convolution_normalization(::Type{B}) where {B<:Adaptiv
     return nothing
 end
 
-function run_optional_sodium_profile_wfs(::Type{B},
+function run_optional_sodium_layer_profile_wfs(::Type{B},
     BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     selector = backend_selector(B)
     T = Float32
@@ -2899,7 +2899,8 @@ function run_optional_sodium_profile_wfs(::Type{B},
 
     for family in (:pyramid, :bi_o_edge)
         src = LGSSource(
-            na_profile=T[80000 90000 100000; 0.2 0.6 0.2],
+            sodium_layer_profile=SodiumLayerProfile(
+                T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
             laser_coordinates=(T(1), T(-0.5)),
             fwhm_spot_up=T(0.8),
             photon_irradiance=one(T),
@@ -2923,7 +2924,8 @@ function run_optional_sodium_profile_wfs(::Type{B},
         @test slopes isa BackendArray
         @test all(isfinite, Array(slopes))
 
-        src.params.na_profile[2, :] .= T[0.8, 0.1, 0.1]
+        src.params.sodium_layer_profile.relative_weights .=
+            T[0.8, 0.1, 0.1]
         WavefrontSensors.ensure_lgs_kernel!(wfs, pupil, src)
         @test propagation.lgs_kernel_tag != original_tag
         @test !isapprox(Array(propagation.lgs_kernel_fft), original_kernel;
@@ -3228,7 +3230,8 @@ function run_optional_wfs_stage_contracts(
 
     sodium_lgs = LGSSource(wavelength=wavelength(src),
         photon_irradiance=T(4),
-        na_profile=T[80_000 90_000 100_000; 0.2 0.6 0.2],
+        sodium_layer_profile=SodiumLayerProfile(
+            T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
         laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     spectral_sodium = with_spectrum(sodium_lgs, SpectralBundle(
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6];
@@ -3643,7 +3646,8 @@ function run_optional_wfs_stage_contracts(
                 photon_irradiance=T(4), elongation_factor=T(1.8), T=T),
             LGSSource(wavelength=wavelength(src),
                 photon_irradiance=T(4),
-                na_profile=T[80_000 90_000 100_000; 0.2 0.6 0.2],
+                sodium_layer_profile=SodiumLayerProfile(
+                    T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
                 laser_coordinates=(T(1), T(-0.5)),
                 fwhm_spot_up=T(0.8), T=T),
         )
@@ -5969,7 +5973,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_exact_compute_device_checks(B, backend)
     run_optional_backend_selector_smoke(B, backend)
     run_optional_lgs_convolution_normalization(B)
-    run_optional_sodium_profile_wfs(B, backend)
+    run_optional_sodium_layer_profile_wfs(B, backend)
     run_optional_zernike_normalization(B, backend)
     run_optional_generic_wfs_acquisition_checks(B, backend)
     run_optional_wfs_stage_contracts(B, backend)

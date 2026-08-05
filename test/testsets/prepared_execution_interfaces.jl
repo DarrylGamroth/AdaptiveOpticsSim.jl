@@ -49,7 +49,7 @@ end
         scratch, fft_buffer, fft_plan, ifft_buffer, ifft_plan, target)
     @test intensity == ones(4, 4)
 
-    sodium = WavefrontSensors.PreparedFourPupilSodiumProfile(
+    sodium = WavefrontSensors.PreparedFourPupilSodiumLayerProfile(
         ones(ComplexF64, size(intensity)))
     intensity .= reshape(collect(1.0:16.0), 4, 4)
     baseline = copy(intensity)

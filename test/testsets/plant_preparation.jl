@@ -812,15 +812,18 @@ end
     @test isequal(equivalent_key, science_path.key)
     @test hash(equivalent_key) == hash(science_path.key)
 
-    sodium_profile = T[80_000 90_000 100_000; 0.2 0.6 0.2]
+    sodium_layer_profile = SodiumLayerProfile(
+        T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2])
     lgs_source = LGSSource(wavelength=T(589e-9),
-        photon_irradiance=T(2), na_profile=sodium_profile,
+        photon_irradiance=T(2),
+        sodium_layer_profile=sodium_layer_profile,
         laser_coordinates=(T(1), T(-0.5)), elongation_factor=T(1.2),
         fwhm_spot_up=T(0.8), T=T)
     lgs_geometry = Plant.path_source_geometry_key(lgs_source)
     @test lgs_geometry.kind === LGSSource
-    @test lgs_geometry.sodium_profile == sodium_profile
-    @test lgs_geometry.sodium_profile !== lgs_source.params.na_profile
+    @test lgs_geometry.sodium_layer_profile == sodium_layer_profile
+    @test lgs_geometry.sodium_layer_profile !==
+        lgs_source.params.sodium_layer_profile
     @test only(Plant.path_source_spectral_key(
         lgs_source)).wavelength_m == wavelength(lgs_source)
     @test Plant.path_source_radiometry_key(
@@ -839,12 +842,13 @@ end
     )
     lgs_hash = hash(lgs_key)
     keyed_results = Dict(lgs_key => :prepared)
-    exposed_profile = lgs_key.source_geometry.sodium_profile
-    exposed_profile[1, 1] = -one(T)
-    lgs_geometry.sodium_profile[1, 1] = -T(2)
+    exposed_profile = lgs_key.source_geometry.sodium_layer_profile
+    exposed_profile.altitudes_m[1] = -one(T)
+    lgs_geometry.sodium_layer_profile.altitudes_m[1] = -T(2)
     @test hash(lgs_key) == lgs_hash
     @test keyed_results[lgs_key] === :prepared
-    @test lgs_key.source_geometry.sodium_profile == sodium_profile
+    @test lgs_key.source_geometry.sodium_layer_profile ==
+        sodium_layer_profile
 
     spectral_source = with_spectrum(science_source, SpectralBundle(
         T[0.75e-6, 0.85e-6], T[0.4, 0.6]))

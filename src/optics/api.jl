@@ -2,10 +2,11 @@ export CircularAperture, AnnularAperture, SpiderMask
 export RectangularROI, SubapertureGridMask
 export build_mask!, apply_mask!
 
-export Telescope, Source, LGSSource, Asterism
+export Telescope, Source, LGSSource, SodiumLayerProfile, Asterism
 export AbstractSourceRadiometry, PhysicalPhotonIrradianceSource
 export NormalizedTestSource, source_radiometry, source_radiometric_value
-export wavelength, photon_irradiance, optical_path, pupil_photon_rate_map
+export wavelength, photon_irradiance, sodium_layer_profile, optical_path
+export pupil_photon_rate_map
 export reset_opd!, apply_opd!, set_pupil!, set_pupil_reflectivity!
 export pupil_mask, pupil_reflectivity, apply_spiders!
 export focal_plane_pixel_scale_arcsec

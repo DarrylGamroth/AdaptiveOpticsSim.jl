@@ -276,7 +276,8 @@ end
 
 function pyramid_intensity!(out::AbstractMatrix{T}, wfs::PyramidWFS, pupil::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
     pyramid_intensity_core!(out, wfs, pupil, src)
-    apply_lgs_elongation!(lgs_profile(src), out, wfs, pupil, src)
+    apply_lgs_elongation!(sodium_layer_profile_style(src), out, wfs,
+        pupil, src)
     return out
 end
 
@@ -334,7 +335,7 @@ function pyramid_modulation_frame(wfs::PyramidWFS{<:Diffractive},
     return pyramid_modulation_frame!(out, wfs, pupil, src)
 end
 
-function apply_lgs_elongation!(::LGSProfileNone, out::AbstractMatrix{T}, wfs::PyramidWFS,
+function apply_lgs_elongation!(::NoSodiumLayerProfileStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
     ::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
     wfs.front_end.propagation.elongation_kernel = apply_elongation!(
         out,
@@ -345,7 +346,7 @@ function apply_lgs_elongation!(::LGSProfileNone, out::AbstractMatrix{T}, wfs::Py
     return wfs
 end
 
-function apply_lgs_elongation!(::LGSProfileNaProfile, out::AbstractMatrix{T}, wfs::PyramidWFS,
+function apply_lgs_elongation!(::SampledSodiumLayerProfileStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
     pupil::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
     ensure_lgs_kernel!(wfs, pupil, src)
     apply_lgs_convolution!(
@@ -360,8 +361,8 @@ function apply_lgs_elongation!(::LGSProfileNaProfile, out::AbstractMatrix{T}, wf
 end
 
 function ensure_lgs_kernel!(wfs::PyramidWFS, pupil::PupilFunction, src::LGSSource)
-    na_profile = src.params.na_profile
-    if na_profile === nothing
+    profile = src.params.sodium_layer_profile
+    if profile === nothing
         return wfs
     end
     pad = size(wfs.front_end.propagation.intensity, 1)

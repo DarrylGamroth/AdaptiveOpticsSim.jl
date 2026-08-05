@@ -297,7 +297,8 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::Pup
             xe = min(i * sub, n)
             ye = min(j * sub, n)
             compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
-            apply_lgs_elongation!(lgs_profile(src), wfs, pupil, src, idx)
+            apply_lgs_elongation!(sodium_layer_profile_style(src), wfs,
+                pupil, src, idx)
             sample_spot!(wfs.optics, wfs.optics.propagation.workspace.intensity)
             copyto!(spot_view, wfs.optics.propagation.workspace.spot)
             peak = max(peak, sh_safe_peak_value(spot_view))
@@ -310,7 +311,8 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::Pup
 end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
-    return sampled_spots_peak_lgs!(lgs_profile(src), style, wfs, pupil, src)
+    return sampled_spots_peak_lgs!(sodium_layer_profile_style(src), style,
+        wfs, pupil, src)
 end
 
 function sampled_spots_peak!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
@@ -486,7 +488,8 @@ function sampled_spots_peak!(::ScalarCPUStyle, wfs::ShackHartmannWFS, pupil::Pup
             xe = min(i * sub, n)
             ye = min(j * sub, n)
             compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
-            apply_lgs_elongation!(lgs_profile(src), wfs, pupil, src, idx)
+            apply_lgs_elongation!(sodium_layer_profile_style(src), wfs,
+                pupil, src, idx)
             sample_spot!(wfs.optics, wfs.optics.propagation.workspace.intensity)
             frame = capture!(det, wfs.optics.propagation.workspace.spot, src; rng=rng)
             copyto!(spot_view, frame)
@@ -501,10 +504,11 @@ end
 
 function sampled_spots_peak!(style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
-    return sampled_spots_peak_lgs!(lgs_profile(src), style, wfs, pupil, src, det, rng)
+    return sampled_spots_peak_lgs!(sodium_layer_profile_style(src), style,
+        wfs, pupil, src, det, rng)
 end
 
-function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
+function sampled_spots_peak_lgs!(::NoSodiumLayerProfileStyle, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
     compute_intensity_stack!(style, wfs, pupil, src)
     tmp_view = @view wfs.optics.propagation.workspace.intensity_tmp_stack[:, :, 1:size(wfs.optics.propagation.workspace.intensity_stack, 3)]
     apply_elongation_stack!(wfs.optics.propagation.workspace.intensity_stack, lgs_elongation_factor(src),
@@ -514,7 +518,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
     return sh_safe_peak_value(wfs.workspace.spot_cube)
 end
 
-function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
+function sampled_spots_peak_lgs!(::NoSodiumLayerProfileStyle, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
     compute_intensity_stack!(style, wfs, pupil, src)
     tmp_view = @view wfs.optics.propagation.workspace.intensity_tmp_stack[:, :, 1:size(wfs.optics.propagation.workspace.intensity_stack, 3)]
@@ -529,7 +533,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNone, style::AcceleratorStyle, wfs:
     return sh_safe_peak_value(wfs.workspace.spot_cube)
 end
 
-function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
+function sampled_spots_peak_lgs!(::SampledSodiumLayerProfileStyle, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
     n_sub = n_lenslets(wfs)
     compute_intensity_stack!(style, wfs, pupil, src)
     ensure_lgs_kernels!(wfs, pupil, src)
@@ -540,7 +544,7 @@ function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle,
     return sh_safe_peak_value(wfs.workspace.spot_cube)
 end
 
-function sampled_spots_peak_lgs!(::LGSProfileNaProfile, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
+function sampled_spots_peak_lgs!(::SampledSodiumLayerProfileStyle, style::AcceleratorStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector, rng::AbstractRNG)
     n_sub = n_lenslets(wfs)
     compute_intensity_stack!(style, wfs, pupil, src)
@@ -826,7 +830,8 @@ end
 function centroid_sums!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource,
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, pad::Int, idx::Int)
     compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
-    apply_lgs_elongation!(lgs_profile(src), wfs, pupil, src, idx)
+    apply_lgs_elongation!(sodium_layer_profile_style(src), wfs, pupil,
+        src, idx)
     spot = sample_spot!(wfs.optics, wfs.optics.propagation.workspace.intensity)
     copyto!(sh_spot_view(wfs, idx), spot)
     return centroid_from_spot!(wfs, spot)
@@ -846,7 +851,8 @@ function centroid_sums!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSou
     xs::Int, ys::Int, xe::Int, ye::Int, ox::Int, oy::Int, sub::Int, ::Int, idx::Int,
     det::AbstractDetector, rng::AbstractRNG)
     compute_intensity!(wfs, pupil, src, xs, ys, xe, ye, ox, oy, sub)
-    apply_lgs_elongation!(lgs_profile(src), wfs, pupil, src, idx)
+    apply_lgs_elongation!(sodium_layer_profile_style(src), wfs, pupil,
+        src, idx)
     spot = sample_spot!(wfs.optics, wfs.optics.propagation.workspace.intensity)
     frame = capture!(det, spot, src; rng=rng)
     copyto!(sh_spot_view(wfs, idx), frame)

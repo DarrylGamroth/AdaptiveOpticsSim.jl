@@ -373,7 +373,7 @@ Additional production-supported frozen OOPAO equivalence surfaces:
 - diffractive Pyramid ramp from the committed OOPAO reference bundle
 - diffractive Bi-O-edge ramp from the committed OOPAO reference bundle
 - prepared Pyramid/Bi-O-edge WFS optics for pupil-function and electric-field inputs,
-  spectral and path-local source bundles, LGS elongation/sodium profiles,
+  spectral and path-local source bundles, LGS elongation/sodium-layer profiles,
   exact-once detector exposure, and revision-bound differential estimation
 
 Primary evidence:
