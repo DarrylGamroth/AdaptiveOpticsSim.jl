@@ -2231,7 +2231,8 @@ end
     @test !hasfield(typeof(pyramid.front_end), :amplitude_mask)
     @test !hasfield(typeof(bi_o_edge.front_end), :phase_mask)
 
-    circular = CircularModulation(T(2); samples=8, T=T)
+    circular = CircularModulation(T(2); samples=8,
+        phase_offset_rad=T(0.25), T=T)
     sampled = SampledModulation([(T(0), T(0)), (T(1), T(-0.5))];
         weights=T[0.25, 0.75], T=T)
     @test sum(sampled.weights) == one(T)
@@ -2244,6 +2245,7 @@ end
     sampled_prepared = AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
         sampled, 16, pupil.opd, T)
     @test sum(abs2, circular_prepared.amplitude_weights) ≈ one(T)
+    @test circular.phase_offset_rad == T(0.25)
     @test abs2.(sampled_prepared.amplitude_weights) ≈ sampled.weights
 
     user_path = [(T(0), T(0), T(0.25)),

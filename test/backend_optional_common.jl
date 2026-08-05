@@ -848,7 +848,7 @@ function run_optional_cycle_averaged_modulation_checks(::Type{B},
     BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     T = Float32
     policy = CircularModulation(T(2);
-        samples=5, phase_offset=T(0.3), T=T)
+        samples=5, phase_offset_rad=T(0.3), T=T)
     cpu = AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(
         policy, 8, zeros(T, 8, 8), T)
     device = AdaptiveOpticsSim.Optics.prepare_focal_plane_modulation(

@@ -1,8 +1,12 @@
-"""Immutable physical definition of a pyramid focal-plane phase mask."""
+"""
+Immutable physical definition of a pyramid focal-plane phase mask.
+`rotation_rad` is the rotation angle in radians applied by the mask-coordinate
+transform.
+"""
 struct PyramidPhaseMask{T<:AbstractFloat}
     old_mask::Bool
     rooftop::T
-    theta_rotation::T
+    rotation_rad::T
     mask_scale::T
     diffraction_padding::Int
     psf_centering::Bool

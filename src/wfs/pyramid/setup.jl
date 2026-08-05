@@ -256,13 +256,19 @@ Construct a pyramid wavefront sensor.
 The diffractive model forms four re-imaged pupil intensities through a
 focal-plane pyramid mask. Slopes are obtained from left/right and top/bottom
 intensity differences after optional modulation averaging and binning.
+`phase_mask_rotation_rad` sets the rotation angle applied to the physical
+mask-coordinate transform, while
+`modulation_phase_offset_rad` selects the circular modulation quadrature
+origin. Both values are in radians.
 """
 function PyramidWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, modulation::Real=2.0,
     light_ratio::Real=0.0,
     normalization::WFSNormalization=MeanValidFluxNormalization(),
     calib_modulation::Real=min(50.0, tel.params.resolution / 2 - 1),
     modulation_points::Union{Int,Nothing}=nothing, extra_modulation_factor::Int=0,
-    old_mask::Bool=false, rooftop::Real=0.0, theta_rotation::Real=0.0, delta_theta::Real=0.0,
+    old_mask::Bool=false, rooftop::Real=0.0,
+    phase_mask_rotation_rad::Real=0.0,
+    modulation_phase_offset_rad::Real=0.0,
     user_modulation_path=nothing, mask_scale::Real=1.0, diffraction_padding::Int=2,
     psf_centering::Bool=true, n_pix_separation=nothing, n_pix_edge=nothing, binning::Int=1,
     mode::SensingMode=Geometric(), T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
@@ -285,6 +291,13 @@ function PyramidWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, mod
     isfinite(typed_mask_scale) && typed_mask_scale > zero(T) ||
         throw(InvalidConfiguration(
             "pyramid mask_scale must be finite and > 0"))
+    typed_phase_mask_rotation_rad = T(phase_mask_rotation_rad)
+    isfinite(typed_phase_mask_rotation_rad) || throw(InvalidConfiguration(
+        "pyramid phase_mask_rotation_rad must be finite"))
+    typed_modulation_phase_offset_rad = T(modulation_phase_offset_rad)
+    isfinite(typed_modulation_phase_offset_rad) || throw(
+        InvalidConfiguration(
+            "pyramid modulation_phase_offset_rad must be finite"))
     pyramid_sampled_geometry(pupil_samples, n_pix_separation, n_pix_edge,
         binning)
     estimator_params = PyramidEstimatorParams{T,typeof(normalization)}(
@@ -298,14 +311,15 @@ function PyramidWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, mod
     phase_mask = PyramidPhaseMask{T}(
         old_mask,
         T(rooftop),
-        T(theta_rotation),
+        typed_phase_mask_rotation_rad,
         typed_mask_scale,
         diffraction_padding, psf_centering, n_pix_separation, n_pix_edge)
     operating_policy = legacy_modulation_policy(T(modulation),
-        modulation_points, extra_modulation_factor, T(delta_theta),
+        modulation_points, extra_modulation_factor,
+        typed_modulation_phase_offset_rad,
         user_modulation_path)
     calibration_policy = calibration_modulation_policy(operating_policy,
-        T(calib_modulation), T(delta_theta))
+        T(calib_modulation), typed_modulation_phase_offset_rad)
     valid_mask = backend{Bool}(undef, pupil_samples, pupil_samples)
     slopes = backend{T}(undef, 2 * pupil_samples * pupil_samples)
     fill!(slopes, zero(T))

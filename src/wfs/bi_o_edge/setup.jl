@@ -196,12 +196,16 @@ The diffractive model forms four edge-filtered pupil images using complementary
 focal-plane Bi-O-edge masks. Slopes are then built from the resulting
 left/right and top/bottom differential signals after optional binning and
 modulation averaging.
+`modulation_phase_offset_rad` selects the circular modulation quadrature
+origin in radians.
 """
 function BiOEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
     light_ratio::Real=0.0, modulation::Real=0.0, modulation_points::Union{Int,Nothing}=nothing,
     normalization::WFSNormalization=MeanValidFluxNormalization(),
     calib_modulation::Real=min(50.0, tel.params.resolution / 2 - 1),
-    extra_modulation_factor::Int=0, delta_theta::Real=0.0, user_modulation_path=nothing,
+    extra_modulation_factor::Int=0,
+    modulation_phase_offset_rad::Real=0.0,
+    user_modulation_path=nothing,
     grey_width::Real=0.0, grey_length=false,
     diffraction_padding::Int=2, psf_centering::Bool=true, n_pix_separation=nothing,
     n_pix_edge=nothing, binning::Int=1,
@@ -222,6 +226,10 @@ function BiOEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
             "Bi-O-edge binning must evenly divide pupil_samples"))
     end
     grey_length_val = grey_length === false ? false : T(grey_length)
+    typed_modulation_phase_offset_rad = T(modulation_phase_offset_rad)
+    isfinite(typed_modulation_phase_offset_rad) || throw(
+        InvalidConfiguration(
+            "Bi-O-edge modulation_phase_offset_rad must be finite"))
     estimator_params = BiOEdgeEstimatorParams{T,typeof(normalization)}(
         pupil_samples,
         tel.params.resolution,
@@ -237,10 +245,11 @@ function BiOEdgeWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1,
         n_pix_separation,
         n_pix_edge)
     operating_policy = legacy_modulation_policy(T(modulation),
-        modulation_points, extra_modulation_factor, T(delta_theta),
+        modulation_points, extra_modulation_factor,
+        typed_modulation_phase_offset_rad,
         user_modulation_path)
     calibration_policy = calibration_modulation_policy(operating_policy,
-        T(calib_modulation), T(delta_theta))
+        T(calib_modulation), typed_modulation_phase_offset_rad)
     valid_mask = backend{Bool}(undef, pupil_samples, pupil_samples)
     edge_mask = backend{Bool}(undef, size(pupil_mask(tel)))
     slopes = backend{T}(undef, 2 * pupil_samples * pupil_samples)

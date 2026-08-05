@@ -13,11 +13,11 @@ abstract type AbstractFocalPlaneModulation end
 struct NoModulation <: AbstractFocalPlaneModulation end
 
 @kernel function circular_modulation_phases_kernel!(
-    phases, radius, phase_offset, coordinate_start, coordinate_step,
+    phases, radius, phase_offset_rad, coordinate_start, coordinate_step,
     point_count::Int, resolution::Int)
     axis_1, axis_2, point = @index(Global, NTuple)
     if axis_1 <= resolution && axis_2 <= resolution && point <= point_count
-        angle = phase_offset +
+        angle = phase_offset_rad +
             typeof(radius)(2pi) * typeof(radius)(point - 1) /
                 typeof(radius)(point_count)
         sine, cosine = sincos(angle)
@@ -33,31 +33,31 @@ struct NoModulation <: AbstractFocalPlaneModulation end
 end
 
 """
-    CircularModulation(radius; samples, phase_offset=0)
+    CircularModulation(radius; samples, phase_offset_rad=0)
 
 Uniform circular modulation in units of `lambda / D`. `samples` is the number
-of equally weighted points over one cycle and `phase_offset` is in radians.
+of equally weighted points over one cycle and `phase_offset_rad` is in radians.
 """
 struct CircularModulation{T<:AbstractFloat} <: AbstractFocalPlaneModulation
     radius::T
     samples::Int
-    phase_offset::T
+    phase_offset_rad::T
 
     function CircularModulation(radius::T, samples::Int,
-        phase_offset::T) where {T<:AbstractFloat}
+        phase_offset_rad::T) where {T<:AbstractFloat}
         isfinite(radius) && radius >= zero(T) || throw(InvalidConfiguration(
             "circular modulation radius must be finite and nonnegative"))
         samples >= 1 || throw(InvalidConfiguration(
             "circular modulation samples must be >= 1"))
-        isfinite(phase_offset) || throw(InvalidConfiguration(
+        isfinite(phase_offset_rad) || throw(InvalidConfiguration(
             "circular modulation phase offset must be finite"))
-        return new{T}(radius, samples, phase_offset)
+        return new{T}(radius, samples, phase_offset_rad)
     end
 end
 
 function CircularModulation(radius::Real; samples::Int,
-    phase_offset::Real=0, T::Type{<:AbstractFloat}=Float64)
-    return CircularModulation(T(radius), samples, T(phase_offset))
+    phase_offset_rad::Real=0, T::Type{<:AbstractFloat}=Float64)
+    return CircularModulation(T(radius), samples, T(phase_offset_rad))
 end
 
 """
@@ -129,7 +129,7 @@ end
 
 @inline function modulation_offset(policy::CircularModulation, index::Int,
     ::Type{T}) where {T}
-    angle = T(policy.phase_offset) + T(2pi * (index - 1) / policy.samples)
+    angle = T(policy.phase_offset_rad) + T(2pi * (index - 1) / policy.samples)
     sine, cosine = sincos(angle)
     radius = T(policy.radius)
     return radius * cosine, radius * sine
@@ -181,13 +181,13 @@ end
 
 function _update_cycle_averaged_circular_modulation!(
     ::ScalarCPUStyle, prepared::PreparedFocalPlaneModulation,
-    radius::T, phase_offset::T) where {T<:AbstractFloat}
+    radius::T, phase_offset_rad::T) where {T<:AbstractFloat}
     phases = prepared.phases
     resolution = size(phases, 1)
     point_count = size(phases, 3)
     coordinates = range(-T(pi), T(pi); length=resolution)
     @inbounds for point in axes(phases, 3)
-        angle = phase_offset + T(2pi * (point - 1) / point_count)
+        angle = phase_offset_rad + T(2pi * (point - 1) / point_count)
         sine, cosine = sincos(angle)
         offset_x = radius * cosine
         offset_y = radius * sine
@@ -202,14 +202,14 @@ end
 
 function _update_cycle_averaged_circular_modulation!(
     style::AcceleratorStyle, prepared::PreparedFocalPlaneModulation,
-    radius::T, phase_offset::T) where {T<:AbstractFloat}
+    radius::T, phase_offset_rad::T) where {T<:AbstractFloat}
     phases = prepared.phases
     resolution = size(phases, 1)
     point_count = size(phases, 3)
     coordinate_start = -T(pi)
     coordinate_step = _circular_modulation_coordinate_step(T, resolution)
     launch_kernel!(style, circular_modulation_phases_kernel!, phases,
-        radius, phase_offset, coordinate_start, coordinate_step,
+        radius, phase_offset_rad, coordinate_start, coordinate_step,
         point_count, resolution; ndrange=size(phases))
     return prepared
 end
@@ -240,5 +240,5 @@ function update_cycle_averaged_circular_modulation!(
     effective_radius = enabled ? radius : zero(T)
     return _update_cycle_averaged_circular_modulation!(
         execution_style(prepared.phases), prepared, effective_radius,
-        T(prepared.policy.phase_offset))
+        T(prepared.policy.phase_offset_rad))
 end

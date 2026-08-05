@@ -7,7 +7,8 @@
 
 function legacy_modulation_policy(modulation::T,
     modulation_points::Union{Int,Nothing}, extra_modulation_factor::Int,
-    delta_theta::T, user_modulation_path) where {T<:AbstractFloat}
+    modulation_phase_offset_rad::T,
+    user_modulation_path) where {T<:AbstractFloat}
     if user_modulation_path !== nothing
         return SampledModulation(user_modulation_path; T=T)
     end
@@ -22,18 +23,19 @@ function legacy_modulation_policy(modulation::T,
             "modulation_points must be >= 1"))
         modulation_points
     end
-    return CircularModulation(modulation, samples, delta_theta)
+    return CircularModulation(modulation, samples,
+        modulation_phase_offset_rad)
 end
 
 @inline calibration_modulation_policy(policy::SampledModulation,
-    radius, phase_offset) = policy
+    radius, phase_offset_rad) = policy
 
 function calibration_modulation_policy(
     policy::Union{NoModulation,CircularModulation}, radius::T,
-    phase_offset::T) where {T<:AbstractFloat}
+    phase_offset_rad::T) where {T<:AbstractFloat}
     iszero(radius) && return NoModulation()
     return CircularModulation(radius, modulation_point_count(policy),
-        phase_offset)
+        phase_offset_rad)
 end
 
 @inline _modulated_input_storage(input::PupilFunction) = input.opd
