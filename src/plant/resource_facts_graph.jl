@@ -135,9 +135,11 @@ function _append_controllable_optic_structural_facts!(
 )
     @inbounds for index in eachindex(prepared.optics)
         optic = prepared.optics[index]
+        definition = _prepared_controllable_optic_definition(
+            prepared.optics, optic)
         id = StructuralResourceOwnerID(
             :controllable_optic,
-            controllable_optic_id(optic.definition).name,
+            controllable_optic_id(definition).name,
         )
         fact = _controllable_optic_structural_resource_fact(
             optic,

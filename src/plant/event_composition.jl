@@ -1067,13 +1067,14 @@ end
 function _prepare_event_path_optic_coupling(
     ::PupilSurfaceExecutionRole,
     optic::PreparedControllableOptic,
+    definition::ControllableOpticDefinition,
     path::PreparedPathExecutor,
 )
     coupling = prepare_controllable_optic_path_coupling(
-        optic.implementation, optic.definition, path)
+        optic.implementation, definition, path)
     return _require_prepared_event_path_coupling(
         coupling,
-        controllable_optic_id(optic.definition),
+        controllable_optic_id(definition),
         path_id(path.definition),
     )
 end
@@ -1081,11 +1082,12 @@ end
 @inline function _prepare_event_path_optic_coupling(
     ::AutonomousPathExecutionRole,
     optic::PreparedControllableOptic,
+    definition::ControllableOpticDefinition,
     path::PreparedPathExecutor,
 )
     return _prepare_event_autonomous_path_coupling(
-        controllable_optic_placement(optic),
-        controllable_optic_id(optic.definition),
+        controllable_optic_placement(definition),
+        controllable_optic_id(definition),
         path_id(path.definition),
     )
 end
@@ -1111,10 +1113,11 @@ end
 function _prepare_event_path_optic_coupling(
     role::AbstractControllableOpticExecutionRole,
     optic::PreparedControllableOptic,
+    definition::ControllableOpticDefinition,
     path::PreparedPathExecutor,
 )
     _plant_event_loop_error(:unsupported_optic_execution_role,
-        "controllable optic $(controllable_optic_id(optic.definition)) on " *
+        "controllable optic $(controllable_optic_id(definition)) on " *
         "path $(path_id(path.definition)) declares unsupported execution " *
         "role $(typeof(role))")
 end
@@ -1168,8 +1171,11 @@ function _prepare_event_path_optic_couplings(
         enumerate(binding_range)
         optic_slot = prepared_controllable_optic_slot(bindings, binding)
         optic = optics[optic_slot]
+        definition =
+            _prepared_controllable_optic_definition(optics, optic)
         role = controllable_optic_execution_role(optic.implementation)
-        coupling = _prepare_event_path_optic_coupling(role, optic, path)
+        coupling = _prepare_event_path_optic_coupling(
+            role, optic, definition, path)
         couplings[coupling_slot] = coupling
         if !_coupling_group_member(role)
             _append_event_path_coupling_group!(
@@ -1345,7 +1351,8 @@ end
 function _event_controllable_optic_slot(optics,
     id::ControllableOpticID)
     @inbounds for index in eachindex(optics)
-        controllable_optic_id(optics[index].definition) == id &&
+        definition = _prepared_controllable_optic_definition(optics, index)
+        controllable_optic_id(definition) == id &&
             return index
     end
     _plant_event_loop_error(:unknown_controllable_optic,
@@ -1397,8 +1404,10 @@ function _require_autonomous_definition_for_role(
 end
 
 function _require_all_autonomous_optics_bound(optics, definitions)
-    @inbounds for optic in optics
-        id = controllable_optic_id(optic.definition)
+    @inbounds for index in eachindex(optics)
+        optic = optics[index]
+        definition = _prepared_controllable_optic_definition(optics, optic)
+        id = controllable_optic_id(definition)
         role = controllable_optic_execution_role(optic.implementation)
         _require_autonomous_definition_for_role(role, id, definitions)
     end
@@ -1449,11 +1458,13 @@ function _prepare_event_autonomous_optics(definitions, optics, path_groups,
         optic_slot = _event_controllable_optic_slot(optics,
             definition.optic)
         optic = optics[optic_slot]
+        optic_definition =
+            _prepared_controllable_optic_definition(optics, optic)
         _require_autonomous_execution_role(
             controllable_optic_execution_role(optic.implementation),
             definition.optic)
         _require_autonomous_path_visibility(
-            controllable_optic_visibility(optic), definition.optic,
+            controllable_optic_visibility(optic_definition), definition.optic,
             definition.path)
         path_slot = _event_path_group_slot(path_groups, definition.path)
         group = path_groups[path_slot]
@@ -1776,16 +1787,16 @@ end
 function _event_optic_endpoint_initials(
     prepared::PreparedPlantEventLoop,
     optic::PreparedControllableOptic)
-    ids = map(optic.endpoint_slots) do slot
+    ids = Tuple(map(optic.endpoint_slots) do slot
         command_endpoint_id(
             prepared.command_endpoints[Int(slot)].binding)
-    end
-    commands = map(optic.endpoint_slots) do slot
+    end)
+    commands = Tuple(map(optic.endpoint_slots) do slot
         binding = prepared.command_endpoints[Int(slot)].binding
         _copy_prepared_effective_command(binding.endpoint,
             binding.initial_command, "initial physical command",
             prepared.target)
-    end
+    end)
     return ids, commands
 end
 
@@ -1794,8 +1805,10 @@ function _event_controllable_optic_state(
     optic::PreparedControllableOptic,
 )
     ids, commands = _event_optic_endpoint_initials(prepared, optic)
+    definition =
+        _prepared_controllable_optic_definition(prepared.optics, optic)
     return prepare_controllable_optic_state(
-        optic.implementation, optic.definition, ids, commands)
+        optic.implementation, definition, ids, commands)
 end
 
 function _event_controllable_optic_state_family(
@@ -2113,8 +2126,8 @@ end
         :foreign_workspace,
         "plant event-loop workspace belongs to another prepared loop")
     _require_scheduler_binding(prepared.scheduler, workspace.scheduler)
-        length(workspace.command_endpoints) ==
-            length(prepared.command_endpoints) &&
+    length(workspace.command_endpoints) ==
+        length(prepared.command_endpoints) &&
         length(workspace.controllable_optics) == length(prepared.optics) &&
         workspace.controllable_optics.slots === prepared.optics.slots &&
         length(workspace.transaction_endpoint_slots) ==
@@ -2521,13 +2534,15 @@ function _prepare_transaction_member_slots!(
         for prior in 1:count
             prior_binding = prepared.command_endpoints[
                 Int(workspace.transaction_endpoint_slots[prior])].binding
-            prior_binding.optic_slot == binding.optic_slot &&
+            if prior_binding.optic_slot == binding.optic_slot
+                definition = _prepared_controllable_optic_definition(
+                    prepared.optics, Int(binding.optic_slot))
                 _command_admission_error(:transaction,
                     :duplicate_physical_optic,
                     "atomic multi-optic transaction contains more than one " *
                     "endpoint owned by controllable optic " *
-                    "$(controllable_optic_id(prepared.optics[
-                        Int(binding.optic_slot)].definition))")
+                    "$(controllable_optic_id(definition))")
+            end
         end
         count += 1
         workspace.transaction_endpoint_slots[count] = UInt32(endpoint_slot)
@@ -4766,10 +4781,10 @@ end
 
 @inline function _apply_prepared_event_controllable_optic_surface!(
     input,
-    optic::PreparedControllableOptic{D,P,S},
+    optic::PreparedControllableOptic,
     state,
     coupling::AbstractPupilSurfacePathCoupling,
-) where {D,P,S}
+)
     implementation = optic.implementation
     _apply_event_controllable_optic_surface!(
         controllable_optic_execution_role(implementation),

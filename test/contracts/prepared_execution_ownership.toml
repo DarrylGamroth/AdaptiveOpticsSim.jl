@@ -621,7 +621,7 @@ entries = [
     ["_PreparedControllableOpticFamily","struct",1,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["_PreparedControllableOpticFamilyType","struct",0,"prepared",["support"],false,false,"internal",false,"backend_neutral",false,"PE-06"],
     ["_PreparedControllableOpticPathBindingsToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
-    ["_PreparedControllableOpticRegistry","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
+    ["_PreparedControllableOpticRegistry","struct",3,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],
     ["_PreparedControllableOpticSlot","struct",2,"prepared",["support"],false,false,"internal",false,"backend_neutral",true,"PE-06"],
     ["_PreparedControllableOpticToken","struct",0,"prepared",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-06"],
     ["_PreparedPlantCommandEndpoint","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-06"],

@@ -1436,8 +1436,10 @@ end
 
 function prepared_controllable_optic(plant::PreparedPlant, id)
     resolved = _as_controllable_optic_id(id)
-    for optic in plant.controllable_optics
-        controllable_optic_id(optic.definition) == resolved && return optic
+    optics = plant.controllable_optics
+    for index in eachindex(optics)
+        definition = _prepared_controllable_optic_definition(optics, index)
+        controllable_optic_id(definition) == resolved && return optics[index]
     end
     throw(PlantPreparationError(:controllable_optic, :unknown_id,
         "prepared plant has no controllable optic $resolved"))

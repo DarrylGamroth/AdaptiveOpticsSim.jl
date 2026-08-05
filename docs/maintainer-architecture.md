@@ -224,7 +224,7 @@ Examples:
   nonthrowing publication step so explicit multi-optic transactions cannot
   become partially visible. Preparation seals exact implementation types into
   concrete fixed-size family groups. Compact `(family_slot, member_slot)`
-  descriptors preserve definition order without placing optic count in the
+  descriptors preserve canonical optic order without placing optic count in the
   prepared plant type. Matching event-loop state and workspace groups share
   that exact descriptor storage but retain separate semantic owners
 - `PreparedPlant` as a schedule-free owner of concrete controllable-optic
