@@ -160,7 +160,7 @@ struct PreparedFourPupilElongation{K<:AbstractVector} <:
     half_width::Int
 end
 
-struct PreparedFourPupilSodiumProfile{K<:AbstractMatrix} <:
+struct PreparedFourPupilSodiumLayerProfile{K<:AbstractMatrix} <:
     AbstractPreparedFourPupilLGS
     kernel_fft::K
 end
@@ -184,11 +184,11 @@ end
 
 function prepare_four_pupil_lgs(source::LGSSource, spectral_source, input,
     front_end)
-    return prepare_four_pupil_lgs(lgs_profile(source), source,
+    return prepare_four_pupil_lgs(sodium_layer_profile_style(source), source,
         _four_pupil_lgs_wavelength(spectral_source), input, front_end)
 end
 
-function prepare_four_pupil_lgs(::LGSProfileNone, source::LGSSource,
+function prepare_four_pupil_lgs(::NoSodiumLayerProfileStyle, source::LGSSource,
     wavelength_m, input, front_end)
     T = eltype(front_end.propagation.intensity)
     factor = T(lgs_elongation_factor(source))
@@ -208,7 +208,7 @@ function prepare_four_pupil_lgs(::LGSProfileNone, source::LGSSource,
     return PreparedFourPupilElongation(kernel, half)
 end
 
-function prepare_four_pupil_lgs(::LGSProfileNaProfile, source::LGSSource,
+function prepare_four_pupil_lgs(::SampledSodiumLayerProfileStyle, source::LGSSource,
     wavelength_m, input, front_end)
     metadata = input.metadata
     resolution = metadata.dimensions[1]
@@ -226,7 +226,7 @@ function prepare_four_pupil_lgs(::LGSProfileNaProfile, source::LGSSource,
     kernel_fft = lgs_average_kernel_fft(pupil_diameter, source, pad,
         front_end.pupil_samples, pixel_scale, propagation.focal_field,
         propagation.fft_plan)
-    return PreparedFourPupilSodiumProfile(kernel_fft)
+    return PreparedFourPupilSodiumLayerProfile(kernel_fft)
 end
 
 @inline function apply_prepared_four_pupil_lgs!(
@@ -247,7 +247,7 @@ function apply_prepared_four_pupil_lgs!(
 end
 
 function apply_prepared_four_pupil_lgs!(
-    model::PreparedFourPupilSodiumProfile, intensity::AbstractMatrix{T},
+    model::PreparedFourPupilSodiumLayerProfile, intensity::AbstractMatrix{T},
     scratch, fft_buffer, fft_plan, ifft_buffer, ifft_plan) where {
     T<:AbstractFloat,
 }

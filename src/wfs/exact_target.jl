@@ -421,12 +421,12 @@ function _require_exact_prepared_four_pupil_lgs_target(
 end
 
 function _require_exact_prepared_four_pupil_lgs_target(
-    model::PreparedFourPupilSodiumProfile,
+    model::PreparedFourPupilSodiumLayerProfile,
     target::AbstractComputeDevice,
 )
     _require_exact_wfs_storage_target(
         model.kernel_fft, target, :wfs_optics,
-        "four-pupil sodium-profile Fourier kernel")
+        "four-pupil sodium-layer-profile Fourier kernel")
     return nothing
 end
 

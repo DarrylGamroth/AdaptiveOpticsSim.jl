@@ -857,29 +857,45 @@ end
     @test LGSSource(elongation_factor=0.0,
         fwhm_spot_up=0.0).params.elongation_factor == 0.0
 
-    valid_profile = [80_000.0 90_000.0 100_000.0; 0.25 0.5 0.25]
-    profile_source = LGSSource(na_profile=valid_profile, T=Float32)
+    valid_profile = SodiumLayerProfile(
+        [80_000.0, 90_000.0, 100_000.0], [0.25, 0.5, 0.25])
+    profile_source = LGSSource(sodium_layer_profile=valid_profile,
+        T=Float32)
     @test profile_source.params.altitude ≈ 90_000.0f0
-    @test profile_source.params.na_profile == Float32.(valid_profile)
+    @test profile_source.params.sodium_layer_profile == SodiumLayerProfile(
+        Float32[80_000, 90_000, 100_000], Float32[0.25, 0.5, 0.25])
+    @test sodium_layer_profile(profile_source) ===
+        profile_source.params.sodium_layer_profile
+    @test_throws DimensionMismatchError SodiumLayerProfile(
+        [80_000.0, 90_000.0], [1.0])
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=zeros(2, 0), T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(Float64[], Float64[]),
+        T=Float32)
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=[80_000.0 90_000.0; 0.0 0.0], T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, 90_000.0], [0.0, 0.0]), T=Float32)
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=[0.0 90_000.0; 0.5 0.5], T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(
+            [0.0, 90_000.0], [0.5, 0.5]), T=Float32)
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=[80_000.0 Inf; 0.5 0.5], T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, Inf], [0.5, 0.5]), T=Float32)
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=[80_000.0 float32_overflow; 0.5 0.5], T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, float32_overflow], [0.5, 0.5]), T=Float32)
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=[80_000.0 90_000.0; -0.1 1.1], T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, 90_000.0], [-0.1, 1.1]), T=Float32)
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=[80_000.0 90_000.0; NaN 1.0], T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, 90_000.0], [NaN, 1.0]), T=Float32)
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=[80_000.0 90_000.0; Inf 1.0], T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, 90_000.0], [Inf, 1.0]), T=Float32)
     @test_throws InvalidConfiguration LGSSource(
-        na_profile=[80_000.0 90_000.0;
-            floatmax(Float32) floatmax(Float32)], T=Float32)
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, 90_000.0],
+            [floatmax(Float32), floatmax(Float32)]), T=Float32)
 
     @test_throws InvalidConfiguration GeometricAtmosphericPropagation(
         chromatic_reference_wavelength=Inf, T=Float32)

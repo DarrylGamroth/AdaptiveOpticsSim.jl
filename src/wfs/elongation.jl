@@ -180,7 +180,8 @@ end
     lgs_kernel_signature(pupil, source, pad, n_subapertures,
         pixel_scale, kernel_eltype; model, threshold=nothing)
 
-Return the content-based identity of an LGS sodium-profile convolution kernel.
+Return the content-based identity of an LGS sodium-layer-profile convolution
+kernel.
 The signature includes every source, pupil-grid, and numerical
 parameter used to build the cached kernel. In particular, profile values are
 hashed rather than identified by their array object so an in-place profile
@@ -193,7 +194,7 @@ function lgs_kernel_signature(src::LGSSource, pad::Int,
     wavelength_m::Real=wavelength(src), model::Symbol,
     threshold::Union{Nothing,Real}=nothing)
     params = src.params
-    sig = hash(:lgs_sodium_profile_kernel_v1)
+    sig = hash(:lgs_sodium_layer_profile_kernel_v1)
     sig = hash(model, sig)
     sig = hash(kernel_eltype, sig)
     sig = hash(pad, sig)
@@ -208,13 +209,16 @@ function lgs_kernel_signature(src::LGSSource, pad::Int,
     sig = hash(pupil_sampling, sig)
     sig = hash(pupil_origin, sig)
 
-    profile = params.na_profile
+    profile = params.sodium_layer_profile
     if profile === nothing
         return sig
     end
-    sig = hash(eltype(profile), sig)
-    sig = hash(size(profile), sig)
-    @inbounds for value in profile
+    sig = hash(eltype(profile.altitudes_m), sig)
+    sig = hash(length(profile.altitudes_m), sig)
+    @inbounds for value in profile.altitudes_m
+        sig = hash(value, sig)
+    end
+    @inbounds for value in profile.relative_weights
         sig = hash(value, sig)
     end
     return sig
@@ -387,12 +391,12 @@ end
 function lgs_average_kernel_fft(pupil_diameter::Real, src::LGSSource,
     pad::Int, n_subap::Int,
     pixel_scale::Real, fft_buffer::AbstractMatrix{Complex{T}}, fft_plan) where {T<:AbstractFloat}
-    na_profile = src.params.na_profile
-    if na_profile === nothing
+    profile = src.params.sodium_layer_profile
+    if profile === nothing
         return similar(fft_buffer, Complex{T}, 0, 0)
     end
-    altitudes = na_profile[1, :]
-    weights = na_profile[2, :]
+    altitudes = profile.altitudes_m
+    weights = profile.relative_weights
     if length(altitudes) == 0
         return similar(fft_buffer, Complex{T}, 0, 0)
     end

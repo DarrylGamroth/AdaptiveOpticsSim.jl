@@ -45,12 +45,13 @@
           vec(sum(expected_stack; dims=(1, 2))) rtol=1e-12
 end
 
-@testset "Sodium-profile LGS kernel cache invalidation" begin
+@testset "Sodium-layer-profile LGS kernel cache invalidation" begin
     tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
     pupil = PupilFunction(tel)
     signature_source = LGSSource(
-        na_profile=[80000.0 90000.0 100000.0; 0.2 0.6 0.2],
+        sodium_layer_profile=SodiumLayerProfile(
+            [80_000.0, 90_000.0, 100_000.0], [0.2, 0.6, 0.2]),
         laser_coordinates=(1.0, -0.5),
         fwhm_spot_up=0.8,
         photon_irradiance=1.0,
@@ -82,7 +83,7 @@ end
         model=:subaperture_average) != base_signature
     changed_wavelength = LGSSource(
         wavelength=600e-9,
-        na_profile=signature_source.params.na_profile,
+        sodium_layer_profile=signature_source.params.sodium_layer_profile,
         laser_coordinates=signature_source.params.laser_coordinates,
         fwhm_spot_up=signature_source.params.fwhm_spot_up,
         photon_irradiance=1.0,
@@ -93,7 +94,8 @@ end
 
     for family in (:shack_hartmann, :pyramid, :bi_o_edge)
         src = LGSSource(
-            na_profile=[80000.0 90000.0 100000.0; 0.2 0.6 0.2],
+            sodium_layer_profile=SodiumLayerProfile(
+                [80_000.0, 90_000.0, 100_000.0], [0.2, 0.6, 0.2]),
             laser_coordinates=(1.0, -0.5),
             fwhm_spot_up=0.8,
             photon_irradiance=1.0,
@@ -123,7 +125,8 @@ end
         ensure_kernel!(wfs, pupil, src)
         @test kernel_state.lgs_kernel_tag == original_tag
 
-        src.params.na_profile[2, :] .= [0.8, 0.1, 0.1]
+        src.params.sodium_layer_profile.relative_weights .=
+            [0.8, 0.1, 0.1]
         ensure_kernel!(wfs, pupil, src)
         @test kernel_state.lgs_kernel_tag != original_tag
         @test !isapprox(kernel_state.lgs_kernel_fft, original_kernel;
@@ -384,15 +387,17 @@ end
     bio_lgs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs, pupil, lgs) ===
         bio_lgs
-    na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
-    lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
-    bio_lgs_profile = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs_profile, pupil,
-        lgs_profile) === bio_lgs_profile
-    cached_tag = bio_lgs_profile.front_end.propagation.lgs_kernel_tag
-    @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs_profile, pupil,
-        lgs_profile) === bio_lgs_profile
-    @test bio_lgs_profile.front_end.propagation.lgs_kernel_tag == cached_tag
+    sodium_layer_profile = SodiumLayerProfile(
+        [80_000.0, 90_000.0, 100_000.0], [0.2, 0.6, 0.2])
+    sodium_lgs = LGSSource(elongation_factor=1.2,
+        sodium_layer_profile=sodium_layer_profile, fwhm_spot_up=1.0)
+    bio_sodium_lgs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    @test WavefrontSensors.ensure_lgs_kernel!(bio_sodium_lgs, pupil,
+        sodium_lgs) === bio_sodium_lgs
+    cached_tag = bio_sodium_lgs.front_end.propagation.lgs_kernel_tag
+    @test WavefrontSensors.ensure_lgs_kernel!(bio_sodium_lgs, pupil,
+        sodium_lgs) === bio_sodium_lgs
+    @test bio_sodium_lgs.front_end.propagation.lgs_kernel_tag == cached_tag
 end
 
 @testset "Diffractive WFS" begin
@@ -412,11 +417,13 @@ end
     sh_lgs = measure!(sh, pupil, lgs)
     @test all(isfinite, sh_lgs)
 
-    na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
-    lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile,
+    sodium_layer_profile = SodiumLayerProfile(
+        [80_000.0, 90_000.0, 100_000.0], [0.2, 0.6, 0.2])
+    sodium_lgs = LGSSource(elongation_factor=1.2,
+        sodium_layer_profile=sodium_layer_profile,
         fwhm_spot_up=1.0, photon_irradiance=1.0)
     sh_profile = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    sh_profile_slopes = measure!(sh_profile, pupil, lgs_profile)
+    sh_profile_slopes = measure!(sh_profile, pupil, sodium_lgs)
     @test all(isfinite, sh_profile_slopes)
 
     sh_sampled = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
@@ -452,11 +459,11 @@ end
     @test bio_frame == bio_manual
 
     pyr_profile = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
-    pyr_profile_slopes = measure!(pyr_profile, pupil, lgs_profile)
+    pyr_profile_slopes = measure!(pyr_profile, pupil, sodium_lgs)
     @test all(isfinite, pyr_profile_slopes)
 
     bio_profile = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    bio_profile_slopes = measure!(bio_profile, pupil, lgs_profile)
+    bio_profile_slopes = measure!(bio_profile, pupil, sodium_lgs)
     @test all(isfinite, bio_profile_slopes)
 
     pyr = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
@@ -506,8 +513,8 @@ end
     WavefrontSensors.subtract_reference_and_scale!(sh_ast_serial)
     sh_ast_serial_slopes = copy(slopes(sh_ast_serial))
     @test norm(sh_ast_slopes - sh_ast_serial_slopes) / norm(sh_ast_slopes) < 0.07
-    mixed_ngs = Source(wavelength=wavelength(lgs_profile), magnitude=0.0, coordinates=(0.0, 0.0))
-    mixed_ast = Asterism([mixed_ngs, lgs_profile])
+    mixed_ngs = Source(wavelength=wavelength(sodium_lgs), magnitude=0.0, coordinates=(0.0, 0.0))
+    mixed_ast = Asterism([mixed_ngs, sodium_lgs])
     sh_mixed_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(sh_mixed_det, pupil,
         mixed_ast, det; rng=MersenneTwister(14))

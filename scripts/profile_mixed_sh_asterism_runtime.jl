@@ -40,11 +40,10 @@ function _sync_wfs!(::Type{B}, wfs) where {B<:AdaptiveOpticsSim.Backends.GPUBack
     return nothing
 end
 
-function _na_profile(T::Type{<:AbstractFloat})
-    return T[
-        89_500 90_000 90_500 91_000 91_500;
-        0.10   0.25   0.30   0.22   0.13
-    ]
+function _sodium_layer_profile(T::Type{<:AbstractFloat})
+    return SodiumLayerProfile(
+        T[89_500, 90_000, 90_500, 91_000, 91_500],
+        T[0.10, 0.25, 0.30, 0.22, 0.13])
 end
 
 function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warmup::Int=5)
@@ -64,7 +63,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
         coordinates=(0.0, 0.0),
         altitude=90000.0,
         laser_coordinates=(5.0, 0.0),
-        na_profile=_na_profile(T),
+        sodium_layer_profile=_sodium_layer_profile(T),
         fwhm_spot_up=1.0,
         photon_irradiance=one(T),
         T=T,
@@ -75,7 +74,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
         coordinates=(5.0, 90.0),
         altitude=90000.0,
         laser_coordinates=(5.0, 0.0),
-        na_profile=_na_profile(T),
+        sodium_layer_profile=_sodium_layer_profile(T),
         fwhm_spot_up=1.0,
         photon_irradiance=T(0.75),
         T=T,

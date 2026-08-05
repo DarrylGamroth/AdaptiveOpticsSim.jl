@@ -59,8 +59,9 @@ function bi_o_edge_intensity_core!(out::AbstractMatrix{T}, wfs::BiOEdgeWFS,
     amplitude = pupil.amplitude
 
     fill!(out, zero(T))
-    profile = apply_lgs ? lgs_profile(src) : LGSProfileNone()
-    apply_lgs && ensure_bi_o_edge_lgs_kernel!(profile, wfs, pupil, src)
+    profile_style = apply_lgs ? sodium_layer_profile_style(src) :
+        NoSodiumLayerProfileStyle()
+    apply_lgs && ensure_bi_o_edge_lgs_kernel!(profile_style, wfs, pupil, src)
 
     @inbounds for p in 1:modulation_point_count(modulation)
         fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
@@ -89,7 +90,8 @@ function bi_o_edge_intensity_core!(out::AbstractMatrix{T}, wfs::BiOEdgeWFS,
             execute_fft_plan!(wfs.front_end.propagation.pupil_field, wfs.front_end.propagation.ifft_plan)
             @. wfs.front_end.propagation.temp = abs2(wfs.front_end.propagation.pupil_field)
             if apply_lgs
-                apply_bi_o_edge_lgs_profile!(profile, wfs, src, lgs_fft_buffer, lgs_ifft_buffer)
+                apply_bi_o_edge_sodium_layer_profile!(profile_style, wfs, src,
+                    lgs_fft_buffer, lgs_ifft_buffer)
             end
             oxq = k in (3, 4) ? pad : 0
             oyq = k in (2, 4) ? pad : 0

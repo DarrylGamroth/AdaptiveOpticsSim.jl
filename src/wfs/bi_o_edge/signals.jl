@@ -534,7 +534,7 @@ function ensure_bi_o_edge_calibration!(wfs::BiOEdgeWFS, pupil::PupilFunction,
     return wfs
 end
 
-function apply_lgs_elongation!(::LGSProfileNone, intensity::AbstractMatrix{T}, wfs::BiOEdgeWFS,
+function apply_lgs_elongation!(::NoSodiumLayerProfileStyle, intensity::AbstractMatrix{T}, wfs::BiOEdgeWFS,
     ::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
     wfs.front_end.propagation.elongation_kernel = apply_elongation!(
         intensity,
@@ -545,7 +545,7 @@ function apply_lgs_elongation!(::LGSProfileNone, intensity::AbstractMatrix{T}, w
     return wfs
 end
 
-function apply_lgs_elongation!(::LGSProfileNaProfile, intensity::AbstractMatrix{T}, wfs::BiOEdgeWFS,
+function apply_lgs_elongation!(::SampledSodiumLayerProfileStyle, intensity::AbstractMatrix{T}, wfs::BiOEdgeWFS,
     pupil::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
     ensure_lgs_kernel!(wfs, pupil, src)
     apply_lgs_convolution!(
@@ -560,8 +560,8 @@ function apply_lgs_elongation!(::LGSProfileNaProfile, intensity::AbstractMatrix{
 end
 
 function ensure_lgs_kernel!(wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource)
-    na_profile = src.params.na_profile
-    if na_profile === nothing
+    profile = src.params.sodium_layer_profile
+    if profile === nothing
         return wfs
     end
     pad = size(wfs.front_end.propagation.fft_buffer, 1)

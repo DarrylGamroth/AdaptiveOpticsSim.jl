@@ -187,7 +187,8 @@ function source_with_wavelength_and_radiometric_value(src::LGSSource, λ::T,
     params = src.params
     lcoords = (T(params.laser_coordinates[1]), T(params.laser_coordinates[2]))
     coords = (T(params.coordinates_xy_arcsec[1]), T(params.coordinates_xy_arcsec[2]))
-    profile = isnothing(params.na_profile) ? nothing : copy(params.na_profile)
+    profile = isnothing(params.sodium_layer_profile) ? nothing :
+        copy(params.sodium_layer_profile)
     return LGSSource(LGSSourceParams{T, typeof(profile),
         typeof(params.radiometry)}(
         T(params.magnitude),

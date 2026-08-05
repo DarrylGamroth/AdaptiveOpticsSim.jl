@@ -291,6 +291,7 @@ end
 
     migration = authority["migration"]
     introduced_root = Set(String.(migration["new_root_exports"]))
+    introduced_exports = Set(String.(migration["new_domain_exports"]))
     introduced_public = Set(String.(migration["new_domain_public"]))
     export_to_public = Set(String.(migration["export_to_public"]))
     removed_exports = Set(String.(migration["removed_exports"]))
@@ -299,12 +300,17 @@ end
     @test removed_public ⊆ Set(String.(current["public"]))
     @test isdisjoint(removed_exports, introduced_root)
     @test isdisjoint(removed_public, introduced_public)
+    @test isdisjoint(introduced_exports, introduced_public)
     @test isdisjoint(introduced_public, export_to_public)
     @test all(binding -> owner_by_binding[binding] == ("Root", "exports"),
         introduced_root)
     @test all(introduced_public) do qualified
         owner, binding = split(qualified, '.'; limit=2)
         owner_by_binding[binding] == (owner, "public")
+    end
+    @test all(introduced_exports) do qualified
+        owner, binding = split(qualified, '.'; limit=2)
+        owner_by_binding[binding] == (owner, "exports")
     end
     @test all(export_to_public) do qualified
         owner, binding = split(qualified, '.'; limit=2)
@@ -320,8 +326,8 @@ end
     for (binding, (owner, visibility)) in owner_by_binding
         owner == "Plant" && continue
         binding in introduced_root && continue
-        "$owner.$binding" in union(introduced_public,
-            export_to_public) && continue
+        "$owner.$binding" in union(introduced_exports,
+            introduced_public, export_to_public) && continue
         push!(existing_target, binding)
     end
     @test existing_target == Set([

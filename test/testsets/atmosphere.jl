@@ -267,14 +267,18 @@ end
             atm, epoch)) == 0
     end
 
-    profile = [80_000.0 90_000.0 100_000.0; 0.2 0.6 0.2]
-    profile_source = LGSSource(na_profile=profile)
+    profile = SodiumLayerProfile([80_000.0, 90_000.0, 100_000.0],
+        [0.2, 0.6, 0.2])
+    profile_source = LGSSource(sodium_layer_profile=profile)
     profile_renderer = prepare_atmosphere_renderer(atm, tel, profile_source)
-    frozen_profile = copy(profile_renderer.source.params.na_profile)
-    profile .= 0.0
-    @test profile_renderer.source.params.na_profile == frozen_profile
-    profile_source.params.na_profile .= 1.0
-    @test profile_renderer.source.params.na_profile == frozen_profile
+    frozen_profile = copy(
+        profile_renderer.source.params.sodium_layer_profile)
+    profile.relative_weights .= 1.0
+    @test profile_renderer.source.params.sodium_layer_profile ==
+        frozen_profile
+    profile_source.params.sodium_layer_profile.relative_weights .= 1.0
+    @test profile_renderer.source.params.sodium_layer_profile ==
+        frozen_profile
 
     image = [0.0 1.0 0.0; 1.0 2.0 1.0; 0.0 1.0 0.0]
     extended = with_extended_source(onaxis,

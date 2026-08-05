@@ -265,11 +265,11 @@ function build_reference_source(cfg::AbstractDict{<:AbstractString,<:Any})
             coordinates=coordinates,
         )
     elseif kind == "lgs"
-        na_profile = nothing
+        sodium_layer_profile = nothing
         if haskey(cfg, "na_profile_altitudes") && haskey(cfg, "na_profile_weights")
             altitudes = Float64.(cfg["na_profile_altitudes"])
             weights = Float64.(cfg["na_profile_weights"])
-            na_profile = permutedims(hcat(altitudes, weights))
+            sodium_layer_profile = SodiumLayerProfile(altitudes, weights)
         end
         laser_raw = get(cfg, "laser_coordinates", [0.0, 0.0])
         laser_coordinates = (Float64(laser_raw[1]), Float64(laser_raw[2]))
@@ -279,7 +279,7 @@ function build_reference_source(cfg::AbstractDict{<:AbstractString,<:Any})
             coordinates=coordinates,
             laser_coordinates=laser_coordinates,
             fwhm_spot_up=Float64(get(cfg, "fwhm_spot_up", 0.0)),
-            na_profile=na_profile,
+            sodium_layer_profile=sodium_layer_profile,
             photon_irradiance=1.0,
         )
     end

@@ -162,7 +162,8 @@ namespace.
 
 ### Optical Models
 
-- Telescope/source: `Telescope`, `Source`, `LGSSource`, `Asterism`;
+- Telescope/source: `Telescope`, `Source`, `LGSSource`,
+  `SodiumLayerProfile`, `sodium_layer_profile`, `Asterism`;
   source radiometry is declared with `PhysicalPhotonIrradianceSource` or
   `NormalizedTestSource`
 - Qualified cold telescope preparation: `Optics.AbstractTelescopeDefinition`,
@@ -302,6 +303,21 @@ A custom-band source is a normalized test source unless it supplies
 requires explicit photon irradiance to claim a physical rate; its default is a
 normalized source. Calling `photon_irradiance` on a normalized source is an
 error rather than an implicit unit conversion.
+
+An LGS sodium-layer return model is explicit rather than encoded by matrix row
+order:
+
+```julia
+profile = SodiumLayerProfile(
+    [80_000.0, 90_000.0, 100_000.0],
+    [0.2, 0.6, 0.2],
+)
+source = LGSSource(sodium_layer_profile=profile)
+```
+
+The first vector contains altitudes in metres and the second contains
+nonnegative relative photon-return weights. An `LGSSource` without a profile
+remains a finite-height laser guide star and uses its scalar `altitude`.
 
 ## `AdaptiveOpticsSim.Plant`
 

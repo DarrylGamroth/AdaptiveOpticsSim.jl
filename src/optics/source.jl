@@ -20,9 +20,9 @@ const BAND_ZEROPOINTS = Dict(
     :K => 0.70e12 / 368,
 )
 
-abstract type LGSProfile end
-struct LGSProfileNone <: LGSProfile end
-struct LGSProfileNaProfile <: LGSProfile end
+abstract type AbstractSodiumLayerProfileStyle end
+struct NoSodiumLayerProfileStyle <: AbstractSodiumLayerProfileStyle end
+struct SampledSodiumLayerProfileStyle <: AbstractSodiumLayerProfileStyle end
 
 abstract type AbstractSourceRadiometry end
 
@@ -110,6 +110,85 @@ function _converted_nonnegative_finite(::Any, ::Type{T},
     throw(InvalidConfiguration(
         "$(label) must be a real finite non-negative value"))
 end
+
+"""
+    SodiumLayerProfile(altitudes_m, relative_weights; T)
+
+Construct a sampled laser-guide-star sodium-layer return profile. Altitudes
+are positive and expressed in metres. Relative photon-return weights are
+nonnegative and must have a positive finite sum; they are intentionally not
+normalized so their supplied proportions remain inspectable.
+"""
+struct SodiumLayerProfile{T<:AbstractFloat}
+    altitudes_m::FixedSizeVectorDefault{T}
+    relative_weights::FixedSizeVectorDefault{T}
+
+    function SodiumLayerProfile{T}(
+        altitudes_m::FixedSizeVectorDefault{T},
+        relative_weights::FixedSizeVectorDefault{T},
+    ) where {T<:AbstractFloat}
+        length(altitudes_m) == length(relative_weights) || throw(
+            DimensionMismatchError(
+                "sodium-layer altitudes and relative weights must have equal lengths"))
+        isempty(altitudes_m) && throw(InvalidConfiguration(
+            "sodium-layer profile must contain at least one altitude sample"))
+        total_weight = zero(T)
+        @inbounds for i in eachindex(altitudes_m, relative_weights)
+            _converted_positive_finite(altitudes_m[i], T,
+                "sodium-layer profile altitude_m")
+            weight = _converted_nonnegative_finite(
+                relative_weights[i], T,
+                "sodium-layer profile relative weight")
+            total_weight += weight
+        end
+        isfinite(total_weight) && total_weight > zero(T) || throw(
+            InvalidConfiguration(
+                "sodium-layer profile relative weights must have a finite positive sum"))
+        return new{T}(altitudes_m, relative_weights)
+    end
+end
+
+@inline function _sodium_layer_profile_numeric_type(altitudes_m,
+    relative_weights)
+    return float(promote_type(eltype(altitudes_m), eltype(relative_weights)))
+end
+
+function SodiumLayerProfile(altitudes_m::AbstractVector,
+    relative_weights::AbstractVector;
+    T::Type{<:AbstractFloat}=_sodium_layer_profile_numeric_type(
+        altitudes_m, relative_weights))
+    altitudes = Vector{T}(undef, length(altitudes_m))
+    weights = Vector{T}(undef, length(relative_weights))
+    @inbounds for (i, altitude_m) in enumerate(altitudes_m)
+        altitudes[i] = _converted_positive_finite(altitude_m, T,
+            "sodium-layer profile altitude_m")
+    end
+    @inbounds for (i, weight) in enumerate(relative_weights)
+        weights[i] = _converted_nonnegative_finite(weight, T,
+            "sodium-layer profile relative weight")
+    end
+    return SodiumLayerProfile{T}(
+        FixedSizeVectorDefault{T}(altitudes),
+        FixedSizeVectorDefault{T}(weights),
+    )
+end
+
+Base.copy(profile::SodiumLayerProfile{T}) where {T} =
+    SodiumLayerProfile{T}(
+        FixedSizeVectorDefault{T}(profile.altitudes_m),
+        FixedSizeVectorDefault{T}(profile.relative_weights),
+    )
+
+Base.:(==)(left::SodiumLayerProfile, right::SodiumLayerProfile) =
+    left.altitudes_m == right.altitudes_m &&
+    left.relative_weights == right.relative_weights
+
+Base.isequal(left::SodiumLayerProfile, right::SodiumLayerProfile) =
+    isequal(left.altitudes_m, right.altitudes_m) &&
+    isequal(left.relative_weights, right.relative_weights)
+
+Base.hash(profile::SodiumLayerProfile, seed::UInt) =
+    hash((profile.altitudes_m, profile.relative_weights), seed)
 
 struct SourceParams{T<:AbstractFloat,R<:AbstractSourceRadiometry}
     band::Symbol
@@ -237,14 +316,14 @@ is_lgs_source(::AbstractSource) = false
 
 coordinates_xy_arcsec(src::Source) = src.params.coordinates_xy_arcsec
 
-struct LGSSourceParams{T<:AbstractFloat,A,R<:AbstractSourceRadiometry}
+struct LGSSourceParams{T<:AbstractFloat,P,R<:AbstractSourceRadiometry}
     magnitude::T
     coordinates_xy_arcsec::NTuple{2,T}
     wavelength::T
     altitude::T
     elongation_factor::T
     laser_coordinates::NTuple{2,T}
-    na_profile::A
+    sodium_layer_profile::P
     fwhm_spot_up::T
     radiometric_value::T
     radiometry::R
@@ -254,44 +333,34 @@ struct LGSSource{P<:LGSSourceParams} <: AbstractSource
     params::P
 end
 
-function _freeze_lgs_profile(profile::AbstractMatrix,
+function _freeze_sodium_layer_profile(profile::SodiumLayerProfile,
     ::Type{T}) where {T<:AbstractFloat}
-    size(profile, 1) == 2 || throw(InvalidConfiguration(
-        "na_profile must be a 2xN matrix of (altitude, weight)"))
-    n_samples = size(profile, 2)
-    n_samples > 0 || throw(InvalidConfiguration(
-        "na_profile must contain at least one altitude sample"))
-    raw_profile = Matrix(profile)
-    frozen = Matrix{T}(undef, 2, n_samples)
+    frozen = SodiumLayerProfile(profile.altitudes_m,
+        profile.relative_weights; T)
     total_weight = zero(T)
-    @inbounds for i in 1:n_samples
-        frozen[1, i] = _converted_positive_finite(raw_profile[1, i], T,
-            "na_profile altitude")
-        weight = _converted_nonnegative_finite(raw_profile[2, i], T,
-            "na_profile weight")
-        frozen[2, i] = weight
+    @inbounds for weight in frozen.relative_weights
         total_weight += weight
     end
-    isfinite(total_weight) && total_weight > zero(T) || throw(
-        InvalidConfiguration(
-            "na_profile weights must have a finite positive sum"))
     mean_altitude = zero(T)
-    @inbounds for i in 1:n_samples
-        mean_altitude += frozen[1, i] * (frozen[2, i] / total_weight)
+    @inbounds for i in eachindex(frozen.altitudes_m,
+        frozen.relative_weights)
+        mean_altitude += frozen.altitudes_m[i] *
+            (frozen.relative_weights[i] / total_weight)
     end
     mean_altitude = _converted_positive_finite(mean_altitude, T,
-        "na_profile weighted altitude")
+        "sodium-layer profile weighted altitude_m")
     return frozen, mean_altitude
 end
 
-function _freeze_lgs_profile(::Any, ::Type{T}) where {T<:AbstractFloat}
+function _freeze_sodium_layer_profile(::Any,
+    ::Type{T}) where {T<:AbstractFloat}
     throw(InvalidConfiguration(
-        "na_profile must be a 2xN matrix of (altitude, weight)"))
+        "sodium_layer_profile must be a SodiumLayerProfile or nothing"))
 end
 
 function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Real=589e-9,
     altitude::Real=90000.0, elongation_factor::Real=1.2, laser_coordinates=(0.0, 0.0),
-    na_profile=nothing, fwhm_spot_up::Real=0.0,
+    sodium_layer_profile=nothing, fwhm_spot_up::Real=0.0,
     photon_irradiance::Union{Nothing,Real}=nothing,
     normalized_power::Real=1.0,
     radiometry::Union{Nothing,AbstractSourceRadiometry}=nothing,
@@ -299,8 +368,9 @@ function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Re
 
     altitude_value = _converted_positive_finite(altitude, T,
         "LGS altitude")
-    frozen_profile, alt_val = isnothing(na_profile) ?
-        (nothing, altitude_value) : _freeze_lgs_profile(na_profile, T)
+    frozen_profile, alt_val = isnothing(sodium_layer_profile) ?
+        (nothing, altitude_value) :
+        _freeze_sodium_layer_profile(sodium_layer_profile, T)
     magnitude_value = _converted_finite(magnitude, T, "LGS magnitude")
     coordinates_value = polar_arcsec_deg_to_xy_arcsec(
         coordinates[1], coordinates[2], T)
@@ -357,12 +427,14 @@ print_optical_path(parts...) = print_optical_path(stdout, parts...)
 
 lgs_elongation_factor(src::LGSSource) = src.params.elongation_factor
 
-function lgs_has_profile(src::LGSSource)
-    return src.params.na_profile !== nothing
-end
+sodium_layer_profile(src::LGSSource) = src.params.sodium_layer_profile
 
-lgs_profile(::LGSSource{<:LGSSourceParams{<:AbstractFloat,Nothing}}) = LGSProfileNone()
-lgs_profile(::LGSSource{<:LGSSourceParams{<:AbstractFloat,<:AbstractMatrix}}) = LGSProfileNaProfile()
+sodium_layer_profile_style(
+    ::LGSSource{<:LGSSourceParams{<:AbstractFloat,Nothing}}) =
+    NoSodiumLayerProfileStyle()
+sodium_layer_profile_style(
+    ::LGSSource{<:LGSSourceParams{<:AbstractFloat,<:SodiumLayerProfile}}) =
+    SampledSodiumLayerProfileStyle()
 
 """
     freeze_source(source)
@@ -375,7 +447,8 @@ mutable user inputs specialize this function and copy those inputs.
 
 function freeze_source(src::LGSSource)
     params = src.params
-    profile = isnothing(params.na_profile) ? nothing : copy(params.na_profile)
+    profile = isnothing(params.sodium_layer_profile) ? nothing :
+        copy(params.sodium_layer_profile)
     return LGSSource(LGSSourceParams{
         typeof(params.altitude),typeof(profile),typeof(params.radiometry),
     }(

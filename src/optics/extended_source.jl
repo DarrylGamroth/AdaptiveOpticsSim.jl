@@ -357,7 +357,8 @@ end
 function source_with_coordinates_and_radiometric_value(src::LGSSource,
     coords_xy_arcsec::NTuple{2,T}, radiometric_value::T) where {T<:AbstractFloat}
     params = src.params
-    profile = isnothing(params.na_profile) ? nothing : copy(params.na_profile)
+    profile = isnothing(params.sodium_layer_profile) ? nothing :
+        copy(params.sodium_layer_profile)
     λ = _converted_positive_finite(params.wavelength, T,
         "extended LGS wavelength")
     value = _converted_nonnegative_finite(radiometric_value, T,

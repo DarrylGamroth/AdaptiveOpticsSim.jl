@@ -524,6 +524,10 @@ new_root_exports = [
     "Tomography",
     "Ensembles",
 ]
+new_domain_exports = [
+    "Optics.SodiumLayerProfile",
+    "Optics.sodium_layer_profile",
+]
 new_domain_public = [
     "Backends.AbstractComputeDeviceAvailability",
     "Backends.ComputeDeviceAvailable",
@@ -829,6 +833,7 @@ exports = [
     "Telescope",
     "Source",
     "LGSSource",
+    "SodiumLayerProfile",
     "Asterism",
     "AbstractSourceRadiometry",
     "PhysicalPhotonIrradianceSource",
@@ -837,6 +842,7 @@ exports = [
     "source_radiometric_value",
     "wavelength",
     "photon_irradiance",
+    "sodium_layer_profile",
     "optical_path",
     "pupil_photon_rate_map",
     "reset_opd!",
