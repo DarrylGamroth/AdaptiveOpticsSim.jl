@@ -28,12 +28,18 @@ end
 
 # Test-local extension values exercise the generic WFS optics rejection
 # contracts independently of the package's built-in domain values.
-struct ContractUnsupportedPlane <: AbstractOpticalPlaneKind end
-struct ContractUnsupportedNormalization <: AbstractOpticalNormalization end
-struct ContractUnsupportedSpatialMeasure <: AbstractSpatialMeasure end
-struct ContractUnsupportedCombinationPolicy <: AbstractCombinationPolicy end
-struct ContractUnsupportedSpectralCoordinate <: AbstractSpectralCoordinate end
-struct ContractOpticalProduct <: AbstractOpticalProduct end
+struct ContractUnsupportedPlane <:
+        AdaptiveOpticsSim.Optics.AbstractOpticalPlaneKind end
+struct ContractUnsupportedNormalization <:
+        AdaptiveOpticsSim.Optics.AbstractOpticalNormalization end
+struct ContractUnsupportedSpatialMeasure <:
+        AdaptiveOpticsSim.Optics.AbstractSpatialMeasure end
+struct ContractUnsupportedCombinationPolicy <:
+        AdaptiveOpticsSim.Optics.AbstractCombinationPolicy end
+struct ContractUnsupportedSpectralCoordinate <:
+        AdaptiveOpticsSim.Optics.AbstractSpectralCoordinate end
+struct ContractOpticalProduct <:
+        AdaptiveOpticsSim.Optics.AbstractOpticalProduct end
 
 struct ContractRatePlan{M,I,O}
     model::M
