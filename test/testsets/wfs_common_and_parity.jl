@@ -160,8 +160,10 @@ end
     pyr_rooftop = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
         rooftop=0.5, phase_mask_rotation_rad=0.2)
     pyr_old = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0, old_mask=true)
-    @test pyr_default.front_end.propagation.pyramid_mask != pyr_rooftop.front_end.propagation.pyramid_mask
-    @test pyr_default.front_end.propagation.pyramid_mask != pyr_old.front_end.propagation.pyramid_mask
+    @test pyramid_propagation_workspace(pyr_default).pyramid_mask !=
+        pyramid_propagation_workspace(pyr_rooftop).pyramid_mask
+    @test pyramid_propagation_workspace(pyr_default).pyramid_mask !=
+        pyramid_propagation_workspace(pyr_old).pyramid_mask
     @test pyr_rooftop.front_end.phase_mask.rotation_rad == 0.2
 
     @test_throws InvalidConfiguration PyramidWFS(tel;
@@ -174,9 +176,11 @@ end
     bio_plain = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
     bio_gray = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
         grey_width=0.5, grey_length=1.0)
-    amps = real.(bio_gray.front_end.propagation.bi_o_edge_masks[:, :, 1])
+    amps = real.(bi_o_edge_propagation_workspace(
+        bio_gray).bi_o_edge_masks[:, :, 1])
     @test any(x -> 0 < x < 1, amps)
-    @test bio_plain.front_end.propagation.bi_o_edge_masks != bio_gray.front_end.propagation.bi_o_edge_masks
+    @test bi_o_edge_propagation_workspace(bio_plain).bi_o_edge_masks !=
+        bi_o_edge_propagation_workspace(bio_gray).bi_o_edge_masks
 
     bio_gray_slopes = measure!(bio_gray, pupil, src)
     @test length(bio_gray_slopes) == 2 * 4 * 4
@@ -217,7 +221,8 @@ end
 
     compact_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=2,
         mode=Diffractive())
-    compact_bi_o_edge.acquisition.state.nominal_detector_resolution = 4
+    WavefrontSensors.bi_o_edge_acquisition_workspace(
+        compact_bi_o_edge).nominal_detector_resolution = 4
     WavefrontSensors.resize_bi_o_edge_signal_buffers!(compact_bi_o_edge, 4)
     fill!(compact_bi_o_edge.estimator.state.valid_i4q, true)
     WavefrontSensors.update_bi_o_edge_valid_signal!(compact_bi_o_edge)
@@ -233,7 +238,8 @@ end
 
     padded_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=2,
         mode=Diffractive())
-    padded_bi_o_edge.acquisition.state.nominal_detector_resolution = 4
+    WavefrontSensors.bi_o_edge_acquisition_workspace(
+        padded_bi_o_edge).nominal_detector_resolution = 4
     WavefrontSensors.resize_bi_o_edge_signal_buffers!(padded_bi_o_edge, 8)
     fill!(padded_bi_o_edge.estimator.state.valid_i4q, true)
     WavefrontSensors.update_bi_o_edge_valid_signal!(padded_bi_o_edge)

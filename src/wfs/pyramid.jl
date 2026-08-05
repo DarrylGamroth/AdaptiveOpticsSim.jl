@@ -13,7 +13,7 @@ include("pyramid/stages.jl")
 
 @inline valid_subaperture_mask(wfs::PyramidWFS) = wfs.estimator.state.valid_mask
 @inline reference_signal(wfs::PyramidWFS) = wfs.estimator.state.reference_signal_2d
-@inline slopes(wfs::PyramidWFS) = wfs.estimator.state.slopes
+@inline slopes(wfs::PyramidWFS) = pyramid_estimator_products(wfs).slopes
 @inline wfs_calibration_signature(wfs::PyramidWFS) =
     wfs.estimator.state.calibration_signature
 

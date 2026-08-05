@@ -348,11 +348,11 @@ end
 
 @inline function _four_pupil_device_path_batch_plan_contract(plan)
     front_end = plan.front_end
-    propagation = front_end.propagation
+    propagation = plan.workspace
     return (
         typeof(plan),
-        typeof(plan.lgs_model),
-        plan.propagation_revision,
+        typeof(plan.plan.lgs_model),
+        plan.plan.propagation_revision,
         size(propagation.field),
         size(propagation.intensity),
         size(front_end.modulation.phases),
@@ -377,7 +377,7 @@ function _wfs_device_path_batch_plan_contract(
 )
     contracts = map(
         _wfs_device_path_batch_plan_contract,
-        plan.plans,
+        plan.components,
     )
     return (typeof(plan), contracts)
 end

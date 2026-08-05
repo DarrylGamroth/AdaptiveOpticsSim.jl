@@ -1255,7 +1255,7 @@ end
     @testset "Pyramid kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, modulation_points=3, mode=Diffractive())
-        propagation = WavefrontSensors.pyramid_propagation(wfs)
+        propagation = WavefrontSensors.pyramid_propagation_workspace(wfs)
 
         scalar_phasor = similar(propagation.phasor)
         ka_phasor = similar(propagation.phasor)
@@ -1305,7 +1305,7 @@ end
     @testset "Bi-O-edge kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-        propagation = WavefrontSensors.bi_o_edge_propagation(wfs)
+        propagation = WavefrontSensors.bi_o_edge_propagation_workspace(wfs)
 
         scalar_edge_mask = similar(wfs.estimator.state.edge_mask)
         ka_edge_mask = similar(wfs.estimator.state.edge_mask)

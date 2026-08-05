@@ -21,14 +21,14 @@ function _build_pyramid_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix{
 end
 
 function build_pyramid_mask!(wfs::PyramidWFS, pupil::PupilFunction)
-    mask = wfs.front_end.propagation.pyramid_mask
+    mask = pyramid_propagation_workspace(wfs).pyramid_mask
     copyto!(mask, host_pyramid_mask(wfs, pupil))
     return mask
 end
 
 function host_pyramid_mask(wfs::PyramidWFS, pupil::PupilFunction)
-    n = size(wfs.front_end.propagation.pyramid_mask, 1)
-    T = eltype(wfs.estimator.state.slopes)
+    n = size(pyramid_propagation_workspace(wfs).pyramid_mask, 1)
+    T = eltype(pyramid_estimator_products(wfs).slopes)
     host = Matrix{Complex{T}}(undef, n, n)
     if wfs.front_end.phase_mask.old_mask
         build_pyramid_mask_old_host!(host, wfs, pupil)
@@ -175,7 +175,7 @@ end
 
 function accumulate_pyramid_focal_intensity!(out::AbstractMatrix,
     front_end::PyramidOpticalFrontEnd)
-    propagation = front_end.propagation
+    propagation = pyramid_propagation_workspace(front_end)
     if front_end.phase_mask.psf_centering
         @. propagation.focal_field = propagation.focal_field * propagation.phasor
         execute_fft_plan!(propagation.focal_field, propagation.fft_plan)
@@ -216,8 +216,9 @@ function pyramid_intensity_core!(::ScalarCPUStyle,
     T<:AbstractFloat,
 }
     prepare_pyramid_sampling!(wfs, pupil)
+    propagation = pyramid_propagation_workspace(wfs)
     n = _pupil_resolution(pupil)
-    pad = size(wfs.front_end.propagation.field, 1)
+    pad = size(propagation.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
@@ -226,12 +227,12 @@ function pyramid_intensity_core!(::ScalarCPUStyle,
     amplitude = pupil.amplitude
 
     fill!(out, zero(T))
-    fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
-    @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * amplitude *
+    fill!(propagation.field, zero(eltype(propagation.field)))
+    @views @. propagation.field[ox+1:ox+n, oy+1:oy+n] = amp_scale * amplitude *
         cispi(opd_to_cycles * pupil.opd)
     for p in 1:modulation_point_count(modulation)
-        copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
-        @views @. wfs.front_end.propagation.focal_field[ox+1:ox+n, oy+1:oy+n] *=
+        copyto!(propagation.focal_field, propagation.field)
+        @views @. propagation.focal_field[ox+1:ox+n, oy+1:oy+n] *=
             modulation.amplitude_weights[p] * modulation.phases[:, :, p]
         accumulate_pyramid_focal_intensity!(out, wfs)
     end
@@ -244,8 +245,9 @@ function pyramid_intensity_core!(::AcceleratorStyle,
     T<:AbstractFloat,
 }
     prepare_pyramid_sampling!(wfs, pupil)
+    propagation = pyramid_propagation_workspace(wfs)
     n = _pupil_resolution(pupil)
-    pad = size(wfs.front_end.propagation.field, 1)
+    pad = size(propagation.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
@@ -255,12 +257,12 @@ function pyramid_intensity_core!(::AcceleratorStyle,
 
     fill!(out, zero(T))
     for p in 1:modulation_point_count(modulation)
-        fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
+        fill!(propagation.field, zero(eltype(propagation.field)))
         amplitude_weight = modulation.amplitude_weights[p]
-        @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] =
+        @views @. propagation.field[ox+1:ox+n, oy+1:oy+n] =
             amp_scale * amplitude_weight * amplitude *
             modulation.phases[:, :, p] * cispi(opd_to_cycles * pupil.opd)
-        copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
+        copyto!(propagation.focal_field, propagation.field)
         accumulate_pyramid_focal_intensity!(out, wfs)
     end
     return out
@@ -284,8 +286,9 @@ end
 function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, pupil::PupilFunction,
     src::AbstractSource) where {T<:AbstractFloat}
     prepare_pyramid_sampling!(wfs, pupil)
+    propagation = pyramid_propagation_workspace(wfs)
     n = _pupil_resolution(pupil)
-    pad = size(wfs.front_end.propagation.field, 1)
+    pad = size(propagation.field, 1)
     fft_scale2 = inv(T(pad) * T(pad))
     if size(out) != (pad, pad)
         throw(DimensionMismatchError("modulation frame size must match pyramid sampling"))
@@ -300,24 +303,24 @@ function pyramid_modulation_frame!(out::AbstractMatrix{T}, wfs::PyramidWFS, pupi
 
     fill!(out, zero(T))
     for p in 1:modulation_point_count(modulation)
-        fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
+        fill!(propagation.field, zero(eltype(propagation.field)))
         amplitude_weight = modulation.amplitude_weights[p]
-        @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] =
+        @views @. propagation.field[ox+1:ox+n, oy+1:oy+n] =
             amp_scale * amplitude_weight * amplitude *
             modulation.phases[:, :, p] * cispi(opd_to_cycles * pupil.opd)
-        copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
+        copyto!(propagation.focal_field, propagation.field)
         if wfs.front_end.phase_mask.psf_centering
-            @. wfs.front_end.propagation.focal_field = wfs.front_end.propagation.focal_field * wfs.front_end.propagation.phasor
-            execute_fft_plan!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.fft_plan)
+            @. propagation.focal_field = propagation.focal_field * propagation.phasor
+            execute_fft_plan!(propagation.focal_field, propagation.fft_plan)
         else
-            execute_fft_plan!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.fft_plan)
-            @. wfs.front_end.propagation.intensity = abs2(wfs.front_end.propagation.focal_field) * fft_scale2
-            fftshift2d!(wfs.front_end.propagation.temp, wfs.front_end.propagation.intensity)
-            out .+= wfs.front_end.propagation.temp
+            execute_fft_plan!(propagation.focal_field, propagation.fft_plan)
+            @. propagation.intensity = abs2(propagation.focal_field) * fft_scale2
+            fftshift2d!(propagation.temp, propagation.intensity)
+            out .+= propagation.temp
             continue
         end
-        @. wfs.front_end.propagation.temp = abs2(wfs.front_end.propagation.focal_field) * fft_scale2
-        out .+= wfs.front_end.propagation.temp
+        @. propagation.temp = abs2(propagation.focal_field) * fft_scale2
+        out .+= propagation.temp
     end
     return out
 end
@@ -331,31 +334,35 @@ native focal-plane sampling.
 """
 function pyramid_modulation_frame(wfs::PyramidWFS{<:Diffractive},
     pupil::PupilFunction, src::AbstractSource)
-    out = similar(wfs.front_end.propagation.intensity)
+    out = similar(pyramid_propagation_workspace(wfs).intensity)
     return pyramid_modulation_frame!(out, wfs, pupil, src)
 end
 
-function apply_lgs_elongation!(::NoSodiumLayerProfileStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
-    ::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
-    wfs.front_end.propagation.elongation_kernel = apply_elongation!(
+function apply_lgs_elongation!(::NoSodiumLayerProfileStyle,
+    out::AbstractMatrix{T}, wfs::PyramidWFS, ::PupilFunction,
+    src::LGSSource) where {T<:AbstractFloat}
+    propagation = pyramid_propagation_workspace(wfs)
+    propagation.elongation_kernel = apply_elongation!(
         out,
         lgs_elongation_factor(src),
-        wfs.front_end.propagation.scratch,
-        wfs.front_end.propagation.elongation_kernel,
+        propagation.scratch,
+        propagation.elongation_kernel,
     )
     return wfs
 end
 
-function apply_lgs_elongation!(::SampledSodiumLayerProfileStyle, out::AbstractMatrix{T}, wfs::PyramidWFS,
-    pupil::PupilFunction, src::LGSSource) where {T<:AbstractFloat}
+function apply_lgs_elongation!(::SampledSodiumLayerProfileStyle,
+    out::AbstractMatrix{T}, wfs::PyramidWFS, pupil::PupilFunction,
+    src::LGSSource) where {T<:AbstractFloat}
     ensure_lgs_kernel!(wfs, pupil, src)
+    propagation = pyramid_propagation_workspace(wfs)
     apply_lgs_convolution!(
         out,
-        wfs.front_end.propagation.lgs_kernel_fft,
-        wfs.front_end.propagation.focal_field,
-        wfs.front_end.propagation.fft_plan,
-        wfs.front_end.propagation.pupil_field,
-        wfs.front_end.propagation.ifft_plan,
+        propagation.lgs_kernel_fft,
+        propagation.focal_field,
+        propagation.fft_plan,
+        propagation.pupil_field,
+        propagation.ifft_plan,
     )
     return wfs
 end
@@ -365,8 +372,9 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, pupil::PupilFunction, src::LGSSourc
     if profile === nothing
         return wfs
     end
-    pad = size(wfs.front_end.propagation.intensity, 1)
-    padding = wfs.front_end.propagation.effective_resolution / _pupil_resolution(pupil)
+    propagation = pyramid_propagation_workspace(wfs)
+    pad = size(propagation.intensity, 1)
+    padding = propagation.effective_resolution / _pupil_resolution(pupil)
     pixel_scale = lgs_pixel_scale(_pupil_diameter_m(pupil), padding,
         wavelength(src))
     tag = lgs_kernel_signature(
@@ -375,21 +383,22 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, pupil::PupilFunction, src::LGSSourc
         pad,
         wfs.estimator.params.pupil_samples,
         pixel_scale,
-        eltype(wfs.front_end.propagation.intensity);
+        eltype(propagation.intensity);
         model=:subaperture_average,
     )
-    if size(wfs.front_end.propagation.lgs_kernel_fft, 1) == pad && wfs.front_end.propagation.lgs_kernel_tag == tag
+    if size(propagation.lgs_kernel_fft, 1) == pad &&
+        propagation.lgs_kernel_tag == tag
         return wfs
     end
-    wfs.front_end.propagation.lgs_kernel_fft = lgs_average_kernel_fft(
+    propagation.lgs_kernel_fft = lgs_average_kernel_fft(
         pupil,
         src,
         pad,
         wfs.estimator.params.pupil_samples,
         pixel_scale,
-        wfs.front_end.propagation.focal_field,
-        wfs.front_end.propagation.fft_plan,
+        propagation.focal_field,
+        propagation.fft_plan,
     )
-    wfs.front_end.propagation.lgs_kernel_tag = tag
+    propagation.lgs_kernel_tag = tag
     return wfs
 end

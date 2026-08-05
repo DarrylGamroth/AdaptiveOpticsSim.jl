@@ -323,10 +323,10 @@ separate field of an exact single-writer prepared owner. Generic frame,
 accumulated-count, and static fan-out acquisition already follow that split
 and expose their plan through `wfs_acquisition_plan`. Family optical and
 estimator owners migrate under the same contract in PE-05B through PE-05F;
-there is no universal stage graph or compatibility owner. Shack-Hartmann
-separates microlens optics, acquisition, and
-estimation over caller-owned products. Its geometric and diffractive signals
-share one explicit
+there is no universal stage graph or compatibility owner. Shack-Hartmann and
+the Pyramid/Bi-O-edge families now implement that exact split. Shack-Hartmann
+separates microlens optics, acquisition, and estimation over caller-owned
+products. Its geometric and diffractive signals share one explicit
 `[axis 1; axis 2]`, Julia-column-major lenslet convention; OOPAO row-major
 reference adaptation remains in the test harness. Its geometric mode declares
 `DirectMeasurementPath()` and allocates no placeholder optical or acquisition
@@ -348,10 +348,20 @@ focal-plane modulation only where the optical quadrature is identical; its
 normalized weights average intensity and never integrate detector time. Each
 front end writes a normalized-pupil-coordinate, cell-integrated
 photon-arrival-rate four-pupil mosaic or a typed spectral/path-local bundle.
-Generic detector
-acquisition applies response, QE, and duration afterward. Their differential
-estimators own valid support, normalization, reference subtraction, optical
-gain, and a calibration revision that invalidates stale prepared plans.
+Generic detector acquisition applies response, QE, and duration afterward.
+Their differential
+estimators separate persistent calibration/support state, replaceable
+single-writer scratch, and caller-visible slopes. Their family convenience
+acquisitions likewise separate immutable binning, derived native detector
+sampling workspace, and the caller-visible frame. Propagation has an immutable
+physical and numerical plan, replaceable backend-bound FFT workspace, and an
+exact prepared owner. Prepared optics and estimation owners bind these parts by
+identity and reject workspace, state, product, or calibration replacement
+before mutating a destination. Recreating equivalent independent workspaces
+therefore preserves the numerical result without allowing a stale prepared
+owner to follow replacement storage. The estimator state owns valid support,
+normalization, reference subtraction,
+optical gain, and a calibration revision that invalidates stale prepared plans.
 Geometric Pyramid and Bi-O-edge declare `DirectMeasurementPath()` and construct
 neither propagation nor acquisition workspace.
 

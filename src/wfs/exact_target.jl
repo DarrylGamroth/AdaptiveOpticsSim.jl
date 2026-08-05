@@ -444,7 +444,7 @@ function _require_exact_pyramid_front_end_target(
     front_end::PyramidOpticalFrontEnd,
     target::AbstractComputeDevice,
 )
-    propagation = front_end.propagation
+    propagation = pyramid_propagation_workspace(front_end)
     _require_exact_wfs_array_targets(
         (
             propagation.field,
@@ -495,7 +495,7 @@ function _require_exact_wfs_target(
         plan.output, target, :wfs_optics)
     _require_exact_pyramid_front_end_target(plan.front_end, target)
     _require_exact_prepared_four_pupil_lgs_target(
-        plan.lgs_model, target)
+        plan.plan.lgs_model, target)
     return plan
 end
 
@@ -505,7 +505,7 @@ function _require_exact_wfs_target(
 )
     validate_wfs_optics_binding(
         plan.output, plan.input, plan)
-    @inbounds for component in plan.plans
+    @inbounds for component in plan.components
         _require_exact_wfs_target(component, target)
     end
     return plan
@@ -515,7 +515,7 @@ function _require_exact_bi_o_edge_front_end_target(
     front_end::BiOEdgeOpticalFrontEnd,
     target::AbstractComputeDevice,
 )
-    propagation = front_end.propagation
+    propagation = bi_o_edge_propagation_workspace(front_end)
     _require_exact_wfs_array_targets(
         (
             propagation.field,
@@ -568,7 +568,7 @@ function _require_exact_wfs_target(
         plan.output, target, :wfs_optics)
     _require_exact_bi_o_edge_front_end_target(plan.front_end, target)
     _require_exact_prepared_four_pupil_lgs_target(
-        plan.lgs_model, target)
+        plan.plan.lgs_model, target)
     return plan
 end
 
@@ -578,7 +578,7 @@ function _require_exact_wfs_target(
 )
     validate_wfs_optics_binding(
         plan.output, plan.input, plan)
-    @inbounds for component in plan.plans
+    @inbounds for component in plan.components
         _require_exact_wfs_target(component, target)
     end
     return plan
@@ -844,32 +844,54 @@ function _require_exact_pyramid_estimator_state_target(
     _require_exact_wfs_array_targets(
         (
             state.valid_mask,
-            state.slopes,
             state.optical_gain,
             state.valid_i4q,
-            state.valid_signal,
-            state.valid_signal_indices,
-            state.valid_flux_sum_buffer,
-            state.flux_i4q,
-            state.signal_2d,
             state.reference_signal_2d,
         ),
         (
             "Pyramid valid mask",
-            "Pyramid slopes",
             "Pyramid optical gain",
             "Pyramid valid I4Q mask",
-            "Pyramid valid-signal mask",
-            "Pyramid valid-signal indices",
-            "Pyramid flux-sum buffer",
-            "Pyramid I4Q flux",
-            "Pyramid signal",
             "Pyramid calibration reference",
         ),
         target,
         :estimation,
     )
     return state
+end
+
+function _require_exact_pyramid_estimator_workspace_target(
+    workspace::PyramidEstimatorWorkspace,
+    target::AbstractComputeDevice,
+)
+    _require_exact_wfs_array_targets(
+        (
+            workspace.valid_signal,
+            workspace.valid_signal_indices,
+            workspace.valid_flux_sum_buffer,
+            workspace.flux_i4q,
+            workspace.signal_2d,
+        ),
+        (
+            "Pyramid valid-signal mask",
+            "Pyramid valid-signal indices",
+            "Pyramid flux-sum buffer",
+            "Pyramid I4Q flux",
+            "Pyramid signal",
+        ),
+        target,
+        :estimation,
+    )
+    return workspace
+end
+
+function _require_exact_pyramid_estimator_products_target(
+    products::PyramidEstimatorProducts,
+    target::AbstractComputeDevice,
+)
+    _require_exact_wfs_storage_target(products.slopes, target, :estimation,
+        "Pyramid slopes")
+    return products
 end
 
 function _require_exact_wfs_target(
@@ -881,17 +903,17 @@ function _require_exact_wfs_target(
     _require_exact_wfs_estimator_input_target(plan.input, target)
     _require_exact_wfs_measurement_target(plan.measurement, target)
     _require_exact_pyramid_estimator_state_target(
-        plan.sensor.estimator.state, target)
+        plan.state, target)
+    _require_exact_pyramid_estimator_workspace_target(
+        plan.workspace, target)
+    _require_exact_pyramid_estimator_products_target(
+        plan.products, target)
     if plan.sensor.front_end !== nothing
         _require_exact_pyramid_front_end_target(
             plan.sensor.front_end, target)
-        acquisition = plan.sensor.acquisition.state
-        _require_exact_wfs_array_targets(
-            (acquisition.binned_intensity, acquisition.camera_frame),
-            ("Pyramid binned intensity", "Pyramid camera frame"),
-            target,
-            :estimation,
-        )
+        acquisition = pyramid_acquisition_products(plan.sensor)
+        _require_exact_wfs_storage_target(acquisition.frame, target,
+            :estimation, "Pyramid acquisition frame")
     end
     return plan
 end
@@ -904,37 +926,59 @@ function _require_exact_bi_o_edge_estimator_state_target(
         (
             state.valid_mask,
             state.edge_mask,
-            state.slopes,
             state.optical_gain,
             state.valid_i4q,
-            state.valid_signal,
-            state.valid_signal_indices,
-            state.valid_flux_sum_buffer,
-            state.flux_i4q,
-            state.signal_2d,
             state.reference_signal_2d,
-            state.binned_phase,
-            state.edge_mask_binned,
         ),
         (
             "Bi-O-edge valid mask",
             "Bi-O-edge edge mask",
-            "Bi-O-edge slopes",
             "Bi-O-edge optical gain",
             "Bi-O-edge valid I4Q mask",
+            "Bi-O-edge calibration reference",
+        ),
+        target,
+        :estimation,
+    )
+    return state
+end
+
+function _require_exact_bi_o_edge_estimator_workspace_target(
+    workspace::BiOEdgeEstimatorWorkspace,
+    target::AbstractComputeDevice,
+)
+    _require_exact_wfs_array_targets(
+        (
+            workspace.valid_signal,
+            workspace.valid_signal_indices,
+            workspace.valid_flux_sum_buffer,
+            workspace.flux_i4q,
+            workspace.signal_2d,
+            workspace.binned_phase,
+            workspace.edge_mask_binned,
+        ),
+        (
             "Bi-O-edge valid-signal mask",
             "Bi-O-edge valid-signal indices",
             "Bi-O-edge flux-sum buffer",
             "Bi-O-edge I4Q flux",
             "Bi-O-edge signal",
-            "Bi-O-edge calibration reference",
             "Bi-O-edge binned phase",
             "Bi-O-edge binned edge mask",
         ),
         target,
         :estimation,
     )
-    return state
+    return workspace
+end
+
+function _require_exact_bi_o_edge_estimator_products_target(
+    products::BiOEdgeEstimatorProducts,
+    target::AbstractComputeDevice,
+)
+    _require_exact_wfs_storage_target(products.slopes, target, :estimation,
+        "Bi-O-edge slopes")
+    return products
 end
 
 function _require_exact_wfs_target(
@@ -946,17 +990,17 @@ function _require_exact_wfs_target(
     _require_exact_wfs_estimator_input_target(plan.input, target)
     _require_exact_wfs_measurement_target(plan.measurement, target)
     _require_exact_bi_o_edge_estimator_state_target(
-        plan.sensor.estimator.state, target)
+        plan.state, target)
+    _require_exact_bi_o_edge_estimator_workspace_target(
+        plan.workspace, target)
+    _require_exact_bi_o_edge_estimator_products_target(
+        plan.products, target)
     if plan.sensor.front_end !== nothing
         _require_exact_bi_o_edge_front_end_target(
             plan.sensor.front_end, target)
-        acquisition = plan.sensor.acquisition.state
-        _require_exact_wfs_array_targets(
-            (acquisition.binned_intensity, acquisition.camera_frame),
-            ("Bi-O-edge binned intensity", "Bi-O-edge camera frame"),
-            target,
-            :estimation,
-        )
+        acquisition = bi_o_edge_acquisition_products(plan.sensor)
+        _require_exact_wfs_storage_target(acquisition.frame, target,
+            :estimation, "Bi-O-edge acquisition frame")
     end
     return plan
 end

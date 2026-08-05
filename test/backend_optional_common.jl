@@ -1855,7 +1855,7 @@ end
     BackendArray,
 )
     front_end = plan.front_end
-    propagation = front_end.propagation
+    propagation = plan.workspace
     arrays = (
         front_end.modulation.phases,
         propagation.field,
@@ -1889,7 +1889,7 @@ function optional_wfs_plan_device_resident(
             device,
             BackendArray,
         ),
-        plan.plans,
+        plan.components,
     )
 end
 
@@ -2913,7 +2913,9 @@ function run_optional_sodium_layer_profile_wfs(::Type{B},
                 modulation=zero(T), T=T, backend=selector)
 
         WavefrontSensors.ensure_lgs_kernel!(wfs, pupil, src)
-        propagation = wfs.front_end.propagation
+        propagation = family === :pyramid ?
+            WavefrontSensors.pyramid_propagation_workspace(wfs) :
+            WavefrontSensors.bi_o_edge_propagation_workspace(wfs)
         @test propagation.lgs_kernel_fft isa BackendArray
         original_tag = propagation.lgs_kernel_tag
         original_kernel = Array(propagation.lgs_kernel_fft)
@@ -5265,8 +5267,16 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DStrategy
-    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStaged2DStrategy
+    pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
+    bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
+    @test WavefrontSensors.grouped_accumulation_strategy(
+        AdaptiveOpticsSim.Backends.execution_style(
+            pyr_propagation.intensity), pyr) isa
+        WavefrontSensors.GroupedStaged2DStrategy
+    @test WavefrontSensors.grouped_accumulation_strategy(
+        AdaptiveOpticsSim.Backends.execution_style(
+            bio_propagation.intensity), bio) isa
+        WavefrontSensors.GroupedStaged2DStrategy
     @test typeof(WavefrontSensors.sh_sensing_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh)) ===
         WavefrontSensors.ShackHartmannWFSROCmHostStatsStrategy
@@ -5311,7 +5321,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         ),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(poisson_method.file))
-    @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.HostMirrorReductionStrategy
+    @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr_propagation.intensity) isa AdaptiveOpticsSim.Backends.HostMirrorReductionStrategy
     @test AdaptiveOpticsSim.Backends.backend_sum_value(capture_psf) == T(160)
 
     phase_freqs = T[-0.2, -0.1, 0.1, 0.2]
@@ -5525,11 +5535,19 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(pyr.front_end.propagation.intensity), pyr) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy
-    @test AdaptiveOpticsSim.WavefrontSensors.grouped_accumulation_strategy(AdaptiveOpticsSim.Backends.execution_style(bio.front_end.propagation.intensity), bio) isa AdaptiveOpticsSim.WavefrontSensors.GroupedStackReduceStrategy
+    pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
+    bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
+    @test WavefrontSensors.grouped_accumulation_strategy(
+        AdaptiveOpticsSim.Backends.execution_style(
+            pyr_propagation.intensity), pyr) isa
+        WavefrontSensors.GroupedStackReduceStrategy
+    @test WavefrontSensors.grouped_accumulation_strategy(
+        AdaptiveOpticsSim.Backends.execution_style(
+            bio_propagation.intensity), bio) isa
+        WavefrontSensors.GroupedStackReduceStrategy
     @test WavefrontSensors.sh_sensing_execution_strategy(AdaptiveOpticsSim.Backends.execution_style(slopes(sh)), sh) isa WavefrontSensors.ShackHartmannWFSBatchedStrategy
     @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorDirectStrategy
-    @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr.front_end.propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionStrategy
+    @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr_propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionStrategy
     @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,

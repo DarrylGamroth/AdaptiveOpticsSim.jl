@@ -22,8 +22,22 @@ function main(; resolution::Int=24)
 
     pyr_point = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
     pyr_ext = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
-    pyr_point_slopes = copy(measure!(pyr_point, pupil, src))
-    pyr_ext_slopes = copy(measure!(pyr_ext, pupil, ext))
+    pyr_point_detector = AdaptiveOpticsSim.Detectors.Detector(
+        noise=AdaptiveOpticsSim.Detectors.NoiseNone(), qe=1.0,
+        integration_time=1.0,
+        response_model=AdaptiveOpticsSim.Detectors.NullFrameResponse())
+    pyr_extended_detector = AdaptiveOpticsSim.Detectors.Detector(
+        noise=AdaptiveOpticsSim.Detectors.NoiseNone(), qe=1.0,
+        integration_time=1.0,
+        response_model=AdaptiveOpticsSim.Detectors.NullFrameResponse())
+    pyr_point_slopes = copy(measure!(pyr_point, pupil, src,
+        pyr_point_detector))
+    pyr_ext_slopes = copy(measure!(pyr_ext, pupil, ext,
+        pyr_extended_detector))
+    pyr_point_frame = copy(wfs_detector_image(pyr_point,
+        pyr_point_detector))
+    pyr_extended_frame = copy(wfs_detector_image(pyr_ext,
+        pyr_extended_detector))
 
     point_rate = shack_hartmann_rate_map(sh_point, pupil, src)
     point_optics = prepare_wfs_optics(
@@ -40,15 +54,15 @@ function main(; resolution::Int=24)
     point_spots = point_rate.values
     extended_spots = extended_rate.values
     sh_delta = copy(extended_spots .- point_spots)
-    pyramid_delta = copy(pyr_ext.front_end.propagation.intensity .- pyr_point.front_end.propagation.intensity)
+    pyramid_frame_delta = pyr_extended_frame .- pyr_point_frame
     sh_relative_morphology = norm(sh_delta) / norm(point_spots)
-    pyramid_relative_morphology = norm(pyramid_delta) /
-                                  norm(pyr_point.front_end.propagation.intensity)
+    pyramid_relative_morphology = norm(pyramid_frame_delta) /
+                                  norm(pyr_point_frame)
     @info(
         "Extended-source sensing tutorial complete",
         sh_rate_ratio=sum(extended_spots) / sum(point_spots),
-        pyramid_rate_ratio=sum(pyr_ext.front_end.propagation.intensity) /
-                           sum(pyr_point.front_end.propagation.intensity),
+        pyramid_count_ratio=sum(pyr_extended_frame) /
+                            sum(pyr_point_frame),
         sh_relative_morphology=sh_relative_morphology,
         pyramid_relative_morphology=pyramid_relative_morphology,
     )
@@ -63,9 +77,9 @@ function main(; resolution::Int=24)
         sh_relative_morphology=sh_relative_morphology,
         pyramid_point_slopes=pyr_point_slopes,
         pyramid_extended_slopes=pyr_ext_slopes,
-        pyramid_point_rate=sum(pyr_point.front_end.propagation.intensity),
-        pyramid_extended_rate=sum(pyr_ext.front_end.propagation.intensity),
-        pyramid_intensity_delta=pyramid_delta,
+        pyramid_point_counts=sum(pyr_point_frame),
+        pyramid_extended_counts=sum(pyr_extended_frame),
+        pyramid_frame_delta=pyramid_frame_delta,
         pyramid_relative_morphology=pyramid_relative_morphology,
         n_samples=length(extended_source_asterism(ext)),
     )

@@ -91,6 +91,8 @@ function modulated_input_wavelength(input::PupilFunction, source)
     return wavelength(source)
 end
 
+function four_pupil_propagation_workspace end
+
 @inline modulated_wfs_propagation_storage(front_end) =
     front_end.propagation.field
 
@@ -192,7 +194,8 @@ end
 
 function prepare_four_pupil_lgs(::NoSodiumLayerProfileStyle, source::LGSSource,
     wavelength_m, input, front_end)
-    T = eltype(front_end.propagation.intensity)
+    propagation = four_pupil_propagation_workspace(front_end)
+    T = eltype(propagation.intensity)
     factor = T(lgs_elongation_factor(source))
     factor <= one(T) && return NoPreparedFourPupilLGS()
     sigma = T(0.5) * (factor - one(T))
@@ -205,7 +208,7 @@ function prepare_four_pupil_lgs(::NoSodiumLayerProfileStyle, source::LGSSource,
             exp(-T(0.5) * (T(offset) / sigma)^2)
     end
     host_kernel ./= sum(host_kernel)
-    kernel = similar(front_end.propagation.elongation_kernel, T, needed)
+    kernel = similar(propagation.elongation_kernel, T, needed)
     copyto!(kernel, host_kernel)
     return PreparedFourPupilElongation(kernel, half)
 end
@@ -220,7 +223,7 @@ function prepare_four_pupil_lgs(::SampledSodiumLayerProfileStyle, source::LGSSou
     metadata.sampling[1] == metadata.sampling[2] ||
         throw(WFSPreparationError(:wfs_optics, :plane_metadata,
             "LGS pupil input requires equal metric sampling on both axes"))
-    propagation = front_end.propagation
+    propagation = four_pupil_propagation_workspace(front_end)
     pad = size(propagation.field, 1)
     pupil_diameter = metadata.sampling[1] * resolution
     padding = pad / resolution

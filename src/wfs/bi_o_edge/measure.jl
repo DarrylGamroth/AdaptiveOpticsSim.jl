@@ -7,7 +7,7 @@ end
 function accumulate_bi_o_edge_masked_pupils!(out::AbstractMatrix,
     front_end::BiOEdgeOpticalFrontEnd,
     lgs_model::AbstractPreparedFourPupilLGS)
-    propagation = front_end.propagation
+    propagation = bi_o_edge_propagation_workspace(front_end)
     pad = size(propagation.field, 1)
     if front_end.amplitude_mask.psf_centering
         @. propagation.focal_field = propagation.focal_field *
@@ -49,8 +49,9 @@ function bi_o_edge_intensity_core!(out::AbstractMatrix{T}, wfs::BiOEdgeWFS,
     apply_lgs::Bool=false) where {T<:AbstractFloat}
     require_leaf_source(src, "Bi-O-edge WFS")
     prepare_bi_o_edge_sampling!(wfs, pupil)
+    propagation = bi_o_edge_propagation_workspace(wfs)
     n = _pupil_resolution(pupil)
-    pad = size(wfs.front_end.propagation.field, 1)
+    pad = size(propagation.field, 1)
     ox = div(pad - n, 2)
     oy = div(pad - n, 2)
     opd_to_cycles = T(2) / wavelength(src)
@@ -64,38 +65,41 @@ function bi_o_edge_intensity_core!(out::AbstractMatrix{T}, wfs::BiOEdgeWFS,
     apply_lgs && ensure_bi_o_edge_lgs_kernel!(profile_style, wfs, pupil, src)
 
     @inbounds for p in 1:modulation_point_count(modulation)
-        fill!(wfs.front_end.propagation.field, zero(eltype(wfs.front_end.propagation.field)))
+        fill!(propagation.field, zero(eltype(propagation.field)))
         amplitude_weight = modulation.amplitude_weights[p]
-        @views @. wfs.front_end.propagation.field[ox+1:ox+n, oy+1:oy+n] =
+        @views @. propagation.field[ox+1:ox+n, oy+1:oy+n] =
             amp_scale * amplitude_weight * amplitude *
             modulation.phases[:, :, p] * cispi(opd_to_cycles * pupil.opd)
-        copyto!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.field)
+        copyto!(propagation.focal_field, propagation.field)
         if !apply_lgs
             accumulate_bi_o_edge_masked_pupils!(out, wfs.front_end)
             continue
         end
         if wfs.front_end.amplitude_mask.psf_centering
-            @. wfs.front_end.propagation.focal_field = wfs.front_end.propagation.focal_field * wfs.front_end.propagation.phasor
-            execute_fft_plan!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.fft_plan)
+            @. propagation.focal_field = propagation.focal_field * propagation.phasor
+            execute_fft_plan!(propagation.focal_field, propagation.fft_plan)
         else
-            execute_fft_plan!(wfs.front_end.propagation.focal_field, wfs.front_end.propagation.fft_plan)
-            fftshift2d!(wfs.front_end.propagation.fft_buffer, wfs.front_end.propagation.focal_field)
+            execute_fft_plan!(propagation.focal_field, propagation.fft_plan)
+            fftshift2d!(propagation.fft_buffer, propagation.focal_field)
         end
 
-        focal_source = wfs.front_end.amplitude_mask.psf_centering ? wfs.front_end.propagation.focal_field : wfs.front_end.propagation.fft_buffer
-        lgs_fft_buffer = wfs.front_end.amplitude_mask.psf_centering ? wfs.front_end.propagation.fft_buffer : wfs.front_end.propagation.focal_field
-        lgs_ifft_buffer = wfs.front_end.propagation.pupil_field
+        focal_source = wfs.front_end.amplitude_mask.psf_centering ?
+            propagation.focal_field : propagation.fft_buffer
+        lgs_fft_buffer = wfs.front_end.amplitude_mask.psf_centering ?
+            propagation.fft_buffer : propagation.focal_field
+        lgs_ifft_buffer = propagation.pupil_field
         @inbounds for k in 1:4
-            @views @. wfs.front_end.propagation.pupil_field = focal_source * wfs.front_end.propagation.bi_o_edge_masks[:, :, k]
-            execute_fft_plan!(wfs.front_end.propagation.pupil_field, wfs.front_end.propagation.ifft_plan)
-            @. wfs.front_end.propagation.temp = abs2(wfs.front_end.propagation.pupil_field)
+            @views @. propagation.pupil_field = focal_source *
+                propagation.bi_o_edge_masks[:, :, k]
+            execute_fft_plan!(propagation.pupil_field, propagation.ifft_plan)
+            @. propagation.temp = abs2(propagation.pupil_field)
             if apply_lgs
                 apply_bi_o_edge_sodium_layer_profile!(profile_style, wfs, src,
                     lgs_fft_buffer, lgs_ifft_buffer)
             end
             oxq = k in (3, 4) ? pad : 0
             oyq = k in (2, 4) ? pad : 0
-            @views out[oxq+1:oxq+pad, oyq+1:oyq+pad] .+= wfs.front_end.propagation.temp
+            @views out[oxq+1:oxq+pad, oyq+1:oyq+pad] .+= propagation.temp
         end
     end
     return out
@@ -112,9 +116,11 @@ function bi_o_edge_intensity!(out::AbstractMatrix{T}, wfs::BiOEdgeWFS, pupil::Pu
 end
 
 function measure!(mode::Geometric, wfs::BiOEdgeWFS, pupil::PupilFunction)
-    edge_geometric_slopes!(wfs.estimator.state.slopes, pupil.opd, wfs.estimator.state.valid_mask, wfs.estimator.state.edge_mask)
-    @. wfs.estimator.state.slopes *= wfs.estimator.state.optical_gain
-    return wfs.estimator.state.slopes
+    slopes = bi_o_edge_estimator_products(wfs).slopes
+    edge_geometric_slopes!(slopes, pupil.opd,
+        wfs.estimator.state.valid_mask, wfs.estimator.state.edge_mask)
+    @. slopes *= wfs.estimator.state.optical_gain
+    return slopes
 end
 
 function measure!(::Geometric, wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource)
@@ -162,23 +168,29 @@ end
 
 function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource)
     ensure_bi_o_edge_calibration!(wfs, pupil, src)
-    bi_o_edge_intensity!(wfs.front_end.propagation.intensity, wfs, pupil, src)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
+    propagation = bi_o_edge_propagation_workspace(wfs)
+    bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
+    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
+        propagation.intensity)
     return bi_o_edge_signal!(wfs, pupil, intensity, src)
 end
 
 function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource)
     ensure_bi_o_edge_calibration!(wfs, pupil, src)
-    bi_o_edge_intensity!(wfs.front_end.propagation.intensity, wfs, pupil, src)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
+    propagation = bi_o_edge_propagation_workspace(wfs)
+    bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
+    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
+        propagation.intensity)
     return bi_o_edge_signal!(wfs, pupil, intensity, src)
 end
 
 function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_bi_o_edge_calibration!(wfs, pupil, src, det)
-    bi_o_edge_intensity!(wfs.front_end.propagation.intensity, wfs, pupil, src)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
+    propagation = bi_o_edge_propagation_workspace(wfs)
+    bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
+    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
+        propagation.intensity)
     frame = capture!(det, intensity, src; rng=rng)
     resize_bi_o_edge_signal_buffers!(wfs, size(frame, 1), det)
     normalization_scale = wfs_detector_incidence_scale(det, src,
@@ -189,8 +201,10 @@ end
 function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource,
     det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
     ensure_bi_o_edge_calibration!(wfs, pupil, src, det)
-    bi_o_edge_intensity!(wfs.front_end.propagation.intensity, wfs, pupil, src)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
+    propagation = bi_o_edge_propagation_workspace(wfs)
+    bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
+    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
+        propagation.intensity)
     frame = capture!(det, intensity, src; rng=rng)
     resize_bi_o_edge_signal_buffers!(wfs, size(frame, 1), det)
     normalization_scale = wfs_detector_incidence_scale(det, src,
@@ -202,8 +216,11 @@ function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Ast
     Base.require_one_based_indexing(pupil.opd)
     common_source = common_wfs_calibration_source(ast, "Bi-O-edge WFS")
     ensure_bi_o_edge_calibration!(wfs, pupil, common_source)
-    accumulate_bi_o_edge_asterism_intensity!(execution_style(wfs.front_end.propagation.intensity), wfs, pupil, ast)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
+    propagation = bi_o_edge_propagation_workspace(wfs)
+    accumulate_bi_o_edge_asterism_intensity!(
+        execution_style(propagation.intensity), wfs, pupil, ast)
+    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
+        propagation.intensity)
     return bi_o_edge_signal!(wfs, pupil, intensity, ast)
 end
 
@@ -212,8 +229,11 @@ function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Ast
     Base.require_one_based_indexing(pupil.opd)
     common_source = common_wfs_calibration_source(ast, "Bi-O-edge WFS")
     ensure_bi_o_edge_calibration!(wfs, pupil, common_source, det)
-    accumulate_bi_o_edge_asterism_intensity!(execution_style(wfs.front_end.propagation.intensity), wfs, pupil, ast)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil, wfs.front_end.propagation.intensity)
+    propagation = bi_o_edge_propagation_workspace(wfs)
+    accumulate_bi_o_edge_asterism_intensity!(
+        execution_style(propagation.intensity), wfs, pupil, ast)
+    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
+        propagation.intensity)
     frame = capture!(det, intensity, common_source; rng=rng)
     resize_bi_o_edge_signal_buffers!(wfs, size(frame, 1), det)
     normalization_scale = wfs_detector_incidence_scale(det, common_source,
