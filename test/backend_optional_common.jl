@@ -2976,7 +2976,7 @@ function run_optional_zernike_normalization(
             frame, src, normalization_scale)
         AdaptiveOpticsSim.Backends.synchronize_backend!(
             AdaptiveOpticsSim.Backends.execution_style(actual))
-        @test gpu_wfs.estimator.state.normalization_sum isa BackendArray
+        @test gpu_wfs.estimator.workspace.normalization_sum isa BackendArray
         @test actual isa BackendArray
         @test Array(actual) ≈ expected rtol=T(2e-5) atol=T(2e-6)
     end
@@ -2987,12 +2987,12 @@ function run_optional_zernike_normalization(
         normalization=IncidenceFluxNormalization(), T=T,
         backend=selector)
     fill!(zero_wfs.estimator.state.reference_signal_2d, zero(T))
-    zero_slopes = AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(zero_wfs, gpu_pupil,
+    zero_signal = AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(zero_wfs, gpu_pupil,
         BackendArray(copy(frame_host)), zero_src, one(T))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(zero_slopes))
-    @test all(iszero, Array(zero_slopes))
-    @test all(isfinite, Array(zero_slopes))
+        AdaptiveOpticsSim.Backends.execution_style(zero_signal))
+    @test all(iszero, Array(zero_signal))
+    @test all(isfinite, Array(zero_signal))
     return nothing
 end
 
