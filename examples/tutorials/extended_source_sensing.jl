@@ -25,8 +25,20 @@ function main(; resolution::Int=24)
     pyr_point_slopes = copy(measure!(pyr_point, pupil, src))
     pyr_ext_slopes = copy(measure!(pyr_ext, pupil, ext))
 
-    point_spots = shack_hartmann_spot_cube(sh_point)
-    extended_spots = shack_hartmann_spot_cube(sh_ext)
+    point_rate = shack_hartmann_rate_map(sh_point, pupil, src)
+    point_optics = prepare_wfs_optics(
+        shack_hartmann_optics(sh_point, src), pupil, point_rate)
+    form_wfs_optical_products!(point_rate, pupil, point_optics)
+    extended_asterism = extended_source_asterism(ext)
+    extended_rate = shack_hartmann_rate_map(
+        sh_ext, pupil, extended_asterism)
+    extended_optics = prepare_wfs_optics(
+        shack_hartmann_optics(sh_ext, extended_asterism),
+        pupil, extended_rate)
+    form_wfs_optical_products!(
+        extended_rate, pupil, extended_optics)
+    point_spots = point_rate.values
+    extended_spots = extended_rate.values
     sh_delta = copy(extended_spots .- point_spots)
     pyramid_delta = copy(pyr_ext.front_end.propagation.intensity .- pyr_point.front_end.propagation.intensity)
     sh_relative_morphology = norm(sh_delta) / norm(point_spots)

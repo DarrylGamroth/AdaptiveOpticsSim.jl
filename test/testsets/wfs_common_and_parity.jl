@@ -63,7 +63,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :ShackHartmannOpticalFrontEnd,
         :SubapertureLayout,
         :SubapertureCalibration,
-        :shack_hartmann_spot_cube,
         :PyramidWFS,
         :BiOEdgeWFS,
         :PyramidOpticalFrontEnd,
@@ -111,6 +110,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     @test !isdefined(WavefrontSensors, :camera_frame)
     @test !isdefined(WavefrontSensors, :shack_hartmann_detector_image)
     @test !isdefined(WavefrontSensors, :shack_hartmann_detector_image!)
+    @test !isdefined(WavefrontSensors, :shack_hartmann_spot_cube)
 
     observation = @inferred WFSObservation(zeros(Float32, 2, 3);
         units=:electron_count, layout=:detector_frame)

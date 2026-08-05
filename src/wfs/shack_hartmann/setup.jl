@@ -693,15 +693,7 @@ function ensure_sh_acquisition_buffers!(wfs::ShackHartmannWFS,
     return wfs
 end
 
-"""
-    shack_hartmann_spot_cube(wfs::ShackHartmannWFS{<:Diffractive})
-
-Return the caller-visible lenslet spot cube written by the most recent
-diffractive Shack–Hartmann measurement. Its dimensions are
-`(n_lenslets^2, n_axis_1, n_axis_2)`. The returned array is owned by `wfs` and
-is overwritten by later mutating measurements.
-"""
-@inline function shack_hartmann_spot_cube(
+@inline function _shack_hartmann_spot_cube(
     wfs::ShackHartmannWFS{<:Diffractive})
     return wfs.products.exported_spot_cube
 end

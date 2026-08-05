@@ -631,7 +631,7 @@ end
 @inline _high_order_detector_output(::ShackHartmannWFS, ::Nothing) =
     nothing
 @inline _high_order_detector_output(wfs::ShackHartmannWFS,
-    _) = shack_hartmann_spot_cube(wfs)
+    _) = WavefrontSensors._shack_hartmann_spot_cube(wfs)
 @inline _high_order_detector_output(_, det) = _detector_output(det)
 
 @inline _detector_output(::Nothing) = nothing

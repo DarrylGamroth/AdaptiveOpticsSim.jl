@@ -110,7 +110,7 @@
     @test !applicable(wfs_detector_image, bio)
     @test !applicable(wfs_detector_image, zwfs)
     @test !applicable(wfs_detector_image, curv)
-    @test_throws MethodError shack_hartmann_spot_cube(wfs)
+    @test !isdefined(WavefrontSensors, :shack_hartmann_spot_cube)
     @test !applicable(wfs_detector_image, wfs_diffractive)
     # IF-DM
     assert_dm_interface(dm, tel)

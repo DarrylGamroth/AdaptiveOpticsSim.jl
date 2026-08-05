@@ -5550,8 +5550,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     gpu_pupil = PupilFunction(gpu_tel; T=T, backend=backend)
     measure!(cpu_sh, cpu_pupil, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
-    cpu_export = Array(shack_hartmann_spot_cube(cpu_sh))
-    gpu_export = Array(shack_hartmann_spot_cube(gpu_sh))
+    cpu_export = Array(
+        WavefrontSensors._shack_hartmann_spot_cube(cpu_sh))
+    gpu_export = Array(
+        WavefrontSensors._shack_hartmann_spot_cube(gpu_sh))
     @test size(gpu_export) == size(cpu_export)
     @test isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
     cpu_sh_stats = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend(),

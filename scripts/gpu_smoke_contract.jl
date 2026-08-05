@@ -536,8 +536,10 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         measure!(cpu_wfs, cpu_pupil, cpu_src, cpu_det; rng=rng)
         measure!(gpu_wfs, gpu_pupil, gpu_src, gpu_det; rng=rng)
 
-        cpu_export = Array(shack_hartmann_spot_cube(cpu_wfs))
-        gpu_export = Array(shack_hartmann_spot_cube(gpu_wfs))
+        cpu_export = Array(
+            WavefrontSensors._shack_hartmann_spot_cube(cpu_wfs))
+        gpu_export = Array(
+            WavefrontSensors._shack_hartmann_spot_cube(gpu_wfs))
 
         @assert size(gpu_export) == size(cpu_export)
         @assert isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)

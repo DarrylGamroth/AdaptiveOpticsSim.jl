@@ -639,6 +639,7 @@ removed_exports = [
     "camera_frame",
     "shack_hartmann_detector_image",
     "shack_hartmann_detector_image!",
+    "shack_hartmann_spot_cube",
 ]
 removed_public = []
 
@@ -1275,7 +1276,6 @@ exports = [
     "slopes",
     "wfs_calibration_signature",
     "prepare_runtime_wfs!",
-    "shack_hartmann_spot_cube",
     "n_valid_subapertures",
     "LiFT",
     "PreparedLiFTForwardModel",

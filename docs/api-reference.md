@@ -1553,7 +1553,7 @@ components. Migrated bindings are not forwarded through the root.
   `MeanValidFluxNormalization`, `IncidenceFluxNormalization`
 - Measurement and detector products: `measure!`,
   `pyramid_modulation_frame!`, `valid_subaperture_mask`,
-  `wfs_detector_image`, and `shack_hartmann_spot_cube`
+  and `wfs_detector_image`
 - Prepared WFS optical-product access: the qualified-public
   `WavefrontSensors.wfs_optical_products`
 - LiFT forward and observation contracts: `PreparedLiFTForwardModel`,
