@@ -1123,7 +1123,7 @@ entries = [
     ["ZernikeEstimatorState","mutable_struct",6,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
     ["ZernikeEstimatorWorkspace","mutable_struct",6,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["ZernikePropagationPlan","struct",4,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
-    ["ZernikePropagationWorkspace","mutable_struct",11,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikePropagationWorkspace","mutable_struct",9,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]
@@ -1133,7 +1133,7 @@ entries = [
     ["PreparedZernikeEstimator","struct",12,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["PreparedZernikeOptics","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
     ["ZernikeEstimationPlan","struct",5,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
-    ["ZernikeOpticsPlan","struct",3,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ZernikeOpticsPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
 ]
 
 [direct_memory]

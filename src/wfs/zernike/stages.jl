@@ -9,7 +9,6 @@ photon-arrival-rate map.
 struct ZernikeOpticsPlan{P,S} <: AbstractWFSOpticsPlan
     propagation::P
     source::S
-    propagation_revision::UInt
 end
 
 """Exact live owner for one prepared Zernike optics execution."""
@@ -241,8 +240,7 @@ function prepare_wfs_optics(front_end::ZernikeOpticalFrontEnd,
     _require_zernike_optics_aliases(input, output, workspace)
     propagation = front_end.propagation
     propagation_plan = zernike_propagation_plan(propagation)
-    plan = ZernikeOpticsPlan(propagation_plan, front_end.source,
-        workspace.revision)
+    plan = ZernikeOpticsPlan(propagation_plan, front_end.source)
     return PreparedZernikeOptics(plan, front_end, workspace, input, output,
         _zernike_propagation_workspace_binding(workspace),
         input.metadata.backend, input.metadata.device)
@@ -289,8 +287,7 @@ function _require_zernike_optical_binding(
         prepared.front_end.source === prepared.plan.source &&
         workspace === zernike_propagation_workspace(prepared.front_end) &&
         _zernike_propagation_workspace_binding(workspace) ===
-            prepared.workspace_binding &&
-        workspace.revision == prepared.plan.propagation_revision || throw(
+            prepared.workspace_binding || throw(
         WFSPreparationError(:wfs_optics, :prepared_binding,
             "Zernike propagation storage changed after preparation"))
     return nothing

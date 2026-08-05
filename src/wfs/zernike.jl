@@ -113,8 +113,6 @@ mutable struct ZernikePropagationWorkspace{
     nominal_frame::R
     fft_plan::Pf
     ifft_plan::Pi
-    effective_padding::Int
-    revision::UInt
 end
 
 """Exact plan/workspace owner for one Zernike propagation execution."""
@@ -316,8 +314,6 @@ function ZernikeWFS(tel::Telescope; pupil_samples::Int,
         nominal_frame,
         fft_plan,
         ifft_plan,
-        diffraction_padding,
-        UInt(0),
     )
     propagation_plan = ZernikePropagationPlan(spot,
         tel.params.resolution, pupil_samples, T)
@@ -373,6 +369,15 @@ function zernike_signal_resolution(wfs::ZernikeWFS)
     return div(plan.pupil_samples, zernike_acquisition_plan(wfs).binning)
 end
 
+@inline function _require_zernike_pupil_geometry(wfs::ZernikeWFS,
+    pupil::PupilFunction)
+    resolution = zernike_propagation_plan(wfs).pupil_resolution
+    pupil.metadata.dimensions == (resolution, resolution) || throw(
+        DimensionMismatchError(
+            "ZernikeWFS PupilFunction dimensions do not match its prepared pupil grid"))
+    return nothing
+end
+
 function update_zernike_valid_indices!(wfs::ZernikeWFS)
     state = zernike_estimator_state(wfs)
     workspace = zernike_estimator_workspace(wfs)
@@ -400,6 +405,7 @@ function update_zernike_valid_indices!(wfs::ZernikeWFS)
 end
 
 function update_valid_mask!(wfs::ZernikeWFS, pupil::PupilFunction)
+    _require_zernike_pupil_geometry(wfs, pupil)
     params = zernike_estimator_params(wfs)
     state = zernike_estimator_state(wfs)
     workspace = zernike_estimator_workspace(wfs)
@@ -410,31 +416,6 @@ function update_valid_mask!(wfs::ZernikeWFS, pupil::PupilFunction)
         propagation.nominal_frame, wfs,
         pupil.amplitude, pupil)
     update_zernike_valid_indices!(wfs)
-    return wfs
-end
-
-function ensure_zernike_buffers!(wfs::ZernikeWFS, pupil::PupilFunction)
-    plan = zernike_propagation_plan(wfs)
-    workspace = zernike_propagation_workspace(wfs)
-    state = zernike_estimator_state(wfs)
-    n = _pupil_resolution(pupil)
-    diffraction_padding = plan.phase_spot.diffraction_padding
-    pad = n * diffraction_padding
-    if size(workspace.field) != (pad, pad)
-        workspace.field = similar(workspace.field, pad, pad)
-        workspace.focal_field = similar(workspace.focal_field, pad, pad)
-        workspace.pupil_field = similar(workspace.pupil_field, pad, pad)
-        workspace.phasor = similar(workspace.phasor, pad, pad)
-        workspace.phase_mask = similar(workspace.phase_mask, pad, pad)
-        workspace.fft_plan = plan_fft_backend!(workspace.focal_field)
-        workspace.ifft_plan = plan_ifft_backend!(workspace.pupil_field)
-        workspace.effective_padding = diffraction_padding
-        workspace.revision += UInt(1)
-        state.calibrated = false
-        state.calibration_revision += UInt(1)
-        build_zernike_phasor!(workspace.phasor)
-        build_zernike_phase_mask!(wfs, pupil)
-    end
     return wfs
 end
 
@@ -516,7 +497,7 @@ end
 
 function zernike_pupil_intensity!(wfs::ZernikeWFS, pupil::PupilFunction, src::AbstractSource)
     require_leaf_source(src, "ZernikeWFS")
-    ensure_zernike_buffers!(wfs, pupil)
+    _require_zernike_pupil_geometry(wfs, pupil)
     propagation = zernike_propagation_workspace(wfs)
     T = eltype(zernike_acquisition_products(wfs).frame)
     n = _pupil_resolution(pupil)
@@ -552,6 +533,7 @@ end
 function zernike_normalization(normalization::WFSNormalization,
     wfs::ZernikeWFS, pupil::PupilFunction, src::AbstractSource,
     frame::AbstractMatrix{T}, normalization_scale::Real) where {T<:AbstractFloat}
+    _require_zernike_pupil_geometry(wfs, pupil)
     return zernike_normalization(execution_style(frame), normalization,
         wfs, pupil, src, frame, T(normalization_scale))
 end
@@ -682,6 +664,7 @@ end
 function zernike_signal!(wfs::ZernikeWFS, pupil::PupilFunction,
     frame::AbstractMatrix{T}, src::AbstractSource,
     normalization_scale::Real) where {T<:AbstractFloat}
+    _require_zernike_pupil_geometry(wfs, pupil)
     return zernike_signal!(execution_style(frame), wfs, pupil, frame, src,
         T(normalization_scale))
 end
@@ -757,6 +740,7 @@ function zernike_signal!(style::AcceleratorStyle, wfs::ZernikeWFS,
 end
 
 function ensure_zernike_calibration!(wfs::ZernikeWFS, pupil::PupilFunction, src::AbstractSource)
+    _require_zernike_pupil_geometry(wfs, pupil)
     state = zernike_estimator_state(wfs)
     workspace = zernike_estimator_workspace(wfs)
     products = zernike_estimator_products(wfs)
@@ -799,6 +783,7 @@ end
 
 function ensure_zernike_calibration!(wfs::ZernikeWFS, pupil::PupilFunction,
     src::AbstractSource, det::Detector)
+    _require_zernike_pupil_geometry(wfs, pupil)
     state = zernike_estimator_state(wfs)
     workspace = zernike_estimator_workspace(wfs)
     products = zernike_estimator_products(wfs)
