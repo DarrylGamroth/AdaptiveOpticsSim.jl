@@ -385,8 +385,8 @@ Nominal interface for a run-immutable WFS optics contract. Concrete
 plans retain validated physical and numerical data only; the corresponding
 prepared owner binds exact input, workspace, products, backend, and device.
 Implementations provide the existing `prepare_wfs_optics`,
-`form_wfs_optical_products!`, and `validate_wfs_optics_binding`
-protocol.
+`form_wfs_optical_products!`, `wfs_optical_products`, and
+`validate_wfs_optics_binding` protocol.
 """
 abstract type AbstractWFSOpticsPlan end
 
@@ -436,6 +436,17 @@ function prepare_wfs_optics(model, input, output)
 end
 
 function form_wfs_optical_products! end
+
+"""
+    wfs_optical_products(prepared)
+
+Return the caller-visible detector-facing photon-arrival-rate product or
+products bound by an exact prepared WFS optics owner. The result is an
+`IntensityMap`, `OpticalProductBundle`, or family-specific concrete tuple of
+rate products; it is not an acquired [`WFSObservation`](@ref) or estimated
+[`WFSMeasurement`](@ref).
+"""
+function wfs_optical_products end
 
 """
     validate_wfs_optics_binding(output, input, prepared)

@@ -40,6 +40,11 @@ struct PreparedShackHartmannOpticsBundle{
     output::O
 end
 
+@inline wfs_optical_products(prepared::PreparedShackHartmannOptics) =
+    prepared.output
+@inline wfs_optical_products(prepared::PreparedShackHartmannOpticsBundle) =
+    prepared.output
+
 struct ShackHartmannSpectralComponent{S,T<:AbstractFloat} <: AbstractSource
     source::S
     wavelength_m::T

@@ -16,6 +16,11 @@ struct PreparedPyramidOpticsBundle{P<:Tuple,I,O}
     output::O
 end
 
+@inline wfs_optical_products(prepared::PreparedPyramidOptics) =
+    prepared.output
+@inline wfs_optical_products(prepared::PreparedPyramidOpticsBundle) =
+    prepared.output
+
 struct PyramidCalibrationBinding{T<:AbstractFloat,R,A}
     revision::UInt
     wavelength_m::T

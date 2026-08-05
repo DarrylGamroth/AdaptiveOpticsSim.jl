@@ -625,6 +625,7 @@ new_domain_public = [
     "WavefrontSensors.PreparedShackHartmannOpticsBundle",
     "WavefrontSensors.ShackHartmannEstimationPlan",
     "WavefrontSensors.PreparedShackHartmannEstimator",
+    "WavefrontSensors.wfs_optical_products",
     "WavefrontSensors.wfs_acquisition_plan",
     "WavefrontSensors.validate_wfs_target",
 ]
@@ -1318,6 +1319,7 @@ public = [
     "PreparedShackHartmannOpticsBundle",
     "ShackHartmannEstimationPlan",
     "PreparedShackHartmannEstimator",
+    "wfs_optical_products",
     "wfs_acquisition_plan",
     "validate_wfs_target",
 ]

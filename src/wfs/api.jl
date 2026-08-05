@@ -114,5 +114,6 @@ public PreparedShackHartmannOptics
 public PreparedShackHartmannOpticsBundle
 public ShackHartmannEstimationPlan
 public PreparedShackHartmannEstimator
+public wfs_optical_products
 public wfs_acquisition_plan
 public validate_wfs_target

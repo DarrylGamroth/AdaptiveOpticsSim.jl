@@ -16,6 +16,11 @@ struct PreparedBiOEdgeOpticsBundle{P<:Tuple,I,O}
     output::O
 end
 
+@inline wfs_optical_products(prepared::PreparedBiOEdgeOptics) =
+    prepared.output
+@inline wfs_optical_products(prepared::PreparedBiOEdgeOpticsBundle) =
+    prepared.output
+
 struct BiOEdgeCalibrationBinding{T<:AbstractFloat,R,A}
     revision::UInt
     wavelength_m::T

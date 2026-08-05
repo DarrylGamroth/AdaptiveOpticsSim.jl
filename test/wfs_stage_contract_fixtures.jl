@@ -47,6 +47,9 @@ struct ContractRatePlan{M,I,O}
     output::O
 end
 
+@inline WavefrontSensors.wfs_optical_products(prepared::ContractRatePlan) =
+    prepared.output
+
 function _contract_require_optical_domains(input, output)
     typeof(input.metadata.backend) === typeof(output.metadata.backend) ||
         throw(WFSPreparationError(:wfs_optics, :backend,
@@ -130,6 +133,9 @@ struct ContractBundleRatePlan{P<:Tuple,I,O}
     input::I
     output::O
 end
+
+@inline WavefrontSensors.wfs_optical_products(
+    prepared::ContractBundleRatePlan) = prepared.output
 
 @inline _contract_prepare_rate_plans(::Tuple{}, input, ::Tuple{}) = ()
 
