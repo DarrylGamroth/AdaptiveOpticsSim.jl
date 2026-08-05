@@ -65,25 +65,25 @@ function lift_profile()
     imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
     psf = copy(intensity_values(form_direct_image!(imaging)))
     diversity = zeros(Float64, size(pupil.opd))
+    model_opd = zeros(Float64, size(pupil.opd))
     t0 = time_ns()
-    forward = prepare_lift_forward_model(tel, src, basis;
+    forward = prepare_lift_forward_model(tel, src, basis, model_opd;
         diversity_opd=diversity, zero_padding=2)
-    lift = LiFT(forward; iterations=3, mode_ids=1:length(coeffs_true),
-        numerical=false)
-    build_time_ns = Int(time_ns() - t0)
-
     observation = LiFTObservation(forward, psf)
     coeffs_fit = zeros(Float64, length(coeffs_true))
-    WavefrontSensors.reconstruct!(coeffs_fit, lift, observation;
-        coeffs0=nothing, check_convergence=true)
-    timing = runtime_timing(() -> WavefrontSensors.reconstruct!(
-            coeffs_fit, lift, observation;
-            coeffs0=nothing, check_convergence=true);
+    lift = prepare_lift_estimator(
+        LiFT(iterations=3, mode_ids=1:length(coeffs_true),
+            check_convergence=true),
+        forward,
+        observation,
+        coeffs_fit,
+    )
+    build_time_ns = Int(time_ns() - t0)
+
+    WavefrontSensors.reconstruct!(lift)
+    timing = runtime_timing(() -> WavefrontSensors.reconstruct!(lift);
         warmup=3, samples=20, gc_before=false)
-    alloc_bytes = _alloc_bytes(() -> WavefrontSensors.reconstruct!(
-        coeffs_fit, lift,
-        observation;
-        coeffs0=nothing, check_convergence=true))
+    alloc_bytes = _alloc_bytes(() -> WavefrontSensors.reconstruct!(lift))
     coeff_error = maximum(abs.(coeffs_fit .- coeffs_true))
 
     return Dict(
