@@ -546,12 +546,27 @@ end
     @test length(Plant.prepared_controllable_optics(result.plant)) == 2
     optic_registry = getfield(result.plant, :controllable_optics)
     @test optic_registry isa Plant._PreparedControllableOpticRegistry
+    @test size(optic_registry) == (2,)
+    @test axes(optic_registry) == (Base.OneTo(2),)
+    @test collect(keys(optic_registry)) == [1, 2]
+    @test firstindex(optic_registry) == 1
+    @test lastindex(optic_registry) == 2
     @test length(optic_registry.groups) == 1
     @test only(optic_registry.groups).values isa FixedSizeVector
     @test length(only(optic_registry.groups).values) == 2
     @test result.prepared.optics === optic_registry
     @test result.state.controllable_optics.slots === optic_registry.slots
     @test result.workspace.controllable_optics.slots === optic_registry.slots
+    for registry in (
+        result.state.controllable_optics,
+        result.workspace.controllable_optics,
+    )
+        @test size(registry) == (2,)
+        @test axes(registry) == (Base.OneTo(2),)
+        @test collect(keys(registry)) == [1, 2]
+        @test firstindex(registry) == 1
+        @test lastindex(registry) == 2
+    end
     @test only(result.state.controllable_optics.groups).values isa
         FixedSizeVector
     @test only(result.workspace.controllable_optics.groups).values isa
