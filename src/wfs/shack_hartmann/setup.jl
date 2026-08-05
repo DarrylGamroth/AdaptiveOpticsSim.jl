@@ -63,10 +63,10 @@ mutable struct ShackHartmannWorkspace{SC,DN,SS,SA,SH,CH}
     centroid_host::CH
 end
 
-"""Caller-visible Shack-Hartmann measurement and optional spot products."""
-mutable struct ShackHartmannProducts{S,ES}
+"""Shack-Hartmann slope product and internal legacy spot diagnostic storage."""
+mutable struct ShackHartmannProducts{S,LS}
     slopes::S
-    exported_spot_cube::ES
+    legacy_spot_cube::LS
 end
 
 """
@@ -234,10 +234,10 @@ function ShackHartmannWFS(tel::Telescope; n_lenslets::Int, threshold::Real=0.1,
         threshold_cog, T)
     calibration = SubapertureCalibration(reference_signal_2d,
         reference_signal_host, extraction)
-    front_end, optics, workspace, exported_spot_cube =
+    front_end, optics, workspace, legacy_spot_cube =
         _prepare_sh_mode_storage(mode, backend,
         T, mla, layout, sub, convolution_threshold)
-    products = ShackHartmannProducts(slopes, exported_spot_cube)
+    products = ShackHartmannProducts(slopes, legacy_spot_cube)
     wfs = ShackHartmannWFS{
         typeof(mode),typeof(params),typeof(front_end),typeof(optics),
         typeof(workspace),typeof(products),typeof(calibration),
@@ -684,18 +684,18 @@ function ensure_sh_acquisition_buffers!(wfs::ShackHartmannWFS,
     size(wfs.workspace.spot_cube) == expected && return wfs
     wfs.workspace.spot_cube = similar(wfs.workspace.spot_cube,
         eltype(wfs.workspace.spot_cube), expected...)
-    wfs.products.exported_spot_cube = similar(
-        wfs.products.exported_spot_cube,
-        eltype(wfs.products.exported_spot_cube), expected...)
+    wfs.products.legacy_spot_cube = similar(
+        wfs.products.legacy_spot_cube,
+        eltype(wfs.products.legacy_spot_cube), expected...)
     wfs.workspace.detector_noise_cube = similar(
         wfs.workspace.detector_noise_cube,
         eltype(wfs.workspace.detector_noise_cube), expected...)
     return wfs
 end
 
-@inline function _shack_hartmann_spot_cube(
+@inline function _legacy_shack_hartmann_spot_cube(
     wfs::ShackHartmannWFS{<:Diffractive})
-    return wfs.products.exported_spot_cube
+    return wfs.products.legacy_spot_cube
 end
 
 @inline function sh_sampled_spot_cube(wfs::ShackHartmannWFS)
@@ -717,9 +717,9 @@ end
     return wfs.workspace.spot_cube
 end
 
-@inline function sync_exported_spots!(wfs::ShackHartmannWFS)
-    copyto!(wfs.products.exported_spot_cube, wfs.workspace.spot_cube)
-    return wfs.products.exported_spot_cube
+@inline function sync_legacy_spots!(wfs::ShackHartmannWFS)
+    copyto!(wfs.products.legacy_spot_cube, wfs.workspace.spot_cube)
+    return wfs.products.legacy_spot_cube
 end
 
 """

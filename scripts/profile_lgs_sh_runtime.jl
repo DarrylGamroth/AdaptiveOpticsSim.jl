@@ -134,7 +134,7 @@ function run_profile(; backend_name::AbstractString="cpu", profile_name::Abstrac
     println("  measure_p95_ns: ", timing.p95_ns)
     println("  frame_rate_hz: ", 1.0e9 / timing.mean_ns)
     println("  spot_cube_shape: ",
-        size(WavefrontSensors._shack_hartmann_spot_cube(wfs)))
+        size(WavefrontSensors._legacy_shack_hartmann_spot_cube(wfs)))
     println("  has_na_profile: ", AdaptiveOpticsSim.Optics.lgs_has_profile(src))
     return nothing
 end

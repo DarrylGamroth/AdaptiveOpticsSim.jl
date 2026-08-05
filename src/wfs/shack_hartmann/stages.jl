@@ -146,7 +146,7 @@ end
 end
 
 @inline function _sh_products_binding(products)
-    return (products.slopes, products.exported_spot_cube)
+    return (products.slopes, products.legacy_spot_cube)
 end
 
 @inline _sh_input_storages(input::PupilFunction) =
@@ -184,7 +184,7 @@ end
     input_storages = _sh_input_storages(input)
     resources = (_sh_estimator_workspace_binding(sensor.workspace)...,
         sensor.products.slopes,
-        sensor.products.exported_spot_cube,
+        sensor.products.legacy_spot_cube,
         sensor.front_end.layout.valid_mask,
         sensor.front_end.layout.valid_mask_host,
         sensor.calibration.reference_signal_2d,

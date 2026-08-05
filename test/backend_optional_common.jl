@@ -3378,7 +3378,7 @@ function run_optional_wfs_stage_contracts(
         Plant.StructuralResourceOwnerID(:wfs_estimator, :physical_sh_products),
         physical_target,
         (physical_wfs.products.slopes,
-            physical_wfs.products.exported_spot_cube),
+            physical_wfs.products.legacy_spot_cube),
         (),
     )
     assert_optional_structural_resource_fact(
@@ -5551,9 +5551,9 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     measure!(cpu_sh, cpu_pupil, cpu_src, cpu_det; rng=MersenneTwister(3))
     measure!(gpu_sh, gpu_pupil, gpu_src, gpu_det; rng=MersenneTwister(3))
     cpu_export = Array(
-        WavefrontSensors._shack_hartmann_spot_cube(cpu_sh))
+        WavefrontSensors._legacy_shack_hartmann_spot_cube(cpu_sh))
     gpu_export = Array(
-        WavefrontSensors._shack_hartmann_spot_cube(gpu_sh))
+        WavefrontSensors._legacy_shack_hartmann_spot_cube(gpu_sh))
     @test size(gpu_export) == size(cpu_export)
     @test isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
     cpu_sh_stats = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend(),

@@ -1352,7 +1352,7 @@ end
     @test !hasfield(typeof(geometric), :layout)
     @test geometric.optics === nothing
     @test geometric.workspace === nothing
-    @test geometric.products.exported_spot_cube === nothing
+    @test geometric.products.legacy_spot_cube === nothing
     measure!(geometric, pupil)
     if coverage_enabled
         @test_skip "geometric allocation assertion is disabled under coverage instrumentation"

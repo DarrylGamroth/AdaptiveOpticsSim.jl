@@ -177,7 +177,7 @@ function assert_backend_residency(ctx::RevoltLikeHILContext)
         "pupil_opd" => ctx.pupil.opd,
         "dm_coefficients" => ctx.dm.state.coefs,
         "wfs_spot_cube" =>
-            WavefrontSensors._shack_hartmann_spot_cube(ctx.wfs),
+            WavefrontSensors._legacy_shack_hartmann_spot_cube(ctx.wfs),
         "output_frame" => ctx.tiled_frame,
     )
     if PRE_HIL_BACKEND_NAME == "cpu"

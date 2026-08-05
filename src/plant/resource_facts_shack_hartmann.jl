@@ -80,7 +80,7 @@ end
 function structural_resource_fact(products::ShackHartmannProducts,
     id::StructuralResourceOwnerID, target::AbstractComputeDevice)
     resident = _structural_array_target_bytes(
-        (products.slopes, products.exported_spot_cube), target,
+        (products.slopes, products.legacy_spot_cube), target,
         :resident_bytes)
     return _targeted_structural_resource_fact(
         id, target, resident, (present=false, bytes=UInt64(0)))

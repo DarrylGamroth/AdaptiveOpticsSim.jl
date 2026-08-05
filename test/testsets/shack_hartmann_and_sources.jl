@@ -692,7 +692,7 @@ end
         slopes=copy(guard_wfs.products.slopes),
         intensity=copy(guard_wfs.optics.propagation.workspace.intensity),
         spot_cube=copy(guard_wfs.workspace.spot_cube),
-        exported_spot_cube=copy(guard_wfs.products.exported_spot_cube),
+        legacy_spot_cube=copy(guard_wfs.products.legacy_spot_cube),
         reference_signal=copy(guard_wfs.calibration.reference_signal_2d),
         effective_padding=guard_wfs.optics.propagation.workspace.effective_padding,
         binning_pixel_scale=guard_wfs.optics.propagation.workspace.binning_pixel_scale,
@@ -714,8 +714,8 @@ end
         guard_state_before.intensity)
     @test isequal(guard_wfs.workspace.spot_cube,
         guard_state_before.spot_cube)
-    @test isequal(guard_wfs.products.exported_spot_cube,
-        guard_state_before.exported_spot_cube)
+    @test isequal(guard_wfs.products.legacy_spot_cube,
+        guard_state_before.legacy_spot_cube)
     @test isequal(guard_wfs.calibration.reference_signal_2d,
         guard_state_before.reference_signal)
     @test guard_wfs.optics.propagation.workspace.effective_padding ==

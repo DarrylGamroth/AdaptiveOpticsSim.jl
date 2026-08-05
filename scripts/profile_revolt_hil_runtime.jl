@@ -173,7 +173,7 @@ function run_profile(; backend_name::AbstractString="cpu", config_dir::AbstractS
     println("  roi_size: ", ctx.roi)
     println("  tiled_wfs_frame_shape: ", size(ctx.tiled_frame))
     println("  spot_cube_shape: ",
-        size(WavefrontSensors._shack_hartmann_spot_cube(ctx.wfs)))
+        size(WavefrontSensors._legacy_shack_hartmann_spot_cube(ctx.wfs)))
     println("  build_time_ns: ", build_time_ns)
     println("  command_map_mean_ns: ", command_map_mean_ns)
     println("  command_map_p95_ns: ", command_map_p95_ns)
