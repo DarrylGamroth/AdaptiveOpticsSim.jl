@@ -386,7 +386,7 @@ row-phase offset explicitly in the source or schedule.
 Conventional CCD capture uses `CCDSensor()` with `SingleRead()` by default.
 Configure `clock_induced_charge_per_frame` as an independent Poisson
 expectation in electrons per pixel per frame; it is not multiplied by exposure
-duration. A single-read `CCDSensor` does not accept `read_time`, because Plant
+duration. A single-read `CCDSensor` does not accept `read_duration`, because Plant
 acquisition definitions own readout completion and readiness timing. Detector
 MTF comes only from an explicitly configured presampling response.
 
@@ -406,7 +406,7 @@ frame = capture!(skipper, image; rng=runtime_rng(3))
 ```
 
 The reported effective read-noise sigma scales as `1/sqrt(n_samples)`, and
-sampling wall-clock metadata includes all reads. `sample_duration` is the
+acquisition-duration metadata includes all reads. `sample_duration` is the
 duration of one configured full-frame nondestructive sample; it is not a
 sample period or a model of the correlated-double-sampling electronics
 integration window. The core model assumes independent read samples;
@@ -457,7 +457,7 @@ det = Detector(
 conventional output, and photon-counting operating modes. Treat it as a design
 and validation helper, not a replacement for a calibrated camera model.
 `clock_induced_charge_per_frame` is explicitly per frame and is not scaled by
-integration time. CIC enters before EM gain. For the stronger CPU distribution
+exposure duration. CIC enters before EM gain. For the stronger CPU distribution
 model, select the qualified-public
 `AdaptiveOpticsSim.Detectors.ConditionalGammaMultiplication()` explicitly.
 That model is CPU-only and is not silently replaced on accelerators; accelerator
@@ -469,21 +469,21 @@ configured. Camera-specific parameter packs belong in a companion profiles
 package.
 
 Frame transfer is an acquisition-timing policy, not an optical response. Set a
-pixel readout rate and transfer time when frame latency or sustained cadence
+pixel readout rate and transfer duration when frame latency or sustained cadence
 matters:
 
 ```julia
 frame_transfer_emccd = Detector(
-    integration_time=1e-3,
+    exposure_duration=1e-3,
     sensor=EMCCDSensor(
         readout_rate_hz=10e6,
-        acquisition_mode=FrameTransferAcquisition(transfer_time=20e-6),
+        acquisition_mode=FrameTransferAcquisition(transfer_duration=20e-6),
     ),
 )
 ```
 
 After the first capture, `detector_export_metadata(frame_transfer_emccd)`
-reports one-frame output latency as `sampling_wallclock_time` and the overlapped
+reports one-frame output latency as `sampling_acquisition_duration` and the overlapped
 cadence as `steady_state_frame_period`. `SequentialAcquisition()` instead adds
 integration and readout durations. Both modes run the same optical, charge, EM
 gain, and noise pipeline. In a scheduled HIL plant,
@@ -548,10 +548,10 @@ support up-the-ramp fitting through the shared readout contract:
 
 ```julia
 ramp_detector = Detector(
-    integration_time=1.0,
+    exposure_duration=1.0,
     noise=NoisePhotonReadout(8.0),
     sensor=HgCdTeSensor(
-        read_time=20e-3,
+        read_duration=20e-3,
         sampling_mode=UpTheRampSampling(16),
     ),
 )
@@ -560,15 +560,16 @@ integrated = capture!(ramp_detector, image; rng=runtime_rng(5))
 slope = detector_ramp_slope(ramp_detector)
 intercept = detector_ramp_intercept(ramp_detector)
 read_cube = detector_ramp_cube(ramp_detector)
-read_times = detector_ramp_times(ramp_detector)
+read_offsets_s = detector_ramp_read_offsets_s(ramp_detector)
 kind = AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(ramp_detector)
 ```
 
 This direct `capture!` workflow is the lower-fidelity post-exposure convenience:
 it synthesizes evenly spaced reads by scaling one completed frame. The returned
-frame is `slope * integration_time`, while the fitted slope, intercept, read
-cube, and timestamps remain in detector-owned reusable products. It does not
-represent changing atmosphere, source, or optic state during the exposure.
+frame is `slope * exposure_duration`, while the fitted slope, intercept, read
+cube, and read offsets in seconds remain in detector-owned reusable products.
+It does not represent changing atmosphere, source, or optic state during the
+exposure.
 
 For a time-resolved ramp, first prepare an `IntensityMap` as `rate_map`, then use
 the qualified event surface. The producer may update the bound `rate_map.values`
@@ -581,10 +582,10 @@ using AdaptiveOpticsSim.Plant
 rate_map = direct_imaging_output(imaging)
 rng = runtime_rng(6)
 event_ramp_detector = Detector(
-    integration_time=1.0,
+    exposure_duration=1.0,
     noise=NoisePhotonReadout(8.0),
     sensor=HgCdTeSensor(
-        read_time=20e-3,
+        read_duration=20e-3,
         sampling_mode=UpTheRampSampling(3),
     ),
 )
@@ -613,7 +614,7 @@ frame = AdaptiveOpticsSim.Plant.mark_acquisition_ready!(events, state,
     t2 + PlantDuration(20_000_000))
 ```
 
-The prepared read time must not exceed the spacing between ramp samples or the
+The prepared read duration must not exceed the spacing between ramp samples or the
 declared readout duration. Read instants span zero through exposure close; when
 equal spacing is not exactly representable in integer nanoseconds, interior
 instants use documented floor quantization while retaining both endpoints. The
@@ -628,7 +629,7 @@ fixed-size vector suitable for preallocated channel readout:
 ```julia
 apd = LinearAPDDetector(
     topology=SingleElementLinearAPD(),
-    integration_time=100e-6,
+    exposure_duration=100e-6,
     qe=0.75,
     avalanche_gain=30.0,
     excess_noise_factor=1.2,
@@ -645,7 +646,8 @@ linear-mode APD channel surface.
 
 Rolling-shutter detectors can also capture a time-varying scene. Use
 `InPlaceFrameSource` when the source can write into a preallocated frame, or
-`FunctionFrameSource` when a function returns a frame for each sample time:
+`FunctionFrameSource` when a function returns a frame for each exposure-start
+offset in seconds:
 
 ```julia
 det = Detector(
@@ -664,26 +666,27 @@ rng = runtime_rng(3)
 frame = capture!(det, pulse; rng=rng)
 ```
 
-This path samples each rolling-shutter row group at its own readout time, so it
-can show transient illumination and rolling-shutter artifacts. Static
+This path samples each rolling-shutter row group at its own exposure-start
+offset in seconds, so it can show transient illumination and rolling-shutter
+artifacts. Static
 `capture!(det, image)` remains the preferred path when the scene does not vary
 during the exposure.
 
 For transient sources where the flux rate depends on the full exposure
 interval, use `InPlaceExposureFrameSource` or `FunctionExposureFrameSource`.
-These receive `start_time` and `exposure_time`, which is important for
+These receive `start_offset_s` and `exposure_duration`, which is important for
 global-reset rolling readout:
 
 ```julia
-pulse = FunctionExposureFrameSource((start_time, exposure_time) -> begin
-    active = start_time <= 50e-6 < start_time + exposure_time
+pulse = FunctionExposureFrameSource((start_offset_s, exposure_duration) -> begin
+    active = start_offset_s <= 50e-6 < start_offset_s + exposure_duration
     return fill(active ? 1.0 : 0.0, 64, 64)
 end)
 ```
 
 For cameras that use global reset with rolling readout, set
 `exposure_mode=GlobalResetExposure()`. This starts all row groups together and
-then increases the effective exposure time for later row groups as the rolling
+then increases the effective exposure duration for later row groups as the rolling
 readout reaches them:
 
 ```julia
@@ -839,7 +842,7 @@ unless an application prepares an explicit flux-conserving resampler.
 Prepared Pyramid and Bi-O-edge optics follow the same photon-arrival-rate
 boundary while retaining distinct physical masks. Their zero, circular, and
 sampled focal-plane modulation policies are optical cycle averages in λ/D;
-they contain no exposure time or trigger semantics. A spectral source produces
+they contain no exposure duration or trigger semantics. A spectral source produces
 one four-pupil `IntensityMap` per wavelength in an `OpticalProductBundle`.
 Directional `Asterism` and `ExtendedSource` inputs require a matching tuple or
 vector of path-rendered pupil functions and remain separate bundle products so

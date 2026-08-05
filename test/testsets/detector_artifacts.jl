@@ -263,6 +263,8 @@ detector_artifact_sha256(path::AbstractString) =
         qualification["moment_cases"])
     deterministic = qualification["deterministic"]
     @test deterministic["cic_exposure_invariant"]
+    # Dated qualification artifacts retain their historical schema; new
+    # generators emit the canonical duration vocabulary.
     @test deterministic["single_read_read_time_rejected"]
     @test deterministic["allocation_gate_passed"]
     @test deterministic["steady_alloc_bytes"] == 0

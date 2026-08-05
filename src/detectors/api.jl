@@ -36,7 +36,7 @@ export NearestNeighborCountRedistribution, CompositeCountingMeanResponse
 export capture!, output_frame, channel_output, detector_export_metadata
 export prepare_detector_acquisition
 export detector_ramp_slope, detector_ramp_intercept
-export detector_ramp_cube, detector_ramp_times
+export detector_ramp_cube, detector_ramp_read_offsets_s
 export readout_ready, reset_integration!, thermal_model
 
 public AbstractEMGainModel

@@ -82,7 +82,7 @@ function prepared_detector_exposed_storage_is_zero(det::Detector)
         detector_reference_cube(det),
         detector_signal_cube(det),
         detector_read_cube(det),
-        detector_read_times(det),
+        detector_read_offsets_s(det),
         detector_ramp_slope(det),
         detector_ramp_intercept(det),
     )

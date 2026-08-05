@@ -25,7 +25,7 @@ function sh_resource_fixture()
     set_subaperture_calibration!(sensor.calibration,
         zeros(Float32, size(sensor.calibration.reference_signal_2d));
         centroid_response=1f0, wavelength=500f-9)
-    detector = Detector(integration_time=1f0, noise=NoiseNone(), qe=1f0,
+    detector = Detector(exposure_duration=1f0, noise=NoiseNone(), qe=1f0,
         response_model=NullFrameResponse(), T=Float32)
     observation = WFSObservation(zeros(Float32, size(output.values));
         units=:detected_electrons, layout=:lenslet_mosaic)
@@ -154,7 +154,7 @@ end
         propagation_workspace.opd_to_cycles_host,
     ))
 
-    unsupported = Detector(integration_time=1f0, noise=NoiseNone(),
+    unsupported = Detector(exposure_duration=1f0, noise=NoiseNone(),
         qe=1f0, response_model=NullFrameResponse(), output_type=UInt16,
         T=Float32)
     unsupported_fact = structural_resource_fact(unsupported.state,

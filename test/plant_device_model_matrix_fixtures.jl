@@ -685,7 +685,7 @@ end
     ::Type{T},
 ) where {T<:AbstractFloat} = EMCCDSensor(
     excess_noise_factor=one(T),
-    acquisition_mode=FrameTransferAcquisition(transfer_time=T(0.1)),
+    acquisition_mode=FrameTransferAcquisition(transfer_duration=T(0.1)),
     T=T,
 )
 
@@ -723,7 +723,7 @@ end
     ::AdaptiveOpticsSim.Backends.AbstractArrayBackend,
     ::Type{T},
 ) where {T<:AbstractFloat} = HgCdTeSensor(
-    read_time=zero(T),
+    read_duration=zero(T),
     sampling_mode=UpTheRampSampling(3),
     T=T,
 )
@@ -735,7 +735,7 @@ function device_model_matrix_detector(
 )
     return Detector(
         ;
-        integration_time=one(T),
+        exposure_duration=one(T),
         qe=T(0.5),
         gain=one(T),
         noise=NoiseNone(),

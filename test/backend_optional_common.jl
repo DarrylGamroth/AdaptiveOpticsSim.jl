@@ -1043,7 +1043,7 @@ function Plant.prepare_acquisition_provider(
     Plant.require_path_result(path)
     result = path_result(path)
     T = eltype(result.values)
-    detector = Detector(integration_time=T(model.exposure),
+    detector = Detector(exposure_duration=T(model.exposure),
         noise=NoiseNone(), qe=one(T), response_model=NullFrameResponse(),
         T=T, backend=path_result_key(path).backend)
     execution = Plant.FrameAcquisitionExecution(detector, result)
@@ -2280,7 +2280,7 @@ function optional_detector_readout_owner_device_resident(
     BackendArray,
 )
     for name in fieldnames(typeof(owner))
-        name === :read_times && continue
+        name === :read_offsets_s && continue
         value = getfield(owner, name)
         if value isa AbstractArray
             value isa BackendArray || return false
@@ -2524,8 +2524,8 @@ function run_optional_detector_device_model_matrix_checks(
                 rtol=8f-6,
                 atol=8f-7,
             )
-            @test detector_ramp_times(detector) ==
-                detector_ramp_times(oracle.detector)
+            @test detector_ramp_read_offsets_s(detector) ==
+                detector_ramp_read_offsets_s(oracle.detector)
         end
 
         retained_arrays = (
@@ -2670,7 +2670,7 @@ function run_optional_shared_detector_ipc_checks(
     map = device_model_matrix_detector_rate_map(row; backend=selector, T)
     detector = Detector(
         noise=NoiseNone(),
-        integration_time=T(0.75),
+        exposure_duration=T(0.75),
         qe=T(0.4),
         sensor=CMOSSensor(T=T, backend=selector),
         response_model=SampledFrameResponse(response_kernel;
@@ -2788,13 +2788,13 @@ function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:
     zernike_modal = ModalControllableOptic(tel, ZernikeOpticBasis([2, 3]); T=T, backend=selector)
     cartesian_modal = ModalControllableOptic(tel, CartesianTiltBasis(; scale=T(0.1)); T=T, backend=selector)
     wfs = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive(), T=T, backend=selector)
-    det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1, T=T, backend=selector)
+    det = Detector(noise=NoiseNone(), exposure_duration=T(1), qe=T(1), binning=1, T=T, backend=selector)
     sampled_response = SampledFrameResponse(
         T[0 0.1 0; 0.1 0.6 0.1; 0 0.1 0]; T=T,
         backend=selector)
     sampled_qe = AdaptiveOpticsSim.Detectors.SampledQuantumEfficiency(
         T[0.5e-6, 0.6e-6, 0.7e-6], T[0.2, 0.8, 0.4]; T=T)
-    calibration_det = Detector(noise=NoiseNone(), integration_time=T(1),
+    calibration_det = Detector(noise=NoiseNone(), exposure_duration=T(1),
         qe=sampled_qe, response_model=sampled_response, T=T,
         backend=selector)
     pupil = PupilFunction(tel; T=T, backend=selector)
@@ -3012,7 +3012,7 @@ function run_optional_generic_wfs_acquisition_checks(
         coherence=IncoherentIntensityAddition())
     rate = IntensityMap(metadata, rate_values)
 
-    detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+    detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
         qe=one(T), response_model=NullFrameResponse(), T=T,
         backend=selector)
     observation = WFSObservation(similar(rate_values);
@@ -3028,7 +3028,7 @@ function run_optional_generic_wfs_acquisition_checks(
     @test observation.storage isa BackendArray
     @test Array(observation.storage) == Array(rate_values) .* T(0.25)
 
-    spad = SPADArrayDetector((2, 2); integration_time=T(0.5),
+    spad = SPADArrayDetector((2, 2); exposure_duration=T(0.5),
         noise=NoiseNone(), sensor=SPADArraySensor(
             active_area_detection_efficiency=one(T),
             dark_count_rate=zero(T), fill_factor=one(T), T=T),
@@ -3050,7 +3050,7 @@ function run_optional_generic_wfs_acquisition_checks(
     second_rate_values = copy(rate_values)
     second_rate = IntensityMap(metadata, second_rate_values)
     second_detector = Detector(noise=NoiseNone(),
-        integration_time=T(0.5), qe=one(T),
+        exposure_duration=T(0.5), qe=one(T),
         response_model=NullFrameResponse(), T=T, backend=selector)
     second_observation = WFSObservation(similar(rate_values);
         units=:electron_count, layout=:detector_frame)
@@ -3106,7 +3106,7 @@ function run_optional_wfs_stage_contracts(
     optical_model = ContractRateModel(T(3), T(1e6), rate.metadata)
     optics_plan = prepare_wfs_optics(optical_model, pupil, rate)
 
-    detector = Detector(noise=NoiseNone(), integration_time=T(0.4),
+    detector = Detector(noise=NoiseNone(), exposure_duration=T(0.4),
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
         backend=selector)
     binding = contract_detector_binding(detector, rate)
@@ -3168,7 +3168,7 @@ function run_optional_wfs_stage_contracts(
     ))
     optics_bundle = prepare_wfs_optics(bundle_model, pupil, bundle)
     form_wfs_optical_products!(bundle, pupil, optics_bundle)
-    second_detector = Detector(noise=NoiseNone(), integration_time=T(0.7),
+    second_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.7),
         qe=T(0.25), response_model=NullFrameResponse(), T=T,
         backend=selector)
     first_binding = contract_detector_binding(detector, rate)
@@ -3296,7 +3296,7 @@ function run_optional_wfs_stage_contracts(
     @test isapprox(Array(physical_asterism_rate.values),
         Array(physical_rate.values); rtol=T(2e-5), atol=T(2e-5))
 
-    physical_detector = Detector(noise=NoiseNone(), integration_time=T(0.4),
+    physical_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.4),
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
         backend=selector)
     physical_observation = WFSObservation(similar(physical_rate.values);
@@ -3491,7 +3491,7 @@ function run_optional_wfs_stage_contracts(
             rtol=T(3e-5), atol=T(3e-5))
 
         four_pupil_detector = Detector(noise=NoiseNone(),
-            integration_time=T(0.4), qe=T(0.5),
+            exposure_duration=T(0.4), qe=T(0.5),
             response_model=NullFrameResponse(), T=T, backend=selector)
         four_pupil_observation = WFSObservation(similar(gpu_rate.values);
             units=:electron_count, layout=:four_pupil_mosaic)
@@ -3745,7 +3745,7 @@ function run_optional_zernike_curvature_stages(
         cpu_zernike_rate.values; rtol=T(4e-5), atol=T(4e-5))
 
     zernike_detector = Detector(noise=NoiseNone(),
-        integration_time=T(0.25), qe=T(0.4),
+        exposure_duration=T(0.25), qe=T(0.4),
         response_model=NullFrameResponse(), T=T, backend=selector)
     zernike_observation = WFSObservation(similar(gpu_zernike_rate.values);
         units=:electron_count, layout=:zernike_pupil_image)
@@ -3793,10 +3793,10 @@ function run_optional_zernike_curvature_stages(
         rtol=T(5e-5), atol=T(5e-5))
 
     plus_detector = Detector(noise=NoiseNone(),
-        integration_time=T(0.25), qe=T(0.4),
+        exposure_duration=T(0.25), qe=T(0.4),
         response_model=NullFrameResponse(), T=T, backend=selector)
     minus_detector = Detector(noise=NoiseNone(),
-        integration_time=T(0.5), qe=T(0.5),
+        exposure_duration=T(0.5), qe=T(0.5),
         response_model=NullFrameResponse(), T=T, backend=selector)
     plus_observation = WFSObservation(similar(gpu_rates[1].values);
         units=:electron_count, layout=:curvature_branch_image)
@@ -3816,7 +3816,7 @@ function run_optional_zernike_curvature_stages(
         rtol=T(3e-5), atol=T(3e-5))
 
     packed_detector = Detector(noise=NoiseNone(),
-        integration_time=T(0.25), qe=T(0.5),
+        exposure_duration=T(0.25), qe=T(0.5),
         response_model=NullFrameResponse(), T=T, backend=selector)
     packed_model = CurvaturePackedAcquisition(packed_detector)
     packed_storage = similar(gpu_rates[1].values, T, 8, 4)
@@ -3833,7 +3833,7 @@ function run_optional_zernike_curvature_stages(
     @test isapprox(packed_host[5:8, :], Array(gpu_rates[2].values) .* T(0.125);
         rtol=T(3e-5), atol=T(3e-5))
 
-    spad = SPADArrayDetector((2, 16); integration_time=T(0.25), noise=NoiseNone(),
+    spad = SPADArrayDetector((2, 16); exposure_duration=T(0.25), noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=T(0.5), dark_count_rate=zero(T),
             fill_factor=one(T)), T=T, backend=selector)
     counting_model = CurvaturePackedAcquisition(spad;
@@ -3861,7 +3861,7 @@ function run_optional_zernike_curvature_stages(
 
     linear_apd = LinearAPDDetector(
         topology=LinearAPDChannelBank(32),
-        integration_time=T(0.25), qe=T(0.5), avalanche_gain=T(2),
+        exposure_duration=T(0.25), qe=T(0.5), avalanche_gain=T(2),
         conversion_gain=T(2), noise=NoiseNone(), T=T,
         backend=selector)
     linear_model = CurvaturePackedAcquisition(linear_apd;
@@ -4037,7 +4037,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     @test sum_output.values isa BackendArray
     @test Array(sum_output.values) == fill(T(3), size(sum_output.values))
 
-    detector = Detector(integration_time=T(0.5), noise=NoiseNone(),
+    detector = Detector(exposure_duration=T(0.5), noise=NoiseNone(),
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
         backend=selector)
     acquisition = prepare_detector_acquisition(detector, prepared.output)
@@ -4047,7 +4047,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     @test detector_frame isa BackendArray
     @test sum(Array(detector_frame)) ≈
         sum(Array(prepared.output.values)) * T(0.25) atol=T(2e-5) rtol=T(2e-5)
-    identical_detector = Detector(integration_time=T(0.5), noise=NoiseNone(),
+    identical_detector = Detector(exposure_duration=T(0.5), noise=NoiseNone(),
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
         backend=selector)
     @test identical_detector.params === detector.params
@@ -4055,7 +4055,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     @test !applicable(capture!, identical_detector, prepared.output,
         acquisition, MersenneTwister(301))
 
-    long_detector = Detector(integration_time=T(1.0), noise=NoiseNone(),
+    long_detector = Detector(exposure_duration=T(1.0), noise=NoiseNone(),
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
         backend=selector)
     long_acquisition = prepare_detector_acquisition(long_detector,
@@ -4070,7 +4070,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         AdaptiveOpticsSim.Backends.execution_style(long_frame))
     @test Array(long_frame) ≈ 2 .* short_snapshot atol=T(2e-5) rtol=T(2e-5)
 
-    incremental_detector = Detector(integration_time=T(0.5),
+    incremental_detector = Detector(exposure_duration=T(0.5),
         noise=NoiseNone(), qe=T(0.5), response_model=NullFrameResponse(),
         T=T, backend=selector)
     incremental_acquisition = prepare_detector_acquisition(
@@ -4087,7 +4087,7 @@ function run_optional_plane_product_checks(tel::Telescope,
     @test readout_ready(incremental_detector)
     @test sum(Array(incremental_frame)) ≈
         sum(Array(prepared.output.values)) * T(0.25) atol=T(2e-5) rtol=T(2e-5)
-    cpu_detector = Detector(integration_time=T(0.5), noise=NoiseNone(),
+    cpu_detector = Detector(exposure_duration=T(0.5), noise=NoiseNone(),
         qe=T(0.5), response_model=NullFrameResponse(), T=T,
         backend=CPUBackend())
     @test_throws InvalidConfiguration prepare_detector_acquisition(
@@ -4106,7 +4106,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         coherence=AdaptiveOpticsSim.Optics.IncoherentIntensityAddition())
     density_map = IntensityMap(density_metadata, density_values)
     response_kernel = T[0 0.1 0; 0.1 0.6 0.1; 0 0.1 0]
-    response_detector = Detector(integration_time=T(2), noise=NoiseNone(),
+    response_detector = Detector(exposure_duration=T(2), noise=NoiseNone(),
         qe=T(0.5), binning=3,
         response_model=SampledFrameResponse(response_kernel; T=T), T=T,
         backend=selector)
@@ -4137,7 +4137,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         spatial_measure=AdaptiveOpticsSim.Optics.CellIntegratedMeasure(),
         coherence=AdaptiveOpticsSim.Optics.IncoherentIntensityAddition())
     edge_map = IntensityMap(edge_metadata, edge_values)
-    edge_detector = Detector(integration_time=one(T), noise=NoiseNone(),
+    edge_detector = Detector(exposure_duration=one(T), noise=NoiseNone(),
         qe=one(T), response_model=SampledFrameResponse(asymmetric_kernel; T=T),
         T=T, backend=selector)
     edge_acquisition = prepare_detector_acquisition(edge_detector, edge_map)
@@ -4340,7 +4340,7 @@ function _build_optional_independent_optics_case(backend, ::Type{T},
     )
     detector = Detector(
         noise=NoiseNone(),
-        integration_time=one(T),
+        exposure_duration=one(T),
         qe=one(T),
         binning=1,
         T=T,
@@ -4580,9 +4580,9 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
             T=T),
         response_model=NullFrameResponse(), T=T, backend=selector)
 
-    ramp_detector = Detector(integration_time=T(2), noise=NoiseNone(),
+    ramp_detector = Detector(exposure_duration=T(2), noise=NoiseNone(),
         qe=one(T), gain=one(T),
-        sensor=HgCdTeSensor(read_time=zero(T),
+        sensor=HgCdTeSensor(read_duration=zero(T),
             sampling_mode=UpTheRampSampling(5), T=T),
         response_model=NullFrameResponse(), T=T, backend=selector)
     ramp_output = capture!(ramp_detector,
@@ -4593,12 +4593,12 @@ function run_optional_avalanche_detector_parity(::Type{B}, BackendArray) where {
     @test Array(detector_ramp_slope(ramp_detector)) == fill(T(3), 32, 32)
     @test maximum(abs, Array(detector_ramp_intercept(ramp_detector))) <= eps(T)
     @test size(detector_ramp_cube(ramp_detector)) == (32, 32, 5)
-    @test detector_ramp_times(ramp_detector) == T[0, 0.5, 1, 1.5, 2]
+    @test detector_ramp_read_offsets_s(ramp_detector) == T[0, 0.5, 1, 1.5, 2]
     @test AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(
         ramp_detector) == :synthesized_final_charge
 
     linear_apd = LinearAPDDetector(topology=LinearAPDChannelBank(4),
-        integration_time=T(0.5), qe=T(0.5), avalanche_gain=T(4),
+        exposure_duration=T(0.5), qe=T(0.5), avalanche_gain=T(4),
         conversion_gain=T(2), noise=NoiseNone(), T=T, backend=selector)
     linear_output = capture!(linear_apd, BackendArray(fill(T(10), 4));
         rng=MersenneTwister(2029))
@@ -4615,7 +4615,7 @@ function run_optional_skipper_ccd_checks(
     T = Float32
     selector = backend_selector(B)
     detector = Detector(
-        integration_time=one(T),
+        exposure_duration=one(T),
         noise=NoiseReadout(T(4)),
         qe=one(T),
         sensor=CCDSensor(
@@ -4641,8 +4641,8 @@ function run_optional_skipper_ccd_checks(
     @test isapprox(mean(host), zero(T); atol=T(0.05))
     @test isapprox(var(host), one(T); rtol=T(0.05))
     metadata = detector_export_metadata(detector)
-    @test metadata.sampling_read_time == T(2e-6)
-    @test metadata.sampling_wallclock_time ==
+    @test metadata.sampling_read_duration == T(2e-6)
+    @test metadata.sampling_acquisition_duration ==
         one(T) + T(16) * T(2e-6)
     return nothing
 end
@@ -4654,7 +4654,7 @@ function run_optional_ingaas_deterministic_checks(
     selector = backend_selector(B)
     function persistence_detector(gain)
         return Detector(
-            integration_time=one(T),
+            exposure_duration=one(T),
             noise=NoiseNone(),
             qe=one(T),
             gain=gain,
@@ -4732,7 +4732,7 @@ function run_optional_spad_qualification_checks(
     selector = backend_selector(B)
 
     deterministic = SPADArrayDetector((3, 3);
-        integration_time=T(2), noise=NoiseNone(),
+        exposure_duration=T(2), noise=NoiseNone(),
         gate_model=DutyCycleGate(T(0.5)),
         sensor=SPADArraySensor(
             active_area_detection_efficiency=T(0.5),
@@ -4786,7 +4786,7 @@ function run_optional_ingaas_moment_checks(
     T = Float32
     selector = backend_selector(B)
     stochastic = Detector(
-        integration_time=T(2),
+        exposure_duration=T(2),
         noise=NoiseNone(),
         qe=one(T),
         dark_current=T(1.5),
@@ -4843,7 +4843,7 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
 
     values = BackendArray(fill(T(2), 8, 8))
     map = optional_detector_event_map(values)
-    detector = Detector(integration_time=one(T), qe=T(0.5),
+    detector = Detector(exposure_duration=one(T), qe=T(0.5),
         noise=NoiseNone(), response_model=NullFrameResponse(), T=T,
         backend=selector)
     prepared = Plant.prepare_global_shutter_acquisition(detector,
@@ -4867,9 +4867,9 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
 
     ramp_values = BackendArray(fill(one(T), 4, 4))
     ramp_map = optional_detector_event_map(ramp_values)
-    ramp_detector = Detector(integration_time=one(T), qe=one(T),
+    ramp_detector = Detector(exposure_duration=one(T), qe=one(T),
         noise=NoiseNone(),
-        sensor=HgCdTeSensor(read_time=zero(T),
+        sensor=HgCdTeSensor(read_duration=zero(T),
             sampling_mode=UpTheRampSampling(3), T=T),
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3), T=T,
@@ -4911,13 +4911,13 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
     avalanche_values = BackendArray(fill(T(128), 4, 4))
     avalanche_map = optional_detector_event_map(avalanche_values)
     avalanche_detector = Detector(
-        integration_time=one(T), qe=one(T), noise=NoiseNone(),
+        exposure_duration=one(T), qe=one(T), noise=NoiseNone(),
         sensor=HgCdTeAvalancheArraySensor(
             avalanche_gain=T(2),
             excess_noise_factor=T(1.5),
             multiplication_model=AdaptiveOpticsSim.Detectors.
                 ClippedGaussianAvalancheMultiplicationApproximation(),
-            read_time=zero(T),
+            read_duration=zero(T),
             sampling_mode=UpTheRampSampling(3), T=T),
         response_model=NullFrameResponse(), T=T, backend=selector)
     avalanche_prepared = Plant.prepare_global_shutter_acquisition(
@@ -4955,7 +4955,7 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
 
     rolling_values = BackendArray(fill(T(2), 8, 8))
     rolling_map = optional_detector_event_map(rolling_values)
-    rolling_detector = Detector(integration_time=one(T), qe=one(T),
+    rolling_detector = Detector(exposure_duration=one(T), qe=one(T),
         noise=NoiseNone(), response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(T(0.1);
             row_group_size=2), T=T), T=T, backend=selector)
@@ -5005,10 +5005,10 @@ function run_optional_detector_event_checks(::Type{B}, BackendArray) where
 
     transfer_values = BackendArray(fill(T(3), 8, 8))
     transfer_map = optional_detector_event_map(transfer_values)
-    transfer_detector = Detector(integration_time=one(T), qe=one(T),
+    transfer_detector = Detector(exposure_duration=one(T), qe=one(T),
         gain=one(T), noise=NoiseNone(), response_model=NullFrameResponse(),
         sensor=EMCCDSensor(acquisition_mode=FrameTransferAcquisition(
-            transfer_time=T(0.1)), T=T), T=T, backend=selector)
+            transfer_duration=T(0.1)), T=T), T=T, backend=selector)
     transfer_prepared =
         Plant.prepare_frame_transfer_acquisition(
             transfer_detector, transfer_map,
@@ -5300,10 +5300,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     captured = capture!(det_capture, capture_psf; rng=MersenneTwister(2))
     @test captured isa array_backend
     @test maximum(Array(captured)) <= Float64(exp2(T(12)) - one(T))
-    cpu_poisson_det = Detector(noise=NoisePhoton(), integration_time=T(1.0), qe=T(1.0),
+    cpu_poisson_det = Detector(noise=NoisePhoton(), exposure_duration=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T,
         backend=CPUBackend())
-    gpu_poisson_det = Detector(noise=NoisePhoton(), integration_time=T(1.0), qe=T(1.0),
+    gpu_poisson_det = Detector(noise=NoisePhoton(), exposure_duration=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T,
         backend=backend)
     poisson_input = fill(T(10), 4, 4)
@@ -5390,10 +5390,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         )),
     )
     corr_input = reshape(T.(1:96), 2, 6, 8)
-    cpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    cpu_quant_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
         response_model=NullFrameResponse(), T=T, backend=CPUBackend())
-    gpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    gpu_quant_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
         response_model=NullFrameResponse(), T=T, backend=backend)
     quant_input = reshape(T.(1:48), 6, 8) .* T(3)
@@ -5403,13 +5403,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     @test isapprox(Array(gpu_quant_frame), cpu_quant_frame; rtol=1f-5, atol=1f-4)
 
     for correction_model in correction_models
-        cpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        cpu_frame_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
             sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
             backend=CPUBackend())
-        gpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        gpu_frame_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
             sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
@@ -5421,13 +5421,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         @test gpu_frame isa array_backend
         @test isapprox(Array(gpu_frame), cpu_frame; rtol=1f-5, atol=1f-4)
 
-        cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        cpu_corr_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
             sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
             backend=CPUBackend())
-        gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        gpu_corr_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
             sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
@@ -5447,14 +5447,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         ReferenceRowCommonModeCorrection(1),
         ReferenceColumnCommonModeCorrection(1),
     ))
-    cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    cpu_gen_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeSensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
         backend=CPUBackend())
-    gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    gpu_gen_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeSensor(T=T),
         response_model=NullFrameResponse(),
@@ -5470,14 +5470,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     @test gpu_gen_out isa array_backend
     @test Array(gpu_gen_out) == cpu_gen_out
 
-    cpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
+    cpu_windowed_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
         sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3),
         T=T,
         backend=CPUBackend())
-    gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
+    gpu_windowed_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
         sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
@@ -5494,7 +5494,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_reference_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
     @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_signal_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
     @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_read_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test AdaptiveOpticsSim.Detectors.detector_read_times(gpu_windowed_det) == AdaptiveOpticsSim.Detectors.detector_read_times(cpu_windowed_det)
+    @test AdaptiveOpticsSim.Detectors.detector_read_offsets_s(gpu_windowed_det) == AdaptiveOpticsSim.Detectors.detector_read_offsets_s(cpu_windowed_det)
 
     gsc_mask = array_backend(fill(one(T), 8, 8))
     gsc_basis = array_backend(reshape(T.(1:192), 8, 8, 3) .* T(1e-3))
@@ -5564,9 +5564,9 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     gpu_src = Source(band=:I, magnitude=0.0, T=T)
     cpu_sh = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
     gpu_sh = ShackHartmannWFS(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-    cpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    cpu_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
-    gpu_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    gpu_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=backend)
     cpu_pupil = PupilFunction(cpu_tel; T=T, backend=CPUBackend())
     gpu_pupil = PupilFunction(gpu_tel; T=T, backend=backend)
@@ -5607,10 +5607,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         )),
     )
     corr_input = reshape(T.(1:96), 2, 6, 8)
-    cpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    cpu_quant_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
         response_model=NullFrameResponse(), T=T, backend=CPUBackend())
-    gpu_quant_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    gpu_quant_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
         response_model=NullFrameResponse(), T=T, backend=backend)
     quant_input = reshape(T.(1:48), 6, 8) .* T(3)
@@ -5620,13 +5620,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     @test isapprox(Array(gpu_quant_frame), cpu_quant_frame; rtol=1f-5, atol=1f-4)
 
     for correction_model in correction_models
-        cpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        cpu_frame_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
             sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
             backend=CPUBackend())
-        gpu_frame_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        gpu_frame_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
             sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
@@ -5638,13 +5638,13 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         @test gpu_frame isa array_backend
         @test isapprox(Array(gpu_frame), cpu_frame; rtol=1f-5, atol=1f-4)
 
-        cpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        cpu_corr_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
             sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
             T=T,
             backend=CPUBackend())
-        gpu_corr_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+        gpu_corr_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
             sensor=HgCdTeSensor(T=T),
             response_model=NullFrameResponse(),
             correction_model=correction_model,
@@ -5664,14 +5664,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         ReferenceRowCommonModeCorrection(1),
         ReferenceColumnCommonModeCorrection(1),
     ))
-    cpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    cpu_gen_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeSensor(T=T),
         response_model=NullFrameResponse(),
         correction_model=generalized_correction,
         T=T,
         backend=CPUBackend())
-    gpu_gen_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0),
+    gpu_gen_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
         bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
         sensor=HgCdTeSensor(T=T),
         response_model=NullFrameResponse(),
@@ -5687,14 +5687,14 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     @test gpu_gen_out isa array_backend
     @test Array(gpu_gen_out) == cpu_gen_out
 
-    cpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
+    cpu_windowed_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
         sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
         readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3),
         T=T,
         backend=CPUBackend())
-    gpu_windowed_det = Detector(noise=NoiseNone(), integration_time=T(1.0), qe=T(1.0), binning=1,
+    gpu_windowed_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0), binning=1,
         gain=T(1.0),
         sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
         response_model=NullFrameResponse(),
@@ -5711,7 +5711,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_reference_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
     @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_signal_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
     @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_read_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test AdaptiveOpticsSim.Detectors.detector_read_times(gpu_windowed_det) == AdaptiveOpticsSim.Detectors.detector_read_times(cpu_windowed_det)
+    @test AdaptiveOpticsSim.Detectors.detector_read_offsets_s(gpu_windowed_det) == AdaptiveOpticsSim.Detectors.detector_read_offsets_s(cpu_windowed_det)
 
     return nothing
 end
@@ -5831,7 +5831,7 @@ function run_optional_direct_imaging_batch_checks(
 
     selected = products[2]
     short_detector = Detector(
-        integration_time=T(0.25),
+        exposure_duration=T(0.25),
         noise=NoiseNone(),
         qe=T(0.5),
         response_model=NullFrameResponse(),
@@ -5839,7 +5839,7 @@ function run_optional_direct_imaging_batch_checks(
         backend=selector,
     )
     long_detector = Detector(
-        integration_time=one(T),
+        exposure_duration=one(T),
         noise=NoiseNone(),
         qe=T(0.5),
         response_model=NullFrameResponse(),
@@ -6134,7 +6134,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.2, 0.8])
     spectral_exposure = T(2.5)
     spectral_detector = Detector(noise=NoiseNone(), qe=spectral_qe,
-        integration_time=spectral_exposure, binning=1,
+        exposure_duration=spectral_exposure, binning=1,
         response_model=NullFrameResponse(), T=T, backend=selector)
     spectral_detector_sh = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), T=T, backend=selector)
@@ -6153,7 +6153,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     science_src = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0), T=T)
     split_dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T,
         backend=selector)
-    split_det = Detector(noise=NoiseNone(), integration_time=one(T), qe=one(T),
+    split_det = Detector(noise=NoiseNone(), exposure_duration=one(T), qe=one(T),
         binning=1, T=T, backend=selector)
     science_pupil = PupilFunction(tel; T=T, backend=selector)
     science_renderer = prepare_atmosphere_renderer(
@@ -6191,9 +6191,9 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     @test split_frame isa BackendArray
     @test all(isfinite, Array(split_frame))
 
-    shared_detector_a = Detector(noise=NoiseNone(), integration_time=one(T),
+    shared_detector_a = Detector(noise=NoiseNone(), exposure_duration=one(T),
         qe=one(T), binning=1, T=T, backend=selector)
-    shared_detector_b = Detector(noise=NoiseNone(), integration_time=one(T),
+    shared_detector_b = Detector(noise=NoiseNone(), exposure_duration=one(T),
         qe=one(T), binning=1, T=T, backend=selector)
     shared_acquisition_a = prepare_detector_acquisition(
         shared_detector_a, science_rate)

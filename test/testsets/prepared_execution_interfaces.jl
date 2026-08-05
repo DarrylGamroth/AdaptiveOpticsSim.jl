@@ -90,8 +90,8 @@ end
     definition = GlobalShutterAcquisitionDefinition(
         PlantDuration(1_000_000_000))
     map = pe01_detector_rate_map(ones(2, 2))
-    detector = Detector(integration_time=1.0, noise=NoiseNone())
-    foreign_detector = Detector(integration_time=1.0, noise=NoiseNone())
+    detector = Detector(exposure_duration=1.0, noise=NoiseNone())
+    foreign_detector = Detector(exposure_duration=1.0, noise=NoiseNone())
     prepared = prepare_global_shutter_acquisition(
         detector, map, definition)
     foreign_prepared = prepare_global_shutter_acquisition(
@@ -111,9 +111,9 @@ end
         timing_model=RollingShutter(0.01; row_group_size=1))
     foreign_rolling_sensor = CMOSSensor(
         timing_model=RollingShutter(0.01; row_group_size=1))
-    rolling_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    rolling_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         sensor=rolling_sensor)
-    foreign_rolling_detector = Detector(integration_time=1.0,
+    foreign_rolling_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), sensor=foreign_rolling_sensor)
     rolling = prepare_rolling_shutter_acquisition(
         rolling_detector, map, rolling_definition)
@@ -131,12 +131,12 @@ end
     transfer_definition = FrameTransferAcquisitionDefinition(
         PlantDuration(1_000_000_000))
     transfer_sensor = EMCCDSensor(excess_noise_factor=1.0,
-        acquisition_mode=FrameTransferAcquisition(transfer_time=0.1))
+        acquisition_mode=FrameTransferAcquisition(transfer_duration=0.1))
     foreign_transfer_sensor = EMCCDSensor(excess_noise_factor=1.0,
-        acquisition_mode=FrameTransferAcquisition(transfer_time=0.1))
-    transfer_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+        acquisition_mode=FrameTransferAcquisition(transfer_duration=0.1))
+    transfer_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         sensor=transfer_sensor)
-    foreign_transfer_detector = Detector(integration_time=1.0,
+    foreign_transfer_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), sensor=foreign_transfer_sensor)
     transfer = prepare_frame_transfer_acquisition(
         transfer_detector, map, transfer_definition)

@@ -49,7 +49,7 @@ struct SPADArrayDetectorParams{
     G<:AbstractCountingGateModel,
     TM<:AbstractDetectorThermalModel,
 }
-    integration_time::T
+    exposure_duration::T
     dimensions::Tuple{Int,Int}
     gate_model::G
     thermal_model::TM
@@ -79,7 +79,7 @@ counting_sensor(det::SPADArrayDetector) = det.params.sensor
 counting_gate_model(det::SPADArrayDetector) = det.params.gate_model
 counting_dead_time_model(det::SPADArrayDetector) = det.params.sensor.dead_time_model
 counting_mean_response_model(det::SPADArrayDetector) = det.params.sensor.mean_response_model
-counting_integration_time(det::SPADArrayDetector) = det.params.integration_time
+counting_exposure_duration(det::SPADArrayDetector) = det.params.exposure_duration
 function counting_layout(::SPADArrayDetector)
     return :pixel_counts
 end
@@ -110,7 +110,7 @@ detector_sensor_symbol(::SPADArraySensor) = :spad_array
 dark_count_law(::SPADArrayDetector) = NullTemperatureLaw()
 
 function _build_spad_array_detector(dimensions::Tuple{Int,Int}, noise::NoiseModel;
-    integration_time::Real,
+    exposure_duration::Real,
     gate_model::AbstractCountingGateModel,
     thermal_model::AbstractDetectorThermalModel,
     sensor::AbstractSPADArraySensor,
@@ -119,16 +119,16 @@ function _build_spad_array_detector(dimensions::Tuple{Int,Int}, noise::NoiseMode
     backend)
     all(>(0), dimensions) || throw(InvalidConfiguration(
         "SPADArrayDetector dimensions must contain two positive values"))
-    typed_integration_time = T(integration_time)
-    isfinite(typed_integration_time) && typed_integration_time > zero(T) ||
-        throw(InvalidConfiguration("SPADArrayDetector integration_time must be finite and > 0"))
+    typed_exposure_duration = T(exposure_duration)
+    isfinite(typed_exposure_duration) && typed_exposure_duration > zero(T) ||
+        throw(InvalidConfiguration("SPADArrayDetector exposure_duration must be finite and > 0"))
     converted = convert_noise(noise, T)
     validated = validate_counting_noise(converted)
     gate = validate_gate_model(convert_gate_model(gate_model, T))
     thermal = validate_thermal_model(convert_thermal_model(thermal_model, T))
     typed_sensor = convert_spad_sensor(sensor, T)
     params = SPADArrayDetectorParams{T,typeof(typed_sensor),typeof(gate),typeof(thermal)}(
-        typed_integration_time,
+        typed_exposure_duration,
         dimensions,
         gate,
         thermal,
@@ -167,7 +167,7 @@ matrices contain already cell-integrated photon-arrival rates. The model emits
 an expected-count or sampled-count image, not photon events or timestamps.
 """
 function SPADArrayDetector(dimensions::Tuple{Int,Int};
-    integration_time::Real=1.0, noise::NoiseModel=NoisePhoton(),
+    exposure_duration::Real=1.0, noise::NoiseModel=NoisePhoton(),
     sensor::SPADArraySensor=SPADArraySensor(),
     output_type::Union{Nothing,DataType}=nothing,
     gate_model::AbstractCountingGateModel=NullCountingGate(),
@@ -175,7 +175,7 @@ function SPADArrayDetector(dimensions::Tuple{Int,Int};
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend())
     backend = _resolve_array_backend(backend)
-    return _build_spad_array_detector(dimensions, noise; integration_time=integration_time,
+    return _build_spad_array_detector(dimensions, noise; exposure_duration=exposure_duration,
         gate_model=gate_model, thermal_model=thermal_model, sensor=sensor,
         output_type=output_type, T=T, backend=backend)
 end

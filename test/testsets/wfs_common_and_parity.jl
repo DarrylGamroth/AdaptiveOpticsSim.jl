@@ -255,7 +255,7 @@ end
     lgs = LGSSource(wavelength=589e-9, elongation_factor=1.4,
         photon_irradiance=1.0)
     heterogeneous = Asterism(AdaptiveOpticsSim.Optics.AbstractSource[ngs, lgs])
-    detector = Detector(noise=NoiseNone(), integration_time=1.0,
+    detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
         qe=1.0, binning=1)
     sensors = (
         ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive()),

@@ -163,7 +163,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend_cfg.selector)
     wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), n_pix_subap=roi,
         diffraction_padding=2, T=T, backend=backend_cfg.selector)
-    det = Detector(noise=NoiseNone(), integration_time=T(1), qe=T(1), binning=1,
+    det = Detector(noise=NoiseNone(), exposure_duration=T(1), qe=T(1), binning=1,
         dark_current=dark_current, sensor=sensor, response_model=response_model,
         thermal_model=thermal_model, T=T, backend=backend_cfg.selector)
     active_indices_backend = backend_cfg.array_backend{Int}(undef, n_active)

@@ -41,7 +41,7 @@ end
 function linear_apd_moment_cases()
     n = LINEAR_APD_SAMPLE_COUNT
     multiplied_shot = LinearAPDDetector(
-        topology=LinearAPDChannelBank(n), integration_time=1.0,
+        topology=LinearAPDChannelBank(n), exposure_duration=1.0,
         qe=1.0, avalanche_gain=3.0, excess_noise_factor=1.4,
         conversion_gain=2.0, noise=NoisePhoton())
     multiplication_only = LinearAPDDetector(
@@ -61,19 +61,19 @@ function linear_apd_moment_cases()
 end
 
 function linear_apd_deterministic_contract()
-    single = LinearAPDDetector(integration_time=0.5, qe=0.5,
+    single = LinearAPDDetector(exposure_duration=0.5, qe=0.5,
         avalanche_gain=4.0, conversion_gain=2.0, noise=NoiseNone())
     single_output = copy(capture!(single, 10.0, Xoshiro(9050)))
 
     bank = LinearAPDDetector(topology=LinearAPDChannelBank(4),
-        integration_time=2.0, qe=0.5, avalanche_gain=4.0,
+        exposure_duration=2.0, qe=0.5, avalanche_gain=4.0,
         dark_current=1.0, conversion_gain=2.0, noise=NoiseNone())
     bank_output = copy(capture!(bank, fill(3.0, 4), Xoshiro(9051)))
     metadata = detector_export_metadata(bank)
 
     function replay_detector()
         return LinearAPDDetector(topology=LinearAPDChannelBank(64),
-            integration_time=0.5, qe=0.75, avalanche_gain=5.0,
+            exposure_duration=0.5, qe=0.75, avalanche_gain=5.0,
             excess_noise_factor=1.2, dark_current=0.5,
             conversion_gain=2.0, noise=NoisePhotonReadout(0.25))
     end
@@ -169,7 +169,7 @@ function generate_linear_apd_qualification_artifact()
         ),
         "scope" => Dict(
             "included" => [
-                "quantum efficiency and integration duration",
+                "quantum efficiency and exposure duration",
                 "dark current",
                 "linear avalanche gain and moderate-charge excess-noise approximation",
                 "additive read noise and conversion gain",

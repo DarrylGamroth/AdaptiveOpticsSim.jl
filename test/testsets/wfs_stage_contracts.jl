@@ -180,7 +180,7 @@ end
     sensor.front_end.propagation.workspace.field = original_propagation_field
     form_wfs_optical_products!(rate, pupil, optics_plan)
 
-    detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+    detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
         qe=T(0.4), response_model=NullFrameResponse(), T=T)
     observation = WFSObservation(similar(rate.values);
         units=:electron_count, layout=:zernike_pupil_image)
@@ -428,9 +428,9 @@ end
     @test field_rates[1].values ≈ rates[1].values rtol=T(2e-12) atol=T(2e-12)
     @test field_rates[2].values ≈ rates[2].values rtol=T(2e-12) atol=T(2e-12)
 
-    plus_detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+    plus_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
         qe=T(0.4), response_model=NullFrameResponse(), T=T)
-    minus_detector = Detector(noise=NoiseNone(), integration_time=T(0.75),
+    minus_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.75),
         qe=T(0.2), response_model=NullFrameResponse(), T=T)
     plus_observation = WFSObservation(similar(rates[1].values);
         units=:electron_count, layout=:curvature_branch_image)
@@ -451,11 +451,11 @@ end
     plus_kernel = T[0 0 0; 0.1 0.2 0.7; 0 0 0]
     minus_kernel = T[0 0 0; 0 0.6 0; 0 0.4 0]
     plus_response_detector = Detector(noise=NoiseNone(),
-        integration_time=one(T), qe=one(T),
+        exposure_duration=one(T), qe=one(T),
         response_model=SampledFrameResponse(plus_kernel;
             normalize=false, T=T), T=T)
     minus_response_detector = Detector(noise=NoiseNone(),
-        integration_time=one(T), qe=one(T),
+        exposure_duration=one(T), qe=one(T),
         response_model=SampledFrameResponse(minus_kernel;
             normalize=false, T=T), T=T)
     plus_response_observation = WFSObservation(similar(rates[1].values);
@@ -483,12 +483,11 @@ end
         detector_mtf(minus_response_detector, T(0.25), zero(T))
 
     packed_detector = Detector(noise=NoiseNone(),
-        integration_time=T(0.5), qe=T(0.4),
+        exposure_duration=T(0.5), qe=T(0.4),
         response_model=NullFrameResponse(), T=T)
-    @test_throws InvalidConfiguration CurvaturePackedAcquisition(
-        packed_detector; branch_durations=:invalid)
-    packed_model = CurvaturePackedAcquisition(packed_detector;
-        branch_durations=(T(0.5), T(0.5)))
+    @test_throws MethodError CurvaturePackedAcquisition(
+        packed_detector; branch_durations=(T(0.5), T(0.5)))
+    packed_model = CurvaturePackedAcquisition(packed_detector)
     packed_observation = WFSObservation(zeros(T, 8, 4);
         units=:electron_count, layout=:curvature_branch_regions)
     packed_plan = prepare_wfs_acquisition(packed_model, rates,
@@ -501,7 +500,7 @@ end
             rates[2].values .* T(0.2)
     end
 
-    spad = SPADArrayDetector((2, 16); integration_time=T(0.5), noise=NoiseNone(),
+    spad = SPADArrayDetector((2, 16); exposure_duration=T(0.5), noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=T(0.4), dark_count_rate=zero(T),
             fill_factor=one(T)), T=T)
     counting_model = CurvaturePackedAcquisition(spad;
@@ -528,7 +527,7 @@ end
     end
     @test counting_observation.storage ≈ expected_channels
 
-    mkid = MKIDArrayDetector(integration_time=T(0.5), noise=NoiseNone(),
+    mkid = MKIDArrayDetector(exposure_duration=T(0.5), noise=NoiseNone(),
         sensor=MKIDArraySensor(qe=T(0.5), dark_count_rate=zero(T),
             fill_factor=one(T), characteristics=MKIDArrayCharacteristics(
                 wavelength_passband_m=(T(0.8e-6), T(0.9e-6)), T=T),
@@ -554,7 +553,7 @@ end
 
     linear_apd = LinearAPDDetector(
         topology=LinearAPDChannelBank(32),
-        integration_time=T(0.5), qe=T(0.4), avalanche_gain=T(2),
+        exposure_duration=T(0.5), qe=T(0.4), avalanche_gain=T(2),
         conversion_gain=T(3), noise=NoiseNone(), T=T)
     linear_model = CurvaturePackedAcquisition(linear_apd;
         readout_model=CurvatureChannelReadout())
@@ -664,14 +663,6 @@ end
     @test counting_radiometry_error isa WFSPreparationError
     @test counting_radiometry_error.reason === :radiometry
 
-    duration_model = CurvaturePackedAcquisition(packed_detector;
-        branch_durations=(T(0.5), T(0.6)))
-    duration_error = contract_captured_error() do
-        prepare_wfs_acquisition(duration_model, rates, packed_observation)
-    end
-    @test duration_error isa WFSPreparationError
-    @test duration_error.reason === :duration
-
     scale_error = contract_captured_error() do
         prepare_wfs_estimation(sensor, observations, measurement;
             branch_rate_scales=(one(T),))
@@ -776,7 +767,7 @@ end
         coordinate_domain=NormalizedPupilCoordinates(),
         spectral=MonochromaticChannel(T(wavelength(source))))
 
-    spad = SPADArrayDetector(size(rate_values); integration_time=T(0.25), noise=NoiseNone(),
+    spad = SPADArrayDetector(size(rate_values); exposure_duration=T(0.25), noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=T(0.5), dark_count_rate=zero(T),
             fill_factor=one(T), T=T), T=T)
     observation = WFSObservation(zeros(T, size(rate_values));
@@ -798,7 +789,7 @@ end
     @test_throws InvalidConfiguration prepare_wfs_acquisition(
         spad, invalid_rate, observation; source=source)
 
-    source_free_spad = SPADArrayDetector(size(rate_values); integration_time=T(0.5),
+    source_free_spad = SPADArrayDetector(size(rate_values); exposure_duration=T(0.5),
         noise=NoiseNone(),
         sensor=SPADArraySensor(active_area_detection_efficiency=one(T), dark_count_rate=zero(T),
             fill_factor=one(T), T=T), T=T)
@@ -810,7 +801,7 @@ end
         source_free_plan, rng)
     @test source_free_observation.storage == rate_values .* T(0.5)
 
-    mkid = MKIDArrayDetector(integration_time=T(0.5), noise=NoiseNone(),
+    mkid = MKIDArrayDetector(exposure_duration=T(0.5), noise=NoiseNone(),
         sensor=MKIDArraySensor(qe=one(T), dark_count_rate=zero(T),
             fill_factor=one(T), characteristics=MKIDArrayCharacteristics(
                 wavelength_passband_m=(T(0.5e-6), T(1e-6)), T=T),
@@ -829,7 +820,7 @@ end
     acquire_wfs_observation!(mkid_observation, rate, mkid_plan, rng)
     @test mkid_observation.storage == rate_values .* T(0.5)
 
-    source_free_mkid = MKIDArrayDetector(integration_time=T(0.5),
+    source_free_mkid = MKIDArrayDetector(exposure_duration=T(0.5),
         noise=NoiseNone(), sensor=MKIDArraySensor(qe=one(T),
             dark_count_rate=zero(T), fill_factor=one(T), T=T), T=T)
     source_free_mkid_observation = WFSObservation(
@@ -1366,7 +1357,7 @@ end
     optics_plan = prepare_wfs_optics(optical_model, pupil, rate)
     @test @inferred(WavefrontSensors.wfs_optical_products(optics_plan)) === rate
 
-    detector = Detector(noise=NoiseNone(), integration_time=T(0.4),
+    detector = Detector(noise=NoiseNone(), exposure_duration=T(0.4),
         qe=T(0.5), response_model=NullFrameResponse(), T=T)
     binding = contract_detector_binding(detector, rate)
     observation = binding.observation
@@ -1423,7 +1414,7 @@ end
     response_rate_values[3, 2] = T(4)
     response_rate = contract_rate_map(response_rate_values)
     kernel = T[0 0 0; 0.1 0.2 0.7; 0 0 0]
-    response_detector = Detector(noise=NoiseNone(), integration_time=T(1.5),
+    response_detector = Detector(noise=NoiseNone(), exposure_duration=T(1.5),
         qe=T(0.4), binning=2,
         response_model=SampledFrameResponse(kernel; normalize=false, T=T),
         T=T)
@@ -1663,7 +1654,7 @@ end
     path_sources = Asterism([src, path_source])
     path_sensor = ShackHartmannWFS(tel; n_lenslets=4,
         mode=Diffractive(), n_pix_subap=4, T=T)
-    path_detector = Detector(noise=NoiseNone(), integration_time=one(T),
+    path_detector = Detector(noise=NoiseNone(), exposure_duration=one(T),
         qe=one(T), T=T)
     path_slopes = measure!(path_sensor, pupil, path_sources, path_detector;
         rng=Xoshiro(0x5a))
@@ -1899,9 +1890,9 @@ end
     @test rate.values == rate_before
     @test pupil.opd == pupil_before
 
-    short_detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+    short_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
         qe=one(T), response_model=NullFrameResponse(), T=T)
-    long_detector = Detector(noise=NoiseNone(), integration_time=T(0.75),
+    long_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.75),
         qe=one(T), response_model=NullFrameResponse(), T=T)
     short_observation = WFSObservation(similar(rate.values);
         units=:electron_count, layout=:lenslet_mosaic)
@@ -1920,7 +1911,7 @@ end
     @test long_observation.storage ≈ T(3) .* short_observation.storage
     @test rate.values == rate_before
 
-    quantized_detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+    quantized_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
         qe=one(T), response_model=NullFrameResponse(), bits=8,
         full_well=T(100), T=T)
     quantized_observation = WFSObservation(
@@ -1946,7 +1937,7 @@ end
     wrong_layout_observation = WFSObservation(similar(rate.values);
         units=:electron_count, layout=:packed_channels)
     wrong_layout_detector = Detector(noise=NoiseNone(),
-        integration_time=T(0.25), qe=one(T),
+        exposure_duration=T(0.25), qe=one(T),
         response_model=NullFrameResponse(), T=T)
     @test prepare_wfs_acquisition(wrong_layout_detector, rate,
         wrong_layout_observation) isa PreparedWFSDetectorAcquisition
@@ -2122,7 +2113,7 @@ end
         sampling=rate.metadata.sampling,
         spectral=rate.metadata.spectral)
     kernel = T[0 0 0; 0.1 0.2 0.7; 0 0 0]
-    response_detector = Detector(noise=NoiseNone(), integration_time=T(1.5),
+    response_detector = Detector(noise=NoiseNone(), exposure_duration=T(1.5),
         qe=T(0.4), binning=2,
         response_model=SampledFrameResponse(kernel; normalize=false, T=T),
         T=T)
@@ -2434,7 +2425,7 @@ end
         T(3)
 
     calibration_detector = Detector(noise=NoiseNone(),
-        integration_time=one(T), qe=one(T), binning=1,
+        exposure_duration=one(T), qe=one(T), binning=1,
         sensor=CMOSSensor(T=T), T=T)
     flat_pupil = PupilFunction(tel; T=T)
     measure!(circular_pyramid, flat_pupil, source, calibration_detector)
@@ -2494,7 +2485,7 @@ end
             replacement, pupil, optics_plan)
         @test replacement.values == replacement_before
 
-        detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+        detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
             qe=T(0.4), response_model=NullFrameResponse(), T=T)
         observation = WFSObservation(similar(rate.values);
             units=:electron_count, layout=:four_pupil_mosaic)
@@ -2722,7 +2713,7 @@ end
     reduced_optics = prepare_wfs_optics(reduced_front_end,
         pupil, reduced_rate)
     form_wfs_optical_products!(reduced_rate, pupil, reduced_optics)
-    reduced_detector = Detector(noise=NoiseNone(), integration_time=one(T),
+    reduced_detector = Detector(noise=NoiseNone(), exposure_duration=one(T),
         qe=one(T), binning=2, response_model=NullFrameResponse(), T=T)
     reduced_side = div(size(reduced_rate.values, 1), 2)
     reduced_observation = WFSObservation(zeros(T, reduced_side, reduced_side);
@@ -2954,9 +2945,9 @@ end
         shared_rate)
     form_wfs_optical_products!(shared_rate, pupil, shared_plan)
     shared_before = copy(shared_rate.values)
-    short_detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+    short_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
         qe=T(0.8), T=T)
-    long_detector = Detector(noise=NoiseNone(), integration_time=T(0.75),
+    long_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.75),
         qe=T(0.8), T=T)
     short_binding = contract_detector_binding(short_detector, shared_rate)
     long_binding = contract_detector_binding(long_detector, shared_rate)
@@ -3032,9 +3023,9 @@ end
     @test plane_count_error.stage === :wfs_optics
     @test plane_count_error.reason === :plane_count
 
-    first_detector = Detector(noise=NoiseNone(), integration_time=T(0.4),
+    first_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.4),
         qe=T(0.5), T=T)
-    second_detector = Detector(noise=NoiseNone(), integration_time=T(0.6),
+    second_detector = Detector(noise=NoiseNone(), exposure_duration=T(0.6),
         qe=T(0.25), T=T)
     first_binding = contract_detector_binding(first_detector, first_rate)
     second_binding = contract_detector_binding(second_detector, second_rate)
@@ -3251,7 +3242,7 @@ end
     @test WavefrontSensors._require_exact_wfs_target(
         prepared_optics, target) === prepared_optics
 
-    detector = Detector(noise=NoiseNone(), integration_time=T(0.25),
+    detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
         qe=one(T), response_model=NullFrameResponse(), T=T)
     observation = WFSObservation(similar(rate.values);
         units=:electron_count, layout=:lenslet_mosaic)
@@ -3290,7 +3281,7 @@ end
     @test unsupported_input.reason === :unsupported_target_validation
 
     counting_detector = SPADArrayDetector(size(rate.values);
-        integration_time=T(0.25), noise=NoiseNone(),
+        exposure_duration=T(0.25), noise=NoiseNone(),
         sensor=SPADArraySensor(
             active_area_detection_efficiency=one(T),
             dark_count_rate=zero(T), fill_factor=one(T)), T=T)

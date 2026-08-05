@@ -118,7 +118,7 @@ end
         (0.19, 0.31))
 
     for response in responses
-        detector = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+        detector = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
             response_model=response)
         observed = copy(capture!(detector, impulse, Xoshiro(2001)))
         kernel = detector_qualification_response_kernel(
@@ -138,7 +138,7 @@ end
     right_edge[6, end] = 1.0
     expected_edge = detector_qualification_zero_extended_convolution(
         right_edge, Array(asymmetric.kernel))
-    edge_detector = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0,
+    edge_detector = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
         response_model=asymmetric)
     observed_edge = copy(capture!(edge_detector, right_edge, Xoshiro(2002)))
     @test observed_edge == expected_edge
@@ -149,7 +149,7 @@ end
         0.03 0.90 0.01
         0.00 0.04 0.00
     ]
-    ipc_detector = Detector(noise=NoiseNone(), integration_time=2.0, qe=0.5,
+    ipc_detector = Detector(noise=NoiseNone(), exposure_duration=2.0, qe=0.5,
         response_model=NullFrameResponse(),
         charge_coupling_model=InterpixelCapacitance(ipc_kernel))
     collected_charge = impulse
@@ -176,7 +176,7 @@ end
         0.05 0.80 0.05
         0.00 0.05 0.00
     ])
-    detector = Detector(noise=NoiseNone(), integration_time=2.0, qe=0.5,
+    detector = Detector(noise=NoiseNone(), exposure_duration=2.0, qe=0.5,
         binning=2, gain=1.5, full_well=15.0, bits=8,
         output_type=UInt16,
         sensor=InGaAsSensor(),
@@ -208,7 +208,7 @@ end
     observed = capture!(detector, input, Xoshiro(2004))
     @test observed == expected_output
 
-    scalar_qe_detector = Detector(noise=NoiseNone(), integration_time=2.0,
+    scalar_qe_detector = Detector(noise=NoiseNone(), exposure_duration=2.0,
         qe=0.25, response_model=NullFrameResponse())
     scalar_map = detector_test_intensity_map(fill(8.0, 2, 2);
         spectral=MonochromaticChannel(0.55e-6))
@@ -225,7 +225,7 @@ end
         (0.65e-6, 0.6),
         (0.75e-6, 0.1),
     )
-        qe_detector = Detector(noise=NoiseNone(), integration_time=2.0,
+        qe_detector = Detector(noise=NoiseNone(), exposure_duration=2.0,
             qe=sampled_qe, response_model=NullFrameResponse())
         qe_map = detector_test_intensity_map(fill(8.0, 2, 2);
             spectral=MonochromaticChannel(wavelength_m))
@@ -235,7 +235,7 @@ end
     end
 
     low_fidelity_detector = Detector(noise=NoiseNone(),
-        integration_time=1e-3, qe=1.0,
+        exposure_duration=1e-3, qe=1.0,
         response_model=NullFrameResponse())
     low_fidelity_map = detector_test_intensity_map(fill(1000.0, 32, 32))
     low_fidelity_plan = prepare_detector_acquisition(low_fidelity_detector,
@@ -268,14 +268,14 @@ end
     input = fill(50.0, 32, 32)
 
     shot_mean = 20.0
-    shot_detector = Detector(noise=NoisePhoton(), integration_time=0.5,
+    shot_detector = Detector(noise=NoisePhoton(), exposure_duration=0.5,
         qe=0.8, response_model=NullFrameResponse())
     shot_samples = detector_qualification_samples(shot_detector, input,
         Xoshiro(2101), frame_count)
     test_detector_poisson_moments(shot_samples, shot_mean)
 
     dark_mean = 24.0
-    dark_detector = Detector(noise=NoiseNone(), integration_time=2.0,
+    dark_detector = Detector(noise=NoiseNone(), exposure_duration=2.0,
         qe=1.0, dark_current=12.0, response_model=NullFrameResponse())
     dark_samples = detector_qualification_samples(dark_detector,
         zeros(32, 32), Xoshiro(2102), frame_count)
@@ -283,7 +283,7 @@ end
 
     read_sigma = 3.0
     read_detector = Detector(noise=NoiseReadout(read_sigma),
-        integration_time=1.0, qe=1.0,
+        exposure_duration=1.0, qe=1.0,
         response_model=NullFrameResponse())
     read_samples = detector_qualification_samples(read_detector,
         zeros(32, 32), Xoshiro(2103), frame_count)

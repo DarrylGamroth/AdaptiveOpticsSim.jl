@@ -35,11 +35,11 @@ end
     @test all(Calibration.weak_mode_mask(weak_gsc))
     @test weak_og == ones(2)
 
-    det = Detector(noise=NoiseReadout(1e-3), integration_time=2.0, qe=0.8, psf_sampling=2, binning=4)
+    det = Detector(noise=NoiseReadout(1e-3), exposure_duration=2.0, qe=0.8, psf_sampling=2, binning=4)
     gsc_with_det = GainSensingCamera(mask, basis; detector=det)
     metadata = Calibration.detector_metadata(gsc_with_det)
     @test metadata isa Calibration.GSCDetectorMetadata
-    @test metadata.integration_time == 2.0
+    @test metadata.exposure_duration == 2.0
     @test metadata.qe == 0.8
     @test metadata.psf_sampling == 2
     @test metadata.binning == 4

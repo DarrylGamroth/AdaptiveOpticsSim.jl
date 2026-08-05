@@ -1,4 +1,12 @@
 @testset "Sampled detector parameter ownership" begin
+    canonical_detector = Detector(exposure_duration=1.0)
+    @test :exposure_duration in fieldnames(typeof(canonical_detector.params))
+    @test :integration_time ∉ fieldnames(typeof(canonical_detector.params))
+    @test_throws MethodError Detector(integration_time=1.0)
+    @test_throws MethodError RollingShutter(line_time=1.0)
+    @test_throws MethodError FrameTransferAcquisition(transfer_time=1.0)
+    @test_throws MethodError HgCdTeSensor(read_time=1.0)
+
     raw_kernel = [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0]
     sampled_response = SampledFrameResponse(raw_kernel)
     sampled_snapshot = copy(sampled_response.kernel)
@@ -110,7 +118,7 @@
     @test eltype(owned_cmos_sensor.output_model.gains) === Float32
     @test owned_cmos_sensor.column_readout_sigma == 0.25f0
     @test owned_cmos_sensor.row_readout_sigma == 0.5f0
-    @test owned_cmos_sensor.timing_model.line_time == 0.01f0
+    @test owned_cmos_sensor.timing_model.line_duration == 0.01f0
     owned_cmos_before = copy(capture!(owned_cmos_detector,
         ones(Float32, 2, 2); rng=MersenneTwister(2300)))
     fill!(external_cmos_sensor.readout_noise_model.sigma, 9.0)
@@ -133,7 +141,7 @@
             unkeyed_response, UInt(0))
     end
 
-    detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=sampled_qe, response_model=sampled_response)
     @test detector.params.response_model.kernel !== sampled_response.kernel
     @test detector.params.quantum_efficiency_model.wavelengths !==

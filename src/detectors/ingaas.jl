@@ -52,9 +52,9 @@ function validate_persistence_model(model::ExponentialPersistence)
 end
 
 function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
+    rng::AbstractRNG, exposure_duration::Real)
     rate = effective_glow_rate(det) *
-        effective_sensor_glow_time(sensor, exposure_time)
+        effective_sensor_glow_duration(sensor, exposure_duration)
     rate <= zero(rate) && return det.products.frame
     fill!(det.workspace.noise_buffer, rate)
     poisson_noise!(rng, det.workspace.noise_buffer)
@@ -63,22 +63,22 @@ function apply_sensor_statistics!(sensor::InGaAsSensor, det::Detector,
 end
 
 function apply_incremental_sensor_statistics!(sensor::InGaAsSensor,
-    det::Detector, rng::AbstractRNG, exposure_time::Real)
-    rate = effective_glow_rate(det) * exposure_time
+    det::Detector, rng::AbstractRNG, exposure_duration::Real)
+    rate = effective_glow_rate(det) * exposure_duration
     return add_poisson_rate!(det.products.frame, det, rng, rate)
 end
 
-apply_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_time::Real) where {T} = det.products.frame
+apply_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_duration::Real) where {T} = det.products.frame
 
-function apply_sensor_persistence!(sensor::InGaAsSensor{T,<:ExponentialPersistence}, det::Detector, exposure_time::Real) where {T}
+function apply_sensor_persistence!(sensor::InGaAsSensor{T,<:ExponentialPersistence}, det::Detector, exposure_duration::Real) where {T}
     ensure_latent_buffer!(det)
     det.products.frame .+= det.state.latent_buffer
     return det.products.frame
 end
 
-update_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_time::Real) where {T} = det.products.frame
+update_sensor_persistence!(::InGaAsSensor{T,NullPersistence}, det::Detector, exposure_duration::Real) where {T} = det.products.frame
 
-function update_sensor_persistence!(sensor::InGaAsSensor{T,<:ExponentialPersistence}, det::Detector, exposure_time::Real) where {T}
+function update_sensor_persistence!(sensor::InGaAsSensor{T,<:ExponentialPersistence}, det::Detector, exposure_duration::Real) where {T}
     ensure_latent_buffer!(det)
     model = sensor.persistence_model
     det.state.latent_buffer .= model.decay .* det.state.latent_buffer .+ model.coupling .* det.products.frame
@@ -86,22 +86,22 @@ function update_sensor_persistence!(sensor::InGaAsSensor{T,<:ExponentialPersiste
 end
 
 function _finalize_capture!(::InGaAsSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
-    return finalize_ingaas_capture!(det, rng, exposure_time, exposure_time)
+    rng::AbstractRNG, exposure_duration::Real)
+    return finalize_ingaas_capture!(det, rng, exposure_duration, exposure_duration)
 end
 
 function _finalize_incremental_capture!(::InGaAsSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
-    return finalize_ingaas_capture!(det, rng, exposure_time,
-        zero(exposure_time))
+    rng::AbstractRNG, exposure_duration::Real)
+    return finalize_ingaas_capture!(det, rng, exposure_duration,
+        zero(exposure_duration))
 end
 
 function finalize_ingaas_capture!(det::Detector, rng::AbstractRNG,
-    exposure_time::Real, charge_exposure_time::Real)
-    finalize_charge_generation!(det, rng, charge_exposure_time)
+    exposure_duration::Real, charge_exposure_duration::Real)
+    finalize_charge_generation!(det, rng, charge_exposure_duration)
     finalize_charge_transport!(det, rng)
-    update_sensor_persistence!(det.params.sensor, det, exposure_time)
-    return finalize_electronics_without_persistence!(det, rng, exposure_time)
+    update_sensor_persistence!(det.params.sensor, det, exposure_duration)
+    return finalize_electronics_without_persistence!(det, rng, exposure_duration)
 end
 
 function apply_post_readout_gain!(::InGaAsSensor, det::Detector)
@@ -111,9 +111,9 @@ end
 
 function _batched_sensor_statistics!(sensor::InGaAsSensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
-    exposure_time::Real)
+    exposure_duration::Real)
     rate = effective_glow_rate(det) *
-        effective_sensor_glow_time(sensor, exposure_time)
+        effective_sensor_glow_duration(sensor, exposure_duration)
     rate <= zero(rate) && return cube
     fill!(scratch, rate)
     poisson_noise!(rng, scratch)

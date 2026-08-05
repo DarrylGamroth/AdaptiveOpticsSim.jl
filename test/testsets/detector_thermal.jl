@@ -6,7 +6,7 @@
     @test evaluate_temperature_law(linear, 2.0, 250.0) ≈ 1.0
     @test evaluate_temperature_law(exp_law, 2.0, 250.0) < 2.0
 
-    thermal_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    thermal_det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=10.0,
         response_model=NullFrameResponse(),
         thermal_model=FixedTemperature(temperature_K=80.0, dark_current_law=arrhenius),
@@ -33,7 +33,7 @@
         max_temperature_K=320.0,
         dark_current_law=arrhenius,
     )
-    dynamic_det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    dynamic_det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=10.0,
         response_model=NullFrameResponse(),
         thermal_model=dynamic_model,
@@ -65,7 +65,7 @@
         max_temperature_K=320.0,
     )
 
-    dynamic_stack_det = Detector(integration_time=1.0, noise=NoiseNone(),
+    dynamic_stack_det = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, response_model=NullFrameResponse(),
         thermal_model=dynamic_model, sensor=CCDSensor())
     dynamic_stack_cube = zeros(2, 2, 2)
@@ -75,7 +75,7 @@
     @test detector_temperature(dynamic_stack_det) ≈ expected_stack_temperature
     @test readout_ready(dynamic_stack_det)
 
-    dynamic_generalized_det = Detector(integration_time=1.0,
+    dynamic_generalized_det = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, psf_sampling=2,
         response_model=NullFrameResponse(), thermal_model=dynamic_model,
         sensor=CCDSensor())
@@ -92,10 +92,10 @@
     incremental_rate_input = zeros(128, 128)
     static_rate_model = FixedTemperature(temperature_K=250.0,
         dark_current_law=incremental_rate_law)
-    static_rate_whole = Detector(integration_time=1.0, noise=NoiseNone(),
+    static_rate_whole = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, dark_current=100.0, response_model=NullFrameResponse(),
         thermal_model=static_rate_model, sensor=CCDSensor())
-    static_rate_split = Detector(integration_time=1.0, noise=NoiseNone(),
+    static_rate_split = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, dark_current=100.0, response_model=NullFrameResponse(),
         thermal_model=static_rate_model, sensor=CCDSensor())
     static_rate_whole_frame = copy(capture!(static_rate_whole,
@@ -120,10 +120,10 @@
         max_temperature_K=320.0,
         dark_current_law=incremental_rate_law,
     )
-    dynamic_rate_whole = Detector(integration_time=1.0, noise=NoiseNone(),
+    dynamic_rate_whole = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, dark_current=100.0, response_model=NullFrameResponse(),
         thermal_model=incremental_dynamic_model, sensor=CCDSensor())
-    dynamic_rate_split = Detector(integration_time=1.0, noise=NoiseNone(),
+    dynamic_rate_split = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, dark_current=100.0, response_model=NullFrameResponse(),
         thermal_model=incremental_dynamic_model, sensor=CCDSensor())
     dynamic_rate_whole_frame = copy(capture!(dynamic_rate_whole,
@@ -152,7 +152,7 @@
         max_temperature_K=320.0,
         glow_rate_law=incremental_rate_law,
     )
-    dynamic_glow_split = Detector(integration_time=1.0, noise=NoiseNone(),
+    dynamic_glow_split = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, response_model=NullFrameResponse(),
         thermal_model=incremental_glow_model,
         sensor=InGaAsSensor(glow_rate=100.0))
@@ -163,11 +163,11 @@
     @test mean(dynamic_glow_frame) ≈ dynamic_split_expected rtol=0.01
 
     hgcdte_glow_sensor = HgCdTeSensor(glow_rate=60.0,
-        read_time=0.1, sampling_mode=CorrelatedDoubleSampling())
-    hgcdte_glow_whole = Detector(integration_time=1.0, noise=NoiseNone(),
+        read_duration=0.1, sampling_mode=CorrelatedDoubleSampling())
+    hgcdte_glow_whole = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, dark_current=40.0, response_model=NullFrameResponse(),
         sensor=hgcdte_glow_sensor)
-    hgcdte_glow_split = Detector(integration_time=1.0, noise=NoiseNone(),
+    hgcdte_glow_split = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, dark_current=40.0, response_model=NullFrameResponse(),
         sensor=hgcdte_glow_sensor)
     hgcdte_glow_whole_frame = copy(capture!(hgcdte_glow_whole,
@@ -180,14 +180,14 @@
     @test mean(hgcdte_glow_whole_frame) ≈ hgcdte_glow_expected rtol=0.01
     @test mean(hgcdte_glow_split_frame) ≈ hgcdte_glow_expected rtol=0.01
 
-    thermal_ingaas = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    thermal_ingaas = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=NullFrameResponse(),
         thermal_model=FixedTemperature(temperature_K=250.0, glow_rate_law=linear),
         sensor=InGaAsSensor(glow_rate=2.0))
     @test supports_temperature_dependent_glow(thermal_ingaas)
     @test effective_glow_rate(thermal_ingaas) ≈ 1.0
 
-    thermal_emccd = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=1,
+    thermal_emccd = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         response_model=NullFrameResponse(),
         thermal_model=FixedTemperature(temperature_K=250.0,
             cic_per_frame_law=linear),

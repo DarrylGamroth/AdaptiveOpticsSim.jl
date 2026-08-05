@@ -106,8 +106,8 @@ function counting_mean_response_model(det::AbstractCountingDetector)
     throw(InvalidConfiguration(
         "missing counting_mean_response_model overload for $(typeof(det))"))
 end
-counting_integration_time(det::AbstractCountingDetector) =
-    throw(InvalidConfiguration("missing counting_integration_time overload for $(typeof(det))"))
+counting_exposure_duration(det::AbstractCountingDetector) =
+    throw(InvalidConfiguration("missing counting_exposure_duration overload for $(typeof(det))"))
 counting_layout(det::AbstractCountingDetector) =
     throw(InvalidConfiguration("missing counting_layout overload for $(typeof(det))"))
 counting_output_type(det::AbstractCountingDetector) =
@@ -303,7 +303,7 @@ function counting_detector_export_metadata(det::AbstractCountingDetector,
     ::Type{T}=eltype(counting_array(det))) where {T<:AbstractFloat}
     output = output_frame(det)
     return CountingDetectorExportMetadata{T}(
-        T(counting_integration_time(det)),
+        T(counting_exposure_duration(det)),
         counting_detection_efficiency(det, T),
         counting_reported_fill_factor(det, T),
         counting_post_gain(det, T),
@@ -358,14 +358,17 @@ function ensure_buffers!(det::AbstractCountingDetector, dims::Tuple{Int,Int})
     return det
 end
 
-effective_gate_time(::NullCountingGate, exposure_time) = exposure_time
-effective_gate_time(model::DutyCycleGate, exposure_time) = exposure_time * model.duty_cycle
-counting_exposure_time(det::AbstractCountingDetector) = effective_gate_time(counting_gate_model(det), counting_integration_time(det))
+effective_gate_duration(::NullCountingGate, exposure_duration) = exposure_duration
+effective_gate_duration(model::DutyCycleGate, exposure_duration) =
+    exposure_duration * model.duty_cycle
+counting_live_duration(det::AbstractCountingDetector) =
+    effective_gate_duration(counting_gate_model(det),
+        counting_exposure_duration(det))
 
 function seed_counting_input!(det::AbstractCountingDetector, input::AbstractMatrix, source_throughput)
     copyto!(counting_array(det), input)
     counting_array(det) .*= counting_detection_efficiency(det) * counting_fill_factor(det) *
-        counting_exposure_time(det) * source_throughput
+        counting_live_duration(det) * source_throughput
     return counting_array(det)
 end
 
@@ -374,8 +377,8 @@ seed_counting_input!(det::AbstractCountingDetector, input::AbstractMatrix) =
 
 apply_counting_channel_gain_map!(det::AbstractCountingDetector) = counting_array(det)
 
-function apply_dark_counts!(det::AbstractCountingDetector, exposure_time::Real)
-    dark = effective_dark_count_rate(det) * exposure_time
+function apply_dark_counts!(det::AbstractCountingDetector, exposure_duration::Real)
+    dark = effective_dark_count_rate(det) * exposure_duration
     dark <= 0 && return counting_array(det)
     counting_array(det) .+= dark
     return counting_array(det)
@@ -385,9 +388,9 @@ apply_dead_time!(det::AbstractCountingDetector) = apply_dead_time!(counting_dead
 apply_dead_time!(::NoDeadTime, det::AbstractCountingDetector) = counting_array(det)
 
 function apply_dead_time!(model::NonParalyzableDeadTime, det::AbstractCountingDetector)
-    exposure_time = counting_exposure_time(det)
-    exposure_time > zero(exposure_time) || return counting_array(det)
-    scale = model.dead_time / exposure_time
+    live_duration = counting_live_duration(det)
+    live_duration > zero(live_duration) || return counting_array(det)
+    scale = model.dead_time / live_duration
     scale <= zero(scale) && return counting_array(det)
     counts = counting_array(det)
     @. counts = counts / (1 + counts * scale)
@@ -395,9 +398,9 @@ function apply_dead_time!(model::NonParalyzableDeadTime, det::AbstractCountingDe
 end
 
 function apply_dead_time!(model::ParalyzableDeadTime, det::AbstractCountingDetector)
-    exposure_time = counting_exposure_time(det)
-    exposure_time > zero(exposure_time) || return counting_array(det)
-    scale = model.dead_time / exposure_time
+    live_duration = counting_live_duration(det)
+    live_duration > zero(live_duration) || return counting_array(det)
+    scale = model.dead_time / live_duration
     scale <= zero(scale) && return counting_array(det)
     counts = counting_array(det)
     @. counts = counts * exp(-counts * scale)
@@ -500,15 +503,15 @@ end
 
 function _capture_prevalidated_counting!(det::AbstractCountingDetector,
     channels::AbstractMatrix, source_throughput, rng::AbstractRNG)
-    exposure_time = counting_exposure_time(det)
+    live_duration = counting_live_duration(det)
     seed_counting_input!(det, channels, source_throughput)
     apply_counting_channel_gain_map!(det)
-    apply_dark_counts!(det, exposure_time)
+    apply_dark_counts!(det, live_duration)
     apply_dead_time!(det)
     apply_counting_mean_response!(det)
     apply_counting_noise!(det, rng)
     apply_post_counting_gain!(det)
-    advance_thermal!(det, counting_integration_time(det))
+    advance_thermal!(det, counting_exposure_duration(det))
     return write_output!(det)
 end
 

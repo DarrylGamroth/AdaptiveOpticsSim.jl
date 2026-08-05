@@ -14,7 +14,7 @@ const INGAAS_SIGMA_LIMIT = 6.0
 function ingaas_poisson_case()
     expected_mean = 8.0
     detector = Detector(
-        integration_time=2.0,
+        exposure_duration=2.0,
         noise=NoiseNone(),
         qe=1.0,
         dark_current=1.5,
@@ -50,7 +50,7 @@ end
 
 function ingaas_persistence_sequence(gain)
     detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         noise=NoiseNone(),
         qe=1.0,
         gain=gain,
@@ -80,7 +80,7 @@ function ingaas_deterministic_contract()
     response_metadata = detector_export_metadata(response_detector)
 
     pipeline_detector = Detector(
-        integration_time=2.0,
+        exposure_duration=2.0,
         noise=NoiseNone(),
         qe=0.5,
         gain=2.0,
@@ -97,12 +97,12 @@ function ingaas_deterministic_contract()
     expected_charge = [8.0, 2.0, 1.5]
     expected_latent = [2.0, 1.5, 1.125]
 
-    replay_a = Detector(integration_time=0.5,
+    replay_a = Detector(exposure_duration=0.5,
         noise=NoisePhotonReadout(0.25), qe=0.75, dark_current=0.5,
         sensor=InGaAsSensor(glow_rate=0.25,
             persistence_model=ExponentialPersistence(0.1, 0.4)),
         response_model=NullFrameResponse())
-    replay_b = Detector(integration_time=0.5,
+    replay_b = Detector(exposure_duration=0.5,
         noise=NoisePhotonReadout(0.25), qe=0.75, dark_current=0.5,
         sensor=InGaAsSensor(glow_rate=0.25,
             persistence_model=ExponentialPersistence(0.1, 0.4)),
@@ -127,7 +127,7 @@ function ingaas_deterministic_contract()
         err isa InvalidConfiguration
     end
 
-    allocation_detector = Detector(integration_time=0.5,
+    allocation_detector = Detector(exposure_duration=0.5,
         noise=NoiseNone(), qe=1.0,
         sensor=InGaAsSensor(persistence_model=
             ExponentialPersistence(0.1, 0.4)),

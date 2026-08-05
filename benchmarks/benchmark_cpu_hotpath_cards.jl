@@ -159,11 +159,11 @@ function science_detector_fanout_probe()
     rate = direct_imaging_output(imaging)
     detector_a = Detector(
         noise=NoiseNone(),
-        integration_time=0.001,
+        exposure_duration=0.001,
     )
     detector_b = Detector(
         noise=NoiseNone(),
-        integration_time=0.002,
+        exposure_duration=0.002,
     )
     acquisition_a = prepare_detector_acquisition(detector_a, rate)
     acquisition_b = prepare_detector_acquisition(detector_b, rate)

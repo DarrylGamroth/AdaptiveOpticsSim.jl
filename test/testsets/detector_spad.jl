@@ -53,7 +53,7 @@ end
 @testset "SPAD ownership and deterministic radiometry" begin
     sensor = SPADArraySensor(active_area_detection_efficiency=0.5,
         dark_count_rate=0.0, fill_factor=0.8)
-    detector = SPADArrayDetector((2, 8); integration_time=1.0,
+    detector = SPADArrayDetector((2, 8); exposure_duration=1.0,
         noise=NoiseNone(), sensor=sensor)
     output = capture!(detector, fill(10.0, 2, 8); rng=Xoshiro(9101))
     @test output == fill(4.0, 2, 8)
@@ -86,14 +86,14 @@ end
     @test supports_counting_noise(detector)
     @test !supports_dead_time(detector)
 
-    gated = SPADArrayDetector((2, 8); integration_time=2.0,
+    gated = SPADArrayDetector((2, 8); exposure_duration=2.0,
         noise=NoiseNone(), gate_model=DutyCycleGate(0.25), sensor=sensor)
-    @test counting_exposure_time(gated) == 0.5
+    @test counting_live_duration(gated) == 0.5
     @test capture!(gated, fill(10.0, 2, 8), Xoshiro(9102)) ==
         fill(2.0, 2, 8)
     @test supports_counting_gating(gated)
 
-    gated_dark = SPADArrayDetector((1, 1); integration_time=2.0,
+    gated_dark = SPADArrayDetector((1, 1); exposure_duration=2.0,
         noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
         sensor=SPADArraySensor(active_area_detection_efficiency=0.0,
             dark_count_rate=4.0))
@@ -122,7 +122,7 @@ end
         (NonParalyzableDeadTime(dead_time), x -> (x / dead_time) / (1 + x)),
         (ParalyzableDeadTime(dead_time), x -> (x / dead_time) * exp(-x)),
     )
-        detector = SPADArrayDetector((1, 1); integration_time=1.0,
+        detector = SPADArrayDetector((1, 1); exposure_duration=1.0,
             noise=NoiseNone(), sensor=SPADArraySensor(
                 active_area_detection_efficiency=1.0,
                 dead_time_model=model))
@@ -220,7 +220,7 @@ end
 end
 
 @testset "SPAD ordered deterministic pipeline" begin
-    detector = SPADArrayDetector((1, 1); integration_time=2.0,
+    detector = SPADArrayDetector((1, 1); exposure_duration=2.0,
         noise=NoiseNone(), gate_model=DutyCycleGate(0.25),
         sensor=SPADArraySensor(
             active_area_detection_efficiency=0.5,
@@ -237,7 +237,7 @@ end
         (SPADArrayDetector(dimensions; noise=NoisePhoton(),
             sensor=SPADArraySensor(active_area_detection_efficiency=1.0)),
             fill(20.0, dimensions), 20.0),
-        (SPADArrayDetector(dimensions; integration_time=2.0,
+        (SPADArrayDetector(dimensions; exposure_duration=2.0,
             noise=NoisePhoton(), sensor=SPADArraySensor(
                 active_area_detection_efficiency=0.0,
                 dark_count_rate=6.0)), zeros(dimensions), 12.0),
@@ -279,7 +279,7 @@ end
     end
     for bad in (0.0, -1.0, Inf, NaN)
         @test_throws InvalidConfiguration SPADArrayDetector((1, 1);
-            integration_time=bad)
+            exposure_duration=bad)
     end
     for bad_dimensions in ((0, 1), (1, 0), (-1, 1))
         @test_throws InvalidConfiguration SPADArrayDetector(bad_dimensions)
@@ -315,7 +315,7 @@ end
         noise=NoiseReadout(1.0))
 
     function replay_detector()
-        return SPADArrayDetector((16, 16); integration_time=0.5,
+        return SPADArrayDetector((16, 16); exposure_duration=0.5,
             noise=NoisePhoton(), gate_model=DutyCycleGate(0.75),
             sensor=SPADArraySensor(active_area_detection_efficiency=0.7,
                 dark_count_rate=0.25,

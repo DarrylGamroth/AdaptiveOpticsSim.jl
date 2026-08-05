@@ -94,7 +94,7 @@ end
 
 Fit a line to `n_reads` evenly spaced nondestructive reads spanning the
 integration. The detector output remains in integrated-frame units and is the
-fitted slope multiplied by the integration time. At least two reads are
+fitted slope multiplied by the exposure duration. At least two reads are
 required so that both an intercept and slope can be estimated.
 """
 struct UpTheRampSampling <: FrameSamplingMode
@@ -133,19 +133,19 @@ frame_sampling_symbol(sensor::AbstractFrameSensor) = frame_sampling_symbol(multi
 frame_sampling_reads(sensor::AbstractFrameSensor) = frame_sampling_reads(multi_read_sampling_mode(sensor))
 frame_sampling_reference_reads(sensor::AbstractFrameSensor) = frame_sampling_reference_reads(multi_read_sampling_mode(sensor))
 frame_sampling_signal_reads(sensor::AbstractFrameSensor) = frame_sampling_signal_reads(multi_read_sampling_mode(sensor))
-sampling_read_time(::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
-sampling_read_time(sensor::AbstractFrameSensor, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
-    sampling_read_time(sensor, T)
-sampling_wallclock_time(::AbstractFrameSensor, integration_time, ::Type{T}) where {T<:AbstractFloat} = T(integration_time)
-sampling_wallclock_time(sensor::AbstractFrameSensor, integration_time, frame_size::Tuple{Int,Int},
+sampling_read_duration(::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
+sampling_read_duration(sensor::AbstractFrameSensor, frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
+    sampling_read_duration(sensor, T)
+sampling_acquisition_duration(::AbstractFrameSensor, exposure_duration, ::Type{T}) where {T<:AbstractFloat} = T(exposure_duration)
+sampling_acquisition_duration(sensor::AbstractFrameSensor, exposure_duration, frame_size::Tuple{Int,Int},
     window::Union{Nothing,FrameWindow}, ::Type{T}) where {T<:AbstractFloat} =
-    sampling_wallclock_time(sensor, integration_time, T)
+    sampling_acquisition_duration(sensor, exposure_duration, T)
 acquisition_mode_symbol(::AbstractFrameSensor) = :standard
-frame_transfer_time(::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
-steady_state_frame_period(sensor::AbstractFrameSensor, integration_time,
+frame_transfer_duration(::AbstractFrameSensor, ::Type{T}) where {T<:AbstractFloat} = nothing
+steady_state_frame_period(sensor::AbstractFrameSensor, exposure_duration,
     frame_size::Tuple{Int,Int}, window::Union{Nothing,FrameWindow},
     ::Type{T}) where {T<:AbstractFloat} =
-    sampling_wallclock_time(sensor, integration_time, frame_size, window, T)
+    sampling_acquisition_duration(sensor, exposure_duration, frame_size, window, T)
 frame_sampling_symbol(::SingleRead) = :single_read
 frame_sampling_symbol(::AveragedNonDestructiveReads) = :averaged_non_destructive_reads
 frame_sampling_symbol(::CorrelatedDoubleSampling) = :correlated_double_sampling
@@ -420,17 +420,17 @@ struct RollingExposure <: AbstractRollingShutterExposureMode end
 struct GlobalResetExposure <: AbstractRollingShutterExposureMode end
 
 struct RollingShutter{T<:AbstractFloat,M<:AbstractRollingShutterExposureMode} <: AbstractFrameTimingModel
-    line_time::T
+    line_duration::T
     row_group_size::Int
     exposure_mode::M
 end
 
-RollingShutter(line_time::Real; row_group_size::Integer=1,
+RollingShutter(line_duration::Real; row_group_size::Integer=1,
     exposure_mode::AbstractRollingShutterExposureMode=RollingExposure()) =
-    RollingShutter{Float64,typeof(exposure_mode)}(float(line_time), Int(row_group_size), exposure_mode)
-RollingShutter{T}(line_time::Real, row_group_size::Integer=1;
+    RollingShutter{Float64,typeof(exposure_mode)}(float(line_duration), Int(row_group_size), exposure_mode)
+RollingShutter{T}(line_duration::Real, row_group_size::Integer=1;
     exposure_mode::AbstractRollingShutterExposureMode=RollingExposure()) where {T<:AbstractFloat} =
-    RollingShutter{T,typeof(exposure_mode)}(T(line_time), Int(row_group_size), exposure_mode)
+    RollingShutter{T,typeof(exposure_mode)}(T(line_duration), Int(row_group_size), exposure_mode)
 
 timing_model_symbol(::GlobalShutter) = :global_shutter
 timing_model_symbol(::RollingShutter) = :rolling_shutter
@@ -456,33 +456,35 @@ struct InPlaceExposureFrameSource{F} <: AbstractTemporalFrameSource
     frame_size::Tuple{Int,Int}
 end
 
-function sample_frame!(dest::AbstractMatrix, source::FunctionFrameSource, time)
-    frame = source.f(time)
+function sample_frame!(dest::AbstractMatrix, source::FunctionFrameSource,
+    sample_offset_s)
+    frame = source.f(sample_offset_s)
     size(frame) == size(dest) || throw(DimensionMismatchError("temporal frame source returned an unexpected frame size"))
     copyto!(dest, frame)
     return dest
 end
 
-function sample_frame!(dest::AbstractMatrix, source::InPlaceFrameSource, time)
+function sample_frame!(dest::AbstractMatrix, source::InPlaceFrameSource,
+    sample_offset_s)
     size(dest) == source.frame_size || throw(DimensionMismatchError("temporal frame source destination has an unexpected frame size"))
-    source.f(dest, time)
+    source.f(dest, sample_offset_s)
     return dest
 end
 
-sample_exposure_frame!(dest::AbstractMatrix, source::AbstractTemporalFrameSource, start_time, exposure_time) =
-    sample_frame!(dest, source, start_time)
+sample_exposure_frame!(dest::AbstractMatrix, source::AbstractTemporalFrameSource, start_offset_s, exposure_duration) =
+    sample_frame!(dest, source, start_offset_s)
 
-function sample_exposure_frame!(dest::AbstractMatrix, source::FunctionExposureFrameSource, start_time, exposure_time)
-    frame = source.f(start_time, exposure_time)
+function sample_exposure_frame!(dest::AbstractMatrix, source::FunctionExposureFrameSource, start_offset_s, exposure_duration)
+    frame = source.f(start_offset_s, exposure_duration)
     size(frame) == size(dest) || throw(DimensionMismatchError("temporal exposure frame source returned an unexpected frame size"))
     copyto!(dest, frame)
     return dest
 end
 
-function sample_exposure_frame!(dest::AbstractMatrix, source::InPlaceExposureFrameSource, start_time, exposure_time)
+function sample_exposure_frame!(dest::AbstractMatrix, source::InPlaceExposureFrameSource, start_offset_s, exposure_duration)
     size(dest) == source.frame_size ||
         throw(DimensionMismatchError("temporal exposure frame source destination has an unexpected frame size"))
-    source.f(dest, start_time, exposure_time)
+    source.f(dest, start_offset_s, exposure_duration)
     return dest
 end
 
@@ -946,17 +948,17 @@ mutable struct MultiReadFrameReadoutProducts{A<:AbstractMatrix,C,V} <:
     const reference_cube::Union{Nothing,C}
     const signal_cube::Union{Nothing,C}
     const read_cube::Union{Nothing,C}
-    const read_times::Union{Nothing,V}
+    const read_offsets_s::Union{Nothing,V}
 
     function MultiReadFrameReadoutProducts{A,C,V}(
         reference_frame::Union{Nothing,A}, signal_frame::A,
         combined_frame::A, reference_cube::Union{Nothing,C},
         signal_cube::Union{Nothing,C}, read_cube::Union{Nothing,C},
-        read_times::Union{Nothing,V}) where {
+        read_offsets_s::Union{Nothing,V}) where {
         A<:AbstractMatrix,C,V,
     }
         return new{A,C,V}(reference_frame, signal_frame, combined_frame,
-            reference_cube, signal_cube, read_cube, read_times)
+            reference_cube, signal_cube, read_cube, read_offsets_s)
     end
 end
 
@@ -974,7 +976,7 @@ end
     UpTheRampReadoutProducts
 
 Preallocated products from an up-the-ramp fit. `integrated_frame` is the slope
-multiplied by the integration time and therefore matches ordinary detector
+multiplied by the exposure duration and therefore matches ordinary detector
 output units. Product arrays may be windowed; full-frame fitting storage belongs
 to `UpTheRampReadoutWorkspace`.
 """
@@ -993,7 +995,7 @@ mutable struct UpTheRampReadoutProducts{
     intercept_frame::A
     integrated_frame::A
     read_cube::C
-    read_times::V
+    read_offsets_s::V
     acquisition_kind::RampAcquisitionKind
 end
 
@@ -1020,12 +1022,12 @@ end
 
 function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A},
     signal_frame::A, combined_frame::A, reference_cube, signal_cube,
-    read_cube, read_times) where {A<:AbstractMatrix}
+    read_cube, read_offsets_s) where {A<:AbstractMatrix}
     C = _multi_read_cube_param(reference_cube, signal_cube, read_cube)
-    V = typeof(read_times)
+    V = typeof(read_offsets_s)
     return MultiReadFrameReadoutProducts{A,C,V}(reference_frame,
         signal_frame, combined_frame, reference_cube, signal_cube, read_cube,
-        read_times)
+        read_offsets_s)
 end
 
 const HgCdTeReadoutProducts = MultiReadFrameReadoutProducts
@@ -1416,7 +1418,7 @@ struct SampledQuantumEfficiency{T<:AbstractFloat,V<:AbstractVector{T}} <: Abstra
 end
 
 struct DetectorExportMetadata{T<:AbstractFloat}
-    integration_time::T
+    exposure_duration::T
     qe::T
     psf_sampling::Int
     binning::Int
@@ -1452,9 +1454,9 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     window_rows::Union{Nothing,Tuple{Int,Int}}
     window_cols::Union{Nothing,Tuple{Int,Int}}
     timing_model::Symbol
-    timing_line_time::Union{Nothing,T}
+    timing_line_duration::Union{Nothing,T}
     acquisition_mode::Symbol
-    frame_transfer_time::Union{Nothing,T}
+    frame_transfer_duration::Union{Nothing,T}
     steady_state_frame_period::Union{Nothing,T}
     thermal_model::Symbol
     detector_temperature_K::Union{Nothing,T}
@@ -1468,8 +1470,8 @@ struct DetectorExportMetadata{T<:AbstractFloat}
     sampling_reads::Union{Nothing,Int}
     sampling_reference_reads::Union{Nothing,Int}
     sampling_signal_reads::Union{Nothing,Int}
-    sampling_read_time::Union{Nothing,T}
-    sampling_wallclock_time::Union{Nothing,T}
+    sampling_read_duration::Union{Nothing,T}
+    sampling_acquisition_duration::Union{Nothing,T}
     readout_correction::Symbol
     correction_edge_rows::Union{Nothing,Int}
     correction_edge_cols::Union{Nothing,Int}
@@ -1496,7 +1498,7 @@ struct ChannelReadoutMetadata
 end
 
 struct CountingDetectorExportMetadata{T<:AbstractFloat}
-    integration_time::T
+    exposure_duration::T
     detection_efficiency::T
     fill_factor::Union{Nothing,T}
     gain::T
@@ -1740,7 +1742,7 @@ struct DetectorParams{T<:AbstractFloat,S<:AbstractSensor,QE<:AbstractQuantumEffi
     D<:AbstractDetectorDefectModel,FT<:AbstractFrameTimingModel,
     C<:FrameReadoutCorrectionModel,NL<:AbstractFrameNonlinearityModel,
     TM<:AbstractDetectorThermalModel}
-    integration_time::T
+    exposure_duration::T
     qe::T
     psf_sampling::Int
     binning::Int

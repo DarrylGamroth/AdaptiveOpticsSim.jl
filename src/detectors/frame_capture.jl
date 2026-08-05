@@ -6,25 +6,25 @@ function ensure_latent_buffer!(det::Detector)
     return det.state.latent_buffer
 end
 
-apply_signal_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.products.frame
-apply_dark_defects!(::NullDetectorDefectModel, det::Detector, exposure_time::Real) = det.products.frame
+apply_signal_defects!(::NullDetectorDefectModel, det::Detector, exposure_duration::Real) = det.products.frame
+apply_dark_defects!(::NullDetectorDefectModel, det::Detector, exposure_duration::Real) = det.products.frame
 
-function apply_signal_defects!(model::PixelResponseNonuniformity, det::Detector, exposure_time::Real)
+function apply_signal_defects!(model::PixelResponseNonuniformity, det::Detector, exposure_duration::Real)
     _require_detector_defect_shape(model, size(det.products.frame))
     det.products.frame .*= model.gain_map
     return det.products.frame
 end
 
-apply_dark_defects!(::PixelResponseNonuniformity, det::Detector, exposure_time::Real) = det.products.frame
-apply_signal_defects!(::DarkSignalNonuniformity, det::Detector, exposure_time::Real) = det.products.frame
+apply_dark_defects!(::PixelResponseNonuniformity, det::Detector, exposure_duration::Real) = det.products.frame
+apply_signal_defects!(::DarkSignalNonuniformity, det::Detector, exposure_duration::Real) = det.products.frame
 
-function apply_dark_defects!(model::DarkSignalNonuniformity, det::Detector, exposure_time::Real)
+function apply_dark_defects!(model::DarkSignalNonuniformity, det::Detector, exposure_duration::Real)
     _require_detector_defect_shape(model, size(det.products.frame))
-    det.products.frame .+= model.dark_map .* exposure_time
+    det.products.frame .+= model.dark_map .* exposure_duration
     return det.products.frame
 end
 
-function apply_signal_defects!(model::BadPixelMask, det::Detector, exposure_time::Real)
+function apply_signal_defects!(model::BadPixelMask, det::Detector, exposure_duration::Real)
     _require_detector_defect_shape(model, size(det.products.frame))
     throughput = model.throughput
     throughput == one(throughput) && return det.products.frame
@@ -32,15 +32,15 @@ function apply_signal_defects!(model::BadPixelMask, det::Detector, exposure_time
     return det.products.frame
 end
 
-apply_dark_defects!(::BadPixelMask, det::Detector, exposure_time::Real) = det.products.frame
+apply_dark_defects!(::BadPixelMask, det::Detector, exposure_duration::Real) = det.products.frame
 
-function apply_signal_defects!(model::CompositeDetectorDefectModel, det::Detector, exposure_time::Real)
-    foreach(stage -> apply_signal_defects!(stage, det, exposure_time), model.stages)
+function apply_signal_defects!(model::CompositeDetectorDefectModel, det::Detector, exposure_duration::Real)
+    foreach(stage -> apply_signal_defects!(stage, det, exposure_duration), model.stages)
     return det.products.frame
 end
 
-function apply_dark_defects!(model::CompositeDetectorDefectModel, det::Detector, exposure_time::Real)
-    foreach(stage -> apply_dark_defects!(stage, det, exposure_time), model.stages)
+function apply_dark_defects!(model::CompositeDetectorDefectModel, det::Detector, exposure_duration::Real)
+    foreach(stage -> apply_dark_defects!(stage, det, exposure_duration), model.stages)
     return det.products.frame
 end
 
@@ -53,8 +53,8 @@ function apply_frame_nonlinearity!(model::SaturatingFrameNonlinearity, det::Dete
     return det.products.frame
 end
 
-apply_sensor_persistence!(::AbstractFrameSensor, det::Detector, exposure_time::Real) = det.products.frame
-update_sensor_persistence!(::AbstractFrameSensor, det::Detector, exposure_time::Real) = det.products.frame
+apply_sensor_persistence!(::AbstractFrameSensor, det::Detector, exposure_duration::Real) = det.products.frame
+update_sensor_persistence!(::AbstractFrameSensor, det::Detector, exposure_duration::Real) = det.products.frame
 
 function detector_host_buffer!(det::Detector, ::Type{T}, dims::Tuple{Int,Int}) where {T<:AbstractFloat}
     host = det.workspace.noise_buffer_host
@@ -129,59 +129,59 @@ function randn_frame_noise!(det::Detector, rng::AbstractRNG, out::AbstractArray{
     return _randn_frame_noise!(strategy, det, rng, out)
 end
 
-function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_time)
+function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_duration)
     return nothing
 end
-function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real, qe) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_time, qe)
-    return nothing
-end
-
-function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_time)
-    return nothing
-end
-function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real, qe) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_time, qe)
+function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real, qe) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe)
     return nothing
 end
 
-function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_time)
+function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_duration)
     return nothing
 end
-function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real, qe) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_time, qe)
-    return nothing
-end
-
-function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_time)
-    return nothing
-end
-function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_time::Real, qe) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_time, qe)
+function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real, qe) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe)
     return nothing
 end
 
-apply_background_flux!(::NoBackground, det::Detector, rng::AbstractRNG, exposure_time::Real) = det.products.frame
-
-function apply_background_flux!(background::ScalarBackground, det::Detector, rng::AbstractRNG, exposure_time::Real)
-    return add_poisson_rate!(det.products.frame, det, rng, background.level * exposure_time)
+function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_duration)
+    return nothing
+end
+function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real, qe) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe)
+    return nothing
 end
 
-function apply_background_flux!(background::BackgroundFrame, det::Detector, rng::AbstractRNG, exposure_time::Real)
+function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_duration)
+    return nothing
+end
+function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real, qe) where {T}
+    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe)
+    return nothing
+end
+
+apply_background_flux!(::NoBackground, det::Detector, rng::AbstractRNG, exposure_duration::Real) = det.products.frame
+
+function apply_background_flux!(background::ScalarBackground, det::Detector, rng::AbstractRNG, exposure_duration::Real)
+    return add_poisson_rate!(det.products.frame, det, rng, background.level * exposure_duration)
+end
+
+function apply_background_flux!(background::BackgroundFrame, det::Detector, rng::AbstractRNG, exposure_duration::Real)
     _require_background_flux_shape(background, size(det.products.frame))
     copyto!(det.workspace.noise_buffer, background.map)
-    det.workspace.noise_buffer .*= exposure_time
+    det.workspace.noise_buffer .*= exposure_duration
     poisson_noise_frame!(det, rng, det.workspace.noise_buffer)
     det.products.frame .+= det.workspace.noise_buffer
     return det.products.frame
 end
 
-function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_time::Real)
-    dark_signal = effective_dark_current(det) * effective_dark_current_time(det.params.sensor, exposure_time)
+function apply_dark_current!(det::Detector, rng::AbstractRNG, exposure_duration::Real)
+    dark_signal = effective_dark_current(det) * effective_dark_current_duration(det.params.sensor, exposure_duration)
     return add_poisson_rate!(det.products.frame, det, rng, dark_signal)
 end
 
@@ -229,7 +229,7 @@ function apply_saturation!(det::Detector)
 end
 
 apply_sensor_statistics!(sensor::AbstractFrameSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real) = det.products.frame
+    rng::AbstractRNG, exposure_duration::Real) = det.products.frame
 
 apply_pre_readout_gain!(::AbstractFrameSensor, det::Detector, rng::AbstractRNG) = det.products.frame
 apply_post_readout_gain!(::AbstractFrameSensor, det::Detector) = det.products.frame
@@ -571,28 +571,28 @@ function apply_readout_correction!(model::FrameReadoutCorrectionModel, frame::Ab
     return _apply_readout_correction!(strategy, model, frame, det)
 end
 
-finalize_readout_products!(::AbstractFrameSensor, det::Detector, rng::AbstractRNG, exposure_time::Real) =
+finalize_readout_products!(::AbstractFrameSensor, det::Detector, rng::AbstractRNG, exposure_duration::Real) =
     reset_readout_products!(det)
 
 function _finalize_capture!(::AbstractFrameSensor, det::Detector, rng::AbstractRNG,
-    exposure_time::Real)
-    return finalize_readout_pipeline!(det, rng, exposure_time)
+    exposure_duration::Real)
+    return finalize_readout_pipeline!(det, rng, exposure_duration)
 end
 
-function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_time::Real)
-    return _finalize_capture!(det.params.sensor, det, rng, exposure_time)
+function finalize_capture!(det::Detector, rng::AbstractRNG, exposure_duration::Real)
+    return _finalize_capture!(det.params.sensor, det, rng, exposure_duration)
 end
 
 function _finalize_incremental_capture!(::AbstractFrameSensor, det::Detector,
-    rng::AbstractRNG, exposure_time::Real)
-    return finalize_readout_pipeline!(det, rng, exposure_time,
-        zero(exposure_time))
+    rng::AbstractRNG, exposure_duration::Real)
+    return finalize_readout_pipeline!(det, rng, exposure_duration,
+        zero(exposure_duration))
 end
 
 function finalize_incremental_capture!(det::Detector, rng::AbstractRNG,
-    exposure_time::Real)
+    exposure_duration::Real)
     return _finalize_incremental_capture!(det.params.sensor, det, rng,
-        exposure_time)
+        exposure_duration)
 end
 
 validated_temporal_frame(frame::AbstractMatrix) = frame
@@ -600,26 +600,28 @@ validated_temporal_frame(frame) =
     throw(InvalidConfiguration("FunctionFrameSource must return an AbstractMatrix"))
 
 function initial_temporal_frame(source::FunctionFrameSource, det::Detector,
-    time, exposure_time)
-    return validated_temporal_frame(source.f(time))
+    sample_offset_s, exposure_duration)
+    return validated_temporal_frame(source.f(sample_offset_s))
 end
 
 function initial_temporal_frame(source::InPlaceFrameSource, det::Detector,
-    time, exposure_time)
+    sample_offset_s, exposure_duration)
     frame = ensure_temporal_buffer!(det, source.frame_size)
-    sample_frame!(frame, source, time)
+    sample_frame!(frame, source, sample_offset_s)
     return frame
 end
 
 function initial_temporal_frame(source::FunctionExposureFrameSource,
-    det::Detector, time, exposure_time)
-    return validated_temporal_frame(source.f(time, exposure_time))
+    det::Detector, start_offset_s, exposure_duration)
+    return validated_temporal_frame(source.f(start_offset_s,
+        exposure_duration))
 end
 
 function initial_temporal_frame(source::InPlaceExposureFrameSource,
-    det::Detector, time, exposure_time)
+    det::Detector, start_offset_s, exposure_duration)
     frame = ensure_temporal_buffer!(det, source.frame_size)
-    sample_exposure_frame!(frame, source, time, exposure_time)
+    sample_exposure_frame!(frame, source, start_offset_s,
+        exposure_duration)
     return frame
 end
 
@@ -631,23 +633,23 @@ function ensure_temporal_buffer!(det::Detector, dims::Tuple{Int,Int})
 end
 
 function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
-    rng::AbstractRNG, exposure_time::Real, ::GlobalShutter)
-    capture_signal_pipeline!(det, first_frame, rng, exposure_time)
+    rng::AbstractRNG, exposure_duration::Real, ::GlobalShutter)
+    capture_signal_pipeline!(det, first_frame, rng, exposure_duration)
     return det.products.frame
 end
 
-rolling_exposure_start(::RollingExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
-    T(line_index) * T(line_time)
-rolling_exposure_duration(::RollingExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
-    T(exposure_time)
-rolling_exposure_start(::GlobalResetExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
+rolling_exposure_start_offset_s(::RollingExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
+    T(line_index) * T(line_duration)
+rolling_exposure_duration(::RollingExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
+    T(exposure_duration)
+rolling_exposure_start_offset_s(::GlobalResetExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
     zero(T)
-rolling_exposure_duration(::GlobalResetExposure, line_index, line_time, exposure_time, ::Type{T}) where {T<:AbstractFloat} =
-    T(exposure_time) + T(line_index) * T(line_time)
+rolling_exposure_duration(::GlobalResetExposure, line_index, line_duration, exposure_duration, ::Type{T}) where {T<:AbstractFloat} =
+    T(exposure_duration) + T(line_index) * T(line_duration)
 
 function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSource, first_frame::AbstractMatrix,
-    rng::AbstractRNG, exposure_time::Real, timing::RollingShutter)
-    fill_frame!(det, first_frame, exposure_time)
+    rng::AbstractRNG, exposure_duration::Real, timing::RollingShutter)
+    fill_frame!(det, first_frame, exposure_duration)
     det.state.accum_buffer .= det.products.frame
 
     scratch = ensure_temporal_buffer!(det, size(first_frame))
@@ -657,18 +659,18 @@ function capture_temporal_signal!(det::Detector, source::AbstractTemporalFrameSo
     for row_lo in (firstindex(det.products.frame, 1) + group_size):group_size:n_rows
         row_hi = min(row_lo + group_size - 1, n_rows)
         line_index = div(row_lo - 1, group_size)
-        sample_time = rolling_exposure_start(timing.exposure_mode, line_index, timing.line_time, exposure_time, value_type)
-        group_exposure = rolling_exposure_duration(timing.exposure_mode, line_index, timing.line_time, exposure_time, value_type)
-        sample_exposure_frame!(scratch, source, sample_time, group_exposure)
+        sample_offset_s = rolling_exposure_start_offset_s(timing.exposure_mode, line_index, timing.line_duration, exposure_duration, value_type)
+        group_exposure = rolling_exposure_duration(timing.exposure_mode, line_index, timing.line_duration, exposure_duration, value_type)
+        sample_exposure_frame!(scratch, source, sample_offset_s, group_exposure)
         fill_frame!(det, scratch, group_exposure)
         @views det.state.accum_buffer[row_lo:row_hi, :] .= det.products.frame[row_lo:row_hi, :]
     end
 
     det.products.frame .= det.state.accum_buffer
-    apply_signal_defects!(det.params.defect_model, det, exposure_time)
-    apply_sensor_persistence!(det.params.sensor, det, exposure_time)
+    apply_signal_defects!(det.params.defect_model, det, exposure_duration)
+    apply_sensor_persistence!(det.params.sensor, det, exposure_duration)
     photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.products.frame)
-    apply_background_flux!(det.background_flux, det, rng, exposure_time)
+    apply_background_flux!(det.background_flux, det, rng, exposure_duration)
     return det.products.frame
 end
 
@@ -732,11 +734,11 @@ function capture_with_quantum_efficiency!(det::Detector,
     photon_rate::AbstractMatrix{T}, quantum_efficiency::Real,
     rng::AbstractRNG) where {T}
     require_whole_capture_idle(det)
-    exposure_time = det.params.integration_time
-    capture_signal!(det, photon_rate, rng, exposure_time,
+    exposure_duration = det.params.exposure_duration
+    capture_signal!(det, photon_rate, rng, exposure_duration,
         quantum_efficiency)
-    finalize_capture!(det, rng, exposure_time)
-    advance_thermal!(det, exposure_time)
+    finalize_capture!(det, rng, exposure_duration)
+    advance_thermal!(det, exposure_duration)
     return completed_whole_capture_output!(det)
 end
 
@@ -766,13 +768,13 @@ end
 
 function capture!(det::Detector, source::AbstractTemporalFrameSource, rng::AbstractRNG)
     require_whole_capture_idle(det)
-    exposure_time = det.params.integration_time
+    exposure_duration = det.params.exposure_duration
     first_frame = initial_temporal_frame(source, det,
-        zero(eltype(det.products.frame)), exposure_time)
-    capture_temporal_signal!(det, source, first_frame, rng, exposure_time,
+        zero(eltype(det.products.frame)), exposure_duration)
+    capture_temporal_signal!(det, source, first_frame, rng, exposure_duration,
         det.params.timing_model)
-    finalize_capture!(det, rng, exposure_time)
-    advance_thermal!(det, exposure_time)
+    finalize_capture!(det, rng, exposure_duration)
+    advance_thermal!(det, exposure_duration)
     return completed_whole_capture_output!(det)
 end
 
@@ -786,7 +788,7 @@ end
 
 Accumulate one positive `integration_duration` in seconds from a cell-integrated
 photon-arrival-rate matrix. This frame-step convenience finalizes automatically
-when the configured integration duration is reached. `integration_duration`
+when the configured exposure duration is reached. `integration_duration`
 is neither an absolute timestamp nor the period between consecutive samples;
 scheduled detector events own their timestamps and completion semantics.
 """
@@ -803,11 +805,11 @@ function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
     dt = T(integration_duration)
     isfinite(dt) && dt > zero(T) || throw(InvalidConfiguration(
         "integration_duration must be finite and > 0"))
-    remaining = det.params.integration_time - det.state.integrated_time
-    tolerance = T(8) * eps(det.params.integration_time) *
-        max(one(T), abs(det.params.integration_time))
+    remaining = det.params.exposure_duration - det.state.integrated_time
+    tolerance = T(8) * eps(det.params.exposure_duration) *
+        max(one(T), abs(det.params.exposure_duration))
     dt <= remaining + tolerance || throw(InvalidConfiguration(
-        "integration_duration exceeds the remaining detector integration " *
+        "integration_duration exceeds the remaining detector exposure " *
         "duration"))
     dt = min(dt, remaining)
 
@@ -815,13 +817,13 @@ function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
     exposure_start && fill!(det.state.accum_buffer,
         zero(eltype(det.state.accum_buffer)))
     capture_signal_pipeline!(det, photon_rate, rng, dt, qe, exposure_start,
-        det.params.integration_time)
+        det.params.exposure_duration)
     accumulate_incremental_charge_generation!(det, rng, dt)
     det.state.accum_buffer .+= det.products.frame
     det.state.integrated_time += dt
     advance_thermal!(det, dt)
     det.state.readout_ready = false
-    if det.state.integrated_time + tolerance >= det.params.integration_time
+    if det.state.integrated_time + tolerance >= det.params.exposure_duration
         det.products.frame .= det.state.accum_buffer
         finalize_incremental_capture!(det, rng, det.state.integrated_time)
         fill!(det.state.accum_buffer, zero(eltype(det.state.accum_buffer)))

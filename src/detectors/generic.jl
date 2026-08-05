@@ -9,11 +9,11 @@ detector_combined_frame(det::Detector) = detector_combined_frame(det.products.re
 detector_reference_cube(det::Detector) = detector_reference_cube(det.products.readout)
 detector_signal_cube(det::Detector) = detector_signal_cube(det.products.readout)
 detector_read_cube(det::Detector) = detector_read_cube(det.products.readout)
-detector_read_times(det::Detector) = detector_read_times(det.products.readout)
+detector_read_offsets_s(det::Detector) = detector_read_offsets_s(det.products.readout)
 detector_ramp_slope(det::Detector) = detector_ramp_slope(det.products.readout)
 detector_ramp_intercept(det::Detector) = detector_ramp_intercept(det.products.readout)
 detector_ramp_cube(det::Detector) = detector_ramp_cube(det.products.readout)
-detector_ramp_times(det::Detector) = detector_ramp_times(det.products.readout)
+detector_ramp_read_offsets_s(det::Detector) = detector_ramp_read_offsets_s(det.products.readout)
 detector_ramp_acquisition(det::Detector) =
     detector_ramp_acquisition(det.products.readout)
 
@@ -28,11 +28,11 @@ detector_combined_frame(::FrameReadoutProducts) = nothing
 detector_reference_cube(::FrameReadoutProducts) = nothing
 detector_signal_cube(::FrameReadoutProducts) = nothing
 detector_read_cube(::FrameReadoutProducts) = nothing
-detector_read_times(::FrameReadoutProducts) = nothing
+detector_read_offsets_s(::FrameReadoutProducts) = nothing
 detector_ramp_slope(::FrameReadoutProducts) = nothing
 detector_ramp_intercept(::FrameReadoutProducts) = nothing
 detector_ramp_cube(::FrameReadoutProducts) = nothing
-detector_ramp_times(::FrameReadoutProducts) = nothing
+detector_ramp_read_offsets_s(::FrameReadoutProducts) = nothing
 detector_ramp_acquisition(::FrameReadoutProducts) = nothing
 detector_reference_frame(products::SampledFrameReadoutProducts) = products.reference_frame
 detector_signal_frame(products::SampledFrameReadoutProducts) = products.signal_frame
@@ -40,25 +40,25 @@ detector_combined_frame(::SampledFrameReadoutProducts) = nothing
 detector_reference_cube(::SampledFrameReadoutProducts) = nothing
 detector_signal_cube(::SampledFrameReadoutProducts) = nothing
 detector_read_cube(products::SampledFrameReadoutProducts) = products.read_cube
-detector_read_times(::SampledFrameReadoutProducts) = nothing
+detector_read_offsets_s(::SampledFrameReadoutProducts) = nothing
 detector_reference_frame(products::MultiReadFrameReadoutProducts) = products.reference_frame
 detector_signal_frame(products::MultiReadFrameReadoutProducts) = products.signal_frame
 detector_combined_frame(products::MultiReadFrameReadoutProducts) = products.combined_frame
 detector_reference_cube(products::MultiReadFrameReadoutProducts) = products.reference_cube
 detector_signal_cube(products::MultiReadFrameReadoutProducts) = products.signal_cube
 detector_read_cube(products::MultiReadFrameReadoutProducts) = products.read_cube
-detector_read_times(products::MultiReadFrameReadoutProducts) = products.read_times
+detector_read_offsets_s(products::MultiReadFrameReadoutProducts) = products.read_offsets_s
 detector_signal_frame(products::SkipperReadoutProducts) = products.mean_frame
 detector_combined_frame(products::SkipperReadoutProducts) = products.mean_frame
 detector_signal_frame(products::UpTheRampReadoutProducts) = products.integrated_frame
 detector_combined_frame(products::UpTheRampReadoutProducts) = products.integrated_frame
 detector_signal_cube(products::UpTheRampReadoutProducts) = products.read_cube
 detector_read_cube(products::UpTheRampReadoutProducts) = products.read_cube
-detector_read_times(products::UpTheRampReadoutProducts) = products.read_times
+detector_read_offsets_s(products::UpTheRampReadoutProducts) = products.read_offsets_s
 detector_ramp_slope(products::UpTheRampReadoutProducts) = products.slope_frame
 detector_ramp_intercept(products::UpTheRampReadoutProducts) = products.intercept_frame
 detector_ramp_cube(products::UpTheRampReadoutProducts) = products.read_cube
-detector_ramp_times(products::UpTheRampReadoutProducts) = products.read_times
+detector_ramp_read_offsets_s(products::UpTheRampReadoutProducts) = products.read_offsets_s
 detector_ramp_acquisition(products::UpTheRampReadoutProducts) =
     ramp_acquisition_symbol(products.acquisition_kind)
 
@@ -267,7 +267,7 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
     signal_cube = detector_signal_cube(products)
     read_cube = detector_read_cube(products)
     return DetectorExportMetadata{T}(
-        T(det.params.integration_time),
+        T(det.params.exposure_duration),
         T(det.params.qe),
         det.params.psf_sampling,
         det.params.binning,
@@ -303,10 +303,10 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         row_window,
         col_window,
         timing_model_symbol(det.params.timing_model),
-        line_time(det.params.timing_model, T),
+        line_duration(det.params.timing_model, T),
         acquisition_mode_symbol(det.params.sensor),
-        frame_transfer_time(det.params.sensor, T),
-        steady_state_frame_period(det.params.sensor, det.params.integration_time,
+        frame_transfer_duration(det.params.sensor, T),
+        steady_state_frame_period(det.params.sensor, det.params.exposure_duration,
             size(det.products.frame), det.params.readout_window, T),
         thermal_model_symbol(det.params.thermal_model),
         detector_temperature(det, T),
@@ -321,8 +321,8 @@ function detector_export_metadata(det::Detector; T::Type{<:AbstractFloat}=eltype
         frame_sampling_reads(det.params.sensor),
         frame_sampling_reference_reads(det.params.sensor),
         frame_sampling_signal_reads(det.params.sensor),
-        sampling_read_time(det.params.sensor, size(det.products.frame), det.params.readout_window, T),
-        sampling_wallclock_time(det.params.sensor, det.params.integration_time, size(det.products.frame), det.params.readout_window, T),
+        sampling_read_duration(det.params.sensor, size(det.products.frame), det.params.readout_window, T),
+        sampling_acquisition_duration(det.params.sensor, det.params.exposure_duration, size(det.products.frame), det.params.readout_window, T),
         readout_correction_symbol(det.params.correction_model),
         correction_edge_rows(det.params.correction_model),
         correction_edge_cols(det.params.correction_model),
@@ -431,12 +431,12 @@ function background_model(map::AbstractMatrix; T::Type{<:AbstractFloat}, backend
 end
 
 effective_readout_sigma(::AbstractFrameSensor, sigma) = sigma
-effective_dark_current_time(::AbstractFrameSensor, exposure_time) = exposure_time
-effective_sensor_glow_time(::AbstractFrameSensor, exposure_time) = exposure_time
+effective_dark_current_duration(::AbstractFrameSensor, exposure_duration) = exposure_duration
+effective_sensor_glow_duration(::AbstractFrameSensor, exposure_duration) = exposure_duration
 persistence_model(::AbstractFrameSensor) = NullPersistence()
 
-line_time(::AbstractFrameTimingModel, ::Type{T}) where {T<:AbstractFloat} = nothing
-line_time(model::RollingShutter, ::Type{T}) where {T<:AbstractFloat} = T(model.line_time)
+line_duration(::AbstractFrameTimingModel, ::Type{T}) where {T<:AbstractFloat} = nothing
+line_duration(model::RollingShutter, ::Type{T}) where {T<:AbstractFloat} = T(model.line_duration)
 
 has_prnu(::AbstractDetectorDefectModel) = false
 has_prnu(::PixelResponseNonuniformity) = true
@@ -616,14 +616,14 @@ end
 
 convert_frame_timing_model(::GlobalShutter, ::Type{T}) where {T<:AbstractFloat} = GlobalShutter()
 convert_frame_timing_model(model::RollingShutter, ::Type{T}) where {T<:AbstractFloat} =
-    RollingShutter{T}(T(model.line_time), model.row_group_size; exposure_mode=model.exposure_mode)
+    RollingShutter{T}(T(model.line_duration), model.row_group_size; exposure_mode=model.exposure_mode)
 
 validate_frame_timing_model(::GlobalShutter) = GlobalShutter()
 
 function validate_frame_timing_model(model::RollingShutter)
-    isfinite(model.line_time) && model.line_time >= zero(model.line_time) ||
+    isfinite(model.line_duration) && model.line_duration >= zero(model.line_duration) ||
         throw(InvalidConfiguration(
-            "RollingShutter line_time must be finite and >= 0"))
+            "RollingShutter line_duration must be finite and >= 0"))
     model.row_group_size > 0 || throw(InvalidConfiguration("RollingShutter row_group_size must be > 0"))
     return model
 end
@@ -781,7 +781,7 @@ end
 @inline initial_readout_workspace(::AbstractFrameSensor, frame::AbstractMatrix,
     ::Type{T}) where {T<:AbstractFloat} = NoFrameReadoutWorkspace()
 
-function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Real,AbstractQuantumEfficiencyModel},
+function _build_detector(noise::NoiseModel; exposure_duration::Real, qe::Union{Real,AbstractQuantumEfficiencyModel},
     psf_sampling::Int, binning::Int, gain::Real, dark_current::Real,
     bits::Union{Nothing,Int}, full_well::Union{Nothing,Real}, sensor::AbstractSensor,
     response_model::Union{Nothing,FrameResponseModel},
@@ -799,9 +799,9 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     run_sensor = owned_frame_sensor(sensor, T, selector)
     gain_t = T(gain)
     validate_sensor_gain(run_sensor, gain_t)
-    integration_time_t = T(integration_time)
-    isfinite(integration_time_t) && integration_time_t > zero(T) ||
-        throw(InvalidConfiguration("Detector integration_time must be finite and > 0"))
+    exposure_duration_t = T(exposure_duration)
+    isfinite(exposure_duration_t) && exposure_duration_t > zero(T) ||
+        throw(InvalidConfiguration("Detector exposure_duration must be finite and > 0"))
     bits === nothing || (bits > 0 && bits <= 64) ||
         throw(InvalidConfiguration("Detector bits must lie in 1:64"))
     bits === nothing || full_well !== nothing ||
@@ -847,7 +847,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
         typeof(response),
         typeof(coupling), typeof(defects), typeof(timing), typeof(correction),
         typeof(nonlinearity), typeof(thermal)}(
-        integration_time_t,
+        exposure_duration_t,
         qe_scalar,
         psf_sampling,
         binning,
@@ -942,7 +942,7 @@ function _build_detector(noise::NoiseModel; integration_time::Real, qe::Union{Re
     )
 end
 
-function Detector(; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEfficiencyModel}=1.0,
+function Detector(; exposure_duration::Real=1.0, qe::Union{Real,AbstractQuantumEfficiencyModel}=1.0,
     psf_sampling::Int=1, binning::Int=1, noise=NoisePhoton(),
     gain::Real=1.0, dark_current::Real=0.0, bits::Union{Nothing,Int}=nothing,
     full_well::Union{Nothing,Real}=nothing, sensor::AbstractSensor=CCDSensor(),
@@ -957,7 +957,7 @@ function Detector(; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEf
     output_type::Union{Nothing,DataType}=nothing, background_flux=nothing, background_map=nothing,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     normalized = normalize_noise(noise)
-    return Detector(normalized; integration_time=integration_time, qe=qe,
+    return Detector(normalized; exposure_duration=exposure_duration, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
         sensor=sensor, response_model=response_model,
@@ -969,7 +969,7 @@ function Detector(; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEf
         T=T, backend=backend)
 end
 
-function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Union{Real,AbstractQuantumEfficiencyModel}=1.0,
+function Detector(noise::NoiseModel; exposure_duration::Real=1.0, qe::Union{Real,AbstractQuantumEfficiencyModel}=1.0,
     psf_sampling::Int=1, binning::Int=1, gain::Real=1.0, dark_current::Real=0.0,
     bits::Union{Nothing,Int}=nothing, full_well::Union{Nothing,Real}=nothing,
     sensor::AbstractSensor=CCDSensor(), response_model::Union{Nothing,FrameResponseModel}=nothing,
@@ -985,7 +985,7 @@ function Detector(noise::NoiseModel; integration_time::Real=1.0, qe::Union{Real,
     T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
     converted = convert_noise(noise, T)
     validated = validate_noise(converted)
-    return _build_detector(validated; integration_time=integration_time, qe=qe,
+    return _build_detector(validated; exposure_duration=exposure_duration, qe=qe,
         psf_sampling=psf_sampling, binning=binning, gain=gain,
         dark_current=dark_current, bits=bits, full_well=full_well,
         sensor=sensor, response_model=response_model,

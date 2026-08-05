@@ -437,7 +437,7 @@ end
         products.reference_cube,
         products.signal_cube,
         products.read_cube,
-        products.read_times,
+        products.read_offsets_s,
     ), target, :resident_bytes)
     return (; known=true, resident,
         workspace=_NO_ACQUISITION_STRUCTURAL_BYTES)
@@ -452,7 +452,7 @@ end
         products.intercept_frame,
         products.integrated_frame,
         products.read_cube,
-        products.read_times,
+        products.read_offsets_s,
     ), target, :resident_bytes)
     return (; known=true, resident,
         workspace=_NO_ACQUISITION_STRUCTURAL_BYTES)

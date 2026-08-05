@@ -4,12 +4,12 @@
     @test !hasfield(typeof(cadence_free_tel.params), :sampling_time)
 
     psf = fill(1.0, 8, 8)
-    det = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, binning=2)
+    det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=2)
     frame = capture!(det, psf; rng=MersenneTwister(2))
     @test size(frame) == (4, 4)
     @test sum(frame) == sum(psf)
 
-    det_sampling = Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
+    det_sampling = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
     frame_sampling = capture!(det_sampling, psf; rng=MersenneTwister(2))
     @test size(frame_sampling) == (2, 2)
     @test sum(frame_sampling) == sum(psf)
@@ -17,9 +17,9 @@
     rate_values = reshape(Float64.(1:16), 4, 4)
     shared_rate = detector_test_intensity_map(rate_values)
     shared_rate_before = copy(shared_rate.values)
-    short_exposure = Detector(integration_time=0.25, noise=NoiseNone(),
+    short_exposure = Detector(exposure_duration=0.25, noise=NoiseNone(),
         qe=0.5, response_model=NullFrameResponse())
-    long_exposure = Detector(integration_time=1.5, noise=NoiseNone(),
+    long_exposure = Detector(exposure_duration=1.5, noise=NoiseNone(),
         qe=0.5, response_model=NullFrameResponse())
     short_plan = prepare_detector_acquisition(short_exposure, shared_rate)
     long_plan = prepare_detector_acquisition(long_exposure, shared_rate)
@@ -74,7 +74,7 @@
     @test AdaptiveOpticsSim.Detectors._require_exact_detector_readout_products_target(
         sampled_products, host_target) === sampled_products
     rich_kernel = [0.0 0.1 0.0; 0.1 0.6 0.1; 0.0 0.1 0.0]
-    rich_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    rich_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=SampledQuantumEfficiency([0.5e-6, 0.6e-6], [0.4, 0.8]),
         sensor=CMOSSensor(
             readout_noise_model=CMOSReadNoiseMap(ones(4, 4)),
@@ -117,7 +117,7 @@
 
     trusted_values = ones(2, 2)
     trusted_rate = detector_test_intensity_map(trusted_values)
-    trusted_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    trusted_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         response_model=NullFrameResponse())
     trusted_plan = prepare_detector_acquisition(trusted_detector,
         trusted_rate)
@@ -127,7 +127,7 @@
 
     spectral_rate = detector_test_intensity_map(ones(2, 2);
         spectral=MonochromaticChannel(0.55e-6))
-    spectral_detector = Detector(integration_time=2.0, noise=NoiseNone(),
+    spectral_detector = Detector(exposure_duration=2.0, noise=NoiseNone(),
         qe=SampledQuantumEfficiency([0.50e-6, 0.60e-6], [0.2, 0.8]),
         response_model=NullFrameResponse())
     spectral_plan = prepare_detector_acquisition(spectral_detector,
@@ -138,7 +138,7 @@
         spectral_detector, detector_test_intensity_map(ones(2, 2);
             spectral=UnspecifiedSpectralCoordinate()))
     @test_throws InvalidConfiguration prepare_detector_acquisition(
-        Detector(integration_time=1.0, noise=NoiseNone(), qe=1.0,
+        Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0,
             response_model=NullFrameResponse()),
         detector_test_intensity_map(ones(2, 2);
             spectral=UnspecifiedSpectralCoordinate()))
@@ -151,7 +151,7 @@
         (SampledQuantumEfficiency([0.50e-6, 0.60e-6], [0.2, 0.8]),
             IntegratedSpectralChannel(:science_passband)),
     )
-        rejecting_detector = Detector(integration_time=1.0,
+        rejecting_detector = Detector(exposure_duration=1.0,
             noise=NoiseNone(), qe=qe, response_model=NullFrameResponse())
         state_before = detector_state_snapshot(rejecting_detector)
         @test_throws InvalidConfiguration prepare_detector_acquisition(
@@ -161,7 +161,7 @@
             state_before)
     end
 
-    invalid_window_detector = Detector(integration_time=1.0,
+    invalid_window_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, readout_window=FrameWindow(1:3, 1:3),
         response_model=NullFrameResponse())
     invalid_window_state_before = detector_state_snapshot(
@@ -176,7 +176,7 @@
     density_values[3, 5] = 8.0
     density_rate = detector_test_intensity_map(density_values;
         sampling=(0.5, 0.25), spatial_measure=SpatialDensityMeasure())
-    density_detector = Detector(integration_time=2.0, noise=NoiseNone(),
+    density_detector = Detector(exposure_duration=2.0, noise=NoiseNone(),
         qe=0.5, binning=3,
         response_model=SampledFrameResponse(response_kernel))
     density_plan = prepare_detector_acquisition(density_detector, density_rate)
@@ -197,7 +197,7 @@
 
     cell_rate = detector_test_intensity_map(copy(density_values);
         sampling=(0.5, 0.25), spatial_measure=CellIntegratedMeasure())
-    cell_detector = Detector(integration_time=2.0, noise=NoiseNone(),
+    cell_detector = Detector(exposure_duration=2.0, noise=NoiseNone(),
         qe=0.5, binning=3,
         response_model=SampledFrameResponse(response_kernel))
     cell_plan = prepare_detector_acquisition(cell_detector, cell_rate)
@@ -208,7 +208,7 @@
 
     normalized_map = detector_test_intensity_map(ones(2, 2);
         normalization=DimensionlessNormalization())
-    normalized_detector = Detector(integration_time=0.5,
+    normalized_detector = Detector(exposure_duration=0.5,
         noise=NoiseNone(), qe=0.25, response_model=NullFrameResponse())
     @test_throws InvalidConfiguration prepare_detector_acquisition(
         normalized_detector, normalized_map)
@@ -232,7 +232,7 @@
         spatial_measure=CellIntegratedMeasure(),
         coherence=IncoherentIntensityAddition())
     external_product = IntensityMap(external_metadata, external_values)
-    external_detector = Detector(integration_time=0.4, noise=NoiseNone(),
+    external_detector = Detector(exposure_duration=0.4, noise=NoiseNone(),
         qe=0.5, response_model=NullFrameResponse())
     external_plan = prepare_detector_acquisition(external_detector,
         external_product)
@@ -257,12 +257,12 @@
         normalized_detector, point_rate)
     @test_throws InvalidConfiguration prepare_detector_acquisition(
         normalized_detector, coherent_rate)
-    float32_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    float32_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, response_model=NullFrameResponse(), T=Float32)
     @test_throws InvalidConfiguration prepare_detector_acquisition(
         float32_detector, shared_rate)
 
-    oversampled_response_detector = Detector(integration_time=1.0,
+    oversampled_response_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, psf_sampling=2,
         response_model=SampledFrameResponse(response_kernel))
     @test_throws InvalidConfiguration prepare_detector_acquisition(
@@ -270,7 +270,7 @@
     @test_throws InvalidConfiguration capture!(oversampled_response_detector,
         rate_values; rng=MersenneTwister(204))
 
-    allocation_detector = Detector(integration_time=1.0,
+    allocation_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     allocation_plan = prepare_detector_acquisition(allocation_detector,
         shared_rate)
@@ -279,7 +279,7 @@
     @test_detector_allocation prepared_detector_readiness_allocations(
         allocation_plan) == 0
 
-    busy_prepared_detector = Detector(integration_time=2.0,
+    busy_prepared_detector = Detector(exposure_duration=2.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     busy_prepared_plan = prepare_detector_acquisition(
         busy_prepared_detector, shared_rate)
@@ -296,29 +296,29 @@
 
     prepared_readout_rate = detector_test_intensity_map(ones(4, 4))
     prepared_readout_builders = (
-        :skipper => (() -> Detector(integration_time=2.0,
+        :skipper => (() -> Detector(exposure_duration=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
             sensor=CCDSensor(sampling_mode=SkipperSampling(4)))),
-        :hgcdte_single => (() -> Detector(integration_time=2.0,
+        :hgcdte_single => (() -> Detector(exposure_duration=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
             sensor=HgCdTeSensor())),
-        :hgcdte_ndr => (() -> Detector(integration_time=2.0,
+        :hgcdte_ndr => (() -> Detector(exposure_duration=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
             sensor=HgCdTeSensor(
                 sampling_mode=AveragedNonDestructiveReads(4)))),
-        :hgcdte_cds => (() -> Detector(integration_time=2.0,
+        :hgcdte_cds => (() -> Detector(exposure_duration=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
             sensor=HgCdTeSensor(
                 sampling_mode=CorrelatedDoubleSampling()))),
-        :hgcdte_fowler => (() -> Detector(integration_time=2.0,
+        :hgcdte_fowler => (() -> Detector(exposure_duration=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
             sensor=HgCdTeSensor(
                 sampling_mode=FowlerSampling(2)))),
-        :hgcdte_ramp => (() -> Detector(integration_time=2.0,
+        :hgcdte_ramp => (() -> Detector(exposure_duration=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-            sensor=HgCdTeSensor(read_time=0.1,
+            sensor=HgCdTeSensor(read_duration=0.1,
                 sampling_mode=UpTheRampSampling(5)))),
-        :hgcdte_windowed_cds => (() -> Detector(integration_time=2.0,
+        :hgcdte_windowed_cds => (() -> Detector(exposure_duration=2.0,
             noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
             sensor=HgCdTeSensor(
                 sampling_mode=CorrelatedDoubleSampling()),
@@ -410,9 +410,9 @@
     @test detector_state_matches_snapshot(invalid_prepared_cmos_output,
         invalid_prepared_cmos_output_state)
 
-    invalid_prepared_ramp = Detector(integration_time=1.0,
+    invalid_prepared_ramp = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(read_time=0.3,
+        sensor=HgCdTeSensor(read_duration=0.3,
             sampling_mode=UpTheRampSampling(5)))
     invalid_prepared_ramp_state = detector_state_snapshot(
         invalid_prepared_ramp)
@@ -421,14 +421,14 @@
     @test detector_state_matches_snapshot(invalid_prepared_ramp,
         invalid_prepared_ramp_state)
 
-    full_cds = Detector(integration_time=2.0, noise=NoiseReadout(2.0),
+    full_cds = Detector(exposure_duration=2.0, noise=NoiseReadout(2.0),
         qe=1.0, response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(read_time=0.1,
+        sensor=HgCdTeSensor(read_duration=0.1,
             sampling_mode=CorrelatedDoubleSampling()))
-    windowed_cds = Detector(integration_time=2.0,
+    windowed_cds = Detector(exposure_duration=2.0,
         noise=NoiseReadout(2.0), qe=1.0,
         response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(read_time=0.1,
+        sensor=HgCdTeSensor(read_duration=0.1,
             sampling_mode=CorrelatedDoubleSampling()),
         readout_window=FrameWindow(2:3, 2:3))
     full_cds_plan = prepare_detector_acquisition(full_cds,
@@ -452,7 +452,7 @@
     @test detector_read_cube(windowed_cds) ==
         detector_read_cube(full_cds)[2:3, 2:3, :]
 
-    binned_ndr = Detector(integration_time=1.0, noise=NoiseNone(),
+    binned_ndr = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, binning=2, response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(
             sampling_mode=AveragedNonDestructiveReads(4)))
@@ -472,7 +472,7 @@
     end
     @test_detector_allocation prepared_detector_capture_allocations(
         allocation_plan, Xoshiro(205)) == 0
-    identical_allocation_detector = Detector(integration_time=1.0,
+    identical_allocation_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     @test identical_allocation_detector.params === allocation_detector.params
     @test identical_allocation_detector.state !== allocation_detector.state
@@ -480,7 +480,7 @@
         AdaptiveOpticsSim.Detectors._require_prepared_detector_binding(
             identical_allocation_detector, allocation_plan)
     end
-    incremental_allocation_detector = Detector(integration_time=4.0,
+    incremental_allocation_detector = Detector(exposure_duration=4.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse())
     incremental_allocation_plan = prepare_detector_acquisition(
         incremental_allocation_detector, shared_rate)

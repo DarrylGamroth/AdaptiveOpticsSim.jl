@@ -144,7 +144,7 @@ end
     atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
-    det = Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0, binning=1)
+    det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1)
 
     basis = modal_basis(dm, tel; n_modes=2)
     assert_modal_basis_contract(basis, length(dm.state.coefs), 2)

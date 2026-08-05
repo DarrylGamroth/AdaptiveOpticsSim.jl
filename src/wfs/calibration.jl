@@ -153,7 +153,7 @@ end
 function detector_hgcdte_readout_calibration_signature(
     sensor::AbstractHgCdTeSensor, sig::UInt)
     readout = hgcdte_readout(sensor)
-    sig = hash(readout.read_time, sig)
+    sig = hash(readout.read_duration, sig)
     sig = hash(persistence_model(sensor), sig)
     return detector_sampling_calibration_signature(
         readout.sampling_mode, sig)
@@ -337,7 +337,7 @@ end
 @inline function require_wfs_hgcdte_sampling(mode::UpTheRampSampling,
     sensor::AbstractHgCdTeSensor, det::Detector)
     validate_up_the_ramp_schedule(sensor, det, mode,
-        det.params.integration_time)
+        det.params.exposure_duration)
     return nothing
 end
 
@@ -425,7 +425,7 @@ end
 function detector_calibration_signature(det::Detector, sig::UInt)
     require_wfs_detector_calibration_output(det)
     params = det.params
-    sig = hash(params.integration_time, sig)
+    sig = hash(params.exposure_duration, sig)
     sig = hash(params.psf_sampling, sig)
     sig = hash(params.binning, sig)
     sig = hash(params.gain, sig)
@@ -467,8 +467,8 @@ function detector_calibration_frame!(det::Detector,
     require_wfs_detector_calibration_output(det)
     require_whole_capture_idle(det)
     frame = prepare_signal_frame!(det, photon_rate,
-        det.params.integration_time, quantum_efficiency, false,
-        det.params.integration_time)
+        det.params.exposure_duration, quantum_efficiency, false,
+        det.params.exposure_duration)
     return apply_detector_calibration_readout!(det, frame)
 end
 

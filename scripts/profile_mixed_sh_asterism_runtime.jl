@@ -81,7 +81,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     )
     ast = Asterism([lgs, second_lgs])
     wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
-    det = Detector(noise=NoiseNone(), integration_time=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
+    det = Detector(noise=NoiseNone(), exposure_duration=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
     pupil = PupilFunction(tel; T=T, backend=backend)
 
     rng = runtime_rng(1)

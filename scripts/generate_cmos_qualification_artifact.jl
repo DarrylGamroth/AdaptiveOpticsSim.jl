@@ -165,25 +165,25 @@ function cmos_artifact_spatial_noise_cases()
 end
 
 function cmos_artifact_deterministic_contract()
-    global_detector = Detector(integration_time=1.0,
+    global_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor())
     global_shutter_passed =
         capture!(global_detector, fill(2.0, 4, 4), Xoshiro(4201)) ==
         fill(2.0, 4, 4)
 
-    rolling_detector = Detector(integration_time=1.0,
+    rolling_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(0.25;
             row_group_size=2)))
     rolling_source = InPlaceExposureFrameSource(
-        (out, start_time, exposure_time) ->
-            fill!(out, start_time + exposure_time), (4, 4))
+        (out, start_offset_s, exposure_duration) ->
+            fill!(out, start_offset_s + exposure_duration), (4, 4))
     rolling_exposure_passed =
         capture!(rolling_detector, rolling_source, Xoshiro(4202)) ==
         repeat(reshape([1.0, 1.0, 1.25, 1.25], :, 1), 1, 4)
 
-    global_reset_detector = Detector(integration_time=1.0,
+    global_reset_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(0.25;
             exposure_mode=GlobalResetExposure())))
@@ -191,7 +191,7 @@ function cmos_artifact_deterministic_contract()
         FunctionFrameSource(_ -> ones(4, 4)), Xoshiro(4203)) ==
         repeat(reshape([1.0, 1.25, 1.5, 1.75], :, 1), 1, 4)
 
-    windowed_detector = Detector(integration_time=1.0,
+    windowed_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(0.25)),
         readout_window=Detectors.FrameWindow(3:4, 1:2))
@@ -202,9 +202,9 @@ function cmos_artifact_deterministic_contract()
     window_preserves_full_frame_timing =
         windowed_output ==
             repeat(reshape([0.5, 0.75], :, 1), 1, 2) &&
-        windowed_metadata.sampling_wallclock_time == 2.0
+        windowed_metadata.sampling_acquisition_duration == 2.0
 
-    mtf_detector = Detector(integration_time=1.0,
+    mtf_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0,
         response_model=GaussianPixelResponse(response_width_px=0.7),
         sensor=CMOSSensor(timing_model=RollingShutter(0.25)))
@@ -213,7 +213,7 @@ function cmos_artifact_deterministic_contract()
     configured_mtf_preserved =
         detector_mtf(mtf_detector, 0.17, -0.09) == mtf_before
 
-    pipeline_detector = Detector(integration_time=1.0,
+    pipeline_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, gain=2.0, full_well=5.0,
         bits=3, output_type=UInt8,
         response_model=NullFrameResponse(),
@@ -238,7 +238,7 @@ function cmos_artifact_deterministic_contract()
         capture!(replay_a, replay_input, Xoshiro(4207)) ==
         capture!(replay_b, replay_input, Xoshiro(4207))
 
-    allocation_detector = Detector(integration_time=1.0,
+    allocation_detector = Detector(exposure_duration=1.0,
         noise=NoiseNone(), qe=1.0, response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=RollingShutter(1.0e-3)))
     allocation_source = InPlaceFrameSource(
@@ -293,7 +293,7 @@ function generate_cmos_qualification_artifact()
         ))
     cpu = first(Sys.cpu_info())
     artifact = Dict{String,Any}(
-        "schema_version" => 1,
+        "schema_version" => 2,
         "artifact_id" => CMOS_ARTIFACT_ID,
         "family" => "parameterized_cmos",
         "all_gates_passed" =>

@@ -981,7 +981,7 @@ application and both precede optical execution.
 
 The existing diffractive `PyramidWFS` then averages that quadrature against one
 unchanged path-owned pupil OPD. The result remains a detector-plane
-photon-arrival-rate product: quadrature weights do not supply exposure time,
+photon-arrival-rate product: quadrature weights do not supply exposure duration,
 and detector acquisition still integrates its half-open exposure exactly once.
 Changing the operating setpoint does not silently rebuild a WFS calibration
 reference or change the immutable fidelity policy.

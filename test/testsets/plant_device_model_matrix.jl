@@ -443,7 +443,7 @@ end
             @test Array(detector_ramp_slope(detector)) ≈ response
             @test Array(detector_ramp_intercept(detector)) ≈
                 -response ./ 12
-            @test detector_ramp_times(detector) == [0.0, 0.5, 1.0]
+            @test detector_ramp_read_offsets_s(detector) == [0.0, 0.5, 1.0]
             @test result.event_times == (
                 start=PlantTimestamp(100_000_000),
                 middle=PlantTimestamp(600_000_000),

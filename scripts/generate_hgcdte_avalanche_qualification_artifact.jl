@@ -61,7 +61,7 @@ function hgcdte_avalanche_moment_record(
         ConditionalGammaAvalancheMultiplication() :
         ClippedGaussianAvalancheMultiplicationApproximation()
     detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
@@ -169,7 +169,7 @@ function hgcdte_avalanche_scheduled_fixture(seed)
     values = fill(128.0, 8, 8)
     map = hgcdte_avalanche_artifact_map(values)
     detector = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         response_model=NullFrameResponse(),
@@ -178,7 +178,7 @@ function hgcdte_avalanche_scheduled_fixture(seed)
             excess_noise_factor=1.5,
             multiplication_model=
                 ClippedGaussianAvalancheMultiplicationApproximation(),
-            read_time=0.0,
+            read_duration=0.0,
             sampling_mode=UpTheRampSampling(3)),
     )
     definition = GlobalShutterAcquisitionDefinition(
@@ -191,7 +191,7 @@ end
 
 function hgcdte_avalanche_deterministic_contract()
     exact = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         gain=3.0,
@@ -207,7 +207,7 @@ function hgcdte_avalanche_deterministic_contract()
         fill(105.0, 4, 4)
 
     saturated = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseNone(),
         full_well=100.0,
@@ -219,7 +219,7 @@ function hgcdte_avalanche_deterministic_contract()
         fill(100.0, 4, 4)
 
     noisy_signal = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseReadout(2.0),
         gain=3.0,
@@ -229,7 +229,7 @@ function hgcdte_avalanche_deterministic_contract()
             excess_noise_factor=1.0),
     )
     noise_only = Detector(
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         noise=NoiseReadout(2.0),
         gain=3.0,
@@ -253,12 +253,12 @@ function hgcdte_avalanche_deterministic_contract()
         sensor_kwargs = generated_charge_kind == :glow ?
             (; glow_rate=8.0) : (;)
         base = Detector(;
-            integration_time=1.0, qe=1.0, noise=NoiseNone(),
+            exposure_duration=1.0, qe=1.0, noise=NoiseNone(),
             response_model=NullFrameResponse(),
             sensor=HgCdTeAvalancheArraySensor(;
                 avalanche_gain=1.0, sensor_kwargs...), kwargs...)
         gained = Detector(;
-            integration_time=1.0, qe=1.0, noise=NoiseNone(),
+            exposure_duration=1.0, qe=1.0, noise=NoiseNone(),
             response_model=NullFrameResponse(),
             sensor=HgCdTeAvalancheArraySensor(;
                 avalanche_gain=5.0, sensor_kwargs...), kwargs...)
@@ -278,7 +278,7 @@ function hgcdte_avalanche_deterministic_contract()
     )
     sampling_modes_passed = all(sampling_modes) do mode
         detector = Detector(
-            integration_time=2.0, qe=1.0, noise=NoiseNone(),
+            exposure_duration=2.0, qe=1.0, noise=NoiseNone(),
             response_model=NullFrameResponse(),
             sensor=HgCdTeAvalancheArraySensor(
                 avalanche_gain=3.0,
@@ -288,17 +288,17 @@ function hgcdte_avalanche_deterministic_contract()
     end
 
     windowed = Detector(
-        integration_time=1.0, qe=1.0, noise=NoiseNone(),
+        exposure_duration=1.0, qe=1.0, noise=NoiseNone(),
         response_model=NullFrameResponse(),
         readout_window=FrameWindow(2:3, 2:3),
         sensor=HgCdTeAvalancheArraySensor(
-            avalanche_gain=2.0, read_time=0.25,
+            avalanche_gain=2.0, read_duration=0.25,
             sampling_mode=CorrelatedDoubleSampling()))
     windowed_output = capture!(
         windowed, fill(4.0, 4, 4), Xoshiro(6206))
     window_timing_passed =
         windowed_output == fill(8.0, 2, 2) &&
-        detector_export_metadata(windowed).sampling_wallclock_time ==
+        detector_export_metadata(windowed).sampling_acquisition_duration ==
             1.5
 
     response = GaussianPixelResponse(response_width_px=0.7)

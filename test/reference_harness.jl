@@ -330,7 +330,9 @@ end
 
 function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
     noise_name = lowercase(String(get(cfg, "noise", "none")))
-    integration_time = Float64(get(cfg, "integration_time", 1.0))
+    # The immutable OOPAO reference schema retains its upstream key at this
+    # adapter boundary; core detector construction uses canonical vocabulary.
+    exposure_duration = Float64(get(cfg, "integration_time", 1.0))
     qe = Float64(get(cfg, "qe", 1.0))
     psf_sampling = Int(get(cfg, "psf_sampling", 1))
     binning = Int(get(cfg, "binning", 1))
@@ -345,7 +347,7 @@ function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
     else
         throw(InvalidConfiguration("unknown detector noise kind '$noise_name'"))
     end
-    return Detector(noise; integration_time=integration_time, qe=qe,
+    return Detector(noise; exposure_duration=exposure_duration, qe=qe,
         psf_sampling=psf_sampling, binning=binning)
 end
 

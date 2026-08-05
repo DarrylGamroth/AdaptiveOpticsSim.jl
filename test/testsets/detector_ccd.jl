@@ -47,7 +47,7 @@ end
         sampling_mode=UpTheRampSampling(2))
 
     sensor = CCDSensor(clock_induced_charge_per_frame=0.25)
-    detector = Detector(integration_time=2.0, noise=NoiseNone(), qe=1.0,
+    detector = Detector(exposure_duration=2.0, noise=NoiseNone(), qe=1.0,
         sensor=sensor)
     @test isimmutable(sensor)
     @test detector.params.sensor isa CCDSensor{Float64,SingleRead}
@@ -58,11 +58,11 @@ end
     metadata = detector_export_metadata(detector)
     @test metadata.sensor == :ccd
     @test metadata.sampling_mode == :single_read
-    @test isnothing(metadata.sampling_read_time)
-    @test metadata.sampling_wallclock_time == 2.0
+    @test isnothing(metadata.sampling_read_duration)
+    @test metadata.sampling_acquisition_duration == 2.0
     @test metadata.cic_per_frame_law == :none
 
-    default_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    default_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, sensor=CCDSensor())
     @test detector_export_metadata(default_detector).frame_response == :none
     @test !supports_detector_mtf(default_detector)
@@ -71,7 +71,7 @@ end
         0.10 0.70 0.05
         0.00 0.10 0.00
     ])
-    response_detector = Detector(integration_time=1.0, noise=NoiseNone(),
+    response_detector = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, sensor=CCDSensor(), response_model=response)
     @test supports_detector_mtf(response_detector)
     @test detector_mtf(response_detector, 0.21, 0.17) ==
@@ -80,7 +80,7 @@ end
     deterministic_input = reshape(collect(1.0:16.0), 4, 4)
     prnu = [0.8 1.0; 1.2 0.9]
     deterministic_detector = Detector(
-        integration_time=2.0,
+        exposure_duration=2.0,
         qe=0.5,
         binning=2,
         noise=NoiseNone(),
@@ -109,25 +109,25 @@ end
         Xoshiro(3001)) == expected_output
 
     zero_input = zeros(16, 16)
-    short_cic = Detector(integration_time=0.1, noise=NoiseNone(), qe=1.0,
+    short_cic = Detector(exposure_duration=0.1, noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=3.0))
-    long_cic = Detector(integration_time=10.0, noise=NoiseNone(), qe=1.0,
+    long_cic = Detector(exposure_duration=10.0, noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=3.0))
     short_frame = copy(capture!(short_cic, zero_input, Xoshiro(3002)))
     long_frame = copy(capture!(long_cic, zero_input, Xoshiro(3002)))
     @test short_frame == long_frame
 
-    first_forward = Detector(integration_time=0.5, noise=NoiseNone(), qe=1.0,
+    first_forward = Detector(exposure_duration=0.5, noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=2.0))
-    second_forward = Detector(integration_time=4.0, noise=NoiseNone(), qe=1.0,
+    second_forward = Detector(exposure_duration=4.0, noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=5.0))
     forward = (
         copy(capture!(first_forward, zero_input, Xoshiro(3003))),
         copy(capture!(second_forward, zero_input, Xoshiro(3004))),
     )
-    first_reverse = Detector(integration_time=0.5, noise=NoiseNone(), qe=1.0,
+    first_reverse = Detector(exposure_duration=0.5, noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=2.0))
-    second_reverse = Detector(integration_time=4.0, noise=NoiseNone(), qe=1.0,
+    second_reverse = Detector(exposure_duration=4.0, noise=NoiseNone(), qe=1.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=5.0))
     reverse_second = copy(capture!(second_reverse, zero_input, Xoshiro(3004)))
     reverse_first = copy(capture!(first_reverse, zero_input, Xoshiro(3003)))
@@ -135,7 +135,7 @@ end
 
     prepared_values = fill(12.0, 16, 16)
     prepared_map = detector_test_intensity_map(prepared_values)
-    prepared_detector = Detector(integration_time=0.25,
+    prepared_detector = Detector(exposure_duration=0.25,
         noise=NoisePhotonReadout(1.5), qe=0.8, dark_current=4.0,
         sensor=CCDSensor(clock_induced_charge_per_frame=0.75))
     prepared_plan = prepare_detector_acquisition(prepared_detector,
@@ -163,21 +163,21 @@ end
     signal_input = fill(50.0, 32, 32)
 
     shot_mean = 20.0
-    shot_detector = Detector(integration_time=0.5, qe=0.8,
+    shot_detector = Detector(exposure_duration=0.5, qe=0.8,
         noise=NoisePhoton(), sensor=CCDSensor())
     shot_samples = ccd_qualification_samples(shot_detector, signal_input,
         Xoshiro(3101), frame_count)
     test_ccd_poisson_moments(shot_samples, shot_mean)
 
     dark_mean = 24.0
-    dark_detector = Detector(integration_time=2.0, qe=1.0,
+    dark_detector = Detector(exposure_duration=2.0, qe=1.0,
         dark_current=12.0, noise=NoiseNone(), sensor=CCDSensor())
     dark_samples = ccd_qualification_samples(dark_detector, zero_input,
         Xoshiro(3102), frame_count)
     test_ccd_poisson_moments(dark_samples, dark_mean)
 
     cic_mean = 3.5
-    cic_detector = Detector(integration_time=7.0, qe=1.0,
+    cic_detector = Detector(exposure_duration=7.0, qe=1.0,
         noise=NoiseNone(),
         sensor=CCDSensor(clock_induced_charge_per_frame=cic_mean))
     cic_samples = ccd_qualification_samples(cic_detector, zero_input,
@@ -185,7 +185,7 @@ end
     test_ccd_poisson_moments(cic_samples, cic_mean)
 
     read_sigma = 3.0
-    read_detector = Detector(integration_time=1.0, qe=1.0,
+    read_detector = Detector(exposure_duration=1.0, qe=1.0,
         noise=NoiseReadout(read_sigma), sensor=CCDSensor())
     read_samples = ccd_qualification_samples(read_detector, zero_input,
         Xoshiro(3104), frame_count)
@@ -195,7 +195,7 @@ end
     combined_sigma = 2.5
     combined_variance = combined_poisson_mean + combined_sigma^2
     combined_fourth = combined_poisson_mean + 3 * combined_variance^2
-    combined_detector = Detector(integration_time=0.5, qe=0.8,
+    combined_detector = Detector(exposure_duration=0.5, qe=0.8,
         dark_current=12.0, noise=NoisePhotonReadout(combined_sigma),
         sensor=CCDSensor(clock_induced_charge_per_frame=2.0))
     combined_samples = ccd_qualification_samples(combined_detector,

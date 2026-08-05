@@ -36,7 +36,7 @@ end
     coverage_enabled = coverage_instrumented()
     rate = pe05a_rate_map(reshape(T.(1:4), 2, 2))
 
-    detector = Detector(integration_time=T(0.25), qe=one(T),
+    detector = Detector(exposure_duration=T(0.25), qe=one(T),
         noise=NoiseNone(), response_model=NullFrameResponse(), T=T)
     observation = WFSObservation(zeros(T, 2, 2);
         units=:electron_count, layout=:detector_frame)
@@ -101,7 +101,7 @@ end
     @test observation.storage == observation_before_foreign
     @test rand(rng) == rand(rng_before_foreign)
 
-    spad = SPADArrayDetector((2, 2); integration_time=T(0.5),
+    spad = SPADArrayDetector((2, 2); exposure_duration=T(0.5),
         noise=NoiseNone(), sensor=SPADArraySensor(
             active_area_detection_efficiency=one(T),
             dark_count_rate=zero(T), fill_factor=one(T), T=T), T=T)
@@ -150,9 +150,9 @@ end
     @test counting_detector_alias_error.reason === :ownership
 
     fanout_detectors = (
-        Detector(integration_time=T(0.25), qe=one(T), noise=NoiseNone(),
+        Detector(exposure_duration=T(0.25), qe=one(T), noise=NoiseNone(),
             response_model=NullFrameResponse(), T=T),
-        Detector(integration_time=T(0.5), qe=one(T), noise=NoiseNone(),
+        Detector(exposure_duration=T(0.5), qe=one(T), noise=NoiseNone(),
             response_model=NullFrameResponse(), T=T),
     )
     fanout_rates = (

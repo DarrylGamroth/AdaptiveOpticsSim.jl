@@ -12,7 +12,7 @@ end
     @test !isdefined(Detectors, :APDDetector)
     @test !isdefined(Detectors, :APDSensor)
 
-    single = LinearAPDDetector(integration_time=0.5, qe=0.5,
+    single = LinearAPDDetector(exposure_duration=0.5, qe=0.5,
         avalanche_gain=4.0, conversion_gain=2.0, noise=NoiseNone())
     output = capture!(single, 10.0; rng=Xoshiro(9001))
     @test output == [20.0]
@@ -34,7 +34,7 @@ end
     @test !applicable(capture!, single, fill(10.0, 1, 1))
 
     bank = LinearAPDDetector(topology=LinearAPDChannelBank(4),
-        integration_time=1.0, qe=0.5, avalanche_gain=2.0,
+        exposure_duration=1.0, qe=0.5, avalanche_gain=2.0,
         dark_current=1.0, noise=NoiseNone())
     @test capture!(bank, fill(3.0, 4); rng=Xoshiro(9002)) ==
         fill(5.0, 4)
@@ -47,7 +47,7 @@ end
 @testset "Linear-mode APD deterministic signal order" begin
     detector = LinearAPDDetector(
         topology=LinearAPDChannelBank(4),
-        integration_time=2.0,
+        exposure_duration=2.0,
         qe=0.5,
         avalanche_gain=4.0,
         excess_noise_factor=1.0,
@@ -66,7 +66,7 @@ end
 
     multiplied_shot = LinearAPDDetector(
         topology=LinearAPDChannelBank(sample_count),
-        integration_time=1.0,
+        exposure_duration=1.0,
         qe=1.0,
         avalanche_gain=3.0,
         excess_noise_factor=1.4,
@@ -105,7 +105,7 @@ end
     @test_throws InvalidConfiguration LinearAPDChannelBank(1)
     for bad in (0.0, -1.0, Inf, NaN)
         @test_throws InvalidConfiguration LinearAPDDetector(
-            integration_time=bad)
+            exposure_duration=bad)
     end
     for bad in (-0.1, 1.1, Inf, NaN)
         @test_throws InvalidConfiguration LinearAPDDetector(qe=bad)
@@ -127,7 +127,7 @@ end
 
     function replay_detector()
         return LinearAPDDetector(topology=LinearAPDChannelBank(64),
-            integration_time=0.5, qe=0.75, avalanche_gain=5.0,
+            exposure_duration=0.5, qe=0.75, avalanche_gain=5.0,
             excess_noise_factor=1.2, dark_current=0.5,
             conversion_gain=2.0, noise=NoisePhotonReadout(0.25))
     end

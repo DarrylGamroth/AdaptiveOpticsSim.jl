@@ -295,7 +295,7 @@ function Plant.prepare_acquisition_provider(
 )
     require_path_result(path)
     T = eltype(path.result.values)
-    detector = Detector(integration_time=T(model.exposure),
+    detector = Detector(exposure_duration=T(model.exposure),
         noise=NoiseNone(), qe=one(T), gain=one(T),
         response_model=NullFrameResponse(),
         sensor=CMOSSensor(timing_model=GlobalShutter(), T=T), T=T,

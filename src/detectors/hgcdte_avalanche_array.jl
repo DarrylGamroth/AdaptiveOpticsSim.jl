@@ -75,14 +75,14 @@ function HgCdTeAvalancheArraySensor(;
     multiplication_model::AbstractHgCdTeAvalancheMultiplication=
         ClippedGaussianAvalancheMultiplicationApproximation(),
     glow_rate::Real=0.0,
-    read_time::Real=0.0,
+    read_duration::Real=0.0,
     sampling_mode::FrameSamplingMode=SingleRead(),
     persistence_model::AbstractPersistenceModel=NullPersistence(),
     T::Type{<:AbstractFloat}=Float64,
 )
     readout = HgCdTeReadout(
         glow_rate=glow_rate,
-        read_time=read_time,
+        read_duration=read_duration,
         sampling_mode=sampling_mode,
         T=T,
     )
@@ -97,7 +97,7 @@ function owned_frame_sensor(sensor::HgCdTeAvalancheArraySensor, ::Type{T},
     backend::AbstractArrayBackend) where {T<:AbstractFloat}
     readout = HgCdTeReadout(
         glow_rate=sensor.readout.glow_rate,
-        read_time=sensor.readout.read_time,
+        read_duration=sensor.readout.read_duration,
         sampling_mode=sensor.readout.sampling_mode,
         T=T,
     )
@@ -190,8 +190,8 @@ function apply_hgcdte_avalanche_statistics!(
 end
 
 function apply_sensor_statistics!(sensor::HgCdTeAvalancheArraySensor,
-    det::Detector, rng::AbstractRNG, exposure_time::Real)
-    _apply_hgcdte_glow!(sensor, det, rng, exposure_time)
+    det::Detector, rng::AbstractRNG, exposure_duration::Real)
+    _apply_hgcdte_glow!(sensor, det, rng, exposure_duration)
     return apply_hgcdte_avalanche_statistics!(sensor, det, rng)
 end
 
@@ -208,9 +208,9 @@ _batched_pre_readout_gain!(sensor::HgCdTeAvalancheArraySensor,
 function _batched_sensor_statistics!(
     sensor::HgCdTeAvalancheArraySensor, det::Detector,
     cube::AbstractArray, scratch::AbstractArray, rng::AbstractRNG,
-    exposure_time::Real)
+    exposure_duration::Real)
     _batched_hgcdte_glow!(
-        sensor, det, cube, scratch, rng, exposure_time)
+        sensor, det, cube, scratch, rng, exposure_duration)
     return _apply_hgcdte_avalanche_statistics!(
         sensor.multiplication_model, sensor, cube, scratch, rng)
 end

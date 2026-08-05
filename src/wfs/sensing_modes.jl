@@ -56,12 +56,12 @@ end
     src::AbstractSource, ::Type{T}) where {T<:AbstractFloat}
     gain = deterministic_frame_readout_gain(det.params.sensor,
         det.params.gain, T)
-    return T(det.params.integration_time) * effective_qe(det, src, T) * gain
+    return T(det.params.exposure_duration) * effective_qe(det, src, T) * gain
 end
 
 @inline function wfs_detector_incidence_scale(det::AbstractCountingDetector,
     src::AbstractSource, ::Type{T}) where {T<:AbstractFloat}
-    return T(counting_exposure_time(det)) * counting_detection_efficiency(det, T) *
+    return T(counting_live_duration(det)) * counting_detection_efficiency(det, T) *
         counting_fill_factor(det, T) * counting_source_throughput(det, src, T) *
         counting_post_gain(det, T)
 end

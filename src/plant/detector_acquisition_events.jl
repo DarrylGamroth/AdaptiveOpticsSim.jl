@@ -320,7 +320,7 @@ function _prepare_detector_read_offsets(::_ScheduledUpTheRampReadout,
         mode.n_reads)
     T = eltype(det.products.frame)
     physical_read_duration = _quantized_plant_duration(
-        sampling_read_time(sensor, size(det.products.frame),
+        sampling_read_duration(sensor, size(det.products.frame),
             det.params.readout_window, T),
         "detector read duration", :invalid_read_duration,
         :unrepresentable_read_duration)
@@ -357,7 +357,7 @@ function _prepare_detector_event_products!(::_ScheduledUpTheRampReadout,
         ensure_up_the_ramp_products!(det, length(offsets);
             acquisition=:scheduled_evolving_charge))
     @inbounds for read_index in eachindex(offsets)
-        products.read_times[read_index] =
+        products.read_offsets_s[read_index] =
             plant_duration_seconds(offsets[read_index], T)
     end
     return nothing
@@ -382,7 +382,7 @@ end
         normalized_to_photon_rate=nothing)
 
 Prepare an exact virtual-time lifecycle over one existing detector intensity-map
-contract. The detector's floating integration time must equal the definition's
+contract. The detector's floating exposure duration must equal the definition's
 nanosecond duration when converted to its numeric type. Scheduled up-the-ramp
 read instants use endpoint-preserving integer-nanosecond floor quantization;
 the detector's floating read duration is rounded to the nearest nanosecond for
@@ -416,9 +416,9 @@ function _prepare_global_shutter_acquisition(
     _require_prepared_acquisition(acquisition)
     T = eltype(det.products.frame)
     exposure_seconds = plant_duration_seconds(definition.exposure_duration, T)
-    isequal(det.params.integration_time, exposure_seconds) ||
+    isequal(det.params.exposure_duration, exposure_seconds) ||
         _detector_acquisition_event_error(:exposure_duration,
-            "detector integration time must exactly match the prepared plant duration")
+            "detector exposure duration must exactly match the prepared plant duration")
     readout_style = _detector_event_readout_style(det.params.sensor)
     read_offsets = _prepare_detector_read_offsets(readout_style,
         det.params.sensor, det, definition)
@@ -504,9 +504,9 @@ function _clear_detector_event_products!(::_ScheduledUpTheRampReadout,
         fill!(workspace_integrated, zero(eltype(workspace_integrated)))
     products.read_cube === workspace_cube ||
         fill!(workspace_cube, zero(eltype(workspace_cube)))
-    T = eltype(products.read_times)
+    T = eltype(products.read_offsets_s)
     @inbounds for read_index in eachindex(prepared.read_offsets)
-        products.read_times[read_index] = plant_duration_seconds(
+        products.read_offsets_s[read_index] = plant_duration_seconds(
             prepared.read_offsets[read_index], T)
     end
     return nothing
