@@ -835,36 +835,36 @@ end
 
 @inline contract_four_pupil_sensor(::Val{:pyramid}, tel; kwargs...) =
     PyramidWFS(tel; kwargs...)
-@inline contract_four_pupil_sensor(::Val{:bioedge}, tel; kwargs...) =
-    BioEdgeWFS(tel; kwargs...)
+@inline contract_four_pupil_sensor(::Val{:bi_o_edge}, tel; kwargs...) =
+    BiOEdgeWFS(tel; kwargs...)
 
 @inline contract_four_pupil_front_end(::Val{:pyramid}, sensor, source) =
     PyramidOpticalFrontEnd(sensor, source)
-@inline contract_four_pupil_front_end(::Val{:bioedge}, sensor, source) =
-    BioEdgeOpticalFrontEnd(sensor, source)
+@inline contract_four_pupil_front_end(::Val{:bi_o_edge}, sensor, source) =
+    BiOEdgeOpticalFrontEnd(sensor, source)
 
 @inline contract_four_pupil_rate_map(::Val{:pyramid}, front_end, input) =
     pyramid_rate_map(front_end, input)
-@inline contract_four_pupil_rate_map(::Val{:bioedge}, front_end, input) =
-    bioedge_rate_map(front_end, input)
+@inline contract_four_pupil_rate_map(::Val{:bi_o_edge}, front_end, input) =
+    bi_o_edge_rate_map(front_end, input)
 
 @inline contract_four_pupil_factor(::Val{:pyramid}, front_end, resolution) =
     WavefrontSensors.pyramid_output_sampling_factor(front_end, resolution)
-@inline contract_four_pupil_factor(::Val{:bioedge}, front_end, resolution) =
-    WavefrontSensors.bioedge_output_sampling_factor(front_end, resolution)
+@inline contract_four_pupil_factor(::Val{:bi_o_edge}, front_end, resolution) =
+    WavefrontSensors.bi_o_edge_output_sampling_factor(front_end, resolution)
 
 @inline contract_four_pupil_native!(::Val{:pyramid}, output, sensor, pupil,
     source) = WavefrontSensors.pyramid_intensity!(output, sensor, pupil,
     source)
-@inline contract_four_pupil_native!(::Val{:bioedge}, output, sensor, pupil,
-    source) = WavefrontSensors.bioedge_intensity!(output, sensor, pupil,
+@inline contract_four_pupil_native!(::Val{:bi_o_edge}, output, sensor, pupil,
+    source) = WavefrontSensors.bi_o_edge_intensity!(output, sensor, pupil,
     source)
 
 @inline contract_four_pupil_set_calibration!(::Val{:pyramid}, sensor,
     reference; kwargs...) = set_pyramid_calibration!(sensor, reference;
     kwargs...)
-@inline contract_four_pupil_set_calibration!(::Val{:bioedge}, sensor,
-    reference; kwargs...) = set_bioedge_calibration!(sensor, reference;
+@inline contract_four_pupil_set_calibration!(::Val{:bi_o_edge}, sensor,
+    reference; kwargs...) = set_bi_o_edge_calibration!(sensor, reference;
     kwargs...)
 
 @inline function contract_four_pupil_resize_calibration!(::Val{:pyramid},
@@ -873,17 +873,17 @@ end
         div(size(sensor.acquisition.state.camera_frame, 1), 2))
 end
 
-@inline function contract_four_pupil_resize_calibration!(::Val{:bioedge},
+@inline function contract_four_pupil_resize_calibration!(::Val{:bi_o_edge},
     sensor)
-    resize_bioedge_signal_buffers!(sensor,
+    resize_bi_o_edge_signal_buffers!(sensor,
         size(sensor.acquisition.state.camera_frame, 1), 2)
 end
 
 @inline contract_four_pupil_prepare_sampling!(::Val{:pyramid}, sensor,
     pupil) = WavefrontSensors.prepare_pyramid_sampling!(sensor, pupil)
 
-@inline contract_four_pupil_prepare_sampling!(::Val{:bioedge}, sensor,
-    pupil) = WavefrontSensors.prepare_bioedge_sampling!(sensor, pupil)
+@inline contract_four_pupil_prepare_sampling!(::Val{:bi_o_edge}, sensor,
+    pupil) = WavefrontSensors.prepare_bi_o_edge_sampling!(sensor, pupil)
 
 @testset "Prepared WFS stage products and protocols" begin
     @test !Base.isexported(AdaptiveOpticsSim, :WFSObservation)
@@ -2178,7 +2178,7 @@ end
     @test asterism_rate.values ≈ expected_asterism rtol=T(2e-12) atol=T(2e-12)
 end
 
-@testset "Prepared Pyramid and BioEdge stages" begin
+@testset "Prepared Pyramid and Bi-O-edge stages" begin
     T = Float64
     coverage_enabled = coverage_instrumented()
     tel = Telescope(resolution=16, diameter=T(8),
@@ -2191,25 +2191,25 @@ end
 
     pyramid = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=0, T=T)
-    bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+    bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=0, T=T)
     geometric_pyramid = PyramidWFS(tel; pupil_samples=4,
         mode=Geometric(), T=T)
-    geometric_bioedge = BioEdgeWFS(tel; pupil_samples=4,
+    geometric_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4,
         mode=Geometric(), T=T)
     @test_throws WFSPreparationError PyramidOpticalFrontEnd(
         geometric_pyramid, source)
-    @test_throws WFSPreparationError BioEdgeOpticalFrontEnd(
-        geometric_bioedge, source)
+    @test_throws WFSPreparationError BiOEdgeOpticalFrontEnd(
+        geometric_bi_o_edge, source)
     @test pyramid.front_end.phase_mask isa PyramidPhaseMask{T}
-    @test bioedge.front_end.amplitude_mask isa BioEdgeAmplitudeMask{T}
+    @test bi_o_edge.front_end.amplitude_mask isa BiOEdgeAmplitudeMask{T}
     @test typeof(pyramid.front_end.phase_mask) !==
-        typeof(bioedge.front_end.amplitude_mask)
+        typeof(bi_o_edge.front_end.amplitude_mask)
     @test all(isapprox.(abs.(pyramid.front_end.propagation.pyramid_mask),
         one(T); atol=T(8) * eps(T), rtol=zero(T)))
-    @test any(iszero, abs.(bioedge.front_end.propagation.bioedge_masks))
+    @test any(iszero, abs.(bi_o_edge.front_end.propagation.bi_o_edge_masks))
     @test !hasfield(typeof(pyramid.front_end), :amplitude_mask)
-    @test !hasfield(typeof(bioedge.front_end), :phase_mask)
+    @test !hasfield(typeof(bi_o_edge.front_end), :phase_mask)
 
     circular = CircularModulation(T(2); samples=8, T=T)
     sampled = SampledModulation([(T(0), T(0)), (T(1), T(-0.5))];
@@ -2244,14 +2244,14 @@ end
     @test circular_pyramid.front_end.modulation.policy.radius == T(2)
     @test circular_pyramid.front_end.calibration_modulation.policy.radius ==
         T(3)
-    circular_bioedge = BioEdgeWFS(tel; pupil_samples=4,
+    circular_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4,
         mode=Diffractive(), modulation=2, modulation_points=8,
         calib_modulation=3, T=T)
-    @test circular_bioedge.front_end.modulation.policy isa CircularModulation
-    @test circular_bioedge.front_end.calibration_modulation.policy isa
+    @test circular_bi_o_edge.front_end.modulation.policy isa CircularModulation
+    @test circular_bi_o_edge.front_end.calibration_modulation.policy isa
         CircularModulation
-    @test circular_bioedge.front_end.modulation.policy.radius == T(2)
-    @test circular_bioedge.front_end.calibration_modulation.policy.radius ==
+    @test circular_bi_o_edge.front_end.modulation.policy.radius == T(2)
+    @test circular_bi_o_edge.front_end.calibration_modulation.policy.radius ==
         T(3)
 
     calibration_detector = Detector(noise=NoiseNone(),
@@ -2260,10 +2260,10 @@ end
     flat_pupil = PupilFunction(tel; T=T)
     measure!(circular_pyramid, flat_pupil, source, calibration_detector)
     @test norm(Array(slopes(circular_pyramid))) <= T(2e-2)
-    measure!(circular_bioedge, flat_pupil, source)
-    @test norm(Array(slopes(circular_bioedge))) <= T(2e-2)
+    measure!(circular_bi_o_edge, flat_pupil, source)
+    @test norm(Array(slopes(circular_bi_o_edge))) <= T(2e-2)
 
-    for family in (Val(:pyramid), Val(:bioedge))
+    for family in (Val(:pyramid), Val(:bi_o_edge))
         staged = contract_four_pupil_sensor(family, tel; pupil_samples=4,
             mode=Diffractive(), modulation=0, T=T)
         front_end = contract_four_pupil_front_end(family, staged, source)
@@ -2510,10 +2510,10 @@ end
         end
     end
 
-    reduced_bioedge = BioEdgeWFS(tel; pupil_samples=4,
+    reduced_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4,
         mode=Diffractive(), modulation=0, T=T)
-    reduced_front_end = BioEdgeOpticalFrontEnd(reduced_bioedge, source)
-    reduced_rate = bioedge_rate_map(reduced_front_end, pupil)
+    reduced_front_end = BiOEdgeOpticalFrontEnd(reduced_bi_o_edge, source)
+    reduced_rate = bi_o_edge_rate_map(reduced_front_end, pupil)
     reduced_optics = prepare_wfs_optics(reduced_front_end,
         pupil, reduced_rate)
     form_wfs_optical_products!(reduced_rate, pupil, reduced_optics)
@@ -2526,17 +2526,17 @@ end
         reduced_rate, reduced_observation)
     acquire_wfs_observation!(reduced_observation, reduced_rate,
         reduced_acquisition, Xoshiro(0x42494f))
-    resize_bioedge_signal_buffers!(reduced_bioedge, reduced_side,
+    resize_bi_o_edge_signal_buffers!(reduced_bi_o_edge, reduced_side,
         reduced_detector)
-    set_bioedge_calibration!(reduced_bioedge,
-        zeros(T, size(reduced_bioedge.estimator.state.reference_signal_2d));
+    set_bi_o_edge_calibration!(reduced_bi_o_edge,
+        zeros(T, size(reduced_bi_o_edge.estimator.state.reference_signal_2d));
         wavelength_m=wavelength(source), signature=UInt(0x42494f))
-    reduced_revision = reduced_bioedge.estimator.state.calibration_revision
-    reduced_measurement = WFSMeasurement(similar(slopes(reduced_bioedge));
+    reduced_revision = reduced_bi_o_edge.estimator.state.calibration_revision
+    reduced_measurement = WFSMeasurement(similar(slopes(reduced_bi_o_edge));
         units=:dimensionless, kind=:differential_slopes)
-    reduced_estimator = prepare_wfs_estimation(reduced_bioedge,
+    reduced_estimator = prepare_wfs_estimation(reduced_bi_o_edge,
         reduced_observation, reduced_measurement)
-    @test reduced_bioedge.estimator.state.calibration_revision ==
+    @test reduced_bi_o_edge.estimator.state.calibration_revision ==
         reduced_revision
     estimate_wfs_measurement!(reduced_measurement, reduced_observation,
         reduced_estimator)
@@ -2544,7 +2544,7 @@ end
 
     alternate_telescope = Telescope(resolution=32, diameter=T(8),
         central_obstruction=zero(T), T=T)
-    for family in (Val(:pyramid), Val(:bioedge))
+    for family in (Val(:pyramid), Val(:bi_o_edge))
         stale_sensor = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         stale_front_end = contract_four_pupil_front_end(family, stale_sensor,
@@ -2564,7 +2564,7 @@ end
         @test stale_rate.values == stale_before
     end
 
-    for family in (Val(:pyramid), Val(:bioedge))
+    for family in (Val(:pyramid), Val(:bi_o_edge))
         zero_sensor = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         circular_sensor = contract_four_pupil_sensor(family, tel;
@@ -2599,7 +2599,7 @@ end
     extended = with_extended_source(source, PointCloudSourceModel(
         [(T(0), T(0)), (T(0.2), T(-0.1))], T[0.3, 0.7]; T=T))
 
-    for family in (Val(:pyramid), Val(:bioedge))
+    for family in (Val(:pyramid), Val(:bi_o_edge))
         spectral_sensor = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         spectral_front_end = contract_four_pupil_front_end(family,
@@ -2652,7 +2652,7 @@ end
         na_profile=T[80_000 90_000 100_000; 0.2 0.6 0.2],
         laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     heterogeneous_source = Asterism(AbstractSource[source, simple_lgs])
-    for family in (Val(:pyramid), Val(:bioedge))
+    for family in (Val(:pyramid), Val(:bi_o_edge))
         sensor = contract_four_pupil_sensor(family, tel; pupil_samples=4,
             mode=Diffractive(), modulation=0, T=T)
         front_end = contract_four_pupil_front_end(family, sensor,
@@ -2671,7 +2671,7 @@ end
                 plan)) == 0
         end
     end
-    for family in (Val(:pyramid), Val(:bioedge)),
+    for family in (Val(:pyramid), Val(:bi_o_edge)),
             lgs in (simple_lgs, sodium_lgs)
         sensor = contract_four_pupil_sensor(family, tel; pupil_samples=4,
             mode=Diffractive(), modulation=0, T=T)
@@ -3118,7 +3118,7 @@ end
     @test WavefrontSensors._require_exact_wfs_target(
         curvature_optics, target) === curvature_optics
 
-    for family in (Val(:pyramid), Val(:bioedge))
+    for family in (Val(:pyramid), Val(:bi_o_edge))
         four_pupil = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         four_pupil_front_end = contract_four_pupil_front_end(

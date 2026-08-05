@@ -1302,10 +1302,10 @@ end
         @test ka_slopes == scalar_slopes
     end
 
-    @testset "BioEdge kernels" begin
+    @testset "Bi-O-edge kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-        wfs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-        propagation = WavefrontSensors.bioedge_propagation(wfs)
+        wfs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+        propagation = WavefrontSensors.bi_o_edge_propagation(wfs)
 
         scalar_edge_mask = similar(wfs.estimator.state.edge_mask)
         ka_edge_mask = similar(wfs.estimator.state.edge_mask)
@@ -1316,16 +1316,16 @@ end
 
         scalar_phasor = similar(propagation.phasor)
         ka_phasor = similar(propagation.phasor)
-        WavefrontSensors._build_bioedge_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
-        WavefrontSensors._build_bioedge_phasor!(KA_CPU_STYLE, ka_phasor)
-        mark_ka_cpu_kernel!(:bioedge_phasor_kernel!)
+        WavefrontSensors._build_bi_o_edge_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
+        WavefrontSensors._build_bi_o_edge_phasor!(KA_CPU_STYLE, ka_phasor)
+        mark_ka_cpu_kernel!(:bi_o_edge_phasor_kernel!)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
-        scalar_masks = similar(propagation.bioedge_masks)
-        ka_masks = similar(propagation.bioedge_masks)
-        WavefrontSensors._build_bioedge_masks!(SCALAR_CPU_STYLE, scalar_masks, Float64)
-        WavefrontSensors._build_bioedge_masks!(KA_CPU_STYLE, ka_masks, Float64)
-        mark_ka_cpu_kernel!(:bioedge_masks_kernel!)
+        scalar_masks = similar(propagation.bi_o_edge_masks)
+        ka_masks = similar(propagation.bi_o_edge_masks)
+        WavefrontSensors._build_bi_o_edge_masks!(SCALAR_CPU_STYLE, scalar_masks, Float64)
+        WavefrontSensors._build_bi_o_edge_masks!(KA_CPU_STYLE, ka_masks, Float64)
+        mark_ka_cpu_kernel!(:bi_o_edge_masks_kernel!)
         @test ka_cpu_close(ka_masks, scalar_masks)
 
         mask = falses(8, 8)
@@ -1421,7 +1421,7 @@ end
             :diagonal_matrix_kernel!,
             :dm_apply_gaussian_operator_kernel!,
             :fit_source_average_kernel!,
-            :gather_bioedge_slopes_kernel!,
+            :gather_bi_o_edge_slopes_kernel!,
             :gather_pyramid_slopes_kernel!,
             :gather_stencil_data_kernel!,
             :gather_zernike_signal_kernel!,

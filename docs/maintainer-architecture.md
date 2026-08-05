@@ -48,7 +48,7 @@ The codebase is organized into subsystem directories:
   - Von Karman/Kolmogorov screens, multilayer atmospheres, infinite-screen
     evolution, atmosphere-field propagation support
 - `src/wfs`
-  - Shack-Hartmann, Pyramid, BioEdge, Curvature, Zernike, grouped execution,
+  - Shack-Hartmann, Pyramid, Bi-O-edge, Curvature, Zernike, grouped execution,
     calibration scaffolding
 - `src/plant`
   - the real `AdaptiveOpticsSim.Plant` submodule, with explicit imports from
@@ -340,10 +340,10 @@ removed and callers are migrated directly; synthetic property forwarding,
 state views, deprecated aliases, and permanent compatibility adapters are not
 part of the maintained architecture.
 
-`WavefrontSensors.PyramidWFS` and `WavefrontSensors.BioEdgeWFS` own their
+`WavefrontSensors.PyramidWFS` and `WavefrontSensors.BiOEdgeWFS` own their
 composition, acquisition, calibration, and estimation implementations.
 `Optics` independently owns their `PyramidPhaseMask` and
-`BioEdgeAmplitudeMask` physical components. The sensor families share prepared
+`BiOEdgeAmplitudeMask` physical components. The sensor families share prepared
 focal-plane modulation only where the optical quadrature is identical; its
 normalized weights average intensity and never integrate detector time. Each
 front end writes a normalized-pupil-coordinate, cell-integrated
@@ -352,7 +352,7 @@ Generic detector
 acquisition applies response, QE, and duration afterward. Their differential
 estimators own valid support, normalization, reference subtraction, optical
 gain, and a calibration revision that invalidates stale prepared plans.
-Geometric Pyramid and BioEdge declare `DirectMeasurementPath()` and construct
+Geometric Pyramid and Bi-O-edge declare `DirectMeasurementPath()` and construct
 neither propagation nor acquisition workspace.
 
 Zernike and Curvature now follow the same ownership boundary. Their optical
@@ -410,7 +410,7 @@ Examples:
 - backend reductions and random/noise services
 
 These shared services reduce duplicated orchestration logic across SH, Pyramid,
-BioEdge, detectors, explicit model loops, and Plant implementations.
+Bi-O-edge, detectors, explicit model loops, and Plant implementations.
 
 ### 3. Plant and model orchestration
 

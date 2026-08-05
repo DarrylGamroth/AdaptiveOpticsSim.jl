@@ -1849,7 +1849,7 @@ end
 @inline function optional_wfs_plan_device_resident(
     plan::Union{
         WavefrontSensors.PreparedPyramidOptics,
-        WavefrontSensors.PreparedBioEdgeOptics,
+        WavefrontSensors.PreparedBiOEdgeOptics,
     },
     device,
     BackendArray,
@@ -1878,7 +1878,7 @@ function optional_wfs_plan_device_resident(
     plan::Union{
         WavefrontSensors.PreparedShackHartmannOpticsBundle,
         WavefrontSensors.PreparedPyramidOpticsBundle,
-        WavefrontSensors.PreparedBioEdgeOpticsBundle,
+        WavefrontSensors.PreparedBiOEdgeOpticsBundle,
     },
     device,
     BackendArray,
@@ -2897,7 +2897,7 @@ function run_optional_sodium_profile_wfs(::Type{B},
         central_obstruction=zero(T), T=T, backend=selector)
     pupil = PupilFunction(tel; T=T, backend=selector)
 
-    for family in (:pyramid, :bioedge)
+    for family in (:pyramid, :bi_o_edge)
         src = LGSSource(
             na_profile=T[80000 90000 100000; 0.2 0.6 0.2],
             laser_coordinates=(T(1), T(-0.5)),
@@ -2908,7 +2908,7 @@ function run_optional_sodium_profile_wfs(::Type{B},
         wfs = family === :pyramid ?
             PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=zero(T), T=T, backend=selector) :
-            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+            BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=zero(T), T=T, backend=selector)
 
         WavefrontSensors.ensure_lgs_kernel!(wfs, pupil, src)
@@ -3430,29 +3430,29 @@ function run_optional_wfs_stage_contracts(
         central_obstruction=zero(T), T=T, backend=CPUBackend())
     four_pupil_cpu = PupilFunction(four_pupil_cpu_tel; T=T)
     copyto!(four_pupil_cpu.opd, Array(pupil.opd))
-    for family in (:pyramid, :bioedge)
+    for family in (:pyramid, :bi_o_edge)
         cpu_sensor = family === :pyramid ?
             PyramidWFS(four_pupil_cpu_tel; pupil_samples=2,
                 mode=Diffractive(), modulation=0, T=T) :
-            BioEdgeWFS(four_pupil_cpu_tel; pupil_samples=2,
+            BiOEdgeWFS(four_pupil_cpu_tel; pupil_samples=2,
                 mode=Diffractive(), modulation=0, T=T)
         gpu_sensor = family === :pyramid ?
             PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
                 modulation=0, T=T, backend=selector) :
-            BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+            BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
                 modulation=0, T=T, backend=selector)
         cpu_front_end = family === :pyramid ?
             PyramidOpticalFrontEnd(cpu_sensor, src) :
-            BioEdgeOpticalFrontEnd(cpu_sensor, src)
+            BiOEdgeOpticalFrontEnd(cpu_sensor, src)
         gpu_front_end = family === :pyramid ?
             PyramidOpticalFrontEnd(gpu_sensor, src) :
-            BioEdgeOpticalFrontEnd(gpu_sensor, src)
+            BiOEdgeOpticalFrontEnd(gpu_sensor, src)
         cpu_rate = family === :pyramid ?
             pyramid_rate_map(cpu_front_end, four_pupil_cpu) :
-            bioedge_rate_map(cpu_front_end, four_pupil_cpu)
+            bi_o_edge_rate_map(cpu_front_end, four_pupil_cpu)
         gpu_rate = family === :pyramid ?
             pyramid_rate_map(gpu_front_end, pupil) :
-            bioedge_rate_map(gpu_front_end, pupil)
+            bi_o_edge_rate_map(gpu_front_end, pupil)
         cpu_plan = prepare_wfs_optics(cpu_front_end,
             four_pupil_cpu, cpu_rate)
         gpu_plan = prepare_wfs_optics(gpu_front_end, pupil,
@@ -3468,14 +3468,14 @@ function run_optional_wfs_stage_contracts(
         field_sensor = family === :pyramid ?
             PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
                 modulation=0, T=T, backend=selector) :
-            BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+            BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
                 modulation=0, T=T, backend=selector)
         field_front_end = family === :pyramid ?
             PyramidOpticalFrontEnd(field_sensor) :
-            BioEdgeOpticalFrontEnd(field_sensor)
+            BiOEdgeOpticalFrontEnd(field_sensor)
         field_rate = family === :pyramid ?
             pyramid_rate_map(field_front_end, field) :
-            bioedge_rate_map(field_front_end, field)
+            bi_o_edge_rate_map(field_front_end, field)
         field_plan = prepare_wfs_optics(field_front_end, field,
             field_rate)
         form_wfs_optical_products!(field_rate, field, field_plan)
@@ -3507,7 +3507,7 @@ function run_optional_wfs_stage_contracts(
             set_pyramid_calibration!(gpu_sensor, reference;
                 wavelength_m=wavelength(src), signature=UInt(0x5042))
         else
-            set_bioedge_calibration!(gpu_sensor, reference;
+            set_bi_o_edge_calibration!(gpu_sensor, reference;
                 wavelength_m=wavelength(src), signature=UInt(0x5042))
         end
 
@@ -3570,7 +3570,7 @@ function run_optional_wfs_stage_contracts(
             set_pyramid_calibration!(cpu_sensor, cpu_reference;
                 wavelength_m=wavelength(src), signature=UInt(0x5042))
         else
-            set_bioedge_calibration!(cpu_sensor, cpu_reference;
+            set_bi_o_edge_calibration!(cpu_sensor, cpu_reference;
                 wavelength_m=wavelength(src), signature=UInt(0x5042))
         end
         cpu_quantized_observation = WFSObservation(quantized_host;
@@ -3588,7 +3588,7 @@ function run_optional_wfs_stage_contracts(
         geometric = family === :pyramid ?
             PyramidWFS(tel; pupil_samples=2, mode=Geometric(), T=T,
                 backend=selector) :
-            BioEdgeWFS(tel; pupil_samples=2, mode=Geometric(), T=T,
+            BiOEdgeWFS(tel; pupil_samples=2, mode=Geometric(), T=T,
                 backend=selector)
         geometric_measurement = WFSMeasurement(similar(slopes(geometric));
             units=:metre, kind=:geometric_slopes)
@@ -3606,10 +3606,10 @@ function run_optional_wfs_stage_contracts(
             SpectralBundle(T[0.7e-6, 0.9e-6], T[0.25, 0.75]; T=T))
         spectral_front_end = family === :pyramid ?
             PyramidOpticalFrontEnd(gpu_sensor, spectral_source) :
-            BioEdgeOpticalFrontEnd(gpu_sensor, spectral_source)
+            BiOEdgeOpticalFrontEnd(gpu_sensor, spectral_source)
         spectral_rates = family === :pyramid ?
             pyramid_rate_map(spectral_front_end, pupil) :
-            bioedge_rate_map(spectral_front_end, pupil)
+            bi_o_edge_rate_map(spectral_front_end, pupil)
         spectral_plan = prepare_wfs_optics(spectral_front_end,
             pupil, spectral_rates)
         form_wfs_optical_products!(spectral_rates, pupil, spectral_plan)
@@ -3626,11 +3626,11 @@ function run_optional_wfs_stage_contracts(
         copyto!(second_pupil.opd, pupil.opd)
         path_front_end = family === :pyramid ?
             PyramidOpticalFrontEnd(gpu_sensor, path_source) :
-            BioEdgeOpticalFrontEnd(gpu_sensor, path_source)
+            BiOEdgeOpticalFrontEnd(gpu_sensor, path_source)
         path_inputs = (pupil, second_pupil)
         path_rates = family === :pyramid ?
             pyramid_rate_map(path_front_end, path_inputs) :
-            bioedge_rate_map(path_front_end, path_inputs)
+            bi_o_edge_rate_map(path_front_end, path_inputs)
         path_plan = prepare_wfs_optics(path_front_end,
             path_inputs, path_rates)
         form_wfs_optical_products!(path_rates, path_inputs, path_plan)
@@ -3650,25 +3650,25 @@ function run_optional_wfs_stage_contracts(
             cpu_lgs_sensor = family === :pyramid ?
                 PyramidWFS(four_pupil_cpu_tel; pupil_samples=2,
                     mode=Diffractive(), modulation=0, T=T) :
-                BioEdgeWFS(four_pupil_cpu_tel; pupil_samples=2,
+                BiOEdgeWFS(four_pupil_cpu_tel; pupil_samples=2,
                     mode=Diffractive(), modulation=0, T=T)
             gpu_lgs_sensor = family === :pyramid ?
                 PyramidWFS(tel; pupil_samples=2, mode=Diffractive(),
                     modulation=0, T=T, backend=selector) :
-                BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+                BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
                     modulation=0, T=T, backend=selector)
             cpu_lgs_front_end = family === :pyramid ?
                 PyramidOpticalFrontEnd(cpu_lgs_sensor, lgs) :
-                BioEdgeOpticalFrontEnd(cpu_lgs_sensor, lgs)
+                BiOEdgeOpticalFrontEnd(cpu_lgs_sensor, lgs)
             gpu_lgs_front_end = family === :pyramid ?
                 PyramidOpticalFrontEnd(gpu_lgs_sensor, lgs) :
-                BioEdgeOpticalFrontEnd(gpu_lgs_sensor, lgs)
+                BiOEdgeOpticalFrontEnd(gpu_lgs_sensor, lgs)
             cpu_lgs_rate = family === :pyramid ?
                 pyramid_rate_map(cpu_lgs_front_end, four_pupil_cpu) :
-                bioedge_rate_map(cpu_lgs_front_end, four_pupil_cpu)
+                bi_o_edge_rate_map(cpu_lgs_front_end, four_pupil_cpu)
             gpu_lgs_rate = family === :pyramid ?
                 pyramid_rate_map(gpu_lgs_front_end, pupil) :
-                bioedge_rate_map(gpu_lgs_front_end, pupil)
+                bi_o_edge_rate_map(gpu_lgs_front_end, pupil)
             cpu_lgs_plan = prepare_wfs_optics(
                 cpu_lgs_front_end, four_pupil_cpu, cpu_lgs_rate)
             gpu_lgs_plan = prepare_wfs_optics(
@@ -4248,7 +4248,7 @@ function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val
 end
 
 function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:bio}) where {T<:AbstractFloat}
-    return BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    return BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
 end
 
 function _build_optional_low_order_optic(tel::Telescope, backend,
@@ -5237,7 +5237,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     sh_large = ShackHartmannWFS(tel; n_lenslets=8, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
-    bio = BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    bio = BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
     det_capture = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, bits=12, full_well=T(100),
         sensor=CMOSSensor(T=T), T=T, backend=backend)
@@ -5499,7 +5499,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
     sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
-    bio = BioEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    bio = BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     pupil = PupilFunction(tel; T=T, backend=backend)

@@ -27,10 +27,10 @@ export shack_hartmann_rate_map
 export shack_hartmann_optics
 export PyramidOpticalFrontEnd
 export pyramid_rate_map
-export BioEdgeOpticalFrontEnd
-export bioedge_rate_map
+export BiOEdgeOpticalFrontEnd
+export bi_o_edge_rate_map
 export set_pyramid_calibration!
-export set_bioedge_calibration!
+export set_bi_o_edge_calibration!
 export ZernikeOpticalFrontEnd
 export zernike_rate_map
 export CurvatureOpticalFrontEnd
@@ -40,7 +40,7 @@ export set_zernike_calibration!
 export set_curvature_calibration!
 export ShackHartmannWFS
 export PyramidWFS
-export BioEdgeWFS
+export BiOEdgeWFS
 export ZernikeWFS
 export CurvatureWFS
 export CurvatureReadoutModel

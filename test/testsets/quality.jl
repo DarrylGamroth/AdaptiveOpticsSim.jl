@@ -171,7 +171,7 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["wfs-shack-hartmann"])) == ("wfs-shack-hartmann",)
     @test Tuple(spec.name for spec in resolve_test_suites(
-        ["wfs-pyramid-bioedge"])) == ("wfs-pyramid-bioedge",)
+        ["wfs-pyramid-bi-o-edge"])) == ("wfs-pyramid-bi-o-edge",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["wfs-zernike-curvature"])) ==
         ("wfs-zernike-curvature",)
@@ -196,7 +196,7 @@ end
         "core-optics",
         "detector-lifecycle",
         "wfs-shack-hartmann",
-        "wfs-pyramid-bioedge",
+        "wfs-pyramid-bi-o-edge",
         "wfs-lift",
         "backend-smoke",
     )
@@ -227,7 +227,7 @@ end
             "wfs-acquisition-ownership",
             "wfs-common",
             "wfs-shack-hartmann",
-            "wfs-pyramid-bioedge",
+            "wfs-pyramid-bi-o-edge",
             "wfs-zernike-curvature",
             "wfs-lift",
         )
@@ -490,7 +490,7 @@ end
         DETECTOR_TEST_SUITE_NAMES...,
         "wfs-common",
         "wfs-shack-hartmann",
-        "wfs-pyramid-bioedge",
+        "wfs-pyramid-bi-o-edge",
         "wfs-zernike-curvature",
         "plant-preparation",
         "plant-handoffs",

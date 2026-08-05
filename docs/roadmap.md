@@ -86,7 +86,7 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    and separate direct-science photon-arrival-rate formation from detector-owned
    temporal integration and acquisition. Then decompose every maintained
    WFS into a prepared optical front end, detector acquisition, and estimator.
-   Shack-Hartmann now has an independent microlens array; Pyramid/BioEdge have
+   Shack-Hartmann now has an independent microlens array; Pyramid/Bi-O-edge have
    separate physical optics over shared modulation; Zernike/Curvature now
    separate propagation, acquisition, and estimation, including independent or
    packed Curvature detector planes; and LiFT now consumes independently
@@ -200,7 +200,7 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
    original path-product handoffs, and completion barrier while preserving the
    Gate 6 claim lifecycle. Gate 7.5 extends that exact owner/context and shared
    atmosphere-direction boundary to compatible maintained Shack-Hartmann,
-   Pyramid, and BioEdge paths without replacing their domain pipelines, and
+   Pyramid, and Bi-O-edge paths without replacing their domain pipelines, and
    validates a six-row conventional CCD/EMCCD/CMOS/HgCdTe response/readout
    matrix on CUDA and AMDGPU. Gate 7.6 adds a clean-tree paired service-cost
    contract for two compatible off-axis NGS diffractive Shack-Hartmann paths.

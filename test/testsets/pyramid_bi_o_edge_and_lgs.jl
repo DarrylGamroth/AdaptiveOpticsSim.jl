@@ -91,7 +91,7 @@ end
         pupil, changed_wavelength, 16, 4, 0.1, Float64;
         model=:subaperture_average) != base_signature
 
-    for family in (:shack_hartmann, :pyramid, :bioedge)
+    for family in (:shack_hartmann, :pyramid, :bi_o_edge)
         src = LGSSource(
             na_profile=[80000.0 90000.0 100000.0; 0.2 0.6 0.2],
             laser_coordinates=(1.0, -0.5),
@@ -107,7 +107,7 @@ end
             PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=0.0)
         else
-            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+            BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=0.0)
         end
         ensure_kernel! = family === :shack_hartmann ?
@@ -141,7 +141,7 @@ function detector_calibration_signature_allocation_bytes(det, sig)
     return @allocated detector_calibration_signature(det, sig)
 end
 
-@testset "Pyramid, BioEdge, and LGS" begin
+@testset "Pyramid, Bi-O-edge, and LGS" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
@@ -152,7 +152,7 @@ end
     pyr_slopes = measure!(pyr, pupil)
     @test length(pyr_slopes) == 2 * 4 * 4
 
-    bio = BioEdgeWFS(tel; pupil_samples=4)
+    bio = BiOEdgeWFS(tel; pupil_samples=4)
     bio_slopes = measure!(bio, pupil)
     @test length(bio_slopes) == 2 * 4 * 4
 
@@ -301,24 +301,24 @@ end
         pyr_incidence.estimator.params.normalization,
         pyr_incidence, pupil, nothing, 3, 10.0) == 1.0
 
-    bio_direct = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    bio_direct = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     bio_direct.acquisition.state.nominal_detector_resolution = 4
-    WavefrontSensors.resize_bioedge_signal_buffers!(bio_direct, 4)
+    WavefrontSensors.resize_bi_o_edge_signal_buffers!(bio_direct, 4)
     bio_direct.estimator.state.valid_i4q .= Bool[1 0; 1 1]
-    WavefrontSensors.update_bioedge_valid_signal!(bio_direct)
+    WavefrontSensors.update_bi_o_edge_valid_signal!(bio_direct)
     bio_direct.estimator.state.valid_signal_indices = Int[]
     bio_direct.estimator.state.valid_signal_indices_host = Int[]
-    @test WavefrontSensors.update_bioedge_valid_signal_indices!(bio_direct) == 3
-    WavefrontSensors.resize_bioedge_slope_buffers!(bio_direct)
+    @test WavefrontSensors.update_bi_o_edge_valid_signal_indices!(bio_direct) == 3
+    WavefrontSensors.resize_bi_o_edge_slope_buffers!(bio_direct)
     fill!(bio_direct.estimator.state.reference_signal_2d, 0.0)
     fill!(bio_direct.estimator.state.optical_gain, 2.0)
     bio_frame = copy(pyr_frame)
-    bio_direct_slopes = WavefrontSensors.bioedge_signal!(bio_direct,
+    bio_direct_slopes = WavefrontSensors.bi_o_edge_signal!(bio_direct,
         pupil, bio_frame)
     @test length(bio_direct_slopes) == 6
     @test bio_direct_slopes[1:3] ≈ fill(0.8, 3)
     @test bio_direct_slopes[4:6] ≈ zeros(3)
-    @test WavefrontSensors.bioedge_slopes_intensity!(bio_direct, pupil,
+    @test WavefrontSensors.bi_o_edge_slopes_intensity!(bio_direct, pupil,
         bio_frame) ≈ bio_direct_slopes
     bio_phase = reshape(collect(range(0.0, 1.0; length=32 * 32)), 32, 32)
     bio_edge_mask = falses(32, 32)
@@ -326,17 +326,17 @@ end
     bio_edge_mask[end, :] .= true
     bio_edge_mask[:, 1] .= true
     bio_edge_mask[:, end] .= true
-    @test length(WavefrontSensors.bioedge_slopes!(bio, bio_phase, bio_edge_mask)) == 2 * 4 * 4
-    bio_direct_accel = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    @test length(WavefrontSensors.bi_o_edge_slopes!(bio, bio_phase, bio_edge_mask)) == 2 * 4 * 4
+    bio_direct_accel = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     bio_direct_accel.acquisition.state.nominal_detector_resolution = 4
-    WavefrontSensors.resize_bioedge_signal_buffers!(bio_direct_accel, 4)
+    WavefrontSensors.resize_bi_o_edge_signal_buffers!(bio_direct_accel, 4)
     bio_direct_accel.estimator.state.valid_i4q .= bio_direct.estimator.state.valid_i4q
-    WavefrontSensors.update_bioedge_valid_signal!(bio_direct_accel)
-    @test WavefrontSensors.update_bioedge_valid_signal_indices!(bio_direct_accel) == 3
-    WavefrontSensors.resize_bioedge_slope_buffers!(bio_direct_accel)
+    WavefrontSensors.update_bi_o_edge_valid_signal!(bio_direct_accel)
+    @test WavefrontSensors.update_bi_o_edge_valid_signal_indices!(bio_direct_accel) == 3
+    WavefrontSensors.resize_bi_o_edge_slope_buffers!(bio_direct_accel)
     fill!(bio_direct_accel.estimator.state.reference_signal_2d, 0.0)
     fill!(bio_direct_accel.estimator.state.optical_gain, 2.0)
-    @test WavefrontSensors.bioedge_signal!(KA_CPU_STYLE,
+    @test WavefrontSensors.bi_o_edge_signal!(KA_CPU_STYLE,
         bio_direct_accel, pupil, bio_frame, nothing) ≈ bio_direct_slopes
     WavefrontSensors.set_optical_gain!(bio_direct, 3.0)
     @test all(==(3.0), bio_direct.estimator.state.optical_gain)
@@ -344,32 +344,32 @@ end
     @test bio_direct.estimator.state.optical_gain[end] == length(bio_direct.estimator.state.optical_gain)
     @test_throws InvalidConfiguration WavefrontSensors.set_optical_gain!(bio_direct, [1.0])
 
-    bio_invalid = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    bio_invalid = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     bio_invalid.acquisition.state.nominal_detector_resolution = 4
-    WavefrontSensors.resize_bioedge_signal_buffers!(bio_invalid, 4)
+    WavefrontSensors.resize_bi_o_edge_signal_buffers!(bio_invalid, 4)
     fill!(bio_invalid.estimator.state.valid_i4q, false)
-    WavefrontSensors.update_bioedge_valid_signal!(bio_invalid)
-    @test WavefrontSensors.update_bioedge_valid_signal_indices!(bio_invalid) == 0
-    @test_throws InvalidConfiguration WavefrontSensors.resize_bioedge_slope_buffers!(bio_invalid)
+    WavefrontSensors.update_bi_o_edge_valid_signal!(bio_invalid)
+    @test WavefrontSensors.update_bi_o_edge_valid_signal_indices!(bio_invalid) == 0
+    @test_throws InvalidConfiguration WavefrontSensors.resize_bi_o_edge_slope_buffers!(bio_invalid)
 
-    bio_incidence = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+    bio_incidence = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
         normalization=IncidenceFluxNormalization())
     expected_bio_norm = AdaptiveOpticsSim.Optics.photon_irradiance(ngs) *
                         (tel.params.diameter /
                          bio_incidence.estimator.params.pupil_samples)^2
-    @test WavefrontSensors.bioedge_normalization(
+    @test WavefrontSensors.bi_o_edge_normalization(
         bio_incidence.estimator.params.normalization,
         bio_incidence, pupil, ngs, 3, 10.0) ≈ expected_bio_norm
-    @test WavefrontSensors.bioedge_normalization(
+    @test WavefrontSensors.bi_o_edge_normalization(
         bio_incidence.estimator.params.normalization,
         bio_incidence, pupil, nothing, 3, 10.0) == 1.0
-    bio_flux_select = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
-    @test WavefrontSensors.select_bioedge_valid_i4q!(
+    bio_flux_select = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
+    @test WavefrontSensors.select_bi_o_edge_valid_i4q!(
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(), bio_flux_select, pupil,
         ngs) === bio_flux_select
     @test bio_flux_select.estimator.state.valid_signal_count > 0
-    bio_flux_select_accel = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
-    @test WavefrontSensors.select_bioedge_valid_i4q!(
+    bio_flux_select_accel = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive(), light_ratio=0.25)
+    @test WavefrontSensors.select_bi_o_edge_valid_i4q!(
         KA_CPU_STYLE, bio_flux_select_accel, pupil,
         ngs) === bio_flux_select_accel
     @test bio_flux_select_accel.estimator.state.valid_signal_count > 0
@@ -381,12 +381,12 @@ end
     n = n_lenslets * n_lenslets
     @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
 
-    bio_lgs = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_lgs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs, pupil, lgs) ===
         bio_lgs
     na_profile = [80000.0 90000.0 100000.0; 0.2 0.6 0.2]
     lgs_profile = LGSSource(elongation_factor=1.2, na_profile=na_profile, fwhm_spot_up=1.0)
-    bio_lgs_profile = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_lgs_profile = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs_profile, pupil,
         lgs_profile) === bio_lgs_profile
     cached_tag = bio_lgs_profile.front_end.propagation.lgs_kernel_tag
@@ -439,11 +439,11 @@ end
     AdaptiveOpticsSim.bin2d!(pyr_manual, pyr_camera, 2)
     @test pyr_frame == pyr_manual
 
-    bio_sampled = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), binning=2)
+    bio_sampled = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), binning=2)
     bio_sampled_slopes = measure!(bio_sampled, pupil, ngs)
     @test length(bio_sampled_slopes) == 2 * count(bio_sampled.estimator.state.valid_i4q)
     bio_intensity = reshape(Float64.(1:length(pupil.opd)), size(pupil.opd))
-    bio_frame = copy(WavefrontSensors.sample_bioedge_intensity!(
+    bio_frame = copy(WavefrontSensors.sample_bi_o_edge_intensity!(
         bio_sampled, pupil, bio_intensity))
     bio_camera = zeros(Float64, 4, 4)
     bio_manual = similar(bio_frame)
@@ -455,7 +455,7 @@ end
     pyr_profile_slopes = measure!(pyr_profile, pupil, lgs_profile)
     @test all(isfinite, pyr_profile_slopes)
 
-    bio_profile = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_profile = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_profile_slopes = measure!(bio_profile, pupil, lgs_profile)
     @test all(isfinite, bio_profile_slopes)
 
@@ -464,7 +464,7 @@ end
     pyr_slopes = measure!(pyr, pupil, ngs)
     @test length(pyr_slopes) == 2 * 4 * 4
 
-    bio = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     @test_throws InvalidConfiguration measure!(bio, pupil)
     bio_slopes = measure!(bio, pupil, ngs)
     @test length(bio_slopes) == 2 * 4 * 4
@@ -485,7 +485,7 @@ end
     pyr_det_slopes = measure!(pyr_det, pupil, ngs, det)
     @test length(pyr_det_slopes) == 2 * 4 * 4
     @test wfs_detector_image(pyr_det, det) === output_frame(det)
-    bio_det = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_det = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_det_slopes = measure!(bio_det, pupil, ngs, det)
     @test length(bio_det_slopes) == 2 * 4 * 4
     @test wfs_detector_image(bio_det, det) === output_frame(det)
@@ -534,23 +534,23 @@ end
         pyr_ast_intensity)
     slopes(pyr_ast_serial) .*= pyr_ast_serial.estimator.state.optical_gain
     @test pyr_ast_slopes ≈ slopes(pyr_ast_serial)
-    bio_ast = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_ast = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_ast_slopes = copy(measure!(bio_ast, pupil, ast))
     @test length(bio_ast_slopes) == 2 * 4 * 4
-    bio_ast_serial = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    WavefrontSensors.ensure_bioedge_calibration!(bio_ast_serial, pupil,
+    bio_ast_serial = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    WavefrontSensors.ensure_bi_o_edge_calibration!(bio_ast_serial, pupil,
         ast.sources[1])
     fill!(bio_ast_serial.acquisition.state.binned_intensity, zero(eltype(bio_ast_serial.acquisition.state.binned_intensity)))
     for src in ast.sources
-        WavefrontSensors.bioedge_intensity!(
+        WavefrontSensors.bi_o_edge_intensity!(
             bio_ast_serial.front_end.propagation.intensity,
             bio_ast_serial, pupil, src)
         bio_ast_serial.acquisition.state.binned_intensity .+= bio_ast_serial.front_end.propagation.intensity
     end
-    bio_ast_intensity = WavefrontSensors.sample_bioedge_intensity!(
+    bio_ast_intensity = WavefrontSensors.sample_bi_o_edge_intensity!(
         bio_ast_serial, pupil,
         bio_ast_serial.acquisition.state.binned_intensity)
-    WavefrontSensors.bioedge_signal!(bio_ast_serial, pupil,
+    WavefrontSensors.bi_o_edge_signal!(bio_ast_serial, pupil,
         bio_ast_intensity)
     @test bio_ast_slopes ≈ slopes(bio_ast_serial)
 
@@ -578,26 +578,26 @@ end
     slopes(pyr_ast_det_serial) .*= pyr_ast_det_serial.estimator.state.optical_gain
     @test pyr_ast_det_slopes ≈ slopes(pyr_ast_det_serial)
 
-    bio_ast_det = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_ast_det = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_ast_det_slopes = copy(measure!(bio_ast_det, pupil, ast, det;
         rng=MersenneTwister(13)))
-    bio_ast_det_serial = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    WavefrontSensors.ensure_bioedge_calibration!(bio_ast_det_serial, pupil,
+    bio_ast_det_serial = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    WavefrontSensors.ensure_bi_o_edge_calibration!(bio_ast_det_serial, pupil,
         ast.sources[1])
     fill!(bio_ast_det_serial.acquisition.state.binned_intensity, zero(eltype(bio_ast_det_serial.acquisition.state.binned_intensity)))
     for src in ast.sources
-        WavefrontSensors.bioedge_intensity!(
+        WavefrontSensors.bi_o_edge_intensity!(
             bio_ast_det_serial.front_end.propagation.intensity,
             bio_ast_det_serial, pupil, src)
         bio_ast_det_serial.acquisition.state.binned_intensity .+= bio_ast_det_serial.front_end.propagation.intensity
     end
-    bio_ast_det_intensity = WavefrontSensors.sample_bioedge_intensity!(
+    bio_ast_det_intensity = WavefrontSensors.sample_bi_o_edge_intensity!(
         bio_ast_det_serial, pupil,
         bio_ast_det_serial.acquisition.state.binned_intensity)
     bio_ast_det_frame = capture!(det, bio_ast_det_intensity,
         first(ast.sources); rng=MersenneTwister(13))
-    WavefrontSensors.resize_bioedge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
-    WavefrontSensors.bioedge_signal!(bio_ast_det_serial, pupil,
+    WavefrontSensors.resize_bi_o_edge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
+    WavefrontSensors.bi_o_edge_signal!(bio_ast_det_serial, pupil,
         bio_ast_det_frame)
     @test bio_ast_det_slopes ≈ slopes(bio_ast_det_serial)
 
@@ -625,13 +625,13 @@ end
     @test sum(pyr_sampled_qe_frame) > 0
     @test pyr_sampled_qe_frame ≈ output_frame(pyr_scalar_qe_det)
 
-    bio_sampled_qe = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_sampled_qe = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_sampled_qe_det = Detector(noise=NoiseNone(),
         qe=wavelength_dependent_qe, integration_time=1.0, binning=1)
     measure!(bio_sampled_qe, pupil, common_qe_ast, bio_sampled_qe_det;
         rng=MersenneTwister(22))
     bio_sampled_qe_frame = copy(output_frame(bio_sampled_qe_det))
-    bio_scalar_qe = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_scalar_qe = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_scalar_qe_det = Detector(noise=NoiseNone(), qe=0.35,
         integration_time=1.0, binning=1)
     measure!(bio_scalar_qe, pupil, common_qe_ast, bio_scalar_qe_det;
@@ -649,11 +649,11 @@ end
         PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
         pupil, mixed_qe_ast, pyr_sampled_qe_det)
     @test_throws InvalidConfiguration measure!(
-        BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
+        BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
         pupil, mixed_qe_ast, bio_sampled_qe_det)
 end
 
-@testset "Pyramid and BioEdge incidence-normalization contracts" begin
+@testset "Pyramid and Bi-O-edge incidence-normalization contracts" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
     @inbounds for j in axes(pupil.opd, 2), i in axes(pupil.opd, 1)
@@ -663,12 +663,12 @@ end
     src = Source(band=:custom, wavelength=0.75e-6,
         photon_irradiance=10.0)
 
-    for family in (:pyramid, :bioedge)
+    for family in (:pyramid, :bi_o_edge)
         make_wfs = () -> family === :pyramid ?
             PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=1.0,
                 normalization=IncidenceFluxNormalization()) :
-            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+            BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=1.0,
                 normalization=IncidenceFluxNormalization())
 
@@ -718,7 +718,7 @@ end
         actual_ast_norm = family === :pyramid ?
             pyramid_normalization(normalization, ast_wfs, pupil, ast, 16,
                 1.0) :
-            bioedge_normalization(normalization, ast_wfs, pupil, ast, 16,
+            bi_o_edge_normalization(normalization, ast_wfs, pupil, ast, 16,
                 1.0)
         @test actual_ast_norm ≈ expected_ast_norm
     end
@@ -730,12 +730,12 @@ end
         zero_pyramid = PyramidWFS(tel; pupil_samples=4,
             mode=Diffractive(), modulation=0.0,
             normalization=normalization)
-        zero_bioedge = BioEdgeWFS(tel; pupil_samples=4,
+        zero_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4,
             mode=Diffractive(), normalization=normalization)
         @test all(iszero, measure!(zero_pyramid, pupil, zero_src))
         @test all(isfinite, slopes(zero_pyramid))
-        @test all(iszero, measure!(zero_bioedge, pupil, zero_src))
-        @test all(isfinite, slopes(zero_bioedge))
+        @test all(iszero, measure!(zero_bi_o_edge, pupil, zero_src))
+        @test all(isfinite, slopes(zero_bi_o_edge))
     end
     undetectable = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=0.0, normalization=IncidenceFluxNormalization())
@@ -798,7 +798,7 @@ end
 end
 
 
-@testset "Pyramid and BioEdge detector-response references" begin
+@testset "Pyramid and Bi-O-edge detector-response references" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
     src = Source(band=:custom, wavelength=0.75e-6,
@@ -811,11 +811,11 @@ end
         SampledFrameResponse(asymmetric_response),
     )
 
-    for response in responses, family in (:pyramid, :bioedge)
+    for response in responses, family in (:pyramid, :bi_o_edge)
         wfs = family === :pyramid ?
             PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=1.0) :
-            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+            BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=1.0)
         det = Detector(noise=NoiseNone(), integration_time=0.4, qe=0.3,
             response_model=response)
@@ -834,10 +834,10 @@ end
     make_wfs = family -> family === :pyramid ?
         PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
             modulation=1.0, light_ratio=0.0) :
-        BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+        BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
             modulation=1.0, light_ratio=0.0)
 
-    for family in (:pyramid, :bioedge)
+    for family in (:pyramid, :bi_o_edge)
         probe_wfs = make_wfs(family)
         probe_detector = Detector(noise=NoiseNone(), sensor=CMOSSensor())
         measure!(probe_wfs, pupil, src, probe_detector;
@@ -996,16 +996,16 @@ end
             PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
             pupil, src, detector)
         @test_throws InvalidConfiguration measure!(
-            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
+            BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
             pupil, src, detector)
     end
 
     fill!(pupil.opd, 1e-8)
     opd_before_failure = copy(pupil.opd)
-    for family in (:pyramid, :bioedge)
+    for family in (:pyramid, :bi_o_edge)
         wfs = family === :pyramid ?
             PyramidWFS(tel; pupil_samples=4, mode=Diffractive()) :
-            BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+            BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
         invalid_sampling = Detector(noise=NoiseNone(), psf_sampling=3)
         @test_throws DimensionMismatchError measure!(
             wfs, pupil, src, invalid_sampling)
@@ -1013,7 +1013,7 @@ end
     end
 end
 
-@testset "BioEdge source-composition support boundary" begin
+@testset "Bi-O-edge source-composition support boundary" begin
     tel = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
     pupil = PupilFunction(tel)
@@ -1026,16 +1026,16 @@ end
 
     for expanded in (spectral, extended)
         @test_throws UnsupportedAlgorithm measure!(
-            BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive()),
+            BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive()),
             pupil, expanded)
         @test_throws UnsupportedAlgorithm measure!(
-            BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive()),
+            BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive()),
             pupil, expanded,
             Detector(noise=NoiseNone(), integration_time=1.0, qe=1.0))
     end
 end
 
-@testset "Pyramid and BioEdge pupil-reflectivity throughput" begin
+@testset "Pyramid and Bi-O-edge pupil-reflectivity throughput" begin
     transmission = 0.25
     src = Source(band=:custom, wavelength=0.75e-6,
         photon_irradiance=1.0)
@@ -1075,18 +1075,18 @@ end
     @test sum(attenuated_modulation_frame) ≈
         transmission * sum(full_modulation_frame) rtol=1e-12
 
-    full_bioedge = BioEdgeWFS(full_tel; pupil_samples=2,
+    full_bi_o_edge = BiOEdgeWFS(full_tel; pupil_samples=2,
         mode=Diffractive(), modulation=0.0)
-    attenuated_bioedge = BioEdgeWFS(attenuated_tel; pupil_samples=2,
+    attenuated_bi_o_edge = BiOEdgeWFS(attenuated_tel; pupil_samples=2,
         mode=Diffractive(), modulation=0.0)
-    bioedge_intensity_core!(full_bioedge.front_end.propagation.intensity,
-        full_bioedge, full_pupil, src)
-    bioedge_intensity_core!(attenuated_bioedge.front_end.propagation.intensity,
-        attenuated_bioedge, attenuated_pupil, src)
-    full_bioedge_rate = sum(full_bioedge.front_end.propagation.intensity)
-    @test full_bioedge_rate > 0
-    @test sum(attenuated_bioedge.front_end.propagation.intensity) ≈
-        transmission * full_bioedge_rate rtol=1e-12
+    bi_o_edge_intensity_core!(full_bi_o_edge.front_end.propagation.intensity,
+        full_bi_o_edge, full_pupil, src)
+    bi_o_edge_intensity_core!(attenuated_bi_o_edge.front_end.propagation.intensity,
+        attenuated_bi_o_edge, attenuated_pupil, src)
+    full_bi_o_edge_rate = sum(full_bi_o_edge.front_end.propagation.intensity)
+    @test full_bi_o_edge_rate > 0
+    @test sum(attenuated_bi_o_edge.front_end.propagation.intensity) ≈
+        transmission * full_bi_o_edge_rate rtol=1e-12
 end
 
 @testset "Shack-Hartmann subapertures" begin

@@ -30,7 +30,7 @@
     poly_common = with_spectrum(src, SpectralBundle(
         fill(wavelength(src), 2), [0.7, 0.3]))
     pyr = PyramidWFS(tel; pupil_samples=2, mode=Diffractive())
-    bio = BioEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    bio = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
     zwfs = ZernikeWFS(tel; pupil_samples=2)
     curv = CurvatureWFS(tel; pupil_samples=2)
     curv_count = CurvatureWFS(tel; pupil_samples=2,

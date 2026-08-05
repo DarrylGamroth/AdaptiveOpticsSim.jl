@@ -47,7 +47,7 @@ The package is organized around a small set of modeling objects:
 
 - `Telescope` and `Source`
 - atmosphere objects such as `KolmogorovAtmosphere` and `MultiLayerAtmosphere`
-- sensing objects such as `ShackHartmannWFS`, `PyramidWFS`, and `BioEdgeWFS`
+- sensing objects such as `ShackHartmannWFS`, `PyramidWFS`, and `BiOEdgeWFS`
 - `Detector` when the sensing path needs explicit detector physics
 - independent controllable optics such as `DeformableMirror`,
   `ModalControllableOptic`, `TipTiltMirror`, and `FocusStage`
@@ -61,7 +61,7 @@ Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Calibration`; import control vocabulary with
 `using AdaptiveOpticsSim.Control`; import tomography vocabulary with
 `using AdaptiveOpticsSim.Tomography`. The common WFS contracts and the
-complete Shack–Hartmann, Pyramid, BioEdge, Zernike, and Curvature families
+complete Shack–Hartmann, Pyramid, Bi-O-edge, Zernike, and Curvature families
 live in `WavefrontSensors`; inverse policy, interaction/control matrices,
 modal bases, and model-derived NCPA synthesis live in `Calibration`.
 Slopes-to-command reconstructors, controller models, and their preallocated
@@ -821,7 +821,7 @@ single-product `measure!` convenience path remains restricted to a common
 wavelength grid. Model bundled channels with independent acquisition mappings
 unless an application prepares an explicit flux-conserving resampler.
 
-Prepared Pyramid and BioEdge optics follow the same photon-arrival-rate
+Prepared Pyramid and Bi-O-edge optics follow the same photon-arrival-rate
 boundary while retaining distinct physical masks. Their zero, circular, and
 sampled focal-plane modulation policies are optical cycle averages in λ/D;
 they contain no exposure time or trigger semantics. A spectral source produces
@@ -832,13 +832,13 @@ direction-dependent atmosphere states are not silently combined. Apply an
 explicit compatible incoherent sum or detector mapping only when the intended
 instrument path requires it.
 
-The acquired Pyramid/BioEdge estimator accepts a real, square
+The acquired Pyramid/Bi-O-edge estimator accepts a real, square
 `:four_pupil_mosaic`, including integer ADU/count frames. It converts samples to
 the estimator's floating-point precision before differential arithmetic, and
 preparation rejects incompatible frame geometry, backend, or compute device.
 Reprepare an optical plan after changing the front-end propagation sampling.
 
-A single diffractive Shack–Hartmann, Pyramid, BioEdge, or atmosphere-aware
+A single diffractive Shack–Hartmann, Pyramid, Bi-O-edge, or atmosphere-aware
 Curvature acquisition also requires every asterism leaf to share one optical
 calibration signature. In particular, mixed NGS/LGS lists and LGS leaves with
 different elongation or sodium-profile geometry belong on independently
@@ -873,12 +873,12 @@ calibrated WFS paths.
   - use `PyramidOpticalFrontEnd`, `pyramid_rate_map`, and
     `set_pyramid_calibration!` when WFS optics, acquisition, and
     differential estimation must be scheduled independently
-- `BioEdgeWFS`
-  - BioEdge variants
+- `BiOEdgeWFS`
+  - Bi-O-edge variants
   - owned by `AdaptiveOpticsSim.WavefrontSensors`; its physical
-    `BioEdgeAmplitudeMask` remains in `AdaptiveOpticsSim.Optics`
-  - use `BioEdgeOpticalFrontEnd`, `bioedge_rate_map`, and
-    `set_bioedge_calibration!` for the corresponding staged path
+    `BiOEdgeAmplitudeMask` remains in `AdaptiveOpticsSim.Optics`
+  - use `BiOEdgeOpticalFrontEnd`, `bi_o_edge_rate_map`, and
+    `set_bi_o_edge_calibration!` for the corresponding staged path
 - `CurvatureWFS`
   - curvature sensing
 - `ZernikeWFS`
@@ -998,7 +998,7 @@ Runnable example ports live under `examples/tutorials/`. Good starting points:
 - `examples/tutorials/detector.jl`
 - `examples/tutorials/closed_loop_shack_hartmann.jl`
 - `examples/tutorials/closed_loop_pyramid.jl`
-- `examples/tutorials/closed_loop_bioedge.jl`
+- `examples/tutorials/closed_loop_bi_o_edge.jl`
 - `examples/tutorials/closed_loop_zernike.jl`
 
 See [julia-tutorial-mappings.md](julia-tutorial-mappings.md) for the mapping

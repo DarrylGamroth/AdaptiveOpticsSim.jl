@@ -361,12 +361,12 @@ end
         @test wfs.calibration.calibrated
     end
 
-    bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     for (src, signature) in zip(
         (base, changed_geometry, changed_profile), signatures)
-        WavefrontSensors.ensure_bioedge_calibration!(bioedge, pupil, src)
-        @test bioedge.estimator.state.calibration_signature == signature
-        @test bioedge.estimator.state.calibrated
+        WavefrontSensors.ensure_bi_o_edge_calibration!(bi_o_edge, pupil, src)
+        @test bi_o_edge.estimator.state.calibration_signature == signature
+        @test bi_o_edge.estimator.state.calibrated
     end
 end
 
@@ -1007,17 +1007,17 @@ end
         n_pix_subap=4)
     pyramid = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=1.0)
-    bioedge = BioEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+    bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=1.0)
     zernike = ZernikeWFS(tel; pupil_samples=4)
     curvature = CurvatureWFS(tel; pupil_samples=4)
-    sensors = (sh, pyramid, bioedge, zernike, curvature)
+    sensors = (sh, pyramid, bi_o_edge, zernike, curvature)
     pupil = PupilFunction(tel)
 
     prepare_sampling!(sh, pupil, src)
     ensure_sh_calibration!(sh, pupil, src)
     ensure_pyramid_calibration!(pyramid, pupil, src)
-    ensure_bioedge_calibration!(bioedge, pupil, src)
+    ensure_bi_o_edge_calibration!(bi_o_edge, pupil, src)
     ensure_zernike_calibration!(zernike, pupil, src)
     ensure_curvature_calibration!(curvature, pupil, src)
     initial_signature = pupil_aperture_calibration_signature(pupil,
@@ -1035,7 +1035,7 @@ end
     pupil = PupilFunction(tel)
     ensure_sh_calibration!(sh, pupil, src)
     ensure_pyramid_calibration!(pyramid, pupil, src)
-    ensure_bioedge_calibration!(bioedge, pupil, src)
+    ensure_bi_o_edge_calibration!(bi_o_edge, pupil, src)
     ensure_zernike_calibration!(zernike, pupil, src)
     ensure_curvature_calibration!(curvature, pupil, src)
     reflectivity_signature = pupil_aperture_calibration_signature(pupil,
@@ -1055,7 +1055,7 @@ end
     pupil = PupilFunction(tel)
     ensure_sh_calibration!(sh, pupil, src)
     ensure_pyramid_calibration!(pyramid, pupil, src)
-    ensure_bioedge_calibration!(bioedge, pupil, src)
+    ensure_bi_o_edge_calibration!(bi_o_edge, pupil, src)
     ensure_zernike_calibration!(zernike, pupil, src)
     ensure_curvature_calibration!(curvature, pupil, src)
     pupil_signature = pupil_aperture_calibration_signature(pupil,

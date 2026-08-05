@@ -10,8 +10,8 @@ struct PyramidPhaseMask{T<:AbstractFloat}
     n_pix_edge::Union{Int,Nothing}
 end
 
-"""Immutable physical definition of the four BioEdge amplitude masks."""
-struct BioEdgeAmplitudeMask{T<:AbstractFloat}
+"""Immutable physical definition of the four Bi-O-edge amplitude masks."""
+struct BiOEdgeAmplitudeMask{T<:AbstractFloat}
     grey_width::T
     grey_length::Union{Bool,T}
     diffraction_padding::Int

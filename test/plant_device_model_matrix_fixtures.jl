@@ -1,7 +1,7 @@
 abstract type DeviceModelMatrixWFSFamily end
 struct DeviceModelMatrixShackHartmann <: DeviceModelMatrixWFSFamily end
 struct DeviceModelMatrixPyramid <: DeviceModelMatrixWFSFamily end
-struct DeviceModelMatrixBioEdge <: DeviceModelMatrixWFSFamily end
+struct DeviceModelMatrixBiOEdge <: DeviceModelMatrixWFSFamily end
 struct DeviceModelMatrixZernike <: DeviceModelMatrixWFSFamily end
 struct DeviceModelMatrixCurvature <: DeviceModelMatrixWFSFamily end
 
@@ -22,7 +22,7 @@ struct DeviceModelMatrixCurvature <: DeviceModelMatrixWFSFamily end
         Val(:spectral),
     ),
     (
-        DeviceModelMatrixBioEdge(),
+        DeviceModelMatrixBiOEdge(),
         Val(:ngs),
         Val(:spectral),
     ),
@@ -47,8 +47,8 @@ Plant.plant_model_definition_style(
     ::DeviceModelMatrixPyramid,
 ) = :pyramid
 @inline device_model_matrix_family_symbol(
-    ::DeviceModelMatrixBioEdge,
-) = :bioedge
+    ::DeviceModelMatrixBiOEdge,
+) = :bi_o_edge
 @inline device_model_matrix_family_symbol(
     ::DeviceModelMatrixZernike,
 ) = :zernike
@@ -95,13 +95,13 @@ function device_model_matrix_front_end(
 end
 
 function device_model_matrix_front_end(
-    ::DeviceModelMatrixBioEdge,
+    ::DeviceModelMatrixBiOEdge,
     telescope::Telescope,
     source::AdaptiveOpticsSim.Optics.AbstractSource,
     ::Type{T},
     ::Int=0,
 ) where {T<:AbstractFloat}
-    sensor = BioEdgeWFS(
+    sensor = BiOEdgeWFS(
         telescope;
         pupil_samples=2,
         mode=Diffractive(),
@@ -111,7 +111,7 @@ function device_model_matrix_front_end(
         T,
         backend=backend(telescope),
     )
-    return BioEdgeOpticalFrontEnd(sensor, source)
+    return BiOEdgeOpticalFrontEnd(sensor, source)
 end
 
 function device_model_matrix_front_end(
@@ -168,11 +168,11 @@ end
 ) = pyramid_rate_map(front_end, pupil)
 
 @inline device_model_matrix_rate_map(
-    ::DeviceModelMatrixBioEdge,
-    front_end::BioEdgeOpticalFrontEnd,
+    ::DeviceModelMatrixBiOEdge,
+    front_end::BiOEdgeOpticalFrontEnd,
     pupil::PupilFunction,
     ::AdaptiveOpticsSim.Optics.AbstractSource,
-) = bioedge_rate_map(front_end, pupil)
+) = bi_o_edge_rate_map(front_end, pupil)
 
 @inline device_model_matrix_rate_map(
     ::DeviceModelMatrixZernike,
@@ -520,7 +520,7 @@ struct DeviceModelMatrixM6UpTheRampHgCdTe <:
 ) = DeviceModelMatrixM3GlobalCMOS()
 
 @inline device_model_matrix_wfs_detector_row(
-    ::DeviceModelMatrixBioEdge,
+    ::DeviceModelMatrixBiOEdge,
     ::Val{:ngs},
 ) = DeviceModelMatrixM4GlobalHgCdTe()
 

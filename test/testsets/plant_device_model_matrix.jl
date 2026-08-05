@@ -292,7 +292,7 @@ end
     end
 
     coexistence = device_model_matrix_wfs_fixture(
-        DeviceModelMatrixBioEdge();
+        DeviceModelMatrixBiOEdge();
         spectral=Val(:spectral),
     )
     @test device_path_batch_owner_count(coexistence.prepared) == 1

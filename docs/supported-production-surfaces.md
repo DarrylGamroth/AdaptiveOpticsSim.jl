@@ -60,7 +60,7 @@ Current CPU-supported families:
   fixed-cardinality `FixedSizeVector` storage. Repeated prepared CPU capture is
   inferred and allocation-free after warmup; preparation, diagnostics, and
   failures are outside that allocation claim
-- staged Shack-Hartmann, Pyramid, and BioEdge WFS optics,
+- staged Shack-Hartmann, Pyramid, and Bi-O-edge WFS optics,
   detector acquisition, and estimation on maintained validated surfaces;
   geometric variants use explicit direct-measurement paths
 - explicit closed-loop numerical composition and the model-specific AO188/AO3k
@@ -268,7 +268,7 @@ Current AMDGPU-supported scope:
   identities through same-device handoffs, and synchronizes before reporting
   completion
 - integrated single-device ownership for two or more compatible, equally
-  clocked Shack-Hartmann, Pyramid, or BioEdge WFS paths. The owner shares the
+  clocked Shack-Hartmann, Pyramid, or Bi-O-edge WFS paths. The owner shares the
   exact device context and atmosphere-direction batch, then invokes each
   family's existing prepared lenslet/modulation/spectral pipeline and preserves
   the original path-local result. Singleton, unequal-rate/origin, mixed-family,
@@ -304,7 +304,7 @@ Gate 5 closure validation head `02e5f29` passed all `448` maintained checks on
 the local gfx1030 AMDGPU target and `438/438` on the WSL RTX 3050 Ti CUDA
 target with Julia 1.12.6 and scalar indexing disabled. Gate 7.4 added
 integrated direct-science same-device path-batch ownership; Gate 7.5 extends
-that ownership boundary to maintained SH/Pyramid/BioEdge paths and adds the
+that ownership boundary to maintained SH/Pyramid/Bi-O-edge paths and adds the
 six-row conventional detector matrix. Focused Gate 7.5 validation completed
 separate `212/212` composed WFS-to-detector and `155/155` standalone detector
 checks on local AMDGPU and the same counts on WSL CUDA.jl 6.2.1. These checks
@@ -371,8 +371,8 @@ Primary evidence:
 Additional production-supported frozen OOPAO equivalence surfaces:
 
 - diffractive Pyramid ramp from the committed OOPAO reference bundle
-- diffractive BioEdge ramp from the committed OOPAO reference bundle
-- prepared Pyramid/BioEdge WFS optics for pupil-function and electric-field inputs,
+- diffractive Bi-O-edge ramp from the committed OOPAO reference bundle
+- prepared Pyramid/Bi-O-edge WFS optics for pupil-function and electric-field inputs,
   spectral and path-local source bundles, LGS elongation/sodium profiles,
   exact-once detector exposure, and revision-bound differential estimation
 

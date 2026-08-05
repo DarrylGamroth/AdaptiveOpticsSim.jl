@@ -105,7 +105,7 @@ The main modeling objects are:
 
 - `Telescope` and `Source` for optical geometry and illumination
 - `MultiLayerAtmosphere` or `KolmogorovAtmosphere` for turbulence
-- `ShackHartmannWFS`, `PyramidWFS`, `BioEdgeWFS`, `CurvatureWFS`, `ZernikeWFS` for sensing
+- `ShackHartmannWFS`, `PyramidWFS`, `BiOEdgeWFS`, `CurvatureWFS`, `ZernikeWFS` for sensing
 - `DeformableMirror` plus a reconstructor for control
 - `AdaptiveOpticsSim.Plant` definitions, prepared owners, and the event loop
   when you need independent commands, acquisitions, triggers, and virtual time

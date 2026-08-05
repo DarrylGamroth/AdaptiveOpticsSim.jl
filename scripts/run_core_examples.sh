@@ -14,7 +14,7 @@ examples=(
     "examples/closed_loop/run_cl_two_stages_atm_change.jl"
     "examples/closed_loop/run_cl_zernike.jl"
     "examples/tutorials/asterism.jl"
-    "examples/tutorials/closed_loop_bioedge.jl"
+    "examples/tutorials/closed_loop_bi_o_edge.jl"
     "examples/tutorials/closed_loop_pyramid.jl"
     "examples/tutorials/closed_loop_shack_hartmann.jl"
     "examples/tutorials/closed_loop_zernike.jl"
