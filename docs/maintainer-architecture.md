@@ -222,9 +222,13 @@ Examples:
   Its separately constructed state owns visible and staged physical response;
   its workspace owns scratch. Staging is fallible, while commit is a bounded,
   nonthrowing publication step so explicit multi-optic transactions cannot
-  become partially visible
-- `PreparedPlant` as a schedule-free concrete tuple of
-  `PreparedControllableOptic`, prepared command-endpoint,
+  become partially visible. Preparation seals exact implementation types into
+  concrete fixed-size family groups. Compact `(family_slot, member_slot)`
+  descriptors preserve canonical optic order without placing optic count in the
+  prepared plant type. Matching event-loop state and workspace groups share
+  that exact descriptor storage but retain separate semantic owners
+- `PreparedPlant` as a schedule-free owner of concrete controllable-optic
+  families, prepared command-endpoint,
   `PreparedPathExecutor`, and `PreparedAcquisitionOwner` values. Every declared
   endpoint has one explicit `CommandEndpointConfiguration`; canonical identity
   determines endpoint ordinals and optic order. Each path owns one explicit
@@ -248,6 +252,9 @@ Examples:
   and exposure intervals are half-open. Explicit `PlantCommandTransaction`
   values provide all-or-none admission and physical publication across
   distinct optics; equal time or placement alone does not. Required
+  controllable-optic state and workspace are grouped by the same exact family
+  order as immutable preparation; hot command, autonomous-waveform, and surface
+  operations cross a concrete family barrier before mutation. Optical
   placement/visibility declarations resolve into bounded canonical per-path
   ranges and co-placed groups; a due path applies only its visible pupil-plane
   members. `AutonomousPathExecutionRole` retains one exact focal-plane

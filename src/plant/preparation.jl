@@ -1327,6 +1327,7 @@ struct PreparedPlant{
     X,
     T<:AbstractTelescope,
     A<:AbstractTimedAtmosphere,
+    O<:_PreparedControllableOpticRegistry,
     S,
     B,
     R<:PreparedPlantRNGs,
@@ -1336,7 +1337,7 @@ struct PreparedPlant{
     context::X
     telescope::T
     atmosphere::A
-    controllable_optics::Memory{PreparedControllableOptic}
+    controllable_optics::O
     controllable_optic_path_bindings::PreparedControllableOpticPathBindings
     sampled_aberrations::S
     sampled_aberration_path_bindings::B
@@ -1350,7 +1351,7 @@ struct PreparedPlant{
         context::X,
         telescope::T,
         atmosphere::A,
-        controllable_optics::Memory{PreparedControllableOptic},
+        controllable_optics::O,
         bindings::PreparedControllableOpticPathBindings,
         sampled_aberrations::S,
         sampled_bindings::B,
@@ -1364,6 +1365,7 @@ struct PreparedPlant{
         X,
         T<:AbstractTelescope,
         A<:AbstractTimedAtmosphere,
+        O<:_PreparedControllableOpticRegistry,
         S,
         B,
         R<:PreparedPlantRNGs,
@@ -1373,7 +1375,7 @@ struct PreparedPlant{
                 "prepared execution context does not match the exact plant target"))
         validate_telescope_target(telescope, target)
         validate_timed_atmosphere_target(atmosphere, target)
-        plant = new{D,C,X,T,A,S,B,R}(
+        plant = new{D,C,X,T,A,O,S,B,R}(
             definition,
             target,
             context,
@@ -1434,8 +1436,10 @@ end
 
 function prepared_controllable_optic(plant::PreparedPlant, id)
     resolved = _as_controllable_optic_id(id)
-    for optic in plant.controllable_optics
-        controllable_optic_id(optic.definition) == resolved && return optic
+    optics = plant.controllable_optics
+    for index in eachindex(optics)
+        definition = _prepared_controllable_optic_definition(optics, index)
+        controllable_optic_id(definition) == resolved && return optics[index]
     end
     throw(PlantPreparationError(:controllable_optic, :unknown_id,
         "prepared plant has no controllable optic $resolved"))

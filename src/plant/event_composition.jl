@@ -470,6 +470,7 @@ struct PreparedPlantEventLoop{
     X,
     A<:AbstractTimedAtmosphere,
     R,
+    O<:_PreparedControllableOpticRegistry,
     T,
 }
     binding::_PlantEventLoopBinding
@@ -479,7 +480,7 @@ struct PreparedPlantEventLoop{
     atmosphere_rng::R
     scheduler::PreparedEventScheduler
     actions::Memory{_PlantEventAction}
-    optics::Memory{PreparedControllableOptic}
+    optics::O
     optic_path_bindings::PreparedControllableOpticPathBindings
     sampled_aberrations::Memory{PreparedSampledAberration}
     sampled_aberration_path_bindings::
@@ -992,12 +993,7 @@ function _prepared_event_actions(scheduler::PreparedEventScheduler)
 end
 
 function _prepare_event_controllable_optics(plant::PreparedPlant)
-    source = getfield(plant, :controllable_optics)
-    optics = Memory{PreparedControllableOptic}(undef, length(source))
-    @inbounds for index in eachindex(source)
-        optics[index] = source[index]
-    end
-    return optics
+    return getfield(plant, :controllable_optics)
 end
 
 function _prepare_event_sampled_aberrations(plant::PreparedPlant)
@@ -1071,13 +1067,14 @@ end
 function _prepare_event_path_optic_coupling(
     ::PupilSurfaceExecutionRole,
     optic::PreparedControllableOptic,
+    definition::ControllableOpticDefinition,
     path::PreparedPathExecutor,
 )
     coupling = prepare_controllable_optic_path_coupling(
-        optic.implementation, optic.definition, path)
+        optic.implementation, definition, path)
     return _require_prepared_event_path_coupling(
         coupling,
-        controllable_optic_id(optic.definition),
+        controllable_optic_id(definition),
         path_id(path.definition),
     )
 end
@@ -1085,11 +1082,12 @@ end
 @inline function _prepare_event_path_optic_coupling(
     ::AutonomousPathExecutionRole,
     optic::PreparedControllableOptic,
+    definition::ControllableOpticDefinition,
     path::PreparedPathExecutor,
 )
     return _prepare_event_autonomous_path_coupling(
-        controllable_optic_placement(optic),
-        controllable_optic_id(optic.definition),
+        controllable_optic_placement(definition),
+        controllable_optic_id(definition),
         path_id(path.definition),
     )
 end
@@ -1115,10 +1113,11 @@ end
 function _prepare_event_path_optic_coupling(
     role::AbstractControllableOpticExecutionRole,
     optic::PreparedControllableOptic,
+    definition::ControllableOpticDefinition,
     path::PreparedPathExecutor,
 )
     _plant_event_loop_error(:unsupported_optic_execution_role,
-        "controllable optic $(controllable_optic_id(optic.definition)) on " *
+        "controllable optic $(controllable_optic_id(definition)) on " *
         "path $(path_id(path.definition)) declares unsupported execution " *
         "role $(typeof(role))")
 end
@@ -1172,8 +1171,11 @@ function _prepare_event_path_optic_couplings(
         enumerate(binding_range)
         optic_slot = prepared_controllable_optic_slot(bindings, binding)
         optic = optics[optic_slot]
+        definition =
+            _prepared_controllable_optic_definition(optics, optic)
         role = controllable_optic_execution_role(optic.implementation)
-        coupling = _prepare_event_path_optic_coupling(role, optic, path)
+        coupling = _prepare_event_path_optic_coupling(
+            role, optic, definition, path)
         couplings[coupling_slot] = coupling
         if !_coupling_group_member(role)
             _append_event_path_coupling_group!(
@@ -1349,7 +1351,8 @@ end
 function _event_controllable_optic_slot(optics,
     id::ControllableOpticID)
     @inbounds for index in eachindex(optics)
-        controllable_optic_id(optics[index].definition) == id &&
+        definition = _prepared_controllable_optic_definition(optics, index)
+        controllable_optic_id(definition) == id &&
             return index
     end
     _plant_event_loop_error(:unknown_controllable_optic,
@@ -1401,8 +1404,10 @@ function _require_autonomous_definition_for_role(
 end
 
 function _require_all_autonomous_optics_bound(optics, definitions)
-    @inbounds for optic in optics
-        id = controllable_optic_id(optic.definition)
+    @inbounds for index in eachindex(optics)
+        optic = optics[index]
+        definition = _prepared_controllable_optic_definition(optics, optic)
+        id = controllable_optic_id(definition)
         role = controllable_optic_execution_role(optic.implementation)
         _require_autonomous_definition_for_role(role, id, definitions)
     end
@@ -1453,11 +1458,13 @@ function _prepare_event_autonomous_optics(definitions, optics, path_groups,
         optic_slot = _event_controllable_optic_slot(optics,
             definition.optic)
         optic = optics[optic_slot]
+        optic_definition =
+            _prepared_controllable_optic_definition(optics, optic)
         _require_autonomous_execution_role(
             controllable_optic_execution_role(optic.implementation),
             definition.optic)
         _require_autonomous_path_visibility(
-            controllable_optic_visibility(optic), definition.optic,
+            controllable_optic_visibility(optic_definition), definition.optic,
             definition.path)
         path_slot = _event_path_group_slot(path_groups, definition.path)
         group = path_groups[path_slot]
@@ -1724,14 +1731,14 @@ function prepare_plant_event_loop(
     )
 end
 
-mutable struct PlantEventLoopState{T}
+mutable struct PlantEventLoopState{T,O<:_ControllableOpticStateRegistry}
     binding::_PlantEventLoopBinding
     state_binding::_PlantEventLoopStateBinding
     scheduler::EventSchedulerState
     command_endpoints::Memory{CommandEndpointState}
     command_applications::Memory{CommandApplicationState}
     command_shadow_transactions::Memory{UInt64}
-    controllable_optics::Memory{Any}
+    controllable_optics::O
     acquisitions::Memory{_AcquisitionEventLifecycleState}
     path_sampled::Memory{Bool}
     product_sequences::Memory{UInt64}
@@ -1780,39 +1787,140 @@ end
 function _event_optic_endpoint_initials(
     prepared::PreparedPlantEventLoop,
     optic::PreparedControllableOptic)
-    ids = map(optic.endpoint_slots) do slot
+    ids = Tuple(map(optic.endpoint_slots) do slot
         command_endpoint_id(
             prepared.command_endpoints[Int(slot)].binding)
-    end
-    commands = map(optic.endpoint_slots) do slot
+    end)
+    commands = Tuple(map(optic.endpoint_slots) do slot
         binding = prepared.command_endpoints[Int(slot)].binding
         _copy_prepared_effective_command(binding.endpoint,
             binding.initial_command, "initial physical command",
             prepared.target)
-    end
+    end)
     return ids, commands
 end
 
-function _event_controllable_optic_states(
-    prepared::PreparedPlantEventLoop)
-    states = Memory{Any}(undef, length(prepared.optics))
-    @inbounds for index in eachindex(prepared.optics)
-        optic = prepared.optics[index]
-        ids, commands = _event_optic_endpoint_initials(prepared, optic)
-        states[index] = prepare_controllable_optic_state(
-            optic.implementation, optic.definition, ids, commands)
+function _event_controllable_optic_state(
+    prepared::PreparedPlantEventLoop,
+    optic::PreparedControllableOptic,
+)
+    ids, commands = _event_optic_endpoint_initials(prepared, optic)
+    definition =
+        _prepared_controllable_optic_definition(prepared.optics, optic)
+    return prepare_controllable_optic_state(
+        optic.implementation, definition, ids, commands)
+end
+
+function _event_controllable_optic_state_family(
+    prepared::PreparedPlantEventLoop,
+    family::_PreparedControllableOpticFamily,
+)
+    first_optic = first(family.values)
+    first_state = _event_controllable_optic_state(prepared, first_optic)
+    S = typeof(first_state)
+    states = Vector{S}(undef, length(family.values))
+    states[1] = first_state
+    @inbounds for index in 2:length(states)
+        state = _event_controllable_optic_state(
+            prepared, family.values[index])
+        typeof(state) === S || throw(PlantPreparationError(
+            :controllable_optic,
+            :state_family_type,
+            "one exact prepared controllable-optic family returned " *
+            "different physical-state types",
+        ))
+        states[index] = state
     end
-    return states
+    fixed = FixedSizeVectorDefault{S}(states)
+    return _ControllableOpticStateFamily{S,typeof(fixed)}(fixed)
+end
+
+@inline _event_controllable_optic_state_families(
+    prepared::PreparedPlantEventLoop,
+    ::Tuple{},
+) = ()
+
+function _event_controllable_optic_state_families(
+    prepared::PreparedPlantEventLoop,
+    families::Tuple,
+)
+    first = _event_controllable_optic_state_family(prepared, families[1])
+    rest = _event_controllable_optic_state_families(
+        prepared, Base.tail(families))
+    return (first, rest...)
+end
+
+function _event_controllable_optic_states(
+    prepared::PreparedPlantEventLoop,
+)
+    optics = prepared.optics
+    groups = _event_controllable_optic_state_families(
+        prepared, optics.groups)
+    return _ControllableOpticStateRegistry(groups, optics.slots)
 end
 
 function _initialize_event_autonomous_optics!(
     prepared::PreparedPlantEventLoop, state::PlantEventLoopState)
     @inbounds for binding in prepared.autonomous_optics
-        optic_state = state.controllable_optics[Int(binding.optic_slot)]
-        initialize_autonomous_periodic_optic!(binding.implementation,
-            optic_state, binding.phase_reference)
+        _initialize_event_autonomous_optic!(
+            prepared,
+            state,
+            binding.optic_slot,
+            binding.implementation,
+            binding.phase_reference,
+        )
     end
     return nothing
+end
+
+@inline function _initialize_event_autonomous_optic_family!(
+    ::Tuple{},
+    family_slot::Int,
+    member_slot::Int,
+    implementation,
+    phase_reference,
+)
+    return _prepared_controllable_optic_slot_error(
+        family_slot, member_slot)
+end
+
+@inline function _initialize_event_autonomous_optic_family!(
+    state_families::Tuple,
+    family_slot::Int,
+    member_slot::Int,
+    implementation,
+    phase_reference,
+)
+    if family_slot == 1
+        optic_state = @inbounds state_families[1].values[member_slot]
+        initialize_autonomous_periodic_optic!(
+            implementation, optic_state, phase_reference)
+        return nothing
+    end
+    return _initialize_event_autonomous_optic_family!(
+        Base.tail(state_families),
+        family_slot - 1,
+        member_slot,
+        implementation,
+        phase_reference,
+    )
+end
+
+@inline function _initialize_event_autonomous_optic!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    optic_slot::UInt32,
+    implementation,
+    phase_reference,
+)
+    slot = @inbounds prepared.optics.slots[Int(optic_slot)]
+    return _initialize_event_autonomous_optic_family!(
+        state.controllable_optics.groups,
+        Int(slot.family_slot),
+        Int(slot.member_slot),
+        implementation,
+        phase_reference,
+    )
 end
 
 function _plant_event_loop_state(prepared::PreparedPlantEventLoop)
@@ -1859,11 +1967,15 @@ function PlantEventLoopState(prepared::PreparedPlantEventLoop)
     end
 end
 
-mutable struct PlantEventLoopWorkspace{T,B}
+mutable struct PlantEventLoopWorkspace{
+    T,
+    B,
+    O<:_ControllableOpticWorkspaceRegistry,
+}
     binding::_PlantEventLoopBinding
     scheduler::EventSchedulerWorkspace
     command_endpoints::Memory{CommandDispositionWorkspace}
-    controllable_optics::Memory{Any}
+    controllable_optics::O
     command_dispositions::Memory{PlantCommandDisposition}
     command_disposition_count::Int
     transaction_endpoint_slots::Memory{UInt32}
@@ -1910,6 +2022,45 @@ function _optical_path_batch_workspace(
     )
 end
 
+function _event_controllable_optic_workspace_family(
+    family::_PreparedControllableOpticFamily,
+)
+    first_workspace = prepare_controllable_optic_workspace(
+        first(family.values).implementation)
+    W = typeof(first_workspace)
+    workspaces = Vector{W}(undef, length(family.values))
+    workspaces[1] = first_workspace
+    @inbounds for index in 2:length(workspaces)
+        workspace = prepare_controllable_optic_workspace(
+            family.values[index].implementation)
+        typeof(workspace) === W || throw(PlantPreparationError(
+            :controllable_optic,
+            :workspace_family_type,
+            "one exact prepared controllable-optic family returned " *
+            "different physical-workspace types",
+        ))
+        workspaces[index] = workspace
+    end
+    fixed = FixedSizeVectorDefault{W}(workspaces)
+    return _ControllableOpticWorkspaceFamily{W,typeof(fixed)}(fixed)
+end
+
+@inline _event_controllable_optic_workspace_families(::Tuple{}) = ()
+
+function _event_controllable_optic_workspace_families(families::Tuple)
+    first = _event_controllable_optic_workspace_family(families[1])
+    rest = _event_controllable_optic_workspace_families(Base.tail(families))
+    return (first, rest...)
+end
+
+function _event_controllable_optic_workspaces(
+    prepared::PreparedPlantEventLoop,
+)
+    optics = prepared.optics
+    groups = _event_controllable_optic_workspace_families(optics.groups)
+    return _ControllableOpticWorkspaceRegistry(groups, optics.slots)
+end
+
 function _plant_event_loop_workspace(prepared::PreparedPlantEventLoop)
     command_endpoints = Memory{CommandDispositionWorkspace}(undef,
         length(prepared.command_endpoints))
@@ -1919,12 +2070,7 @@ function _plant_event_loop_workspace(prepared::PreparedPlantEventLoop)
         command_endpoints[index] = CommandDispositionWorkspace(endpoint)
         disposition_capacity += command_endpoint_capacity(endpoint)
     end
-    controllable_optics = Memory{Any}(undef, length(prepared.optics))
-    @inbounds for index in eachindex(prepared.optics)
-        controllable_optics[index] =
-            prepare_controllable_optic_workspace(
-                prepared.optics[index].implementation)
-    end
+    controllable_optics = _event_controllable_optic_workspaces(prepared)
     endpoint_count = length(prepared.command_endpoints)
     due_paths = Memory{Bool}(undef, length(prepared.path_groups))
     fill!(due_paths, false)
@@ -1963,6 +2109,7 @@ end
         length(state.command_shadow_transactions) ==
             length(prepared.command_endpoints) &&
         length(state.controllable_optics) == length(prepared.optics) &&
+        state.controllable_optics.slots === prepared.optics.slots &&
         length(state.acquisitions) == length(prepared.acquisitions) &&
         length(state.path_sampled) == length(prepared.path_groups) &&
         length(state.product_sequences) == length(prepared.acquisitions) &&
@@ -1982,6 +2129,7 @@ end
     length(workspace.command_endpoints) ==
         length(prepared.command_endpoints) &&
         length(workspace.controllable_optics) == length(prepared.optics) &&
+        workspace.controllable_optics.slots === prepared.optics.slots &&
         length(workspace.transaction_endpoint_slots) ==
             length(prepared.command_endpoints) &&
         length(workspace.transaction_admissions) ==
@@ -2386,13 +2534,15 @@ function _prepare_transaction_member_slots!(
         for prior in 1:count
             prior_binding = prepared.command_endpoints[
                 Int(workspace.transaction_endpoint_slots[prior])].binding
-            prior_binding.optic_slot == binding.optic_slot &&
+            if prior_binding.optic_slot == binding.optic_slot
+                definition = _prepared_controllable_optic_definition(
+                    prepared.optics, Int(binding.optic_slot))
                 _command_admission_error(:transaction,
                     :duplicate_physical_optic,
                     "atomic multi-optic transaction contains more than one " *
                     "endpoint owned by controllable optic " *
-                    "$(controllable_optic_id(prepared.optics[
-                        Int(binding.optic_slot)].definition))")
+                    "$(controllable_optic_id(definition))")
+            end
         end
         count += 1
         workspace.transaction_endpoint_slots[count] = UInt32(endpoint_slot)
@@ -2579,17 +2729,54 @@ function admit_plant_command_transaction!(
         member_count, scheduled)
 end
 
-@inline function _event_controllable_optic_parts(
-    prepared::PreparedPlantEventLoop,
-    state::PlantEventLoopState,
-    workspace::PlantEventLoopWorkspace,
-    endpoint_slot::Integer)
-    binding = _event_command_endpoint(prepared, endpoint_slot).binding
-    optic_slot = Int(binding.optic_slot)
-    optic = @inbounds prepared.optics[optic_slot]
-    optic_state = @inbounds state.controllable_optics[optic_slot]
-    optic_workspace = @inbounds workspace.controllable_optics[optic_slot]
-    return binding, optic, optic_state, optic_workspace
+@inline function _stage_event_controllable_optic_family_command!(
+    ::Tuple{},
+    ::Tuple{},
+    ::Tuple{},
+    family_slot::Int,
+    member_slot::Int,
+    binding::_PreparedPlantCommandEndpoint,
+    application_state::CommandApplicationState,
+    timestamp::PlantTimestamp,
+)
+    return _prepared_controllable_optic_slot_error(
+        family_slot, member_slot)
+end
+
+@inline function _stage_event_controllable_optic_family_command!(
+    prepared_families::Tuple,
+    state_families::Tuple,
+    workspace_families::Tuple,
+    family_slot::Int,
+    member_slot::Int,
+    binding::_PreparedPlantCommandEndpoint,
+    application_state::CommandApplicationState,
+    timestamp::PlantTimestamp,
+)
+    if family_slot == 1
+        optic = @inbounds prepared_families[1].values[member_slot]
+        optic_state = @inbounds state_families[1].values[member_slot]
+        optic_workspace = @inbounds workspace_families[1].values[member_slot]
+        stage_controllable_optic_command!(
+            optic.implementation,
+            optic_state,
+            optic_workspace,
+            command_endpoint_id(binding),
+            _staged_effective_command(application_state),
+            timestamp,
+        )
+        return nothing
+    end
+    return _stage_event_controllable_optic_family_command!(
+        Base.tail(prepared_families),
+        Base.tail(state_families),
+        Base.tail(workspace_families),
+        family_slot - 1,
+        member_slot,
+        binding,
+        application_state,
+        timestamp,
+    )
 end
 
 @inline function _stage_event_controllable_optic_command!(
@@ -2597,16 +2784,66 @@ end
     state::PlantEventLoopState,
     workspace::PlantEventLoopWorkspace,
     endpoint_slot::Integer)
-    binding, optic, optic_state, optic_workspace =
-        _event_controllable_optic_parts(prepared, state, workspace,
-            endpoint_slot)
+    binding = _event_command_endpoint(prepared, endpoint_slot).binding
     application_state =
         _event_command_application_state(state, endpoint_slot)
-    stage_controllable_optic_command!(optic.implementation, optic_state,
-        optic_workspace, command_endpoint_id(binding),
-        _staged_effective_command(application_state),
-        state.scheduler.current_timestamp)
-    return nothing
+    slot = @inbounds prepared.optics.slots[Int(binding.optic_slot)]
+    return _stage_event_controllable_optic_family_command!(
+        prepared.optics.groups,
+        state.controllable_optics.groups,
+        workspace.controllable_optics.groups,
+        Int(slot.family_slot),
+        Int(slot.member_slot),
+        binding,
+        application_state,
+        state.scheduler.current_timestamp,
+    )
+end
+
+@inline function _commit_event_controllable_optic_family_command!(
+    ::Tuple{},
+    ::Tuple{},
+    ::Tuple{},
+    family_slot::Int,
+    member_slot::Int,
+    binding::_PreparedPlantCommandEndpoint,
+    timestamp::PlantTimestamp,
+)
+    return _prepared_controllable_optic_slot_error(
+        family_slot, member_slot)
+end
+
+@inline function _commit_event_controllable_optic_family_command!(
+    prepared_families::Tuple,
+    state_families::Tuple,
+    workspace_families::Tuple,
+    family_slot::Int,
+    member_slot::Int,
+    binding::_PreparedPlantCommandEndpoint,
+    timestamp::PlantTimestamp,
+)
+    if family_slot == 1
+        optic = @inbounds prepared_families[1].values[member_slot]
+        optic_state = @inbounds state_families[1].values[member_slot]
+        optic_workspace = @inbounds workspace_families[1].values[member_slot]
+        commit_controllable_optic_command!(
+            optic.implementation,
+            optic_state,
+            optic_workspace,
+            command_endpoint_id(binding),
+            timestamp,
+        )
+        return nothing
+    end
+    return _commit_event_controllable_optic_family_command!(
+        Base.tail(prepared_families),
+        Base.tail(state_families),
+        Base.tail(workspace_families),
+        family_slot - 1,
+        member_slot,
+        binding,
+        timestamp,
+    )
 end
 
 @inline function _commit_event_controllable_optic_command!(
@@ -2614,13 +2851,17 @@ end
     state::PlantEventLoopState,
     workspace::PlantEventLoopWorkspace,
     endpoint_slot::Integer)
-    binding, optic, optic_state, optic_workspace =
-        _event_controllable_optic_parts(prepared, state, workspace,
-            endpoint_slot)
-    commit_controllable_optic_command!(optic.implementation, optic_state,
-        optic_workspace, command_endpoint_id(binding),
-        state.scheduler.current_timestamp)
-    return nothing
+    binding = _event_command_endpoint(prepared, endpoint_slot).binding
+    slot = @inbounds prepared.optics.slots[Int(binding.optic_slot)]
+    return _commit_event_controllable_optic_family_command!(
+        prepared.optics.groups,
+        state.controllable_optics.groups,
+        workspace.controllable_optics.groups,
+        Int(slot.family_slot),
+        Int(slot.member_slot),
+        binding,
+        state.scheduler.current_timestamp,
+    )
 end
 
 @noinline function _fail_composed_command_staging!(
@@ -2706,17 +2947,26 @@ function _apply_event_command_claim!(
     workspace::PlantEventLoopWorkspace,
     endpoint_slot::Integer,
     claim::PlantCommandApplicationClaim)
-    binding, optic, optic_state, optic_workspace =
-        _event_controllable_optic_parts(prepared, state, workspace,
-            endpoint_slot)
+    binding = _event_command_endpoint(prepared, endpoint_slot).binding
     endpoint_state = _event_command_endpoint_state(state, endpoint_slot)
     application_state =
         _event_command_application_state(state, endpoint_slot)
     endpoint_workspace = _event_command_workspace(workspace, endpoint_slot)
+    slot = @inbounds prepared.optics.slots[Int(binding.optic_slot)]
     staged = try
-        _apply_event_command_claim_parts!(binding, endpoint_state,
-            application_state, endpoint_workspace, optic, optic_state,
-            optic_workspace, claim, state.scheduler.current_timestamp)
+        _apply_event_command_claim_family!(
+            prepared.optics.groups,
+            state.controllable_optics.groups,
+            workspace.controllable_optics.groups,
+            Int(slot.family_slot),
+            Int(slot.member_slot),
+            binding,
+            endpoint_state,
+            application_state,
+            endpoint_workspace,
+            claim,
+            state.scheduler.current_timestamp,
+        )
     catch
         _append_event_command_dispositions!(workspace, endpoint_workspace)
         rethrow()
@@ -2726,6 +2976,67 @@ function _apply_event_command_claim!(
         :application, staged.reason.name,
         "application-stage command policy requires structural failure")
     return nothing
+end
+
+@inline function _apply_event_command_claim_family!(
+    ::Tuple{},
+    ::Tuple{},
+    ::Tuple{},
+    family_slot::Int,
+    member_slot::Int,
+    binding::_PreparedPlantCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    application_state::CommandApplicationState,
+    endpoint_workspace::CommandDispositionWorkspace,
+    claim::PlantCommandApplicationClaim,
+    timestamp::PlantTimestamp,
+)
+    return _prepared_controllable_optic_slot_error(
+        family_slot, member_slot)
+end
+
+@inline function _apply_event_command_claim_family!(
+    prepared_families::Tuple,
+    state_families::Tuple,
+    workspace_families::Tuple,
+    family_slot::Int,
+    member_slot::Int,
+    binding::_PreparedPlantCommandEndpoint,
+    endpoint_state::CommandEndpointState,
+    application_state::CommandApplicationState,
+    endpoint_workspace::CommandDispositionWorkspace,
+    claim::PlantCommandApplicationClaim,
+    timestamp::PlantTimestamp,
+)
+    if family_slot == 1
+        optic = @inbounds prepared_families[1].values[member_slot]
+        optic_state = @inbounds state_families[1].values[member_slot]
+        optic_workspace = @inbounds workspace_families[1].values[member_slot]
+        return _apply_event_command_claim_parts!(
+            binding,
+            endpoint_state,
+            application_state,
+            endpoint_workspace,
+            optic,
+            optic_state,
+            optic_workspace,
+            claim,
+            timestamp,
+        )
+    end
+    return _apply_event_command_claim_family!(
+        Base.tail(prepared_families),
+        Base.tail(state_families),
+        Base.tail(workspace_families),
+        family_slot - 1,
+        member_slot,
+        binding,
+        endpoint_state,
+        application_state,
+        endpoint_workspace,
+        claim,
+        timestamp,
+    )
 end
 
 function _apply_event_command_silence!(
@@ -3564,9 +3875,14 @@ function _notify_autonomous_trigger_source!(
     @inbounds for binding in prepared.autonomous_optics
         _phase_reference_matches_source(binding.phase_reference,
             nominal.source_id) || continue
-        optic_state = state.controllable_optics[Int(binding.optic_slot)]
-        reset_autonomous_periodic_optic_phase!(binding.implementation,
-            optic_state, timestamp, nominal.sequence)
+        _reset_event_autonomous_optic!(
+            prepared,
+            state,
+            binding.optic_slot,
+            binding.implementation,
+            timestamp,
+            nominal.sequence,
+        )
     end
     return nothing
 end
@@ -3575,12 +3891,69 @@ function _reset_triggered_autonomous_optic!(
     prepared::PreparedPlantEventLoop, state::PlantEventLoopState,
     slot::UInt32, delivery::TriggerDelivery)
     binding = @inbounds prepared.autonomous_optics[Int(slot)]
-    optic_state = @inbounds state.controllable_optics[
-        Int(binding.optic_slot)]
-    reset_autonomous_periodic_optic_phase!(binding.implementation,
-        optic_state, delivered_trigger_edge(delivery).timestamp,
-        nominal_trigger_edge(delivery).sequence)
-    return nothing
+    return _reset_event_autonomous_optic!(
+        prepared,
+        state,
+        binding.optic_slot,
+        binding.implementation,
+        delivered_trigger_edge(delivery).timestamp,
+        nominal_trigger_edge(delivery).sequence,
+    )
+end
+
+@inline function _reset_event_autonomous_optic_family!(
+    ::Tuple{},
+    family_slot::Int,
+    member_slot::Int,
+    implementation,
+    timestamp::PlantTimestamp,
+    sequence::UInt64,
+)
+    return _prepared_controllable_optic_slot_error(
+        family_slot, member_slot)
+end
+
+@inline function _reset_event_autonomous_optic_family!(
+    state_families::Tuple,
+    family_slot::Int,
+    member_slot::Int,
+    implementation,
+    timestamp::PlantTimestamp,
+    sequence::UInt64,
+)
+    if family_slot == 1
+        optic_state = @inbounds state_families[1].values[member_slot]
+        reset_autonomous_periodic_optic_phase!(
+            implementation, optic_state, timestamp, sequence)
+        return nothing
+    end
+    return _reset_event_autonomous_optic_family!(
+        Base.tail(state_families),
+        family_slot - 1,
+        member_slot,
+        implementation,
+        timestamp,
+        sequence,
+    )
+end
+
+@inline function _reset_event_autonomous_optic!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    optic_slot::UInt32,
+    implementation,
+    timestamp::PlantTimestamp,
+    sequence::UInt64,
+)
+    slot = @inbounds prepared.optics.slots[Int(optic_slot)]
+    return _reset_event_autonomous_optic_family!(
+        state.controllable_optics.groups,
+        Int(slot.family_slot),
+        Int(slot.member_slot),
+        implementation,
+        timestamp,
+        sequence,
+    )
 end
 
 @inline function _next_trigger_action_timestamp(
@@ -3595,7 +3968,7 @@ end
 
 function _process_trigger_topology!(
     prepared::PreparedPlantEventLoop{
-        <:Any,<:Any,<:Any,<:Any,<:PreparedTriggerTopology},
+        <:Any,<:Any,<:Any,<:Any,<:Any,<:PreparedTriggerTopology},
     state::PlantEventLoopState{<:TriggerTopologyState},
     workspace::PlantEventLoopWorkspace{<:TriggerTopologyWorkspace},
     claim::EventClaim)
@@ -3656,7 +4029,7 @@ end
 
 function _process_trigger_topology!(
     ::PreparedPlantEventLoop{
-        <:Any,<:Any,<:Any,<:Any,<:_NoPreparedTriggerTopology},
+        <:Any,<:Any,<:Any,<:Any,<:Any,<:_NoPreparedTriggerTopology},
     ::PlantEventLoopState{<:_NoTriggerTopologyState},
     ::PlantEventLoopWorkspace{<:_NoTriggerTopologyWorkspace}, ::EventClaim)
     _plant_event_loop_error(:invalid_action,
@@ -4332,18 +4705,19 @@ Base.@noinline function _apply_due_path_controllable_optics!(
     binding_start::Int,
     binding_stop::Int,
     couplings::Memory{AbstractPupilSurfacePathCoupling},
-    optics::Memory{PreparedControllableOptic},
-    states::Memory{Any},
+    optics::_PreparedControllableOpticRegistry,
+    states::_ControllableOpticStateRegistry,
     bindings::PreparedControllableOpticPathBindings,
 )
     Base.@nospecialize input
     coupling_slot = 1
     @inbounds for binding in binding_start:binding_stop
         optic_index = prepared_controllable_optic_slot(bindings, binding)
-        _apply_prepared_event_controllable_optic_surface!(
+        _apply_prepared_event_controllable_optic_slot!(
             input,
-            optics[optic_index],
-            states[optic_index],
+            optics,
+            states,
+            optic_index,
             couplings[coupling_slot],
         )
         coupling_slot += 1
@@ -4351,12 +4725,66 @@ Base.@noinline function _apply_due_path_controllable_optics!(
     return nothing
 end
 
+@inline function _apply_prepared_event_controllable_optic_family!(
+    input,
+    ::Tuple{},
+    ::Tuple{},
+    family_slot::Int,
+    member_slot::Int,
+    coupling::AbstractPupilSurfacePathCoupling,
+)
+    return _prepared_controllable_optic_slot_error(
+        family_slot, member_slot)
+end
+
+@inline function _apply_prepared_event_controllable_optic_family!(
+    input,
+    prepared_families::Tuple,
+    state_families::Tuple,
+    family_slot::Int,
+    member_slot::Int,
+    coupling::AbstractPupilSurfacePathCoupling,
+)
+    if family_slot == 1
+        optic = @inbounds prepared_families[1].values[member_slot]
+        state = @inbounds state_families[1].values[member_slot]
+        return _apply_prepared_event_controllable_optic_surface!(
+            input, optic, state, coupling)
+    end
+    return _apply_prepared_event_controllable_optic_family!(
+        input,
+        Base.tail(prepared_families),
+        Base.tail(state_families),
+        family_slot - 1,
+        member_slot,
+        coupling,
+    )
+end
+
+@inline function _apply_prepared_event_controllable_optic_slot!(
+    input,
+    optics::_PreparedControllableOpticRegistry,
+    states::_ControllableOpticStateRegistry,
+    optic_index::Int,
+    coupling::AbstractPupilSurfacePathCoupling,
+)
+    slot = @inbounds optics.slots[optic_index]
+    return _apply_prepared_event_controllable_optic_family!(
+        input,
+        optics.groups,
+        states.groups,
+        Int(slot.family_slot),
+        Int(slot.member_slot),
+        coupling,
+    )
+end
+
 @inline function _apply_prepared_event_controllable_optic_surface!(
     input,
-    optic::PreparedControllableOptic{D,P,S},
+    optic::PreparedControllableOptic,
     state,
     coupling::AbstractPupilSurfacePathCoupling,
-) where {D,P,S}
+)
     implementation = optic.implementation
     _apply_event_controllable_optic_surface!(
         controllable_optic_execution_role(implementation),
@@ -4430,17 +4858,72 @@ Base.@noinline function _stage_materialized_path_execution_group!(
         )
         @inbounds for binding_slot in group.autonomous_optic_slots
             binding = prepared.autonomous_optics[Int(binding_slot)]
-            optic_state =
-                state.controllable_optics[Int(binding.optic_slot)]
-            evaluate_autonomous_periodic_optic!(
+            _evaluate_event_autonomous_optic!(
+                prepared,
+                state,
+                binding.optic_slot,
                 binding.implementation,
-                optic_state,
                 binding.coupling,
                 timestamp,
             )
         end
     end
     return nothing
+end
+
+@inline function _evaluate_event_autonomous_optic_family!(
+    ::Tuple{},
+    family_slot::Int,
+    member_slot::Int,
+    implementation,
+    coupling,
+    timestamp::PlantTimestamp,
+)
+    return _prepared_controllable_optic_slot_error(
+        family_slot, member_slot)
+end
+
+@inline function _evaluate_event_autonomous_optic_family!(
+    state_families::Tuple,
+    family_slot::Int,
+    member_slot::Int,
+    implementation,
+    coupling,
+    timestamp::PlantTimestamp,
+)
+    if family_slot == 1
+        optic_state = @inbounds state_families[1].values[member_slot]
+        evaluate_autonomous_periodic_optic!(
+            implementation, optic_state, coupling, timestamp)
+        return nothing
+    end
+    return _evaluate_event_autonomous_optic_family!(
+        Base.tail(state_families),
+        family_slot - 1,
+        member_slot,
+        implementation,
+        coupling,
+        timestamp,
+    )
+end
+
+@inline function _evaluate_event_autonomous_optic!(
+    prepared::PreparedPlantEventLoop,
+    state::PlantEventLoopState,
+    optic_slot::UInt32,
+    implementation,
+    coupling,
+    timestamp::PlantTimestamp,
+)
+    slot = @inbounds prepared.optics.slots[Int(optic_slot)]
+    return _evaluate_event_autonomous_optic_family!(
+        state.controllable_optics.groups,
+        Int(slot.family_slot),
+        Int(slot.member_slot),
+        implementation,
+        coupling,
+        timestamp,
+    )
 end
 
 Base.@noinline function _finish_materialized_path_execution_group!(

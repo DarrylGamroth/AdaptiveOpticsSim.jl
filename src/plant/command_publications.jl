@@ -296,6 +296,12 @@ end
 @inline controllable_optic_visibility(
     optic::PreparedTargetLocalControllableOptic) =
     controllable_optic_visibility(optic.definition)
+@inline function _prepared_controllable_optic_definition(
+    optics::AbstractVector{<:PreparedTargetLocalControllableOptic},
+    index::Int,
+)
+    return @inbounds optics[index].definition
+end
 @inline target_local_command_endpoints(
     optic::PreparedTargetLocalControllableOptic) = optic.endpoints
 @inline prepared_target_local_controllable_optic(

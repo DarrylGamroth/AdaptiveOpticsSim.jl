@@ -295,7 +295,9 @@ function placed_optics_binding_ids(plant::PreparedPlant, path)
         prepared_controllable_optic_binding_range(bindings, path),
     ) do binding
         slot = prepared_controllable_optic_slot(bindings, binding)
-        controllable_optic_id(optics[slot].definition)
+        definition = Plant._prepared_controllable_optic_definition(
+            optics, Int(slot))
+        controllable_optic_id(definition)
     end
 end
 
@@ -309,7 +311,9 @@ function placed_optics_group_ids(plant::PreparedPlant, path)
             bindings, group_index)
         map(prepared_controllable_optic_plane_group_binding_range(group)) do binding
             slot = prepared_controllable_optic_slot(bindings, binding)
-            controllable_optic_id(optics[slot].definition)
+            definition = Plant._prepared_controllable_optic_definition(
+                optics, Int(slot))
+            controllable_optic_id(definition)
         end
     end
 end

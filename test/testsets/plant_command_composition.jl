@@ -544,6 +544,33 @@ end
     @test plant_event_controllable_optic_count(result.prepared) == 2
     @test plant_event_command_endpoint_count(result.prepared) == 2
     @test length(Plant.prepared_controllable_optics(result.plant)) == 2
+    optic_registry = getfield(result.plant, :controllable_optics)
+    @test optic_registry isa Plant._PreparedControllableOpticRegistry
+    @test size(optic_registry) == (2,)
+    @test axes(optic_registry) == (Base.OneTo(2),)
+    @test collect(keys(optic_registry)) == [1, 2]
+    @test firstindex(optic_registry) == 1
+    @test lastindex(optic_registry) == 2
+    @test length(optic_registry.groups) == 1
+    @test only(optic_registry.groups).values isa FixedSizeVector
+    @test length(only(optic_registry.groups).values) == 2
+    @test result.prepared.optics === optic_registry
+    @test result.state.controllable_optics.slots === optic_registry.slots
+    @test result.workspace.controllable_optics.slots === optic_registry.slots
+    for registry in (
+        result.state.controllable_optics,
+        result.workspace.controllable_optics,
+    )
+        @test size(registry) == (2,)
+        @test axes(registry) == (Base.OneTo(2),)
+        @test collect(keys(registry)) == [1, 2]
+        @test firstindex(registry) == 1
+        @test lastindex(registry) == 2
+    end
+    @test only(result.state.controllable_optics.groups).values isa
+        FixedSizeVector
+    @test only(result.workspace.controllable_optics.groups).values isa
+        FixedSizeVector
     @test length(Plant.prepared_command_endpoints(result.plant)) == 2
     @test Plant.prepared_controllable_optic(result.plant, :woofer) ===
         Plant.prepared_controllable_optics(result.plant)[2]
@@ -564,6 +591,70 @@ end
     @test reordered.first_rate == result.first_rate
     @test reordered.second_rate == result.second_rate
     @test reordered.observation == result.observation
+end
+
+@testset "Concrete controllable-optic family storage" begin
+    _, scalar_loop, scalar_state, scalar_workspace, _, _ =
+        command_composition_fixture()
+    _, array_plant, array_loop = array_initial_command_fixture()
+    array_state = PlantEventLoopState(array_loop)
+    array_workspace = PlantEventLoopWorkspace(array_loop)
+
+    scalar_registry = scalar_loop.optics
+    array_registry = getfield(array_plant, :controllable_optics)
+    one_scalar = Plant._prepare_controllable_optic_registry(
+        scalar_registry.definitions, (scalar_registry[1],))
+    mixed_optics = (
+        scalar_registry[1],
+        array_registry[1],
+        scalar_registry[2],
+    )
+    mixed_family_types =
+        Plant._prepared_controllable_optic_family_types(mixed_optics)
+    mixed_groups = Plant._prepare_controllable_optic_families(
+        mixed_family_types, mixed_optics)
+    mixed_slots = Plant._prepare_controllable_optic_slots(
+        mixed_family_types, mixed_optics)
+    mixed_with_another_scalar = (
+        mixed_optics...,
+        scalar_registry[1],
+    )
+    larger_family_types = Plant._prepared_controllable_optic_family_types(
+        mixed_with_another_scalar)
+    larger_groups = Plant._prepare_controllable_optic_families(
+        larger_family_types, mixed_with_another_scalar)
+
+    @test typeof(one_scalar) == typeof(scalar_registry)
+    @test typeof(mixed_groups) == typeof(larger_groups)
+    @test length(mixed_groups) == 2
+    @test map(length, map(group -> group.values, mixed_groups)) == (2, 1)
+    @test map(slot -> (slot.family_slot, slot.member_slot), mixed_slots) ==
+        [(UInt32(1), UInt32(1)),
+            (UInt32(2), UInt32(1)),
+            (UInt32(1), UInt32(2))]
+    @test Plant._prepared_controllable_optic_family_value(
+        mixed_groups, 1, 1) === scalar_registry[1]
+    @test Plant._prepared_controllable_optic_family_value(
+        mixed_groups, 2, 1) === array_registry[1]
+    @test Plant._prepared_controllable_optic_family_value(
+        mixed_groups, 1, 2) === scalar_registry[2]
+
+    mixed_states = Plant._ControllableOpticStateRegistry(
+        (only(scalar_state.controllable_optics.groups),
+            only(array_state.controllable_optics.groups)),
+        mixed_slots,
+    )
+    mixed_workspaces = Plant._ControllableOpticWorkspaceRegistry(
+        (only(scalar_workspace.controllable_optics.groups),
+            only(array_workspace.controllable_optics.groups)),
+        mixed_slots,
+    )
+    @test mixed_states[1] === scalar_state.controllable_optics[1]
+    @test mixed_states[2] === array_state.controllable_optics[1]
+    @test mixed_states[3] === scalar_state.controllable_optics[2]
+    @test mixed_workspaces[1] === scalar_workspace.controllable_optics[1]
+    @test mixed_workspaces[2] === array_workspace.controllable_optics[1]
+    @test mixed_workspaces[3] === scalar_workspace.controllable_optics[2]
 end
 
 @testset "Event-loop command failure drain preserves the optic" begin

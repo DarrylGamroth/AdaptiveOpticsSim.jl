@@ -138,31 +138,380 @@ const _PREPARED_CONTROLLABLE_OPTIC_TOKEN =
 """
 Model-specific physical preparation for one declared controllable optic.
 
-`implementation` is run-immutable preparation data. `endpoint_slots` names the
-independent prepared endpoint owners of this physical device; it does not pack
-their commands or synchronize their timing.
+`definition_slot` binds the cold declaration retained by the prepared
+registry. `implementation` is run-immutable preparation data.
+`endpoint_slots` names the independent prepared endpoint owners of this
+physical device; it does not pack their commands or synchronize their timing.
 """
-struct PreparedControllableOptic{D<:ControllableOpticDefinition,P,S<:Tuple}
-    definition::D
+struct PreparedControllableOptic{
+    P,
+    S<:FixedSizeVector{UInt32},
+}
+    definition_slot::UInt32
     implementation::P
     endpoint_slots::S
 
     function PreparedControllableOptic(
         ::_PreparedControllableOpticToken,
-        definition::D,
+        definition_slot::UInt32,
         implementation::P,
         endpoint_slots::S,
-    ) where {D<:ControllableOpticDefinition,P,S<:Tuple}
-        return new{D,P,S}(definition, implementation, endpoint_slots)
+    ) where {P,S<:FixedSizeVector{UInt32}}
+        iszero(definition_slot) && throw(PlantPreparationError(
+            :controllable_optic,
+            :definition_slot,
+            "prepared controllable-optic definition slot must be positive",
+        ))
+        return new{P,S}(definition_slot, implementation, endpoint_slots)
     end
+end
+
+"""Compact location of one controllable optic in concrete family storage."""
+struct _PreparedControllableOpticSlot
+    family_slot::UInt32
+    member_slot::UInt32
+end
+
+"""Fixed-capacity prepared optics with one exact concrete element type."""
+struct _PreparedControllableOpticFamily{
+    O<:PreparedControllableOptic,
+    V<:FixedSizeVector{O},
+}
+    values::V
+end
+
+
+"""Fixed-capacity persistent states for one exact optic family."""
+struct _ControllableOpticStateFamily{T,V<:FixedSizeVector{T}}
+    values::V
+end
+
+
+"""Fixed-capacity replaceable workspaces for one exact optic family."""
+struct _ControllableOpticWorkspaceFamily{T,V<:FixedSizeVector{T}}
+    values::V
+end
+
+"""
+Definition-order view over concrete prepared controllable-optic families.
+
+The family tuple type depends on the bounded set of exact execution families,
+while `slots` carries runtime optic cardinality. Armed homogeneous storage is
+therefore concrete without specializing the registry type on the number of
+optics in a family.
+"""
+struct _PreparedControllableOpticRegistry{
+    D<:_FixedPlantRegistry{ControllableOpticDefinition},
+    G<:Tuple,
+    S<:FixedSizeVector{_PreparedControllableOpticSlot},
+}
+    definitions::D
+    groups::G
+    slots::S
+end
+
+"""Persistent physical states grouped exactly like prepared optic families."""
+struct _ControllableOpticStateRegistry{
+    G<:Tuple,
+    S<:FixedSizeVector{_PreparedControllableOpticSlot},
+}
+    groups::G
+    slots::S
+end
+
+
+"""Replaceable physical workspaces grouped like prepared optic families."""
+struct _ControllableOpticWorkspaceRegistry{
+    G<:Tuple,
+    S<:FixedSizeVector{_PreparedControllableOpticSlot},
+}
+    groups::G
+    slots::S
+end
+
+Base.size(registry::_PreparedControllableOpticRegistry) =
+    (length(registry.slots),)
+Base.axes(registry::_PreparedControllableOpticRegistry) =
+    axes(registry.slots)
+Base.length(registry::_PreparedControllableOpticRegistry) =
+    length(registry.slots)
+Base.keys(registry::_PreparedControllableOpticRegistry) =
+    eachindex(registry.slots)
+Base.eachindex(registry::_PreparedControllableOpticRegistry) =
+    eachindex(registry.slots)
+Base.firstindex(registry::_PreparedControllableOpticRegistry) =
+    firstindex(registry.slots)
+Base.lastindex(registry::_PreparedControllableOpticRegistry) =
+    lastindex(registry.slots)
+
+Base.size(registry::_ControllableOpticStateRegistry) =
+    (length(registry.slots),)
+Base.axes(registry::_ControllableOpticStateRegistry) =
+    axes(registry.slots)
+Base.length(registry::_ControllableOpticStateRegistry) =
+    length(registry.slots)
+
+Base.size(registry::_ControllableOpticWorkspaceRegistry) =
+    (length(registry.slots),)
+Base.axes(registry::_ControllableOpticWorkspaceRegistry) =
+    axes(registry.slots)
+Base.length(registry::_ControllableOpticWorkspaceRegistry) =
+    length(registry.slots)
+
+Base.keys(registry::Union{
+    _ControllableOpticStateRegistry,
+    _ControllableOpticWorkspaceRegistry,
+}) = eachindex(registry.slots)
+Base.eachindex(registry::Union{
+    _ControllableOpticStateRegistry,
+    _ControllableOpticWorkspaceRegistry,
+}) = eachindex(registry.slots)
+Base.firstindex(registry::Union{
+    _ControllableOpticStateRegistry,
+    _ControllableOpticWorkspaceRegistry,
+}) = firstindex(registry.slots)
+Base.lastindex(registry::Union{
+    _ControllableOpticStateRegistry,
+    _ControllableOpticWorkspaceRegistry,
+}) = lastindex(registry.slots)
+
+@noinline function _prepared_controllable_optic_slot_error(
+    family::Int,
+    member::Int,
+)
+    throw(BoundsError((family_slot=family, member_slot=member)))
+end
+
+@inline function _controllable_optic_runtime_value(
+    registry::Union{
+        _ControllableOpticStateRegistry,
+        _ControllableOpticWorkspaceRegistry,
+    },
+    index::Int,
+)
+    checkbounds(registry.slots, index)
+    slot = @inbounds registry.slots[index]
+    return _prepared_controllable_optic_family_value(
+        registry.groups,
+        Int(slot.family_slot),
+        Int(slot.member_slot),
+    )
+end
+
+@inline Base.getindex(
+    registry::_ControllableOpticStateRegistry,
+    index::Int,
+) = _controllable_optic_runtime_value(registry, index)
+
+@inline Base.getindex(
+    registry::_ControllableOpticWorkspaceRegistry,
+    index::Int,
+) = _controllable_optic_runtime_value(registry, index)
+
+@inline function Base.iterate(
+    registry::Union{
+        _ControllableOpticStateRegistry,
+        _ControllableOpticWorkspaceRegistry,
+    },
+    state::Int=1,
+)
+    state > length(registry) && return nothing
+    return (@inbounds registry[state], state + 1)
+end
+
+@inline function _prepared_controllable_optic_family_value(
+    groups::Tuple{},
+    family::Int,
+    member::Int,
+)
+    return _prepared_controllable_optic_slot_error(family, member)
+end
+
+@inline function _prepared_controllable_optic_family_value(
+    groups::Tuple,
+    family::Int,
+    member::Int,
+)
+    family == 1 && return @inbounds groups[1].values[member]
+    return _prepared_controllable_optic_family_value(
+        Base.tail(groups), family - 1, member)
+end
+
+@inline function Base.getindex(
+    registry::_PreparedControllableOpticRegistry,
+    index::Int,
+)
+    checkbounds(registry.slots, index)
+    slot = @inbounds registry.slots[index]
+    return _prepared_controllable_optic_family_value(
+        registry.groups,
+        Int(slot.family_slot),
+        Int(slot.member_slot),
+    )
+end
+
+@inline function _prepared_controllable_optic_definition(
+    registry::_PreparedControllableOpticRegistry,
+    optic::PreparedControllableOptic,
+)
+    slot = Int(optic.definition_slot)
+    checkbounds(registry.definitions, slot)
+    return @inbounds registry.definitions[slot]
+end
+
+@inline function _prepared_controllable_optic_definition(
+    registry::_PreparedControllableOpticRegistry,
+    index::Int,
+)
+    return _prepared_controllable_optic_definition(
+        registry, registry[index])
+end
+
+@inline function Base.iterate(
+    registry::_PreparedControllableOpticRegistry,
+    state::Int=1,
+)
+    state > length(registry) && return nothing
+    return (@inbounds registry[state], state + 1)
+end
+
+struct _PreparedControllableOpticFamilyType{O<:PreparedControllableOptic} end
+
+@inline _prepared_controllable_optic_family_matches(
+    ::_PreparedControllableOpticFamilyType{O},
+    ::Type{O},
+) where {O<:PreparedControllableOptic} = true
+
+@inline _prepared_controllable_optic_family_matches(
+    ::_PreparedControllableOpticFamilyType,
+    ::Type{<:PreparedControllableOptic},
+) = false
+
+@inline function _has_prepared_controllable_optic_family(
+    ::Tuple{},
+    ::Type{<:PreparedControllableOptic},
+)
+    return false
+end
+
+@inline function _has_prepared_controllable_optic_family(
+    families::Tuple,
+    ::Type{O},
+) where {O<:PreparedControllableOptic}
+    _prepared_controllable_optic_family_matches(families[1], O) &&
+        return true
+    return _has_prepared_controllable_optic_family(Base.tail(families), O)
+end
+
+function _append_prepared_controllable_optic_family(
+    families::Tuple,
+    optic::O,
+) where {O<:PreparedControllableOptic}
+    _has_prepared_controllable_optic_family(families, O) && return families
+    return (families..., _PreparedControllableOpticFamilyType{O}())
+end
+
+function _prepared_controllable_optic_family_types(optics)
+    Base.@nospecialize optics
+    families = ()
+    @inbounds for optic in optics
+        families = _append_prepared_controllable_optic_family(
+            families, optic)
+    end
+    return families
+end
+
+function _prepare_controllable_optic_family(
+    ::_PreparedControllableOpticFamilyType{O},
+    optics,
+) where {O<:PreparedControllableOptic}
+    Base.@nospecialize optics
+    count = 0
+    @inbounds for optic in optics
+        typeof(optic) === O && (count += 1)
+    end
+    values = Vector{O}(undef, count)
+    next = 1
+    @inbounds for optic in optics
+        typeof(optic) === O || continue
+        values[next] = optic
+        next += 1
+    end
+    fixed = FixedSizeVectorDefault{O}(values)
+    return _PreparedControllableOpticFamily{O,typeof(fixed)}(fixed)
+end
+
+@inline _prepare_controllable_optic_families(::Tuple{}, optics) = ()
+
+function _prepare_controllable_optic_families(families::Tuple, optics)
+    Base.@nospecialize optics
+    first = _prepare_controllable_optic_family(families[1], optics)
+    rest = _prepare_controllable_optic_families(Base.tail(families), optics)
+    return (first, rest...)
+end
+
+@inline function _prepared_controllable_optic_family_index(
+    ::Tuple{},
+    ::Type{<:PreparedControllableOptic},
+    ::Int=1,
+)
+    return 0
+end
+
+
+@inline function _prepared_controllable_optic_family_index(
+    families::Tuple,
+    ::Type{O},
+    index::Int=1,
+) where {O<:PreparedControllableOptic}
+    _prepared_controllable_optic_family_matches(families[1], O) &&
+        return index
+    return _prepared_controllable_optic_family_index(
+        Base.tail(families), O, index + 1)
+end
+
+function _prepare_controllable_optic_slots(families::Tuple, optics)
+    Base.@nospecialize optics
+    length(families) <= typemax(UInt32) || throw(PlantPreparationError(
+        :controllable_optic,
+        :family_capacity,
+        "prepared controllable-optic family count exceeds UInt32 capacity",
+    ))
+    counts = zeros(UInt32, length(families))
+    slots = Vector{_PreparedControllableOpticSlot}(undef, length(optics))
+    @inbounds for index in eachindex(optics)
+        family = _prepared_controllable_optic_family_index(
+            families, typeof(optics[index]))
+        iszero(family) && throw(PlantPreparationError(
+            :controllable_optic,
+            :missing_family,
+            "prepared controllable optic has no concrete family",
+        ))
+        counts[family] == typemax(UInt32) && throw(PlantPreparationError(
+            :controllable_optic,
+            :family_capacity,
+            "prepared controllable-optic family exceeds UInt32 capacity",
+        ))
+        counts[family] += UInt32(1)
+        slots[index] = _PreparedControllableOpticSlot(
+            UInt32(family), counts[family])
+    end
+    return FixedSizeVectorDefault{_PreparedControllableOpticSlot}(slots)
+end
+
+function _prepare_controllable_optic_registry(
+    definitions::_FixedPlantRegistry{ControllableOpticDefinition},
+    optics,
+)
+    Base.@nospecialize optics
+    family_types = _prepared_controllable_optic_family_types(optics)
+    groups = _prepare_controllable_optic_families(family_types, optics)
+    slots = _prepare_controllable_optic_slots(family_types, optics)
+    return _PreparedControllableOpticRegistry(definitions, groups, slots)
 end
 
 @inline controllable_optic_implementation(
     optic::PreparedControllableOptic) = optic.implementation
-@inline controllable_optic_placement(optic::PreparedControllableOptic) =
-    controllable_optic_placement(optic.definition)
-@inline controllable_optic_visibility(optic::PreparedControllableOptic) =
-    controllable_optic_visibility(optic.definition)
 
 """
     prepare_controllable_optic(model, definition, telescope, atmosphere)
@@ -404,8 +753,14 @@ end
 
 function _prepare_controllable_optics(definition::PlantDefinition,
     optic_definitions, endpoints, telescope, atmosphere)
-    optics = Memory{PreparedControllableOptic}(
-        undef, length(optic_definitions))
+    declared_definitions = controllable_optic_definitions(definition)
+    length(declared_definitions) <= typemax(UInt32) || throw(
+        PlantPreparationError(
+            :controllable_optic,
+            :capacity,
+            "prepared controllable-optic count exceeds UInt32 capacity",
+        ))
+    optics = ()
     for index in eachindex(optic_definitions)
         optic_definition = optic_definitions[index]
         implementation = prepare_controllable_optic(
@@ -421,15 +776,27 @@ function _prepare_controllable_optics(definition::PlantDefinition,
                 "prepare_controllable_optic must return immutable " *
                 "preparation data; mutable physical state is constructed " *
                 "separately"))
-        slots = map(command_schemas(optic_definition)) do schema
+        endpoint_slots = UInt32[
             _prepared_command_endpoint_slot(endpoints,
                 command_endpoint_id(schema))
-        end
-        optics[index] = PreparedControllableOptic(
-            _PREPARED_CONTROLLABLE_OPTIC_TOKEN, optic_definition,
-            implementation, slots)
+            for schema in command_schemas(optic_definition)
+        ]
+        fixed_endpoint_slots =
+            FixedSizeVectorDefault{UInt32}(endpoint_slots)
+        definition_slot = _controllable_optic_slot(
+            declared_definitions,
+            controllable_optic_id(optic_definition),
+        )
+        optic = PreparedControllableOptic(
+            _PREPARED_CONTROLLABLE_OPTIC_TOKEN,
+            UInt32(definition_slot),
+            implementation,
+            fixed_endpoint_slots,
+        )
+        optics = (optics..., optic)
     end
-    return optics
+    return _prepare_controllable_optic_registry(
+        declared_definitions, optics)
 end
 
 struct _PreparedControllableOpticPathBindingsToken end
@@ -505,25 +872,27 @@ function _canonical_prepared_path_slots(paths::AbstractVector)
 end
 
 @inline function _optic_binding_slot_isless(left::UInt32, right::UInt32,
-    optics::AbstractVector)
-    left_optic = optics[Int(left)]
-    right_optic = optics[Int(right)]
-    left_placement = controllable_optic_placement(left_optic)
-    right_placement = controllable_optic_placement(right_optic)
+    optics)
+    left_definition =
+        _prepared_controllable_optic_definition(optics, Int(left))
+    right_definition =
+        _prepared_controllable_optic_definition(optics, Int(right))
+    left_placement = controllable_optic_placement(left_definition)
+    right_placement = controllable_optic_placement(right_definition)
     if _same_optical_placement(left_placement, right_placement)
-        return String(controllable_optic_id(left_optic.definition).name) <
-            String(controllable_optic_id(right_optic.definition).name)
+        return String(controllable_optic_id(left_definition).name) <
+            String(controllable_optic_id(right_definition).name)
     end
     return _optical_placement_isless(left_placement, right_placement)
 end
 
 function _visible_prepared_optic_slots(
-    optics::AbstractVector, path::OpticalPathID)
+    optics, path::OpticalPathID)
     slots = UInt32[]
     sizehint!(slots, length(optics))
     @inbounds for slot in eachindex(optics)
-        optic = optics[slot]
-        _visible_on_path(controllable_optic_visibility(optic), path) ||
+        definition = _prepared_controllable_optic_definition(optics, slot)
+        _visible_on_path(controllable_optic_visibility(definition), path) ||
             continue
         slot <= typemax(UInt32) || throw(PlantPreparationError(
             :controllable_optic, :capacity,
@@ -540,17 +909,20 @@ function _append_prepared_optic_plane_groups!(
     optic_slots::Vector{UInt32},
     visible_slots::Vector{UInt32},
     path_slot::UInt32,
-    optics::AbstractVector,
+    optics,
 )
     isempty(visible_slots) && return nothing
     first_binding = length(optic_slots) + 1
     first_slot = first(visible_slots)
-    previous_placement =
-        controllable_optic_placement(optics[Int(first_slot)])
+    previous_definition =
+        _prepared_controllable_optic_definition(optics, Int(first_slot))
+    previous_placement = controllable_optic_placement(previous_definition)
     group_first = first_binding
     group_representative = first_slot
     @inbounds for slot in visible_slots
-        placement = controllable_optic_placement(optics[Int(slot)])
+        definition =
+            _prepared_controllable_optic_definition(optics, Int(slot))
+        placement = controllable_optic_placement(definition)
         if !_same_optical_placement(previous_placement, placement)
             push!(groups, PreparedControllableOpticPlaneGroup(
                 _PREPARED_CONTROLLABLE_OPTIC_PATH_BINDINGS_TOKEN,
@@ -570,7 +942,7 @@ function _append_prepared_optic_plane_groups!(
 end
 
 function _prepare_controllable_optic_path_bindings(
-    optics::AbstractVector, paths::AbstractVector)
+    optics, paths::AbstractVector)
     length(paths) <= typemax(UInt32) || throw(PlantPreparationError(
         :path, :capacity, "prepared path count exceeds UInt32 capacity"))
     canonical_path_slots = _canonical_prepared_path_slots(paths)

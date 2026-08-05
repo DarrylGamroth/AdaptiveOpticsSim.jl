@@ -659,8 +659,11 @@ function mcao_moao_native_runtime_binding(
     path_id_value::Symbol,
 )
     optic_id_value = ControllableOpticID(optic_id)
-    optic_slot = findfirst(fixture.event_loop.optics) do optic
-        controllable_optic_id(optic.definition) == optic_id_value
+    optics = fixture.event_loop.optics
+    optic_slot = findfirst(eachindex(optics)) do slot
+        definition =
+            Plant._prepared_controllable_optic_definition(optics, slot)
+        controllable_optic_id(definition) == optic_id_value
     end
     optic_slot === nothing &&
         error("test fixture has no prepared optic $optic_id_value")
@@ -684,7 +687,9 @@ function mcao_moao_native_runtime_binding(
         "test fixture optic $optic_id_value is hidden on $path_id_value",
     )
     optic = fixture.event_loop.optics[optic_slot]
-    endpoint = only(command_endpoint_ids(optic.definition))
+    definition =
+        Plant._prepared_controllable_optic_definition(optics, optic)
+    endpoint = only(command_endpoint_ids(definition))
     return (
         implementation=optic.implementation,
         state=fixture.state.controllable_optics[optic_slot],
@@ -1245,6 +1250,8 @@ end
 
 @testset "Common MCAO surfaces and target-local MOAO isolation" begin
     fixture = mcao_moao_full_optical_fixture()
+    @test length(fixture.event_loop.optics.groups) == 1
+    @test length(only(fixture.event_loop.optics.groups).values) == 5
     @test step_plant_events!(
         fixture.event_loop,
         fixture.state,
