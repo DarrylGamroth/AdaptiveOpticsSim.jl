@@ -169,7 +169,7 @@ function generate_linear_apd_qualification_artifact()
         ),
         "scope" => Dict(
             "included" => [
-                "quantum efficiency and integration duration",
+                "quantum efficiency and exposure duration",
                 "dark current",
                 "linear avalanche gain and moderate-charge excess-noise approximation",
                 "additive read noise and conversion gain",

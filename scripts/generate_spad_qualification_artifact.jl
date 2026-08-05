@@ -290,7 +290,7 @@ function generate_spad_qualification_artifact()
         ),
         "model" => Dict(
             "input" => "cell-integrated photon-arrival rate in photons per second per array cell",
-            "output" => "accumulated expected counts or sampled counts per integration",
+            "output" => "accumulated expected counts or sampled counts per exposure",
             "live_time_equation" =>
                 "live_time = duty_cycle * exposure_duration",
             "pipeline_order" => "radiometry and dark expectation; dead-time mean law; deterministic mean response; optional Poisson surrogate; output conversion",

@@ -567,8 +567,9 @@ kind = AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(ramp_detector)
 This direct `capture!` workflow is the lower-fidelity post-exposure convenience:
 it synthesizes evenly spaced reads by scaling one completed frame. The returned
 frame is `slope * exposure_duration`, while the fitted slope, intercept, read
-cube, and timestamps remain in detector-owned reusable products. It does not
-represent changing atmosphere, source, or optic state during the exposure.
+cube, and read offsets in seconds remain in detector-owned reusable products.
+It does not represent changing atmosphere, source, or optic state during the
+exposure.
 
 For a time-resolved ramp, first prepare an `IntensityMap` as `rate_map`, then use
 the qualified event surface. The producer may update the bound `rate_map.values`
@@ -645,7 +646,8 @@ linear-mode APD channel surface.
 
 Rolling-shutter detectors can also capture a time-varying scene. Use
 `InPlaceFrameSource` when the source can write into a preallocated frame, or
-`FunctionFrameSource` when a function returns a frame for each sample time:
+`FunctionFrameSource` when a function returns a frame for each exposure-start
+offset in seconds:
 
 ```julia
 det = Detector(

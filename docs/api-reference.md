@@ -1244,11 +1244,11 @@ not the moved detector bindings.
 `capture!(prepared_acquisition; integration_duration=seconds)` is the
 frame-step incremental convenience surface. `integration_duration` is a
 positive integration duration, not an absolute timestamp or sample period.
-Event-driven global-
-shutter, rolling-shutter, and frame-transfer acquisition instead use the
-qualified plant API above, with exact scheduler-owned exposure/read timestamps
-rather than floating accumulated duration as completion authority. The
-composed event loop publishes complete-product sequence/readiness state only;
+Event-driven global-shutter, rolling-shutter, and frame-transfer acquisition
+instead use the qualified plant API above, with exact scheduler-owned
+exposure-boundary and read-event timestamps rather than floating accumulated
+duration as completion authority. The composed event loop publishes
+complete-product sequence/readiness state only;
 leases, ports, progressive transport delivery, and wall-clock pacing remain
 outside this core surface.
 
@@ -1389,7 +1389,7 @@ structure. Core provides no vendor defaults or named cameras.
 
 `InGaAsSensor` is a product-neutral InGaAs area-sensor model. Its `glow_rate`
 is an independent Poisson expectation rate in electrons per pixel per second;
-the model applies it over integration duration and does not infer a read-cadence
+the model applies it over exposure duration and does not infer a read-cadence
 glow law. Ordinary `Detector.dark_current` remains a separate rate. InGaAs
 technology does not select a presampling response: the default is
 `NullFrameResponse`, and an aperture, sampled response, or other detector MTF

@@ -315,7 +315,7 @@ function generate_mkid_qualification_artifact()
         ),
         "model" => Dict(
             "input" => "cell-integrated, spectrally prefiltered photon-arrival rate in photons per second per detector pixel",
-            "observable" => "accumulated expected-count or sampled-count image per integration",
+            "observable" => "accumulated expected-count or sampled-count image per exposure",
             "pipeline_order" => "QE, fill factor, live time, and source throughput; dark expectation; dead-time mean law; optional Poisson surrogate; output conversion",
             "nonparalyzable_mean_law" =>
                 "mu / (1 + mu * tau / live_time)",

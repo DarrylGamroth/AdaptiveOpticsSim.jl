@@ -293,7 +293,7 @@ function generate_cmos_qualification_artifact()
         ))
     cpu = first(Sys.cpu_info())
     artifact = Dict{String,Any}(
-        "schema_version" => 1,
+        "schema_version" => 2,
         "artifact_id" => CMOS_ARTIFACT_ID,
         "family" => "parameterized_cmos",
         "all_gates_passed" =>

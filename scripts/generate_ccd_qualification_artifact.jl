@@ -178,7 +178,7 @@ function generate_ccd_qualification_artifact()
 
     cpu = first(Sys.cpu_info())
     artifact = Dict{String,Any}(
-        "schema_version" => 1,
+        "schema_version" => 2,
         "artifact_id" => CCD_ARTIFACT_ID,
         "family" => "conventional_ccd_single_read",
         "all_gates_passed" =>
