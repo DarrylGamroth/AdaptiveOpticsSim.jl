@@ -646,7 +646,7 @@ function target_partition_test_error(f, component::Symbol, reason::Symbol)
 end
 
 function target_partition_test_path_ids(partition)
-    return Tuple(path_id(path.definition) for path in prepared_paths(partition))
+    return Tuple(path_id(path) for path in prepared_paths(partition))
 end
 
 function target_partition_test_acquisition_ids(partition)
