@@ -1031,7 +1031,7 @@ function _prepare_controllable_optic_path_coupling(
         "prepared model $(typeof(implementation)) does not implement " *
         "atmospheric-conjugate path coupling at " *
         "$(conjugate_altitude_m(placement)) m for " *
-        "$(path_id(path.definition))"))
+        "$(path_id(path))"))
 end
 
 function _prepare_controllable_optic_path_coupling(
@@ -1045,7 +1045,7 @@ function _prepare_controllable_optic_path_coupling(
         :invalid_optic_placement,
         "pupil-surface controllable optic " *
         "$(controllable_optic_id(definition)) cannot use " *
-        "$(typeof(placement)) on $(path_id(path.definition)); prepared " *
+        "$(typeof(placement)) on $(path_id(path)); prepared " *
         "model is $(typeof(implementation))"))
 end
 
@@ -1060,7 +1060,7 @@ function _prepare_controllable_optic_path_coupling(
         :unsupported_optic_execution_role,
         "controllable optic $(controllable_optic_id(definition)) has " *
         "unsupported execution role $(typeof(role)) at " *
-        "$(typeof(placement)) on $(path_id(path.definition)); prepared " *
+        "$(typeof(placement)) on $(path_id(path)); prepared " *
         "model is $(typeof(implementation))"))
 end
 

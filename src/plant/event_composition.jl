@@ -654,7 +654,7 @@ end
 function _event_prepared_path(plant::PreparedPlant, id::OpticalPathID)
     Base.@nospecialize plant
     for path in getfield(plant, :paths)
-        path_id(path.definition) == id && return path
+        path_id(path) == id && return path
     end
     _plant_event_loop_error(:unknown_path,
         "prepared plant has no optical path $id")
@@ -664,7 +664,7 @@ function _event_prepared_acquisition(plant::PreparedPlant,
     id::AcquisitionID)
     Base.@nospecialize plant
     for owner in getfield(plant, :acquisitions)
-        acquisition_id(owner.definition) == id && return owner
+        acquisition_id(owner) == id && return owner
     end
     _plant_event_loop_error(:unknown_acquisition,
         "prepared plant has no acquisition $id")
@@ -1030,7 +1030,7 @@ end
 function _event_path_requires_full_optical(id::OpticalPathID, owners)
     has_acquisition = false
     @inbounds for owner in owners
-        acquisition_path_id(owner.definition) == id || continue
+        acquisition_path_id(owner) == id || continue
         has_acquisition = true
         _provider_requires_full_optical(acquisition_provider_style(owner)) &&
             return true
@@ -1075,7 +1075,7 @@ function _prepare_event_path_optic_coupling(
     return _require_prepared_event_path_coupling(
         coupling,
         controllable_optic_id(definition),
-        path_id(path.definition),
+        path_id(path),
     )
 end
 
@@ -1088,7 +1088,7 @@ end
     return _prepare_event_autonomous_path_coupling(
         controllable_optic_placement(definition),
         controllable_optic_id(definition),
-        path_id(path.definition),
+        path_id(path),
     )
 end
 
@@ -1118,7 +1118,7 @@ function _prepare_event_path_optic_coupling(
 )
     _plant_event_loop_error(:unsupported_optic_execution_role,
         "controllable optic $(controllable_optic_id(definition)) on " *
-        "path $(path_id(path.definition)) declares unsupported execution " *
+        "path $(path_id(path)) declares unsupported execution " *
         "role $(typeof(role))")
 end
 
@@ -1535,7 +1535,7 @@ function _prepare_event_acquisition_lifecycle(
     visible_endpoint_slots =
         _event_path_visible_command_endpoint_slots(
             plant,
-            acquisition_path_id(owner.definition),
+            acquisition_path_id(owner),
         )
     sample_provider = prepare_linear_reduced_order_event_provider(
         implementation,
@@ -1550,7 +1550,7 @@ function _prepare_event_acquisition_lifecycle(
     definition::AbstractAcquisitionLifecycleDefinition,
     ::CommandResponsiveReducedOrderProviderStyle)
     _plant_event_loop_error(:unsupported_acquisition,
-        "command-responsive reduced-order acquisition $(acquisition_id(owner.definition)) requires DirectMeasurementAcquisitionDefinition; got $(typeof(definition))")
+        "command-responsive reduced-order acquisition $(acquisition_id(owner)) requires DirectMeasurementAcquisitionDefinition; got $(typeof(definition))")
 end
 
 function _prepare_event_acquisition_lifecycle(
@@ -1566,7 +1566,7 @@ function _prepare_event_acquisition_lifecycle(
     definition::DirectMeasurementAcquisitionDefinition,
     ::FullOpticalProviderStyle)
     _plant_event_loop_error(:unsupported_acquisition,
-        "full-optical acquisition $(acquisition_id(owner.definition)) requires a detector lifecycle, not DirectMeasurementAcquisitionDefinition")
+        "full-optical acquisition $(acquisition_id(owner)) requires a detector lifecycle, not DirectMeasurementAcquisitionDefinition")
 end
 
 function _prepare_event_acquisition_parts(plant::PreparedPlant,
@@ -1593,7 +1593,7 @@ function _prepare_event_acquisition_parts(plant::PreparedPlant,
         push!(sample_providers, sample_provider)
         push!(rngs, rng_stream_state(acquisition_rngs, Val(:detector)))
         push!(path_slots, _event_path_slot_from_definitions(path_definitions,
-            acquisition_path_id(owner.definition)))
+            acquisition_path_id(owner)))
     end
     return owners, lifecycles, products, sample_providers, rngs, path_slots
 end

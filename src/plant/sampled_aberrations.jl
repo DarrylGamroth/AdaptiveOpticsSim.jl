@@ -293,7 +293,7 @@ function _prepare_sampled_aberration_path_coupling_impl(
 )
     definition = aberration.definition
     id = sampled_aberration_id(definition)
-    path_identity = path_id(path.definition)
+    path_identity = path_id(path)
     try
         return prepare_sampled_pupil_footprint_coupling(
             sampled_aberration_metadata(aberration),
@@ -310,7 +310,7 @@ end
 
 function _prepare_sampled_aberration_path_bindings(
     aberrations::AbstractVector,
-    paths::AbstractVector,
+    paths,
 )
     canonical_path_slots = _canonical_prepared_path_slots(paths)
     path_ids = OpticalPathID[]
@@ -323,7 +323,7 @@ function _prepare_sampled_aberration_path_bindings(
     sizehint!(coupling_values, length(paths) * length(aberrations))
     @inbounds for path_slot in canonical_path_slots
         path = paths[path_slot]
-        id = path_id(path.definition)
+        id = path_id(path)
         push!(path_ids, id)
         visible_slots =
             _visible_sampled_aberration_slots(aberrations, id)
@@ -540,7 +540,7 @@ end
     bindings::PreparedSampledAberrationPathBindings,
 )
     range = prepared_sampled_aberration_binding_range(
-        bindings, path_id(path.definition))
+        bindings, path_id(path))
     isempty(range) && return path
     _apply_sampled_aberration_bindings!(
         path.input, aberrations, bindings, range)

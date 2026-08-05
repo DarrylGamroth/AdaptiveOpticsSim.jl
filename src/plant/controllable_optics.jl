@@ -864,10 +864,10 @@ function _optic_binding_memory(values::Vector{T}) where {T}
     return result
 end
 
-function _canonical_prepared_path_slots(paths::AbstractVector)
+function _canonical_prepared_path_slots(paths)
     slots = collect(eachindex(paths))
     sort!(slots; by=slot ->
-        String(path_id(paths[slot].definition).name))
+        String(path_id(paths[slot]).name))
     return slots
 end
 
@@ -941,8 +941,7 @@ function _append_prepared_optic_plane_groups!(
     return nothing
 end
 
-function _prepare_controllable_optic_path_bindings(
-    optics, paths::AbstractVector)
+function _prepare_controllable_optic_path_bindings(optics, paths)
     length(paths) <= typemax(UInt32) || throw(PlantPreparationError(
         :path, :capacity, "prepared path count exceeds UInt32 capacity"))
     canonical_path_slots = _canonical_prepared_path_slots(paths)
@@ -960,7 +959,7 @@ function _prepare_controllable_optic_path_bindings(
     sizehint!(groups, length(paths) * length(optics))
     @inbounds for path_slot_value in canonical_path_slots
         path_slot = UInt32(path_slot_value)
-        id = path_id(paths[path_slot_value].definition)
+        id = path_id(paths[path_slot_value])
         push!(path_ids, id)
         push!(path_slots, path_slot)
         visible_slots = _visible_prepared_optic_slots(optics, id)

@@ -61,6 +61,8 @@ end
 
 @inline _rng_owner_binding_token(resources::PreparedTargetLocalPathResources) =
     resources.rng_token
+@inline path_id(resources::PreparedTargetLocalPathResources) =
+    path_id(resources.definition)
 
 function PreparedTargetLocalPathResources(
     definition::OpticalPathDefinition,
@@ -161,7 +163,7 @@ function prepare_controllable_optic_path_coupling(
         :wrong_device,
         "target-local controllable optic $(controllable_optic_id(optic)) " *
         "occupies $(compute_device(optic)); path " *
-        "$(path_id(path.definition)) occupies $path_target",
+        "$(path_id(path)) occupies $path_target",
     ))
     return prepare_controllable_optic_path_coupling(
         optic.implementation, optic.definition, path)
@@ -358,11 +360,11 @@ function PreparedTargetLocalAcquisitionResources(
     path::PreparedTargetLocalPathResources,
     provider::PreparedAcquisitionProvider,
 )
-    acquisition_path_id(definition) == path_id(path.definition) || throw(
+    acquisition_path_id(definition) == path_id(path) || throw(
         PlantPreparationError(
             :acquisition,
             :unknown_path,
-            "acquisition $(definition.id) does not reference prepared target-local path $(path.definition.id)",
+            "acquisition $(definition.id) does not reference prepared target-local path $(path_id(path))",
         ),
     )
     target = getfield(path.key, :device)

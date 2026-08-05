@@ -426,6 +426,7 @@ end
 @testset "Prepared path executors reject disguised optical bindings" begin
     partitions = path_input_publication_test_partitions()
     path = path_input_publication_test_oracle(partitions, :alpha)
+    definition = path_definition(plant_definition(partitions), :alpha)
     wrong_source_materialization =
         path_input_publication_wrong_renderer_source_materialization(
             getfield(path, :atmosphere),
@@ -435,7 +436,7 @@ end
         )
     constructor_error = assert_path_materialization_binding_error() do
         PreparedPathExecutor(
-            getfield(path, :definition),
+            definition,
             getfield(path, :source),
             getfield(path, :telescope),
             getfield(path, :atmosphere),
@@ -460,7 +461,7 @@ end
         )
     telescope_error = assert_path_materialization_binding_error() do
         PreparedPathExecutor(
-            getfield(path, :definition),
+            definition,
             getfield(path, :source),
             getfield(path, :telescope),
             getfield(path, :atmosphere),
@@ -478,11 +479,13 @@ end
 
     forged = PreparedPathExecutor(
         Plant._PREPARED_PATH_EXECUTOR_TOKEN,
-        getfield(path, :definition),
+        UInt32(0),
+        path_id(path),
         getfield(path, :source),
         getfield(path, :telescope),
         getfield(path, :atmosphere),
         getfield(path, :context),
+        getfield(path, :rng_token),
         path_input(path),
         path_result(path),
         wrong_source_materialization,
