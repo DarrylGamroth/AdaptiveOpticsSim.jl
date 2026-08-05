@@ -10,6 +10,8 @@ function zernike_signal_allocations(wfs, pupil, src, frame,
         normalization_scale)
 end
 
+@inline wfs_optical_rate_storage(wfs::ZernikeWFS) =
+    wfs.acquisition.products.frame
 @inline wfs_optical_rate_storage(wfs) =
     wfs.acquisition.state.camera_frame
 
@@ -70,8 +72,8 @@ end
             max(sum(frame[valid]) / count(valid), eps(eltype(frame)))
         else
             photon_rate = pupil_photon_rate_map(tel, src)
-            nominal = similar(wfs.front_end.propagation.nominal_frame)
-            sampled = similar(wfs.estimator.state.normalization_frame)
+            nominal = similar(wfs.front_end.propagation.workspace.nominal_frame)
+            sampled = similar(wfs.estimator.workspace.normalization_frame)
             sample_zernike_frame!(sampled, nominal, wfs, photon_rate, pupil)
             sum(sampled[valid]) / count(valid) * normalization_scale
         end
@@ -238,9 +240,10 @@ end
         diffraction_padding=2)
     zernike_pupil_intensity!(full_zernike, full_pupil, src)
     zernike_pupil_intensity!(attenuated_zernike, attenuated_pupil, src)
-    full_zernike_rate = sum(full_zernike.front_end.propagation.pupil_intensity)
+    full_zernike_rate = sum(
+        full_zernike.front_end.propagation.workspace.pupil_intensity)
     @test full_zernike_rate > 0
-    @test sum(attenuated_zernike.front_end.propagation.pupil_intensity) ≈
+    @test sum(attenuated_zernike.front_end.propagation.workspace.pupil_intensity) ≈
         transmission * full_zernike_rate rtol=1e-12
 
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)

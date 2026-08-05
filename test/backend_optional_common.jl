@@ -3753,7 +3753,7 @@ function run_optional_zernike_curvature_stages(
         gpu_zernike_rate, zernike_observation)
     acquire_wfs_observation!(zernike_observation, gpu_zernike_rate,
         zernike_acquisition, Xoshiro(0x5a47))
-    zernike_reference = similar(gpu_zernike.estimator.state.signal_2d)
+    zernike_reference = similar(gpu_zernike.estimator.workspace.signal_2d)
     fill!(zernike_reference, zero(T))
     set_zernike_calibration!(gpu_zernike, zernike_reference;
         wavelength_m=wavelength(source), signature=UInt(0x5a47))

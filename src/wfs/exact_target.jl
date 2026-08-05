@@ -585,7 +585,7 @@ function _require_exact_wfs_target(
 end
 
 function _require_exact_zernike_propagation_target(
-    propagation::PreparedZernikePropagation,
+    propagation::ZernikePropagationWorkspace,
     target::AbstractComputeDevice,
 )
     _require_exact_wfs_array_targets(
@@ -624,7 +624,7 @@ function _require_exact_wfs_target(
     _require_exact_wfs_product_target(
         plan.output, target, :wfs_optics)
     _require_exact_zernike_propagation_target(
-        plan.front_end.propagation, target)
+        plan.workspace, target)
     return plan
 end
 
@@ -1013,26 +1013,32 @@ function _require_exact_wfs_target(
         plan.measurement, plan.input, plan)
     _require_exact_wfs_observation_target(plan.input, target, :estimation)
     _require_exact_wfs_measurement_target(plan.measurement, target)
-    state = plan.estimator.estimator.state
+    state = plan.state
+    workspace = plan.workspace
+    products = plan.products
     _require_exact_wfs_array_targets(
         (
             state.valid_mask,
-            state.valid_signal_indices,
-            state.slopes,
-            state.signal_2d,
             state.reference_signal_2d,
-            state.reference_frame,
-            state.normalization_frame,
-            state.normalization_partials,
-            state.normalization_sum,
         ),
         (
             "Zernike valid mask",
-            "Zernike valid-signal indices",
-            "Zernike slopes",
-            "Zernike signal",
             "Zernike calibration reference",
-            "Zernike reference frame",
+        ),
+        target,
+        :estimation,
+    )
+    _require_exact_wfs_array_targets(
+        (
+            workspace.valid_signal_indices,
+            workspace.signal_2d,
+            workspace.normalization_frame,
+            workspace.normalization_partials,
+            workspace.normalization_sum,
+        ),
+        (
+            "Zernike valid-signal indices",
+            "Zernike signal",
             "Zernike normalization frame",
             "Zernike normalization partials",
             "Zernike normalization sum",
@@ -1040,6 +1046,8 @@ function _require_exact_wfs_target(
         target,
         :estimation,
     )
+    _require_exact_wfs_storage_target(products.signal, target,
+        :estimation, "Zernike signal product")
     return plan
 end
 

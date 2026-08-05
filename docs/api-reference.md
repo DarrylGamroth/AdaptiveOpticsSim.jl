@@ -1528,7 +1528,11 @@ components. Migrated bindings are not forwarded through the root.
   `ZernikeWFS`, `CurvatureWFS`
 - Zernike optical composition: `Optics.ZernikePhaseSpot`,
   `ZernikeOpticalFrontEnd`, `zernike_rate_map`, and
-  `set_zernike_calibration!`
+  `set_zernike_calibration!`. Qualified prepared-execution seams are
+  `WavefrontSensors.ZernikeOpticsPlan`,
+  `WavefrontSensors.PreparedZernikeOptics`,
+  `WavefrontSensors.ZernikeEstimationPlan`, and
+  `WavefrontSensors.PreparedZernikeEstimator`.
 - Shack-Hartmann optical composition: `Optics` owns `MicrolensArrayParams`,
   `MicrolensArray`, `prepare_microlens_propagation`, and `microlens_array`;
   `WavefrontSensors` owns `ShackHartmannDirectFrontEnd`,
@@ -1678,14 +1682,18 @@ origin. The reusable `CircularModulation` policy stores that origin as
 `phase_offset_rad`.
 
 `ZernikeOpticalFrontEnd` separates the immutable phase-shifting
-`ZernikePhaseSpot` and prepared re-imaged-pupil propagation from detector
-acquisition and the referenced pupil estimator. `zernike_rate_map` allocates a
-caller-owned photon-arrival-rate plane; its acquired observation uses the
-`:zernike_pupil_image` layout. Estimation writes a dimensionless
-`:normalized_pupil_signal` and accepts real floating-point or integer detector
-samples. `set_zernike_calibration!` installs the reference, wavelength, and
-optical signature atomically; prepared estimators reject a later calibration
-revision before output mutation.
+`ZernikePhaseSpot` and propagation plan from its backend-bound re-imaged-pupil
+FFT workspace, detector acquisition, and referenced pupil estimator.
+`zernike_rate_map` allocates a caller-owned photon-arrival-rate plane; its
+acquired observation uses the `:zernike_pupil_image` layout. Estimation keeps
+immutable parameters, persistent support/reference calibration state,
+replaceable reduction scratch, and its dimensionless
+`:normalized_pupil_signal` product separate. It accepts real floating-point or
+integer detector samples. `set_zernike_calibration!` installs the reference,
+wavelength, and optical signature atomically; exact prepared owners reject
+aliases, replaced bindings, or a later calibration revision before destination
+mutation. The convenience sampling path writes directly into its frame product
+and therefore owns no placeholder acquisition workspace.
 
 `CurvatureOpticalFrontEnd` forms a fixed two-element tuple ordered as positive
 then negative defocus. Each product is a separate normalized-pupil-coordinate,
