@@ -413,38 +413,39 @@ function pupil_photon_rate_map(tel::Telescope, src::AbstractSource)
     return out
 end
 
-function apply_spiders!(tel::Telescope; thickness::Real, angles::AbstractVector, offset_x::Real=0.0, offset_y::Real=0.0)
+function apply_spiders!(tel::Telescope; thickness::Real,
+    angles_deg::AbstractVector, offset_x::Real=0.0, offset_y::Real=0.0)
     Base.require_one_based_indexing(pupil_mask(tel))
     radius = tel.params.diameter / 2
     thickness_norm = thickness / radius
     offset_x_norm = offset_x / radius
     offset_y_norm = offset_y / radius
-    _apply_spiders!(pupil_mask(tel), angles, thickness_norm, offset_x_norm,
+    _apply_spiders!(pupil_mask(tel), angles_deg, thickness_norm, offset_x_norm,
         offset_y_norm)
     pupil_reflectivity(tel) .*= pupil_mask(tel)
     advance_aperture_revision!(tel)
     return tel
 end
 
-function _apply_spiders!(pupil::AbstractMatrix{Bool}, angles::AbstractVector, thickness_norm::Real,
+function _apply_spiders!(pupil::AbstractMatrix{Bool}, angles_deg::AbstractVector, thickness_norm::Real,
     offset_x_norm::Real, offset_y_norm::Real)
     T = promote_type(typeof(thickness_norm), typeof(offset_x_norm), typeof(offset_y_norm))
     grid = default_mask_grid(pupil; T=T)
-    for angle in angles
-        apply_mask!(pupil, SpiderMask(thickness=thickness_norm, angle_rad=deg2rad(angle), offset_x=offset_x_norm, offset_y=offset_y_norm,
+    for angle_deg in angles_deg
+        apply_mask!(pupil, SpiderMask(thickness=thickness_norm, angle_rad=deg2rad(angle_deg), offset_x=offset_x_norm, offset_y=offset_y_norm,
             T=T); grid=grid)
     end
     return pupil
 end
 
-function _apply_spiders!(::ScalarCPUStyle, pupil::AbstractMatrix{Bool}, angles::AbstractVector, thickness_norm::Real,
+function _apply_spiders!(::ScalarCPUStyle, pupil::AbstractMatrix{Bool}, angles_deg::AbstractVector, thickness_norm::Real,
     offset_x_norm::Real, offset_y_norm::Real, cx::Real, cy::Real, scale::Real, n::Int)
-    _apply_spiders!(pupil, angles, thickness_norm, offset_x_norm, offset_y_norm)
+    _apply_spiders!(pupil, angles_deg, thickness_norm, offset_x_norm, offset_y_norm)
     return pupil
 end
 
-function _apply_spiders!(::AcceleratorStyle, pupil::AbstractMatrix{Bool}, angles::AbstractVector, thickness_norm::Real,
+function _apply_spiders!(::AcceleratorStyle, pupil::AbstractMatrix{Bool}, angles_deg::AbstractVector, thickness_norm::Real,
     offset_x_norm::Real, offset_y_norm::Real, cx::Real, cy::Real, scale::Real, n::Int)
-    _apply_spiders!(pupil, angles, thickness_norm, offset_x_norm, offset_y_norm)
+    _apply_spiders!(pupil, angles_deg, thickness_norm, offset_x_norm, offset_y_norm)
     return pupil
 end

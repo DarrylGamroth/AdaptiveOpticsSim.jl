@@ -264,7 +264,7 @@ function update_misregistration(mis::Misregistration{T}, field::Symbol, value::R
     return Misregistration(; shift_x=field == :shift_x ? T(value) : mis.shift_x,
         shift_y=field == :shift_y ? T(value) : mis.shift_y,
         rotation_deg=field == :rotation_deg ? T(value) : rotation_deg(mis),
-        anamorphosis_angle=field == :anamorphosis_angle ? T(value) : anamorphosis_angle_deg(mis),
+        anamorphosis_angle_deg=field == :anamorphosis_angle_deg ? T(value) : anamorphosis_angle_deg(mis),
         tangential_scaling=field == :tangential_scaling ? T(value) : mis.tangential_scaling,
         radial_scaling=field == :radial_scaling ? T(value) : mis.radial_scaling,
         T=T)

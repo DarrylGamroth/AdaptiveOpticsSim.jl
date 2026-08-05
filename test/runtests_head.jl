@@ -63,7 +63,7 @@ function plant_test_atmosphere_definition(
         L0=params.L0,
         fractional_cn2=collect(params.cn2_fractions),
         wind_speed=collect(params.wind_speed),
-        wind_direction=collect(params.wind_direction),
+        wind_direction_deg=collect(params.wind_direction_deg),
         altitude=collect(params.altitude),
         layer_ids=params.layer_ids,
         T=T,
@@ -382,7 +382,7 @@ function moving_atmosphere_trace(;
     L0::Real=25.0,
     fractional_cn2::AbstractVector=[1.0],
     wind_speed::AbstractVector=[0.0],
-    wind_direction::AbstractVector=[0.0],
+    wind_direction_deg::AbstractVector=[0.0],
     altitude::AbstractVector=[0.0],
 )
     tel = Telescope(resolution=resolution, diameter=diameter, central_obstruction=0.0)
@@ -391,7 +391,7 @@ function moving_atmosphere_trace(;
         L0=L0,
         fractional_cn2=fractional_cn2,
         wind_speed=wind_speed,
-        wind_direction=wind_direction,
+        wind_direction_deg=wind_direction_deg,
         altitude=altitude,
     )
     rng = MersenneTwister(seed)
@@ -419,7 +419,7 @@ function moving_wfs_slope_trace(;
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[delta / atmosphere_step, 0.5 * delta / atmosphere_step],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
@@ -449,7 +449,7 @@ function moving_closed_loop_trace(;
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[delta / atmosphere_step, 0.5 * delta / atmosphere_step],
-        wind_direction=[0.0, 90.0],
+        wind_direction_deg=[0.0, 90.0],
         altitude=[0.0, 5000.0],
     )
     dm = DeformableMirror(tel; n_act=4, influence_width=0.3)

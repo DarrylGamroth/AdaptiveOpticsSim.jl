@@ -9,8 +9,8 @@ struct Misregistration{T<:AbstractFloat}
 end
 
 function Misregistration(; shift_x::Real=0.0, shift_y::Real=0.0, rotation_deg::Real=0.0,
-    anamorphosis_angle::Real=0.0, tangential_scaling::Real=1.0, radial_scaling::Real=1.0, T::Type{<:AbstractFloat}=Float64)
-    θ = T(deg2rad(anamorphosis_angle))
+    anamorphosis_angle_deg::Real=0.0, tangential_scaling::Real=1.0, radial_scaling::Real=1.0, T::Type{<:AbstractFloat}=Float64)
+    θ = T(deg2rad(anamorphosis_angle_deg))
     sθ, cθ = sincos(θ)
     φ = T(deg2rad(rotation_deg))
     sφ, cφ = sincos(φ)
@@ -51,7 +51,7 @@ end
         return mis.shift_y
     elseif field === :rotation_deg
         return rotation_deg(mis)
-    elseif field === :anamorphosis_angle
+    elseif field === :anamorphosis_angle_deg
         return anamorphosis_angle_deg(mis)
     elseif field === :tangential_scaling
         return mis.tangential_scaling

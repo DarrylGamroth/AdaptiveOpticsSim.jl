@@ -250,7 +250,7 @@ function _convert_deformable_mirror_misregistration(
             shift_x=T(misregistration.shift_x),
             shift_y=T(misregistration.shift_y),
             rotation_deg=T(rad2deg(misregistration.rotation_rad)),
-            anamorphosis_angle=T(
+            anamorphosis_angle_deg=T(
                 rad2deg(misregistration.anamorphosis_angle_rad),
             ),
             tangential_scaling=T(misregistration.tangential_scaling),

@@ -44,7 +44,7 @@ Plant.plant_model_definition_style(
 
     multilayer = MultiLayerAtmosphere(telescope; r0=T(0.2), L0=T(25),
         fractional_cn2=T[0.6, 0.4], wind_speed=T[3, 5],
-        wind_direction=T[0, 90], altitude=T[0, 3_000],
+        wind_direction_deg=T[0, 90], altitude=T[0, 3_000],
         layer_ids=(:ground, :high), T=T)
     screen_n = 3 * n
     layer_resident_bytes = cpu_array_bytes(Bool, screen_n, screen_n) +

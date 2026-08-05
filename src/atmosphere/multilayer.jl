@@ -66,7 +66,7 @@ struct MultiLayerParams{T<:AbstractFloat,
     I<:Tuple}
     cn2_fractions::V1
     wind_speed::V2
-    wind_direction::V3
+    wind_direction_deg::V3
     altitude::V4
     wind_velocity_x::V5
     wind_velocity_y::V6
@@ -354,7 +354,7 @@ function MultiLayerAtmosphere(tel::Telescope;
     L0::Real=25.0,
     fractional_cn2::AbstractVector,
     wind_speed::AbstractVector,
-    wind_direction::AbstractVector,
+    wind_direction_deg::AbstractVector,
     altitude::AbstractVector,
     layer_ids=nothing,
     T::Type{<:AbstractFloat}=Float64,
@@ -363,7 +363,7 @@ function MultiLayerAtmosphere(tel::Telescope;
     selector = require_same_backend(tel, backend)
     n_layers = length(fractional_cn2)
     n_layers > 0 || throw(InvalidConfiguration("fractional_cn2 cannot be empty"))
-    if length(wind_speed) != n_layers || length(wind_direction) != n_layers || length(altitude) != n_layers
+    if length(wind_speed) != n_layers || length(wind_direction_deg) != n_layers || length(altitude) != n_layers
         throw(InvalidConfiguration("layer parameter lengths must match fractional_cn2"))
     end
     all(>=(0), fractional_cn2) || throw(InvalidConfiguration("fractional_cn2 must be non-negative"))
@@ -374,10 +374,10 @@ function MultiLayerAtmosphere(tel::Telescope;
     params = MultiLayerParams(
         T.(fractional_cn2),
         T.(wind_speed),
-        T.(wind_direction),
+        T.(wind_direction_deg),
         T.(altitude),
-        T[T(wind_speed[i]) * cosd(T(wind_direction[i])) for i in 1:n_layers],
-        T[T(wind_speed[i]) * sind(T(wind_direction[i])) for i in 1:n_layers],
+        T[T(wind_speed[i]) * cosd(T(wind_direction_deg[i])) for i in 1:n_layers],
+        T[T(wind_speed[i]) * sind(T(wind_direction_deg[i])) for i in 1:n_layers],
         prepared_layer_ids,
         T(r0),
         T(L0),

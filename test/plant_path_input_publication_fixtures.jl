@@ -381,7 +381,7 @@ function path_input_publication_test_definition(;
         L0=25.0,
         fractional_cn2=[0.65, 0.35],
         wind_speed=[7.0, 11.0],
-        wind_direction=[20.0, 125.0],
+        wind_direction_deg=[20.0, 125.0],
         altitude=[0.0, 5_000.0],
         layer_ids=(:ground, :high),
     )

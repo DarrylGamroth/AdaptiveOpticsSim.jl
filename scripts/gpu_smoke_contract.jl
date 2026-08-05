@@ -69,7 +69,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     lgs = LGSSource(; magnitude=0.0, wavelength=589e-9, altitude=90_000.0,
         laser_coordinates=(0.0, 0.0), photon_irradiance=one(T), T=T)
     spider_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
-    apply_spiders!(spider_tel; thickness=0.5, angles=[0.0, 90.0])
+    apply_spiders!(spider_tel; thickness=0.5, angles_deg=[0.0, 90.0])
     pupil = PupilFunction(tel; T=T, backend=backend)
     spider_pupil = PupilFunction(spider_tel; T=T, backend=backend)
 
@@ -220,7 +220,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
-            wind_direction=T[0.0, 90.0],
+            wind_direction_deg=T[0.0, 90.0],
             altitude=T[0.0, 5000.0],
             T=T,
             backend=backend,
@@ -240,7 +240,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
-            wind_direction=T[0.0, 90.0],
+            wind_direction_deg=T[0.0, 90.0],
             altitude=T[0.0, 5000.0],
             T=T,
             backend=backend,
@@ -260,7 +260,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
-            wind_direction=T[0.0, 90.0],
+            wind_direction_deg=T[0.0, 90.0],
             altitude=T[0.0, 5000.0],
             screen_resolution=33,
             stencil_size=35,
@@ -283,7 +283,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
-            wind_direction=T[0.0, 90.0],
+            wind_direction_deg=T[0.0, 90.0],
             altitude=T[0.0, 5000.0],
             screen_resolution=33,
             stencil_size=35,
@@ -304,7 +304,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
-            wind_direction=T[0.0, 90.0],
+            wind_direction_deg=T[0.0, 90.0],
             altitude=T[0.0, 5000.0],
             T=T,
             backend=backend,
@@ -328,7 +328,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
-            wind_direction=T[0.0, 90.0],
+            wind_direction_deg=T[0.0, 90.0],
             altitude=T[0.0, 5000.0],
             T=T,
             backend=backend,
@@ -353,7 +353,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
                 L0=T(25.0),
                 fractional_cn2=T[0.7, 0.3],
                 wind_speed=T[8.0, 4.0],
-                wind_direction=T[0.0, 90.0],
+                wind_direction_deg=T[0.0, 90.0],
                 altitude=T[0.0, 5000.0],
                 screen_resolution=33,
                 stencil_size=35,
@@ -621,7 +621,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
-            wind_direction=T[0.0, 90.0],
+            wind_direction_deg=T[0.0, 90.0],
             altitude=T[0.0, 5000.0],
             T=T,
             backend=backend,

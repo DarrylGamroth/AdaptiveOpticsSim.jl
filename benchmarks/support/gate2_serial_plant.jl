@@ -218,7 +218,7 @@ function serial_plant_definition(raw::AbstractDict;
         L0=T(raw["outer_scale_m"]),
         fractional_cn2=T.(raw["fractional_cn2"]),
         wind_speed=T.(raw["wind_speed_m_per_s"]),
-        wind_direction=T.(raw["wind_direction_deg"]),
+        wind_direction_deg=T.(raw["wind_direction_deg"]),
         altitude=T.(raw["layer_altitude_m"]),
         layer_ids=Tuple(Symbol.(raw["layer_ids"])),
         T=T,

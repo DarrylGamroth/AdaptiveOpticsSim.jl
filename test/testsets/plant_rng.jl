@@ -223,7 +223,7 @@ function rng_test_definition(;
             L0=T(25),
             fractional_cn2=T[base_cn2[index] for index in layer_order],
             wind_speed=T[base_speed[index] for index in layer_order],
-            wind_direction=T[base_direction[index] for index in layer_order],
+            wind_direction_deg=T[base_direction[index] for index in layer_order],
             altitude=T[base_altitude[index] for index in layer_order],
             layer_ids=resolved_layer_ids,
             T=T,

@@ -254,7 +254,7 @@ function event_composition_fixture(; reverse_order::Bool=false,
     telescope = Telescope(resolution=4, diameter=T(4),
         central_obstruction=zero(T), T=T)
     atmosphere = MultiLayerAtmosphere(telescope; r0=T(0.2), L0=T(25),
-        fractional_cn2=T[1], wind_speed=T[7], wind_direction=T[35],
+        fractional_cn2=T[1], wind_speed=T[7], wind_direction_deg=T[35],
         altitude=T[0], layer_ids=(:ground,), T=T)
     science_source = Source(band=:custom, wavelength=T(0.8e-6),
         photon_irradiance=T(80), coordinates=(T(0), T(0)), T=T)

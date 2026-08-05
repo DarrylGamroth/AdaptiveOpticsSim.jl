@@ -184,7 +184,7 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
         L0=25.0,
         fractional_cn2=[0.6, 0.4],
         wind_speed=[10.0, 18.0],
-        wind_direction=[0.0, 144.0],
+        wind_direction_deg=[0.0, 144.0],
         altitude=[0.0, 5000.0],
     )
     atmosphere_trace = atmosphere_gsc_trace(tel, src, sci, wfs, basis, atm)

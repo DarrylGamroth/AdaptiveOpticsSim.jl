@@ -358,7 +358,7 @@ function build_reference_atmosphere(cfg::AbstractDict{<:AbstractString,<:Any}, t
         L0=Float64(get(cfg, "L0", 25.0)),
         fractional_cn2=Float64.(cfg["fractional_cn2"]),
         wind_speed=Float64.(cfg["wind_speed"]),
-        wind_direction=Float64.(cfg["wind_direction"]),
+        wind_direction_deg=Float64.(cfg["wind_direction"]),
         altitude=Float64.(cfg["altitude"]),
         T=Float64,
     )
