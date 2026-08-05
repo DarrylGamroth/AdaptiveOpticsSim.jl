@@ -594,11 +594,11 @@ end
 function build_reference_tomography_atmosphere(cfg::AbstractDict{<:AbstractString,<:Any})
     return TomographyAtmosphereParams(
         zenith_angle_deg=Float64(cfg["zenith_angle_deg"]),
-        altitude_km=Float64.(cfg["altitude_km"]),
+        layer_altitudes_m=1000 .* Float64.(cfg["altitude_km"]),
         L0=Float64(cfg["L0"]),
         r0_zenith=Float64(cfg["r0_zenith"]),
         fractional_cn2=Float64.(cfg["fractional_cn2"]),
-        wavelength=Float64(cfg["wavelength"]),
+        reference_wavelength_m=Float64(cfg["wavelength"]),
         wind_direction_deg=Float64.(cfg["wind_direction_deg"]),
         wind_speed=Float64.(cfg["wind_speed"]),
     )
@@ -607,7 +607,7 @@ end
 function build_reference_tomography_asterism(cfg::AbstractDict{<:AbstractString,<:Any})
     return LGSAsterismParams(
         radius_arcsec=Float64(cfg["radius_arcsec"]),
-        wavelength=Float64(cfg["wavelength"]),
+        wavelength_m=Float64(cfg["wavelength"]),
         base_height_m=Float64(cfg["base_height_m"]),
         n_lgs=Int(cfg["n_lgs"]),
     )
@@ -615,15 +615,15 @@ end
 
 function build_reference_tomography_wfs(cfg::AbstractDict{<:AbstractString,<:Any})
     valid_lenslet_map = convert.(Bool, matrix_from_rows(cfg["valid_lenslet_map"]))
-    lenslet_offset = matrix_from_rows(cfg["lenslet_offset"])
+    lenslet_grid_offsets_fraction = matrix_from_rows(cfg["lenslet_offset"])
     return LGSWFSParams(
-        diameter=Float64(cfg["diameter"]),
-        n_lenslet=Int(cfg["n_lenslet"]),
+        pupil_diameter_m=Float64(cfg["diameter"]),
+        n_lenslets=Int(cfg["n_lenslet"]),
         n_px=Int(cfg["n_px"]),
         field_stop_size_arcsec=Float64(cfg["field_stop_size_arcsec"]),
         valid_lenslet_map=valid_lenslet_map,
-        lenslet_rotation_rad=Float64.(cfg["lenslet_rotation_rad"]),
-        lenslet_offset=lenslet_offset,
+        lenslet_grid_rotations_rad=Float64.(cfg["lenslet_rotation_rad"]),
+        lenslet_grid_offsets_fraction=lenslet_grid_offsets_fraction,
     )
 end
 

@@ -80,6 +80,9 @@ The current implementation follows this policy for:
   degree-based constructor keywords at the API boundary.
 - `TomographyAtmosphereParams`: store zenith and wind directions internally in
   radians while keeping degree-based constructor keywords at the API boundary.
+- Tomography length inputs: use metre-valued canonical fields and constructor
+  keywords. External PyTomoAO kilometre-valued layer altitudes are converted
+  once by the reference adapter and do not enter the core API.
 
 ## Non-goals
 

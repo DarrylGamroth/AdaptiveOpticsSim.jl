@@ -6,27 +6,27 @@ struct TomographyAtmosphereParams{
     S<:AbstractVector{T},
 }
     zenith_angle_rad::T
-    altitude_km::A
+    layer_altitudes_m::A
     L0::T
     r0_zenith::T
     fractional_cn2::F
-    wavelength::T
+    reference_wavelength_m::T
     wind_direction_rad::D
     wind_speed::S
 end
 
 function TomographyAtmosphereParams(;
     zenith_angle_deg::Real,
-    altitude_km::AbstractVector{<:Real},
+    layer_altitudes_m::AbstractVector{<:Real},
     L0::Real,
     r0_zenith::Real,
     fractional_cn2::AbstractVector{<:Real},
-    wavelength::Real,
+    reference_wavelength_m::Real,
     wind_direction_deg::AbstractVector{<:Real},
     wind_speed::AbstractVector{<:Real},
 )
     lengths = (
-        length(altitude_km),
+        length(layer_altitudes_m),
         length(fractional_cn2),
         length(wind_direction_deg),
         length(wind_speed),
@@ -38,8 +38,10 @@ function TomographyAtmosphereParams(;
         throw(InvalidConfiguration("zenith_angle_deg must be between 0 and 90"))
     L0 > 0 || throw(InvalidConfiguration("L0 must be positive"))
     r0_zenith > 0 || throw(InvalidConfiguration("r0_zenith must be positive"))
-    wavelength > 0 || throw(InvalidConfiguration("wavelength must be positive"))
-    all(>=(0), altitude_km) || throw(InvalidConfiguration("altitude_km must be non-negative"))
+    reference_wavelength_m > 0 ||
+        throw(InvalidConfiguration("reference_wavelength_m must be positive"))
+    all(>=(0), layer_altitudes_m) ||
+        throw(InvalidConfiguration("layer_altitudes_m must be non-negative"))
     all(>=(0), wind_speed) || throw(InvalidConfiguration("wind_speed must be non-negative"))
     all(>=(0), fractional_cn2) ||
         throw(InvalidConfiguration("fractional_cn2 must be non-negative"))
@@ -48,31 +50,31 @@ function TomographyAtmosphereParams(;
 
     T = promote_type(
         typeof(float(zenith_angle_deg)),
-        eltype(float.(altitude_km)),
+        eltype(float.(layer_altitudes_m)),
         typeof(float(L0)),
         typeof(float(r0_zenith)),
         eltype(float.(fractional_cn2)),
-        typeof(float(wavelength)),
+        typeof(float(reference_wavelength_m)),
         eltype(float.(wind_direction_deg)),
         eltype(float.(wind_speed)),
     )
-    altitude = convert.(T, altitude_km)
+    altitudes = convert.(T, layer_altitudes_m)
     fractions = convert.(T, fractional_cn2)
     directions = T.(deg2rad.(wind_direction_deg))
     speeds = convert.(T, wind_speed)
     return TomographyAtmosphereParams{
         T,
-        typeof(altitude),
+        typeof(altitudes),
         typeof(fractions),
         typeof(directions),
         typeof(speeds),
     }(
         T(deg2rad(zenith_angle_deg)),
-        altitude,
+        altitudes,
         T(L0),
         T(r0_zenith),
         fractions,
-        T(wavelength),
+        T(reference_wavelength_m),
         directions,
         speeds,
     )
@@ -80,27 +82,27 @@ end
 
 struct LGSAsterismParams{T<:AbstractFloat}
     radius_arcsec::T
-    wavelength::T
+    wavelength_m::T
     base_height_m::T
     n_lgs::Int
 end
 
 function LGSAsterismParams(;
     radius_arcsec::Real,
-    wavelength::Real,
+    wavelength_m::Real,
     base_height_m::Real,
     n_lgs::Integer,
 )
     radius_arcsec >= 0 || throw(InvalidConfiguration("radius_arcsec must be non-negative"))
-    wavelength > 0 || throw(InvalidConfiguration("wavelength must be positive"))
+    wavelength_m > 0 || throw(InvalidConfiguration("wavelength_m must be positive"))
     base_height_m > 0 || throw(InvalidConfiguration("base_height_m must be positive"))
     n_lgs >= 0 || throw(InvalidConfiguration("n_lgs must be non-negative"))
     T = promote_type(
         typeof(float(radius_arcsec)),
-        typeof(float(wavelength)),
+        typeof(float(wavelength_m)),
         typeof(float(base_height_m)),
     )
-    return LGSAsterismParams{T}(T(radius_arcsec), T(wavelength), T(base_height_m), Int(n_lgs))
+    return LGSAsterismParams{T}(T(radius_arcsec), T(wavelength_m), T(base_height_m), Int(n_lgs))
 end
 
 struct LGSWFSParams{
@@ -109,27 +111,29 @@ struct LGSWFSParams{
     R<:AbstractVector{T},
     O<:AbstractMatrix{T},
 }
-    diameter::T
-    n_lenslet::Int
+    pupil_diameter_m::T
+    n_lenslets::Int
     n_px::Int
     field_stop_size_arcsec::T
     valid_lenslet_map::M
-    lenslet_rotation_rad::R
-    lenslet_offset::O
+    lenslet_grid_rotations_rad::R
+    lenslet_grid_offsets_fraction::O
 end
 
 function LGSWFSParams(;
-    diameter::Real,
-    n_lenslet::Integer,
+    pupil_diameter_m::Real,
+    n_lenslets::Integer,
     n_px::Integer,
     field_stop_size_arcsec::Real,
     valid_lenslet_map::AbstractMatrix,
-    lenslet_rotation_rad::AbstractVector{<:Real}=Float64[],
-    lenslet_offset::AbstractMatrix{<:Real}=zeros(2, 0),
-    n_lgs::Integer=max(length(lenslet_rotation_rad), size(lenslet_offset, 2)),
+    lenslet_grid_rotations_rad::AbstractVector{<:Real}=Float64[],
+    lenslet_grid_offsets_fraction::AbstractMatrix{<:Real}=zeros(2, 0),
+    n_lgs::Integer=max(length(lenslet_grid_rotations_rad),
+        size(lenslet_grid_offsets_fraction, 2)),
 )
-    diameter > 0 || throw(InvalidConfiguration("diameter must be positive"))
-    n_lenslet > 0 || throw(InvalidConfiguration("n_lenslet must be positive"))
+    pupil_diameter_m > 0 ||
+        throw(InvalidConfiguration("pupil_diameter_m must be positive"))
+    n_lenslets > 0 || throw(InvalidConfiguration("n_lenslets must be positive"))
     n_px > 0 || throw(InvalidConfiguration("n_px must be positive"))
     field_stop_size_arcsec > 0 ||
         throw(InvalidConfiguration("field_stop_size_arcsec must be positive"))
@@ -137,26 +141,28 @@ function LGSWFSParams(;
         throw(InvalidConfiguration("valid_lenslet_map must be 2D"))
 
     T = promote_type(
-        typeof(float(diameter)),
+        typeof(float(pupil_diameter_m)),
         typeof(float(field_stop_size_arcsec)),
-        eltype(float.(lenslet_rotation_rad)),
-        eltype(float.(lenslet_offset)),
+        eltype(float.(lenslet_grid_rotations_rad)),
+        eltype(float.(lenslet_grid_offsets_fraction)),
     )
-    lenslet_rotation = convert.(T, lenslet_rotation_rad)
-    length(lenslet_rotation) == n_lgs ||
-        throw(InvalidConfiguration("lenslet_rotation_rad length must match n_lgs"))
-    size(lenslet_offset) == (2, n_lgs) ||
-        throw(InvalidConfiguration("lenslet_offset must have size (2, n_lgs)"))
-    offsets = convert.(T, lenslet_offset)
+    lenslet_grid_rotations = convert.(T, lenslet_grid_rotations_rad)
+    length(lenslet_grid_rotations) == n_lgs || throw(InvalidConfiguration(
+        "lenslet_grid_rotations_rad length must match n_lgs"))
+    size(lenslet_grid_offsets_fraction) == (2, n_lgs) ||
+        throw(InvalidConfiguration(
+            "lenslet_grid_offsets_fraction must have size (2, n_lgs)"))
+    lenslet_grid_offsets = convert.(T, lenslet_grid_offsets_fraction)
     lenslet_map = convert.(Bool, valid_lenslet_map)
-    return LGSWFSParams{T, typeof(lenslet_map), typeof(lenslet_rotation), typeof(offsets)}(
-        T(diameter),
-        Int(n_lenslet),
+    return LGSWFSParams{T, typeof(lenslet_map), typeof(lenslet_grid_rotations),
+        typeof(lenslet_grid_offsets)}(
+        T(pupil_diameter_m),
+        Int(n_lenslets),
         Int(n_px),
         T(field_stop_size_arcsec),
         lenslet_map,
-        lenslet_rotation,
-        offsets,
+        lenslet_grid_rotations,
+        lenslet_grid_offsets,
     )
 end
 
@@ -231,7 +237,8 @@ end
 
 @inline airmass(params::TomographyAtmosphereParams) = inv(cos(params.zenith_angle_rad))
 
-@inline layer_altitude_m(params::TomographyAtmosphereParams) = params.altitude_km .* (1000 * airmass(params))
+@inline layer_slant_ranges_m(params::TomographyAtmosphereParams) =
+    params.layer_altitudes_m .* airmass(params)
 
 @inline wind_direction_rad(params::TomographyAtmosphereParams) = params.wind_direction_rad
 @inline wind_direction_deg(params::TomographyAtmosphereParams) = rad2deg.(params.wind_direction_rad)
@@ -252,8 +259,9 @@ function valid_lenslet_support(params::LGSWFSParams)
     return support
 end
 
-@inline function support_diameter(params::LGSWFSParams)
-    return params.diameter * size(valid_lenslet_support(params), 1) / params.n_lenslet
+@inline function lenslet_grid_support_diameter_m(params::LGSWFSParams)
+    return params.pupil_diameter_m * size(valid_lenslet_support(params), 1) /
+        params.n_lenslets
 end
 
 function dm_valid_support(params::TomographyDMParams)

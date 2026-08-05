@@ -29,33 +29,33 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
     T = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
     backend = AdaptiveOpticsSim.Calibration.GPUArrayBuildBackend(B)
 
-    n_lenslet = 3
+    n_lenslets = 3
     n_lgs = 2
 
     atmosphere = TomographyAtmosphereParams(
         zenith_angle_deg=T(0.0),
-        altitude_km=T[0.0, 10.0],
+        layer_altitudes_m=T[0.0, 10_000.0],
         L0=T(25.0),
         r0_zenith=T(0.2),
         fractional_cn2=T[0.6, 0.4],
-        wavelength=T(500e-9),
+        reference_wavelength_m=T(500e-9),
         wind_direction_deg=T[0.0, 45.0],
         wind_speed=T[10.0, 20.0],
     )
     asterism = LGSAsterismParams(
         radius_arcsec=T(7.6),
-        wavelength=T(589e-9),
+        wavelength_m=T(589e-9),
         base_height_m=T(90_000.0),
         n_lgs=n_lgs,
     )
     wfs = LGSWFSParams(
-        diameter=T(8.0),
-        n_lenslet=n_lenslet,
+        pupil_diameter_m=T(8.0),
+        n_lenslets=n_lenslets,
         n_px=8,
         field_stop_size_arcsec=T(2.0),
-        valid_lenslet_map=trues(n_lenslet, n_lenslet),
-        lenslet_rotation_rad=zeros(T, n_lenslet^2),
-        lenslet_offset=zeros(T, 2, n_lenslet^2),
+        valid_lenslet_map=trues(n_lenslets, n_lenslets),
+        lenslet_grid_rotations_rad=zeros(T, n_lgs),
+        lenslet_grid_offsets_fraction=zeros(T, 2, n_lgs),
     )
 
     _, grid_mask = AdaptiveOpticsSim.Tomography.sparse_gradient_matrix(
@@ -65,19 +65,20 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
     mask_vec = vec(grid_mask)
     valid_positions = findall(mask_vec)
     n_valid = count(mask_vec)
-    altitude = AdaptiveOpticsSim.Tomography.layer_altitude_m(atmosphere)
+    slant_ranges_m = AdaptiveOpticsSim.Tomography.layer_slant_ranges_m(atmosphere)
     r0 = AdaptiveOpticsSim.Tomography._fried_parameter(atmosphere)
-    support_d = AdaptiveOpticsSim.Tomography.support_diameter(wfs)
+    support_diameter_m =
+        AdaptiveOpticsSim.Tomography.lenslet_grid_support_diameter_m(wfs)
     lgs_dir = AdaptiveOpticsSim.Tomography.lgs_directions(asterism)
     directions = AdaptiveOpticsSim.Tomography.direction_vectors(
         view(lgs_dir, :, 1), view(lgs_dir, :, 2))
-    source_height =
+    source_height_m =
         AdaptiveOpticsSim.Tomography.lgs_height_m(asterism, atmosphere)
-    rotations, offsets_x, offsets_y =
+    rotations_rad, offset_fractions_x, offset_fractions_y =
         AdaptiveOpticsSim.Tomography._active_guide_grid_params(
-        wfs.lenslet_rotation_rad,
-        view(wfs.lenslet_offset, 1, :),
-        view(wfs.lenslet_offset, 2, :),
+        wfs.lenslet_grid_rotations_rad,
+        view(wfs.lenslet_grid_offsets_fraction, 1, :),
+        view(wfs.lenslet_grid_offsets_fraction, 2, :),
         n_lgs,
     )
 
@@ -93,10 +94,10 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
         gx, gy = AdaptiveOpticsSim.Tomography._guide_star_grids(
             backend,
             sampling,
-            support_d,
-            rotations,
-            offsets_x,
-            offsets_y,
+            support_diameter_m,
+            rotations_rad,
+            offset_fractions_x,
+            offset_fractions_y,
         )
         _sync_backend!(gx)
         _sync_backend!(gy)
@@ -110,12 +111,12 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
             guide_x,
             guide_y,
             directions,
-            altitude,
-            source_height,
+            slant_ranges_m,
+            source_height_m,
         )
         _sync_backend!(value)
     end
-    shifted_flat = reshape(shifted, :, n_lgs, length(altitude))
+    shifted_flat = reshape(shifted, :, n_lgs, length(slant_ranges_m))
 
     cst, var_term, inv_L0 =
         AdaptiveOpticsSim.Tomography._covariance_constants(
@@ -144,7 +145,7 @@ function _profile_case(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBacken
                     var_term,
                     inv_L0,
                     n_valid,
-                    length(altitude);
+                    length(slant_ranges_m);
                     ndrange=size(block),
                 )
                 _sync_backend!(block)

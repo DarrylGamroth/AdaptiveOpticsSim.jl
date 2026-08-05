@@ -1825,6 +1825,14 @@ using AdaptiveOpticsSim.Tomography
 - Helpers: `zenith_angle_deg`, `wind_direction_deg`,
   `reconstruct_wavefront_map`, `dm_commands`
 
+Tomography length inputs use metres: `layer_altitudes_m` contains vertical
+layer altitudes, `reference_wavelength_m` is the wavelength at which the
+atmospheric parameters are specified, `wavelength_m` is the LGS wavelength,
+and `pupil_diameter_m` is the WFS pupil diameter. `n_lenslets` is the count
+along each pupil axis. `lenslet_grid_offsets_fraction` is dimensionless and is
+scaled by the padded lenslet-grid support diameter; it is not a metre-valued
+translation.
+
 ## Extension Contracts
 
 Use [`extension-guide.md`](extension-guide.md) for detailed instructions on
