@@ -70,6 +70,25 @@
 #   replaceable workspace scratch.
 # - Compare outputs against OOPAO reference datasets within tolerance.
 #
+# Validation and GitHub Actions cost:
+# - Validate locally first. Use the local CPU/AMDGPU host, `ssh wsl` for CUDA
+#   validation, and `ssh raspberrypi` for Linux aarch64 validation when those
+#   targets are relevant and available.
+# - Run the smallest selector that covers the changed ownership and dependency
+#   surface. Run the complete suite locally only for cross-cutting changes or a
+#   final release/milestone gate.
+# - Do not push commits merely to exercise GitHub Actions, and do not rerun an
+#   unchanged failed workflow as a debugging strategy. Reproduce and repair
+#   locally before publishing a new exact head.
+# - Keep scheduled exhaustive GitHub workflows disabled. GitHub-hosted
+#   platform, coverage, and full-composition matrices are manual final gates,
+#   not per-commit or nightly development loops.
+# - Use at most one justified exact-head GitHub validation run for a PR after
+#   local review. Additional billed runs require a concrete platform-only
+#   question that cannot be answered on the available local targets.
+# - Record local commands, target versions, and results in the PR so local
+#   evidence remains reviewable when GitHub Actions is intentionally not run.
+#
 # Dependencies:
 # - Keep core dependencies minimal.
 # - Optional features (I/O helpers, ModelingToolkit control, plotting extras)
