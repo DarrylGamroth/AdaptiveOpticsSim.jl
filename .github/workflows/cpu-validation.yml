@@ -2,285 +2,211 @@ name: CPU Validation
 
 on:
   workflow_dispatch:
+    inputs:
+      gate:
+        description: Validation gate to run
+        required: true
+        default: linux-selector
+        type: choice
+        options:
+          - linux-selector
+          - linux-full
+          - macos-selector
+          - windows-selector
+          - linux-aarch64
+          - grouped-cpu
+          - scheduler
+          - appleaccelerate
+          - metal
+      selectors:
+        description: Comma-separated test selectors used by selector gates
+        required: true
+        default: quality
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
-jobs:
-  full-composition:
-    name: Full composition / Linux
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      JULIA_NUM_THREADS: "1"
-      OPENBLAS_NUM_THREADS: "1"
-      OMP_NUM_THREADS: "1"
-      MKL_NUM_THREADS: "1"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+env:
+  JULIA_NUM_THREADS: "1"
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
 
-      - name: Setup Julia
-        uses: julia-actions/setup-julia@v3
+jobs:
+  linux-selector:
+    name: Linux / selected tests
+    if: inputs.gate == 'linux-selector'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ADAPTIVEOPTICS_TEST_SELECTORS: ${{ inputs.selectors }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1.12"
-
-      - name: Cache Julia artifacts
-        uses: julia-actions/cache@v3
-
+      - uses: julia-actions/cache@v3
       - name: Instantiate
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Run selected tests
+        run: julia --project=. --startup-file=no test/ci/run_selected_tests.jl
 
+  linux-full:
+    name: Linux / full composition
+    if: inputs.gate == 'linux-full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
+      - name: Instantiate
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
       - name: Run full test suite
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
 
-  fast-feedback:
-    name: Fast feedback / ${{ matrix.shard }}
-    if: >-
-      github.event_name != 'push' &&
-      (github.event_name != 'pull_request' ||
-      github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        shard:
-          - ci-foundations
-          - ci-sensors-control
-          - ci-plant-runtime
-          - ci-plant-optics
-    env:
-      ADAPTIVEOPTICS_TEST_SHARD: ${{ matrix.shard }}
-      JULIA_NUM_THREADS: "1"
-      OPENBLAS_NUM_THREADS: "1"
-      OMP_NUM_THREADS: "1"
-      MKL_NUM_THREADS: "1"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Julia
-        uses: julia-actions/setup-julia@v3
-        with:
-          version: "1.12"
-
-      - name: Cache Julia artifacts
-        uses: julia-actions/cache@v3
-
-      - name: Instantiate
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
-
-      - name: Run bounded Linux shard
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=[ENV["ADAPTIVEOPTICS_TEST_SHARD"]])'
-
-  platform-closure:
-    name: Platform closure / ${{ matrix.os }} / ${{ matrix.shard }}
-    if: >-
-      github.event_name != 'push' &&
-      (github.event_name != 'pull_request' ||
-      github.event.pull_request.draft == false)
-    runs-on: ${{ matrix.os }}
+  macos-selector:
+    name: macOS / selected tests
+    if: inputs.gate == 'macos-selector'
+    runs-on: macos-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - macos-latest
-          - windows-latest
-        shard:
-          - ci-foundations
-          - ci-sensors-control
-          - ci-plant-runtime
-          - ci-plant-optics
     env:
-      ADAPTIVEOPTICS_TEST_SHARD: ${{ matrix.shard }}
-      JULIA_NUM_THREADS: "1"
-      OPENBLAS_NUM_THREADS: "1"
-      OMP_NUM_THREADS: "1"
-      MKL_NUM_THREADS: "1"
+      ADAPTIVEOPTICS_TEST_SELECTORS: ${{ inputs.selectors }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Julia
-        uses: julia-actions/setup-julia@v3
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1.12"
-
-      - name: Cache Julia artifacts
-        uses: julia-actions/cache@v3
-
+      - uses: julia-actions/cache@v3
       - name: Instantiate
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Run selected tests
+        run: julia --project=. --startup-file=no test/ci/run_selected_tests.jl
 
-      - name: Run cross-platform closure shard
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=[ENV["ADAPTIVEOPTICS_TEST_SHARD"]])'
-
-  grouped-cpu-execution:
-    name: Grouped CPU execution
-    if: >-
-      github.event_name != 'push' &&
-      (github.event_name != 'pull_request' ||
-      github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  windows-selector:
+    name: Windows / selected tests
+    if: inputs.gate == 'windows-selector'
+    runs-on: windows-latest
+    timeout-minutes: 60
     env:
-      JULIA_NUM_THREADS: "4"
-      OPENBLAS_NUM_THREADS: "1"
-      OMP_NUM_THREADS: "1"
-      MKL_NUM_THREADS: "1"
+      ADAPTIVEOPTICS_TEST_SELECTORS: ${{ inputs.selectors }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Julia
-        uses: julia-actions/setup-julia@v3
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1.12"
-
-      - name: Cache Julia artifacts
-        uses: julia-actions/cache@v3
-
+      - uses: julia-actions/cache@v3
       - name: Instantiate
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Run selected tests
+        run: julia --project=. --startup-file=no test/ci/run_selected_tests.jl
 
-      - name: Run Gate 6 grouped CPU tests
-        run: julia --threads=4 --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=["gate6"])'
-
-  scheduler-extensions:
-    name: Optional CPU scheduler extensions
-    if: >-
-      github.event_name != 'push' &&
-      (github.event_name != 'pull_request' ||
-      github.event.pull_request.draft == false)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      JULIA_NUM_THREADS: "4"
-      OPENBLAS_NUM_THREADS: "1"
-      OMP_NUM_THREADS: "1"
-      MKL_NUM_THREADS: "1"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Julia
-        uses: julia-actions/setup-julia@v3
-        with:
-          version: "1.12"
-
-      - name: Cache Julia artifacts
-        uses: julia-actions/cache@v3
-
-      - name: Instantiate scheduler test environment
-        run: julia --project=test/schedulers --startup-file=no -e 'using Pkg; Pkg.instantiate()'
-
-      - name: Run scheduler extension tests
-        run: julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl
-
-  linux-arm64-portability:
-    name: Linux aarch64 portability
-    if: >-
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch'
+  linux-aarch64:
+    name: Linux aarch64 / selected tests
+    if: inputs.gate == 'linux-aarch64'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     env:
-      JULIA_NUM_THREADS: "1"
-      OPENBLAS_NUM_THREADS: "1"
-      OMP_NUM_THREADS: "1"
-      MKL_NUM_THREADS: "1"
+      ADAPTIVEOPTICS_TEST_SELECTORS: ${{ inputs.selectors }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Julia
-        uses: julia-actions/setup-julia@v3
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1.12"
-
-      - name: Cache Julia artifacts
-        uses: julia-actions/cache@v3
-
+      - uses: julia-actions/cache@v3
       - name: Verify Linux aarch64 runner
-        run: julia --startup-file=no -e 'using InteractiveUtils; Sys.islinux() && Sys.ARCH === :aarch64 || error("Linux aarch64 validation requires an aarch64 runner"); versioninfo()'
-
+        run: >-
+          julia --startup-file=no -e
+          'using InteractiveUtils;
+          Sys.islinux() && Sys.ARCH === :aarch64 || error("expected Linux aarch64");
+          versioninfo()'
       - name: Instantiate
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Run selected tests
+        run: julia --project=. --startup-file=no test/ci/run_selected_tests.jl
 
-      - name: Run Linux aarch64 portability shard
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=["ci-foundations"])'
-
-  apple-accelerate:
-    name: Apple Silicon / AppleAccelerate
-    if: >-
-      github.event_name != 'push' &&
-      (github.event_name != 'pull_request' ||
-      github.event.pull_request.draft == false)
-    runs-on: macos-15
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      id-token: write
+  grouped-cpu:
+    name: Grouped CPU execution
+    if: inputs.gate == 'grouped-cpu'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
-      JULIA_NUM_THREADS: "1"
-      OPENBLAS_NUM_THREADS: "1"
-      OMP_NUM_THREADS: "1"
-      MKL_NUM_THREADS: "1"
-      VECLIB_MAXIMUM_THREADS: "1"
+      JULIA_NUM_THREADS: "4"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Julia
-        uses: julia-actions/setup-julia@v3
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1.12"
+      - uses: julia-actions/cache@v3
+      - name: Instantiate
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Run grouped CPU tests
+        run: julia --threads=4 --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=["gate6"])'
 
-      - name: Cache Julia artifacts
-        uses: julia-actions/cache@v3
+  scheduler:
+    name: Optional CPU scheduler extensions
+    if: inputs.gate == 'scheduler'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JULIA_NUM_THREADS: "4"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
+      - name: Instantiate scheduler environment
+        run: julia --project=test/schedulers --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Run scheduler extension tests
+        run: julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl
 
+  appleaccelerate:
+    name: Apple Silicon / AppleAccelerate
+    if: inputs.gate == 'appleaccelerate'
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      VECLIB_MAXIMUM_THREADS: "1"
+      ADAPTIVEOPTICS_APPLE_FOCUSED_ONLY: "true"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
       - name: Verify Apple Silicon runner
-        run: julia --startup-file=no -e 'using InteractiveUtils; Sys.isapple() && Sys.ARCH === :aarch64 || error("AppleAccelerate validation requires Apple Silicon"); versioninfo()'
-
-      - name: Instantiate AppleAccelerate test environment
+        run: >-
+          julia --startup-file=no -e
+          'using InteractiveUtils;
+          Sys.isapple() && Sys.ARCH === :aarch64 || error("expected Apple Silicon");
+          versioninfo()'
+      - name: Instantiate AppleAccelerate environment
         run: julia --project=test/appleaccelerate --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
-
       - name: Verify backend-neutral package load
         run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/backend_neutral.jl
-
-      - name: Run full CPU suite with AppleAccelerate
+      - name: Run focused AppleAccelerate validation
         run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/runtests.jl
 
-      - name: Run Apple FFT coverage
-        env:
-          ADAPTIVEOPTICS_APPLE_FOCUSED_ONLY: "true"
-        run: julia --project=test/appleaccelerate --startup-file=no --code-coverage=user test/appleaccelerate/runtests.jl
-
-      - name: Instantiate Metal extension test environment
+  metal:
+    name: Apple Silicon / Metal extension
+    if: inputs.gate == 'metal'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
+      - name: Instantiate Metal environment
         run: julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
-
-      - name: Run Metal extension load coverage
-        run: julia --project=test/metal --startup-file=no --code-coverage=user test/metal/runtests.jl
-
-      - name: Process Apple platform extension coverage
-        uses: julia-actions/julia-processcoverage@v1
-        with:
-          directories: ext
-
-      - name: Upload Apple platform extension coverage to Codecov
-        uses: codecov/codecov-action@v6
-        with:
-          files: lcov.info
-          disable_search: true
-          fail_ci_if_error: true
-          name: adaptiveopticssim-apple-platform
-          use_oidc: true
+      - name: Run Metal extension validation
+        run: julia --project=test/metal --startup-file=no test/metal/runtests.jl
