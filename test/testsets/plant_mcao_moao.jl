@@ -6,6 +6,12 @@ struct MCAOMOAOFrameAcquisitionModel{T<:AbstractFloat}
     exposure_s::T
 end
 
+struct RollingDMAcquisitionModel{T<:AbstractFloat}
+    exposure_s::T
+    line_duration_s::T
+    row_group_size::Int
+end
+
 struct MCAOMOAOZeroPupilMaterialization{P}
     destination::P
 end
@@ -15,6 +21,8 @@ Plant.plant_model_definition_style(::Type{MCAOMOAOPathModel}) =
 Plant.plant_model_definition_style(
     ::Type{<:MCAOMOAOFrameAcquisitionModel},
 ) = ColdPlantModelDefinition()
+Plant.plant_model_definition_style(::Type{<:RollingDMAcquisitionModel}) =
+    ColdPlantModelDefinition()
 
 function Plant.validate_path_materialization_binding(
     materialization::MCAOMOAOZeroPupilMaterialization,
@@ -136,6 +144,41 @@ function Plant.prepare_acquisition_provider(
     return prepare_full_optical_provider(execution, products)
 end
 
+function Plant.prepare_acquisition_provider(
+    model::RollingDMAcquisitionModel,
+    ::AcquisitionDefinition,
+    path::PreparedPathExecutor,
+)
+    require_path_result(path)
+    T = eltype(path.result.values)
+    detector = Detector(
+        exposure_duration=T(model.exposure_s),
+        noise=NoiseNone(),
+        qe=one(T),
+        gain=one(T),
+        response_model=NullFrameResponse(),
+        sensor=CMOSSensor(
+            timing_model=RollingShutter(
+                T(model.line_duration_s);
+                row_group_size=model.row_group_size,
+            ),
+            T=T,
+        ),
+        T=T,
+        backend=path.key.backend,
+    )
+    execution = FrameAcquisitionExecution(detector, path.result)
+    products = AcquisitionProducts(
+        execution.observation;
+        metadata=(
+            kind=:rolling_shutter_dm_oracle,
+            units=:detected_electrons,
+            geometry=path.result.metadata,
+        ),
+    )
+    return prepare_full_optical_provider(execution, products)
+end
+
 function mcao_moao_command_schema(
     endpoint::Symbol;
     T::Type{<:AbstractFloat}=Float64,
@@ -169,12 +212,11 @@ function mcao_moao_dm_definition(
     visibility,
     resolution::Integer;
     T::Type{<:AbstractFloat}=Float64,
+    influence_values=fill(one(T), Int(resolution)^2, 1),
 )
     endpoint = Symbol(id, :_command)
     topology = SampledActuatorTopology(zeros(T, 2, 1); T=T)
-    influence = DenseInfluenceMatrix(
-        fill(one(T), Int(resolution)^2, 1),
-    )
+    influence = DenseInfluenceMatrix(influence_values)
     model = DeformableMirrorModel(;
         topology,
         influence_model=influence,
@@ -348,6 +390,93 @@ function mcao_moao_full_optical_fixture()
         state=PlantEventLoopState(event_loop),
         workspace=PlantEventLoopWorkspace(event_loop),
         initial_commands=initial_commands,
+    )
+end
+
+function rolling_dm_oracle_fixture()
+    T = Float64
+    resolution = 6
+    exposure_ns = 1_000_000_000
+    line_duration_ns = 200_000_000
+    telescope = Telescope(
+        resolution=resolution,
+        diameter=T(6),
+        central_obstruction=zero(T),
+        T=T,
+    )
+    atmosphere = mcao_moao_atmosphere(telescope)
+    source = Source(
+        band=:custom,
+        wavelength=T(0.8e-6),
+        photon_irradiance=T(100),
+        T=T,
+    )
+    influence_values = reshape(
+        collect(range(T(-1), T(1); length=resolution^2)),
+        resolution^2,
+        1,
+    )
+    optic = mcao_moao_dm_definition(
+        :rolling_dm,
+        PupilPlanePlacement(),
+        AllPathVisibility(),
+        resolution;
+        T=T,
+        influence_values,
+    )
+    schema = only(command_schemas(optic))
+    plant = prepare_plant(
+        PlantDefinition(;
+            telescope=plant_test_telescope_definition(telescope),
+            atmosphere=plant_test_atmosphere_definition(atmosphere),
+            controllable_optics=(optic,),
+            paths=(OpticalPathDefinition(
+                :science,
+                source,
+                MCAOMOAOPathModel(),
+            ),),
+            acquisitions=(AcquisitionDefinition(
+                :science_camera,
+                :science,
+                RollingDMAcquisitionModel(
+                    T(1),
+                    T(0.2),
+                    2,
+                ),
+            ),),
+        ),
+        PLANT_TEST_HOST_TARGET;
+        run_seed=0x8602,
+        command_endpoints=(CommandEndpointConfiguration(
+            command_endpoint_id(schema),
+            T[0];
+            capacity=8,
+        ),),
+    )
+    event_loop = prepare_plant_event_loop(
+        plant,
+        PlantEventLoopDefinition(
+            (OpticalSampleDefinition(
+                :science,
+                PeriodicSchedule(period_ns=line_duration_ns),
+            ),),
+            (AcquisitionEventDefinition(
+                :science_camera,
+                RollingShutterAcquisitionDefinition(
+                    PlantDuration(exposure_ns),
+                ),
+                PeriodicAcquisitionStart(
+                    PeriodicSchedule(period_ns=2_000_000_000),
+                ),
+            ),),
+        ),
+    )
+    return (
+        plant,
+        event_loop,
+        state=PlantEventLoopState(event_loop),
+        workspace=PlantEventLoopWorkspace(event_loop),
+        schema,
     )
 end
 
@@ -1428,4 +1557,65 @@ end
         rtol=0,
         atol=16eps(Float64),
     ))
+end
+
+@testset "Rolling shutter observes a mid-frame DM update" begin
+    fixture = rolling_dm_oracle_fixture()
+    @test step_plant_events!(
+        fixture.event_loop,
+        fixture.state,
+        fixture.workspace,
+    ) == PlantTimestamp(0)
+    initial_rate = copy(path_result(
+        prepared_path(fixture.plant, :science)).values)
+    @test all(isfinite, initial_rate)
+
+    admission = admit_plant_command!(
+        fixture.event_loop,
+        fixture.state,
+        fixture.workspace,
+        PlantCommand(
+            fixture.schema,
+            1,
+            PlantTimestamp(600_000_000),
+            [100e-9],
+        ),
+        PlantTimestamp(1),
+    )
+    @test command_admission_status(admission) == CommandAdmittedPending
+
+    run_plant_events_until!(
+        fixture.event_loop,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(600_000_000),
+    )
+    updated_rate = copy(path_result(
+        prepared_path(fixture.plant, :science)).values)
+    @test !isapprox(initial_rate, updated_rate)
+
+    run_plant_events_until!(
+        fixture.event_loop,
+        fixture.state,
+        fixture.workspace,
+        PlantTimestamp(1_600_000_000),
+    )
+    @test acquisition_product_sequence(
+        fixture.event_loop,
+        fixture.state,
+        :science_camera,
+    ) == 1
+
+    output = acquisition_products(
+        fixture.event_loop,
+        :science_camera,
+    ).observation
+    expected = similar(output)
+    old_fractions = (0.6, 0.6, 0.4, 0.4, 0.2, 0.2)
+    @inbounds for row in axes(expected, 1)
+        old = old_fractions[row]
+        @views @. expected[row, :] =
+            old * initial_rate[row, :] + (1 - old) * updated_rate[row, :]
+    end
+    @test output ≈ expected rtol = 64eps(Float64) atol = 64eps(Float64)
 end
