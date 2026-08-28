@@ -76,6 +76,50 @@ external-RTC HIL development, following the maintained specifications indexed
 by [`hil-package-boundary.md`](hil-package-boundary.md) and tracking completion
 in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 
+The default portable simulation path now targets the transport-neutral
+Calculon algorithm declaration API. `AdaptiveOpticsSim.AlgorithmGraphs` owns a
+small statically prepared executor for those declarations; it does not create a
+second numerical plan or `process!` interface. Plant remains supported and is
+retained as the detailed physical-timing implementation and differential oracle,
+but new general-purpose orchestration should not expand Plant. PipeWireAO
+remains the advanced Linux deployment for paced HIL execution, while ordinary
+Julia scripts remain a first-class manual composition path.
+
+The delivery order for this boundary is:
+
+1. Stabilize one shared Calculon declaration, port, property, and sparse-
+   parameter vocabulary across native Julia and FGN deployment.
+2. Provide a portable statically prepared graph with direct and explicit
+   prior-successful-step delayed links.
+3. Provide deterministic fixed-step and prepared-boundary model-time drivers;
+   wall-clock pacing remains outside core.
+4. Bind stateful rolling-shutter integration, command adoption, explicit
+   delays, and multi-rate behavior as semantically atomic prepared operations.
+5. Retain Plant scenarios as differential evidence for synchronized MCAO,
+   path-local MOAO, and rolling-shutter exposure across a mid-frame DM update.
+6. Use PipeWireAO for real paced HIL and capture canonical timestamps needed to
+   replay the same run through the portable graph or Plant oracle.
+
+```mermaid
+flowchart LR
+    SCI["Typed scientific implementation"] --> CAL["Calculon declaration"]
+    CAL --> NATIVE["AlgorithmGraphs<br/>portable model time"]
+    CAL --> FGN["FGN adapter"]
+    FGN --> PWAO["PipeWireAO<br/>paced HIL"]
+    PLANT["Plant<br/>precision physical timing"] --> ORACLE["Differential scenarios"]
+    NATIVE --> ORACLE
+    PWAO -->|"captured timestamps"| ORACLE
+```
+
+The first portable graph is deliberately single-writer and serial. Concrete
+tuple ownership keeps prepared algorithms and arrays type-stable without an
+`Any`-typed registry; explicit delayed links make feedback causal without a
+general event calendar. Topology-dependent specialization and service cost must
+be characterized at representative 4/8/16-node sizes before that executor is
+promoted for large MCAO/MOAO graphs. The existing Plant event loop stays
+available when sub-frame detector physics, trigger faults, command skew, or
+other detailed event semantics are the subject of the simulation.
+
 1. Preserve the completed HIL prerequisite Gates 0 and 1 and the qualified
    Gate 4A companion boundary while extending the general HIL runtime. Gate 0
    separates telescope aperture/geometry
@@ -302,8 +346,9 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
     values; normalize cold input into concrete execution-family ownership.
     Each slice must retain numerical correctness, concrete hot dispatch, CPU
     zero-allocation contracts, accelerator residency, and bounded topology
-    growth. Add no universal plan root, generic `process!` API, or compatibility
-    layer.
+    growth. Add no universal AdaptiveOpticsSim plan root, generic numerical
+    `process!` API, or compatibility layer; the separately maintained Calculon
+    declaration remains the algorithm boundary used by graph adapters.
 11. Preserve the completed detector family qualification and evidence catalog.
     Product-neutral frame, counting-array, and channel models remain in the
     canonical `Detectors` namespace. Named camera profiles remain outside core.
@@ -372,7 +417,8 @@ parallel scheduler integrations.
 | `Control` | control reconstructors, controllers, delay lines, and prepared runtime operations | dependency direction is `Control` to `Calibration`; tomography remains separate |
 | `Tomography` | tomography geometry, atmosphere reconstruction, fitting, and DM-command mapping | general controller execution remains in `Control` |
 | `Ensembles` | coarse offline execution policies, sweeps, and optional parallel integrations | this is not an `AdaptiveOpticsHIL.jl` deadline scheduler |
-| `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, execution requirements, providers, and event composition | resource inventory, placement policy, pacing, rings, and workers belong to `AdaptiveOpticsHIL.jl`; physical domain models enter through explicit imports |
+| `AlgorithmGraphs` | portable static composition of Calculon declarations, exact graph-boundary storage, direct and delayed links, and deterministic model-time drivers | Calculon owns numerical declarations; Plant owns detailed physical event semantics; PipeWireAO and `AdaptiveOpticsHIL.jl` own wall-clock pacing and operational execution |
+| `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, execution requirements, providers, detailed event composition, and precision-timing oracle | general algorithm-graph orchestration belongs to `AlgorithmGraphs`; resource inventory, placement policy, pacing, rings, and workers belong to `AdaptiveOpticsHIL.jl`; physical domain models enter through explicit imports |
 
 `AdaptiveOpticsSim` exports the canonical modules plus shared errors,
 fidelity profiles, and deliberately selected cross-domain workflow vocabulary.
