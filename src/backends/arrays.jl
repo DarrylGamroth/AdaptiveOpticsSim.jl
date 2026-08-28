@@ -48,6 +48,7 @@ ownership is not promised. Unsupported devices fail with a structured
 """
 abstract type _AbstractPreparedDeviceExecutionContext end
 
+execution_style(::BitArray) = ScalarCPUStyle()
 execution_style(A::AbstractArray) = execution_style(KernelAbstractions.get_backend(A))
 execution_style(::FixedSizeVector) = ScalarCPUStyle()
 execution_style(::KernelAbstractions.CPU) = ScalarCPUStyle()
@@ -78,6 +79,7 @@ array_backend_type(::AMDGPUBackend) = _require_gpu_array_backend(AMDGPUBackendTa
 resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backend)
 
 array_backend_selector(::Type{<:Array}) = CPUBackend()
+array_backend_selector(::Type{<:BitArray}) = CPUBackend()
 array_backend_selector(::Type{<:FixedSizeVector}) = CPUBackend()
 @inline array_backend_selector(
     ::Type{<:SubArray{T,N,P}}) where {T,N,P<:AbstractArray} =

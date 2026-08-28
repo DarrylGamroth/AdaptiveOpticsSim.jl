@@ -609,6 +609,11 @@ end
     )
     host_device = compute_device(metadata_storage)
     @test host_device == AdaptiveOpticsSim.Backends.HostComputeDevice()
+    host_bits = trues(2, 2)
+    @test AdaptiveOpticsSim.Backends.execution_style(host_bits) isa
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle
+    @test backend(host_bits) isa CPUBackend
+    @test compute_device(host_bits) == host_device
     @test AdaptiveOpticsSim.Backends.compute_device_backend(host_device) ==
         CPUBackend()
     @test isnothing(
