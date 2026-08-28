@@ -1822,6 +1822,12 @@ the canonical representation of these results.
   call `prepare_algorithm_graph`, and execute with `step_graph!`. This is a
   deterministic native adapter for Calculon declarations, not a second
   numerical algorithm interface or a wall-clock scheduler.
+- Deterministic model time: `FixedStepModelTimeDriver` selects a nominal
+  recurrence; `prepare_boundary_model_time_driver` seals a finite list
+  or expands periodic offsets during preparation. `step_graph_at!` commits the
+  graph and its model-time cursor together after a successful complete-frame
+  call. The drivers reuse `PlantTimestamp`, `PlantDuration`, and
+  `PeriodicSchedule`; they do not use the Plant event loop.
 - Independent `AdaptiveOpticsSim.Control` primitives: `VectorDelayLine`,
   `shift_delay!`, `DiscreteIntegratorController`, and `reconstruct!`; command
   application remains the `AdaptiveOpticsSim.Optics.set_command!` operation

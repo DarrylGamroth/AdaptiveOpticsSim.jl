@@ -3,9 +3,13 @@ export AlgorithmNodeDefinition, AlgorithmGraphDefinition
 export AlgorithmLink, DelayedAlgorithmLink
 export GraphInputDefinition, GraphOutputDefinition
 export PreparedAlgorithmGraph
+export FixedStepModelTimeDriver, PreparedBoundaryModelTimeDriver
 export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
 export prepare_algorithm_graph, step_graph!, reset_graph!
 export graph_step_sequence, graph_failed
+export prepare_boundary_model_time_driver
+export next_model_timestamp, advance_model_time!, reset_model_time!
+export step_graph_at!, model_time_sequence, model_time_exhausted
 
 public prepared_algorithm

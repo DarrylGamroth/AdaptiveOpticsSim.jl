@@ -154,11 +154,32 @@ storage and are valid after a successful step. `graph_step_sequence` identifies
 successful publications, and any node failure stops the graph until
 `reset_graph!`.
 
+For fixed-step model time, use the canonical Plant time values without
+introducing a wall clock:
+
+```julia
+using AdaptiveOpticsSim.Plant
+
+driver = FixedStepModelTimeDriver(
+    PeriodicSchedule(PlantDuration(1_000_000));
+    origin=PlantTimestamp(0),
+)
+timestamp = next_model_timestamp(driver)
+# Update `residual` from physics evaluated at `timestamp`.
+@assert step_graph_at!(graph, driver) == timestamp
+```
+
+`prepare_boundary_model_time_driver` instead seals a finite, strictly
+increasing set of physical boundaries. Its periodic overload expands admitted
+offsets during preparation. Use `advance_model_time!` only after the atomic
+boundary operation succeeds; the cursor owns no callback, task, queue, event
+phase, or wall-clock policy.
+
 This first native path is complete-frame, single-writer, CPU storage. It
 supports typed construction configuration and startup sparse parameters. It
 does not yet provide coordinated runtime-property transactions, conditional
-publication of row blocks, model-time drivers, wall-clock pacing, or device
-placement. Keep manual Julia composition for custom physics, Plant for detailed
+publication of row blocks, wall-clock pacing, or device placement. Keep manual
+Julia composition for custom physics, Plant for detailed
 physical-event semantics, and PipeWireAO for paced Linux HIL deployment.
 
 ### 4. Plant execution layer

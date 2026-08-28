@@ -450,3 +450,136 @@ end
     )
     @test_throws AlgorithmGraphError prepare_algorithm_graph(duplicate_destination)
 end
+
+@testset "fixed-step model-time driver" begin
+    driver = FixedStepModelTimeDriver(
+        PeriodicSchedule(PlantDuration(100); phase=PlantDuration(25));
+        origin=PlantTimestamp(1_000),
+    )
+
+    @test model_time_sequence(driver) == UInt64(0)
+    @test !model_time_exhausted(driver)
+    @test next_model_timestamp(driver) == PlantTimestamp(1_025)
+    @test advance_model_time!(driver) == PlantTimestamp(1_025)
+    @test model_time_sequence(driver) == UInt64(1)
+    @test next_model_timestamp(driver) == PlantTimestamp(1_125)
+    @test @inferred(advance_model_time!(driver)) == PlantTimestamp(1_125)
+    @test @allocated(advance_model_time!(driver)) == 0
+
+    @test reset_model_time!(driver) === driver
+    @test model_time_sequence(driver) == UInt64(0)
+    @test next_model_timestamp(driver) == PlantTimestamp(1_025)
+end
+
+@testset "prepared-boundary model-time driver" begin
+    driver = prepare_boundary_model_time_driver((
+        PlantTimestamp(10),
+        PlantTimestamp(20),
+        PlantTimestamp(35),
+    ))
+
+    @test next_model_timestamp(driver) == PlantTimestamp(10)
+    @test advance_model_time!(driver) == PlantTimestamp(10)
+    @test @inferred(advance_model_time!(driver)) == PlantTimestamp(20)
+    @test @allocated(advance_model_time!(driver)) == 0
+    @test model_time_sequence(driver) == UInt64(3)
+    @test model_time_exhausted(driver)
+    @test_throws AlgorithmGraphError next_model_timestamp(driver)
+    @test_throws AlgorithmGraphError advance_model_time!(driver)
+    reset_model_time!(driver)
+    @test next_model_timestamp(driver) == PlantTimestamp(10)
+
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(())
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver((
+        PlantTimestamp(10),
+        PlantTimestamp(10),
+    ))
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver((
+        PlantTimestamp(20),
+        PlantTimestamp(10),
+    ))
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver((1, 2))
+end
+
+@testset "periodic prepared-boundary model time" begin
+    schedule = PeriodicSchedule(
+        PlantDuration(1_000);
+        phase=PlantDuration(100),
+    )
+    driver = prepare_boundary_model_time_driver(
+        schedule,
+        (PlantDuration(0), PlantDuration(250), PlantDuration(750)),
+        2;
+        origin=PlantTimestamp(10),
+    )
+    observed = ntuple(_ -> advance_model_time!(driver), 6)
+    @test observed == (
+        PlantTimestamp(110),
+        PlantTimestamp(360),
+        PlantTimestamp(860),
+        PlantTimestamp(1_110),
+        PlantTimestamp(1_360),
+        PlantTimestamp(1_860),
+    )
+    @test model_time_exhausted(driver)
+
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
+        schedule,
+        (),
+        1,
+    )
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
+        schedule,
+        (PlantDuration(0), PlantDuration(1_000)),
+        1,
+    )
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
+        schedule,
+        (PlantDuration(250), PlantDuration(100)),
+        1,
+    )
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
+        schedule,
+        (PlantDuration(0),),
+        0,
+    )
+    @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
+        schedule,
+        (PlantDuration(0),),
+        true,
+    )
+end
+
+@testset "model-time graph stepping commits together" begin
+    graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(
+            :source,
+            GraphTestSourceDeclaration,
+            GraphTestSourceConfiguration(2, 4.0f0),
+        ),);
+        outputs=(graph_output(:sample, :source => :output),),
+    ))
+    driver = FixedStepModelTimeDriver(PeriodicSchedule(PlantDuration(50)))
+
+    @test step_graph_at!(graph, driver) == PlantTimestamp(0)
+    @test graph_output(graph, Val(:sample)) == Float32[4, 4]
+    @test graph_step_sequence(graph) == model_time_sequence(driver) == UInt64(1)
+    @test @allocated(step_graph_at!(graph, driver)) == 0
+
+    step_graph!(graph)
+    @test_throws AlgorithmGraphError step_graph_at!(graph, driver)
+
+    reset_graph!(graph)
+    reset_model_time!(driver)
+    @test step_graph_at!(graph, driver) == PlantTimestamp(0)
+
+    failing_input = Float32[-1, 1]
+    failing_graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(:checked, GraphTestFailureDeclaration, 2),);
+        inputs=(graph_input(:input, :checked => :input, failing_input),),
+        outputs=(graph_output(:output, :checked => :output),),
+    ))
+    failing_driver = FixedStepModelTimeDriver(PeriodicSchedule(PlantDuration(50)))
+    @test_throws DomainError step_graph_at!(failing_graph, failing_driver)
+    @test model_time_sequence(failing_driver) == UInt64(0)
+end

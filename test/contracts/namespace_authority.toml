@@ -534,6 +534,8 @@ new_domain_exports = [
     "AlgorithmGraphs.GraphInputDefinition",
     "AlgorithmGraphs.GraphOutputDefinition",
     "AlgorithmGraphs.PreparedAlgorithmGraph",
+    "AlgorithmGraphs.FixedStepModelTimeDriver",
+    "AlgorithmGraphs.PreparedBoundaryModelTimeDriver",
     "AlgorithmGraphs.algorithm_node",
     "AlgorithmGraphs.algorithm_graph",
     "AlgorithmGraphs.graph_input",
@@ -546,6 +548,13 @@ new_domain_exports = [
     "AlgorithmGraphs.reset_graph!",
     "AlgorithmGraphs.graph_step_sequence",
     "AlgorithmGraphs.graph_failed",
+    "AlgorithmGraphs.prepare_boundary_model_time_driver",
+    "AlgorithmGraphs.next_model_timestamp",
+    "AlgorithmGraphs.advance_model_time!",
+    "AlgorithmGraphs.reset_model_time!",
+    "AlgorithmGraphs.step_graph_at!",
+    "AlgorithmGraphs.model_time_sequence",
+    "AlgorithmGraphs.model_time_exhausted",
     "Optics.SodiumLayerProfile",
     "Optics.sodium_layer_profile",
     "WavefrontSensors.PreparedLiFTForward",
@@ -840,7 +849,9 @@ dependencies = [
 
 [[owner_graph]]
 name = "AlgorithmGraphs"
-dependencies = []
+dependencies = [
+    "Plant",
+]
 
 [[api_allowlists]]
 owner = "Root"
@@ -2384,6 +2395,8 @@ exports = [
     "GraphInputDefinition",
     "GraphOutputDefinition",
     "PreparedAlgorithmGraph",
+    "FixedStepModelTimeDriver",
+    "PreparedBoundaryModelTimeDriver",
     "algorithm_node",
     "algorithm_graph",
     "graph_input",
@@ -2396,6 +2409,13 @@ exports = [
     "reset_graph!",
     "graph_step_sequence",
     "graph_failed",
+    "prepare_boundary_model_time_driver",
+    "next_model_timestamp",
+    "advance_model_time!",
+    "reset_model_time!",
+    "step_graph_at!",
+    "model_time_sequence",
+    "model_time_exhausted",
 ]
 public = [
     "prepared_algorithm",

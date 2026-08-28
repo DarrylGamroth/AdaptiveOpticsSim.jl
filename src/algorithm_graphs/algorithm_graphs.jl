@@ -8,11 +8,20 @@ model-time execution policy.
 """
 module AlgorithmGraphs
 
+using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
+
 import ..AdaptiveOpticsSim: AdaptiveOpticsSimError
+import ..Plant:
+    PeriodicSchedule,
+    PlantDuration,
+    PlantTimestamp,
+    schedule_period,
+    schedule_timestamp
 
 include("definitions.jl")
 include("preparation.jl")
 include("execution.jl")
+include("model_time.jl")
 include("api.jl")
 
 end # module AlgorithmGraphs
