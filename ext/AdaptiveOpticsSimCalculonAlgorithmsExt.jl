@@ -1,6 +1,6 @@
 module AdaptiveOpticsSimCalculonAlgorithmsExt
 
-import AdaptiveOpticsSim: AlgorithmGraphs, Control
+import AdaptiveOpticsSim: AlgorithmGraphs, Calibration, Control
 import CalculonAlgorithms
 
 const AG = AlgorithmGraphs
@@ -13,6 +13,7 @@ struct _StateWorkspace{State,Workspace}
 end
 
 include("calculon_algorithms/control.jl")
+include("calculon_algorithms/calibration.jl")
 
 @inline _direction(::CA.InputPort) = :input
 @inline _direction(::CA.OutputPort) = :output

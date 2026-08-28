@@ -87,11 +87,13 @@ Julia scripts remain a first-class manual composition path.
 
 AdaptiveOpticsSim scientific implementations retain their domain ownership
 when exposed through Calculon. A Calculon declaration may wrap the exact AOS
-plan and package separately owned persistent state and replaceable scratch workspace
-inside Calculon's one mutable execution slot; it does not merge those AOS
-ownership roles. The first complete-frame proof uses the native discrete
-integrator controller. Native Julia and `AlgorithmGraphs` execution are in
-scope now; a Julia FGN runtime remains a separate deployment gate.
+plan and package separately owned persistent state and replaceable scratch
+workspace inside Calculon's one mutable execution slot; it does not merge
+those AOS ownership roles. The first complete-frame proof uses the native discrete
+integrator controller. A second proof uses modal OPD expansion with a
+coefficient vector, an OPD matrix, and separately replaceable basis and pupil-
+support ndarray parameters. Native Julia and `AlgorithmGraphs` execution are
+in scope now; a Julia FGN runtime remains a separate deployment gate.
 
 The delivery order for this boundary is:
 

@@ -1825,10 +1825,14 @@ the canonical representation of these results.
 - AOS-owned Calculon algorithms retain their numerical implementation in the
   canonical scientific module. The optional Calculon extension provides the
   declaration metadata and packages separately owned AOS execution state and
-  replaceable scratch workspace into Calculon's single mutable execution slot. The
-  initial `discrete-integrator-controller-f32` declaration is qualified for
-  native Julia and `AlgorithmGraphs`; direct Julia loading through an FGN
-  shared library remains future adapter-runtime work.
+  replaceable scratch workspace into Calculon's single mutable execution
+  slot. The
+  `discrete-integrator-controller-f32` exercises state plus scratch workspace.
+  `modal-opd-expansion-f32` exercises rank-changing frame data and two immutable
+  ndarray parameter families through `Calibration.ModalOPDExpansionPlan`.
+  Both declarations are qualified for native Julia and `AlgorithmGraphs`;
+  direct Julia loading through an FGN shared library remains future
+  adapter-runtime work.
 - Deterministic model time: `FixedStepModelTimeDriver` selects a nominal
   recurrence; `prepare_boundary_model_time_driver` seals a finite list
   or expands periodic offsets during preparation. `step_graph_at!` commits the

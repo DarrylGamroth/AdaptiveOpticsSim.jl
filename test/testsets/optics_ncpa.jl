@@ -47,11 +47,19 @@
     expanded_opd = similar(pupil.opd)
     @test @inferred(Calibration.combine_basis!(
         expanded_opd, basis_dm, coeffs, pupil_mask(tel))) === expanded_opd
+    expansion_plan = ModalOPDExpansionPlan(basis_dm, pupil_mask(tel))
+    @test expansion_plan.basis !== basis_dm
+    @test expansion_plan.pupil_support !== pupil_mask(tel)
+    @test @inferred(combine_basis!(
+        expanded_opd, expansion_plan, coeffs)) === expanded_opd
     if coverage_instrumented()
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
         @test_skip "allocation assertions are disabled under coverage instrumentation"
     else
         @test @allocated(Calibration.combine_basis!(
             expanded_opd, basis_dm, coeffs, pupil_mask(tel))) == 0
+        @test @allocated(combine_basis!(
+            expanded_opd, expansion_plan, coeffs)) == 0
     end
 
     amplitude = 2e-9

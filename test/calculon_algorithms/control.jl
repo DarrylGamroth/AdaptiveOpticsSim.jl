@@ -70,6 +70,7 @@ const CalculonExtension = Base.get_extension(
     @test replacement.sample_period_s == declared.plan.sample_period_s
 
     @test CalculonAlgorithms.reset!(declared) === declared
+    @test @allocated(CalculonAlgorithms.reset!(declared)) == 0
     @test all(iszero, declared.workspace.state.integrated_command)
     @test all(iszero, declared.workspace.state.command)
     @test all(iszero, declared.workspace.workspace.next_integrated_command)
@@ -102,6 +103,7 @@ end
 
     prepared = AlgorithmGraphs.prepared_algorithm(graph, Val(:controller))
     @test reset_graph!(graph) === graph
+    @test @allocated(reset_graph!(graph)) == 0
     @test all(iszero, prepared.workspace.state.command)
     @test all(iszero, prepared.workspace.workspace.next_command)
 end
