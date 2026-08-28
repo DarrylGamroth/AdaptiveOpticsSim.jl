@@ -123,6 +123,8 @@ function adaptive_optics_sim_extension_hooks(path::AbstractString)
             r"(?m)^(?:@inline\s+)?(?:function\s+)?(?:AdaptiveOpticsSim\.)?Tomography\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()",
         "Ensembles" =>
             r"(?m)^(?:@inline\s+)?(?:function\s+)?(?:AdaptiveOpticsSim\.)?Ensembles\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()",
+        "AlgorithmGraphs" =>
+            r"(?m)^(?:@inline\s+)?(?:function\s+)?(?:AdaptiveOpticsSim\.)?AlgorithmGraphs\.([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\{|\()",
     )
     owners = Dict{String,String}()
     for (owner, pattern) in patterns
@@ -228,6 +230,7 @@ end
         "Control",
         "Tomography",
         "Ensembles",
+        "AlgorithmGraphs",
     ))
     allowlists = authority["api_allowlists"]
     @test Set(String(entry["owner"]) for entry in allowlists) ==

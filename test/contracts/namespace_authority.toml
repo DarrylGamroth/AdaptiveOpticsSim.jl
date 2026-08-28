@@ -523,8 +523,29 @@ new_root_exports = [
     "Control",
     "Tomography",
     "Ensembles",
+    "AlgorithmGraphs",
 ]
 new_domain_exports = [
+    "AlgorithmGraphs.AlgorithmGraphError",
+    "AlgorithmGraphs.AlgorithmNodeDefinition",
+    "AlgorithmGraphs.AlgorithmGraphDefinition",
+    "AlgorithmGraphs.AlgorithmLink",
+    "AlgorithmGraphs.DelayedAlgorithmLink",
+    "AlgorithmGraphs.GraphInputDefinition",
+    "AlgorithmGraphs.GraphOutputDefinition",
+    "AlgorithmGraphs.PreparedAlgorithmGraph",
+    "AlgorithmGraphs.algorithm_node",
+    "AlgorithmGraphs.algorithm_graph",
+    "AlgorithmGraphs.graph_input",
+    "AlgorithmGraphs.graph_output",
+    "AlgorithmGraphs.link",
+    "AlgorithmGraphs.delayed_link",
+    "AlgorithmGraphs.sparse_parameter",
+    "AlgorithmGraphs.prepare_algorithm_graph",
+    "AlgorithmGraphs.step_graph!",
+    "AlgorithmGraphs.reset_graph!",
+    "AlgorithmGraphs.graph_step_sequence",
+    "AlgorithmGraphs.graph_failed",
     "Optics.SodiumLayerProfile",
     "Optics.sodium_layer_profile",
     "WavefrontSensors.PreparedLiFTForward",
@@ -541,6 +562,7 @@ new_domain_exports = [
     "WavefrontSensors.LiFTPhysicalRatePreservation",
 ]
 new_domain_public = [
+    "AlgorithmGraphs.prepared_algorithm",
     "Backends.AbstractComputeDeviceAvailability",
     "Backends.ComputeDeviceAvailable",
     "Backends.ComputeDeviceUnavailable",
@@ -816,6 +838,10 @@ dependencies = [
     "Backends",
 ]
 
+[[owner_graph]]
+name = "AlgorithmGraphs"
+dependencies = []
+
 [[api_allowlists]]
 owner = "Root"
 exports = [
@@ -828,6 +854,7 @@ exports = [
     "Control",
     "Tomography",
     "Ensembles",
+    "AlgorithmGraphs",
     "AdaptiveOpticsSimError",
     "InvalidConfiguration",
     "DimensionMismatchError",
@@ -2346,6 +2373,34 @@ public = [
     "init_execution_state",
 ]
 
+[[api_allowlists]]
+owner = "AlgorithmGraphs"
+exports = [
+    "AlgorithmGraphError",
+    "AlgorithmNodeDefinition",
+    "AlgorithmGraphDefinition",
+    "AlgorithmLink",
+    "DelayedAlgorithmLink",
+    "GraphInputDefinition",
+    "GraphOutputDefinition",
+    "PreparedAlgorithmGraph",
+    "algorithm_node",
+    "algorithm_graph",
+    "graph_input",
+    "graph_output",
+    "link",
+    "delayed_link",
+    "sparse_parameter",
+    "prepare_algorithm_graph",
+    "step_graph!",
+    "reset_graph!",
+    "graph_step_sequence",
+    "graph_failed",
+]
+public = [
+    "prepared_algorithm",
+]
+
 [[cross_module_imports]]
 consumer = "Plant"
 provider = "Root"
@@ -2733,6 +2788,17 @@ adaptive_optics_sim_hooks = [
 ]
 
 [[extension_files]]
+path = "ext/AdaptiveOpticsSimCalculonAlgorithmsExt.jl"
+dependency = "CalculonAlgorithms"
+adaptive_optics_sim_hooks = [
+    "_algorithm_port_contracts",
+    "_prepare_algorithm_instance",
+    "_process_algorithm!",
+    "_replace_algorithm_parameter!",
+    "_reset_algorithm!",
+]
+
+[[extension_files]]
 path = "ext/AdaptiveOpticsSimCUDAExt.jl"
 dependency = "CUDA"
 adaptive_optics_sim_hooks = [
@@ -2885,4 +2951,14 @@ owner = "Ensembles"
 hooks = [
     "execute_ensemble!",
     "init_ensemble_scheduler",
+]
+
+[[extension_hook_owners]]
+owner = "AlgorithmGraphs"
+hooks = [
+    "_algorithm_port_contracts",
+    "_prepare_algorithm_instance",
+    "_process_algorithm!",
+    "_replace_algorithm_parameter!",
+    "_reset_algorithm!",
 ]

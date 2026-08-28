@@ -1816,6 +1816,12 @@ the canonical representation of these results.
 - HIL-neutral orchestration: the `AdaptiveOpticsSim.Plant` definitions,
   prepared owners, command lifecycle, triggers, detector lifecycles, and event
   loop documented above
+- Portable complete-frame algorithm composition: load `CalculonAlgorithms`,
+  import `AdaptiveOpticsSim.AlgorithmGraphs`, declare nodes with
+  `algorithm_node`, connect them with `link` or an explicit `delayed_link`,
+  call `prepare_algorithm_graph`, and execute with `step_graph!`. This is a
+  deterministic native adapter for Calculon declarations, not a second
+  numerical algorithm interface or a wall-clock scheduler.
 - Independent `AdaptiveOpticsSim.Control` primitives: `VectorDelayLine`,
   `shift_delay!`, `DiscreteIntegratorController`, and `reconstruct!`; command
   application remains the `AdaptiveOpticsSim.Optics.set_command!` operation

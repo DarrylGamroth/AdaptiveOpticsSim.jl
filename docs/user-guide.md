@@ -54,6 +54,8 @@ The package is organized around a small set of modeling objects:
 - modal-optic basis specs such as `CartesianTiltBasis`, `ZernikeOpticBasis`, and `MatrixModalBasis` when you want to choose controlled modes explicitly
 - `AdaptiveOpticsSim.Plant` when you need independent virtual-time commands,
   acquisitions, triggers, and detector lifecycles
+- `AdaptiveOpticsSim.AlgorithmGraphs` when you want one statically prepared,
+  portable graph of transport-neutral Calculon algorithms
 
 Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
@@ -67,9 +69,9 @@ modal bases, and model-derived NCPA synthesis live in `Calibration`.
 Slopes-to-command reconstructors, controller models, and their preallocated
 composition live in `Control`.
 
-## Three Execution Layers
+## Four Execution Layers
 
-The package exposes three layers on purpose.
+The package exposes four layers on purpose.
 
 ### 1. Primitive physics layer
 
@@ -113,7 +115,53 @@ not define a second generic package runtime.
 After `using AdaptiveOpticsSim.Ensembles`, `SimulationEnsemble` may schedule
 several independent model instances for coarse offline work.
 
-### 3. Plant execution layer
+### 3. Portable algorithm-graph layer
+
+Use `AdaptiveOpticsSim.AlgorithmGraphs` for a fixed, serial composition of
+Calculon declarations that must also remain deployable through other Calculon
+adapters. `CalculonAlgorithms` is an optional dependency; loading both packages
+activates the native adapter automatically.
+
+```julia
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.AlgorithmGraphs
+using CalculonAlgorithms
+
+configuration = LeakyIntegratorF32Configuration(
+    extent=4,
+    initial_state=0.0f0,
+    input_schema="org.example.residual-error/1",
+    output_schema="org.example.controller-command/1",
+)
+residual = zeros(Float32, 4)
+
+definition = algorithm_graph(
+    (algorithm_node(:controller, LeakyIntegratorF32, configuration),);
+    inputs=(graph_input(:residual, :controller => :input, residual),),
+    outputs=(graph_output(:command, :controller => :output),),
+)
+graph = prepare_algorithm_graph(definition)
+
+residual .= (1, 2, 3, 4)
+step_graph!(graph)
+command = graph_output(graph, Val(:command))
+```
+
+Node declaration order is execution order. Use `link` only from an earlier
+node to a later node. Feedback requires `delayed_link` and an explicit initial
+ndarray. Graph inputs remain caller-owned; graph outputs alias prepared node
+storage and are valid after a successful step. `graph_step_sequence` identifies
+successful publications, and any node failure stops the graph until
+`reset_graph!`.
+
+This first native path is complete-frame, single-writer, CPU storage. It
+supports typed construction configuration and startup sparse parameters. It
+does not yet provide coordinated runtime-property transactions, conditional
+publication of row blocks, model-time drivers, wall-clock pacing, or device
+placement. Keep manual Julia composition for custom physics, Plant for detailed
+physical-event semantics, and PipeWireAO for paced Linux HIL deployment.
+
+### 4. Plant execution layer
 
 Use `AdaptiveOpticsSim.Plant` when the model needs explicit HIL-neutral
 ownership and virtual time.

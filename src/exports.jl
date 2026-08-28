@@ -9,6 +9,7 @@ export AdaptiveOpticsSimError, InvalidConfiguration, DimensionMismatchError
 export UnsupportedAlgorithm, NumericalConditionError
 export Backends, Optics, Detectors, Atmospheres, WavefrontSensors, Calibration
 export Control, Tomography, Ensembles, Plant
+export AlgorithmGraphs
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export runtime_rng, deterministic_reference_rng

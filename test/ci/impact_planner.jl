@@ -229,6 +229,8 @@ function add_source_impacts!(plan::ValidationPlan, path::String)
         add_selectors!(plan, ("ci-foundations",))
         plan.run_grouped_cpu = true
         plan.run_scheduler = true
+    elseif startswith(path, "src/algorithm_graphs/")
+        add_selectors!(plan, ("algorithm-graphs", "namespace-authority"))
     else
         all_validation!(plan)
     end

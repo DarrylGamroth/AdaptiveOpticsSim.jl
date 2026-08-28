@@ -10,6 +10,7 @@ using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim.Ensembles
+using AdaptiveOpticsSim.AlgorithmGraphs
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using FixedSizeArrays: FixedSizeVector
@@ -160,6 +161,14 @@ for name in names(Ensembles; all=true)
     if Base.isidentifier(s) && !startswith(s, "#") &&
             !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(Ensembles, $(QuoteNode(name)))
+    end
+end
+
+for name in names(AlgorithmGraphs; all=true)
+    s = String(name)
+    if Base.isidentifier(s) && !startswith(s, "#") &&
+            !isdefined(@__MODULE__, name)
+        @eval const $(name) = getfield(AlgorithmGraphs, $(QuoteNode(name)))
     end
 end
 
