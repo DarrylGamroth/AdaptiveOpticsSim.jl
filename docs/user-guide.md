@@ -175,6 +175,33 @@ offsets during preparation. Use `advance_model_time!` only after the atomic
 boundary operation succeeds; the cursor owns no callback, task, queue, event
 phase, or wall-clock policy.
 
+For replay, first map external clock readings to run-local Plant time through
+an explicit transport adapter and origin. Store each mapped reading as a
+`CapturedModelTimestamp`, including its uncertainty and immutable concrete
+provenance, then seal the recording:
+
+```julia
+captures = (
+    CapturedModelTimestamp(
+        PlantTimestamp(0),
+        PlantDuration(20),
+        (source=UInt32(3), sequence=UInt64(81)),
+    ),
+    CapturedModelTimestamp(
+        PlantTimestamp(1_000_040),
+        PlantDuration(25),
+        (source=UInt32(3), sequence=UInt64(82)),
+    ),
+)
+replay = prepare_captured_model_time_driver(captures)
+capture = next_model_time_capture(replay)
+@assert next_model_timestamp(replay) == model_timestamp(capture)
+```
+
+The replay cursor schedules by the mapped timestamp and preserves uncertainty
+and provenance for inspection. It does not infer an origin from an absolute
+execution-clock value, pace against wall time, or serialize the recording.
+
 This first native path is complete-frame, single-writer, CPU storage. It
 supports typed construction configuration and startup sparse parameters. It
 does not yet provide coordinated runtime-property transactions, conditional

@@ -27,9 +27,40 @@ struct PreparedBoundaryModelTimeDriver{
     state::_ModelTimeDriverState
 end
 
+"""One mapped run-local model timestamp with uncertainty and owned provenance."""
+struct CapturedModelTimestamp{Provenance}
+    timestamp::PlantTimestamp
+    uncertainty::PlantDuration
+    provenance::Provenance
+
+    function CapturedModelTimestamp(
+        timestamp::PlantTimestamp,
+        uncertainty::PlantDuration,
+        provenance::Provenance,
+    ) where {Provenance}
+        isbitstype(Provenance) || throw(AlgorithmGraphError(
+            "captured model-time provenance must have an immutable isbits representation",
+        ))
+        return new{Provenance}(timestamp, uncertainty, provenance)
+    end
+end
+
+@inline model_timestamp(capture::CapturedModelTimestamp) = capture.timestamp
+@inline model_time_uncertainty(capture::CapturedModelTimestamp) =
+    capture.uncertainty
+@inline model_time_provenance(capture::CapturedModelTimestamp) =
+    capture.provenance
+
+"""A deterministic cursor over sealed captured model timestamps."""
+struct PreparedCapturedModelTimeDriver{Captures<:FixedSizeVector}
+    captures::Captures
+    state::_ModelTimeDriverState
+end
+
 const _ModelTimeDriver = Union{
     FixedStepModelTimeDriver,
     PreparedBoundaryModelTimeDriver,
+    PreparedCapturedModelTimeDriver,
 }
 
 function _seal_model_time_boundaries(boundaries)
@@ -63,6 +94,48 @@ event-phase order.
 function prepare_boundary_model_time_driver(boundaries)
     prepared = _seal_model_time_boundaries(boundaries)
     return PreparedBoundaryModelTimeDriver(prepared, _ModelTimeDriverState())
+end
+
+function _seal_model_time_captures(captures)
+    isempty(captures) && throw(AlgorithmGraphError(
+        "a captured model-time driver requires at least one capture",
+    ))
+    Capture = typeof(first(captures))
+    Capture <: CapturedModelTimestamp || throw(AlgorithmGraphError(
+        "captured model-time entries must be CapturedModelTimestamp values, not $Capture",
+    ))
+    isconcretetype(Capture) || throw(AlgorithmGraphError(
+        "captured model-time entries must have one concrete provenance type",
+    ))
+    builder = Vector{Capture}(undef, length(captures))
+    prior = nothing
+    index = 1
+    for capture in captures
+        typeof(capture) === Capture || throw(AlgorithmGraphError(
+            "captured model-time entries must have one concrete provenance type",
+        ))
+        timestamp = model_timestamp(capture)
+        prior === nothing || prior < timestamp || throw(AlgorithmGraphError(
+            "captured model timestamps must be strictly increasing",
+        ))
+        builder[index] = capture
+        prior = timestamp
+        index += 1
+    end
+    return FixedSizeVectorDefault{Capture}(builder)
+end
+
+"""
+    prepare_captured_model_time_driver(captures)
+
+Seal a finite, strictly increasing tuple or vector of captured model timestamps.
+Each entry must use the same concrete isbits provenance representation.
+"""
+function prepare_captured_model_time_driver(
+    captures::Union{Tuple,AbstractVector},
+)
+    prepared = _seal_model_time_captures(captures)
+    return PreparedCapturedModelTimeDriver(prepared, _ModelTimeDriverState())
 end
 
 function _checked_model_time_occurrences(occurrences::Integer)
@@ -157,6 +230,19 @@ end
     @inbounds return driver.boundaries[index]
 end
 
+
+"""Return the next captured record without advancing its replay cursor."""
+@inline function next_model_time_capture(
+    driver::PreparedCapturedModelTimeDriver,
+)
+    model_time_exhausted(driver) && _throw_model_time_exhausted()
+    index = Int(driver.state.sequence) + 1
+    @inbounds return driver.captures[index]
+end
+
+@inline next_model_timestamp(driver::PreparedCapturedModelTimeDriver) =
+    model_timestamp(next_model_time_capture(driver))
+
 @inline function _commit_model_time!(driver::FixedStepModelTimeDriver)
     state = driver.state
     state.sequence += UInt64(1)
@@ -168,6 +254,13 @@ end
     state = driver.state
     state.sequence += UInt64(1)
     state.exhausted = state.sequence == UInt64(length(driver.boundaries))
+    return driver
+end
+
+@inline function _commit_model_time!(driver::PreparedCapturedModelTimeDriver)
+    state = driver.state
+    state.sequence += UInt64(1)
+    state.exhausted = state.sequence == UInt64(length(driver.captures))
     return driver
 end
 

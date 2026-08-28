@@ -1828,6 +1828,12 @@ the canonical representation of these results.
   graph and its model-time cursor together after a successful complete-frame
   call. The drivers reuse `PlantTimestamp`, `PlantDuration`, and
   `PeriodicSchedule`; they do not use the Plant event loop.
+- Captured model-time replay: `CapturedModelTimestamp` stores one already
+  mapped run-local timestamp, mapping uncertainty, and concrete isbits source
+  provenance. `prepare_captured_model_time_driver` seals a finite strictly
+  increasing recording, while `next_model_time_capture` preserves the full
+  record and `next_model_timestamp` exposes its scheduling timestamp. External
+  clock mapping and persistence remain adapter/application responsibilities.
 - Independent `AdaptiveOpticsSim.Control` primitives: `VectorDelayLine`,
   `shift_delay!`, `DiscreteIntegratorController`, and `reconstruct!`; command
   application remains the `AdaptiveOpticsSim.Optics.set_command!` operation

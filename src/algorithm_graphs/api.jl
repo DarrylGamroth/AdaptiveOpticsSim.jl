@@ -4,11 +4,14 @@ export AlgorithmLink, DelayedAlgorithmLink
 export GraphInputDefinition, GraphOutputDefinition
 export PreparedAlgorithmGraph
 export FixedStepModelTimeDriver, PreparedBoundaryModelTimeDriver
+export CapturedModelTimestamp, PreparedCapturedModelTimeDriver
 export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
 export prepare_algorithm_graph, step_graph!, reset_graph!
 export graph_step_sequence, graph_failed
 export prepare_boundary_model_time_driver
+export prepare_captured_model_time_driver, next_model_time_capture
+export model_timestamp, model_time_uncertainty, model_time_provenance
 export next_model_timestamp, advance_model_time!, reset_model_time!
 export step_graph_at!, model_time_sequence, model_time_exhausted
 

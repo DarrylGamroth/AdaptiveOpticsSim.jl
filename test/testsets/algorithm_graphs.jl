@@ -550,6 +550,59 @@ end
     )
 end
 
+@testset "captured model-time replay" begin
+    captures = (
+        CapturedModelTimestamp(
+            PlantTimestamp(15),
+            PlantDuration(2),
+            (source=UInt32(7), sequence=UInt64(41)),
+        ),
+        CapturedModelTimestamp(
+            PlantTimestamp(28),
+            PlantDuration(3),
+            (source=UInt32(7), sequence=UInt64(42)),
+        ),
+    )
+    driver = prepare_captured_model_time_driver(captures)
+
+    @test next_model_time_capture(driver) === captures[1]
+    @test model_timestamp(next_model_time_capture(driver)) ==
+        PlantTimestamp(15)
+    @test model_time_uncertainty(next_model_time_capture(driver)) ==
+        PlantDuration(2)
+    @test model_time_provenance(next_model_time_capture(driver)) ==
+        (source=UInt32(7), sequence=UInt64(41))
+    @test advance_model_time!(driver) == PlantTimestamp(15)
+    @test @inferred(next_model_time_capture(driver)) === captures[2]
+    @test @allocated(advance_model_time!(driver)) == 0
+    @test model_time_exhausted(driver)
+
+    reset_model_time!(driver)
+    @test next_model_timestamp(driver) == PlantTimestamp(15)
+    @test_throws AlgorithmGraphError prepare_captured_model_time_driver(())
+    @test_throws AlgorithmGraphError prepare_captured_model_time_driver((
+        captures[1],
+        CapturedModelTimestamp(
+            PlantTimestamp(15),
+            PlantDuration(3),
+            (source=UInt32(7), sequence=UInt64(42)),
+        ),
+    ))
+    @test_throws AlgorithmGraphError prepare_captured_model_time_driver((
+        captures[1],
+        CapturedModelTimestamp(
+            PlantTimestamp(28),
+            PlantDuration(3),
+            (stream=UInt32(7), sequence=UInt64(42)),
+        ),
+    ))
+    @test_throws AlgorithmGraphError CapturedModelTimestamp(
+        PlantTimestamp(1),
+        PlantDuration(0),
+        "borrowed provenance",
+    )
+end
+
 @testset "model-time graph stepping commits together" begin
     graph = prepare_algorithm_graph(algorithm_graph(
         (algorithm_node(
@@ -572,6 +625,17 @@ end
     reset_graph!(graph)
     reset_model_time!(driver)
     @test step_graph_at!(graph, driver) == PlantTimestamp(0)
+
+    reset_graph!(graph)
+    captured_driver = prepare_captured_model_time_driver((
+        CapturedModelTimestamp(
+            PlantTimestamp(75),
+            PlantDuration(4),
+            (source=UInt32(1), sequence=UInt64(1)),
+        ),
+    ))
+    @test step_graph_at!(graph, captured_driver) == PlantTimestamp(75)
+    @test model_time_exhausted(captured_driver)
 
     failing_input = Float32[-1, 1]
     failing_graph = prepare_algorithm_graph(algorithm_graph(
