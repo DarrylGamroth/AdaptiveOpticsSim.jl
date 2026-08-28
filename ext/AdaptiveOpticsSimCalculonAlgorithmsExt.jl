@@ -1,10 +1,18 @@
 module AdaptiveOpticsSimCalculonAlgorithmsExt
 
-import AdaptiveOpticsSim: AlgorithmGraphs
+import AdaptiveOpticsSim: AlgorithmGraphs, Control
 import CalculonAlgorithms
 
 const AG = AlgorithmGraphs
 const CA = CalculonAlgorithms
+
+"""Calculon execution slot retaining separate AOS state and scratch-workspace owners."""
+struct _StateWorkspace{State,Workspace}
+    state::State
+    workspace::Workspace
+end
+
+include("calculon_algorithms/control.jl")
 
 @inline _direction(::CA.InputPort) = :input
 @inline _direction(::CA.OutputPort) = :output

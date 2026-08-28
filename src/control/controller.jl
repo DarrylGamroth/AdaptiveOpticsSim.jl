@@ -201,7 +201,7 @@ function DiscreteIntegratorController(n::Int; gain::Real=0.3, tau::Real=0.02,
     return DiscreteIntegratorController(plan, state, workspace)
 end
 
-function update!(
+function _prepare_controller_update!(
     state::DiscreteIntegratorState{T},
     workspace::DiscreteIntegratorWorkspace{T},
     plan::DiscreteIntegratorPlan{T},
@@ -223,9 +223,44 @@ function update!(
     @. workspace.next_command =
         state.command + (workspace.next_integrated_command - state.command) * lag
 
+    return nothing
+end
+
+@inline function _commit_controller_update!(
+    state::DiscreteIntegratorState,
+    workspace::DiscreteIntegratorWorkspace,
+)
     copyto!(state.integrated_command, workspace.next_integrated_command)
     copyto!(state.command, workspace.next_command)
     return state.command
+end
+
+function update!(
+    state::DiscreteIntegratorState,
+    workspace::DiscreteIntegratorWorkspace,
+    plan::DiscreteIntegratorPlan,
+    input::AbstractVector,
+    dt::Real,
+)
+    _prepare_controller_update!(state, workspace, plan, input, dt)
+    return _commit_controller_update!(state, workspace)
+end
+
+function update!(
+    output::AbstractVector,
+    state::DiscreteIntegratorState,
+    workspace::DiscreteIntegratorWorkspace,
+    plan::DiscreteIntegratorPlan,
+    input::AbstractVector,
+    dt::Real,
+)
+    axes(output) == axes(state.command) || throw(DimensionMismatchError(
+        "controller output and state axes must match",
+    ))
+    _prepare_controller_update!(state, workspace, plan, input, dt)
+    copyto!(output, workspace.next_command)
+    _commit_controller_update!(state, workspace)
+    return output
 end
 
 """
@@ -233,9 +268,10 @@ end
 
 Advance the controller state by one sample period.
 
-`i_state` integrates the incoming command-like input, and `dm_state` then
-applies a first-order lag toward that integral state using the controller time
-constant.
+The persistent `integrated_command` integrates the incoming command-like input,
+and `command` then applies a first-order lag toward that integral state using
+the controller time constant. Replacement workspace is prepared before either
+state value commits.
 """
 function update!(ctrl::DiscreteIntegratorController, input::AbstractVector, dt::Real)
     return update!(ctrl.state, ctrl.workspace, ctrl.plan, input, dt)

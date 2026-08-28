@@ -1822,6 +1822,13 @@ the canonical representation of these results.
   call `prepare_algorithm_graph`, and execute with `step_graph!`. This is a
   deterministic native adapter for Calculon declarations, not a second
   numerical algorithm interface or a wall-clock scheduler.
+- AOS-owned Calculon algorithms retain their numerical implementation in the
+  canonical scientific module. The optional Calculon extension provides the
+  declaration metadata and packages separately owned AOS execution state and
+  replaceable scratch workspace into Calculon's single mutable execution slot. The
+  initial `discrete-integrator-controller-f32` declaration is qualified for
+  native Julia and `AlgorithmGraphs`; direct Julia loading through an FGN
+  shared library remains future adapter-runtime work.
 - Deterministic model time: `FixedStepModelTimeDriver` selects a nominal
   recurrence; `prepare_boundary_model_time_driver` seals a finite list
   or expands periodic offsets during preparation. `step_graph_at!` commits the
