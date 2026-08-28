@@ -51,6 +51,21 @@ end
 @inline model_time_provenance(capture::CapturedModelTimestamp) =
     capture.provenance
 
+"""Create an explicit model-time mapping origin through a loaded adapter."""
+function capture_model_time_origin(source)
+    throw(AlgorithmGraphError(
+        "no model-time capture adapter is loaded for $(typeof(source))",
+    ))
+end
+
+"""Map one external timestamp through an explicit adapter origin."""
+function capture_model_timestamp(source, origin)
+    throw(AlgorithmGraphError(
+        "no model-time capture adapter is loaded for $(typeof(source)) " *
+        "and $(typeof(origin))",
+    ))
+end
+
 """A deterministic cursor over sealed captured model timestamps."""
 struct PreparedCapturedModelTimeDriver{Captures<:FixedSizeVector}
     captures::Captures

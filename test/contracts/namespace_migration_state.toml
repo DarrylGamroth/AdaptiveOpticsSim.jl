@@ -41,6 +41,7 @@ extension_sources = [
     "ext/AdaptiveOpticsSimDaggerExt.jl",
     "ext/AdaptiveOpticsSimMetalExt.jl",
     "ext/AdaptiveOpticsSimCalculonAlgorithmsExt.jl",
+    "ext/AdaptiveOpticsSimPipeWireAOExt.jl",
 ]
 extension_tests = [
     "test/appleaccelerate/backend_neutral.jl",

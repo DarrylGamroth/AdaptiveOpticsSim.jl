@@ -556,6 +556,8 @@ new_domain_exports = [
     "AlgorithmGraphs.model_timestamp",
     "AlgorithmGraphs.model_time_uncertainty",
     "AlgorithmGraphs.model_time_provenance",
+    "AlgorithmGraphs.capture_model_time_origin",
+    "AlgorithmGraphs.capture_model_timestamp",
     "AlgorithmGraphs.next_model_timestamp",
     "AlgorithmGraphs.advance_model_time!",
     "AlgorithmGraphs.reset_model_time!",
@@ -2424,6 +2426,8 @@ exports = [
     "model_timestamp",
     "model_time_uncertainty",
     "model_time_provenance",
+    "capture_model_time_origin",
+    "capture_model_timestamp",
     "next_model_timestamp",
     "advance_model_time!",
     "reset_model_time!",
@@ -2833,6 +2837,14 @@ adaptive_optics_sim_hooks = [
 ]
 
 [[extension_files]]
+path = "ext/AdaptiveOpticsSimPipeWireAOExt.jl"
+dependency = "PipeWireAO"
+adaptive_optics_sim_hooks = [
+    "capture_model_time_origin",
+    "capture_model_timestamp",
+]
+
+[[extension_files]]
 path = "ext/AdaptiveOpticsSimCUDAExt.jl"
 dependency = "CUDA"
 adaptive_optics_sim_hooks = [
@@ -2991,6 +3003,8 @@ hooks = [
 owner = "AlgorithmGraphs"
 hooks = [
     "_algorithm_port_contracts",
+    "capture_model_time_origin",
+    "capture_model_timestamp",
     "_prepare_algorithm_instance",
     "_process_algorithm!",
     "_replace_algorithm_parameter!",

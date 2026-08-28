@@ -26,6 +26,7 @@ CalculonAlgorithms = "6785d3db-db0a-43ab-bf7e-9bc558dffef4"
 Dagger = "d58978e5-989f-55fb-8d15-ea34adc7bf54"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+PipeWireAO = "5d815c25-fdf3-4508-8205-db8be38ea5d0"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
 [extensions]
@@ -38,6 +39,7 @@ AdaptiveOpticsSimCUDAExt = "CUDA"
 AdaptiveOpticsSimDaggerExt = "Dagger"
 AdaptiveOpticsSimJSON3Ext = "JSON3"
 AdaptiveOpticsSimMetalExt = "Metal"
+AdaptiveOpticsSimPipeWireAOExt = "PipeWireAO"
 AdaptiveOpticsSimTablesExt = "Tables"
 
 [compat]
@@ -60,6 +62,7 @@ KernelAbstractions = "0.9.42"
 LinearAlgebra = "1.9"
 Logging = "1.9"
 Metal = "1"
+PipeWireAO = "0.4"
 Random = "1.9"
 SHA = "0.7"
 SparseArrays = "1.9"

@@ -202,6 +202,25 @@ The replay cursor schedules by the mapped timestamp and preserves uncertainty
 and provenance for inspection. It does not infer an origin from an absolute
 execution-clock value, pace against wall time, or serialize the recording.
 
+Loading PipeWireAO activates the optional acquisition-metadata adapter on
+Linux. Capture while the PipeWire buffer is still borrowed, then retain the
+owned `CapturedModelTimestamp` after returning the buffer:
+
+```julia
+using PipeWireAO
+
+metadata = buffer_acquisition(buffer)
+origin = capture_model_time_origin(metadata)
+capture = capture_model_timestamp(metadata, origin)
+```
+
+The adapter requires acquisition identity, exposure start, exposure duration,
+and a consistent clock domain. PTP-qualified TAI captures must name the same
+grandmaster and PTP domain as the origin. Host-monotonic captures are suitable
+only within the recording context that established their origin; unrelated
+hosts or boots are not comparable. PipeWireAO still owns live pacing and buffer
+lifetime, while AdaptiveOpticsSim owns only mapped deterministic replay.
+
 This first native path is complete-frame, single-writer, CPU storage. It
 supports typed construction configuration and startup sparse parameters. It
 does not yet provide coordinated runtime-property transactions, conditional

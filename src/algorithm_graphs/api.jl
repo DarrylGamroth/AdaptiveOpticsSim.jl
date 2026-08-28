@@ -12,6 +12,7 @@ export graph_step_sequence, graph_failed
 export prepare_boundary_model_time_driver
 export prepare_captured_model_time_driver, next_model_time_capture
 export model_timestamp, model_time_uncertainty, model_time_provenance
+export capture_model_time_origin, capture_model_timestamp
 export next_model_timestamp, advance_model_time!, reset_model_time!
 export step_graph_at!, model_time_sequence, model_time_exhausted
 

@@ -1834,6 +1834,12 @@ the canonical representation of these results.
   increasing recording, while `next_model_time_capture` preserves the full
   record and `next_model_timestamp` exposes its scheduling timestamp. External
   clock mapping and persistence remain adapter/application responsibilities.
+- PipeWireAO timestamp adapter: loading PipeWireAO activates
+  `capture_model_time_origin(::AcquisitionMetadata)` and
+  `capture_model_timestamp(::AcquisitionMetadata, origin)`. The adapter copies
+  acquisition identity, source exposure timestamp, clock/PTP qualification,
+  exposure duration, and uncertainty before the borrowed buffer is returned;
+  it rejects incomplete metadata, clock mismatch, and time regression.
 - Independent `AdaptiveOpticsSim.Control` primitives: `VectorDelayLine`,
   `shift_delay!`, `DiscreteIntegratorController`, and `reconstruct!`; command
   application remains the `AdaptiveOpticsSim.Optics.set_command!` operation
