@@ -1314,6 +1314,15 @@ Use this split:
 Prefer concrete state and workspace fields. Avoid hidden allocations in the
 per-step control path.
 
+`DiscreteIntegratorController` is a prepared execution owner rather than an
+algorithm plan. Its qualified `discrete_integrator_plan`,
+`discrete_integrator_state`, and `discrete_integrator_workspace` accessors
+expose the run-immutable coefficients, persistent mathematical history, and
+replaceable scratch as separate concrete owners. A graph adapter may package
+the state and workspace together for an external interface that provides one
+mutable execution slot, but it must not reclassify persistent state as
+replaceable workspace.
+
 For large calibration/control surfaces:
 
 - use `AdaptiveOpticsSim.Calibration.interaction_matrix!` with caller-owned

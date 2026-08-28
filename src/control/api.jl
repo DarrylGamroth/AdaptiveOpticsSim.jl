@@ -3,4 +3,8 @@ export MappedReconstructor, ControlledReconstructor
 export reconstruct!, reconstruct
 export DiscreteIntegratorController, VectorDelayLine, shift_delay!
 
-public controller_output, reset_controller!, supports_controller_reset
+public controller_output
+public DiscreteIntegratorPlan, DiscreteIntegratorState, DiscreteIntegratorWorkspace
+public discrete_integrator_plan, discrete_integrator_state
+public discrete_integrator_workspace
+public reset_controller!, supports_controller_reset

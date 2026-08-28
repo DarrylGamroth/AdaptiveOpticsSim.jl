@@ -188,16 +188,45 @@ end
         gain=0.1,
         tau=0.02,
     )
+    controller_plan = Control.discrete_integrator_plan(controller)
+    controller_state = Control.discrete_integrator_state(controller)
+    controller_workspace = Control.discrete_integrator_workspace(controller)
+    @test controller_plan isa Control.DiscreteIntegratorPlan
+    @test controller_state isa Control.DiscreteIntegratorState
+    @test controller_workspace isa Control.DiscreteIntegratorWorkspace
+    @test !Base.mightalias(
+        controller_state.integrated_command,
+        controller_workspace.next_integrated_command,
+    )
+    @test !Base.mightalias(
+        controller_state.command,
+        controller_workspace.next_command,
+    )
+    output_identity = controller_output(controller)
     output = @inferred update!(controller, command, 0.01)
     @test output === controller_output(controller)
+    @test output === output_identity
+    if coverage_instrumented()
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(update!(controller, command, 0.01)) == 0
+    end
     @test reset_controller!(controller) === controller
     @test all(iszero, controller_output(controller))
+    @test all(iszero, controller_state.integrated_command)
+    @test all(iszero, controller_workspace.next_integrated_command)
+    @test all(iszero, controller_workspace.next_command)
     @test_throws DimensionMismatchError update!(
         controller,
         zeros(length(command) + 1),
         0.01,
     )
     @test_throws InvalidConfiguration update!(controller, command, -0.01)
+    @test_throws InvalidConfiguration update!(controller, command, Inf)
+    @test_throws InvalidConfiguration DiscreteIntegratorController(
+        length(command);
+        gain=Inf,
+    )
 
     controlled = ControlledReconstructor(
         reconstructor,

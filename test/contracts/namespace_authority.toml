@@ -581,6 +581,12 @@ new_domain_exports = [
 ]
 new_domain_public = [
     "AlgorithmGraphs.prepared_algorithm",
+    "Control.DiscreteIntegratorPlan",
+    "Control.DiscreteIntegratorState",
+    "Control.DiscreteIntegratorWorkspace",
+    "Control.discrete_integrator_plan",
+    "Control.discrete_integrator_state",
+    "Control.discrete_integrator_workspace",
     "Backends.AbstractComputeDeviceAvailability",
     "Backends.ComputeDeviceAvailable",
     "Backends.ComputeDeviceUnavailable",
@@ -2345,6 +2351,12 @@ exports = [
 ]
 public = [
     "controller_output",
+    "DiscreteIntegratorPlan",
+    "DiscreteIntegratorState",
+    "DiscreteIntegratorWorkspace",
+    "discrete_integrator_plan",
+    "discrete_integrator_state",
+    "discrete_integrator_workspace",
     "reset_controller!",
     "supports_controller_reset",
 ]
