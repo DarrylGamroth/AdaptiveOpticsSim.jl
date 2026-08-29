@@ -545,9 +545,14 @@ new_domain_exports = [
     "AlgorithmGraphs.link",
     "AlgorithmGraphs.delayed_link",
     "AlgorithmGraphs.sparse_parameter",
+    "AlgorithmGraphs.discrete_integrator_node",
+    "AlgorithmGraphs.modal_opd_expansion_node",
+    "AlgorithmGraphs.load_algorithm_graph",
+    "AlgorithmGraphs.builtin_graph_node_types",
     "AlgorithmGraphs.prepare_algorithm_graph",
     "AlgorithmGraphs.step_graph!",
     "AlgorithmGraphs.reset_graph!",
+    "AlgorithmGraphs.graph_name",
     "AlgorithmGraphs.graph_step_sequence",
     "AlgorithmGraphs.graph_failed",
     "AlgorithmGraphs.prepare_boundary_model_time_driver",
@@ -582,14 +587,17 @@ new_domain_exports = [
     "WavefrontSensors.LiFTPhysicalRatePreservation",
 ]
 new_domain_public = [
+    "AlgorithmGraphs.prepared_graph_node",
     "AlgorithmGraphs.graph_port_contract",
-    "AlgorithmGraphs.prepare_algorithm_instance",
-    "AlgorithmGraphs.algorithm_port_contracts",
-    "AlgorithmGraphs.bind_algorithm_instance",
-    "AlgorithmGraphs.replace_algorithm_parameter!",
-    "AlgorithmGraphs.process_algorithm!",
-    "AlgorithmGraphs.reset_algorithm!",
-    "AlgorithmGraphs.prepared_algorithm",
+    "AlgorithmGraphs.graph_node_ports",
+    "AlgorithmGraphs.prepare_graph_node",
+    "AlgorithmGraphs.step_graph_node!",
+    "AlgorithmGraphs.reset_graph_node!",
+    "AlgorithmGraphs.DiscreteIntegratorNode",
+    "AlgorithmGraphs.DiscreteIntegratorNodeConfig",
+    "AlgorithmGraphs.DiscreteIntegratorNodeProps",
+    "AlgorithmGraphs.ModalOPDExpansionNode",
+    "AlgorithmGraphs.ModalOPDExpansionNodeConfig",
     "Control.DiscreteIntegratorPlan",
     "Control.DiscreteIntegratorState",
     "Control.DiscreteIntegratorWorkspace",
@@ -874,6 +882,8 @@ dependencies = [
 [[owner_graph]]
 name = "AlgorithmGraphs"
 dependencies = [
+    "Calibration",
+    "Control",
     "Plant",
 ]
 
@@ -2438,9 +2448,14 @@ exports = [
     "link",
     "delayed_link",
     "sparse_parameter",
+    "discrete_integrator_node",
+    "modal_opd_expansion_node",
+    "load_algorithm_graph",
+    "builtin_graph_node_types",
     "prepare_algorithm_graph",
     "step_graph!",
     "reset_graph!",
+    "graph_name",
     "graph_step_sequence",
     "graph_failed",
     "prepare_boundary_model_time_driver",
@@ -2459,14 +2474,17 @@ exports = [
     "model_time_exhausted",
 ]
 public = [
-    "prepared_algorithm",
+    "prepared_graph_node",
     "graph_port_contract",
-    "prepare_algorithm_instance",
-    "algorithm_port_contracts",
-    "bind_algorithm_instance",
-    "replace_algorithm_parameter!",
-    "process_algorithm!",
-    "reset_algorithm!",
+    "graph_node_ports",
+    "prepare_graph_node",
+    "step_graph_node!",
+    "reset_graph_node!",
+    "DiscreteIntegratorNode",
+    "DiscreteIntegratorNodeConfig",
+    "DiscreteIntegratorNodeProps",
+    "ModalOPDExpansionNode",
+    "ModalOPDExpansionNodeConfig",
 ]
 
 [[cross_module_imports]]
@@ -2856,17 +2874,6 @@ adaptive_optics_sim_hooks = [
 ]
 
 [[extension_files]]
-path = "ext/AdaptiveOpticsSimCalculonAlgorithmsExt.jl"
-dependency = "CalculonAlgorithms"
-adaptive_optics_sim_hooks = [
-    "algorithm_port_contracts",
-    "prepare_algorithm_instance",
-    "process_algorithm!",
-    "replace_algorithm_parameter!",
-    "reset_algorithm!",
-]
-
-[[extension_files]]
 path = "ext/AdaptiveOpticsSimPipeWireAOExt.jl"
 dependency = "PipeWireAO"
 adaptive_optics_sim_hooks = [
@@ -3032,11 +3039,6 @@ hooks = [
 [[extension_hook_owners]]
 owner = "AlgorithmGraphs"
 hooks = [
-    "algorithm_port_contracts",
     "capture_model_time_origin",
     "capture_model_timestamp",
-    "prepare_algorithm_instance",
-    "process_algorithm!",
-    "replace_algorithm_parameter!",
-    "reset_algorithm!",
 ]

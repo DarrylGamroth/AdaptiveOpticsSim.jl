@@ -1,14 +1,15 @@
 """
     AlgorithmGraphs
 
-Portable, deterministic composition of transport-neutral algorithm
-declarations. Calculon owns the scientific algorithm interface; this module
-owns only static graph topology, exact buffer bindings, delayed links, and
-model-time execution policy.
+Portable, deterministic composition of AOS-native algorithm nodes. Scientific
+modules retain their domain APIs; this module owns only the graph-node adapter
+protocol, static topology, exact buffer bindings, delayed links, and model-time
+execution policy.
 """
 module AlgorithmGraphs
 
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
+using TOML
 
 import ..AdaptiveOpticsSim: AdaptiveOpticsSimError
 import ..Backends:
@@ -27,9 +28,20 @@ import ..Plant:
     PlantTimestamp,
     schedule_period,
     schedule_timestamp
+import ..Calibration:
+    ModalOPDExpansionPlan,
+    combine_basis!
+import ..Control:
+    DiscreteIntegratorPlan,
+    DiscreteIntegratorState,
+    DiscreteIntegratorWorkspace,
+    reset_controller!,
+    update!
 
 include("definitions.jl")
 include("preparation.jl")
+include("native_nodes.jl")
+include("graph_files.jl")
 include("execution.jl")
 include("model_time.jl")
 include("api.jl")

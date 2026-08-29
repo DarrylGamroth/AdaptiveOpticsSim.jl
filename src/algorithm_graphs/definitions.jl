@@ -29,30 +29,33 @@ _port_reference(reference) = throw(AlgorithmGraphError(
     "algorithm port references use :node => :port, not $(typeof(reference))",
 ))
 
-"""One cold typed Calculon declaration and its construction configuration."""
-struct AlgorithmNodeDefinition{Name,Declaration,Configuration}
-    configuration::Configuration
+"""One cold typed graph-node declaration, configuration, and initial props."""
+struct AlgorithmNodeDefinition{Name,Node,Config,Props}
+    config::Config
+    props::Props
 end
 
 @inline _node_name(::AlgorithmNodeDefinition{Name}) where {Name} = Name
-@inline _declaration_type(
-    ::AlgorithmNodeDefinition{Name,Declaration},
-) where {Name,Declaration} = Declaration
+@inline _node_type(
+    ::AlgorithmNodeDefinition{Name,Node},
+) where {Name,Node} = Node
 
 """
-    algorithm_node(name, Declaration, configuration)
+    algorithm_node(name, Node, config; props=NamedTuple())
 
-Declare one named graph node backed by a transport-neutral algorithm
-declaration. Node order in [`algorithm_graph`](@ref) is direct-link execution
-order.
+Declare one named graph node backed by an AOS graph-node adapter. `config`
+fixes construction and graph-rebuild values. `props` supplies scalar initial
+values without changing the node's port contract. Node order in
+[`algorithm_graph`](@ref) is direct-link execution order.
 """
 function algorithm_node(
     name::Symbol,
-    ::Type{Declaration},
-    configuration::Configuration,
-) where {Declaration,Configuration}
+    ::Type{Node},
+    config::Config;
+    props::Props=NamedTuple(),
+) where {Node,Config,Props}
     _require_graph_name(name, "algorithm node")
-    return AlgorithmNodeDefinition{name,Declaration,Configuration}(configuration)
+    return AlgorithmNodeDefinition{name,Node,Config,Props}(config, props)
 end
 
 """A same-step output-to-input connection."""
@@ -154,9 +157,8 @@ end
 """
     sparse_parameter(endpoint, values)
 
-Supply one startup ndarray replacement for a Calculon sparse-parameter port.
-The complete graph is still inactive while all replacements are validated and
-installed.
+Supply one startup ndarray value for a sparse-parameter port. The complete
+graph is still inactive while all parameter values are validated and bound.
 """
 function sparse_parameter(endpoint, values)
     prepared_endpoint = _port_reference(endpoint)
@@ -165,6 +167,7 @@ end
 
 """Cold static topology for one portable algorithm graph."""
 struct AlgorithmGraphDefinition{Nodes,Inputs,Outputs,Links,Delays,Parameters}
+    name::Symbol
     nodes::Nodes
     inputs::Inputs
     outputs::Outputs
@@ -225,7 +228,7 @@ function _require_unique_names(names::Tuple, role::AbstractString)
 end
 
 """
-    algorithm_graph(nodes; inputs=(), outputs=(), links=(),
+    algorithm_graph(nodes; name=:anonymous, inputs=(), outputs=(), links=(),
                     delayed_links=(), parameters=())
 
 Construct a cold graph definition from concrete tuples. Direct-link execution
@@ -233,12 +236,14 @@ order is the order of `nodes`; feedback must use an explicit delayed link.
 """
 function algorithm_graph(
     nodes::Tuple;
+    name::Symbol=:anonymous,
     inputs::Tuple=(),
     outputs::Tuple=(),
     links::Tuple=(),
     delayed_links::Tuple=(),
     parameters::Tuple=(),
 )
+    _require_graph_name(name, "algorithm graph")
     isempty(nodes) && throw(AlgorithmGraphError(
         "an algorithm graph requires at least one node",
     ))
@@ -252,6 +257,7 @@ function algorithm_graph(
     _require_unique_names(_boundary_names(inputs), "graph input")
     _require_unique_names(_boundary_names(outputs), "graph output")
     return AlgorithmGraphDefinition(
+        name,
         nodes,
         inputs,
         outputs,
@@ -260,3 +266,6 @@ function algorithm_graph(
         parameters,
     )
 end
+
+"""Return the stable name of a cold or prepared algorithm graph."""
+@inline graph_name(graph::AlgorithmGraphDefinition) = graph.name

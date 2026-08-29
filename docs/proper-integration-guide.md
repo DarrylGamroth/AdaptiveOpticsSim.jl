@@ -99,18 +99,16 @@ Use the direct `Proper.prop_dm(wf, dm_surface)` path only when the external
 science prescription should own a DM surface internally. If the AO runtime has
 already applied the DM, pass the total sampled OPD instead.
 
-## Optional Calculon Declaration
+## Optional Proper Graph Node
 
 `Proper.jl` remains outside the AdaptiveOpticsSim core dependency graph. The
-optional `AdaptiveOpticsProperHIL.jl` companion now exposes a
-[`Proper propagation declaration`](./glossary.md) when `CalculonAlgorithms` is
-loaded:
+optional `AdaptiveOpticsProperHIL.jl` companion exposes a
+[`Proper propagation graph node`](./glossary.md):
 
 ```julia
 using AdaptiveOpticsProperHIL
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.AlgorithmGraphs
-using CalculonAlgorithms
 
 configuration = ProperPropagationConfiguration(
     coronagraph_prescription;
@@ -119,10 +117,10 @@ configuration = ProperPropagationConfiguration(
     diameter_m=8.0f0,
     wavelength_um=1.65f0,
 )
-declaration = proper_propagation_declaration(configuration)
+node = proper_propagation_node(:science_propagation, configuration)
 ```
 
-The maintained declaration has two complete-frame inputs, `pupil_opd` and
+The maintained node has two complete-frame inputs, `pupil_opd` and
 `pupil_amplitude`, and one output. Its configuration fixes the prescription,
 resolution, physical diameter, wavelength, random seed, port schemas, numeric
 type, backend, and exact device before execution. The default output schema is
@@ -132,17 +130,14 @@ adapter does not invent a photon-rate scale or detector exposure.
 
 The adapter preserves the package ownership model:
 
-- its immutable Calculon plan contains only the run-immutable prescription
+- its immutable execution plan contains only the run-immutable prescription
   contract
 - evolving random state has a distinct persistent owner and resets to the
   configured seed
 - the `Proper.RunContext`, wavefront field, prescription-specific assets, and
   reusable scratch belong to the replaceable workspace owner
-- direct Calculon execution copies caller arrays into its internally bound
-  buffers because the direct interface does not retain caller identity
-- `AlgorithmGraphs` preparation instead binds the final admitted graph input
-  and output arrays exactly, so a graph step performs no frame copy at that
-  node boundary
+- `AlgorithmGraphs` preparation binds the final admitted graph input and output
+  arrays exactly, so a graph step performs no frame copy at that node boundary
 
 A prescription that needs masks, propagation plans, or other prepared assets
 may specialize `prepare_proper_assets`. It must return a concrete named tuple;
@@ -151,27 +146,27 @@ boundary. The prescription remains an ordinary Julia function and receives the
 prepared `pupil_opd`, `pupil_amplitude`, `diameter_m`, field, wavefront, output,
 and run context as keyword arguments.
 
-One prepared Proper declaration is homogeneous in numeric type, array backend,
+One prepared Proper node is homogeneous in numeric type, array backend,
 and exact device. A complete algorithm graph may connect different element
 types through explicit conversion algorithms, but every array in one graph is
-currently placed on one exact compute target. Neither the declaration nor the
+currently placed on one exact compute target. Neither the node nor the
 graph inserts a fallback or transfer. A GPU-produced science frame therefore
 reaches a CPU RTC or PipeWireAO client only through an explicit
 application-owned device-to-host copy or prepared handoff after successful
 graph publication.
 
-Focused companion tests exercise the same declaration on CPU, local AMDGPU,
+Focused companion tests exercise the same node on CPU, local AMDGPU,
 and WSL CUDA hardware with GPU scalar indexing disabled. They establish
 CPU/GPU numerical agreement, exact residency, graph buffer identity, explicit
 host publication, and zero warmed Julia heap allocation on the CPU path. They
 do not establish coronagraph fidelity, SPIDERS end-to-end validity, service
 time, acquisition cadence, or asynchronous failure isolation.
 
-The declaration is usable today from Julia scripts and
+The node is usable today from Julia scripts and
 `AdaptiveOpticsSim.AlgorithmGraphs`. Direct execution of Julia prescriptions in
-PipeWire remains a separate Julia-host/module adapter problem. The shared
-Calculon declaration and port contract makes such an adapter possible; it does
-not turn Julia code into a native FGN shared-library plugin.
+PipeWire remains a separate Julia-host/module adapter problem. This graph-node
+adapter does not turn Julia code into a native FGN shared-library plugin or
+make Calculon part of the AOS API.
 
 ## NCPA Ownership
 
@@ -248,7 +243,7 @@ For repeated HIL execution:
 6. Benchmark the combined command-to-pixels path on each claimed backend.
 
 For a portable complete-frame graph, replace steps 2 and 5 with preparation of
-the optional Calculon declaration and one `step_graph!` call. Keep the complete
+the optional Proper graph node and one `step_graph!` call. Keep the complete
 Proper path atomic: the prescription may evaluate every required optical plane
 internally, while the graph publishes only its completed output frame.
 

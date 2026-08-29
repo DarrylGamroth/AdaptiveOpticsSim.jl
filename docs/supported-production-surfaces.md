@@ -392,7 +392,7 @@ Scientist-owned HEART boundary truth artifact:
 The following are outside the current support claim:
 
 - the portable `AlgorithmGraphs` executor and optional Proper propagation
-  declaration as production HIL surfaces. Focused CPU, AMDGPU, and CUDA tests
+  graph node as production HIL surfaces. Focused CPU, AMDGPU, and CUDA tests
   validate static complete-frame composition, exact device residency, and an
   explicit GPU-to-host publication boundary, but representative graph-size
   service cost, asynchronous acquisition pacing, independent WFS/science

@@ -76,50 +76,51 @@ external-RTC HIL development, following the maintained specifications indexed
 by [`hil-package-boundary.md`](hil-package-boundary.md) and tracking completion
 in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 
-The default portable simulation path now targets the transport-neutral
-Calculon algorithm declaration API. `AdaptiveOpticsSim.AlgorithmGraphs` owns a
-small statically prepared executor for those declarations; it does not create a
-second numerical plan or `process!` interface. Plant remains supported and is
-retained as the detailed physical-timing implementation and differential oracle,
-but new general-purpose orchestration should not expand Plant. PipeWireAO
-remains the advanced Linux deployment for paced HIL execution, while ordinary
-Julia scripts remain a first-class manual composition path.
+The default portable simulation path now uses AOS-native scientific
+implementations and a small graph-node adapter protocol owned by
+`AdaptiveOpticsSim.AlgorithmGraphs`. It does not require Calculon or create a
+universal numerical `process!` interface. Plant remains supported as the
+detailed physical-timing implementation and differential oracle, but new
+complete-frame orchestration should not expand Plant. PipeWireAO remains the
+advanced Linux deployment for paced HIL execution, while ordinary Julia scripts
+remain a first-class unrestricted composition path.
 
-AdaptiveOpticsSim scientific implementations retain their domain ownership
-when exposed through Calculon. A Calculon declaration may wrap the exact AOS
-plan and package separately owned persistent state and replaceable scratch
-workspace inside Calculon's one mutable execution slot; it does not merge
-those AOS ownership roles. The first complete-frame proof uses the native discrete
-integrator controller. A second proof uses modal OPD expansion with a
-coefficient vector, an OPD matrix, and separately replaceable basis and pupil-
-support ndarray parameters. Native Julia and `AlgorithmGraphs` execution are
-in scope now. The optional `AdaptiveOpticsProperHIL.jl` companion adds a third
-proof: one complete-frame Julia-native Proper prescription with separate
-random state and scratch, exact graph-buffer binding, and focused CPU, AMDGPU,
-and CUDA residency/equivalence evidence. A Julia FGN runtime remains a separate
-deployment gate, and the Proper proof does not yet close SPIDERS fidelity or
+The first complete-frame proof uses the native discrete-integrator controller.
+A second proof uses modal OPD expansion with a coefficient vector, an OPD
+matrix, and explicit basis and pupil-support ndarray parameters. The versioned
+TOML graph format compiles those same nodes into the same concrete graph
+definition as direct Julia construction. The optional
+`AdaptiveOpticsProperHIL.jl` companion adds a third proof: one complete-frame
+Julia-native Proper prescription with separate random state and scratch, exact
+graph-buffer binding, and focused CPU, AMDGPU, and CUDA
+residency/equivalence evidence. Calculon or FGN deployment adapters are
+separate boundaries that may wrap AOS implementations later; they do not own
+the AOS simulation API. The Proper proof does not yet close SPIDERS fidelity or
 asynchronous science-acquisition cadence.
 
 The delivery order for this boundary is:
 
-1. Stabilize one shared Calculon declaration, port, property, and sparse-
-   parameter vocabulary across native Julia and FGN deployment.
-2. Provide a portable statically prepared graph with direct and explicit
-   prior-successful-step delayed links.
-3. Provide deterministic fixed-step and prepared-boundary model-time drivers;
+1. Stabilize the AOS-native graph-node protocol and versioned TOML static
+   subset without changing domain numerical APIs.
+2. Add executable node adapters and graph files for REVOLT Classic, REVOLT
+   Copper, and SPIDERS only as their complete scientific node sets become
+   available and qualified.
+3. Preserve direct Julia graph construction for generated, conditional, and
+   multi-rate arrangements that exceed the TOML subset.
+4. Provide deterministic fixed-step and prepared-boundary model-time drivers;
    wall-clock pacing remains outside core.
-4. Bind stateful rolling-shutter integration, command adoption, explicit
+5. Bind stateful rolling-shutter integration, command adoption, explicit
    delays, and multi-rate behavior as semantically atomic prepared operations.
-5. Retain Plant scenarios as differential evidence for synchronized MCAO,
+6. Retain Plant scenarios as differential evidence for synchronized MCAO,
    path-local MOAO, and rolling-shutter exposure across a mid-frame DM update.
-6. Use PipeWireAO for real paced HIL and capture canonical timestamps needed to
+7. Use PipeWireAO for real paced HIL and capture canonical timestamps needed to
    replay the same run through the portable graph or Plant oracle.
 
 ```mermaid
 flowchart LR
-    SCI["Typed scientific implementation"] --> CAL["Calculon declaration"]
-    CAL --> NATIVE["AlgorithmGraphs<br/>portable model time"]
-    CAL --> FGN["FGN adapter"]
+    SCI["AOS scientific implementation<br/>domain API"] --> NODE["AOS graph-node adapter"]
+    NODE --> NATIVE["AlgorithmGraphs<br/>portable model time"]
+    SCI --> FGN["Optional Calculon / FGN adapter"]
     FGN --> PWAO["PipeWireAO<br/>paced HIL"]
     PLANT["Plant<br/>precision physical timing"] --> ORACLE["Differential scenarios"]
     NATIVE --> ORACLE
@@ -362,8 +363,9 @@ other detailed event semantics are the subject of the simulation.
     Each slice must retain numerical correctness, concrete hot dispatch, CPU
     zero-allocation contracts, accelerator residency, and bounded topology
     growth. Add no universal AdaptiveOpticsSim plan root, generic numerical
-    `process!` API, or compatibility layer; the separately maintained Calculon
-    declaration remains the algorithm boundary used by graph adapters.
+    `process!` API, or compatibility layer. Graph adapters call the canonical
+    operation owned by each scientific domain; a separately maintained Calculon
+    adapter may be added for deployment without becoming the AOS API.
 11. Preserve the completed detector family qualification and evidence catalog.
     Product-neutral frame, counting-array, and channel models remain in the
     canonical `Detectors` namespace. Named camera profiles remain outside core.
@@ -432,7 +434,7 @@ parallel scheduler integrations.
 | `Control` | control reconstructors, controllers, delay lines, and prepared runtime operations | dependency direction is `Control` to `Calibration`; tomography remains separate |
 | `Tomography` | tomography geometry, atmosphere reconstruction, fitting, and DM-command mapping | general controller execution remains in `Control` |
 | `Ensembles` | coarse offline execution policies, sweeps, and optional parallel integrations | this is not an `AdaptiveOpticsHIL.jl` deadline scheduler |
-| `AlgorithmGraphs` | portable static composition of Calculon declarations, exact graph-boundary storage, direct and delayed links, and deterministic model-time drivers | Calculon owns numerical declarations; Plant owns detailed physical event semantics; PipeWireAO and `AdaptiveOpticsHIL.jl` own wall-clock pacing and operational execution |
+| `AlgorithmGraphs` | portable static composition of AOS-native graph nodes, TOML graph compilation, exact graph-boundary storage, direct and delayed links, and deterministic model-time drivers | scientific modules own domain implementations; Plant owns detailed physical event semantics; PipeWireAO and `AdaptiveOpticsHIL.jl` own wall-clock pacing and operational execution |
 | `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, execution requirements, providers, detailed event composition, and precision-timing oracle | general algorithm-graph orchestration belongs to `AlgorithmGraphs`; resource inventory, placement policy, pacing, rings, and workers belong to `AdaptiveOpticsHIL.jl`; physical domain models enter through explicit imports |
 
 `AdaptiveOpticsSim` exports the canonical modules plus shared errors,

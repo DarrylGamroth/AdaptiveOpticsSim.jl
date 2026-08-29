@@ -55,7 +55,7 @@ The package is organized around a small set of modeling objects:
 - `AdaptiveOpticsSim.Plant` when you need independent virtual-time commands,
   acquisitions, triggers, and detector lifecycles
 - `AdaptiveOpticsSim.AlgorithmGraphs` when you want one statically prepared,
-  portable graph of transport-neutral Calculon algorithms
+  portable graph of AOS-native algorithm nodes
 
 Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
@@ -118,25 +118,29 @@ several independent model instances for coarse offline work.
 ### 3. Portable algorithm-graph layer
 
 Use `AdaptiveOpticsSim.AlgorithmGraphs` for a fixed, serial composition of
-Calculon declarations that must also remain deployable through other Calculon
-adapters. `CalculonAlgorithms` is an optional dependency; loading both packages
-activates the native adapter automatically.
+AOS-native algorithms. Each graph-node adapter calls the operation's canonical
+domain API and binds its plan, state, workspace, parameters, and exact buffers
+during preparation. The graph layer does not require Calculon and does not
+replace those domain APIs.
 
 ```julia
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.AlgorithmGraphs
-using CalculonAlgorithms
 
-configuration = LeakyIntegratorF32Configuration(
+residual = zeros(Float32, 4)
+controller = discrete_integrator_node(
+    :controller;
     extent=4,
-    initial_state=0.0f0,
+    sample_period_s=0.001f0,
     input_schema="org.example.residual-error/1",
     output_schema="org.example.controller-command/1",
+    gain=0.3f0,
+    tau_s=0.02f0,
 )
-residual = zeros(Float32, 4)
 
 definition = algorithm_graph(
-    (algorithm_node(:controller, LeakyIntegratorF32, configuration),);
+    (controller,);
+    name=:controller_example,
     inputs=(graph_input(:residual, :controller => :input, residual),),
     outputs=(graph_output(:command, :controller => :output),),
 )
@@ -146,6 +150,12 @@ residual .= (1, 2, 3, 4)
 step_graph!(graph)
 command = graph_output(graph, Val(:command))
 ```
+
+For a maintained human-authored topology, `load_algorithm_graph` reads the
+versioned TOML subset and returns the same concrete definition. The file names
+external arrays; Julia supplies them explicitly through `bindings`. Use direct
+Julia construction for generated topology, conditional composition, multi-rate
+orchestration, and other arrangements outside the static file subset.
 
 Node declaration order is execution order. Use `link` only from an earlier
 node to a later node. Feedback requires `delayed_link` and an explicit initial

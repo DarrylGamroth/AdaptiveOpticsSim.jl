@@ -1,23 +1,19 @@
-@inline function _process_node!(node::PreparedAlgorithmNode)
-    process_algorithm!(node.algorithm, node.outputs, node.inputs)
+@inline function _step_node!(node::PreparedGraphNode)
+    step_graph_node!(node.owner)
     return nothing
 end
 
-@inline _process_nodes!(::Tuple{}) = nothing
-@inline function _process_nodes!(nodes::Tuple)
-    _process_node!(first(nodes))
-    _process_nodes!(Base.tail(nodes))
+@inline _step_nodes!(::Tuple{}) = nothing
+@inline function _step_nodes!(nodes::Tuple)
+    _step_node!(first(nodes))
+    _step_nodes!(Base.tail(nodes))
     return nothing
 end
 
 @inline _commit_delayed_links!(::Tuple{}, ::Tuple{}) = nothing
 @inline function _commit_delayed_links!(links::Tuple, state_values::Tuple)
     link = first(links)
-    _copy_algorithm_buffer!(
-        link.destination_algorithm,
-        first(state_values),
-        link.source,
-    )
+    _copy_graph_buffer!(first(state_values), link.source)
     _commit_delayed_links!(Base.tail(links), Base.tail(state_values))
     return nothing
 end
@@ -25,18 +21,14 @@ end
 @inline _reset_delayed_links!(::Tuple{}, ::Tuple{}) = nothing
 @inline function _reset_delayed_links!(links::Tuple, state_values::Tuple)
     link = first(links)
-    _copy_algorithm_buffer!(
-        link.destination_algorithm,
-        first(state_values),
-        link.initial,
-    )
+    _copy_graph_buffer!(first(state_values), link.initial)
     _reset_delayed_links!(Base.tail(links), Base.tail(state_values))
     return nothing
 end
 
 @inline _reset_nodes!(::Tuple{}) = nothing
 @inline function _reset_nodes!(nodes::Tuple)
-    reset_algorithm!(first(nodes).algorithm)
+    reset_graph_node!(first(nodes).owner)
     _reset_nodes!(Base.tail(nodes))
     return nothing
 end
@@ -66,7 +58,7 @@ function step_graph!(graph::PreparedAlgorithmGraph)
     try
         _with_prepared_device_execution_context(graph.context) do
             try
-                _process_nodes!(values(graph.nodes))
+                _step_nodes!(values(graph.nodes))
                 _commit_delayed_links!(graph.delayed_links, state.delayed_values)
             finally
                 _synchronize_prepared_device_execution_context!(graph.context)
@@ -83,7 +75,7 @@ end
 """
     reset_graph!(graph)
 
-Reset every prepared algorithm through its declaration adapter, restore all
+Reset every prepared graph node through its adapter, restore all
 delayed-link initial values, and clear graph failure and sequence state. The
 graph remains failed if any reset operation throws.
 """

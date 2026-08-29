@@ -7,8 +7,10 @@ export FixedStepModelTimeDriver, PreparedBoundaryModelTimeDriver
 export CapturedModelTimestamp, PreparedCapturedModelTimeDriver
 export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
+export discrete_integrator_node, modal_opd_expansion_node
+export load_algorithm_graph, builtin_graph_node_types
 export prepare_algorithm_graph, step_graph!, reset_graph!
-export graph_step_sequence, graph_failed
+export graph_name, graph_step_sequence, graph_failed
 export prepare_boundary_model_time_driver
 export prepare_captured_model_time_driver, next_model_time_capture
 export model_timestamp, model_time_uncertainty, model_time_provenance
@@ -16,8 +18,10 @@ export capture_model_time_origin, capture_model_timestamp
 export next_model_timestamp, advance_model_time!, reset_model_time!
 export step_graph_at!, model_time_sequence, model_time_exhausted
 
-public prepared_algorithm
+public prepared_graph_node
 public graph_port_contract
-public prepare_algorithm_instance, algorithm_port_contracts
-public bind_algorithm_instance, replace_algorithm_parameter!
-public process_algorithm!, reset_algorithm!
+public graph_node_ports, prepare_graph_node
+public step_graph_node!, reset_graph_node!
+public DiscreteIntegratorNode, DiscreteIntegratorNodeConfig
+public DiscreteIntegratorNodeProps
+public ModalOPDExpansionNode, ModalOPDExpansionNodeConfig

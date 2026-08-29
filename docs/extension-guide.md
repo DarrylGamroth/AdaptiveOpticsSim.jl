@@ -162,33 +162,32 @@ The implementation migration and its required evidence are tracked in
 
 Optional packages implement the qualified-public
 [`Algorithm graph adapter protocol`](./glossary.md) owned by
-`AdaptiveOpticsSim.AlgorithmGraphs`. Calculon remains the authority for
-scientific declarations, configuration, ports, formats, properties, sparse
-parameters, preparation, processing, and reset. The graph adapter translates
-that interface into exact graph storage; it must not define a parallel
-scientific plan or `process!` API.
+`AdaptiveOpticsSim.AlgorithmGraphs`. The scientific module remains the authority
+for its plan, state, workspace, products, configuration, and canonical domain
+operation. The graph adapter only declares ports and binds an exact execution
+owner; it must not replace domain functions such as `update!`,
+`combine_basis!`, or a prescription-specific Proper call with a universal
+scientific API.
 
 The protocol methods are:
 
 | Method | Adapter obligation |
 |---|---|
-| `prepare_algorithm_instance(Declaration, configuration)` | Prepare a concrete prototype before final graph buffers exist. Do not retain provisional input or output storage. |
-| `algorithm_port_contracts(Declaration, prototype)` | Return one fixed tuple of `graph_port_contract(...)` values in declaration order. Names, direction, role, element type, shape, schema, and layout must match the Calculon declaration. |
-| `bind_algorithm_instance(Declaration, prototype, inputs, outputs)` | Optionally return a specialized prepared owner bound to the final admitted named buffers. The default returns the prototype unchanged. |
-| `replace_algorithm_parameter!(prototype, Val(name), values)` | Apply an admitted startup sparse parameter during preparation. Live parameter replacement is not yet a graph capability. |
-| `process_algorithm!(prepared, outputs, inputs)` | Execute bounded repeated-path work against the exact named buffers without replacing their storage. |
-| `reset_algorithm!(prepared)` | Reset persistent algorithm state at a serialized graph boundary. |
+| `graph_node_ports(Node, config)` | Return one fixed tuple of `graph_port_contract(...)` values in declaration order. Names, direction, role, element type, shape, schema, and layout must depend only on construction and graph-rebuild config, never props. |
+| `prepare_graph_node(Node, config, props, inputs, outputs, parameters, target)` | After complete graph admission, return one concrete prepared owner that binds the exact plan, state, workspace, named buffers, sparse parameters, and target needed by the node. Every declared sparse parameter is required. |
+| `step_graph_node!(owner)` | Execute bounded repeated-path work through the domain API and the exact buffers retained by `owner`; do not replace their storage. |
+| `reset_graph_node!(owner)` | Reset persistent state at a serialized graph boundary without changing exact bindings. Stateless nodes return `nothing`. |
 
 Use these exact names through the `AlgorithmGraphs` module. They are public but
 not exported so extension code makes ownership visible. There are no
-underscore-prefixed aliases. An adapter whose underlying Calculon instance can
-operate on graph-supplied buffers directly may return that instance unchanged.
-An adapter that must prebind FFT plans, wavefronts, or other exact owners uses
-`bind_algorithm_instance` only after all formats, topology, startup parameters,
-and storage have been admitted.
+underscore-prefixed aliases. A node with no persistent state still returns a
+small exact owner retaining its plan and buffers. A node that must prebind FFT
+plans, wavefronts, random state, or other resources does so only in
+`prepare_graph_node`, after all formats, topology, startup parameters, and
+storage have been admitted.
 
-Preparation may allocate and may fail. `process_algorithm!` and
-`reset_algorithm!` execute inside the graph's retained exact-device context;
+Preparation may allocate and may fail. `step_graph_node!` and
+`reset_graph_node!` execute inside the graph's retained exact-device context;
 the adapter must not select a different device or stream. A CPU repeated path
 requires inference and an explicit warmed allocation budget. Accelerator claims
 require native storage, exact-device residency, scalar-index prohibition, and

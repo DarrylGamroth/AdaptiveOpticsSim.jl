@@ -40,7 +40,6 @@ extension_sources = [
     "ext/AdaptiveOpticsSimCUDAExt.jl",
     "ext/AdaptiveOpticsSimDaggerExt.jl",
     "ext/AdaptiveOpticsSimMetalExt.jl",
-    "ext/AdaptiveOpticsSimCalculonAlgorithmsExt.jl",
     "ext/AdaptiveOpticsSimPipeWireAOExt.jl",
 ]
 extension_tests = [

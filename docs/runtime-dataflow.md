@@ -10,9 +10,9 @@ model-specific code composes the independent numerical optics and control
 primitives around that boundary.
 
 `AdaptiveOpticsSim.AlgorithmGraphs` is the smaller complete-frame composition
-boundary. It schedules transport-neutral Calculon declarations and deliberately
-does not reproduce Plant's physical event calendar, detector lifecycle, or
-command timing.
+boundary. It schedules AOS-native graph-node adapters and deliberately does not
+reproduce Plant's physical event calendar, detector lifecycle, or command
+timing.
 
 For package structure, see
 [`maintainer-architecture.md`](maintainer-architecture.md). For normative HIL
@@ -58,18 +58,22 @@ field nor detector cadence, exposure, FFT scratch, or atmosphere model time.
 ## Complete-Frame Algorithm Graphs
 
 An algorithm graph has a cold definition and one exact prepared owner. Graph
-preparation proceeds in two stages:
+preparation proceeds in three stages:
 
-1. Prepare each Calculon declaration and obtain its exact port formats.
+1. Call `graph_node_ports(Node, config)` for each node and admit its fixed port
+   type, shape, scientific schema, role, and layout.
 2. Admit the complete topology and startup sparse parameters, retain graph
-   inputs, allocate node outputs and delayed-link storage, and then let each
-   adapter bind its execution owner to those exact buffers.
+   inputs, and allocate node outputs and delayed-link storage.
+3. Call `prepare_graph_node` so each adapter constructs one exact execution
+   owner from its config, initial props, admitted inputs, outputs, parameters,
+   and compute target.
 
-The second stage is necessary for AOS operations whose prepared execution owner
+The final stage is necessary for AOS operations whose prepared execution owner
 must bind exact plan, state, workspace, product, backend, device, and execution-
-context identities. Ordinary Calculon declarations need no additional owner;
-their default binding retains the prepared Calculon instance unchanged. No
-binding or allocation occurs in `step_graph!`.
+context identities. Domain algorithms keep their canonical APIs, such as
+`Control.update!` and `Calibration.combine_basis!`; only the small graph-node
+adapter knows about graph ports. No binding or allocation occurs in
+`step_graph!`.
 
 One graph step invokes every node once in validated declaration order. A direct
 link exposes an earlier node's complete output to a later node in the same
@@ -87,11 +91,11 @@ not native packed storage on that same target. The prepared graph retains one
 device execution context. Preparation, stepping, and reset run inside it and
 complete its stream before successful publication or error return.
 
-One graph may still connect port formats with different element types where an
-algorithm explicitly declares that conversion. Exact target ownership does not
+One graph may still connect port formats with different element types where a
+node explicitly declares that conversion. Exact target ownership does not
 impose one graph-wide numeric type. Host/device movement remains an explicit
 application or prepared-handoff operation; the graph never inserts a fallback
-or transfer. Runtime scalar-property transactions and live sparse-parameter
+or transfer. Runtime scalar-prop transactions and live sparse-parameter
 replacement likewise remain open graph-host work rather than implied
 capabilities.
 
@@ -103,6 +107,110 @@ prescription scratch separately. Its focused CPU, AMDGPU, and CUDA tests
 qualify that narrow exact-target execution path. They do not add an acquisition
 clock, asynchronous WFS/science concurrency, or a PipeWire Julia host to this
 executor.
+
+## TOML Algorithm Graph Format
+
+TOML is the maintained human-authored format because it supports comments,
+keeps arrays of node and link tables readable, and is available as a Julia
+standard library. JSON may be added later as an interchange representation,
+but it is not a second maintained authoring schema. Direct Julia construction
+remains the unrestricted API for generated topology, conditional composition,
+multi-rate orchestration, and other arrangements that do not fit the static
+file subset.
+
+The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**,
+and **MAY** in the following requirements are to be interpreted as described by
+[BCP 14](https://www.rfc-editor.org/info/bcp14) when, and only when, they appear
+in all capitals.
+
+- **AOS-GRAPH-FILE-001:** A maintained graph file MUST set
+  `schema_version = 1`, MUST have a stable identifier-valued `name`, and MUST
+  contain at least one `[[nodes]]` table. A loader MUST reject unknown schema
+  versions and unknown fields.
+- **AOS-GRAPH-FILE-002:** Node order MUST be execution order. Each node MUST
+  identify an explicitly supplied `type`; the loader MUST NOT evaluate Julia
+  source, resolve arbitrary module paths, or mutate a global type registry.
+- **AOS-GRAPH-FILE-003:** `[nodes.config]` MUST contain construction and
+  graph-rebuild values. `[nodes.props]` MAY contain scalar initial props but
+  MUST NOT change a node's admitted ports. Version 1 does not define live prop
+  transactions.
+- **AOS-GRAPH-FILE-004:** Frame inputs, delayed-link initial arrays, and sparse
+  parameter arrays MUST be referenced by external binding name. The core
+  loader MUST NOT infer FITS or another calibration file format and MUST NOT
+  insert a host/device transfer.
+- **AOS-GRAPH-FILE-005:** Endpoints MUST use `node.port` syntax. Direct links,
+  delayed links, boundary inputs and outputs, and sparse parameters MUST pass
+  the same type, shape, schema, layout, ownership, and connectivity admission
+  checks as direct Julia construction.
+- **AOS-GRAPH-FILE-006:** `load_algorithm_graph` MUST compile a valid file into
+  the same concrete `AlgorithmGraphDefinition` used by `algorithm_graph`. The
+  parsed TOML dictionaries and cold builder vectors MUST NOT survive into the
+  definition or prepared execution owner.
+- **AOS-GRAPH-FILE-007:** Version 1 is a static, single-rate, complete-frame
+  subset. Multi-rate scheduling, conditional topology, generated nodes, and
+  physical sub-frame event semantics SHOULD use direct Julia composition or
+  Plant rather than acquire implicit file semantics.
+
+The version 1 tables are:
+
+| Table | Required fields | Meaning |
+|---|---|---|
+| root | `schema_version`, `name`, `nodes` | Schema and graph identity |
+| `[[nodes]]` | `name`, `type`, `[nodes.config]` | One node in execution order; `[nodes.props]` is optional |
+| `[[inputs]]` | `name`, `destination`, `binding` | Caller-owned frame input |
+| `[[outputs]]` | `name`, `source` | Caller-visible allocated graph output |
+| `[[links]]` | `source`, `destination` | Same-step direct link |
+| `[[delayed_links]]` | `source`, `destination`, `initial` | One-successful-step delayed link; `initial` is a binding name |
+| `[[parameters]]` | `destination`, `binding` | Required startup ndarray sparse parameter |
+
+For example:
+
+```toml
+schema_version = 1
+name = "revolt_classic"
+
+[[nodes]]
+name = "controller"
+type = "discrete_integrator_f32"
+
+[nodes.config]
+extent = 277
+sample_period_s = 0.001
+input_schema = "org.revolt.residual-modes/1"
+output_schema = "org.revolt.command-modes/1"
+
+[nodes.props]
+gain = 0.3
+tau_s = 0.02
+
+[[inputs]]
+name = "residual"
+destination = "controller.input"
+binding = "residual"
+
+[[outputs]]
+name = "command"
+source = "controller.output"
+```
+
+The application supplies the array explicitly and then prepares the ordinary
+graph:
+
+```julia
+definition = load_algorithm_graph(
+    "revolt_classic.toml";
+    bindings=(residual=residual_modes,),
+)
+graph = prepare_algorithm_graph(definition; target=target)
+```
+
+The built-in type map currently contains `discrete_integrator_f32` and
+`modal_opd_expansion_f32`. `merge(builtin_graph_node_types(), companion_types)`
+creates an explicit larger map for optional packages such as the Proper
+companion. Complete REVOLT Classic, REVOLT Copper, and SPIDERS files are not
+claimed until all node types needed by those architectures are executable and
+scientifically qualified. This prevents a configuration file from becoming a
+catalog of plausible but non-running node names.
 
 ## Definition And Preparation
 

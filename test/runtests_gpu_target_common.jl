@@ -10,6 +10,7 @@ using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim.Ensembles
+using AdaptiveOpticsSim.AlgorithmGraphs
 using AdaptiveOpticsSim: Plant
 using AdaptiveOpticsSim.Plant
 using FixedSizeArrays: FixedSizeVector
@@ -86,10 +87,64 @@ end
 function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     require_backend_target!(B)
     @testset "$(backend_label(B)) hardware target" begin
+        run_algorithm_graph_backend_smoke(B)
         run_optional_backend_smoke(B)
         run_gpu_builder_smoke(B)
         run_revolt_like_hil_backend_smoke(B)
     end
+    return nothing
+end
+
+function run_algorithm_graph_backend_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    residual = BackendArray(Float32[1, 2])
+    basis_host = zeros(Float32, 2, 2, 2)
+    fill!(@view(basis_host[:, :, 1]), 1.0f0)
+    fill!(@view(basis_host[:, :, 2]), 2.0f0)
+    basis = BackendArray(basis_host)
+    pupil_support = BackendArray(Bool[true false; true true])
+    coefficient_schema = "test.graph.modal-coefficients.f32/1"
+    target = compute_device(residual)
+
+    definition = algorithm_graph(
+        (
+            discrete_integrator_node(
+                :controller;
+                extent=2,
+                sample_period_s=0.1f0,
+                input_schema="test.graph.residual.f32/1",
+                output_schema=coefficient_schema,
+                gain=2.0f0,
+                tau_s=0.2f0,
+            ),
+            modal_opd_expansion_node(
+                :modal_opd;
+                pupil_rows=2,
+                pupil_columns=2,
+                mode_count=2,
+                coefficients_schema=coefficient_schema,
+                opd_schema="test.graph.opd.f32/1",
+                basis_schema="test.graph.modal-basis.f32/1",
+                pupil_support_schema="test.graph.pupil-support.bool/1",
+            ),
+        );
+        name=:gpu_native_modal_control,
+        inputs=(graph_input(:residual, :controller => :input, residual),),
+        outputs=(graph_output(:opd, :modal_opd => :opd),),
+        links=(link(:controller => :output, :modal_opd => :coefficients),),
+        parameters=(
+            sparse_parameter(:modal_opd => :basis, basis),
+            sparse_parameter(:modal_opd => :pupil_support, pupil_support),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition; target)
+    step_graph!(graph)
+
+    @test compute_device(graph) == target
+    @test compute_device(graph_output(graph, Val(:opd))) == target
+    @test Array(graph_output(graph, Val(:opd))) ≈ Float32[0.5 0.0; 0.5 0.5]
     return nothing
 end
 

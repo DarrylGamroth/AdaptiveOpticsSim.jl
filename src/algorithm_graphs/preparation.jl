@@ -19,7 +19,7 @@ end
 """
     graph_port_contract(name, direction, role, T, shape, schema, layout)
 
-Construct one validated graph-side port contract for an algorithm adapter.
+Construct one validated graph-side port contract for a graph-node adapter.
 `direction` is `:input` or `:output`; `role` is `:data` or `:parameter`; the
 portable allocator currently admits `:column_major` layout.
 """
@@ -51,7 +51,7 @@ end
 
 @inline _validate_port_contract(::_GraphPortContract) = nothing
 @inline _validate_port_contract(value) = throw(AlgorithmGraphError(
-    "algorithm adapters must return graph port contracts, not $(typeof(value))",
+    "graph-node adapters must return graph port contracts, not $(typeof(value))",
 ))
 
 @inline _port_names(::Tuple{}) = ()
@@ -67,86 +67,65 @@ function _named_tuple(names::Tuple, values::Tuple, role::AbstractString)
 end
 
 """
-    prepare_algorithm_instance(Declaration, configuration)
+    graph_node_ports(Node, config)
 
-Prepare an algorithm declaration before final graph storage is admitted.
-Adapters that need exact graph-buffer identities finish their ownership binding
-in [`bind_algorithm_instance`](@ref).
+Return the fixed tuple of graph-side port contracts for one graph-node type and
+construction configuration. Port contracts must not depend on initial or live
+props.
 """
-function prepare_algorithm_instance(::Type{Declaration}, configuration) where {Declaration}
+function graph_node_ports(::Type{Node}, config) where {Node}
     throw(AlgorithmGraphError(
-        "no AlgorithmGraphs adapter is loaded for declaration $Declaration",
+        "no AlgorithmGraphs port adapter is loaded for node type $Node",
     ))
 end
 
 """
-    algorithm_port_contracts(Declaration, prepared)
+    prepare_graph_node(Node, config, props, inputs, outputs, parameters, target)
 
-Return the fixed tuple of graph-side port contracts for one prepared algorithm
-prototype, in declaration order.
+Prepare one exact single-writer node owner after all graph storage, connections,
+and startup sparse parameters have been admitted. The returned owner binds its
+run-immutable plan, persistent state, replaceable workspace, and exact named
+buffers without changing their identities.
 """
-function algorithm_port_contracts(::Type{Declaration}, prepared) where {Declaration}
-    throw(AlgorithmGraphError(
-        "the AlgorithmGraphs adapter for $Declaration did not provide port contracts",
-    ))
-end
-
-"""
-Bind one prepared algorithm instance to its exact admitted frame-data buffers.
-
-The default adapter needs no additional execution owner. More-specific
-adapters may construct one after graph inputs, outputs, direct links, and
-delayed-link storage have all been validated. This hook runs only during graph
-preparation.
-"""
-function bind_algorithm_instance(
-    ::Type{Declaration},
-    prepared,
+function prepare_graph_node(
+    ::Type{Node},
+    config,
+    props,
     inputs::NamedTuple,
     outputs::NamedTuple,
-) where {Declaration}
-    return prepared
-end
-
-"""
-    replace_algorithm_parameter!(prepared, name, values)
-
-Apply one admitted startup sparse-parameter value to a prepared algorithm
-prototype. This is a preparation-time hook, not a live graph update.
-"""
-function replace_algorithm_parameter!(prepared, name::Val, values)
+    parameters::NamedTuple,
+    target,
+) where {Node}
     throw(AlgorithmGraphError(
-        "the AlgorithmGraphs adapter for $(typeof(prepared)) does not support " *
-        "sparse parameter $(name)",
+        "no AlgorithmGraphs preparation adapter is loaded for node type $Node",
     ))
 end
 
 """
-    process_algorithm!(prepared, outputs, inputs)
+    step_graph_node!(owner)
 
-Execute one prepared algorithm instance against its exact named graph buffers.
-Implementations must perform bounded repeated-path work and must not replace or
-retain different input or output storage.
+Execute one prepared graph-node owner against the exact buffers retained during
+preparation. Implementations must perform bounded repeated-path work and must
+not replace their input, output, parameter, state, or workspace storage.
 """
-function process_algorithm!(prepared, outputs::NamedTuple, inputs::NamedTuple)
+function step_graph_node!(owner)
     throw(AlgorithmGraphError(
-        "the AlgorithmGraphs adapter for $(typeof(prepared)) does not implement processing",
+        "the AlgorithmGraphs adapter for $(typeof(owner)) does not implement stepping",
     ))
 end
 
 """
-    reset_algorithm!(prepared)
+    reset_graph_node!(owner)
 
-Reset one prepared algorithm instance at a serialized graph boundary.
+Reset one prepared graph-node owner at a serialized graph boundary.
 """
-function reset_algorithm!(prepared)
+function reset_graph_node!(owner)
     throw(AlgorithmGraphError(
-        "the AlgorithmGraphs adapter for $(typeof(prepared)) does not implement reset",
+        "the AlgorithmGraphs adapter for $(typeof(owner)) does not implement reset",
     ))
 end
 
-function _allocate_algorithm_buffer(
-    prepared,
+function _allocate_graph_buffer(
     target::AbstractComputeDevice,
     format::_GraphPortFormat{T,N},
 ) where {T,N}
@@ -159,8 +138,7 @@ function _allocate_algorithm_buffer(
     return values
 end
 
-function _validate_algorithm_buffer(
-    prepared,
+function _validate_graph_buffer(
     target::AbstractComputeDevice,
     format::_GraphPortFormat{T,N},
     values,
@@ -190,64 +168,71 @@ function _validate_algorithm_buffer(
     return values
 end
 
-@inline function _copy_algorithm_buffer!(prepared, destination, source)
+@inline function _copy_graph_buffer!(destination, source)
     copyto!(destination, source)
     return destination
 end
 
-struct _PreparedNodePrototype{Name,Declaration,Algorithm,Ports<:NamedTuple}
-    algorithm::Algorithm
+struct _AdmittedGraphNode{Name,Node,Config,Props,Ports<:NamedTuple}
+    config::Config
+    props::Props
     ports::Ports
 end
 
-@inline _node_name(::_PreparedNodePrototype{Name}) where {Name} = Name
+@inline _node_name(::_AdmittedGraphNode{Name}) where {Name} = Name
 
-function _prepare_node_prototype(
-    definition::AlgorithmNodeDefinition{Name,Declaration},
-) where {Name,Declaration}
-    algorithm = prepare_algorithm_instance(Declaration, definition.configuration)
-    port_values = algorithm_port_contracts(Declaration, algorithm)
+function _admit_graph_node(
+    definition::AlgorithmNodeDefinition{Name,Node},
+) where {Name,Node}
+    port_values = graph_node_ports(Node, definition.config)
     _validate_tuple(port_values, _validate_port_contract)
     ports = _named_tuple(_port_names(port_values), port_values, "algorithm port")
-    return _PreparedNodePrototype{Name,Declaration,typeof(algorithm),typeof(ports)}(
-        algorithm,
+    return _AdmittedGraphNode{
+        Name,
+        Node,
+        typeof(definition.config),
+        typeof(definition.props),
+        typeof(ports),
+    }(
+        definition.config,
+        definition.props,
         ports,
     )
 end
 
-@inline _prepare_node_prototypes(::Tuple{}) = ()
-@inline function _prepare_node_prototypes(definitions::Tuple)
+@inline _admit_graph_nodes(::Tuple{}) = ()
+@inline function _admit_graph_nodes(definitions::Tuple)
     return (
-        _prepare_node_prototype(first(definitions)),
-        _prepare_node_prototypes(Base.tail(definitions))...,
+        _admit_graph_node(first(definitions)),
+        _admit_graph_nodes(Base.tail(definitions))...,
     )
 end
 
-function _prepared_node_prototypes(definition::AlgorithmGraphDefinition)
-    values = _prepare_node_prototypes(definition.nodes)
+function _admitted_graph_nodes(definition::AlgorithmGraphDefinition)
+    values = _admit_graph_nodes(definition.nodes)
     return _named_tuple(_node_names(definition.nodes), values, "algorithm node")
 end
 
-function _require_node(prototypes::NamedTuple, ::Val{Name}) where {Name}
-    hasproperty(prototypes, Name) || throw(AlgorithmGraphError(
+function _require_node(nodes::NamedTuple, ::Val{Name}) where {Name}
+    hasproperty(nodes, Name) || throw(AlgorithmGraphError(
         "algorithm graph has no node named $Name",
     ))
-    return getproperty(prototypes, Name)
+    return getproperty(nodes, Name)
 end
 
-function _require_port(prototype::_PreparedNodePrototype, ::Val{Name}) where {Name}
-    hasproperty(prototype.ports, Name) || throw(AlgorithmGraphError(
-        "algorithm node $(_node_name(prototype)) has no port named $Name",
+function _require_port(node::_AdmittedGraphNode, ::Val{Name}) where {Name}
+    hasproperty(node.ports, Name) || throw(AlgorithmGraphError(
+        "algorithm node $(_node_name(node)) has no port named $Name",
     ))
-    return getproperty(prototype.ports, Name)
+    return getproperty(node.ports, Name)
 end
 
 function _endpoint_contract(
-    prototypes::NamedTuple,
+    nodes::NamedTuple,
     reference::AlgorithmPortReference{Node,Port},
 ) where {Node,Port}
-    prototype = _require_node(prototypes, Val(Node))
-    return prototype, _require_port(prototype, Val(Port))
+    node = _require_node(nodes, Val(Node))
+    return node, _require_port(node, Val(Port))
 end
 
 @inline _require_data_input(
@@ -307,7 +292,7 @@ end
 )
 
 function _validate_parameters!(
-    prototypes::NamedTuple,
+    nodes::NamedTuple,
     parameters::Tuple,
     target::AbstractComputeDevice,
 )
@@ -315,42 +300,25 @@ function _validate_parameters!(
     length(keys) == length(unique(keys)) || throw(AlgorithmGraphError(
         "each sparse parameter port may be initialized at most once",
     ))
-    _validate_parameters_recursive!(prototypes, parameters, target)
+    _validate_parameters_recursive!(nodes, parameters, target)
     return nothing
 end
 
-@inline _validate_parameters_recursive!(prototypes, ::Tuple{}, target) = nothing
+@inline _validate_parameters_recursive!(nodes, ::Tuple{}, target) = nothing
 @inline function _validate_parameters_recursive!(
-    prototypes,
+    nodes,
     parameters::Tuple,
     target,
 )
     binding = first(parameters)
-    prototype, contract = _endpoint_contract(prototypes, binding.endpoint)
+    _, contract = _endpoint_contract(nodes, binding.endpoint)
     _require_sparse_parameter(contract, binding.endpoint)
-    _validate_algorithm_buffer(
-        prototype.algorithm,
+    _validate_graph_buffer(
         target,
         contract.format,
         binding.values,
     )
-    _validate_parameters_recursive!(prototypes, Base.tail(parameters), target)
-    return nothing
-end
-
-@inline _apply_parameters!(prototypes, ::Tuple{}) = nothing
-@inline function _apply_parameters!(prototypes, parameters::Tuple)
-    binding = first(parameters)
-    prototype = _require_node(
-        prototypes,
-        Val(_node_name(binding.endpoint)),
-    )
-    replace_algorithm_parameter!(
-        prototype.algorithm,
-        Val(_port_name(binding.endpoint)),
-        binding.values,
-    )
-    _apply_parameters!(prototypes, Base.tail(parameters))
+    _validate_parameters_recursive!(nodes, Base.tail(parameters), target)
     return nothing
 end
 
@@ -380,35 +348,47 @@ end
 ) where {Name} = (port, tail...)
 @inline _prepend_data_input(port::_GraphPortContract, tail::Tuple) = tail
 
-@inline _allocate_output_buffers(algorithm, ::Tuple{}, target) = ()
-@inline function _allocate_output_buffers(algorithm, contracts::Tuple, target)
+@inline _parameter_contracts(::Tuple{}) = ()
+@inline function _parameter_contracts(ports::Tuple)
+    head = first(ports)
+    tail = _parameter_contracts(Base.tail(ports))
+    return _prepend_parameter(head, tail)
+end
+
+@inline _prepend_parameter(
+    port::_GraphPortContract{Name,:input,:parameter},
+    tail::Tuple,
+) where {Name} = (port, tail...)
+@inline _prepend_parameter(port::_GraphPortContract, tail::Tuple) = tail
+
+@inline _allocate_output_buffers(::Tuple{}, target) = ()
+@inline function _allocate_output_buffers(contracts::Tuple, target)
     return (
-        _allocate_algorithm_buffer(algorithm, target, first(contracts).format),
+        _allocate_graph_buffer(target, first(contracts).format),
         _allocate_output_buffers(
-            algorithm,
             Base.tail(contracts),
             target,
         )...,
     )
 end
 
-function _allocate_node_outputs(prototype::_PreparedNodePrototype, target)
-    contracts = _data_output_contracts(values(prototype.ports))
-    buffers = _allocate_output_buffers(prototype.algorithm, contracts, target)
+function _allocate_node_outputs(node::_AdmittedGraphNode, target)
+    contracts = _data_output_contracts(values(node.ports))
+    buffers = _allocate_output_buffers(contracts, target)
     return _named_tuple(_port_names(contracts), buffers, "algorithm output port")
 end
 
 @inline _allocate_all_node_outputs(::Tuple{}, target) = ()
-@inline function _allocate_all_node_outputs(prototypes::Tuple, target)
+@inline function _allocate_all_node_outputs(nodes::Tuple, target)
     return (
-        _allocate_node_outputs(first(prototypes), target),
-        _allocate_all_node_outputs(Base.tail(prototypes), target)...,
+        _allocate_node_outputs(first(nodes), target),
+        _allocate_all_node_outputs(Base.tail(nodes), target)...,
     )
 end
 
-function _prepared_node_outputs(prototypes::NamedTuple, target)
-    groups = _allocate_all_node_outputs(values(prototypes), target)
-    return NamedTuple{keys(prototypes)}(groups)
+function _prepared_node_outputs(nodes::NamedTuple, target)
+    groups = _allocate_all_node_outputs(values(nodes), target)
+    return NamedTuple{keys(nodes)}(groups)
 end
 
 function _endpoint_output(
@@ -434,13 +414,12 @@ end
 
 function _prepare_graph_input(
     definition::GraphInputDefinition{Name},
-    prototypes::NamedTuple,
+    nodes::NamedTuple,
     target::AbstractComputeDevice,
 ) where {Name}
-    prototype, contract = _endpoint_contract(prototypes, definition.destination)
+    _, contract = _endpoint_contract(nodes, definition.destination)
     _require_data_input(contract, definition.destination)
-    _validate_algorithm_buffer(
-        prototype.algorithm,
+    _validate_graph_buffer(
         target,
         contract.format,
         definition.values,
@@ -452,20 +431,20 @@ function _prepare_graph_input(
     }(definition.destination, definition.values)
 end
 
-@inline _prepare_graph_inputs(::Tuple{}, prototypes, target) = ()
-@inline function _prepare_graph_inputs(definitions::Tuple, prototypes, target)
+@inline _prepare_graph_inputs(::Tuple{}, nodes, target) = ()
+@inline function _prepare_graph_inputs(definitions::Tuple, nodes, target)
     return (
-        _prepare_graph_input(first(definitions), prototypes, target),
-        _prepare_graph_inputs(Base.tail(definitions), prototypes, target)...,
+        _prepare_graph_input(first(definitions), nodes, target),
+        _prepare_graph_inputs(Base.tail(definitions), nodes, target)...,
     )
 end
 
 function _prepared_graph_inputs(
     definition::AlgorithmGraphDefinition,
-    prototypes,
+    nodes,
     target,
 )
-    prepared = _prepare_graph_inputs(definition.inputs, prototypes, target)
+    prepared = _prepare_graph_inputs(definition.inputs, nodes, target)
     return _named_tuple(_boundary_names(definition.inputs), prepared, "graph input")
 end
 
@@ -478,21 +457,21 @@ function _node_ordinal(names::Tuple, sought::Symbol, ordinal::Int=1)
 end
 
 @inline _validate_direct_links!(
-    prototypes,
+    nodes,
     node_outputs,
     ::Tuple{},
     target,
 ) = nothing
 @inline function _validate_direct_links!(
-    prototypes,
+    nodes,
     node_outputs,
     links::Tuple,
     target,
 )
     direct = first(links)
-    _, source_contract = _endpoint_contract(prototypes, direct.source)
-    destination_prototype, destination_contract =
-        _endpoint_contract(prototypes, direct.destination)
+    _, source_contract = _endpoint_contract(nodes, direct.source)
+    _, destination_contract =
+        _endpoint_contract(nodes, direct.destination)
     _require_data_output(source_contract, direct.source)
     _require_data_input(destination_contract, direct.destination)
     context = "direct link $(_node_name(direct.source)) => " *
@@ -502,21 +481,20 @@ end
         destination_contract.format,
         context,
     )
-    names = keys(prototypes)
+    names = keys(nodes)
     source_ordinal = _node_ordinal(names, _node_name(direct.source))
     destination_ordinal = _node_ordinal(names, _node_name(direct.destination))
     source_ordinal < destination_ordinal || throw(AlgorithmGraphError(
         "$context must point from an earlier node to a later node; use delayed_link for feedback",
     ))
     source_values = _endpoint_output(node_outputs, direct.source)
-    _validate_algorithm_buffer(
-        destination_prototype.algorithm,
+    _validate_graph_buffer(
         target,
         destination_contract.format,
         source_values,
     )
     _validate_direct_links!(
-        prototypes,
+        nodes,
         node_outputs,
         Base.tail(links),
         target,
@@ -524,9 +502,8 @@ end
     return nothing
 end
 
-struct _PreparedDelayedLink{Destination,Algorithm,Source,Initial,Format}
+struct _PreparedDelayedLink{Destination,Source,Initial,Format}
     destination::Destination
-    destination_algorithm::Algorithm
     source::Source
     initial::Initial
     format::Format
@@ -534,13 +511,13 @@ end
 
 function _prepare_delayed_link(
     definition::DelayedAlgorithmLink,
-    prototypes,
+    nodes,
     node_outputs,
     target,
 )
-    _, source_contract = _endpoint_contract(prototypes, definition.source)
-    destination_prototype, destination_contract =
-        _endpoint_contract(prototypes, definition.destination)
+    _, source_contract = _endpoint_contract(nodes, definition.source)
+    _, destination_contract =
+        _endpoint_contract(nodes, definition.destination)
     _require_data_output(source_contract, definition.source)
     _require_data_input(destination_contract, definition.destination)
     context = "delayed link $(_node_name(definition.source)) => " *
@@ -550,42 +527,35 @@ function _prepare_delayed_link(
         destination_contract.format,
         context,
     )
-    _validate_algorithm_buffer(
-        destination_prototype.algorithm,
+    _validate_graph_buffer(
         target,
         destination_contract.format,
         definition.initial,
     )
     source = _endpoint_output(node_outputs, definition.source)
-    _validate_algorithm_buffer(
-        destination_prototype.algorithm,
+    _validate_graph_buffer(
         target,
         destination_contract.format,
         source,
     )
-    initial = _allocate_algorithm_buffer(
-        destination_prototype.algorithm,
+    initial = _allocate_graph_buffer(
         target,
         destination_contract.format,
     )
-    state = _allocate_algorithm_buffer(
-        destination_prototype.algorithm,
+    state = _allocate_graph_buffer(
         target,
         destination_contract.format,
     )
-    _copy_algorithm_buffer!(
-        destination_prototype.algorithm,
+    _copy_graph_buffer!(
         initial,
         definition.initial,
     )
-    _copy_algorithm_buffer!(
-        destination_prototype.algorithm,
+    _copy_graph_buffer!(
         state,
         definition.initial,
     )
     prepared = _PreparedDelayedLink(
         definition.destination,
-        destination_prototype.algorithm,
         source,
         initial,
         destination_contract.format,
@@ -595,25 +565,25 @@ end
 
 @inline _prepare_delayed_links(
     ::Tuple{},
-    prototypes,
+    nodes,
     node_outputs,
     target,
 ) = ((), ())
 @inline function _prepare_delayed_links(
     definitions::Tuple,
-    prototypes,
+    nodes,
     node_outputs,
     target,
 )
     prepared, state = _prepare_delayed_link(
         first(definitions),
-        prototypes,
+        nodes,
         node_outputs,
         target,
     )
     tail_prepared, tail_state = _prepare_delayed_links(
         Base.tail(definitions),
-        prototypes,
+        nodes,
         node_outputs,
         target,
     )
@@ -700,67 +670,154 @@ end
     )
 end
 
-"""One prepared algorithm and its exact named graph buffer bindings."""
-struct PreparedAlgorithmNode{Name,Algorithm,Inputs<:NamedTuple,Outputs<:NamedTuple}
-    algorithm::Algorithm
+@inline function _parameter_binding_matches(
+    binding::SparseParameterBinding,
+    ::AlgorithmPortReference{Node,Port},
+) where {Node,Port}
+    return _node_name(binding.endpoint) === Node &&
+           _port_name(binding.endpoint) === Port
+end
+
+function _require_parameter_binding(::Tuple{}, reference::AlgorithmPortReference)
+    throw(AlgorithmGraphError(
+        "sparse parameter $(_node_name(reference)) => $(_port_name(reference)) is unbound",
+    ))
+end
+
+function _require_parameter_binding(
+    bindings::Tuple,
+    reference::AlgorithmPortReference,
+)
+    binding = first(bindings)
+    _parameter_binding_matches(binding, reference) && return binding.values
+    return _require_parameter_binding(Base.tail(bindings), reference)
+end
+
+@inline _bind_node_parameters(node_name::Symbol, ::Tuple{}, bindings) = ()
+@inline function _bind_node_parameters(node_name::Symbol, contracts::Tuple, bindings)
+    contract = first(contracts)
+    reference = AlgorithmPortReference(node_name, _port_name(contract))
+    return (
+        _require_parameter_binding(bindings, reference),
+        _bind_node_parameters(node_name, Base.tail(contracts), bindings)...,
+    )
+end
+
+"""One prepared graph-node owner and its exact named buffer bindings."""
+struct PreparedGraphNode{
+    Name,
+    Owner,
+    Inputs<:NamedTuple,
+    Outputs<:NamedTuple,
+    Parameters<:NamedTuple,
+}
+    owner::Owner
     inputs::Inputs
     outputs::Outputs
+    parameters::Parameters
 end
 
-@inline _node_name(::PreparedAlgorithmNode{Name}) where {Name} = Name
+@inline _node_name(::PreparedGraphNode{Name}) where {Name} = Name
 
-function _bind_prepared_node(
-    prototype::_PreparedNodePrototype{Name,Declaration},
+function _prepare_exact_node(
+    node::_AdmittedGraphNode{Name,Node},
     outputs::NamedTuple,
     bindings::Tuple,
-) where {Name,Declaration}
-    contracts = _data_input_contracts(values(prototype.ports))
-    input_values = _bind_node_inputs(Name, contracts, bindings)
-    inputs = _named_tuple(_port_names(contracts), input_values, "algorithm input port")
-    algorithm = bind_algorithm_instance(
-        Declaration,
-        prototype.algorithm,
-        inputs,
-        outputs,
+    parameter_bindings::Tuple,
+    target::AbstractComputeDevice,
+) where {Name,Node}
+    input_contracts = _data_input_contracts(values(node.ports))
+    input_values = _bind_node_inputs(Name, input_contracts, bindings)
+    inputs = _named_tuple(
+        _port_names(input_contracts),
+        input_values,
+        "algorithm input port",
     )
-    return PreparedAlgorithmNode{Name,typeof(algorithm),typeof(inputs),typeof(outputs)}(
-        algorithm,
+    parameter_contracts = _parameter_contracts(values(node.ports))
+    parameter_values = _bind_node_parameters(
+        Name,
+        parameter_contracts,
+        parameter_bindings,
+    )
+    parameters = _named_tuple(
+        _port_names(parameter_contracts),
+        parameter_values,
+        "sparse parameter port",
+    )
+    owner = prepare_graph_node(
+        Node,
+        node.config,
+        node.props,
         inputs,
         outputs,
+        parameters,
+        target,
+    )
+    return PreparedGraphNode{
+        Name,
+        typeof(owner),
+        typeof(inputs),
+        typeof(outputs),
+        typeof(parameters),
+    }(
+        owner,
+        inputs,
+        outputs,
+        parameters,
     )
 end
 
-@inline _bind_prepared_nodes(::Tuple{}, ::Tuple{}, bindings) = ()
-@inline function _bind_prepared_nodes(prototypes::Tuple, outputs::Tuple, bindings)
+@inline _prepare_exact_nodes(
+    ::Tuple{},
+    ::Tuple{},
+    bindings,
+    parameter_bindings,
+    target,
+) = ()
+@inline function _prepare_exact_nodes(
+    nodes::Tuple,
+    outputs::Tuple,
+    bindings,
+    parameter_bindings,
+    target,
+)
     return (
-        _bind_prepared_node(first(prototypes), first(outputs), bindings),
-        _bind_prepared_nodes(
-            Base.tail(prototypes),
+        _prepare_exact_node(
+            first(nodes),
+            first(outputs),
+            bindings,
+            parameter_bindings,
+            target,
+        ),
+        _prepare_exact_nodes(
+            Base.tail(nodes),
             Base.tail(outputs),
             bindings,
+            parameter_bindings,
+            target,
         )...,
     )
 end
 
 function _prepare_graph_outputs(
     definitions::Tuple,
-    prototypes::NamedTuple,
+    nodes::NamedTuple,
     node_outputs::NamedTuple,
 )
-    values = _prepare_graph_output_values(definitions, prototypes, node_outputs)
+    values = _prepare_graph_output_values(definitions, nodes, node_outputs)
     return _named_tuple(_boundary_names(definitions), values, "graph output")
 end
 
-@inline _prepare_graph_output_values(::Tuple{}, prototypes, node_outputs) = ()
-@inline function _prepare_graph_output_values(definitions::Tuple, prototypes, node_outputs)
+@inline _prepare_graph_output_values(::Tuple{}, nodes, node_outputs) = ()
+@inline function _prepare_graph_output_values(definitions::Tuple, nodes, node_outputs)
     definition = first(definitions)
-    _, contract = _endpoint_contract(prototypes, definition.source)
+    _, contract = _endpoint_contract(nodes, definition.source)
     _require_data_output(contract, definition.source)
     return (
         _endpoint_output(node_outputs, definition.source),
         _prepare_graph_output_values(
             Base.tail(definitions),
-            prototypes,
+            nodes,
             node_outputs,
         )...,
     )
@@ -783,6 +840,7 @@ struct PreparedAlgorithmGraph{
     Outputs<:NamedTuple,
     State<:AlgorithmGraphState,
 }
+    name::Symbol
     target::Target
     context::Context
     nodes::Nodes
@@ -795,9 +853,9 @@ end
 """
     prepare_algorithm_graph(definition; target=HostComputeDevice())
 
-Prepare every algorithm, validate all exact formats and connections, install
-startup sparse parameters, allocate intermediate and delayed storage, then bind
-every algorithm to its exact admitted frame-data buffers in one concrete
+Admit every node's fixed ports, validate all exact formats and connections,
+allocate intermediate and delayed storage, then prepare every node against its
+exact frame-data buffers and startup sparse parameters in one concrete
 single-writer graph owner. Every graph buffer must be native packed storage on
 the exact `target`; preparation never inserts an implicit host/device transfer.
 """
@@ -806,21 +864,20 @@ function _prepare_algorithm_graph(
     target::AbstractComputeDevice,
     context,
 )
-    prototypes = _prepared_node_prototypes(definition)
-    _validate_parameters!(prototypes, definition.parameters, target)
-    _apply_parameters!(prototypes, definition.parameters)
+    admitted_nodes = _admitted_graph_nodes(definition)
+    _validate_parameters!(admitted_nodes, definition.parameters, target)
 
-    node_outputs = _prepared_node_outputs(prototypes, target)
-    prepared_inputs = _prepared_graph_inputs(definition, prototypes, target)
+    node_outputs = _prepared_node_outputs(admitted_nodes, target)
+    prepared_inputs = _prepared_graph_inputs(definition, admitted_nodes, target)
     _validate_direct_links!(
-        prototypes,
+        admitted_nodes,
         node_outputs,
         definition.links,
         target,
     )
     prepared_delays, delayed_values = _prepare_delayed_links(
         definition.delayed_links,
-        prototypes,
+        admitted_nodes,
         node_outputs,
         target,
     )
@@ -832,19 +889,22 @@ function _prepare_algorithm_graph(
     )
     _require_unique_destinations(bindings)
 
-    node_values = _bind_prepared_nodes(
-        values(prototypes),
+    node_values = _prepare_exact_nodes(
+        values(admitted_nodes),
         values(node_outputs),
         bindings,
+        definition.parameters,
+        target,
     )
-    nodes = NamedTuple{keys(prototypes)}(node_values)
+    nodes = NamedTuple{keys(admitted_nodes)}(node_values)
     outputs = _prepare_graph_outputs(
         definition.outputs,
-        prototypes,
+        admitted_nodes,
         node_outputs,
     )
     state = AlgorithmGraphState(delayed_values, UInt64(0), false)
     return PreparedAlgorithmGraph(
+        definition.name,
         target,
         context,
         nodes,
@@ -870,6 +930,7 @@ function prepare_algorithm_graph(
 end
 
 @inline compute_device(graph::PreparedAlgorithmGraph) = graph.target
+@inline graph_name(graph::PreparedAlgorithmGraph) = graph.name
 
 @inline graph_input(
     graph::PreparedAlgorithmGraph,
@@ -895,14 +956,14 @@ function graph_output(graph::PreparedAlgorithmGraph, name::Symbol)
     return getproperty(graph.outputs, name)
 end
 
-@inline prepared_algorithm(
+@inline prepared_graph_node(
     graph::PreparedAlgorithmGraph,
     ::Val{Name},
-) where {Name} = getproperty(graph.nodes, Name).algorithm
+) where {Name} = getproperty(graph.nodes, Name).owner
 
-function prepared_algorithm(graph::PreparedAlgorithmGraph, name::Symbol)
+function prepared_graph_node(graph::PreparedAlgorithmGraph, name::Symbol)
     hasproperty(graph.nodes, name) || throw(AlgorithmGraphError(
-        "prepared graph has no algorithm node named $name",
+        "prepared graph has no node named $name",
     ))
-    return getproperty(graph.nodes, name).algorithm
+    return getproperty(graph.nodes, name).owner
 end

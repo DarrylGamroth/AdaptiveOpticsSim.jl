@@ -1816,23 +1816,27 @@ the canonical representation of these results.
 - HIL-neutral orchestration: the `AdaptiveOpticsSim.Plant` definitions,
   prepared owners, command lifecycle, triggers, detector lifecycles, and event
   loop documented above
-- Portable complete-frame algorithm composition: load `CalculonAlgorithms`,
-  import `AdaptiveOpticsSim.AlgorithmGraphs`, declare nodes with
-  `algorithm_node`, connect them with `link` or an explicit `delayed_link`,
-  call `prepare_algorithm_graph`, and execute with `step_graph!`. This is a
-  deterministic native adapter for Calculon declarations, not a second
-  numerical algorithm interface or a wall-clock scheduler.
-- AOS-owned Calculon algorithms retain their numerical implementation in the
-  canonical scientific module. The optional Calculon extension provides the
-  declaration metadata and packages separately owned AOS execution state and
-  replaceable scratch workspace into Calculon's single mutable execution
-  slot. The
-  `discrete-integrator-controller-f32` exercises state plus scratch workspace.
-  `modal-opd-expansion-f32` exercises rank-changing frame data and two immutable
-  ndarray parameter families through `Calibration.ModalOPDExpansionPlan`.
-  Both declarations are qualified for native Julia and `AlgorithmGraphs`;
-  direct Julia loading through an FGN shared library remains future
-  adapter-runtime work.
+- Portable complete-frame algorithm composition: import
+  `AdaptiveOpticsSim.AlgorithmGraphs`, declare AOS-native nodes, connect them
+  with `link` or an explicit `delayed_link`, call
+  `prepare_algorithm_graph`, and execute with `step_graph!`. The graph-node
+  protocol binds canonical scientific operations to exact graph storage; it is
+  not a second numerical algorithm interface or a wall-clock scheduler.
+- File-defined composition: `load_algorithm_graph` compiles version 1 TOML into
+  the same `AlgorithmGraphDefinition` as direct Julia construction. TOML node
+  `config` fixes construction and graph-rebuild values, node `props` supplies
+  scalar initial values, and named `bindings` supply caller-owned frame inputs,
+  delayed initial values, and ndarray sparse parameters. The loader performs no
+  Julia evaluation or calibration-file I/O. `builtin_graph_node_types()`
+  currently supplies `discrete_integrator_f32` and
+  `modal_opd_expansion_f32`; optional packages extend the file vocabulary by
+  passing an explicitly merged node-type map.
+- Native nodes retain their numerical implementation in the canonical
+  scientific module. `discrete_integrator_node` calls `Control.update!` with a
+  separate plan, state, and workspace. `modal_opd_expansion_node` calls
+  `Calibration.combine_basis!` with a `ModalOPDExpansionPlan` prepared from
+  explicit basis and pupil-support parameters. A Calculon or FGN wrapper for
+  PipeWire deployment is a separate optional adapter, not an AOS dependency.
 - Deterministic model time: `FixedStepModelTimeDriver` selects a nominal
   recurrence; `prepare_boundary_model_time_driver` seals a finite list
   or expands periodic offsets during preparation. `step_graph_at!` commits the

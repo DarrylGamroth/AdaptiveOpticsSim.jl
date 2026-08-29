@@ -6,30 +6,25 @@ struct GraphTestGainConfiguration
     extent::Int
 end
 
-mutable struct GraphTestGainPrepared{T}
-    gain::Vector{T}
+struct GraphTestGainOwner{G,I,O}
+    gain::G
+    input::I
+    output::O
 end
 
-function AOG.prepare_algorithm_instance(
+function AOG.graph_node_ports(
     ::Type{GraphTestGainDeclaration},
     configuration::GraphTestGainConfiguration,
 )
     configuration.extent > 0 || throw(ArgumentError("extent must be positive"))
-    return GraphTestGainPrepared(ones(Float32, configuration.extent))
-end
-
-function AOG.algorithm_port_contracts(
-    ::Type{GraphTestGainDeclaration},
-    prepared::GraphTestGainPrepared{T},
-) where {T}
-    shape = (length(prepared.gain),)
+    shape = (configuration.extent,)
     schema = "test.graph.signal.f32/1"
     return (
         AOG.graph_port_contract(
             :input,
             :input,
             :data,
-            T,
+            Float32,
             shape,
             schema,
             :column_major,
@@ -38,7 +33,7 @@ function AOG.algorithm_port_contracts(
             :output,
             :output,
             :data,
-            T,
+            Float32,
             shape,
             schema,
             :column_major,
@@ -47,7 +42,7 @@ function AOG.algorithm_port_contracts(
             :gain,
             :input,
             :parameter,
-            T,
+            Float32,
             shape,
             "test.graph.gain.f32/1",
             :column_major,
@@ -55,27 +50,26 @@ function AOG.algorithm_port_contracts(
     )
 end
 
-function AOG.process_algorithm!(
-    prepared::GraphTestGainPrepared,
-    outputs::NamedTuple,
+function AOG.prepare_graph_node(
+    ::Type{GraphTestGainDeclaration},
+    ::GraphTestGainConfiguration,
+    props,
     inputs::NamedTuple,
+    outputs::NamedTuple,
+    parameters::NamedTuple,
+    target,
 )
-    @inbounds for index in eachindex(outputs.output, inputs.input, prepared.gain)
-        outputs.output[index] = inputs.input[index] * prepared.gain[index]
+    return GraphTestGainOwner(parameters.gain, inputs.input, outputs.output)
+end
+
+function AOG.step_graph_node!(owner::GraphTestGainOwner)
+    @inbounds for index in eachindex(owner.output, owner.input, owner.gain)
+        owner.output[index] = owner.input[index] * owner.gain[index]
     end
     return nothing
 end
 
-AOG.reset_algorithm!(::GraphTestGainPrepared) = nothing
-
-function AOG.replace_algorithm_parameter!(
-    prepared::GraphTestGainPrepared,
-    ::Val{:gain},
-    values,
-)
-    copyto!(prepared.gain, values)
-    return nothing
-end
+AOG.reset_graph_node!(::GraphTestGainOwner) = nothing
 
 struct GraphTestAddDeclaration end
 
@@ -85,51 +79,52 @@ struct GraphTestAddConfiguration
     increment::Float32
 end
 
-struct GraphTestAddPrepared
-    extent::Int
-    schema::String
+struct GraphTestAddOwner{I,O}
     increment::Float32
+    input::I
+    output::O
 end
 
-function AOG.prepare_algorithm_instance(
+function AOG.graph_node_ports(
     ::Type{GraphTestAddDeclaration},
     configuration::GraphTestAddConfiguration,
-)
-    return GraphTestAddPrepared(
-        configuration.extent,
-        configuration.schema,
-        configuration.increment,
-    )
-end
-
-function AOG.algorithm_port_contracts(
-    ::Type{GraphTestAddDeclaration},
-    prepared::GraphTestAddPrepared,
 )
     format(name, direction) = AOG.graph_port_contract(
         name,
         direction,
         :data,
         Float32,
-        (prepared.extent,),
-        prepared.schema,
+        (configuration.extent,),
+        configuration.schema,
         :column_major,
     )
     return (format(:input, :input), format(:output, :output))
 end
 
-function AOG.process_algorithm!(
-    prepared::GraphTestAddPrepared,
-    outputs::NamedTuple,
+function AOG.prepare_graph_node(
+    ::Type{GraphTestAddDeclaration},
+    configuration::GraphTestAddConfiguration,
+    props,
     inputs::NamedTuple,
+    outputs::NamedTuple,
+    parameters::NamedTuple,
+    target,
 )
-    @inbounds for index in eachindex(outputs.output, inputs.input)
-        outputs.output[index] = inputs.input[index] + prepared.increment
+    return GraphTestAddOwner(
+        configuration.increment,
+        inputs.input,
+        outputs.output,
+    )
+end
+
+function AOG.step_graph_node!(owner::GraphTestAddOwner)
+    @inbounds for index in eachindex(owner.output, owner.input)
+        owner.output[index] = owner.input[index] + owner.increment
     end
     return nothing
 end
 
-AOG.reset_algorithm!(::GraphTestAddPrepared) = nothing
+AOG.reset_graph_node!(::GraphTestAddOwner) = nothing
 
 struct GraphTestSourceDeclaration end
 
@@ -138,19 +133,14 @@ struct GraphTestSourceConfiguration
     value::Float32
 end
 
-struct GraphTestSourcePrepared
-    extent::Int
+struct GraphTestSourceOwner{O}
     value::Float32
+    output::O
 end
 
-AOG.prepare_algorithm_instance(
+function AOG.graph_node_ports(
     ::Type{GraphTestSourceDeclaration},
     configuration::GraphTestSourceConfiguration,
-) = GraphTestSourcePrepared(configuration.extent, configuration.value)
-
-function AOG.algorithm_port_contracts(
-    ::Type{GraphTestSourceDeclaration},
-    prepared::GraphTestSourcePrepared,
 )
     return (
         AOG.graph_port_contract(
@@ -158,82 +148,73 @@ function AOG.algorithm_port_contracts(
             :output,
             :data,
             Float32,
-            (prepared.extent,),
+            (configuration.extent,),
             "test.graph.signal.f32/1",
             :column_major,
         ),
     )
 end
 
-function AOG.process_algorithm!(
-    prepared::GraphTestSourcePrepared,
-    outputs::NamedTuple,
+function AOG.prepare_graph_node(
+    ::Type{GraphTestSourceDeclaration},
+    configuration::GraphTestSourceConfiguration,
+    props,
     ::NamedTuple{()},
+    outputs::NamedTuple,
+    parameters::NamedTuple,
+    target,
 )
-    fill!(outputs.output, prepared.value)
+    return GraphTestSourceOwner(configuration.value, outputs.output)
+end
+
+function AOG.step_graph_node!(owner::GraphTestSourceOwner)
+    fill!(owner.output, owner.value)
     return nothing
 end
 
-AOG.reset_algorithm!(::GraphTestSourcePrepared) = nothing
+AOG.reset_graph_node!(::GraphTestSourceOwner) = nothing
 
 struct GraphTestExactBindingDeclaration end
 
-struct GraphTestExactBindingPrepared
-    extent::Int
-end
-
-struct GraphTestExactBindingOwner{P,I,O}
-    prepared::P
+struct GraphTestExactBindingOwner{I,O}
     input::I
     output::O
 end
 
-AOG.prepare_algorithm_instance(
+function AOG.graph_node_ports(
     ::Type{GraphTestExactBindingDeclaration},
     extent::Int,
-) = GraphTestExactBindingPrepared(extent)
-
-function AOG.algorithm_port_contracts(
-    ::Type{GraphTestExactBindingDeclaration},
-    prepared::GraphTestExactBindingPrepared,
 )
     format(name, direction) = AOG.graph_port_contract(
         name,
         direction,
         :data,
         Float32,
-        (prepared.extent,),
+        (extent,),
         "test.graph.signal.f32/1",
         :column_major,
     )
     return (format(:input, :input), format(:output, :output))
 end
 
-function AOG.bind_algorithm_instance(
+function AOG.prepare_graph_node(
     ::Type{GraphTestExactBindingDeclaration},
-    prepared::GraphTestExactBindingPrepared,
+    extent::Int,
+    props,
     inputs::NamedTuple,
     outputs::NamedTuple,
+    parameters::NamedTuple,
+    target,
 )
-    return GraphTestExactBindingOwner(
-        prepared,
-        inputs.input,
-        outputs.output,
-    )
+    return GraphTestExactBindingOwner(inputs.input, outputs.output)
 end
 
-function AOG.process_algorithm!(
-    owner::GraphTestExactBindingOwner,
-    outputs::NamedTuple,
-    inputs::NamedTuple,
-)
-    inputs.input === owner.input || error("graph input binding changed")
-    outputs.output === owner.output || error("graph output binding changed")
+function AOG.step_graph_node!(owner::GraphTestExactBindingOwner)
     copyto!(owner.output, owner.input)
     return nothing
 end
 
-AOG.reset_algorithm!(::GraphTestExactBindingOwner) = nothing
+AOG.reset_graph_node!(::GraphTestExactBindingOwner) = nothing
 
 struct GraphTestSinkDeclaration end
 
@@ -241,19 +222,14 @@ struct GraphTestSinkConfiguration
     extent::Int
 end
 
-mutable struct GraphTestSinkPrepared
-    extent::Int
+mutable struct GraphTestSinkOwner{I}
     sum::Float32
+    input::I
 end
 
-AOG.prepare_algorithm_instance(
+function AOG.graph_node_ports(
     ::Type{GraphTestSinkDeclaration},
     configuration::GraphTestSinkConfiguration,
-) = GraphTestSinkPrepared(configuration.extent, 0.0f0)
-
-function AOG.algorithm_port_contracts(
-    ::Type{GraphTestSinkDeclaration},
-    prepared::GraphTestSinkPrepared,
 )
     return (
         AOG.graph_port_contract(
@@ -261,74 +237,84 @@ function AOG.algorithm_port_contracts(
             :input,
             :data,
             Float32,
-            (prepared.extent,),
+            (configuration.extent,),
             "test.graph.signal.f32/1",
             :column_major,
         ),
     )
 end
 
-
-function AOG.process_algorithm!(
-    prepared::GraphTestSinkPrepared,
-    ::NamedTuple{()},
+function AOG.prepare_graph_node(
+    ::Type{GraphTestSinkDeclaration},
+    configuration::GraphTestSinkConfiguration,
+    props,
     inputs::NamedTuple,
+    ::NamedTuple{()},
+    parameters::NamedTuple,
+    target,
 )
+    return GraphTestSinkOwner(0.0f0, inputs.input)
+end
+
+function AOG.step_graph_node!(owner::GraphTestSinkOwner)
     total = 0.0f0
-    @inbounds for value in inputs.input
+    @inbounds for value in owner.input
         total += value
     end
-    prepared.sum = total
+    owner.sum = total
     return nothing
 end
 
-
-function AOG.reset_algorithm!(prepared::GraphTestSinkPrepared)
-    prepared.sum = 0.0f0
+function AOG.reset_graph_node!(owner::GraphTestSinkOwner)
+    owner.sum = 0.0f0
     return nothing
 end
 
 struct GraphTestFailureDeclaration end
 
-struct GraphTestFailurePrepared
-    extent::Int
+struct GraphTestFailureOwner{I,O}
+    input::I
+    output::O
 end
 
-AOG.prepare_algorithm_instance(
+function AOG.graph_node_ports(
     ::Type{GraphTestFailureDeclaration},
     extent::Int,
-) = GraphTestFailurePrepared(extent)
-
-function AOG.algorithm_port_contracts(
-    ::Type{GraphTestFailureDeclaration},
-    prepared::GraphTestFailurePrepared,
 )
     format(name, direction) = AOG.graph_port_contract(
         name,
         direction,
         :data,
         Float32,
-        (prepared.extent,),
+        (extent,),
         "test.graph.signal.f32/1",
         :column_major,
     )
     return (format(:input, :input), format(:output, :output))
 end
 
-function AOG.process_algorithm!(
-    ::GraphTestFailurePrepared,
-    outputs::NamedTuple,
+function AOG.prepare_graph_node(
+    ::Type{GraphTestFailureDeclaration},
+    extent::Int,
+    props,
     inputs::NamedTuple,
+    outputs::NamedTuple,
+    parameters::NamedTuple,
+    target,
 )
-    any(<(0.0f0), inputs.input) && throw(DomainError(
-        inputs.input,
+    return GraphTestFailureOwner(inputs.input, outputs.output)
+end
+
+function AOG.step_graph_node!(owner::GraphTestFailureOwner)
+    any(<(0.0f0), owner.input) && throw(DomainError(
+        owner.input,
         "negative graph fixture input",
     ))
-    copyto!(outputs.output, inputs.input)
+    copyto!(owner.output, owner.input)
     return nothing
 end
 
-AOG.reset_algorithm!(::GraphTestFailurePrepared) = nothing
+AOG.reset_graph_node!(::GraphTestFailureOwner) = nothing
 
 @testset "portable algorithm graph direct links and sparse parameters" begin
     input = Float32[1, 2, 3]
@@ -360,13 +346,13 @@ AOG.reset_algorithm!(::GraphTestFailurePrepared) = nothing
         target
     @test graph_input(graph, Val(:residual)) === input
     @test graph_input(graph, :residual) === input
-    @test prepared_algorithm(graph, Val(:gain)) isa GraphTestGainPrepared
+    @test prepared_graph_node(graph, Val(:gain)) isa GraphTestGainOwner
     @test iszero(graph_step_sequence(graph))
     @test all(iszero, graph_output(graph, Val(:command)))
     @test step_graph!(graph) === graph
     @test graph_output(graph, Val(:command)) == Float32[2, 6, 12]
     @test graph_output(graph, :command) === graph_output(graph, Val(:command))
-    @test prepared_algorithm(graph, Val(:sink)).sum == 20.0f0
+    @test prepared_graph_node(graph, Val(:sink)).sum == 20.0f0
     @test graph_step_sequence(graph) == UInt64(1)
     @test !graph_failed(graph)
 
@@ -434,7 +420,7 @@ end
     ))
     step_graph!(sink)
     @test isempty(sink.outputs)
-    @test prepared_algorithm(sink, Val(:sink)).sum == 7.0f0
+    @test prepared_graph_node(sink, Val(:sink)).sum == 7.0f0
 end
 
 @testset "portable algorithm graph binds exact node execution owners" begin
@@ -445,7 +431,7 @@ end
         outputs=(graph_output(:copy, :bound => :output),),
     ))
 
-    owner = prepared_algorithm(graph, Val(:bound))
+    owner = prepared_graph_node(graph, Val(:bound))
     @test owner isa GraphTestExactBindingOwner
     @test owner.input === input
     @test owner.output === graph_output(graph, Val(:copy))
@@ -471,6 +457,161 @@ end
     reset_graph!(graph)
     step_graph!(graph)
     @test graph_output(graph, Val(:output)) == input
+end
+
+@testset "native controller and modal OPD graph nodes" begin
+    residual = Float32[1, 2]
+    basis = zeros(Float32, 2, 2, 2)
+    fill!(@view(basis[:, :, 1]), 1.0f0)
+    fill!(@view(basis[:, :, 2]), 2.0f0)
+    pupil_support = Bool[true false; true true]
+    coefficient_schema = "test.graph.modal-coefficients.f32/1"
+
+    definition = algorithm_graph(
+        (
+            discrete_integrator_node(
+                :controller;
+                extent=2,
+                sample_period_s=0.1f0,
+                input_schema="test.graph.residual.f32/1",
+                output_schema=coefficient_schema,
+                gain=2.0f0,
+                tau_s=0.2f0,
+            ),
+            modal_opd_expansion_node(
+                :modal_opd;
+                pupil_rows=2,
+                pupil_columns=2,
+                mode_count=2,
+                coefficients_schema=coefficient_schema,
+                opd_schema="test.graph.opd.f32/1",
+                basis_schema="test.graph.modal-basis.f32/1",
+                pupil_support_schema="test.graph.pupil-support.bool/1",
+            ),
+        );
+        name=:native_modal_control,
+        inputs=(graph_input(:residual, :controller => :input, residual),),
+        outputs=(
+            graph_output(:command, :controller => :output),
+            graph_output(:opd, :modal_opd => :opd),
+        ),
+        links=(link(:controller => :output, :modal_opd => :coefficients),),
+        parameters=(
+            sparse_parameter(:modal_opd => :basis, basis),
+            sparse_parameter(:modal_opd => :pupil_support, pupil_support),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+
+    @test graph_name(definition) === :native_modal_control
+    @test graph_name(graph) === :native_modal_control
+    @test step_graph!(graph) === graph
+    @test graph_output(graph, Val(:command)) ≈ Float32[0.1, 0.2]
+    @test graph_output(graph, Val(:opd)) ≈ Float32[0.5 0.0; 0.5 0.5]
+    step_graph!(graph)
+    @test @allocated(step_graph!(graph)) == 0
+    @test @inferred(step_graph!(graph)) === graph
+    reset_graph!(graph)
+    step_graph!(graph)
+    @test graph_output(graph, Val(:command)) ≈ Float32[0.1, 0.2]
+end
+
+@testset "TOML graph files compile to native graph definitions" begin
+    residual = Float32[1, 2]
+    basis = zeros(Float32, 2, 2, 2)
+    fill!(@view(basis[:, :, 1]), 1.0f0)
+    fill!(@view(basis[:, :, 2]), 2.0f0)
+    pupil_support = Bool[true false; true true]
+    path = joinpath(
+        dirname(@__DIR__),
+        "graph_files",
+        "native_modal_control.toml",
+    )
+
+    definition = load_algorithm_graph(
+        path;
+        bindings=(;
+            residual,
+            basis,
+            pupil_support,
+        ),
+    )
+    @test graph_name(definition) === :native_modal_control
+    @test isconcretetype(typeof(definition))
+    @test all(isconcretetype, fieldtypes(typeof(definition)))
+    graph = prepare_algorithm_graph(definition)
+    step_graph!(graph)
+    @test graph_output(graph, Val(:command)) ≈ Float32[0.1, 0.2]
+    @test graph_output(graph, Val(:opd)) ≈ Float32[0.5 0.0; 0.5 0.5]
+    step_graph!(graph)
+    @test @allocated(step_graph!(graph)) == 0
+    @test @inferred(step_graph!(graph)) === graph
+
+    @test_throws AlgorithmGraphError load_algorithm_graph(
+        path;
+        bindings=(; residual, basis),
+    )
+    @test keys(builtin_graph_node_types()) == (
+        :discrete_integrator_f32,
+        :modal_opd_expansion_f32,
+    )
+
+    mktemp() do invalid_path, io
+        write(io, "schema_version = 2\nname = \"invalid_version\"\nnodes = []\n")
+        close(io)
+        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_path)
+    end
+    mktemp() do invalid_path, io
+        write(
+            io,
+            "schema_version = 1\nname = \"unknown_field\"\n" *
+            "unexpected = true\nnodes = []\n",
+        )
+        close(io)
+        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_path)
+    end
+    mktemp() do invalid_path, io
+        write(
+            io,
+            "schema_version = 1\nname = \"unknown_type\"\n" *
+            "[[nodes]]\nname = \"node\"\ntype = \"not_registered\"\n" *
+            "[nodes.config]\nextent = 2\n",
+        )
+        close(io)
+        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_path)
+    end
+
+    mktemp() do custom_path, io
+        write(
+            io,
+            "schema_version = 1\nname = \"custom_type\"\n" *
+            "[[nodes]]\nname = \"source\"\ntype = \"test_source\"\n" *
+            "[nodes.config]\nextent = 2\nvalue = 7.0\n" *
+            "[[outputs]]\nname = \"sample\"\nsource = \"source.output\"\n",
+        )
+        close(io)
+        test_source = function (name, config, props)
+            isempty(props) || error("test-source props must be empty")
+            return algorithm_node(
+                name,
+                GraphTestSourceDeclaration,
+                GraphTestSourceConfiguration(
+                    Int(config.extent),
+                    Float32(config.value),
+                ),
+            )
+        end
+        node_types = merge(
+            builtin_graph_node_types(),
+            (; test_source),
+        )
+        custom = prepare_algorithm_graph(load_algorithm_graph(
+            custom_path;
+            node_types,
+        ))
+        step_graph!(custom)
+        @test graph_output(custom, Val(:sample)) == Float32[7, 7]
+    end
 end
 
 @testset "portable algorithm graph rejects invalid topology" begin

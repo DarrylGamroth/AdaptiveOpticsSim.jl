@@ -42,10 +42,10 @@ include("atmosphere/atmospheres.jl")
 include("detectors/detectors.jl")
 include("wfs/wavefront_sensors.jl")
 include("plant/plant.jl")
-include("algorithm_graphs/algorithm_graphs.jl")
 include("calibration/calibration.jl")
 include("control/control.jl")
 include("tomography/tomography.jl")
+include("algorithm_graphs/algorithm_graphs.jl")
 
 include("exports.jl")
 
