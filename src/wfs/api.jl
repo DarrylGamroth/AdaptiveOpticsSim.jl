@@ -58,6 +58,7 @@ export slope_extraction_model
 export set_valid_subapertures!
 export set_subaperture_calibration!
 export valid_subaperture_indices
+export select_shack_hartmann_slopes!
 export MeanValidFluxNormalization
 export IncidenceFluxNormalization
 export measure!
@@ -122,6 +123,8 @@ public PreparedShackHartmannOptics
 public PreparedShackHartmannOpticsBundle
 public ShackHartmannEstimationPlan
 public PreparedShackHartmannEstimator
+public ShackHartmannSlopeSelectionPlan
+public selected_lenslet_count
 public PyramidOpticsPlan
 public PyramidOpticsBundlePlan
 public PreparedPyramidOptics

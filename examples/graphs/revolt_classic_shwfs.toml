@@ -3,8 +3,9 @@
 # This is intentionally not the complete REVOLT Classic simulation or RTC
 # graph. Atmosphere propagation supplies the externally bound pupil OPD, while
 # the caller supplies the authoritative valid-subaperture mask and centroid
-# reference signal. Compact operational slope selection and reconstruction are
-# later nodes. Optical and detector values follow
+# reference signal. The caller also converts the authoritative detector ROI
+# artifact into the one-based AOS lenslet order used by the final selection
+# node. Reconstruction is a later node. Optical and detector values follow
 # REVOLT/Python/specula/params_revolt_modal.yml. The AOS/OOPAO centroid cutoff
 # below is not SPECULA's absolute-pedestal thr_value; that extraction policy
 # remains a numerical-parity gap. The explicit RNG seed is an AOS
@@ -76,6 +77,17 @@ slopes_schema = "org.revolt.classic.shwfs-centroid-slopes.f32/1"
 valid_subapertures_schema = "org.revolt.classic.shwfs-valid-subapertures.bool/1"
 reference_signal_schema = "org.revolt.classic.shwfs-centroid-reference.f32/1"
 
+[[nodes]]
+name = "slope_selection"
+type = "shack_hartmann_slope_selection_f32"
+
+[nodes.config]
+n_lenslets = 16
+selected_lenslet_count = 188
+full_slopes_schema = "org.revolt.classic.shwfs-centroid-slopes.f32/1"
+selected_slopes_schema = "org.revolt.classic.shwfs-selected-centroid-slopes.f32/1"
+lenslet_order_schema = "org.revolt.classic.shwfs-lenslet-order.u32/1"
+
 [[inputs]]
 name = "pupil_opd"
 destination = "shwfs.opd"
@@ -93,6 +105,10 @@ source = "detector.frame"
 name = "shwfs_full_slopes"
 source = "centroid.slopes"
 
+[[outputs]]
+name = "shwfs_selected_slopes"
+source = "slope_selection.selected_slopes"
+
 [[links]]
 source = "shwfs.photon_rate"
 destination = "detector.photon_rate"
@@ -101,6 +117,10 @@ destination = "detector.photon_rate"
 source = "detector.frame"
 destination = "centroid.frame"
 
+[[links]]
+source = "centroid.slopes"
+destination = "slope_selection.full_slopes"
+
 [[parameters]]
 destination = "centroid.valid_subapertures"
 binding = "valid_subapertures"
@@ -108,3 +128,7 @@ binding = "valid_subapertures"
 [[parameters]]
 destination = "centroid.reference_signal"
 binding = "reference_signal"
+
+[[parameters]]
+destination = "slope_selection.lenslet_order"
+binding = "lenslet_order"

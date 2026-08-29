@@ -567,6 +567,47 @@ function _shack_hartmann_centroid_f32_node(
     )
 end
 
+function _shack_hartmann_slope_selection_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :full_slopes_schema,
+        :lenslet_order_schema,
+        :n_lenslets,
+        :selected_lenslet_count,
+        :selected_slopes_schema,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, config_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    return shack_hartmann_slope_selection_node(
+        name;
+        n_lenslets=_file_integer(
+            config.n_lenslets,
+            "$context.n_lenslets",
+        ),
+        selected_lenslet_count=_file_integer(
+            config.selected_lenslet_count,
+            "$context.selected_lenslet_count",
+        ),
+        full_slopes_schema=_file_string(
+            config.full_slopes_schema,
+            "$context.full_slopes_schema",
+        ),
+        selected_slopes_schema=_file_string(
+            config.selected_slopes_schema,
+            "$context.selected_slopes_schema",
+        ),
+        lenslet_order_schema=_file_string(
+            config.lenslet_order_schema,
+            "$context.lenslet_order_schema",
+        ),
+        T=Float32,
+    )
+end
+
 """
     builtin_graph_node_types()
 
@@ -582,6 +623,8 @@ function builtin_graph_node_types()
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
         shack_hartmann_centroid_f32=_shack_hartmann_centroid_f32_node,
         shack_hartmann_rate_f32=_shack_hartmann_rate_f32_node,
+        shack_hartmann_slope_selection_f32=
+            _shack_hartmann_slope_selection_f32_node,
     )
 end
 

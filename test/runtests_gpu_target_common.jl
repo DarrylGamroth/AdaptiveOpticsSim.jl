@@ -193,6 +193,17 @@ function run_algorithm_graph_backend_smoke(
                 reference_signal_schema=
                     "test.graph.shwfs-centroid-reference.f32/1",
             ),
+            shack_hartmann_slope_selection_node(
+                :slope_selection;
+                n_lenslets=4,
+                selected_lenslet_count=3,
+                full_slopes_schema=
+                    "test.graph.shwfs-centroid-slopes.f32/1",
+                selected_slopes_schema=
+                    "test.graph.shwfs-selected-slopes.f32/1",
+                lenslet_order_schema=
+                    "test.graph.shwfs-lenslet-order.u32/1",
+            ),
         );
         name=:gpu_shwfs_centroid,
         inputs=(graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),),
@@ -200,10 +211,18 @@ function run_algorithm_graph_backend_smoke(
             graph_output(:shwfs_photon_rate, :shwfs => :photon_rate),
             graph_output(:shwfs_frame, :detector => :frame),
             graph_output(:shwfs_full_slopes, :centroid => :slopes),
+            graph_output(
+                :shwfs_selected_slopes,
+                :slope_selection => :selected_slopes,
+            ),
         ),
         links=(
             link(:shwfs => :photon_rate, :detector => :photon_rate),
             link(:detector => :frame, :centroid => :frame),
+            link(
+                :centroid => :slopes,
+                :slope_selection => :full_slopes,
+            ),
         ),
         parameters=(
             sparse_parameter(
@@ -213,6 +232,10 @@ function run_algorithm_graph_backend_smoke(
             sparse_parameter(
                 :centroid => :reference_signal,
                 BackendArray(zeros(Float32, 16, 2)),
+            ),
+            sparse_parameter(
+                :slope_selection => :lenslet_order,
+                BackendArray(UInt32[16, 1, 6]),
             ),
         ),
     )
@@ -224,17 +247,33 @@ function run_algorithm_graph_backend_smoke(
     photon_rate = graph_output(shwfs_graph, Val(:shwfs_photon_rate))
     frame = graph_output(shwfs_graph, Val(:shwfs_frame))
     full_slopes = graph_output(shwfs_graph, Val(:shwfs_full_slopes))
+    selected_slopes = graph_output(
+        shwfs_graph,
+        Val(:shwfs_selected_slopes),
+    )
     @test compute_device(photon_rate) == shwfs_target
     @test compute_device(frame) == shwfs_target
     @test compute_device(full_slopes) == shwfs_target
+    @test compute_device(selected_slopes) == shwfs_target
     @test size(photon_rate) == (24, 24)
     @test size(frame) == (24, 24)
     @test size(full_slopes) == (32,)
+    @test size(selected_slopes) == (6,)
     @test sum(Array(photon_rate)) > 0
     @test sum(Array(frame)) ≈ sum(Array(photon_rate)) * 0.25f0
     @test all(isfinite, Array(full_slopes))
+    full_slopes_host = Array(full_slopes)
+    @test Array(selected_slopes) == Float32[
+        full_slopes_host[16],
+        full_slopes_host[32],
+        full_slopes_host[1],
+        full_slopes_host[17],
+        full_slopes_host[6],
+        full_slopes_host[22],
+    ]
     step_graph!(shwfs_graph)
     @test all(isfinite, Array(full_slopes))
+    @test all(isfinite, Array(selected_slopes))
     return nothing
 end
 

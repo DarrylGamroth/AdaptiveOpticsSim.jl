@@ -69,6 +69,7 @@ import ..Detectors:
     reset_integration!
 import ..WavefrontSensors:
     Diffractive,
+    ShackHartmannSlopeSelectionPlan,
     ShackHartmannWFS,
     WFSMeasurement,
     WFSObservation,
@@ -76,11 +77,13 @@ import ..WavefrontSensors:
     form_wfs_optical_products!,
     prepare_wfs_estimation,
     prepare_wfs_optics,
+    select_shack_hartmann_slopes!,
     set_subaperture_calibration!,
     set_valid_subapertures!,
     shack_hartmann_optics,
     shack_hartmann_rate_map,
-    subaperture_calibration
+    subaperture_calibration,
+    selected_lenslet_count
 
 include("definitions.jl")
 include("preparation.jl")

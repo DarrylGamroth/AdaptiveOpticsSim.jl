@@ -771,6 +771,75 @@ end
     )
 end
 
+@testset "ordered Shack-Hartmann slope-selection graph node" begin
+    full_slopes = Float32[1, 2, 3, 4, 11, 12, 13, 14]
+    lenslet_order = UInt32[4, 1, 3]
+    node = shack_hartmann_slope_selection_node(
+        :selection;
+        n_lenslets=2,
+        selected_lenslet_count=3,
+        full_slopes_schema="test.graph.shwfs-full-slopes.f32/1",
+        selected_slopes_schema="test.graph.shwfs-selected-slopes.f32/1",
+        lenslet_order_schema="test.graph.shwfs-lenslet-order.u32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:shwfs_slope_selection,
+        inputs=(
+            graph_input(
+                :full_slopes,
+                :selection => :full_slopes,
+                full_slopes,
+            ),
+        ),
+        outputs=(
+            graph_output(
+                :selected_slopes,
+                :selection => :selected_slopes,
+            ),
+        ),
+        parameters=(
+            sparse_parameter(
+                :selection => :lenslet_order,
+                lenslet_order,
+            ),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:selection))
+    selected_slopes = graph_output(graph, Val(:selected_slopes))
+
+    fill!(lenslet_order, UInt32(1))
+    step_graph!(graph)
+    @test owner.input === full_slopes
+    @test owner.output === selected_slopes
+    @test selected_slopes == Float32[4, 14, 1, 11, 3, 13]
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+    reset_graph!(graph)
+    @test all(iszero, selected_slopes)
+
+    duplicate_definition = algorithm_graph(
+        (node,);
+        inputs=(graph_input(
+            :full_slopes,
+            :selection => :full_slopes,
+            full_slopes,
+        ),),
+        outputs=(graph_output(
+            :selected_slopes,
+            :selection => :selected_slopes,
+        ),),
+        parameters=(sparse_parameter(
+            :selection => :lenslet_order,
+            UInt32[1, 1, 2],
+        ),),
+    )
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(
+        duplicate_definition,
+    )
+end
+
 @testset "TOML graph files compile to native graph definitions" begin
     residual = Float32[1, 2]
     basis = zeros(Float32, 2, 2, 2)
@@ -812,6 +881,7 @@ end
         :modal_opd_expansion_f32,
         :shack_hartmann_centroid_f32,
         :shack_hartmann_rate_f32,
+        :shack_hartmann_slope_selection_f32,
     )
 
     mktemp() do invalid_path, io
@@ -877,6 +947,8 @@ end
     pupil_opd = zeros(Float32, 240, 240)
     valid_subapertures = fill(true, 16, 16)
     reference_signal = zeros(Float32, 16 * 16, 2)
+    # Executable wiring fixture only. Applications bind the ROI-derived order.
+    lenslet_order = UInt32.(1:188)
     path = joinpath(
         dirname(dirname(@__DIR__)),
         "examples",
@@ -885,7 +957,12 @@ end
     )
     definition = load_algorithm_graph(
         path;
-        bindings=(; pupil_opd, valid_subapertures, reference_signal),
+        bindings=(;
+            pupil_opd,
+            valid_subapertures,
+            reference_signal,
+            lenslet_order,
+        ),
     )
     graph = prepare_algorithm_graph(definition)
     centroid_owner = prepared_graph_node(graph, Val(:centroid))
@@ -893,15 +970,26 @@ end
     photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
     frame = graph_output(graph, Val(:shwfs_frame))
     full_slopes = graph_output(graph, Val(:shwfs_full_slopes))
+    selected_slopes = graph_output(graph, Val(:shwfs_selected_slopes))
 
     @test graph_name(graph) === :revolt_classic_shwfs
     @test size(photon_rate) == (352, 352)
     @test size(frame) == (352, 352)
     @test size(full_slopes) == (512,)
+    @test size(selected_slopes) == (376,)
     @test size(centroid_owner.prepared.workspace.centroid_host) == (22, 22)
     @test all(isfinite, photon_rate)
     @test all(isfinite, frame)
     @test all(isfinite, full_slopes)
+    @test all(isfinite, selected_slopes)
+    @test selected_slopes[1:6] == Float32[
+        full_slopes[1],
+        full_slopes[257],
+        full_slopes[2],
+        full_slopes[258],
+        full_slopes[3],
+        full_slopes[259],
+    ]
     @test sum(photon_rate) > 0
     @test sum(frame) > 0
 end

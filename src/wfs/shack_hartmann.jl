@@ -9,6 +9,7 @@ include("shack_hartmann/setup.jl")
 include("shack_hartmann/measure.jl")
 include("shack_hartmann/stacks.jl")
 include("shack_hartmann/signals.jl")
+include("shack_hartmann/selection.jl")
 include("shack_hartmann/lgs.jl")
 include("shack_hartmann/stages.jl")
 

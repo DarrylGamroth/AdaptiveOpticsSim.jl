@@ -25,6 +25,63 @@ end
     @test isempty(findall(flux_mask .& .!geom_mask))
 end
 
+@testset "Shack-Hartmann ordered slope selection" begin
+    full_parent = Float32[-1; collect(1:9); collect(101:109); -1]
+    full_slopes = @view full_parent[2:19]
+    order_parent = UInt32[99, 7, 2, 9, 99]
+    lenslet_order = @view order_parent[2:4]
+    plan = ShackHartmannSlopeSelectionPlan(3, lenslet_order)
+    selected_parent = fill(-1.0f0, 8)
+    selected_slopes = @view selected_parent[2:7]
+
+    fill!(lenslet_order, UInt32(1))
+    @test selected_lenslet_count(plan) == 3
+    @test @inferred(select_shack_hartmann_slopes!(
+        selected_slopes,
+        plan,
+        full_slopes,
+    )) === selected_slopes
+    @test selected_slopes == Float32[7, 107, 2, 102, 9, 109]
+    select_shack_hartmann_slopes!(selected_slopes, plan, full_slopes)
+    @test @allocated(select_shack_hartmann_slopes!(
+        selected_slopes,
+        plan,
+        full_slopes,
+    )) == 0
+    @test selected_parent[[1, 8]] == Float32[-1, -1]
+
+    @test_throws InvalidConfiguration ShackHartmannSlopeSelectionPlan(
+        3,
+        Bool[true],
+    )
+    @test_throws InvalidConfiguration ShackHartmannSlopeSelectionPlan(
+        3,
+        UInt32[],
+    )
+    @test_throws InvalidConfiguration ShackHartmannSlopeSelectionPlan(
+        3,
+        UInt32[0],
+    )
+    @test_throws InvalidConfiguration ShackHartmannSlopeSelectionPlan(
+        3,
+        UInt32[1, 1],
+    )
+    @test_throws DimensionMismatchError ShackHartmannSlopeSelectionPlan(
+        3,
+        UInt32.(1:10),
+    )
+    @test_throws DimensionMismatchError select_shack_hartmann_slopes!(
+        zeros(Float32, 5),
+        plan,
+        full_slopes,
+    )
+    @test_throws InvalidConfiguration select_shack_hartmann_slopes!(
+        @view(full_slopes[1:6]),
+        plan,
+        full_slopes,
+    )
+end
+
 @testset "Shack-Hartmann optical rate map" begin
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.1)
     pupil = PupilFunction(tel)

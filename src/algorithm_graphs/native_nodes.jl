@@ -853,6 +853,169 @@ end
     return nothing
 end
 
+struct ShackHartmannSlopeSelectionNode{T<:AbstractFloat} end
+
+"""Construction values for one ordered Shack–Hartmann slope selector."""
+struct ShackHartmannSlopeSelectionNodeConfig
+    n_lenslets::Int
+    selected_lenslet_count::Int
+    full_slopes_schema::String
+    selected_slopes_schema::String
+    lenslet_order_schema::String
+end
+
+function ShackHartmannSlopeSelectionNodeConfig(
+    n_lenslets::Integer,
+    selected_lenslet_count::Integer,
+    full_slopes_schema::AbstractString,
+    selected_slopes_schema::AbstractString,
+    lenslet_order_schema::AbstractString,
+)
+    lenslets = Int(n_lenslets)
+    selected_count = Int(selected_lenslet_count)
+    lenslets > 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann slope-selection n_lenslets must be positive",
+    ))
+    full_count = Base.checked_mul(lenslets, lenslets)
+    0 < selected_count <= full_count || throw(AlgorithmGraphError(
+        "Shack–Hartmann selected_lenslet_count must lie in 1:$full_count",
+    ))
+    schemas = (
+        full_slopes_schema,
+        selected_slopes_schema,
+        lenslet_order_schema,
+    )
+    all(schema -> !isempty(schema), schemas) || throw(AlgorithmGraphError(
+        "Shack–Hartmann slope-selection schemas must not be empty",
+    ))
+    return ShackHartmannSlopeSelectionNodeConfig(
+        lenslets,
+        selected_count,
+        String(full_slopes_schema),
+        String(selected_slopes_schema),
+        String(lenslet_order_schema),
+    )
+end
+
+"""
+    shack_hartmann_slope_selection_node(name; ...)
+
+Declare one complete-frame slope selector. The node converts the full AOS
+`[axis 1; axis 2]` slope vector into pair-interleaved `[axis 1, axis 2]`
+pairs using an explicit startup lenslet order. Instrument ROI-file parsing
+remains an application concern.
+"""
+function shack_hartmann_slope_selection_node(
+    name::Symbol;
+    n_lenslets::Integer,
+    selected_lenslet_count::Integer,
+    full_slopes_schema::AbstractString,
+    selected_slopes_schema::AbstractString,
+    lenslet_order_schema::AbstractString,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = ShackHartmannSlopeSelectionNodeConfig(
+        n_lenslets,
+        selected_lenslet_count,
+        full_slopes_schema,
+        selected_slopes_schema,
+        lenslet_order_schema,
+    )
+    return algorithm_node(
+        name,
+        ShackHartmannSlopeSelectionNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{ShackHartmannSlopeSelectionNode{T}},
+    config::ShackHartmannSlopeSelectionNodeConfig,
+) where {T}
+    full_count = config.n_lenslets * config.n_lenslets
+    selected_count = config.selected_lenslet_count
+    return (
+        graph_port_contract(
+            :full_slopes,
+            :input,
+            :data,
+            T,
+            (2 * full_count,),
+            config.full_slopes_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :selected_slopes,
+            :output,
+            :data,
+            T,
+            (2 * selected_count,),
+            config.selected_slopes_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :lenslet_order,
+            :input,
+            :parameter,
+            UInt32,
+            (selected_count,),
+            config.lenslet_order_schema,
+            :column_major,
+        ),
+    )
+end
+
+struct _ShackHartmannSlopeSelectionOwner{P,I,O}
+    plan::P
+    input::I
+    output::O
+end
+
+function prepare_graph_node(
+    ::Type{ShackHartmannSlopeSelectionNode{T}},
+    config::ShackHartmannSlopeSelectionNodeConfig,
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:full_slopes,)},
+    outputs::NamedTuple{(:selected_slopes,)},
+    parameters::NamedTuple{(:lenslet_order,)},
+    target,
+) where {T}
+    plan = try
+        ShackHartmannSlopeSelectionPlan(
+            config.n_lenslets,
+            parameters.lenslet_order,
+        )
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+    selected_lenslet_count(plan) == config.selected_lenslet_count || throw(
+        AlgorithmGraphError(
+            "Shack–Hartmann lenslet order does not match selected_lenslet_count",
+        ),
+    )
+    return _ShackHartmannSlopeSelectionOwner(
+        plan,
+        inputs.full_slopes,
+        outputs.selected_slopes,
+    )
+end
+
+@inline function step_graph_node!(owner::_ShackHartmannSlopeSelectionOwner)
+    select_shack_hartmann_slopes!(
+        owner.output,
+        owner.plan,
+        owner.input,
+    )
+    return nothing
+end
+
+@inline function reset_graph_node!(owner::_ShackHartmannSlopeSelectionOwner)
+    fill!(owner.output, zero(eltype(owner.output)))
+    return nothing
+end
+
 struct CCDDetectorAcquisitionNode{T<:AbstractFloat} end
 
 """Construction values for one complete-frame single-read CCD acquisition."""
