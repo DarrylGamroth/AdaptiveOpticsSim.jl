@@ -95,6 +95,15 @@ or transfer. Runtime scalar-property transactions and live sparse-parameter
 replacement likewise remain open graph-host work rather than implied
 capabilities.
 
+Optional companion packages may bind a specialized prepared owner after graph
+storage admission. The `AdaptiveOpticsProperHIL.jl` companion uses that seam to
+bind one complete-frame Proper prescription directly to the admitted pupil-OPD,
+pupil-amplitude, and output arrays while retaining adapter random state and
+prescription scratch separately. Its focused CPU, AMDGPU, and CUDA tests
+qualify that narrow exact-target execution path. They do not add an acquisition
+clock, asynchronous WFS/science concurrency, or a PipeWire Julia host to this
+executor.
+
 ## Definition And Preparation
 
 A plant starts from `PlantDefinition`. It may declare:

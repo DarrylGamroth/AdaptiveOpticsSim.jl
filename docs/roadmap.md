@@ -93,7 +93,12 @@ those AOS ownership roles. The first complete-frame proof uses the native discre
 integrator controller. A second proof uses modal OPD expansion with a
 coefficient vector, an OPD matrix, and separately replaceable basis and pupil-
 support ndarray parameters. Native Julia and `AlgorithmGraphs` execution are
-in scope now; a Julia FGN runtime remains a separate deployment gate.
+in scope now. The optional `AdaptiveOpticsProperHIL.jl` companion adds a third
+proof: one complete-frame Julia-native Proper prescription with separate
+random state and scratch, exact graph-buffer binding, and focused CPU, AMDGPU,
+and CUDA residency/equivalence evidence. A Julia FGN runtime remains a separate
+deployment gate, and the Proper proof does not yet close SPIDERS fidelity or
+asynchronous science-acquisition cadence.
 
 The delivery order for this boundary is:
 

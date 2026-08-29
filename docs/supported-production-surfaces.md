@@ -391,6 +391,13 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
+- the portable `AlgorithmGraphs` executor and optional Proper propagation
+  declaration as production HIL surfaces. Focused CPU, AMDGPU, and CUDA tests
+  validate static complete-frame composition, exact device residency, and an
+  explicit GPU-to-host publication boundary, but representative graph-size
+  service cost, asynchronous acquisition pacing, independent WFS/science
+  failure isolation, full SPIDERS fidelity, and routine release qualification
+  remain open
 - CUDA execution. The extension, dedicated test project, focused 250/250
   detector target, complete 1,028/1,028 hardware target, and current manual WSL
   evidence—including the exact detector family scope in the
