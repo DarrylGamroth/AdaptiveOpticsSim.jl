@@ -112,7 +112,6 @@ using AdaptiveOpticsSim.AlgorithmGraphs
 
 configuration = ProperPropagationConfiguration(
     coronagraph_prescription;
-    target=AdaptiveOpticsSim.Backends.HostComputeDevice(),
     resolution=128,
     diameter_m=8.0f0,
     wavelength_um=1.65f0,
@@ -123,7 +122,8 @@ node = proper_propagation_node(:science_propagation, configuration)
 The maintained node has two complete-frame inputs, `pupil_opd` and
 `pupil_amplitude`, and one output. Its configuration fixes the prescription,
 resolution, physical diameter, wavelength, random seed, port schemas, numeric
-type, backend, and exact device before execution. The default output schema is
+type before execution. `prepare_algorithm_graph(...; target=...)` selects the
+exact CPU or GPU device for the complete graph. The default output schema is
 normalized intensity. A different schema may be declared only when the
 prescription and downstream integration actually satisfy that contract; the
 adapter does not invent a photon-rate scale or detector exposure.
@@ -145,6 +145,13 @@ may specialize `prepare_proper_assets`. It must return a concrete named tuple;
 boundary. The prescription remains an ordinary Julia function and receives the
 prepared `pupil_opd`, `pupil_amplitude`, `diameter_m`, field, wavefront, output,
 and run context as keyword arguments.
+
+For a TOML-defined graph, the application explicitly admits the trusted Julia
+prescription under a node-type name with `proper_propagation_node_factory` and
+passes that factory in the loader's immutable `node_types` map. The TOML file
+can select the admitted name and construction values, but it cannot resolve or
+evaluate Julia code. Direct Julia graph construction remains available when a
+SPIDERS prescription or topology is generated or conditional.
 
 One prepared Proper node is homogeneous in numeric type, array backend,
 and exact device. A complete algorithm graph may connect different element
