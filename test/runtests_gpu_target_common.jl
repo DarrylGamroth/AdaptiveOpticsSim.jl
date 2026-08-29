@@ -162,11 +162,28 @@ function run_algorithm_graph_backend_smoke(
                 opd_schema="test.graph.pupil-opd.f32/1",
                 photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
             ),
+            ccd_detector_acquisition_node(
+                :detector;
+                rows=16,
+                columns=16,
+                pixel_scale_arcsec=0.1,
+                wavelength_m=0.75e-6,
+                exposure_duration_s=0.5,
+                quantum_efficiency=0.5,
+                rng_seed=0x801,
+                photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+                frame_schema="test.graph.shwfs-frame.f32/1",
+                photon_noise=false,
+            ),
         );
-        name=:gpu_shwfs_photon_rate,
+        name=:gpu_shwfs_detector_acquisition,
         inputs=(graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),),
         outputs=(
             graph_output(:shwfs_photon_rate, :shwfs => :photon_rate),
+            graph_output(:shwfs_frame, :detector => :frame),
+        ),
+        links=(
+            link(:shwfs => :photon_rate, :detector => :photon_rate),
         ),
     )
     shwfs_graph = prepare_algorithm_graph(
@@ -175,9 +192,13 @@ function run_algorithm_graph_backend_smoke(
     )
     step_graph!(shwfs_graph)
     photon_rate = graph_output(shwfs_graph, Val(:shwfs_photon_rate))
+    frame = graph_output(shwfs_graph, Val(:shwfs_frame))
     @test compute_device(photon_rate) == shwfs_target
+    @test compute_device(frame) == shwfs_target
     @test size(photon_rate) == (16, 16)
+    @test size(frame) == (16, 16)
     @test sum(Array(photon_rate)) > 0
+    @test sum(Array(frame)) ≈ sum(Array(photon_rate)) * 0.25f0
     return nothing
 end
 

@@ -569,6 +569,114 @@ end
     )
 end
 
+@testset "single-read CCD detector-acquisition graph node" begin
+    photon_rate = fill(1_000.0f0, 4, 4)
+    node = ccd_detector_acquisition_node(
+        :detector;
+        rows=4,
+        columns=4,
+        pixel_scale_arcsec=0.1,
+        wavelength_m=0.75e-6,
+        exposure_duration_s=0.01,
+        quantum_efficiency=0.5,
+        rng_seed=0x1234,
+        photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+        frame_schema="test.graph.shwfs-frame.f32/1",
+        photon_noise=true,
+        readout_noise=true,
+        readout_noise_e=2.7,
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:ccd_detector_acquisition,
+        inputs=(
+            graph_input(
+                :photon_rate,
+                :detector => :photon_rate,
+                photon_rate,
+            ),
+        ),
+        outputs=(graph_output(:frame, :detector => :frame),),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:detector))
+    frame = graph_output(graph, Val(:frame))
+
+    @test owner.prepared.input.values === photon_rate
+    @test owner.output === frame
+    @test size(frame) == (4, 4)
+    step_graph!(graph)
+    first_frame = copy(frame)
+    @test all(isfinite, frame)
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+    @test frame != first_frame
+    reset_graph!(graph)
+    @test all(iszero, frame)
+    step_graph!(graph)
+    @test frame == first_frame
+
+    deterministic = ccd_detector_acquisition_node(
+        :detector;
+        rows=4,
+        columns=4,
+        binning=2,
+        pixel_scale_arcsec=0.1,
+        wavelength_m=0.75e-6,
+        exposure_duration_s=0.01,
+        quantum_efficiency=0.5,
+        rng_seed=1,
+        photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+        frame_schema="test.graph.shwfs-frame.f32/1",
+        photon_noise=false,
+    )
+    deterministic_graph = prepare_algorithm_graph(algorithm_graph(
+        (deterministic,);
+        inputs=(
+            graph_input(
+                :photon_rate,
+                :detector => :photon_rate,
+                photon_rate,
+            ),
+        ),
+        outputs=(graph_output(:frame, :detector => :frame),),
+    ))
+    step_graph!(deterministic_graph)
+    @test graph_output(deterministic_graph, Val(:frame)) ==
+        fill(20.0f0, 2, 2)
+
+    @test_throws AlgorithmGraphError ccd_detector_acquisition_node(
+        :invalid_detector;
+        rows=4,
+        columns=4,
+        pixel_scale_arcsec=0.1,
+        wavelength_m=0.75e-6,
+        exposure_duration_s=0.01,
+        quantum_efficiency=0.5,
+        rng_seed=1,
+        photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+        frame_schema="test.graph.shwfs-frame.f32/1",
+        photon_noise=false,
+        readout_noise=false,
+        readout_noise_e=2.7,
+    )
+    invalid_rate = copy(photon_rate)
+    invalid_rate[1, 1] = -1
+    invalid_definition = algorithm_graph(
+        (node,);
+        inputs=(
+            graph_input(
+                :photon_rate,
+                :detector => :photon_rate,
+                invalid_rate,
+            ),
+        ),
+    )
+    @test_throws InvalidConfiguration prepare_algorithm_graph(
+        invalid_definition,
+    )
+end
+
 @testset "TOML graph files compile to native graph definitions" begin
     residual = Float32[1, 2]
     basis = zeros(Float32, 2, 2, 2)
@@ -605,6 +713,7 @@ end
         bindings=(; residual, basis),
     )
     @test keys(builtin_graph_node_types()) == (
+        :ccd_detector_acquisition_f32,
         :discrete_integrator_f32,
         :modal_opd_expansion_f32,
         :shack_hartmann_rate_f32,
@@ -681,11 +790,15 @@ end
     graph = prepare_algorithm_graph(definition)
     step_graph!(graph)
     photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
+    frame = graph_output(graph, Val(:shwfs_frame))
 
     @test graph_name(graph) === :revolt_classic_shwfs
     @test size(photon_rate) == (352, 352)
+    @test size(frame) == (352, 352)
     @test all(isfinite, photon_rate)
+    @test all(isfinite, frame)
     @test sum(photon_rate) > 0
+    @test sum(frame) > 0
 end
 
 @testset "portable algorithm graph rejects invalid topology" begin

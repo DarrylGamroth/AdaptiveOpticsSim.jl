@@ -102,7 +102,7 @@ The delivery order for this boundary is:
 
 1. Stabilize the AOS-native graph-node protocol and versioned TOML static
    subset without changing domain numerical APIs.
-2. Extend the executable REVOLT Classic SHWFS TOML slice through detector,
+2. Extend the executable REVOLT Classic SHWFS-and-CCD TOML slice through
    slopes, reconstruction, control, atmosphere, DM, and science products; add
    complete REVOLT Copper and SPIDERS files only after their authoritative
    topologies and scientific node sets are available and qualified.

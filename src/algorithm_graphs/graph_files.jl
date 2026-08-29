@@ -407,6 +407,93 @@ function _shack_hartmann_rate_f32_node(
     )
 end
 
+function _ccd_detector_acquisition_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :binning,
+        :columns,
+        :exposure_duration_s,
+        :frame_schema,
+        :photon_noise,
+        :photon_rate_schema,
+        :pixel_scale_arcsec,
+        :quantum_efficiency,
+        :readout_noise,
+        :readout_noise_e,
+        :rng_seed,
+        :rows,
+        :wavelength_m,
+    )
+    required_fields = (
+        :columns,
+        :exposure_duration_s,
+        :frame_schema,
+        :photon_noise,
+        :photon_rate_schema,
+        :pixel_scale_arcsec,
+        :quantum_efficiency,
+        :readout_noise,
+        :readout_noise_e,
+        :rng_seed,
+        :rows,
+        :wavelength_m,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    binning = hasproperty(config, :binning) ? _file_integer(
+        config.binning,
+        "$context.binning",
+    ) : 1
+    return ccd_detector_acquisition_node(
+        name;
+        rows=_file_integer(config.rows, "$context.rows"),
+        columns=_file_integer(config.columns, "$context.columns"),
+        binning,
+        pixel_scale_arcsec=_file_real(
+            config.pixel_scale_arcsec,
+            "$context.pixel_scale_arcsec",
+        ),
+        wavelength_m=_file_real(
+            config.wavelength_m,
+            "$context.wavelength_m",
+        ),
+        exposure_duration_s=_file_real(
+            config.exposure_duration_s,
+            "$context.exposure_duration_s",
+        ),
+        quantum_efficiency=_file_real(
+            config.quantum_efficiency,
+            "$context.quantum_efficiency",
+        ),
+        photon_noise=_file_bool(
+            config.photon_noise,
+            "$context.photon_noise",
+        ),
+        readout_noise=_file_bool(
+            config.readout_noise,
+            "$context.readout_noise",
+        ),
+        readout_noise_e=_file_real(
+            config.readout_noise_e,
+            "$context.readout_noise_e",
+        ),
+        rng_seed=_file_integer(config.rng_seed, "$context.rng_seed"),
+        photon_rate_schema=_file_string(
+            config.photon_rate_schema,
+            "$context.photon_rate_schema",
+        ),
+        frame_schema=_file_string(
+            config.frame_schema,
+            "$context.frame_schema",
+        ),
+        T=Float32,
+    )
+end
+
 """
     builtin_graph_node_types()
 
@@ -417,6 +504,7 @@ global registry or dynamic Julia evaluation is used.
 """
 function builtin_graph_node_types()
     return (
+        ccd_detector_acquisition_f32=_ccd_detector_acquisition_f32_node,
         discrete_integrator_f32=_discrete_integrator_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
         shack_hartmann_rate_f32=_shack_hartmann_rate_f32_node,

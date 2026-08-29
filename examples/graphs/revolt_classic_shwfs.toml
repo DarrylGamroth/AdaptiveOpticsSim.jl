@@ -1,9 +1,10 @@
-# Executable REVOLT Classic diffractive SHWFS optical stage.
+# Executable REVOLT Classic diffractive SHWFS and CCD acquisition stages.
 #
 # This is intentionally not the complete REVOLT Classic simulation or RTC
 # graph. Atmosphere propagation supplies the externally bound pupil OPD. A
-# separate detector node will own exposure, noise, and readout before slope
-# estimation is added. Values follow REVOLT/Python/specula/params_revolt_modal.yml.
+# separate slope-estimation node will consume the completed CCD frame. Values
+# follow REVOLT/Python/specula/params_revolt_modal.yml. The explicit RNG seed is
+# an AOS reproducibility choice because the source file does not declare one.
 
 schema_version = 1
 name = "revolt_classic_shwfs"
@@ -34,6 +35,25 @@ source_position_angle_deg = 0.0
 opd_schema = "org.revolt.classic.pupil-opd.f32/1"
 photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
 
+[[nodes]]
+name = "detector"
+type = "ccd_detector_acquisition_f32"
+
+[nodes.config]
+rows = 352
+columns = 352
+binning = 1
+pixel_scale_arcsec = 0.697
+wavelength_m = 8.0e-7
+exposure_duration_s = 0.001
+quantum_efficiency = 0.5
+photon_noise = true
+readout_noise = true
+readout_noise_e = 2.7
+rng_seed = 0
+photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
+frame_schema = "org.revolt.classic.shwfs-frame.f32/1"
+
 [[inputs]]
 name = "pupil_opd"
 destination = "shwfs.opd"
@@ -42,3 +62,11 @@ binding = "pupil_opd"
 [[outputs]]
 name = "shwfs_photon_rate"
 source = "shwfs.photon_rate"
+
+[[outputs]]
+name = "shwfs_frame"
+source = "detector.frame"
+
+[[links]]
+source = "shwfs.photon_rate"
+destination = "detector.photon_rate"

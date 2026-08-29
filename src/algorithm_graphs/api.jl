@@ -9,6 +9,7 @@ export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
 export discrete_integrator_node, modal_opd_expansion_node
 export shack_hartmann_rate_node
+export ccd_detector_acquisition_node
 export load_algorithm_graph, builtin_graph_node_types
 export prepare_algorithm_graph, step_graph!, reset_graph!
 export graph_name, graph_step_sequence, graph_failed
@@ -27,3 +28,4 @@ public DiscreteIntegratorNode, DiscreteIntegratorNodeConfig
 public DiscreteIntegratorNodeProps
 public ModalOPDExpansionNode, ModalOPDExpansionNodeConfig
 public ShackHartmannRateNode, ShackHartmannRateNodeConfig
+public CCDDetectorAcquisitionNode, CCDDetectorAcquisitionNodeConfig

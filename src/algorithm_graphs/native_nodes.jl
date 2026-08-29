@@ -585,3 +585,279 @@ end
 end
 
 @inline reset_graph_node!(::_ShackHartmannRateOwner) = nothing
+
+struct CCDDetectorAcquisitionNode{T<:AbstractFloat} end
+
+"""Construction values for one complete-frame single-read CCD acquisition."""
+struct CCDDetectorAcquisitionNodeConfig{T<:AbstractFloat,N<:NoiseModel}
+    rows::Int
+    columns::Int
+    binning::Int
+    pixel_scale_arcsec::T
+    wavelength_m::T
+    exposure_duration_s::T
+    quantum_efficiency::T
+    noise::N
+    rng_seed::UInt64
+    photon_rate_schema::String
+    frame_schema::String
+end
+
+@inline function _ccd_detector_noise(
+    ::Type{T},
+    photon_noise::Bool,
+    readout_noise::Bool,
+    readout_noise_e::Real,
+) where {T<:AbstractFloat}
+    sigma = T(readout_noise_e)
+    isfinite(sigma) && sigma >= zero(T) || throw(AlgorithmGraphError(
+        "CCD readout_noise_e must be finite and nonnegative",
+    ))
+    if readout_noise
+        sigma > zero(T) || throw(AlgorithmGraphError(
+            "CCD readout_noise_e must be positive when readout noise is enabled",
+        ))
+        return photon_noise ? NoisePhotonReadout{T}(sigma) :
+            NoiseReadout{T}(sigma)
+    end
+    iszero(sigma) || throw(AlgorithmGraphError(
+        "CCD readout_noise_e must be zero when readout noise is disabled",
+    ))
+    return photon_noise ? NoisePhoton() : NoiseNone()
+end
+
+function _ccd_detector_acquisition_config(
+    ::Type{T};
+    rows::Integer,
+    columns::Integer,
+    binning::Integer,
+    pixel_scale_arcsec::Real,
+    wavelength_m::Real,
+    exposure_duration_s::Real,
+    quantum_efficiency::Real,
+    photon_noise::Bool,
+    readout_noise::Bool,
+    readout_noise_e::Real,
+    rng_seed::Integer,
+    photon_rate_schema::AbstractString,
+    frame_schema::AbstractString,
+) where {T<:AbstractFloat}
+    n_rows = Int(rows)
+    n_columns = Int(columns)
+    bin = Int(binning)
+    n_rows > 0 && n_columns > 0 || throw(AlgorithmGraphError(
+        "CCD photon-rate dimensions must be positive",
+    ))
+    bin > 0 || throw(AlgorithmGraphError(
+        "CCD binning must be positive",
+    ))
+    n_rows % bin == 0 && n_columns % bin == 0 || throw(
+        AlgorithmGraphError(
+            "CCD photon-rate dimensions must be divisible by binning",
+        ))
+
+    pixel_scale = T(pixel_scale_arcsec)
+    wavelength = T(wavelength_m)
+    exposure = T(exposure_duration_s)
+    qe = T(quantum_efficiency)
+    isfinite(pixel_scale) && pixel_scale > zero(T) || throw(
+        AlgorithmGraphError(
+            "CCD pixel_scale_arcsec must be finite and positive",
+        ))
+    isfinite(wavelength) && wavelength > zero(T) || throw(
+        AlgorithmGraphError(
+            "CCD wavelength_m must be finite and positive",
+        ))
+    isfinite(exposure) && exposure > zero(T) || throw(
+        AlgorithmGraphError(
+            "CCD exposure_duration_s must be finite and positive",
+        ))
+    isfinite(qe) && zero(T) <= qe <= one(T) || throw(
+        AlgorithmGraphError(
+            "CCD quantum_efficiency must lie in [0, 1]",
+        ))
+    rng_seed >= 0 || throw(AlgorithmGraphError(
+        "CCD rng_seed must be nonnegative",
+    ))
+    rng_seed <= typemax(UInt64) || throw(AlgorithmGraphError(
+        "CCD rng_seed exceeds UInt64",
+    ))
+    isempty(photon_rate_schema) && throw(AlgorithmGraphError(
+        "CCD photon_rate_schema must not be empty",
+    ))
+    isempty(frame_schema) && throw(AlgorithmGraphError(
+        "CCD frame_schema must not be empty",
+    ))
+
+    noise = _ccd_detector_noise(
+        T,
+        photon_noise,
+        readout_noise,
+        readout_noise_e,
+    )
+    return CCDDetectorAcquisitionNodeConfig(
+        n_rows,
+        n_columns,
+        bin,
+        pixel_scale,
+        wavelength,
+        exposure,
+        qe,
+        noise,
+        UInt64(rng_seed),
+        String(photon_rate_schema),
+        String(frame_schema),
+    )
+end
+
+"""
+    ccd_detector_acquisition_node(name; ...)
+
+Declare one complete-frame, single-read CCD acquisition. The node consumes a
+cell-integrated detector-plane photon-rate mosaic and writes a detector frame.
+Its RNG is explicit persistent state and is restored by `reset_graph!`.
+Partial exposure timing, rolling shutters, frame transfer, and readout
+readiness remain Plant operations.
+"""
+function ccd_detector_acquisition_node(
+    name::Symbol;
+    rows::Integer,
+    columns::Integer,
+    pixel_scale_arcsec::Real,
+    wavelength_m::Real,
+    exposure_duration_s::Real,
+    quantum_efficiency::Real,
+    rng_seed::Integer,
+    photon_rate_schema::AbstractString,
+    frame_schema::AbstractString,
+    binning::Integer=1,
+    photon_noise::Bool=true,
+    readout_noise::Bool=false,
+    readout_noise_e::Real=0,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _ccd_detector_acquisition_config(
+        T;
+        rows,
+        columns,
+        binning,
+        pixel_scale_arcsec,
+        wavelength_m,
+        exposure_duration_s,
+        quantum_efficiency,
+        photon_noise,
+        readout_noise,
+        readout_noise_e,
+        rng_seed,
+        photon_rate_schema,
+        frame_schema,
+    )
+    return algorithm_node(
+        name,
+        CCDDetectorAcquisitionNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{CCDDetectorAcquisitionNode{T}},
+    config::CCDDetectorAcquisitionNodeConfig{T},
+) where {T}
+    return (
+        graph_port_contract(
+            :photon_rate,
+            :input,
+            :data,
+            T,
+            (config.rows, config.columns),
+            config.photon_rate_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :frame,
+            :output,
+            :data,
+            T,
+            (div(config.rows, config.binning),
+                div(config.columns, config.binning)),
+            config.frame_schema,
+            :column_major,
+        ),
+    )
+end
+
+struct _CCDDetectorAcquisitionOwner{P,R,O,A}
+    prepared::P
+    rng::R
+    output::O
+    latent_buffer::A
+    rng_seed::UInt64
+end
+
+@inline _arcsec_to_rad(value::T) where {T<:AbstractFloat} =
+    value * T(pi / (180 * 3600))
+
+function prepare_graph_node(
+    ::Type{CCDDetectorAcquisitionNode{T}},
+    config::CCDDetectorAcquisitionNodeConfig{T},
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:photon_rate,)},
+    outputs::NamedTuple{(:frame,)},
+    ::NamedTuple{()},
+    target,
+) where {T}
+    sampling = _arcsec_to_rad(config.pixel_scale_arcsec)
+    metadata = OpticalPlaneMetadata(
+        DetectorPlane(),
+        inputs.photon_rate;
+        coordinate_domain=AngularCoordinates(),
+        sampling=(sampling, sampling),
+        spectral=MonochromaticChannel(config.wavelength_m),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition(),
+    )
+    photon_rate = IntensityMap(metadata, inputs.photon_rate)
+    detector = Detector(
+        exposure_duration=config.exposure_duration_s,
+        qe=config.quantum_efficiency,
+        psf_sampling=1,
+        binning=config.binning,
+        noise=config.noise,
+        sensor=CCDSensor(T=T),
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=compute_device_backend(target),
+    )
+    prepared = prepare_detector_acquisition(detector, photon_rate)
+    size(output_frame(detector)) == size(outputs.frame) || throw(
+        AlgorithmGraphError(
+            "prepared CCD output shape does not match its graph frame port",
+        ))
+    rng = runtime_rng(config.rng_seed)
+    state = detector_acquisition_state(prepared)
+    return _CCDDetectorAcquisitionOwner(
+        prepared,
+        rng,
+        outputs.frame,
+        state.latent_buffer,
+        config.rng_seed,
+    )
+end
+
+@inline function step_graph_node!(owner::_CCDDetectorAcquisitionOwner)
+    frame = capture!(owner.prepared, owner.rng)
+    copyto!(owner.output, frame)
+    return nothing
+end
+
+function reset_graph_node!(owner::_CCDDetectorAcquisitionOwner)
+    detector = detector_acquisition_detector(owner.prepared)
+    reset_integration!(detector)
+    fill!(owner.latent_buffer, zero(eltype(owner.latent_buffer)))
+    fill!(output_frame(detector), zero(eltype(output_frame(detector))))
+    fill!(owner.output, zero(eltype(owner.output)))
+    seed!(owner.rng, owner.rng_seed)
+    return nothing
+end

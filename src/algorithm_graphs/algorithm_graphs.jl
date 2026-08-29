@@ -9,9 +9,10 @@ execution policy.
 module AlgorithmGraphs
 
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
+using Random: seed!
 using TOML
 
-import ..AdaptiveOpticsSim: AdaptiveOpticsSimError
+import ..AdaptiveOpticsSim: AdaptiveOpticsSimError, runtime_rng
 import ..Backends:
     AbstractComputeDevice,
     HostComputeDevice,
@@ -38,11 +39,34 @@ import ..Control:
     reset_controller!,
     update!
 import ..Optics:
+    AngularCoordinates,
+    CellIntegratedMeasure,
+    DetectorPlane,
+    IncoherentIntensityAddition,
+    IntensityMap,
+    MonochromaticChannel,
+    OpticalPlaneMetadata,
+    PhotonRateNormalization,
     PupilFunction,
     Source,
     TelescopeDefinition,
     photon_irradiance,
     prepare_telescope
+import ..Detectors:
+    CCDSensor,
+    Detector,
+    NoiseModel,
+    NoiseNone,
+    NoisePhoton,
+    NoisePhotonReadout,
+    NoiseReadout,
+    NullFrameResponse,
+    capture!,
+    detector_acquisition_detector,
+    detector_acquisition_state,
+    output_frame,
+    prepare_detector_acquisition,
+    reset_integration!
 import ..WavefrontSensors:
     Diffractive,
     ShackHartmannWFS,
