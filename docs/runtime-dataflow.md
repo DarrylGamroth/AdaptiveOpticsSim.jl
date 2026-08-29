@@ -9,6 +9,11 @@ canonical HIL-neutral runtime is `AdaptiveOpticsSim.Plant`; application and
 model-specific code composes the independent numerical optics and control
 primitives around that boundary.
 
+`AdaptiveOpticsSim.AlgorithmGraphs` is the smaller complete-frame composition
+boundary. It schedules transport-neutral Calculon declarations and deliberately
+does not reproduce Plant's physical event calendar, detector lifecycle, or
+command timing.
+
 For package structure, see
 [`maintainer-architecture.md`](maintainer-architecture.md). For normative HIL
 requirements, see
@@ -49,6 +54,39 @@ normalized into concrete family ownership before execution.
 The telescope owns revisioned aperture geometry, intensity reflectivity,
 diameter, and spatial sampling. It owns neither a path's mutable OPD or electric
 field nor detector cadence, exposure, FFT scratch, or atmosphere model time.
+
+## Complete-Frame Algorithm Graphs
+
+An algorithm graph has a cold definition and one exact prepared owner. Graph
+preparation proceeds in two stages:
+
+1. Prepare each Calculon declaration and obtain its exact port formats.
+2. Admit the complete topology and startup sparse parameters, retain graph
+   inputs, allocate node outputs and delayed-link storage, and then let each
+   adapter bind its execution owner to those exact buffers.
+
+The second stage is necessary for AOS operations whose prepared execution owner
+must bind exact plan, state, workspace, product, backend, device, and execution-
+context identities. Ordinary Calculon declarations need no additional owner;
+their default binding retains the prepared Calculon instance unchanged. No
+binding or allocation occurs in `step_graph!`.
+
+One graph step invokes every node once in validated declaration order. A direct
+link exposes an earlier node's complete output to a later node in the same
+step. A delayed link exposes only the value committed after the preceding
+successful step. Delayed-link state and the graph sequence commit after all
+nodes return normally. A node failure makes the run fail-stop until an explicit
+reset; the graph does not claim graph-wide rollback of outputs already written
+by earlier nodes.
+
+This executor has one writer and no task, queue, wall-clock pacing, transport,
+or dynamic placement policy. The currently maintained default allocator admits
+packed column-major host `Array` storage. Accelerator placement, exact-device
+admission, and host/device movement require explicit prepared allocation and
+handoff seams before they become a supported graph surface; an implicit host
+fallback is not permitted. Runtime scalar-property transactions and live sparse
+parameter replacement likewise remain open graph-host work rather than implied
+capabilities.
 
 ## Definition And Preparation
 

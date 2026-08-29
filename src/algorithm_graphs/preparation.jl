@@ -71,6 +71,23 @@ function _algorithm_port_contracts(::Type{Declaration}, prepared) where {Declara
     ))
 end
 
+"""
+Bind one prepared algorithm instance to its exact admitted frame-data buffers.
+
+The default adapter needs no additional execution owner. More-specific
+adapters may construct one after graph inputs, outputs, direct links, and
+delayed-link storage have all been validated. This hook runs only during graph
+preparation.
+"""
+function _bind_algorithm_instance(
+    ::Type{Declaration},
+    prepared,
+    inputs::NamedTuple,
+    outputs::NamedTuple,
+) where {Declaration}
+    return prepared
+end
+
 function _replace_algorithm_parameter!(prepared, name::Val, values)
     throw(AlgorithmGraphError(
         "the AlgorithmGraphs adapter for $(typeof(prepared)) does not support " *
@@ -594,15 +611,21 @@ end
 @inline _node_name(::PreparedAlgorithmNode{Name}) where {Name} = Name
 
 function _bind_prepared_node(
-    prototype::_PreparedNodePrototype{Name},
+    prototype::_PreparedNodePrototype{Name,Declaration},
     outputs::NamedTuple,
     bindings::Tuple,
-) where {Name}
+) where {Name,Declaration}
     contracts = _data_input_contracts(values(prototype.ports))
     input_values = _bind_node_inputs(Name, contracts, bindings)
     inputs = _named_tuple(_port_names(contracts), input_values, "algorithm input port")
-    return PreparedAlgorithmNode{Name,typeof(prototype.algorithm),typeof(inputs),typeof(outputs)}(
+    algorithm = _bind_algorithm_instance(
+        Declaration,
         prototype.algorithm,
+        inputs,
+        outputs,
+    )
+    return PreparedAlgorithmNode{Name,typeof(algorithm),typeof(inputs),typeof(outputs)}(
+        algorithm,
         inputs,
         outputs,
     )
@@ -670,8 +693,9 @@ end
     prepare_algorithm_graph(definition)
 
 Prepare every algorithm, validate all exact formats and connections, install
-startup sparse parameters, allocate intermediate and delayed storage, and bind
-one concrete single-writer graph owner.
+startup sparse parameters, allocate intermediate and delayed storage, then bind
+every algorithm to its exact admitted frame-data buffers in one concrete
+single-writer graph owner.
 """
 function prepare_algorithm_graph(definition::AlgorithmGraphDefinition)
     prototypes = _prepared_node_prototypes(definition)

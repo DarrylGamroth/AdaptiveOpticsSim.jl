@@ -176,6 +176,65 @@ end
 
 AOG._reset_algorithm!(::GraphTestSourcePrepared) = nothing
 
+struct GraphTestExactBindingDeclaration end
+
+struct GraphTestExactBindingPrepared
+    extent::Int
+end
+
+struct GraphTestExactBindingOwner{P,I,O}
+    prepared::P
+    input::I
+    output::O
+end
+
+AOG._prepare_algorithm_instance(
+    ::Type{GraphTestExactBindingDeclaration},
+    extent::Int,
+) = GraphTestExactBindingPrepared(extent)
+
+function AOG._algorithm_port_contracts(
+    ::Type{GraphTestExactBindingDeclaration},
+    prepared::GraphTestExactBindingPrepared,
+)
+    format(name, direction) = AOG._graph_port_contract(
+        name,
+        direction,
+        :data,
+        Float32,
+        (prepared.extent,),
+        "test.graph.signal.f32/1",
+        :column_major,
+    )
+    return (format(:input, :input), format(:output, :output))
+end
+
+function AOG._bind_algorithm_instance(
+    ::Type{GraphTestExactBindingDeclaration},
+    prepared::GraphTestExactBindingPrepared,
+    inputs::NamedTuple,
+    outputs::NamedTuple,
+)
+    return GraphTestExactBindingOwner(
+        prepared,
+        inputs.input,
+        outputs.output,
+    )
+end
+
+function AOG._process_algorithm!(
+    owner::GraphTestExactBindingOwner,
+    outputs::NamedTuple,
+    inputs::NamedTuple,
+)
+    inputs.input === owner.input || error("graph input binding changed")
+    outputs.output === owner.output || error("graph output binding changed")
+    copyto!(owner.output, owner.input)
+    return nothing
+end
+
+AOG._reset_algorithm!(::GraphTestExactBindingOwner) = nothing
+
 struct GraphTestSinkDeclaration end
 
 struct GraphTestSinkConfiguration
@@ -370,6 +429,24 @@ end
     step_graph!(sink)
     @test isempty(sink.outputs)
     @test prepared_algorithm(sink, Val(:sink)).sum == 7.0f0
+end
+
+@testset "portable algorithm graph binds exact node execution owners" begin
+    input = Float32[3, 5]
+    graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(:bound, GraphTestExactBindingDeclaration, 2),);
+        inputs=(graph_input(:sample, :bound => :input, input),),
+        outputs=(graph_output(:copy, :bound => :output),),
+    ))
+
+    owner = prepared_algorithm(graph, Val(:bound))
+    @test owner isa GraphTestExactBindingOwner
+    @test owner.input === input
+    @test owner.output === graph_output(graph, Val(:copy))
+    @test step_graph!(graph) === graph
+    @test graph_output(graph, Val(:copy)) == input
+    @test @allocated(step_graph!(graph)) == 0
+    @test @inferred(step_graph!(graph)) === graph
 end
 
 @testset "portable algorithm graph failure is fail-stop" begin
