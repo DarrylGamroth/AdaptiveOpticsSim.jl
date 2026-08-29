@@ -205,24 +205,29 @@ graph = prepare_algorithm_graph(definition; target=target)
 ```
 
 The built-in type map currently contains `ccd_detector_acquisition_f32`,
-`discrete_integrator_f32`, `modal_opd_expansion_f32`, and
-`shack_hartmann_rate_f32`.
+`discrete_integrator_f32`, `modal_opd_expansion_f32`,
+`shack_hartmann_centroid_f32`, and `shack_hartmann_rate_f32`.
 `merge(builtin_graph_node_types(), companion_types)` creates an explicit larger
 map for optional packages such as the Proper companion. The maintained
 [`revolt_classic_shwfs.toml`](../examples/graphs/revolt_classic_shwfs.toml)
 file is an executable first REVOLT slice: it converts one externally supplied
 complete-frame pupil OPD into the configured 352-by-352 diffractive SHWFS
 photon-rate mosaic, then applies the configured one-millisecond single-read CCD
-acquisition with QE, photon noise, and read noise. It deliberately stops before
-slope estimation, reconstruction, control, atmosphere evolution, and
-science-path imaging. The file's explicit RNG seed is an AOS reproducibility
-choice because the source SPECULA profile does not declare one.
+acquisition with QE, photon noise, and read noise. A calibrated centroid node
+then consumes the completed frame using caller-bound valid-subaperture and
+reference-signal arrays and publishes the canonical full 512-component slope
+vector. Its OOPAO-compatible fractional cutoff is explicitly not mapped from
+SPECULA's absolute-pedestal `thr_value`; numerical extractor parity remains
+open. The file deliberately stops before operational 188-component slope
+selection, reconstruction, control, atmosphere evolution, and science-path
+imaging. Its explicit RNG seed is an AOS reproducibility choice because the
+source SPECULA profile does not declare one.
 
 Architecture-file status is therefore explicit:
 
 | Architecture | File-defined executable surface | Remaining authority or implementation gate |
 |---|---|---|
-| REVOLT Classic | Diffractive SHWFS optics and single-read CCD acquisition using the SPECULA telescope, source, lenslet, sampling, exposure, QE, photon-noise, and read-noise values | Add slopes, modal reconstruction, controller delay, DM, atmosphere propagation, and science products before claiming the complete graph |
+| REVOLT Classic | Diffractive SHWFS optics, single-read CCD acquisition, and AOS/OOPAO calibrated full-grid centroid estimation using the SPECULA telescope, source, lenslet, sampling, exposure, QE, photon-noise, and read-noise values | Add the SPECULA absolute-pedestal extraction policy, bind the authoritative 188-subaperture ordering, then add compact selection, modal reconstruction, controller delay, DM, atmosphere propagation, and science products before claiming the complete graph |
 | REVOLT Copper | None claimed | The current Copper configuration describes operational RTC components and many alternatives, but does not provide one authoritative AOS simulation topology to transcribe |
 | SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
 

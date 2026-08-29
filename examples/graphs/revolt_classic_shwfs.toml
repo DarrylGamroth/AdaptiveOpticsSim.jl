@@ -1,10 +1,14 @@
 # Executable REVOLT Classic diffractive SHWFS and CCD acquisition stages.
 #
 # This is intentionally not the complete REVOLT Classic simulation or RTC
-# graph. Atmosphere propagation supplies the externally bound pupil OPD. A
-# separate slope-estimation node will consume the completed CCD frame. Values
-# follow REVOLT/Python/specula/params_revolt_modal.yml. The explicit RNG seed is
-# an AOS reproducibility choice because the source file does not declare one.
+# graph. Atmosphere propagation supplies the externally bound pupil OPD, while
+# the caller supplies the authoritative valid-subaperture mask and centroid
+# reference signal. Compact operational slope selection and reconstruction are
+# later nodes. Optical and detector values follow
+# REVOLT/Python/specula/params_revolt_modal.yml. The AOS/OOPAO centroid cutoff
+# below is not SPECULA's absolute-pedestal thr_value; that extraction policy
+# remains a numerical-parity gap. The explicit RNG seed is an AOS
+# reproducibility choice because the source file does not declare one.
 
 schema_version = 1
 name = "revolt_classic_shwfs"
@@ -54,6 +58,24 @@ rng_seed = 0
 photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
 frame_schema = "org.revolt.classic.shwfs-frame.f32/1"
 
+[[nodes]]
+name = "centroid"
+type = "shack_hartmann_centroid_f32"
+
+[nodes.config]
+resolution = 240
+telescope_diameter_m = 1.22
+n_lenslets = 16
+n_pix_subap = 22
+centroid_cutoff_fraction = 0.01
+centroid_response = 1.0
+calibration_wavelength_m = 8.0e-7
+calibration_signature = 1
+frame_schema = "org.revolt.classic.shwfs-frame.f32/1"
+slopes_schema = "org.revolt.classic.shwfs-centroid-slopes.f32/1"
+valid_subapertures_schema = "org.revolt.classic.shwfs-valid-subapertures.bool/1"
+reference_signal_schema = "org.revolt.classic.shwfs-centroid-reference.f32/1"
+
 [[inputs]]
 name = "pupil_opd"
 destination = "shwfs.opd"
@@ -67,6 +89,22 @@ source = "shwfs.photon_rate"
 name = "shwfs_frame"
 source = "detector.frame"
 
+[[outputs]]
+name = "shwfs_full_slopes"
+source = "centroid.slopes"
+
 [[links]]
 source = "shwfs.photon_rate"
 destination = "detector.photon_rate"
+
+[[links]]
+source = "detector.frame"
+destination = "centroid.frame"
+
+[[parameters]]
+destination = "centroid.valid_subapertures"
+binding = "valid_subapertures"
+
+[[parameters]]
+destination = "centroid.reference_signal"
+binding = "reference_signal"

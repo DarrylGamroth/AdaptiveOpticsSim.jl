@@ -55,6 +55,7 @@ export SubapertureCalibration
 export subaperture_layout
 export subaperture_calibration
 export slope_extraction_model
+export set_valid_subapertures!
 export set_subaperture_calibration!
 export valid_subaperture_indices
 export MeanValidFluxNormalization

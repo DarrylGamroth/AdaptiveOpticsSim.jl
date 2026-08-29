@@ -1198,10 +1198,20 @@ function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Diffractive},
     _require_sh_storage_domain(:estimation, observation.metadata,
         sensor.front_end.layout.valid_mask, "observation/layout")
     n_sub = n_lenslets(sensor)
-    n_pix = sensor.optics.propagation.workspace.sampled_n_pix_subap
-    size(observation.storage) == (n_sub * n_pix, n_sub * n_pix) ||
+    observation_shape = size(observation.storage)
+    length(observation_shape) == 2 ||
         throw(WFSPreparationError(:estimation, :shape,
-            "Shack-Hartmann estimator requires a tiled lenslet mosaic"))
+            "Shack-Hartmann estimator requires a two-dimensional lenslet mosaic"))
+    observation_shape[1] == observation_shape[2] ||
+        throw(WFSPreparationError(:estimation, :shape,
+            "Shack-Hartmann estimator requires a square tiled lenslet mosaic"))
+    observation_shape[1] % n_sub == 0 ||
+        throw(WFSPreparationError(:estimation, :shape,
+            "Shack-Hartmann mosaic extent must be divisible by the lenslet count"))
+    n_pix = div(observation_shape[1], n_sub)
+    n_pix > 0 ||
+        throw(WFSPreparationError(:estimation, :shape,
+            "Shack-Hartmann lenslet blocks must not be empty"))
     size(measurement.storage) == size(sensor.products.slopes) ||
         throw(WFSPreparationError(:estimation, :shape,
             "Shack-Hartmann measurement storage has the wrong slope shape"))

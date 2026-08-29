@@ -70,10 +70,17 @@ import ..Detectors:
 import ..WavefrontSensors:
     Diffractive,
     ShackHartmannWFS,
+    WFSMeasurement,
+    WFSObservation,
+    estimate_wfs_measurement!,
     form_wfs_optical_products!,
+    prepare_wfs_estimation,
     prepare_wfs_optics,
+    set_subaperture_calibration!,
+    set_valid_subapertures!,
     shack_hartmann_optics,
-    shack_hartmann_rate_map
+    shack_hartmann_rate_map,
+    subaperture_calibration
 
 include("definitions.jl")
 include("preparation.jl")

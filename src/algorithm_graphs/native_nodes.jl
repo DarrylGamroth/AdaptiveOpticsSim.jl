@@ -586,6 +586,273 @@ end
 
 @inline reset_graph_node!(::_ShackHartmannRateOwner) = nothing
 
+struct ShackHartmannCentroidNode{T<:AbstractFloat} end
+
+"""Construction values for one calibrated Shack–Hartmann centroid node."""
+struct ShackHartmannCentroidNodeConfig{T<:AbstractFloat,TD}
+    telescope::TD
+    n_lenslets::Int
+    n_pix_subap::Int
+    centroid_cutoff_fraction::T
+    centroid_response::T
+    calibration_wavelength_m::T
+    calibration_signature::UInt
+    frame_schema::String
+    slopes_schema::String
+    valid_subapertures_schema::String
+    reference_signal_schema::String
+end
+
+function _shack_hartmann_centroid_config(
+    ::Type{T};
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    n_lenslets::Integer,
+    n_pix_subap::Integer,
+    centroid_cutoff_fraction::Real,
+    centroid_response::Real,
+    calibration_wavelength_m::Real,
+    calibration_signature::Integer,
+    frame_schema::AbstractString,
+    slopes_schema::AbstractString,
+    valid_subapertures_schema::AbstractString,
+    reference_signal_schema::AbstractString,
+) where {T<:AbstractFloat}
+    pupil_resolution = Int(resolution)
+    lenslets = Int(n_lenslets)
+    pixels = Int(n_pix_subap)
+    pupil_resolution > 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann centroid resolution must be greater than zero",
+    ))
+    lenslets > 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann centroid n_lenslets must be greater than zero",
+    ))
+    pupil_resolution % lenslets == 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann centroid resolution must be divisible by n_lenslets",
+    ))
+    pixels > 0 && iseven(pixels) || throw(AlgorithmGraphError(
+        "Shack–Hartmann centroid n_pix_subap must be positive and even",
+    ))
+
+    cutoff_fraction = T(centroid_cutoff_fraction)
+    response = T(centroid_response)
+    wavelength = T(calibration_wavelength_m)
+    isfinite(cutoff_fraction) &&
+        zero(T) <= cutoff_fraction <= one(T) ||
+        throw(AlgorithmGraphError(
+            "Shack–Hartmann centroid_cutoff_fraction must lie in [0, 1]",
+        ))
+    isfinite(response) && response != zero(T) ||
+        throw(AlgorithmGraphError(
+            "Shack–Hartmann centroid_response must be finite and nonzero",
+        ))
+    isfinite(wavelength) && wavelength > zero(T) ||
+        throw(AlgorithmGraphError(
+            "Shack–Hartmann calibration_wavelength_m must be finite and positive",
+        ))
+    calibration_signature >= 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann calibration_signature must be nonnegative",
+    ))
+    calibration_signature <= typemax(UInt) || throw(AlgorithmGraphError(
+        "Shack–Hartmann calibration_signature exceeds UInt",
+    ))
+    schemas = (
+        frame_schema,
+        slopes_schema,
+        valid_subapertures_schema,
+        reference_signal_schema,
+    )
+    all(schema -> !isempty(schema), schemas) || throw(AlgorithmGraphError(
+        "Shack–Hartmann centroid scientific schemas must not be empty",
+    ))
+
+    telescope = try
+        TelescopeDefinition(
+            resolution=pupil_resolution,
+            diameter=telescope_diameter_m,
+            revision=0,
+            T=T,
+        )
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+    return ShackHartmannCentroidNodeConfig(
+        telescope,
+        lenslets,
+        pixels,
+        cutoff_fraction,
+        response,
+        wavelength,
+        UInt(calibration_signature),
+        String(frame_schema),
+        String(slopes_schema),
+        String(valid_subapertures_schema),
+        String(reference_signal_schema),
+    )
+end
+
+"""
+    shack_hartmann_centroid_node(name; ...)
+
+Declare one calibrated, complete-frame Shack–Hartmann centroid operation. The
+node consumes a lenslet-mosaic detector frame and writes the full canonical
+`[axis 1; axis 2]` centroid-slope vector. Its valid-subaperture mask and
+reference signal are explicit startup sparse parameters; compact slope
+selection remains a separate graph operation.
+"""
+function shack_hartmann_centroid_node(
+    name::Symbol;
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    n_lenslets::Integer,
+    n_pix_subap::Integer,
+    centroid_cutoff_fraction::Real,
+    centroid_response::Real,
+    calibration_wavelength_m::Real,
+    calibration_signature::Integer,
+    frame_schema::AbstractString,
+    slopes_schema::AbstractString,
+    valid_subapertures_schema::AbstractString,
+    reference_signal_schema::AbstractString,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _shack_hartmann_centroid_config(
+        T;
+        resolution,
+        telescope_diameter_m,
+        n_lenslets,
+        n_pix_subap,
+        centroid_cutoff_fraction,
+        centroid_response,
+        calibration_wavelength_m,
+        calibration_signature,
+        frame_schema,
+        slopes_schema,
+        valid_subapertures_schema,
+        reference_signal_schema,
+    )
+    return algorithm_node(
+        name,
+        ShackHartmannCentroidNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{ShackHartmannCentroidNode{T}},
+    config::ShackHartmannCentroidNodeConfig{T},
+) where {T}
+    lenslet_count = config.n_lenslets * config.n_lenslets
+    frame_extent = config.n_lenslets * config.n_pix_subap
+    return (
+        graph_port_contract(
+            :frame,
+            :input,
+            :data,
+            T,
+            (frame_extent, frame_extent),
+            config.frame_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :slopes,
+            :output,
+            :data,
+            T,
+            (2 * lenslet_count,),
+            config.slopes_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :valid_subapertures,
+            :input,
+            :parameter,
+            Bool,
+            (config.n_lenslets, config.n_lenslets),
+            config.valid_subapertures_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :reference_signal,
+            :input,
+            :parameter,
+            T,
+            (lenslet_count, 2),
+            config.reference_signal_schema,
+            :column_major,
+        ),
+    )
+end
+
+struct _ShackHartmannCentroidOwner{P,O,M}
+    prepared::P
+    observation::O
+    measurement::M
+end
+
+function prepare_graph_node(
+    ::Type{ShackHartmannCentroidNode{T}},
+    config::ShackHartmannCentroidNodeConfig{T},
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:frame,)},
+    outputs::NamedTuple{(:slopes,)},
+    parameters::NamedTuple{(:valid_subapertures,:reference_signal)},
+    target,
+) where {T}
+    telescope = prepare_telescope(config.telescope, target)
+    sensor = ShackHartmannWFS(
+        telescope;
+        n_lenslets=config.n_lenslets,
+        threshold_cog=config.centroid_cutoff_fraction,
+        diffraction_padding=1,
+        n_pix_subap=config.n_pix_subap,
+        mode=Diffractive(),
+        T=T,
+        backend=compute_device_backend(target),
+    )
+    set_valid_subapertures!(sensor, parameters.valid_subapertures)
+    set_subaperture_calibration!(
+        subaperture_calibration(sensor),
+        parameters.reference_signal;
+        centroid_response=config.centroid_response,
+        output_units=:pixel,
+        wavelength=config.calibration_wavelength_m,
+        signature=config.calibration_signature,
+    )
+    observation = WFSObservation(
+        inputs.frame;
+        units=:electron_count,
+        layout=:lenslet_mosaic,
+    )
+    measurement = WFSMeasurement(
+        outputs.slopes;
+        units=:pixel,
+        kind=:centroid_slopes,
+    )
+    prepared = prepare_wfs_estimation(sensor, observation, measurement)
+    return _ShackHartmannCentroidOwner(
+        prepared,
+        observation,
+        measurement,
+    )
+end
+
+@inline function step_graph_node!(owner::_ShackHartmannCentroidOwner)
+    estimate_wfs_measurement!(
+        owner.measurement,
+        owner.observation,
+        owner.prepared,
+    )
+    return nothing
+end
+
+@inline function reset_graph_node!(owner::_ShackHartmannCentroidOwner)
+    fill!(owner.measurement.storage, zero(eltype(owner.measurement.storage)))
+    return nothing
+end
+
 struct CCDDetectorAcquisitionNode{T<:AbstractFloat} end
 
 """Construction values for one complete-frame single-read CCD acquisition."""

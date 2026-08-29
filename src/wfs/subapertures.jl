@@ -153,6 +153,30 @@ end
     return indices
 end
 
+"""
+    set_valid_subapertures!(layout, valid_subapertures)
+
+Snapshot an explicit one-based square lenslet mask into a subaperture layout.
+The execution mask, host mirror, and column-major valid-index list are updated
+together before the cold-configuration revision advances. Prepared optics and
+estimators that bind the prior revision must be prepared again.
+"""
+function set_valid_subapertures!(
+    layout::SubapertureLayout,
+    valid_subapertures::AbstractMatrix{Bool},
+)
+    Base.require_one_based_indexing(valid_subapertures)
+    size(valid_subapertures) == (layout.n_subap, layout.n_subap) ||
+        throw(DimensionMismatchError(
+            "valid-subaperture mask must match the square lenslet layout",
+        ))
+    copyto!(layout.valid_mask, valid_subapertures)
+    _copy_valid_mask_to_host!(layout.valid_mask_host, layout.valid_mask)
+    _refresh_valid_indices_host!(layout)
+    _advance_subaperture_layout_revision!(layout)
+    return layout
+end
+
 function SubapertureCalibration(reference_signal_2d::AbstractMatrix{T},
     reference_signal_host::AbstractVector{T},
     extraction::AbstractSlopeExtractionModel=CenterOfGravityExtraction(

@@ -677,6 +677,100 @@ end
     )
 end
 
+@testset "calibrated Shack-Hartmann centroid graph node" begin
+    frame = zeros(Float32, 4, 4)
+    frame[1, 2] = 1
+    frame[4, 1] = 1
+    frame[2, 4] = 1
+    frame[3, 3] = 1
+    valid_subapertures = Bool[true false; true true]
+    reference_signal = zeros(Float32, 4, 2)
+    reference_signal[2, 1] = 0.25f0
+    reference_signal[1, 2] = 0.5f0
+    node = shack_hartmann_centroid_node(
+        :centroid;
+        resolution=4,
+        telescope_diameter_m=2.0,
+        n_lenslets=2,
+        n_pix_subap=2,
+        centroid_cutoff_fraction=0.1,
+        centroid_response=2.0,
+        calibration_wavelength_m=0.75e-6,
+        calibration_signature=7,
+        frame_schema="test.graph.shwfs-frame.f32/1",
+        slopes_schema="test.graph.shwfs-centroid-slopes.f32/1",
+        valid_subapertures_schema=
+            "test.graph.shwfs-valid-subapertures.bool/1",
+        reference_signal_schema=
+            "test.graph.shwfs-centroid-reference.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:shwfs_centroid,
+        inputs=(graph_input(:frame, :centroid => :frame, frame),),
+        outputs=(graph_output(:slopes, :centroid => :slopes),),
+        parameters=(
+            sparse_parameter(
+                :centroid => :valid_subapertures,
+                valid_subapertures,
+            ),
+            sparse_parameter(
+                :centroid => :reference_signal,
+                reference_signal,
+            ),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:centroid))
+    slopes_output = graph_output(graph, Val(:slopes))
+
+    fill!(valid_subapertures, false)
+    fill!(reference_signal, 100)
+    step_graph!(graph)
+
+    @test owner.observation.storage === frame
+    @test owner.measurement.storage === slopes_output
+    @test slopes_output == Float32[0, 0.375, 0, 0, 0.25, 0, 0, 0]
+    @test n_valid_subapertures(owner.prepared.sensor.front_end.layout) == 3
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+    reset_graph!(graph)
+    @test all(iszero, slopes_output)
+
+    sensor = owner.prepared.sensor
+    layout_revision = subaperture_layout_revision(sensor.front_end.layout)
+    @test_throws DimensionMismatchError set_valid_subapertures!(
+        sensor,
+        fill(true, 1, 1),
+    )
+    mask_parent = fill(false, 4, 4)
+    mask_parent[2:3, 2:3] .= Bool[true false; false true]
+    mask_view = @view mask_parent[2:3, 2:3]
+    @test set_valid_subapertures!(sensor, mask_view) === sensor
+    @test subaperture_layout_revision(sensor.front_end.layout) ==
+        layout_revision + UInt(1)
+    @test n_valid_subapertures(sensor.front_end.layout) == 2
+    @test !sensor.calibration.calibrated
+
+    @test_throws AlgorithmGraphError shack_hartmann_centroid_node(
+        :invalid_centroid;
+        resolution=4,
+        telescope_diameter_m=2.0,
+        n_lenslets=2,
+        n_pix_subap=3,
+        centroid_cutoff_fraction=0.1,
+        centroid_response=1.0,
+        calibration_wavelength_m=0.75e-6,
+        calibration_signature=0,
+        frame_schema="test.graph.shwfs-frame.f32/1",
+        slopes_schema="test.graph.shwfs-centroid-slopes.f32/1",
+        valid_subapertures_schema=
+            "test.graph.shwfs-valid-subapertures.bool/1",
+        reference_signal_schema=
+            "test.graph.shwfs-centroid-reference.f32/1",
+    )
+end
+
 @testset "TOML graph files compile to native graph definitions" begin
     residual = Float32[1, 2]
     basis = zeros(Float32, 2, 2, 2)
@@ -716,6 +810,7 @@ end
         :ccd_detector_acquisition_f32,
         :discrete_integrator_f32,
         :modal_opd_expansion_f32,
+        :shack_hartmann_centroid_f32,
         :shack_hartmann_rate_f32,
     )
 
@@ -780,23 +875,33 @@ end
 
 @testset "REVOLT Classic SHWFS TOML path is executable" begin
     pupil_opd = zeros(Float32, 240, 240)
+    valid_subapertures = fill(true, 16, 16)
+    reference_signal = zeros(Float32, 16 * 16, 2)
     path = joinpath(
         dirname(dirname(@__DIR__)),
         "examples",
         "graphs",
         "revolt_classic_shwfs.toml",
     )
-    definition = load_algorithm_graph(path; bindings=(; pupil_opd))
+    definition = load_algorithm_graph(
+        path;
+        bindings=(; pupil_opd, valid_subapertures, reference_signal),
+    )
     graph = prepare_algorithm_graph(definition)
+    centroid_owner = prepared_graph_node(graph, Val(:centroid))
     step_graph!(graph)
     photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
     frame = graph_output(graph, Val(:shwfs_frame))
+    full_slopes = graph_output(graph, Val(:shwfs_full_slopes))
 
     @test graph_name(graph) === :revolt_classic_shwfs
     @test size(photon_rate) == (352, 352)
     @test size(frame) == (352, 352)
+    @test size(full_slopes) == (512,)
+    @test size(centroid_owner.prepared.workspace.centroid_host) == (22, 22)
     @test all(isfinite, photon_rate)
     @test all(isfinite, frame)
+    @test all(isfinite, full_slopes)
     @test sum(photon_rate) > 0
     @test sum(frame) > 0
 end

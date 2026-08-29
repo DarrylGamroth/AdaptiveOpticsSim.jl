@@ -494,6 +494,79 @@ function _ccd_detector_acquisition_f32_node(
     )
 end
 
+function _shack_hartmann_centroid_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :calibration_signature,
+        :calibration_wavelength_m,
+        :centroid_response,
+        :centroid_cutoff_fraction,
+        :frame_schema,
+        :n_lenslets,
+        :n_pix_subap,
+        :reference_signal_schema,
+        :resolution,
+        :slopes_schema,
+        :telescope_diameter_m,
+        :valid_subapertures_schema,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, config_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    return shack_hartmann_centroid_node(
+        name;
+        resolution=_file_integer(config.resolution, "$context.resolution"),
+        telescope_diameter_m=_file_real(
+            config.telescope_diameter_m,
+            "$context.telescope_diameter_m",
+        ),
+        n_lenslets=_file_integer(
+            config.n_lenslets,
+            "$context.n_lenslets",
+        ),
+        n_pix_subap=_file_integer(
+            config.n_pix_subap,
+            "$context.n_pix_subap",
+        ),
+        centroid_cutoff_fraction=_file_real(
+            config.centroid_cutoff_fraction,
+            "$context.centroid_cutoff_fraction",
+        ),
+        centroid_response=_file_real(
+            config.centroid_response,
+            "$context.centroid_response",
+        ),
+        calibration_wavelength_m=_file_real(
+            config.calibration_wavelength_m,
+            "$context.calibration_wavelength_m",
+        ),
+        calibration_signature=_file_integer(
+            config.calibration_signature,
+            "$context.calibration_signature",
+        ),
+        frame_schema=_file_string(
+            config.frame_schema,
+            "$context.frame_schema",
+        ),
+        slopes_schema=_file_string(
+            config.slopes_schema,
+            "$context.slopes_schema",
+        ),
+        valid_subapertures_schema=_file_string(
+            config.valid_subapertures_schema,
+            "$context.valid_subapertures_schema",
+        ),
+        reference_signal_schema=_file_string(
+            config.reference_signal_schema,
+            "$context.reference_signal_schema",
+        ),
+        T=Float32,
+    )
+end
+
 """
     builtin_graph_node_types()
 
@@ -507,6 +580,7 @@ function builtin_graph_node_types()
         ccd_detector_acquisition_f32=_ccd_detector_acquisition_f32_node,
         discrete_integrator_f32=_discrete_integrator_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
+        shack_hartmann_centroid_f32=_shack_hartmann_centroid_f32_node,
         shack_hartmann_rate_f32=_shack_hartmann_rate_f32_node,
     )
 end
