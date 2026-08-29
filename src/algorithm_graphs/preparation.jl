@@ -107,32 +107,49 @@ function _reset_algorithm!(prepared)
     ))
 end
 
-function _allocate_algorithm_buffer(prepared, format::_GraphPortFormat{T,N}) where {T,N}
+function _allocate_algorithm_buffer(
+    prepared,
+    target::AbstractComputeDevice,
+    format::_GraphPortFormat{T,N},
+) where {T,N}
     format.layout === :column_major || throw(AlgorithmGraphError(
         "the native graph allocator supports only column-major buffers; got " *
         "$(format.layout)",
     ))
-    return zeros(T, format.shape)
+    values = allocate_device_array(target, T, format.shape...)
+    fill!(values, zero(T))
+    return values
 end
 
 function _validate_algorithm_buffer(
     prepared,
+    target::AbstractComputeDevice,
     format::_GraphPortFormat{T,N},
-    values::Array{T,N},
+    values,
 ) where {T,N}
+    format.layout === :column_major || throw(AlgorithmGraphError(
+        "the native graph supports only column-major buffers; got " *
+        "$(format.layout)",
+    ))
+    storage_type = array_backend_type(compute_device_backend(target))
+    values isa storage_type || throw(AlgorithmGraphError(
+        "buffer $(typeof(values)) is not native packed storage for graph " *
+        "target $target; expected $storage_type",
+    ))
+    eltype(values) === T || throw(AlgorithmGraphError(
+        "buffer element type $(eltype(values)) does not match declared $T",
+    ))
+    ndims(values) == N || throw(AlgorithmGraphError(
+        "buffer rank $(ndims(values)) does not match declared rank $N",
+    ))
     size(values) == format.shape || throw(AlgorithmGraphError(
         "buffer shape $(size(values)) does not match declared shape $(format.shape)",
     ))
-    format.layout === :column_major || throw(AlgorithmGraphError(
-        "ordinary Julia arrays cannot satisfy $(format.layout) packed layout",
+    actual_target = compute_device(values)
+    actual_target == target || throw(AlgorithmGraphError(
+        "buffer target $actual_target does not match prepared graph target $target",
     ))
     return values
-end
-
-function _validate_algorithm_buffer(prepared, format::_GraphPortFormat{T,N}, values) where {T,N}
-    throw(AlgorithmGraphError(
-        "buffer $(typeof(values)) does not satisfy packed $T rank-$N storage",
-    ))
 end
 
 @inline function _copy_algorithm_buffer!(prepared, destination, source)
@@ -251,26 +268,35 @@ end
     _parameter_endpoint_keys(Base.tail(parameters))...,
 )
 
-function _validate_parameters!(prototypes::NamedTuple, parameters::Tuple)
+function _validate_parameters!(
+    prototypes::NamedTuple,
+    parameters::Tuple,
+    target::AbstractComputeDevice,
+)
     keys = _parameter_endpoint_keys(parameters)
     length(keys) == length(unique(keys)) || throw(AlgorithmGraphError(
         "each sparse parameter port may be initialized at most once",
     ))
-    _validate_parameters_recursive!(prototypes, parameters)
+    _validate_parameters_recursive!(prototypes, parameters, target)
     return nothing
 end
 
-@inline _validate_parameters_recursive!(prototypes, ::Tuple{}) = nothing
-@inline function _validate_parameters_recursive!(prototypes, parameters::Tuple)
+@inline _validate_parameters_recursive!(prototypes, ::Tuple{}, target) = nothing
+@inline function _validate_parameters_recursive!(
+    prototypes,
+    parameters::Tuple,
+    target,
+)
     binding = first(parameters)
     prototype, contract = _endpoint_contract(prototypes, binding.endpoint)
     _require_sparse_parameter(contract, binding.endpoint)
     _validate_algorithm_buffer(
         prototype.algorithm,
+        target,
         contract.format,
         binding.values,
     )
-    _validate_parameters_recursive!(prototypes, Base.tail(parameters))
+    _validate_parameters_recursive!(prototypes, Base.tail(parameters), target)
     return nothing
 end
 
@@ -316,30 +342,34 @@ end
 ) where {Name} = (port, tail...)
 @inline _prepend_data_input(port::_GraphPortContract, tail::Tuple) = tail
 
-@inline _allocate_output_buffers(algorithm, ::Tuple{}) = ()
-@inline function _allocate_output_buffers(algorithm, contracts::Tuple)
+@inline _allocate_output_buffers(algorithm, ::Tuple{}, target) = ()
+@inline function _allocate_output_buffers(algorithm, contracts::Tuple, target)
     return (
-        _allocate_algorithm_buffer(algorithm, first(contracts).format),
-        _allocate_output_buffers(algorithm, Base.tail(contracts))...,
+        _allocate_algorithm_buffer(algorithm, target, first(contracts).format),
+        _allocate_output_buffers(
+            algorithm,
+            Base.tail(contracts),
+            target,
+        )...,
     )
 end
 
-function _allocate_node_outputs(prototype::_PreparedNodePrototype)
+function _allocate_node_outputs(prototype::_PreparedNodePrototype, target)
     contracts = _data_output_contracts(values(prototype.ports))
-    buffers = _allocate_output_buffers(prototype.algorithm, contracts)
+    buffers = _allocate_output_buffers(prototype.algorithm, contracts, target)
     return _named_tuple(_port_names(contracts), buffers, "algorithm output port")
 end
 
-@inline _allocate_all_node_outputs(::Tuple{}) = ()
-@inline function _allocate_all_node_outputs(prototypes::Tuple)
+@inline _allocate_all_node_outputs(::Tuple{}, target) = ()
+@inline function _allocate_all_node_outputs(prototypes::Tuple, target)
     return (
-        _allocate_node_outputs(first(prototypes)),
-        _allocate_all_node_outputs(Base.tail(prototypes))...,
+        _allocate_node_outputs(first(prototypes), target),
+        _allocate_all_node_outputs(Base.tail(prototypes), target)...,
     )
 end
 
-function _prepared_node_outputs(prototypes::NamedTuple)
-    groups = _allocate_all_node_outputs(values(prototypes))
+function _prepared_node_outputs(prototypes::NamedTuple, target)
+    groups = _allocate_all_node_outputs(values(prototypes), target)
     return NamedTuple{keys(prototypes)}(groups)
 end
 
@@ -367,11 +397,13 @@ end
 function _prepare_graph_input(
     definition::GraphInputDefinition{Name},
     prototypes::NamedTuple,
+    target::AbstractComputeDevice,
 ) where {Name}
     prototype, contract = _endpoint_contract(prototypes, definition.destination)
     _require_data_input(contract, definition.destination)
     _validate_algorithm_buffer(
         prototype.algorithm,
+        target,
         contract.format,
         definition.values,
     )
@@ -382,16 +414,20 @@ function _prepare_graph_input(
     }(definition.destination, definition.values)
 end
 
-@inline _prepare_graph_inputs(::Tuple{}, prototypes) = ()
-@inline function _prepare_graph_inputs(definitions::Tuple, prototypes)
+@inline _prepare_graph_inputs(::Tuple{}, prototypes, target) = ()
+@inline function _prepare_graph_inputs(definitions::Tuple, prototypes, target)
     return (
-        _prepare_graph_input(first(definitions), prototypes),
-        _prepare_graph_inputs(Base.tail(definitions), prototypes)...,
+        _prepare_graph_input(first(definitions), prototypes, target),
+        _prepare_graph_inputs(Base.tail(definitions), prototypes, target)...,
     )
 end
 
-function _prepared_graph_inputs(definition::AlgorithmGraphDefinition, prototypes)
-    prepared = _prepare_graph_inputs(definition.inputs, prototypes)
+function _prepared_graph_inputs(
+    definition::AlgorithmGraphDefinition,
+    prototypes,
+    target,
+)
+    prepared = _prepare_graph_inputs(definition.inputs, prototypes, target)
     return _named_tuple(_boundary_names(definition.inputs), prepared, "graph input")
 end
 
@@ -403,11 +439,17 @@ function _node_ordinal(names::Tuple, sought::Symbol, ordinal::Int=1)
     return _node_ordinal(Base.tail(names), sought, ordinal + 1)
 end
 
-@inline _validate_direct_links!(prototypes, node_outputs, ::Tuple{}) = nothing
+@inline _validate_direct_links!(
+    prototypes,
+    node_outputs,
+    ::Tuple{},
+    target,
+) = nothing
 @inline function _validate_direct_links!(
     prototypes,
     node_outputs,
     links::Tuple,
+    target,
 )
     direct = first(links)
     _, source_contract = _endpoint_contract(prototypes, direct.source)
@@ -431,6 +473,7 @@ end
     source_values = _endpoint_output(node_outputs, direct.source)
     _validate_algorithm_buffer(
         destination_prototype.algorithm,
+        target,
         destination_contract.format,
         source_values,
     )
@@ -438,6 +481,7 @@ end
         prototypes,
         node_outputs,
         Base.tail(links),
+        target,
     )
     return nothing
 end
@@ -454,6 +498,7 @@ function _prepare_delayed_link(
     definition::DelayedAlgorithmLink,
     prototypes,
     node_outputs,
+    target,
 )
     _, source_contract = _endpoint_contract(prototypes, definition.source)
     destination_prototype, destination_contract =
@@ -469,21 +514,25 @@ function _prepare_delayed_link(
     )
     _validate_algorithm_buffer(
         destination_prototype.algorithm,
+        target,
         destination_contract.format,
         definition.initial,
     )
     source = _endpoint_output(node_outputs, definition.source)
     _validate_algorithm_buffer(
         destination_prototype.algorithm,
+        target,
         destination_contract.format,
         source,
     )
     initial = _allocate_algorithm_buffer(
         destination_prototype.algorithm,
+        target,
         destination_contract.format,
     )
     state = _allocate_algorithm_buffer(
         destination_prototype.algorithm,
+        target,
         destination_contract.format,
     )
     _copy_algorithm_buffer!(
@@ -506,17 +555,29 @@ function _prepare_delayed_link(
     return prepared, state
 end
 
-@inline _prepare_delayed_links(::Tuple{}, prototypes, node_outputs) = ((), ())
-@inline function _prepare_delayed_links(definitions::Tuple, prototypes, node_outputs)
+@inline _prepare_delayed_links(
+    ::Tuple{},
+    prototypes,
+    node_outputs,
+    target,
+) = ((), ())
+@inline function _prepare_delayed_links(
+    definitions::Tuple,
+    prototypes,
+    node_outputs,
+    target,
+)
     prepared, state = _prepare_delayed_link(
         first(definitions),
         prototypes,
         node_outputs,
+        target,
     )
     tail_prepared, tail_state = _prepare_delayed_links(
         Base.tail(definitions),
         prototypes,
         node_outputs,
+        target,
     )
     return (prepared, tail_prepared...), (state, tail_state...)
 end
@@ -676,12 +737,16 @@ end
 
 """Concrete prepared owner for one portable algorithm graph run."""
 struct PreparedAlgorithmGraph{
+    Target<:AbstractComputeDevice,
+    Context,
     Nodes<:NamedTuple,
     DelayedLinks<:Tuple,
     Inputs<:NamedTuple,
     Outputs<:NamedTuple,
     State<:AlgorithmGraphState,
 }
+    target::Target
+    context::Context
     nodes::Nodes
     delayed_links::DelayedLinks
     inputs::Inputs
@@ -690,29 +755,36 @@ struct PreparedAlgorithmGraph{
 end
 
 """
-    prepare_algorithm_graph(definition)
+    prepare_algorithm_graph(definition; target=HostComputeDevice())
 
 Prepare every algorithm, validate all exact formats and connections, install
 startup sparse parameters, allocate intermediate and delayed storage, then bind
 every algorithm to its exact admitted frame-data buffers in one concrete
-single-writer graph owner.
+single-writer graph owner. Every graph buffer must be native packed storage on
+the exact `target`; preparation never inserts an implicit host/device transfer.
 """
-function prepare_algorithm_graph(definition::AlgorithmGraphDefinition)
+function _prepare_algorithm_graph(
+    definition::AlgorithmGraphDefinition,
+    target::AbstractComputeDevice,
+    context,
+)
     prototypes = _prepared_node_prototypes(definition)
-    _validate_parameters!(prototypes, definition.parameters)
+    _validate_parameters!(prototypes, definition.parameters, target)
     _apply_parameters!(prototypes, definition.parameters)
 
-    node_outputs = _prepared_node_outputs(prototypes)
-    prepared_inputs = _prepared_graph_inputs(definition, prototypes)
+    node_outputs = _prepared_node_outputs(prototypes, target)
+    prepared_inputs = _prepared_graph_inputs(definition, prototypes, target)
     _validate_direct_links!(
         prototypes,
         node_outputs,
         definition.links,
+        target,
     )
     prepared_delays, delayed_values = _prepare_delayed_links(
         definition.delayed_links,
         prototypes,
         node_outputs,
+        target,
     )
 
     bindings = (
@@ -735,6 +807,8 @@ function prepare_algorithm_graph(definition::AlgorithmGraphDefinition)
     )
     state = AlgorithmGraphState(delayed_values, UInt64(0), false)
     return PreparedAlgorithmGraph(
+        target,
+        context,
         nodes,
         prepared_delays,
         prepared_inputs,
@@ -742,6 +816,22 @@ function prepare_algorithm_graph(definition::AlgorithmGraphDefinition)
         state,
     )
 end
+
+function prepare_algorithm_graph(
+    definition::AlgorithmGraphDefinition;
+    target::AbstractComputeDevice=HostComputeDevice(),
+)
+    context = _prepare_device_execution_context(target)
+    return _with_prepared_device_execution_context(context) do
+        try
+            return _prepare_algorithm_graph(definition, target, context)
+        finally
+            _synchronize_prepared_device_execution_context!(context)
+        end
+    end
+end
+
+@inline compute_device(graph::PreparedAlgorithmGraph) = graph.target
 
 @inline graph_input(
     graph::PreparedAlgorithmGraph,

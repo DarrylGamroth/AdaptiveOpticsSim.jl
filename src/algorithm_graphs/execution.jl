@@ -64,8 +64,14 @@ function step_graph!(graph::PreparedAlgorithmGraph)
         "algorithm graph step sequence is exhausted",
     ))
     try
-        _process_nodes!(values(graph.nodes))
-        _commit_delayed_links!(graph.delayed_links, state.delayed_values)
+        _with_prepared_device_execution_context(graph.context) do
+            try
+                _process_nodes!(values(graph.nodes))
+                _commit_delayed_links!(graph.delayed_links, state.delayed_values)
+            finally
+                _synchronize_prepared_device_execution_context!(graph.context)
+            end
+        end
         state.step_sequence += UInt64(1)
     catch
         state.failed = true
@@ -84,8 +90,14 @@ graph remains failed if any reset operation throws.
 function reset_graph!(graph::PreparedAlgorithmGraph)
     state = graph.state
     state.failed = true
-    _reset_nodes!(values(graph.nodes))
-    _reset_delayed_links!(graph.delayed_links, state.delayed_values)
+    _with_prepared_device_execution_context(graph.context) do
+        try
+            _reset_nodes!(values(graph.nodes))
+            _reset_delayed_links!(graph.delayed_links, state.delayed_values)
+        finally
+            _synchronize_prepared_device_execution_context!(graph.context)
+        end
+    end
     state.step_sequence = UInt64(0)
     state.failed = false
     return graph

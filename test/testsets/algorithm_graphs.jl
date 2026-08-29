@@ -350,8 +350,14 @@ AOG._reset_algorithm!(::GraphTestFailurePrepared) = nothing
         links=(link(:gain => :output, :sink => :input),),
         parameters=(sparse_parameter(:gain => :gain, Float32[2, 3, 4]),),
     )
-    graph = prepare_algorithm_graph(definition)
+    target = AdaptiveOpticsSim.Backends.HostComputeDevice()
+    graph = prepare_algorithm_graph(definition; target=target)
 
+    @test AdaptiveOpticsSim.Backends.compute_device(graph) == target
+    @test AdaptiveOpticsSim.Backends.compute_device(
+        graph_output(graph, Val(:command)),
+    ) ==
+        target
     @test graph_input(graph, Val(:residual)) === input
     @test graph_input(graph, :residual) === input
     @test prepared_algorithm(graph, Val(:gain)) isa GraphTestGainPrepared
@@ -485,6 +491,12 @@ end
     @test_throws AlgorithmGraphError prepare_algorithm_graph(algorithm_graph(
         (node,);
         inputs=(graph_input(:input, :add => :input, zeros(Float32, 3)),),
+    ))
+    packed_parent = zeros(Float32, 3)
+    wrapped_input = @view packed_parent[1:2]
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(algorithm_graph(
+        (node,);
+        inputs=(graph_input(:input, :add => :input, wrapped_input),),
     ))
 
     backward = algorithm_graph(

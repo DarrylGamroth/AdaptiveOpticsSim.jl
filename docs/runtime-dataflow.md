@@ -80,12 +80,19 @@ reset; the graph does not claim graph-wide rollback of outputs already written
 by earlier nodes.
 
 This executor has one writer and no task, queue, wall-clock pacing, transport,
-or dynamic placement policy. The currently maintained default allocator admits
-packed column-major host `Array` storage. Accelerator placement, exact-device
-admission, and host/device movement require explicit prepared allocation and
-handoff seams before they become a supported graph surface; an implicit host
-fallback is not permitted. Runtime scalar-property transactions and live sparse
-parameter replacement likewise remain open graph-host work rather than implied
+or dynamic placement policy. `prepare_algorithm_graph` accepts one exact compute
+target, defaults to the host, allocates packed column-major node outputs and
+delayed storage there, and rejects graph inputs or sparse parameters that are
+not native packed storage on that same target. The prepared graph retains one
+device execution context. Preparation, stepping, and reset run inside it and
+complete its stream before successful publication or error return.
+
+One graph may still connect port formats with different element types where an
+algorithm explicitly declares that conversion. Exact target ownership does not
+impose one graph-wide numeric type. Host/device movement remains an explicit
+application or prepared-handoff operation; the graph never inserts a fallback
+or transfer. Runtime scalar-property transactions and live sparse-parameter
+replacement likewise remain open graph-host work rather than implied
 capabilities.
 
 ## Definition And Preparation
