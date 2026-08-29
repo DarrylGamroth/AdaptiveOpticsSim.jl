@@ -158,6 +158,43 @@ barrier with inference and allocation evidence.
 The implementation migration and its required evidence are tracked in
 [issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225).
 
+## Algorithm Graph Adapters
+
+Optional packages implement the qualified-public
+[`Algorithm graph adapter protocol`](./glossary.md) owned by
+`AdaptiveOpticsSim.AlgorithmGraphs`. Calculon remains the authority for
+scientific declarations, configuration, ports, formats, properties, sparse
+parameters, preparation, processing, and reset. The graph adapter translates
+that interface into exact graph storage; it must not define a parallel
+scientific plan or `process!` API.
+
+The protocol methods are:
+
+| Method | Adapter obligation |
+|---|---|
+| `prepare_algorithm_instance(Declaration, configuration)` | Prepare a concrete prototype before final graph buffers exist. Do not retain provisional input or output storage. |
+| `algorithm_port_contracts(Declaration, prototype)` | Return one fixed tuple of `graph_port_contract(...)` values in declaration order. Names, direction, role, element type, shape, schema, and layout must match the Calculon declaration. |
+| `bind_algorithm_instance(Declaration, prototype, inputs, outputs)` | Optionally return a specialized prepared owner bound to the final admitted named buffers. The default returns the prototype unchanged. |
+| `replace_algorithm_parameter!(prototype, Val(name), values)` | Apply an admitted startup sparse parameter during preparation. Live parameter replacement is not yet a graph capability. |
+| `process_algorithm!(prepared, outputs, inputs)` | Execute bounded repeated-path work against the exact named buffers without replacing their storage. |
+| `reset_algorithm!(prepared)` | Reset persistent algorithm state at a serialized graph boundary. |
+
+Use these exact names through the `AlgorithmGraphs` module. They are public but
+not exported so extension code makes ownership visible. There are no
+underscore-prefixed aliases. An adapter whose underlying Calculon instance can
+operate on graph-supplied buffers directly may return that instance unchanged.
+An adapter that must prebind FFT plans, wavefronts, or other exact owners uses
+`bind_algorithm_instance` only after all formats, topology, startup parameters,
+and storage have been admitted.
+
+Preparation may allocate and may fail. `process_algorithm!` and
+`reset_algorithm!` execute inside the graph's retained exact-device context;
+the adapter must not select a different device or stream. A CPU repeated path
+requires inference and an explicit warmed allocation budget. Accelerator claims
+require native storage, exact-device residency, scalar-index prohibition, and
+real-hardware evidence. Input/output aliasing, replacement, wrong schema or
+shape, and foreign or wrapped storage must fail before repeated execution.
+
 ## Exact Compute-Device Selection
 
 Gate 9A preparation distinguishes a semantic backend family from one exact

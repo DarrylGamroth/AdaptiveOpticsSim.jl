@@ -17,3 +17,7 @@ export next_model_timestamp, advance_model_time!, reset_model_time!
 export step_graph_at!, model_time_sequence, model_time_exhausted
 
 public prepared_algorithm
+public graph_port_contract
+public prepare_algorithm_instance, algorithm_port_contracts
+public bind_algorithm_instance, replace_algorithm_parameter!
+public process_algorithm!, reset_algorithm!

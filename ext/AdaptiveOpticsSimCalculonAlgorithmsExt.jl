@@ -24,7 +24,7 @@ include("calculon_algorithms/calibration.jl")
 @inline _layout(::CA.ColumnMajorLayout) = :column_major
 @inline _layout(::CA.RowMajorLayout) = :row_major
 
-function AlgorithmGraphs._prepare_algorithm_instance(
+function AlgorithmGraphs.prepare_algorithm_instance(
     ::Type{Declaration},
     configuration,
 ) where {Declaration<:CA.AbstractAlgorithmDeclaration}
@@ -32,7 +32,7 @@ function AlgorithmGraphs._prepare_algorithm_instance(
 end
 
 function _port_contract(port, format)
-    return AG._graph_port_contract(
+    return AG.graph_port_contract(
         port.name,
         _direction(port.direction),
         _role(port.role),
@@ -43,7 +43,7 @@ function _port_contract(port, format)
     )
 end
 
-function AlgorithmGraphs._algorithm_port_contracts(
+function AlgorithmGraphs.algorithm_port_contracts(
     ::Type{Declaration},
     prepared::CA.PreparedAlgorithm{Declaration},
 ) where {Declaration<:CA.AbstractAlgorithmDeclaration}
@@ -55,7 +55,7 @@ function AlgorithmGraphs._algorithm_port_contracts(
     return map(_port_contract, ports, formats)
 end
 
-@inline function AlgorithmGraphs._process_algorithm!(
+@inline function AlgorithmGraphs.process_algorithm!(
     prepared::CA.PreparedAlgorithm,
     outputs::NamedTuple,
     inputs::NamedTuple,
@@ -64,12 +64,12 @@ end
     return nothing
 end
 
-@inline function AlgorithmGraphs._reset_algorithm!(prepared::CA.PreparedAlgorithm)
+@inline function AlgorithmGraphs.reset_algorithm!(prepared::CA.PreparedAlgorithm)
     CA.reset!(prepared)
     return nothing
 end
 
-function AlgorithmGraphs._replace_algorithm_parameter!(
+function AlgorithmGraphs.replace_algorithm_parameter!(
     prepared::CA.PreparedAlgorithm,
     name::Val,
     values,

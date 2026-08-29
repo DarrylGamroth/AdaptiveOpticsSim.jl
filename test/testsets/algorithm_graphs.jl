@@ -10,7 +10,7 @@ mutable struct GraphTestGainPrepared{T}
     gain::Vector{T}
 end
 
-function AOG._prepare_algorithm_instance(
+function AOG.prepare_algorithm_instance(
     ::Type{GraphTestGainDeclaration},
     configuration::GraphTestGainConfiguration,
 )
@@ -18,14 +18,14 @@ function AOG._prepare_algorithm_instance(
     return GraphTestGainPrepared(ones(Float32, configuration.extent))
 end
 
-function AOG._algorithm_port_contracts(
+function AOG.algorithm_port_contracts(
     ::Type{GraphTestGainDeclaration},
     prepared::GraphTestGainPrepared{T},
 ) where {T}
     shape = (length(prepared.gain),)
     schema = "test.graph.signal.f32/1"
     return (
-        AOG._graph_port_contract(
+        AOG.graph_port_contract(
             :input,
             :input,
             :data,
@@ -34,7 +34,7 @@ function AOG._algorithm_port_contracts(
             schema,
             :column_major,
         ),
-        AOG._graph_port_contract(
+        AOG.graph_port_contract(
             :output,
             :output,
             :data,
@@ -43,7 +43,7 @@ function AOG._algorithm_port_contracts(
             schema,
             :column_major,
         ),
-        AOG._graph_port_contract(
+        AOG.graph_port_contract(
             :gain,
             :input,
             :parameter,
@@ -55,7 +55,7 @@ function AOG._algorithm_port_contracts(
     )
 end
 
-function AOG._process_algorithm!(
+function AOG.process_algorithm!(
     prepared::GraphTestGainPrepared,
     outputs::NamedTuple,
     inputs::NamedTuple,
@@ -66,9 +66,9 @@ function AOG._process_algorithm!(
     return nothing
 end
 
-AOG._reset_algorithm!(::GraphTestGainPrepared) = nothing
+AOG.reset_algorithm!(::GraphTestGainPrepared) = nothing
 
-function AOG._replace_algorithm_parameter!(
+function AOG.replace_algorithm_parameter!(
     prepared::GraphTestGainPrepared,
     ::Val{:gain},
     values,
@@ -91,7 +91,7 @@ struct GraphTestAddPrepared
     increment::Float32
 end
 
-function AOG._prepare_algorithm_instance(
+function AOG.prepare_algorithm_instance(
     ::Type{GraphTestAddDeclaration},
     configuration::GraphTestAddConfiguration,
 )
@@ -102,11 +102,11 @@ function AOG._prepare_algorithm_instance(
     )
 end
 
-function AOG._algorithm_port_contracts(
+function AOG.algorithm_port_contracts(
     ::Type{GraphTestAddDeclaration},
     prepared::GraphTestAddPrepared,
 )
-    format(name, direction) = AOG._graph_port_contract(
+    format(name, direction) = AOG.graph_port_contract(
         name,
         direction,
         :data,
@@ -118,7 +118,7 @@ function AOG._algorithm_port_contracts(
     return (format(:input, :input), format(:output, :output))
 end
 
-function AOG._process_algorithm!(
+function AOG.process_algorithm!(
     prepared::GraphTestAddPrepared,
     outputs::NamedTuple,
     inputs::NamedTuple,
@@ -129,7 +129,7 @@ function AOG._process_algorithm!(
     return nothing
 end
 
-AOG._reset_algorithm!(::GraphTestAddPrepared) = nothing
+AOG.reset_algorithm!(::GraphTestAddPrepared) = nothing
 
 struct GraphTestSourceDeclaration end
 
@@ -143,17 +143,17 @@ struct GraphTestSourcePrepared
     value::Float32
 end
 
-AOG._prepare_algorithm_instance(
+AOG.prepare_algorithm_instance(
     ::Type{GraphTestSourceDeclaration},
     configuration::GraphTestSourceConfiguration,
 ) = GraphTestSourcePrepared(configuration.extent, configuration.value)
 
-function AOG._algorithm_port_contracts(
+function AOG.algorithm_port_contracts(
     ::Type{GraphTestSourceDeclaration},
     prepared::GraphTestSourcePrepared,
 )
     return (
-        AOG._graph_port_contract(
+        AOG.graph_port_contract(
             :output,
             :output,
             :data,
@@ -165,7 +165,7 @@ function AOG._algorithm_port_contracts(
     )
 end
 
-function AOG._process_algorithm!(
+function AOG.process_algorithm!(
     prepared::GraphTestSourcePrepared,
     outputs::NamedTuple,
     ::NamedTuple{()},
@@ -174,7 +174,7 @@ function AOG._process_algorithm!(
     return nothing
 end
 
-AOG._reset_algorithm!(::GraphTestSourcePrepared) = nothing
+AOG.reset_algorithm!(::GraphTestSourcePrepared) = nothing
 
 struct GraphTestExactBindingDeclaration end
 
@@ -188,16 +188,16 @@ struct GraphTestExactBindingOwner{P,I,O}
     output::O
 end
 
-AOG._prepare_algorithm_instance(
+AOG.prepare_algorithm_instance(
     ::Type{GraphTestExactBindingDeclaration},
     extent::Int,
 ) = GraphTestExactBindingPrepared(extent)
 
-function AOG._algorithm_port_contracts(
+function AOG.algorithm_port_contracts(
     ::Type{GraphTestExactBindingDeclaration},
     prepared::GraphTestExactBindingPrepared,
 )
-    format(name, direction) = AOG._graph_port_contract(
+    format(name, direction) = AOG.graph_port_contract(
         name,
         direction,
         :data,
@@ -209,7 +209,7 @@ function AOG._algorithm_port_contracts(
     return (format(:input, :input), format(:output, :output))
 end
 
-function AOG._bind_algorithm_instance(
+function AOG.bind_algorithm_instance(
     ::Type{GraphTestExactBindingDeclaration},
     prepared::GraphTestExactBindingPrepared,
     inputs::NamedTuple,
@@ -222,7 +222,7 @@ function AOG._bind_algorithm_instance(
     )
 end
 
-function AOG._process_algorithm!(
+function AOG.process_algorithm!(
     owner::GraphTestExactBindingOwner,
     outputs::NamedTuple,
     inputs::NamedTuple,
@@ -233,7 +233,7 @@ function AOG._process_algorithm!(
     return nothing
 end
 
-AOG._reset_algorithm!(::GraphTestExactBindingOwner) = nothing
+AOG.reset_algorithm!(::GraphTestExactBindingOwner) = nothing
 
 struct GraphTestSinkDeclaration end
 
@@ -246,17 +246,17 @@ mutable struct GraphTestSinkPrepared
     sum::Float32
 end
 
-AOG._prepare_algorithm_instance(
+AOG.prepare_algorithm_instance(
     ::Type{GraphTestSinkDeclaration},
     configuration::GraphTestSinkConfiguration,
 ) = GraphTestSinkPrepared(configuration.extent, 0.0f0)
 
-function AOG._algorithm_port_contracts(
+function AOG.algorithm_port_contracts(
     ::Type{GraphTestSinkDeclaration},
     prepared::GraphTestSinkPrepared,
 )
     return (
-        AOG._graph_port_contract(
+        AOG.graph_port_contract(
             :input,
             :input,
             :data,
@@ -269,7 +269,7 @@ function AOG._algorithm_port_contracts(
 end
 
 
-function AOG._process_algorithm!(
+function AOG.process_algorithm!(
     prepared::GraphTestSinkPrepared,
     ::NamedTuple{()},
     inputs::NamedTuple,
@@ -283,7 +283,7 @@ function AOG._process_algorithm!(
 end
 
 
-function AOG._reset_algorithm!(prepared::GraphTestSinkPrepared)
+function AOG.reset_algorithm!(prepared::GraphTestSinkPrepared)
     prepared.sum = 0.0f0
     return nothing
 end
@@ -294,16 +294,16 @@ struct GraphTestFailurePrepared
     extent::Int
 end
 
-AOG._prepare_algorithm_instance(
+AOG.prepare_algorithm_instance(
     ::Type{GraphTestFailureDeclaration},
     extent::Int,
 ) = GraphTestFailurePrepared(extent)
 
-function AOG._algorithm_port_contracts(
+function AOG.algorithm_port_contracts(
     ::Type{GraphTestFailureDeclaration},
     prepared::GraphTestFailurePrepared,
 )
-    format(name, direction) = AOG._graph_port_contract(
+    format(name, direction) = AOG.graph_port_contract(
         name,
         direction,
         :data,
@@ -315,7 +315,7 @@ function AOG._algorithm_port_contracts(
     return (format(:input, :input), format(:output, :output))
 end
 
-function AOG._process_algorithm!(
+function AOG.process_algorithm!(
     ::GraphTestFailurePrepared,
     outputs::NamedTuple,
     inputs::NamedTuple,
@@ -328,7 +328,7 @@ function AOG._process_algorithm!(
     return nothing
 end
 
-AOG._reset_algorithm!(::GraphTestFailurePrepared) = nothing
+AOG.reset_algorithm!(::GraphTestFailurePrepared) = nothing
 
 @testset "portable algorithm graph direct links and sparse parameters" begin
     input = Float32[1, 2, 3]

@@ -16,7 +16,14 @@ end
     ::_GraphPortContract{Name,Direction,Role},
 ) where {Name,Direction,Role} = Role
 
-function _graph_port_contract(
+"""
+    graph_port_contract(name, direction, role, T, shape, schema, layout)
+
+Construct one validated graph-side port contract for an algorithm adapter.
+`direction` is `:input` or `:output`; `role` is `:data` or `:parameter`; the
+portable allocator currently admits `:column_major` layout.
+"""
+function graph_port_contract(
     name::Symbol,
     direction::Symbol,
     role::Symbol,
@@ -59,13 +66,26 @@ function _named_tuple(names::Tuple, values::Tuple, role::AbstractString)
     return NamedTuple{names}(values)
 end
 
-function _prepare_algorithm_instance(::Type{Declaration}, configuration) where {Declaration}
+"""
+    prepare_algorithm_instance(Declaration, configuration)
+
+Prepare an algorithm declaration before final graph storage is admitted.
+Adapters that need exact graph-buffer identities finish their ownership binding
+in [`bind_algorithm_instance`](@ref).
+"""
+function prepare_algorithm_instance(::Type{Declaration}, configuration) where {Declaration}
     throw(AlgorithmGraphError(
         "no AlgorithmGraphs adapter is loaded for declaration $Declaration",
     ))
 end
 
-function _algorithm_port_contracts(::Type{Declaration}, prepared) where {Declaration}
+"""
+    algorithm_port_contracts(Declaration, prepared)
+
+Return the fixed tuple of graph-side port contracts for one prepared algorithm
+prototype, in declaration order.
+"""
+function algorithm_port_contracts(::Type{Declaration}, prepared) where {Declaration}
     throw(AlgorithmGraphError(
         "the AlgorithmGraphs adapter for $Declaration did not provide port contracts",
     ))
@@ -79,7 +99,7 @@ adapters may construct one after graph inputs, outputs, direct links, and
 delayed-link storage have all been validated. This hook runs only during graph
 preparation.
 """
-function _bind_algorithm_instance(
+function bind_algorithm_instance(
     ::Type{Declaration},
     prepared,
     inputs::NamedTuple,
@@ -88,20 +108,38 @@ function _bind_algorithm_instance(
     return prepared
 end
 
-function _replace_algorithm_parameter!(prepared, name::Val, values)
+"""
+    replace_algorithm_parameter!(prepared, name, values)
+
+Apply one admitted startup sparse-parameter value to a prepared algorithm
+prototype. This is a preparation-time hook, not a live graph update.
+"""
+function replace_algorithm_parameter!(prepared, name::Val, values)
     throw(AlgorithmGraphError(
         "the AlgorithmGraphs adapter for $(typeof(prepared)) does not support " *
         "sparse parameter $(name)",
     ))
 end
 
-function _process_algorithm!(prepared, outputs::NamedTuple, inputs::NamedTuple)
+"""
+    process_algorithm!(prepared, outputs, inputs)
+
+Execute one prepared algorithm instance against its exact named graph buffers.
+Implementations must perform bounded repeated-path work and must not replace or
+retain different input or output storage.
+"""
+function process_algorithm!(prepared, outputs::NamedTuple, inputs::NamedTuple)
     throw(AlgorithmGraphError(
         "the AlgorithmGraphs adapter for $(typeof(prepared)) does not implement processing",
     ))
 end
 
-function _reset_algorithm!(prepared)
+"""
+    reset_algorithm!(prepared)
+
+Reset one prepared algorithm instance at a serialized graph boundary.
+"""
+function reset_algorithm!(prepared)
     throw(AlgorithmGraphError(
         "the AlgorithmGraphs adapter for $(typeof(prepared)) does not implement reset",
     ))
@@ -167,8 +205,8 @@ end
 function _prepare_node_prototype(
     definition::AlgorithmNodeDefinition{Name,Declaration},
 ) where {Name,Declaration}
-    algorithm = _prepare_algorithm_instance(Declaration, definition.configuration)
-    port_values = _algorithm_port_contracts(Declaration, algorithm)
+    algorithm = prepare_algorithm_instance(Declaration, definition.configuration)
+    port_values = algorithm_port_contracts(Declaration, algorithm)
     _validate_tuple(port_values, _validate_port_contract)
     ports = _named_tuple(_port_names(port_values), port_values, "algorithm port")
     return _PreparedNodePrototype{Name,Declaration,typeof(algorithm),typeof(ports)}(
@@ -307,7 +345,7 @@ end
         prototypes,
         Val(_node_name(binding.endpoint)),
     )
-    _replace_algorithm_parameter!(
+    replace_algorithm_parameter!(
         prototype.algorithm,
         Val(_port_name(binding.endpoint)),
         binding.values,
@@ -679,7 +717,7 @@ function _bind_prepared_node(
     contracts = _data_input_contracts(values(prototype.ports))
     input_values = _bind_node_inputs(Name, contracts, bindings)
     inputs = _named_tuple(_port_names(contracts), input_values, "algorithm input port")
-    algorithm = _bind_algorithm_instance(
+    algorithm = bind_algorithm_instance(
         Declaration,
         prototype.algorithm,
         inputs,

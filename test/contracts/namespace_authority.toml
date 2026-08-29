@@ -582,6 +582,13 @@ new_domain_exports = [
     "WavefrontSensors.LiFTPhysicalRatePreservation",
 ]
 new_domain_public = [
+    "AlgorithmGraphs.graph_port_contract",
+    "AlgorithmGraphs.prepare_algorithm_instance",
+    "AlgorithmGraphs.algorithm_port_contracts",
+    "AlgorithmGraphs.bind_algorithm_instance",
+    "AlgorithmGraphs.replace_algorithm_parameter!",
+    "AlgorithmGraphs.process_algorithm!",
+    "AlgorithmGraphs.reset_algorithm!",
     "AlgorithmGraphs.prepared_algorithm",
     "Control.DiscreteIntegratorPlan",
     "Control.DiscreteIntegratorState",
@@ -2453,6 +2460,13 @@ exports = [
 ]
 public = [
     "prepared_algorithm",
+    "graph_port_contract",
+    "prepare_algorithm_instance",
+    "algorithm_port_contracts",
+    "bind_algorithm_instance",
+    "replace_algorithm_parameter!",
+    "process_algorithm!",
+    "reset_algorithm!",
 ]
 
 [[cross_module_imports]]
@@ -2845,11 +2859,11 @@ adaptive_optics_sim_hooks = [
 path = "ext/AdaptiveOpticsSimCalculonAlgorithmsExt.jl"
 dependency = "CalculonAlgorithms"
 adaptive_optics_sim_hooks = [
-    "_algorithm_port_contracts",
-    "_prepare_algorithm_instance",
-    "_process_algorithm!",
-    "_replace_algorithm_parameter!",
-    "_reset_algorithm!",
+    "algorithm_port_contracts",
+    "prepare_algorithm_instance",
+    "process_algorithm!",
+    "replace_algorithm_parameter!",
+    "reset_algorithm!",
 ]
 
 [[extension_files]]
@@ -3018,11 +3032,11 @@ hooks = [
 [[extension_hook_owners]]
 owner = "AlgorithmGraphs"
 hooks = [
-    "_algorithm_port_contracts",
+    "algorithm_port_contracts",
     "capture_model_time_origin",
     "capture_model_timestamp",
-    "_prepare_algorithm_instance",
-    "_process_algorithm!",
-    "_replace_algorithm_parameter!",
-    "_reset_algorithm!",
+    "prepare_algorithm_instance",
+    "process_algorithm!",
+    "replace_algorithm_parameter!",
+    "reset_algorithm!",
 ]

@@ -1,5 +1,5 @@
 @inline function _process_node!(node::PreparedAlgorithmNode)
-    _process_algorithm!(node.algorithm, node.outputs, node.inputs)
+    process_algorithm!(node.algorithm, node.outputs, node.inputs)
     return nothing
 end
 
@@ -36,7 +36,7 @@ end
 
 @inline _reset_nodes!(::Tuple{}) = nothing
 @inline function _reset_nodes!(nodes::Tuple)
-    _reset_algorithm!(first(nodes).algorithm)
+    reset_algorithm!(first(nodes).algorithm)
     _reset_nodes!(Base.tail(nodes))
     return nothing
 end
