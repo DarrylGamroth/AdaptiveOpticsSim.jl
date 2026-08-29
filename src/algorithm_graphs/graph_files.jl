@@ -62,6 +62,14 @@ function _file_real(value, context::AbstractString)
     return value
 end
 
+function _file_bool(value, context::AbstractString)
+    value isa Bool || throw(_file_error(
+        context,
+        "expected a boolean, got $(typeof(value))",
+    ))
+    return value
+end
+
 function _file_identifier(value, context::AbstractString)
     text = _file_string(value, context)
     Base.isidentifier(text) || throw(_file_error(
@@ -249,6 +257,156 @@ function _modal_opd_expansion_f32_node(
     )
 end
 
+function _shack_hartmann_rate_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :aperture_revision,
+        :central_obstruction_ratio,
+        :diffraction_padding,
+        :half_pixel_shift,
+        :n_lenslets,
+        :n_pix_subap,
+        :opd_schema,
+        :photon_rate_schema,
+        :pixel_scale_arcsec,
+        :pupil_reflectivity,
+        :resolution,
+        :shannon_sampling,
+        :source_band,
+        :source_magnitude,
+        :source_photon_irradiance_m2_s,
+        :source_position_angle_deg,
+        :source_separation_arcsec,
+        :source_wavelength_m,
+        :telescope_diameter_m,
+        :threshold_convolution,
+        :valid_subaperture_threshold,
+    )
+    required_fields = (
+        :n_lenslets,
+        :n_pix_subap,
+        :opd_schema,
+        :photon_rate_schema,
+        :pixel_scale_arcsec,
+        :resolution,
+        :source_wavelength_m,
+        :telescope_diameter_m,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+
+    central_obstruction_ratio = hasproperty(
+        config,
+        :central_obstruction_ratio,
+    ) ? _file_real(
+        config.central_obstruction_ratio,
+        "$context.central_obstruction_ratio",
+    ) : 0.0
+    pupil_reflectivity = hasproperty(config, :pupil_reflectivity) ?
+        _file_real(config.pupil_reflectivity, "$context.pupil_reflectivity") :
+        1.0
+    aperture_revision = hasproperty(config, :aperture_revision) ?
+        _file_integer(config.aperture_revision, "$context.aperture_revision") :
+        0
+    diffraction_padding = hasproperty(config, :diffraction_padding) ?
+        _file_integer(
+            config.diffraction_padding,
+            "$context.diffraction_padding",
+        ) : 2
+    valid_subaperture_threshold = hasproperty(
+        config,
+        :valid_subaperture_threshold,
+    ) ? _file_real(
+        config.valid_subaperture_threshold,
+        "$context.valid_subaperture_threshold",
+    ) : 0.1
+    threshold_convolution = hasproperty(config, :threshold_convolution) ?
+        _file_real(
+            config.threshold_convolution,
+            "$context.threshold_convolution",
+        ) : 0.05
+    half_pixel_shift = hasproperty(config, :half_pixel_shift) ?
+        _file_bool(config.half_pixel_shift, "$context.half_pixel_shift") :
+        false
+    shannon_sampling = hasproperty(config, :shannon_sampling) ?
+        _file_bool(config.shannon_sampling, "$context.shannon_sampling") :
+        true
+    source_separation_arcsec = hasproperty(
+        config,
+        :source_separation_arcsec,
+    ) ? _file_real(
+        config.source_separation_arcsec,
+        "$context.source_separation_arcsec",
+    ) : 0.0
+    source_position_angle_deg = hasproperty(
+        config,
+        :source_position_angle_deg,
+    ) ? _file_real(
+        config.source_position_angle_deg,
+        "$context.source_position_angle_deg",
+    ) : 0.0
+    source_band = hasproperty(config, :source_band) ? _file_identifier(
+        config.source_band,
+        "$context.source_band",
+    ) : :custom
+    source_magnitude = hasproperty(config, :source_magnitude) ? _file_real(
+        config.source_magnitude,
+        "$context.source_magnitude",
+    ) : 0.0
+    source_photon_irradiance_m2_s = hasproperty(
+        config,
+        :source_photon_irradiance_m2_s,
+    ) ? _file_real(
+        config.source_photon_irradiance_m2_s,
+        "$context.source_photon_irradiance_m2_s",
+    ) : nothing
+
+    return shack_hartmann_rate_node(
+        name;
+        resolution=_file_integer(config.resolution, "$context.resolution"),
+        telescope_diameter_m=_file_real(
+            config.telescope_diameter_m,
+            "$context.telescope_diameter_m",
+        ),
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        n_lenslets=_file_integer(config.n_lenslets, "$context.n_lenslets"),
+        n_pix_subap=_file_integer(
+            config.n_pix_subap,
+            "$context.n_pix_subap",
+        ),
+        diffraction_padding,
+        pixel_scale_arcsec=_file_real(
+            config.pixel_scale_arcsec,
+            "$context.pixel_scale_arcsec",
+        ),
+        valid_subaperture_threshold,
+        threshold_convolution,
+        half_pixel_shift,
+        shannon_sampling,
+        source_band,
+        source_magnitude,
+        source_wavelength_m=_file_real(
+            config.source_wavelength_m,
+            "$context.source_wavelength_m",
+        ),
+        source_photon_irradiance_m2_s,
+        source_separation_arcsec,
+        source_position_angle_deg,
+        opd_schema=_file_string(config.opd_schema, "$context.opd_schema"),
+        photon_rate_schema=_file_string(
+            config.photon_rate_schema,
+            "$context.photon_rate_schema",
+        ),
+        T=Float32,
+    )
+end
+
 """
     builtin_graph_node_types()
 
@@ -261,6 +419,7 @@ function builtin_graph_node_types()
     return (
         discrete_integrator_f32=_discrete_integrator_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
+        shack_hartmann_rate_f32=_shack_hartmann_rate_f32_node,
     )
 end
 

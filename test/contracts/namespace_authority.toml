@@ -547,6 +547,7 @@ new_domain_exports = [
     "AlgorithmGraphs.sparse_parameter",
     "AlgorithmGraphs.discrete_integrator_node",
     "AlgorithmGraphs.modal_opd_expansion_node",
+    "AlgorithmGraphs.shack_hartmann_rate_node",
     "AlgorithmGraphs.load_algorithm_graph",
     "AlgorithmGraphs.builtin_graph_node_types",
     "AlgorithmGraphs.prepare_algorithm_graph",
@@ -598,6 +599,8 @@ new_domain_public = [
     "AlgorithmGraphs.DiscreteIntegratorNodeProps",
     "AlgorithmGraphs.ModalOPDExpansionNode",
     "AlgorithmGraphs.ModalOPDExpansionNodeConfig",
+    "AlgorithmGraphs.ShackHartmannRateNode",
+    "AlgorithmGraphs.ShackHartmannRateNodeConfig",
     "Control.DiscreteIntegratorPlan",
     "Control.DiscreteIntegratorState",
     "Control.DiscreteIntegratorWorkspace",
@@ -884,7 +887,9 @@ name = "AlgorithmGraphs"
 dependencies = [
     "Calibration",
     "Control",
+    "Optics",
     "Plant",
+    "WavefrontSensors",
 ]
 
 [[api_allowlists]]
@@ -2450,6 +2455,7 @@ exports = [
     "sparse_parameter",
     "discrete_integrator_node",
     "modal_opd_expansion_node",
+    "shack_hartmann_rate_node",
     "load_algorithm_graph",
     "builtin_graph_node_types",
     "prepare_algorithm_graph",
@@ -2485,6 +2491,8 @@ public = [
     "DiscreteIntegratorNodeProps",
     "ModalOPDExpansionNode",
     "ModalOPDExpansionNodeConfig",
+    "ShackHartmannRateNode",
+    "ShackHartmannRateNodeConfig",
 ]
 
 [[cross_module_imports]]

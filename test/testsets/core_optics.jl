@@ -1225,6 +1225,16 @@ end
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
     wavefront = PupilFunction(tel)
+    opd_parent = zeros(Float64, 64, 64)
+    bound_opd = @view opd_parent[1:2:63, 2:2:64]
+    bound_wavefront = @inferred PupilFunction(tel, bound_opd)
+    @test bound_wavefront.opd === bound_opd
+    @test axes(bound_wavefront.opd) == (Base.OneTo(32), Base.OneTo(32))
+    @test backend(bound_wavefront) == backend(tel)
+    @test_throws DimensionMismatchError PupilFunction(
+        tel,
+        zeros(Float64, 31, 32),
+    )
     field = ElectricField(wavefront, src; zero_padding=2)
     formation = prepare_pupil_field(wavefront, src, field)
     fill_electric_field!(field, wavefront, formation)

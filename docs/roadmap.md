@@ -102,9 +102,10 @@ The delivery order for this boundary is:
 
 1. Stabilize the AOS-native graph-node protocol and versioned TOML static
    subset without changing domain numerical APIs.
-2. Add executable node adapters and graph files for REVOLT Classic, REVOLT
-   Copper, and SPIDERS only as their complete scientific node sets become
-   available and qualified.
+2. Extend the executable REVOLT Classic SHWFS TOML slice through detector,
+   slopes, reconstruction, control, atmosphere, DM, and science products; add
+   complete REVOLT Copper and SPIDERS files only after their authoritative
+   topologies and scientific node sets are available and qualified.
 3. Preserve direct Julia graph construction for generated, conditional, and
    multi-rate arrangements that exceed the TOML subset.
 4. Provide deterministic fixed-step and prepared-boundary model-time drivers;

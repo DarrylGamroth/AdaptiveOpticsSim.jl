@@ -30,11 +30,15 @@ end
     pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=7.0)
     sh = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
-    rate = shack_hartmann_rate_map(sh, pupil, src)
-    prepared = prepare_wfs_optics(shack_hartmann_optics(sh, src),
-        pupil, rate)
+    optics = shack_hartmann_optics(sh, src)
+    rate_parent = zeros(eltype(pupil.opd), 256, 256)
+    rate_values = @view rate_parent[1:2:255, 2:2:256]
+    rate = shack_hartmann_rate_map(optics, pupil, rate_values)
+    prepared = prepare_wfs_optics(optics, pupil, rate)
+    form_wfs_optical_products!(rate, pupil, prepared)
     form_wfs_optical_products!(rate, pupil, prepared)
     @test WavefrontSensors.wfs_optical_products(prepared) === rate
+    @test rate.values === rate_values
     @test size(rate.values) == (128, 128)
     @test size(prepared.workspace.sampled_spot_cube) ==
         (16 * 16, 8, 8)

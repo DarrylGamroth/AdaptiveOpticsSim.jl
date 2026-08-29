@@ -145,6 +145,39 @@ function run_algorithm_graph_backend_smoke(
     @test compute_device(graph) == target
     @test compute_device(graph_output(graph, Val(:opd))) == target
     @test Array(graph_output(graph, Val(:opd))) ≈ Float32[0.5 0.0; 0.5 0.5]
+
+    pupil_opd = BackendArray(zeros(Float32, 16, 16))
+    shwfs_target = compute_device(pupil_opd)
+    shwfs_definition = algorithm_graph(
+        (
+            shack_hartmann_rate_node(
+                :shwfs;
+                resolution=16,
+                telescope_diameter_m=8.0,
+                n_lenslets=4,
+                n_pix_subap=4,
+                pixel_scale_arcsec=0.1,
+                source_wavelength_m=0.75e-6,
+                source_photon_irradiance_m2_s=1.0,
+                opd_schema="test.graph.pupil-opd.f32/1",
+                photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+            ),
+        );
+        name=:gpu_shwfs_photon_rate,
+        inputs=(graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),),
+        outputs=(
+            graph_output(:shwfs_photon_rate, :shwfs => :photon_rate),
+        ),
+    )
+    shwfs_graph = prepare_algorithm_graph(
+        shwfs_definition;
+        target=shwfs_target,
+    )
+    step_graph!(shwfs_graph)
+    photon_rate = graph_output(shwfs_graph, Val(:shwfs_photon_rate))
+    @test compute_device(photon_rate) == shwfs_target
+    @test size(photon_rate) == (16, 16)
+    @test sum(Array(photon_rate)) > 0
     return nothing
 end
 

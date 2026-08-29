@@ -317,3 +317,271 @@ end
 end
 
 @inline reset_graph_node!(::_ModalOPDExpansionOwner) = nothing
+
+struct ShackHartmannRateNode{T<:AbstractFloat} end
+
+"""Construction values for one diffractive Shack–Hartmann photon-rate node."""
+struct ShackHartmannRateNodeConfig{T<:AbstractFloat,TD,S}
+    telescope::TD
+    source::S
+    n_lenslets::Int
+    n_pix_subap::Int
+    diffraction_padding::Int
+    pixel_scale_arcsec::T
+    valid_subaperture_threshold::T
+    threshold_convolution::T
+    half_pixel_shift::Bool
+    shannon_sampling::Bool
+    opd_schema::String
+    photon_rate_schema::String
+end
+
+function _shack_hartmann_rate_config(
+    ::Type{T};
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    central_obstruction_ratio::Real,
+    pupil_reflectivity::Real,
+    aperture_revision::Integer,
+    n_lenslets::Integer,
+    n_pix_subap::Integer,
+    diffraction_padding::Integer,
+    pixel_scale_arcsec::Real,
+    valid_subaperture_threshold::Real,
+    threshold_convolution::Real,
+    half_pixel_shift::Bool,
+    shannon_sampling::Bool,
+    source_band::Symbol,
+    source_magnitude::Real,
+    source_wavelength_m::Real,
+    source_photon_irradiance_m2_s::Union{Nothing,Real},
+    source_separation_arcsec::Real,
+    source_position_angle_deg::Real,
+    opd_schema::AbstractString,
+    photon_rate_schema::AbstractString,
+) where {T<:AbstractFloat}
+    lenslets = Int(n_lenslets)
+    pixels = Int(n_pix_subap)
+    padding = Int(diffraction_padding)
+    pupil_resolution = Int(resolution)
+    lenslets > 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann n_lenslets must be greater than zero",
+    ))
+    pupil_resolution > 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann resolution must be greater than zero",
+    ))
+    pupil_resolution % lenslets == 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann resolution must be divisible by n_lenslets",
+    ))
+    pixels > 0 && iseven(pixels) || throw(AlgorithmGraphError(
+        "Shack–Hartmann n_pix_subap must be positive and even",
+    ))
+    padding > 0 || throw(AlgorithmGraphError(
+        "Shack–Hartmann diffraction_padding must be greater than zero",
+    ))
+    isempty(opd_schema) && throw(AlgorithmGraphError(
+        "Shack–Hartmann opd_schema must not be empty",
+    ))
+    isempty(photon_rate_schema) && throw(AlgorithmGraphError(
+        "Shack–Hartmann photon_rate_schema must not be empty",
+    ))
+
+    pixel_scale = T(pixel_scale_arcsec)
+    valid_threshold = T(valid_subaperture_threshold)
+    convolution_threshold = T(threshold_convolution)
+    isfinite(pixel_scale) && pixel_scale > zero(T) || throw(
+        AlgorithmGraphError(
+            "Shack–Hartmann pixel_scale_arcsec must be finite and positive",
+        ))
+    isfinite(valid_threshold) && zero(T) <= valid_threshold <= one(T) ||
+        throw(AlgorithmGraphError(
+            "Shack–Hartmann valid_subaperture_threshold must lie in [0, 1]",
+        ))
+    isfinite(convolution_threshold) &&
+        zero(T) <= convolution_threshold <= one(T) || throw(
+            AlgorithmGraphError(
+                "Shack–Hartmann threshold_convolution must lie in [0, 1]",
+            ))
+
+    telescope, source = try
+        definition = TelescopeDefinition(
+            resolution=pupil_resolution,
+            diameter=telescope_diameter_m,
+            central_obstruction=central_obstruction_ratio,
+            pupil_reflectivity=pupil_reflectivity,
+            revision=aperture_revision,
+            T=T,
+        )
+        guide_source = Source(
+            band=source_band,
+            magnitude=source_magnitude,
+            coordinates=(source_separation_arcsec, source_position_angle_deg),
+            wavelength=source_wavelength_m,
+            photon_irradiance=source_photon_irradiance_m2_s,
+            T=T,
+        )
+        photon_irradiance(guide_source)
+        (definition, guide_source)
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+
+    return ShackHartmannRateNodeConfig(
+        telescope,
+        source,
+        lenslets,
+        pixels,
+        padding,
+        pixel_scale,
+        valid_threshold,
+        convolution_threshold,
+        half_pixel_shift,
+        shannon_sampling,
+        String(opd_schema),
+        String(photon_rate_schema),
+    )
+end
+
+"""
+    shack_hartmann_rate_node(name; ...)
+
+Declare one complete-frame diffractive Shack–Hartmann optics node. The node
+consumes a pupil-plane OPD map and writes a cell-integrated detector-plane
+photon-rate mosaic. Detector exposure/noise and slope estimation remain
+separate graph operations.
+"""
+function shack_hartmann_rate_node(
+    name::Symbol;
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    n_lenslets::Integer,
+    n_pix_subap::Integer,
+    pixel_scale_arcsec::Real,
+    source_wavelength_m::Real,
+    source_photon_irradiance_m2_s::Union{Nothing,Real}=nothing,
+    opd_schema::AbstractString,
+    photon_rate_schema::AbstractString,
+    central_obstruction_ratio::Real=0,
+    pupil_reflectivity::Real=1,
+    aperture_revision::Integer=0,
+    diffraction_padding::Integer=2,
+    valid_subaperture_threshold::Real=0.1,
+    threshold_convolution::Real=0.05,
+    half_pixel_shift::Bool=false,
+    shannon_sampling::Bool=true,
+    source_band::Symbol=:custom,
+    source_magnitude::Real=0,
+    source_separation_arcsec::Real=0,
+    source_position_angle_deg::Real=0,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _shack_hartmann_rate_config(
+        T;
+        resolution,
+        telescope_diameter_m,
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        n_lenslets,
+        n_pix_subap,
+        diffraction_padding,
+        pixel_scale_arcsec,
+        valid_subaperture_threshold,
+        threshold_convolution,
+        half_pixel_shift,
+        shannon_sampling,
+        source_band,
+        source_magnitude,
+        source_wavelength_m,
+        source_photon_irradiance_m2_s,
+        source_separation_arcsec,
+        source_position_angle_deg,
+        opd_schema,
+        photon_rate_schema,
+    )
+    return algorithm_node(
+        name,
+        ShackHartmannRateNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{ShackHartmannRateNode{T}},
+    config::ShackHartmannRateNodeConfig{T},
+) where {T}
+    output_extent = config.n_lenslets * config.n_pix_subap
+    return (
+        graph_port_contract(
+            :opd,
+            :input,
+            :data,
+            T,
+            (config.telescope.resolution, config.telescope.resolution),
+            config.opd_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :photon_rate,
+            :output,
+            :data,
+            T,
+            (output_extent, output_extent),
+            config.photon_rate_schema,
+            :column_major,
+        ),
+    )
+end
+
+struct _ShackHartmannRateOwner{P}
+    prepared::P
+end
+
+function prepare_graph_node(
+    ::Type{ShackHartmannRateNode{T}},
+    config::ShackHartmannRateNodeConfig{T},
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:opd,)},
+    outputs::NamedTuple{(:photon_rate,)},
+    ::NamedTuple{()},
+    target,
+) where {T}
+    telescope = prepare_telescope(config.telescope, target)
+    pupil = PupilFunction(telescope, inputs.opd)
+    sensor = ShackHartmannWFS(
+        telescope;
+        n_lenslets=config.n_lenslets,
+        threshold=config.valid_subaperture_threshold,
+        threshold_convolution=config.threshold_convolution,
+        half_pixel_shift=config.half_pixel_shift,
+        diffraction_padding=config.diffraction_padding,
+        pixel_scale_arcsec=config.pixel_scale_arcsec,
+        n_pix_subap=config.n_pix_subap,
+        shannon_sampling=config.shannon_sampling,
+        mode=Diffractive(),
+        T=T,
+        backend=compute_device_backend(target),
+    )
+    optics = shack_hartmann_optics(sensor, config.source)
+    photon_rate = shack_hartmann_rate_map(
+        optics,
+        pupil,
+        outputs.photon_rate,
+    )
+    prepared = prepare_wfs_optics(optics, pupil, photon_rate)
+    return _ShackHartmannRateOwner(prepared)
+end
+
+@inline function step_graph_node!(owner::_ShackHartmannRateOwner)
+    prepared = owner.prepared
+    form_wfs_optical_products!(
+        prepared.output,
+        prepared.input,
+        prepared,
+    )
+    return nothing
+end
+
+@inline reset_graph_node!(::_ShackHartmannRateOwner) = nothing

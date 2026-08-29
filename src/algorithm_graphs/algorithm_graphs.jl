@@ -37,6 +37,19 @@ import ..Control:
     DiscreteIntegratorWorkspace,
     reset_controller!,
     update!
+import ..Optics:
+    PupilFunction,
+    Source,
+    TelescopeDefinition,
+    photon_irradiance,
+    prepare_telescope
+import ..WavefrontSensors:
+    Diffractive,
+    ShackHartmannWFS,
+    form_wfs_optical_products!,
+    prepare_wfs_optics,
+    shack_hartmann_optics,
+    shack_hartmann_rate_map
 
 include("definitions.jl")
 include("preparation.jl")

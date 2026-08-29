@@ -1360,10 +1360,12 @@ end
 
 """
     shack_hartmann_rate_map(sensor, input, source=nothing)
+    shack_hartmann_rate_map(model, input, values)
 
 Allocate a detector-plane photon-rate mosaic with metadata compatible with a
 prepared Shack-Hartmann optical front end. Execution remains allocation-free;
-applications may instead construct and retain an equivalent `IntensityMap`.
+the `values` overload binds an already allocated caller-owned, one-based output
+matrix.
 """
 function shack_hartmann_rate_map(
     sensor::ShackHartmannWFS{<:Diffractive},
@@ -1405,10 +1407,12 @@ function shack_hartmann_rate_map(sensor::ShackHartmannWFS{<:Diffractive},
     return shack_hartmann_rate_map(optics, input)
 end
 
-function shack_hartmann_rate_map(model::ShackHartmannOptics,
-    input::Union{PupilFunction,ElectricField}, source=nothing)
-    resolved_model = source === nothing ? model :
-        _sh_optics_with_source(model, source)
+function _shack_hartmann_rate_map(
+    resolved_model::ShackHartmannOptics,
+    input::Union{PupilFunction,ElectricField},
+    values::AbstractMatrix,
+)
+    Base.require_one_based_indexing(values)
     wavelength_m = _sh_front_end_wavelength(resolved_model, input)
     sampling = _sh_microlens_sampling_configuration(resolved_model,
         input.metadata.dimensions[1],
@@ -1416,8 +1420,22 @@ function shack_hartmann_rate_map(model::ShackHartmannOptics,
     propagation = microlens_propagation_workspace(resolved_model.propagation)
     n = n_lenslets(resolved_model) * sampling.spot_samples_per_axis
     T = eltype(propagation.intensity)
-    values = similar(_sh_input_storage(input), T, n, n)
-    fill!(values, zero(T))
+    eltype(values) === T || throw(WFSPreparationError(
+        :wfs_optics,
+        :numeric_type,
+        "Shack-Hartmann rate output numeric type must match its optics workspace",
+    ))
+    size(values) == (n, n) || throw(WFSPreparationError(
+        :wfs_optics,
+        :shape,
+        "Shack-Hartmann rate output must match the configured spot mosaic",
+    ))
+    compute_device(values) == compute_device(_sh_input_storage(input)) ||
+        throw(WFSPreparationError(
+            :wfs_optics,
+            :device,
+            "Shack-Hartmann input and rate output occupy different compute devices",
+        ))
     pixel_scale_rad = T(sampling.pixel_scale_arcsec / ARCSEC_PER_RAD)
     metadata = OpticalPlaneMetadata(DetectorPlane(), values;
         coordinate_domain=AngularCoordinates(),
@@ -1427,6 +1445,34 @@ function shack_hartmann_rate_map(model::ShackHartmannOptics,
         spatial_measure=CellIntegratedMeasure(),
         coherence=IncoherentIntensityAddition())
     return IntensityMap(metadata, values)
+end
+
+function shack_hartmann_rate_map(
+    model::ShackHartmannOptics,
+    input::Union{PupilFunction,ElectricField},
+    values::AbstractMatrix,
+)
+    return _shack_hartmann_rate_map(model, input, values)
+end
+
+function shack_hartmann_rate_map(model::ShackHartmannOptics,
+    input::Union{PupilFunction,ElectricField}, source=nothing)
+    resolved_model = source === nothing ? model :
+        _sh_optics_with_source(model, source)
+    sampling = _sh_microlens_sampling_configuration(resolved_model,
+        input.metadata.dimensions[1],
+        _sh_pupil_diameter(input.metadata),
+        _sh_front_end_wavelength(resolved_model, input))
+    propagation = microlens_propagation_workspace(resolved_model.propagation)
+    n = n_lenslets(resolved_model) * sampling.spot_samples_per_axis
+    values = similar(
+        _sh_input_storage(input),
+        eltype(propagation.intensity),
+        n,
+        n,
+    )
+    fill!(values, zero(eltype(values)))
+    return _shack_hartmann_rate_map(resolved_model, input, values)
 end
 
 

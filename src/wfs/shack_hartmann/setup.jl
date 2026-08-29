@@ -608,6 +608,15 @@ function _prepare_microlens_sampling_wavelength!(
         propagation.sampled_n_pix_subap = n_pix_subap
     end
 
+    n_binned = div(pad, binning_pixel_scale)
+    if size(propagation.bin_buffer) != (n_binned, n_binned)
+        propagation.bin_buffer = similar(
+            propagation.bin_buffer,
+            n_binned,
+            n_binned,
+        )
+    end
+
     propagation.binning_pixel_scale = binning_pixel_scale
     T = eltype(propagation.intensity)
     half_shift_ratio = microlens_array(optics).params.half_pixel_shift ?

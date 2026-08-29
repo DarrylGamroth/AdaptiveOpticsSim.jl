@@ -204,13 +204,32 @@ definition = load_algorithm_graph(
 graph = prepare_algorithm_graph(definition; target=target)
 ```
 
-The built-in type map currently contains `discrete_integrator_f32` and
-`modal_opd_expansion_f32`. `merge(builtin_graph_node_types(), companion_types)`
-creates an explicit larger map for optional packages such as the Proper
-companion. Complete REVOLT Classic, REVOLT Copper, and SPIDERS files are not
-claimed until all node types needed by those architectures are executable and
-scientifically qualified. This prevents a configuration file from becoming a
-catalog of plausible but non-running node names.
+The built-in type map currently contains `discrete_integrator_f32`,
+`modal_opd_expansion_f32`, and `shack_hartmann_rate_f32`.
+`merge(builtin_graph_node_types(), companion_types)` creates an explicit larger
+map for optional packages such as the Proper companion. The maintained
+[`revolt_classic_shwfs.toml`](../examples/graphs/revolt_classic_shwfs.toml)
+file is an executable first REVOLT slice: it converts one externally supplied
+complete-frame pupil OPD into the configured 352-by-352 diffractive SHWFS
+photon-rate mosaic. It deliberately stops before detector acquisition, slope
+estimation, reconstruction, control, atmosphere evolution, and science-path
+imaging.
+
+Architecture-file status is therefore explicit:
+
+| Architecture | File-defined executable surface | Remaining authority or implementation gate |
+|---|---|---|
+| REVOLT Classic | Diffractive SHWFS optical stage using the SPECULA telescope, source, lenslet, and sampling values | Add detector, slopes, modal reconstruction, controller delay, DM, atmosphere propagation, and science products before claiming the complete graph |
+| REVOLT Copper | None claimed | The current Copper configuration describes operational RTC components and many alternatives, but does not provide one authoritative AOS simulation topology to transcribe |
+| SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
+
+Complete REVOLT Classic, REVOLT Copper, and SPIDERS files are not claimed until
+all nodes needed by those architectures are executable and scientifically
+qualified. This prevents a configuration file from becoming a catalog of
+plausible but non-running node names. Direct Julia construction remains the
+correct extension path in the meantime: an application may generate nodes,
+branch on configuration, admit a trusted Proper prescription factory, or
+compose several prepared graphs without expanding the static TOML language.
 
 ## Definition And Preparation
 

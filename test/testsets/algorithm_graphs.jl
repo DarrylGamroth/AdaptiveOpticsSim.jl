@@ -1,5 +1,10 @@
 const AOG = AdaptiveOpticsSim.AlgorithmGraphs
 
+function warmed_graph_step_allocation_bytes(graph)
+    step_graph!(graph)
+    return @allocated step_graph!(graph)
+end
+
 struct GraphTestGainDeclaration end
 
 struct GraphTestGainConfiguration
@@ -356,8 +361,7 @@ AOG.reset_graph_node!(::GraphTestFailureOwner) = nothing
     @test graph_step_sequence(graph) == UInt64(1)
     @test !graph_failed(graph)
 
-    step_graph!(graph)
-    @test @allocated(step_graph!(graph)) == 0
+    @test warmed_graph_step_allocation_bytes(graph) == 0
     @test @inferred(step_graph!(graph)) === graph
     @test all(isconcretetype, fieldtypes(typeof(graph)))
 end
@@ -516,6 +520,55 @@ end
     @test graph_output(graph, Val(:command)) ≈ Float32[0.1, 0.2]
 end
 
+@testset "diffractive Shack-Hartmann photon-rate graph node" begin
+    pupil_opd = zeros(Float32, 16, 16)
+    node = shack_hartmann_rate_node(
+        :shwfs;
+        resolution=16,
+        telescope_diameter_m=8.0,
+        n_lenslets=4,
+        n_pix_subap=4,
+        pixel_scale_arcsec=0.1,
+        source_wavelength_m=0.75e-6,
+        source_photon_irradiance_m2_s=1.0,
+        opd_schema="test.graph.pupil-opd.f32/1",
+        photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:shwfs_photon_rate,
+        inputs=(graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),),
+        outputs=(
+            graph_output(:shwfs_photon_rate, :shwfs => :photon_rate),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:shwfs))
+    output = graph_output(graph, Val(:shwfs_photon_rate))
+
+    @test owner.prepared.input.opd === pupil_opd
+    @test owner.prepared.output.values === output
+    @test size(output) == (16, 16)
+    step_graph!(graph)
+    @test all(isfinite, output)
+    @test sum(output) > 0
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+
+    @test_throws AlgorithmGraphError shack_hartmann_rate_node(
+        :invalid_shwfs;
+        resolution=16,
+        telescope_diameter_m=8.0,
+        n_lenslets=4,
+        n_pix_subap=3,
+        pixel_scale_arcsec=0.1,
+        source_wavelength_m=0.75e-6,
+        source_photon_irradiance_m2_s=1.0,
+        opd_schema="test.graph.pupil-opd.f32/1",
+        photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+    )
+end
+
 @testset "TOML graph files compile to native graph definitions" begin
     residual = Float32[1, 2]
     basis = zeros(Float32, 2, 2, 2)
@@ -554,6 +607,7 @@ end
     @test keys(builtin_graph_node_types()) == (
         :discrete_integrator_f32,
         :modal_opd_expansion_f32,
+        :shack_hartmann_rate_f32,
     )
 
     mktemp() do invalid_path, io
@@ -612,6 +666,26 @@ end
         step_graph!(custom)
         @test graph_output(custom, Val(:sample)) == Float32[7, 7]
     end
+end
+
+
+@testset "REVOLT Classic SHWFS TOML path is executable" begin
+    pupil_opd = zeros(Float32, 240, 240)
+    path = joinpath(
+        dirname(dirname(@__DIR__)),
+        "examples",
+        "graphs",
+        "revolt_classic_shwfs.toml",
+    )
+    definition = load_algorithm_graph(path; bindings=(; pupil_opd))
+    graph = prepare_algorithm_graph(definition)
+    step_graph!(graph)
+    photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
+
+    @test graph_name(graph) === :revolt_classic_shwfs
+    @test size(photon_rate) == (352, 352)
+    @test all(isfinite, photon_rate)
+    @test sum(photon_rate) > 0
 end
 
 @testset "portable algorithm graph rejects invalid topology" begin

@@ -1,0 +1,44 @@
+# Executable REVOLT Classic diffractive SHWFS optical stage.
+#
+# This is intentionally not the complete REVOLT Classic simulation or RTC
+# graph. Atmosphere propagation supplies the externally bound pupil OPD. A
+# separate detector node will own exposure, noise, and readout before slope
+# estimation is added. Values follow REVOLT/Python/specula/params_revolt_modal.yml.
+
+schema_version = 1
+name = "revolt_classic_shwfs"
+
+[[nodes]]
+name = "shwfs"
+type = "shack_hartmann_rate_f32"
+
+[nodes.config]
+resolution = 240
+telescope_diameter_m = 1.22
+central_obstruction_ratio = 0.20491803278688525
+pupil_reflectivity = 1.0
+aperture_revision = 1
+n_lenslets = 16
+n_pix_subap = 22
+diffraction_padding = 2
+pixel_scale_arcsec = 0.697
+valid_subaperture_threshold = 0.1
+threshold_convolution = 0.05
+half_pixel_shift = false
+shannon_sampling = true
+source_band = "R"
+source_magnitude = 2.0
+source_wavelength_m = 8.0e-7
+source_separation_arcsec = 0.0
+source_position_angle_deg = 0.0
+opd_schema = "org.revolt.classic.pupil-opd.f32/1"
+photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
+
+[[inputs]]
+name = "pupil_opd"
+destination = "shwfs.opd"
+binding = "pupil_opd"
+
+[[outputs]]
+name = "shwfs_photon_rate"
+source = "shwfs.photon_rate"
