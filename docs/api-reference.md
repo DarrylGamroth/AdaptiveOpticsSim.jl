@@ -1856,6 +1856,10 @@ the canonical representation of these results.
   `Optics.set_command!` plus `Optics.update_surface!` on a native
   `DeformableMirror` prepared from explicit measured actuator coordinates and
   influence-function parameters; it does not invent a physical DM model.
+  `pupil_opd_composition_node` adds that already calibrated surface OPD to an
+  uncompensated pupil OPD on the same grid and publishes the complete pupil
+  OPD consumed by downstream optics; it does not infer sign, conjugation,
+  registration, or timing.
   `control_matrix_reconstruction_node` calls `Control.reconstruct!` with a
   `ControlMatrixPlan` prepared from an explicit dense matrix parameter. A
   `closed_loop_correction_node` owns its exact correction state and workspace,

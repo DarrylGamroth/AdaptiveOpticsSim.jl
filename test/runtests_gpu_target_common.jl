@@ -154,6 +154,7 @@ function run_algorithm_graph_backend_smoke(
         0 1
         1 0
     ])
+    uncompensated_opd = BackendArray(fill(4.0f0, 2, 2))
     dm_definition = algorithm_graph(
         (
             deformable_mirror_surface_node(
@@ -168,13 +169,30 @@ function run_algorithm_graph_backend_smoke(
                 influence_functions_schema=
                     "test.graph.dm-influence-functions.f32/1",
             ),
+            pupil_opd_composition_node(
+                :composition;
+                resolution=2,
+                uncompensated_opd_schema=
+                    "test.graph.uncompensated-opd.f32/1",
+                surface_opd_schema="test.graph.dm-surface-opd.f32/1",
+                pupil_opd_schema="test.graph.pupil-opd.f32/1",
+            ),
         );
         name=:gpu_measured_deformable_mirror,
         inputs=(
             graph_input(:pdm_command, :dm => :pdm_command, pdm_command),
+            graph_input(
+                :uncompensated_opd,
+                :composition => :uncompensated_opd,
+                uncompensated_opd,
+            ),
         ),
         outputs=(
             graph_output(:surface_opd, :dm => :surface_opd),
+            graph_output(:pupil_opd, :composition => :pupil_opd),
+        ),
+        links=(
+            link(:dm => :surface_opd, :composition => :surface_opd),
         ),
         parameters=(
             sparse_parameter(
@@ -191,13 +209,16 @@ function run_algorithm_graph_backend_smoke(
     step_graph!(dm_graph)
     dm_owner = prepared_graph_node(dm_graph, Val(:dm))
     dm_surface = graph_output(dm_graph, Val(:surface_opd))
+    pupil_opd = graph_output(dm_graph, Val(:pupil_opd))
     @test compute_device(
         influence_model(dm_owner.deformable_mirror).modes,
     ) == target
     @test influence_model(dm_owner.deformable_mirror).modes !==
         influence_functions
     @test compute_device(dm_surface) == target
+    @test compute_device(pupil_opd) == target
     @test Array(dm_surface) == Float32[2 3; 3 2]
+    @test Array(pupil_opd) == Float32[6 7; 7 6]
 
     pyramid_opd = BackendArray(zeros(Float32, 8, 8))
     pyramid_target = compute_device(pyramid_opd)

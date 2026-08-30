@@ -209,6 +209,7 @@ The built-in type map currently contains `ccd_detector_acquisition_f32`,
 `deformable_mirror_surface_f32`,
 `discrete_integrator_f32`, `emccd_detector_acquisition_f32`,
 `modal_opd_expansion_f32`,
+`pupil_opd_composition_f32`,
 `pyramid_rate_f32`,
 `shack_hartmann_centroid_f32`, `shack_hartmann_rate_f32`, and
 `shack_hartmann_slope_selection_f32`.
@@ -218,18 +219,24 @@ map for optional packages such as the Proper companion.
 The maintained
 [`revolt_classic_hil.toml`](../examples/graphs/revolt_classic_hil.toml) file
 defines the intended external-RTC sensor boundary. The surrounding AOS
-simulation applies the latest physical-DM command received from the RTC,
-evolves the atmosphere, evaluates the optical path, and binds the resulting
-complete pupil OPD. The graph converts that OPD into the configured 352-by-352
+simulation evolves the atmosphere and evaluates the uncompensated optical
+path. A serialized adapter places the latest accepted complete PDM command in
+the caller-owned input buffer before the graph step. The graph applies that
+command with `deformable_mirror_surface_f32`, composes the resulting sampled
+surface with the uncompensated pupil OPD through
+`pupil_opd_composition_f32`, and produces the configured 352-by-352
 diffractive SHWFS photon-rate mosaic and one completed noisy CCD frame for a
 transport adapter such as PipeWireAO. The RTC performs centroiding,
 reconstruction, control, and command production outside this graph.
-`deformable_mirror_surface_f32` provides the native command-to-surface seam for
-a larger direct-Julia or file-defined graph once the application supplies the
-measured actuator coordinates and influence-function matrix. It is not
-inserted into the maintained REVOLT file because no authoritative REVOLT
-influence artifact has been selected, and optical-path composition remains an
-explicit surrounding simulation operation.
+
+The pinned REVOLT profile and RTC tree agree on the 277-actuator HSDM277 map;
+the map hash is `76b60effb1786a6cdb37ef3b51c12e34cdc592803f1b1161895b69ee85d51ecc`.
+No authoritative HSDM277 influence-function artifact has been identified.
+The locally available `AX307_Influences.fits` instead contains 468 BAX307
+influences over 5,813 pupil samples and belongs to the SPIDERS physical mirror.
+The REVOLT graph therefore requires caller-qualified 277-actuator coordinates
+and a `240^2`-by-277 sampled influence matrix. Preparation snapshots that
+matrix, and the example makes no synthetic-Gaussian instrument claim.
 
 The maintained
 [`revolt_copper_hil.toml`](../examples/graphs/revolt_copper_hil.toml) file

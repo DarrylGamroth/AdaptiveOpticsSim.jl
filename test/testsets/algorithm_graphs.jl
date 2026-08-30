@@ -659,6 +659,45 @@ end
     )
 end
 
+@testset "additive pupil-OPD composition graph node" begin
+    uncompensated_opd = Float32[1 2; 3 4]
+    surface_opd = Float32[-0.25 0.5; 0.75 -1]
+    node = pupil_opd_composition_node(
+        :composition;
+        resolution=2,
+        uncompensated_opd_schema="test.graph.uncompensated-opd.f32/1",
+        surface_opd_schema="test.graph.surface-opd.f32/1",
+        pupil_opd_schema="test.graph.pupil-opd.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:pupil_opd_composition,
+        inputs=(
+            graph_input(
+                :uncompensated_opd,
+                :composition => :uncompensated_opd,
+                uncompensated_opd,
+            ),
+            graph_input(
+                :surface_opd,
+                :composition => :surface_opd,
+                surface_opd,
+            ),
+        ),
+        outputs=(
+            graph_output(:pupil_opd, :composition => :pupil_opd),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    output = graph_output(graph, Val(:pupil_opd))
+
+    @test @inferred(step_graph!(graph)) === graph
+    @test output == Float32[0.75 2.5; 3.75 3]
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    reset_graph!(graph)
+    @test all(iszero, output)
+end
+
 @testset "diffractive Shack-Hartmann photon-rate graph node" begin
     pupil_opd = zeros(Float32, 16, 16)
     node = shack_hartmann_rate_node(
@@ -1265,6 +1304,7 @@ end
         :discrete_integrator_f32,
         :emccd_detector_acquisition_f32,
         :modal_opd_expansion_f32,
+        :pupil_opd_composition_f32,
         :pyramid_rate_f32,
         :shack_hartmann_centroid_f32,
         :shack_hartmann_rate_f32,
@@ -1360,26 +1400,52 @@ end
 
 
 @testset "REVOLT Classic HIL sensor TOML path is executable" begin
-    pupil_opd = zeros(Float32, 240, 240)
+    pdm_command = zeros(Float32, 277)
+    pdm_command[1] = 0.5f0
+    uncompensated_pupil_opd = fill(2.0f-8, 240, 240)
+    # Synthetic wiring fixture only. A real run must bind the qualified HSDM277
+    # coordinates and influence functions required by the graph file.
+    pdm_actuator_coordinates = zeros(Float32, 2, 277)
+    pdm_influence_functions = zeros(Float32, 240 * 240, 277)
+    fill!(@view(pdm_influence_functions[:, 1]), 1.0f-8)
     path = joinpath(
         dirname(dirname(@__DIR__)),
         "examples",
         "graphs",
         "revolt_classic_hil.toml",
     )
-    definition = load_algorithm_graph(path; bindings=(; pupil_opd))
+    definition = load_algorithm_graph(
+        path;
+        bindings=(;
+            pdm_command,
+            uncompensated_pupil_opd,
+            pdm_actuator_coordinates,
+            pdm_influence_functions,
+        ),
+    )
     graph = prepare_algorithm_graph(definition)
     step_graph!(graph)
+    surface_opd = graph_output(graph, Val(:pdm_surface_opd))
+    pupil_opd = graph_output(graph, Val(:pupil_opd))
     photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
     frame = graph_output(graph, Val(:shwfs_frame))
 
     @test graph_name(graph) === :revolt_classic_hil
+    @test graph_step_sequence(graph) == UInt64(1)
+    @test surface_opd ≈ fill(0.5f-8, 240, 240)
+    @test pupil_opd ≈ fill(2.5f-8, 240, 240)
     @test size(photon_rate) == (352, 352)
     @test size(frame) == (352, 352)
     @test all(isfinite, photon_rate)
     @test all(isfinite, frame)
     @test sum(photon_rate) > 0
     @test sum(frame) > 0
+
+    pdm_command[1] = -0.25f0
+    step_graph!(graph)
+    @test surface_opd ≈ fill(-0.25f-8, 240, 240)
+    @test pupil_opd ≈ fill(1.75f-8, 240, 240)
+    @test warmed_graph_step_allocation_bytes(graph) == 0
 end
 
 @testset "REVOLT Copper HIL sensor TOML path is executable" begin

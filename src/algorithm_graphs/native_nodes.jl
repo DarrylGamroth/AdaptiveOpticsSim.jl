@@ -791,6 +791,133 @@ end
     return nothing
 end
 
+struct PupilOPDCompositionNode{T<:AbstractFloat} end
+
+"""Construction values for one additive pupil-OPD composition node."""
+struct PupilOPDCompositionNodeConfig
+    resolution::Int
+    uncompensated_opd_schema::String
+    surface_opd_schema::String
+    pupil_opd_schema::String
+
+    function PupilOPDCompositionNodeConfig(
+        resolution::Integer,
+        uncompensated_opd_schema::AbstractString,
+        surface_opd_schema::AbstractString,
+        pupil_opd_schema::AbstractString,
+    )
+        resolution isa Bool && throw(AlgorithmGraphError(
+            "pupil-OPD composition resolution must be an integer, not Bool",
+        ))
+        0 < resolution <= typemax(Int) || throw(AlgorithmGraphError(
+            "pupil-OPD composition resolution must be positive and fit the " *
+            "host index range",
+        ))
+        schemas = (
+            uncompensated_opd_schema,
+            surface_opd_schema,
+            pupil_opd_schema,
+        )
+        all(schema -> !isempty(schema), schemas) || throw(AlgorithmGraphError(
+            "pupil-OPD composition scientific schemas must not be empty",
+        ))
+        return new(
+            Int(resolution),
+            String(uncompensated_opd_schema),
+            String(surface_opd_schema),
+            String(pupil_opd_schema),
+        )
+    end
+end
+
+"""
+    pupil_opd_composition_node(name; resolution, uncompensated_opd_schema,
+                               surface_opd_schema, pupil_opd_schema,
+                               T=Float32)
+
+Declare one same-grid additive optical-path operation. Each step adds one
+complete deformable-mirror surface OPD to the uncompensated pupil OPD and
+publishes one complete pupil-plane OPD map. The node does not infer surface
+sign, path placement, conjugation, resampling, or command timing.
+"""
+function pupil_opd_composition_node(
+    name::Symbol;
+    resolution::Integer,
+    uncompensated_opd_schema::AbstractString,
+    surface_opd_schema::AbstractString,
+    pupil_opd_schema::AbstractString,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = PupilOPDCompositionNodeConfig(
+        resolution,
+        uncompensated_opd_schema,
+        surface_opd_schema,
+        pupil_opd_schema,
+    )
+    return algorithm_node(
+        name,
+        PupilOPDCompositionNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{PupilOPDCompositionNode{T}},
+    config::PupilOPDCompositionNodeConfig,
+) where {T}
+    format(name, direction, schema) = graph_port_contract(
+        name,
+        direction,
+        :data,
+        T,
+        (config.resolution, config.resolution),
+        schema,
+        :column_major,
+    )
+    return (
+        format(
+            :uncompensated_opd,
+            :input,
+            config.uncompensated_opd_schema,
+        ),
+        format(:surface_opd, :input, config.surface_opd_schema),
+        format(:pupil_opd, :output, config.pupil_opd_schema),
+    )
+end
+
+struct _PupilOPDCompositionOwner{Uncompensated,Surface,Output}
+    uncompensated_opd::Uncompensated
+    surface_opd::Surface
+    pupil_opd::Output
+end
+
+function prepare_graph_node(
+    ::Type{PupilOPDCompositionNode{T}},
+    ::PupilOPDCompositionNodeConfig,
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:uncompensated_opd,:surface_opd)},
+    outputs::NamedTuple{(:pupil_opd,)},
+    ::NamedTuple{()},
+    target,
+) where {T}
+    return _PupilOPDCompositionOwner(
+        inputs.uncompensated_opd,
+        inputs.surface_opd,
+        outputs.pupil_opd,
+    )
+end
+
+@inline function step_graph_node!(owner::_PupilOPDCompositionOwner)
+    @. owner.pupil_opd = owner.uncompensated_opd + owner.surface_opd
+    return nothing
+end
+
+@inline function reset_graph_node!(owner::_PupilOPDCompositionOwner)
+    fill!(owner.pupil_opd, zero(eltype(owner.pupil_opd)))
+    return nothing
+end
+
 struct ShackHartmannRateNode{T<:AbstractFloat} end
 
 """Construction values for one diffractive Shack–Hartmann photon-rate node."""

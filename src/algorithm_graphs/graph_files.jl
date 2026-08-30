@@ -379,6 +379,39 @@ function _deformable_mirror_surface_f32_node(
     )
 end
 
+function _pupil_opd_composition_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :pupil_opd_schema,
+        :resolution,
+        :surface_opd_schema,
+        :uncompensated_opd_schema,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, config_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    return pupil_opd_composition_node(
+        name;
+        resolution=_file_integer(config.resolution, "$context.resolution"),
+        uncompensated_opd_schema=_file_string(
+            config.uncompensated_opd_schema,
+            "$context.uncompensated_opd_schema",
+        ),
+        surface_opd_schema=_file_string(
+            config.surface_opd_schema,
+            "$context.surface_opd_schema",
+        ),
+        pupil_opd_schema=_file_string(
+            config.pupil_opd_schema,
+            "$context.pupil_opd_schema",
+        ),
+        T=Float32,
+    )
+end
+
 function _shack_hartmann_rate_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -1077,6 +1110,7 @@ function builtin_graph_node_types()
         emccd_detector_acquisition_f32=
             _emccd_detector_acquisition_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
+        pupil_opd_composition_f32=_pupil_opd_composition_f32_node,
         pyramid_rate_f32=_pyramid_rate_f32_node,
         shack_hartmann_centroid_f32=_shack_hartmann_centroid_f32_node,
         shack_hartmann_rate_f32=_shack_hartmann_rate_f32_node,
