@@ -54,3 +54,8 @@ path = "2026-07-18-pre-hil-11-wsl-cuda.toml"
 purpose = "Per-node CPU, AMDGPU, and CUDA profile of the atmosphere-enabled REVOLT Classic and Copper algorithm graphs"
 id = "REVOLT-ALGORITHM-GRAPH-NODE-PROFILE-2026-08-30"
 path = "2026-08-30-revolt-algorithm-graph-node-profile.toml"
+
+[[artifacts]]
+purpose = "CPU, AMDGPU, and CUDA profile of the full-resolution REVOLT graphs using the regular-grid separable provisional HSDM277 implementation"
+id = "REVOLT-FAST-DM-PROFILE-2026-08-30"
+path = "2026-08-30-revolt-fast-dm-profile.toml"

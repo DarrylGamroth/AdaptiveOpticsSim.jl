@@ -503,6 +503,17 @@ remain unchanged. The default is a one-thread, closed-loop, self-paced
 service-cost measurement; it does not model fixed arrivals, transport,
 overload, or wall-clock pacing.
 
+The [fast-DM profile](../benchmarks/results/platform/2026-08-30-revolt-fast-dm-profile.toml)
+records clean local CPU and AMDGPU measurements plus a WSL CUDA measurement
+from an exact source archive. Relative to the general Gaussian node, the
+separable PDM is between 895 and 1,095 times faster on the tested CPU, between
+3.5 and 3.9 times faster on AMDGPU, and between 1.7 and 1.8 times faster on
+CUDA. Classic CPU host-ready throughput rises from 12.9 to 112.4 frames/s.
+Copper remains limited
+by its unchanged 32-point diffractive Pyramid propagation; its independently
+prepared CPU graphs show more propagation variation than the remaining DM
+cost, so no precise frame-rate gain is attributed to this change.
+
 `benchmark_gate0_latency.jl` accepts `AOS_GATE0_CARD_IDS` as a comma-separated,
 predeclared subset. The artifact records the explicit selection mode and the
 ordered card IDs. Use this for incremental evidence owned by one PR so
