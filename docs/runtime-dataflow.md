@@ -211,37 +211,42 @@ The built-in type map currently contains `ccd_detector_acquisition_f32`,
 `shack_hartmann_centroid_f32`, `shack_hartmann_rate_f32`, and
 `shack_hartmann_slope_selection_f32`.
 `merge(builtin_graph_node_types(), companion_types)` creates an explicit larger
-map for optional packages such as the Proper companion. The maintained
-[`revolt_classic_shwfs.toml`](../examples/graphs/revolt_classic_shwfs.toml)
-file is an executable first REVOLT slice: it converts one externally supplied
-complete-frame pupil OPD into the configured 352-by-352 diffractive SHWFS
-photon-rate mosaic, then applies the configured one-millisecond single-read CCD
-acquisition with QE, photon noise, and read noise. A calibrated centroid node
-then consumes the completed frame using caller-bound valid-subaperture and
-reference-signal arrays and publishes the canonical full 512-component slope
-vector. A final selection node converts that vector into 376 pair-interleaved
-components using a caller-bound one-based ordering for 188 lenslets. The core
-graph does not parse or silently reinterpret the instrument's detector
-ROI-origin file. A control-matrix node then snapshots and applies the
-caller-bound 221-by-376 calibrated matrix to publish 221 reconstructed
-controller residual-error coordinates. Its OOPAO-compatible fractional cutoff
-is explicitly not mapped from SPECULA's absolute-pedestal `thr_value`;
-numerical extractor parity and therefore operational matrix compatibility
-remain open. An atomic closed-loop correction node then applies the REVOLT
-Classic gain `-0.3`, pole `0.99`, and anti-windup gain `1.0` to publish 221
-demanded correction coordinates and the corresponding integrator state. Until
-a downstream constraint and DM path exists, the caller binds the preceding
-demanded-minus-realized correction feedback; the first step ignores that
-required placeholder buffer. The file deliberately stops before that feedback
-delay is closed, controller/DM coordinate transforms, DM response, atmosphere
-evolution, and science-path imaging. Its explicit RNG seed is an AOS
-reproducibility choice because the source SPECULA profile does not declare one.
+map for optional packages such as the Proper companion.
+
+The maintained
+[`revolt_classic_hil.toml`](../examples/graphs/revolt_classic_hil.toml) file
+defines the intended external-RTC sensor boundary. The surrounding AOS
+simulation applies the latest physical-DM command received from the RTC,
+evolves the atmosphere, evaluates the optical path, and binds the resulting
+complete pupil OPD. The graph converts that OPD into the configured 352-by-352
+diffractive SHWFS photon-rate mosaic and one completed noisy CCD frame for a
+transport adapter such as PipeWireAO. The RTC performs centroiding,
+reconstruction, control, and command production outside this graph.
+
+The separate
+[`revolt_classic_rtc_reference.toml`](../examples/graphs/revolt_classic_rtc_reference.toml)
+file extends the same sensor stages into an optional in-process RTC reference.
+A calibrated centroid node consumes the completed frame using caller-bound
+valid-subaperture and reference-signal arrays and publishes the canonical full
+512-component slope vector. A selection node converts that vector into 376
+pair-interleaved components using a caller-bound one-based ordering for 188
+lenslets. The core graph does not parse or silently reinterpret the
+instrument's detector ROI-origin file. A control-matrix node snapshots and
+applies the caller-bound 221-by-376 calibrated matrix, then an atomic
+closed-loop correction node applies the REVOLT Classic gain `-0.3`, pole
+`0.99`, and anti-windup gain `1.0`. Its OOPAO-compatible fractional cutoff is
+not mapped from SPECULA's absolute-pedestal `thr_value`; numerical extractor
+parity and operational matrix compatibility remain open. Until the optional
+reference graph includes downstream constraint and DM nodes, the caller binds
+the preceding demanded-minus-realized correction feedback and the first step
+ignores that placeholder. The reference graph is a deterministic standalone
+and differential-testing aid, not the required HIL deployment topology.
 
 Architecture-file status is therefore explicit:
 
 | Architecture | File-defined executable surface | Remaining authority or implementation gate |
 |---|---|---|
-| REVOLT Classic | Diffractive SHWFS optics, single-read CCD acquisition, AOS/OOPAO calibrated full-grid centroid estimation, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 dense reconstruction, and atomic 221-coordinate closed-loop correction using the SPECULA telescope, source, lenslet, sampling, exposure, QE, noise, gain, pole, and anti-windup values | Bind the authoritative ROI-derived order and calibrated matrix in the application, add the SPECULA absolute-pedestal extraction policy and numerical compatibility evidence, then close the constraint-feedback delay through coordinate transforms, DM constraints and response; add atmosphere propagation and science products before claiming the complete graph |
+| REVOLT Classic | The primary HIL file executes diffractive SHWFS optics and single-read CCD acquisition through the completed frame boundary. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Add atmosphere and physical-DM command application ahead of the HIL sensor boundary, then publish the frame and consume returned commands through transport adapters. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
 | REVOLT Copper | None claimed | The current Copper configuration describes operational RTC components and many alternatives, but does not provide one authoritative AOS simulation topology to transcribe |
 | SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
 

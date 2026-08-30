@@ -1,0 +1,77 @@
+# REVOLT Classic HIL sensor boundary.
+#
+# The surrounding AOS simulation owns atmosphere evolution, optical-path
+# evaluation, and application of the physical-DM command received from the
+# external RTC. It binds the resulting complete pupil-plane OPD before each
+# graph step. This graph forms the diffractive Shack-Hartmann photon-rate
+# mosaic and one completed noisy CCD frame suitable for publication to the
+# RTC through a transport adapter such as PipeWireAO.
+#
+# Optical and detector values follow
+# REVOLT/Python/specula/params_revolt_modal.yml. The explicit RNG seed is an
+# AOS reproducibility choice because the source file does not declare one.
+
+schema_version = 1
+name = "revolt_classic_hil"
+
+[[nodes]]
+name = "shwfs"
+type = "shack_hartmann_rate_f32"
+
+[nodes.config]
+resolution = 240
+telescope_diameter_m = 1.22
+central_obstruction_ratio = 0.20491803278688525
+pupil_reflectivity = 1.0
+aperture_revision = 1
+n_lenslets = 16
+n_pix_subap = 22
+diffraction_padding = 2
+pixel_scale_arcsec = 0.697
+valid_subaperture_threshold = 0.1
+threshold_convolution = 0.05
+half_pixel_shift = false
+shannon_sampling = true
+source_band = "R"
+source_magnitude = 2.0
+source_wavelength_m = 8.0e-7
+source_separation_arcsec = 0.0
+source_position_angle_deg = 0.0
+opd_schema = "org.revolt.classic.pupil-opd.f32/1"
+photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
+
+[[nodes]]
+name = "detector"
+type = "ccd_detector_acquisition_f32"
+
+[nodes.config]
+rows = 352
+columns = 352
+binning = 1
+pixel_scale_arcsec = 0.697
+wavelength_m = 8.0e-7
+exposure_duration_s = 0.001
+quantum_efficiency = 0.5
+photon_noise = true
+readout_noise = true
+readout_noise_e = 2.7
+rng_seed = 0
+photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
+frame_schema = "org.revolt.classic.shwfs-frame.f32/1"
+
+[[inputs]]
+name = "pupil_opd"
+destination = "shwfs.opd"
+binding = "pupil_opd"
+
+[[outputs]]
+name = "shwfs_photon_rate"
+source = "shwfs.photon_rate"
+
+[[outputs]]
+name = "shwfs_frame"
+source = "detector.frame"
+
+[[links]]
+source = "shwfs.photon_rate"
+destination = "detector.photon_rate"

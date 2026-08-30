@@ -1069,7 +1069,30 @@ end
 end
 
 
-@testset "REVOLT Classic SHWFS TOML path is executable" begin
+@testset "REVOLT Classic HIL sensor TOML path is executable" begin
+    pupil_opd = zeros(Float32, 240, 240)
+    path = joinpath(
+        dirname(dirname(@__DIR__)),
+        "examples",
+        "graphs",
+        "revolt_classic_hil.toml",
+    )
+    definition = load_algorithm_graph(path; bindings=(; pupil_opd))
+    graph = prepare_algorithm_graph(definition)
+    step_graph!(graph)
+    photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
+    frame = graph_output(graph, Val(:shwfs_frame))
+
+    @test graph_name(graph) === :revolt_classic_hil
+    @test size(photon_rate) == (352, 352)
+    @test size(frame) == (352, 352)
+    @test all(isfinite, photon_rate)
+    @test all(isfinite, frame)
+    @test sum(photon_rate) > 0
+    @test sum(frame) > 0
+end
+
+@testset "REVOLT Classic RTC-reference TOML path is executable" begin
     pupil_opd = zeros(Float32, 240, 240)
     valid_subapertures = fill(true, 16, 16)
     reference_signal = zeros(Float32, 16 * 16, 2)
@@ -1085,7 +1108,7 @@ end
         dirname(dirname(@__DIR__)),
         "examples",
         "graphs",
-        "revolt_classic_shwfs.toml",
+        "revolt_classic_rtc_reference.toml",
     )
     definition = load_algorithm_graph(
         path;
@@ -1115,7 +1138,7 @@ end
     )
     controller_state = graph_output(graph, Val(:controller_state))
 
-    @test graph_name(graph) === :revolt_classic_shwfs
+    @test graph_name(graph) === :revolt_classic_rtc_reference
     @test size(photon_rate) == (352, 352)
     @test size(frame) == (352, 352)
     @test size(full_slopes) == (512,)

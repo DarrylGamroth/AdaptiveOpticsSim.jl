@@ -1,5 +1,6 @@
-# Executable REVOLT Classic diffractive SHWFS, CCD acquisition, calibrated
-# centroid selection, dense reconstruction, and closed-loop correction stages.
+# Executable REVOLT Classic RTC-reference path from a simulated pupil OPD
+# through diffractive SHWFS, CCD acquisition, calibrated centroid selection,
+# dense reconstruction, and closed-loop correction stages.
 #
 # This is intentionally not the complete REVOLT Classic simulation or RTC
 # graph. Atmosphere propagation supplies the externally bound pupil OPD, while
@@ -18,7 +19,7 @@
 # is a required placeholder and is ignored by the controller's first step.
 
 schema_version = 1
-name = "revolt_classic_shwfs"
+name = "revolt_classic_rtc_reference"
 
 [[nodes]]
 name = "shwfs"
