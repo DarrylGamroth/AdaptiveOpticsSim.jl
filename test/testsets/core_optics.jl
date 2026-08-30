@@ -458,6 +458,7 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :runtime_reconstructor_storage)
     for name in (
         :NullReconstructor,
+        :ControlMatrixPlan,
         :ModalReconstructor,
         :FactorizedReconstructor,
         :MappedReconstructor,

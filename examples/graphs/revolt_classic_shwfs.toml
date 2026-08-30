@@ -1,14 +1,17 @@
-# Executable REVOLT Classic diffractive SHWFS and CCD acquisition stages.
+# Executable REVOLT Classic diffractive SHWFS, CCD acquisition, calibrated
+# centroid selection, and dense reconstruction stages.
 #
 # This is intentionally not the complete REVOLT Classic simulation or RTC
 # graph. Atmosphere propagation supplies the externally bound pupil OPD, while
 # the caller supplies the authoritative valid-subaperture mask and centroid
 # reference signal. The caller also converts the authoritative detector ROI
 # artifact into the one-based AOS lenslet order used by the final selection
-# node. Reconstruction is a later node. Optical and detector values follow
-# REVOLT/Python/specula/params_revolt_modal.yml. The AOS/OOPAO centroid cutoff
+# node and binds the calibrated 221x376 reconstruction matrix. Optical and
+# detector values follow REVOLT/Python/specula/params_revolt_modal.yml. The
+# AOS/OOPAO centroid cutoff
 # below is not SPECULA's absolute-pedestal thr_value; that extraction policy
-# remains a numerical-parity gap. The explicit RNG seed is an AOS
+# remains a numerical-parity gap, so executing the matrix does not yet claim
+# operational reconstructor compatibility. The explicit RNG seed is an AOS
 # reproducibility choice because the source file does not declare one.
 
 schema_version = 1
@@ -88,6 +91,17 @@ full_slopes_schema = "org.revolt.classic.shwfs-centroid-slopes.f32/1"
 selected_slopes_schema = "org.revolt.classic.shwfs-selected-centroid-slopes.f32/1"
 lenslet_order_schema = "org.revolt.classic.shwfs-lenslet-order.u32/1"
 
+[[nodes]]
+name = "reconstruction"
+type = "control_matrix_reconstruction_f32"
+
+[nodes.config]
+slope_count = 376
+reconstructed_count = 221
+slopes_schema = "org.revolt.classic.shwfs-selected-centroid-slopes.f32/1"
+reconstructed_schema = "org.revolt.classic.controller-residual-error.f32/1"
+control_matrix_schema = "org.revolt.classic.shwfs-control-matrix.f32/1"
+
 [[inputs]]
 name = "pupil_opd"
 destination = "shwfs.opd"
@@ -109,6 +123,10 @@ source = "centroid.slopes"
 name = "shwfs_selected_slopes"
 source = "slope_selection.selected_slopes"
 
+[[outputs]]
+name = "controller_residual_error"
+source = "reconstruction.reconstructed"
+
 [[links]]
 source = "shwfs.photon_rate"
 destination = "detector.photon_rate"
@@ -121,6 +139,10 @@ destination = "centroid.frame"
 source = "centroid.slopes"
 destination = "slope_selection.full_slopes"
 
+[[links]]
+source = "slope_selection.selected_slopes"
+destination = "reconstruction.slopes"
+
 [[parameters]]
 destination = "centroid.valid_subapertures"
 binding = "valid_subapertures"
@@ -128,6 +150,10 @@ binding = "valid_subapertures"
 [[parameters]]
 destination = "centroid.reference_signal"
 binding = "reference_signal"
+
+[[parameters]]
+destination = "reconstruction.control_matrix"
+binding = "reconstruction_matrix"
 
 [[parameters]]
 destination = "slope_selection.lenslet_order"

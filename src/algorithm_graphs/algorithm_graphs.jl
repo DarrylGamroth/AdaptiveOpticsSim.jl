@@ -33,9 +33,11 @@ import ..Calibration:
     ModalOPDExpansionPlan,
     combine_basis!
 import ..Control:
+    ControlMatrixPlan,
     DiscreteIntegratorPlan,
     DiscreteIntegratorState,
     DiscreteIntegratorWorkspace,
+    reconstruct!,
     reset_controller!,
     update!
 import ..Optics:

@@ -1797,7 +1797,7 @@ Import the maintained control surface explicitly:
 using AdaptiveOpticsSim.Control
 ```
 
-- Reconstructors: `NullReconstructor`, `ModalReconstructor`,
+- Reconstructors: `NullReconstructor`, `ControlMatrixPlan`, `ModalReconstructor`,
   `FactorizedReconstructor`, `MappedReconstructor`,
   `ControlledReconstructor`, `reconstruct!`, `reconstruct`
 - Controller: `DiscreteIntegratorController`. `ControlledReconstructor`
@@ -1828,15 +1828,19 @@ the canonical representation of these results.
   scalar initial values, and named `bindings` supply caller-owned frame inputs,
   delayed initial values, and ndarray sparse parameters. The loader performs no
   Julia evaluation or calibration-file I/O. `builtin_graph_node_types()`
-  currently supplies `discrete_integrator_f32` and
-  `modal_opd_expansion_f32`; optional packages extend the file vocabulary by
-  passing an explicitly merged node-type map.
+  currently supplies the maintained native nodes listed in
+  [`runtime-dataflow.md`](runtime-dataflow.md), including
+  `control_matrix_reconstruction_f32`; optional packages extend the file
+  vocabulary by passing an explicitly merged node-type map.
 - Native nodes retain their numerical implementation in the canonical
   scientific module. `discrete_integrator_node` calls `Control.update!` with a
   separate plan, state, and workspace. `modal_opd_expansion_node` calls
   `Calibration.combine_basis!` with a `ModalOPDExpansionPlan` prepared from
-  explicit basis and pupil-support parameters. A Calculon or FGN wrapper for
-  PipeWire deployment is a separate optional adapter, not an AOS dependency.
+  explicit basis and pupil-support parameters.
+  `control_matrix_reconstruction_node` calls `Control.reconstruct!` with a
+  `ControlMatrixPlan` prepared from an explicit dense matrix parameter. A
+  Calculon or FGN wrapper for PipeWire deployment is a separate optional
+  adapter, not an AOS dependency.
 - Deterministic model time: `FixedStepModelTimeDriver` selects a nominal
   recurrence; `prepare_boundary_model_time_driver` seals a finite list
   or expands periodic offsets during preparation. `step_graph_at!` commits the

@@ -608,6 +608,47 @@ function _shack_hartmann_slope_selection_f32_node(
     )
 end
 
+function _control_matrix_reconstruction_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :control_matrix_schema,
+        :reconstructed_count,
+        :reconstructed_schema,
+        :slope_count,
+        :slopes_schema,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, config_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    return control_matrix_reconstruction_node(
+        name;
+        slope_count=_file_integer(
+            config.slope_count,
+            "$context.slope_count",
+        ),
+        reconstructed_count=_file_integer(
+            config.reconstructed_count,
+            "$context.reconstructed_count",
+        ),
+        slopes_schema=_file_string(
+            config.slopes_schema,
+            "$context.slopes_schema",
+        ),
+        reconstructed_schema=_file_string(
+            config.reconstructed_schema,
+            "$context.reconstructed_schema",
+        ),
+        control_matrix_schema=_file_string(
+            config.control_matrix_schema,
+            "$context.control_matrix_schema",
+        ),
+        T=Float32,
+    )
+end
+
 """
     builtin_graph_node_types()
 
@@ -619,6 +660,8 @@ global registry or dynamic Julia evaluation is used.
 function builtin_graph_node_types()
     return (
         ccd_detector_acquisition_f32=_ccd_detector_acquisition_f32_node,
+        control_matrix_reconstruction_f32=
+            _control_matrix_reconstruction_f32_node,
         discrete_integrator_f32=_discrete_integrator_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
         shack_hartmann_centroid_f32=_shack_hartmann_centroid_f32_node,

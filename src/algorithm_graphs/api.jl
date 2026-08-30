@@ -12,6 +12,7 @@ export shack_hartmann_rate_node
 export ccd_detector_acquisition_node
 export shack_hartmann_centroid_node
 export shack_hartmann_slope_selection_node
+export control_matrix_reconstruction_node
 export load_algorithm_graph, builtin_graph_node_types
 export prepare_algorithm_graph, step_graph!, reset_graph!
 export graph_name, graph_step_sequence, graph_failed
@@ -33,3 +34,4 @@ public ShackHartmannRateNode, ShackHartmannRateNodeConfig
 public CCDDetectorAcquisitionNode, CCDDetectorAcquisitionNodeConfig
 public ShackHartmannCentroidNode, ShackHartmannCentroidNodeConfig
 public ShackHartmannSlopeSelectionNode, ShackHartmannSlopeSelectionNodeConfig
+public ControlMatrixReconstructionNode, ControlMatrixReconstructionNodeConfig

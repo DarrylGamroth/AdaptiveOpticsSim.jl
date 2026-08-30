@@ -148,6 +148,10 @@ function run_algorithm_graph_backend_smoke(
 
     pupil_opd = BackendArray(zeros(Float32, 16, 16))
     shwfs_target = compute_device(pupil_opd)
+    reconstruction_matrix = BackendArray(Float32[
+        1 0 0 0 0 0
+        0 0 0 0 1 0
+    ])
     shwfs_definition = algorithm_graph(
         (
             shack_hartmann_rate_node(
@@ -204,6 +208,17 @@ function run_algorithm_graph_backend_smoke(
                 lenslet_order_schema=
                     "test.graph.shwfs-lenslet-order.u32/1",
             ),
+            control_matrix_reconstruction_node(
+                :reconstruction;
+                slope_count=6,
+                reconstructed_count=2,
+                slopes_schema=
+                    "test.graph.shwfs-selected-slopes.f32/1",
+                reconstructed_schema=
+                    "test.graph.controller-error.f32/1",
+                control_matrix_schema=
+                    "test.graph.shwfs-control-matrix.f32/1",
+            ),
         );
         name=:gpu_shwfs_centroid,
         inputs=(graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),),
@@ -215,6 +230,10 @@ function run_algorithm_graph_backend_smoke(
                 :shwfs_selected_slopes,
                 :slope_selection => :selected_slopes,
             ),
+            graph_output(
+                :controller_residual_error,
+                :reconstruction => :reconstructed,
+            ),
         ),
         links=(
             link(:shwfs => :photon_rate, :detector => :photon_rate),
@@ -222,6 +241,10 @@ function run_algorithm_graph_backend_smoke(
             link(
                 :centroid => :slopes,
                 :slope_selection => :full_slopes,
+            ),
+            link(
+                :slope_selection => :selected_slopes,
+                :reconstruction => :slopes,
             ),
         ),
         parameters=(
@@ -237,6 +260,10 @@ function run_algorithm_graph_backend_smoke(
                 :slope_selection => :lenslet_order,
                 BackendArray(UInt32[16, 1, 6]),
             ),
+            sparse_parameter(
+                :reconstruction => :control_matrix,
+                reconstruction_matrix,
+            ),
         ),
     )
     shwfs_graph = prepare_algorithm_graph(
@@ -251,14 +278,20 @@ function run_algorithm_graph_backend_smoke(
         shwfs_graph,
         Val(:shwfs_selected_slopes),
     )
+    controller_residual_error = graph_output(
+        shwfs_graph,
+        Val(:controller_residual_error),
+    )
     @test compute_device(photon_rate) == shwfs_target
     @test compute_device(frame) == shwfs_target
     @test compute_device(full_slopes) == shwfs_target
     @test compute_device(selected_slopes) == shwfs_target
+    @test compute_device(controller_residual_error) == shwfs_target
     @test size(photon_rate) == (24, 24)
     @test size(frame) == (24, 24)
     @test size(full_slopes) == (32,)
     @test size(selected_slopes) == (6,)
+    @test size(controller_residual_error) == (2,)
     @test sum(Array(photon_rate)) > 0
     @test sum(Array(frame)) ≈ sum(Array(photon_rate)) * 0.25f0
     @test all(isfinite, Array(full_slopes))
@@ -271,9 +304,12 @@ function run_algorithm_graph_backend_smoke(
         full_slopes_host[6],
         full_slopes_host[22],
     ]
+    @test Array(controller_residual_error) ==
+        Array(selected_slopes)[[1, 5]]
     step_graph!(shwfs_graph)
     @test all(isfinite, Array(full_slopes))
     @test all(isfinite, Array(selected_slopes))
+    @test all(isfinite, Array(controller_residual_error))
     return nothing
 end
 

@@ -93,11 +93,15 @@ formation, single-read CCD acquisition, and calibrated full-grid centroid
 estimation with explicit valid-subaperture and reference-signal ndarray
 parameters. An explicit one-based lenslet-order parameter selects 188
 lenslets and converts the full block layout into 376 pair-interleaved
-components without teaching core to parse the detector ROI artifact. Its
-centroid cutoff retains the AOS/OOPAO fractional-peak semantics; SPECULA's
-absolute-pedestal `ShSlopec` policy remains an explicit parity item. The
-versioned TOML graph format compiles those same nodes into the same concrete
-graph definition as direct Julia construction. The optional
+components without teaching core to parse the detector ROI artifact. A
+run-immutable `ControlMatrixPlan` and graph adapter now apply a caller-bound
+221-by-376 calibrated matrix to those ordered slopes and publish 221
+reconstructed controller residual-error coordinates. Its centroid cutoff
+retains the AOS/OOPAO fractional-peak semantics; SPECULA's absolute-pedestal
+`ShSlopec` policy and compatibility with the operational matrix remain
+explicit parity items. The versioned TOML graph format compiles those same
+nodes into the same concrete graph definition as direct Julia construction.
+The optional
 `AdaptiveOpticsProperHIL.jl` companion adds a third proof: one complete-frame
 Julia-native Proper prescription with separate random state and scratch, exact
 graph-buffer binding, and focused CPU, AMDGPU, and CUDA

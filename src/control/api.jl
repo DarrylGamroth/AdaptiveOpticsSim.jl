@@ -1,4 +1,5 @@
-export NullReconstructor, ModalReconstructor, FactorizedReconstructor
+export NullReconstructor, ControlMatrixPlan, ModalReconstructor
+export FactorizedReconstructor
 export MappedReconstructor, ControlledReconstructor
 export reconstruct!, reconstruct
 export DiscreteIntegratorController, VectorDelayLine, shift_delay!

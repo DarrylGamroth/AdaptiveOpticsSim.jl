@@ -15,6 +15,63 @@
     @test maximum(abs, exact_control_matrix.M .- tsvd_control_matrix.M) > 0
     @test ControlMatrix(D_sing).policy isa TSVDInverse
 
+    matrix_parent = reshape(Float32.(1:30), 5, 6)
+    matrix_view = @view matrix_parent[2:4, 2:5]
+    expected_matrix = copy(matrix_view)
+    prepared_matrix = @inferred ControlMatrixPlan(matrix_view)
+    fill!(matrix_view, 0.0f0)
+    @test prepared_matrix.matrix == expected_matrix
+    @test Control.runtime_reconstructor_storage(prepared_matrix) ===
+        (prepared_matrix.matrix,)
+
+    slopes_parent = Float32[-1, 0.5, -0.25, 0.75, 1.25, 2]
+    slopes_view = @view slopes_parent[2:5]
+    output_parent = fill(-1.0f0, 5)
+    output_view = @view output_parent[2:4]
+    expected_output = expected_matrix * collect(slopes_view)
+    @test (@inferred reconstruct!(
+        output_view,
+        prepared_matrix,
+        slopes_view,
+    )) === output_view
+    @test output_view ≈ expected_output
+    @test reconstruct(prepared_matrix, slopes_view) ≈ expected_output
+    reconstruct!(output_view, prepared_matrix, slopes_view)
+    if coverage_instrumented()
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(reconstruct!(
+            output_view,
+            prepared_matrix,
+            slopes_view,
+        )) == 0
+    end
+
+    @test_throws InvalidConfiguration ControlMatrixPlan(zeros(Float32, 0, 2))
+    @test_throws InvalidConfiguration ControlMatrixPlan(zeros(Float32, 2, 0))
+    @test_throws DimensionMismatchError reconstruct!(
+        zeros(Float32, 2),
+        prepared_matrix,
+        slopes_view,
+    )
+    @test_throws DimensionMismatchError reconstruct!(
+        output_view,
+        prepared_matrix,
+        zeros(Float32, 3),
+    )
+    square_plan = ControlMatrixPlan(Float32[1 0; 0 1])
+    aliased = zeros(Float32, 2)
+    @test_throws InvalidConfiguration reconstruct!(
+        aliased,
+        square_plan,
+        aliased,
+    )
+    @test_throws InvalidConfiguration reconstruct!(
+        @view(square_plan.matrix[:, 1]),
+        square_plan,
+        Float32[1, 2],
+    )
+
     imat = InteractionMatrix(D_sing, 0.1)
     recon_exact = @inferred ModalReconstructor(
         imat;

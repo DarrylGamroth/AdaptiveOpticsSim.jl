@@ -1016,6 +1016,153 @@ end
     return nothing
 end
 
+struct ControlMatrixReconstructionNode{T<:AbstractFloat} end
+
+"""Construction values for one calibrated dense reconstruction node."""
+struct ControlMatrixReconstructionNodeConfig
+    slope_count::Int
+    reconstructed_count::Int
+    slopes_schema::String
+    reconstructed_schema::String
+    control_matrix_schema::String
+
+    function ControlMatrixReconstructionNodeConfig(
+        slope_count::Integer,
+        reconstructed_count::Integer,
+        slopes_schema::AbstractString,
+        reconstructed_schema::AbstractString,
+        control_matrix_schema::AbstractString,
+    )
+        slope_count > 0 || throw(AlgorithmGraphError(
+            "control-matrix reconstruction slope_count must be positive",
+        ))
+        reconstructed_count > 0 || throw(AlgorithmGraphError(
+            "control-matrix reconstruction reconstructed_count must be positive",
+        ))
+        schemas = (
+            slopes_schema,
+            reconstructed_schema,
+            control_matrix_schema,
+        )
+        all(schema -> !isempty(schema), schemas) || throw(AlgorithmGraphError(
+            "control-matrix reconstruction schemas must not be empty",
+        ))
+        return new(
+            Int(slope_count),
+            Int(reconstructed_count),
+            String(slopes_schema),
+            String(reconstructed_schema),
+            String(control_matrix_schema),
+        )
+    end
+end
+
+"""
+    control_matrix_reconstruction_node(name; ...)
+
+Declare one complete-frame dense reconstruction operation. The node snapshots
+an already calibrated control matrix from a startup sparse parameter, consumes
+one exact ordered slope vector, and writes reconstructed controller
+coordinates. Slope ordering, reference subtraction, controller integration,
+and command-basis expansion remain separate operations.
+"""
+function control_matrix_reconstruction_node(
+    name::Symbol;
+    slope_count::Integer,
+    reconstructed_count::Integer,
+    slopes_schema::AbstractString,
+    reconstructed_schema::AbstractString,
+    control_matrix_schema::AbstractString,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = ControlMatrixReconstructionNodeConfig(
+        slope_count,
+        reconstructed_count,
+        slopes_schema,
+        reconstructed_schema,
+        control_matrix_schema,
+    )
+    return algorithm_node(
+        name,
+        ControlMatrixReconstructionNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{ControlMatrixReconstructionNode{T}},
+    config::ControlMatrixReconstructionNodeConfig,
+) where {T}
+    return (
+        graph_port_contract(
+            :slopes,
+            :input,
+            :data,
+            T,
+            (config.slope_count,),
+            config.slopes_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :reconstructed,
+            :output,
+            :data,
+            T,
+            (config.reconstructed_count,),
+            config.reconstructed_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :control_matrix,
+            :input,
+            :parameter,
+            T,
+            (config.reconstructed_count, config.slope_count),
+            config.control_matrix_schema,
+            :column_major,
+        ),
+    )
+end
+
+struct _ControlMatrixReconstructionOwner{Plan,Slopes,Reconstructed}
+    plan::Plan
+    slopes::Slopes
+    reconstructed::Reconstructed
+end
+
+function prepare_graph_node(
+    ::Type{ControlMatrixReconstructionNode{T}},
+    ::ControlMatrixReconstructionNodeConfig,
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:slopes,)},
+    outputs::NamedTuple{(:reconstructed,)},
+    parameters::NamedTuple{(:control_matrix,)},
+    target,
+) where {T}
+    plan = try
+        ControlMatrixPlan(parameters.control_matrix)
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+    return _ControlMatrixReconstructionOwner(
+        plan,
+        inputs.slopes,
+        outputs.reconstructed,
+    )
+end
+
+@inline function step_graph_node!(owner::_ControlMatrixReconstructionOwner)
+    reconstruct!(owner.reconstructed, owner.plan, owner.slopes)
+    return nothing
+end
+
+@inline function reset_graph_node!(owner::_ControlMatrixReconstructionOwner)
+    fill!(owner.reconstructed, zero(eltype(owner.reconstructed)))
+    return nothing
+end
+
 struct CCDDetectorAcquisitionNode{T<:AbstractFloat} end
 
 """Construction values for one complete-frame single-read CCD acquisition."""

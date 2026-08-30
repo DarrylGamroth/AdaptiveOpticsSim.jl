@@ -840,6 +840,61 @@ end
     )
 end
 
+@testset "control-matrix reconstruction graph node" begin
+    slopes = Float32[1, 2, 3, 4]
+    control_matrix = Float32[
+        1 0 2 0
+        0 -1 0 2
+    ]
+    node = control_matrix_reconstruction_node(
+        :reconstruction;
+        slope_count=4,
+        reconstructed_count=2,
+        slopes_schema="test.graph.shwfs-selected-slopes.f32/1",
+        reconstructed_schema="test.graph.controller-error.f32/1",
+        control_matrix_schema="test.graph.control-matrix.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:control_matrix_reconstruction,
+        inputs=(graph_input(
+            :slopes,
+            :reconstruction => :slopes,
+            slopes,
+        ),),
+        outputs=(graph_output(
+            :reconstructed,
+            :reconstruction => :reconstructed,
+        ),),
+        parameters=(sparse_parameter(
+            :reconstruction => :control_matrix,
+            control_matrix,
+        ),),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:reconstruction))
+    reconstructed = graph_output(graph, Val(:reconstructed))
+
+    fill!(control_matrix, 0.0f0)
+    step_graph!(graph)
+    @test owner.slopes === slopes
+    @test owner.reconstructed === reconstructed
+    @test reconstructed == Float32[7, 6]
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+    reset_graph!(graph)
+    @test all(iszero, reconstructed)
+
+    @test_throws AlgorithmGraphError control_matrix_reconstruction_node(
+        :invalid_reconstruction;
+        slope_count=0,
+        reconstructed_count=2,
+        slopes_schema="test.graph.shwfs-selected-slopes.f32/1",
+        reconstructed_schema="test.graph.controller-error.f32/1",
+        control_matrix_schema="test.graph.control-matrix.f32/1",
+    )
+end
+
 @testset "TOML graph files compile to native graph definitions" begin
     residual = Float32[1, 2]
     basis = zeros(Float32, 2, 2, 2)
@@ -877,6 +932,7 @@ end
     )
     @test keys(builtin_graph_node_types()) == (
         :ccd_detector_acquisition_f32,
+        :control_matrix_reconstruction_f32,
         :discrete_integrator_f32,
         :modal_opd_expansion_f32,
         :shack_hartmann_centroid_f32,
@@ -949,6 +1005,11 @@ end
     reference_signal = zeros(Float32, 16 * 16, 2)
     # Executable wiring fixture only. Applications bind the ROI-derived order.
     lenslet_order = UInt32.(1:188)
+    # Executable wiring fixture only. Applications bind the calibrated matrix.
+    reconstruction_matrix = zeros(Float32, 221, 376)
+    for coordinate in axes(reconstruction_matrix, 1)
+        reconstruction_matrix[coordinate, coordinate] = 1.0f0
+    end
     path = joinpath(
         dirname(dirname(@__DIR__)),
         "examples",
@@ -962,6 +1023,7 @@ end
             valid_subapertures,
             reference_signal,
             lenslet_order,
+            reconstruction_matrix,
         ),
     )
     graph = prepare_algorithm_graph(definition)
@@ -971,17 +1033,24 @@ end
     frame = graph_output(graph, Val(:shwfs_frame))
     full_slopes = graph_output(graph, Val(:shwfs_full_slopes))
     selected_slopes = graph_output(graph, Val(:shwfs_selected_slopes))
+    controller_residual_error = graph_output(
+        graph,
+        Val(:controller_residual_error),
+    )
 
     @test graph_name(graph) === :revolt_classic_shwfs
     @test size(photon_rate) == (352, 352)
     @test size(frame) == (352, 352)
     @test size(full_slopes) == (512,)
     @test size(selected_slopes) == (376,)
+    @test size(controller_residual_error) == (221,)
     @test size(centroid_owner.prepared.workspace.centroid_host) == (22, 22)
     @test all(isfinite, photon_rate)
     @test all(isfinite, frame)
     @test all(isfinite, full_slopes)
     @test all(isfinite, selected_slopes)
+    @test all(isfinite, controller_residual_error)
+    @test controller_residual_error == selected_slopes[1:221]
     @test selected_slopes[1:6] == Float32[
         full_slopes[1],
         full_slopes[257],

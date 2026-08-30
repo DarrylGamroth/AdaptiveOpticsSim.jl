@@ -16,6 +16,7 @@ import ..Backends:
     AbstractArrayBackend,
     CPUBackend,
     _resolve_array_backend,
+    compute_device,
     require_same_backend
 
 import ..Calibration:
