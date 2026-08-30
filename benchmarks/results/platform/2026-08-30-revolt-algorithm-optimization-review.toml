@@ -34,6 +34,16 @@ gpu_architecture = "gfx1030"
 julia = "1.12.7"
 amdgpu_jl = "2.8.0"
 
+[environment.wsl_cuda]
+host = "wsl"
+os = "Linux 6.18.33.2-microsoft-standard-WSL2 x86_64 GNU/Linux"
+gpu = "NVIDIA GeForce RTX 3050 Ti Laptop GPU"
+gpu_memory_mib = 4096
+driver = "596.08"
+julia = "1.12.6"
+cuda_jl = "6.3.1"
+power_control = "Laptop GPU clocks and power state were not fixed. Observed sustained Copper runs entered P0 at different core clocks, producing material run-to-run dispersion."
+
 [algorithm_assessment.separable_grid_gaussian_dm]
 decision = "retain"
 equivalence = "Mathematically equivalent to dense analytic Gaussian evaluation for the declared regular Cartesian actuator grid; floating-point evaluation order is different."
@@ -153,10 +163,156 @@ frame_host_ready_rate_hz = 9.354893535509662
 wfs_mean_ns = 106128108.72
 frame_rate_ratio_vs_fast_dm_baseline = 1.5637510807329629
 
+[cuda_benchmark_protocol]
+source_archive_revision = "b8fa1f9"
+source_transfer = "git archive of the exact committed revision into /tmp on the WSL host"
+command_template = "AOS_REVOLT_GRAPH_BACKEND=cuda AOS_REVOLT_GRAPH_PROFILE=fast_dm AOS_REVOLT_GRAPH_ARCHITECTURES=<architecture> AOS_REVOLT_GRAPH_SAMPLES=<samples> AOS_REVOLT_GRAPH_WARMUP=<warmup> julia --project=<archive>/benchmarks/cuda --startup-file=no <archive>/benchmarks/benchmark_revolt_graph_nodes.jl"
+repetitions = 2
+classic_samples_per_repetition = 1000
+classic_warmup_cycles_per_repetition = 200
+copper_samples_per_repetition = 500
+copper_warmup_cycles_per_repetition = 100
+result_selection = "Both sustained repetitions are retained. Earlier 100-sample exploratory results are excluded from the sustained range because their means varied substantially with GPU power state."
+raw_histograms_archived = false
+note = "The harness is closed-loop and synchronized. It reports HdrHistogram summaries, but does not retain raw samples and does not correct coordinated omission."
+
+[[cuda_results]]
+architecture = "classic"
+repetition = 1
+samples = 1000
+warmup_cycles = 200
+graph_mean_ns = 1336235
+graph_p50_ns = 1276927
+graph_p90_ns = 1545215
+graph_p95_ns = 1696767
+graph_p99_ns = 2590719
+graph_maximum_ns = 7647231
+graph_rate_hz = 748.371
+frame_host_ready_mean_ns = 1444236
+frame_host_ready_p50_ns = 1414143
+frame_host_ready_p90_ns = 1629183
+frame_host_ready_p95_ns = 1774591
+frame_host_ready_p99_ns = 2201599
+frame_host_ready_maximum_ns = 3127295
+frame_host_ready_rate_hz = 692.408
+atmosphere_mean_ns = 244466
+pdm_mean_ns = 248788
+composition_mean_ns = 54424
+wfs_mean_ns = 550863
+detector_mean_ns = 369148
+
+[[cuda_results]]
+architecture = "classic"
+repetition = 2
+samples = 1000
+warmup_cycles = 200
+graph_mean_ns = 1405272
+graph_p50_ns = 1369087
+graph_p90_ns = 1649663
+graph_p95_ns = 1753087
+graph_p99_ns = 2109439
+graph_maximum_ns = 3123199
+graph_rate_hz = 711.606
+frame_host_ready_mean_ns = 1596507
+frame_host_ready_p50_ns = 1580031
+frame_host_ready_p90_ns = 1815551
+frame_host_ready_p95_ns = 1918975
+frame_host_ready_p99_ns = 2306047
+frame_host_ready_maximum_ns = 3137535
+frame_host_ready_rate_hz = 626.367
+atmosphere_mean_ns = 269683
+pdm_mean_ns = 288261
+composition_mean_ns = 59793
+wfs_mean_ns = 603306
+detector_mean_ns = 415239
+
+[[cuda_results]]
+architecture = "copper"
+repetition = 1
+samples = 500
+warmup_cycles = 100
+graph_mean_ns = 55521277
+graph_p50_ns = 49053695
+graph_p90_ns = 82837503
+graph_p95_ns = 90701823
+graph_p99_ns = 109772799
+graph_maximum_ns = 252575743
+graph_rate_hz = 18.011
+frame_host_ready_mean_ns = 61637069
+frame_host_ready_p50_ns = 53706751
+frame_host_ready_p90_ns = 87687167
+frame_host_ready_p95_ns = 96403455
+frame_host_ready_p99_ns = 117047295
+frame_host_ready_maximum_ns = 171704319
+frame_host_ready_rate_hz = 16.224
+wfs_mean_ns = 38625348
+wfs_p50_ns = 35422207
+wfs_p90_ns = 54755327
+wfs_p99_ns = 65535999
+
+[[cuda_results]]
+architecture = "copper"
+repetition = 2
+samples = 500
+warmup_cycles = 100
+graph_mean_ns = 42740050
+graph_p50_ns = 39452671
+graph_p90_ns = 50266111
+graph_p95_ns = 54558719
+graph_p99_ns = 82575359
+graph_maximum_ns = 128712703
+graph_rate_hz = 23.397
+frame_host_ready_mean_ns = 46292958
+frame_host_ready_p50_ns = 44236799
+frame_host_ready_p90_ns = 53280767
+frame_host_ready_p95_ns = 58556415
+frame_host_ready_p99_ns = 87228415
+frame_host_ready_maximum_ns = 112459775
+frame_host_ready_rate_hz = 21.602
+wfs_mean_ns = 31446763
+wfs_p50_ns = 30539775
+wfs_p90_ns = 35028991
+wfs_p99_ns = 36208639
+
+[cuda_result_summary]
+classic_frame_host_ready_rate_hz_range = [626.367, 692.408]
+classic_frame_host_ready_mean_rate_hz = 659.3875
+classic_run_mean_dispersion_fraction = 0.10543499258421996
+copper_frame_host_ready_rate_hz_range = [16.224, 21.602]
+copper_frame_host_ready_mean_rate_hz = 18.913
+copper_run_mean_dispersion_fraction = 0.3314842209072979
+interpretation = "Classic sustains hundreds of complete atmosphere-enabled HIL frames per second. Copper remains dominated by the 32-point full-resolution Pyramid WFS and is sensitive to unmanaged laptop GPU clocks; the range, not either isolated maximum, is the defensible result."
+
+[cuda_same_session_pre_batch_baseline]
+source_revision = "1c2d7fe"
+architecture = "copper"
+samples = 500
+warmup_cycles = 100
+graph_mean_ns = 51654791
+graph_p50_ns = 50888703
+graph_p99_ns = 54427647
+graph_maximum_ns = 124977151
+frame_host_ready_mean_ns = 93142123
+frame_host_ready_p50_ns = 74448895
+frame_host_ready_p99_ns = 229244927
+frame_host_ready_maximum_ns = 1560281087
+wfs_mean_ns = 49622140
+wfs_p50_ns = 50659327
+wfs_p99_ns = 51249151
+wfs_maximum_ns = 564000000
+current_wfs_mean_speedup_range = [1.284704023896432, 1.5779729061461747]
+current_wfs_p50_speedup_range = [1.4301572739383517, 1.6587983048336146]
+interpretation = "The same-session sensor-node comparison isolates a material benefit from modulation batching. End-to-end baseline latency contained a 1.56-second outlier, so it is not used as the primary algorithm speedup claim."
+
 [cuda_validation]
-status = "not validated at source revision"
-reason = "The WSL CUDA host disconnected during the first full hardware attempt and subsequently refused SSH connections."
-prior_reference = "The pre-batch fast-DM artifact measured 274.73 Classic fps and 19.59 Copper fps on the RTX 3050 Ti, but those values are not attributed to this revision."
+changed_surfaces_status = "passed within the full CUDA hardware target"
+algorithm_graph_status = "passed; the reduced AlgorithmGraphs smoke and both atmosphere-enabled REVOLT graph executions completed"
+full_target_status = "failed in legacy Plant and other non-AlgorithmGraphs checks"
+full_target_counts = "1379 passed, 5 failed, 2 errored; 1386 total"
+changed_surface_evidence = "CUDA selected the eight-plane Pyramid modulation workspace, CPU/CUDA WFS numerical parity passed, CUDA Shack-Hartmann plan and output checks passed, and both full-resolution atmosphere-enabled REVOLT graphs produced finite nonzero frames."
+remaining_assertion_failures = "Three legacy Plant Shack-Hartmann CPU/CUDA reference/fast/slow parity assertions and two direct-imaging device-path batch parity assertions."
+remaining_errors = "Two target-partition checks call a missing acquisition_id(::PreparedTargetLocalAcquisitionResources) method, once for CPU and once for CUDA resources."
+scope_note = "No failure was reported in the reduced AlgorithmGraphs scheduler, separable DM, direct CPU/CUDA WFS parity, batched Pyramid plan, or REVOLT benchmark paths. The legacy Plant mismatches do exercise shared Shack-Hartmann products and were not root-caused in this review; the overall CUDA target must not be represented as green until all seven remaining outcomes are resolved."
 
 [validation]
 cpu_shack_hartmann = "passed; 271 checks and two maintained broken checks, including the new bitwise-equivalence and zero-allocation regression"
@@ -168,4 +324,4 @@ cpu_optics_ownership = "passed; 31 checks"
 cpu_core_optics = "passed"
 cpu_pyramid_bioedge = "passed"
 amdgpu_execution = "Both full-resolution atmosphere-enabled REVOLT graphs completed with finite nonzero frames and clean source state."
-cuda_execution = "not run to completion; host unavailable"
+cuda_execution = "The reduced AlgorithmGraphs path and both REVOLT graphs passed on the RTX 3050 Ti. The complete target ran to completion but failed overall in legacy Plant, direct-imaging batch, and target-partition checks."
