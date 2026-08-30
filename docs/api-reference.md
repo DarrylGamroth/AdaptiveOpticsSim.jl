@@ -1868,8 +1868,9 @@ the canonical representation of these results.
   influence-function parameters; it does not invent a physical DM model.
   `gaussian_deformable_mirror_surface_node` provides an explicitly analytic
   alternative from caller-bound normalized-pupil actuator coordinates and a
-  configured Gaussian influence width. Its command values are actuator-centre
-  surface OPD in metres, not normalized hardware commands.
+  configured Gaussian influence width. Its command values are unit-peak
+  actuator surface-OPD coefficients in metres, not normalized hardware
+  commands.
   `pupil_opd_composition_node` adds that already calibrated surface OPD to an
   uncompensated pupil OPD on the same grid and publishes the complete pupil
   OPD consumed by downstream optics; it does not infer sign, conjugation,

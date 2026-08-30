@@ -3,26 +3,37 @@
 # The surrounding AOS simulation owns atmosphere evolution and evaluates the
 # uncompensated optical path. A serialized RTC adapter places one complete PDM
 # command in the caller-owned command buffer before each graph step. This graph
-# applies that command through caller-qualified measured actuator coordinates
-# and influence functions, composes the resulting surface OPD with the
-# uncompensated pupil OPD, forms the diffractive Shack-Hartmann photon-rate
-# mosaic, and completes one noisy CCD frame suitable for publication through a
-# transport adapter such as PipeWireAO.
+# applies that command through an explicitly provisional continuous-facesheet
+# model, composes the resulting surface OPD with the uncompensated pupil OPD,
+# forms the diffractive Shack-Hartmann photon-rate mosaic, and completes one
+# noisy CCD frame suitable for publication through a transport adapter such as
+# PipeWireAO.
 #
 # Optical and detector values follow
 # REVOLT/Python/specula/params_revolt_modal.yml. The explicit RNG seed is an
 # AOS reproducibility choice because the source file does not declare one.
-# The available AX307_Influences.fits artifact belongs to the 468-actuator
-# BAX307/SPIDERS mirror and is not a REVOLT HSDM277 influence calibration. This
-# file therefore requires the application to bind a separately qualified
-# 277-actuator matrix and makes no synthetic-influence instrument claim.
+# The exact 277-actuator command order comes from the matching 19-by-19 map
+# payloads in the maintained on-sky and Copper branches. The caller binds the
+# normalized-pupil coordinates produced by examples/support/revolt_hsdm277.jl.
+# REVOLT simulation sources place 17 actuator centres across the pupil and the
+# OOPAO ideal profile uses 0.35 adjacent mechanical coupling; an older OOMAO
+# script uses 0.30. Selecting 0.35 gives the provisional normalized Gaussian
+# width of 0.08626550214129701.
+# AX307_Influences.fits belongs to the 468-actuator BAX307/SPIDERS mirror, not
+# HSDM277. Replace this analytic node with deformable_mirror_surface_f32 when a
+# qualified HSDM277 sampled influence calibration is available.
+#
+# The PDM input contains one unit-peak actuator surface-OPD coefficient in
+# metres per command element. It is not an ALPAO normalized hardware command; a
+# transport adapter must apply a separately qualified command calibration
+# before this graph boundary.
 
 schema_version = 1
 name = "revolt_classic_hil"
 
 [[nodes]]
 name = "pdm"
-type = "deformable_mirror_surface_f32"
+type = "gaussian_deformable_mirror_surface_f32"
 
 [nodes.config]
 resolution = 240
@@ -31,10 +42,10 @@ central_obstruction_ratio = 0.20491803278688525
 pupil_reflectivity = 1.0
 aperture_revision = 1
 actuator_count = 277
-pdm_command_schema = "org.revolt.classic.pdm-command.f32/1"
-surface_opd_schema = "org.revolt.classic.pdm-surface-opd.f32/1"
-actuator_coordinates_schema = "org.revolt.classic.pdm-actuator-coordinates.f32/1"
-influence_functions_schema = "org.revolt.classic.pdm-influence-functions.f32/1"
+influence_width = 0.08626550214129701
+pdm_command_schema = "org.revolt.hsdm277.actuator-surface-opd-m.f32/1"
+surface_opd_schema = "org.revolt.hsdm277.pdm-surface-opd-m.f32/1"
+actuator_coordinates_schema = "org.revolt.hsdm277.normalized-pupil-actuator-coordinates.f32/1"
 
 [[nodes]]
 name = "pupil_opd_composition"
@@ -42,9 +53,9 @@ type = "pupil_opd_composition_f32"
 
 [nodes.config]
 resolution = 240
-uncompensated_opd_schema = "org.revolt.classic.uncompensated-pupil-opd.f32/1"
-surface_opd_schema = "org.revolt.classic.pdm-surface-opd.f32/1"
-pupil_opd_schema = "org.revolt.classic.pupil-opd.f32/1"
+uncompensated_opd_schema = "org.revolt.classic.uncompensated-pupil-opd-m.f32/1"
+surface_opd_schema = "org.revolt.hsdm277.pdm-surface-opd-m.f32/1"
+pupil_opd_schema = "org.revolt.classic.pupil-opd-m.f32/1"
 
 [[nodes]]
 name = "shwfs"
@@ -69,7 +80,7 @@ source_magnitude = 2.0
 source_wavelength_m = 8.0e-7
 source_separation_arcsec = 0.0
 source_position_angle_deg = 0.0
-opd_schema = "org.revolt.classic.pupil-opd.f32/1"
+opd_schema = "org.revolt.classic.pupil-opd-m.f32/1"
 photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
 
 [[nodes]]
@@ -132,7 +143,3 @@ destination = "detector.photon_rate"
 [[parameters]]
 destination = "pdm.actuator_coordinates"
 binding = "pdm_actuator_coordinates"
-
-[[parameters]]
-destination = "pdm.influence_functions"
-binding = "pdm_influence_functions"

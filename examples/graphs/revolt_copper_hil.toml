@@ -1,12 +1,14 @@
 # REVOLT Copper HIL sensor boundary.
 #
-# The surrounding AOS simulation owns atmosphere evolution, optical-path
-# evaluation, and application of the physical-DM command received from the
-# external RTC. It binds the resulting complete pupil-plane OPD before each
-# graph step. This graph forms one modulated Pyramid photon-rate frame and one
-# completed noisy EMCCD frame for publication through a transport adapter such
-# as PipeWireAO. The external RTC owns pixel processing, reconstruction,
-# control, and command production.
+# The surrounding AOS simulation owns atmosphere evolution and evaluates the
+# uncompensated optical path. A serialized RTC adapter places one complete PDM
+# command in the caller-owned command buffer before each graph step. This graph
+# applies that command through the same explicitly provisional HSDM277
+# continuous-facesheet model as REVOLT Classic, composes the surface OPD with
+# the uncompensated pupil OPD, forms one modulated Pyramid photon-rate frame,
+# and completes one noisy EMCCD frame for publication through a transport
+# adapter such as PipeWireAO. The external RTC owns pixel processing,
+# reconstruction, control, and command production.
 #
 # Model authority is deliberately layered:
 # - REVOLT/Julia/contracts/revolt/common.toml supplies the 1.22 m, 480-sample
@@ -17,13 +19,44 @@
 # - REVOLT/Julia/contracts/revolt/cameras.toml supplies the iXon EMCCD values.
 # - heart/revolt-rtc/config/copper_config_sim.yaml supplies the operational
 #   64-by-64 WFS frame and 30-by-30 Pyramid-pupil dimensions.
+# - examples/support/revolt_hsdm277.jl reproduces the exact physical-actuator
+#   command map and the explicitly provisional 17-across-pupil, 0.35-coupling
+#   Gaussian response used until measured HSDM277 influence functions exist.
 #
 # The symmetric AOS pupil-image placement is transport-shape compatible but is
 # not a claim that the current measured pwfsRoiOffsets_64.csv registration or
 # an operational pixel reconstructor is calibrated to this simulated image.
+# The PDM input contains unit-peak actuator surface-OPD coefficients in metres,
+# not ALPAO normalized hardware commands.
 
 schema_version = 1
 name = "revolt_copper_hil"
+
+[[nodes]]
+name = "pdm"
+type = "gaussian_deformable_mirror_surface_f32"
+
+[nodes.config]
+resolution = 480
+telescope_diameter_m = 1.22
+central_obstruction_ratio = 0.0
+pupil_reflectivity = 1.0
+aperture_revision = 1
+actuator_count = 277
+influence_width = 0.08626550214129701
+pdm_command_schema = "org.revolt.hsdm277.actuator-surface-opd-m.f32/1"
+surface_opd_schema = "org.revolt.hsdm277.pdm-surface-opd-m.f32/1"
+actuator_coordinates_schema = "org.revolt.hsdm277.normalized-pupil-actuator-coordinates.f32/1"
+
+[[nodes]]
+name = "pupil_opd_composition"
+type = "pupil_opd_composition_f32"
+
+[nodes.config]
+resolution = 480
+uncompensated_opd_schema = "org.revolt.copper.uncompensated-pupil-opd-m.f32/1"
+surface_opd_schema = "org.revolt.hsdm277.pdm-surface-opd-m.f32/1"
+pupil_opd_schema = "org.revolt.copper.pupil-opd-m.f32/1"
 
 [[nodes]]
 name = "pwfs"
@@ -50,7 +83,7 @@ source_magnitude = 5.752574989159953
 source_wavelength_m = 5.5e-7
 source_separation_arcsec = 0.0
 source_position_angle_deg = 0.0
-opd_schema = "org.revolt.copper.pupil-opd.f32/1"
+opd_schema = "org.revolt.copper.pupil-opd-m.f32/1"
 photon_rate_schema = "org.revolt.copper.pwfs-photon-rate.f32/1"
 
 [[nodes]]
@@ -79,9 +112,22 @@ photon_rate_schema = "org.revolt.copper.pwfs-photon-rate.f32/1"
 frame_schema = "org.revolt.copper.pwfs-frame.f32/1"
 
 [[inputs]]
+name = "pdm_command"
+destination = "pdm.pdm_command"
+binding = "pdm_command"
+
+[[inputs]]
+name = "uncompensated_pupil_opd"
+destination = "pupil_opd_composition.uncompensated_opd"
+binding = "uncompensated_pupil_opd"
+
+[[outputs]]
+name = "pdm_surface_opd"
+source = "pdm.surface_opd"
+
+[[outputs]]
 name = "pupil_opd"
-destination = "pwfs.opd"
-binding = "pupil_opd"
+source = "pupil_opd_composition.pupil_opd"
 
 [[outputs]]
 name = "pwfs_photon_rate"
@@ -92,5 +138,17 @@ name = "pwfs_frame"
 source = "detector.frame"
 
 [[links]]
+source = "pdm.surface_opd"
+destination = "pupil_opd_composition.surface_opd"
+
+[[links]]
+source = "pupil_opd_composition.pupil_opd"
+destination = "pwfs.opd"
+
+[[links]]
 source = "pwfs.photon_rate"
 destination = "detector.photon_rate"
+
+[[parameters]]
+destination = "pdm.actuator_coordinates"
+binding = "pdm_actuator_coordinates"

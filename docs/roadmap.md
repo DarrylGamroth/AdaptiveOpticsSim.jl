@@ -89,13 +89,17 @@ The first complete-frame proof uses the native discrete-integrator controller.
 A second proof uses modal OPD expansion with a coefficient vector, an OPD
 matrix, and explicit basis and pupil-support ndarray parameters. The executable
 REVOLT Classic HIL sensor graph now accepts the external RTC's complete
-277-actuator PDM command, applies a caller-qualified measured influence model,
-adds the resulting surface OPD to the uncompensated pupil OPD, and composes
+277-actuator PDM command as unit-peak actuator surface-OPD coefficients in
+metres, applies the exact on-sky command-map topology with explicitly
+provisional normalized-pupil placement and Gaussian influence model, adds the
+resulting surface OPD to the uncompensated pupil OPD, and composes
 diffractive Shack–Hartmann photon-rate formation with single-read CCD
 acquisition through a completed 352-by-352 frame. The available BAX307/SPIDERS
 influence artifact is explicitly rejected as authority for the REVOLT HSDM277;
-an authoritative HSDM277 influence calibration remains an application binding
-before this becomes an instrument model. A separate RTC-reference graph
+an authoritative HSDM277 influence calibration and normalized-hardware-command
+conversion remain application bindings before this becomes an instrument
+model. The Copper HIL graph uses the same physical-DM boundary before its
+Pyramid/EMCCD sensor path. A separate RTC-reference graph
 continues through calibrated full-grid centroid estimation with explicit
 valid-subaperture and reference-signal ndarray parameters. An explicit
 one-based lenslet-order parameter selects 188
@@ -140,10 +144,11 @@ The delivery order for this boundary is:
 
 1. Stabilize the AOS-native graph-node protocol and versioned TOML static
    subset without changing domain numerical APIs.
-2. Bind the REVOLT Classic HIL graph's existing returned-PDM and same-grid
-   optical-path composition stages to an authoritative HSDM277 influence
-   calibration, then add the atmosphere/path producer while keeping transport
-   at the completed-frame and complete-command boundaries. Bind the
+2. Replace the REVOLT Classic and Copper HIL graphs' provisional Gaussian PDM
+   response with an authoritative HSDM277 influence calibration, bind the
+   normalized-hardware-command conversion, then add the atmosphere/path
+   producer while keeping transport at the completed-frame and
+   complete-command boundaries. Bind the
    authoritative ROI-derived order to the separate
    RTC-reference graph; reconstruction and the first atomic controller are
    executable there, and its next controller gate is downstream

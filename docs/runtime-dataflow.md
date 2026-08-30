@@ -273,29 +273,43 @@ defines the intended external-RTC sensor boundary. The surrounding AOS
 simulation evolves the atmosphere and evaluates the uncompensated optical
 path. A serialized adapter places the latest accepted complete PDM command in
 the caller-owned input buffer before the graph step. The graph applies that
-command with `deformable_mirror_surface_f32`, composes the resulting sampled
-surface with the uncompensated pupil OPD through
+command with `gaussian_deformable_mirror_surface_f32`, composes the resulting
+sampled surface with the uncompensated pupil OPD through
 `pupil_opd_composition_f32`, and produces the configured 352-by-352
 diffractive SHWFS photon-rate mosaic and one completed noisy CCD frame for a
 transport adapter such as PipeWireAO. The RTC performs centroiding,
 reconstruction, control, and command production outside this graph.
 
-The pinned REVOLT profile and RTC tree agree on the 277-actuator HSDM277 map;
-the map hash is `76b60effb1786a6cdb37ef3b51c12e34cdc592803f1b1161895b69ee85d51ecc`.
-No authoritative HSDM277 influence-function artifact has been identified.
-The locally available `AX307_Influences.fits` instead contains 468 BAX307
+The on-sky and Copper trees contain the same 277-actuator HSDM277 map payload;
+their raw files differ in header and have hashes
+`b75ae701627b24af51ecd50f019e91989a514441a0d510b418b5fe82b6127fd1`
+and `76b60effb1786a6cdb37ef3b51c12e34cdc592803f1b1161895b69ee85d51ecc`.
+[`revolt_hsdm277.jl`](../examples/support/revolt_hsdm277.jl) reproduces that
+exact command order. It places the 19-actuator physical grid at the REVOLT
+simulation assumption of 17 actuator centres across the pupil. The maintained
+OOPAO ideal profile's 0.35 adjacent coupling then gives a normalized Gaussian
+influence width of `0.08626550214129701`; an older OOMAO script uses 0.30.
+Command-map topology is source-backed, while pupil registration and coupling
+are explicitly provisional model assumptions. The graph command contains
+unit-peak actuator surface-OPD coefficients in metres, so an ALPAO normalized
+hardware command still requires separately qualified conversion.
+
+No authoritative HSDM277 influence-function artifact has been identified. The
+locally available `AX307_Influences.fits` instead contains 468 BAX307
 influences over 5,813 pupil samples and belongs to the SPIDERS physical mirror.
-The REVOLT graph therefore requires caller-qualified 277-actuator coordinates
-and a `240^2`-by-277 sampled influence matrix. Preparation snapshots that
-matrix, and the example makes no synthetic-Gaussian instrument claim.
+When qualified HSDM277 sampled influences become available, the analytic node
+can be replaced by `deformable_mirror_surface_f32` without changing the
+downstream surface-OPD contract.
 
 The maintained
 [`revolt_copper_hil.toml`](../examples/graphs/revolt_copper_hil.toml) file
 defines the corresponding external-RTC boundary for Copper. It combines the
 maintained REVOLT optical and iXon camera profile with the current RTC's
-64-by-64 frame and 30-by-30 Pyramid-pupil contract. One graph step forms the
-modulated Pyramid photon-rate image and completes one seeded EMCCD acquisition;
-the external RTC consumes that frame and returns the next physical-DM command.
+64-by-64 frame and 30-by-30 Pyramid-pupil contract. It applies the same exact
+command geometry and provisional surface model as Classic. One graph step
+composes that surface with uncompensated pupil OPD, forms the modulated Pyramid
+photon-rate image, and completes one seeded EMCCD acquisition; the external RTC
+consumes that frame and returns the next physical-DM command.
 The file records its layered parameter authority and does not claim that the
 symmetric simulated pupil registration already matches the measured
 `pwfsRoiOffsets_64.csv` positions or an operational pixel reconstructor.
@@ -323,8 +337,8 @@ Architecture-file status is therefore explicit:
 
 | Architecture | File-defined executable surface | Remaining authority or implementation gate |
 |---|---|---|
-| REVOLT Classic | The primary HIL file executes diffractive SHWFS optics and single-read CCD acquisition through the completed frame boundary. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind the measured physical-DM model, atmosphere, and optical-path composition ahead of the HIL sensor boundary, then publish the frame and consume returned commands through transport adapters. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
-| REVOLT Copper | The primary HIL file executes the maintained modulated Pyramid optics and complete-frame EMCCD acquisition through a 64-by-64 frame boundary. | Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; bind the physical-DM model and atmosphere for an end-to-end simulation. |
+| REVOLT Classic | The primary HIL file applies the exact HSDM277 command-map topology with provisional normalized-pupil placement and Gaussian surface response, composes uncompensated pupil OPD, and executes diffractive SHWFS optics plus single-read CCD acquisition through the completed frame boundary. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind a qualified normalized-hardware-command conversion, measured HSDM277 influence model, atmosphere, and optical-path producer before claiming an instrument model. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
+| REVOLT Copper | The primary HIL file applies the same exact command map and provisional placement/Gaussian response, composes uncompensated pupil OPD, and executes maintained modulated Pyramid optics plus complete-frame EMCCD acquisition through a 64-by-64 frame boundary. | Bind qualified command conversion and measured HSDM277 influences. Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; add the atmosphere/path producer for an end-to-end simulation. |
 | SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
 
 End-to-end REVOLT Classic, REVOLT Copper, and SPIDERS simulations are not

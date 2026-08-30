@@ -1,5 +1,12 @@
 const AOG = AdaptiveOpticsSim.AlgorithmGraphs
 
+include(joinpath(
+    dirname(dirname(@__DIR__)),
+    "examples",
+    "support",
+    "revolt_hsdm277.jl",
+))
+
 function warmed_graph_step_allocation_bytes(graph)
     step_graph!(graph)
     return @allocated step_graph!(graph)
@@ -1616,13 +1623,9 @@ end
 
 @testset "REVOLT Classic HIL sensor TOML path is executable" begin
     pdm_command = zeros(Float32, 277)
-    pdm_command[1] = 0.5f0
+    pdm_command[143] = 5.0f-8
     uncompensated_pupil_opd = fill(2.0f-8, 240, 240)
-    # Synthetic wiring fixture only. A real run must bind the qualified HSDM277
-    # coordinates and influence functions required by the graph file.
-    pdm_actuator_coordinates = zeros(Float32, 2, 277)
-    pdm_influence_functions = zeros(Float32, 240 * 240, 277)
-    fill!(@view(pdm_influence_functions[:, 1]), 1.0f-8)
+    pdm_actuator_coordinates = REVOLTHSDM277.actuator_coordinates(Float32)
     path = joinpath(
         dirname(dirname(@__DIR__)),
         "examples",
@@ -1635,7 +1638,6 @@ end
             pdm_command,
             uncompensated_pupil_opd,
             pdm_actuator_coordinates,
-            pdm_influence_functions,
         ),
     )
     graph = prepare_algorithm_graph(definition)
@@ -1649,11 +1651,17 @@ end
     pupil_opd = graph_output(graph, Val(:pupil_opd))
     photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
     frame = graph_output(graph, Val(:shwfs_frame))
+    pdm_owner = prepared_graph_node(graph, Val(:pdm))
 
     @test graph_name(graph) === :revolt_classic_hil
     @test graph_step_sequence(graph) == UInt64(1)
-    @test surface_opd ≈ fill(0.5f-8, 240, 240)
-    @test pupil_opd ≈ fill(2.5f-8, 240, 240)
+    @test influence_model(pdm_owner.deformable_mirror) ==
+        GaussianInfluenceWidth(
+            REVOLTHSDM277.provisional_gaussian_influence_width(Float32),
+        )
+    @test maximum(surface_opd) ≈ 5.0f-8 rtol = 5.0f-3
+    @test minimum(surface_opd) == 0.0f0
+    @test pupil_opd ≈ uncompensated_pupil_opd .+ surface_opd
     @test size(photon_rate) == (352, 352)
     @test size(frame) == (352, 352)
     @test hil_frame_buffer(boundary) == frame
@@ -1663,39 +1671,89 @@ end
     @test sum(frame) > 0
 
     fill!(hil_command_buffer(boundary), 0.0f0)
-    hil_command_buffer(boundary)[1] = -0.25f0
+    hil_command_buffer(boundary)[143] = -2.5f-8
     adopt_hil_command!(boundary, UInt64(1))
     @test step_hil_frame!(boundary) == UInt64(2)
-    @test surface_opd ≈ fill(-0.25f-8, 240, 240)
-    @test pupil_opd ≈ fill(1.75f-8, 240, 240)
+    @test minimum(surface_opd) ≈ -2.5f-8 rtol = 5.0f-3
+    @test maximum(surface_opd) == 0.0f0
+    @test pupil_opd ≈ uncompensated_pupil_opd .+ surface_opd
     fill!(hil_command_buffer(boundary), 0.0f0)
-    hil_command_buffer(boundary)[1] = 0.125f0
+    hil_command_buffer(boundary)[143] = 1.25f-8
     adopt_hil_command!(boundary, UInt64(2))
     @test @allocated(step_hil_frame!(boundary)) == 0
-    @test surface_opd ≈ fill(0.125f-8, 240, 240)
+    @test maximum(surface_opd) ≈ 1.25f-8 rtol = 5.0f-3
 end
 
 @testset "REVOLT Copper HIL sensor TOML path is executable" begin
-    pupil_opd = zeros(Float32, 480, 480)
+    pdm_command = zeros(Float32, 277)
+    pdm_command[139] = 5.0f-8
+    uncompensated_pupil_opd = zeros(Float32, 480, 480)
+    pdm_actuator_coordinates = REVOLTHSDM277.actuator_coordinates(Float32)
     path = joinpath(
         dirname(dirname(@__DIR__)),
         "examples",
         "graphs",
         "revolt_copper_hil.toml",
     )
-    definition = load_algorithm_graph(path; bindings=(; pupil_opd))
+    definition = load_algorithm_graph(
+        path;
+        bindings=(;
+            pdm_command,
+            uncompensated_pupil_opd,
+            pdm_actuator_coordinates,
+        ),
+    )
     graph = prepare_algorithm_graph(definition)
-    step_graph!(graph)
+    boundary = prepare_graph_hil_boundary(
+        graph;
+        command_input=:pdm_command,
+        frame_output=:pwfs_frame,
+    )
+    @test step_hil_frame!(boundary) == UInt64(1)
+    surface_opd = graph_output(graph, Val(:pdm_surface_opd))
+    pupil_opd = graph_output(graph, Val(:pupil_opd))
     photon_rate = graph_output(graph, Val(:pwfs_photon_rate))
     frame = graph_output(graph, Val(:pwfs_frame))
 
     @test graph_name(graph) === :revolt_copper_hil
+    @test maximum(surface_opd) ≈ 5.0f-8 rtol = 5.0f-3
+    @test minimum(surface_opd) == 0.0f0
+    @test pupil_opd ≈ surface_opd
     @test size(photon_rate) == (64, 64)
     @test size(frame) == (64, 64)
+    @test hil_frame_buffer(boundary) == frame
     @test all(isfinite, photon_rate)
     @test all(isfinite, frame)
     @test sum(photon_rate) > 0
     @test sum(frame) > 0
+end
+
+@testset "REVOLT HSDM277 command map and provisional response" begin
+    index_map = REVOLTHSDM277.actuator_index_map()
+    coordinates = REVOLTHSDM277.actuator_coordinates(Float32)
+
+    @test size(index_map) == (19, 19)
+    @test count(!iszero, index_map) == 277
+    @test sort(filter(!iszero, vec(index_map))) == UInt16.(1:277)
+    @test Tuple(count(!iszero, @view(index_map[row, :])) for row in 1:19) ==
+        (7, 9, 11, 13, 15, 17, 19, 19, 19, 19, 19, 19, 19, 17, 15, 13,
+            11, 9, 7)
+    @test index_map[19, 7:13] == UInt16.(1:7)
+    @test index_map[10, :] == UInt16.(130:148)
+    @test index_map[1, 7:13] == UInt16.(271:277)
+    @test size(coordinates) == (2, 277)
+    @test all(isfinite, coordinates)
+    @test coordinates[:, 1] == Float32[-0.375, -1.125]
+    @test coordinates[:, 7] == Float32[0.375, -1.125]
+    @test coordinates[:, 139] == Float32[0, 0]
+    @test coordinates[:, 143] == Float32[0.5, 0]
+    @test coordinates[:, 271] == Float32[-0.375, 1.125]
+    @test coordinates[:, 277] == Float32[0.375, 1.125]
+    @test coordinates[:, 140] - coordinates[:, 139] == Float32[0.125, 0]
+    @test REVOLTHSDM277.normalized_pupil_actuator_pitch(Float32) == 0.125f0
+    @test REVOLTHSDM277.provisional_mechanical_coupling(Float32) == 0.35f0
+    @test REVOLTHSDM277.provisional_gaussian_influence_width(Float64) ≈
+        0.08626550214129701
 end
 
 @testset "REVOLT Classic RTC-reference TOML path is executable" begin

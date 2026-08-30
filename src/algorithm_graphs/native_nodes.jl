@@ -870,10 +870,11 @@ The graph snapshots caller-supplied actuator coordinates in normalized pupil
 coordinates and evaluates the native matrix-free Gaussian influence model.
 `influence_width` uses the same normalized-pupil coordinate system.
 
-Each PDM command element is the surface OPD in metres at its actuator centre,
-so the output is also surface OPD in metres. A normalized hardware command
-requires an explicit, separately qualified command-calibration adapter. Use
-[`deformable_mirror_surface_node`](@ref) when sampled measured influence
+Each PDM command element is the unit-peak surface-OPD coefficient, in metres,
+of its actuator's Gaussian influence function. The total output superposes all
+actuator contributions and is also surface OPD in metres. A normalized hardware
+command requires an explicit, separately qualified command-calibration adapter.
+Use [`deformable_mirror_surface_node`](@ref) when sampled measured influence
 functions are available.
 """
 function gaussian_deformable_mirror_surface_node(

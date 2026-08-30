@@ -229,6 +229,58 @@ function run_algorithm_graph_backend_smoke(
     @test adopt_hil_command!(dm_boundary, UInt64(1)) == UInt64(1)
     @test Array(graph_input(dm_graph, Val(:pdm_command))) == Float32[1, 1]
 
+    gaussian_command = BackendArray(Float32[2.0f-8, -1.0f-8])
+    gaussian_coordinates = BackendArray(Float32[-0.25 0.25; -0.25 0.25])
+    gaussian_definition = algorithm_graph(
+        (
+            gaussian_deformable_mirror_surface_node(
+                :dm;
+                resolution=4,
+                telescope_diameter_m=1.22,
+                actuator_count=2,
+                influence_width=0.2,
+                pdm_command_schema=
+                    "test.graph.pdm-actuator-opd-m.f32/1",
+                surface_opd_schema=
+                    "test.graph.dm-surface-opd-m.f32/1",
+                actuator_coordinates_schema=
+                    "test.graph.dm-normalized-pupil-coordinates.f32/1",
+            ),
+        );
+        name=:gpu_analytic_gaussian_deformable_mirror,
+        inputs=(
+            graph_input(
+                :pdm_command,
+                :dm => :pdm_command,
+                gaussian_command,
+            ),
+        ),
+        outputs=(
+            graph_output(:surface_opd, :dm => :surface_opd),
+        ),
+        parameters=(
+            sparse_parameter(
+                :dm => :actuator_coordinates,
+                gaussian_coordinates,
+            ),
+        ),
+    )
+    gaussian_graph = prepare_algorithm_graph(gaussian_definition; target)
+    step_graph!(gaussian_graph)
+    gaussian_surface = graph_output(
+        gaussian_graph,
+        Val(:surface_opd),
+    )
+    gaussian_surface_host = Array(gaussian_surface)
+    diagonal_response = exp(-0.5f0 / (2 * 0.2f0^2))
+    cross_response = exp(-0.25f0 / (2 * 0.2f0^2))
+    @test compute_device(gaussian_surface) == target
+    @test gaussian_surface_host[2, 2] ≈
+        2.0f-8 - 1.0f-8 * diagonal_response
+    @test gaussian_surface_host[3, 3] ≈
+        2.0f-8 * diagonal_response - 1.0f-8
+    @test gaussian_surface_host[2, 3] ≈ 1.0f-8 * cross_response
+
     pyramid_opd = BackendArray(zeros(Float32, 8, 8))
     pyramid_target = compute_device(pyramid_opd)
     pyramid_definition = algorithm_graph(
