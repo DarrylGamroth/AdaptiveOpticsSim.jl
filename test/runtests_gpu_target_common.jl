@@ -207,7 +207,7 @@ function run_algorithm_graph_backend_smoke(
     )
     dm_graph = prepare_algorithm_graph(dm_definition; target)
     step_graph!(dm_graph)
-    dm_owner = prepared_graph_node(dm_graph, Val(:dm))
+    dm_owner = AlgorithmGraphs.prepared_graph_node(dm_graph, Val(:dm))
     dm_surface = graph_output(dm_graph, Val(:surface_opd))
     pupil_opd = graph_output(dm_graph, Val(:pupil_opd))
     @test compute_device(
