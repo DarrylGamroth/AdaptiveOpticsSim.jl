@@ -101,6 +101,42 @@ end
         (16 * 16, 8, 8)
 end
 
+@testset "Shack-Hartmann scalar spot-stack sampling" begin
+    T = Float64
+    tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    pupil = PupilFunction(tel; T=T)
+    src = Source(band=:I, magnitude=zero(T), T=T)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
+        diffraction_padding=2, n_pix_subap=2, shannon_sampling=false, T=T)
+    WavefrontSensors.prepare_sampling!(wfs, pupil, src)
+    optics = WavefrontSensors.shack_hartmann_optics(wfs)
+    propagation = Optics.microlens_propagation_workspace(optics.propagation)
+    intensity_stack = propagation.intensity_stack
+    intensity_stack .= reshape(T.(1:length(intensity_stack)),
+        size(intensity_stack))
+
+    binning = propagation.binning_pixel_scale
+    n_binned = div(size(intensity_stack, 1), binning)
+    binned = zeros(T, n_binned, n_binned)
+    centered = zeros(T, size(propagation.sampled_spot_cube, 2),
+        size(propagation.sampled_spot_cube, 3))
+    expected = similar(propagation.sampled_spot_cube)
+    @inbounds for idx in axes(intensity_stack, 3)
+        bin2d!(binned, @view(intensity_stack[:, :, idx]), binning)
+        center_resize2d!(centered, binned)
+        @views expected[idx, :, :] .= centered
+    end
+
+    actual = WavefrontSensors.sample_spot_stack!(
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), optics)
+    @test actual == expected
+    WavefrontSensors.sample_spot_stack!(
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), optics)
+    @test @allocated(WavefrontSensors.sample_spot_stack!(
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), optics)) == 0
+end
+
 @testset "Shack-Hartmann signal extraction branches" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)

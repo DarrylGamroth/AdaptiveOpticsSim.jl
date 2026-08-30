@@ -522,6 +522,39 @@ plan_fft_backend!(buffer) = plan_fft!(buffer)
 plan_fft_backend!(buffer, dims) = plan_fft!(buffer, dims)
 plan_ifft_backend!(buffer) = plan_ifft!(buffer)
 plan_ifft_backend!(buffer, dims) = plan_ifft!(buffer, dims)
+
+# Optical workspaces execute these transforms once or more per simulated
+# frame, so the one-time FFTW search cost is repaid over a prepared run. Keep
+# this separate from the general planning seam: setup and diagnostic
+# transforms should not unexpectedly pay a measured-planning cost. Optional
+# Apple and accelerator providers retain their native planning behavior.
+function plan_repeated_fft_backend!(buffer::Array{T,N}) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return plan_repeated_fft_backend!(buffer, ntuple(identity, N))
+end
+
+function plan_repeated_fft_backend!(buffer::Array{T,N}, dims) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    Sys.isapple() && return plan_fft_backend!(buffer, dims)
+    return FFTW.plan_fft!(buffer, dims; flags=FFTW.MEASURE)
+end
+
+function plan_repeated_ifft_backend!(buffer::Array{T,N}) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return plan_repeated_ifft_backend!(buffer, ntuple(identity, N))
+end
+
+function plan_repeated_ifft_backend!(buffer::Array{T,N}, dims) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    Sys.isapple() && return plan_ifft_backend!(buffer, dims)
+    return FFTW.plan_ifft!(buffer, dims; flags=FFTW.MEASURE)
+end
+
+plan_repeated_fft_backend!(buffer) = plan_fft_backend!(buffer)
+plan_repeated_fft_backend!(buffer, dims) = plan_fft_backend!(buffer, dims)
+plan_repeated_ifft_backend!(buffer) = plan_ifft_backend!(buffer)
+plan_repeated_ifft_backend!(buffer, dims) = plan_ifft_backend!(buffer, dims)
+
 set_fft_provider_threads!(n::Integer) = FFTW.set_num_threads(n)
 execute_fft_plan!(buffer, plan) = (mul!(buffer, plan, buffer); buffer)
 backend_matmul(A::AbstractMatrix, B::AbstractMatrix) = A * B

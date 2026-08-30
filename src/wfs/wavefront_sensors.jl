@@ -8,7 +8,6 @@ detector response and acquisition physics remain owned by `Detectors`.
 """
 module WavefrontSensors
 
-import FFTW
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
 using LinearAlgebra
@@ -57,6 +56,8 @@ import ..Backends:
     packed_valid_pair_mean,
     plan_fft_backend!,
     plan_ifft_backend!,
+    plan_repeated_fft_backend!,
+    plan_repeated_ifft_backend!,
     queue_kernel!,
     reduction_execution_strategy,
     reduction_host_view,

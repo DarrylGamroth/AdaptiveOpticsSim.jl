@@ -236,26 +236,6 @@ struct PreparedPyramidPropagation{
     workspace::W
 end
 
-# Pyramid propagation executes the same large transforms once per modulation
-# point and therefore amortizes FFTW's measured-planning cost quickly. Planning
-# is confined to newly allocated scratch because FFTW.MEASURE may overwrite its
-# input while evaluating candidates. Apple and accelerator providers retain
-# their backend-native planning behavior.
-@inline function _plan_pyramid_fft!(::ScalarCPUStyle, buffer)
-    Sys.isapple() && return plan_fft_backend!(buffer)
-    return FFTW.plan_fft!(buffer; flags=FFTW.MEASURE)
-end
-
-@inline function _plan_pyramid_ifft!(::ScalarCPUStyle, buffer)
-    Sys.isapple() && return plan_ifft_backend!(buffer)
-    return FFTW.plan_ifft!(buffer; flags=FFTW.MEASURE)
-end
-
-@inline _plan_pyramid_fft!(::AcceleratorStyle, buffer) =
-    plan_fft_backend!(buffer)
-@inline _plan_pyramid_ifft!(::AcceleratorStyle, buffer) =
-    plan_ifft_backend!(buffer)
-
 const _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT = 8
 
 function _pyramid_modulation_batch_size(point_count::Int)
@@ -290,8 +270,8 @@ function _prepare_pyramid_modulation_batch(
     calibration_weights = similar(operating_weights)
     copyto!(operating_weights, modulation.amplitude_weights)
     copyto!(calibration_weights, calibration_modulation.amplitude_weights)
-    fft_plan = plan_fft_backend!(field_stack, (1, 2))
-    ifft_plan = plan_ifft_backend!(field_stack, (1, 2))
+    fft_plan = plan_repeated_fft_backend!(field_stack, (1, 2))
+    ifft_plan = plan_repeated_ifft_backend!(field_stack, (1, 2))
     return PyramidModulationBatchWorkspace(
         field_stack,
         operating_weights,
@@ -317,8 +297,8 @@ function _resize_pyramid_modulation_batch(
         pad,
         batch.batch_size,
     )
-    fft_plan = plan_fft_backend!(field_stack, (1, 2))
-    ifft_plan = plan_ifft_backend!(field_stack, (1, 2))
+    fft_plan = plan_repeated_fft_backend!(field_stack, (1, 2))
+    ifft_plan = plan_repeated_ifft_backend!(field_stack, (1, 2))
     return PyramidModulationBatchWorkspace(
         field_stack,
         batch.operating_weights,
@@ -631,8 +611,8 @@ function _prepare_pyramid_diffractive_storage(backend, ::Type{T}, tel,
     scratch = similar(intensity)
     asterism_stack = backend{T}(undef, pad, pad, 1)
     style = execution_style(field)
-    fft_plan = _plan_pyramid_fft!(style, focal_field)
-    ifft_plan = _plan_pyramid_ifft!(style, pupil_field)
+    fft_plan = plan_repeated_fft_backend!(focal_field)
+    ifft_plan = plan_repeated_ifft_backend!(pupil_field)
     modulation = prepare_focal_plane_modulation(operating_policy,
         tel.params.resolution, field, T)
     calibration_modulation = prepare_focal_plane_modulation(
@@ -722,10 +702,9 @@ function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, pupil::PupilFunction
         acquisition.frame = similar(acquisition.frame, pad, pad)
         propagation.asterism_stack = similar(propagation.asterism_stack,
             pad, pad, propagation.asterism_capacity)
-        style = execution_style(propagation.field)
-        propagation.fft_plan = _plan_pyramid_fft!(style,
+        propagation.fft_plan = plan_repeated_fft_backend!(
             propagation.focal_field)
-        propagation.ifft_plan = _plan_pyramid_ifft!(style,
+        propagation.ifft_plan = plan_repeated_ifft_backend!(
             propagation.pupil_field)
         propagation.modulation_batch = _resize_pyramid_modulation_batch(
             propagation.modulation_batch, propagation.field)

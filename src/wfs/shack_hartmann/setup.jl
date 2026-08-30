@@ -447,15 +447,17 @@ function ensure_sh_buffers!(optics::ShackHartmannOptics,
             propagation.intensity_tmp_stack, eltype(propagation.intensity),
             pad, pad, total)
         propagation.temp = similar(propagation.temp, pad, pad)
-        propagation.fft_plan = plan_fft_backend!(propagation.fft_buffer)
-        propagation.fft_stack_plan = plan_fft_backend!(
+        propagation.fft_plan = plan_repeated_fft_backend!(
+            propagation.fft_buffer)
+        propagation.fft_stack_plan = plan_repeated_fft_backend!(
             propagation.fft_stack, (1, 2))
-        propagation.ifft_plan = plan_ifft_backend!(propagation.fft_buffer)
-        propagation.ifft_stack_plan = plan_ifft_backend!(
+        propagation.ifft_plan = plan_repeated_ifft_backend!(
+            propagation.fft_buffer)
+        propagation.ifft_stack_plan = plan_repeated_ifft_backend!(
             propagation.fft_stack, (1, 2))
         propagation.fft_asterism_stack = similar(
             propagation.fft_asterism_stack, pad, pad, total)
-        propagation.fft_asterism_plan = plan_fft_backend!(
+        propagation.fft_asterism_plan = plan_repeated_fft_backend!(
             propagation.fft_asterism_stack, (1, 2))
         propagation.phasor_ratio = eltype(propagation.intensity)(NaN)
     end
@@ -497,7 +499,7 @@ function ensure_sh_asterism_buffers!(
         propagation.intensity_tmp_stack = similar(
             propagation.intensity_tmp_stack,
             eltype(propagation.intensity_tmp_stack), pad, pad, total)
-        propagation.fft_asterism_plan = plan_fft_backend!(
+        propagation.fft_asterism_plan = plan_repeated_fft_backend!(
             propagation.fft_asterism_stack, (1, 2))
         propagation.asterism_capacity = n_sources
     end

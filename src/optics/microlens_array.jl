@@ -203,12 +203,13 @@ function _build_microlens_propagation(array_source, ::Type{T},
     sampled_spot_cube = _allocate_microlens_array(array_source, T,
         n_lenslets * n_lenslets, sub, sub)
     spot_cube_accum = similar(sampled_spot_cube)
-    fft_plan = plan_fft_backend!(fft_buffer)
-    fft_stack_plan = plan_fft_backend!(fft_stack, (1, 2))
-    ifft_plan = plan_ifft_backend!(fft_buffer)
-    ifft_stack_plan = plan_ifft_backend!(fft_stack, (1, 2))
+    fft_plan = plan_repeated_fft_backend!(fft_buffer)
+    fft_stack_plan = plan_repeated_fft_backend!(fft_stack, (1, 2))
+    ifft_plan = plan_repeated_ifft_backend!(fft_buffer)
+    ifft_stack_plan = plan_repeated_ifft_backend!(fft_stack, (1, 2))
     fft_asterism_stack = similar(fft_stack)
-    fft_asterism_plan = plan_fft_backend!(fft_asterism_stack, (1, 2))
+    fft_asterism_plan = plan_repeated_fft_backend!(
+        fft_asterism_stack, (1, 2))
     elongation_kernel = _allocate_microlens_array(array_source, T, 1)
     lgs_kernel_fft = _allocate_microlens_array(array_source, Complex{T},
         0, 0, 0)
