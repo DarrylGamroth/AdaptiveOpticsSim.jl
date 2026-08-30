@@ -3,6 +3,7 @@ export AlgorithmNodeDefinition, AlgorithmGraphDefinition
 export AlgorithmLink, DelayedAlgorithmLink
 export GraphInputDefinition, GraphOutputDefinition
 export PreparedAlgorithmGraph
+export PreparedGraphHILBoundary
 export FixedStepModelTimeDriver, PreparedBoundaryModelTimeDriver
 export CapturedModelTimestamp, PreparedCapturedModelTimeDriver
 export algorithm_node, algorithm_graph, graph_input, graph_output
@@ -20,6 +21,9 @@ export shack_hartmann_slope_selection_node
 export control_matrix_reconstruction_node
 export load_algorithm_graph, builtin_graph_node_types
 export prepare_algorithm_graph, step_graph!, reset_graph!
+export prepare_graph_hil_boundary, step_hil_frame!, step_hil_frame_at!
+export adopt_hil_command!, reset_hil_boundary!
+export hil_command_buffer, hil_frame_buffer, hil_boundary_status
 export graph_name, graph_step_sequence, graph_failed
 export prepare_boundary_model_time_driver
 export prepare_captured_model_time_driver, next_model_time_capture

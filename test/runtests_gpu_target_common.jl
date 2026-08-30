@@ -206,7 +206,12 @@ function run_algorithm_graph_backend_smoke(
         ),
     )
     dm_graph = prepare_algorithm_graph(dm_definition; target)
-    step_graph!(dm_graph)
+    dm_boundary = prepare_graph_hil_boundary(
+        dm_graph;
+        command_input=:pdm_command,
+        frame_output=:pupil_opd,
+    )
+    @test step_hil_frame!(dm_boundary) == UInt64(1)
     dm_owner = AlgorithmGraphs.prepared_graph_node(dm_graph, Val(:dm))
     dm_surface = graph_output(dm_graph, Val(:surface_opd))
     pupil_opd = graph_output(dm_graph, Val(:pupil_opd))
@@ -219,6 +224,10 @@ function run_algorithm_graph_backend_smoke(
     @test compute_device(pupil_opd) == target
     @test Array(dm_surface) == Float32[2 3; 3 2]
     @test Array(pupil_opd) == Float32[6 7; 7 6]
+    @test hil_frame_buffer(dm_boundary) == Float32[6 7; 7 6]
+    hil_command_buffer(dm_boundary) .= Float32[1, 1]
+    @test adopt_hil_command!(dm_boundary, UInt64(1)) == UInt64(1)
+    @test Array(graph_input(dm_graph, Val(:pdm_command))) == Float32[1, 1]
 
     pyramid_opd = BackendArray(zeros(Float32, 8, 8))
     pyramid_target = compute_device(pyramid_opd)

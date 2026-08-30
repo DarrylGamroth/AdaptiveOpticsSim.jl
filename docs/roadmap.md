@@ -128,6 +128,14 @@ implementations later; they do not own the AOS simulation API. This topology
 proof does not supply a qualified SPIDERS optical prescription, detector
 response, observation metadata, or asynchronous acquisition driver.
 
+The portable graph now also has a transport-neutral lockstep HIL boundary.
+It stages one completed frame in a reusable host buffer, requires one complete
+finite same-sequence command before the next frame, and adopts that command
+through a completed host-to-target copy. This closes the serial command/frame
+lifecycle needed by direct Julia scripts and CPU RTCs attached to GPU
+simulations. PipeWire buffer integration, timeout/hold policy, and wall-clock
+pacing remain deployment work rather than graph semantics.
+
 The delivery order for this boundary is:
 
 1. Stabilize the AOS-native graph-node protocol and versioned TOML static
@@ -148,8 +156,10 @@ The delivery order for this boundary is:
    multi-rate arrangements that exceed the TOML subset.
 4. Provide deterministic fixed-step and prepared-boundary model-time drivers;
    wall-clock pacing remains outside core.
-5. Bind stateful rolling-shutter integration, command adoption, explicit
-   delays, and multi-rate behavior as semantically atomic prepared operations.
+5. Use the lockstep boundary for complete-frame external command adoption.
+   Bind stateful rolling-shutter integration, explicit physical delays, and
+   multi-rate behavior as semantically atomic prepared operations rather than
+   extending the lockstep protocol with implicit timing.
 6. Retain Plant scenarios as differential evidence for synchronized MCAO,
    path-local MOAO, and rolling-shutter exposure across a mid-frame DM update.
 7. Use PipeWireAO for real paced HIL and capture canonical timestamps needed to
@@ -473,7 +483,7 @@ parallel scheduler integrations.
 | `Control` | control reconstructors, controllers, delay lines, and prepared runtime operations | dependency direction is `Control` to `Calibration`; tomography remains separate |
 | `Tomography` | tomography geometry, atmosphere reconstruction, fitting, and DM-command mapping | general controller execution remains in `Control` |
 | `Ensembles` | coarse offline execution policies, sweeps, and optional parallel integrations | this is not an `AdaptiveOpticsHIL.jl` deadline scheduler |
-| `AlgorithmGraphs` | portable static composition of AOS-native graph nodes, TOML graph compilation, exact graph-boundary storage, direct and delayed links, and deterministic model-time drivers | scientific modules own domain implementations; Plant owns detailed physical event semantics; PipeWireAO and `AdaptiveOpticsHIL.jl` own wall-clock pacing and operational execution |
+| `AlgorithmGraphs` | portable static composition of AOS-native graph nodes, TOML graph compilation, exact graph-boundary storage, direct and delayed links, deterministic model-time drivers, and a serial host command/frame HIL boundary | scientific modules own domain implementations; Plant owns detailed physical event semantics; PipeWireAO and `AdaptiveOpticsHIL.jl` own wall-clock pacing and operational execution |
 | `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, execution requirements, providers, detailed event composition, and precision-timing oracle | general algorithm-graph orchestration belongs to `AlgorithmGraphs`; resource inventory, placement policy, pacing, rings, and workers belong to `AdaptiveOpticsHIL.jl`; physical domain models enter through explicit imports |
 
 `AdaptiveOpticsSim` exports the canonical modules plus shared errors,

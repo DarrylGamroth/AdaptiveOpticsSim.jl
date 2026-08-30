@@ -1836,6 +1836,16 @@ the canonical representation of these results.
   `prepare_algorithm_graph`, and execute with `step_graph!`. The graph-node
   protocol binds canonical scientific operations to exact graph storage; it is
   not a second numerical algorithm interface or a wall-clock scheduler.
+- External-RTC lockstep staging: `prepare_graph_hil_boundary` binds one
+  prepared graph's complete command input and frame output to separate host
+  exchange buffers. `step_hil_frame!` produces one positive frame sequence,
+  and `adopt_hil_command!` requires a complete finite command with that same
+  sequence before another frame can run. `hil_frame_buffer`,
+  `hil_command_buffer`, and `hil_boundary_status` expose the reusable products
+  and lifecycle state. `step_hil_frame_at!` composes the same boundary with a
+  caller-owned model-time driver. This layer performs explicit completed
+  host/device copies but owns no transport, task, timeout, pacing, or
+  command-hold policy.
 - File-defined composition: `load_algorithm_graph` compiles version 1 TOML into
   the same `AlgorithmGraphDefinition` as direct Julia construction. TOML node
   `config` fixes construction and graph-rebuild values, node `props` supplies

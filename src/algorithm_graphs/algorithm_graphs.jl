@@ -114,6 +114,7 @@ include("native_nodes.jl")
 include("graph_files.jl")
 include("execution.jl")
 include("model_time.jl")
+include("hil_boundary.jl")
 include("api.jl")
 
 end # module AlgorithmGraphs

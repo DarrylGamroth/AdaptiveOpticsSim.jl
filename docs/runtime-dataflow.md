@@ -108,6 +108,56 @@ qualify that narrow exact-target execution path. They do not add an acquisition
 clock, asynchronous WFS/science concurrency, or a PipeWire Julia host to this
 executor.
 
+### External-RTC Lockstep Boundary
+
+`prepare_graph_hil_boundary` wraps one unstepped prepared graph without
+changing its topology or scientific owners. It snapshots the initial graph
+command for reset and binds two distinct host `Array` exchange buffers: a
+caller-readable completed frame and a caller-writable command response. For an
+accelerator graph, these buffers are the explicit GPU-to-CPU and CPU-to-GPU
+boundary; each copy completes in the graph's retained device context before
+the operation returns.
+
+Once bound, the lockstep boundary is the graph's execution owner. Application
+code must not call `step_graph!` on that graph or mutate the original exact
+command-input array. Transport code writes only `hil_command_buffer`; the
+boundary validates and adopts it at the serialized frame boundary.
+
+The serialized application loop is:
+
+```julia
+boundary = prepare_graph_hil_boundary(
+    graph;
+    command_input=:pdm_command,
+    frame_output=:shwfs_frame,
+)
+
+sequence = step_hil_frame!(boundary)
+publish_frame!(transport, sequence, hil_frame_buffer(boundary))
+receive_command!(
+    transport,
+    sequence,
+    hil_command_buffer(boundary),
+)
+adopt_hil_command!(boundary, sequence)
+```
+
+The sequence-zero command already present in the graph produces frame one.
+Command `n` is a response to frame `n` and becomes active only for frame
+`n + 1`. The boundary rejects missing, stale, skipped, non-`UInt64`, and
+nonfinite command responses before mutating the graph command. It stops after
+an execution or target-copy failure because either graph products or the
+active command may then be partial. `reset_hil_boundary!` restores the
+snapshotted initial command and graph sequence. When a model-time driver is
+used through `step_hil_frame_at!`, reset both owners with
+`reset_hil_boundary!(boundary, driver)`.
+
+The example transport functions above are application placeholders, not AOS
+APIs. The boundary deliberately defines no socket, PipeWire buffer, wall-clock
+deadline, timeout, last-command hold, queue, or concurrent callback. A direct
+Julia script can perform the loop synchronously; a PipeWireAO adapter can map
+the same buffers and sequences to its transport lifecycle.
+
 ## TOML Algorithm Graph Format
 
 TOML is the maintained human-authored format because it supports comments,

@@ -484,6 +484,157 @@ end
     @test @inferred(step_graph!(graph)) === graph
 end
 
+@testset "graph HIL lockstep boundary" begin
+    initial_command = Float32[1, 2]
+    graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(:bound, GraphTestExactBindingDeclaration, 2),);
+        inputs=(graph_input(:pdm_command, :bound => :input, initial_command),),
+        outputs=(graph_output(:shwfs_frame, :bound => :output),),
+    ))
+    command_buffer = zeros(Float32, 2)
+    frame_buffer = zeros(Float32, 2)
+    boundary = prepare_graph_hil_boundary(
+        graph;
+        command_input=:pdm_command,
+        frame_output=:shwfs_frame,
+        command_buffer,
+        frame_buffer,
+    )
+
+    @test boundary isa PreparedGraphHILBoundary
+    @test hil_command_buffer(boundary) === command_buffer
+    @test hil_frame_buffer(boundary) === frame_buffer
+    @test command_buffer == initial_command
+    @test all(iszero, frame_buffer)
+    @test @inferred(hil_boundary_status(boundary)) == (
+        frame_sequence=UInt64(0),
+        active_command_sequence=UInt64(0),
+        command_response_required=false,
+        failed=false,
+    )
+    @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(1))
+
+    @test @inferred(step_hil_frame!(boundary)) == UInt64(1)
+    @test frame_buffer == initial_command
+    @test hil_boundary_status(boundary).command_response_required
+    @test_throws AlgorithmGraphError step_hil_frame!(boundary)
+    @test_throws AlgorithmGraphError adopt_hil_command!(boundary, 1)
+
+    command_buffer .= Float32[3, 4]
+    @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(2))
+    @test graph_input(graph, Val(:pdm_command)) == initial_command
+    command_buffer[1] = NaN32
+    @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(1))
+    @test graph_input(graph, Val(:pdm_command)) == initial_command
+    @test !hil_boundary_status(boundary).failed
+
+    command_buffer .= Float32[3, 4]
+    @test @inferred(adopt_hil_command!(boundary, UInt64(1))) == UInt64(1)
+    @test graph_input(graph, Val(:pdm_command)) == Float32[3, 4]
+    @test step_hil_frame!(boundary) == UInt64(2)
+    @test frame_buffer == Float32[3, 4]
+
+    command_buffer .= Float32[5, 6]
+    @test @allocated(adopt_hil_command!(boundary, UInt64(2))) == 0
+    @test @allocated(step_hil_frame!(boundary)) == 0
+    @test frame_buffer == Float32[5, 6]
+    command_buffer .= Float32[7, 8]
+    @test @allocated(adopt_hil_command!(boundary, UInt64(3))) == 0
+    @test hil_boundary_status(boundary) == (
+        frame_sequence=UInt64(3),
+        active_command_sequence=UInt64(3),
+        command_response_required=false,
+        failed=false,
+    )
+
+    @test reset_hil_boundary!(boundary) === boundary
+    @test graph_input(graph, Val(:pdm_command)) == initial_command
+    @test command_buffer == initial_command
+    @test all(iszero, frame_buffer)
+    @test hil_boundary_status(boundary).frame_sequence == UInt64(0)
+
+    timed_graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(:bound, GraphTestExactBindingDeclaration, 2),);
+        inputs=(graph_input(
+            :pdm_command,
+            :bound => :input,
+            Float32[9, 10],
+        ),),
+        outputs=(graph_output(:shwfs_frame, :bound => :output),),
+    ))
+    timed_boundary = prepare_graph_hil_boundary(
+        timed_graph;
+        command_input=:pdm_command,
+        frame_output=:shwfs_frame,
+    )
+    driver = FixedStepModelTimeDriver(PeriodicSchedule(PlantDuration(50)))
+    @test step_hil_frame_at!(timed_boundary, driver) == (
+        sequence=UInt64(1),
+        timestamp=PlantTimestamp(0),
+    )
+    hil_command_buffer(timed_boundary) .= Float32[11, 12]
+    adopt_hil_command!(timed_boundary, UInt64(1))
+    @test @allocated(step_hil_frame_at!(timed_boundary, driver)) == 0
+    @test hil_frame_buffer(timed_boundary) == Float32[11, 12]
+    @test reset_hil_boundary!(timed_boundary, driver) === timed_boundary
+    @test model_time_sequence(driver) == UInt64(0)
+
+    unbound_graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(:bound, GraphTestExactBindingDeclaration, 2),);
+        inputs=(graph_input(
+            :pdm_command,
+            :bound => :input,
+            Float32[1, 2],
+        ),),
+        outputs=(graph_output(:shwfs_frame, :bound => :output),),
+    ))
+    @test_throws AlgorithmGraphError prepare_graph_hil_boundary(
+        unbound_graph;
+        command_input=:pdm_command,
+        frame_output=:shwfs_frame,
+        command_buffer=graph_input(unbound_graph, Val(:pdm_command)),
+    )
+    @test_throws AlgorithmGraphError prepare_graph_hil_boundary(
+        unbound_graph;
+        command_input=:pdm_command,
+        frame_output=:shwfs_frame,
+        frame_buffer=zeros(Float32, 3),
+    )
+
+    nonfinite_graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(:bound, GraphTestExactBindingDeclaration, 2),);
+        inputs=(graph_input(
+            :pdm_command,
+            :bound => :input,
+            Float32[NaN, 0],
+        ),),
+        outputs=(graph_output(:shwfs_frame, :bound => :output),),
+    ))
+    @test_throws AlgorithmGraphError prepare_graph_hil_boundary(
+        nonfinite_graph;
+        command_input=:pdm_command,
+        frame_output=:shwfs_frame,
+    )
+
+    failing_graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(:checked, GraphTestFailureDeclaration, 2),);
+        inputs=(graph_input(
+            :pdm_command,
+            :checked => :input,
+            Float32[-1, 1],
+        ),),
+        outputs=(graph_output(:shwfs_frame, :checked => :output),),
+    ))
+    failing_boundary = prepare_graph_hil_boundary(
+        failing_graph;
+        command_input=:pdm_command,
+        frame_output=:shwfs_frame,
+    )
+    @test_throws DomainError step_hil_frame!(failing_boundary)
+    @test hil_boundary_status(failing_boundary).failed
+    @test_throws AlgorithmGraphError step_hil_frame!(failing_boundary)
+end
+
 @testset "portable algorithm graph failure is fail-stop" begin
     input = Float32[1, -1]
     graph = prepare_algorithm_graph(algorithm_graph(
@@ -1424,7 +1575,12 @@ end
         ),
     )
     graph = prepare_algorithm_graph(definition)
-    step_graph!(graph)
+    boundary = prepare_graph_hil_boundary(
+        graph;
+        command_input=:pdm_command,
+        frame_output=:shwfs_frame,
+    )
+    @test step_hil_frame!(boundary) == UInt64(1)
     surface_opd = graph_output(graph, Val(:pdm_surface_opd))
     pupil_opd = graph_output(graph, Val(:pupil_opd))
     photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
@@ -1436,16 +1592,23 @@ end
     @test pupil_opd ≈ fill(2.5f-8, 240, 240)
     @test size(photon_rate) == (352, 352)
     @test size(frame) == (352, 352)
+    @test hil_frame_buffer(boundary) == frame
     @test all(isfinite, photon_rate)
     @test all(isfinite, frame)
     @test sum(photon_rate) > 0
     @test sum(frame) > 0
 
-    pdm_command[1] = -0.25f0
-    step_graph!(graph)
+    fill!(hil_command_buffer(boundary), 0.0f0)
+    hil_command_buffer(boundary)[1] = -0.25f0
+    adopt_hil_command!(boundary, UInt64(1))
+    @test step_hil_frame!(boundary) == UInt64(2)
     @test surface_opd ≈ fill(-0.25f-8, 240, 240)
     @test pupil_opd ≈ fill(1.75f-8, 240, 240)
-    @test warmed_graph_step_allocation_bytes(graph) == 0
+    fill!(hil_command_buffer(boundary), 0.0f0)
+    hil_command_buffer(boundary)[1] = 0.125f0
+    adopt_hil_command!(boundary, UInt64(2))
+    @test @allocated(step_hil_frame!(boundary)) == 0
+    @test surface_opd ≈ fill(0.125f-8, 240, 240)
 end
 
 @testset "REVOLT Copper HIL sensor TOML path is executable" begin
