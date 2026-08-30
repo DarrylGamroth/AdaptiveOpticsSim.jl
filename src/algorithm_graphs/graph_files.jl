@@ -453,6 +453,159 @@ function _shack_hartmann_rate_f32_node(
     )
 end
 
+function _pyramid_rate_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :aperture_revision,
+        :binning,
+        :central_obstruction_ratio,
+        :diffraction_padding,
+        :light_ratio,
+        :modulation,
+        :modulation_points,
+        :n_pix_edge,
+        :n_pix_separation,
+        :opd_schema,
+        :photon_rate_schema,
+        :psf_centering,
+        :pupil_reflectivity,
+        :pupil_samples,
+        :resolution,
+        :source_band,
+        :source_magnitude,
+        :source_photon_irradiance_m2_s,
+        :source_position_angle_deg,
+        :source_separation_arcsec,
+        :source_wavelength_m,
+        :telescope_diameter_m,
+        :threshold,
+    )
+    required_fields = (
+        :opd_schema,
+        :photon_rate_schema,
+        :pupil_samples,
+        :resolution,
+        :source_wavelength_m,
+        :telescope_diameter_m,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+
+    central_obstruction_ratio = hasproperty(
+        config,
+        :central_obstruction_ratio,
+    ) ? _file_real(
+        config.central_obstruction_ratio,
+        "$context.central_obstruction_ratio",
+    ) : 0.0
+    pupil_reflectivity = hasproperty(config, :pupil_reflectivity) ?
+        _file_real(config.pupil_reflectivity, "$context.pupil_reflectivity") :
+        1.0
+    aperture_revision = hasproperty(config, :aperture_revision) ?
+        _file_integer(config.aperture_revision, "$context.aperture_revision") :
+        0
+    threshold = hasproperty(config, :threshold) ?
+        _file_real(config.threshold, "$context.threshold") : 0.1
+    modulation = hasproperty(config, :modulation) ?
+        _file_real(config.modulation, "$context.modulation") : 2.0
+    modulation_points = hasproperty(config, :modulation_points) ?
+        _file_integer(
+            config.modulation_points,
+            "$context.modulation_points",
+        ) : nothing
+    light_ratio = hasproperty(config, :light_ratio) ?
+        _file_real(config.light_ratio, "$context.light_ratio") : 0.0
+    diffraction_padding = hasproperty(config, :diffraction_padding) ?
+        _file_integer(
+            config.diffraction_padding,
+            "$context.diffraction_padding",
+        ) : 2
+    psf_centering = hasproperty(config, :psf_centering) ?
+        _file_bool(config.psf_centering, "$context.psf_centering") : true
+    n_pix_separation = hasproperty(config, :n_pix_separation) ?
+        _file_integer(
+            config.n_pix_separation,
+            "$context.n_pix_separation",
+        ) : nothing
+    n_pix_edge = hasproperty(config, :n_pix_edge) ?
+        _file_integer(config.n_pix_edge, "$context.n_pix_edge") : nothing
+    binning = hasproperty(config, :binning) ?
+        _file_integer(config.binning, "$context.binning") : 1
+    source_band = hasproperty(config, :source_band) ? _file_identifier(
+        config.source_band,
+        "$context.source_band",
+    ) : :custom
+    source_magnitude = hasproperty(config, :source_magnitude) ? _file_real(
+        config.source_magnitude,
+        "$context.source_magnitude",
+    ) : 0.0
+    source_photon_irradiance_m2_s = hasproperty(
+        config,
+        :source_photon_irradiance_m2_s,
+    ) ? _file_real(
+        config.source_photon_irradiance_m2_s,
+        "$context.source_photon_irradiance_m2_s",
+    ) : nothing
+    source_separation_arcsec = hasproperty(
+        config,
+        :source_separation_arcsec,
+    ) ? _file_real(
+        config.source_separation_arcsec,
+        "$context.source_separation_arcsec",
+    ) : 0.0
+    source_position_angle_deg = hasproperty(
+        config,
+        :source_position_angle_deg,
+    ) ? _file_real(
+        config.source_position_angle_deg,
+        "$context.source_position_angle_deg",
+    ) : 0.0
+
+    return pyramid_rate_node(
+        name;
+        resolution=_file_integer(config.resolution, "$context.resolution"),
+        telescope_diameter_m=_file_real(
+            config.telescope_diameter_m,
+            "$context.telescope_diameter_m",
+        ),
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        pupil_samples=_file_integer(
+            config.pupil_samples,
+            "$context.pupil_samples",
+        ),
+        threshold,
+        modulation,
+        modulation_points,
+        light_ratio,
+        diffraction_padding,
+        psf_centering,
+        n_pix_separation,
+        n_pix_edge,
+        binning,
+        source_band,
+        source_magnitude,
+        source_wavelength_m=_file_real(
+            config.source_wavelength_m,
+            "$context.source_wavelength_m",
+        ),
+        source_photon_irradiance_m2_s,
+        source_separation_arcsec,
+        source_position_angle_deg,
+        opd_schema=_file_string(config.opd_schema, "$context.opd_schema"),
+        photon_rate_schema=_file_string(
+            config.photon_rate_schema,
+            "$context.photon_rate_schema",
+        ),
+        T=Float32,
+    )
+end
+
 function _ccd_detector_acquisition_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -711,6 +864,7 @@ function builtin_graph_node_types()
             _control_matrix_reconstruction_f32_node,
         discrete_integrator_f32=_discrete_integrator_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
+        pyramid_rate_f32=_pyramid_rate_f32_node,
         shack_hartmann_centroid_f32=_shack_hartmann_centroid_f32_node,
         shack_hartmann_rate_f32=_shack_hartmann_rate_f32_node,
         shack_hartmann_slope_selection_f32=

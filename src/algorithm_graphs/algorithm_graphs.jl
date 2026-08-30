@@ -76,6 +76,8 @@ import ..Detectors:
     reset_integration!
 import ..WavefrontSensors:
     Diffractive,
+    PyramidOpticalFrontEnd,
+    PyramidWFS,
     ShackHartmannSlopeSelectionPlan,
     ShackHartmannWFS,
     WFSMeasurement,
@@ -84,6 +86,7 @@ import ..WavefrontSensors:
     form_wfs_optical_products!,
     prepare_wfs_estimation,
     prepare_wfs_optics,
+    pyramid_rate_map,
     select_shack_hartmann_slopes!,
     set_subaperture_calibration!,
     set_valid_subapertures!,

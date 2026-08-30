@@ -432,13 +432,32 @@ function _pyramid_rate_map(front_end::PyramidOpticalFrontEnd, input,
         "path-expanded pyramid sources require path-local pupil inputs"))
 end
 
-function _pyramid_rate_map(front_end::PyramidOpticalFrontEnd, input, source)
+function _pyramid_rate_map(
+    front_end::PyramidOpticalFrontEnd,
+    input::Union{PupilFunction,ElectricField},
+    values::AbstractMatrix,
+)
     wavelength_m = _pyramid_front_end_wavelength(front_end, input)
     dimensions = pyramid_output_dimensions(front_end,
         input.metadata.dimensions[1])
     T = eltype(pyramid_propagation_workspace(front_end).intensity)
-    values = similar(_modulated_input_storage(input), T, dimensions...)
-    fill!(values, zero(T))
+    Base.require_one_based_indexing(values)
+    eltype(values) === T || throw(WFSPreparationError(
+        :wfs_optics,
+        :numeric_type,
+        "pyramid rate output numeric type must match its optics workspace",
+    ))
+    size(values) == dimensions || throw(WFSPreparationError(
+        :wfs_optics,
+        :shape,
+        "pyramid rate output must match the configured four-pupil frame",
+    ))
+    compute_device(values) == compute_device(_modulated_input_storage(input)) ||
+        throw(WFSPreparationError(
+            :wfs_optics,
+            :device,
+            "pyramid input and rate output occupy different compute devices",
+        ))
     factor = pyramid_output_sampling_factor(front_end,
         input.metadata.dimensions[1])
     normalized_sampling = T(factor / input.metadata.dimensions[1])
@@ -450,6 +469,31 @@ function _pyramid_rate_map(front_end::PyramidOpticalFrontEnd, input, source)
         spatial_measure=CellIntegratedMeasure(),
         coherence=IncoherentIntensityAddition())
     return IntensityMap(metadata, values)
+end
+
+"""
+    pyramid_rate_map(front_end, input, values)
+
+Bind an already allocated caller-owned, one-based output matrix as the
+detector-plane photon-rate frame for a prepared Pyramid optical front end.
+The matrix must match the front end's numeric type, shape, and compute device.
+Repeated optical execution remains allocation-free.
+"""
+function pyramid_rate_map(
+    front_end::PyramidOpticalFrontEnd,
+    input::Union{PupilFunction,ElectricField},
+    values::AbstractMatrix,
+)
+    return _pyramid_rate_map(front_end, input, values)
+end
+
+function _pyramid_rate_map(front_end::PyramidOpticalFrontEnd, input, source)
+    dimensions = pyramid_output_dimensions(front_end,
+        input.metadata.dimensions[1])
+    T = eltype(pyramid_propagation_workspace(front_end).intensity)
+    values = similar(_modulated_input_storage(input), T, dimensions...)
+    fill!(values, zero(T))
+    return _pyramid_rate_map(front_end, input, values)
 end
 
 @inline _require_pyramid_estimation_source(::WFSNormalization, source) =

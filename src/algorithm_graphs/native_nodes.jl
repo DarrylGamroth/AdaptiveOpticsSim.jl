@@ -787,6 +787,326 @@ end
 
 @inline reset_graph_node!(::_ShackHartmannRateOwner) = nothing
 
+struct PyramidRateNode{T<:AbstractFloat} end
+
+"""Construction values for one diffractive Pyramid photon-rate node."""
+struct PyramidRateNodeConfig{T<:AbstractFloat,TD,S}
+    telescope::TD
+    source::S
+    pupil_samples::Int
+    threshold::T
+    modulation::T
+    modulation_points::Union{Nothing,Int}
+    light_ratio::T
+    diffraction_padding::Int
+    psf_centering::Bool
+    n_pix_separation::Union{Nothing,Int}
+    n_pix_edge::Union{Nothing,Int}
+    binning::Int
+    opd_schema::String
+    photon_rate_schema::String
+end
+
+function _pyramid_rate_config(
+    ::Type{T};
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    central_obstruction_ratio::Real,
+    pupil_reflectivity::Real,
+    aperture_revision::Integer,
+    pupil_samples::Integer,
+    threshold::Real,
+    modulation::Real,
+    modulation_points::Union{Nothing,Integer},
+    light_ratio::Real,
+    diffraction_padding::Integer,
+    psf_centering::Bool,
+    n_pix_separation::Union{Nothing,Integer},
+    n_pix_edge::Union{Nothing,Integer},
+    binning::Integer,
+    source_band::Symbol,
+    source_magnitude::Real,
+    source_wavelength_m::Real,
+    source_photon_irradiance_m2_s::Union{Nothing,Real},
+    source_separation_arcsec::Real,
+    source_position_angle_deg::Real,
+    opd_schema::AbstractString,
+    photon_rate_schema::AbstractString,
+) where {T<:AbstractFloat}
+    pupil_resolution = Int(resolution)
+    samples = Int(pupil_samples)
+    padding = Int(diffraction_padding)
+    bin = Int(binning)
+    points = isnothing(modulation_points) ? nothing : Int(modulation_points)
+    separation = isnothing(n_pix_separation) ? nothing :
+        Int(n_pix_separation)
+    edge = isnothing(n_pix_edge) ? nothing : Int(n_pix_edge)
+
+    pupil_resolution > 0 || throw(AlgorithmGraphError(
+        "Pyramid resolution must be greater than zero",
+    ))
+    samples > 0 || throw(AlgorithmGraphError(
+        "Pyramid pupil_samples must be greater than zero",
+    ))
+    pupil_resolution % samples == 0 || throw(AlgorithmGraphError(
+        "Pyramid resolution must be divisible by pupil_samples",
+    ))
+    padding > 0 || throw(AlgorithmGraphError(
+        "Pyramid diffraction_padding must be greater than zero",
+    ))
+    bin > 0 && samples % bin == 0 || throw(AlgorithmGraphError(
+        "Pyramid binning must be positive and divide pupil_samples",
+    ))
+    isnothing(points) || points > 0 || throw(AlgorithmGraphError(
+        "Pyramid modulation_points must be greater than zero",
+    ))
+    if isnothing(separation)
+        isnothing(edge) || throw(AlgorithmGraphError(
+            "Pyramid n_pix_edge requires n_pix_separation",
+        ))
+    else
+        separation >= 0 || throw(AlgorithmGraphError(
+            "Pyramid n_pix_separation must be nonnegative",
+        ))
+        separation % (2 * bin) == 0 || throw(AlgorithmGraphError(
+            "Pyramid n_pix_separation must remain even after binning",
+        ))
+        resolved_edge = isnothing(edge) ? div(separation, 2) : edge
+        resolved_edge >= 0 || throw(AlgorithmGraphError(
+            "Pyramid n_pix_edge must be nonnegative",
+        ))
+        resolved_edge % bin == 0 || throw(AlgorithmGraphError(
+            "Pyramid n_pix_edge must remain integral after binning",
+        ))
+    end
+
+    typed_threshold = T(threshold)
+    typed_modulation = T(modulation)
+    typed_light_ratio = T(light_ratio)
+    isfinite(typed_threshold) &&
+        zero(T) <= typed_threshold <= one(T) || throw(
+            AlgorithmGraphError("Pyramid threshold must lie in [0, 1]"),
+        )
+    isfinite(typed_modulation) && typed_modulation >= zero(T) || throw(
+        AlgorithmGraphError(
+            "Pyramid modulation must be finite and nonnegative",
+        ),
+    )
+    isfinite(typed_light_ratio) &&
+        zero(T) <= typed_light_ratio <= one(T) || throw(
+            AlgorithmGraphError("Pyramid light_ratio must lie in [0, 1]"),
+        )
+    isempty(opd_schema) && throw(AlgorithmGraphError(
+        "Pyramid opd_schema must not be empty",
+    ))
+    isempty(photon_rate_schema) && throw(AlgorithmGraphError(
+        "Pyramid photon_rate_schema must not be empty",
+    ))
+
+    telescope, source = try
+        definition = TelescopeDefinition(
+            resolution=pupil_resolution,
+            diameter=telescope_diameter_m,
+            central_obstruction=central_obstruction_ratio,
+            pupil_reflectivity=pupil_reflectivity,
+            revision=aperture_revision,
+            T=T,
+        )
+        guide_source = Source(
+            band=source_band,
+            magnitude=source_magnitude,
+            coordinates=(source_separation_arcsec, source_position_angle_deg),
+            wavelength=source_wavelength_m,
+            photon_irradiance=source_photon_irradiance_m2_s,
+            T=T,
+        )
+        photon_irradiance(guide_source)
+        (definition, guide_source)
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+
+    return PyramidRateNodeConfig(
+        telescope,
+        source,
+        samples,
+        typed_threshold,
+        typed_modulation,
+        points,
+        typed_light_ratio,
+        padding,
+        psf_centering,
+        separation,
+        edge,
+        bin,
+        String(opd_schema),
+        String(photon_rate_schema),
+    )
+end
+
+"""
+    pyramid_rate_node(name; ...)
+
+Declare one complete-frame diffractive Pyramid optics node. The node consumes
+a pupil-plane OPD map and writes the four re-imaged pupils as one
+cell-integrated detector-plane photon-rate frame. Detector acquisition and
+external RTC processing remain separate graph operations.
+"""
+function pyramid_rate_node(
+    name::Symbol;
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    pupil_samples::Integer,
+    source_wavelength_m::Real,
+    opd_schema::AbstractString,
+    photon_rate_schema::AbstractString,
+    central_obstruction_ratio::Real=0,
+    pupil_reflectivity::Real=1,
+    aperture_revision::Integer=0,
+    threshold::Real=0.1,
+    modulation::Real=2,
+    modulation_points::Union{Nothing,Integer}=nothing,
+    light_ratio::Real=0,
+    diffraction_padding::Integer=2,
+    psf_centering::Bool=true,
+    n_pix_separation::Union{Nothing,Integer}=nothing,
+    n_pix_edge::Union{Nothing,Integer}=nothing,
+    binning::Integer=1,
+    source_band::Symbol=:custom,
+    source_magnitude::Real=0,
+    source_photon_irradiance_m2_s::Union{Nothing,Real}=nothing,
+    source_separation_arcsec::Real=0,
+    source_position_angle_deg::Real=0,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _pyramid_rate_config(
+        T;
+        resolution,
+        telescope_diameter_m,
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        pupil_samples,
+        threshold,
+        modulation,
+        modulation_points,
+        light_ratio,
+        diffraction_padding,
+        psf_centering,
+        n_pix_separation,
+        n_pix_edge,
+        binning,
+        source_band,
+        source_magnitude,
+        source_wavelength_m,
+        source_photon_irradiance_m2_s,
+        source_separation_arcsec,
+        source_position_angle_deg,
+        opd_schema,
+        photon_rate_schema,
+    )
+    return algorithm_node(
+        name,
+        PyramidRateNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+@inline function _pyramid_rate_output_extent(
+    config::PyramidRateNodeConfig,
+)
+    if isnothing(config.n_pix_separation)
+        return div(
+            config.pupil_samples * config.diffraction_padding,
+            config.binning,
+        )
+    end
+    edge = isnothing(config.n_pix_edge) ?
+        div(config.n_pix_separation, 2) : config.n_pix_edge
+    return div(
+        2 * config.pupil_samples + config.n_pix_separation + 2 * edge,
+        config.binning,
+    )
+end
+
+function graph_node_ports(
+    ::Type{PyramidRateNode{T}},
+    config::PyramidRateNodeConfig{T},
+) where {T}
+    output_extent = _pyramid_rate_output_extent(config)
+    return (
+        graph_port_contract(
+            :opd,
+            :input,
+            :data,
+            T,
+            (config.telescope.resolution, config.telescope.resolution),
+            config.opd_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :photon_rate,
+            :output,
+            :data,
+            T,
+            (output_extent, output_extent),
+            config.photon_rate_schema,
+            :column_major,
+        ),
+    )
+end
+
+struct _PyramidRateOwner{P}
+    prepared::P
+end
+
+function prepare_graph_node(
+    ::Type{PyramidRateNode{T}},
+    config::PyramidRateNodeConfig{T},
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:opd,)},
+    outputs::NamedTuple{(:photon_rate,)},
+    ::NamedTuple{()},
+    target,
+) where {T}
+    telescope = prepare_telescope(config.telescope, target)
+    pupil = PupilFunction(telescope, inputs.opd)
+    sensor = PyramidWFS(
+        telescope;
+        pupil_samples=config.pupil_samples,
+        threshold=config.threshold,
+        modulation=config.modulation,
+        modulation_points=config.modulation_points,
+        light_ratio=config.light_ratio,
+        diffraction_padding=config.diffraction_padding,
+        psf_centering=config.psf_centering,
+        n_pix_separation=config.n_pix_separation,
+        n_pix_edge=config.n_pix_edge,
+        binning=config.binning,
+        mode=Diffractive(),
+        T=T,
+        backend=compute_device_backend(target),
+    )
+    front_end = PyramidOpticalFrontEnd(sensor, config.source)
+    photon_rate = pyramid_rate_map(front_end, pupil, outputs.photon_rate)
+    prepared = prepare_wfs_optics(front_end, pupil, photon_rate)
+    return _PyramidRateOwner(prepared)
+end
+
+@inline function step_graph_node!(owner::_PyramidRateOwner)
+    prepared = owner.prepared
+    form_wfs_optical_products!(
+        prepared.output,
+        prepared.input,
+        prepared,
+    )
+    return nothing
+end
+
+@inline reset_graph_node!(::_PyramidRateOwner) = nothing
+
 struct ShackHartmannCentroidNode{T<:AbstractFloat} end
 
 """Construction values for one calibrated Shack–Hartmann centroid node."""

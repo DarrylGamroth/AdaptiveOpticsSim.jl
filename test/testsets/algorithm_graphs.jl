@@ -569,6 +569,56 @@ end
     )
 end
 
+@testset "diffractive Pyramid photon-rate graph node" begin
+    pupil_opd = zeros(Float32, 8, 8)
+    node = pyramid_rate_node(
+        :pwfs;
+        resolution=8,
+        telescope_diameter_m=1.22,
+        pupil_samples=4,
+        threshold=0.1,
+        modulation=2,
+        modulation_points=4,
+        light_ratio=0.1,
+        n_pix_separation=2,
+        n_pix_edge=1,
+        source_wavelength_m=0.55e-6,
+        source_photon_irradiance_m2_s=1.0,
+        opd_schema="test.graph.pupil-opd.f32/1",
+        photon_rate_schema="test.graph.pwfs-photon-rate.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:pwfs_photon_rate,
+        inputs=(graph_input(:pupil_opd, :pwfs => :opd, pupil_opd),),
+        outputs=(graph_output(:pwfs_photon_rate, :pwfs => :photon_rate),),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:pwfs))
+    output = graph_output(graph, Val(:pwfs_photon_rate))
+
+    @test owner.prepared.input.opd === pupil_opd
+    @test owner.prepared.output.values === output
+    @test size(output) == (12, 12)
+    step_graph!(graph)
+    @test all(isfinite, output)
+    @test sum(output) > 0
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+
+    @test_throws AlgorithmGraphError pyramid_rate_node(
+        :invalid_pwfs;
+        resolution=8,
+        telescope_diameter_m=1.22,
+        pupil_samples=4,
+        n_pix_edge=1,
+        source_wavelength_m=0.55e-6,
+        source_photon_irradiance_m2_s=1.0,
+        opd_schema="test.graph.pupil-opd.f32/1",
+        photon_rate_schema="test.graph.pwfs-photon-rate.f32/1",
+    )
+end
+
 @testset "single-read CCD detector-acquisition graph node" begin
     photon_rate = fill(1_000.0f0, 4, 4)
     node = ccd_detector_acquisition_node(
@@ -1005,6 +1055,7 @@ end
         :control_matrix_reconstruction_f32,
         :discrete_integrator_f32,
         :modal_opd_expansion_f32,
+        :pyramid_rate_f32,
         :shack_hartmann_centroid_f32,
         :shack_hartmann_rate_f32,
         :shack_hartmann_slope_selection_f32,

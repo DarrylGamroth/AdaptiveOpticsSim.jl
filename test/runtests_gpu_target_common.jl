@@ -146,6 +146,42 @@ function run_algorithm_graph_backend_smoke(
     @test compute_device(graph_output(graph, Val(:opd))) == target
     @test Array(graph_output(graph, Val(:opd))) ≈ Float32[0.5 0.0; 0.5 0.5]
 
+    pyramid_opd = BackendArray(zeros(Float32, 8, 8))
+    pyramid_target = compute_device(pyramid_opd)
+    pyramid_definition = algorithm_graph(
+        (
+            pyramid_rate_node(
+                :pwfs;
+                resolution=8,
+                telescope_diameter_m=1.22,
+                pupil_samples=4,
+                modulation=2,
+                modulation_points=4,
+                n_pix_separation=2,
+                n_pix_edge=1,
+                source_wavelength_m=0.55e-6,
+                source_photon_irradiance_m2_s=1.0,
+                opd_schema="test.graph.pupil-opd.f32/1",
+                photon_rate_schema=
+                    "test.graph.pwfs-photon-rate.f32/1",
+            ),
+        );
+        name=:gpu_pwfs,
+        inputs=(graph_input(:pupil_opd, :pwfs => :opd, pyramid_opd),),
+        outputs=(
+            graph_output(:pwfs_photon_rate, :pwfs => :photon_rate),
+        ),
+    )
+    pyramid_graph = prepare_algorithm_graph(
+        pyramid_definition;
+        target=pyramid_target,
+    )
+    step_graph!(pyramid_graph)
+    pyramid_rate = graph_output(pyramid_graph, Val(:pwfs_photon_rate))
+    @test compute_device(pyramid_rate) == pyramid_target
+    @test size(pyramid_rate) == (12, 12)
+    @test sum(Array(pyramid_rate)) > 0
+
     pupil_opd = BackendArray(zeros(Float32, 16, 16))
     shwfs_target = compute_device(pupil_opd)
     reconstruction_matrix = BackendArray(Float32[
