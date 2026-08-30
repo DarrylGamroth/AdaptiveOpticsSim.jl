@@ -440,6 +440,34 @@ function _require_exact_focal_plane_modulation_target(
     return modulation
 end
 
+@inline function _require_exact_pyramid_modulation_batch_target(
+    ::NoPyramidModulationBatchWorkspace,
+    ::AbstractComputeDevice,
+)
+    return nothing
+end
+
+function _require_exact_pyramid_modulation_batch_target(
+    batch::PyramidModulationBatchWorkspace,
+    target::AbstractComputeDevice,
+)
+    _require_exact_wfs_array_targets(
+        (
+            batch.field_stack,
+            batch.operating_weights,
+            batch.calibration_weights,
+        ),
+        (
+            "Pyramid modulation field stack",
+            "Pyramid operating modulation weights",
+            "Pyramid calibration modulation weights",
+        ),
+        target,
+        :wfs_optics,
+    )
+    return nothing
+end
+
 function _require_exact_pyramid_front_end_target(
     front_end::PyramidOpticalFrontEnd,
     target::AbstractComputeDevice,
@@ -480,6 +508,8 @@ function _require_exact_pyramid_front_end_target(
     _require_exact_focal_plane_modulation_target(
         front_end.calibration_modulation, target,
         "Pyramid calibration modulation")
+    _require_exact_pyramid_modulation_batch_target(
+        propagation.modulation_batch, target)
     return front_end
 end
 

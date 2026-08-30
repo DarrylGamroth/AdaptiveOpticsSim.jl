@@ -1299,6 +1299,8 @@ end
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, modulation_points=3, mode=Diffractive())
         propagation = WavefrontSensors.pyramid_propagation_workspace(wfs)
+        @test propagation.modulation_batch isa
+            WavefrontSensors.NoPyramidModulationBatchWorkspace
 
         scalar_phasor = similar(propagation.phasor)
         ka_phasor = similar(propagation.phasor)
@@ -1444,10 +1446,14 @@ end
 
     @testset "KA CPU kernel inventory" begin
         # Deferred kernels are still accounted for: most require larger
-        # end-to-end wfs/tomography fixtures, while masked_sum2d_kernel! uses
-        # atomics that are meaningful for GPU backends but not portable to the
-        # KA CPU Array backend on Julia 1.12.
+        # end-to-end wfs/tomography fixtures. Accelerator-only publication,
+        # scatter, and modulation-batch paths are covered by the optional
+        # backend suites; atomic kernels are not portable to the KA CPU Array
+        # backend on Julia 1.12.
         deferred = Set([
+            :_count_nonfinite_graph_values_kernel!,
+            :_scatter_grid_dm_command_kernel!,
+            :_select_shack_hartmann_slopes_kernel!,
             :accumulate_selected_block_kernel!,
             :accumulate_selected_block_transpose_kernel!,
             :calibration_ramp_kernel!,
@@ -1476,6 +1482,10 @@ end
             :lift_gather_kernel!,
             :lift_scatter_update_kernel!,
             :masked_sum2d_kernel!,
+            :pyramid_electric_field_modulation_batch_kernel!,
+            :pyramid_modulation_batch_intensity_kernel!,
+            :pyramid_modulation_batch_mask_kernel!,
+            :pyramid_pupil_modulation_batch_kernel!,
             :scaled_shifted_coord_stack_kernel!,
             :selected_covariance_block_kernel!,
             :submatrix_extract_kernel!,

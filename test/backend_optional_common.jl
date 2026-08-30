@@ -5301,6 +5301,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         T=T)
     pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
     bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
+    @test pyr_propagation.modulation_batch isa
+        WavefrontSensors.PyramidModulationBatchWorkspace
+    @test pyr_propagation.modulation_batch.batch_size == 8
+    @test size(pyr_propagation.modulation_batch.field_stack, 3) == 8
     @test WavefrontSensors.grouped_accumulation_strategy(
         AdaptiveOpticsSim.Backends.execution_style(
             pyr_propagation.intensity), pyr) isa
@@ -5569,6 +5573,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         T=T)
     pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
     bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
+    @test pyr_propagation.modulation_batch isa
+        WavefrontSensors.PyramidModulationBatchWorkspace
+    @test pyr_propagation.modulation_batch.batch_size == 8
+    @test size(pyr_propagation.modulation_batch.field_stack, 3) == 8
     @test WavefrontSensors.grouped_accumulation_strategy(
         AdaptiveOpticsSim.Backends.execution_style(
             pyr_propagation.intensity), pyr) isa

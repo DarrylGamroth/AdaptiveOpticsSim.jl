@@ -1060,6 +1060,7 @@ entries = [
 path = "src/wfs/pyramid/setup.jl"
 owner = "WavefrontSensors"
 entries = [
+    ["NoPyramidModulationBatchWorkspace","struct",0,"workspace",["workspace"],false,false,"internal",false,"backend_neutral",false,"PE-05"],
     ["PreparedPyramidPropagation","struct",2,"prepared",["prepared_owner"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidAcquisitionPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidAcquisitionProducts","mutable_struct",1,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
@@ -1068,8 +1069,9 @@ entries = [
     ["PyramidEstimatorProducts","mutable_struct",1,"product",["product"],true,false,"caller_visible",false,"backend_parameterized",true,"PE-05"],
     ["PyramidEstimatorState","mutable_struct",10,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidEstimatorWorkspace","mutable_struct",10,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PyramidModulationBatchWorkspace","struct",6,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",false,"PE-05"],
     ["PyramidPropagationPlan","struct",4,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
-    ["PyramidPropagationWorkspace","mutable_struct",17,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PyramidPropagationWorkspace","mutable_struct",18,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]

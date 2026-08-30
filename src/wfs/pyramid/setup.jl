@@ -34,6 +34,69 @@ end
     end
 end
 
+@kernel function pyramid_pupil_modulation_batch_kernel!(stack, amplitude,
+    opd, phases, weights, phasor, amplitude_scale, opd_to_cycles,
+    offset::Int, resolution::Int, first_point::Int, pad::Int,
+    batch_size::Int)
+    i, j, batch_index = @index(Global, NTuple)
+    if i <= pad && j <= pad && batch_index <= batch_size
+        pupil_i = i - offset
+        pupil_j = j - offset
+        if 1 <= pupil_i <= resolution && 1 <= pupil_j <= resolution
+            point = first_point + batch_index - 1
+            @inbounds begin
+                value = amplitude_scale * weights[point] *
+                    amplitude[pupil_i, pupil_j] *
+                    phases[pupil_i, pupil_j, point] *
+                    cispi(opd_to_cycles * opd[pupil_i, pupil_j])
+                stack[i, j, batch_index] = value * phasor[i, j]
+            end
+        else
+            @inbounds stack[i, j, batch_index] = zero(eltype(stack))
+        end
+    end
+end
+
+@kernel function pyramid_electric_field_modulation_batch_kernel!(stack,
+    field, phases, weights, phasor, offset::Int, resolution::Int,
+    first_point::Int, pad::Int, batch_size::Int)
+    i, j, batch_index = @index(Global, NTuple)
+    if i <= pad && j <= pad && batch_index <= batch_size
+        pupil_i = i - offset
+        pupil_j = j - offset
+        if 1 <= pupil_i <= resolution && 1 <= pupil_j <= resolution
+            point = first_point + batch_index - 1
+            @inbounds begin
+                value = weights[point] * field[pupil_i, pupil_j] *
+                    phases[pupil_i, pupil_j, point]
+                stack[i, j, batch_index] = value * phasor[i, j]
+            end
+        else
+            @inbounds stack[i, j, batch_index] = zero(eltype(stack))
+        end
+    end
+end
+
+@kernel function pyramid_modulation_batch_mask_kernel!(stack, mask,
+    pad::Int, batch_size::Int)
+    i, j, batch_index = @index(Global, NTuple)
+    if i <= pad && j <= pad && batch_index <= batch_size
+        @inbounds stack[i, j, batch_index] *= mask[i, j]
+    end
+end
+
+@kernel function pyramid_modulation_batch_intensity_kernel!(out, stack,
+    pad::Int, batch_size::Int)
+    i, j = @index(Global, NTuple)
+    if i <= pad && j <= pad
+        value = @inbounds out[i, j]
+        @inbounds for batch_index in 1:batch_size
+            value += abs2(stack[i, j, batch_index])
+        end
+        @inbounds out[i, j] = value
+    end
+end
+
 @kernel function pyramid_slopes_kernel!(slopes, intensity, valid_mask, sub::Int, n_sub::Int, pad::Int, offset::Int,
     ox1::Int, oy1::Int, ox2::Int, oy2::Int, ox3::Int, oy3::Int, ox4::Int, oy4::Int,
     sx1::Int, sy1::Int, sx2::Int, sy2::Int, sx3::Int, sy3::Int, sx4::Int, sy4::Int)
@@ -120,6 +183,19 @@ struct PyramidPropagationPlan{M<:PyramidPhaseMask,T<:AbstractFloat}
     numeric_type::Type{T}
 end
 
+"""Marker for scalar or uncentered propagation without modulation batching."""
+struct NoPyramidModulationBatchWorkspace end
+
+"""Accelerator scratch and plans for one bounded modulation-point tile."""
+struct PyramidModulationBatchWorkspace{C,V,Pf,Pi}
+    field_stack::C
+    operating_weights::V
+    calibration_weights::V
+    fft_plan::Pf
+    ifft_plan::Pi
+    batch_size::Int
+end
+
 """
 Backend-bound FFT handles, caches, and replaceable single-writer scratch for
 pyramid-mask propagation. No field is a caller-visible optical product.
@@ -131,7 +207,8 @@ mutable struct PyramidPropagationWorkspace{T<:AbstractFloat,
     Pf,
     Pi,
     K<:AbstractVector{T},
-    Kf<:AbstractMatrix{Complex{T}}}
+    Kf<:AbstractMatrix{Complex{T}},
+    MB}
     field::C
     focal_field::C
     pupil_field::C
@@ -149,6 +226,7 @@ mutable struct PyramidPropagationWorkspace{T<:AbstractFloat,
     effective_resolution::Int
     asterism_capacity::Int
     revision::UInt
+    modulation_batch::MB
 end
 
 """Exact plan/workspace owner for one pyramid propagation execution."""
@@ -177,6 +255,79 @@ end
     plan_fft_backend!(buffer)
 @inline _plan_pyramid_ifft!(::AcceleratorStyle, buffer) =
     plan_ifft_backend!(buffer)
+
+const _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT = 8
+
+function _pyramid_modulation_batch_size(point_count::Int)
+    for candidate in min(
+        point_count, _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT):-1:1
+        point_count % candidate == 0 && return candidate
+    end
+    return 1
+end
+
+@inline function _prepare_pyramid_modulation_batch(
+    ::ScalarCPUStyle, field, phase_mask, modulation,
+    calibration_modulation)
+    return NoPyramidModulationBatchWorkspace()
+end
+
+function _prepare_pyramid_modulation_batch(
+    ::AcceleratorStyle, field, phase_mask, modulation,
+    calibration_modulation)
+    phase_mask.psf_centering ||
+        return NoPyramidModulationBatchWorkspace()
+    point_count = modulation_point_count(modulation)
+    modulation_point_count(calibration_modulation) == point_count || throw(
+        InvalidConfiguration(
+            "Pyramid operating and calibration modulation counts must match",
+        ),
+    )
+    batch_size = _pyramid_modulation_batch_size(point_count)
+    pad = size(field, 1)
+    field_stack = similar(field, eltype(field), pad, pad, batch_size)
+    operating_weights = similar(field, real(eltype(field)), point_count)
+    calibration_weights = similar(operating_weights)
+    copyto!(operating_weights, modulation.amplitude_weights)
+    copyto!(calibration_weights, calibration_modulation.amplitude_weights)
+    fft_plan = plan_fft_backend!(field_stack, (1, 2))
+    ifft_plan = plan_ifft_backend!(field_stack, (1, 2))
+    return PyramidModulationBatchWorkspace(
+        field_stack,
+        operating_weights,
+        calibration_weights,
+        fft_plan,
+        ifft_plan,
+        batch_size,
+    )
+end
+
+@inline function _resize_pyramid_modulation_batch(
+    batch::NoPyramidModulationBatchWorkspace, field)
+    return batch
+end
+
+function _resize_pyramid_modulation_batch(
+    batch::PyramidModulationBatchWorkspace, field)
+    pad = size(field, 1)
+    field_stack = similar(
+        batch.field_stack,
+        eltype(batch.field_stack),
+        pad,
+        pad,
+        batch.batch_size,
+    )
+    fft_plan = plan_fft_backend!(field_stack, (1, 2))
+    ifft_plan = plan_ifft_backend!(field_stack, (1, 2))
+    return PyramidModulationBatchWorkspace(
+        field_stack,
+        batch.operating_weights,
+        batch.calibration_weights,
+        fft_plan,
+        ifft_plan,
+        batch.batch_size,
+    )
+end
 
 @inline pyramid_propagation_plan(
     propagation::PreparedPyramidPropagation) = propagation.plan
@@ -482,6 +633,12 @@ function _prepare_pyramid_diffractive_storage(backend, ::Type{T}, tel,
     style = execution_style(field)
     fft_plan = _plan_pyramid_fft!(style, focal_field)
     ifft_plan = _plan_pyramid_ifft!(style, pupil_field)
+    modulation = prepare_focal_plane_modulation(operating_policy,
+        tel.params.resolution, field, T)
+    calibration_modulation = prepare_focal_plane_modulation(
+        calibration_policy, tel.params.resolution, field, T)
+    modulation_batch = _prepare_pyramid_modulation_batch(
+        style, field, phase_mask, modulation, calibration_modulation)
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0)
     propagation_plan = PyramidPropagationPlan(
@@ -489,13 +646,9 @@ function _prepare_pyramid_diffractive_storage(backend, ::Type{T}, tel,
     propagation_workspace = PyramidPropagationWorkspace(
         field, focal_field, pupil_field, mask, phasor, intensity, temp,
         scratch, asterism_stack, fft_plan, ifft_plan, elongation_kernel,
-        lgs_kernel_fft, UInt(0), pad, 1, UInt(0))
+        lgs_kernel_fft, UInt(0), pad, 1, UInt(0), modulation_batch)
     propagation = PreparedPyramidPropagation(
         propagation_plan, propagation_workspace)
-    modulation = prepare_focal_plane_modulation(operating_policy,
-        tel.params.resolution, field, T)
-    calibration_modulation = prepare_focal_plane_modulation(
-        calibration_policy, tel.params.resolution, field, T)
     front_end = PyramidOpticalFrontEnd(phase_mask, modulation,
         calibration_modulation, propagation, pupil_samples, binning, nothing)
     subaperture_pixels = div(tel.params.resolution, pupil_samples)
@@ -574,6 +727,8 @@ function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, pupil::PupilFunction
             propagation.focal_field)
         propagation.ifft_plan = _plan_pyramid_ifft!(style,
             propagation.pupil_field)
+        propagation.modulation_batch = _resize_pyramid_modulation_batch(
+            propagation.modulation_batch, propagation.field)
         propagation.lgs_kernel_fft = similar(propagation.focal_field,
             eltype(propagation.focal_field), 0, 0)
         propagation.lgs_kernel_tag = UInt(0)

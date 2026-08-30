@@ -197,6 +197,84 @@ end
     wfs::PyramidWFS{<:Diffractive}) =
     accumulate_pyramid_focal_intensity!(out, wfs.front_end)
 
+@inline function _pyramid_modulation_batch_weights(batch,
+    front_end::PyramidOpticalFrontEnd, modulation)
+    modulation === front_end.modulation && return batch.operating_weights
+    modulation === front_end.calibration_modulation &&
+        return batch.calibration_weights
+    return nothing
+end
+
+@inline function _propagate_pyramid_modulation_batch!(out,
+    front_end::PyramidOpticalFrontEnd,
+    batch::PyramidModulationBatchWorkspace, style::AcceleratorStyle)
+    stack = batch.field_stack
+    pad = size(out, 1)
+    execute_fft_plan!(stack, batch.fft_plan)
+    launch_kernel!(style, pyramid_modulation_batch_mask_kernel!,
+        stack, pyramid_propagation_workspace(front_end).pyramid_mask,
+        pad, batch.batch_size; ndrange=size(stack))
+    execute_fft_plan!(stack, batch.ifft_plan)
+    launch_kernel!(style, pyramid_modulation_batch_intensity_kernel!,
+        out, stack, pad, batch.batch_size; ndrange=size(out))
+    return nothing
+end
+
+@inline function _pyramid_pupil_modulation_batch!(
+    ::NoPyramidModulationBatchWorkspace, out,
+    front_end::PyramidOpticalFrontEnd, amplitude, opd, modulation,
+    amplitude_scale, opd_to_cycles, offset::Int, resolution::Int)
+    return false
+end
+
+function _pyramid_pupil_modulation_batch!(
+    batch::PyramidModulationBatchWorkspace, out,
+    front_end::PyramidOpticalFrontEnd, amplitude, opd, modulation,
+    amplitude_scale, opd_to_cycles, offset::Int, resolution::Int)
+    weights = _pyramid_modulation_batch_weights(batch, front_end, modulation)
+    isnothing(weights) && return false
+    style = execution_style(out)
+    pad = size(out, 1)
+    point_count = modulation_point_count(modulation)
+    @inbounds for first_point in 1:batch.batch_size:point_count
+        launch_kernel!(style, pyramid_pupil_modulation_batch_kernel!,
+            batch.field_stack, amplitude, opd, modulation.phases, weights,
+            pyramid_propagation_workspace(front_end).phasor,
+            amplitude_scale, opd_to_cycles, offset, resolution, first_point,
+            pad, batch.batch_size; ndrange=size(batch.field_stack))
+        _propagate_pyramid_modulation_batch!(out, front_end, batch, style)
+    end
+    return true
+end
+
+@inline function _pyramid_electric_field_modulation_batch!(
+    ::NoPyramidModulationBatchWorkspace, out,
+    front_end::PyramidOpticalFrontEnd, field, modulation,
+    offset::Int, resolution::Int)
+    return false
+end
+
+function _pyramid_electric_field_modulation_batch!(
+    batch::PyramidModulationBatchWorkspace, out,
+    front_end::PyramidOpticalFrontEnd, field, modulation,
+    offset::Int, resolution::Int)
+    weights = _pyramid_modulation_batch_weights(batch, front_end, modulation)
+    isnothing(weights) && return false
+    style = execution_style(out)
+    pad = size(out, 1)
+    point_count = modulation_point_count(modulation)
+    @inbounds for first_point in 1:batch.batch_size:point_count
+        launch_kernel!(style,
+            pyramid_electric_field_modulation_batch_kernel!,
+            batch.field_stack, field, modulation.phases, weights,
+            pyramid_propagation_workspace(front_end).phasor,
+            offset, resolution, first_point, pad, batch.batch_size;
+            ndrange=size(batch.field_stack))
+        _propagate_pyramid_modulation_batch!(out, front_end, batch, style)
+    end
+    return true
+end
+
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
     pupil::PupilFunction, src::AbstractSource) where {T<:AbstractFloat}
     return pyramid_intensity_core!(out, wfs, pupil, src,
@@ -256,6 +334,18 @@ function pyramid_intensity_core!(::AcceleratorStyle,
     amplitude = pupil.amplitude
 
     fill!(out, zero(T))
+    _pyramid_pupil_modulation_batch!(
+        propagation.modulation_batch,
+        out,
+        wfs.front_end,
+        amplitude,
+        pupil.opd,
+        modulation,
+        amp_scale,
+        opd_to_cycles,
+        ox,
+        n,
+    ) && return out
     for p in 1:modulation_point_count(modulation)
         fill!(propagation.field, zero(eltype(propagation.field)))
         amplitude_weight = modulation.amplitude_weights[p]
