@@ -152,6 +152,7 @@ function run_algorithm_graph_backend_smoke(
         1 0 0 0 0 0
         0 0 0 0 1 0
     ])
+    controller_constraint_feedback = BackendArray(zeros(Float32, 2))
     shwfs_definition = algorithm_graph(
         (
             shack_hartmann_rate_node(
@@ -219,9 +220,31 @@ function run_algorithm_graph_backend_smoke(
                 control_matrix_schema=
                     "test.graph.shwfs-control-matrix.f32/1",
             ),
+            closed_loop_correction_node(
+                :controller;
+                extent=2,
+                residual_error_schema=
+                    "test.graph.controller-error.f32/1",
+                constraint_feedback_schema=
+                    "test.graph.controller-constraint-feedback.f32/1",
+                correction_schema=
+                    "test.graph.controller-command.f32/1",
+                controller_state_schema=
+                    "test.graph.controller-state.f32/1",
+                gain=-0.3f0,
+                pole=0.99f0,
+                anti_windup_gain=1.0f0,
+            ),
         );
         name=:gpu_shwfs_centroid,
-        inputs=(graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),),
+        inputs=(
+            graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),
+            graph_input(
+                :controller_constraint_feedback,
+                :controller => :constraint_feedback,
+                controller_constraint_feedback,
+            ),
+        ),
         outputs=(
             graph_output(:shwfs_photon_rate, :shwfs => :photon_rate),
             graph_output(:shwfs_frame, :detector => :frame),
@@ -234,6 +257,14 @@ function run_algorithm_graph_backend_smoke(
                 :controller_residual_error,
                 :reconstruction => :reconstructed,
             ),
+            graph_output(
+                :controller_correction,
+                :controller => :correction,
+            ),
+            graph_output(
+                :controller_state,
+                :controller => :controller_state,
+            ),
         ),
         links=(
             link(:shwfs => :photon_rate, :detector => :photon_rate),
@@ -245,6 +276,10 @@ function run_algorithm_graph_backend_smoke(
             link(
                 :slope_selection => :selected_slopes,
                 :reconstruction => :slopes,
+            ),
+            link(
+                :reconstruction => :reconstructed,
+                :controller => :residual_error,
             ),
         ),
         parameters=(
@@ -282,16 +317,25 @@ function run_algorithm_graph_backend_smoke(
         shwfs_graph,
         Val(:controller_residual_error),
     )
+    controller_correction = graph_output(
+        shwfs_graph,
+        Val(:controller_correction),
+    )
+    controller_state = graph_output(shwfs_graph, Val(:controller_state))
     @test compute_device(photon_rate) == shwfs_target
     @test compute_device(frame) == shwfs_target
     @test compute_device(full_slopes) == shwfs_target
     @test compute_device(selected_slopes) == shwfs_target
     @test compute_device(controller_residual_error) == shwfs_target
+    @test compute_device(controller_correction) == shwfs_target
+    @test compute_device(controller_state) == shwfs_target
     @test size(photon_rate) == (24, 24)
     @test size(frame) == (24, 24)
     @test size(full_slopes) == (32,)
     @test size(selected_slopes) == (6,)
     @test size(controller_residual_error) == (2,)
+    @test size(controller_correction) == (2,)
+    @test size(controller_state) == (2,)
     @test sum(Array(photon_rate)) > 0
     @test sum(Array(frame)) ≈ sum(Array(photon_rate)) * 0.25f0
     @test all(isfinite, Array(full_slopes))
@@ -306,10 +350,15 @@ function run_algorithm_graph_backend_smoke(
     ]
     @test Array(controller_residual_error) ==
         Array(selected_slopes)[[1, 5]]
+    @test Array(controller_correction) ≈
+        -0.3f0 .* Array(controller_residual_error)
+    @test all(iszero, Array(controller_state))
     step_graph!(shwfs_graph)
     @test all(isfinite, Array(full_slopes))
     @test all(isfinite, Array(selected_slopes))
     @test all(isfinite, Array(controller_residual_error))
+    @test all(isfinite, Array(controller_correction))
+    @test all(isfinite, Array(controller_state))
     return nothing
 end
 

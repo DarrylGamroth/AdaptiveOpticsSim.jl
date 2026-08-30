@@ -1800,9 +1800,13 @@ using AdaptiveOpticsSim.Control
 - Reconstructors: `NullReconstructor`, `ControlMatrixPlan`, `ModalReconstructor`,
   `FactorizedReconstructor`, `MappedReconstructor`,
   `ControlledReconstructor`, `reconstruct!`, `reconstruct`
-- Controller: `DiscreteIntegratorController`. `ControlledReconstructor`
-  composes a reconstructor and stateful controller without adding a runtime
-  branch.
+- Controllers: `DiscreteIntegratorController` and the complete-frame
+  `ClosedLoopCorrectionPlan` / `apply_closed_loop_correction!` recurrence.
+  The latter keeps persistent `ClosedLoopCorrectionState` and replaceable
+  `ClosedLoopCorrectionWorkspace` separate; its first step starts from zero,
+  and later steps consume the preceding demanded-minus-realized correction in
+  the same coordinates. `ControlledReconstructor` composes a reconstructor and
+  stateful controller without adding a runtime branch.
 
 Core calibration and configuration APIs perform no implicit filesystem I/O.
 They accept no cache path or serialization policy and do not select a file
@@ -1830,8 +1834,9 @@ the canonical representation of these results.
   Julia evaluation or calibration-file I/O. `builtin_graph_node_types()`
   currently supplies the maintained native nodes listed in
   [`runtime-dataflow.md`](runtime-dataflow.md), including
-  `control_matrix_reconstruction_f32`; optional packages extend the file
-  vocabulary by passing an explicitly merged node-type map.
+  `closed_loop_correction_f32` and `control_matrix_reconstruction_f32`;
+  optional packages extend the file vocabulary by passing an explicitly
+  merged node-type map.
 - Native nodes retain their numerical implementation in the canonical
   scientific module. `discrete_integrator_node` calls `Control.update!` with a
   separate plan, state, and workspace. `modal_opd_expansion_node` calls
@@ -1839,6 +1844,10 @@ the canonical representation of these results.
   explicit basis and pupil-support parameters.
   `control_matrix_reconstruction_node` calls `Control.reconstruct!` with a
   `ControlMatrixPlan` prepared from an explicit dense matrix parameter. A
+  `closed_loop_correction_node` owns its exact correction state and workspace,
+  publishes complete correction and state outputs atomically at node scope,
+  and consumes explicit same-coordinate constraint feedback. It does not hide
+  a DM constraint, coordinate transform, or physical response. A
   Calculon or FGN wrapper for PipeWire deployment is a separate optional
   adapter, not an AOS dependency.
 - Deterministic model time: `FixedStepModelTimeDriver` selects a nominal
@@ -1860,8 +1869,10 @@ the canonical representation of these results.
   exposure duration, and uncertainty before the borrowed buffer is returned;
   it rejects incomplete metadata, clock mismatch, and time regression.
 - Independent `AdaptiveOpticsSim.Control` primitives: `VectorDelayLine`,
-  `shift_delay!`, `DiscreteIntegratorController`, and `reconstruct!`; command
-  application remains the `AdaptiveOpticsSim.Optics.set_command!` operation
+  `shift_delay!`, `DiscreteIntegratorController`,
+  `ClosedLoopCorrectionPlan`, `apply_closed_loop_correction!`, and
+  `reconstruct!`; command application remains the
+  `AdaptiveOpticsSim.Optics.set_command!` operation
 - WFS preparation helper: `prepare_runtime_wfs!` prepares the retained WFS
   family-specific scratch required by explicit model loops
 - Generic timing helper: `runtime_timing`

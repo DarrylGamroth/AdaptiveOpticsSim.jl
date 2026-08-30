@@ -33,11 +33,16 @@ import ..Calibration:
     ModalOPDExpansionPlan,
     combine_basis!
 import ..Control:
+    ClosedLoopCorrectionPlan,
+    ClosedLoopCorrectionState,
+    ClosedLoopCorrectionWorkspace,
     ControlMatrixPlan,
     DiscreteIntegratorPlan,
     DiscreteIntegratorState,
     DiscreteIntegratorWorkspace,
+    apply_closed_loop_correction!,
     reconstruct!,
+    reset_closed_loop_correction!,
     reset_controller!,
     update!
 import ..Optics:

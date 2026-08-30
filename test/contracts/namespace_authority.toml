@@ -548,6 +548,7 @@ new_domain_exports = [
     "AlgorithmGraphs.delayed_link",
     "AlgorithmGraphs.sparse_parameter",
     "AlgorithmGraphs.discrete_integrator_node",
+    "AlgorithmGraphs.closed_loop_correction_node",
     "AlgorithmGraphs.modal_opd_expansion_node",
     "AlgorithmGraphs.shack_hartmann_rate_node",
     "AlgorithmGraphs.ccd_detector_acquisition_node",
@@ -593,6 +594,8 @@ new_domain_exports = [
     "WavefrontSensors.LiFTPeakRateMatching",
     "WavefrontSensors.LiFTPhysicalRatePreservation",
     "Control.ControlMatrixPlan",
+    "Control.ClosedLoopCorrectionPlan",
+    "Control.apply_closed_loop_correction!",
 ]
 new_domain_public = [
     "AlgorithmGraphs.prepared_graph_node",
@@ -604,6 +607,9 @@ new_domain_public = [
     "AlgorithmGraphs.DiscreteIntegratorNode",
     "AlgorithmGraphs.DiscreteIntegratorNodeConfig",
     "AlgorithmGraphs.DiscreteIntegratorNodeProps",
+    "AlgorithmGraphs.ClosedLoopCorrectionNode",
+    "AlgorithmGraphs.ClosedLoopCorrectionNodeConfig",
+    "AlgorithmGraphs.ClosedLoopCorrectionNodeProps",
     "AlgorithmGraphs.ModalOPDExpansionNode",
     "AlgorithmGraphs.ModalOPDExpansionNodeConfig",
     "AlgorithmGraphs.ShackHartmannRateNode",
@@ -622,6 +628,9 @@ new_domain_public = [
     "Control.discrete_integrator_plan",
     "Control.discrete_integrator_state",
     "Control.discrete_integrator_workspace",
+    "Control.ClosedLoopCorrectionState",
+    "Control.ClosedLoopCorrectionWorkspace",
+    "Control.reset_closed_loop_correction!",
     "Backends.AbstractComputeDeviceAvailability",
     "Backends.ComputeDeviceAvailable",
     "Backends.ComputeDeviceUnavailable",
@@ -2397,6 +2406,8 @@ exports = [
     "DiscreteIntegratorController",
     "VectorDelayLine",
     "shift_delay!",
+    "ClosedLoopCorrectionPlan",
+    "apply_closed_loop_correction!",
 ]
 public = [
     "controller_output",
@@ -2408,6 +2419,9 @@ public = [
     "discrete_integrator_workspace",
     "reset_controller!",
     "supports_controller_reset",
+    "ClosedLoopCorrectionState",
+    "ClosedLoopCorrectionWorkspace",
+    "reset_closed_loop_correction!",
 ]
 
 [[api_allowlists]]
@@ -2477,6 +2491,7 @@ exports = [
     "delayed_link",
     "sparse_parameter",
     "discrete_integrator_node",
+    "closed_loop_correction_node",
     "modal_opd_expansion_node",
     "shack_hartmann_rate_node",
     "ccd_detector_acquisition_node",
@@ -2516,6 +2531,9 @@ public = [
     "DiscreteIntegratorNode",
     "DiscreteIntegratorNodeConfig",
     "DiscreteIntegratorNodeProps",
+    "ClosedLoopCorrectionNode",
+    "ClosedLoopCorrectionNodeConfig",
+    "ClosedLoopCorrectionNodeProps",
     "ModalOPDExpansionNode",
     "ModalOPDExpansionNodeConfig",
     "ShackHartmannRateNode",

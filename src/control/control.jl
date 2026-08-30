@@ -36,6 +36,7 @@ import ..Calibration:
     truncation_count
 
 include("controller.jl")
+include("closed_loop_correction.jl")
 include("reconstructors.jl")
 include("api.jl")
 

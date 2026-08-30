@@ -459,6 +459,7 @@ end
     for name in (
         :NullReconstructor,
         :ControlMatrixPlan,
+        :ClosedLoopCorrectionPlan,
         :ModalReconstructor,
         :FactorizedReconstructor,
         :MappedReconstructor,
@@ -468,6 +469,7 @@ end
         :DiscreteIntegratorController,
         :VectorDelayLine,
         :shift_delay!,
+        :apply_closed_loop_correction!,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)
@@ -479,6 +481,9 @@ end
         :controller_output,
         :reset_controller!,
         :supports_controller_reset,
+        :ClosedLoopCorrectionState,
+        :ClosedLoopCorrectionWorkspace,
+        :reset_closed_loop_correction!,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)

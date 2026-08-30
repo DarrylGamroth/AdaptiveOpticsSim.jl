@@ -895,6 +895,75 @@ end
     )
 end
 
+@testset "closed-loop correction graph node" begin
+    residual_error = Float32[1, 2]
+    constraint_feedback = fill(99.0f0, 2)
+    node = closed_loop_correction_node(
+        :controller;
+        extent=2,
+        residual_error_schema="test.graph.controller-error.f32/1",
+        constraint_feedback_schema="test.graph.constraint-feedback.f32/1",
+        correction_schema="test.graph.correction.f32/1",
+        controller_state_schema="test.graph.controller-state.f32/1",
+        gain=-0.3f0,
+        pole=0.99f0,
+        anti_windup_gain=1.0f0,
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:closed_loop_correction,
+        inputs=(
+            graph_input(
+                :residual_error,
+                :controller => :residual_error,
+                residual_error,
+            ),
+            graph_input(
+                :constraint_feedback,
+                :controller => :constraint_feedback,
+                constraint_feedback,
+            ),
+        ),
+        outputs=(
+            graph_output(:correction, :controller => :correction),
+            graph_output(
+                :controller_state,
+                :controller => :controller_state,
+            ),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    correction = graph_output(graph, Val(:correction))
+    controller_state = graph_output(graph, Val(:controller_state))
+
+    @test @inferred(step_graph!(graph)) === graph
+    @test correction ≈ Float32[-0.3, -0.6]
+    @test all(iszero, controller_state)
+
+    residual_error .= Float32[0.5, -1]
+    constraint_feedback .= Float32[0.1, -0.2]
+    step_graph!(graph)
+    @test controller_state ≈ Float32[-0.4, -0.4]
+    @test correction ≈ Float32[-0.546, -0.096]
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+
+    reset_graph!(graph)
+    @test all(iszero, correction)
+    @test all(iszero, controller_state)
+    owner = prepared_graph_node(graph, Val(:controller))
+    @test !owner.state.has_correction
+
+    @test_throws AlgorithmGraphError closed_loop_correction_node(
+        :invalid_controller;
+        extent=2,
+        residual_error_schema="test.graph.controller-error.f32/1",
+        constraint_feedback_schema="test.graph.constraint-feedback.f32/1",
+        correction_schema="test.graph.correction.f32/1",
+        controller_state_schema="test.graph.controller-state.f32/1",
+        pole=1.1f0,
+    )
+end
+
 @testset "TOML graph files compile to native graph definitions" begin
     residual = Float32[1, 2]
     basis = zeros(Float32, 2, 2, 2)
@@ -932,6 +1001,7 @@ end
     )
     @test keys(builtin_graph_node_types()) == (
         :ccd_detector_acquisition_f32,
+        :closed_loop_correction_f32,
         :control_matrix_reconstruction_f32,
         :discrete_integrator_f32,
         :modal_opd_expansion_f32,
@@ -1010,6 +1080,7 @@ end
     for coordinate in axes(reconstruction_matrix, 1)
         reconstruction_matrix[coordinate, coordinate] = 1.0f0
     end
+    controller_constraint_feedback = zeros(Float32, 221)
     path = joinpath(
         dirname(dirname(@__DIR__)),
         "examples",
@@ -1024,6 +1095,7 @@ end
             reference_signal,
             lenslet_order,
             reconstruction_matrix,
+            controller_constraint_feedback,
         ),
     )
     graph = prepare_algorithm_graph(definition)
@@ -1037,6 +1109,11 @@ end
         graph,
         Val(:controller_residual_error),
     )
+    controller_correction = graph_output(
+        graph,
+        Val(:controller_correction),
+    )
+    controller_state = graph_output(graph, Val(:controller_state))
 
     @test graph_name(graph) === :revolt_classic_shwfs
     @test size(photon_rate) == (352, 352)
@@ -1044,13 +1121,18 @@ end
     @test size(full_slopes) == (512,)
     @test size(selected_slopes) == (376,)
     @test size(controller_residual_error) == (221,)
+    @test size(controller_correction) == (221,)
+    @test size(controller_state) == (221,)
     @test size(centroid_owner.prepared.workspace.centroid_host) == (22, 22)
     @test all(isfinite, photon_rate)
     @test all(isfinite, frame)
     @test all(isfinite, full_slopes)
     @test all(isfinite, selected_slopes)
     @test all(isfinite, controller_residual_error)
+    @test all(isfinite, controller_correction)
+    @test all(iszero, controller_state)
     @test controller_residual_error == selected_slopes[1:221]
+    @test controller_correction ≈ -0.3f0 .* controller_residual_error
     @test selected_slopes[1:6] == Float32[
         full_slopes[1],
         full_slopes[257],

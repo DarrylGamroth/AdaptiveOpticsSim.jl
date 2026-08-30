@@ -3,6 +3,109 @@ function dm_surface_allocations(dm)
     return @allocated update_surface!(dm)
 end
 
+@testset "Closed-loop correction plan, state, and workspace" begin
+    plan = @inferred ClosedLoopCorrectionPlan(
+        2,
+        -0.3f0,
+        0.99f0,
+        1.0f0,
+    )
+    reference_parent = zeros(Float32, 4)
+    reference = @view reference_parent[2:3]
+    state = @inferred Control.ClosedLoopCorrectionState(plan, reference)
+    workspace = @inferred Control.ClosedLoopCorrectionWorkspace(plan, reference)
+    correction_parent = fill(-1.0f0, 4)
+    correction = @view correction_parent[2:3]
+    residual_parent = Float32[-1, 1, 2, -1]
+    residual_error = @view residual_parent[2:3]
+    feedback_parent = Float32[-1, 99, 99, -1]
+    constraint_feedback = @view feedback_parent[2:3]
+
+    @test (@inferred apply_closed_loop_correction!(
+        correction,
+        state,
+        workspace,
+        plan,
+        residual_error,
+        constraint_feedback,
+    )) === correction
+    @test correction ≈ Float32[-0.3, -0.6]
+    @test all(iszero, state.integrator_state)
+    @test state.last_correction == correction
+    @test state.has_correction
+
+    residual_error .= Float32[0.5, -1]
+    constraint_feedback .= Float32[0.1, -0.2]
+    apply_closed_loop_correction!(
+        correction,
+        state,
+        workspace,
+        plan,
+        residual_error,
+        constraint_feedback,
+    )
+    @test state.integrator_state ≈ Float32[-0.4, -0.4]
+    @test correction ≈ Float32[-0.546, -0.096]
+    if coverage_instrumented()
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(apply_closed_loop_correction!(
+            correction,
+            state,
+            workspace,
+            plan,
+            residual_error,
+            constraint_feedback,
+        )) == 0
+    end
+
+    @test Control.reset_closed_loop_correction!(state, workspace) === state
+    @test !state.has_correction
+    @test all(iszero, state.integrator_state)
+    @test all(iszero, state.last_correction)
+    @test all(iszero, workspace.next_state)
+    @test all(iszero, workspace.next_correction)
+
+    @test_throws InvalidConfiguration ClosedLoopCorrectionPlan(
+        0,
+        -0.3f0,
+        0.99f0,
+        1.0f0,
+    )
+    @test_throws InvalidConfiguration ClosedLoopCorrectionPlan(
+        2,
+        -0.3f0,
+        1.01f0,
+        1.0f0,
+    )
+    @test_throws InvalidConfiguration ClosedLoopCorrectionPlan(
+        2,
+        -0.3f0,
+        0.99f0,
+        Float32(Inf),
+    )
+    @test_throws DimensionMismatchError Control.ClosedLoopCorrectionState(
+        plan,
+        zeros(Float32, 3),
+    )
+    @test_throws DimensionMismatchError apply_closed_loop_correction!(
+        correction,
+        state,
+        workspace,
+        plan,
+        zeros(Float32, 3),
+        constraint_feedback,
+    )
+    @test_throws InvalidConfiguration apply_closed_loop_correction!(
+        residual_error,
+        state,
+        workspace,
+        plan,
+        residual_error,
+        constraint_feedback,
+    )
+end
+
 @testset "Deformable-mirror surface formation" begin
     tel = Telescope(
         resolution=32,

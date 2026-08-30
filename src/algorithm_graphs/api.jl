@@ -7,7 +7,8 @@ export FixedStepModelTimeDriver, PreparedBoundaryModelTimeDriver
 export CapturedModelTimestamp, PreparedCapturedModelTimeDriver
 export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
-export discrete_integrator_node, modal_opd_expansion_node
+export discrete_integrator_node, closed_loop_correction_node
+export modal_opd_expansion_node
 export shack_hartmann_rate_node
 export ccd_detector_acquisition_node
 export shack_hartmann_centroid_node
@@ -29,6 +30,8 @@ public graph_node_ports, prepare_graph_node
 public step_graph_node!, reset_graph_node!
 public DiscreteIntegratorNode, DiscreteIntegratorNodeConfig
 public DiscreteIntegratorNodeProps
+public ClosedLoopCorrectionNode, ClosedLoopCorrectionNodeConfig
+public ClosedLoopCorrectionNodeProps
 public ModalOPDExpansionNode, ModalOPDExpansionNodeConfig
 public ShackHartmannRateNode, ShackHartmannRateNodeConfig
 public CCDDetectorAcquisitionNode, CCDDetectorAcquisitionNodeConfig

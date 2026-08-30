@@ -202,6 +202,52 @@ function _discrete_integrator_f32_node(
     )
 end
 
+function _closed_loop_correction_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :constraint_feedback_schema,
+        :controller_state_schema,
+        :correction_schema,
+        :extent,
+        :residual_error_schema,
+    )
+    prop_fields = (:anti_windup_gain, :gain, :pole)
+    context = "node '$name' config"
+    props_context = "node '$name' props"
+    _require_named_fields(config, config_fields, config_fields, context)
+    _require_named_fields(props, prop_fields, prop_fields, props_context)
+    return closed_loop_correction_node(
+        name;
+        extent=_file_integer(config.extent, "$context.extent"),
+        residual_error_schema=_file_string(
+            config.residual_error_schema,
+            "$context.residual_error_schema",
+        ),
+        constraint_feedback_schema=_file_string(
+            config.constraint_feedback_schema,
+            "$context.constraint_feedback_schema",
+        ),
+        correction_schema=_file_string(
+            config.correction_schema,
+            "$context.correction_schema",
+        ),
+        controller_state_schema=_file_string(
+            config.controller_state_schema,
+            "$context.controller_state_schema",
+        ),
+        gain=_file_real(props.gain, "$props_context.gain"),
+        pole=_file_real(props.pole, "$props_context.pole"),
+        anti_windup_gain=_file_real(
+            props.anti_windup_gain,
+            "$props_context.anti_windup_gain",
+        ),
+        T=Float32,
+    )
+end
+
 function _modal_opd_expansion_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -660,6 +706,7 @@ global registry or dynamic Julia evaluation is used.
 function builtin_graph_node_types()
     return (
         ccd_detector_acquisition_f32=_ccd_detector_acquisition_f32_node,
+        closed_loop_correction_f32=_closed_loop_correction_f32_node,
         control_matrix_reconstruction_f32=
             _control_matrix_reconstruction_f32_node,
         discrete_integrator_f32=_discrete_integrator_f32_node,

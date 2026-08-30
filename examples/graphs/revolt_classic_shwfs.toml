@@ -1,5 +1,5 @@
 # Executable REVOLT Classic diffractive SHWFS, CCD acquisition, calibrated
-# centroid selection, and dense reconstruction stages.
+# centroid selection, dense reconstruction, and closed-loop correction stages.
 #
 # This is intentionally not the complete REVOLT Classic simulation or RTC
 # graph. Atmosphere propagation supplies the externally bound pupil OPD, while
@@ -12,7 +12,10 @@
 # below is not SPECULA's absolute-pedestal thr_value; that extraction policy
 # remains a numerical-parity gap, so executing the matrix does not yet claim
 # operational reconstructor compatibility. The explicit RNG seed is an AOS
-# reproducibility choice because the source file does not declare one.
+# reproducibility choice because the source file does not declare one. Until a
+# downstream command-constraint/DM path is present, the caller also supplies
+# the preceding demanded-minus-realized correction feedback. Its initial value
+# is a required placeholder and is ignored by the controller's first step.
 
 schema_version = 1
 name = "revolt_classic_shwfs"
@@ -102,10 +105,31 @@ slopes_schema = "org.revolt.classic.shwfs-selected-centroid-slopes.f32/1"
 reconstructed_schema = "org.revolt.classic.controller-residual-error.f32/1"
 control_matrix_schema = "org.revolt.classic.shwfs-control-matrix.f32/1"
 
+[[nodes]]
+name = "controller"
+type = "closed_loop_correction_f32"
+
+[nodes.config]
+extent = 221
+residual_error_schema = "org.revolt.classic.controller-residual-error.f32/1"
+constraint_feedback_schema = "org.revolt.classic.controller-constraint-feedback.f32/1"
+correction_schema = "org.revolt.classic.controller-command.f32/1"
+controller_state_schema = "org.revolt.classic.controller-state.f32/1"
+
+[nodes.props]
+gain = -0.3
+pole = 0.99
+anti_windup_gain = 1.0
+
 [[inputs]]
 name = "pupil_opd"
 destination = "shwfs.opd"
 binding = "pupil_opd"
+
+[[inputs]]
+name = "controller_constraint_feedback"
+destination = "controller.constraint_feedback"
+binding = "controller_constraint_feedback"
 
 [[outputs]]
 name = "shwfs_photon_rate"
@@ -127,6 +151,14 @@ source = "slope_selection.selected_slopes"
 name = "controller_residual_error"
 source = "reconstruction.reconstructed"
 
+[[outputs]]
+name = "controller_correction"
+source = "controller.correction"
+
+[[outputs]]
+name = "controller_state"
+source = "controller.controller_state"
+
 [[links]]
 source = "shwfs.photon_rate"
 destination = "detector.photon_rate"
@@ -142,6 +174,10 @@ destination = "slope_selection.full_slopes"
 [[links]]
 source = "slope_selection.selected_slopes"
 destination = "reconstruction.slopes"
+
+[[links]]
+source = "reconstruction.reconstructed"
+destination = "controller.residual_error"
 
 [[parameters]]
 destination = "centroid.valid_subapertures"

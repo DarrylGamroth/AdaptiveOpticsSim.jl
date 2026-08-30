@@ -3,9 +3,12 @@ export FactorizedReconstructor
 export MappedReconstructor, ControlledReconstructor
 export reconstruct!, reconstruct
 export DiscreteIntegratorController, VectorDelayLine, shift_delay!
+export ClosedLoopCorrectionPlan, apply_closed_loop_correction!
 
 public controller_output
 public DiscreteIntegratorPlan, DiscreteIntegratorState, DiscreteIntegratorWorkspace
 public discrete_integrator_plan, discrete_integrator_state
 public discrete_integrator_workspace
 public reset_controller!, supports_controller_reset
+public ClosedLoopCorrectionState, ClosedLoopCorrectionWorkspace
+public reset_closed_loop_correction!

@@ -160,6 +160,207 @@ end
     return nothing
 end
 
+struct ClosedLoopCorrectionNode{T<:AbstractFloat} end
+
+"""Construction values for one same-coordinate closed-loop correction node."""
+struct ClosedLoopCorrectionNodeConfig
+    extent::Int
+    residual_error_schema::String
+    constraint_feedback_schema::String
+    correction_schema::String
+    controller_state_schema::String
+
+    function ClosedLoopCorrectionNodeConfig(
+        extent::Integer,
+        residual_error_schema::AbstractString,
+        constraint_feedback_schema::AbstractString,
+        correction_schema::AbstractString,
+        controller_state_schema::AbstractString,
+    )
+        extent > 0 || throw(AlgorithmGraphError(
+            "closed-loop correction extent must be positive",
+        ))
+        schemas = (
+            residual_error_schema,
+            constraint_feedback_schema,
+            correction_schema,
+            controller_state_schema,
+        )
+        all(schema -> !isempty(schema), schemas) || throw(AlgorithmGraphError(
+            "closed-loop correction schemas must not be empty",
+        ))
+        return new(
+            Int(extent),
+            String(residual_error_schema),
+            String(constraint_feedback_schema),
+            String(correction_schema),
+            String(controller_state_schema),
+        )
+    end
+end
+
+"""Initial scalar props for one closed-loop correction node."""
+struct ClosedLoopCorrectionNodeProps{T<:AbstractFloat}
+    gain::T
+    pole::T
+    anti_windup_gain::T
+
+    function ClosedLoopCorrectionNodeProps{T}(
+        gain::Real,
+        pole::Real,
+        anti_windup_gain::Real,
+    ) where {T<:AbstractFloat}
+        converted_gain = T(gain)
+        converted_pole = T(pole)
+        converted_anti_windup_gain = T(anti_windup_gain)
+        try
+            ClosedLoopCorrectionPlan(
+                1,
+                converted_gain,
+                converted_pole,
+                converted_anti_windup_gain,
+            )
+        catch error
+            error isa AdaptiveOpticsSimError || rethrow()
+            throw(AlgorithmGraphError(sprint(showerror, error)))
+        end
+        return new{T}(
+            converted_gain,
+            converted_pole,
+            converted_anti_windup_gain,
+        )
+    end
+end
+
+"""
+    closed_loop_correction_node(name; ...)
+
+Declare one atomic, complete-frame leaky correction operation with delayed
+same-coordinate constraint feedback. The first step starts from zero state and
+ignores its placeholder feedback. Later steps subtract the supplied feedback
+(`preceding demanded correction - realized correction`) from the preceding
+correction before applying the pole and current residual error. Hidden-mode
+removal, coordinate transforms, command constraints, and DM response remain
+separate operations.
+"""
+function closed_loop_correction_node(
+    name::Symbol;
+    extent::Integer,
+    residual_error_schema::AbstractString,
+    constraint_feedback_schema::AbstractString,
+    correction_schema::AbstractString,
+    controller_state_schema::AbstractString,
+    gain::Real=1.0,
+    pole::Real=0.0,
+    anti_windup_gain::Real=0.0,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = ClosedLoopCorrectionNodeConfig(
+        extent,
+        residual_error_schema,
+        constraint_feedback_schema,
+        correction_schema,
+        controller_state_schema,
+    )
+    props = ClosedLoopCorrectionNodeProps{T}(
+        gain,
+        pole,
+        anti_windup_gain,
+    )
+    return algorithm_node(name, ClosedLoopCorrectionNode{T}, config; props)
+end
+
+function graph_node_ports(
+    ::Type{ClosedLoopCorrectionNode{T}},
+    config::ClosedLoopCorrectionNodeConfig,
+) where {T}
+    format(name, direction, schema) = graph_port_contract(
+        name,
+        direction,
+        :data,
+        T,
+        (config.extent,),
+        schema,
+        :column_major,
+    )
+    return (
+        format(:residual_error, :input, config.residual_error_schema),
+        format(
+            :constraint_feedback,
+            :input,
+            config.constraint_feedback_schema,
+        ),
+        format(:correction, :output, config.correction_schema),
+        format(:controller_state, :output, config.controller_state_schema),
+    )
+end
+
+struct _ClosedLoopCorrectionOwner{
+    Plan,
+    State,
+    Workspace,
+    ResidualError,
+    ConstraintFeedback,
+    Correction,
+    ControllerState,
+}
+    plan::Plan
+    state::State
+    workspace::Workspace
+    residual_error::ResidualError
+    constraint_feedback::ConstraintFeedback
+    correction::Correction
+    controller_state::ControllerState
+end
+
+function prepare_graph_node(
+    ::Type{ClosedLoopCorrectionNode{T}},
+    config::ClosedLoopCorrectionNodeConfig,
+    props::ClosedLoopCorrectionNodeProps{T},
+    inputs::NamedTuple{(:residual_error,:constraint_feedback)},
+    outputs::NamedTuple{(:correction,:controller_state)},
+    ::NamedTuple{()},
+    target,
+) where {T}
+    plan = ClosedLoopCorrectionPlan(
+        config.extent,
+        props.gain,
+        props.pole,
+        props.anti_windup_gain,
+    )
+    state = ClosedLoopCorrectionState(plan, outputs.correction)
+    workspace = ClosedLoopCorrectionWorkspace(plan, outputs.correction)
+    return _ClosedLoopCorrectionOwner(
+        plan,
+        state,
+        workspace,
+        inputs.residual_error,
+        inputs.constraint_feedback,
+        outputs.correction,
+        outputs.controller_state,
+    )
+end
+
+@inline function step_graph_node!(owner::_ClosedLoopCorrectionOwner)
+    apply_closed_loop_correction!(
+        owner.correction,
+        owner.state,
+        owner.workspace,
+        owner.plan,
+        owner.residual_error,
+        owner.constraint_feedback,
+    )
+    copyto!(owner.controller_state, owner.state.integrator_state)
+    return nothing
+end
+
+@inline function reset_graph_node!(owner::_ClosedLoopCorrectionOwner)
+    reset_closed_loop_correction!(owner.state, owner.workspace)
+    fill!(owner.correction, zero(eltype(owner.correction)))
+    fill!(owner.controller_state, zero(eltype(owner.controller_state)))
+    return nothing
+end
+
 struct ModalOPDExpansionNode{T<:AbstractFloat} end
 
 """Construction and graph-rebuild values for one modal OPD expansion node."""

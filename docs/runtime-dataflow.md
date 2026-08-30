@@ -205,7 +205,8 @@ graph = prepare_algorithm_graph(definition; target=target)
 ```
 
 The built-in type map currently contains `ccd_detector_acquisition_f32`,
-`control_matrix_reconstruction_f32`, `discrete_integrator_f32`,
+`closed_loop_correction_f32`, `control_matrix_reconstruction_f32`,
+`discrete_integrator_f32`,
 `modal_opd_expansion_f32`,
 `shack_hartmann_centroid_f32`, `shack_hartmann_rate_f32`, and
 `shack_hartmann_slope_selection_f32`.
@@ -226,16 +227,21 @@ caller-bound 221-by-376 calibrated matrix to publish 221 reconstructed
 controller residual-error coordinates. Its OOPAO-compatible fractional cutoff
 is explicitly not mapped from SPECULA's absolute-pedestal `thr_value`;
 numerical extractor parity and therefore operational matrix compatibility
-remain open. The file deliberately stops before controller integration,
-controller/DM coordinate transforms, DM response, atmosphere evolution, and
-science-path imaging. Its explicit RNG seed is an AOS reproducibility choice
-because the source SPECULA profile does not declare one.
+remain open. An atomic closed-loop correction node then applies the REVOLT
+Classic gain `-0.3`, pole `0.99`, and anti-windup gain `1.0` to publish 221
+demanded correction coordinates and the corresponding integrator state. Until
+a downstream constraint and DM path exists, the caller binds the preceding
+demanded-minus-realized correction feedback; the first step ignores that
+required placeholder buffer. The file deliberately stops before that feedback
+delay is closed, controller/DM coordinate transforms, DM response, atmosphere
+evolution, and science-path imaging. Its explicit RNG seed is an AOS
+reproducibility choice because the source SPECULA profile does not declare one.
 
 Architecture-file status is therefore explicit:
 
 | Architecture | File-defined executable surface | Remaining authority or implementation gate |
 |---|---|---|
-| REVOLT Classic | Diffractive SHWFS optics, single-read CCD acquisition, AOS/OOPAO calibrated full-grid centroid estimation, explicit 188-lenslet/376-component slope selection, and caller-bound 221-by-376 dense reconstruction using the SPECULA telescope, source, lenslet, sampling, exposure, QE, photon-noise, and read-noise values | Bind the authoritative ROI-derived order and calibrated matrix in the application, add the SPECULA absolute-pedestal extraction policy and numerical compatibility evidence, then add controller integration/delay, coordinate transforms, DM response, atmosphere propagation, and science products before claiming the complete graph |
+| REVOLT Classic | Diffractive SHWFS optics, single-read CCD acquisition, AOS/OOPAO calibrated full-grid centroid estimation, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 dense reconstruction, and atomic 221-coordinate closed-loop correction using the SPECULA telescope, source, lenslet, sampling, exposure, QE, noise, gain, pole, and anti-windup values | Bind the authoritative ROI-derived order and calibrated matrix in the application, add the SPECULA absolute-pedestal extraction policy and numerical compatibility evidence, then close the constraint-feedback delay through coordinate transforms, DM constraints and response; add atmosphere propagation and science products before claiming the complete graph |
 | REVOLT Copper | None claimed | The current Copper configuration describes operational RTC components and many alternatives, but does not provide one authoritative AOS simulation topology to transcribe |
 | SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
 

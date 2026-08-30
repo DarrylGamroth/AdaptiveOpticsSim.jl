@@ -96,7 +96,12 @@ lenslets and converts the full block layout into 376 pair-interleaved
 components without teaching core to parse the detector ROI artifact. A
 run-immutable `ControlMatrixPlan` and graph adapter now apply a caller-bound
 221-by-376 calibrated matrix to those ordered slopes and publish 221
-reconstructed controller residual-error coordinates. Its centroid cutoff
+reconstructed controller residual-error coordinates. A separate atomic
+`ClosedLoopCorrectionPlan` now applies the REVOLT Classic gain, pole, and
+anti-windup recurrence and publishes both the demanded correction and its
+integrator state; the current TOML slice takes explicit external
+demanded-minus-realized correction feedback until downstream DM constraint and
+response nodes close that delay. Its centroid cutoff
 retains the AOS/OOPAO fractional-peak semantics; SPECULA's absolute-pedestal
 `ShSlopec` policy and compatibility with the operational matrix remain
 explicit parity items. The versioned TOML graph format compiles those same
@@ -116,7 +121,9 @@ The delivery order for this boundary is:
    subset without changing domain numerical APIs.
 2. Bind the authoritative ROI-derived order to the executable REVOLT Classic
    SHWFS/CCD/centroid/selection TOML slice, then extend it through
-   reconstruction, control, atmosphere, DM, and science products; add complete
+   reconstruction, control, atmosphere, DM, and science products. Reconstruction
+   and the first atomic controller are now executable; the next controller gate
+   is downstream constraint-feedback closure. Add complete
    REVOLT Copper and SPIDERS files only after their authoritative topologies
    and scientific node sets are available and qualified.
 3. Preserve direct Julia graph construction for generated, conditional, and
