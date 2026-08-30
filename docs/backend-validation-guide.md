@@ -472,14 +472,28 @@ julia --project=benchmarks benchmarks/benchmark_loop_order_simd.jl
 julia --project=benchmarks benchmarks/benchmark_detector_hil_latency.jl
 julia --project=benchmarks benchmarks/benchmark_gate0_latency.jl
 julia --project=benchmarks benchmarks/benchmark_pre_hil_backend_latency.jl cpu local_cpu
+julia --project=benchmarks benchmarks/benchmark_revolt_graph_nodes.jl
 
 julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
 julia --project=benchmarks/amdgpu benchmarks/benchmark_pre_hil_backend_latency.jl amdgpu local_amdgpu
+AOS_REVOLT_GRAPH_BACKEND=amdgpu julia --project=benchmarks/amdgpu benchmarks/benchmark_revolt_graph_nodes.jl
 
 julia --project=benchmarks/cuda -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/cuda benchmarks/benchmark_pre_hil_backend_latency.jl cuda wsl_cuda
+AOS_REVOLT_GRAPH_BACKEND=cuda julia --project=benchmarks/cuda benchmarks/benchmark_revolt_graph_nodes.jl
 ```
+
+`benchmark_revolt_graph_nodes.jl` profiles the executable Classic and Copper
+external-RTC graphs, including atmosphere evolution. It reports each node with
+an exact graph-context synchronization, the ordinary complete graph boundary,
+and the separate frame-to-host, command-to-target, and full lockstep HIL
+boundaries. The sum of node times has one synchronization per node and is
+therefore diagnostic rather than an estimate of an asynchronously submitted
+graph. `AOS_REVOLT_GRAPH_ARCHITECTURES`, `AOS_REVOLT_GRAPH_SAMPLES`, and
+`AOS_REVOLT_GRAPH_WARMUP` select the graph subset and measurement length. The
+default is a one-thread, closed-loop, self-paced service-cost measurement; it
+does not model fixed arrivals, transport, overload, or wall-clock pacing.
 
 `benchmark_gate0_latency.jl` accepts `AOS_GATE0_CARD_IDS` as a comma-separated,
 predeclared subset. The artifact records the explicit selection mode and the
