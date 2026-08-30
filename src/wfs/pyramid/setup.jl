@@ -158,6 +158,26 @@ struct PreparedPyramidPropagation{
     workspace::W
 end
 
+# Pyramid propagation executes the same large transforms once per modulation
+# point and therefore amortizes FFTW's measured-planning cost quickly. Planning
+# is confined to newly allocated scratch because FFTW.MEASURE may overwrite its
+# input while evaluating candidates. Apple and accelerator providers retain
+# their backend-native planning behavior.
+@inline function _plan_pyramid_fft!(::ScalarCPUStyle, buffer)
+    Sys.isapple() && return plan_fft_backend!(buffer)
+    return FFTW.plan_fft!(buffer; flags=FFTW.MEASURE)
+end
+
+@inline function _plan_pyramid_ifft!(::ScalarCPUStyle, buffer)
+    Sys.isapple() && return plan_ifft_backend!(buffer)
+    return FFTW.plan_ifft!(buffer; flags=FFTW.MEASURE)
+end
+
+@inline _plan_pyramid_fft!(::AcceleratorStyle, buffer) =
+    plan_fft_backend!(buffer)
+@inline _plan_pyramid_ifft!(::AcceleratorStyle, buffer) =
+    plan_ifft_backend!(buffer)
+
 @inline pyramid_propagation_plan(
     propagation::PreparedPyramidPropagation) = propagation.plan
 @inline pyramid_propagation_workspace(
@@ -459,8 +479,9 @@ function _prepare_pyramid_diffractive_storage(backend, ::Type{T}, tel,
     temp = similar(intensity)
     scratch = similar(intensity)
     asterism_stack = backend{T}(undef, pad, pad, 1)
-    fft_plan = plan_fft_backend!(focal_field)
-    ifft_plan = plan_ifft_backend!(pupil_field)
+    style = execution_style(field)
+    fft_plan = _plan_pyramid_fft!(style, focal_field)
+    ifft_plan = _plan_pyramid_ifft!(style, pupil_field)
     elongation_kernel = backend{T}(undef, 1)
     lgs_kernel_fft = backend{Complex{T}}(undef, 0, 0)
     propagation_plan = PyramidPropagationPlan(
@@ -548,8 +569,11 @@ function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, pupil::PupilFunction
         acquisition.frame = similar(acquisition.frame, pad, pad)
         propagation.asterism_stack = similar(propagation.asterism_stack,
             pad, pad, propagation.asterism_capacity)
-        propagation.fft_plan = plan_fft_backend!(propagation.focal_field)
-        propagation.ifft_plan = plan_ifft_backend!(propagation.pupil_field)
+        style = execution_style(propagation.field)
+        propagation.fft_plan = _plan_pyramid_fft!(style,
+            propagation.focal_field)
+        propagation.ifft_plan = _plan_pyramid_ifft!(style,
+            propagation.pupil_field)
         propagation.lgs_kernel_fft = similar(propagation.focal_field,
             eltype(propagation.focal_field), 0, 0)
         propagation.lgs_kernel_tag = UInt(0)
