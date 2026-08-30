@@ -1807,6 +1807,16 @@ using AdaptiveOpticsSim.Control
   and later steps consume the preceding demanded-minus-realized correction in
   the same coordinates. `ControlledReconstructor` composes a reconstructor and
   stateful controller without adding a runtime branch.
+- Deformable-mirror command routing: `ControllerToVDMPlan` /
+  `project_controller_to_vdm!`, `VDMToPDMPlan` /
+  `project_vdm_to_pdm!`, `PDMFeedbackToVDMPlan` /
+  `project_pdm_feedback_to_vdm!`, and `VDMFeedbackToControllerPlan` /
+  `project_vdm_feedback_to_controller!` apply explicit calibrated maps between
+  controller, active/full VDM, and physical-actuator coordinates.
+  `PDMActuatorRangePlan` / `apply_pdm_actuator_range!` applies only prepared
+  per-actuator lower and upper ranges and returns requested-minus-demanded
+  feedback. The two two-stage projections keep their full-VDM intermediate in
+  replaceable `VDMToPDMWorkspace` or `PDMFeedbackToVDMWorkspace` storage.
 
 Core calibration and configuration APIs perform no implicit filesystem I/O.
 They accept no cache path or serialization policy and do not select a file

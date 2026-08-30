@@ -106,6 +106,165 @@ end
     )
 end
 
+@testset "VDM/PDM command routing and actuator ranges" begin
+    controller_to_vdm = Float32[
+        1 0
+        0 1
+        1 -1
+    ]
+    controller_plan = @inferred ControllerToVDMPlan(controller_to_vdm)
+    fill!(controller_to_vdm, 0.0f0)
+    controller_parent = Float32[99, 2, -1, 99]
+    controller_command = @view controller_parent[2:3]
+    vdm_parent = fill(99.0f0, 5)
+    vdm_command = @view vdm_parent[2:4]
+    @test (@inferred project_controller_to_vdm!(
+        vdm_command,
+        controller_plan,
+        controller_command,
+    )) === vdm_command
+    @test vdm_command == Float32[2, -1, 3]
+
+    active_to_full = Float32[
+        1 0 0
+        0 1 0
+        0 0 1
+        0.5 0.5 0
+    ]
+    vdm_to_pdm = Float32[
+        1 0 0 0
+        0 1 0 0
+        0 0 1 0
+        0 0 0 1
+        1 0 0 1
+    ]
+    forward_plan = @inferred VDMToPDMPlan(active_to_full, vdm_to_pdm)
+    forward_workspace = @inferred Control.VDMToPDMWorkspace(
+        forward_plan,
+        vdm_command,
+    )
+    requested_parent = fill(99.0f0, 7)
+    requested = @view requested_parent[2:6]
+    @test (@inferred project_vdm_to_pdm!(
+        requested,
+        forward_workspace,
+        forward_plan,
+        vdm_command,
+    )) === requested
+    @test forward_workspace.full_vdm_command == Float32[2, -1, 3, 0.5]
+    @test requested == Float32[2, -1, 3, 0.5, 2.5]
+
+    lower_limits = Float32[-1, -2, -3, 0, -4]
+    upper_limits = Float32[1, 2, 2, 1, 2]
+    range_plan = @inferred PDMActuatorRangePlan(lower_limits, upper_limits)
+    fill!(lower_limits, -99.0f0)
+    fill!(upper_limits, 99.0f0)
+    demanded = similar(requested)
+    pdm_feedback = similar(requested)
+    @test (@inferred apply_pdm_actuator_range!(
+        demanded,
+        pdm_feedback,
+        range_plan,
+        requested,
+    )) === demanded
+    @test demanded == Float32[1, -1, 2, 0.5, 2]
+    @test pdm_feedback == requested - demanded
+
+    pdm_to_vdm = Float32[
+        1 0 0 0 0
+        0 1 0 0 0
+        0 0 1 0 0
+        0 0 0 1 0
+    ]
+    full_to_active = Float32[
+        1 0 0 0
+        0 1 0 0
+        0 0 1 0
+    ]
+    reverse_plan = @inferred PDMFeedbackToVDMPlan(
+        pdm_to_vdm,
+        full_to_active,
+    )
+    reverse_workspace = @inferred Control.PDMFeedbackToVDMWorkspace(
+        reverse_plan,
+        vdm_command,
+    )
+    vdm_feedback = similar(vdm_command)
+    @test (@inferred project_pdm_feedback_to_vdm!(
+        vdm_feedback,
+        reverse_workspace,
+        reverse_plan,
+        pdm_feedback,
+    )) === vdm_feedback
+    @test vdm_feedback == Float32[1, 0, 1]
+
+    vdm_to_controller = Float32[
+        1 0 0
+        0 0.5 0.5
+    ]
+    feedback_plan = @inferred VDMFeedbackToControllerPlan(vdm_to_controller)
+    controller_feedback = similar(controller_command)
+    @test (@inferred project_vdm_feedback_to_controller!(
+        controller_feedback,
+        feedback_plan,
+        vdm_feedback,
+    )) === controller_feedback
+    @test controller_feedback == Float32[1, 0.5]
+
+    if coverage_instrumented()
+        @test_skip "allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(project_controller_to_vdm!(
+            vdm_command,
+            controller_plan,
+            controller_command,
+        )) == 0
+        @test @allocated(project_vdm_to_pdm!(
+            requested,
+            forward_workspace,
+            forward_plan,
+            vdm_command,
+        )) == 0
+        @test @allocated(apply_pdm_actuator_range!(
+            demanded,
+            pdm_feedback,
+            range_plan,
+            requested,
+        )) == 0
+        @test @allocated(project_pdm_feedback_to_vdm!(
+            vdm_feedback,
+            reverse_workspace,
+            reverse_plan,
+            pdm_feedback,
+        )) == 0
+        @test @allocated(project_vdm_feedback_to_controller!(
+            controller_feedback,
+            feedback_plan,
+            vdm_feedback,
+        )) == 0
+    end
+
+    @test_throws InvalidConfiguration project_controller_to_vdm!(
+        controller_command,
+        ControllerToVDMPlan(Float32[1 0; 0 1]),
+        controller_command,
+    )
+    @test_throws DimensionMismatchError VDMToPDMPlan(
+        zeros(Float32, 3, 2),
+        zeros(Float32, 4, 2),
+    )
+    @test_throws InvalidConfiguration PDMActuatorRangePlan(
+        Float32[0, 2],
+        Float32[1, 1],
+    )
+    @test_throws InvalidConfiguration apply_pdm_actuator_range!(
+        demanded,
+        demanded,
+        range_plan,
+        requested,
+    )
+end
+
 @testset "Deformable-mirror surface formation" begin
     tel = Telescope(
         resolution=32,

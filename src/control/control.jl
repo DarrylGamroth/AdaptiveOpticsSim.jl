@@ -17,6 +17,7 @@ import ..Backends:
     CPUBackend,
     _resolve_array_backend,
     compute_device,
+    host_array,
     require_same_backend
 
 import ..Calibration:
@@ -37,6 +38,7 @@ import ..Calibration:
 
 include("controller.jl")
 include("closed_loop_correction.jl")
+include("deformable_mirror_routing.jl")
 include("reconstructors.jl")
 include("api.jl")
 

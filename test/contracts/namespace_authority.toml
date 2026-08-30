@@ -596,6 +596,16 @@ new_domain_exports = [
     "Control.ControlMatrixPlan",
     "Control.ClosedLoopCorrectionPlan",
     "Control.apply_closed_loop_correction!",
+    "Control.ControllerToVDMPlan",
+    "Control.project_controller_to_vdm!",
+    "Control.VDMToPDMPlan",
+    "Control.project_vdm_to_pdm!",
+    "Control.PDMActuatorRangePlan",
+    "Control.apply_pdm_actuator_range!",
+    "Control.PDMFeedbackToVDMPlan",
+    "Control.project_pdm_feedback_to_vdm!",
+    "Control.VDMFeedbackToControllerPlan",
+    "Control.project_vdm_feedback_to_controller!",
 ]
 new_domain_public = [
     "AlgorithmGraphs.prepared_graph_node",
@@ -631,6 +641,8 @@ new_domain_public = [
     "Control.ClosedLoopCorrectionState",
     "Control.ClosedLoopCorrectionWorkspace",
     "Control.reset_closed_loop_correction!",
+    "Control.VDMToPDMWorkspace",
+    "Control.PDMFeedbackToVDMWorkspace",
     "Backends.AbstractComputeDeviceAvailability",
     "Backends.ComputeDeviceAvailable",
     "Backends.ComputeDeviceUnavailable",
@@ -2408,6 +2420,16 @@ exports = [
     "shift_delay!",
     "ClosedLoopCorrectionPlan",
     "apply_closed_loop_correction!",
+    "ControllerToVDMPlan",
+    "project_controller_to_vdm!",
+    "VDMToPDMPlan",
+    "project_vdm_to_pdm!",
+    "PDMActuatorRangePlan",
+    "apply_pdm_actuator_range!",
+    "PDMFeedbackToVDMPlan",
+    "project_pdm_feedback_to_vdm!",
+    "VDMFeedbackToControllerPlan",
+    "project_vdm_feedback_to_controller!",
 ]
 public = [
     "controller_output",
@@ -2422,6 +2444,8 @@ public = [
     "ClosedLoopCorrectionState",
     "ClosedLoopCorrectionWorkspace",
     "reset_closed_loop_correction!",
+    "VDMToPDMWorkspace",
+    "PDMFeedbackToVDMWorkspace",
 ]
 
 [[api_allowlists]]

@@ -460,6 +460,11 @@ end
         :NullReconstructor,
         :ControlMatrixPlan,
         :ClosedLoopCorrectionPlan,
+        :ControllerToVDMPlan,
+        :VDMToPDMPlan,
+        :PDMActuatorRangePlan,
+        :PDMFeedbackToVDMPlan,
+        :VDMFeedbackToControllerPlan,
         :ModalReconstructor,
         :FactorizedReconstructor,
         :MappedReconstructor,
@@ -470,6 +475,11 @@ end
         :VectorDelayLine,
         :shift_delay!,
         :apply_closed_loop_correction!,
+        :project_controller_to_vdm!,
+        :project_vdm_to_pdm!,
+        :apply_pdm_actuator_range!,
+        :project_pdm_feedback_to_vdm!,
+        :project_vdm_feedback_to_controller!,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)
@@ -484,6 +494,8 @@ end
         :ClosedLoopCorrectionState,
         :ClosedLoopCorrectionWorkspace,
         :reset_closed_loop_correction!,
+        :VDMToPDMWorkspace,
+        :PDMFeedbackToVDMWorkspace,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)

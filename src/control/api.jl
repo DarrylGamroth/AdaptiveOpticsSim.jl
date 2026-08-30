@@ -4,6 +4,11 @@ export MappedReconstructor, ControlledReconstructor
 export reconstruct!, reconstruct
 export DiscreteIntegratorController, VectorDelayLine, shift_delay!
 export ClosedLoopCorrectionPlan, apply_closed_loop_correction!
+export ControllerToVDMPlan, project_controller_to_vdm!
+export VDMToPDMPlan, project_vdm_to_pdm!
+export PDMActuatorRangePlan, apply_pdm_actuator_range!
+export PDMFeedbackToVDMPlan, project_pdm_feedback_to_vdm!
+export VDMFeedbackToControllerPlan, project_vdm_feedback_to_controller!
 
 public controller_output
 public DiscreteIntegratorPlan, DiscreteIntegratorState, DiscreteIntegratorWorkspace
@@ -12,3 +17,4 @@ public discrete_integrator_workspace
 public reset_controller!, supports_controller_reset
 public ClosedLoopCorrectionState, ClosedLoopCorrectionWorkspace
 public reset_closed_loop_correction!
+public VDMToPDMWorkspace, PDMFeedbackToVDMWorkspace
