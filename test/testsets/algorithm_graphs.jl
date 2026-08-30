@@ -179,6 +179,45 @@ end
 
 AOG.reset_graph_node!(::GraphTestSourceOwner) = nothing
 
+@testset "graph port contracts reject execution-unsafe declarations" begin
+    @test_throws AlgorithmGraphError AOG.graph_port_contract(
+        :empty_schema,
+        :input,
+        :data,
+        Float32,
+        (1,),
+        "",
+        :column_major,
+    )
+    @test_throws AlgorithmGraphError AOG.graph_port_contract(
+        :abstract_element,
+        :input,
+        :data,
+        AbstractFloat,
+        (1,),
+        "test.graph.signal/1",
+        :column_major,
+    )
+    @test_throws AlgorithmGraphError AOG.graph_port_contract(
+        :boolean_dimension,
+        :input,
+        :data,
+        Float32,
+        (true,),
+        "test.graph.signal.f32/1",
+        :column_major,
+    )
+    @test_throws AlgorithmGraphError AOG.graph_port_contract(
+        :oversized_dimension,
+        :input,
+        :data,
+        Float32,
+        (big(typemax(Int)) + 1,),
+        "test.graph.signal.f32/1",
+        :column_major,
+    )
+end
+
 struct GraphTestExactBindingDeclaration end
 
 struct GraphTestExactBindingOwner{I,O}

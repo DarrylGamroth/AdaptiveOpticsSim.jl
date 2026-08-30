@@ -33,6 +33,9 @@ function graph_port_contract(
     layout::Symbol,
 ) where {T,N}
     _require_graph_name(name, "algorithm port")
+    isconcretetype(T) && isbitstype(T) || throw(AlgorithmGraphError(
+        "algorithm port $name element type $T must be concrete and isbits",
+    ))
     direction in (:input, :output) || throw(AlgorithmGraphError(
         "algorithm port $name has unsupported direction $direction",
     ))
@@ -41,10 +44,22 @@ function graph_port_contract(
     ))
     direction === :output && role === :parameter &&
         throw(AlgorithmGraphError("sparse parameter $name must be an input"))
-    all(>(0), shape) || throw(AlgorithmGraphError(
-        "algorithm port $name dimensions must be positive",
+    isempty(schema) && throw(AlgorithmGraphError(
+        "algorithm port $name scientific schema must not be empty",
     ))
-    converted = ntuple(index -> Int(shape[index]), Val(N))
+    converted = ntuple(Val(N)) do index
+        dimension = shape[index]
+        dimension isa Bool && throw(AlgorithmGraphError(
+            "algorithm port $name dimensions must be integers, not Bool",
+        ))
+        zero(dimension) < dimension <= typemax(Int) || throw(
+            AlgorithmGraphError(
+                "algorithm port $name dimensions must be positive and fit " *
+                "the host index range",
+            ),
+        )
+        return Int(dimension)
+    end
     format = _GraphPortFormat{T,N}(converted, String(schema), layout)
     return _GraphPortContract{name,direction,role,typeof(format)}(format)
 end
