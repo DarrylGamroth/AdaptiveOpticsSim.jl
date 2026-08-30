@@ -206,6 +206,7 @@ graph = prepare_algorithm_graph(definition; target=target)
 
 The built-in type map currently contains `ccd_detector_acquisition_f32`,
 `closed_loop_correction_f32`, `control_matrix_reconstruction_f32`,
+`deformable_mirror_surface_f32`,
 `discrete_integrator_f32`, `emccd_detector_acquisition_f32`,
 `modal_opd_expansion_f32`,
 `pyramid_rate_f32`,
@@ -223,6 +224,12 @@ complete pupil OPD. The graph converts that OPD into the configured 352-by-352
 diffractive SHWFS photon-rate mosaic and one completed noisy CCD frame for a
 transport adapter such as PipeWireAO. The RTC performs centroiding,
 reconstruction, control, and command production outside this graph.
+`deformable_mirror_surface_f32` provides the native command-to-surface seam for
+a larger direct-Julia or file-defined graph once the application supplies the
+measured actuator coordinates and influence-function matrix. It is not
+inserted into the maintained REVOLT file because no authoritative REVOLT
+influence artifact has been selected, and optical-path composition remains an
+explicit surrounding simulation operation.
 
 The maintained
 [`revolt_copper_hil.toml`](../examples/graphs/revolt_copper_hil.toml) file
@@ -258,17 +265,18 @@ Architecture-file status is therefore explicit:
 
 | Architecture | File-defined executable surface | Remaining authority or implementation gate |
 |---|---|---|
-| REVOLT Classic | The primary HIL file executes diffractive SHWFS optics and single-read CCD acquisition through the completed frame boundary. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Add atmosphere and physical-DM command application ahead of the HIL sensor boundary, then publish the frame and consume returned commands through transport adapters. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
-| REVOLT Copper | None claimed | The current Copper configuration describes operational RTC components and many alternatives, but does not provide one authoritative AOS simulation topology to transcribe |
+| REVOLT Classic | The primary HIL file executes diffractive SHWFS optics and single-read CCD acquisition through the completed frame boundary. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind the measured physical-DM model, atmosphere, and optical-path composition ahead of the HIL sensor boundary, then publish the frame and consume returned commands through transport adapters. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
+| REVOLT Copper | The primary HIL file executes the maintained modulated Pyramid optics and complete-frame EMCCD acquisition through a 64-by-64 frame boundary. | Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; bind the physical-DM model and atmosphere for an end-to-end simulation. |
 | SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
 
-Complete REVOLT Classic, REVOLT Copper, and SPIDERS files are not claimed until
-all nodes needed by those architectures are executable and scientifically
-qualified. This prevents a configuration file from becoming a catalog of
-plausible but non-running node names. Direct Julia construction remains the
-correct extension path in the meantime: an application may generate nodes,
-branch on configuration, admit a trusted Proper prescription factory, or
-compose several prepared graphs without expanding the static TOML language.
+End-to-end REVOLT Classic, REVOLT Copper, and SPIDERS simulations are not
+claimed until all nodes needed by those architectures are executable and
+scientifically qualified. This prevents a configuration file from becoming a
+catalog of plausible but non-running node names. Direct Julia construction
+remains the correct extension path in the meantime: an application may
+generate nodes, branch on configuration, admit a trusted Proper prescription
+factory, or compose several prepared graphs without expanding the static TOML
+language.
 
 ## Definition And Preparation
 

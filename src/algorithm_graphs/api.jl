@@ -9,6 +9,7 @@ export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
 export discrete_integrator_node, closed_loop_correction_node
 export modal_opd_expansion_node
+export deformable_mirror_surface_node
 export shack_hartmann_rate_node
 export pyramid_rate_node
 export ccd_detector_acquisition_node
@@ -35,6 +36,7 @@ public DiscreteIntegratorNodeProps
 public ClosedLoopCorrectionNode, ClosedLoopCorrectionNodeConfig
 public ClosedLoopCorrectionNodeProps
 public ModalOPDExpansionNode, ModalOPDExpansionNodeConfig
+public DeformableMirrorSurfaceNode, DeformableMirrorSurfaceNodeConfig
 public ShackHartmannRateNode, ShackHartmannRateNodeConfig
 public PyramidRateNode, PyramidRateNodeConfig
 public CCDDetectorAcquisitionNode, CCDDetectorAcquisitionNodeConfig

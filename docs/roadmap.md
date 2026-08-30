@@ -123,12 +123,14 @@ The delivery order for this boundary is:
    subset without changing domain numerical APIs.
 2. Extend the REVOLT Classic HIL graph upstream with atmosphere and returned
    physical-DM command application while keeping its transport boundary at the
-   completed frame. Bind the authoritative ROI-derived order to the separate
+   completed frame. The generic measured-DM surface node is available, but an
+   authoritative REVOLT influence artifact and optical-path composition still
+   need binding. Bind the authoritative ROI-derived order to the separate
    RTC-reference graph; reconstruction and the first atomic controller are
    executable there, and its next controller gate is downstream
-   constraint-feedback closure. Add complete
-   REVOLT Copper and SPIDERS files only after their authoritative topologies
-   and scientific node sets are available and qualified.
+   constraint-feedback closure. The Copper HIL sensor file now reaches its
+   complete 64-by-64 EMCCD frame boundary; add SPIDERS only after its
+   authoritative topology and scientific node set are available and qualified.
 3. Preserve direct Julia graph construction for generated, conditional, and
    multi-rate arrangements that exceed the TOML subset.
 4. Provide deterministic fixed-step and prepared-boundary model-time drivers;

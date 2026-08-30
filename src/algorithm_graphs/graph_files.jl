@@ -303,6 +303,82 @@ function _modal_opd_expansion_f32_node(
     )
 end
 
+function _deformable_mirror_surface_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :actuator_coordinates_schema,
+        :actuator_count,
+        :aperture_revision,
+        :central_obstruction_ratio,
+        :influence_functions_schema,
+        :pdm_command_schema,
+        :pupil_reflectivity,
+        :resolution,
+        :surface_opd_schema,
+        :telescope_diameter_m,
+    )
+    required_fields = (
+        :actuator_coordinates_schema,
+        :actuator_count,
+        :influence_functions_schema,
+        :pdm_command_schema,
+        :resolution,
+        :surface_opd_schema,
+        :telescope_diameter_m,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    central_obstruction_ratio = hasproperty(
+        config,
+        :central_obstruction_ratio,
+    ) ? _file_real(
+        config.central_obstruction_ratio,
+        "$context.central_obstruction_ratio",
+    ) : 0.0
+    pupil_reflectivity = hasproperty(config, :pupil_reflectivity) ?
+        _file_real(config.pupil_reflectivity, "$context.pupil_reflectivity") :
+        1.0
+    aperture_revision = hasproperty(config, :aperture_revision) ?
+        _file_integer(config.aperture_revision, "$context.aperture_revision") :
+        0
+    return deformable_mirror_surface_node(
+        name;
+        resolution=_file_integer(config.resolution, "$context.resolution"),
+        telescope_diameter_m=_file_real(
+            config.telescope_diameter_m,
+            "$context.telescope_diameter_m",
+        ),
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        actuator_count=_file_integer(
+            config.actuator_count,
+            "$context.actuator_count",
+        ),
+        pdm_command_schema=_file_string(
+            config.pdm_command_schema,
+            "$context.pdm_command_schema",
+        ),
+        surface_opd_schema=_file_string(
+            config.surface_opd_schema,
+            "$context.surface_opd_schema",
+        ),
+        actuator_coordinates_schema=_file_string(
+            config.actuator_coordinates_schema,
+            "$context.actuator_coordinates_schema",
+        ),
+        influence_functions_schema=_file_string(
+            config.influence_functions_schema,
+            "$context.influence_functions_schema",
+        ),
+        T=Float32,
+    )
+end
+
 function _shack_hartmann_rate_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -995,6 +1071,8 @@ function builtin_graph_node_types()
         closed_loop_correction_f32=_closed_loop_correction_f32_node,
         control_matrix_reconstruction_f32=
             _control_matrix_reconstruction_f32_node,
+        deformable_mirror_surface_f32=
+            _deformable_mirror_surface_f32_node,
         discrete_integrator_f32=_discrete_integrator_f32_node,
         emccd_detector_acquisition_f32=
             _emccd_detector_acquisition_f32_node,

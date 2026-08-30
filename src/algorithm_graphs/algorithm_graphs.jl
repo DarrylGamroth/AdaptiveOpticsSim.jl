@@ -9,20 +9,25 @@ execution policy.
 module AlgorithmGraphs
 
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
+using KernelAbstractions
 using Random: seed!
 using TOML
 
 import ..AdaptiveOpticsSim: AdaptiveOpticsSimError, runtime_rng
 import ..Backends:
     AbstractComputeDevice,
+    AcceleratorStyle,
     HostComputeDevice,
+    ScalarCPUStyle,
     _prepare_device_execution_context,
     _synchronize_prepared_device_execution_context!,
     _with_prepared_device_execution_context,
     allocate_device_array,
     array_backend_type,
     compute_device,
-    compute_device_backend
+    compute_device_backend,
+    execution_style,
+    launch_kernel!
 import ..Plant:
     PeriodicSchedule,
     PlantDuration,
@@ -48,18 +53,24 @@ import ..Control:
 import ..Optics:
     AngularCoordinates,
     CellIntegratedMeasure,
+    DeformableMirror,
     DetectorPlane,
     IncoherentIntensityAddition,
     IntensityMap,
+    MeasuredInfluenceFunctions,
     MonochromaticChannel,
     NormalizedPupilCoordinates,
     OpticalPlaneMetadata,
     PhotonRateNormalization,
     PupilFunction,
+    SampledActuatorTopology,
     Source,
     TelescopeDefinition,
     photon_irradiance,
-    prepare_telescope
+    prepare_telescope,
+    set_command!,
+    surface_opd,
+    update_surface!
 import ..Detectors:
     CCDSensor,
     Detector,

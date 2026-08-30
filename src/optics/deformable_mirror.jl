@@ -446,8 +446,7 @@ function _convert_dm_influence_model(model::DenseInfluenceMatrix, ::Type{T}, bac
     expected = (n * n, topology_command_count(topology))
     size(model.modes) == expected ||
         throw(DimensionMismatchError("DenseInfluenceMatrix size $(size(model.modes)) does not match expected $(expected)"))
-    modes = backend{T}(undef, expected...)
-    copyto!(modes, T.(Array(model.modes)))
+    modes = _snapshot_dm_influence_modes(model.modes, T, backend, expected)
     return DenseInfluenceMatrix{T,typeof(modes)}(modes)
 end
 
@@ -458,9 +457,23 @@ function _convert_dm_influence_model(model::MeasuredInfluenceFunctions, ::Type{T
     expected = (n * n, topology_command_count(topology))
     size(model.modes) == expected ||
         throw(DimensionMismatchError("MeasuredInfluenceFunctions size $(size(model.modes)) does not match expected $(expected)"))
-    modes = backend{T}(undef, expected...)
-    copyto!(modes, T.(Array(model.modes)))
+    modes = _snapshot_dm_influence_modes(model.modes, T, backend, expected)
     return MeasuredInfluenceFunctions{T,typeof(modes),typeof(model.metadata)}(modes, model.metadata)
+end
+
+function _snapshot_dm_influence_modes(
+    source::AbstractMatrix,
+    ::Type{T},
+    backend,
+    dimensions::Tuple{Int,Int},
+) where {T<:AbstractFloat}
+    modes = backend{T}(undef, dimensions...)
+    if compute_device(modes) == compute_device(source) && eltype(source) === T
+        copyto!(modes, source)
+    else
+        copyto!(modes, T.(Array(source)))
+    end
+    return modes
 end
 
 function _resolve_dm_influence_model(; n::Integer, topology::AbstractDMTopology,

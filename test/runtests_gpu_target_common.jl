@@ -146,6 +146,59 @@ function run_algorithm_graph_backend_smoke(
     @test compute_device(graph_output(graph, Val(:opd))) == target
     @test Array(graph_output(graph, Val(:opd))) ≈ Float32[0.5 0.0; 0.5 0.5]
 
+    pdm_command = BackendArray(Float32[2, 3])
+    actuator_coordinates = BackendArray(Float32[-0.5 0.5; 0 0])
+    influence_functions = BackendArray(Float32[
+        1 0
+        0 1
+        0 1
+        1 0
+    ])
+    dm_definition = algorithm_graph(
+        (
+            deformable_mirror_surface_node(
+                :dm;
+                resolution=2,
+                telescope_diameter_m=1.22,
+                actuator_count=2,
+                pdm_command_schema="test.graph.pdm-command.f32/1",
+                surface_opd_schema="test.graph.dm-surface-opd.f32/1",
+                actuator_coordinates_schema=
+                    "test.graph.dm-actuator-coordinates.f32/1",
+                influence_functions_schema=
+                    "test.graph.dm-influence-functions.f32/1",
+            ),
+        );
+        name=:gpu_measured_deformable_mirror,
+        inputs=(
+            graph_input(:pdm_command, :dm => :pdm_command, pdm_command),
+        ),
+        outputs=(
+            graph_output(:surface_opd, :dm => :surface_opd),
+        ),
+        parameters=(
+            sparse_parameter(
+                :dm => :actuator_coordinates,
+                actuator_coordinates,
+            ),
+            sparse_parameter(
+                :dm => :influence_functions,
+                influence_functions,
+            ),
+        ),
+    )
+    dm_graph = prepare_algorithm_graph(dm_definition; target)
+    step_graph!(dm_graph)
+    dm_owner = prepared_graph_node(dm_graph, Val(:dm))
+    dm_surface = graph_output(dm_graph, Val(:surface_opd))
+    @test compute_device(
+        influence_model(dm_owner.deformable_mirror).modes,
+    ) == target
+    @test influence_model(dm_owner.deformable_mirror).modes !==
+        influence_functions
+    @test compute_device(dm_surface) == target
+    @test Array(dm_surface) == Float32[2 3; 3 2]
+
     pyramid_opd = BackendArray(zeros(Float32, 8, 8))
     pyramid_target = compute_device(pyramid_opd)
     pyramid_definition = algorithm_graph(

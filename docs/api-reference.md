@@ -1851,7 +1851,11 @@ the canonical representation of these results.
   scientific module. `discrete_integrator_node` calls `Control.update!` with a
   separate plan, state, and workspace. `modal_opd_expansion_node` calls
   `Calibration.combine_basis!` with a `ModalOPDExpansionPlan` prepared from
-  explicit basis and pupil-support parameters.
+  explicit basis and pupil-support parameters. A
+  `deformable_mirror_surface_node` consumes a complete PDM command and calls
+  `Optics.set_command!` plus `Optics.update_surface!` on a native
+  `DeformableMirror` prepared from explicit measured actuator coordinates and
+  influence-function parameters; it does not invent a physical DM model.
   `control_matrix_reconstruction_node` calls `Control.reconstruct!` with a
   `ControlMatrixPlan` prepared from an explicit dense matrix parameter. A
   `closed_loop_correction_node` owns its exact correction state and workspace,

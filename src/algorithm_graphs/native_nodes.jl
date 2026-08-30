@@ -519,6 +519,278 @@ end
 
 @inline reset_graph_node!(::_ModalOPDExpansionOwner) = nothing
 
+struct DeformableMirrorSurfaceNode{T<:AbstractFloat} end
+
+"""Construction values for one measured deformable-mirror surface node."""
+struct DeformableMirrorSurfaceNodeConfig{TD,AM}
+    telescope::TD
+    actuator_count::Int
+    actuator_model::AM
+    pdm_command_schema::String
+    surface_opd_schema::String
+    actuator_coordinates_schema::String
+    influence_functions_schema::String
+end
+
+function _deformable_mirror_surface_config(
+    ::Type{T};
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    central_obstruction_ratio::Real,
+    pupil_reflectivity::Real,
+    aperture_revision::Integer,
+    actuator_count::Integer,
+    actuator_model,
+    pdm_command_schema::AbstractString,
+    surface_opd_schema::AbstractString,
+    actuator_coordinates_schema::AbstractString,
+    influence_functions_schema::AbstractString,
+) where {T<:AbstractFloat}
+    count = Int(actuator_count)
+    count > 0 || throw(AlgorithmGraphError(
+        "deformable-mirror actuator_count must be greater than zero",
+    ))
+    schemas = (
+        pdm_command_schema,
+        surface_opd_schema,
+        actuator_coordinates_schema,
+        influence_functions_schema,
+    )
+    all(schema -> !isempty(schema), schemas) || throw(AlgorithmGraphError(
+        "deformable-mirror scientific schemas must not be empty",
+    ))
+    telescope = try
+        TelescopeDefinition(
+            resolution=Int(resolution),
+            diameter=telescope_diameter_m,
+            central_obstruction=central_obstruction_ratio,
+            pupil_reflectivity=pupil_reflectivity,
+            revision=Int(aperture_revision),
+            T=T,
+        )
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+    return DeformableMirrorSurfaceNodeConfig(
+        telescope,
+        count,
+        actuator_model,
+        String(pdm_command_schema),
+        String(surface_opd_schema),
+        String(actuator_coordinates_schema),
+        String(influence_functions_schema),
+    )
+end
+
+"""
+    deformable_mirror_surface_node(name; resolution, telescope_diameter_m,
+                                   actuator_count, pdm_command_schema,
+                                   surface_opd_schema,
+                                   actuator_coordinates_schema,
+                                   influence_functions_schema, ...)
+
+Declare one complete-command physical deformable-mirror operation. The graph
+supplies sampled actuator coordinates and calibrated influence functions as
+startup sparse parameters. Each step applies the complete PDM command through
+the native [`DeformableMirror`](@ref) implementation and publishes one complete
+surface OPD. No actuator layout or influence width is inferred.
+
+The default actuator response is the native linear static response. Direct
+Julia construction may supply an explicit native `actuator_model`; the
+maintained TOML factory deliberately keeps that choice out of configuration
+until a typed file representation is defined.
+"""
+function deformable_mirror_surface_node(
+    name::Symbol;
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    actuator_count::Integer,
+    pdm_command_schema::AbstractString,
+    surface_opd_schema::AbstractString,
+    actuator_coordinates_schema::AbstractString,
+    influence_functions_schema::AbstractString,
+    central_obstruction_ratio::Real=0,
+    pupil_reflectivity::Real=1,
+    aperture_revision::Integer=0,
+    actuator_model=nothing,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _deformable_mirror_surface_config(
+        T;
+        resolution,
+        telescope_diameter_m,
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        actuator_count,
+        actuator_model,
+        pdm_command_schema,
+        surface_opd_schema,
+        actuator_coordinates_schema,
+        influence_functions_schema,
+    )
+    return algorithm_node(
+        name,
+        DeformableMirrorSurfaceNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{DeformableMirrorSurfaceNode{T}},
+    config::DeformableMirrorSurfaceNodeConfig,
+) where {T}
+    resolution = config.telescope.resolution
+    return (
+        graph_port_contract(
+            :pdm_command,
+            :input,
+            :data,
+            T,
+            (config.actuator_count,),
+            config.pdm_command_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :surface_opd,
+            :output,
+            :data,
+            T,
+            (resolution, resolution),
+            config.surface_opd_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :actuator_coordinates,
+            :input,
+            :parameter,
+            T,
+            (2, config.actuator_count),
+            config.actuator_coordinates_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :influence_functions,
+            :input,
+            :parameter,
+            T,
+            (resolution * resolution, config.actuator_count),
+            config.influence_functions_schema,
+            :column_major,
+        ),
+    )
+end
+
+struct _DeformableMirrorSurfaceOwner{DM,Command,Output}
+    deformable_mirror::DM
+    pdm_command::Command
+    output::Output
+end
+
+@kernel function _count_nonfinite_graph_values_kernel!(count, values, n::Int)
+    index = @index(Global, Linear)
+    if index <= n && !isfinite(@inbounds(values[index]))
+        @inbounds KernelAbstractions.@atomic count[1] = UInt32(1)
+    end
+end
+
+function _require_finite_graph_values(
+    ::ScalarCPUStyle,
+    values::AbstractArray,
+    role::AbstractString,
+)
+    all(isfinite, values) || throw(AlgorithmGraphError("$role must be finite"))
+    return nothing
+end
+
+function _require_finite_graph_values(
+    style::AcceleratorStyle,
+    values::AbstractArray,
+    role::AbstractString,
+)
+    nonfinite_count = similar(values, UInt32, 1)
+    fill!(nonfinite_count, UInt32(0))
+    launch_kernel!(
+        style,
+        _count_nonfinite_graph_values_kernel!,
+        nonfinite_count,
+        values,
+        length(values);
+        ndrange=length(values),
+    )
+    host_count = Vector{UInt32}(undef, 1)
+    copyto!(host_count, nonfinite_count)
+    iszero(only(host_count)) || throw(AlgorithmGraphError(
+        "$role must be finite",
+    ))
+    return nothing
+end
+
+@inline function _require_finite_graph_values(
+    values::AbstractArray,
+    role::AbstractString,
+)
+    return _require_finite_graph_values(execution_style(values), values, role)
+end
+
+function prepare_graph_node(
+    ::Type{DeformableMirrorSurfaceNode{T}},
+    config::DeformableMirrorSurfaceNodeConfig,
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:pdm_command,)},
+    outputs::NamedTuple{(:surface_opd,)},
+    parameters::NamedTuple{(:actuator_coordinates,:influence_functions)},
+    target,
+) where {T}
+    actuator_coordinates = Array(parameters.actuator_coordinates)
+    all(isfinite, actuator_coordinates) || throw(AlgorithmGraphError(
+        "deformable-mirror actuator coordinates must be finite",
+    ))
+    _require_finite_graph_values(
+        parameters.influence_functions,
+        "deformable-mirror influence functions",
+    )
+    topology = SampledActuatorTopology(actuator_coordinates; T=T)
+    metadata = (schema=config.influence_functions_schema,)
+    influence_model = MeasuredInfluenceFunctions{
+        T,
+        typeof(parameters.influence_functions),
+        typeof(metadata),
+    }(
+        parameters.influence_functions,
+        metadata,
+    )
+    telescope = prepare_telescope(config.telescope, target)
+    deformable_mirror = DeformableMirror(
+        telescope;
+        topology,
+        influence_model,
+        actuator_model=config.actuator_model,
+        T=T,
+        backend=compute_device_backend(target),
+    )
+    return _DeformableMirrorSurfaceOwner(
+        deformable_mirror,
+        inputs.pdm_command,
+        outputs.surface_opd,
+    )
+end
+
+@inline function step_graph_node!(owner::_DeformableMirrorSurfaceOwner)
+    set_command!(owner.deformable_mirror, owner.pdm_command)
+    update_surface!(owner.deformable_mirror)
+    copyto!(owner.output, surface_opd(owner.deformable_mirror))
+    return nothing
+end
+
+@inline function reset_graph_node!(owner::_DeformableMirrorSurfaceOwner)
+    fill!(surface_opd(owner.deformable_mirror), zero(eltype(owner.output)))
+    fill!(owner.output, zero(eltype(owner.output)))
+    return nothing
+end
+
 struct ShackHartmannRateNode{T<:AbstractFloat} end
 
 """Construction values for one diffractive Shack–Hartmann photon-rate node."""

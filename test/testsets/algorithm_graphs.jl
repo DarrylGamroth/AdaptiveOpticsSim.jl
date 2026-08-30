@@ -520,6 +520,106 @@ end
     @test graph_output(graph, Val(:command)) ≈ Float32[0.1, 0.2]
 end
 
+@testset "measured deformable-mirror surface graph node" begin
+    pdm_command = Float32[2, -3]
+    actuator_coordinates = Float32[-0.5 0.5; 0 0]
+    influence_functions = Float32[
+        1 0
+        0 1
+        0 1
+        1 0
+    ]
+    node = deformable_mirror_surface_node(
+        :dm;
+        resolution=2,
+        telescope_diameter_m=1.22,
+        actuator_count=2,
+        actuator_model=ClippedActuators(-1.0f0, 1.0f0),
+        pdm_command_schema="test.graph.pdm-command.f32/1",
+        surface_opd_schema="test.graph.dm-surface-opd.f32/1",
+        actuator_coordinates_schema=
+            "test.graph.dm-actuator-coordinates.f32/1",
+        influence_functions_schema=
+            "test.graph.dm-influence-functions.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:measured_deformable_mirror,
+        inputs=(
+            graph_input(:pdm_command, :dm => :pdm_command, pdm_command),
+        ),
+        outputs=(
+            graph_output(:surface_opd, :dm => :surface_opd),
+        ),
+        parameters=(
+            sparse_parameter(
+                :dm => :actuator_coordinates,
+                actuator_coordinates,
+            ),
+            sparse_parameter(
+                :dm => :influence_functions,
+                influence_functions,
+            ),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:dm))
+    output = graph_output(graph, Val(:surface_opd))
+
+    @test owner.pdm_command === pdm_command
+    @test owner.output === output
+    @test influence_model(owner.deformable_mirror).modes !==
+        influence_functions
+    @test influence_model(owner.deformable_mirror).modes ==
+        influence_functions
+    @test @inferred(step_graph!(graph)) === graph
+    @test output == Float32[1 -1; -1 1]
+    pdm_command .= Float32[0.25, 0.5]
+    step_graph!(graph)
+    @test output == Float32[0.25 0.5; 0.5 0.25]
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+
+    reset_graph!(graph)
+    @test all(iszero, output)
+    step_graph!(graph)
+    @test output == Float32[0.25 0.5; 0.5 0.25]
+
+    @test_throws AlgorithmGraphError deformable_mirror_surface_node(
+        :invalid_dm;
+        resolution=2,
+        telescope_diameter_m=1.22,
+        actuator_count=0,
+        pdm_command_schema="test.graph.pdm-command.f32/1",
+        surface_opd_schema="test.graph.dm-surface-opd.f32/1",
+        actuator_coordinates_schema=
+            "test.graph.dm-actuator-coordinates.f32/1",
+        influence_functions_schema=
+            "test.graph.dm-influence-functions.f32/1",
+    )
+
+    nonfinite_influence_functions = copy(influence_functions)
+    nonfinite_influence_functions[1] = NaN32
+    invalid_definition = algorithm_graph(
+        (node,);
+        inputs=(
+            graph_input(:pdm_command, :dm => :pdm_command, pdm_command),
+        ),
+        parameters=(
+            sparse_parameter(
+                :dm => :actuator_coordinates,
+                actuator_coordinates,
+            ),
+            sparse_parameter(
+                :dm => :influence_functions,
+                nonfinite_influence_functions,
+            ),
+        ),
+    )
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(
+        invalid_definition,
+    )
+end
+
 @testset "diffractive Shack-Hartmann photon-rate graph node" begin
     pupil_opd = zeros(Float32, 16, 16)
     node = shack_hartmann_rate_node(
@@ -1122,6 +1222,7 @@ end
         :ccd_detector_acquisition_f32,
         :closed_loop_correction_f32,
         :control_matrix_reconstruction_f32,
+        :deformable_mirror_surface_f32,
         :discrete_integrator_f32,
         :emccd_detector_acquisition_f32,
         :modal_opd_expansion_f32,
@@ -1187,6 +1288,35 @@ end
         step_graph!(custom)
         @test graph_output(custom, Val(:sample)) == Float32[7, 7]
     end
+end
+
+@testset "TOML graph binds a measured deformable mirror" begin
+    pdm_command = Float32[2, 3]
+    actuator_coordinates = Float32[-0.5 0.5; 0 0]
+    influence_functions = Float32[
+        1 0
+        0 1
+        0 1
+        1 0
+    ]
+    path = joinpath(
+        dirname(@__DIR__),
+        "graph_files",
+        "measured_deformable_mirror.toml",
+    )
+    definition = load_algorithm_graph(
+        path;
+        bindings=(;
+            pdm_command,
+            actuator_coordinates,
+            influence_functions,
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    step_graph!(graph)
+    @test graph_output(graph, Val(:surface_opd)) == Float32[2 3; 3 2]
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
 end
 
 
