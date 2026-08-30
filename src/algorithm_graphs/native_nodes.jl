@@ -1701,25 +1701,26 @@ struct CCDDetectorAcquisitionNodeConfig{T<:AbstractFloat,N<:NoiseModel}
     frame_schema::String
 end
 
-@inline function _ccd_detector_noise(
+@inline function _frame_detector_noise(
     ::Type{T},
+    detector_name::AbstractString,
     photon_noise::Bool,
     readout_noise::Bool,
     readout_noise_e::Real,
 ) where {T<:AbstractFloat}
     sigma = T(readout_noise_e)
     isfinite(sigma) && sigma >= zero(T) || throw(AlgorithmGraphError(
-        "CCD readout_noise_e must be finite and nonnegative",
+        "$detector_name readout_noise_e must be finite and nonnegative",
     ))
     if readout_noise
         sigma > zero(T) || throw(AlgorithmGraphError(
-            "CCD readout_noise_e must be positive when readout noise is enabled",
+            "$detector_name readout_noise_e must be positive when readout noise is enabled",
         ))
         return photon_noise ? NoisePhotonReadout{T}(sigma) :
             NoiseReadout{T}(sigma)
     end
     iszero(sigma) || throw(AlgorithmGraphError(
-        "CCD readout_noise_e must be zero when readout noise is disabled",
+        "$detector_name readout_noise_e must be zero when readout noise is disabled",
     ))
     return photon_noise ? NoisePhoton() : NoiseNone()
 end
@@ -1787,8 +1788,9 @@ function _ccd_detector_acquisition_config(
         "CCD frame_schema must not be empty",
     ))
 
-    noise = _ccd_detector_noise(
+    noise = _frame_detector_noise(
         T,
+        "CCD",
         photon_noise,
         readout_noise,
         readout_noise_e,
@@ -1885,7 +1887,7 @@ function graph_node_ports(
     )
 end
 
-struct _CCDDetectorAcquisitionOwner{P,R,O,A}
+struct _FrameDetectorAcquisitionOwner{P,R,O,A}
     prepared::P
     rng::R
     output::O
@@ -1935,7 +1937,7 @@ function prepare_graph_node(
         ))
     rng = runtime_rng(config.rng_seed)
     state = detector_acquisition_state(prepared)
-    return _CCDDetectorAcquisitionOwner(
+    return _FrameDetectorAcquisitionOwner(
         prepared,
         rng,
         outputs.frame,
@@ -1944,13 +1946,13 @@ function prepare_graph_node(
     )
 end
 
-@inline function step_graph_node!(owner::_CCDDetectorAcquisitionOwner)
+@inline function step_graph_node!(owner::_FrameDetectorAcquisitionOwner)
     frame = capture!(owner.prepared, owner.rng)
     copyto!(owner.output, frame)
     return nothing
 end
 
-function reset_graph_node!(owner::_CCDDetectorAcquisitionOwner)
+function reset_graph_node!(owner::_FrameDetectorAcquisitionOwner)
     detector = detector_acquisition_detector(owner.prepared)
     reset_integration!(detector)
     fill!(owner.latent_buffer, zero(eltype(owner.latent_buffer)))
@@ -1958,4 +1960,344 @@ function reset_graph_node!(owner::_CCDDetectorAcquisitionOwner)
     fill!(owner.output, zero(eltype(owner.output)))
     seed!(owner.rng, owner.rng_seed)
     return nothing
+end
+
+struct EMCCDDetectorAcquisitionNode{T<:AbstractFloat} end
+
+"""Construction values for one complete-frame linear-mode EMCCD acquisition."""
+struct EMCCDDetectorAcquisitionNodeConfig{
+    T<:AbstractFloat,
+    N<:NoiseModel,
+}
+    rows::Int
+    columns::Int
+    binning::Int
+    normalized_pupil_sampling::T
+    wavelength_m::T
+    exposure_duration_s::T
+    quantum_efficiency::T
+    gain::T
+    dark_current_e_per_pixel_s::T
+    bits::Union{Nothing,Int}
+    full_well_e::Union{Nothing,T}
+    noise::N
+    excess_noise_factor::T
+    clock_induced_charge_e_per_pixel_frame::T
+    register_full_well_e::Union{Nothing,T}
+    em_gain_range::Tuple{T,T}
+    rng_seed::UInt64
+    photon_rate_schema::String
+    frame_schema::String
+end
+
+function _emccd_detector_acquisition_config(
+    ::Type{T};
+    rows::Integer,
+    columns::Integer,
+    binning::Integer,
+    normalized_pupil_sampling::Real,
+    wavelength_m::Real,
+    exposure_duration_s::Real,
+    quantum_efficiency::Real,
+    gain::Real,
+    dark_current_e_per_pixel_s::Real,
+    bits::Union{Nothing,Integer},
+    full_well_e::Union{Nothing,Real},
+    photon_noise::Bool,
+    readout_noise::Bool,
+    readout_noise_e::Real,
+    excess_noise_factor::Real,
+    clock_induced_charge_e_per_pixel_frame::Real,
+    register_full_well_e::Union{Nothing,Real},
+    em_gain_min::Real,
+    em_gain_max::Real,
+    rng_seed::Integer,
+    photon_rate_schema::AbstractString,
+    frame_schema::AbstractString,
+) where {T<:AbstractFloat}
+    n_rows = Int(rows)
+    n_columns = Int(columns)
+    bin = Int(binning)
+    output_bits = isnothing(bits) ? nothing : Int(bits)
+    n_rows > 0 && n_columns > 0 || throw(AlgorithmGraphError(
+        "EMCCD photon-rate dimensions must be positive",
+    ))
+    bin > 0 || throw(AlgorithmGraphError(
+        "EMCCD binning must be positive",
+    ))
+    n_rows % bin == 0 && n_columns % bin == 0 || throw(
+        AlgorithmGraphError(
+            "EMCCD photon-rate dimensions must be divisible by binning",
+        ),
+    )
+    isnothing(output_bits) || 1 <= output_bits <= 64 || throw(
+        AlgorithmGraphError("EMCCD bits must lie in 1:64"),
+    )
+    isnothing(output_bits) || !isnothing(full_well_e) || throw(
+        AlgorithmGraphError("EMCCD bits requires full_well_e"),
+    )
+
+    sampling = T(normalized_pupil_sampling)
+    wavelength = T(wavelength_m)
+    exposure = T(exposure_duration_s)
+    qe = T(quantum_efficiency)
+    em_gain = T(gain)
+    dark_current = T(dark_current_e_per_pixel_s)
+    full_well = isnothing(full_well_e) ? nothing : T(full_well_e)
+    excess_noise = T(excess_noise_factor)
+    cic = T(clock_induced_charge_e_per_pixel_frame)
+    register_full_well = isnothing(register_full_well_e) ? nothing :
+        T(register_full_well_e)
+    gain_range = (T(em_gain_min), T(em_gain_max))
+
+    isfinite(sampling) && sampling > zero(T) || throw(AlgorithmGraphError(
+        "EMCCD normalized_pupil_sampling must be finite and positive",
+    ))
+    isfinite(wavelength) && wavelength > zero(T) || throw(
+        AlgorithmGraphError(
+            "EMCCD wavelength_m must be finite and positive",
+        ),
+    )
+    isfinite(exposure) && exposure > zero(T) || throw(AlgorithmGraphError(
+        "EMCCD exposure_duration_s must be finite and positive",
+    ))
+    isfinite(qe) && zero(T) <= qe <= one(T) || throw(AlgorithmGraphError(
+        "EMCCD quantum_efficiency must lie in [0, 1]",
+    ))
+    isfinite(em_gain) && em_gain > zero(T) || throw(AlgorithmGraphError(
+        "EMCCD gain must be finite and positive",
+    ))
+    isfinite(dark_current) && dark_current >= zero(T) || throw(
+        AlgorithmGraphError(
+            "EMCCD dark_current_e_per_pixel_s must be finite and nonnegative",
+        ),
+    )
+    isnothing(full_well) || isfinite(full_well) && full_well > zero(T) ||
+        throw(AlgorithmGraphError(
+            "EMCCD full_well_e must be finite and positive",
+        ))
+    isfinite(excess_noise) && excess_noise >= one(T) || throw(
+        AlgorithmGraphError(
+            "EMCCD excess_noise_factor must be finite and at least one",
+        ),
+    )
+    isfinite(cic) && cic >= zero(T) || throw(AlgorithmGraphError(
+        "EMCCD clock-induced charge must be finite and nonnegative",
+    ))
+    isnothing(register_full_well) ||
+        isfinite(register_full_well) && register_full_well > zero(T) ||
+        throw(AlgorithmGraphError(
+            "EMCCD register_full_well_e must be finite and positive",
+        ))
+    isfinite(gain_range[1]) && gain_range[1] > zero(T) || throw(
+        AlgorithmGraphError(
+            "EMCCD em_gain_min must be finite and positive",
+        ),
+    )
+    !isnan(gain_range[2]) && gain_range[2] >= gain_range[1] || throw(
+        AlgorithmGraphError(
+            "EMCCD em_gain_max must be at least em_gain_min",
+        ),
+    )
+    gain_range[1] <= em_gain <= gain_range[2] || throw(
+        AlgorithmGraphError("EMCCD gain must lie in its EM gain range"),
+    )
+    rng_seed >= 0 || throw(AlgorithmGraphError(
+        "EMCCD rng_seed must be nonnegative",
+    ))
+    rng_seed <= typemax(UInt64) || throw(AlgorithmGraphError(
+        "EMCCD rng_seed exceeds UInt64",
+    ))
+    isempty(photon_rate_schema) && throw(AlgorithmGraphError(
+        "EMCCD photon_rate_schema must not be empty",
+    ))
+    isempty(frame_schema) && throw(AlgorithmGraphError(
+        "EMCCD frame_schema must not be empty",
+    ))
+
+    noise = _frame_detector_noise(
+        T,
+        "EMCCD",
+        photon_noise,
+        readout_noise,
+        readout_noise_e,
+    )
+    return EMCCDDetectorAcquisitionNodeConfig(
+        n_rows,
+        n_columns,
+        bin,
+        sampling,
+        wavelength,
+        exposure,
+        qe,
+        em_gain,
+        dark_current,
+        output_bits,
+        full_well,
+        noise,
+        excess_noise,
+        cic,
+        register_full_well,
+        gain_range,
+        UInt64(rng_seed),
+        String(photon_rate_schema),
+        String(frame_schema),
+    )
+end
+
+"""
+    emccd_detector_acquisition_node(name; ...)
+
+Declare one complete-frame linear-mode EMCCD acquisition. The node consumes a
+cell-integrated four-pupil photon-rate frame and writes a detector frame. Its
+RNG is explicit persistent state and is restored by `reset_graph!`.
+
+Frame-transfer timing and readout readiness remain Plant operations; this node
+performs one complete sequential acquisition per graph step.
+"""
+function emccd_detector_acquisition_node(
+    name::Symbol;
+    rows::Integer,
+    columns::Integer,
+    normalized_pupil_sampling::Real,
+    wavelength_m::Real,
+    exposure_duration_s::Real,
+    quantum_efficiency::Real,
+    rng_seed::Integer,
+    photon_rate_schema::AbstractString,
+    frame_schema::AbstractString,
+    binning::Integer=1,
+    gain::Real=1,
+    dark_current_e_per_pixel_s::Real=0,
+    bits::Union{Nothing,Integer}=nothing,
+    full_well_e::Union{Nothing,Real}=nothing,
+    photon_noise::Bool=true,
+    readout_noise::Bool=false,
+    readout_noise_e::Real=0,
+    excess_noise_factor::Real=1,
+    clock_induced_charge_e_per_pixel_frame::Real=0,
+    register_full_well_e::Union{Nothing,Real}=nothing,
+    em_gain_min::Real=1,
+    em_gain_max::Real=Inf,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _emccd_detector_acquisition_config(
+        T;
+        rows,
+        columns,
+        binning,
+        normalized_pupil_sampling,
+        wavelength_m,
+        exposure_duration_s,
+        quantum_efficiency,
+        gain,
+        dark_current_e_per_pixel_s,
+        bits,
+        full_well_e,
+        photon_noise,
+        readout_noise,
+        readout_noise_e,
+        excess_noise_factor,
+        clock_induced_charge_e_per_pixel_frame,
+        register_full_well_e,
+        em_gain_min,
+        em_gain_max,
+        rng_seed,
+        photon_rate_schema,
+        frame_schema,
+    )
+    return algorithm_node(
+        name,
+        EMCCDDetectorAcquisitionNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{EMCCDDetectorAcquisitionNode{T}},
+    config::EMCCDDetectorAcquisitionNodeConfig{T},
+) where {T}
+    return (
+        graph_port_contract(
+            :photon_rate,
+            :input,
+            :data,
+            T,
+            (config.rows, config.columns),
+            config.photon_rate_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :frame,
+            :output,
+            :data,
+            T,
+            (div(config.rows, config.binning),
+                div(config.columns, config.binning)),
+            config.frame_schema,
+            :column_major,
+        ),
+    )
+end
+
+function prepare_graph_node(
+    ::Type{EMCCDDetectorAcquisitionNode{T}},
+    config::EMCCDDetectorAcquisitionNodeConfig{T},
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:photon_rate,)},
+    outputs::NamedTuple{(:frame,)},
+    ::NamedTuple{()},
+    target,
+) where {T}
+    metadata = OpticalPlaneMetadata(
+        DetectorPlane(),
+        inputs.photon_rate;
+        coordinate_domain=NormalizedPupilCoordinates(),
+        sampling=(config.normalized_pupil_sampling,
+            config.normalized_pupil_sampling),
+        spectral=MonochromaticChannel(config.wavelength_m),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition(),
+    )
+    photon_rate = IntensityMap(metadata, inputs.photon_rate)
+    sensor = EMCCDSensor(
+        excess_noise_factor=config.excess_noise_factor,
+        clock_induced_charge_per_frame=
+            config.clock_induced_charge_e_per_pixel_frame,
+        register_full_well=config.register_full_well_e,
+        em_gain_range=config.em_gain_range,
+        T=T,
+    )
+    detector = Detector(
+        exposure_duration=config.exposure_duration_s,
+        qe=config.quantum_efficiency,
+        psf_sampling=1,
+        binning=config.binning,
+        noise=config.noise,
+        gain=config.gain,
+        dark_current=config.dark_current_e_per_pixel_s,
+        bits=config.bits,
+        full_well=config.full_well_e,
+        sensor=sensor,
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=compute_device_backend(target),
+    )
+    prepared = prepare_detector_acquisition(detector, photon_rate)
+    size(output_frame(detector)) == size(outputs.frame) || throw(
+        AlgorithmGraphError(
+            "prepared EMCCD output shape does not match its graph frame port",
+        ),
+    )
+    rng = runtime_rng(config.rng_seed)
+    state = detector_acquisition_state(prepared)
+    return _FrameDetectorAcquisitionOwner(
+        prepared,
+        rng,
+        outputs.frame,
+        state.latent_buffer,
+        config.rng_seed,
+    )
 end

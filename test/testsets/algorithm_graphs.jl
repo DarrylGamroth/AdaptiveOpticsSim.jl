@@ -727,6 +727,75 @@ end
     )
 end
 
+@testset "complete-frame EMCCD detector-acquisition graph node" begin
+    photon_rate = fill(1_000.0f0, 4, 4)
+    node = emccd_detector_acquisition_node(
+        :detector;
+        rows=4,
+        columns=4,
+        normalized_pupil_sampling=0.05,
+        wavelength_m=0.55e-6,
+        exposure_duration_s=0.01,
+        quantum_efficiency=0.95,
+        gain=1,
+        dark_current_e_per_pixel_s=20,
+        bits=14,
+        full_well_e=16_000,
+        photon_noise=true,
+        readout_noise=true,
+        readout_noise_e=1,
+        rng_seed=0x2234,
+        photon_rate_schema="test.graph.pwfs-photon-rate.f32/1",
+        frame_schema="test.graph.pwfs-frame.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:emccd_detector_acquisition,
+        inputs=(
+            graph_input(
+                :photon_rate,
+                :detector => :photon_rate,
+                photon_rate,
+            ),
+        ),
+        outputs=(graph_output(:frame, :detector => :frame),),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:detector))
+    frame = graph_output(graph, Val(:frame))
+
+    @test owner.prepared.input.values === photon_rate
+    @test owner.output === frame
+    @test size(frame) == (4, 4)
+    step_graph!(graph)
+    first_frame = copy(frame)
+    @test all(isfinite, frame)
+    @test sum(frame) > 0
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+    @test frame != first_frame
+    reset_graph!(graph)
+    @test all(iszero, frame)
+    step_graph!(graph)
+    @test frame == first_frame
+
+    @test_throws AlgorithmGraphError emccd_detector_acquisition_node(
+        :invalid_detector;
+        rows=4,
+        columns=4,
+        normalized_pupil_sampling=0.05,
+        wavelength_m=0.55e-6,
+        exposure_duration_s=0.01,
+        quantum_efficiency=0.95,
+        gain=10,
+        em_gain_min=1,
+        em_gain_max=5,
+        rng_seed=1,
+        photon_rate_schema="test.graph.pwfs-photon-rate.f32/1",
+        frame_schema="test.graph.pwfs-frame.f32/1",
+    )
+end
+
 @testset "calibrated Shack-Hartmann centroid graph node" begin
     frame = zeros(Float32, 4, 4)
     frame[1, 2] = 1
@@ -1054,6 +1123,7 @@ end
         :closed_loop_correction_f32,
         :control_matrix_reconstruction_f32,
         :discrete_integrator_f32,
+        :emccd_detector_acquisition_f32,
         :modal_opd_expansion_f32,
         :pyramid_rate_f32,
         :shack_hartmann_centroid_f32,

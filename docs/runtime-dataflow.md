@@ -206,7 +206,7 @@ graph = prepare_algorithm_graph(definition; target=target)
 
 The built-in type map currently contains `ccd_detector_acquisition_f32`,
 `closed_loop_correction_f32`, `control_matrix_reconstruction_f32`,
-`discrete_integrator_f32`,
+`discrete_integrator_f32`, `emccd_detector_acquisition_f32`,
 `modal_opd_expansion_f32`,
 `pyramid_rate_f32`,
 `shack_hartmann_centroid_f32`, `shack_hartmann_rate_f32`, and

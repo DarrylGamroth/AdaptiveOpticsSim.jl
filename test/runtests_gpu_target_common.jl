@@ -165,11 +165,32 @@ function run_algorithm_graph_backend_smoke(
                 photon_rate_schema=
                     "test.graph.pwfs-photon-rate.f32/1",
             ),
+            emccd_detector_acquisition_node(
+                :pwfs_detector;
+                rows=12,
+                columns=12,
+                normalized_pupil_sampling=0.25,
+                wavelength_m=0.55e-6,
+                exposure_duration_s=0.5,
+                quantum_efficiency=0.5,
+                rng_seed=0x800,
+                photon_noise=false,
+                photon_rate_schema=
+                    "test.graph.pwfs-photon-rate.f32/1",
+                frame_schema="test.graph.pwfs-frame.f32/1",
+            ),
         );
         name=:gpu_pwfs,
         inputs=(graph_input(:pupil_opd, :pwfs => :opd, pyramid_opd),),
         outputs=(
             graph_output(:pwfs_photon_rate, :pwfs => :photon_rate),
+            graph_output(:pwfs_frame, :pwfs_detector => :frame),
+        ),
+        links=(
+            link(
+                :pwfs => :photon_rate,
+                :pwfs_detector => :photon_rate,
+            ),
         ),
     )
     pyramid_graph = prepare_algorithm_graph(
@@ -178,9 +199,13 @@ function run_algorithm_graph_backend_smoke(
     )
     step_graph!(pyramid_graph)
     pyramid_rate = graph_output(pyramid_graph, Val(:pwfs_photon_rate))
+    pyramid_frame = graph_output(pyramid_graph, Val(:pwfs_frame))
     @test compute_device(pyramid_rate) == pyramid_target
+    @test compute_device(pyramid_frame) == pyramid_target
     @test size(pyramid_rate) == (12, 12)
+    @test size(pyramid_frame) == (12, 12)
     @test sum(Array(pyramid_rate)) > 0
+    @test sum(Array(pyramid_frame)) ≈ sum(Array(pyramid_rate)) * 0.25f0
 
     pupil_opd = BackendArray(zeros(Float32, 16, 16))
     shwfs_target = compute_device(pupil_opd)

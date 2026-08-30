@@ -693,6 +693,139 @@ function _ccd_detector_acquisition_f32_node(
     )
 end
 
+function _emccd_detector_acquisition_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :binning,
+        :bits,
+        :clock_induced_charge_e_per_pixel_frame,
+        :columns,
+        :dark_current_e_per_pixel_s,
+        :em_gain_max,
+        :em_gain_min,
+        :excess_noise_factor,
+        :exposure_duration_s,
+        :frame_schema,
+        :full_well_e,
+        :gain,
+        :normalized_pupil_sampling,
+        :photon_noise,
+        :photon_rate_schema,
+        :quantum_efficiency,
+        :readout_noise,
+        :readout_noise_e,
+        :register_full_well_e,
+        :rng_seed,
+        :rows,
+        :wavelength_m,
+    )
+    required_fields = (
+        :columns,
+        :exposure_duration_s,
+        :frame_schema,
+        :normalized_pupil_sampling,
+        :photon_rate_schema,
+        :quantum_efficiency,
+        :rng_seed,
+        :rows,
+        :wavelength_m,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+
+    binning = hasproperty(config, :binning) ? _file_integer(
+        config.binning,
+        "$context.binning",
+    ) : 1
+    gain = hasproperty(config, :gain) ?
+        _file_real(config.gain, "$context.gain") : 1.0
+    dark_current = hasproperty(config, :dark_current_e_per_pixel_s) ?
+        _file_real(
+            config.dark_current_e_per_pixel_s,
+            "$context.dark_current_e_per_pixel_s",
+        ) : 0.0
+    bits = hasproperty(config, :bits) ?
+        _file_integer(config.bits, "$context.bits") : nothing
+    full_well = hasproperty(config, :full_well_e) ?
+        _file_real(config.full_well_e, "$context.full_well_e") : nothing
+    photon_noise = hasproperty(config, :photon_noise) ?
+        _file_bool(config.photon_noise, "$context.photon_noise") : true
+    readout_noise = hasproperty(config, :readout_noise) ?
+        _file_bool(config.readout_noise, "$context.readout_noise") : false
+    readout_noise_e = hasproperty(config, :readout_noise_e) ?
+        _file_real(config.readout_noise_e, "$context.readout_noise_e") : 0.0
+    excess_noise_factor = hasproperty(config, :excess_noise_factor) ?
+        _file_real(
+            config.excess_noise_factor,
+            "$context.excess_noise_factor",
+        ) : 1.0
+    cic = hasproperty(
+        config,
+        :clock_induced_charge_e_per_pixel_frame,
+    ) ? _file_real(
+        config.clock_induced_charge_e_per_pixel_frame,
+        "$context.clock_induced_charge_e_per_pixel_frame",
+    ) : 0.0
+    register_full_well = hasproperty(config, :register_full_well_e) ?
+        _file_real(
+            config.register_full_well_e,
+            "$context.register_full_well_e",
+        ) : nothing
+    em_gain_min = hasproperty(config, :em_gain_min) ?
+        _file_real(config.em_gain_min, "$context.em_gain_min") : 1.0
+    em_gain_max = hasproperty(config, :em_gain_max) ?
+        _file_real(config.em_gain_max, "$context.em_gain_max") : Inf
+
+    return emccd_detector_acquisition_node(
+        name;
+        rows=_file_integer(config.rows, "$context.rows"),
+        columns=_file_integer(config.columns, "$context.columns"),
+        binning,
+        normalized_pupil_sampling=_file_real(
+            config.normalized_pupil_sampling,
+            "$context.normalized_pupil_sampling",
+        ),
+        wavelength_m=_file_real(
+            config.wavelength_m,
+            "$context.wavelength_m",
+        ),
+        exposure_duration_s=_file_real(
+            config.exposure_duration_s,
+            "$context.exposure_duration_s",
+        ),
+        quantum_efficiency=_file_real(
+            config.quantum_efficiency,
+            "$context.quantum_efficiency",
+        ),
+        gain,
+        dark_current_e_per_pixel_s=dark_current,
+        bits,
+        full_well_e=full_well,
+        photon_noise,
+        readout_noise,
+        readout_noise_e,
+        excess_noise_factor,
+        clock_induced_charge_e_per_pixel_frame=cic,
+        register_full_well_e=register_full_well,
+        em_gain_min,
+        em_gain_max,
+        rng_seed=_file_integer(config.rng_seed, "$context.rng_seed"),
+        photon_rate_schema=_file_string(
+            config.photon_rate_schema,
+            "$context.photon_rate_schema",
+        ),
+        frame_schema=_file_string(
+            config.frame_schema,
+            "$context.frame_schema",
+        ),
+        T=Float32,
+    )
+end
+
 function _shack_hartmann_centroid_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -863,6 +996,8 @@ function builtin_graph_node_types()
         control_matrix_reconstruction_f32=
             _control_matrix_reconstruction_f32_node,
         discrete_integrator_f32=_discrete_integrator_f32_node,
+        emccd_detector_acquisition_f32=
+            _emccd_detector_acquisition_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
         pyramid_rate_f32=_pyramid_rate_f32_node,
         shack_hartmann_centroid_f32=_shack_hartmann_centroid_f32_node,

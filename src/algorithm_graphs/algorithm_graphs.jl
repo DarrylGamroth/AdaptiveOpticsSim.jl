@@ -52,6 +52,7 @@ import ..Optics:
     IncoherentIntensityAddition,
     IntensityMap,
     MonochromaticChannel,
+    NormalizedPupilCoordinates,
     OpticalPlaneMetadata,
     PhotonRateNormalization,
     PupilFunction,
@@ -62,6 +63,7 @@ import ..Optics:
 import ..Detectors:
     CCDSensor,
     Detector,
+    EMCCDSensor,
     NoiseModel,
     NoiseNone,
     NoisePhoton,
