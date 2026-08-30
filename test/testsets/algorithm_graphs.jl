@@ -880,6 +880,62 @@ end
     )
 end
 
+@testset "finite multilayer-atmosphere OPD graph node" begin
+    node = multilayer_atmosphere_opd_node(
+        :atmosphere;
+        resolution=16,
+        telescope_diameter_m=1.22,
+        r0=0.15,
+        L0=30.0,
+        fractional_cn2=(0.7, 0.3),
+        wind_speed=(5.0, 9.0),
+        wind_direction_deg=(0.0, 90.0),
+        altitude=(0.0, 5000.0),
+        layer_ids=(:ground, :high),
+        atmosphere_step=0.001,
+        rng_seed=17,
+        atmosphere_opd_schema="test.graph.atmosphere-opd-m.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:multilayer_atmosphere_opd,
+        outputs=(
+            graph_output(:atmosphere_opd, :atmosphere => :atmosphere_opd),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    output = graph_output(graph, Val(:atmosphere_opd))
+
+    @test @inferred(step_graph!(graph)) === graph
+    @test size(output) == (16, 16)
+    @test all(isfinite, output)
+    @test !all(iszero, output)
+    first_frame = copy(output)
+
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test output != first_frame
+
+    reset_graph!(graph)
+    @test all(iszero, output)
+    step_graph!(graph)
+    @test output == first_frame
+
+    @test_throws AlgorithmGraphError multilayer_atmosphere_opd_node(
+        :invalid_atmosphere;
+        resolution=16,
+        telescope_diameter_m=1.22,
+        r0=0.15,
+        fractional_cn2=(1.0,),
+        wind_speed=(5.0,),
+        wind_direction_deg=(0.0,),
+        altitude=(0.0,),
+        layer_ids=(:ground,),
+        atmosphere_step=0.0,
+        rng_seed=17,
+        atmosphere_opd_schema="test.graph.atmosphere-opd-m.f32/1",
+    )
+end
+
 @testset "additive pupil-OPD composition graph node" begin
     uncompensated_opd = Float32[1 2; 3 4]
     surface_opd = Float32[-0.25 0.5; 0.75 -1]
@@ -1526,6 +1582,7 @@ end
         :emccd_detector_acquisition_f32,
         :gaussian_deformable_mirror_surface_f32,
         :modal_opd_expansion_f32,
+        :multilayer_atmosphere_opd_f32,
         :pupil_opd_composition_f32,
         :pyramid_rate_f32,
         :shack_hartmann_centroid_f32,
@@ -1624,7 +1681,6 @@ end
 @testset "REVOLT Classic HIL sensor TOML path is executable" begin
     pdm_command = zeros(Float32, 277)
     pdm_command[143] = 5.0f-8
-    uncompensated_pupil_opd = fill(2.0f-8, 240, 240)
     pdm_actuator_coordinates = REVOLTHSDM277.actuator_coordinates(Float32)
     path = joinpath(
         dirname(dirname(@__DIR__)),
@@ -1636,7 +1692,6 @@ end
         path;
         bindings=(;
             pdm_command,
-            uncompensated_pupil_opd,
             pdm_actuator_coordinates,
         ),
     )
@@ -1647,6 +1702,7 @@ end
         frame_output=:shwfs_frame,
     )
     @test step_hil_frame!(boundary) == UInt64(1)
+    atmosphere_opd = graph_output(graph, Val(:atmosphere_opd))
     surface_opd = graph_output(graph, Val(:pdm_surface_opd))
     pupil_opd = graph_output(graph, Val(:pupil_opd))
     photon_rate = graph_output(graph, Val(:shwfs_photon_rate))
@@ -1661,7 +1717,9 @@ end
         )
     @test maximum(surface_opd) ≈ 5.0f-8 rtol = 5.0f-3
     @test minimum(surface_opd) == 0.0f0
-    @test pupil_opd ≈ uncompensated_pupil_opd .+ surface_opd
+    @test pupil_opd ≈ atmosphere_opd .+ surface_opd
+    @test !all(iszero, atmosphere_opd)
+    first_atmosphere_opd = copy(atmosphere_opd)
     @test size(photon_rate) == (352, 352)
     @test size(frame) == (352, 352)
     @test hil_frame_buffer(boundary) == frame
@@ -1676,7 +1734,8 @@ end
     @test step_hil_frame!(boundary) == UInt64(2)
     @test minimum(surface_opd) ≈ -2.5f-8 rtol = 5.0f-3
     @test maximum(surface_opd) == 0.0f0
-    @test pupil_opd ≈ uncompensated_pupil_opd .+ surface_opd
+    @test atmosphere_opd != first_atmosphere_opd
+    @test pupil_opd ≈ atmosphere_opd .+ surface_opd
     fill!(hil_command_buffer(boundary), 0.0f0)
     hil_command_buffer(boundary)[143] = 1.25f-8
     adopt_hil_command!(boundary, UInt64(2))
@@ -1687,7 +1746,6 @@ end
 @testset "REVOLT Copper HIL sensor TOML path is executable" begin
     pdm_command = zeros(Float32, 277)
     pdm_command[139] = 5.0f-8
-    uncompensated_pupil_opd = zeros(Float32, 480, 480)
     pdm_actuator_coordinates = REVOLTHSDM277.actuator_coordinates(Float32)
     path = joinpath(
         dirname(dirname(@__DIR__)),
@@ -1699,7 +1757,6 @@ end
         path;
         bindings=(;
             pdm_command,
-            uncompensated_pupil_opd,
             pdm_actuator_coordinates,
         ),
     )
@@ -1710,6 +1767,7 @@ end
         frame_output=:pwfs_frame,
     )
     @test step_hil_frame!(boundary) == UInt64(1)
+    atmosphere_opd = graph_output(graph, Val(:atmosphere_opd))
     surface_opd = graph_output(graph, Val(:pdm_surface_opd))
     pupil_opd = graph_output(graph, Val(:pupil_opd))
     photon_rate = graph_output(graph, Val(:pwfs_photon_rate))
@@ -1718,7 +1776,8 @@ end
     @test graph_name(graph) === :revolt_copper_hil
     @test maximum(surface_opd) ≈ 5.0f-8 rtol = 5.0f-3
     @test minimum(surface_opd) == 0.0f0
-    @test pupil_opd ≈ surface_opd
+    @test !all(iszero, atmosphere_opd)
+    @test pupil_opd ≈ atmosphere_opd .+ surface_opd
     @test size(photon_rate) == (64, 64)
     @test size(frame) == (64, 64)
     @test hil_frame_buffer(boundary) == frame

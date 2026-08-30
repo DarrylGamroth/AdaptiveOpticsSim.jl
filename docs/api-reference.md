@@ -1871,6 +1871,11 @@ the canonical representation of these results.
   configured Gaussian influence width. Its command values are unit-peak
   actuator surface-OPD coefficients in metres, not normalized hardware
   commands.
+  `multilayer_atmosphere_opd_node` prepares one finite moving-screen
+  `MultiLayerAtmosphere` and on-axis renderer on the graph target. Its exact
+  prepared owner retains one RNG stream, advances by the explicitly configured
+  `atmosphere_step` on every invocation, and publishes a complete atmospheric
+  OPD map. Detector exposure and wall time do not determine this model step.
   `pupil_opd_composition_node` adds that already calibrated surface OPD to an
   uncompensated pupil OPD on the same grid and publishes the complete pupil
   OPD consumed by downstream optics; it does not infer sign, conjugation,

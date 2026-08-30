@@ -519,6 +519,250 @@ end
 
 @inline reset_graph_node!(::_ModalOPDExpansionOwner) = nothing
 
+struct MultiLayerAtmosphereOPDNode{T<:AbstractFloat} end
+
+"""Construction values for one finite multilayer atmosphere OPD node."""
+struct MultiLayerAtmosphereOPDNodeConfig{TD,AD,T<:AbstractFloat}
+    telescope::TD
+    atmosphere::AD
+    atmosphere_step::T
+    rng_seed::UInt64
+    atmosphere_opd_schema::String
+end
+
+function _multilayer_atmosphere_opd_config(
+    ::Type{T};
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    central_obstruction_ratio::Real,
+    pupil_reflectivity::Real,
+    aperture_revision::Integer,
+    r0::Real,
+    L0::Real,
+    fractional_cn2,
+    wind_speed,
+    wind_direction_deg,
+    altitude,
+    layer_ids,
+    atmosphere_step::Real,
+    rng_seed::Integer,
+    atmosphere_opd_schema::AbstractString,
+) where {T<:AbstractFloat}
+    atmosphere_step isa Bool && throw(AlgorithmGraphError(
+        "atmosphere_step must be a real duration, not Bool",
+    ))
+    step = T(atmosphere_step)
+    isfinite(step) && step > zero(T) || throw(AlgorithmGraphError(
+        "atmosphere_step must be finite and positive",
+    ))
+    rng_seed isa Bool && throw(AlgorithmGraphError(
+        "multilayer atmosphere rng_seed must be an integer, not Bool",
+    ))
+    rng_seed >= 0 || throw(AlgorithmGraphError(
+        "multilayer atmosphere rng_seed must be nonnegative",
+    ))
+    rng_seed <= typemax(UInt64) || throw(AlgorithmGraphError(
+        "multilayer atmosphere rng_seed exceeds UInt64",
+    ))
+    isempty(atmosphere_opd_schema) && throw(AlgorithmGraphError(
+        "multilayer atmosphere OPD schema must not be empty",
+    ))
+
+    telescope, atmosphere = try
+        telescope = TelescopeDefinition(
+            resolution=resolution,
+            diameter=telescope_diameter_m,
+            central_obstruction=central_obstruction_ratio,
+            pupil_reflectivity=pupil_reflectivity,
+            revision=aperture_revision,
+            T=T,
+        )
+        atmosphere = MultiLayerAtmosphereDefinition(
+            r0=r0,
+            L0=L0,
+            fractional_cn2=fractional_cn2,
+            wind_speed=wind_speed,
+            wind_direction_deg=wind_direction_deg,
+            altitude=altitude,
+            layer_ids=layer_ids,
+            T=T,
+        )
+        (telescope, atmosphere)
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+    return MultiLayerAtmosphereOPDNodeConfig(
+        telescope,
+        atmosphere,
+        step,
+        UInt64(rng_seed),
+        String(atmosphere_opd_schema),
+    )
+end
+
+"""
+    multilayer_atmosphere_opd_node(name; resolution,
+        telescope_diameter_m, r0, fractional_cn2, wind_speed,
+        wind_direction_deg, altitude, layer_ids, atmosphere_step,
+        rng_seed, atmosphere_opd_schema, ...)
+
+Declare one finite moving-screen multilayer-atmosphere operation. Preparation
+creates the stochastic phase screens and one on-axis infinite-source direction
+renderer on the graph's exact compute device. Each invocation advances the
+single atmosphere writer by `atmosphere_step` seconds and publishes one
+complete pupil-plane atmospheric OPD map in metres.
+
+The node owns its evolving atmosphere and RNG state. It does not infer cadence
+from a detector exposure or wall time, apply a deformable-mirror surface, or
+retain historical atmosphere epochs.
+"""
+function multilayer_atmosphere_opd_node(
+    name::Symbol;
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    r0::Real,
+    fractional_cn2,
+    wind_speed,
+    wind_direction_deg,
+    altitude,
+    layer_ids,
+    atmosphere_step::Real,
+    rng_seed::Integer,
+    atmosphere_opd_schema::AbstractString,
+    L0::Real=25,
+    central_obstruction_ratio::Real=0,
+    pupil_reflectivity::Real=1,
+    aperture_revision::Integer=0,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _multilayer_atmosphere_opd_config(
+        T;
+        resolution,
+        telescope_diameter_m,
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        r0,
+        L0,
+        fractional_cn2,
+        wind_speed,
+        wind_direction_deg,
+        altitude,
+        layer_ids,
+        atmosphere_step,
+        rng_seed,
+        atmosphere_opd_schema,
+    )
+    return algorithm_node(
+        name,
+        MultiLayerAtmosphereOPDNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{MultiLayerAtmosphereOPDNode{T}},
+    config::MultiLayerAtmosphereOPDNodeConfig,
+) where {T}
+    resolution = config.telescope.resolution
+    return (
+        graph_port_contract(
+            :atmosphere_opd,
+            :output,
+            :data,
+            T,
+            (resolution, resolution),
+            config.atmosphere_opd_schema,
+            :column_major,
+        ),
+    )
+end
+
+mutable struct _MultiLayerAtmosphereOPDOwner{
+    D,
+    TEL,
+    TARGET,
+    A,
+    R,
+    P,
+    RNG,
+    T<:AbstractFloat,
+}
+    definition::D
+    telescope::TEL
+    target::TARGET
+    atmosphere::A
+    renderer::R
+    pupil::P
+    rng::RNG
+    atmosphere_step::T
+    rng_seed::UInt64
+end
+
+function prepare_graph_node(
+    ::Type{MultiLayerAtmosphereOPDNode{T}},
+    config::MultiLayerAtmosphereOPDNodeConfig,
+    ::NamedTuple{()},
+    ::NamedTuple{()},
+    outputs::NamedTuple{(:atmosphere_opd,)},
+    ::NamedTuple{()},
+    target,
+) where {T}
+    telescope = prepare_telescope(config.telescope, target)
+    atmosphere = prepare_timed_atmosphere(
+        config.atmosphere,
+        telescope,
+        target,
+    )
+    renderer = prepare_atmosphere_renderer(atmosphere, telescope)
+    pupil = PupilFunction(telescope, outputs.atmosphere_opd)
+    rng = runtime_rng(config.rng_seed)
+    advance_by!(atmosphere, zero(T), rng)
+    return _MultiLayerAtmosphereOPDOwner(
+        config.atmosphere,
+        telescope,
+        target,
+        atmosphere,
+        renderer,
+        pupil,
+        rng,
+        config.atmosphere_step,
+        config.rng_seed,
+    )
+end
+
+@inline function step_graph_node!(owner::_MultiLayerAtmosphereOPDOwner)
+    epoch = advance_by!(
+        owner.atmosphere,
+        owner.atmosphere_step,
+        owner.rng,
+    )
+    render_atmosphere!(
+        owner.pupil,
+        owner.renderer,
+        owner.atmosphere,
+        epoch,
+    )
+    return nothing
+end
+
+function reset_graph_node!(owner::_MultiLayerAtmosphereOPDOwner)
+    seed!(owner.rng, owner.rng_seed)
+    atmosphere = prepare_timed_atmosphere(
+        owner.definition,
+        owner.telescope,
+        owner.target,
+    )
+    renderer = prepare_atmosphere_renderer(atmosphere, owner.telescope)
+    advance_by!(atmosphere, zero(owner.atmosphere_step), owner.rng)
+    owner.atmosphere = atmosphere
+    owner.renderer = renderer
+    fill!(owner.pupil.opd, zero(eltype(owner.pupil.opd)))
+    return nothing
+end
+
 struct DeformableMirrorSurfaceNode{T<:AbstractFloat} end
 
 """Construction values for one measured deformable-mirror surface node."""

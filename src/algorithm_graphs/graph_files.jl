@@ -62,6 +62,28 @@ function _file_real(value, context::AbstractString)
     return value
 end
 
+function _file_tuple(value, context::AbstractString)
+    value isa Tuple || throw(_file_error(
+        context,
+        "expected an array, got $(typeof(value))",
+    ))
+    return value
+end
+
+function _file_real_tuple(value, context::AbstractString)
+    values = _file_tuple(value, context)
+    return ntuple(length(values)) do index
+        _file_real(values[index], "$context[$index]")
+    end
+end
+
+function _file_identifier_tuple(value, context::AbstractString)
+    values = _file_tuple(value, context)
+    return ntuple(length(values)) do index
+        _file_identifier(values[index], "$context[$index]")
+    end
+end
+
 function _file_bool(value, context::AbstractString)
     value isa Bool || throw(_file_error(
         context,
@@ -374,6 +396,101 @@ function _deformable_mirror_surface_f32_node(
         influence_functions_schema=_file_string(
             config.influence_functions_schema,
             "$context.influence_functions_schema",
+        ),
+        T=Float32,
+    )
+end
+
+function _multilayer_atmosphere_opd_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :L0,
+        :altitude,
+        :aperture_revision,
+        :atmosphere_opd_schema,
+        :atmosphere_step,
+        :central_obstruction_ratio,
+        :fractional_cn2,
+        :layer_ids,
+        :pupil_reflectivity,
+        :r0,
+        :resolution,
+        :rng_seed,
+        :telescope_diameter_m,
+        :wind_direction_deg,
+        :wind_speed,
+    )
+    required_fields = (
+        :altitude,
+        :atmosphere_opd_schema,
+        :atmosphere_step,
+        :fractional_cn2,
+        :layer_ids,
+        :r0,
+        :resolution,
+        :rng_seed,
+        :telescope_diameter_m,
+        :wind_direction_deg,
+        :wind_speed,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    central_obstruction_ratio = hasproperty(
+        config,
+        :central_obstruction_ratio,
+    ) ? _file_real(
+        config.central_obstruction_ratio,
+        "$context.central_obstruction_ratio",
+    ) : 0.0
+    pupil_reflectivity = hasproperty(config, :pupil_reflectivity) ?
+        _file_real(config.pupil_reflectivity, "$context.pupil_reflectivity") :
+        1.0
+    aperture_revision = hasproperty(config, :aperture_revision) ?
+        _file_integer(config.aperture_revision, "$context.aperture_revision") :
+        0
+    L0 = hasproperty(config, :L0) ?
+        _file_real(config.L0, "$context.L0") : 25.0
+    return multilayer_atmosphere_opd_node(
+        name;
+        resolution=_file_integer(config.resolution, "$context.resolution"),
+        telescope_diameter_m=_file_real(
+            config.telescope_diameter_m,
+            "$context.telescope_diameter_m",
+        ),
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        r0=_file_real(config.r0, "$context.r0"),
+        L0,
+        fractional_cn2=_file_real_tuple(
+            config.fractional_cn2,
+            "$context.fractional_cn2",
+        ),
+        wind_speed=_file_real_tuple(
+            config.wind_speed,
+            "$context.wind_speed",
+        ),
+        wind_direction_deg=_file_real_tuple(
+            config.wind_direction_deg,
+            "$context.wind_direction_deg",
+        ),
+        altitude=_file_real_tuple(config.altitude, "$context.altitude"),
+        layer_ids=_file_identifier_tuple(
+            config.layer_ids,
+            "$context.layer_ids",
+        ),
+        atmosphere_step=_file_real(
+            config.atmosphere_step,
+            "$context.atmosphere_step",
+        ),
+        rng_seed=_file_integer(config.rng_seed, "$context.rng_seed"),
+        atmosphere_opd_schema=_file_string(
+            config.atmosphere_opd_schema,
+            "$context.atmosphere_opd_schema",
         ),
         T=Float32,
     )
@@ -1188,6 +1305,8 @@ function builtin_graph_node_types()
         gaussian_deformable_mirror_surface_f32=
             _gaussian_deformable_mirror_surface_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
+        multilayer_atmosphere_opd_f32=
+            _multilayer_atmosphere_opd_f32_node,
         pupil_opd_composition_f32=_pupil_opd_composition_f32_node,
         pyramid_rate_f32=_pyramid_rate_f32_node,
         shack_hartmann_centroid_f32=_shack_hartmann_centroid_f32_node,

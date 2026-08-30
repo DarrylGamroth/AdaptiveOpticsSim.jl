@@ -1,14 +1,14 @@
 # REVOLT Copper HIL sensor boundary.
 #
-# The surrounding AOS simulation owns atmosphere evolution and evaluates the
-# uncompensated optical path. A serialized RTC adapter places one complete PDM
-# command in the caller-owned command buffer before each graph step. This graph
-# applies that command through the same explicitly provisional HSDM277
+# The graph owns one explicitly timed five-layer atmosphere and advances it by
+# 2 ms for every complete frame. A serialized RTC adapter places one complete
+# PDM command in the caller-owned command buffer before each graph step. This
+# graph applies that command through the same explicitly provisional HSDM277
 # continuous-facesheet model as REVOLT Classic, composes the surface OPD with
-# the uncompensated pupil OPD, forms one modulated Pyramid photon-rate frame,
-# and completes one noisy EMCCD frame for publication through a transport
-# adapter such as PipeWireAO. The external RTC owns pixel processing,
-# reconstruction, control, and command production.
+# the atmospheric OPD, forms one modulated Pyramid photon-rate frame, and
+# completes one noisy EMCCD frame for publication through a transport adapter
+# such as PipeWireAO. The external RTC owns pixel processing, reconstruction,
+# control, and command production.
 #
 # Model authority is deliberately layered:
 # - REVOLT/Julia/contracts/revolt/common.toml supplies the 1.22 m, 480-sample
@@ -33,6 +33,33 @@ schema_version = 1
 name = "revolt_copper_hil"
 
 [[nodes]]
+name = "atmosphere"
+type = "multilayer_atmosphere_opd_f32"
+
+[nodes.config]
+resolution = 480
+telescope_diameter_m = 1.22
+central_obstruction_ratio = 0.0
+pupil_reflectivity = 1.0
+aperture_revision = 1
+r0 = 0.15
+L0 = 30.0
+fractional_cn2 = [0.45, 0.10, 0.10, 0.25, 0.10]
+wind_speed = [5.0, 5.0, 7.0, 10.0, 10.0]
+wind_direction_deg = [0.0, 72.0, 144.0, 216.0, 288.0]
+altitude = [0.0, 1000.0, 5000.0, 10000.0, 12000.0]
+layer_ids = [
+    "revolt_ground",
+    "revolt_1km",
+    "revolt_5km",
+    "revolt_10km",
+    "revolt_12km",
+]
+atmosphere_step = 0.002
+rng_seed = 1
+atmosphere_opd_schema = "org.revolt.copper.atmosphere-opd-m.f32/1"
+
+[[nodes]]
 name = "pdm"
 type = "gaussian_deformable_mirror_surface_f32"
 
@@ -54,7 +81,7 @@ type = "pupil_opd_composition_f32"
 
 [nodes.config]
 resolution = 480
-uncompensated_opd_schema = "org.revolt.copper.uncompensated-pupil-opd-m.f32/1"
+uncompensated_opd_schema = "org.revolt.copper.atmosphere-opd-m.f32/1"
 surface_opd_schema = "org.revolt.hsdm277.pdm-surface-opd-m.f32/1"
 pupil_opd_schema = "org.revolt.copper.pupil-opd-m.f32/1"
 
@@ -116,14 +143,13 @@ name = "pdm_command"
 destination = "pdm.pdm_command"
 binding = "pdm_command"
 
-[[inputs]]
-name = "uncompensated_pupil_opd"
-destination = "pupil_opd_composition.uncompensated_opd"
-binding = "uncompensated_pupil_opd"
-
 [[outputs]]
 name = "pdm_surface_opd"
 source = "pdm.surface_opd"
+
+[[outputs]]
+name = "atmosphere_opd"
+source = "atmosphere.atmosphere_opd"
 
 [[outputs]]
 name = "pupil_opd"
@@ -140,6 +166,10 @@ source = "detector.frame"
 [[links]]
 source = "pdm.surface_opd"
 destination = "pupil_opd_composition.surface_opd"
+
+[[links]]
+source = "atmosphere.atmosphere_opd"
+destination = "pupil_opd_composition.uncompensated_opd"
 
 [[links]]
 source = "pupil_opd_composition.pupil_opd"

@@ -37,6 +37,12 @@ import ..Plant:
 import ..Calibration:
     ModalOPDExpansionPlan,
     combine_basis!
+import ..Atmospheres:
+    MultiLayerAtmosphereDefinition,
+    advance_by!,
+    prepare_atmosphere_renderer,
+    prepare_timed_atmosphere,
+    render_atmosphere!
 import ..Control:
     ClosedLoopCorrectionPlan,
     ClosedLoopCorrectionState,

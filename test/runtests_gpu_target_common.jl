@@ -146,6 +146,53 @@ function run_algorithm_graph_backend_smoke(
     @test compute_device(graph_output(graph, Val(:opd))) == target
     @test Array(graph_output(graph, Val(:opd))) ≈ Float32[0.5 0.0; 0.5 0.5]
 
+    atmosphere_definition = algorithm_graph(
+        (
+            multilayer_atmosphere_opd_node(
+                :atmosphere;
+                resolution=8,
+                telescope_diameter_m=1.22,
+                r0=0.15,
+                L0=30.0,
+                fractional_cn2=(1.0,),
+                wind_speed=(5.0,),
+                wind_direction_deg=(0.0,),
+                altitude=(0.0,),
+                layer_ids=(:ground,),
+                atmosphere_step=0.001,
+                rng_seed=17,
+                atmosphere_opd_schema=
+                    "test.graph.atmosphere-opd-m.f32/1",
+            ),
+        );
+        name=:gpu_multilayer_atmosphere_opd,
+        outputs=(
+            graph_output(
+                :atmosphere_opd,
+                :atmosphere => :atmosphere_opd,
+            ),
+        ),
+    )
+    atmosphere_graph = prepare_algorithm_graph(
+        atmosphere_definition;
+        target,
+    )
+    step_graph!(atmosphere_graph)
+    atmosphere_opd = graph_output(
+        atmosphere_graph,
+        Val(:atmosphere_opd),
+    )
+    first_atmosphere_opd = Array(atmosphere_opd)
+    @test compute_device(atmosphere_graph) == target
+    @test compute_device(atmosphere_opd) == target
+    @test all(isfinite, first_atmosphere_opd)
+    @test !all(iszero, first_atmosphere_opd)
+    step_graph!(atmosphere_graph)
+    @test Array(atmosphere_opd) != first_atmosphere_opd
+    reset_graph!(atmosphere_graph)
+    step_graph!(atmosphere_graph)
+    @test Array(atmosphere_opd) == first_atmosphere_opd
+
     pdm_command = BackendArray(Float32[2, 3])
     actuator_coordinates = BackendArray(Float32[-0.5 0.5; 0 0])
     influence_functions = BackendArray(Float32[
