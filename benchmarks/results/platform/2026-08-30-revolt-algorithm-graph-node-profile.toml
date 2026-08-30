@@ -1,0 +1,395 @@
+artifact_id = "REVOLT-ALGORITHM-GRAPH-NODE-PROFILE-2026-08-30"
+generated_on = "2026-08-30"
+source_revision = "fd4518e1ffeafacb1def7d1f34a70e3b7d706350"
+evidence_class = "warmed synchronized diagnostic profile"
+raw_histograms_archived = false
+hypothesis = "Per-node timing will identify whether atmosphere evolution, optical sensing, detector acquisition, or provisional HSDM277 surface formation limits the complete REVOLT Classic and Copper HIL graphs."
+
+[contract]
+load_model = "warmed serial closed loop"
+arrival_model = "the next step starts only after the prior step completes"
+coordinated_omission_correction = false
+timer = "time_ns; timer overhead is included and not subtracted"
+julia_threads = 1
+blas_threads = 1
+fft_threads = 1
+per_node_boundary = "one node invocation plus exact graph-context synchronization"
+graph_boundary = "all graph nodes plus one exact graph-context synchronization"
+frame_host_ready_boundary = "graph boundary plus a completed target-to-host frame copy"
+command_target_ready_boundary = "finite host command validation plus a completed host-to-target command copy"
+per_node_sum_caveat = "GPU node measurements synchronize each node separately and are diagnostic; their sum need not equal integrated graph time."
+tail_note = "The 10-sample Copper CPU percentiles are diagnostic only. The 50- and 100-sample runs support p50 and p90 comparisons, not a production tail-latency claim."
+
+[environment.local]
+host = "rtc-devel"
+os = "Linux"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+logical_cpu_threads = 16
+gpu = "AMD Radeon Graphics"
+gpu_architecture = "gfx1030"
+julia = "1.12.7"
+amdgpu_jl = "2.7.0"
+
+[environment.wsl]
+host = "DGAMROTH-XPS"
+os = "WSL2 Linux"
+cpu = "12th Gen Intel Core i7-12700H"
+logical_cpu_threads = 20
+gpu = "NVIDIA GeForce RTX 3050 Ti Laptop GPU"
+gpu_architecture = "sm_86"
+julia = "1.12.6"
+cuda_jl = "6.3.1"
+cuda_runtime = "13.3"
+
+[workload.classic]
+graph = "examples/graphs/revolt_classic_hil.toml"
+pupil_resolution = 240
+sensor = "diffractive Shack-Hartmann"
+lenslets = 16
+detector_frame_shape = [352, 352]
+detector_noise = true
+atmosphere_layers = 5
+atmosphere_step_s = 0.001
+dm_actuators = 277
+dm_model = "provisional sampled-topology analytic Gaussian HSDM277"
+
+[workload.copper]
+graph = "examples/graphs/revolt_copper_hil.toml"
+pupil_resolution = 480
+sensor = "diffractive modulated Pyramid"
+modulation_points = 32
+diffraction_padding = 2
+detector_frame_shape = [64, 64]
+detector_noise = true
+atmosphere_layers = 5
+atmosphere_step_s = 0.002
+dm_actuators = 277
+dm_model = "provisional sampled-topology analytic Gaussian HSDM277"
+
+[[results]]
+system = "local"
+backend = "cpu"
+architecture = "classic"
+samples = 50
+warmup_cycles = 5
+graph_mean_ns = 78399320.66
+graph_p50_ns = 78184447
+graph_p90_ns = 79691775
+graph_p99_ns = 81526783
+graph_rate_hz = 12.755212565383982
+frame_host_ready_mean_ns = 77627117.4
+frame_host_ready_rate_hz = 12.882096276320057
+command_target_ready_mean_ns = 2952.96
+separately_synchronized_node_sum_over_graph_mean = 0.9949367627594441
+
+[results.nodes.atmosphere]
+mean_ns = 1754924.98
+p50_ns = 1748991
+p90_ns = 1779711
+p99_ns = 1960959
+
+[results.nodes.pdm]
+mean_ns = 69526840.26
+p50_ns = 69468159
+p90_ns = 70975487
+p99_ns = 72024063
+
+[results.nodes.pupil_opd_composition]
+mean_ns = 16924.52
+p50_ns = 16607
+p90_ns = 21455
+p99_ns = 24719
+
+[results.nodes.shwfs]
+mean_ns = 3906246.66
+p50_ns = 3819519
+p90_ns = 4155391
+p99_ns = 4571135
+
+[results.nodes.detector]
+mean_ns = 2797429.88
+p50_ns = 2779135
+p90_ns = 2873343
+p99_ns = 3115007
+
+[[results]]
+system = "local"
+backend = "cpu"
+architecture = "copper"
+samples = 10
+warmup_cycles = 3
+graph_mean_ns = 4465422381.0
+graph_p50_ns = 4437573631
+graph_p90_ns = 4538236927
+graph_p99_ns = 4588568575
+graph_rate_hz = 0.2239429811287095
+frame_host_ready_mean_ns = 3569982364.1
+frame_host_ready_rate_hz = 0.2801134285861107
+command_target_ready_mean_ns = 5309.0
+separately_synchronized_node_sum_over_graph_mean = 0.9885240544952606
+
+[results.nodes.atmosphere]
+mean_ns = 6942039.9
+p50_ns = 6856703
+p90_ns = 7028735
+p99_ns = 7602175
+
+[results.nodes.pdm]
+mean_ns = 290432443.6
+p50_ns = 289144831
+p90_ns = 292552703
+p99_ns = 297795583
+
+[results.nodes.pupil_opd_composition]
+mean_ns = 88311.0
+p50_ns = 86015
+p90_ns = 99007
+p99_ns = 108223
+
+[results.nodes.pwfs]
+mean_ns = 4116563631.1
+p50_ns = 4114612223
+p90_ns = 4125097983
+p99_ns = 4135583743
+
+[results.nodes.detector]
+mean_ns = 151011.5
+p50_ns = 150655
+p90_ns = 152959
+p99_ns = 153983
+
+[[results]]
+system = "local"
+backend = "amdgpu"
+architecture = "classic"
+samples = 50
+warmup_cycles = 10
+graph_mean_ns = 7338003.06
+graph_p50_ns = 6012927
+graph_p90_ns = 6545407
+graph_p99_ns = 44236799
+graph_rate_hz = 136.27685786219882
+frame_host_ready_mean_ns = 5949712.42
+frame_host_ready_rate_hz = 168.07535043853431
+command_target_ready_mean_ns = 52139.7
+separately_synchronized_node_sum_over_graph_mean = 0.8223339879610244
+
+[results.nodes.atmosphere]
+mean_ns = 482801.82
+p50_ns = 457471
+p90_ns = 531967
+p99_ns = 1265663
+
+[results.nodes.pdm]
+mean_ns = 911996.5
+p50_ns = 919039
+p90_ns = 973823
+p99_ns = 1027071
+
+[results.nodes.pupil_opd_composition]
+mean_ns = 83140.86
+p50_ns = 87871
+p90_ns = 111487
+p99_ns = 119295
+
+[results.nodes.shwfs]
+mean_ns = 978573.72
+p50_ns = 931839
+p90_ns = 1104895
+p99_ns = 1672191
+
+[results.nodes.detector]
+mean_ns = 3577776.42
+p50_ns = 3586047
+p90_ns = 3731455
+p99_ns = 4014079
+
+[[results]]
+system = "local"
+backend = "amdgpu"
+architecture = "copper"
+samples = 50
+warmup_cycles = 10
+graph_mean_ns = 164493701.24
+graph_p50_ns = 164364287
+graph_p90_ns = 168296447
+graph_p99_ns = 172359679
+graph_rate_hz = 6.079260132526154
+frame_host_ready_mean_ns = 161688938.48
+frame_host_ready_rate_hz = 6.184714980509903
+command_target_ready_mean_ns = 31124.3
+separately_synchronized_node_sum_over_graph_mean = 1.003251898011703
+
+[results.nodes.atmosphere]
+mean_ns = 483928.98
+p50_ns = 443135
+p90_ns = 498943
+p99_ns = 1663999
+
+[results.nodes.pdm]
+mean_ns = 933021.76
+p50_ns = 864767
+p90_ns = 951295
+p99_ns = 2281471
+
+[results.nodes.pupil_opd_composition]
+mean_ns = 96151.84
+p50_ns = 93375
+p90_ns = 117503
+p99_ns = 159743
+
+[results.nodes.pwfs]
+mean_ns = 162889752.52
+p50_ns = 161349631
+p90_ns = 164495359
+p99_ns = 194510847
+
+[results.nodes.detector]
+mean_ns = 625762.88
+p50_ns = 607231
+p90_ns = 699391
+p99_ns = 1003519
+
+[[results]]
+system = "wsl"
+backend = "cuda"
+architecture = "classic"
+samples = 100
+warmup_cycles = 10
+graph_mean_ns = 1822596.06
+graph_p50_ns = 1781759
+graph_p90_ns = 2156543
+graph_p99_ns = 2988031
+graph_rate_hz = 548.66792590345
+frame_host_ready_mean_ns = 3761919.97
+frame_host_ready_rate_hz = 265.82171018380274
+command_target_ready_mean_ns = 47319.71
+separately_synchronized_node_sum_over_graph_mean = 2.619788632704495
+
+[results.nodes.atmosphere]
+mean_ns = 524535.39
+p50_ns = 526847
+p90_ns = 805375
+p99_ns = 1061887
+
+[results.nodes.pdm]
+mean_ns = 672057.15
+p50_ns = 750591
+p90_ns = 1075199
+p99_ns = 1345535
+
+[results.nodes.pupil_opd_composition]
+mean_ns = 99839.88
+p50_ns = 85375
+p90_ns = 148479
+p99_ns = 325119
+
+[results.nodes.shwfs]
+mean_ns = 2596596.55
+p50_ns = 3983359
+p90_ns = 4333567
+p99_ns = 4816895
+
+[results.nodes.detector]
+mean_ns = 881787.47
+p50_ns = 932863
+p90_ns = 1394687
+p99_ns = 1701887
+
+[[results]]
+system = "wsl"
+backend = "cuda"
+architecture = "copper"
+samples = 100
+warmup_cycles = 10
+graph_mean_ns = 52888092.41
+graph_p50_ns = 53444607
+graph_p90_ns = 54132735
+graph_p99_ns = 54591487
+graph_rate_hz = 18.907847767466873
+frame_host_ready_mean_ns = 53572324.07
+frame_host_ready_rate_hz = 18.666354640380266
+command_target_ready_mean_ns = 54710.95
+separately_synchronized_node_sum_over_graph_mean = 0.8955811838099912
+
+[results.nodes.atmosphere]
+mean_ns = 544150.56
+p50_ns = 434175
+p90_ns = 925183
+p99_ns = 1364991
+
+[results.nodes.pdm]
+mean_ns = 748390.64
+p50_ns = 733695
+p90_ns = 849407
+p99_ns = 982527
+
+[results.nodes.pupil_opd_composition]
+mean_ns = 116641.71
+p50_ns = 109503
+p90_ns = 161791
+p99_ns = 222079
+
+[results.nodes.pwfs]
+mean_ns = 45236349.04
+p50_ns = 45055999
+p90_ns = 45711359
+p99_ns = 45875199
+
+[results.nodes.detector]
+mean_ns = 720048.46
+p50_ns = 652287
+p90_ns = 992767
+p99_ns = 1485823
+
+[statistical_profiles.classic_cpu_pdm]
+iterations = 50
+sampling_delay_s = 0.0005
+worker_samples = 10256
+gaussian_operator_inclusive_samples = 10256
+inner_exponential_accumulation_samples = 9157
+inner_exponential_accumulation_fraction = 0.8928441887675507
+source = "src/optics/deformable_mirror.jl:907"
+interpretation = "The provisional sampled HSDM277 topology evaluates every actuator Gaussian at every illuminated pupil sample."
+
+[statistical_profiles.copper_cpu_pwfs]
+iterations = 2
+sampling_delay_s = 0.0005
+worker_samples = 25899
+fftw_execution_inclusive_samples = 25068
+fftw_execution_fraction = 0.9679138190663732
+source = "src/wfs/pyramid/optics.jl:181 and src/wfs/pyramid/optics.jl:184"
+interpretation = "Each of 32 modulation points executes one forward and one inverse padded 960-by-960 transform, for 64 FFTs per frame."
+
+[historical_comparison]
+artifact = "benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml"
+source_revision = "0272576d01893ec2a79648c42e3d47c9e270d7c7"
+workload_difference = "The 2026-07-14 workload used a 352-by-352 noiseless, atmosphere-free REVOLT-like path and a separable regular 19-by-19 DM grid. It did not run either complete current graph."
+local_cpu_device_ready_rate_hz = 225.994778880
+wsl_cuda_device_ready_rate_hz = 584.186702266
+wsl_cuda_host_ready_rate_hz = 488.467143177
+local_amdgpu_device_ready_rate_hz = 4.694060470
+
+[interpretation]
+atmosphere_is_primary_limit = false
+classic_cpu_primary_limit = "provisional sampled-topology HSDM277 Gaussian surface formation"
+classic_amdgpu_primary_limit = "noisy CCD detector acquisition"
+copper_primary_limit = "32-point diffractive Pyramid sensing"
+historical_memory_supported = true
+notes = [
+    "The older approximately 226 Hz CPU and 488 Hz CUDA host-ready results are real, but they describe a materially simpler workload.",
+    "Current Classic CUDA target-ready throughput remains close to the old CUDA device-ready result; current host-ready throughput includes noisy detector acquisition, atmosphere evolution, the sampled 277-actuator DM, and the maintained graph/HIL boundary.",
+    "Atmosphere evolution costs about 1.75 ms on the local CPU at 240 samples, 6.94 ms at 480 samples, and about 0.5 ms on either tested GPU.",
+    "The next CPU Classic optimization should preserve the exact 277-element command order while recognizing its regular-grid embedding so the separable Gaussian path can be used.",
+    "The next Copper optimization should investigate batched and parallel modulation-point propagation before reducing physical fidelity.",
+]
+
+[validation]
+artifact_toml_parse = "passed"
+profiler_cpu = "passed"
+profiler_amdgpu = "passed on local gfx1030"
+profiler_cuda = "passed on WSL RTX 3050 Ti"
+classic_atmosphere_evolved = true
+copper_atmosphere_evolved = true
+classic_frames_finite_and_nonzero = true
+copper_frames_finite_and_nonzero = true
