@@ -110,12 +110,18 @@ explicit parity items. The versioned TOML graph format compiles those same
 nodes into the same concrete graph definition as direct Julia construction.
 The optional
 `AdaptiveOpticsProperHIL.jl` companion adds a third proof: one complete-frame
-Julia-native Proper prescription with separate random state and scratch, exact
-graph-buffer binding, and focused CPU, AMDGPU, and CUDA
-residency/equivalence evidence. Calculon or FGN deployment adapters are
-separate boundaries that may wrap AOS implementations later; they do not own
-the AOS simulation API. The Proper proof does not yet close SPIDERS fidelity or
-asynchronous science-acquisition cadence.
+Julia-native Proper prescription with separate random state and scratch,
+square propagation inputs, a separately declared rectangular observation,
+exact graph-buffer binding, and focused CPU, AMDGPU, and CUDA
+residency/equivalence evidence. The companion records independent declarative
+LLOWFS and SCC sensor graphs so an application can drive their complete-frame
+observations at different model-time cadences. Each graph requires an
+application-captured, trusted Proper configuration and ends at the external-RTC
+publication boundary; neither graph embeds an RTC or returned-PDM policy.
+Calculon or FGN deployment adapters are separate boundaries that may wrap AOS
+implementations later; they do not own the AOS simulation API. This topology
+proof does not supply a qualified SPIDERS optical prescription, detector
+response, observation metadata, or asynchronous acquisition driver.
 
 The delivery order for this boundary is:
 
@@ -129,8 +135,10 @@ The delivery order for this boundary is:
    RTC-reference graph; reconstruction and the first atomic controller are
    executable there, and its next controller gate is downstream
    constraint-feedback closure. The Copper HIL sensor file now reaches its
-   complete 64-by-64 EMCCD frame boundary; add SPIDERS only after its
-   authoritative topology and scientific node set are available and qualified.
+   complete 64-by-64 EMCCD frame boundary. The companion now records separate
+   SPIDERS LLOWFS and SCC sensor-topology files; bind authoritative physical
+   prescriptions, detector models, observation metadata, and independent
+   acquisition drivers before treating those files as an instrument model.
 3. Preserve direct Julia graph construction for generated, conditional, and
    multi-rate arrangements that exceed the TOML subset.
 4. Provide deterministic fixed-step and prepared-boundary model-time drivers;
