@@ -153,7 +153,11 @@ function requested_backend()
     else
         Backends.AMDGPUBackendTag
     end
-    package_name = Backends.backend_package_name(tag)
+    package_name = if REQUESTED_BACKEND == "cuda"
+        "CUDA"
+    else
+        "AMDGPU"
+    end
     package_module = getfield(Main, Symbol(package_name))
     Base.invokelatest(getproperty(package_module, :functional)) || error(
         "$package_name is not functional on this host",
