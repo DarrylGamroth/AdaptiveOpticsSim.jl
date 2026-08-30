@@ -359,7 +359,7 @@ worker_samples = 25899
 fftw_execution_inclusive_samples = 25068
 fftw_execution_fraction = 0.9679138190663732
 source = "src/wfs/pyramid/optics.jl:181 and src/wfs/pyramid/optics.jl:184"
-interpretation = "Each of 32 modulation points executes one forward and one inverse padded 960-by-960 transform, for 64 FFTs per frame."
+interpretation = "Each of 32 modulation points executes one forward and one inverse padded 1024-by-1024 transform, for 64 FFTs per frame."
 
 [historical_comparison]
 artifact = "benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml"

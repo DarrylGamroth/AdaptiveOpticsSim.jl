@@ -25,6 +25,12 @@ include(joinpath(
     "support",
     "revolt_hsdm277.jl",
 ))
+include(joinpath(
+    dirname(@__DIR__),
+    "examples",
+    "support",
+    "revolt_hil_graphs.jl",
+))
 
 const AOG = AdaptiveOpticsSim.AlgorithmGraphs
 const REPOSITORY_ROOT = dirname(@__DIR__)
@@ -38,6 +44,11 @@ const PROFILE_WARMUP = parse(Int, get(
     "AOS_REVOLT_GRAPH_WARMUP",
     "5",
 ))
+const PROFILE_FIDELITY = Symbol(lowercase(strip(get(
+    ENV,
+    "AOS_REVOLT_GRAPH_FIDELITY",
+    "full_optical",
+))))
 const PROFILE_ARCHITECTURES = Tuple(Symbol(strip(value)) for value in split(
     get(ENV, "AOS_REVOLT_GRAPH_ARCHITECTURES", "classic,copper"),
     ',';
@@ -97,24 +108,14 @@ function revolt_graph_profile(name::Symbol)
     if name === :classic
         return RevoltGraphProfile(
             name,
-            joinpath(
-                REPOSITORY_ROOT,
-                "examples",
-                "graphs",
-                "revolt_classic_hil.toml",
-            ),
+            REVOLTHILGraphs.graph_path(name, PROFILE_FIDELITY),
             143,
             :shwfs_frame,
         )
     elseif name === :copper
         return RevoltGraphProfile(
             name,
-            joinpath(
-                REPOSITORY_ROOT,
-                "examples",
-                "graphs",
-                "revolt_copper_hil.toml",
-            ),
+            REVOLTHILGraphs.graph_path(name, PROFILE_FIDELITY),
             139,
             :pwfs_frame,
         )
@@ -134,6 +135,10 @@ function configure_profile!()
     )
     isempty(PROFILE_ARCHITECTURES) && error(
         "AOS_REVOLT_GRAPH_ARCHITECTURES must select at least one graph",
+    )
+    PROFILE_FIDELITY in REVOLTHILGraphs.supported_fidelities() || error(
+        "AOS_REVOLT_GRAPH_FIDELITY must select one of " *
+        join(REVOLTHILGraphs.supported_fidelities(), ", "),
     )
     return nothing
 end
@@ -398,6 +403,7 @@ function main()
         GC.gc(true)
         results[index] = Dict{String,Any}(
             "name" => String(profile.name),
+            "fidelity" => String(PROFILE_FIDELITY),
             "graph_file" => relpath(profile.graph_file, REPOSITORY_ROOT),
             "graph_execution" => graph_execution,
             "hil_execution" => hil_execution,
@@ -410,6 +416,7 @@ function main()
         "source_revision" => git_revision(),
         "source_tracked_dirty" => tracked_source_dirty(),
         "contract" => Dict{String,Any}(
+            "fidelity" => String(PROFILE_FIDELITY),
             "samples" => PROFILE_SAMPLES,
             "warmup_cycles" => PROFILE_WARMUP,
             "timer" => "time_ns; overhead included and not subtracted",

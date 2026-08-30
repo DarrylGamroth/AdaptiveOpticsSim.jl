@@ -473,6 +473,7 @@ julia --project=benchmarks benchmarks/benchmark_detector_hil_latency.jl
 julia --project=benchmarks benchmarks/benchmark_gate0_latency.jl
 julia --project=benchmarks benchmarks/benchmark_pre_hil_backend_latency.jl cpu local_cpu
 julia --project=benchmarks benchmarks/benchmark_revolt_graph_nodes.jl
+AOS_REVOLT_GRAPH_FIDELITY=reduced_resolution julia --project=benchmarks benchmarks/benchmark_revolt_graph_nodes.jl
 
 julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
@@ -491,9 +492,16 @@ and the separate frame-to-host, command-to-target, and full lockstep HIL
 boundaries. The sum of node times has one synchronization per node and is
 therefore diagnostic rather than an estimate of an asynchronously submitted
 graph. `AOS_REVOLT_GRAPH_ARCHITECTURES`, `AOS_REVOLT_GRAPH_SAMPLES`, and
-`AOS_REVOLT_GRAPH_WARMUP` select the graph subset and measurement length. The
-default is a one-thread, closed-loop, self-paced service-cost measurement; it
-does not model fixed arrivals, transport, overload, or wall-clock pacing.
+`AOS_REVOLT_GRAPH_WARMUP` select the graph subset and measurement length.
+`AOS_REVOLT_GRAPH_FIDELITY` selects the run-immutable `full_optical` default or
+the explicit `reduced_resolution` workload. The reduced-resolution graphs
+retain atmosphere evolution, command response, diffractive sensor formation,
+RTC frame sizes, and HIL sequencing, but lower internal pupil sampling and
+disable detector noise; Copper also reduces the complete-cycle modulation
+quadrature from 32 points to four. They do not establish full-optical or noise
+parity. The default is a one-thread, closed-loop, self-paced service-cost
+measurement; it does not model fixed arrivals, transport, overload, or
+wall-clock pacing.
 
 `benchmark_gate0_latency.jl` accepts `AOS_GATE0_CARD_IDS` as a comma-separated,
 predeclared subset. The artifact records the explicit selection mode and the

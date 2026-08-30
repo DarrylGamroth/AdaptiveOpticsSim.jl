@@ -6,6 +6,12 @@ include(joinpath(
     "support",
     "revolt_hsdm277.jl",
 ))
+include(joinpath(
+    dirname(dirname(@__DIR__)),
+    "examples",
+    "support",
+    "revolt_hil_graphs.jl",
+))
 
 function warmed_graph_step_allocation_bytes(graph)
     step_graph!(graph)
@@ -1785,6 +1791,83 @@ end
     @test all(isfinite, frame)
     @test sum(photon_rate) > 0
     @test sum(frame) > 0
+end
+
+@testset "REVOLT HIL fidelity selection and reduced-resolution graphs" begin
+    @test REVOLTHILGraphs.supported_architectures() == (:classic, :copper)
+    @test REVOLTHILGraphs.supported_fidelities() ==
+        (:full_optical, :reduced_resolution)
+    @test basename(REVOLTHILGraphs.graph_path(:classic)) ==
+        "revolt_classic_hil.toml"
+    @test basename(REVOLTHILGraphs.graph_path(
+        :classic,
+        :reduced_resolution,
+    )) == "revolt_classic_hil_reduced_resolution.toml"
+    @test basename(REVOLTHILGraphs.graph_path(
+        :copper,
+        :reduced_resolution,
+    )) == "revolt_copper_hil_reduced_resolution.toml"
+    @test_throws ArgumentError REVOLTHILGraphs.graph_path(:unknown)
+    @test_throws ArgumentError REVOLTHILGraphs.graph_path(:classic, :unknown)
+
+    cases = (
+        (
+            architecture=:classic,
+            graph_name=:revolt_classic_hil_reduced_resolution,
+            command_index=143,
+            atmosphere_shape=(128, 128),
+            frame_output=:shwfs_frame,
+            frame_shape=(352, 352),
+        ),
+        (
+            architecture=:copper,
+            graph_name=:revolt_copper_hil_reduced_resolution,
+            command_index=139,
+            atmosphere_shape=(240, 240),
+            frame_output=:pwfs_frame,
+            frame_shape=(64, 64),
+        ),
+    )
+    for case in cases
+        pdm_command = zeros(Float32, 277)
+        pdm_command[case.command_index] = 5.0f-8
+        pdm_actuator_coordinates =
+            REVOLTHSDM277.actuator_coordinates(Float32)
+        definition = load_algorithm_graph(
+            REVOLTHILGraphs.graph_path(
+                case.architecture,
+                :reduced_resolution,
+            );
+            bindings=(;
+                pdm_command,
+                pdm_actuator_coordinates,
+            ),
+        )
+        graph = prepare_algorithm_graph(definition)
+        boundary = prepare_graph_hil_boundary(
+            graph;
+            command_input=:pdm_command,
+            frame_output=case.frame_output,
+        )
+        @test step_hil_frame!(boundary) == UInt64(1)
+        atmosphere_opd = graph_output(graph, Val(:atmosphere_opd))
+        first_atmosphere_opd = copy(atmosphere_opd)
+        surface_opd = graph_output(graph, Val(:pdm_surface_opd))
+        frame = graph_output(graph, case.frame_output)
+        @test graph_name(graph) === case.graph_name
+        @test size(atmosphere_opd) == case.atmosphere_shape
+        @test size(frame) == case.frame_shape
+        @test all(isfinite, frame)
+        @test sum(frame) > 0
+        @test maximum(surface_opd) ≈ 5.0f-8 rtol = 1.0f-2
+
+        fill!(hil_command_buffer(boundary), 0.0f0)
+        hil_command_buffer(boundary)[case.command_index] = -2.5f-8
+        adopt_hil_command!(boundary, UInt64(1))
+        @test @allocated(step_hil_frame!(boundary)) == 0
+        @test atmosphere_opd != first_atmosphere_opd
+        @test minimum(surface_opd) ≈ -2.5f-8 rtol = 1.0f-2
+    end
 end
 
 @testset "REVOLT HSDM277 command map and provisional response" begin
