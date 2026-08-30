@@ -11,6 +11,7 @@ export link, delayed_link, sparse_parameter
 export discrete_integrator_node, closed_loop_correction_node
 export modal_opd_expansion_node
 export deformable_mirror_surface_node
+export gaussian_deformable_mirror_surface_node
 export pupil_opd_composition_node
 export shack_hartmann_rate_node
 export pyramid_rate_node
@@ -42,6 +43,8 @@ public ClosedLoopCorrectionNode, ClosedLoopCorrectionNodeConfig
 public ClosedLoopCorrectionNodeProps
 public ModalOPDExpansionNode, ModalOPDExpansionNodeConfig
 public DeformableMirrorSurfaceNode, DeformableMirrorSurfaceNodeConfig
+public GaussianDeformableMirrorSurfaceNode
+public GaussianDeformableMirrorSurfaceNodeConfig
 public PupilOPDCompositionNode, PupilOPDCompositionNodeConfig
 public ShackHartmannRateNode, ShackHartmannRateNodeConfig
 public PyramidRateNode, PyramidRateNodeConfig

@@ -810,6 +810,69 @@ end
     )
 end
 
+@testset "analytic Gaussian deformable-mirror surface graph node" begin
+    pdm_command = Float32[2.0f-8, -1.0f-8]
+    actuator_coordinates = Float32[-0.25 0.25; -0.25 0.25]
+    node = gaussian_deformable_mirror_surface_node(
+        :dm;
+        resolution=4,
+        telescope_diameter_m=1.22,
+        actuator_count=2,
+        influence_width=0.2,
+        pdm_command_schema="test.graph.pdm-actuator-opd-m.f32/1",
+        surface_opd_schema="test.graph.dm-surface-opd-m.f32/1",
+        actuator_coordinates_schema=
+            "test.graph.dm-normalized-pupil-coordinates.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:analytic_gaussian_deformable_mirror,
+        inputs=(
+            graph_input(:pdm_command, :dm => :pdm_command, pdm_command),
+        ),
+        outputs=(
+            graph_output(:surface_opd, :dm => :surface_opd),
+        ),
+        parameters=(
+            sparse_parameter(
+                :dm => :actuator_coordinates,
+                actuator_coordinates,
+            ),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:dm))
+    output = graph_output(graph, Val(:surface_opd))
+
+    @test influence_model(owner.deformable_mirror) ==
+        GaussianInfluenceWidth(0.2f0)
+    @test @inferred(step_graph!(graph)) === graph
+    diagonal_response = exp(-0.5f0 / (2 * 0.2f0^2))
+    cross_response = exp(-0.25f0 / (2 * 0.2f0^2))
+    @test output[2, 2] ≈ 2.0f-8 - 1.0f-8 * diagonal_response
+    @test output[3, 3] ≈ 2.0f-8 * diagonal_response - 1.0f-8
+    @test output[2, 3] ≈ 1.0f-8 * cross_response
+    @test iszero(output[1, 1])
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+
+    reset_graph!(graph)
+    @test all(iszero, output)
+    step_graph!(graph)
+    @test output[2, 2] ≈ 2.0f-8 - 1.0f-8 * diagonal_response
+
+    @test_throws AlgorithmGraphError gaussian_deformable_mirror_surface_node(
+        :invalid_dm;
+        resolution=4,
+        telescope_diameter_m=1.22,
+        actuator_count=2,
+        influence_width=0.0,
+        pdm_command_schema="test.graph.pdm-actuator-opd-m.f32/1",
+        surface_opd_schema="test.graph.dm-surface-opd-m.f32/1",
+        actuator_coordinates_schema=
+            "test.graph.dm-normalized-pupil-coordinates.f32/1",
+    )
+end
+
 @testset "additive pupil-OPD composition graph node" begin
     uncompensated_opd = Float32[1 2; 3 4]
     surface_opd = Float32[-0.25 0.5; 0.75 -1]
@@ -1454,6 +1517,7 @@ end
         :deformable_mirror_surface_f32,
         :discrete_integrator_f32,
         :emccd_detector_acquisition_f32,
+        :gaussian_deformable_mirror_surface_f32,
         :modal_opd_expansion_f32,
         :pupil_opd_composition_f32,
         :pyramid_rate_f32,

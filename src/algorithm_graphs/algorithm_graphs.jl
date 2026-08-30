@@ -55,6 +55,7 @@ import ..Optics:
     CellIntegratedMeasure,
     DeformableMirror,
     DetectorPlane,
+    GaussianInfluenceWidth,
     IncoherentIntensityAddition,
     IntensityMap,
     MeasuredInfluenceFunctions,

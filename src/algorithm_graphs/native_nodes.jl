@@ -791,6 +791,202 @@ end
     return nothing
 end
 
+struct GaussianDeformableMirrorSurfaceNode{T<:AbstractFloat} end
+
+"""Construction values for one analytic Gaussian deformable-mirror node."""
+struct GaussianDeformableMirrorSurfaceNodeConfig{TD,T,AM}
+    telescope::TD
+    actuator_count::Int
+    influence_width::T
+    actuator_model::AM
+    pdm_command_schema::String
+    surface_opd_schema::String
+    actuator_coordinates_schema::String
+end
+
+function _gaussian_deformable_mirror_surface_config(
+    ::Type{T};
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    central_obstruction_ratio::Real,
+    pupil_reflectivity::Real,
+    aperture_revision::Integer,
+    actuator_count::Integer,
+    influence_width::Real,
+    actuator_model,
+    pdm_command_schema::AbstractString,
+    surface_opd_schema::AbstractString,
+    actuator_coordinates_schema::AbstractString,
+) where {T<:AbstractFloat}
+    count = Int(actuator_count)
+    count > 0 || throw(AlgorithmGraphError(
+        "Gaussian deformable-mirror actuator_count must be greater than zero",
+    ))
+    width = T(influence_width)
+    isfinite(width) && width > zero(T) || throw(AlgorithmGraphError(
+        "Gaussian deformable-mirror influence_width must be finite and " *
+        "greater than zero",
+    ))
+    schemas = (
+        pdm_command_schema,
+        surface_opd_schema,
+        actuator_coordinates_schema,
+    )
+    all(schema -> !isempty(schema), schemas) || throw(AlgorithmGraphError(
+        "Gaussian deformable-mirror scientific schemas must not be empty",
+    ))
+    telescope = try
+        TelescopeDefinition(
+            resolution=Int(resolution),
+            diameter=telescope_diameter_m,
+            central_obstruction=central_obstruction_ratio,
+            pupil_reflectivity=pupil_reflectivity,
+            revision=Int(aperture_revision),
+            T=T,
+        )
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+    return GaussianDeformableMirrorSurfaceNodeConfig(
+        telescope,
+        count,
+        width,
+        actuator_model,
+        String(pdm_command_schema),
+        String(surface_opd_schema),
+        String(actuator_coordinates_schema),
+    )
+end
+
+"""
+    gaussian_deformable_mirror_surface_node(name; resolution,
+        telescope_diameter_m, actuator_count, influence_width,
+        pdm_command_schema, surface_opd_schema,
+        actuator_coordinates_schema, ...)
+
+Declare one complete-command analytic Gaussian deformable-mirror operation.
+The graph snapshots caller-supplied actuator coordinates in normalized pupil
+coordinates and evaluates the native matrix-free Gaussian influence model.
+`influence_width` uses the same normalized-pupil coordinate system.
+
+Each PDM command element is the surface OPD in metres at its actuator centre,
+so the output is also surface OPD in metres. A normalized hardware command
+requires an explicit, separately qualified command-calibration adapter. Use
+[`deformable_mirror_surface_node`](@ref) when sampled measured influence
+functions are available.
+"""
+function gaussian_deformable_mirror_surface_node(
+    name::Symbol;
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    actuator_count::Integer,
+    influence_width::Real,
+    pdm_command_schema::AbstractString,
+    surface_opd_schema::AbstractString,
+    actuator_coordinates_schema::AbstractString,
+    central_obstruction_ratio::Real=0,
+    pupil_reflectivity::Real=1,
+    aperture_revision::Integer=0,
+    actuator_model=nothing,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _gaussian_deformable_mirror_surface_config(
+        T;
+        resolution,
+        telescope_diameter_m,
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        actuator_count,
+        influence_width,
+        actuator_model,
+        pdm_command_schema,
+        surface_opd_schema,
+        actuator_coordinates_schema,
+    )
+    return algorithm_node(
+        name,
+        GaussianDeformableMirrorSurfaceNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{GaussianDeformableMirrorSurfaceNode{T}},
+    config::GaussianDeformableMirrorSurfaceNodeConfig,
+) where {T}
+    resolution = config.telescope.resolution
+    return (
+        graph_port_contract(
+            :pdm_command,
+            :input,
+            :data,
+            T,
+            (config.actuator_count,),
+            config.pdm_command_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :surface_opd,
+            :output,
+            :data,
+            T,
+            (resolution, resolution),
+            config.surface_opd_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :actuator_coordinates,
+            :input,
+            :parameter,
+            T,
+            (2, config.actuator_count),
+            config.actuator_coordinates_schema,
+            :column_major,
+        ),
+    )
+end
+
+function prepare_graph_node(
+    ::Type{GaussianDeformableMirrorSurfaceNode{T}},
+    config::GaussianDeformableMirrorSurfaceNodeConfig,
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:pdm_command,)},
+    outputs::NamedTuple{(:surface_opd,)},
+    parameters::NamedTuple{(:actuator_coordinates,)},
+    target,
+) where {T}
+    actuator_coordinates = Array(parameters.actuator_coordinates)
+    all(isfinite, actuator_coordinates) || throw(AlgorithmGraphError(
+        "Gaussian deformable-mirror actuator coordinates must be finite",
+    ))
+    metadata = (
+        schema=config.actuator_coordinates_schema,
+        coordinate_system=NormalizedPupilCoordinates(),
+    )
+    topology = SampledActuatorTopology(
+        actuator_coordinates;
+        metadata,
+        T=T,
+    )
+    telescope = prepare_telescope(config.telescope, target)
+    deformable_mirror = DeformableMirror(
+        telescope;
+        topology,
+        influence_model=GaussianInfluenceWidth(config.influence_width),
+        actuator_model=config.actuator_model,
+        T=T,
+        backend=compute_device_backend(target),
+    )
+    return _DeformableMirrorSurfaceOwner(
+        deformable_mirror,
+        inputs.pdm_command,
+        outputs.surface_opd,
+    )
+end
+
 struct PupilOPDCompositionNode{T<:AbstractFloat} end
 
 """Construction values for one additive pupil-OPD composition node."""
