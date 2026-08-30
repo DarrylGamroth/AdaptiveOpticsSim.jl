@@ -503,6 +503,13 @@ parity. The default is a one-thread, closed-loop, self-paced service-cost
 measurement; it does not model fixed arrivals, transport, overload, or
 wall-clock pacing.
 
+The [reduced-resolution profile](../benchmarks/results/platform/2026-08-30-revolt-reduced-resolution-profile.toml)
+records 100-frame local CPU and AMDGPU runs plus a WSL CUDA run from the same
+source revision. On those systems, host-ready throughput improves by 2.0–6.1×
+for Classic and 21.6–33.4× for Copper relative to the full-optical profile.
+These speedups characterize execution cost only; they do not qualify optical
+or detector-noise equivalence.
+
 `benchmark_gate0_latency.jl` accepts `AOS_GATE0_CARD_IDS` as a comma-separated,
 predeclared subset. The artifact records the explicit selection mode and the
 ordered card IDs. Use this for incremental evidence owned by one PR so

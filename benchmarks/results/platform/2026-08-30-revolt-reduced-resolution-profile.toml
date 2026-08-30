@@ -1,0 +1,294 @@
+artifact_id = "REVOLT-REDUCED-RESOLUTION-PROFILE-2026-08-30"
+generated_on = "2026-08-30"
+source_revision = "1473980a61b2696bbedc278bf4757c468cb30407"
+baseline_artifact = "2026-08-30-revolt-algorithm-graph-node-profile.toml"
+evidence_class = "warmed synchronized diagnostic profile"
+raw_histograms_archived = false
+hypothesis = "An explicit reduced-resolution graph can preserve the REVOLT external HIL contract while substantially reducing complete-frame service cost."
+
+[contract]
+fidelity = "reduced_resolution"
+selection = "run immutable and selected before graph preparation"
+load_model = "warmed serial closed loop"
+arrival_model = "the next step starts only after the prior step completes"
+coordinated_omission_correction = false
+samples = 100
+warmup_cycles = 10
+timer = "time_ns; timer overhead is included and not subtracted"
+julia_threads = 1
+blas_threads = 1
+fft_threads = 1
+graph_boundary = "all graph nodes plus one exact graph-context synchronization"
+frame_host_ready_boundary = "graph boundary plus a completed target-to-host frame copy"
+command_target_ready_boundary = "finite host command validation plus a completed host-to-target command copy"
+lockstep_cycle_boundary = "frame-host-ready boundary immediately followed by same-sequence command adoption"
+tail_note = "The 100-sample percentiles are diagnostic and do not establish a production tail-latency bound."
+validity_note = "Reduced resolution preserves the declared atmosphere trajectory model, physical-DM command semantics, diffractive sensor family, external frame shape, and HIL sequence contract. It does not establish full-optical image, modulation, or detector-noise parity."
+
+[workload.classic]
+graph = "examples/graphs/revolt_classic_hil_reduced_resolution.toml"
+pupil_resolution = 128
+full_optical_pupil_resolution = 240
+sensor = "diffractive Shack-Hartmann"
+lenslets = 16
+diffraction_padding = 1
+detector_frame_shape = [352, 352]
+detector_noise = false
+atmosphere_layers = 5
+atmosphere_step_s = 0.001
+dm_actuators = 277
+dm_model = "provisional sampled-topology analytic Gaussian HSDM277"
+
+[workload.copper]
+graph = "examples/graphs/revolt_copper_hil_reduced_resolution.toml"
+pupil_resolution = 240
+full_optical_pupil_resolution = 480
+sensor = "diffractive modulated Pyramid"
+modulation_points = 4
+full_optical_modulation_points = 32
+diffraction_padding = 1
+detector_frame_shape = [64, 64]
+detector_noise = false
+atmosphere_layers = 5
+atmosphere_step_s = 0.002
+dm_actuators = 277
+dm_model = "provisional sampled-topology analytic Gaussian HSDM277"
+
+[environment.local]
+host = "rtc-devel"
+os = "Linux"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+logical_cpu_threads = 16
+gpu = "AMD Radeon Graphics"
+gpu_architecture = "gfx1030"
+julia = "1.12.7"
+amdgpu_jl = "2.7.0"
+
+[environment.wsl]
+host = "DGAMROTH-XPS"
+os = "WSL2 Linux"
+cpu = "12th Gen Intel Core i7-12700H"
+logical_cpu_threads = 20
+gpu = "NVIDIA GeForce RTX 3050 Ti Laptop GPU"
+gpu_architecture = "sm_86"
+julia = "1.12.6"
+cuda_jl = "6.3.1"
+cuda_runtime = "13.3"
+source_transfer = "git archive of source_revision"
+
+[[results]]
+system = "local"
+backend = "cpu"
+architecture = "classic"
+graph_mean_ns = 21908734.38
+graph_p50_ns = 21790719
+graph_p90_ns = 22429695
+graph_p99_ns = 22790143
+graph_rate_hz = 45.643896295209
+frame_host_ready_mean_ns = 22026915.57
+frame_host_ready_p50_ns = 21823487
+frame_host_ready_p90_ns = 22757375
+frame_host_ready_p99_ns = 24313855
+frame_host_ready_rate_hz = 45.3990027256458
+lockstep_cycle_mean_ns = 22028472.42
+lockstep_cycle_rate_hz = 45.39579417645338
+command_target_ready_mean_ns = 1556.85
+separately_synchronized_node_sum_over_graph_mean = 0.9946389176132776
+atmosphere_mean_ns = 487797.01
+pdm_mean_ns = 19924094.56
+pupil_opd_composition_mean_ns = 2694.98
+sensor_mean_ns = 1321448.61
+detector_mean_ns = 55244.69
+
+[[results]]
+system = "local"
+backend = "cpu"
+architecture = "copper"
+graph_mean_ns = 164478281.24
+graph_p50_ns = 162136063
+graph_p90_ns = 171180031
+graph_p99_ns = 173932543
+graph_rate_hz = 6.079830069119222
+frame_host_ready_mean_ns = 165333732.15
+frame_host_ready_p50_ns = 164626431
+frame_host_ready_p90_ns = 168034303
+frame_host_ready_p99_ns = 172621823
+frame_host_ready_rate_hz = 6.048372506904665
+lockstep_cycle_mean_ns = 165337343.36
+lockstep_cycle_rate_hz = 6.048240401580866
+command_target_ready_mean_ns = 3611.21
+separately_synchronized_node_sum_over_graph_mean = 1.0461004520647676
+atmosphere_mean_ns = 1738349.3
+pdm_mean_ns = 72800098.76
+pupil_opd_composition_mean_ns = 18523.91
+sensor_mean_ns = 97495322.11
+detector_mean_ns = 8510.28
+
+[[results]]
+system = "local"
+backend = "amdgpu"
+architecture = "classic"
+graph_mean_ns = 815441.94
+graph_p50_ns = 789503
+graph_p90_ns = 857599
+graph_p99_ns = 1006079
+graph_rate_hz = 1226.3288787917875
+frame_host_ready_mean_ns = 974227.28
+frame_host_ready_p50_ns = 963071
+frame_host_ready_p90_ns = 1019391
+frame_host_ready_p99_ns = 1085439
+frame_host_ready_rate_hz = 1026.4545250672923
+lockstep_cycle_mean_ns = 1000789.76
+lockstep_cycle_rate_hz = 999.2108632286565
+command_target_ready_mean_ns = 26562.48
+separately_synchronized_node_sum_over_graph_mean = 1.2495521262985323
+atmosphere_mean_ns = 156723.27
+pdm_mean_ns = 159451.26
+pupil_opd_composition_mean_ns = 29477.29
+sensor_mean_ns = 424173.53
+detector_mean_ns = 249111.86
+
+[[results]]
+system = "local"
+backend = "amdgpu"
+architecture = "copper"
+graph_mean_ns = 5942630.36
+graph_p50_ns = 4710399
+graph_p90_ns = 4907007
+graph_p99_ns = 30638079
+graph_rate_hz = 168.27565226520332
+frame_host_ready_mean_ns = 4834093.34
+frame_host_ready_p50_ns = 4812799
+frame_host_ready_p90_ns = 4993023
+frame_host_ready_p99_ns = 5238783
+frame_host_ready_rate_hz = 206.8640238543677
+lockstep_cycle_mean_ns = 4852664.41
+lockstep_cycle_rate_hz = 206.07235850459315
+command_target_ready_mean_ns = 18571.07
+separately_synchronized_node_sum_over_graph_mean = 0.8172501932292487
+atmosphere_mean_ns = 245457.92
+pdm_mean_ns = 418731.26
+pupil_opd_composition_mean_ns = 48602.88
+sensor_mean_ns = 3978494.33
+detector_mean_ns = 165329.42
+
+[[results]]
+system = "wsl"
+backend = "cuda"
+architecture = "classic"
+graph_mean_ns = 1895428.08
+graph_p50_ns = 1935359
+graph_p90_ns = 2121727
+graph_p99_ns = 2213887
+graph_rate_hz = 527.5853041071334
+frame_host_ready_mean_ns = 1901404.09
+frame_host_ready_p50_ns = 1910783
+frame_host_ready_p90_ns = 2142207
+frame_host_ready_p99_ns = 2281471
+frame_host_ready_rate_hz = 525.9271320911064
+lockstep_cycle_mean_ns = 2202621.46
+lockstep_cycle_rate_hz = 454.00447519475273
+command_target_ready_mean_ns = 301217.37
+separately_synchronized_node_sum_over_graph_mean = 1.1026566832332672
+atmosphere_mean_ns = 375918.28
+pdm_mean_ns = 496841.35
+pupil_opd_composition_mean_ns = 70413.22
+sensor_mean_ns = 909364.4
+detector_mean_ns = 237469.19
+
+[[results]]
+system = "wsl"
+backend = "cuda"
+architecture = "copper"
+graph_mean_ns = 2283168.45
+graph_p50_ns = 2269183
+graph_p90_ns = 2557951
+graph_p99_ns = 2676735
+graph_rate_hz = 437.9878322162344
+frame_host_ready_mean_ns = 2100403.08
+frame_host_ready_p50_ns = 2027519
+frame_host_ready_p90_ns = 2361343
+frame_host_ready_p99_ns = 2611199
+frame_host_ready_rate_hz = 476.09909237040347
+lockstep_cycle_mean_ns = 2130763.72
+lockstep_cycle_rate_hz = 469.3152932038846
+command_target_ready_mean_ns = 30360.64
+separately_synchronized_node_sum_over_graph_mean = 1.0893427289607125
+atmosphere_mean_ns = 260085.16
+pdm_mean_ns = 310341.96
+pupil_opd_composition_mean_ns = 55396.4
+sensor_mean_ns = 1648132.23
+detector_mean_ns = 213197.2
+
+[[comparisons]]
+system = "local"
+backend = "cpu"
+architecture = "classic"
+full_optical_frame_host_ready_rate_hz = 12.882096276320057
+reduced_resolution_frame_host_ready_rate_hz = 45.3990027256458
+speedup = 3.5241937144266267
+
+[[comparisons]]
+system = "local"
+backend = "cpu"
+architecture = "copper"
+full_optical_frame_host_ready_rate_hz = 0.2801134285861107
+reduced_resolution_frame_host_ready_rate_hz = 6.048372506904665
+speedup = 21.59258318115696
+
+[[comparisons]]
+system = "local"
+backend = "amdgpu"
+architecture = "classic"
+full_optical_frame_host_ready_rate_hz = 168.07535043853431
+reduced_resolution_frame_host_ready_rate_hz = 1026.4545250672923
+speedup = 6.1071092363580695
+
+[[comparisons]]
+system = "local"
+backend = "amdgpu"
+architecture = "copper"
+full_optical_frame_host_ready_rate_hz = 6.184714980509903
+reduced_resolution_frame_host_ready_rate_hz = 206.8640238543677
+speedup = 33.44762442671411
+
+[[comparisons]]
+system = "wsl"
+backend = "cuda"
+architecture = "classic"
+full_optical_frame_host_ready_rate_hz = 265.82171018380274
+reduced_resolution_frame_host_ready_rate_hz = 525.9271320911064
+speedup = 1.9784957809783612
+
+[[comparisons]]
+system = "wsl"
+backend = "cuda"
+architecture = "copper"
+full_optical_frame_host_ready_rate_hz = 18.666354640380266
+reduced_resolution_frame_host_ready_rate_hz = 476.09909237040347
+speedup = 25.50573486590012
+
+[interpretation]
+classic_cpu_primary_limit = "provisional sampled-topology HSDM277 Gaussian surface formation"
+copper_cpu_primary_limits = "provisional HSDM277 surface formation and four-point diffractive Pyramid sensing"
+classic_amdgpu_lockstep_rate_hz = 999.2108632286565
+copper_amdgpu_lockstep_rate_hz = 206.07235850459315
+classic_cuda_lockstep_rate_hz = 454.00447519475273
+copper_cuda_lockstep_rate_hz = 469.3152932038846
+notes = [
+    "Reduced Classic reaches approximately 1 kHz lockstep only on the tested AMDGPU; the tested CUDA path is about 454 Hz because its command-transfer boundary is material.",
+    "Reduced Copper exceeds 200 Hz lockstep on both tested GPUs and removes the full graph's 64 padded FFTs per frame by using four modulation points.",
+    "Disabling detector noise removes stochastic acquisition cost but also changes the detector model; noise studies must use full_optical or an explicitly qualified intermediate graph.",
+    "The CPU Classic bottleneck remains the exact 277-element provisional Gaussian DM response and is a candidate for a fidelity-preserving separable-grid optimization.",
+]
+
+[validation]
+focused_algorithm_graph_tests = "passed"
+profiler_cpu = "passed on local Ryzen 7 6800H"
+profiler_amdgpu = "passed on local gfx1030"
+profiler_cuda = "passed on WSL RTX 3050 Ti"
+classic_atmosphere_evolved = true
+copper_atmosphere_evolved = true
+classic_frames_finite_and_nonzero = true
+copper_frames_finite_and_nonzero = true
+warmed_graph_step_allocations_bytes = 0
