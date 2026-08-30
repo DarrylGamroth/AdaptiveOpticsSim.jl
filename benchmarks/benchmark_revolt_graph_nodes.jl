@@ -44,9 +44,9 @@ const PROFILE_WARMUP = parse(Int, get(
     "AOS_REVOLT_GRAPH_WARMUP",
     "5",
 ))
-const PROFILE_FIDELITY = Symbol(lowercase(strip(get(
+const PROFILE_GRAPH_PROFILE = Symbol(lowercase(strip(get(
     ENV,
-    "AOS_REVOLT_GRAPH_FIDELITY",
+    "AOS_REVOLT_GRAPH_PROFILE",
     "full_optical",
 ))))
 const PROFILE_ARCHITECTURES = Tuple(Symbol(strip(value)) for value in split(
@@ -108,14 +108,14 @@ function revolt_graph_profile(name::Symbol)
     if name === :classic
         return RevoltGraphProfile(
             name,
-            REVOLTHILGraphs.graph_path(name, PROFILE_FIDELITY),
+            REVOLTHILGraphs.graph_path(name, PROFILE_GRAPH_PROFILE),
             143,
             :shwfs_frame,
         )
     elseif name === :copper
         return RevoltGraphProfile(
             name,
-            REVOLTHILGraphs.graph_path(name, PROFILE_FIDELITY),
+            REVOLTHILGraphs.graph_path(name, PROFILE_GRAPH_PROFILE),
             139,
             :pwfs_frame,
         )
@@ -136,9 +136,9 @@ function configure_profile!()
     isempty(PROFILE_ARCHITECTURES) && error(
         "AOS_REVOLT_GRAPH_ARCHITECTURES must select at least one graph",
     )
-    PROFILE_FIDELITY in REVOLTHILGraphs.supported_fidelities() || error(
-        "AOS_REVOLT_GRAPH_FIDELITY must select one of " *
-        join(REVOLTHILGraphs.supported_fidelities(), ", "),
+    PROFILE_GRAPH_PROFILE in REVOLTHILGraphs.supported_profiles() || error(
+        "AOS_REVOLT_GRAPH_PROFILE must select one of " *
+        join(REVOLTHILGraphs.supported_profiles(), ", "),
     )
     return nothing
 end
@@ -191,14 +191,17 @@ function prepare_profile_graph(
     command_host = zeros(Float32, 277)
     command_host[profile.command_index] = 5.0f-8
     coordinates_host = REVOLTHSDM277.actuator_coordinates(Float32)
+    grid_indices_host = REVOLTHSDM277.actuator_grid_indices(Int32)
     command = backend_array(backend.array_type, command_host)
     coordinates = backend_array(backend.array_type, coordinates_host)
+    grid_indices = backend_array(backend.array_type, grid_indices_host)
     target = compute_device(command)
     definition = load_algorithm_graph(
         profile.graph_file;
         bindings=(;
             pdm_command=command,
             pdm_actuator_coordinates=coordinates,
+            pdm_actuator_grid_indices=grid_indices,
         ),
     )
     start = time_ns()
@@ -403,7 +406,7 @@ function main()
         GC.gc(true)
         results[index] = Dict{String,Any}(
             "name" => String(profile.name),
-            "fidelity" => String(PROFILE_FIDELITY),
+            "graph_profile" => String(PROFILE_GRAPH_PROFILE),
             "graph_file" => relpath(profile.graph_file, REPOSITORY_ROOT),
             "graph_execution" => graph_execution,
             "hil_execution" => hil_execution,
@@ -416,7 +419,7 @@ function main()
         "source_revision" => git_revision(),
         "source_tracked_dirty" => tracked_source_dirty(),
         "contract" => Dict{String,Any}(
-            "fidelity" => String(PROFILE_FIDELITY),
+            "graph_profile" => String(PROFILE_GRAPH_PROFILE),
             "samples" => PROFILE_SAMPLES,
             "warmup_cycles" => PROFILE_WARMUP,
             "timer" => "time_ns; overhead included and not subtracted",

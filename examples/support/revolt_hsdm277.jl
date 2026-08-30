@@ -1,6 +1,7 @@
 module REVOLTHSDM277
 
 export actuator_coordinates
+export actuator_grid_indices
 export actuator_index_map
 export normalized_pupil_actuator_pitch
 export provisional_gaussian_influence_width
@@ -136,6 +137,28 @@ function actuator_coordinates(
         coordinates[2, command_index] = T(centre - source_row) * pitch
     end
     return coordinates
+end
+
+"""
+    actuator_grid_indices([T=Int32])
+
+Return the column-major 19-by-19 grid location of every element in the exact
+277-element physical command order. The grid's first axis is increasing
+normalized-pupil x and its second axis is increasing normalized-pupil y. These
+indices allow a complete physical command to be scattered into the regular
+grid used by the separable Gaussian surface evaluation.
+"""
+function actuator_grid_indices(::Type{T}=Int32) where {T<:Integer}
+    index_map = actuator_index_map()
+    indices = Vector{T}(undef, _ACTUATOR_COUNT)
+    linear_indices = LinearIndices((_ACTUATOR_AXIS_COUNT, _ACTUATOR_AXIS_COUNT))
+    for source_row in axes(index_map, 1), column in axes(index_map, 2)
+        command_index = Int(index_map[source_row, column])
+        iszero(command_index) && continue
+        increasing_y_index = _ACTUATOR_AXIS_COUNT + 1 - source_row
+        indices[command_index] = T(linear_indices[column, increasing_y_index])
+    end
+    return indices
 end
 
 end # module REVOLTHSDM277

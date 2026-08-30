@@ -884,6 +884,7 @@ For example:
 - `DenseInfluenceMatrix(modes)`
 - `MeasuredInfluenceFunctions(modes; metadata=...)`
 - `ActuatorGridTopology(16)`
+- `ActuatorGridTopology(19; actuator_pitch=0.125)`
 - `SampledActuatorTopology(coords; valid_actuators=mask, metadata=...)`
 - `ClippedActuators(-0.2, 0.2)`
 - `ActuatorHealthMap(gains)`
@@ -905,6 +906,8 @@ may materialize the lazy operator during setup when a dense matrix is genuinely
 required.
 Regular-grid command vectors follow Julia column-major `C[x, y]` ordering, so
 the x actuator coordinate is the first and fastest-varying axis.
+`actuator_pitch` is expressed in normalized pupil coordinates and places the
+square grid symmetrically about zero; omit it for the default `[-1, 1]` axis.
 
 Actuator print-through is represented only when it is already present in a
 sampled influence basis supplied through `DenseInfluenceMatrix` or

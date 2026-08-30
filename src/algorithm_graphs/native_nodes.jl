@@ -1232,6 +1232,335 @@ function prepare_graph_node(
     )
 end
 
+struct GridGaussianDeformableMirrorSurfaceNode{T<:AbstractFloat} end
+
+"""Construction values for one separable regular-grid Gaussian DM node."""
+struct GridGaussianDeformableMirrorSurfaceNodeConfig{TD,T<:AbstractFloat}
+    telescope::TD
+    actuator_count::Int
+    actuator_axis_count::Int
+    actuator_pitch::T
+    influence_width::T
+    pdm_command_schema::String
+    surface_opd_schema::String
+    actuator_grid_indices_schema::String
+end
+
+function _grid_gaussian_deformable_mirror_surface_config(
+    ::Type{T};
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    central_obstruction_ratio::Real,
+    pupil_reflectivity::Real,
+    aperture_revision::Integer,
+    actuator_count::Integer,
+    actuator_axis_count::Integer,
+    actuator_pitch::Real,
+    influence_width::Real,
+    pdm_command_schema::AbstractString,
+    surface_opd_schema::AbstractString,
+    actuator_grid_indices_schema::AbstractString,
+) where {T<:AbstractFloat}
+    actuator_count isa Bool && throw(AlgorithmGraphError(
+        "grid Gaussian deformable-mirror actuator_count must be an " *
+        "integer, not Bool",
+    ))
+    0 < actuator_count <= typemax(Int) || throw(AlgorithmGraphError(
+        "grid Gaussian deformable-mirror actuator_count must be positive " *
+        "and fit the host index range",
+    ))
+    count = Int(actuator_count)
+    actuator_axis_count isa Bool && throw(AlgorithmGraphError(
+        "grid Gaussian deformable-mirror actuator_axis_count must be an " *
+        "integer, not Bool",
+    ))
+    1 < actuator_axis_count <= isqrt(typemax(Int32)) || throw(
+        AlgorithmGraphError(
+            "grid Gaussian deformable-mirror actuator_axis_count must be " *
+            "greater than one and its square must fit Int32",
+        ),
+    )
+    axis_count = Int(actuator_axis_count)
+    count <= axis_count * axis_count || throw(AlgorithmGraphError(
+        "grid Gaussian deformable-mirror actuator_count must not exceed " *
+        "actuator_axis_count squared",
+    ))
+    actuator_pitch isa Bool && throw(AlgorithmGraphError(
+        "grid Gaussian deformable-mirror actuator_pitch must be a real " *
+        "value, not Bool",
+    ))
+    pitch = T(actuator_pitch)
+    isfinite(pitch) && pitch > zero(T) || throw(AlgorithmGraphError(
+        "grid Gaussian deformable-mirror actuator_pitch must be finite " *
+        "and greater than zero",
+    ))
+    width = T(influence_width)
+    isfinite(width) && width > zero(T) || throw(AlgorithmGraphError(
+        "grid Gaussian deformable-mirror influence_width must be finite " *
+        "and greater than zero",
+    ))
+    schemas = (
+        pdm_command_schema,
+        surface_opd_schema,
+        actuator_grid_indices_schema,
+    )
+    all(schema -> !isempty(schema), schemas) || throw(AlgorithmGraphError(
+        "grid Gaussian deformable-mirror scientific schemas must not be " *
+        "empty",
+    ))
+    telescope = try
+        TelescopeDefinition(
+            resolution=Int(resolution),
+            diameter=telescope_diameter_m,
+            central_obstruction=central_obstruction_ratio,
+            pupil_reflectivity=pupil_reflectivity,
+            revision=Int(aperture_revision),
+            T=T,
+        )
+    catch error
+        error isa AdaptiveOpticsSimError || rethrow()
+        throw(AlgorithmGraphError(sprint(showerror, error)))
+    end
+    return GridGaussianDeformableMirrorSurfaceNodeConfig(
+        telescope,
+        count,
+        axis_count,
+        pitch,
+        width,
+        String(pdm_command_schema),
+        String(surface_opd_schema),
+        String(actuator_grid_indices_schema),
+    )
+end
+
+"""
+    grid_gaussian_deformable_mirror_surface_node(name; resolution,
+        telescope_diameter_m, actuator_count, actuator_axis_count,
+        actuator_pitch, influence_width, pdm_command_schema,
+        surface_opd_schema, actuator_grid_indices_schema, ...)
+
+Declare an analytic Gaussian deformable-mirror operation whose active
+actuators occupy a subset of a square regular grid. The startup
+`actuator_grid_indices` parameter maps each complete PDM command element to
+one column-major cell of that grid.
+
+The prepared node scatters the active command into a zero-filled grid and
+evaluates the Gaussian surface as `X * C * Y'`. This factorization is
+mathematically equivalent to summing the declared Gaussian influence function
+at every mapped actuator coordinate. It is not valid for an irregular grid or
+for a registration that breaks separability.
+"""
+function grid_gaussian_deformable_mirror_surface_node(
+    name::Symbol;
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    actuator_count::Integer,
+    actuator_axis_count::Integer,
+    actuator_pitch::Real,
+    influence_width::Real,
+    pdm_command_schema::AbstractString,
+    surface_opd_schema::AbstractString,
+    actuator_grid_indices_schema::AbstractString,
+    central_obstruction_ratio::Real=0,
+    pupil_reflectivity::Real=1,
+    aperture_revision::Integer=0,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _grid_gaussian_deformable_mirror_surface_config(
+        T;
+        resolution,
+        telescope_diameter_m,
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        actuator_count,
+        actuator_axis_count,
+        actuator_pitch,
+        influence_width,
+        pdm_command_schema,
+        surface_opd_schema,
+        actuator_grid_indices_schema,
+    )
+    return algorithm_node(
+        name,
+        GridGaussianDeformableMirrorSurfaceNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{GridGaussianDeformableMirrorSurfaceNode{T}},
+    config::GridGaussianDeformableMirrorSurfaceNodeConfig,
+) where {T}
+    resolution = config.telescope.resolution
+    return (
+        graph_port_contract(
+            :pdm_command,
+            :input,
+            :data,
+            T,
+            (config.actuator_count,),
+            config.pdm_command_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :surface_opd,
+            :output,
+            :data,
+            T,
+            (resolution, resolution),
+            config.surface_opd_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :actuator_grid_indices,
+            :input,
+            :parameter,
+            Int32,
+            (config.actuator_count,),
+            config.actuator_grid_indices_schema,
+            :column_major,
+        ),
+    )
+end
+
+struct _GridGaussianDeformableMirrorSurfaceOwner{
+    DM,
+    Command,
+    Indices,
+    Output,
+}
+    deformable_mirror::DM
+    pdm_command::Command
+    actuator_grid_indices::Indices
+    output::Output
+end
+
+@kernel function _scatter_grid_dm_command_kernel!(
+    grid_command,
+    active_command,
+    grid_indices,
+    count::Int,
+)
+    index = @index(Global, Linear)
+    if index <= count
+        @inbounds grid_command[grid_indices[index]] = active_command[index]
+    end
+end
+
+@inline function _scatter_grid_dm_command!(
+    ::ScalarCPUStyle,
+    grid_command,
+    active_command,
+    grid_indices,
+)
+    fill!(grid_command, zero(eltype(grid_command)))
+    @inbounds for index in eachindex(active_command, grid_indices)
+        grid_command[grid_indices[index]] = active_command[index]
+    end
+    return grid_command
+end
+
+@inline function _scatter_grid_dm_command!(
+    style::AcceleratorStyle,
+    grid_command,
+    active_command,
+    grid_indices,
+)
+    fill!(grid_command, zero(eltype(grid_command)))
+    launch_kernel!(
+        style,
+        _scatter_grid_dm_command_kernel!,
+        grid_command,
+        active_command,
+        grid_indices,
+        length(active_command);
+        ndrange=length(active_command),
+    )
+    return grid_command
+end
+
+function prepare_graph_node(
+    ::Type{GridGaussianDeformableMirrorSurfaceNode{T}},
+    config::GridGaussianDeformableMirrorSurfaceNodeConfig,
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:pdm_command,)},
+    outputs::NamedTuple{(:surface_opd,)},
+    parameters::NamedTuple{(:actuator_grid_indices,)},
+    target,
+) where {T}
+    grid_indices_host = Int32.(Array(parameters.actuator_grid_indices))
+    grid_extent = config.actuator_axis_count * config.actuator_axis_count
+    all(index -> 1 <= index <= grid_extent, grid_indices_host) || throw(
+        AlgorithmGraphError(
+            "grid Gaussian deformable-mirror actuator_grid_indices must " *
+            "address the declared actuator grid",
+        ),
+    )
+    length(unique(grid_indices_host)) == config.actuator_count || throw(
+        AlgorithmGraphError(
+            "grid Gaussian deformable-mirror actuator_grid_indices must " *
+            "be unique",
+        ),
+    )
+    grid_indices = similar(
+        inputs.pdm_command,
+        Int32,
+        config.actuator_count,
+    )
+    copyto!(grid_indices, grid_indices_host)
+    topology = ActuatorGridTopology(
+        config.actuator_axis_count;
+        actuator_pitch=config.actuator_pitch,
+        T=T,
+    )
+    telescope = prepare_telescope(config.telescope, target)
+    deformable_mirror = DeformableMirror(
+        telescope;
+        topology,
+        influence_model=GaussianInfluenceWidth(config.influence_width),
+        T=T,
+        backend=compute_device_backend(target),
+    )
+    return _GridGaussianDeformableMirrorSurfaceOwner(
+        deformable_mirror,
+        inputs.pdm_command,
+        grid_indices,
+        outputs.surface_opd,
+    )
+end
+
+@inline function step_graph_node!(
+    owner::_GridGaussianDeformableMirrorSurfaceOwner,
+)
+    grid_command = command_storage(owner.deformable_mirror)
+    _scatter_grid_dm_command!(
+        execution_style(grid_command),
+        grid_command,
+        owner.pdm_command,
+        owner.actuator_grid_indices,
+    )
+    update_surface!(owner.deformable_mirror)
+    copyto!(owner.output, surface_opd(owner.deformable_mirror))
+    return nothing
+end
+
+@inline function reset_graph_node!(
+    owner::_GridGaussianDeformableMirrorSurfaceOwner,
+)
+    fill!(
+        command_storage(owner.deformable_mirror),
+        zero(eltype(owner.pdm_command)),
+    )
+    fill!(
+        surface_opd(owner.deformable_mirror),
+        zero(eltype(owner.output)),
+    )
+    fill!(owner.output, zero(eltype(owner.output)))
+    return nothing
+end
+
 struct PupilOPDCompositionNode{T<:AbstractFloat} end
 
 """Construction values for one additive pupil-OPD composition node."""

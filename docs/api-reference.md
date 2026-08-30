@@ -1870,7 +1870,10 @@ the canonical representation of these results.
   alternative from caller-bound normalized-pupil actuator coordinates and a
   configured Gaussian influence width. Its command values are unit-peak
   actuator surface-OPD coefficients in metres, not normalized hardware
-  commands.
+  commands. `grid_gaussian_deformable_mirror_surface_node` specializes that
+  model for active actuators mapped into a declared square regular grid and
+  evaluates the same separable Gaussian product without changing the external
+  command or surface-OPD contracts.
   `multilayer_atmosphere_opd_node` prepares one finite moving-screen
   `MultiLayerAtmosphere` and on-axis renderer on the graph target. Its exact
   prepared owner retains one RNG stream, advances by the explicitly configured

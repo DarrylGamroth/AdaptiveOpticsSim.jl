@@ -1,21 +1,21 @@
-# Reduced-resolution REVOLT Classic HIL sensor boundary.
+# REVOLT Classic HIL sensor boundary with separable-grid PDM evaluation.
 #
-# This graph is an explicitly lower-fidelity, command-responsive workload. It
-# preserves the five-layer moving atmosphere, exact 277-element command order,
-# provisional HSDM277 Gaussian response, diffractive Shack-Hartmann formation,
-# 352-by-352 RTC frame, and 1 ms model-time step. It reduces the pupil grid from
-# 240 to 128 samples, requests the minimum diffraction padding, and disables
-# photon/readout noise. It does not claim full-optical image or noise parity.
+# This graph changes only the implementation of the provisional HSDM277
+# surface. The exact 277-element command is scattered into its regular 19-by-19
+# physical grid and the same Gaussian influence model is evaluated with the
+# separable X * C * Y' factorization. Atmosphere, pupil sampling, diffractive
+# Shack-Hartmann formation, detector noise, 352-by-352 RTC frame, and 1 ms
+# model-time step match revolt_classic_hil.toml.
 
 schema_version = 1
-name = "revolt_classic_hil_reduced_resolution"
+name = "revolt_classic_hil_fast_dm"
 
 [[nodes]]
 name = "atmosphere"
 type = "multilayer_atmosphere_opd_f32"
 
 [nodes.config]
-resolution = 128
+resolution = 240
 telescope_diameter_m = 1.22
 central_obstruction_ratio = 0.20491803278688525
 pupil_reflectivity = 1.0
@@ -39,26 +39,28 @@ atmosphere_opd_schema = "org.revolt.classic.atmosphere-opd-m.f32/1"
 
 [[nodes]]
 name = "pdm"
-type = "gaussian_deformable_mirror_surface_f32"
+type = "grid_gaussian_deformable_mirror_surface_f32"
 
 [nodes.config]
-resolution = 128
+resolution = 240
 telescope_diameter_m = 1.22
 central_obstruction_ratio = 0.20491803278688525
 pupil_reflectivity = 1.0
 aperture_revision = 1
 actuator_count = 277
+actuator_axis_count = 19
+actuator_pitch = 0.125
 influence_width = 0.08626550214129701
 pdm_command_schema = "org.revolt.hsdm277.actuator-surface-opd-m.f32/1"
 surface_opd_schema = "org.revolt.hsdm277.pdm-surface-opd-m.f32/1"
-actuator_coordinates_schema = "org.revolt.hsdm277.normalized-pupil-actuator-coordinates.f32/1"
+actuator_grid_indices_schema = "org.revolt.hsdm277.actuator-grid-indices.i32/1"
 
 [[nodes]]
 name = "pupil_opd_composition"
 type = "pupil_opd_composition_f32"
 
 [nodes.config]
-resolution = 128
+resolution = 240
 uncompensated_opd_schema = "org.revolt.classic.atmosphere-opd-m.f32/1"
 surface_opd_schema = "org.revolt.hsdm277.pdm-surface-opd-m.f32/1"
 pupil_opd_schema = "org.revolt.classic.pupil-opd-m.f32/1"
@@ -68,14 +70,14 @@ name = "shwfs"
 type = "shack_hartmann_rate_f32"
 
 [nodes.config]
-resolution = 128
+resolution = 240
 telescope_diameter_m = 1.22
 central_obstruction_ratio = 0.20491803278688525
 pupil_reflectivity = 1.0
 aperture_revision = 1
 n_lenslets = 16
 n_pix_subap = 22
-diffraction_padding = 1
+diffraction_padding = 2
 pixel_scale_arcsec = 0.697
 valid_subaperture_threshold = 0.1
 threshold_convolution = 0.05
@@ -101,9 +103,9 @@ pixel_scale_arcsec = 0.697
 wavelength_m = 8.0e-7
 exposure_duration_s = 0.001
 quantum_efficiency = 0.5
-photon_noise = false
-readout_noise = false
-readout_noise_e = 0.0
+photon_noise = true
+readout_noise = true
+readout_noise_e = 2.7
 rng_seed = 0
 photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
 frame_schema = "org.revolt.classic.shwfs-frame.f32/1"
@@ -150,5 +152,5 @@ source = "shwfs.photon_rate"
 destination = "detector.photon_rate"
 
 [[parameters]]
-destination = "pdm.actuator_coordinates"
-binding = "pdm_actuator_coordinates"
+destination = "pdm.actuator_grid_indices"
+binding = "pdm_actuator_grid_indices"

@@ -57,6 +57,7 @@ import ..Control:
     reset_controller!,
     update!
 import ..Optics:
+    ActuatorGridTopology,
     AngularCoordinates,
     CellIntegratedMeasure,
     DeformableMirror,
@@ -73,6 +74,7 @@ import ..Optics:
     SampledActuatorTopology,
     Source,
     TelescopeDefinition,
+    command_storage,
     photon_irradiance,
     prepare_telescope,
     set_command!,

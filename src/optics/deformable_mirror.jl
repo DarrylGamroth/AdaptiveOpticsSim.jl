@@ -203,21 +203,37 @@ ClippedActuators(lo::Real, hi::Real) = ClippedActuators(float(lo), float(hi))
 ActuatorHealthMap(gains::AbstractVector{<:Real}) = ActuatorHealthMap(collect(float.(gains)))
 CompositeDMActuatorModel(stages::AbstractDMActuatorModel...) = CompositeDMActuatorModel(stages)
 
-function ActuatorGridTopology(n_act::Integer; valid_actuators::Union{Nothing,AbstractVector{Bool}}=nothing,
+function ActuatorGridTopology(n_act::Integer;
+    valid_actuators::Union{Nothing,AbstractVector{Bool}}=nothing,
+    actuator_pitch::Union{Nothing,Real}=nothing,
     metadata=(;), T::Type{<:AbstractFloat}=Float64)
-    n_act > 0 || throw(InvalidConfiguration("ActuatorGridTopology n_act must be > 0"))
-    total = Int(n_act) * Int(n_act)
+    n_act isa Bool && throw(InvalidConfiguration(
+        "ActuatorGridTopology n_act must be an integer, not Bool"))
+    0 < n_act <= isqrt(typemax(Int)) || throw(InvalidConfiguration(
+        "ActuatorGridTopology n_act must be positive and its square must " *
+        "fit the host index range"))
+    axis_count = Int(n_act)
+    total = axis_count * axis_count
     mask = valid_actuators === nothing ? fill(true, total) : collect(valid_actuators)
     length(mask) == total ||
         throw(DimensionMismatchError("ActuatorGridTopology valid_actuators length $(length(mask)) does not match expected $(total)"))
     any(mask) || throw(InvalidConfiguration("ActuatorGridTopology must contain at least one active actuator"))
-    xs = collect(range(T(-1), T(1); length=Int(n_act)))
-    ys = collect(range(T(-1), T(1); length=Int(n_act)))
+    actuator_pitch isa Bool && throw(InvalidConfiguration(
+        "ActuatorGridTopology actuator_pitch must be a real value, not Bool"))
+    axis = if actuator_pitch === nothing
+        collect(range(T(-1), T(1); length=axis_count))
+    else
+        pitch = T(actuator_pitch)
+        isfinite(pitch) && pitch > zero(T) || throw(InvalidConfiguration(
+            "ActuatorGridTopology actuator_pitch must be finite and > 0"))
+        centre = T(axis_count + 1) / T(2)
+        [(T(index) - centre) * pitch for index in 1:axis_count]
+    end
     coords = Matrix{T}(undef, 2, total)
     idx = 1
     # Keep x as the first/fast actuator axis so a command vector reshapes to
     # C[x, y] using Julia's native column-major layout.
-    @inbounds for y0 in ys, x0 in xs
+    @inbounds for y0 in axis, x0 in axis
         coords[1, idx] = x0
         coords[2, idx] = y0
         idx += 1
@@ -225,7 +241,7 @@ function ActuatorGridTopology(n_act::Integer; valid_actuators::Union{Nothing,Abs
     active_idx = findall(identity, mask)
     active_coords = coords[:, active_idx]
     return ActuatorGridTopology{T,typeof(coords),typeof(active_coords),typeof(mask),typeof(active_idx),typeof(metadata)}(
-        Int(n_act), coords, active_coords, mask, active_idx, metadata)
+        axis_count, coords, active_coords, mask, active_idx, metadata)
 end
 
 function SampledActuatorTopology(coords::AbstractMatrix{<:Real};
@@ -311,7 +327,11 @@ end
 @inline supports_separable_topology(topology::ActuatorGridTopology) = all(valid_actuator_mask(topology))
 
 @inline dm_normalized_pitch(n_act::Integer) = 2.0 / (n_act - 1)
-@inline dm_normalized_pitch(topology::ActuatorGridTopology) = dm_normalized_pitch(topology.n_act)
+@inline function dm_normalized_pitch(topology::ActuatorGridTopology)
+    topology.n_act > 1 || throw(InvalidConfiguration(
+        "normalized actuator pitch requires more than one actuator per axis"))
+    return abs(topology.coords[1, 2] - topology.coords[1, 1])
+end
 
 function mechanical_coupling(n_act::Integer, influence_width::Real)
     n_act > 1 || throw(InvalidConfiguration("mechanical coupling requires n_act > 1"))
@@ -331,7 +351,8 @@ end
 @inline influence_width(model::GaussianInfluenceWidth, ::AbstractDMTopology) = model.width
 @inline influence_width(model::GaussianInfluenceWidth, ::Integer) = model.width
 @inline function influence_width(model::GaussianMechanicalCoupling, topology::ActuatorGridTopology)
-    typeof(model.coupling)(influence_width_from_mechanical_coupling(topology.n_act, model.coupling))
+    pitch = typeof(model.coupling)(dm_normalized_pitch(topology))
+    return pitch / sqrt(-typeof(model.coupling)(2) * log(model.coupling))
 end
 @inline influence_width(model::GaussianMechanicalCoupling, n_act::Integer) =
     typeof(model.coupling)(influence_width_from_mechanical_coupling(n_act, model.coupling))
@@ -345,7 +366,8 @@ influence_width(::MeasuredInfluenceFunctions, ::AbstractDMTopology) =
 @inline influence_width(dm::DeformableMirror) = influence_width(influence_model(dm), topology(dm))
 
 @inline mechanical_coupling(model::GaussianInfluenceWidth, topology::ActuatorGridTopology) =
-    typeof(model.width)(mechanical_coupling(topology.n_act, model.width))
+    exp(-(typeof(model.width)(dm_normalized_pitch(topology))^2) /
+        (typeof(model.width)(2) * model.width^2))
 @inline mechanical_coupling(model::GaussianInfluenceWidth, n_act::Integer) =
     typeof(model.width)(mechanical_coupling(n_act, model.width))
 @inline mechanical_coupling(model::GaussianMechanicalCoupling, ::ActuatorGridTopology) = model.coupling
@@ -695,21 +717,21 @@ function build_separable_influence!(dm::DeformableMirror, tel::Telescope,
     n_act = topology_axis_count(topology)
     T = eltype(dm.state.opd)
     sigma2 = T(influence_width(model, topology))^2
-    xs = range(T(-1), T(1); length=n_act)
-    ys = range(T(-1), T(1); length=n_act)
     cx = T((n + 1) / 2)
     cy = T((n + 1) / 2)
     scale = T(n / 2)
     xbasis_host = Matrix{T}(undef, n, n_act)
     ybasis_host = Matrix{T}(undef, n_act, n)
-    @inbounds for (ai, x0) in enumerate(xs)
+    @inbounds for ai in 1:n_act
+        x0 = topology.coords[1, ai]
         x_m, _ = apply_misregistration(dm.params.misregistration, x0, zero(T))
         for i in 1:n
             x = (T(i) - cx) / scale
             xbasis_host[i, ai] = exp(-((x - T(x_m))^2) / (2 * sigma2))
         end
     end
-    @inbounds for (aj, y0) in enumerate(ys)
+    @inbounds for aj in 1:n_act
+        y0 = topology.coords[2, (aj - 1) * n_act + 1]
         _, y_m = apply_misregistration(dm.params.misregistration, zero(T), y0)
         for j in 1:n
             y = (T(j) - cy) / scale

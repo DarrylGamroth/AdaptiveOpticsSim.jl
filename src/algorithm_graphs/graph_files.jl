@@ -572,6 +572,94 @@ function _gaussian_deformable_mirror_surface_f32_node(
     )
 end
 
+function _grid_gaussian_deformable_mirror_surface_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :actuator_axis_count,
+        :actuator_count,
+        :actuator_grid_indices_schema,
+        :actuator_pitch,
+        :aperture_revision,
+        :central_obstruction_ratio,
+        :influence_width,
+        :pdm_command_schema,
+        :pupil_reflectivity,
+        :resolution,
+        :surface_opd_schema,
+        :telescope_diameter_m,
+    )
+    required_fields = (
+        :actuator_axis_count,
+        :actuator_count,
+        :actuator_grid_indices_schema,
+        :actuator_pitch,
+        :influence_width,
+        :pdm_command_schema,
+        :resolution,
+        :surface_opd_schema,
+        :telescope_diameter_m,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    central_obstruction_ratio = hasproperty(
+        config,
+        :central_obstruction_ratio,
+    ) ? _file_real(
+        config.central_obstruction_ratio,
+        "$context.central_obstruction_ratio",
+    ) : 0.0
+    pupil_reflectivity = hasproperty(config, :pupil_reflectivity) ?
+        _file_real(config.pupil_reflectivity, "$context.pupil_reflectivity") :
+        1.0
+    aperture_revision = hasproperty(config, :aperture_revision) ?
+        _file_integer(config.aperture_revision, "$context.aperture_revision") :
+        0
+    return grid_gaussian_deformable_mirror_surface_node(
+        name;
+        resolution=_file_integer(config.resolution, "$context.resolution"),
+        telescope_diameter_m=_file_real(
+            config.telescope_diameter_m,
+            "$context.telescope_diameter_m",
+        ),
+        central_obstruction_ratio,
+        pupil_reflectivity,
+        aperture_revision,
+        actuator_count=_file_integer(
+            config.actuator_count,
+            "$context.actuator_count",
+        ),
+        actuator_axis_count=_file_integer(
+            config.actuator_axis_count,
+            "$context.actuator_axis_count",
+        ),
+        actuator_pitch=_file_real(
+            config.actuator_pitch,
+            "$context.actuator_pitch",
+        ),
+        influence_width=_file_real(
+            config.influence_width,
+            "$context.influence_width",
+        ),
+        pdm_command_schema=_file_string(
+            config.pdm_command_schema,
+            "$context.pdm_command_schema",
+        ),
+        surface_opd_schema=_file_string(
+            config.surface_opd_schema,
+            "$context.surface_opd_schema",
+        ),
+        actuator_grid_indices_schema=_file_string(
+            config.actuator_grid_indices_schema,
+            "$context.actuator_grid_indices_schema",
+        ),
+        T=Float32,
+    )
+end
+
 function _pupil_opd_composition_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -1304,6 +1392,8 @@ function builtin_graph_node_types()
             _emccd_detector_acquisition_f32_node,
         gaussian_deformable_mirror_surface_f32=
             _gaussian_deformable_mirror_surface_f32_node,
+        grid_gaussian_deformable_mirror_surface_f32=
+            _grid_gaussian_deformable_mirror_surface_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
         multilayer_atmosphere_opd_f32=
             _multilayer_atmosphere_opd_f32_node,

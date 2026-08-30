@@ -886,6 +886,123 @@ end
     )
 end
 
+@testset "separable grid Gaussian deformable-mirror graph node" begin
+    actuator_axis_count = 3
+    actuator_pitch = 0.4f0
+    influence_width = 0.2f0
+    actuator_grid_indices = Int32[1, 3, 5, 7, 9]
+    pdm_command = Float32[2, -1, 0.5, 1.5, -0.25] .* 1.0f-8
+    grid_coordinates = Float32[-0.4, 0, 0.4]
+    actuator_coordinates = Matrix{Float32}(
+        undef,
+        2,
+        length(actuator_grid_indices),
+    )
+    for command_index in eachindex(actuator_grid_indices)
+        grid_index = CartesianIndices((3, 3))[
+            actuator_grid_indices[command_index]
+        ]
+        actuator_coordinates[1, command_index] =
+            grid_coordinates[grid_index[1]]
+        actuator_coordinates[2, command_index] =
+            grid_coordinates[grid_index[2]]
+    end
+    general_node = gaussian_deformable_mirror_surface_node(
+        :general_dm;
+        resolution=16,
+        telescope_diameter_m=1.22,
+        actuator_count=length(pdm_command),
+        influence_width,
+        pdm_command_schema="test.graph.pdm-actuator-opd-m.f32/1",
+        surface_opd_schema="test.graph.dm-surface-opd-m.f32/1",
+        actuator_coordinates_schema=
+            "test.graph.dm-normalized-pupil-coordinates.f32/1",
+    )
+    grid_node = grid_gaussian_deformable_mirror_surface_node(
+        :grid_dm;
+        resolution=16,
+        telescope_diameter_m=1.22,
+        actuator_count=length(pdm_command),
+        actuator_axis_count,
+        actuator_pitch,
+        influence_width,
+        pdm_command_schema="test.graph.pdm-actuator-opd-m.f32/1",
+        surface_opd_schema="test.graph.dm-surface-opd-m.f32/1",
+        actuator_grid_indices_schema=
+            "test.graph.dm-actuator-grid-indices.i32/1",
+    )
+    definition = algorithm_graph(
+        (general_node, grid_node);
+        name=:separable_grid_gaussian_deformable_mirror,
+        inputs=(
+            graph_input(
+                :general_command,
+                :general_dm => :pdm_command,
+                copy(pdm_command),
+            ),
+            graph_input(
+                :grid_command,
+                :grid_dm => :pdm_command,
+                copy(pdm_command),
+            ),
+        ),
+        outputs=(
+            graph_output(:general_surface, :general_dm => :surface_opd),
+            graph_output(:grid_surface, :grid_dm => :surface_opd),
+        ),
+        parameters=(
+            sparse_parameter(
+                :general_dm => :actuator_coordinates,
+                actuator_coordinates,
+            ),
+            sparse_parameter(
+                :grid_dm => :actuator_grid_indices,
+                actuator_grid_indices,
+            ),
+        ),
+    )
+    graph = prepare_algorithm_graph(definition)
+    step_graph!(graph)
+    general_surface = graph_output(graph, Val(:general_surface))
+    grid_surface = graph_output(graph, Val(:grid_surface))
+    owner = prepared_graph_node(graph, Val(:grid_dm))
+    @test owner.deformable_mirror.state.separable_x !== nothing
+    @test grid_surface ≈ general_surface rtol = 2.0f-5 atol = 1.0f-12
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+
+    reset_graph!(graph)
+    @test all(iszero, grid_surface)
+
+    duplicate_mapping = algorithm_graph(
+        (grid_node,);
+        inputs=(graph_input(
+            :grid_command,
+            :grid_dm => :pdm_command,
+            copy(pdm_command),
+        ),),
+        parameters=(sparse_parameter(
+            :grid_dm => :actuator_grid_indices,
+            Int32[1, 1, 5, 7, 9],
+        ),),
+    )
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(
+        duplicate_mapping,
+    )
+    @test_throws AlgorithmGraphError grid_gaussian_deformable_mirror_surface_node(
+        :invalid_grid_dm;
+        resolution=16,
+        telescope_diameter_m=1.22,
+        actuator_count=5,
+        actuator_axis_count=1,
+        actuator_pitch,
+        influence_width,
+        pdm_command_schema="test.graph.pdm-actuator-opd-m.f32/1",
+        surface_opd_schema="test.graph.dm-surface-opd-m.f32/1",
+        actuator_grid_indices_schema=
+            "test.graph.dm-actuator-grid-indices.i32/1",
+    )
+end
+
 @testset "finite multilayer-atmosphere OPD graph node" begin
     node = multilayer_atmosphere_opd_node(
         :atmosphere;
@@ -1587,6 +1704,7 @@ end
         :discrete_integrator_f32,
         :emccd_detector_acquisition_f32,
         :gaussian_deformable_mirror_surface_f32,
+        :grid_gaussian_deformable_mirror_surface_f32,
         :modal_opd_expansion_f32,
         :multilayer_atmosphere_opd_f32,
         :pupil_opd_composition_f32,
@@ -1793,37 +1911,37 @@ end
     @test sum(frame) > 0
 end
 
-@testset "REVOLT HIL fidelity selection and reduced-resolution graphs" begin
+@testset "REVOLT HIL profile selection and fast-DM graphs" begin
     @test REVOLTHILGraphs.supported_architectures() == (:classic, :copper)
-    @test REVOLTHILGraphs.supported_fidelities() ==
-        (:full_optical, :reduced_resolution)
+    @test REVOLTHILGraphs.supported_profiles() ==
+        (:full_optical, :fast_dm)
     @test basename(REVOLTHILGraphs.graph_path(:classic)) ==
         "revolt_classic_hil.toml"
     @test basename(REVOLTHILGraphs.graph_path(
         :classic,
-        :reduced_resolution,
-    )) == "revolt_classic_hil_reduced_resolution.toml"
+        :fast_dm,
+    )) == "revolt_classic_hil_fast_dm.toml"
     @test basename(REVOLTHILGraphs.graph_path(
         :copper,
-        :reduced_resolution,
-    )) == "revolt_copper_hil_reduced_resolution.toml"
+        :fast_dm,
+    )) == "revolt_copper_hil_fast_dm.toml"
     @test_throws ArgumentError REVOLTHILGraphs.graph_path(:unknown)
     @test_throws ArgumentError REVOLTHILGraphs.graph_path(:classic, :unknown)
 
     cases = (
         (
             architecture=:classic,
-            graph_name=:revolt_classic_hil_reduced_resolution,
+            graph_name=:revolt_classic_hil_fast_dm,
             command_index=143,
-            atmosphere_shape=(128, 128),
+            atmosphere_shape=(240, 240),
             frame_output=:shwfs_frame,
             frame_shape=(352, 352),
         ),
         (
             architecture=:copper,
-            graph_name=:revolt_copper_hil_reduced_resolution,
+            graph_name=:revolt_copper_hil_fast_dm,
             command_index=139,
-            atmosphere_shape=(240, 240),
+            atmosphere_shape=(480, 480),
             frame_output=:pwfs_frame,
             frame_shape=(64, 64),
         ),
@@ -1831,16 +1949,16 @@ end
     for case in cases
         pdm_command = zeros(Float32, 277)
         pdm_command[case.command_index] = 5.0f-8
-        pdm_actuator_coordinates =
-            REVOLTHSDM277.actuator_coordinates(Float32)
+        pdm_actuator_grid_indices =
+            REVOLTHSDM277.actuator_grid_indices(Int32)
         definition = load_algorithm_graph(
             REVOLTHILGraphs.graph_path(
                 case.architecture,
-                :reduced_resolution,
+                :fast_dm,
             );
             bindings=(;
                 pdm_command,
-                pdm_actuator_coordinates,
+                pdm_actuator_grid_indices,
             ),
         )
         graph = prepare_algorithm_graph(definition)
@@ -1859,20 +1977,21 @@ end
         @test size(frame) == case.frame_shape
         @test all(isfinite, frame)
         @test sum(frame) > 0
-        @test maximum(surface_opd) ≈ 5.0f-8 rtol = 1.0f-2
+        @test maximum(surface_opd) ≈ 5.0f-8 rtol = 5.0f-3
 
         fill!(hil_command_buffer(boundary), 0.0f0)
         hil_command_buffer(boundary)[case.command_index] = -2.5f-8
         adopt_hil_command!(boundary, UInt64(1))
         @test @allocated(step_hil_frame!(boundary)) == 0
         @test atmosphere_opd != first_atmosphere_opd
-        @test minimum(surface_opd) ≈ -2.5f-8 rtol = 1.0f-2
+        @test minimum(surface_opd) ≈ -2.5f-8 rtol = 5.0f-3
     end
 end
 
 @testset "REVOLT HSDM277 command map and provisional response" begin
     index_map = REVOLTHSDM277.actuator_index_map()
     coordinates = REVOLTHSDM277.actuator_coordinates(Float32)
+    grid_indices = REVOLTHSDM277.actuator_grid_indices(Int32)
 
     @test size(index_map) == (19, 19)
     @test count(!iszero, index_map) == 277
@@ -1892,6 +2011,21 @@ end
     @test coordinates[:, 271] == Float32[-0.375, 1.125]
     @test coordinates[:, 277] == Float32[0.375, 1.125]
     @test coordinates[:, 140] - coordinates[:, 139] == Float32[0.125, 0]
+    @test length(grid_indices) == 277
+    @test length(unique(grid_indices)) == 277
+    @test extrema(grid_indices) == (Int32(7), Int32(355))
+    @test grid_indices[1] == Int32(7)
+    @test grid_indices[139] == Int32(181)
+    @test grid_indices[277] == Int32(355)
+    grid_cartesian_indices = CartesianIndices((19, 19))
+    @test all(eachindex(grid_indices)) do command_index
+        grid_index = grid_cartesian_indices[grid_indices[command_index]]
+        expected = Float32[
+            (grid_index[1] - 10) * 0.125,
+            (grid_index[2] - 10) * 0.125,
+        ]
+        coordinates[:, command_index] == expected
+    end
     @test REVOLTHSDM277.normalized_pupil_actuator_pitch(Float32) == 0.125f0
     @test REVOLTHSDM277.provisional_mechanical_coupling(Float32) == 0.35f0
     @test REVOLTHSDM277.provisional_gaussian_influence_width(Float64) ≈

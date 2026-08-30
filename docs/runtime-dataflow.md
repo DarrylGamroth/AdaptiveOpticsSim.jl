@@ -317,29 +317,29 @@ The file records its layered parameter authority and does not claim that the
 symmetric simulated pupil registration already matches the measured
 `pwfsRoiOffsets_64.csv` positions or an operational pixel reconstructor.
 
-REVOLT graph fidelity is selected before preparation. The example helper keeps
+The REVOLT graph profile is selected before preparation. The example helper keeps
 the selection explicit:
 
 ```julia
 include("examples/support/revolt_hil_graphs.jl")
 
-path = REVOLTHILGraphs.graph_path(:copper, :reduced_resolution)
+path = REVOLTHILGraphs.graph_path(:copper, :fast_dm)
 definition = load_algorithm_graph(path; bindings)
 graph = prepare_algorithm_graph(definition; target)
 ```
 
 `full_optical` resolves to the primary files above.
-[`revolt_classic_hil_reduced_resolution.toml`](../examples/graphs/revolt_classic_hil_reduced_resolution.toml)
+[`revolt_classic_hil_fast_dm.toml`](../examples/graphs/revolt_classic_hil_fast_dm.toml)
 and
-[`revolt_copper_hil_reduced_resolution.toml`](../examples/graphs/revolt_copper_hil_reduced_resolution.toml)
-retain atmosphere evolution, exact PDM command order, the provisional
-command-responsive surface, diffractive sensor families, external frame
-shapes, and lockstep HIL semantics. Classic reduces its internal pupil grid
-from 240 to 128 samples and disables detector noise. Copper reduces its pupil
-grid from 480 to 240 samples, complete-cycle circular-modulation quadrature
-from 32 to four points, and detector noise. These are declared performance
-approximations, not full-optical image/noise parity, and a prepared run never
-changes fidelity in response to overload.
+[`revolt_copper_hil_fast_dm.toml`](../examples/graphs/revolt_copper_hil_fast_dm.toml)
+change only the provisional HSDM277 implementation. They scatter the exact
+277-element command into its regular 19-by-19 physical grid and evaluate the
+same Gaussian influence model with a separable matrix factorization. Internal
+pupil sampling, atmosphere evolution, WFS propagation and modulation,
+detector noise, external frame shapes, and lockstep HIL semantics are
+unchanged. This is an exact specialization under the current provisional
+regular-grid registration, not a reduced-resolution optical model. A prepared
+run never changes profile in response to overload.
 
 The separate
 [`revolt_classic_rtc_reference.toml`](../examples/graphs/revolt_classic_rtc_reference.toml)
@@ -364,8 +364,8 @@ Architecture-file status is therefore explicit:
 
 | Architecture | File-defined executable surface | Remaining authority or implementation gate |
 |---|---|---|
-| REVOLT Classic | The primary HIL file advances the maintained five-layer atmosphere at 1 ms, applies the exact HSDM277 command-map topology with provisional normalized-pupil placement and Gaussian surface response, composes atmospheric and surface OPD, and executes diffractive SHWFS optics plus single-read CCD acquisition through the completed frame boundary. The selectable reduced-resolution file preserves that topology and 352-by-352 frame boundary at lower internal sampling without detector noise. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind a qualified normalized-hardware-command conversion and measured HSDM277 influence model before claiming an instrument model; add any required non-atmospheric path aberrations explicitly. Quantify the reduced-resolution operating envelope. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
-| REVOLT Copper | The primary HIL file advances the maintained five-layer atmosphere at 2 ms, applies the same exact command map and provisional placement/Gaussian response, composes atmospheric and surface OPD, and executes maintained modulated Pyramid optics plus complete-frame EMCCD acquisition through a 64-by-64 frame boundary. The selectable reduced-resolution file preserves that boundary with half-resolution pupil sampling, four-point modulation quadrature, and no detector noise. | Bind qualified command conversion and measured HSDM277 influences. Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; add any required non-atmospheric path aberrations explicitly. Quantify the reduced-resolution operating envelope. |
+| REVOLT Classic | The primary HIL file advances the maintained five-layer atmosphere at 1 ms, applies the exact HSDM277 command-map topology with provisional normalized-pupil placement and Gaussian surface response, composes atmospheric and surface OPD, and executes diffractive SHWFS optics plus single-read CCD acquisition through the completed frame boundary. The selectable fast-DM file preserves the same 240-sample optics, noisy 352-by-352 frame, and provisional Gaussian surface through a regular-grid separable evaluation. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind a qualified normalized-hardware-command conversion and measured HSDM277 influence model before claiming an instrument model; add any required non-atmospheric path aberrations explicitly. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
+| REVOLT Copper | The primary HIL file advances the maintained five-layer atmosphere at 2 ms, applies the same exact command map and provisional placement/Gaussian response, composes atmospheric and surface OPD, and executes maintained 32-point modulated Pyramid optics plus complete-frame noisy EMCCD acquisition through a 64-by-64 frame boundary. The selectable fast-DM file changes only the Gaussian surface evaluation and retains the 480-sample pupil and complete Pyramid/detector model. | Bind qualified command conversion and measured HSDM277 influences. Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; add any required non-atmospheric path aberrations explicitly. |
 | SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
 
 End-to-end REVOLT Classic, REVOLT Copper, and SPIDERS simulations are not
