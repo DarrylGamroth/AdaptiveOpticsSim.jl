@@ -59,3 +59,8 @@ path = "2026-08-30-revolt-algorithm-graph-node-profile.toml"
 purpose = "CPU, AMDGPU, and CUDA profile of the full-resolution REVOLT graphs using the regular-grid separable provisional HSDM277 implementation"
 id = "REVOLT-FAST-DM-PROFILE-2026-08-30"
 path = "2026-08-30-revolt-fast-dm-profile.toml"
+
+[[artifacts]]
+purpose = "Deep algorithm review and post-optimization CPU/AMDGPU profile of the full-resolution atmosphere-enabled REVOLT graphs"
+id = "REVOLT-ALGORITHM-OPTIMIZATION-REVIEW-2026-08-30"
+path = "2026-08-30-revolt-algorithm-optimization-review.toml"
