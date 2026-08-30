@@ -224,6 +224,17 @@ diffractive SHWFS photon-rate mosaic and one completed noisy CCD frame for a
 transport adapter such as PipeWireAO. The RTC performs centroiding,
 reconstruction, control, and command production outside this graph.
 
+The maintained
+[`revolt_copper_hil.toml`](../examples/graphs/revolt_copper_hil.toml) file
+defines the corresponding external-RTC boundary for Copper. It combines the
+maintained REVOLT optical and iXon camera profile with the current RTC's
+64-by-64 frame and 30-by-30 Pyramid-pupil contract. One graph step forms the
+modulated Pyramid photon-rate image and completes one seeded EMCCD acquisition;
+the external RTC consumes that frame and returns the next physical-DM command.
+The file records its layered parameter authority and does not claim that the
+symmetric simulated pupil registration already matches the measured
+`pwfsRoiOffsets_64.csv` positions or an operational pixel reconstructor.
+
 The separate
 [`revolt_classic_rtc_reference.toml`](../examples/graphs/revolt_classic_rtc_reference.toml)
 file extends the same sensor stages into an optional in-process RTC reference.

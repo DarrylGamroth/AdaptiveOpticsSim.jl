@@ -1213,6 +1213,29 @@ end
     @test sum(frame) > 0
 end
 
+@testset "REVOLT Copper HIL sensor TOML path is executable" begin
+    pupil_opd = zeros(Float32, 480, 480)
+    path = joinpath(
+        dirname(dirname(@__DIR__)),
+        "examples",
+        "graphs",
+        "revolt_copper_hil.toml",
+    )
+    definition = load_algorithm_graph(path; bindings=(; pupil_opd))
+    graph = prepare_algorithm_graph(definition)
+    step_graph!(graph)
+    photon_rate = graph_output(graph, Val(:pwfs_photon_rate))
+    frame = graph_output(graph, Val(:pwfs_frame))
+
+    @test graph_name(graph) === :revolt_copper_hil
+    @test size(photon_rate) == (64, 64)
+    @test size(frame) == (64, 64)
+    @test all(isfinite, photon_rate)
+    @test all(isfinite, frame)
+    @test sum(photon_rate) > 0
+    @test sum(frame) > 0
+end
+
 @testset "REVOLT Classic RTC-reference TOML path is executable" begin
     pupil_opd = zeros(Float32, 240, 240)
     valid_subapertures = fill(true, 16, 16)

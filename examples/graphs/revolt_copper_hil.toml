@@ -1,0 +1,96 @@
+# REVOLT Copper HIL sensor boundary.
+#
+# The surrounding AOS simulation owns atmosphere evolution, optical-path
+# evaluation, and application of the physical-DM command received from the
+# external RTC. It binds the resulting complete pupil-plane OPD before each
+# graph step. This graph forms one modulated Pyramid photon-rate frame and one
+# completed noisy EMCCD frame for publication through a transport adapter such
+# as PipeWireAO. The external RTC owns pixel processing, reconstruction,
+# control, and command production.
+#
+# Model authority is deliberately layered:
+# - REVOLT/Julia/contracts/revolt/common.toml supplies the 1.22 m, 480-sample
+#   telescope and 2 ms simulation sample period.
+# - REVOLT/Julia/contracts/revolt/pwfs.toml supplies the modulated Pyramid
+#   threshold, modulation radius/point count, light ratio, and visible-source
+#   flux scaling. The effective V magnitude below includes its 0.5 flux scale.
+# - REVOLT/Julia/contracts/revolt/cameras.toml supplies the iXon EMCCD values.
+# - heart/revolt-rtc/config/copper_config_sim.yaml supplies the operational
+#   64-by-64 WFS frame and 30-by-30 Pyramid-pupil dimensions.
+#
+# The symmetric AOS pupil-image placement is transport-shape compatible but is
+# not a claim that the current measured pwfsRoiOffsets_64.csv registration or
+# an operational pixel reconstructor is calibrated to this simulated image.
+
+schema_version = 1
+name = "revolt_copper_hil"
+
+[[nodes]]
+name = "pwfs"
+type = "pyramid_rate_f32"
+
+[nodes.config]
+resolution = 480
+telescope_diameter_m = 1.22
+central_obstruction_ratio = 0.0
+pupil_reflectivity = 1.0
+aperture_revision = 1
+pupil_samples = 30
+threshold = 0.1
+modulation = 5.0
+modulation_points = 32
+light_ratio = 0.1
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+source_band = "V"
+source_magnitude = 5.752574989159953
+source_wavelength_m = 5.5e-7
+source_separation_arcsec = 0.0
+source_position_angle_deg = 0.0
+opd_schema = "org.revolt.copper.pupil-opd.f32/1"
+photon_rate_schema = "org.revolt.copper.pwfs-photon-rate.f32/1"
+
+[[nodes]]
+name = "detector"
+type = "emccd_detector_acquisition_f32"
+
+[nodes.config]
+rows = 64
+columns = 64
+binning = 1
+normalized_pupil_sampling = 0.03333333333333333
+wavelength_m = 5.5e-7
+exposure_duration_s = 0.002
+quantum_efficiency = 0.95
+gain = 1.0
+dark_current_e_per_pixel_s = 20.0
+bits = 14
+full_well_e = 16000.0
+photon_noise = true
+readout_noise = true
+readout_noise_e = 1.0
+excess_noise_factor = 1.0
+clock_induced_charge_e_per_pixel_frame = 0.0
+rng_seed = 0
+photon_rate_schema = "org.revolt.copper.pwfs-photon-rate.f32/1"
+frame_schema = "org.revolt.copper.pwfs-frame.f32/1"
+
+[[inputs]]
+name = "pupil_opd"
+destination = "pwfs.opd"
+binding = "pupil_opd"
+
+[[outputs]]
+name = "pwfs_photon_rate"
+source = "pwfs.photon_rate"
+
+[[outputs]]
+name = "pwfs_frame"
+source = "detector.frame"
+
+[[links]]
+source = "pwfs.photon_rate"
+destination = "detector.photon_rate"
