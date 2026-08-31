@@ -649,12 +649,27 @@ end
     return norm(delta)
 end
 
-function regularization_load(normal::AbstractMatrix{T}) where {T<:AbstractFloat}
+@inline regularization_load(normal::AbstractMatrix{T}) where {T<:AbstractFloat} =
+    regularization_load(reduction_execution_strategy(normal), normal)
+
+function regularization_load(
+    ::DirectReductionStrategy,
+    normal::AbstractMatrix{T},
+) where {T<:AbstractFloat}
     n = min(size(normal, 1), size(normal, 2))
     diagvals = @view normal[diagind(normal)]
     diag_sum = sum(abs, diagvals)
     mean_diag = n == 0 ? zero(T) : diag_sum / T(n)
     return max(sqrt(eps(T)) * max(mean_diag, one(T)), eps(T))
+end
+
+function regularization_load(
+    ::HostMirrorReductionStrategy,
+    normal::AbstractMatrix{T},
+) where {T<:AbstractFloat}
+    host_parent = Array(reduction_parent_source(normal))
+    host_normal = reduction_host_view(host_parent, normal)
+    return regularization_load(DirectReductionStrategy(), host_normal)
 end
 
 function damping_lambda(damping::LiFTLevenbergMarquardt, normal::AbstractMatrix{T}) where {T<:AbstractFloat}
