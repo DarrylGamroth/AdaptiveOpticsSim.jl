@@ -167,7 +167,7 @@ The current integration matrix is deliberately small:
 |---|---|---|---|---|
 | Shack–Hartmann | Deterministic, noiseless CCD | AOS lockstep reference controller | `algorithm-graphs` interaction-matrix and convergence tests | covered |
 | Pyramid | Deterministic, noiseless EMCCD | Command/frame lockstep | `algorithm-graphs` complete-frame and command-response tests | covered |
-| Shack–Hartmann | Deterministic, noiseless CCD | Synchronous pyRTC | Optional integration harness | planned |
+| Shack–Hartmann | Deterministic, noiseless CCD | Synchronous pyRTC | Measured interaction and closed-loop convergence | covered |
 | Pyramid | Deterministic, noiseless EMCCD | Synchronous pyRTC | Optional integration harness | planned |
 | Either | Stochastic detector response | Any external RTC | Statistical closed-loop qualification | gap |
 
@@ -175,6 +175,38 @@ Calibrate an external RTC by applying complete positive and negative commands
 through the reference boundary. This measures the interaction matrix in the
 same command units and WFS-signal order used by that RTC. Do not substitute an
 identity matrix or infer a command scale from an instrument name.
+
+The initial pyRTC integration runs from Julia through PythonCall.jl because AOS
+owns graph stepping, frame sequence, and model time. PyJulia/JuliaCall would put
+Python in charge of that lifecycle and is not the initial integration
+direction. The maintained
+[`run_shack_hartmann_reference.jl`](../examples/integrations/pyrtc/run_shack_hartmann_reference.jl)
+harness uses pyRTC's real `ImageSHM`, `SlopesProcess`, `WavefrontCorrector`, and
+`Loop` implementations synchronously. It measures the 104-by-25 interaction
+matrix by push-pull commands, installs it in pyRTC, injects a disturbance that
+lies in the declared deformable-mirror span, and requires the pyRTC command to
+close the AOS optical loop.
+
+Use a Python environment in which a pyRTC checkout is installed, and select
+that interpreter before PythonCall starts:
+
+~~~sh
+python3 -m venv /tmp/aos-pyrtc
+/tmp/aos-pyrtc/bin/python -m pip install -e /path/to/pyRTC
+JULIA_PYTHONCALL_EXE=/tmp/aos-pyrtc/bin/python \
+  julia --project=examples/integrations/pyrtc -e 'using Pkg; Pkg.instantiate()'
+JULIA_PYTHONCALL_EXE=/tmp/aos-pyrtc/bin/python \
+  PYRTC_ROOT=/path/to/pyRTC \
+  julia --project=examples/integrations/pyrtc \
+  examples/integrations/pyrtc/run_shack_hartmann_reference.jl
+~~~
+
+This is a deterministic integration test, not a real-time transport or latency
+claim. The current path copies each AOS frame to a C-contiguous NumPy array and
+uses pyRTC's fixed Linux shared-memory stream names. It refuses to start if any
+of those names already exist, so stop a live pyRTC system before running it.
+PipeWireAO transport, GPU-to-CPU transfer policy, asynchronous pacing, dropped
+frames, and deadline behavior remain separate work.
 
 The example transport functions above are application placeholders, not AOS
 APIs. The boundary deliberately defines no socket, PipeWire buffer, wall-clock
