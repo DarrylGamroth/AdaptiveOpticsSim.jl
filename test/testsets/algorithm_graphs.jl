@@ -1929,6 +1929,50 @@ end
         fill!(hil_command_buffer(boundary), 0.0f0)
         adopt_hil_command!(boundary, sequence)
     end
+
+    atmospheric =
+        HILReferenceSystems.prepare_atmospheric_hil_reference_system(
+            :shack_hartmann;
+            atmosphere_step=1.0e-3,
+            rng_seed=11,
+        )
+    diagnostics =
+        HILReferenceSystems.prepare_hil_reference_science_diagnostics()
+    @test size(HILReferenceSystems.open_loop_psf(diagnostics)) == (128, 128)
+    @test size(HILReferenceSystems.closed_loop_psf(diagnostics)) == (128, 128)
+    @test HILReferenceSystems.open_loop_on_axis_strehl(diagnostics) ≈ 1.0f0
+    @test HILReferenceSystems.closed_loop_on_axis_strehl(diagnostics) ≈ 1.0f0
+    @test maximum(HILReferenceSystems.open_loop_psf(diagnostics)) < 1.0f0
+    @test maximum(HILReferenceSystems.closed_loop_psf(diagnostics)) < 1.0f0
+
+    sequence = step_hil_frame!(atmospheric.boundary)
+    atmosphere_opd = graph_output(atmospheric.graph, Val(:atmosphere_opd))
+    residual_opd = graph_output(atmospheric.graph, Val(:pupil_opd))
+    HILReferenceSystems.update_hil_reference_science_diagnostics!(
+        diagnostics,
+        atmosphere_opd,
+        residual_opd,
+    )
+    open_loop_psf = HILReferenceSystems.open_loop_psf(diagnostics)
+    closed_loop_psf = HILReferenceSystems.closed_loop_psf(diagnostics)
+    @test all(isfinite, open_loop_psf)
+    @test all(isfinite, closed_loop_psf)
+    @test open_loop_psf ≈ closed_loop_psf
+    @test maximum(open_loop_psf) <= 1.001f0
+    @test maximum(closed_loop_psf) <= 1.001f0
+    @test 0.0f0 <
+        HILReferenceSystems.open_loop_on_axis_strehl(diagnostics) < 1.0f0
+    @test HILReferenceSystems.closed_loop_on_axis_strehl(diagnostics) ≈
+        HILReferenceSystems.open_loop_on_axis_strehl(diagnostics)
+    @test @allocated(
+        HILReferenceSystems.update_hil_reference_science_diagnostics!(
+            diagnostics,
+            atmosphere_opd,
+            residual_opd,
+        ),
+    ) == 0
+    fill!(hil_command_buffer(atmospheric.boundary), 0.0f0)
+    adopt_hil_command!(atmospheric.boundary, sequence)
 end
 
 function calibrate_shack_hartmann_reference!(prepared; poke=2.0f-8)

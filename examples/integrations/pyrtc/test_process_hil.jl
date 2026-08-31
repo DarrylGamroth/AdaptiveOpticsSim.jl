@@ -13,5 +13,8 @@ using .PyRTCProcessHIL
         @test result.final_residual >= 0
         @test result.convergence_ratio < 1.0f-3
         @test result.command_error <= 5.0f-11
+        @test 0 < result.mean_open_loop_on_axis_strehl < 1
+        @test 0.5 < result.mean_closed_loop_on_axis_strehl <= 1
+        @test result.improvement > 10
     end
 end

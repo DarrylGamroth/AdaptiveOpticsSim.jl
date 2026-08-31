@@ -85,9 +85,11 @@ SPIDERS prescription or coronagraph model scientifically.
 The example environment contains a native Julia implementation of the numeric
 Linux pyRTC `ImageSHM` layout. It validates C-order vector and matrix exchange
 in both directions and runs the SHWFS and Pyramid reference systems against a
-separate pyRTC process. This is a lockstep integration and calibration surface,
-not an asynchronous transport or deadline guarantee. The one-slot upstream
-layout is used only with one producer and one outstanding frame.
+separate pyRTC process. This lockstep integration and calibration surface also
+verifies corrected science-image and on-axis Strehl improvement for a
+deterministically evolving four-layer atmosphere. It is not an asynchronous
+transport or deadline guarantee. The one-slot upstream layout is used only
+with one producer and one outstanding frame.
 
 ## Explicitly Not Production-Supported
 

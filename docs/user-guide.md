@@ -323,10 +323,13 @@ julia --project=examples/integrations/pyrtc --startup-file=no \
 ~~~
 
 Each run performs push-pull calibration, verifies that the interaction matrix
-has rank 25, installs the matrix in pyRTC, injects a known disturbance, and
-requires the returned command to close the AOS optical loop. The command prints
-the interaction condition, initial and final residuals, convergence ratio, and
-command-recovery error for both sensors.
+has rank 25, installs the matrix in pyRTC, injects a known static disturbance,
+and requires the returned command to close the AOS optical loop. It then uses
+the same measured matrix with a deterministic, evolving four-layer atmosphere
+and requires the corrected 750 nm on-axis Strehl ratio to exceed both the
+open-loop result and an absolute acceptance floor. The command prints the
+interaction condition, static-disturbance convergence and command error, and
+the mean open-loop and corrected atmospheric Strehl ratios for both sensors.
 
 Run the same systems as assertions in the optional integration-test matrix:
 
@@ -344,7 +347,7 @@ shared-memory path.
 
 The integration environment installs pyRTC's optional Qt viewer. From a local
 graphical session or an X11/Wayland-forwarded shell, run a paced Pyramid
-demonstration and open a live six-panel mosaic with:
+demonstration and open a live eight-panel mosaic with:
 
 ~~~sh
 julia --project=examples/integrations/pyrtc --startup-file=no \
@@ -359,14 +362,23 @@ frame rate. The demo opens the official `pyrtc-view` application and displays:
 - pyRTC's `signal2D` slope product
 - the current 5-by-5 pyRTC command in `wfc2D`
 - AOS uncompensated, deformable-mirror, and residual pupil OPD maps
+- diffraction-limited-normalized open-loop and corrected 750 nm science PSFs
 
-The viewer polls at half the requested graph rate, so each normal refresh
-interval spans two graph periods. This avoids pyRTC's transient `PAUSED` label
-between frames without altering the graph or RTC rate.
+The console reports pupil-supported, piston-removed open-loop and residual OPD
+RMS, the open-loop and corrected on-axis Strehl ratios, and command RMS. The
+PSF normalization uses the exact unsampled diffraction-limited peak; the
+Strehl calculation uses the coherent on-axis pupil sum and therefore includes
+image motion from residual tip and tilt.
 
-The disturbance changes smoothly within the calibrated deformable-mirror
-space so the correction remains observable after the initial transient. Close
-the viewer window to stop the demonstration before its requested duration.
+The viewer polls at half the requested wall-clock demonstration rate, so each
+normal refresh interval spans two graph periods. This avoids pyRTC's transient
+`PAUSED` label between frames without altering graph ordering or RTC command
+adoption. Each graph frame advances atmosphere model time by 1 ms; the lower
+wall-clock rate intentionally slows the modeled loop for inspection.
+
+The live graph evolves the maintained four-layer reference atmosphere; it no
+longer substitutes a deformable-mirror-shaped synthetic disturbance. Close the
+viewer window to stop the demonstration before its requested duration.
 
 ### Adapt A Scientific Graph
 

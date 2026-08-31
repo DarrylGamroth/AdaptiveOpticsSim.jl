@@ -169,8 +169,8 @@ The current integration matrix is deliberately small:
 | Pyramid | Deterministic, noiseless EMCCD | Command/frame lockstep | `algorithm-graphs` complete-frame and command-response tests | covered |
 | Shack–Hartmann | Deterministic, noiseless CCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
 | Pyramid | Deterministic, noiseless EMCCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
-| Shack–Hartmann | Deterministic, noiseless CCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, and closed-loop convergence | covered in lockstep |
-| Pyramid | Deterministic, noiseless EMCCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, and closed-loop convergence | covered in lockstep |
+| Shack–Hartmann | Deterministic, noiseless CCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, static convergence, evolving-atmosphere PSFs, and on-axis Strehl improvement | covered in lockstep |
+| Pyramid | Deterministic, noiseless EMCCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, static convergence, evolving-atmosphere PSFs, and on-axis Strehl improvement | covered in lockstep |
 | Either | Stochastic detector response | Any external RTC | Statistical closed-loop qualification | gap |
 
 Calibrate an external RTC by applying complete positive and negative commands
@@ -197,9 +197,12 @@ the GitHub-installed pyRTC package from the Python interpreter selected by
 `JULIA_PYTHONCALL_EXE`.
 
 The live demonstration also publishes `wfc2D`, `aosUncompensatedOpd`,
-`aosDmSurfaceOpd`, and `aosResidualOpd` as diagnostic-only streams for the
-official `pyrtc-view` application. They are observations of the lockstep
-exchange; they do not participate in graph scheduling or command adoption.
+`aosDmSurfaceOpd`, `aosResidualOpd`, `aosOpenLoopPsf`, and
+`aosClosedLoopPsf` as diagnostic-only streams for the official `pyrtc-view`
+application. The PSFs are normalized by the exact diffraction-limited peak of
+the maintained 750 nm reference science path. They are observations of the
+lockstep exchange; they do not participate in graph scheduling or command
+adoption.
 
 This is a deterministic integration test, not a real-time transport or latency
 claim. The current path copies each AOS frame to a C-contiguous NumPy array and
@@ -236,10 +239,12 @@ claim.
 [`pyrtc_process_hil.jl`](../examples/integrations/pyrtc/pyrtc_process_hil.jl)
 uses that adapter to create `wfs`, `signal`, `signal2D`, and `wfc` in Julia. A
 separate Python worker attaches pyRTC's real `SlopesProcess` and `Loop`, while
-Julia retains graph stepping, calibration, disturbance injection, and stream
-lifetime ownership. The control pipe intentionally advances one operation at a
-time, so this validates process and data-boundary correctness rather than
-free-running RTC timing.
+Julia retains graph stepping, calibration, atmosphere evolution, science-image
+formation, and stream lifetime ownership. The optional process test first
+closes a known static disturbance and then requires both sensor paths to
+improve the mean on-axis Strehl ratio of an evolving atmosphere. The control
+pipe intentionally advances one operation at a time, so this validates process
+and data-boundary correctness rather than free-running RTC timing.
 
 The user guide also gives the commands for the bidirectional protocol matrix,
 the opt-in separate-process test matrix, and the two-system demonstration.

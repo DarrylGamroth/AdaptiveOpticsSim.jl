@@ -57,10 +57,11 @@ is not inherently a unit-normalized PSF.
 atm = MultiLayerAtmosphere(
     tel;
     r0=0.15,
+    reference_wavelength_m=500e-9,
     L0=25.0,
     fractional_cn2=[0.6, 0.4],
     wind_speed=[8.0, 12.0],
-    wind_direction=[0.0, 90.0],
+    wind_direction_deg=[0.0, 90.0],
     altitude=[0.0, 5000.0],
 )
 

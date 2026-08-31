@@ -15,6 +15,8 @@ const VIEWER_STREAM_NAMES = (
     "aosUncompensatedOpd",
     "aosDmSurfaceOpd",
     "aosResidualOpd",
+    "aosOpenLoopPsf",
+    "aosClosedLoopPsf",
 )
 const VIEWER_ITEMS = (
     "wfs",
@@ -23,8 +25,13 @@ const VIEWER_ITEMS = (
     "aosUncompensatedOpd",
     "aosDmSurfaceOpd",
     "aosResidualOpd",
+    "aosOpenLoopPsf",
+    "aosClosedLoopPsf",
 )
 const WORKER_PREFIX = "AOS_PYRTC_WORKER "
+const REFERENCE_ATMOSPHERE_STEP_S = 1.0e-3
+const ATMOSPHERE_VALIDATION_FRAMES = 20
+const ATMOSPHERE_VALIDATION_BURN_IN_FRAMES = 10
 
 struct ProcessReferenceCase
     wavefront_sensor::Symbol
@@ -77,11 +84,13 @@ struct ProcessStreams{W,C,S,D}
     signal_2d::D
 end
 
-struct ViewerStreams{C,U,D,R}
+struct ViewerStreams{C,U,D,R,O,L}
     command::C
     uncompensated_opd::U
     dm_surface_opd::D
     residual_opd::R
+    open_loop_psf::O
+    closed_loop_psf::L
 end
 
 mutable struct PyRTCWorker
@@ -148,7 +157,16 @@ function close_process_streams!(streams::ProcessStreams)
     return nothing
 end
 
-function create_viewer_streams()
+function create_viewer_streams(prepared, science_diagnostics)
+    occupied = String[]
+    for name in VIEWER_STREAM_NAMES, suffix in ("", "_meta", "_gpu_handle")
+        path = joinpath("/dev/shm", name * suffix)
+        ispath(path) && push!(occupied, path)
+    end
+    isempty(occupied) || error(
+        "refusing to reuse active viewer shared-memory streams: " *
+        join(occupied, ", "),
+    )
     actuator_axis_count = isqrt(actuator_count())
     actuator_axis_count^2 == actuator_count() || error(
         "the viewer requires a square deformable-mirror command layout",
@@ -157,7 +175,16 @@ function create_viewer_streams()
     uncompensated_opd = nothing
     dm_surface_opd = nothing
     residual_opd = nothing
+    open_loop_psf_stream = nothing
+    closed_loop_psf_stream = nothing
     try
+        graph = prepared.graph
+        uncompensated_opd_values = graph_output(
+            graph,
+            Val(:atmosphere_opd),
+        )
+        dm_surface_opd_values = graph_output(graph, Val(:dm_surface_opd))
+        residual_opd_values = graph_output(graph, Val(:pupil_opd))
         command = create_stream(
             VIEWER_STREAM_NAMES[1],
             Float32,
@@ -165,26 +192,44 @@ function create_viewer_streams()
         )
         uncompensated_opd = create_stream(
             VIEWER_STREAM_NAMES[2],
-            Float32,
-            (64, 64),
+            eltype(uncompensated_opd_values),
+            size(uncompensated_opd_values),
         )
         dm_surface_opd = create_stream(
             VIEWER_STREAM_NAMES[3],
-            Float32,
-            (64, 64),
+            eltype(dm_surface_opd_values),
+            size(dm_surface_opd_values),
         )
         residual_opd = create_stream(
             VIEWER_STREAM_NAMES[4],
-            Float32,
-            (64, 64),
+            eltype(residual_opd_values),
+            size(residual_opd_values),
+        )
+        open_loop_psf_values = open_loop_psf(science_diagnostics)
+        closed_loop_psf_values = closed_loop_psf(science_diagnostics)
+        open_loop_psf_stream = create_stream(
+            VIEWER_STREAM_NAMES[5],
+            eltype(open_loop_psf_values),
+            size(open_loop_psf_values),
+        )
+        closed_loop_psf_stream = create_stream(
+            VIEWER_STREAM_NAMES[6],
+            eltype(closed_loop_psf_values),
+            size(closed_loop_psf_values),
         )
         return ViewerStreams(
             command,
             uncompensated_opd,
             dm_surface_opd,
             residual_opd,
+            open_loop_psf_stream,
+            closed_loop_psf_stream,
         )
     catch
+        !isnothing(closed_loop_psf_stream) &&
+            close_and_unlink_noexcept!(closed_loop_psf_stream)
+        !isnothing(open_loop_psf_stream) &&
+            close_and_unlink_noexcept!(open_loop_psf_stream)
         !isnothing(residual_opd) && close_and_unlink_noexcept!(residual_opd)
         !isnothing(dm_surface_opd) &&
             close_and_unlink_noexcept!(dm_surface_opd)
@@ -196,6 +241,8 @@ function create_viewer_streams()
 end
 
 function close_viewer_streams!(streams::ViewerStreams)
+    close_and_unlink_noexcept!(streams.closed_loop_psf)
+    close_and_unlink_noexcept!(streams.open_loop_psf)
     close_and_unlink_noexcept!(streams.residual_opd)
     close_and_unlink_noexcept!(streams.dm_surface_opd)
     close_and_unlink_noexcept!(streams.uncompensated_opd)
@@ -248,11 +295,11 @@ function viewer_command(frame_rate::Real)
         executable,
         VIEWER_ITEMS...,
         "--geometry",
-        "2x3",
+        "2x4",
         "--fps",
         string(viewer_refresh_rate(frame_rate)),
         "--pixel-scale",
-        "6",
+        "3",
     ])
     if !haskey(ENV, "QT_QPA_PLATFORM") &&
             !haskey(ENV, "DISPLAY") &&
@@ -542,23 +589,52 @@ end
 function publish_viewer_outputs!(
     streams::ViewerStreams,
     prepared,
+    science_diagnostics,
     applied_command::Matrix{Float32},
 )
+    graph = prepared.graph
     publish!(streams.command, applied_command)
-    publish!(streams.uncompensated_opd, prepared.uncompensated_opd)
+    publish!(
+        streams.uncompensated_opd,
+        graph_output(graph, Val(:atmosphere_opd)),
+    )
     publish!(
         streams.dm_surface_opd,
-        graph_output(prepared.graph, Val(:dm_surface_opd)),
+        graph_output(graph, Val(:dm_surface_opd)),
     )
     publish!(
         streams.residual_opd,
-        graph_output(prepared.graph, Val(:pupil_opd)),
+        graph_output(graph, Val(:pupil_opd)),
     )
+    publish!(streams.open_loop_psf, open_loop_psf(science_diagnostics))
+    publish!(streams.closed_loop_psf, closed_loop_psf(science_diagnostics))
     return nothing
 end
 
 @inline function root_mean_square(values::AbstractArray)
     return sqrt(sum(abs2, values) / length(values))
+end
+
+function pupil_opd_rms(
+    opd::AbstractMatrix{<:AbstractFloat},
+    support::AbstractMatrix{Bool},
+)
+    axes(opd) == axes(support) || throw(DimensionMismatch(
+        "the pupil OPD and support must have identical axes",
+    ))
+    sample_count = 0
+    mean_opd = 0.0
+    sum_squared_difference = 0.0
+    for index in eachindex(opd, support)
+        support[index] || continue
+        sample_count += 1
+        value = Float64(opd[index])
+        difference = value - mean_opd
+        mean_opd += difference / sample_count
+        sum_squared_difference += difference * (value - mean_opd)
+    end
+    sample_count > 0 || error("the HIL reference pupil support is empty")
+    return sqrt(sum_squared_difference / sample_count)
 end
 
 function close_loop!(
@@ -589,6 +665,86 @@ function close_loop!(
         iteration < iterations && (sequence = step_hil_frame!(boundary))
     end
     return residual_norms, command
+end
+
+function mean_from(values::Vector{<:Real}, first_index::Int)
+    first_index in eachindex(values) || throw(BoundsError(values, first_index))
+    total = 0.0
+    sample_count = 0
+    for index in first_index:lastindex(values)
+        total += Float64(values[index])
+        sample_count += 1
+    end
+    return total / sample_count
+end
+
+function close_atmospheric_loop!(
+    worker::PyRTCWorker,
+    streams::ProcessStreams,
+    case::ProcessReferenceCase,
+    signal::Vector{Float32};
+    frames::Int=ATMOSPHERE_VALIDATION_FRAMES,
+)
+    frames > ATMOSPHERE_VALIDATION_BURN_IN_FRAMES || throw(ArgumentError(
+        "atmosphere validation requires more than " *
+        "$(ATMOSPHERE_VALIDATION_BURN_IN_FRAMES) frames",
+    ))
+    prepared = prepare_atmospheric_hil_reference_system(
+        case.wavefront_sensor;
+        atmosphere_step=REFERENCE_ATMOSPHERE_STEP_S,
+        rng_seed=1,
+    )
+    diagnostics = prepare_hil_reference_science_diagnostics()
+    boundary = prepared.boundary
+    command = zeros(Float32, actuator_count())
+    open_loop_values = Vector{Float32}(undef, frames)
+    closed_loop_values = Vector{Float32}(undef, frames)
+    sequence = step_hil_frame!(boundary)
+
+    for frame_index in 1:frames
+        atmosphere_opd = graph_output(prepared.graph, Val(:atmosphere_opd))
+        residual_opd = graph_output(prepared.graph, Val(:pupil_opd))
+        update_hil_reference_science_diagnostics!(
+            diagnostics,
+            atmosphere_opd,
+            residual_opd,
+        )
+        open_loop_values[frame_index] =
+            open_loop_on_axis_strehl(diagnostics)
+        closed_loop_values[frame_index] =
+            closed_loop_on_axis_strehl(diagnostics)
+        maximum(open_loop_psf(diagnostics)) <= 1.001f0 || error(
+            "open-loop PSF exceeds its exact diffraction-limited peak",
+        )
+        maximum(closed_loop_psf(diagnostics)) <= 1.001f0 || error(
+            "closed-loop PSF exceeds its exact diffraction-limited peak",
+        )
+
+        process_frame!(
+            worker,
+            streams,
+            hil_frame_buffer(boundary),
+            signal;
+            command="STEP",
+            response="STEPPED",
+        )
+        read_next!(command, streams.wfc; timeout=5.0)
+        copyto!(hil_command_buffer(boundary), command)
+        adopt_hil_command!(boundary, sequence)
+        frame_index < frames && (sequence = step_hil_frame!(boundary))
+    end
+
+    first_steady_frame = ATMOSPHERE_VALIDATION_BURN_IN_FRAMES + 1
+    mean_open_loop_on_axis_strehl =
+        mean_from(open_loop_values, first_steady_frame)
+    mean_closed_loop_on_axis_strehl =
+        mean_from(closed_loop_values, first_steady_frame)
+    return (;
+        mean_open_loop_on_axis_strehl,
+        mean_closed_loop_on_axis_strehl,
+        improvement=mean_closed_loop_on_axis_strehl /
+            mean_open_loop_on_axis_strehl,
+    )
 end
 
 function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
@@ -654,6 +810,29 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
                 "pyRTC process command did not recover the disturbance: " *
                 "error = $command_error",
             )
+
+            configure_worker_loop!(
+                worker,
+                streams,
+                interaction_matrix,
+                case.gain,
+                temporary_directory,
+            )
+            atmosphere = close_atmospheric_loop!(
+                worker,
+                streams,
+                case,
+                signal,
+            )
+            atmosphere.mean_closed_loop_on_axis_strehl > 0.5 || error(
+                "pyRTC atmospheric loop did not produce a usable corrected " *
+                "on-axis PSF: mean Strehl = " *
+                "$(atmosphere.mean_closed_loop_on_axis_strehl)",
+            )
+            atmosphere.improvement > 10 || error(
+                "pyRTC atmospheric loop did not improve the mean on-axis " *
+                "Strehl sufficiently: ratio = $(atmosphere.improvement)",
+            )
             stop_worker!(worker)
 
             return (
@@ -666,6 +845,7 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
                 final_residual=last(residual_norms),
                 convergence_ratio,
                 command_error,
+                atmosphere...,
             )
         finally
             !isnothing(worker) && stop_worker_noexcept!(worker)
@@ -678,7 +858,6 @@ function run_viewer_demo(;
     wavefront_sensor::Symbol=:pyramid,
     duration::Real=60.0,
     frame_rate::Real=10.0,
-    disturbance_period::Real=8.0,
 )
     isfinite(duration) && duration > 0 || throw(ArgumentError(
         "duration must be finite and positive",
@@ -686,20 +865,14 @@ function run_viewer_demo(;
     isfinite(frame_rate) && frame_rate > 0 || throw(ArgumentError(
         "frame_rate must be finite and positive",
     ))
-    isfinite(disturbance_period) && disturbance_period > 0 ||
-        throw(ArgumentError(
-            "disturbance_period must be finite and positive",
-        ))
-
     case = process_reference_case(wavefront_sensor)
-    prepared = prepare_hil_reference_system(case.wavefront_sensor)
+    calibration = prepare_hil_reference_system(case.wavefront_sensor)
     streams = create_process_streams(case)
     viewer_streams = nothing
     worker = nothing
     viewer = nothing
     return mktempdir() do temporary_directory
         try
-            viewer_streams = create_viewer_streams()
             worker = start_worker(case, temporary_directory)
             signal = zeros(Float32, case.signal_shape)
             command = zeros(Float32, actuator_count())
@@ -709,18 +882,11 @@ function run_viewer_demo(;
                 actuator_axis_count,
                 actuator_axis_count,
             )
-            publish_viewer_outputs!(
-                viewer_streams,
-                prepared,
-                applied_command,
-            )
-            viewer = start_viewer(frame_rate)
-
-            println("Calibrating the pyRTC loop while the viewer is open...")
+            println("Calibrating the pyRTC loop against the flat reference...")
             _, interaction_matrix = calibrate_interaction_matrix!(
                 worker,
                 streams,
-                prepared,
+                calibration,
                 signal;
                 poke=case.poke,
             )
@@ -732,10 +898,36 @@ function run_viewer_demo(;
                 temporary_directory,
             )
 
-            controlled_disturbance!(prepared)
-            disturbance_opd = copy(prepared.uncompensated_opd)
+            prepared = prepare_atmospheric_hil_reference_system(
+                case.wavefront_sensor;
+                atmosphere_step=REFERENCE_ATMOSPHERE_STEP_S,
+                rng_seed=1,
+            )
+            science_diagnostics =
+                prepare_hil_reference_science_diagnostics()
+            viewer_streams = create_viewer_streams(
+                prepared,
+                science_diagnostics,
+            )
             boundary = prepared.boundary
             sequence = step_hil_frame!(boundary)
+            atmosphere_opd = graph_output(
+                prepared.graph,
+                Val(:atmosphere_opd),
+            )
+            residual_opd = graph_output(prepared.graph, Val(:pupil_opd))
+            update_hil_reference_science_diagnostics!(
+                science_diagnostics,
+                atmosphere_opd,
+                residual_opd,
+            )
+            publish_viewer_outputs!(
+                viewer_streams,
+                prepared,
+                science_diagnostics,
+                applied_command,
+            )
+            viewer = start_viewer(frame_rate)
             start_time = time()
             next_frame_time = start_time
             next_status_time = start_time
@@ -752,6 +944,7 @@ function run_viewer_demo(;
                 publish_viewer_outputs!(
                     viewer_streams,
                     prepared,
+                    science_diagnostics,
                     applied_command,
                 )
                 process_frame!(
@@ -765,29 +958,41 @@ function run_viewer_demo(;
                 read_next!(command, streams.wfc; timeout=5.0)
 
                 copyto!(hil_command_buffer(boundary), command)
-                copyto!(vec(applied_command), command)
                 adopt_hil_command!(boundary, sequence)
 
                 elapsed = time() - start_time
-                disturbance_scale = Float32(cospi(
-                    2 * elapsed / disturbance_period,
-                ))
-                @. prepared.uncompensated_opd =
-                    disturbance_scale * disturbance_opd
 
                 if time() >= next_status_time
-                    residual_opd = graph_output(
-                        prepared.graph,
-                        Val(:pupil_opd),
-                    )
                     println(
                         "  t=", round(elapsed; digits=1),
-                        " s, residual=", round(
-                            1.0e9 * root_mean_square(residual_opd);
+                        " s, open-loop OPD=", round(
+                            1.0e9 * pupil_opd_rms(
+                                atmosphere_opd,
+                                HILReferenceSystems.pupil_support(
+                                    science_diagnostics,
+                                ),
+                            );
                             digits=3,
                         ),
-                        " nm RMS, command=", round(
-                            1.0e9 * root_mean_square(command);
+                        " nm RMS, residual OPD=", round(
+                            1.0e9 * pupil_opd_rms(
+                                residual_opd,
+                                HILReferenceSystems.pupil_support(
+                                    science_diagnostics,
+                                ),
+                            );
+                            digits=3,
+                        ),
+                        " nm RMS, on-axis Strehl=", round(
+                            open_loop_on_axis_strehl(science_diagnostics);
+                            digits=4,
+                        ),
+                        " -> ", round(
+                            closed_loop_on_axis_strehl(science_diagnostics);
+                            digits=4,
+                        ),
+                        ", command=", round(
+                            1.0e9 * root_mean_square(applied_command);
                             digits=3,
                         ),
                         " nm RMS",
@@ -798,7 +1003,23 @@ function run_viewer_demo(;
                 next_frame_time += frame_period
                 delay = next_frame_time - time()
                 delay > 0 && sleep(delay)
+                (time() - start_time >= duration ||
+                    !process_running(viewer)) && break
                 sequence = step_hil_frame!(boundary)
+                copyto!(vec(applied_command), command)
+                atmosphere_opd = graph_output(
+                    prepared.graph,
+                    Val(:atmosphere_opd),
+                )
+                residual_opd = graph_output(
+                    prepared.graph,
+                    Val(:pupil_opd),
+                )
+                update_hil_reference_science_diagnostics!(
+                    science_diagnostics,
+                    atmosphere_opd,
+                    residual_opd,
+                )
             end
             return nothing
         finally
@@ -825,6 +1046,15 @@ function main(wavefront_sensor::Symbol)
     println("  final residual: ", result.final_residual)
     println("  convergence ratio: ", result.convergence_ratio)
     println("  command error: ", result.command_error)
+    println(
+        "  atmospheric mean open-loop on-axis Strehl: ",
+        result.mean_open_loop_on_axis_strehl,
+    )
+    println(
+        "  atmospheric mean closed-loop on-axis Strehl: ",
+        result.mean_closed_loop_on_axis_strehl,
+    )
+    println("  atmospheric on-axis Strehl improvement: ", result.improvement)
     return nothing
 end
 
