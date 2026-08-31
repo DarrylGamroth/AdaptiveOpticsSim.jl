@@ -196,6 +196,11 @@ The scientist-facing installation, validation, and execution workflow is in
 the GitHub-installed pyRTC package from the Python interpreter selected by
 `JULIA_PYTHONCALL_EXE`.
 
+The live demonstration also publishes `wfc2D`, `aosUncompensatedOpd`,
+`aosDmSurfaceOpd`, and `aosResidualOpd` as diagnostic-only streams for the
+official `pyrtc-view` application. They are observations of the lockstep
+exchange; they do not participate in graph scheduling or command adoption.
+
 This is a deterministic integration test, not a real-time transport or latency
 claim. The current path copies each AOS frame to a C-contiguous NumPy array and
 uses pyRTC's fixed Linux shared-memory stream names. It refuses to start if any

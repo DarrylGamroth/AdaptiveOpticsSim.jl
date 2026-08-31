@@ -338,6 +338,30 @@ For debugging, `run_reference_matrix.jl` provides an in-process PythonCall
 oracle. The separate-process runner above is the representative native Julia
 shared-memory path.
 
+### View The Live Optical Loop
+
+The integration environment installs pyRTC's optional Qt viewer. From a local
+graphical session or an X11/Wayland-forwarded shell, run a paced Pyramid
+demonstration and open a live six-panel mosaic with:
+
+~~~sh
+julia --project=examples/integrations/pyrtc --startup-file=no \
+  examples/integrations/pyrtc/run_process_viewer_demo.jl pyramid 60 10
+~~~
+
+Use `shack_hartmann` in place of `pyramid` for the Shack–Hartmann reference
+system. The final two arguments are the run duration in seconds and requested
+frame rate. The demo opens the official `pyrtc-view` application and displays:
+
+- the complete AOS detector frame in `wfs`
+- pyRTC's `signal2D` slope product
+- the current 5-by-5 pyRTC command in `wfc2D`
+- AOS uncompensated, deformable-mirror, and residual pupil OPD maps
+
+The disturbance changes smoothly within the calibrated deformable-mirror
+space so the correction remains observable after the initial transient. Close
+the viewer window to stop the demonstration before its requested duration.
+
 ### Adapt A Scientific Graph
 
 A graph used with pyRTC needs one complete detector-frame output and one

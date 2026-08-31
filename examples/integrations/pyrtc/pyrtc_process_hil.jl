@@ -10,6 +10,20 @@ include(joinpath(@__DIR__, "..", "..", "support", "hil_reference_systems.jl"))
 using .HILReferenceSystems
 
 const PYRTC_STREAM_NAMES = ("wfs", "wfc", "signal", "signal2D")
+const VIEWER_STREAM_NAMES = (
+    "wfc2D",
+    "aosUncompensatedOpd",
+    "aosDmSurfaceOpd",
+    "aosResidualOpd",
+)
+const VIEWER_ITEMS = (
+    "wfs",
+    "signal2D",
+    "wfc2D",
+    "aosUncompensatedOpd",
+    "aosDmSurfaceOpd",
+    "aosResidualOpd",
+)
 const WORKER_PREFIX = "AOS_PYRTC_WORKER "
 
 struct ProcessReferenceCase
@@ -61,6 +75,13 @@ struct ProcessStreams{W,C,S,D}
     wfc::C
     signal::S
     signal_2d::D
+end
+
+struct ViewerStreams{C,U,D,R}
+    command::C
+    uncompensated_opd::U
+    dm_surface_opd::D
+    residual_opd::R
 end
 
 mutable struct PyRTCWorker
@@ -127,6 +148,61 @@ function close_process_streams!(streams::ProcessStreams)
     return nothing
 end
 
+function create_viewer_streams()
+    actuator_axis_count = isqrt(actuator_count())
+    actuator_axis_count^2 == actuator_count() || error(
+        "the viewer requires a square deformable-mirror command layout",
+    )
+    command = nothing
+    uncompensated_opd = nothing
+    dm_surface_opd = nothing
+    residual_opd = nothing
+    try
+        command = create_stream(
+            VIEWER_STREAM_NAMES[1],
+            Float32,
+            (actuator_axis_count, actuator_axis_count),
+        )
+        uncompensated_opd = create_stream(
+            VIEWER_STREAM_NAMES[2],
+            Float32,
+            (64, 64),
+        )
+        dm_surface_opd = create_stream(
+            VIEWER_STREAM_NAMES[3],
+            Float32,
+            (64, 64),
+        )
+        residual_opd = create_stream(
+            VIEWER_STREAM_NAMES[4],
+            Float32,
+            (64, 64),
+        )
+        return ViewerStreams(
+            command,
+            uncompensated_opd,
+            dm_surface_opd,
+            residual_opd,
+        )
+    catch
+        !isnothing(residual_opd) && close_and_unlink_noexcept!(residual_opd)
+        !isnothing(dm_surface_opd) &&
+            close_and_unlink_noexcept!(dm_surface_opd)
+        !isnothing(uncompensated_opd) &&
+            close_and_unlink_noexcept!(uncompensated_opd)
+        !isnothing(command) && close_and_unlink_noexcept!(command)
+        rethrow()
+    end
+end
+
+function close_viewer_streams!(streams::ViewerStreams)
+    close_and_unlink_noexcept!(streams.residual_opd)
+    close_and_unlink_noexcept!(streams.dm_surface_opd)
+    close_and_unlink_noexcept!(streams.uncompensated_opd)
+    close_and_unlink_noexcept!(streams.command)
+    return nothing
+end
+
 function pyrtc_python()
     executable = get(
         ENV,
@@ -155,6 +231,49 @@ function worker_command(
         "--temporary-directory",
         abspath(temporary_directory),
     ])
+end
+
+function viewer_command()
+    executable = joinpath(dirname(pyrtc_python()), "pyrtc-view")
+    isfile(executable) || error(
+        "the selected pyRTC environment does not provide pyrtc-view; " *
+        "install examples/integrations/pyrtc/requirements.txt",
+    )
+    command = Cmd(String[
+        executable,
+        VIEWER_ITEMS...,
+        "--geometry",
+        "2x3",
+        "--fps",
+        "20",
+        "--pixel-scale",
+        "6",
+    ])
+    if !haskey(ENV, "QT_QPA_PLATFORM") &&
+            !haskey(ENV, "DISPLAY") &&
+            haskey(ENV, "WAYLAND_DISPLAY")
+        command = addenv(command, "QT_QPA_PLATFORM" => "wayland")
+    end
+    return command
+end
+
+function start_viewer()
+    viewer = run(viewer_command(); wait=false)
+    sleep(0.5)
+    if !process_running(viewer)
+        wait(viewer)
+        error("pyrtc-view exited during startup")
+    end
+    return viewer
+end
+
+function stop_viewer_noexcept!(viewer::Base.Process)
+    process_running(viewer) && kill(viewer)
+    try
+        wait(viewer)
+    catch
+    end
+    return nothing
 end
 
 function read_worker_message(process::Base.Process)
@@ -415,6 +534,28 @@ function controlled_disturbance!(prepared)
     return disturbance_command
 end
 
+function publish_viewer_outputs!(
+    streams::ViewerStreams,
+    prepared,
+    applied_command::Matrix{Float32},
+)
+    publish!(streams.command, applied_command)
+    publish!(streams.uncompensated_opd, prepared.uncompensated_opd)
+    publish!(
+        streams.dm_surface_opd,
+        graph_output(prepared.graph, Val(:dm_surface_opd)),
+    )
+    publish!(
+        streams.residual_opd,
+        graph_output(prepared.graph, Val(:pupil_opd)),
+    )
+    return nothing
+end
+
+@inline function root_mean_square(values::AbstractArray)
+    return sqrt(sum(abs2, values) / length(values))
+end
+
 function close_loop!(
     worker::PyRTCWorker,
     streams::ProcessStreams,
@@ -528,6 +669,143 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
     end
 end
 
+function run_viewer_demo(;
+    wavefront_sensor::Symbol=:pyramid,
+    duration::Real=60.0,
+    frame_rate::Real=10.0,
+    disturbance_period::Real=8.0,
+)
+    isfinite(duration) && duration > 0 || throw(ArgumentError(
+        "duration must be finite and positive",
+    ))
+    isfinite(frame_rate) && frame_rate > 0 || throw(ArgumentError(
+        "frame_rate must be finite and positive",
+    ))
+    isfinite(disturbance_period) && disturbance_period > 0 ||
+        throw(ArgumentError(
+            "disturbance_period must be finite and positive",
+        ))
+
+    case = process_reference_case(wavefront_sensor)
+    prepared = prepare_hil_reference_system(case.wavefront_sensor)
+    streams = create_process_streams(case)
+    viewer_streams = nothing
+    worker = nothing
+    viewer = nothing
+    return mktempdir() do temporary_directory
+        try
+            viewer_streams = create_viewer_streams()
+            worker = start_worker(case, temporary_directory)
+            signal = zeros(Float32, case.signal_shape)
+            command = zeros(Float32, actuator_count())
+            actuator_axis_count = isqrt(actuator_count())
+            applied_command = reshape(
+                zeros(Float32, actuator_count()),
+                actuator_axis_count,
+                actuator_axis_count,
+            )
+            publish_viewer_outputs!(
+                viewer_streams,
+                prepared,
+                applied_command,
+            )
+            viewer = start_viewer()
+
+            println("Calibrating the pyRTC loop while the viewer is open...")
+            _, interaction_matrix = calibrate_interaction_matrix!(
+                worker,
+                streams,
+                prepared,
+                signal;
+                poke=case.poke,
+            )
+            configure_worker_loop!(
+                worker,
+                streams,
+                interaction_matrix,
+                case.gain,
+                temporary_directory,
+            )
+
+            controlled_disturbance!(prepared)
+            disturbance_opd = copy(prepared.uncompensated_opd)
+            boundary = prepared.boundary
+            sequence = step_hil_frame!(boundary)
+            start_time = time()
+            next_frame_time = start_time
+            next_status_time = start_time
+            frame_period = inv(Float64(frame_rate))
+
+            println(
+                "Running the ",
+                reference_label(Val(wavefront_sensor)),
+                " AOS/pyRTC live view for ",
+                Float64(duration),
+                " seconds; close the viewer to stop early.",
+            )
+            while time() - start_time < duration && process_running(viewer)
+                publish_viewer_outputs!(
+                    viewer_streams,
+                    prepared,
+                    applied_command,
+                )
+                process_frame!(
+                    worker,
+                    streams,
+                    hil_frame_buffer(boundary),
+                    signal;
+                    command="STEP",
+                    response="STEPPED",
+                )
+                read_next!(command, streams.wfc; timeout=5.0)
+
+                copyto!(hil_command_buffer(boundary), command)
+                copyto!(vec(applied_command), command)
+                adopt_hil_command!(boundary, sequence)
+
+                elapsed = time() - start_time
+                disturbance_scale = Float32(cospi(
+                    2 * elapsed / disturbance_period,
+                ))
+                @. prepared.uncompensated_opd =
+                    disturbance_scale * disturbance_opd
+
+                if time() >= next_status_time
+                    residual_opd = graph_output(
+                        prepared.graph,
+                        Val(:pupil_opd),
+                    )
+                    println(
+                        "  t=", round(elapsed; digits=1),
+                        " s, residual=", round(
+                            1.0e9 * root_mean_square(residual_opd);
+                            digits=3,
+                        ),
+                        " nm RMS, command=", round(
+                            1.0e9 * root_mean_square(command);
+                            digits=3,
+                        ),
+                        " nm RMS",
+                    )
+                    next_status_time += 1.0
+                end
+
+                next_frame_time += frame_period
+                delay = next_frame_time - time()
+                delay > 0 && sleep(delay)
+                sequence = step_hil_frame!(boundary)
+            end
+            return nothing
+        finally
+            !isnothing(viewer) && stop_viewer_noexcept!(viewer)
+            !isnothing(worker) && stop_worker_noexcept!(worker)
+            !isnothing(viewer_streams) &&
+                close_viewer_streams!(viewer_streams)
+            close_process_streams!(streams)
+        end
+    end
+end
+
 function main(wavefront_sensor::Symbol)
     result = run_validation(; wavefront_sensor)
     println(
@@ -542,6 +820,15 @@ function main(wavefront_sensor::Symbol)
     println("  final residual: ", result.final_residual)
     println("  convergence ratio: ", result.convergence_ratio)
     println("  command error: ", result.command_error)
+    return nothing
+end
+
+function viewer_main(
+    wavefront_sensor::Symbol;
+    duration::Real=60.0,
+    frame_rate::Real=10.0,
+)
+    run_viewer_demo(; wavefront_sensor, duration, frame_rate)
     return nothing
 end
 
