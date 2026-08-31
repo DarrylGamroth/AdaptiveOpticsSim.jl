@@ -580,10 +580,10 @@ end
         command_input=:pdm_command,
         frame_output=:shwfs_frame,
     )
-    driver = FixedStepModelTimeDriver(PeriodicSchedule(PlantDuration(50)))
+    driver = FixedStepModelTimeDriver(AlgorithmGraphs.PeriodicSchedule(ModelDuration(50)))
     @test step_hil_frame_at!(timed_boundary, driver) == (
         sequence=UInt64(1),
-        timestamp=PlantTimestamp(0),
+        timestamp=ModelTimestamp(0),
     )
     hil_command_buffer(timed_boundary) .= Float32[11, 12]
     adopt_hil_command!(timed_boundary, UInt64(1))
@@ -2180,74 +2180,92 @@ end
 end
 
 @testset "fixed-step model-time driver" begin
+    schedule = AlgorithmGraphs.PeriodicSchedule(
+        ModelDuration(100);
+        phase=ModelDuration(25),
+    )
     driver = FixedStepModelTimeDriver(
-        PeriodicSchedule(PlantDuration(100); phase=PlantDuration(25));
-        origin=PlantTimestamp(1_000),
+        schedule;
+        origin=ModelTimestamp(1_000),
+    )
+
+    @test model_nanoseconds(ModelTimestamp(1_000)) == 1_000
+    @test model_nanoseconds(ModelDuration(100)) == 100
+    @test model_time_seconds(ModelTimestamp(1_000)) == 1.0e-6
+    @test model_duration_seconds(ModelDuration(100)) == 1.0e-7
+    @test schedule_period(schedule) == ModelDuration(100)
+    @test schedule_phase(schedule) == ModelDuration(25)
+    @test schedule_timestamp(schedule, 2, ModelTimestamp(1_000)) ==
+          ModelTimestamp(1_125)
+    @test_throws AlgorithmGraphError ModelTimestamp(-1)
+    @test_throws AlgorithmGraphError ModelDuration(true)
+    @test_throws AlgorithmGraphError AlgorithmGraphs.PeriodicSchedule(
+        ModelDuration(0),
     )
 
     @test model_time_sequence(driver) == UInt64(0)
     @test !model_time_exhausted(driver)
-    @test next_model_timestamp(driver) == PlantTimestamp(1_025)
-    @test advance_model_time!(driver) == PlantTimestamp(1_025)
+    @test next_model_timestamp(driver) == ModelTimestamp(1_025)
+    @test advance_model_time!(driver) == ModelTimestamp(1_025)
     @test model_time_sequence(driver) == UInt64(1)
-    @test next_model_timestamp(driver) == PlantTimestamp(1_125)
-    @test @inferred(advance_model_time!(driver)) == PlantTimestamp(1_125)
+    @test next_model_timestamp(driver) == ModelTimestamp(1_125)
+    @test @inferred(advance_model_time!(driver)) == ModelTimestamp(1_125)
     @test @allocated(advance_model_time!(driver)) == 0
 
     @test reset_model_time!(driver) === driver
     @test model_time_sequence(driver) == UInt64(0)
-    @test next_model_timestamp(driver) == PlantTimestamp(1_025)
+    @test next_model_timestamp(driver) == ModelTimestamp(1_025)
 end
 
 @testset "prepared-boundary model-time driver" begin
     driver = prepare_boundary_model_time_driver((
-        PlantTimestamp(10),
-        PlantTimestamp(20),
-        PlantTimestamp(35),
+        ModelTimestamp(10),
+        ModelTimestamp(20),
+        ModelTimestamp(35),
     ))
 
-    @test next_model_timestamp(driver) == PlantTimestamp(10)
-    @test advance_model_time!(driver) == PlantTimestamp(10)
-    @test @inferred(advance_model_time!(driver)) == PlantTimestamp(20)
+    @test next_model_timestamp(driver) == ModelTimestamp(10)
+    @test advance_model_time!(driver) == ModelTimestamp(10)
+    @test @inferred(advance_model_time!(driver)) == ModelTimestamp(20)
     @test @allocated(advance_model_time!(driver)) == 0
     @test model_time_sequence(driver) == UInt64(3)
     @test model_time_exhausted(driver)
     @test_throws AlgorithmGraphError next_model_timestamp(driver)
     @test_throws AlgorithmGraphError advance_model_time!(driver)
     reset_model_time!(driver)
-    @test next_model_timestamp(driver) == PlantTimestamp(10)
+    @test next_model_timestamp(driver) == ModelTimestamp(10)
 
     @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(())
     @test_throws AlgorithmGraphError prepare_boundary_model_time_driver((
-        PlantTimestamp(10),
-        PlantTimestamp(10),
+        ModelTimestamp(10),
+        ModelTimestamp(10),
     ))
     @test_throws AlgorithmGraphError prepare_boundary_model_time_driver((
-        PlantTimestamp(20),
-        PlantTimestamp(10),
+        ModelTimestamp(20),
+        ModelTimestamp(10),
     ))
     @test_throws AlgorithmGraphError prepare_boundary_model_time_driver((1, 2))
 end
 
 @testset "periodic prepared-boundary model time" begin
-    schedule = PeriodicSchedule(
-        PlantDuration(1_000);
-        phase=PlantDuration(100),
+    schedule = AlgorithmGraphs.PeriodicSchedule(
+        ModelDuration(1_000);
+        phase=ModelDuration(100),
     )
     driver = prepare_boundary_model_time_driver(
         schedule,
-        (PlantDuration(0), PlantDuration(250), PlantDuration(750)),
+        (ModelDuration(0), ModelDuration(250), ModelDuration(750)),
         2;
-        origin=PlantTimestamp(10),
+        origin=ModelTimestamp(10),
     )
     observed = ntuple(_ -> advance_model_time!(driver), 6)
     @test observed == (
-        PlantTimestamp(110),
-        PlantTimestamp(360),
-        PlantTimestamp(860),
-        PlantTimestamp(1_110),
-        PlantTimestamp(1_360),
-        PlantTimestamp(1_860),
+        ModelTimestamp(110),
+        ModelTimestamp(360),
+        ModelTimestamp(860),
+        ModelTimestamp(1_110),
+        ModelTimestamp(1_360),
+        ModelTimestamp(1_860),
     )
     @test model_time_exhausted(driver)
 
@@ -2258,22 +2276,22 @@ end
     )
     @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
         schedule,
-        (PlantDuration(0), PlantDuration(1_000)),
+        (ModelDuration(0), ModelDuration(1_000)),
         1,
     )
     @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
         schedule,
-        (PlantDuration(250), PlantDuration(100)),
+        (ModelDuration(250), ModelDuration(100)),
         1,
     )
     @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
         schedule,
-        (PlantDuration(0),),
+        (ModelDuration(0),),
         0,
     )
     @test_throws AlgorithmGraphError prepare_boundary_model_time_driver(
         schedule,
-        (PlantDuration(0),),
+        (ModelDuration(0),),
         true,
     )
 end
@@ -2281,13 +2299,13 @@ end
 @testset "captured model-time replay" begin
     captures = (
         CapturedModelTimestamp(
-            PlantTimestamp(15),
-            PlantDuration(2),
+            ModelTimestamp(15),
+            ModelDuration(2),
             (source=UInt32(7), sequence=UInt64(41)),
         ),
         CapturedModelTimestamp(
-            PlantTimestamp(28),
-            PlantDuration(3),
+            ModelTimestamp(28),
+            ModelDuration(3),
             (source=UInt32(7), sequence=UInt64(42)),
         ),
     )
@@ -2295,38 +2313,38 @@ end
 
     @test next_model_time_capture(driver) === captures[1]
     @test model_timestamp(next_model_time_capture(driver)) ==
-        PlantTimestamp(15)
+        ModelTimestamp(15)
     @test model_time_uncertainty(next_model_time_capture(driver)) ==
-        PlantDuration(2)
+        ModelDuration(2)
     @test model_time_provenance(next_model_time_capture(driver)) ==
         (source=UInt32(7), sequence=UInt64(41))
-    @test advance_model_time!(driver) == PlantTimestamp(15)
+    @test advance_model_time!(driver) == ModelTimestamp(15)
     @test @inferred(next_model_time_capture(driver)) === captures[2]
     @test @allocated(advance_model_time!(driver)) == 0
     @test model_time_exhausted(driver)
 
     reset_model_time!(driver)
-    @test next_model_timestamp(driver) == PlantTimestamp(15)
+    @test next_model_timestamp(driver) == ModelTimestamp(15)
     @test_throws AlgorithmGraphError prepare_captured_model_time_driver(())
     @test_throws AlgorithmGraphError prepare_captured_model_time_driver((
         captures[1],
         CapturedModelTimestamp(
-            PlantTimestamp(15),
-            PlantDuration(3),
+            ModelTimestamp(15),
+            ModelDuration(3),
             (source=UInt32(7), sequence=UInt64(42)),
         ),
     ))
     @test_throws AlgorithmGraphError prepare_captured_model_time_driver((
         captures[1],
         CapturedModelTimestamp(
-            PlantTimestamp(28),
-            PlantDuration(3),
+            ModelTimestamp(28),
+            ModelDuration(3),
             (stream=UInt32(7), sequence=UInt64(42)),
         ),
     ))
     @test_throws AlgorithmGraphError CapturedModelTimestamp(
-        PlantTimestamp(1),
-        PlantDuration(0),
+        ModelTimestamp(1),
+        ModelDuration(0),
         "borrowed provenance",
     )
 end
@@ -2340,9 +2358,9 @@ end
         ),);
         outputs=(graph_output(:sample, :source => :output),),
     ))
-    driver = FixedStepModelTimeDriver(PeriodicSchedule(PlantDuration(50)))
+    driver = FixedStepModelTimeDriver(AlgorithmGraphs.PeriodicSchedule(ModelDuration(50)))
 
-    @test step_graph_at!(graph, driver) == PlantTimestamp(0)
+    @test step_graph_at!(graph, driver) == ModelTimestamp(0)
     @test graph_output(graph, Val(:sample)) == Float32[4, 4]
     @test graph_step_sequence(graph) == model_time_sequence(driver) == UInt64(1)
     @test @allocated(step_graph_at!(graph, driver)) == 0
@@ -2352,17 +2370,17 @@ end
 
     reset_graph!(graph)
     reset_model_time!(driver)
-    @test step_graph_at!(graph, driver) == PlantTimestamp(0)
+    @test step_graph_at!(graph, driver) == ModelTimestamp(0)
 
     reset_graph!(graph)
     captured_driver = prepare_captured_model_time_driver((
         CapturedModelTimestamp(
-            PlantTimestamp(75),
-            PlantDuration(4),
+            ModelTimestamp(75),
+            ModelDuration(4),
             (source=UInt32(1), sequence=UInt64(1)),
         ),
     ))
-    @test step_graph_at!(graph, captured_driver) == PlantTimestamp(75)
+    @test step_graph_at!(graph, captured_driver) == ModelTimestamp(75)
     @test model_time_exhausted(captured_driver)
 
     failing_input = Float32[-1, 1]
@@ -2371,7 +2389,7 @@ end
         inputs=(graph_input(:input, :checked => :input, failing_input),),
         outputs=(graph_output(:output, :checked => :output),),
     ))
-    failing_driver = FixedStepModelTimeDriver(PeriodicSchedule(PlantDuration(50)))
+    failing_driver = FixedStepModelTimeDriver(AlgorithmGraphs.PeriodicSchedule(ModelDuration(50)))
     @test_throws DomainError step_graph_at!(failing_graph, failing_driver)
     @test model_time_sequence(failing_driver) == UInt64(0)
 end

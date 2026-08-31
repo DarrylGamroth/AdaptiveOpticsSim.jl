@@ -91,8 +91,6 @@ end
         names(Detectors))
     atmospheres_exported = filter(name -> Base.isexported(Atmospheres, name),
         names(Atmospheres))
-    plant_exported = filter(name -> Base.isexported(Plant, name),
-        names(Plant))
 
     # The root package exposes the domain module, while the domain itself
     # distinguishes routine unqualified vocabulary from stable qualified API.
@@ -100,88 +98,22 @@ end
     @test length(optics_exported) <= 160
     @test length(detectors_exported) <= 105
     @test length(atmospheres_exported) <= 35
-    @test length(plant_exported) <= 100
     @test Base.isexported(AdaptiveOpticsSim, :Backends)
     @test Base.isexported(AdaptiveOpticsSim, :Optics)
     @test Base.isexported(AdaptiveOpticsSim, :Detectors)
     @test Base.isexported(AdaptiveOpticsSim, :Atmospheres)
-    @test Base.isexported(AdaptiveOpticsSim, :Plant)
+    @test Base.isexported(AdaptiveOpticsSim, :AlgorithmGraphs)
     @test Base.ispublic(AdaptiveOpticsSim, :Backends)
     @test Base.ispublic(AdaptiveOpticsSim, :Optics)
     @test Base.ispublic(AdaptiveOpticsSim, :Detectors)
     @test Base.ispublic(AdaptiveOpticsSim, :Atmospheres)
-    @test Base.ispublic(AdaptiveOpticsSim, :Plant)
+    @test Base.ispublic(AdaptiveOpticsSim, :AlgorithmGraphs)
     @test AdaptiveOpticsSim.Backends === Backends
     @test AdaptiveOpticsSim.Optics === Optics
     @test AdaptiveOpticsSim.Detectors === Detectors
     @test AdaptiveOpticsSim.Atmospheres === Atmospheres
-    @test AdaptiveOpticsSim.Plant === Plant
-
-    # Every supported Plant-owned binding has one canonical owner. The root
-    # module exposes only the domain module, never forwarding compatibility
-    # bindings for exported or qualified-public Plant API.
-    for name in names(Plant; imported=false)
-        name === :Plant && continue
-        @test !isdefined(AdaptiveOpticsSim, name)
-    end
-
-    for name in (
-        :PlantTimestamp,
-        :PlantDuration,
-        :PeriodicSchedule,
-        :OpticalPathID,
-        :AcquisitionID,
-        :ControllableOpticID,
-        :CommandEndpointID,
-        :PlantCommandSchema,
-        :PlantCommand,
-        :PlantDefinition,
-        :PreparedPlant,
-        :prepare_plant,
-        :prepare_acquisition_selection,
-        :execute_acquisition_selection!,
-        :PlantEventLoopDefinition,
-        :prepare_plant_event_loop,
-    )
-        @test !isdefined(AdaptiveOpticsSim, name)
-        @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test Base.isexported(Plant, name)
-        @test Base.ispublic(Plant, name)
-    end
-
-    for name in (
-        :CommandValuePolicy,
-        :CommandEndpointState,
-        :CommandApplicationState,
-        :PreparedPathExecutor,
-        :PreparedTriggerTopology,
-        :EventSchedulerWorkspace,
-        :PlantEventKey,
-        :RNGOwnerIdentity,
-        :SingleIllumination,
-        :FullOpticalProviderStyle,
-        :validate_path_execution_binding,
-    )
-        @test !isdefined(AdaptiveOpticsSim, name)
-        @test !Base.isexported(Plant, name)
-        @test Base.ispublic(Plant, name)
-    end
-
-    for name in (
-        :_PreparedTriggerSource,
-        :_PLANT_COMMAND_CLAIM_TOKEN,
-        :_PreparedPlantToken,
-    )
-        @test isdefined(Plant, name)
-        @test !Base.isexported(Plant, name)
-        @test !Base.ispublic(Plant, name)
-    end
-
-    @test parentmodule(Plant.PlantCommand) === Plant
-    @test parentmodule(Plant.PlantTimestamp) === Plant
-    @test parentmodule(Plant.PlantDefinitionError) === Plant
-    @test Plant.advance_to! === AdaptiveOpticsSim.Atmospheres.advance_to!
-    @test Plant.backend === AdaptiveOpticsSim.Backends.backend
+    @test AdaptiveOpticsSim.AlgorithmGraphs === AlgorithmGraphs
+    @test !isdefined(AdaptiveOpticsSim, :Plant)
     @test !Base.isexported(AdaptiveOpticsSim, :ShackHartmannWFS)
     @test Base.isexported(WavefrontSensors, :ShackHartmannWFS)
     for name in (

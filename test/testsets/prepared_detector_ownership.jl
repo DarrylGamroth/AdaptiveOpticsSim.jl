@@ -243,50 +243,6 @@ end
         copy(capture!(control_prepared, Xoshiro(23049)))
 end
 
-@testset "PE-04 lifecycle preparation is transactional" begin
-    input = detector_test_intensity_map(fill(2.0, 4, 4))
-
-    global_detector = pe04_frame_detector()
-    global_owner = prepare_detector_acquisition(global_detector, input)
-    global_owners = (global_detector.state, global_detector.workspace,
-        global_detector.products)
-    @test_throws DetectorAcquisitionError prepare_global_shutter_acquisition(
-        global_detector, input,
-        GlobalShutterAcquisitionDefinition(PlantDuration(500_000_000)))
-    @test (global_detector.state, global_detector.workspace,
-        global_detector.products) === global_owners
-    @test capture!(global_owner, Xoshiro(23070)) ===
-        output_frame(global_detector)
-
-    rolling_detector = pe04_frame_detector(sensor=CMOSSensor(
-        timing_model=RollingShutter(1e-6)))
-    rolling_owner = prepare_detector_acquisition(rolling_detector, input)
-    rolling_owners = (rolling_detector.state, rolling_detector.workspace,
-        rolling_detector.products)
-    @test_throws DetectorAcquisitionError prepare_rolling_shutter_acquisition(
-        rolling_detector, input,
-        RollingShutterAcquisitionDefinition(PlantDuration(500_000_000)))
-    @test (rolling_detector.state, rolling_detector.workspace,
-        rolling_detector.products) === rolling_owners
-    @test capture!(rolling_owner, Xoshiro(23071)) ===
-        output_frame(rolling_detector)
-
-    transfer_detector = pe04_frame_detector(sensor=EMCCDSensor(
-        excess_noise_factor=1.0,
-        acquisition_mode=FrameTransferAcquisition(transfer_duration=0.01)))
-    transfer_owner = prepare_detector_acquisition(transfer_detector, input)
-    transfer_owners = (transfer_detector.state, transfer_detector.workspace,
-        transfer_detector.products)
-    @test_throws DetectorAcquisitionError prepare_frame_transfer_acquisition(
-        transfer_detector, input,
-        FrameTransferAcquisitionDefinition(PlantDuration(500_000_000)))
-    @test (transfer_detector.state, transfer_detector.workspace,
-        transfer_detector.products) === transfer_owners
-    @test capture!(transfer_owner, Xoshiro(23072)) ===
-        output_frame(transfer_detector)
-end
-
-
 @testset "PE-04 readout workspace and product ownership" begin
     input = detector_test_intensity_map(fill(5.0, 4, 4))
 
@@ -336,84 +292,6 @@ end
     @test !Base.mightalias(ramp.products.readout.slope_frame,
         ramp.workspace.readout.slope)
 
-    lifecycle = prepare_global_shutter_acquisition(
-        ramp,
-        input,
-        GlobalShutterAcquisitionDefinition(
-            PlantDuration(1_000_000_000);
-            readout_duration=PlantDuration(100_000_000)),
-    )
-    @test lifecycle.read_offsets isa FixedSizeVector
-    @test lifecycle.read_offset_binding isa FixedSizeVector
-    @test !applicable(prepare_global_shutter_acquisition,
-        lifecycle.acquisition, lifecycle.definition)
-    lifecycle_state = GlobalShutterAcquisitionState(lifecycle)
-    @test lifecycle_state isa GlobalShutterAcquisitionState
-    @test_throws DetectorAcquisitionError GlobalShutterAcquisitionState(
-        lifecycle)
-    lifecycle_fields = pe04_owner_fields(lifecycle_state)
-    @test !applicable(GlobalShutterAcquisitionState, lifecycle_fields...)
-    forged_lifecycle_state = GlobalShutterAcquisitionState(
-        AdaptiveOpticsSim.Plant._DETECTOR_LIFECYCLE_OWNER_TOKEN,
-        lifecycle_fields...)
-    forged_lifecycle_error = pe04_captured_error() do
-        begin_exposure!(lifecycle, forged_lifecycle_state, PlantTimestamp(0))
-    end
-    @test forged_lifecycle_error isa DetectorAcquisitionError
-    @test forged_lifecycle_error.reason == :foreign_state
-
-    rolling_detector = pe04_frame_detector(sensor=CMOSSensor(
-        timing_model=RollingShutter(1e-6)))
-    rolling = prepare_rolling_shutter_acquisition(
-        rolling_detector,
-        input,
-        RollingShutterAcquisitionDefinition(PlantDuration(1_000_000_000)),
-    )
-    rolling_state = RollingShutterAcquisitionState(rolling)
-    @test rolling_state isa RollingShutterAcquisitionState
-    @test_throws DetectorAcquisitionError RollingShutterAcquisitionState(
-        rolling)
-    rolling_fields = pe04_owner_fields(rolling_state)
-    @test !applicable(RollingShutterAcquisitionState, rolling_fields...)
-    forged_rolling_state = RollingShutterAcquisitionState(
-        AdaptiveOpticsSim.Plant._DETECTOR_LIFECYCLE_OWNER_TOKEN,
-        rolling_fields...)
-    forged_rolling_error = pe04_captured_error() do
-        begin_exposure!(rolling, forged_rolling_state, PlantTimestamp(0))
-    end
-    @test forged_rolling_error isa DetectorAcquisitionError
-    @test forged_rolling_error.reason == :foreign_state
-
-    transfer_detector = pe04_frame_detector(sensor=EMCCDSensor(
-        excess_noise_factor=1.0,
-        acquisition_mode=FrameTransferAcquisition(transfer_duration=0.01)))
-    transfer = prepare_frame_transfer_acquisition(
-        transfer_detector,
-        input,
-        FrameTransferAcquisitionDefinition(
-            PlantDuration(1_000_000_000)),
-    )
-    transfer_state = FrameTransferAcquisitionState(transfer)
-    @test_throws DetectorAcquisitionError FrameTransferAcquisitionState(
-        transfer)
-    transfer_fields = pe04_owner_fields(transfer_state)
-    @test !applicable(FrameTransferAcquisitionState, transfer_fields...)
-    forged_transfer_state = FrameTransferAcquisitionState(
-        AdaptiveOpticsSim.Plant._DETECTOR_LIFECYCLE_OWNER_TOKEN,
-        transfer_fields...)
-    forged_transfer_error = pe04_captured_error() do
-        begin_exposure!(transfer, forged_transfer_state, PlantTimestamp(0))
-    end
-    @test forged_transfer_error isa DetectorAcquisitionError
-    @test forged_transfer_error.reason == :foreign_state
-    @test !hasfield(typeof(transfer), :storage_frame)
-    @test hasfield(typeof(transfer_state), :storage_frame)
-    @test !Base.mightalias(transfer_state.storage_frame,
-        transfer_detector.state.accum_buffer)
-    @test !Base.mightalias(transfer_state.storage_frame,
-        transfer_detector.workspace.presampling_buffer)
-    @test !Base.mightalias(transfer_state.storage_frame,
-        transfer_detector.products.frame)
 end
 
 @testset "PE-04 representative detector family storage" begin

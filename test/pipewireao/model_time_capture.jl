@@ -1,6 +1,6 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.AlgorithmGraphs
-using AdaptiveOpticsSim.Plant: PlantDuration, PlantTimestamp
+using AdaptiveOpticsSim.AlgorithmGraphs: ModelDuration, ModelTimestamp
 using PipeWireAO
 using Test
 
@@ -83,9 +83,9 @@ end
         origin = capture_model_time_origin(origin_metadata)
         first_capture = capture_model_timestamp(origin_metadata, origin)
         second_capture = capture_model_timestamp(sample_metadata, origin)
-        @test model_timestamp(first_capture) == PlantTimestamp(0)
-        @test model_timestamp(second_capture) == PlantTimestamp(1_020)
-        @test model_time_uncertainty(second_capture) == PlantDuration(12)
+        @test model_timestamp(first_capture) == ModelTimestamp(0)
+        @test model_timestamp(second_capture) == ModelTimestamp(1_020)
+        @test model_time_uncertainty(second_capture) == ModelDuration(12)
         provenance = model_time_provenance(second_capture)
         @test provenance.identity.sequence == UInt64(82)
         @test provenance.exposure_start_nanoseconds == Int64(1_001_020)
@@ -98,8 +98,8 @@ end
             first_capture,
             second_capture,
         ))
-        @test advance_model_time!(replay) == PlantTimestamp(0)
-        @test advance_model_time!(replay) == PlantTimestamp(1_020)
+        @test advance_model_time!(replay) == ModelTimestamp(0)
+        @test advance_model_time!(replay) == ModelTimestamp(1_020)
         @test model_time_exhausted(replay)
 
         capture_model_timestamp(sample_metadata, origin)

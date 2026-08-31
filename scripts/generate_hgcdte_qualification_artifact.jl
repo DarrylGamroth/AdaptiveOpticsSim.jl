@@ -1,7 +1,5 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Detectors
-using AdaptiveOpticsSim.Optics
-using AdaptiveOpticsSim.Plant
 using Dates
 using Random
 using Statistics
@@ -102,65 +100,6 @@ function hgcdte_moment_cases()
                 sensor=HgCdTeSensor(glow_rate=7.0)),
             5107, 7.0),
     ]
-end
-
-function hgcdte_rate_map(values::AbstractMatrix{T}) where {T<:AbstractFloat}
-    metadata = OpticalPlaneMetadata(DetectorPlane(), values;
-        coordinate_domain=AngularCoordinates(),
-        sampling=(one(T), one(T)),
-        normalization=PhotonRateNormalization(),
-        spatial_measure=CellIntegratedMeasure(),
-        coherence=IncoherentIntensityAddition(),
-        spectral=MonochromaticChannel(T(0.55e-6)))
-    return IntensityMap(metadata, values)
-end
-
-function hgcdte_irregular_scheduled_ramp_contract()
-    rate = 1.0e9
-    values = fill(rate, 2, 2)
-    detector = Detector(
-        exposure_duration=1.0e-8,
-        qe=1.0,
-        noise=NoiseNone(),
-        response_model=NullFrameResponse(),
-        sensor=HgCdTeSensor(
-            read_duration=0.0,
-            sampling_mode=UpTheRampSampling(4)),
-    )
-    definition = GlobalShutterAcquisitionDefinition(PlantDuration(10))
-    prepared = Plant.prepare_global_shutter_acquisition(
-        detector, hgcdte_rate_map(values), definition)
-    state = Plant.GlobalShutterAcquisitionState(prepared)
-    rng = Xoshiro(5201)
-    start = PlantTimestamp(0)
-    Plant.begin_exposure!(prepared, state, start)
-    Plant.take_nondestructive_read!(prepared, state, start, rng)
-    previous = start
-    for read_index in 2:3
-        timestamp = start + Plant.nondestructive_read_offset(
-            prepared, read_index)
-        Plant.accumulate_exposure_interval!(
-            prepared, state, previous, timestamp, rng)
-        Plant.take_nondestructive_read!(
-            prepared, state, timestamp, rng)
-        previous = timestamp
-    end
-    close = start + definition.exposure_duration
-    Plant.accumulate_exposure_interval!(
-        prepared, state, previous, close, rng)
-    Plant.close_exposure!(prepared, state, close)
-    Plant.take_nondestructive_read!(prepared, state, close, rng)
-    output = Plant.complete_readout!(prepared, state, close, rng)
-    return detector_ramp_read_offsets_s(detector) ==
-            [0.0, 3.0e-9, 6.0e-9, 1.0e-8] &&
-        all(isapprox.(detector_ramp_slope(detector), rate;
-            rtol=8eps(Float64), atol=0.0)) &&
-        maximum(abs, detector_ramp_intercept(detector)) <=
-            8eps(Float64) &&
-        all(isapprox.(output, 10.0;
-            rtol=8eps(Float64), atol=0.0)) &&
-        Detectors.detector_ramp_acquisition(detector) ==
-            :scheduled_evolving_charge
 end
 
 function hgcdte_deterministic_contract()
@@ -297,8 +236,6 @@ function hgcdte_deterministic_contract()
         "architecture_separated" => architecture_separated,
         "single_ndr_cds_fowler_passed" => sampling_modes_passed,
         "direct_synthesized_ramp_passed" => direct_ramp_passed,
-        "irregular_scheduled_ramp_passed" =>
-            hgcdte_irregular_scheduled_ramp_contract(),
         "window_preserves_full_frame_timing" =>
             window_preserves_full_frame_timing,
         "configured_mtf_preserved" => configured_mtf_preserved,
@@ -330,7 +267,6 @@ function generate_hgcdte_qualification_artifact()
         "architecture_separated",
         "single_ndr_cds_fowler_passed",
         "direct_synthesized_ramp_passed",
-        "irregular_scheduled_ramp_passed",
         "window_preserves_full_frame_timing",
         "configured_mtf_preserved",
         "configured_ipc_passed",
@@ -361,7 +297,7 @@ function generate_hgcdte_qualification_artifact()
             "included" => [
                 "conventional HgCdTe area arrays without avalanche multiplication",
                 "single, averaged nondestructive, correlated-double, Fowler, and up-the-ramp sampling",
-                "direct synthesized-final-charge and Plant scheduled evolving-charge ramps",
+                "direct synthesized-final-charge ramps",
                 "dark current, readout glow, independent Gaussian read noise, nonlinearity, persistence, saturation, and reference correction",
                 "explicit presampling response, MTF, and post-collection IPC",
             ],

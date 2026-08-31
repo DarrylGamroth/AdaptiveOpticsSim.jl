@@ -19,23 +19,6 @@ function pe02_maintained_text()
 end
 
 @testset "PE-02 execution-strategy terminology" begin
-    contract = TOML.parsefile(joinpath(
-        PE02_REPOSITORY_ROOT,
-        "test",
-        "contracts",
-        "prepared_execution_ownership.toml",
-    ))
-    terminology = contract["strategy_terminology"]
-    @test terminology["work_issue"] == 230
-    @test terminology["delivery_state"] == "implemented"
-    @test length(terminology["families"]) == 6
-    @test length(terminology["selectors"]) == 18
-    @test length(terminology["selection_functions"]) == 6
-    @test all(endswith("Strategy"), terminology["families"])
-    @test all(endswith("Strategy"), terminology["selectors"])
-    @test all(name -> !endswith(name, "_plan"),
-        terminology["selection_functions"])
-
     family_types = (
         (Atmospheres, :AbstractAtmosphericFieldExecutionStrategy),
         (Backends, :AbstractReductionExecutionStrategy),
@@ -65,34 +48,26 @@ end
         (WavefrontSensors, :ShackHartmannWFSROCmSafeStrategy),
         (WavefrontSensors, :ShackHartmannWFSROCmHostStatsStrategy),
     )
-    @test Set(String(name) for (_, name) in family_types) ==
-        Set(String.(terminology["families"]))
-    @test Set(String(name) for (_, name) in selector_types) ==
-        Set(String.(terminology["selectors"]))
+    selection_functions = (
+        :atmospheric_field_execution_strategy,
+        :reduction_execution_strategy,
+        :detector_execution_strategy,
+        :counting_output_execution_strategy,
+        :grouped_accumulation_strategy,
+        :sh_sensing_execution_strategy,
+    )
+    @test length(family_types) == 6
+    @test length(selector_types) == 18
+    @test length(selection_functions) == 6
+    @test all(endswith("Strategy"), String(name) for (_, name) in family_types)
+    @test all(endswith("Strategy"), String(name) for (_, name) in selector_types)
+    @test all(name -> !endswith(String(name), "_plan"), selection_functions)
     @test all(isabstracttype(getfield(owner, name))
         for (owner, name) in family_types)
     @test all(isconcretetype(getfield(owner, name))
         for (owner, name) in selector_types)
     @test all(fieldcount(getfield(owner, name)) == 0
         for (owner, name) in selector_types)
-
-    inventory = contract["type_inventory"]
-    columns = String.(inventory["columns"])
-    expected_names = Set(vcat(
-        String.(terminology["families"]),
-        String.(terminology["selectors"]),
-    ))
-    observed_names = Set{String}()
-    for file in inventory["files"], row in file["entries"]
-        values = Dict(columns .=> row)
-        name = String(values["name"])
-        name in expected_names || continue
-        @test values["current_role"] == "strategy"
-        @test values["target_roles"] == ["strategy"]
-        @test values["migration_gate"] == "PE-02"
-        push!(observed_names, name)
-    end
-    @test observed_names == expected_names
 
     previous_suffix = string("Pl", "an")
     previous_type_stems = (

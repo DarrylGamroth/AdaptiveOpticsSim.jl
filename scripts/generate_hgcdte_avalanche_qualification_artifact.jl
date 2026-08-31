@@ -5,17 +5,6 @@ import AdaptiveOpticsSim.Detectors:
     ClippedGaussianAvalancheMultiplicationApproximation,
     ConditionalGammaAvalancheMultiplication,
     FrameWindow
-using AdaptiveOpticsSim.Optics
-using AdaptiveOpticsSim.Plant
-import AdaptiveOpticsSim.Plant:
-    GlobalShutterAcquisitionState,
-    accumulate_exposure_interval!,
-    begin_exposure!,
-    close_exposure!,
-    complete_readout!,
-    mark_acquisition_ready!,
-    prepare_global_shutter_acquisition,
-    take_nondestructive_read!
 using Dates
 using Random
 using Statistics
@@ -126,67 +115,6 @@ function hgcdte_avalanche_moment_cases()
             "clipped_gaussian_approximation",
             64.0, 5.0, 1.5, 6104),
     ]
-end
-
-function hgcdte_avalanche_artifact_map(
-    values::AbstractMatrix{T}) where {T<:AbstractFloat}
-    metadata = OpticalPlaneMetadata(DetectorPlane(), values;
-        coordinate_domain=AngularCoordinates(),
-        sampling=(one(T), one(T)),
-        normalization=PhotonRateNormalization(),
-        spatial_measure=CellIntegratedMeasure(),
-        coherence=IncoherentIntensityAddition(),
-        spectral=MonochromaticChannel(T(0.8e-6)))
-    return IntensityMap(metadata, values)
-end
-
-function run_hgcdte_avalanche_scheduled_ramp!(
-    prepared, state, values, rng)
-    start = PlantTimestamp(0)
-    middle = PlantTimestamp(500_000_000)
-    close = PlantTimestamp(1_000_000_000)
-    begin_exposure!(prepared, state, start)
-    take_nondestructive_read!(prepared, state, start, rng)
-    accumulate_exposure_interval!(
-        prepared, state, start, middle, rng)
-    take_nondestructive_read!(prepared, state, middle, rng)
-    fill!(values, zero(eltype(values)))
-    accumulate_exposure_interval!(
-        prepared, state, middle, close, rng)
-    take_nondestructive_read!(prepared, state, close, rng)
-    cube = detector_ramp_cube(prepared.detector)
-    retained = true
-    @inbounds for column in axes(cube, 2), row in axes(cube, 1)
-        retained &= cube[row, column, 3] == cube[row, column, 2]
-    end
-    close_exposure!(prepared, state, close)
-    complete_readout!(prepared, state, close, rng)
-    mark_acquisition_ready!(prepared, state, close)
-    return retained
-end
-
-function hgcdte_avalanche_scheduled_fixture(seed)
-    values = fill(128.0, 8, 8)
-    map = hgcdte_avalanche_artifact_map(values)
-    detector = Detector(
-        exposure_duration=1.0,
-        qe=1.0,
-        noise=NoiseNone(),
-        response_model=NullFrameResponse(),
-        sensor=HgCdTeAvalancheArraySensor(
-            avalanche_gain=2.0,
-            excess_noise_factor=1.5,
-            multiplication_model=
-                ClippedGaussianAvalancheMultiplicationApproximation(),
-            read_duration=0.0,
-            sampling_mode=UpTheRampSampling(3)),
-    )
-    definition = GlobalShutterAcquisitionDefinition(
-        PlantDuration(1_000_000_000))
-    prepared = prepare_global_shutter_acquisition(
-        detector, map, definition)
-    state = GlobalShutterAcquisitionState(prepared)
-    return (; detector, prepared, state, values, rng=Xoshiro(seed))
 end
 
 function hgcdte_avalanche_deterministic_contract()
@@ -386,16 +314,6 @@ function hgcdte_avalanche_deterministic_contract()
     gamma_steady_alloc_bytes = @allocated capture!(
         gamma_allocation_detector, allocation_input, gamma_rng)
 
-    warm_scheduled = hgcdte_avalanche_scheduled_fixture(6212)
-    scheduled_retains_prior_multiplication =
-        run_hgcdte_avalanche_scheduled_ramp!(
-            warm_scheduled.prepared, warm_scheduled.state,
-            warm_scheduled.values, warm_scheduled.rng)
-    scheduled = hgcdte_avalanche_scheduled_fixture(6213)
-    scheduled_steady_alloc_bytes = @allocated(
-        run_hgcdte_avalanche_scheduled_ramp!(
-            scheduled.prepared, scheduled.state,
-            scheduled.values, scheduled.rng))
 
     return Dict{String,Any}(
         "architecture_separated" => architecture_separated,
@@ -412,8 +330,6 @@ function hgcdte_avalanche_deterministic_contract()
             window_timing_passed,
         "configured_mtf_preserved" => configured_mtf_preserved,
         "configured_ipc_passed" => configured_ipc_passed,
-        "scheduled_retains_prior_multiplication" =>
-            scheduled_retains_prior_multiplication,
         "gamma_accelerator_rejected" =>
             gamma_accelerator_rejected,
         "deterministic_replay_passed" =>
@@ -422,12 +338,9 @@ function hgcdte_avalanche_deterministic_contract()
             approximate_steady_alloc_bytes,
         "gamma_steady_alloc_bytes" =>
             gamma_steady_alloc_bytes,
-        "scheduled_steady_alloc_bytes" =>
-            scheduled_steady_alloc_bytes,
         "allocation_gate_passed" =>
             approximate_steady_alloc_bytes == 0 &&
-            gamma_steady_alloc_bytes == 0 &&
-            scheduled_steady_alloc_bytes == 0,
+            gamma_steady_alloc_bytes == 0,
     )
 end
 
@@ -459,7 +372,6 @@ function generate_hgcdte_avalanche_qualification_artifact()
         "window_preserves_full_frame_timing",
         "configured_mtf_preserved",
         "configured_ipc_passed",
-        "scheduled_retains_prior_multiplication",
         "gamma_accelerator_rejected",
         "deterministic_replay_passed",
         "allocation_gate_passed",
@@ -508,7 +420,7 @@ function generate_hgcdte_avalanche_qualification_artifact()
                 "dark current and readout glow before avalanche multiplication",
                 "single, averaged nondestructive, correlated-double, Fowler, and up-the-ramp sampling",
                 "full-frame and windowed output with explicit response/MTF and IPC",
-                "scheduled evolving-charge ramps that retain prior multiplication realizations",
+                "direct synthesized-final-charge ramps",
             ],
             "excluded" => [
                 "Geiger-mode counting or photon timestamp output",

@@ -2996,7 +2996,7 @@ Declare one complete-frame, single-read CCD acquisition. The node consumes a
 cell-integrated detector-plane photon-rate mosaic and writes a detector frame.
 Its RNG is explicit persistent state and is restored by `reset_graph!`.
 Partial exposure timing, rolling shutters, frame transfer, and readout
-readiness remain Plant operations.
+readiness are outside the complete-frame graph contract.
 """
 function ccd_detector_acquisition_node(
     name::Symbol;
@@ -3331,8 +3331,9 @@ Declare one complete-frame linear-mode EMCCD acquisition. The node consumes a
 cell-integrated four-pupil photon-rate frame and writes a detector frame. Its
 RNG is explicit persistent state and is restored by `reset_graph!`.
 
-Frame-transfer timing and readout readiness remain Plant operations; this node
-performs one complete sequential acquisition per graph step.
+Frame-transfer timing and readout readiness are outside the complete-frame
+graph contract; this node performs one complete sequential acquisition per
+graph step.
 """
 function emccd_detector_acquisition_node(
     name::Symbol;

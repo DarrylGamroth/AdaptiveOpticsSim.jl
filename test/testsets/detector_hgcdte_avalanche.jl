@@ -21,56 +21,6 @@ function test_hgcdte_avalanche_moments(samples, expected_mean,
         sigma_limit * variance_se
 end
 
-function run_scheduled_hgcdte_avalanche_ramp!(
-    prepared, state, values, rng)
-    start = PlantTimestamp(0)
-    middle = PlantTimestamp(500_000_000)
-    close = PlantTimestamp(1_000_000_000)
-    begin_exposure!(prepared, state, start)
-    take_nondestructive_read!(prepared, state, start, rng)
-    accumulate_exposure_interval!(
-        prepared, state, start, middle, rng)
-    take_nondestructive_read!(prepared, state, middle, rng)
-    fill!(values, zero(eltype(values)))
-    accumulate_exposure_interval!(
-        prepared, state, middle, close, rng)
-    take_nondestructive_read!(prepared, state, close, rng)
-    cube = detector_ramp_cube(prepared.detector)
-    retained = true
-    @inbounds for column in axes(cube, 2), row in axes(cube, 1)
-        retained &= cube[row, column, 3] == cube[row, column, 2]
-    end
-    close_exposure!(prepared, state, close)
-    complete_readout!(prepared, state, close, rng)
-    mark_acquisition_ready!(prepared, state, close)
-    return retained
-end
-
-function scheduled_hgcdte_avalanche_fixture(seed)
-    values = fill(128.0, 8, 8)
-    map = detector_test_intensity_map(values;
-        kind=DetectorPlane())
-    detector = Detector(
-        exposure_duration=1.0,
-        qe=1.0,
-        noise=NoiseNone(),
-        response_model=NullFrameResponse(),
-        sensor=HgCdTeAvalancheArraySensor(
-            avalanche_gain=2.0,
-            excess_noise_factor=1.5,
-            multiplication_model=
-                ClippedGaussianAvalancheMultiplicationApproximation(),
-            read_duration=0.0,
-            sampling_mode=UpTheRampSampling(3)),
-    )
-    definition = GlobalShutterAcquisitionDefinition(
-        PlantDuration(1_000_000_000))
-    prepared = prepare_global_shutter_acquisition(
-        detector, map, definition)
-    state = GlobalShutterAcquisitionState(prepared)
-    return (; detector, prepared, state, values, rng=Xoshiro(seed))
-end
-
 @testset "HgCdTe linear-avalanche multiplication qualification" begin
     gamma_model = ConditionalGammaAvalancheMultiplication()
     approximate_model =
@@ -311,18 +261,4 @@ end
     @test_detector_allocation prepared_detector_capture_allocations(
         gamma_plan, gamma_rng) == 0
 
-    warm_scheduled = scheduled_hgcdte_avalanche_fixture(6142)
-    @test run_scheduled_hgcdte_avalanche_ramp!(
-        warm_scheduled.prepared, warm_scheduled.state,
-        warm_scheduled.values, warm_scheduled.rng)
-    scheduled = scheduled_hgcdte_avalanche_fixture(6143)
-    if coverage_instrumented()
-        @test_skip "scheduled avalanche allocation assertion is disabled under coverage instrumentation"
-    else
-        @test @allocated(run_scheduled_hgcdte_avalanche_ramp!(
-            scheduled.prepared, scheduled.state,
-            scheduled.values, scheduled.rng)) == 0
-    end
-    @test detector_ramp_acquisition(scheduled.detector) ==
-        :scheduled_evolving_charge
 end

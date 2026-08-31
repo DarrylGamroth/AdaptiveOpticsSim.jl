@@ -20,11 +20,11 @@
                 sy += opd[x, y + 1] - opd[x, y]
                 count_y += 1
             end
-            slopes[idx] = scale_x * sx / max(count_x, 1)
-            slopes[idx + offset] = scale_y * sy / max(count_y, 1)
+            @inbounds slopes[idx] = scale_x * sx / max(count_x, 1)
+            @inbounds slopes[idx + offset] = scale_y * sy / max(count_y, 1)
         else
-            slopes[idx] = zero(eltype(slopes))
-            slopes[idx + offset] = zero(eltype(slopes))
+            @inbounds slopes[idx] = zero(eltype(slopes))
+            @inbounds slopes[idx + offset] = zero(eltype(slopes))
         end
     end
 end
@@ -56,11 +56,11 @@ end
                     count_y += 1
                 end
             end
-            slopes[idx] = sx / max(count_x, 1)
-            slopes[idx + offset] = sy / max(count_y, 1)
+            @inbounds slopes[idx] = sx / max(count_x, 1)
+            @inbounds slopes[idx + offset] = sy / max(count_y, 1)
         else
-            slopes[idx] = zero(eltype(slopes))
-            slopes[idx + offset] = zero(eltype(slopes))
+            @inbounds slopes[idx] = zero(eltype(slopes))
+            @inbounds slopes[idx + offset] = zero(eltype(slopes))
         end
     end
 end
@@ -98,21 +98,38 @@ function _set_valid_subapertures!(
     return valid_mask
 end
 
+@inline function _geometric_slope_layout(
+    slopes::AbstractVector,
+    opd::AbstractMatrix,
+    valid_mask::AbstractMatrix{Bool},
+)
+    Base.require_one_based_indexing(slopes, opd, valid_mask)
+    n = size(opd, 1)
+    n_sub = size(valid_mask, 1)
+    n > 0 || throw(DimensionMismatchError(
+        "geometric wavefront OPD must be nonempty"))
+    n_sub > 0 || throw(DimensionMismatchError(
+        "geometric wavefront valid_mask must be nonempty"))
+    size(opd, 2) == n || throw(DimensionMismatchError(
+        "geometric wavefront OPD must be square"))
+    size(valid_mask, 2) == n_sub || throw(DimensionMismatchError(
+        "geometric wavefront valid_mask must be square"))
+    n % n_sub == 0 || throw(DimensionMismatchError(
+        "OPD size must be divisible by valid_mask size"))
+    offset = n_sub * n_sub
+    length(slopes) == 2 * offset ||
+        throw(DimensionMismatchError(
+            "slope vector length does not match valid_mask"))
+    return div(n, n_sub), n_sub, offset
+end
+
 function geometric_slopes!(
     slopes::AbstractVector,
     opd::AbstractMatrix,
     valid_mask::AbstractMatrix{Bool},
 )
-    Base.require_one_based_indexing(opd, valid_mask)
-    n = size(opd, 1)
-    n_sub = size(valid_mask, 1)
-    n % n_sub == 0 || throw(DimensionMismatchError(
-        "OPD size must be divisible by valid_mask size"))
-    length(slopes) == 2 * n_sub * n_sub ||
-        throw(DimensionMismatchError(
-            "slope vector length does not match valid_mask"))
-    sub = div(n, n_sub)
-    offset = n_sub * n_sub
+    sub, n_sub, offset = _geometric_slope_layout(
+        slopes, opd, valid_mask)
     unit_scale = one(eltype(slopes))
     _geometric_slopes!(
         execution_style(slopes), slopes, opd, valid_mask,
@@ -133,23 +150,11 @@ function geometric_wavefront_slopes!(
     valid_mask::AbstractMatrix{Bool},
     sampling_m::NTuple{2,<:Real},
 )
-    Base.require_one_based_indexing(opd, valid_mask)
     all(value -> isfinite(value) && value > zero(value), sampling_m) ||
         throw(InvalidConfiguration(
             "geometric wavefront sampling must be finite and positive"))
-    n = size(opd, 1)
-    n_sub = size(valid_mask, 1)
-    size(opd, 2) == n || throw(DimensionMismatchError(
-        "geometric wavefront OPD must be square"))
-    size(valid_mask, 2) == n_sub || throw(DimensionMismatchError(
-        "geometric wavefront valid_mask must be square"))
-    n % n_sub == 0 || throw(DimensionMismatchError(
-        "OPD size must be divisible by valid_mask size"))
-    length(slopes) == 2 * n_sub * n_sub ||
-        throw(DimensionMismatchError(
-            "slope vector length does not match valid_mask"))
-    sub = div(n, n_sub)
-    offset = n_sub * n_sub
+    sub, n_sub, offset = _geometric_slope_layout(
+        slopes, opd, valid_mask)
     T = eltype(slopes)
     scale_x = inv(T(sampling_m[1]))
     scale_y = inv(T(sampling_m[2]))
@@ -253,18 +258,11 @@ function edge_geometric_slopes!(
     valid_mask::AbstractMatrix{Bool},
     edge_mask::AbstractMatrix{Bool},
 )
-    Base.require_one_based_indexing(opd, valid_mask, edge_mask)
-    n = size(opd, 1)
-    n_sub = size(valid_mask, 1)
-    n % n_sub == 0 || throw(DimensionMismatchError(
-        "OPD size must be divisible by valid_mask size"))
+    Base.require_one_based_indexing(edge_mask)
+    sub, n_sub, offset = _geometric_slope_layout(
+        slopes, opd, valid_mask)
     size(edge_mask) == size(opd) || throw(DimensionMismatchError(
         "edge_mask size must match OPD"))
-    length(slopes) == 2 * n_sub * n_sub ||
-        throw(DimensionMismatchError(
-            "slope vector length does not match valid_mask"))
-    sub = div(n, n_sub)
-    offset = n_sub * n_sub
     _edge_geometric_slopes!(
         execution_style(slopes), slopes, opd, valid_mask,
         edge_mask, sub, n_sub, offset)

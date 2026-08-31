@@ -3,7 +3,7 @@
 [![CPU Validation](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml/badge.svg)](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml)
 [![Coverage](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl)
 
-Julia adaptive-optics plant simulation toolkit for external-RTC HIL development,
+Julia adaptive-optics simulation toolkit for external-RTC HIL development,
 deterministic validation, and offline CPU/GPU studies. OOPAO remains an
 important source of scientific reference cases and tutorial mappings, but its
 class layout and API are not compatibility constraints. The maintained design
@@ -107,13 +107,14 @@ The main modeling objects are:
 - `MultiLayerAtmosphere` or `KolmogorovAtmosphere` for turbulence
 - `ShackHartmannWFS`, `PyramidWFS`, `BiOEdgeWFS`, `CurvatureWFS`, `ZernikeWFS` for sensing
 - `DeformableMirror` plus a reconstructor for control
-- `AdaptiveOpticsSim.Plant` definitions, prepared owners, and the event loop
-  when you need independent commands, acquisitions, triggers, and virtual time
+- `AdaptiveOpticsSim.AlgorithmGraphs` for static, single-rate, complete-frame
+  composition on CPU, CUDA, or AMDGPU arrays
+- direct Julia composition for generated topology, multiple rates, conditional
+  execution, or sub-frame optical sampling
 
-For external-control or HIL paths, prepare independent plant command endpoints.
-`prepare_controller_output_routing` can bind named views of an RTC-owned output
-buffer to those endpoints without imposing packed-command timing or transport
-semantics.
+For a lockstep external RTC, `prepare_graph_hil_boundary` binds one graph input
+as the complete DM command and one graph output as the complete detector frame.
+Transport and wall-clock pacing remain outside the simulation graph.
 
 For advanced controllable-optic and DM modeling, see:
 
