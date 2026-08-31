@@ -256,7 +256,7 @@ REVOLT instrument models.
 
 Install Git, Python, and [Julia 1.12 or newer](https://julialang.org/downloads/).
 pyRTC currently supports Python 3.9 through 3.13; use a dedicated virtual
-environment. Clone both repositories into one working directory:
+environment. Clone AOS into one working directory:
 
 ~~~sh
 mkdir aos-pyrtc-work
@@ -264,19 +264,24 @@ cd aos-pyrtc-work
 export AO_HIL_ROOT="$PWD"
 
 git clone https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl.git
-git clone https://github.com/jacotay7/pyRTC.git
 
 python3 -m venv "$AO_HIL_ROOT/.venv"
 "$AO_HIL_ROOT/.venv/bin/python" -m pip install --upgrade pip
-"$AO_HIL_ROOT/.venv/bin/python" -m pip install -e "$AO_HIL_ROOT/pyRTC"
+"$AO_HIL_ROOT/.venv/bin/python" -m pip install -r \
+  "$AO_HIL_ROOT/AdaptiveOpticsSim.jl/examples/integrations/pyrtc/requirements.txt"
 ~~~
+
+The pyRTC
+[`requirements.txt`](../examples/integrations/pyrtc/requirements.txt) file
+installs the tested revision directly from the official
+[pyRTC GitHub repository](https://github.com/jacotay7/pyRTC). A separate local
+pyRTC checkout is not required.
 
 Enter the AOS checkout and select the same Python interpreter for the native
 worker and the optional PythonCall oracle:
 
 ~~~sh
 cd "$AO_HIL_ROOT/AdaptiveOpticsSim.jl"
-export PYRTC_ROOT="$AO_HIL_ROOT/pyRTC"
 export PYRTC_PYTHON="$AO_HIL_ROOT/.venv/bin/python"
 export JULIA_PYTHONCALL_EXE="$PYRTC_PYTHON"
 
@@ -286,8 +291,7 @@ julia --project=examples/integrations/pyrtc --startup-file=no \
   -e 'using Pkg; Pkg.instantiate()'
 ~~~
 
-Re-export `PYRTC_ROOT`, `PYRTC_PYTHON`, and `JULIA_PYTHONCALL_EXE` after
-opening a new shell.
+Re-export `PYRTC_PYTHON` and `JULIA_PYTHONCALL_EXE` after opening a new shell.
 
 ### Verify Shared-Memory Compatibility
 

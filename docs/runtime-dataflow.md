@@ -193,7 +193,8 @@ and requires the pyRTC command to close the AOS optical loop.
 
 The scientist-facing installation, validation, and execution workflow is in
 [`user-guide.md`](user-guide.md#use-aos-with-pyrtc). The in-process oracle uses
-the Python interpreter selected by `JULIA_PYTHONCALL_EXE`.
+the GitHub-installed pyRTC package from the Python interpreter selected by
+`JULIA_PYTHONCALL_EXE`.
 
 This is a deterministic integration test, not a real-time transport or latency
 claim. The current path copies each AOS frame to a C-contiguous NumPy array and

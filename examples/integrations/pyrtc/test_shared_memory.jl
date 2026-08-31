@@ -5,14 +5,6 @@ using .PyRTCSharedMemory
 
 const PEER_PREFIX = "AOS_PYRTC_PEER "
 
-function pyrtc_test_root()
-    root = get(ENV, "PYRTC_ROOT", "")
-    isdir(joinpath(root, "pyRTC")) || error(
-        "set PYRTC_ROOT to a pyRTC checkout before running SHM integration tests",
-    )
-    return abspath(root)
-end
-
 function pyrtc_test_python()
     executable = get(
         ENV,
@@ -37,7 +29,6 @@ function peer_command(mode::Symbol, name::String, shape::Tuple)
         name,
     ]
     append!(arguments, string.(shape))
-    append!(arguments, ("--pyrtc-root", pyrtc_test_root()))
     return Cmd(arguments)
 end
 

@@ -186,15 +186,7 @@ function prepare_slopes_config(
     )
 end
 
-function prepare_pyrtc_components(
-    pyrtc_root::AbstractString,
-    case::PyRTCReferenceCase,
-)
-    isdir(joinpath(pyrtc_root, "pyRTC")) || error(
-        "expected a pyRTC source checkout containing pyRTC/ at '$pyrtc_root'",
-    )
-    sys = pyimport("sys")
-    sys.path.insert(0, abspath(pyrtc_root))
+function prepare_pyrtc_components(case::PyRTCReferenceCase)
     numpy = pyimport("numpy")
     pybuiltins = pyimport("builtins")
     shared_memory = pyimport("multiprocessing.shared_memory")
@@ -451,17 +443,14 @@ function close_loop!(
     return residual_norms, command
 end
 
-function run_validation(
-    pyrtc_root::AbstractString;
-    wavefront_sensor::Symbol=:shack_hartmann,
-)
+function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
     case = reference_case(wavefront_sensor)
     prepared = prepare_hil_reference_system(case.wavefront_sensor)
     require_available_stream_names()
     components = nothing
     shared_memory = pyimport("multiprocessing.shared_memory")
     try
-        components = prepare_pyrtc_components(pyrtc_root, case)
+        components = prepare_pyrtc_components(case)
         validate_component_geometry!(components, case)
         flat_signal, interaction_matrix = calibrate_interaction_matrix!(
             components,
@@ -536,16 +525,8 @@ function run_validation(
     end
 end
 
-function main(wavefront_sensor::Symbol, args)
-    pyrtc_root = if !isempty(args)
-        first(args)
-    else
-        get(ENV, "PYRTC_ROOT", "")
-    end
-    isempty(pyrtc_root) && error(
-        "pass the pyRTC checkout path or set PYRTC_ROOT",
-    )
-    result = run_validation(pyrtc_root; wavefront_sensor)
+function main(wavefront_sensor::Symbol)
+    result = run_validation(; wavefront_sensor)
     println(
         "AOS/pyRTC ",
         reference_label(Val(wavefront_sensor)),

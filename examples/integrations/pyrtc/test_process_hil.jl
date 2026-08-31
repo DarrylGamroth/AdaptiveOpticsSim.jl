@@ -4,16 +4,8 @@ include(joinpath(@__DIR__, "pyrtc_process_hil.jl"))
 using .PyRTCProcessHIL
 
 @testset "AOS and pyRTC close loops across native shared memory" begin
-    pyrtc_root = get(ENV, "PYRTC_ROOT", "")
-    isdir(joinpath(pyrtc_root, "pyRTC")) || error(
-        "set PYRTC_ROOT to a pyRTC checkout before running process HIL tests",
-    )
-
     for wavefront_sensor in (:shack_hartmann, :pyramid)
-        result = PyRTCProcessHIL.run_validation(
-            pyrtc_root;
-            wavefront_sensor,
-        )
+        result = PyRTCProcessHIL.run_validation(; wavefront_sensor)
         @test result.wavefront_sensor == wavefront_sensor
         @test result.interaction_rank == 25
         @test isfinite(result.interaction_condition)

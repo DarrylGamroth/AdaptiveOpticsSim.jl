@@ -134,17 +134,12 @@ def parse_args() -> argparse.Namespace:
         required=True,
         choices=("shack_hartmann", "pyramid"),
     )
-    parser.add_argument("--pyrtc-root", required=True)
     parser.add_argument("--temporary-directory", required=True)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    pyrtc_root = Path(args.pyrtc_root).resolve()
-    if not (pyrtc_root / "pyRTC").is_dir():
-        raise FileNotFoundError(f"{pyrtc_root} does not contain pyRTC/")
-    sys.path.insert(0, str(pyrtc_root))
     temporary_directory = Path(args.temporary_directory).resolve()
     temporary_directory.mkdir(parents=True, exist_ok=True)
     serve(args.sensor, temporary_directory)

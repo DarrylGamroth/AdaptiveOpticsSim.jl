@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import sys
 from multiprocessing import shared_memory
-from pathlib import Path
 
 import numpy as np
 
@@ -90,16 +89,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("mode", choices=("consume", "produce"))
     parser.add_argument("name")
     parser.add_argument("shape", nargs="+", type=int)
-    parser.add_argument("--pyrtc-root", required=True)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    pyrtc_root = Path(args.pyrtc_root).resolve()
-    if not (pyrtc_root / "pyRTC").is_dir():
-        raise FileNotFoundError(f"{pyrtc_root} does not contain pyRTC/")
-    sys.path.insert(0, str(pyrtc_root))
     shape = tuple(args.shape)
     if args.mode == "consume":
         consume(args.name, shape)

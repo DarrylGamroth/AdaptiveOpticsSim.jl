@@ -144,7 +144,6 @@ function pyrtc_python()
 end
 
 function worker_command(
-    pyrtc_root::AbstractString,
     wavefront_sensor::Symbol,
     temporary_directory::AbstractString,
 )
@@ -153,8 +152,6 @@ function worker_command(
         joinpath(@__DIR__, "pyrtc_process_worker.py"),
         "--sensor",
         String(wavefront_sensor),
-        "--pyrtc-root",
-        abspath(pyrtc_root),
         "--temporary-directory",
         abspath(temporary_directory),
     ])
@@ -192,13 +189,11 @@ function await_worker_message(
 end
 
 function start_worker(
-    pyrtc_root::AbstractString,
     case::ProcessReferenceCase,
     temporary_directory::AbstractString,
 )
     process = open(
         worker_command(
-            pyrtc_root,
             case.wavefront_sensor,
             temporary_directory,
         ),
@@ -450,20 +445,14 @@ function close_loop!(
     return residual_norms, command
 end
 
-function run_validation(
-    pyrtc_root::AbstractString;
-    wavefront_sensor::Symbol=:shack_hartmann,
-)
-    isdir(joinpath(pyrtc_root, "pyRTC")) || error(
-        "expected a pyRTC source checkout containing pyRTC/ at '$pyrtc_root'",
-    )
+function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
     case = process_reference_case(wavefront_sensor)
     prepared = prepare_hil_reference_system(case.wavefront_sensor)
     streams = create_process_streams(case)
     worker = nothing
     return mktempdir() do temporary_directory
         try
-            worker = start_worker(pyrtc_root, case, temporary_directory)
+            worker = start_worker(case, temporary_directory)
             signal = zeros(Float32, case.signal_shape)
             flat_signal, interaction_matrix = calibrate_interaction_matrix!(
                 worker,
@@ -539,16 +528,8 @@ function run_validation(
     end
 end
 
-function main(wavefront_sensor::Symbol, args)
-    pyrtc_root = if !isempty(args)
-        first(args)
-    else
-        get(ENV, "PYRTC_ROOT", "")
-    end
-    isempty(pyrtc_root) && error(
-        "pass the pyRTC checkout path or set PYRTC_ROOT",
-    )
-    result = run_validation(pyrtc_root; wavefront_sensor)
+function main(wavefront_sensor::Symbol)
+    result = run_validation(; wavefront_sensor)
     println(
         "AOS/native-SHM pyRTC ",
         reference_label(Val(wavefront_sensor)),
