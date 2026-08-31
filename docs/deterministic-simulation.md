@@ -2,187 +2,105 @@
 
 Status: active
 
-This document defines the maintained determinism and RNG policy for
-AdaptiveOpticsSim.jl. Results should be reproducible run-to-run when users pass
-the same inputs, configuration, RNG seeds, and execution settings.
+AdaptiveOpticsSim.jl results should be reproducible when inputs, configuration,
+RNG seeds, and execution settings are fixed.
 
 ## Goals
-- Repeatable outputs with fixed seeds and fixed configuration.
-- Traceability: capture the exact inputs and configuration that produced a run.
-- Stable stochastic ownership that does not depend on tuple order, task
-  scheduling, thread identity, or CPU/GPU placement.
 
-## Non-goals
-- Cross-hardware bitwise identity (CPU vs GPU, different CPUs).
-- Hard real-time determinism.
+- Repeatable outputs for a fixed run configuration.
+- Explicit provenance for configuration, inputs, seeds, and backend.
+- One writer for every evolving RNG state.
+- Random ownership that does not depend on task, thread, tuple, or completion
+  order.
 
-## Sources of non-determinism
-- Global RNG usage or implicit `rand()` calls.
-- FFT planning differences and multithreading.
-- Thread scheduling and non-associative floating-point reductions.
-- GPU kernels and non-deterministic reductions.
+Cross-hardware bitwise identity and hard real-time determinism are not claimed.
 
 ## RNG Policy
 
-The package accepts `AbstractRNG` through stochastic APIs rather than owning a
-single global stream. That keeps detector noise, phase screens, and runtime
-simulation reproducible when users pass an explicit RNG.
+Stochastic scientific APIs accept an explicit `AbstractRNG`. Do not use the
+global/default RNG for validation artifacts or reference comparisons.
 
-Use `MersenneTwister` through `deterministic_reference_rng` when changing the
-stream would invalidate stored references or regression baselines. Use `Xoshiro`
-through `runtime_rng` for new RTC/HIL-style simulations and benchmarks where
-throughput and lower RNG state overhead are more important than preserving an
-older fixture stream.
+Use `deterministic_reference_rng(seed)` when an established
+`MersenneTwister` stream is part of a frozen reference. Use
+`runtime_rng(seed)`, which returns `Xoshiro`, for new simulations and
+benchmarks.
 
-Do not rely on `Random.default_rng()` for validation artifacts or reference
-comparisons. Always pass the RNG explicitly.
-
-Example:
-
-```julia
+~~~julia
 atmosphere_rng = runtime_rng(0x1234)
 detector_rng = runtime_rng(0x5678)
-epoch = advance_by!(atm, 1e-3; rng=atmosphere_rng)
-render_atmosphere!(pupil, renderer, atm, epoch)
-measure!(wfs, pupil, src, det; rng=detector_rng)
-```
 
-Rendering a published `AtmosphereEpoch` is deterministic and does not consume
-RNG. A zero-duration advance after initialization returns the current epoch
-without changing the RNG stream or epoch sequence. For order-independent
-multi-path replay, prepare one renderer per direction and render the same
-current epoch in any order before that atmosphere advances, or replay from
-separately retained model state. For a homogeneous finite or infinite
-multilayer direction set, `prepare_atmosphere_direction_batch` instead freezes
-the direction axis and `render_atmosphere_directions!` materializes every
-slice from that same current epoch. Its CPU result is exactly the ordered
-single-direction result and repeated rendering consumes no RNG.
+epoch = advance_by!(atmosphere, 1e-3; rng=atmosphere_rng)
+render_atmosphere!(pupil, renderer, atmosphere, epoch)
+measure!(wfs, pupil, source, detector; rng=detector_rng)
+~~~
 
-For reference-data refreshes:
+An evolving RNG is persistent scientific state, not replaceable workspace
+scratch. Give independently replayable atmosphere layers, detector channels,
+and other stochastic owners separate streams. Deliberately sharing one stream
+makes results depend on call order and must be documented by the application.
 
-```julia
-rng = deterministic_reference_rng(0x1234)
-```
+Rendering a published `AtmosphereEpoch` does not consume RNG. A zero-duration
+advance after initialization returns the current epoch without changing the RNG
+stream or epoch sequence. Direction renderers and direction batches may render
+the same current epoch in any order before the atmosphere advances.
 
-## Prepared-Plant RNG Topology
+## Algorithm Graph Ownership
 
-The implemented prepared Plant requires one central `run_seed`, a
-positive `RNGDerivationVersion`, and stable `RNGOwnerIdentity` values.
-Preparation assigns separate stateful streams to explicitly named atmosphere
-layers, every path/provider, every acquisition/detector, and any additional
-path-materialization or device roles declared by a model extension. A prepared
-illumination entry declares an additional `:illumination` path role and passes
-that exact stream plus explicit epoch time to its evaluator. Identities come
-from declared component names and remain stable when path, acquisition,
-selection, or atmosphere-layer order changes. Duplicate or missing required
-identities are a `PlantPreparationError`.
+A stochastic native graph node owns one prepared RNG and its immutable reset
+seed. For example, atmosphere and detector node configurations declare
+`rng_seed`. Preparation creates the stream, `step_graph!` is its only writer,
+and `reset_graph!` restores the configured seed and state.
 
-```julia
-using AdaptiveOpticsSim
-using AdaptiveOpticsSim.Plant
+Use distinct explicit seeds for independent nodes. Graph declaration order must
+not be used as an implicit seed derivation rule. A graph file and its bound
+configuration are therefore sufficient to identify the intended streams.
 
-target = Backends.HostComputeDevice()
-plant = prepare_plant(definition, target;
-    run_seed=0x1234,
-    rng_derivation_version=RNGDerivationVersion(1),
-)
-selection = prepare_acquisition_selection(plant, (:wfs, :science))
-execute_acquisition_selection_at!(selection, 0.001)
-replay = rng_replay_metadata(plant)
-```
-
-Where retained caller inputs satisfy the target preparation contract, the same
-cold `PlantDefinition` may be prepared independently for another exact
-compute-device target. Each prepared plant owns a separate numerical telescope,
-timed atmosphere, mutable state, and RNG streams; neither prepared owner mutates
-the shared definition. Stable RNG ownership is independent of target placement,
-but the cross-hardware non-goal above still applies to floating-point results.
-
-The maintained derivation encodes the run seed and version as little-endian
-`UInt64` values and each owner symbol as a little-endian `UInt64` UTF-8 byte
-length followed by those bytes. It applies the recorded
-`fnv1a_splitmix64_v1` algorithm and seeds one `Xoshiro` per owner. It never uses
-Julia's process-randomized `hash`. `rng_replay_metadata` returns a canonical
-structured identity-to-derived-seed map and the derivation and stream
-algorithm identifiers. It does not expose mutable stream state or create a
-second writer. Multilayer atmospheres used by `prepare_plant` declare
-`layer_ids`, because altitude or tuple position is not an owner identity.
-
-The complete target distinguishes two prepared policies:
-
-- a stateful stream with exactly one execution writer when its draw order is
-  part of the model; or
-- an addressable random domain derived from run seed, derivation version,
-  owner identity, event or epoch sequence, and element/sample index when work
-  may be replicated, batched, reordered, or evaluated on several devices.
-
-A task ID, `Threads.threadid()`, tuple position, compute-device ordinal, ring
-cursor, or completion order is never an RNG identity. Changing static
-placement must not change which random values belong to a physical event.
-The current serial slice implements the single-writer stateful policy. The
-addressable policy for replicated, reordered, or multi-device element work
-remains `HIL-RNG-002`. Scenario replay from the start records the run seed,
-derivation version, derivation and stream algorithms, and owner-identity map;
-resumable mid-run checkpoints remain model/integration work where required.
-
-Existing stochastic APIs continue to accept explicit `AbstractRNG` values.
-The prepared plant supplies those per-owner values; individual
-models do not look up a global registry in their hot path. Addressable GPU
-kernels receive prepared keys/counters directly rather than consuming one
-host RNG seed in launch order.
-
-The maintained illumination tests replay a user-defined stateful pupil
-evaluator under reversed path/acquisition declarations and obtain identical
-per-path products. This is evidence for serial prepared-stream ownership, not
-for the still-planned addressable multi-device random domain.
+The current graph runtime is serial and single-writer. If future execution
+replicates, reorders, or distributes stochastic element work, that work will
+need an addressable random domain derived from stable owner identity, event or
+frame sequence, and element/sample index. Sequential host seed consumption is
+not a correct multi-device policy.
 
 ## Deterministic Configuration
 
-- Use fixed seeds.
-- Run with one Julia thread, one BLAS thread, and one FFT-provider thread when
-  strict reproducibility matters.
-- For prepared plant execution, use
-  `Plant.deterministic_cpu_execution_budget()` and validate it against an
-  explicit `Plant.CPUExecutionEnvironment` before the run. Validation records
-  and checks configuration; it does not change process-global thread settings.
-- Import `AdaptiveOpticsSim.Ensembles`, then use
-  `DeterministicExecution()` for a `SimulationEnsemble`. It rejects a
-  multi-threaded Julia process and configures BLAS and the FFT provider for one
-  thread before execution.
-- Keep detector noise disabled for deterministic baseline comparisons unless
-  the test is explicitly about noise.
-- Capture commands, configuration, and RNG seed/state in validation artifacts.
-- For cross-version bitstream stability, consider `StableRNGs.jl`.
+- Use fixed seeds and record them with the run.
+- Keep Julia, BLAS, and FFT-provider thread counts at one when strict replay
+  matters.
+- Import `AdaptiveOpticsSim.Ensembles` and use `DeterministicExecution()` for
+  an ensemble. It rejects a multi-threaded Julia process and configures BLAS and
+  the FFT provider for one thread.
+- Disable detector noise for deterministic optical baselines unless noise is
+  the subject of the test.
+- Record configuration, graph file, command inputs, package revision, Julia
+  version, backend versions, and compute device with validation artifacts.
+- Use `StableRNGs.jl` only when a separately maintained cross-version bitstream
+  is required.
 
-## Phase Screens
+## Phase Screens And Noise
 
-- Use a deterministic phase screen generator with fixed `rng` draws.
-- Optionally persist the phase screen sequence to disk (HDF5/FITS) for replay.
+Phase-screen creation and evolution must receive an explicit RNG. Persisting a
+phase-screen sequence can be useful when comparing several algorithms against
+identical turbulence.
 
-## Noise Models
+Detector noise uses the RNG supplied to its acquisition or capture operation.
+`Detector(noise=NoiseNone())` is the deterministic baseline. Stochastic
+cross-backend tests should compare declared distributions or tolerances unless a
+backend-specific bitwise contract has been established.
 
-- `Detector` noise uses the explicitly supplied RNG and the noise model trait.
-- Deterministic baseline: `Detector(noise=NoiseNone())` creates `Detector{NoiseNone}`.
-- An explicit model loop that deliberately shares one RNG across several noisy
-  detectors remains call-order dependent; use separate caller-owned RNGs or
-  `NoiseNone()` when order invariance is required.
-- A prepared Plant derives stable per-owner streams so declaration and
-  acquisition-selection order do not select random values.
+## Testing
 
-## Testing Approach
-
-- Unit test: two runs with identical seed produce equal caller-owned direct
-  images or WFS products.
-- Ownership test: reordering independent acquisitions or execution groups does
-  not change their stochastic products.
-- Placement test: serial CPU, grouped CPU, and applicable replicated GPU
-  execution select the same event-addressed random values within the declared
-  numerical comparison policy.
-- Regression test: compare stored reference outputs within tolerance.
+- Run the same prepared operation twice from reset with the same seed and
+  compare caller-visible products.
+- Reverse independent operation order and verify that separately owned streams
+  retain their products.
+- Verify `reset_graph!` restores stochastic graph nodes.
+- Compare reference data within an explicitly justified tolerance.
+- Treat CPU/GPU parity as numerical or statistical evidence, not automatic
+  bitwise identity.
 
 ## GPU Notes
 
-GPU determinism is typically weaker than CPU determinism. In deterministic
-mode, default to CPU unless a GPU-specific deterministic path is available.
-Multi-device support additionally requires addressable or otherwise replicated
-per-owner random state; sequential host seed consumption is insufficient.
+GPU reductions and random providers may differ from CPU implementations.
+Deterministic validation should default to CPU unless the specific accelerator
+path has a documented deterministic contract. A GPU-ready algorithm must avoid
+host scalar indexing and hidden host/device RNG transfers.

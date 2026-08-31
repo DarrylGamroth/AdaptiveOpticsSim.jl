@@ -2,1168 +2,292 @@
 
 Status: active
 
-This is the main user-facing guide.
+AdaptiveOpticsSim.jl provides adaptive-optics physics, prepared numerical
+operations, and a small complete-frame graph runtime. It supports direct Julia
+workflows on CPU and covered CUDA/AMDGPU paths.
 
-If you only need the normal package entry points, read these and stop there:
+## Choose A Composition Surface
 
-- [../README.md](../README.md)
-- [model-cookbook.md](model-cookbook.md)
-- [api-reference.md](api-reference.md)
-- `examples/tutorials/`
+Use direct Julia when the model has generated topology, multiple rates,
+conditional execution, row-time optical sampling, or research-specific control
+flow.
 
-You do not need the platform, benchmark, audit, or production-hardening docs to
-build a normal AO model.
+Use `AlgorithmGraphs` when the model is a static, single-rate sequence that
+publishes complete frames. Graphs can be declared in Julia or in a versioned
+TOML file.
 
-Use those deeper docs only when you are:
+Use `PreparedGraphHILBoundary` when an external RTC consumes each completed
+simulated frame and returns one complete command for the next frame. PipeWireAO
+or another application owns transport and wall-clock pacing.
 
-- validating backend parity
-- working on production support claims
-- benchmarking against OOPAO/SPECULA/REVOLT-like surfaces
-- refactoring or maintaining the package internals
+## Direct Optical Model
 
-## What To Read Next
-
-Choose one path:
-
-- direct-imaging and optical-product work:
-  - `examples/tutorials/image_formation.jl`
-  - `examples/tutorials/ncpa.jl`
-- detector and WFS work:
-  - `examples/tutorials/detector.jl`
-  - `examples/tutorials/shack_hartmann_subapertures.jl`
-  - `examples/tutorials/extended_source_sensing.jl`
-- closed-loop AO work:
-  - `examples/closed_loop_demo.jl`
-  - `examples/tutorials/closed_loop_shack_hartmann.jl`
-  - `examples/tutorials/closed_loop_pyramid.jl`
-- calibration and identification work:
-  - `examples/tutorials/gain_sensing_camera.jl`
-  - `examples/tutorials/lift.jl`
-  - `examples/tutorials/transfer_function.jl`
-
-## Mental Model
-
-The package is organized around a small set of modeling objects:
-
-- `Telescope` and `Source`
-- atmosphere objects such as `KolmogorovAtmosphere` and `MultiLayerAtmosphere`
-- sensing objects such as `ShackHartmannWFS`, `PyramidWFS`, and `BiOEdgeWFS`
-- `Detector` when the sensing path needs explicit detector physics
-- independent controllable optics such as `DeformableMirror`,
-  `ModalControllableOptic`, `TipTiltMirror`, and `FocusStage`
-- modal-optic basis specs such as `CartesianTiltBasis`, `ZernikeOpticBasis`, and `MatrixModalBasis` when you want to choose controlled modes explicitly
-- `AdaptiveOpticsSim.Plant` when you need independent virtual-time commands,
-  acquisitions, triggers, and detector lifecycles
-- `AdaptiveOpticsSim.AlgorithmGraphs` when you want one statically prepared,
-  portable graph of AOS-native algorithm nodes
-
-Import optical vocabulary and reusable physical components with
-`using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
-`using AdaptiveOpticsSim.WavefrontSensors`; import calibration vocabulary with
-`using AdaptiveOpticsSim.Calibration`; import control vocabulary with
-`using AdaptiveOpticsSim.Control`; import tomography vocabulary with
-`using AdaptiveOpticsSim.Tomography`. The common WFS contracts and the
-complete Shack–Hartmann, Pyramid, Bi-O-edge, Zernike, and Curvature families
-live in `WavefrontSensors`; inverse policy, interaction/control matrices,
-modal bases, and model-derived NCPA synthesis live in `Calibration`.
-Slopes-to-command reconstructors, controller models, and their preallocated
-composition live in `Control`.
-
-## Four Execution Layers
-
-The package exposes four layers on purpose.
-
-### 1. Primitive physics layer
-
-Use this layer when you are studying or composing one physical subsystem at a
-time.
-
-Canonical verbs:
-
-- `advance_by!` or `advance_to!`
-- `render_atmosphere!`
-- `propagate!`
-- `update_surface!` and `apply_surface!`
-- `measure!`
-- `capture!`
-
-Typical use:
-
-- direct photon-arrival-rate image formation
-- direct WFS studies
-- calibration internals
-- custom research scripts
-
-### 2. Explicit model-composition layer
-
-Use this layer for one fixed offline model or benchmark. Compose the primitive
-operations in a concrete `step!` function and store its buffers in a
-model-specific state type.
-
-Typical operations:
-
-- advance and render one atmosphere epoch
-- apply each independent controllable optic
-- execute WFS optics, acquisition, and estimation
-- reconstruct and update controller state
-- return a model-specific `NamedTuple` or typed readout
-
-Model-specific `prepare!`, `step!`, and `readout` methods are appropriate when
-the composition is stable, as in the Subaru AO188/AO3k example modules. They do
-not define a second generic package runtime.
-
-After `using AdaptiveOpticsSim.Ensembles`, `SimulationEnsemble` may schedule
-several independent model instances for coarse offline work.
-
-### 3. Portable algorithm-graph layer
-
-Use `AdaptiveOpticsSim.AlgorithmGraphs` for a fixed, serial composition of
-AOS-native algorithms. Each graph-node adapter calls the operation's canonical
-domain API and binds its plan, state, workspace, parameters, and exact buffers
-during preparation. The graph layer does not require Calculon and does not
-replace those domain APIs.
-
-```julia
-using AdaptiveOpticsSim
-using AdaptiveOpticsSim.AlgorithmGraphs
-
-residual = zeros(Float32, 4)
-controller = discrete_integrator_node(
-    :controller;
-    extent=4,
-    sample_period_s=0.001f0,
-    input_schema="org.example.residual-error/1",
-    output_schema="org.example.controller-command/1",
-    gain=0.3f0,
-    tau_s=0.02f0,
-)
-
-definition = algorithm_graph(
-    (controller,);
-    name=:controller_example,
-    inputs=(graph_input(:residual, :controller => :input, residual),),
-    outputs=(graph_output(:command, :controller => :output),),
-)
-graph = prepare_algorithm_graph(definition)
-
-residual .= (1, 2, 3, 4)
-step_graph!(graph)
-command = graph_output(graph, Val(:command))
-```
-
-For a maintained human-authored topology, `load_algorithm_graph` reads the
-versioned TOML subset and returns the same concrete definition. The file names
-external arrays; Julia supplies them explicitly through `bindings`. Use direct
-Julia construction for generated topology, conditional composition, multi-rate
-orchestration, and other arrangements outside the static file subset.
-
-Node declaration order is execution order. Use `link` only from an earlier
-node to a later node. Feedback requires `delayed_link` and an explicit initial
-ndarray. Graph inputs remain caller-owned; graph outputs alias prepared node
-storage and are valid after a successful step. `graph_step_sequence` identifies
-successful publications, and any node failure stops the graph until
-`reset_graph!`.
-
-For fixed-step model time, use the canonical Plant time values without
-introducing a wall clock:
-
-```julia
-using AdaptiveOpticsSim.Plant
-
-driver = FixedStepModelTimeDriver(
-    PeriodicSchedule(PlantDuration(1_000_000));
-    origin=PlantTimestamp(0),
-)
-timestamp = next_model_timestamp(driver)
-# Update `residual` from physics evaluated at `timestamp`.
-@assert step_graph_at!(graph, driver) == timestamp
-```
-
-`prepare_boundary_model_time_driver` instead seals a finite, strictly
-increasing set of physical boundaries. Its periodic overload expands admitted
-offsets during preparation. Use `advance_model_time!` only after the atomic
-boundary operation succeeds; the cursor owns no callback, task, queue, event
-phase, or wall-clock policy.
-
-For replay, first map external clock readings to run-local Plant time through
-an explicit transport adapter and origin. Store each mapped reading as a
-`CapturedModelTimestamp`, including its uncertainty and immutable concrete
-provenance, then seal the recording:
-
-```julia
-captures = (
-    CapturedModelTimestamp(
-        PlantTimestamp(0),
-        PlantDuration(20),
-        (source=UInt32(3), sequence=UInt64(81)),
-    ),
-    CapturedModelTimestamp(
-        PlantTimestamp(1_000_040),
-        PlantDuration(25),
-        (source=UInt32(3), sequence=UInt64(82)),
-    ),
-)
-replay = prepare_captured_model_time_driver(captures)
-capture = next_model_time_capture(replay)
-@assert next_model_timestamp(replay) == model_timestamp(capture)
-```
-
-The replay cursor schedules by the mapped timestamp and preserves uncertainty
-and provenance for inspection. It does not infer an origin from an absolute
-execution-clock value, pace against wall time, or serialize the recording.
-
-Loading PipeWireAO activates the optional acquisition-metadata adapter on
-Linux. Capture while the PipeWire buffer is still borrowed, then retain the
-owned `CapturedModelTimestamp` after returning the buffer:
-
-```julia
-using PipeWireAO
-
-metadata = buffer_acquisition(buffer)
-origin = capture_model_time_origin(metadata)
-capture = capture_model_timestamp(metadata, origin)
-```
-
-The adapter requires acquisition identity, exposure start, exposure duration,
-and a consistent clock domain. PTP-qualified TAI captures must name the same
-grandmaster and PTP domain as the origin. Host-monotonic captures are suitable
-only within the recording context that established their origin; unrelated
-hosts or boots are not comparable. PipeWireAO still owns live pacing and buffer
-lifetime, while AdaptiveOpticsSim owns only mapped deterministic replay.
-
-This first native path is complete-frame, single-writer, CPU storage. It
-supports typed construction configuration and startup sparse parameters. It
-does not yet provide coordinated runtime-property transactions, conditional
-publication of row blocks, wall-clock pacing, or device placement. Keep manual
-Julia composition for custom physics, Plant for detailed
-physical-event semantics, and PipeWireAO for paced Linux HIL deployment.
-
-### 4. Plant execution layer
-
-Use `AdaptiveOpticsSim.Plant` when the model needs explicit HIL-neutral
-ownership and virtual time.
-
-The layer provides:
-
-- `PlantDefinition` and `prepare_plant`
-- independent optical paths, acquisitions, controllable optics, and command
-  endpoints
-- command schemas, admission, application, silence, and transactions
-- schedules, trigger distribution, and detector lifecycle events
-- `prepare_plant_event_loop`, `step_plant_events!`, and
-  `run_plant_events_until!`
-- automatic prepared single-device batching for compatible co-resident
-  accelerator direct-science paths, with qualified owner/lifecycle inspection
-  through `AdaptiveOpticsSim.Plant`
-- prepared controller-output routing for named RTC-owned products
-
-Transport, wall-clock pacing, external timestamp mapping, and RTC protocol
-remain application or companion-package responsibilities.
-
-For a compact recipe-first version of this guide, use [model-cookbook.md](model-cookbook.md).
-
-## Build A Model
-
-### Workflow 1: Optics-only direct image
-
-```julia
+~~~julia
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
 
-tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.1)
-src = Source(band=:I, magnitude=8.0)
-pupil = PupilFunction(tel)
-imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
-form_direct_image!(imaging)
-photon_rate_image = intensity_values(direct_imaging_output(imaging))
-```
-
-Use this when you care about:
-
-- pupil construction
-- source-scaled focal-plane photon-arrival rates
-- image formation
-- simple aberration studies
-
-`direct_imaging_output(imaging)` is a caller-owned `IntensityMap` on focal-plane
-angular coordinates. Its values are source-scaled, cell-integrated photon
-arrival rates before detector exposure, not an inherently unit-normalized PSF.
-Preparation binds the pupil, work field, output storage, FFT workspace,
-numeric type, backend, and compute device. The `PupilFunction` owns the
-mutable path OPD and amplitude; update that same product with `apply_opd!`,
-`render_atmosphere!`, or `apply_surface!` before calling
-`form_direct_image!` again. `Telescope` owns aperture geometry, not a mutable
-optical path.
-
-For several compatible native Fraunhofer science samples, prepare one fixed
-batch and retain the returned per-sample products:
-
-```julia
-science_sources = Asterism([
-    Source(
-        band=:custom,
-        wavelength=650e-9,
-        photon_irradiance=1.0,
-    ),
-    Source(
-        band=:custom,
-        wavelength=650e-9,
-        photon_irradiance=0.6,
-        coordinates=(0.08, 90.0),
-    ),
-])
-science_batch = prepare_direct_imaging_batch(
-    pupil,
-    science_sources;
-    zero_padding=2,
+telescope = Telescope(
+    resolution=32,
+    diameter=8.0,
+    central_obstruction=0.1,
 )
-science_products = form_direct_image!(science_batch)
-```
+source = Source(band=:I, magnitude=8.0)
+pupil = PupilFunction(telescope)
 
-`science_products` is an ordered `OpticalProductBundle`; each leaf is an
-ordinary focal-plane photon-arrival-rate `IntensityMap` view that can feed an
-independent detector acquisition. The batch shares stacked storage and one FFT
-plan but does not sum wavelengths or directions. A `SpectralSource{Source}` is
-expanded with the existing photon-number weights in the same way. Unsupported
-propagation models use ordinary independently prepared paths; the batch API
-never copies them to the host or regroups them during execution.
-
-### Workflow 2: Atmosphere plus one WFS
-
-```julia
-atm = MultiLayerAtmosphere(
-    tel;
+atmosphere = MultiLayerAtmosphere(
+    telescope;
     r0=0.15,
     L0=25.0,
     fractional_cn2=[0.6, 0.4],
     wind_speed=[8.0, 12.0],
-    wind_direction_deg=[0.0, 90.0],
+    wind_direction=[0.0, 90.0],
     altitude=[0.0, 5000.0],
 )
 
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.1, n_pix_subap=6)
-
-rng = runtime_rng(0)
-renderer = prepare_atmosphere_renderer(atm, tel, src)
-pupil = PupilFunction(tel)
-epoch = advance_by!(atm, 1e-3; rng=rng)
-render_atmosphere!(pupil, renderer, atm, epoch)
-slopes = measure!(wfs, pupil, src)
-```
-
-Atmosphere time is explicit and belongs to the caller. A prepared renderer is
-bound to one atmosphere and one frozen source direction; it can render the
-current epoch repeatedly without advancing time or consuming RNG. Use
-`prepare_atmosphere_renderers` for an `Asterism` or `ExtendedSource`.
-
-For several compatible directions on one finite or infinite multilayer
-atmosphere, prepare one caller-owned OPD stack instead:
-
-```julia
-directions = Asterism([ngs, lgs, science_source])
-opd_stack = Array{Float64}(
-    undef,
-    tel.params.resolution,
-    tel.params.resolution,
-    length(directions),
+renderer = prepare_atmosphere_renderer(
+    atmosphere,
+    telescope,
+    source,
 )
-batch = prepare_atmosphere_direction_batch(
-    atm,
-    tel,
-    directions,
-    opd_stack,
-)
-render_atmosphere_directions!(batch, atm, epoch)
-```
-
-The third axis retains the prepared direction order; each slice is atmospheric
-OPD in metres on the shared pupil-plane grid. CPU execution deliberately uses
-the ordinary serial direction algorithm. Accelerator execution retains output,
-pupil support, and direction/layer geometry on one concrete device and submits
-one three-dimensional extraction kernel per atmosphere layer. Preparation
-rejects incompatible grid, numeric type, backend, device, capacity, or
-unsupported atmosphere model rather than silently splitting a batch.
-
-For HIL or RTC export, attach a detector and request the detector image after
-measurement. `bits` defines the quantization depth, `full_well` defines the
-analog-to-digital scaling, and `output_type` defines the Julia array element
-type used for the exported frame:
-
-```julia
-using AdaptiveOpticsSim.Detectors
-using AdaptiveOpticsSim.WavefrontSensors
-
-frame_wfs = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
-det = Detector(noise=NoiseNone(), full_well=30_000.0, bits=12, output_type=UInt16)
-rng = runtime_rng(0)
-measure!(frame_wfs, pupil, src, det; rng=rng)
-adu = wfs_detector_image(frame_wfs, det)
-```
-
-Here `adu` is the detector's actual `UInt16` output containing 12-bit ADU
-values. `wfs_detector_image` is available only when the compatible detector
-publishes a two-dimensional output. The legacy Shack-Hartmann convenience path
-does not publish a detector-owned image; use the prepared optics, acquisition,
-and `WFSObservation` contracts for stage-correct HIL composition. Quantized
-detectors require a fixed positive `full_well`; the capture path never rescales
-each frame by its own peak.
-
-Detector QE may be a scalar or a sampled QE curve. Scalar QE is the simplest
-and fastest path. Use a sampled curve when the source spectrum matters:
-
-```julia
-using AdaptiveOpticsSim.Detectors
-
-qe = AdaptiveOpticsSim.Detectors.SampledQuantumEfficiency(
-    [0.50e-6, 0.60e-6, 0.70e-6],
-    [0.35, 0.85, 0.60],
-)
-
-det = Detector(noise=NoiseNone(), qe=qe)
-image = ones(32, 32) # cell-integrated photon-arrival rate per represented cell
 rng = runtime_rng(1)
-frame = capture!(det, image, src; rng=rng)
-```
+epoch = advance_by!(atmosphere, 1e-3; rng)
+render_atmosphere!(pupil, renderer, atmosphere, epoch)
 
-For `Source`, detector capture evaluates the curve at `wavelength(src)`. The
-generic `capture!(det, image, spectral_source)` boundary uses the
-flux-weighted effective QE over the spectral bundle. Pyramid acquisition with
-a frame `Detector` instead folds the sampled QE into each wavelength's
-optical-rate contribution before the incoherent sum. Prepared diffractive
-Shack–Hartmann retains distinct wavelength-rate products in a bundle so each
-can use its channel-specific acquisition mapping; the legacy single-product
-path remains common-grid only. Matrix-only
-capture without a source uses the detector's scalar reference QE, which is the
-peak value of a sampled curve.
-The bare-matrix path treats its values as cell-integrated photon-arrival rates;
-use `IntensityMap` plus `prepare_detector_acquisition` when spatial-density
-versus cell-integrated semantics must be checked explicitly. Preparation
-returns the exact owner executed by `capture!`; advanced inspection uses the
-qualified-public `Detectors.DetectorAcquisitionPlan`,
-`Detectors.PreparedDetectorAcquisition`, and `Detectors.detector_acquisition_*`
-accessors rather than root exports.
-
-For CMOS, sCMOS, and quantitative low-noise CMOS sensors, compose the generic
-`CMOSSensor` from measured properties. Core does not contain camera names or
-vendor presets; those belong in a companion profiles package. Uniform
-independent read noise uses `NoiseReadout` or `NoisePhotonReadout`, while
-row/column components and a heteroscedastic per-pixel map are sensor
-properties:
-
-```julia
-sigma_map = fill(0.30, size(image))
-sensor = CMOSSensor(
-    row_readout_sigma=0.05,
-    column_readout_sigma=0.08,
-    readout_noise_model=CMOSReadNoiseMap(sigma_map),
-    timing_model=RollingShutter(10e-6; row_group_size=2),
+wfs = ShackHartmannWFS(
+    telescope;
+    n_lenslets=4,
+    mode=Diffractive(),
+    pixel_scale_arcsec=0.1,
+    n_pix_subap=6,
 )
-det = Detector(
-    sensor=sensor,
-    noise=NoisePhoton(),
-    qe=0.85,
-    full_well=7_000.0,
-    bits=16,
-    output_type=UInt16,
-)
-```
+measurement = measure!(wfs, pupil, source)
+~~~
 
-`CMOSReadNoiseMap` is an absolute per-pixel read-noise sigma map and is added
-to any uniform `NoiseReadout` component. Use `PixelResponseNonuniformity`,
-`DarkSignalNonuniformity`, `BadPixelMask`, and
-`Detectors.StaticCMOSOutputPattern` for measured gain, dark, bad-pixel, and
-output-amplifier structure. CMOS has no implicit blur: select
-`RectangularPixelAperture`, another frame response, or
-`InterpixelCapacitance` only when the detector sampling or calibration
-supports it.
+The atmosphere owns evolving turbulence state. The renderer owns a prepared
+direction mapping and writes the caller's pupil product. Rendering does not
+advance time or consume RNG.
 
-InGaAs arrays use the same explicit frame pipeline. The technology name does
-not choose a pixel response or MTF; the default response is null. Configure
-glow separately from dark current, and add the optional persistence recurrence
-only when a frame-to-frame charge-domain approximation is useful:
+## Explicit Closed Loop
 
-```julia
-ingaas = Detector(
-    sensor=InGaAsSensor(
-        glow_rate=0.4,
-        persistence_model=ExponentialPersistence(0.02, 0.75),
-    ),
-    dark_current=1.2,
-    qe=0.80,
-    response_model=RectangularPixelAperture(width_x_px=1.0,
-        width_y_px=1.0),
-)
-frame = capture!(ingaas, image; rng=runtime_rng(4))
-```
+A direct loop keeps the science visible and is often the best starting point:
 
-The persistence coefficients apply once per completed frame, not per second.
-They define a deterministic charge-domain recurrence and do not represent a
-calibrated time constant or trap population. Camera-specific QE, defect,
-response, persistence, and glow maps belong in an external profile.
-
-`Detectors.FrameWindow` selects a rectangular product from the completed full
-frame. It does not crop the physical sensor or shorten rolling-shutter timing.
-To model a sensor ROI whose electronics expose and read only the cropped rows,
-construct the detector on that cropped frame geometry and express any physical
-row-phase offset explicitly in the source or schedule.
-
-Conventional CCD capture uses `CCDSensor()` with `SingleRead()` by default.
-Configure `clock_induced_charge_per_frame` as an independent Poisson
-expectation in electrons per pixel per frame; it is not multiplied by exposure
-duration. A single-read `CCDSensor` does not accept `read_duration`, because Plant
-acquisition definitions own readout completion and readiness timing. Detector
-MTF comes only from an explicitly configured presampling response.
-
-Skipper CCD readout is a CCD sampling mode rather than a photon-counting
-detector. It averages nondestructive samples online and retains only the mean,
-so memory remains proportional to frame size instead of sample count:
-
-```julia
-skipper = Detector(
-    sensor=CCDSensor(
-        sampling_mode=SkipperSampling(64),
-        sample_duration=20e-6,
-    ),
-    noise=NoisePhotonReadout(3.0),
-)
-frame = capture!(skipper, image; rng=runtime_rng(3))
-```
-
-The reported effective read-noise sigma scales as `1/sqrt(n_samples)`, and
-acquisition-duration metadata includes all reads. `sample_duration` is the
-duration of one configured full-frame nondestructive sample; it is not a
-sample period or a model of the correlated-double-sampling electronics
-integration window. The core model assumes independent read samples;
-calibrated correlated-noise and adaptive-read policies remain future
-extensions.
-
-For EMCCD cameras, the core package models the generic sensor physics rather
-than vendor camera presets. Use `EMOutput()` for the electron-multiplication
-register path and `ConventionalOutput()` for a conventional output channel.
-Linear EM operation is the default; use `excess_noise_factor=sqrt(2)` when you
-want the common high-gain linear-mode excess-noise approximation. The default
-`ClippedGaussianMultiplicationApproximation` is nonnegative and portable across
-CPU and accelerator backends, but its normal approximation is intended for
-moderate-to-high input charge:
-
-```julia
-det = Detector(
-    noise=NoisePhotonReadout(30.0),
-    gain=300.0,
-    sensor=EMCCDSensor(
-        output_path=EMOutput(),
-        operating_mode=LinearEMMode(),
-        excess_noise_factor=sqrt(2.0),
-        clock_induced_charge_per_frame=0.01,
-        em_gain_range=(1.0, 5000.0),
-    ),
-)
-```
-
-Use `PhotonCountingEMMode` when you want a thresholded photon-counting
-approximation for low-flux operation. The threshold is applied after EM gain and
-readout noise, so it is expressed in post-EM frame units. Detection efficiency
-is a Bernoulli probability for each threshold crossing; accepted events have
-unit amplitude rather than using efficiency as an output scale:
-
-```julia
-det = Detector(
-    noise=NoiseReadout(30.0),
-    gain=1000.0,
-    sensor=EMCCDSensor(
-        operating_mode=PhotonCountingEMMode(threshold=300.0),
-        output_path=EMOutput(),
-    ),
-)
-```
-
-`emccd_snr(...)` provides a lightweight analytic check for linear EM,
-conventional output, and photon-counting operating modes. Treat it as a design
-and validation helper, not a replacement for a calibrated camera model.
-`clock_induced_charge_per_frame` is explicitly per frame and is not scaled by
-exposure duration. CIC enters before EM gain. For the stronger CPU distribution
-model, select the qualified-public
-`AdaptiveOpticsSim.Detectors.ConditionalGammaMultiplication()` explicitly.
-That model is CPU-only and is not silently replaced on accelerators; accelerator
-construction rejects it before detector state is prepared. The two model names
-therefore identify different statistical contracts rather than one
-backend-dependent algorithm. `em_gain_range` is enforced for `EMOutput`, and
-input full well and register-referred full well are both applied when both are
-configured. Camera-specific parameter packs belong in a companion profiles
-package.
-
-Frame transfer is an acquisition-timing policy, not an optical response. Set a
-pixel readout rate and transfer duration when frame latency or sustained cadence
-matters:
-
-```julia
-frame_transfer_emccd = Detector(
-    exposure_duration=1e-3,
-    sensor=EMCCDSensor(
-        readout_rate_hz=10e6,
-        acquisition_mode=FrameTransferAcquisition(transfer_duration=20e-6),
-    ),
-)
-```
-
-After the first capture, `detector_export_metadata(frame_transfer_emccd)`
-reports one-frame output latency as `sampling_acquisition_duration` and the overlapped
-cadence as `steady_state_frame_period`. `SequentialAcquisition()` instead adds
-integration and readout durations. Both modes run the same optical, charge, EM
-gain, and noise pipeline. In a scheduled HIL plant,
-`FrameTransferAcquisitionDefinition` remains the authority for event readout
-and product-readiness durations; the sensor-side pixel-rate calculation is a
-direct-capture timing estimate, not a replacement for that Plant contract.
-
-Conventional and linear-avalanche HgCdTe arrays have no implicit optical blur
-or interpixel coupling. Configure presampling detector response and
-post-collection IPC as separate effects. `detector_mtf` reports the normalized
-discrete-space transfer
-magnitude of the realized response kernel on its shift-invariant interior.
-Finite frames use zero extension, so edge response is boundary-dependent and
-can lose signal outside detector support. The diagnostic does not substitute
-for a continuous subpixel-aperture model on an oversampled optical grid:
-
-```julia
-det = Detector(
-    sensor=HgCdTeAvalancheArraySensor(avalanche_gain=20.0),
-    response_model=RectangularPixelAperture(fill_factor_x=0.9,
-        fill_factor_y=0.9),
-    charge_coupling_model=InterpixelCapacitance(
-        [0.0 0.01 0.0; 0.01 0.96 0.01; 0.0 0.01 0.0]),
-)
-```
-
-`RectangularPixelAperture` records pitch and fill-factor configuration and
-applies the resulting discrete detector-grid kernel. It deliberately reports
-no subpixel-geometry capability: at unit detector-grid sampling, distinct
-continuous apertures can collapse to the same discrete kernel. Prepare an
-explicitly oversampled optical mapping when those differences must affect the
-image or MTF.
-
-Linear-avalanche multiplication uses the detector-literature excess-noise
-factor \(F=\mathrm{E}[M^2]/\mathrm{E}[M]^2\). For the nonnegative CPU reference
-distribution, select the qualified-public conditional-Gamma policy:
-
-```julia
-linear_avalanche = Detector(
-    sensor=HgCdTeAvalancheArraySensor(
-        avalanche_gain=20.0,
-        excess_noise_factor=1.25,
-        multiplication_model=
-            AdaptiveOpticsSim.Detectors.
-                ConditionalGammaAvalancheMultiplication(),
-    ),
-)
-```
-
-This policy draws input-referred multiplied charge with shape \(q/(F-1)\) and
-scale \(F-1\), then applies the mean avalanche gain before read noise.
-`AdaptiveOpticsSim.Detectors.ClippedGaussianAvalancheMultiplicationApproximation()`
-is the accelerator-capable alternative and the constructor default. Its
-qualified statistical regime is \(q/(F-1)\geq25\); lower-charge results are
-computationally defined but are not claimed to reproduce the avalanche
-distribution. Conditional-Gamma construction on an accelerator is rejected
-instead of being silently replaced. Neither policy is Geiger-mode photon
-counting or a photon-timestamp model.
-
-Conventional HgCdTe arrays and explicitly configured linear-avalanche arrays
-support up-the-ramp fitting through the shared readout contract:
-
-```julia
-ramp_detector = Detector(
-    exposure_duration=1.0,
-    noise=NoisePhotonReadout(8.0),
-    sensor=HgCdTeSensor(
-        read_duration=20e-3,
-        sampling_mode=UpTheRampSampling(16),
-    ),
-)
-
-integrated = capture!(ramp_detector, image; rng=runtime_rng(5))
-slope = detector_ramp_slope(ramp_detector)
-intercept = detector_ramp_intercept(ramp_detector)
-read_cube = detector_ramp_cube(ramp_detector)
-read_offsets_s = detector_ramp_read_offsets_s(ramp_detector)
-kind = AdaptiveOpticsSim.Detectors.detector_ramp_acquisition(ramp_detector)
-```
-
-This direct `capture!` workflow is the lower-fidelity post-exposure convenience:
-it synthesizes evenly spaced reads by scaling one completed frame. The returned
-frame is `slope * exposure_duration`, while the fitted slope, intercept, read
-cube, and read offsets in seconds remain in detector-owned reusable products.
-It does not represent changing atmosphere, source, or optic state during the
-exposure.
-
-For a time-resolved ramp, first prepare an `IntensityMap` as `rate_map`, then use
-the qualified event surface. The producer may update the bound `rate_map.values`
-between intervals; each read observes charge accumulated through its exact
-event timestamp without resetting integration:
-
-```julia
-using AdaptiveOpticsSim.Plant
-
-rate_map = direct_imaging_output(imaging)
-rng = runtime_rng(6)
-event_ramp_detector = Detector(
-    exposure_duration=1.0,
-    noise=NoisePhotonReadout(8.0),
-    sensor=HgCdTeSensor(
-        read_duration=20e-3,
-        sampling_mode=UpTheRampSampling(3),
-    ),
-)
-timing = AdaptiveOpticsSim.Plant.GlobalShutterAcquisitionDefinition(
-    PlantDuration(1_000_000_000);
-    readout_duration=PlantDuration(20_000_000),
-)
-events = AdaptiveOpticsSim.Plant.prepare_global_shutter_acquisition(
-    event_ramp_detector, rate_map, timing)
-state = AdaptiveOpticsSim.Plant.GlobalShutterAcquisitionState(events)
-
-t0 = PlantTimestamp(0)
-t1 = PlantTimestamp(500_000_000)
-t2 = PlantTimestamp(1_000_000_000)
-AdaptiveOpticsSim.Plant.begin_exposure!(events, state, t0)
-AdaptiveOpticsSim.Plant.take_nondestructive_read!(events, state, t0, rng)
-AdaptiveOpticsSim.Plant.accumulate_exposure_interval!(events, state, t0, t1, rng)
-# Update rate_map.values here after forming the next optical sample.
-AdaptiveOpticsSim.Plant.take_nondestructive_read!(events, state, t1, rng)
-AdaptiveOpticsSim.Plant.accumulate_exposure_interval!(events, state, t1, t2, rng)
-AdaptiveOpticsSim.Plant.close_exposure!(events, state, t2)
-AdaptiveOpticsSim.Plant.take_nondestructive_read!(events, state, t2, rng)
-AdaptiveOpticsSim.Plant.complete_readout!(events, state,
-    t2 + PlantDuration(20_000_000), rng)
-frame = AdaptiveOpticsSim.Plant.mark_acquisition_ready!(events, state,
-    t2 + PlantDuration(20_000_000))
-```
-
-The prepared read duration must not exceed the spacing between ramp samples or the
-declared readout duration. Read instants span zero through exposure close; when
-equal spacing is not exactly representable in integer nanoseconds, interior
-instants use documented floor quantization while retaining both endpoints. The
-current linear estimator does not perform cosmic-ray segmentation,
-saturation-aware fitting, or correlated-noise estimation.
-
-For a linear-mode single-element APD, use `LinearAPDDetector`. Its channel
-storage is a vector rather than a fake 1×1 image. `SingleElementLinearAPD()` accepts
-either a scalar photon flux or a one-element vector; `LinearAPDChannelBank(n)` uses a
-fixed-size vector suitable for preallocated channel readout:
-
-```julia
-apd = LinearAPDDetector(
-    topology=SingleElementLinearAPD(),
-    exposure_duration=100e-6,
-    qe=0.75,
-    avalanche_gain=30.0,
-    excess_noise_factor=1.2,
-    noise=NoisePhotonReadout(2.0),
-)
-value = only(capture!(apd, 2.0e5; rng=runtime_rng(4)))
-```
-
-`SPADArrayDetector((rows, columns); ...)` owns fixed-shape Geiger-mode
-accumulated-count area imaging. `MKIDArrayDetector` owns MKID accumulated-count
-images. Its optional resolving-power and arrival-time-resolution values are
-physical characteristics, not simulated per-photon observables. Neither is a
-linear-mode APD channel surface.
-
-Rolling-shutter detectors can also capture a time-varying scene. Use
-`InPlaceFrameSource` when the source can write into a preallocated frame, or
-`FunctionFrameSource` when a function returns a frame for each exposure-start
-offset in seconds:
-
-```julia
-det = Detector(
-    noise=NoiseNone(),
-    sensor=CMOSSensor(timing_model=RollingShutter(25e-6)),
-    response_model=NullFrameResponse(),
-)
-
-pulse = InPlaceFrameSource((out, t) -> begin
-    fill!(out, 0.0)
-    t >= 50e-6 && fill!(out, 1.0)
-    return out
-end, (64, 64))
-
-rng = runtime_rng(3)
-frame = capture!(det, pulse; rng=rng)
-```
-
-This path samples each rolling-shutter row group at its own exposure-start
-offset in seconds, so it can show transient illumination and rolling-shutter
-artifacts. Static
-`capture!(det, image)` remains the preferred path when the scene does not vary
-during the exposure.
-
-For transient sources where the flux rate depends on the full exposure
-interval, use `InPlaceExposureFrameSource` or `FunctionExposureFrameSource`.
-These receive `start_offset_s` and `exposure_duration`, which is important for
-global-reset rolling readout:
-
-```julia
-pulse = FunctionExposureFrameSource((start_offset_s, exposure_duration) -> begin
-    active = start_offset_s <= 50e-6 < start_offset_s + exposure_duration
-    return fill(active ? 1.0 : 0.0, 64, 64)
-end)
-```
-
-For cameras that use global reset with rolling readout, set
-`exposure_mode=GlobalResetExposure()`. This starts all row groups together and
-then increases the effective exposure duration for later row groups as the rolling
-readout reaches them:
-
-```julia
-det = Detector(
-    noise=NoiseNone(),
-    sensor=CMOSSensor(
-        timing_model=RollingShutter(25e-6; exposure_mode=GlobalResetExposure()),
-    ),
-    response_model=NullFrameResponse(),
-)
-```
-
-Use this when you care about:
-
-- sensor behavior
-- atmosphere evolution
-- detector-coupled readout
-- optical gain and calibration studies
-
-### Workflow 3: Closed-loop AO simulation
-
-```julia
+~~~julia
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
 
-rng = runtime_rng(0)
-dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-calibration_pupil = PupilFunction(tel)
-imat = interaction_matrix(dm, wfs, calibration_pupil, src; amplitude=0.1)
-recon = ModalReconstructor(imat; gain=0.5)
-pupil = PupilFunction(tel)
-renderer = prepare_atmosphere_renderer(atm, tel, src)
+dm = DeformableMirror(telescope; n_act=4, influence_width=0.3)
+interaction = interaction_matrix(
+    dm,
+    wfs,
+    PupilFunction(telescope),
+    source;
+    amplitude=0.1,
+)
+reconstructor = ModalReconstructor(interaction; gain=0.5)
 command = similar(dm.state.coefs)
 
-for _ in 1:5
-    epoch = advance_by!(atm, 1e-3; rng)
-    render_atmosphere!(pupil, renderer, atm, epoch)
+for _ in 1:100
+    epoch = advance_by!(atmosphere, 1e-3; rng)
+    render_atmosphere!(pupil, renderer, atmosphere, epoch)
+
     update_surface!(dm)
     apply_surface!(pupil, dm, DMAdditive())
-    measure!(wfs, pupil, src)
-    reconstruct!(command, recon, slopes(wfs))
+
+    measure!(wfs, pupil, source)
+    reconstruct!(command, reconstructor, slopes(wfs))
     @. command = -command
     set_command!(dm, command)
 end
+~~~
 
-slopes_vec = slopes(wfs)
-```
+Controller delay, detector acquisition, and command timing should be explicit
+when they matter to the experiment. Use caller-owned state and separate RNGs
+for independently replayable stochastic components.
 
-This detector-free loop produces a WFS measurement, not a camera frame. Use a
-prepared WFS optics owner and
-`WavefrontSensors.wfs_optical_products(prepared)` when the detector-facing
-photon-arrival-rate product is required, or attach a detector and inspect its
-acquired output.
+## Detector Acquisition
 
-`DeformableMirror` keeps the concise public Gaussian inputs:
+~~~julia
+using AdaptiveOpticsSim.Detectors
 
-- `influence_width=...`
-- `mechanical_coupling=...`
+detector = Detector(
+    noise=NoisePhotonReadout(2.0),
+    full_well=30_000.0,
+    bits=12,
+    output_type=UInt16,
+)
 
-It also accepts explicit advanced composition through:
+detector_rng = runtime_rng(2)
+measure!(wfs, pupil, source, detector; rng=detector_rng)
+frame = wfs_detector_image(wfs, detector)
+~~~
 
-- `topology=...`
-- `influence_model=...`
-- `actuator_model=...`
+Detector quantization (`bits` and `full_well`) is separate from the Julia output
+element type. Use `output_type=nothing` for floating-point internal readout.
 
-For example:
+For staged WFS models, keep optical formation, detector acquisition, and
+measurement estimation separate:
 
-- `GaussianInfluenceWidth(0.3)`
-- `GaussianMechanicalCoupling(0.08)`
-- `DenseInfluenceMatrix(modes)`
-- `MeasuredInfluenceFunctions(modes; metadata=...)`
-- `ActuatorGridTopology(16)`
-- `ActuatorGridTopology(19; actuator_pitch=0.125)`
-- `SampledActuatorTopology(coords; valid_actuators=mask, metadata=...)`
-- `ClippedActuators(-0.2, 0.2)`
-- `ActuatorHealthMap(gains)`
-- `CompositeDMActuatorModel(...)`
+1. `form_wfs_optical_products!`
+2. `acquire_wfs_observation!`
+3. `estimate_wfs_measurement!`
 
-Use the scalar keywords for normal work. Use `influence_model=...` when you
-need an explicit DM influence representation, `topology=...` when the actuator
-layout is not the default full square grid, and `actuator_model=...` when
-command preprocessing should model clipping or actuator health without changing
-the sampled influence basis.
+## Complete-Frame Algorithm Graphs
 
-Analytic Gaussian DMs keep a lazy actuator-to-OPD operator instead of storing a
-`resolution^2 × n_actuators` sampled matrix. A complete regular grid applies
-through the allocation-free factored `X * C * Y'` path; masked, sampled, or
-non-separable misregistered Gaussian layouts use a fused matrix-free path.
-Dense storage is retained only when explicitly supplied through
-`DenseInfluenceMatrix` or `MeasuredInfluenceFunctions`, and calibration code
-may materialize the lazy operator during setup when a dense matrix is genuinely
-required.
-Regular-grid command vectors follow Julia column-major `C[x, y]` ordering, so
-the x actuator coordinate is the first and fastest-varying axis.
-`actuator_pitch` is expressed in normalized pupil coordinates and places the
-square grid symmetrically about zero; omit it for the default `[-1, 1]` axis.
+A graph definition contains a concrete tuple of nodes, graph inputs/outputs,
+same-frame links, explicit delayed links, and startup ndarray parameters.
+Preparation validates every port and binds exact storage.
 
-Actuator print-through is represented only when it is already present in a
-sampled influence basis supplied through `DenseInfluenceMatrix` or
-`MeasuredInfluenceFunctions`; the built-in Gaussian DM path does not add a
-separate print-through model.
+~~~julia
+using AdaptiveOpticsSim.AlgorithmGraphs
 
-Use this when you care about:
+definition = algorithm_graph(
+    (
+        discrete_integrator_node(
+            :controller;
+            extent=2,
+            sample_period_s=1e-3,
+            input_schema="example.residual.f32/1",
+            output_schema="example.command.f32/1",
+            gain=0.2f0,
+            tau_s=0.02f0,
+        ),
+    );
+    name=:controller,
+    inputs=(
+        graph_input(
+            :residual,
+            :controller => :input,
+            zeros(Float32, 2),
+        ),
+    ),
+    outputs=(
+        graph_output(:command, :controller => :output),
+    ),
+)
 
-- an explicit offline control loop
-- numerical controller or delay-line experiments
-- model-specific profiling
+graph = prepare_algorithm_graph(definition)
+step_graph!(graph)
+command = graph_output(graph, :command)
+~~~
 
-For HIL-style independent commands and acquisitions, lift the same physical
-components into `AdaptiveOpticsSim.Plant`. Do not pack several physical optics
-into one command object merely because one RTC produces a flat buffer.
+Use a delayed link for feedback. Direct links must follow node order and cannot
+form a cycle.
 
-### Workflow 4: Field propagation and diffractive optics
+## TOML Graphs
 
-Start with:
+TOML is the convenient static authoring surface:
 
-- `ElectricField`
-- `FraunhoferPropagation`, `FresnelPropagation`
-- `AtmosphericFieldPropagation`
-- `ExtendedSource`
+~~~julia
+bindings = (
+    pdm_command=zeros(Float32, 277),
+    pdm_actuator_coordinates=actuator_coordinates,
+)
 
-Use this when you care about:
+definition = load_algorithm_graph(
+    "examples/graphs/revolt_classic_hil.toml";
+    bindings,
+)
+graph = prepare_algorithm_graph(definition)
+~~~
 
-- field-level propagation
-- polychromatic sensing
-- extended sources
-- curvature or atmosphere-aware field propagation
+Graph files embed scalar configuration but not large calibration arrays or
+arbitrary filenames. `bindings` supplies caller-owned inputs, delayed initial
+values, and large ndarray parameters by stable name.
 
-`SpectralSource`, `ExtendedSource`, and `Asterism` are alternative top-level
-source expansions in the maintained API. An `Asterism` is a flat,
-common-wavelength directional list and rejects `SpectralSource`,
-`ExtendedSource`, and nested `Asterism` children. `with_spectrum` accepts a
-`Source` or `LGSSource` leaf and rejects an existing spectral, extended, or
-directional expansion. Each `SpectralBundle` weight is the normalized
-photon-number fraction of `photon_irradiance(source)` assigned to that sample;
-ordinary constructors normalize nonnegative proportional weights to sum to
-one. The weights are not radiant-energy fractions. When a model needs a
-spectral-by-spatial-by-directional Cartesian quadrature, prepare the components
-explicitly and accumulate only metadata-compatible intensity products; there is
-not yet a nested convenience API for that product space.
+Maintained examples include:
 
-Use `SodiumLayerProfile(altitudes_m, relative_weights)` when an `LGSSource`
-needs a sampled sodium-layer return model. The altitude samples are in metres;
-the weights are nonnegative relative photon returns. Pass it as
-`LGSSource(sodium_layer_profile=profile)`. Omit the profile for a finite-height
-LGS represented by its scalar `altitude` and simple elongation factor.
+- `examples/graphs/revolt_classic_hil.toml`
+- `examples/graphs/revolt_classic_hil_fast_dm.toml`
+- `examples/graphs/revolt_copper_hil.toml`
+- `examples/graphs/revolt_copper_hil_fast_dm.toml`
 
-Prepared diffractive Shack–Hartmann optics keep distinct wavelength grids
-as separate native-sampling products in an `OpticalProductBundle`; it never
-index-adds or implicitly resamples them. A single output therefore accepts only
-a source compatible with its declared wavelength and sampling. The legacy
-single-product `measure!` convenience path remains restricted to a common
-wavelength grid. Model bundled channels with independent acquisition mappings
-unless an application prepares an explicit flux-conserving resampler.
+The fast profile changes the provisional Gaussian DM evaluation to a separable
+regular-grid implementation without reducing detector or pupil resolution.
 
-Prepared Pyramid and Bi-O-edge optics follow the same photon-arrival-rate
-boundary while retaining distinct physical masks. Their zero, circular, and
-sampled focal-plane modulation policies are optical cycle averages in λ/D;
-they contain no exposure duration or trigger semantics. A spectral source produces
-one four-pupil `IntensityMap` per wavelength in an `OpticalProductBundle`.
-Directional `Asterism` and `ExtendedSource` inputs require a matching tuple or
-vector of path-rendered pupil functions and remain separate bundle products so
-direction-dependent atmosphere states are not silently combined. Apply an
-explicit compatible incoherent sum or detector mapping only when the intended
-instrument path requires it.
+## External RTC Lockstep
 
-The acquired Pyramid/Bi-O-edge estimator accepts a real, square
-`:four_pupil_mosaic`, including integer ADU/count frames. It converts samples to
-the estimator's floating-point precision before differential arithmetic, and
-preparation rejects incompatible frame geometry, backend, or compute device.
-Reprepare an optical plan after changing the front-end propagation sampling.
+~~~julia
+boundary = prepare_graph_hil_boundary(
+    graph;
+    command_input=:pdm_command,
+    frame_output=:shwfs_frame,
+)
 
-A single diffractive Shack–Hartmann, Pyramid, Bi-O-edge, or atmosphere-aware
-Curvature acquisition also requires every asterism leaf to share one optical
-calibration signature. In particular, mixed NGS/LGS lists and LGS leaves with
-different elongation or sodium-layer-profile geometry belong on independently
-calibrated WFS paths.
+while running
+    sequence = step_hil_frame!(boundary)
+    send_frame(sequence, hil_frame_buffer(boundary))
 
-## Choosing Components
+    receive_command!(
+        hil_command_buffer(boundary),
+        sequence,
+    )
+    adopt_hil_command!(boundary, sequence)
+end
+~~~
 
-### Atmosphere
+The first frame uses the command present at preparation. Each subsequent frame
+is blocked until a finite same-sequence command is adopted. The boundary owns
+no socket, PipeWire object, retry policy, or wall-clock schedule.
 
-- `KolmogorovAtmosphere`
-  - compact single-screen studies
-- `MultiLayerAtmosphere`
-  - standard finite multilayer turbulence
-- `InfiniteMultiLayerAtmosphere`
-  - longer-running translated-screen studies
+For GPU graphs, graph arrays remain device-resident and the HIL boundary makes
+the completed frame/device-command copies explicit through ordinary host
+`Array` buffers.
 
-### Wavefront sensor
+## Model Time
 
-- `ShackHartmannWFS`
-  - general SH studies and HIL-style RTC surfaces
-  - owned by `AdaptiveOpticsSim.WavefrontSensors`; it is not forwarded through
-    the package root
-  - composes an independent `MicrolensArray`, prepared optical workspace,
-    layout/calibration, detector acquisition, and estimator state
-  - use `ShackHartmannOpticalFrontEnd` and `shack_hartmann_rate_map` with the
-    prepared WFS stage API when WFS optics, acquisition, and estimation
-    must be scheduled independently
-- `PyramidWFS`
-  - pyramid sensing and modulation studies
-  - owned by `AdaptiveOpticsSim.WavefrontSensors`; its physical
-    `PyramidPhaseMask` remains in `AdaptiveOpticsSim.Optics`
-  - use `phase_mask_rotation_rad` and `modulation_phase_offset_rad` for the
-    independent physical-mask rotation and circular-quadrature origin
-  - use `PyramidOpticalFrontEnd`, `pyramid_rate_map`, and
-    `set_pyramid_calibration!` when WFS optics, acquisition, and
-    differential estimation must be scheduled independently
-- `BiOEdgeWFS`
-  - Bi-O-edge variants
-  - owned by `AdaptiveOpticsSim.WavefrontSensors`; its physical
-    `BiOEdgeAmplitudeMask` remains in `AdaptiveOpticsSim.Optics`
-  - use `BiOEdgeOpticalFrontEnd`, `bi_o_edge_rate_map`, and
-    `set_bi_o_edge_calibration!` for the corresponding staged path
-  - use `modulation_phase_offset_rad` for the circular-quadrature origin
-- `CurvatureWFS`
-  - curvature sensing
-- `ZernikeWFS`
-  - Zernike WFS studies
+`ModelTimestamp` and `ModelDuration` use exact integer nanoseconds.
+`PeriodicSchedule` and the model-time drivers provide deterministic frame
+coordinates:
 
-### Detector
+~~~julia
+driver = FixedStepModelTimeDriver(
+    PeriodicSchedule(ModelDuration(1_000_000)),
+)
+timestamp = step_graph_at!(graph, driver)
+~~~
 
-Use an explicit `Detector(...)` when the sensing path needs detector physics,
-readout behavior, windowing, or exported frame outputs.
+Model time is not host execution time. An application may pace these steps
+against a clock without changing the graph's scientific timestamps.
 
-For counting-imager or counting-channel paths, use a maintained counting
-detector family instead of the generic frame-detector surface:
+## Rolling Shutters And Sub-Frame Optics
 
-- `LinearAPDDetector(...)` for analog single-element or fixed-bank channels
-- `SPADArrayDetector((rows, columns); ...)` for fixed-shape accumulated-count
-  imaging arrays
-- `MKIDArrayDetector(...)` for accumulated-count imaging with optional
-  `MKIDArrayCharacteristics` describing resolving power, arrival-time
-  resolution, and a meter-valued source passband
+A rolling-shutter detector still publishes one complete atomic frame. To model
+moving turbulence, direct Julia code or one atomic custom node evaluates the
+optical path at each row or row-group integration time, accumulates private
+detector state, and publishes only after every row is complete.
 
-MKID source filtering is applied by source-aware `capture!` and WFS/runtime
-paths that carry a source through detector capture. Matrix-only capture assumes
-the input was already spectrally filtered. These characteristics do not add
-per-photon energy estimates or arrival timestamps to the output image.
+Do not expose partially written frames. Mid-frame DM changes and multiple
+cadences are possible in direct Julia, but they are outside the version 1 static
+graph scheduler until an instrument requirement justifies a bounded extension.
 
-Leave detector effects simple or disabled when the goal is deterministic model
-comparison rather than detector realism.
+## GPU Execution
 
-## Public API Tiers
+Prepare the graph for one exact target:
 
-The package distinguishes between:
+~~~julia
+using AdaptiveOpticsSim.Backends
 
-- stable exported workflow APIs
-- advanced but maintained APIs that may require qualification as `AdaptiveOpticsSim.<name>`
-- developer/backend support APIs used mainly by benchmark and extension code
+target = compute_device(device_array)
+graph = prepare_algorithm_graph(definition; target)
+~~~
 
-Use [api-reference.md](api-reference.md) for the exported surface. If a name is
-not exported, prefer qualifying it rather than adding it to the public namespace
-unless it is part of an ordinary workflow or documented extension seam.
+Every bound graph array must already use native storage on that target. There is
+no hidden transfer or CPU fallback. Only nodes whose algorithms support the
+selected backend can be prepared.
 
-For ordinary usage, start with the exported workflow surface shown above and in
-[api-reference.md](api-reference.md).
+## Proper.jl
 
-For advanced utilities such as telemetry/config helpers and some backend policy
-helpers, use namespaced access. Examples:
+Proper.jl remains optional. Use it directly between explicit optical products or
+wrap one prepared prescription in an application-specific graph node. See
+[`proper-integration-guide.md`](proper-integration-guide.md).
 
-```julia
-pupil = PupilFunction(tel)
-ws = AdaptiveOpticsSim.Workspace(pupil.opd, size(pupil.opd, 1);
-    rng=deterministic_reference_rng(0))
-sprint = AdaptiveOpticsSim.Calibration.SPRINT(tel, dm, wfs, basis)
-```
+## Next Reading
 
-SPRINT is currently an experimental, owner-qualified calibration workflow
-rather than marked stable public API. On CPU it uses ForwardDiff-backed DM
-misregistration sensitivity by default for grid-backed Gaussian mirrors. Use
-`sensitivity=:finite_difference` for validation runs, supported
-WFS-misregistration finite differences, or accelerator-backed arrays.
-
-`compute_meta_sensitivity_matrix` returns a structured `MetaSensitivity`, and
-`snapshot_config` returns an ordinary string-keyed dictionary. Core neither
-reads nor writes a sensitivity cache and does not choose a configuration file
-format. If a workflow needs persistence, serialize these returned values
-explicitly in application code or through an optional format extension.
-
-## Apple Silicon Linear Algebra
-
-AppleAccelerate.jl is an application-owned opt-in on Apple Silicon. It is an
-AdaptiveOpticsSim weak dependency, so it is not installed or loaded by the core
-package. Add it to the application environment and load it explicitly before
-constructing the simulation:
-
-```julia
-using AppleAccelerate
-using AdaptiveOpticsSim
-```
-
-This process-wide selection forwards supported Julia BLAS and LAPACK calls to
-Apple's Accelerate framework while retaining OpenBLAS as the fallback chosen by
-AppleAccelerate.jl. It also activates AppleAccelerate's AbstractFFTs extension:
-AdaptiveOpticsSim's optional extension then prepares reusable vDSP setups and
-package-owned split-complex work buffers for full, non-empty, power-of-two 1D
-and 2D CPU transforms. This preserves the allocation-free repeated execution
-contract. FFTW remains the deliberate fallback for partial-dimension,
-arbitrary-size, and three-or-more-dimensional CPU transforms. GPU arrays
-continue to select their native FFT provider. Control Accelerate and FFTW
-threading independently, and keep both at one thread for deterministic
-validation or when coarse Julia tasks own CPU parallelism.
-
-The maintained Apple Silicon target uses the isolated
-[`test/appleaccelerate`](../test/appleaccelerate) environment. It first proves
-that a normal package load does not load AppleAccelerate, then verifies active
-Accelerate BLAS, LAPACK, and supported vDSP FFT selection, FFTW fallback outside
-the vDSP capability envelope, and the full CPU suite under that explicit
-selection.
-
-## Determinism
-
-- Use a fixed RNG and pass it into `advance_by!`/`advance_to!`, detector calls, or runtime
-  constructors instead of relying on `Random.default_rng()`.
-- Use `deterministic_reference_rng(seed)` for reference datasets and regression
-  fixtures. This preserves the long-standing `MersenneTwister` stream.
-- Use `runtime_rng(seed)` for new RTC/HIL-style simulations and benchmarks.
-  This uses `Xoshiro`, which is a better default for throughput-oriented hot
-  paths while still being repeatable for a fixed software stack.
-- Keep detector noise disabled when comparing against reference datasets unless
-  the test is explicitly about noise.
-- Run single-threaded when strict reproducibility matters.
-
-See [deterministic-simulation.md](deterministic-simulation.md).
-
-## Tutorials and Examples
-
-Runnable example ports live under `examples/tutorials/`. Good starting points:
-
-- `examples/tutorials/image_formation.jl`
-- `examples/tutorials/detector.jl`
-- `examples/tutorials/closed_loop_shack_hartmann.jl`
-- `examples/tutorials/closed_loop_pyramid.jl`
-- `examples/tutorials/closed_loop_bi_o_edge.jl`
-- `examples/tutorials/closed_loop_zernike.jl`
-
-See [julia-tutorial-mappings.md](julia-tutorial-mappings.md) for the mapping
-back to OOPAO tutorials.
-
-## When You Need More Than The User Guide
-
-Only go deeper if your task actually needs it:
-
-- public API details:
-  - [api-reference.md](api-reference.md)
-- maintained validation status:
-  - [model-validity-matrix.md](model-validity-matrix.md)
-- supported production scope:
-  - [supported-production-surfaces.md](supported-production-surfaces.md)
-- benchmark and cross-package evidence:
-  - benchmark artifacts under `benchmarks/results/`
-- maintainer/developer navigation:
-  - [documentation-map.md](documentation-map.md)
+- [`model-cookbook.md`](model-cookbook.md) for task-oriented recipes
+- [`runtime-dataflow.md`](runtime-dataflow.md) for graph and ownership details
+- [`api-reference.md`](api-reference.md) for module navigation
+- [`supported-production-surfaces.md`](supported-production-surfaces.md) for
+  qualified scope
+- `examples/tutorials/` for runnable examples

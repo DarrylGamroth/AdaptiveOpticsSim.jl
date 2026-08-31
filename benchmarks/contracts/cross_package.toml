@@ -77,8 +77,8 @@ family = "CP-03"
 class = "representative"
 kind = "runtime_profile"
 status = "contract_only"
-description = "REVOLT-like representative PWFS modal SCAO comparison family retained for a future Plant-based HIL orchestration benchmark."
-skip_reason = "the superseded packed single-optic runtime runner was removed; execution remains deferred until a Plant event-loop benchmark and a comparable external runner share an explicit contract"
+description = "REVOLT-like representative PWFS modal SCAO comparison family retained for a future complete-frame graph benchmark."
+skip_reason = "execution remains deferred until the AOS and external runners share one explicit input, output, timing, and synchronization contract"
 
 [scenarios.cp05_specula_atmo_field_medium]
 family = "CP-05"

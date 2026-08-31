@@ -201,11 +201,9 @@ make Calculon part of the AOS API.
 
 Use the native `NCPA` or `OPDMap` model for a static or slowly varying
 aberration that is adequately represented as sampled pupil OPD. Apply it only
-to the branch that contains the aberration. In a Plant, wrap it in
-`Plant.SampledAberrationDefinition` with exact pupil-plane metadata, optical
-placement, and `Plant.SelectedPathVisibility` for the affected science path.
-`prepare_plant` makes the run-owned copy and path-local coupling, so do not
-also mutate path storage manually or apply the same OPD inside the external
+to the direct-Julia or graph branch that contains the aberration, with exact
+pupil-plane metadata and an application-owned run copy. Do not also mutate the
+same path storage manually or apply the same OPD inside the external
 prescription.
 
 Keep the NCPA inside the `Proper.jl` prescription when its behavior depends on

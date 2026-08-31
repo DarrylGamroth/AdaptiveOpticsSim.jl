@@ -2,589 +2,94 @@
 
 Status: active
 
-This roadmap is intentionally short. Historical implementation plans were
-removed from the live docs tree during the April 2026 documentation cleanup; use
-git history if old plan details are needed.
+## Current Direction
 
-## Current State
+AdaptiveOpticsSim.jl owns adaptive-optics physics and simulation algorithms.
+It has two composition surfaces:
 
-AdaptiveOpticsSim.jl is usable for maintained CPU workflows and selected
-hardware-validated GPU workflows. The core package now has:
+- direct Julia for generated topology, multiple rates, conditional execution,
+  sub-frame sampling, and research workflows
+- `AdaptiveOpticsSim.AlgorithmGraphs` for static, single-rate, complete-frame
+  graphs with prepared storage and deterministic execution
 
-- typed AO model objects for optics, atmosphere, WFS, detectors, DMs, and
-  control, plus the HIL-neutral `AdaptiveOpticsSim.Plant` runtime
-- CPU tests across Linux, macOS, and Windows
-- an active AMDGPU release gate and a retained CUDA hardware target with current
-  manual WSL evidence; CUDA remains outside the release gate
-- a maintained zero-allocation hot-path focus for CPU HIL-style runtime loops
-- explicit coarse ensemble scheduling for independent plants, with optional
-  AcceleratedKernels and Dagger integrations kept outside the HIL inner loop
-- caller-owned calibration storage plus compact factorized and controller-
-  composed reconstruction operators for validated large control surfaces
-- measured column-major/native-SIMD CPU kernels for LiFT convolution and LGS
-  elongation, without adding an explicit SIMD dependency
-- committed reference data and regression tests for core WFS and detector paths
-- a completed schedule-free Gate 2 plant boundary with stable path/acquisition
-  ownership, per-owner RNGs, fidelity-provider and calibration-illumination
-  seams, and a clean serial CPU service-time baseline
-- a completed Gate 3 deterministic multi-rate virtual-time engine with one
-  canonical plant timeline, bounded trigger fan-out and faults, conventional
-  detector lifecycles, fixed prepared storage, and clean scheduler/composed-
-  plant CPU evidence
-- a completed Gate 4A transport-neutral `AdaptiveOpticsHIL.jl` serial CPU
-  vertical slice with injected execution time, canonical command/outcome and
-  complete-product ports, bounded lease ownership, a command-responsive fake
-  RTC loop, and qualified fixed-arrival evidence
-- a completed Gate 8 `AdaptiveOpticsHIL.jl` operational runtime for the
-  qualified single-host CPU profile: versioned timing, bounded SPSC ownership,
-  long-lived Agent execution owners, typed lifecycle and overload policies,
-  coordinated failure/drain/recovery, and clean fixed-arrival, stress,
-  allocation/GC, and 300 s soak evidence
-- completed Gate 6 prepared CPU path-execution groups with single-writer
-  ownership, explicit Julia/FFT/BLAS budgets, a deterministic serial oracle,
-  bounded whole-plant specialization, and a separately validated
-  `AdaptiveOpticsHIL.jl` pin to the final breaking core revision
-- completed Gate 7 single-device direction and optical batching with explicit
-  compute-device identity, one prepared accelerator owner, retained
-  CPU/AMDGPU/CUDA correctness and service-cost evidence, and a separately
-  validated `AdaptiveOpticsHIL.jl` pin
-- an active Gate 9A delivery series for static placement of complete groups
-  across CPU resources and at most one accelerator. Core now has exact
-  structural resource facts and preparation-only caller-resolved target
-  partitions with one atmosphere authority; execution, publication, transfer,
-  HIL placement, and admission remain open. The series is tracked by
-  [AdaptiveOpticsHIL issue #43](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/43);
-  mixed execution is not yet a supported production surface
-- an approved breaking prepared-execution ownership refactor, tracked by
-  [issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225),
-  that will establish domain-owned nominal plan interfaces; separate
-  definitions, plans, persistent state, replaceable workspaces, products, and
-  exact prepared owners; and remove direct `Memory` use without weakening
-  boundedness, type stability, or CPU/GPU evidence. Implementation begins
-  after the Gate 9A serial-oracle prerequisite in
-  [PR #224](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/pull/224)
-- a canonical `AdaptiveOpticsSim.Plant` owner for HIL-neutral plant time,
-  topology, commands, acquisition events, providers, preparation, and event
-  composition, with a bounded root export surface and explicit Julia 1.12 API
-  tiers
-- a compact docs set with one extension guide instead of subsystem plan sprawl
+`AlgorithmGraphs` is deliberately a small scheduler. It does not own wall-clock
+pacing, transport, PipeWire integration, or a general event calendar. The
+transport-neutral `PreparedGraphHILBoundary` exchanges one complete detector
+frame for one complete external-RTC command in lockstep.
+
+The removed `AdaptiveOpticsSim.Plant` event runtime is preserved on
+`archive/plant-runtime-2026-08-30`. Its unfinished concrete RNG-owner work is
+preserved on `archive/plant-pe06b2-wip-2026-08-30`. Neither branch is part of
+the maintained package.
+
+## Implemented Foundations
+
+- Explicit params, run-immutable plans, persistent state, replaceable
+  workspaces, caller-visible products, and prepared execution owners.
+- CPU algorithms plus optional CUDA and AMDGPU execution for covered kernels.
+- Static graph definitions in Julia or TOML, direct and one-frame delayed links,
+  model-time drivers, preparation-time validation, and reset.
+- Native graph nodes for atmosphere OPD, deformable-mirror surfaces, pupil OPD
+  composition, Shack-Hartmann and Pyramid optical rates, detector acquisition,
+  centroid/slope selection, reconstruction, and controller operations.
+- Lockstep host command/frame exchange for external RTC integration.
+- Executable REVOLT Classic and REVOLT Copper graph examples, including the
+  exact HSDM277 command map and a selectable fast separable-grid DM profile.
+- Optional Proper.jl integration at an explicit application or graph-node
+  boundary.
 
 ## Near-Term Priorities
 
-`AdaptiveOpticsSim.jl` is being developed as the high-fidelity AO plant for
-external-RTC HIL development, following the maintained specifications indexed
-by [`hil-package-boundary.md`](hil-package-boundary.md) and tracking completion
-in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
+1. Validate the reduced scheduler and graph-file contract as the stable
+   complete-frame orchestration surface.
+2. Finish instrument-faithful REVOLT Classic and Copper inputs, replace
+   provisional HSDM277 influence data when calibration is available, and
+   preserve measured CPU/GPU performance evidence.
+3. Build the SPIDERS prescription and graph from controlled Subaru/AO3k,
+   SpiderMan, service, and optical-engineering inputs. Mark estimated chopper,
+   stage, filter-wheel, and prescription values as provisional.
+4. Add a PipeWireAO output adapter after the simulated detector boundary. GPU
+   simulations may copy a completed frame to the CPU RTC boundary explicitly;
+   hidden mixed-device execution is out of scope.
+5. Extend graph-node coverage only when an actual architecture needs it. Keep
+   large calibration arrays as prepared parameters, not scalar properties.
+6. Maintain deterministic explicit RNG ownership and OOPAO or instrument
+   reference comparisons for scientific changes.
+7. Improve rolling-shutter models by evaluating the optical path at row or
+   row-group times while publishing one atomic completed frame.
+8. Close remaining production-surface gaps with local CPU, AMDGPU, WSL CUDA,
+   and aarch64 evidence as applicable.
 
-The default portable simulation path now uses AOS-native scientific
-implementations and a small graph-node adapter protocol owned by
-`AdaptiveOpticsSim.AlgorithmGraphs`. It does not require Calculon or create a
-universal numerical `process!` interface. Plant remains supported as the
-detailed physical-timing implementation and differential oracle, but new
-complete-frame orchestration should not expand Plant. PipeWireAO remains the
-advanced Linux deployment for paced HIL execution, while ordinary Julia scripts
-remain a first-class unrestricted composition path.
+## Graph Scope
 
-The first complete-frame proof uses the native discrete-integrator controller.
-A second proof uses modal OPD expansion with a coefficient vector, an OPD
-matrix, and explicit basis and pupil-support ndarray parameters. The executable
-REVOLT Classic HIL sensor graph now accepts the external RTC's complete
-277-actuator PDM command as unit-peak actuator surface-OPD coefficients in
-metres, applies the exact on-sky command-map topology with explicitly
-provisional normalized-pupil placement and Gaussian influence model, advances
-the maintained five-layer atmosphere by exactly 1 ms per frame, adds the
-resulting surface OPD to the atmospheric OPD, and composes
-diffractive Shack–Hartmann photon-rate formation with single-read CCD
-acquisition through a completed 352-by-352 frame. The available BAX307/SPIDERS
-influence artifact is explicitly rejected as authority for the REVOLT HSDM277;
-an authoritative HSDM277 influence calibration and normalized-hardware-command
-conversion remain application bindings before this becomes an instrument
-model. The Copper HIL graph uses the same physical-DM boundary, advances the
-same atmosphere profile by 2 ms per frame, and then executes its Pyramid/EMCCD
-sensor path. A separate RTC-reference graph
-continues through calibrated full-grid centroid estimation with explicit
-valid-subaperture and reference-signal ndarray parameters. An explicit
-one-based lenslet-order parameter selects 188
-lenslets and converts the full block layout into 376 pair-interleaved
-components without teaching core to parse the detector ROI artifact. A
-run-immutable `ControlMatrixPlan` and graph adapter now apply a caller-bound
-221-by-376 calibrated matrix to those ordered slopes and publish 221
-reconstructed controller residual-error coordinates. A separate atomic
-`ClosedLoopCorrectionPlan` now applies the REVOLT Classic gain, pole, and
-anti-windup recurrence and publishes both the demanded correction and its
-integrator state; the RTC-reference TOML takes explicit external
-demanded-minus-realized correction feedback until downstream DM constraint and
-response nodes close that delay. Its centroid cutoff
-retains the AOS/OOPAO fractional-peak semantics; SPECULA's absolute-pedestal
-`ShSlopec` policy and compatibility with the operational matrix remain
-explicit parity items. The versioned TOML graph format compiles those same
-nodes into the same concrete graph definition as direct Julia construction.
-The optional
-`AdaptiveOpticsProperHIL.jl` companion adds a third proof: one complete-frame
-Julia-native Proper prescription with separate random state and scratch,
-square propagation inputs, a separately declared rectangular observation,
-exact graph-buffer binding, and focused CPU, AMDGPU, and CUDA
-residency/equivalence evidence. The companion records independent declarative
-LLOWFS and SCC sensor graphs so an application can drive their complete-frame
-observations at different model-time cadences. Each graph requires an
-application-captured, trusted Proper configuration and ends at the external-RTC
-publication boundary; neither graph embeds an RTC or returned-PDM policy.
-Calculon or FGN deployment adapters are separate boundaries that may wrap AOS
-implementations later; they do not own the AOS simulation API. This topology
-proof does not supply a qualified SPIDERS optical prescription, detector
-response, observation metadata, or asynchronous acquisition driver.
+TOML is the user-facing format for static graphs because it is readable,
+reviewable, and already supported by Julia without an additional parser. Julia
+remains the authority for compositions that cannot be expressed cleanly in the
+versioned file schema.
 
-The portable graph now also has a transport-neutral lockstep HIL boundary.
-It stages one completed frame in a reusable host buffer, requires one complete
-finite same-sequence command before the next frame, and adopts that command
-through a completed host-to-target copy. This closes the serial command/frame
-lifecycle needed by direct Julia scripts and CPU RTCs attached to GPU
-simulations. PipeWire buffer integration, timeout/hold policy, and wall-clock
-pacing remain deployment work rather than graph semantics.
+A graph node must have one writer for its persistent state and outputs. This
+means exactly one prepared execution owner mutates those values. It does not
+prevent MCAO, MOAO, multiple guide stars, multiple DMs, branching optical
+paths, or coarse parallel execution across independent prepared owners.
 
-The delivery order for this boundary is:
+The version 1 graph-file contract remains intentionally limited to static,
+single-rate, complete-frame execution. Multi-rate and mid-frame device changes
+belong in explicit Julia composition until a concrete instrument requirement
+justifies a small, testable scheduler extension.
 
-1. Stabilize the AOS-native graph-node protocol and versioned TOML static
-   subset without changing domain numerical APIs.
-2. Replace the REVOLT Classic and Copper HIL graphs' provisional Gaussian PDM
-   response with an authoritative HSDM277 influence calibration, bind the
-   normalized-hardware-command conversion, and add any additional path-local
-   aberration producers while keeping transport at the completed-frame and
-   complete-command boundaries. Bind the
-   authoritative ROI-derived order to the separate
-   RTC-reference graph; reconstruction and the first atomic controller are
-   executable there, and its next controller gate is downstream
-   constraint-feedback closure. The Copper HIL sensor file now reaches its
-   complete 64-by-64 EMCCD frame boundary. The companion now records separate
-   SPIDERS LLOWFS and SCC sensor-topology files; bind authoritative physical
-   prescriptions, detector models, observation metadata, and independent
-   acquisition drivers before treating those files as an instrument model.
-3. Preserve direct Julia graph construction for generated, conditional, and
-   multi-rate arrangements that exceed the TOML subset.
-4. Provide deterministic fixed-step and prepared-boundary model-time drivers;
-   wall-clock pacing remains outside core.
-5. Use the lockstep boundary for complete-frame external command adoption.
-   Bind stateful rolling-shutter integration, explicit physical delays, and
-   multi-rate behavior as semantically atomic prepared operations rather than
-   extending the lockstep protocol with implicit timing.
-6. Retain Plant scenarios as differential evidence for synchronized MCAO,
-   path-local MOAO, and rolling-shutter exposure across a mid-frame DM update.
-7. Use PipeWireAO for real paced HIL and capture canonical timestamps needed to
-   replay the same run through the portable graph or Plant oracle.
+## Deferred Work
 
-```mermaid
-flowchart LR
-    SCI["AOS scientific implementation<br/>domain API"] --> NODE["AOS graph-node adapter"]
-    NODE --> NATIVE["AlgorithmGraphs<br/>portable model time"]
-    SCI --> FGN["Optional Calculon / FGN adapter"]
-    FGN --> PWAO["PipeWireAO<br/>paced HIL"]
-    PLANT["Plant<br/>precision physical timing"] --> ORACLE["Differential scenarios"]
-    NATIVE --> ORACLE
-    PWAO -->|"captured timestamps"| ORACLE
-```
-
-The first portable graph is deliberately single-writer and serial. Concrete
-tuple ownership keeps prepared algorithms and arrays type-stable without an
-`Any`-typed registry; explicit delayed links make feedback causal without a
-general event calendar. Topology-dependent specialization and service cost must
-be characterized at representative 4/8/16-node sizes before that executor is
-promoted for large MCAO/MOAO graphs. The existing Plant event loop stays
-available when sub-frame detector physics, trigger faults, command skew, or
-other detailed event semantics are the subject of the simulation.
-
-1. Preserve the completed HIL prerequisite Gates 0 and 1 and the qualified
-   Gate 4A companion boundary while extending the general HIL runtime. Gate 0
-   separates telescope aperture/geometry
-   from caller-owned optical
-   planes and propagation workspaces; separate shared atmosphere evolution from
-   path-local NGS/LGS/source rendering; remove temporal cadence from the
-   telescope; define plane geometry/radiometry and safe spectral combination;
-   and separate direct-science photon-arrival-rate formation from detector-owned
-   temporal integration and acquisition. Then decompose every maintained
-   WFS into a prepared optical front end, detector acquisition, and estimator.
-   Shack-Hartmann now has an independent microlens array; Pyramid/Bi-O-edge have
-   separate physical optics over shared modulation; Zernike/Curvature now
-   separate propagation, acquisition, and estimation, including independent or
-   packed Curvature detector planes; and LiFT now consumes independently
-   acquired, explicitly normalized observations through a separately prepared
-   focal-plane model. Cross-backend correctness and residency evidence is now
-   complete on the maintained CPU, CUDA, and AMDGPU targets, with clean CPU and
-   CUDA service-time artifacts retained. The final Gate 0 ownership review
-   removes telescope-owned mutable optical-path state: each maintained WFS,
-   science, calibration, atmosphere, and controllable-optic path now consumes
-   an explicit `PupilFunction` or field product. Preserve CPU, CUDA, and AMDGPU
-   correctness, residency, allocation, and latency evidence throughout the HIL
-   migration. Gate 1 froze the breaking plant-oriented API, package/type
-   boundaries, atmosphere token/materialization lifetime, deterministic RNG
-   ownership, detector event semantics, clock sequencing, and command boundary
-   before companion implementation began.
-2. Preserve the completed Gate 2 schedule-free plant boundary. It composes
-   immutable shared atmosphere/telescope/path definitions, prepared branch-
-   local executors, independent acquisition owners, stable per-owner RNGs, and
-   full-optical/reduced-order/synthetic provider semantics. Native and
-   user-defined calibration illumination enter through typed products without
-   instrument-topology assumptions. The clean
-   [serial plant artifact](../benchmarks/results/gate2/2026-07-21-serial-plant.toml)
-   covers science, NGS Shack-Hartmann, and LGS pyramid directions plus detector
-   fan-out with zero warmed allocation; it is a self-paced CPU service-time
-   baseline, not an external-RTC latency or fixed-rate capacity claim.
-3. Preserve the completed deterministic multi-rate integer-time engine with
-   explicit equal-time trigger-distribution, exposure/row-band, optical-sample, nondestructive-read,
-   detector-readout, and publication semantics before adding command timing or
-   wall-clock pacing. Canonical time, the fixed-capacity event calendar, trigger
-   distribution, exact global/rolling/frame-transfer lifecycles, evolving-charge
-   HgCdTe ramp reads, and their common serial scheduler composition are
-   implemented and validated. The clean [scheduler](../benchmarks/results/gate3/2026-07-21-event-scheduler-gate3-closure.toml)
-   and [composed multi-rate plant](../benchmarks/results/gate3/2026-07-21-multi-rate-plant.toml)
-   artifacts close the gate without claiming wall-clock pacing, external-RTC
-   latency, or production instrument capacity. Keep physical trigger faults
-   separate from timestamp-label faults and execution lateness.
-4. The individually owned controllable-optic and command-endpoint
-   model with prepared core plant command schemas, bounded
-   timing and replayable plant-time command-silence semantics, sampled device-
-   feedback acquisitions, and prepared plane groups as a deliberate breaking
-   change is complete. Gate 4 records stable physical-optic and
-   independently latched endpoint identities, immutable versioned semantic
-   payload schemas, a bounded endpoint owner with copied payload
-   slots, sequence history, future-time admission, application-ready claims,
-   terminal dispositions, transactional absolute/incremental effective-command
-   state, and replayable hold/safe/fail silence semantics. Plant preparation
-   now binds every declared endpoint to an independently timed physical optic;
-   the serial event loop composes right-continuous command application,
-   half-open detector exposure, additive co-conjugated surfaces, and explicit
-   all-or-none multi-optic transactions. Named controller products now bind
-   zero-copy to exact prepared endpoints, and the superseded packed
-   single-optic runtime has been removed without compatibility adapters. A
-   deterministic linear reduced-order direct-measurement model now validates
-   command-responsive scheduled execution, matched loop closure, and expected
-   degradation inside its declared envelope. Sampled device feedback and a
-   trigger-relative autonomous circular-Pyramid model now add bounded
-   setpoints, free-running/source/delivered-reset phase relationships, and
-   allocation-free cycle-averaged optical regeneration without point-wise RTC
-   commands. The clean [command-responsive plant artifact](../benchmarks/results/gate4/2026-07-24-command-plant.toml)
-   closes the serial CPU service-cost, terminal-accounting, storage, and
-   allocation evidence; current-revision `421/421` CUDA and `431/431` AMDGPU
-   targets close the maintained device-resident routing and modulation
-   surfaces with scalar indexing disabled. Explicit conjugate placement and
-   path visibility begin in Gate 5 rather than being retrofitted into this
-   closed gate.
-   Operational execution-clock ingress liveness belongs to the later HIL
-   lifecycle boundary.
-5. Preserve the completed minimal serial CPU HIL vertical slice: one scheduled
-   acquisition, one command-responsive optic, an injected `Clocks.jl` clock,
-   HIL submission descriptors mapped into core plant commands, canonical
-   complete-product and command/outcome ports, bounded SPSC/lease ownership, a
-   deterministic fake RTC, and fixed-arrival evidence. The qualified boundary
-   remains the serial oracle while worker, GPU, transport-specific, and
-   placement-planner capabilities advance through their own gates.
-6. Preserve the completed Gate 5 placement/visibility, sampled-coupling, and
-   native-DM composition foundation. Every optic and sampled aberration
-   declares placement and path visibility; preparation derives bounded
-   canonical per-path bindings and compatible couplings; analytic NGS/LGS
-   source-footprint geometry composes explicit pupil-relay registration with
-   metric plane metadata; common multi-altitude MCAO plus target-local MOAO
-   paths retain independent command state; and run-owned native `NCPA` or
-   `OPDMap` effects remain isolated to their declared branches. The clean
-   [Gate 5 artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
-   closes numerical, declaration-order, finite-support, fixed-storage, and
-   bounded-allocation evidence. Preserve the completed Gate 6 path-execution
-   groups, CPU ownership budgets, deterministic serial fallback, and
-   topology-size-invariant whole-plant registries. The clean
-   [Gate 6 grouped CPU artifact](../benchmarks/results/gate6/2026-07-25-grouped-cpu.toml)
-   records exact serial/grouped replay, direct-call allocation bounds, first
-   use, GC, and paired self-paced service cost without claiming a general
-   speedup or fixed-arrival latency. The clean
-   [Gate 6 topology-growth artifact](../benchmarks/results/gate6/2026-07-25-topology-growth.toml)
-   bounds fresh preparation, first use, storage, method instances, native-code
-   size, inference, and warmed allocation over synthetic 4/8/16-path shapes
-   without making an NFIRAOS/MORFEO capacity claim.
-   [AdaptiveOpticsHIL PR #15](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/15)
-   pins both companion environments to core revision `0a38576` and passes the
-   cross-platform package, ownership-stress, coverage, and benchmark-contract
-   matrix at companion revision `9574432`. Gate 7 separated
-   semantic backend family from concrete compute-device identity and exposed
-   each prepared path group's immutable backend/device requirements. Finite
-   and infinite multilayer atmospheres now provide homogeneous
-   single-device direction batching with an exact serial CPU oracle,
-   device-resident geometry/output, whole-batch preflight, and explicit
-   completion. Compatible physical native-Fraunhofer science directions and
-   spectral samples now also have a fixed prepared stack, one optical-axis FFT
-   plan, ordered per-sample focal products, exact-device validation, and
-   independent detector fan-out. Compatible co-resident equal-rate
-   direct-science paths are now bound to one run-immutable accelerator owner
-   that retains its exact device context, atmosphere/direct-imaging batches,
-   original path-product handoffs, and completion barrier while preserving the
-   Gate 6 claim lifecycle. Gate 7.5 extends that exact owner/context and shared
-   atmosphere-direction boundary to compatible maintained Shack-Hartmann,
-   Pyramid, and Bi-O-edge paths without replacing their domain pipelines, and
-   validates a six-row conventional CCD/EMCCD/CMOS/HgCdTe response/readout
-   matrix on CUDA and AMDGPU. Gate 7.6 adds a clean-tree paired service-cost
-   contract for two compatible off-axis NGS diffractive Shack-Hartmann paths.
-   The retained CPU, gfx1030 AMDGPU, and WSL RTX 3050 Ti CUDA artifacts record
-   first use, raw HdrHistograms, allocation, exact device residency,
-   independent/device-owner parity, and distinct device-ready, host-ready, and
-   transfer-only boundaries. Both accelerators pass the predeclared `1.5`
-   batched-to-independent median-p95 ceiling while reducing the prepared
-   atmosphere-render proxy from two calls to one. This closes the declared
-   single-device Gate 7 evidence envelope. Fixed-arrival evidence remains
-   required before any HIL latency promotion; mixed placement and multi-GPU
-   execution remain Gates 9A and 9B.
-7. Harden the transport-neutral HIL companion with lifecycle transitions,
-   guaranteed lease-return credit, first-failure propagation, replay classes,
-   and GC/process-isolation policy. Add explicit or constrained deterministic
-   mixed CPU/GPU placement, then homogeneous multi-GPU placement. Defer a fully
-   automatic cost-model planner until real profiles provide calibration data;
-   keep Dagger and dynamic migration outside the HIL deadline path. Gate 8
-   delivery is tracked by
-   [AdaptiveOpticsHIL issue #17](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/17).
-   Gate 8.1 qualifies the bounded SPSC layout and publication contract on
-   Linux, Windows, and Apple Silicon. Gate 8.2 adds typed canonical-port
-   lifecycle, resource-specific full policy, exact ownership-deficit
-   accounting, and reserved lease-return credit on the same targets. Gate 8.3
-   adds exact prospective external timestamp-domain mappings and hardens
-   cached execution-clock ownership and staleness evidence, closing
-   `HIL-TIME-002` without claiming transport synchronization. Gate 8.4 adds
-   the exact configured/prepared/arming/armed/running/stopped/failed phase
-   matrix, same-session readiness and bounded arm windows, immutable active
-   serial topology, and distinct typed clean-stop and failure records. This
-   advances `HIL-LIFE-001` only to partial: runtime-control semantics,
-   coordinated first-failure publication, and bounded failure drain remain
-   open at that boundary. Gate 8.5 instantiates stable long-lived owners for
-   prepared path
-   groups and compatible Gate 7 device batches, with bounded owner-specific
-   due/completion rings, deterministic and threaded execution policies, CPU
-   budget validation, and nominal lifecycle/accounting integration. This
-   advances the lifecycle and complete-resource semantics without claiming
-   overload, recovery, affinity, mixed placement, or operational soak
-   evidence. Gate 8.6 adds the selected per-command-endpoint execution-clock
-   ingress watchdog and mandatory acquisition and execution-owner overload
-   policies, promoting `HIL-LIFE-002` and advancing `HIL-PORT-002` and
-   `HIL-FAIL-001` without claiming a multi-endpoint atomic latch group.
-   Gate 8.7 removes the empty-only parallel control placeholder, establishes
-   typed plant command endpoints as the sole model-supported runtime-control
-   seam, validates terminal rejection when the bounded future-effective
-   command calendar is full, and explicitly selects zero optional observation
-   taps for the initial profile. Gate 8.8 is complete in
-   [AdaptiveOpticsHIL PR #34](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/34)
-   at merge
-   [`d77b8c8`](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/commit/d77b8c87627a816b86a18b457a19ead60980a8f9):
-   it adds preallocated per-owner failure publication and acknowledgement,
-   stable first-observed failure selection, inclusive execution-clock
-   acknowledgement/drain deadlines, ordered ingress closure and correlated
-   command outcomes, explicit ownership deficits, and fresh-run fail-stop
-   recovery. It uses the core optical-batch abandonment prerequisite from
-   [PR #132](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/pull/132)
-   at
-   [`68ef433`](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/commit/68ef4336e4b87cddc4e5b55acfa97c601a9c6421).
-   Gate 8.9 is complete in
-   [AdaptiveOpticsHIL PR #35](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/pull/35).
-   Its immutable
-   [qualification artifact](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/blob/6f10d7fd6d5c7f2891c10ea9100c174c1886154a/benchmarks/results/gate8/2026-07-28-operational-runtime.toml)
-   closes the selected single-host CPU envelope with exact replay, independent
-   fixed-arrival target and stress runs, burst/shedding, explicit overload and
-   fresh recovery, injected failure and named-deficit evidence, bounded warmed
-   allocation/GC, and a 300 s soak. The claim is limited to one Linux process,
-   in-memory canonical ports, a reduced-order `Float64` plant, two Agent
-   execution owners, four physical-core-pinned Julia threads, and
-   `SCHED_FIFO` priority 20; transport/RTC interoperability, mixed or GPU
-   placement, multi-process/host operation, full optics/detectors, and
-   NFIRAOS/MORFEO capacity remain outside it.
-   Gate 9A static mixed CPU/GPU placement is now tracked by
-   [AdaptiveOpticsHIL issue #43](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/43).
-   Its exact-target core contracts, structural resource facts, and
-   preparation-only target-local partition boundary are implemented. The next
-   slices add an immutable HIL placement plan, plan-bound Agent owners,
-   explicit bounded publication/transfers, and independent CPU/AMDGPU and
-   CPU/CUDA mixed-execution qualification. Gate 9B retains multi-GPU placement
-   and addressable multi-device RNG work.
-8. Preserve the recorded `Hsm.jl` proof-of-fit decision in
-   `AdaptiveOpticsHIL.jl`: explicit lifecycle control was retained because Hsm
-   added dependency and transition overhead without improving the bounded
-   failure/drain semantics. Agent execution ownership and the SPSC data plane
-   remain unchanged.
-9. Preserve the completed API namespace refactor and canonical domain
-   ownership described below. This is a breaking ownership cleanup with no
-   compatibility aliases; numerical results, accelerator extensions, prepared
-   ownership, and warmed hot-path budgets remain regression gates.
-10. Execute the prepared-execution contract series in
-    [issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225)
-    after [PR #224](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/pull/224).
-    Freeze terminology and characterization first; establish
-    domain-owned nominal interfaces; correct strategy types misnamed as plans;
-    review an optics pilot; then migrate detectors, WFS stages, Plant prepared
-    owners, and the AdaptiveOpticsHIL integration. Remove every direct
-    `Memory` implementation use rather than replacing erased element types
-    mechanically. Eliminate `Any`-typed fields, elements, and prepared return
-    values; normalize cold input into concrete execution-family ownership.
-    Each slice must retain numerical correctness, concrete hot dispatch, CPU
-    zero-allocation contracts, accelerator residency, and bounded topology
-    growth. Add no universal AdaptiveOpticsSim plan root, generic numerical
-    `process!` API, or compatibility layer. Graph adapters call the canonical
-    operation owned by each scientific domain; a separately maintained Calculon
-    adapter may be added for deployment without becoming the AOS API.
-11. Preserve the completed detector family qualification and evidence catalog.
-    Product-neutral frame, counting-array, and channel models remain in the
-    canonical `Detectors` namespace. Named camera profiles remain outside core.
-    Reconsider a sibling only for event-resolved products, calibrated profile
-    collections, or dependency-heavy detector physics that would otherwise
-    expand the core contract.
-12. Preserve hardware validation and zero-allocation CPU gates, then use pinned
-   NFIRAOS and MORFEO companion scenarios for synchronized multi-rate and
-   extreme-scale profiles. Give each a production-shaped synthetic traffic
-   variant, a reduced-order closed-loop variant where applicable, and a full
-   optical variant while keeping topology, model, timing, and external-
-   integration compliance independent.
-
-## API Namespace Refactor Gate
-
-This gate follows the bounded
-[`Hsm.jl` proof-of-fit](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/36)
-in `AdaptiveOpticsHIL.jl`. Either an adopt or reject decision opens the gate;
-adoption is not required. The maintained delivery order, PR checklists, and
-completion state live in the
-[namespace tracker](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/136).
-
-The core namespace migration is complete through NS-10. Every supported
-binding and generic function has one real owner, domain-local exported surfaces
-are exact, and the root contains only its reviewed allowlist. The closure audit
-also removed transitional non-public root imports and moved geometric WFS
-kernel ownership into `WavefrontSensors`.
-
-NS-00B freezes that authority in the machine-readable
-[`namespace_authority.toml`](../test/contracts/namespace_authority.toml),
-records the pinned companion import surface in
-[`adaptiveopticshil_imports.toml`](../test/contracts/adaptiveopticshil_imports.toml),
-and indexes the preserved numerical, allocation, extension, package-load, and
-first-call evidence in
-[`namespace_characterization.toml`](../test/contracts/namespace_characterization.toml).
-The authority and characterization contracts preserve the reviewed baseline;
-the completed implementation state lives in
-[`namespace_migration_state.toml`](../test/contracts/namespace_migration_state.toml);
-`Backends`, `Optics`, `Atmospheres`, `Detectors`, `WavefrontSensors`,
-`Calibration`, `Control`, `Tomography`, and `Ensembles` are complete through
-NS-10. `Plant` remains its established canonical owner.
-`Atmospheres` owns atmosphere models and state, direction rendering and
-batching, and atmosphere-coupled propagation.
-`Detectors` owns both conventional frame/area and counting/channel APIs.
-`Optics` owns apertures,
-telescopes, sources, optical locations/products, fields, general propagation,
-direct imaging, sampled OPD, physical NCPA, controllable optics, and reusable
-physical WFS components without changing the frozen final ownership target.
-`WavefrontSensors` owns composed sensing and estimation, `Calibration` owns
-model-derived calibration products and synthesis, and `Control` owns
-slopes-to-command reconstruction and controller composition. `Tomography`
-owns guide-star geometry, atmospheric reconstruction, fitting, and DM-command
-projection. `Ensembles` owns coarse offline execution policies and optional
-parallel scheduler integrations.
-
-### Ownership target
-
-| Namespace | Canonical responsibility | Explicit boundary |
-|---|---|---|
-| `Backends` | array backends, compute devices, allocation/FFT seams, and accelerator extension protocols | execution placement and scheduling remain outside this module |
-| `Optics` | sources, telescopes, apertures, optical locations and products, fields, propagation, explicit physical NCPA, controllable optics, and physical WFS components | model-derived NCPA synthesis belongs to `Calibration`; detector response is not optics |
-| `Atmospheres` | atmosphere models and state, source-direction geometry, rendering/batching, statistics, and atmosphere-coupled propagation | source radiometry and general optical products remain in `Optics` |
-| `Detectors` | frame and channel detector families, response and MTF, noise, defects, shutter/readout/sampling modes, acquisition plans, and detector products | scheduled acquisition events remain in `Plant`; named camera profiles remain outside core |
-| `WavefrontSensors` | composed WFS models, observations and measurements, detector bindings, estimators, and LiFT | microlens arrays, masks, phase spots, and defocus optics are physical `Optics` components |
-| `Calibration` | interaction matrices, modal bases, fitting and identification workflows, and KL/Zernike/M2C-based NCPA synthesis | it constructs or applies `Optics.NCPA`; runtime controllers do not belong here |
-| `Control` | control reconstructors, controllers, delay lines, and prepared runtime operations | dependency direction is `Control` to `Calibration`; tomography remains separate |
-| `Tomography` | tomography geometry, atmosphere reconstruction, fitting, and DM-command mapping | general controller execution remains in `Control` |
-| `Ensembles` | coarse offline execution policies, sweeps, and optional parallel integrations | this is not an `AdaptiveOpticsHIL.jl` deadline scheduler |
-| `AlgorithmGraphs` | portable static composition of AOS-native graph nodes, TOML graph compilation, exact graph-boundary storage, direct and delayed links, deterministic model-time drivers, and a serial host command/frame HIL boundary | scientific modules own domain implementations; Plant owns detailed physical event semantics; PipeWireAO and `AdaptiveOpticsHIL.jl` own wall-clock pacing and operational execution |
-| `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, execution requirements, providers, detailed event composition, and precision-timing oracle | general algorithm-graph orchestration belongs to `AlgorithmGraphs`; resource inventory, placement policy, pacing, rings, and workers belong to `AdaptiveOpticsHIL.jl`; physical domain models enter through explicit imports |
-
-`AdaptiveOpticsSim` exports the canonical modules plus shared errors,
-fidelity profiles, and deliberately selected cross-domain workflow vocabulary.
-Domain modules export routine vocabulary, mark stable advanced seams `public`,
-and leave implementation details unmarked. A retained root binding is allowed
-only when it is on the exact root allowlist; it is not a migration alias.
-LiFT and control reconstruction remain separate owner-qualified generics.
-
-The dependency and delivery gates are:
-
-```mermaid
-flowchart TD
-    HSM["Hsm proof decision<br/>AdaptiveOpticsHIL #36"]
-    TEST["Test and CI partition<br/>NS-00A"]
-    AUTH["Ownership and baseline<br/>NS-00B"]
-    DOM["Domain owner series<br/>NS-01 through NS-06E"]
-    CAL["Calibration<br/>NS-07A"]
-    CTRL["Control<br/>NS-07B"]
-    CLOSE["Tomography, Ensembles, root closure<br/>NS-08 through NS-10"]
-    HIL["AdaptiveOpticsHIL import migration<br/>#37"]
-    DET["Detector qualification<br/>#155"]
-
-    HSM --> TEST
-    TEST --> AUTH
-    AUTH --> DOM
-    DOM --> CAL
-    CAL --> CTRL
-    CTRL --> CLOSE
-    CLOSE --> HIL
-    HIL --> DET
-```
-
-The core delivery issues are
-[#137 through #154](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/136).
-The WFS slices populate one shallow `WavefrontSensors` module; the common slice
-must be independently buildable and family-specific methods move with their
-families. `Calibration` and `Control` are separate PRs. Core root closure and
-the
-[`AdaptiveOpticsHIL` import migration](https://github.com/DarrylGamroth/AdaptiveOpticsHIL.jl/issues/37)
-are separate cross-repository PRs.
-
-The delivery partitioned broad detector/WFS and calibration/control tests into
-bounded, coverage-preserving suites. Owner changes run focused suites before
-full CPU closure; backend-facing changes run applicable extension and hardware
-tests. Allocation checks remain outside coverage instrumentation where
-instrumentation changes allocation counts.
-
-This gate does not change physical algorithms, promote model-validity claims,
-qualify detectors, add compatibility adapters, integrate `Hsm.jl` into core,
-or redesign HIL transport, placement, or scheduling. The main migration risks
-are circular imports, disconnected extension generics, stale root bindings,
-changed qualified type identities in persisted artifacts, and package-load or
-first-call regressions.
-
-The series is complete only when exact root and domain API assertions pass,
-every supported binding has one canonical owner, numerical characterization
-and hot-path budgets remain within their maintained contracts, superseded root
-bindings are removed, and the companion migration is merged. The maintained
-completion evidence for the
-[detector qualification gate](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/155)
-is the family-specific qualification artifacts and the final
-[CPU/AMDGPU/CUDA evidence catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml).
-
-## Active Cleanup Themes
-
-- Keep the README and `user-guide.md` focused on one recommended user path.
-- Keep `api-reference.md` aligned with the exported API instead of documenting
-  every internal or qualified helper.
-- Keep full visual examples in `../AdaptiveOpticsSimPlots.jl`; the core
-  package examples remain plotting-free and runnable through
-  [`run_core_examples.sh`](../scripts/run_core_examples.sh).
-- Prefer a few high-value OOPAO/SPECULA/REVOLT-like equivalence artifacts over
-  broad claims that are not release-gated.
-- Consolidate validation around maintained entry points:
-  `Pkg.test()`, backend-specific hardware targets, the core example runner, and
-  the release-validation script.
-
-## Deferred Areas
-
-The following remain valid future directions, but should not drive ad hoc API
-growth:
-
-- broader manufacturer-specific DM technology models
-- richer detector physical models where reusable readout/thermal/counting layers
-  are insufficient
-- wider cross-package numerical equivalence beyond the maintained reference data
-  and artifacts
-- companion visualization and analysis packages outside the core package
-- science-path integrations that belong in optional extensions or sibling
-  packages
+- Direct loading of Julia algorithms inside a PipeWire process. Current planning
+  keeps Julia embedding in a separate `module-julia`-style boundary.
+- PipeWire GPU-buffer execution.
+- A general multi-rate event runtime.
+- Automatic graph partitioning, implicit host/device transfer, and dynamic
+  topology mutation.
+- Camera or instrument parameters that have not been confirmed by their
+  scientific or optical owners.
 
 ## Documentation Rule
 
-Do not add new one-off roadmap fragments. Update this file, the
-[`documentation-map.md`](documentation-map.md), or the relevant maintained guide
-instead.
+Keep maintained documents concise and current. Use issues and pull requests for
+temporary plans and audits, and Git history or the named archive branches for
+the retired Plant implementation.

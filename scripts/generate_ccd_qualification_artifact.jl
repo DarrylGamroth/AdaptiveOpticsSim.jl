@@ -197,7 +197,7 @@ function generate_ccd_qualification_artifact()
                 "single-read CCD shared frame pipeline",
                 "independent Poisson clock-induced charge per pixel per frame",
                 "shot, dark, CIC, and independent Gaussian read-noise moments",
-                "Plant-owned readout/readiness timing boundary",
+                "application-owned readout/readiness timing boundary",
             ],
             "excluded" => [
                 "Skipper sampling",

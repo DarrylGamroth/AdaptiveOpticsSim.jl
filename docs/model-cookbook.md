@@ -144,9 +144,9 @@ Use `LinearAPDDetector` for analog single-element or fixed-bank APD channels,
 photon-arrival-time resolution, and a wavelength passband; they do not add
 per-photon energy or timestamp products.
 
-For event-driven detector timing, prepare the appropriate global-shutter,
-rolling-shutter, or frame-transfer acquisition definition. Nondestructive reads
-and up-the-ramp sampling are scheduled detector events; frame transfer changes
+For detailed detector timing, compose the appropriate global-shutter,
+rolling-shutter, or frame-transfer acquisition explicitly. Nondestructive reads
+and up-the-ramp sampling are detector lifecycle state; frame transfer changes
 acquisition timing, not optical performance or MTF.
 
 ## Recipe 4: Explicit Closed-Loop Composition
@@ -211,132 +211,121 @@ apply_surface!(pupil, woofer, DMAdditive())
 apply_surface!(pupil, tweeter, DMAdditive())
 ```
 
-Each optic retains its own command basis, state, response, cadence, and
-event-loop endpoint. Optical addition does not imply synchronized command
-application. Apply the same rule to low-order steering stages, focus stages,
-several MCAO DMs, or path-specific MOAO DMs.
+Each optic retains its own command basis, state, response, and cadence. Optical
+addition does not imply synchronized command application. Apply the same rule
+to low-order steering stages, focus stages, several MCAO DMs, or path-specific
+MOAO DMs.
 
-## Recipe 6: Prepared HIL Command Routing
+## Recipe 6: External RTC Lockstep
 
-The HIL-neutral runtime lives in `AdaptiveOpticsSim.Plant`. A model or companion
-package declares a `PlantDefinition`, prepares it with a run seed and one
-`CommandEndpointConfiguration` per endpoint, then prepares the event loop.
+Prepare a static sensor graph and bind its complete command input and detector
+frame output:
 
-If an RTC computes one flat vector, expose semantic views and route them to
-independent endpoints:
+~~~julia
+using AdaptiveOpticsSim.AlgorithmGraphs
 
-```julia
-using AdaptiveOpticsSim
-using AdaptiveOpticsSim.Plant
-
-rtc_output = zeros(Float32, 5)
-products = (
-    woofer=@view(rtc_output[1:2]),
-    tweeter=@view(rtc_output[3:5]),
+definition = load_algorithm_graph(
+    "examples/graphs/revolt_classic_hil.toml";
+    bindings=(;
+        pdm_command=zeros(Float32, 277),
+        pdm_actuator_coordinates,
+    ),
+)
+graph = prepare_algorithm_graph(definition)
+boundary = prepare_graph_hil_boundary(
+    graph;
+    command_input=:pdm_command,
+    frame_output=:shwfs_frame,
 )
 
-routing = prepare_controller_output_routing(
-    plant,
-    products,
-    ControllerOutputRoute(:woofer, :woofer_command),
-    ControllerOutputRoute(:tweeter, :tweeter_command),
-)
+sequence = step_hil_frame!(boundary)
+send_frame(sequence, hil_frame_buffer(boundary))
+receive_command!(hil_command_buffer(boundary), sequence)
+adopt_hil_command!(boundary, sequence)
+~~~
 
-route = Plant.controller_output_route(routing, Val(:woofer_command))
-command = PlantCommand(
-    Plant.controller_output_schema(route),
-    42,
-    PlantTimestamp(1_000_000),
-    Plant.controller_output_payload(route),
-)
-```
+The boundary validates finite complete commands, enforces sequence matching, and
+keeps host exchange buffers distinct from graph-owned arrays. PipeWireAO,
+shared memory, or another application owns transport and pacing.
 
-Preparation validates exact type, shape, backend, and compute device. The
-route is zero-copy; successful command admission performs the bounded endpoint
-copy. Construct a separate `PlantCommand` for each due endpoint so its sequence
-and requested effective timestamp remain independent.
+A graph with several DMs may expose one structured or packed command input if
+that is the declared RTC contract. Preserve the semantic command map and units;
+flat-buffer adjacency does not imply that the physical optics are one device.
 
-Use `PlantCommandTransaction` only when all-or-none application is a real
-physical requirement. Flat-buffer adjacency, equal timestamps, and common
-conjugation do not create transaction semantics.
+## Recipe 7: Mixed Fidelity And Rates
 
-Transport is application-owned. TCP, UDP, Aeron, iceoryx2, ZeroMQ, shared
-memory, and server/client roles do not change the core command or acquisition
-contracts.
+Use direct Julia composition when optical paths or acquisitions run at different
+rates. The application can combine:
 
-## Recipe 7: Mixed Fidelity And Acquisition Rates
+- NGS and LGS paths in different directions
+- WFS and science-camera cadences
+- native and Proper-backed optical paths
+- full optical and explicitly named reduced-order providers
+- row-time rolling-shutter samples
 
-One prepared plant may declare several paths and acquisitions:
+Keep one writer for each path, detector, controller, and RNG state. Publish only
+complete products. Fidelity and buffer shape should be fixed for a prepared run;
+re-prepare to change them.
 
-- NGS and LGS WFS paths in different directions
-- science cameras
-- native or PROPER-backed coronagraph paths
-- calibration-illumination paths
-- full-optical, reduced-order, synthetic, or bounded-replay providers
-
-Each acquisition owns its schedule or trigger relationship, detector lifecycle,
-product contract, and provider. A fast synthetic WFS can therefore exercise RTC
-latency while a slower science arm retains full optical propagation.
-
-Fidelity is fixed during preparation. Re-prepare instead of changing provider
-shape or semantics during a run.
+A version 1 `AlgorithmGraphs` graph is single-rate. Several separately prepared
+graphs may be stepped by application code at explicit model times, but the
+application then owns their synchronization and shared-state rules.
 
 ## Recipe 8: GPU-Resident Work
 
-Choose the backend when constructing every owner:
+Choose a backend and exact device when constructing the scientific storage:
 
-```julia
+~~~julia
 import CUDA
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.Optics
 
 backend = CUDABackend()
-tel_gpu = Telescope(
+telescope_gpu = Telescope(
     resolution=128,
     diameter=8.0f0,
     central_obstruction=0.1f0,
     T=Float32,
     backend=backend,
 )
-pupil_gpu = PupilFunction(tel_gpu; T=Float32, backend=backend)
-```
+pupil_gpu = PupilFunction(telescope_gpu; T=Float32, backend=backend)
+target = compute_device(opd_map(pupil_gpu))
+~~~
 
-Use `Backends.AMDGPUBackend()` on ROCm hardware when working with qualified
-names. Keep the atmosphere, optics, WFS, detectors, reconstruction storage,
-controller-output products, and command endpoints on the same backend and
-compute device. Copy to host only at a deliberate transport or inspection
-boundary.
+Prepare covered graph nodes with `prepare_algorithm_graph(definition; target)`.
+Every graph input and parameter must already use native storage on that exact
+target. There is no implicit CPU fallback or mixed-device copy.
 
-For a device-resident offline simulation, synchronize only when a dependency or
-measurement requires it. For CPU-paced HIL, measure host-ready and device-ready
-latency separately.
+For a CPU RTC, `PreparedGraphHILBoundary` performs explicit complete-frame and
+complete-command copies between the device graph and host exchange arrays.
 
 ## Recipe 9: External Coronagraph Model With Proper.jl
 
-Detailed coronagraph propagation belongs at the prepared external-optics seam,
-not in a second coronagraph implementation in core. A typical composition:
+Detailed coronagraph propagation belongs at an optional prepared external-
+optics seam. A typical composition:
 
 1. form the corrected, path-specific pupil field in AdaptiveOpticsSim.jl
 2. pass a typed caller-owned field and immutable prescription parameters to a
-   prepared Proper.jl model
+   prepared Proper.jl context
 3. return a declared photon-arrival-rate `IntensityMap`
 4. apply the ordinary detector acquisition path
 
 See
 [`examples/support/proper_hil_coronagraph_common.jl`](../examples/support/proper_hil_coronagraph_common.jl)
-for the maintained integration example. NCPA and path-specific static surfaces
-are applied on the branch where they physically occur.
+and [`proper-integration-guide.md`](proper-integration-guide.md). NCPA and
+path-specific static surfaces are applied on the branch where they physically
+occur.
 
 ## Choosing The Entry Surface
 
 Use:
 
-- subsystem functions for optical or detector experiments
-- an explicit model-specific loop for one fixed offline AO model
-- `AdaptiveOpticsSim.Plant` for independent virtual-time commands,
-  acquisitions, triggers, detector lifecycles, and HIL-neutral execution
-- `SimulationEnsemble` for coarse independent sweeps, not a HIL deadline path
+- subsystem functions for optical, detector, calibration, or controller studies
+- an explicit Julia loop for generated, multi-rate, conditional, or sub-frame
+  models
+- `AlgorithmGraphs` for a static single-rate complete-frame graph
+- `PreparedGraphHILBoundary` for external-RTC frame/command lockstep
+- `SimulationEnsemble` for coarse independent sweeps
 
-See [`runtime-dataflow.md`](runtime-dataflow.md) for ownership and execution
-order, and [`hil-package-boundary.md`](hil-package-boundary.md) for the
-core-versus-integration boundary.
+See [`runtime-dataflow.md`](runtime-dataflow.md) for graph ownership and
+execution order.

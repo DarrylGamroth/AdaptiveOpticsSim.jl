@@ -4,302 +4,150 @@ Status: active
 
 ## Purpose
 
-This runbook defines the maintained release-validation entry point for
-AdaptiveOpticsSim.jl.
+Use this runbook for a release candidate or another cross-cutting gate. During
+ordinary development, run the smallest registered selectors that cover the
+change.
 
-It is intentionally operational: the goal is to make the defended validation
-surface easy to rerun before a release or a production handoff.
+## Before Validation
 
-## Primary Entry Point
+1. Start from the exact candidate commit with a clean worktree.
+2. Record `git rev-parse HEAD`, `git status --short`, Julia version, platform,
+   thread settings, and package environment.
+3. Inspect the diff for unintended manifest, artifact, or generated-file
+   changes.
+4. Set deterministic CPU thread counts to one unless the test explicitly studies
+   parallelism.
+5. Confirm that optional hardware is healthy before starting a billed or remote
+   run.
 
-Use:
+## CPU Gate
 
-- [run_release_validation.sh](../scripts/run_release_validation.sh)
-- [archive_release_validation.sh](../scripts/archive_release_validation.sh)
+~~~bash
+JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
+~~~
 
-From the repository root:
+Then run the core examples when their surface changed:
 
-```bash
-./scripts/run_release_validation.sh
-```
+~~~bash
+./scripts/run_core_examples.sh
+~~~
 
-To archive an operational validation run with dated logs and metadata:
+The full suite covers the registered composition in `test/test_selection.jl`.
+Passing it does not qualify an accelerator that was skipped.
 
-```bash
-./scripts/archive_release_validation.sh amdgpu
-```
+## AMDGPU Gate
 
-By default:
+Run on the local ROCm host when accelerator-relevant source, graph nodes,
+detectors, WFS paths, or backend infrastructure changed:
 
-- `cpu` and `all` archive tracks run full CPU `Pkg.test()`
-- `cuda` and `amdgpu` archive tracks skip the full CPU suite and run the backend-specific validation surface only
+~~~bash
+julia --project=test/amdgpu --startup-file=no   -e 'using Pkg; Pkg.instantiate()'
+julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu.jl
+~~~
 
-Optional validation tracks are enabled through environment flags:
+Record AMDGPU/ROCm/driver/device versions and confirm scalar indexing is
+disabled.
 
-```bash
-ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
-ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 ./scripts/run_release_validation.sh
-ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1 ./scripts/run_release_validation.sh
-ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 ./scripts/run_release_validation.sh
+## CUDA Gate
+
+Run on the WSL CUDA host for the same accelerator-relevant scope:
+
+~~~bash
+ssh wsl 'cd /home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl &&
+  julia --project=test/cuda --startup-file=no -e "using Pkg; Pkg.instantiate()" &&
+  julia --project=test/cuda --startup-file=no test/runtests_cuda.jl'
+~~~
+
+Record CUDA.jl, toolkit, driver, and device versions. CUDA remains a manual
+validation target rather than a continuously available release gate.
+
+## AArch64 Gate
+
+Use the Raspberry Pi only for generic CPU, packaging, or architecture-sensitive
+changes. Record the exact remote revision and environment. Do not substitute a
+different commit or dirty tree for the candidate.
+
+## Algorithm Graph And HIL Checks
+
+For graph-runtime changes, retain focused evidence in addition to the full CPU
+suite:
+
+~~~bash
+julia --project=. test/ci/run_selected_tests.jl algorithm-graphs
+julia --project=. benchmarks/benchmark_revolt_graph_nodes.jl
+~~~
+
+Verify both REVOLT architectures and applicable `full_optical` / `fast_dm`
+profiles. Record warmed service-time distributions and graph configuration.
+The result is a self-paced service-cost measurement, not fixed-arrival
+PipeWire/RTC latency.
+
+The lockstep HIL tests must cover complete-frame publication, same-sequence
+command adoption, nonfinite-command rejection, failure stop, reset, exact
+host/device copies, and warmed allocation for the claimed path.
+
+## Optional Proper.jl Check
+
+When Proper integration changes, use the explicit environment containing
+Proper.jl:
+
+~~~bash
+julia --project=. examples/integrations/proper_hil_coronagraph.jl
+julia --project=. scripts/profile_proper_hil_coronagraph.jl
+~~~
+
+Record the Proper revision and prescription inputs. Passing integration tests
+does not qualify SPIDERS optical fidelity.
+
+## External Reference Checks
+
+Run only when the relevant sibling repositories and datasets are present:
+
+~~~bash
 ADAPTIVEOPTICS_VALIDATE_TRUTH=1 ./scripts/run_release_validation.sh
-```
+ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 ./scripts/run_release_validation.sh
+~~~
 
-They may be combined:
+Reference regeneration is not a routine release step. Review provenance and
+scientific tolerances before replacing a frozen artifact.
 
-```bash
-ADAPTIVEOPTICS_VALIDATE_CUDA=1 \
-ADAPTIVEOPTICS_VALIDATE_AMDGPU=1 \
-ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1 \
-ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1 \
-ADAPTIVEOPTICS_VALIDATE_TRUTH=1 \
+## Unified Entry Point
+
+~~~bash
 ./scripts/run_release_validation.sh
-```
+~~~
 
-To regenerate the maintained frozen OOPAO external-equivalence artifact:
+Optional flags:
 
-```bash
-julia --project=. --startup-file=no scripts/generate_oopao_equivalence_artifact.jl
-```
-
-To regenerate the maintained HEART boundary truth artifact:
-
-```bash
-python3 scripts/generate_heart_boundary_truth_artifact.py
-```
-
-## What Each Track Does
-
-### CPU
-
-Default for `cpu` and `all` archive tracks:
-
-- `julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'`
-
-This is the baseline production gate.
-
-For a candidate that changes conjugate placement, path visibility, native
-Plant DMs, sampled aberrations/NCPA, or the serial optical event boundary, also
-run:
-
-```bash
-julia --threads=1 --project=. --startup-file=no -e \
-  'using Pkg; Pkg.test(test_args=["gate5"])'
-julia --threads=1 --project=benchmarks --startup-file=no \
-  benchmarks/benchmark_gate5_optical_placement.jl
-```
-
-The benchmark is a serial self-paced CPU characterization. Its maintained
-[contract](../benchmarks/contracts/gate5_optical_placement.toml) and
-[artifact](../benchmarks/results/gate5/2026-07-25-optical-placement.toml)
-close the Gate 5 numerical, fixed-storage, bounded-allocation, and bounded
-4/8/16-path topology review without asserting fixed-arrival HIL latency or
-production instrument capacity.
-
-The CPU full suite may be skipped only when `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1` is set explicitly. That mode is intended for backend-host validation runs that are paired with separately archived CPU/full-suite evidence for the same candidate commit or an explicitly identified release ancestor.
-
-### Apple Silicon / AppleAccelerate
-
-The default CPU package remains linear-algebra-provider neutral. On Apple
-Silicon, the hosted CPU workflow additionally instantiates
-[`test/appleaccelerate`](../test/appleaccelerate), proves that normal package
-loading does not load AppleAccelerate, then loads AppleAccelerate explicitly and
-runs the full CPU suite. The target verifies that representative BLAS and
-LAPACK symbols route through Accelerate, supported power-of-two 1D/2D CPU FFTs
-use allocation-free reusable vDSP plans, and unsupported shapes retain FFTW
-fallback plans.
-
-To reproduce this target on a macOS 15 or newer Apple Silicon host:
-
-```bash
-julia --project=test/appleaccelerate --startup-file=no -e 'using Pkg; Pkg.instantiate()'
-julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/backend_neutral.jl
-julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/runtests.jl
-```
-
-Applications opt in by depending on and loading AppleAccelerate themselves;
-AdaptiveOpticsSim declares only a weak dependency and does not auto-load it or
-include it in the root environment.
-
-### Metal extension load
-
-The hosted Apple Silicon job also runs a bounded Metal extension owner-surface
-check. This proves that Metal.jl activates the AdaptiveOpticsSim weak-dependency
-extension and that backend discovery dispatches through `Backends`; it does not
-replace the CUDA/AMDGPU numerical hardware matrices.
-
-To reproduce the load check on an Apple Silicon host:
-
-```bash
-julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.instantiate()'
-julia --project=test/metal --startup-file=no test/metal/runtests.jl
-```
-
-### CUDA
-
-Enabled with:
-
-- `ADAPTIVEOPTICS_VALIDATE_CUDA=1`
-
-Runs:
-
-- [runtests_cuda.jl](../test/runtests_cuda.jl) with the
-  [`test/cuda`](../test/cuda) project
-- [runtests_cuda_detectors.jl](../test/runtests_cuda_detectors.jl) for a
-  fail-fast detector-only qualification rerun
-
-Use this on a CUDA-capable host. The validation script instantiates the
-backend-specific `test/cuda` project so `CUDA.jl` does not need to be installed
-in the root package environment. The archived `cuda` track defaults to
-backend-only validation by setting
-`ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
-
-The CUDA track has a current manual WSL validation host. Gate 5 closure
-validation head `02e5f29` passed the maintained `438/438` hardware target on
-Julia 1.12.6 with CUDA.jl 6.2.1 and KernelAbstractions.jl 0.9.42, on an RTX
-3050 Ti with compute capability 8.6, with scalar indexing disabled. This
-includes exact device-resident defensive sampled-OPD ownership and identity
-plus transformed replacement. The separate
-[final pre-HIL backend evidence](../benchmarks/results/platform/2026-07-18-pre-hil-11-wsl-cuda.toml)
-archives CPU parity, residency, service-time histograms, and backend-ready,
-host-ready, and transfer-only boundaries. CUDA is still outside the present
-production support claim until it is explicitly restored to the supported
-delivery scope and assigned a routine validation cadence.
-
-Detector qualification candidate `dd16596` passed 250/250 focused detector
-checks and 1,028/1,028 complete-target checks on that host. The exact project,
-manifest, runtime, device, and family scope are retained in the
-[detector closure catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml).
-
-### AMDGPU
-
-Enabled with:
-
-- `ADAPTIVEOPTICS_VALIDATE_AMDGPU=1`
-
-Runs:
-
-- [runtests_amdgpu.jl](../test/runtests_amdgpu.jl) with the
-  [`test/amdgpu`](../test/amdgpu) project
-- [runtests_amdgpu_detectors.jl](../test/runtests_amdgpu_detectors.jl) for a
-  fail-fast detector-only qualification rerun
-
-Use this on an AMDGPU-capable host. The validation script instantiates the
-backend-specific `test/amdgpu` project so `AMDGPU.jl` does not need to be
-installed in the root package environment. The archived `amdgpu` track defaults
-to backend-only validation by setting
-`ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`.
-
-Gate 5 closure validation head `02e5f29` passed `448/448` maintained checks on
-the local gfx1030 AMD Radeon Graphics target with scalar indexing disabled and
-Julia 1.12.6. This includes direct device-resident native Plant DM state,
-staging storage, and surface parity plus exact sampled-aberration defensive
-ownership and identity/transformed replacement; it does not exercise an
-integrated GPU event loop. The July 14 REVOLT-like
-[cross-host artifact](../benchmarks/results/platform/2026-07-14-wsl-cuda-local-amdgpu.toml)
-remains a non-equivalent historical workload. The current paired
-single-device owner characterization is retained in the
-[Gate 7 catalog](../benchmarks/results/gate7/manifest.toml).
-
-Detector qualification candidate `dd16596` passed 244/244 focused detector
-checks on the local gfx1030 target. InGaAs and SPAD stochastic Poisson checks
-are explicit AMDGPU exclusions; deterministic semantics and residency remain
-qualified. The broader target currently encounters an AMDGPU/GPUCompiler
-segmentation fault while compiling the unrelated Pyramid geometric-slope
-kernel, which does not invalidate the focused detector result but must remain
-visible in release review and is tracked in
-[issue #200](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/200).
-See the
-[detector closure catalog](../benchmarks/results/detectors/2026-08-01-detector-qualification-closure.toml).
-
-### Gate 7 single-GPU closure benchmark
-
-When a release changes compute-device identity, direction batching, WFS device
-owners, synchronization, or explicit host-observation boundaries, rerun the
-predeclared Gate 7 benchmark on the CPU oracle and each maintained accelerator:
-
-```bash
-AOS_GATE7_OUTPUT=/tmp/gate7-local-cpu.toml \
-  julia --threads=1 --project=benchmarks --startup-file=no \
-  benchmarks/benchmark_gate7_single_gpu.jl cpu local_cpu
-AOS_GATE7_OUTPUT=/tmp/gate7-local-amdgpu.toml \
-  julia --threads=1 --project=benchmarks/amdgpu --startup-file=no \
-  benchmarks/benchmark_gate7_single_gpu.jl amdgpu local_amdgpu
-AOS_GATE7_OUTPUT=/tmp/gate7-wsl-cuda.toml \
-  julia --threads=1 --project=benchmarks/cuda --startup-file=no \
-  benchmarks/benchmark_gate7_single_gpu.jl cuda wsl_cuda
-```
-
-Run each command from the same clean candidate revision without sample, run,
-or warmup overrides. The
-[contract](../benchmarks/contracts/gate7_single_gpu.toml) and
-[artifact catalog](../benchmarks/results/gate7/manifest.toml) define the
-retained workload, hashes, hardware identity, gates, and scope. This benchmark
-is required single-device service-cost evidence, but it does not replace the
-dedicated hardware correctness matrices and must not be reported as
-fixed-arrival HIL latency or multi-GPU validation.
-
-### Core examples
-
-Enabled with:
-
+- `ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS=1`
 - `ADAPTIVEOPTICS_VALIDATE_EXAMPLES=1`
-
-Runs:
-
-- [run_core_examples.sh](../scripts/run_core_examples.sh)
-
-This track executes the maintained plotting-free example scripts in
-`examples/closed_loop` and `examples/tutorials`. It is intentionally separate
-from `Pkg.test()` so examples can be used as a user-facing smoke/regression
-surface without making the normal unit-test path slower.
-
-### Cross-package comparisons
-
-Enabled with:
-
+- `ADAPTIVEOPTICS_VALIDATE_AMDGPU=1`
+- `ADAPTIVEOPTICS_VALIDATE_CUDA=1`
+- `ADAPTIVEOPTICS_VALIDATE_TRUTH=1`
 - `ADAPTIVEOPTICS_VALIDATE_COMPARISONS=1`
 
-Runs the maintained HEART all-package ladder in the sibling comparison
-workspace when it exists:
+Do not skip the CPU gate for a release candidate unless an equivalent exact-head
+result is already recorded and no CPU-relevant content changed.
 
-- `../AdaptiveOpticsComparisons/contracts/heart_hil.toml`
+## PR Evidence
 
-If the sibling comparison workspace is absent, this track skips cleanly.
+Record:
 
-### Scientist-owned HEART truth
+- exact commit
+- local/remote host identity and platform
+- Julia and backend versions
+- commands and selectors
+- pass/fail/skip counts
+- benchmark configuration and summary when applicable
+- known untested surfaces
+- whether GitHub Actions was intentionally not run
 
-Enabled with:
+Use at most one justified exact-head GitHub validation run after local review.
+Do not rerun an unchanged failure as a debugging method.
 
-- `ADAPTIVEOPTICS_VALIDATE_TRUTH=1`
+## Acceptance
 
-Runs:
-
-- [generate_heart_boundary_truth_artifact.py](../scripts/generate_heart_boundary_truth_artifact.py)
-
-Use this when the sibling `REVOLT` checkout is present and the release story
-needs the maintained scientist-owned HEART boundary artifact refreshed.
-
-## Interpretation
-
-Before a release or production handoff:
-
-1. CPU validation must pass.
-2. AMDGPU validation must pass because it is the currently supported GPU
-   delivery scope.
-3. CUDA validation must pass on real hardware before CUDA can be returned to
-   the supported delivery scope.
-4. Cross-package HEART comparison should be rerun when external equivalence
-   claims are part of the release story.
-5. Scientist-owned HEART truth should be rerun when boundary-truth claims are
-   part of the release story.
-
-Use together with:
-
-- [supported-production-surfaces.md](supported-production-surfaces.md)
-- [backend-validation-guide.md](backend-validation-guide.md)
-
-## Validation host bootstrap
-
-Before trusting a new CUDA or AMDGPU validation host, bootstrap it with:
-
-- [bootstrap_validation_host.sh](../scripts/bootstrap_validation_host.sh)
+A release candidate is acceptable only when required local gates pass, skips are
+consistent with the documented support boundary, no stale current claims point
+to removed implementation, and the candidate is the exact revision described by
+the evidence.
