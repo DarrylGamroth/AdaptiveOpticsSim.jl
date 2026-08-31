@@ -11,14 +11,12 @@ using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim.AlgorithmGraphs
-using AdaptiveOpticsSim: Plant
-using AdaptiveOpticsSim.Plant
 using FixedSizeArrays: FixedSizeVector
 using LinearAlgebra
 using Random
 using Statistics
 
-# Hardware targets exercise qualified-public and internal plant contracts in
+# Hardware targets exercise qualified-public and internal backend contracts in
 # addition to the routine exported workflow.
 for name in names(Backends; all=true)
     s = String(name)
@@ -53,15 +51,6 @@ for name in names(WavefrontSensors; all=true)
     end
 end
 
-for name in names(Plant; all=true)
-    s = String(name)
-    if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
-        @eval const $(name) = getfield(Plant, $(QuoteNode(name)))
-    end
-end
-
-include("plant_device_batching_fixtures.jl")
-include("plant_device_model_matrix_fixtures.jl")
 include("backend_optional_common.jl")
 include(normpath(joinpath(@__DIR__, "..", "benchmarks", "support", "revolt_like_hil_common.jl")))
 include(normpath(joinpath(@__DIR__, "..", "scripts", "gpu_builder_contract.jl")))
@@ -620,10 +609,8 @@ function run_gpu_detector_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     @test BackendArray !== nothing
 
     @testset "$(backend_label(B)) detector hardware target" begin
-        run_optional_detector_device_model_matrix_checks(B, BackendArray)
         run_optional_cmos_family_checks(B, BackendArray)
         run_optional_shared_detector_ipc_checks(B, BackendArray)
-        run_optional_detector_event_checks(B, BackendArray)
         run_optional_avalanche_detector_parity(B, BackendArray)
         run_optional_skipper_ccd_checks(B, BackendArray)
         run_optional_ingaas_checks(B, BackendArray)

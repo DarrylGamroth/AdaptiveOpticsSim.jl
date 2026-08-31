@@ -15,13 +15,12 @@ include(joinpath(@__DIR__, "impact_planner.jl"))
     @test isempty(docs.manual_gates)
 
     glossary = plan_validation(("docs/glossary.md",))
-    @test glossary.selectors == Set(("quality", "namespace-authority"))
+    @test glossary.selectors == Set(("quality",))
 
     cmos = plan_validation(("src/detectors/cmos.jl",))
     @test "detector-cmos" in cmos.selectors
     @test "detector-shared" in cmos.selectors
     @test "detector-thermal" in cmos.selectors
-    @test "plant-device-model-matrix" in cmos.selectors
     @test cmos.accelerator_scope == DetectorAccelerator
     @test cmos.run_cuda
     @test cmos.run_amdgpu
@@ -40,20 +39,8 @@ include(joinpath(@__DIR__, "impact_planner.jl"))
         "wfs-acquisition-ownership", "wfs-common", "wfs-shack-hartmann"))
     @test shack_hartmann.accelerator_scope == FullAccelerator
 
-    plant_time = plan_validation(("src/plant/time.jl",))
-    @test plant_time.selectors ==
-        Set(("plant-time", "prepared-execution-contracts"))
-    @test !plant_time.run_cuda
-    @test !plant_time.run_grouped_cpu
-
-    plant_batching = plan_validation(("src/plant/device_batching.jl",))
-    @test "plant-device-batching" in plant_batching.selectors
-    @test plant_batching.run_grouped_cpu
-    @test plant_batching.accelerator_scope == FullAccelerator
-
     atmosphere = plan_validation(("src/atmosphere/multilayer.jl",))
-    @test atmosphere.selectors == Set((
-        "ci-foundations", "ci-sensors-control", "ci-plant-optics"))
+    @test atmosphere.selectors == Set(("ci-foundations", "ci-sensors-control"))
     @test atmosphere.accelerator_scope == FullAccelerator
 
     registered = plan_validation(("test/testsets/detector_cmos.jl",))

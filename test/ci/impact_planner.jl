@@ -37,8 +37,6 @@ const DETECTOR_SHARED_SELECTORS = (
     "detector-shared-qualification",
     "detector-thermal",
     "detector-artifacts",
-    "plant-detector-transitions",
-    "plant-device-model-matrix",
 )
 
 const DETECTOR_FILE_SELECTORS = Dict(
@@ -67,8 +65,6 @@ const GPU_RELEVANT_SUITES = Set((
     "backend-smoke",
     "direct-imaging-batch",
     "atmosphere-direction-batch",
-    "plant-device-batching",
-    "plant-device-model-matrix",
     WFS_SELECTORS...,
     DETECTOR_TEST_SUITE_NAMES...,
 ))
@@ -147,19 +143,13 @@ function add_registered_test_impacts!(plan::ValidationPlan, path::String)
             DetectorAccelerator : FullAccelerator
         request_accelerators!(plan, scope)
     end
-    if !isempty(intersect(selectors, Set((
-            "plant-topology-growth", "plant-event-composition",
-            "plant-cpu-execution"))))
-        plan.run_grouped_cpu = true
-    end
     return true
 end
 
 function add_detector_impacts!(plan::ValidationPlan, path::String)
     family = get(DETECTOR_FILE_SELECTORS, basename(path), nothing)
     family === nothing ?
-        add_selectors!(plan, ("detectors", "plant-detector-transitions",
-            "plant-device-model-matrix")) :
+        add_selectors!(plan, ("detectors",)) :
         add_selectors!(plan, (DETECTOR_SHARED_SELECTORS..., family...))
     request_accelerators!(plan, DetectorAccelerator)
     return plan
@@ -183,27 +173,6 @@ function add_wfs_impacts!(plan::ValidationPlan, path::String)
     return plan
 end
 
-function add_plant_impacts!(plan::ValidationPlan, path::String)
-    stem = first(splitext(basename(path)))
-    candidate = "plant-" * replace(stem, '_' => '-')
-    if candidate in REGISTERED_SELECTORS
-        add_selectors!(plan, (candidate, "prepared-execution-contracts"))
-    else
-        add_selectors!(plan, ("ci-plant-runtime", "ci-plant-optics"))
-    end
-    if any(fragment -> occursin(fragment, stem), (
-            "preparation", "resource", "partition", "device", "target",
-            "sampled", "direct_measurement", "path_input"))
-        request_accelerators!(plan, FullAccelerator)
-    end
-    if any(fragment -> occursin(fragment, stem), (
-            "cpu_execution", "device_batching", "mixed_serial",
-            "topology_growth"))
-        plan.run_grouped_cpu = true
-    end
-    return plan
-end
-
 function add_source_impacts!(plan::ValidationPlan, path::String)
     startswith(path, "src/") || return false
     if path in ("src/AdaptiveOpticsSim.jl", "src/exports.jl") ||
@@ -213,14 +182,11 @@ function add_source_impacts!(plan::ValidationPlan, path::String)
         add_detector_impacts!(plan, path)
     elseif startswith(path, "src/wfs/")
         add_wfs_impacts!(plan, path)
-    elseif startswith(path, "src/plant/")
-        add_plant_impacts!(plan, path)
     elseif startswith(path, "src/optics/") || startswith(path, "src/atmosphere/")
-        add_selectors!(plan,
-            ("ci-foundations", "ci-sensors-control", "ci-plant-optics"))
+        add_selectors!(plan, ("ci-foundations", "ci-sensors-control"))
         request_accelerators!(plan, FullAccelerator)
     elseif startswith(path, "src/control/")
-        add_selectors!(plan, ("control", "plant-controller-routing"))
+        add_selectors!(plan, ("control",))
     elseif startswith(path, "src/calibration/")
         add_selectors!(plan, ("calibration", "control-reconstruction"))
     elseif startswith(path, "src/tomography/")
@@ -230,7 +196,7 @@ function add_source_impacts!(plan::ValidationPlan, path::String)
         plan.run_grouped_cpu = true
         plan.run_scheduler = true
     elseif startswith(path, "src/algorithm_graphs/")
-        add_selectors!(plan, ("algorithm-graphs", "namespace-authority"))
+        add_selectors!(plan, ("algorithm-graphs",))
     else
         all_validation!(plan)
     end
@@ -284,8 +250,7 @@ is_documentation_path(path::String) =
 function add_path_impacts!(plan::ValidationPlan, raw_path::AbstractString)
     path = normalized_repository_path(raw_path)
     if is_documentation_path(path)
-        add_selectors!(plan, path == "docs/glossary.md" ?
-            ("quality", "namespace-authority") : ("quality",))
+        add_selectors!(plan, ("quality",))
         return plan
     end
     if path == "Project.toml"
@@ -329,7 +294,7 @@ function local_commands(plan::ValidationPlan)
     plan.run_cpu && push!(commands, "local CPU" =>
         "julia --project=. --startup-file=no test/ci/run_selected_tests.jl $selectors")
     plan.run_grouped_cpu && push!(commands, "local grouped CPU" =>
-        "julia --threads=4 --project=. --startup-file=no test/ci/run_selected_tests.jl gate6")
+        "julia --threads=4 --project=. --startup-file=no test/ci/run_selected_tests.jl backends")
     plan.run_scheduler && push!(commands, "local scheduler extensions" =>
         "julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl")
     accelerator_target = plan.accelerator_scope == DetectorAccelerator ?

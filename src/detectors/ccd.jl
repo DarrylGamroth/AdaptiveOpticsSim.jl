@@ -5,7 +5,7 @@
 CCD area-sensor model. `sample_duration` is the duration of one configured
 Skipper nondestructive sample and must remain zero for conventional
 `SingleRead` operation. Whole-acquisition readout and readiness timing belongs
-to the Plant acquisition definition.
+to the application or graph scheduler.
 """
 struct CCDSensor{T<:AbstractFloat,M<:FrameSamplingMode} <: AbstractFrameSensor
     clock_induced_charge_per_frame::T
@@ -39,7 +39,7 @@ validate_ccd_sampling_mode(mode::FrameSamplingMode) = throw(InvalidConfiguration
 function validate_ccd_sample_duration(::SingleRead, sample_duration)
     iszero(sample_duration) || throw(InvalidConfiguration(
         "CCDSensor sample_duration applies only to SkipperSampling; " *
-        "Plant acquisition definitions own single-read readout and readiness timing"))
+        "the application or graph scheduler owns single-read timing"))
     return nothing
 end
 

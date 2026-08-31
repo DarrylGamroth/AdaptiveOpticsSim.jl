@@ -11,8 +11,6 @@ using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim.AlgorithmGraphs
-using AdaptiveOpticsSim: Plant
-using AdaptiveOpticsSim.Plant
 using FixedSizeArrays: FixedSizeVector
 using LinearAlgebra
 using Random
@@ -25,51 +23,6 @@ BLAS.set_num_threads(1)
 Backends.set_fft_provider_threads!(1)
 
 const TEST_ATMOSPHERE_STEP = 1e-3
-const PLANT_TEST_HOST_TARGET =
-    AdaptiveOpticsSim.Backends.HostComputeDevice()
-
-function plant_test_telescope_definition(
-    telescope::AdaptiveOpticsSim.Optics.Telescope,
-)
-    T = typeof(telescope.params.diameter)
-    return AdaptiveOpticsSim.Optics.TelescopeDefinition(
-        resolution=telescope.params.resolution,
-        diameter=telescope.params.diameter,
-        central_obstruction=telescope.params.central_obstruction,
-        fov_arcsec=telescope.params.fov_arcsec,
-        pupil_reflectivity=maximum(telescope.aperture.reflectivity),
-        revision=AdaptiveOpticsSim.Optics.aperture_revision(telescope),
-        T=T,
-    )
-end
-
-function plant_test_atmosphere_definition(
-    atmosphere::AdaptiveOpticsSim.Atmospheres.KolmogorovAtmosphere,
-)
-    T = typeof(atmosphere.params.r0)
-    return AdaptiveOpticsSim.Atmospheres.KolmogorovAtmosphereDefinition(
-        r0=atmosphere.params.r0,
-        L0=atmosphere.params.L0,
-        T=T,
-    )
-end
-
-function plant_test_atmosphere_definition(
-    atmosphere::AdaptiveOpticsSim.Atmospheres.MultiLayerAtmosphere,
-)
-    params = atmosphere.params
-    T = typeof(params.r0)
-    return AdaptiveOpticsSim.Atmospheres.MultiLayerAtmosphereDefinition(
-        r0=params.r0,
-        L0=params.L0,
-        fractional_cn2=collect(params.cn2_fractions),
-        wind_speed=collect(params.wind_speed),
-        wind_direction_deg=collect(params.wind_direction_deg),
-        altitude=collect(params.altitude),
-        layer_ids=params.layer_ids,
-        T=T,
-    )
-end
 
 # `Pkg.test(coverage=true)` normally sets Julia's coverage option in the test
 # process. The explicit workflow flag keeps allocation gating deterministic if
@@ -169,13 +122,6 @@ for name in names(AlgorithmGraphs; all=true)
     if Base.isidentifier(s) && !startswith(s, "#") &&
             !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(AlgorithmGraphs, $(QuoteNode(name)))
-    end
-end
-
-for name in names(Plant; all=true)
-    s = String(name)
-    if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
-        @eval const $(name) = getfield(Plant, $(QuoteNode(name)))
     end
 end
 

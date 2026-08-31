@@ -8,8 +8,6 @@ using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim.Ensembles
-using AdaptiveOpticsSim: Plant
-using AdaptiveOpticsSim.Plant
 using FFTW
 using LinearAlgebra
 using Random
@@ -83,13 +81,6 @@ for name in names(Ensembles; all=true)
     if Base.isidentifier(s) && !startswith(s, "#") &&
             !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(Ensembles, $(QuoteNode(name)))
-    end
-end
-
-for name in names(Plant; all=true)
-    s = String(name)
-    if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
-        @eval const $(name) = getfield(Plant, $(QuoteNode(name)))
     end
 end
 

@@ -1,9 +1,4 @@
 using Aqua
-using SHA
-
-canonical_lf_sha256(text::AbstractString) = bytes2hex(SHA.sha256(
-    codeunits(replace(text, "\r\n" => "\n")),
-))
 
 _rng_family(::Xoshiro) = :xoshiro
 _rng_family(::MersenneTwister) = :mersenne_twister
@@ -25,142 +20,12 @@ end
 
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
 
-@testset "Gate 7 benchmark contract" begin
-    root = normpath(joinpath(@__DIR__, "..", ".."))
-    contract_path =
-        joinpath(root, "benchmarks", "contracts", "gate7_single_gpu.toml")
-    harness_path =
-        joinpath(root, "benchmarks", "benchmark_gate7_single_gpu.jl")
-    support_path =
-        joinpath(root, "benchmarks", "support", "gate7_single_gpu.jl")
-    @test isfile(harness_path)
-    @test isfile(support_path)
-
-    contract = TOML.parsefile(contract_path)
-    @test contract["schema_version"] == 1
-    @test contract["name"] == "gate7_single_gpu"
-    @test contract["samples_per_run"] >=
-        contract["minimum_samples_for_p95"]
-    @test contract["runs"] >= 3
-    @test contract["warmup_operations"] > 0
-    @test contract["batched_relative_p95_factor"] >= 1
-    @test canonical_lf_sha256("gate7\r\nartifact\r\n") ==
-        canonical_lf_sha256("gate7\nartifact\n")
-
-    workload = contract["workload"]
-    @test workload["path_count"] == 2
-    @test workload["numeric_type"] == "Float32"
-    @test workload["witness_phase_ns"] > workload["sample_period_ns"]
-
-    independent = contract["submission_proxy"]["independent"]
-    batched = contract["submission_proxy"]["batched"]
-    @test independent["top_level_path_submissions"] == 2
-    @test independent["device_owner_submissions"] == 0
-    @test batched["top_level_path_submissions"] == 0
-    @test batched["device_owner_submissions"] == 1
-    @test batched["atmosphere_direction_render_calls"] <
-        independent["atmosphere_direction_render_calls"]
-    @test batched["wfs_optics_calls"] ==
-        independent["wfs_optics_calls"]
-
-    gpu_boundaries = [
-        "independent_device_ready",
-        "batched_device_ready",
-        "batched_host_ready",
-        "transfer_only",
-    ]
-    placements = contract["placements"]
-    @test placements["local_cpu"]["boundaries"] ==
-        ["independent_device_ready"]
-    @test placements["local_amdgpu"]["boundaries"] == gpu_boundaries
-    @test placements["wsl_cuda"]["boundaries"] == gpu_boundaries
-    @test contract["contract"]["coordinated_omission_correction"] ===
-        false
-    @test any(
-        exclusion -> occursin("HIL latency", exclusion),
-        contract["scope_exclusions"],
-    )
-
-    artifact_root = joinpath(root, "benchmarks", "results", "gate7")
-    manifest = TOML.parsefile(joinpath(artifact_root, "manifest.toml"))
-    closure = manifest["closure"]
-    artifacts = manifest["artifacts"]
-    @test closure["status"] == "passed"
-    @test closure["requirements"] == ["HIL-GPU-001"]
-    @test length(artifacts) == 3
-    @test Set(artifact["backend"] for artifact in artifacts) ==
-        Set(("cpu", "amdgpu", "cuda"))
-
-    for entry in artifacts
-        artifact_path = joinpath(artifact_root, entry["path"])
-        @test isfile(artifact_path)
-        @test canonical_lf_sha256(read(artifact_path, String)) ==
-            entry["sha256"]
-        artifact = TOML.parsefile(artifact_path)
-        @test artifact["all_gates_passed"]
-        @test artifact["p95_supported"]
-        @test artifact["characterized_source_revision"] ==
-            closure["characterized_source_revision"]
-        @test artifact["environment"]["git_dirty"] === false
-        @test artifact["environment"]["backend"] == entry["backend"]
-        @test artifact["correctness"]["passed"]
-        @test artifact["submission_proxy_evidence"]["passed"]
-        @test artifact["relative_comparison"]["passed"]
-        @test all(artifact["boundaries"]) do boundary
-            boundary["passed"] &&
-                length(boundary["runs"]) ==
-                    artifact["configured_runs"] &&
-                all(boundary["runs"]) do run
-                    run["samples"] ==
-                        artifact["configured_samples_per_run"] &&
-                        !isempty(run["histogram_base64"])
-                end
-        end
-    end
-end
-
 @testset "Selective test registry" begin
     @test resolve_test_suites(String[]) === TEST_SUITE_SPECS
     @test resolve_test_suites(["all"]) === TEST_SUITE_SPECS
     @test resolve_test_suites(("all", "all")) === TEST_SUITE_SPECS
     @test isnothing(resolve_test_suites(["--list"]))
     @test isnothing(resolve_test_suites(("--list", "--list")))
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-topology"])) == ("plant-topology",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-topology-growth"])) == ("plant-topology-growth",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-command-schemas"])) == ("plant-command-schemas",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-command-admission"])) == ("plant-command-admission",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-command-application"])) == ("plant-command-application",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-device-batching"])) == ("plant-device-batching",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-device-model-matrix"])) ==
-        ("plant-device-model-matrix",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-command-composition"])) == ("plant-command-composition",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-controller-routing"])) == ("plant-controller-routing",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-autonomous-optics"])) == ("plant-autonomous-optics",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-placed-optics"])) == ("plant-placed-optics",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-conjugate-geometry"])) ==
-        ("plant-conjugate-geometry",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-mcao-moao"])) == ("plant-mcao-moao",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-sampled-aberrations"])) ==
-        ("plant-sampled-aberrations",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-gate5-closure"])) ==
-        ("plant-gate5-closure",)
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant-time"])) == ("plant-time",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["detectors"])) == DETECTOR_TEST_SUITE_NAMES
     @test Tuple(spec.name for spec in resolve_test_suites(
@@ -179,45 +44,6 @@ end
         ["wfs-lift"])) == ("wfs-lift",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["calibration"])) == ("calibration-workflows",)
-    @test Tuple(spec.name for spec in resolve_test_suites(["pe01"])) == (
-        "prepared-execution-contracts",
-        "prepared-execution-interfaces",
-        "direct-imaging-batch",
-        "plant-reduced-order",
-        "wfs-zernike-curvature",
-        "plant-effective-command-routes",
-        "plant-path-input-publications",
-    )
-    @test Tuple(spec.name for spec in resolve_test_suites(["pe02"])) == (
-        "ka-cpu",
-        "prepared-execution-contracts",
-        "execution-strategies",
-        "namespace-authority",
-        "core-optics",
-        "detector-lifecycle",
-        "wfs-shack-hartmann",
-        "wfs-pyramid-bi-o-edge",
-        "wfs-lift",
-        "backend-smoke",
-    )
-    @test Tuple(spec.name for spec in resolve_test_suites(["pe03"])) == (
-        "prepared-execution-contracts",
-        "namespace-authority",
-        "prepared-optics-ownership",
-        "core-optics",
-        "direct-science",
-        "direct-imaging-batch",
-        "plant-preparation",
-        "plant-resource-facts",
-        "optical-analysis",
-        "reference-tutorials",
-        "gate0",
-        "backend-smoke",
-    )
-    @test Tuple(spec.name for spec in resolve_test_suites(["pe04"])) ==
-        ("prepared-detector-ownership",)
-    @test Tuple(spec.name for spec in resolve_test_suites(["pe05"])) ==
-        ("wfs-acquisition-ownership",)
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["control"])) ==
         ("control-primitives", "control-reconstruction")
@@ -231,109 +57,7 @@ end
             "wfs-zernike-curvature",
             "wfs-lift",
         )
-    @test Tuple(spec.name for spec in resolve_test_suites(["gate4"])) == (
-        "plant-command-schemas",
-        "plant-command-admission",
-        "plant-command-application",
-        "plant-event-composition",
-        "plant-command-composition",
-        "plant-controller-routing",
-        "plant-reduced-order",
-        "plant-autonomous-optics",
-    )
-    @test Tuple(spec.name for spec in resolve_test_suites(["gate5"])) ==
-        (
-            "plant-placed-optics",
-            "plant-conjugate-geometry",
-            "plant-mcao-moao",
-            "plant-sampled-aberrations",
-            "plant-gate5-closure",
-        )
-    @test Tuple(spec.name for spec in resolve_test_suites(["gate7"])) ==
-        (
-            "direct-imaging-batch",
-            "atmosphere-direction-batch",
-            "plant-device-batching",
-            "plant-device-model-matrix",
-            "backend-smoke",
-        )
-    @test Tuple(spec.name for spec in resolve_test_suites(["plant"])) == (
-        "plant-topology",
-        "plant-topology-growth",
-        "plant-command-schemas",
-        "plant-command-admission",
-        "plant-command-application",
-        "plant-time",
-        "plant-scheduler",
-        "plant-triggers",
-        "plant-detector-transitions",
-        "plant-event-composition",
-        "plant-device-batching",
-        "plant-device-model-matrix",
-        "plant-cpu-execution",
-        "plant-command-composition",
-        "plant-controller-routing",
-        "plant-reduced-order",
-        "plant-autonomous-optics",
-        "plant-placed-optics",
-        "plant-conjugate-geometry",
-        "plant-mcao-moao",
-        "plant-sampled-aberrations",
-        "plant-gate5-closure",
-        "plant-preparation",
-        "plant-partition-assignments",
-        "plant-target-partitions",
-        "plant-command-publications",
-        "plant-handoffs",
-        "plant-effective-command-routes",
-        "plant-command-fanout",
-        "plant-path-input-publications",
-        "plant-mixed-serial-execution",
-        "plant-mixed-serial-events",
-        "plant-resource-facts",
-        "plant-providers",
-        "plant-rng",
-        "plant-illumination",
-    )
-    @test Tuple(spec.name for spec in resolve_test_suites(
-        ["plant", "plant-topology", "plant"])) == (
-        "plant-topology",
-        "plant-topology-growth",
-        "plant-command-schemas",
-        "plant-command-admission",
-        "plant-command-application",
-        "plant-time",
-        "plant-scheduler",
-        "plant-triggers",
-        "plant-detector-transitions",
-        "plant-event-composition",
-        "plant-device-batching",
-        "plant-device-model-matrix",
-        "plant-cpu-execution",
-        "plant-command-composition",
-        "plant-controller-routing",
-        "plant-reduced-order",
-        "plant-autonomous-optics",
-        "plant-placed-optics",
-        "plant-conjugate-geometry",
-        "plant-mcao-moao",
-        "plant-sampled-aberrations",
-        "plant-gate5-closure",
-        "plant-preparation",
-        "plant-partition-assignments",
-        "plant-target-partitions",
-        "plant-command-publications",
-        "plant-handoffs",
-        "plant-effective-command-routes",
-        "plant-command-fanout",
-        "plant-path-input-publications",
-        "plant-mixed-serial-execution",
-        "plant-mixed-serial-events",
-        "plant-resource-facts",
-        "plant-providers",
-        "plant-rng",
-        "plant-illumination",
-    )
+    @test_throws ArgumentError resolve_test_suites(["plant"])
     @test_throws ArgumentError resolve_test_suites(["unknown"])
     @test_throws ArgumentError resolve_test_suites(["all", "quality"])
     @test_throws ArgumentError resolve_test_suites(["--list", "quality"])
@@ -393,39 +117,11 @@ end
     listing = IOBuffer()
     @test isnothing(print_test_suite_help(listing))
     listing_text = String(take!(listing))
-    @test occursin("plant-topology", listing_text)
-    @test occursin("plant-topology-growth", listing_text)
-    @test occursin("plant-command-schemas", listing_text)
-    @test occursin("plant-command-admission", listing_text)
-    @test occursin("plant-command-application", listing_text)
-    @test occursin("plant-device-batching", listing_text)
-    @test occursin("plant-autonomous-optics", listing_text)
-    @test occursin("plant-placed-optics", listing_text)
-    @test occursin("plant-conjugate-geometry", listing_text)
-    @test occursin("plant-mcao-moao", listing_text)
-    @test occursin("plant-sampled-aberrations", listing_text)
-    @test occursin("plant-gate5-closure", listing_text)
-    @test occursin("plant-partition-assignments", listing_text)
-    @test occursin("plant-target-partitions", listing_text)
-    @test occursin("plant-handoffs", listing_text)
-    @test occursin("plant-effective-command-routes", listing_text)
-    @test occursin("plant-command-fanout", listing_text)
-    @test occursin("plant-path-input-publications", listing_text)
-    @test occursin("plant-mixed-serial-execution", listing_text)
-    @test occursin("plant-mixed-serial-events", listing_text)
-    @test occursin("plant-cpu-execution", listing_text)
-    @test occursin("plant-time", listing_text)
-    @test occursin("plant =", listing_text)
+    @test occursin("algorithm-graphs", listing_text)
     @test occursin("sensors =", listing_text)
     @test occursin("calibration =", listing_text)
     @test occursin("ci-foundations =", listing_text)
     @test occursin("ci-sensors-control =", listing_text)
-    @test occursin("ci-plant-runtime =", listing_text)
-    @test occursin("ci-plant-optics =", listing_text)
-    @test occursin("gate4 =", listing_text)
-    @test occursin("gate5 =", listing_text)
-    @test occursin("gate6 =", listing_text)
-    @test occursin("gate7 =", listing_text)
 
     actual_testsets = sort!(filter(
         path -> endswith(path, ".jl"),
@@ -443,33 +139,6 @@ end
         ),
         joinpath(dirname(@__DIR__), "detector_test_fixtures.jl"),
         joinpath(dirname(@__DIR__), "ka_cpu_style_fixture.jl"),
-        joinpath(dirname(@__DIR__), "plant_device_batching_fixtures.jl"),
-        joinpath(dirname(@__DIR__), "plant_handoff_fixtures.jl"),
-        joinpath(
-            dirname(@__DIR__),
-            "plant_effective_command_route_fixtures.jl",
-        ),
-        joinpath(
-            dirname(@__DIR__),
-            "plant_mixed_serial_event_fixtures.jl",
-        ),
-        joinpath(
-            dirname(@__DIR__),
-            "plant_path_input_publication_fixtures.jl",
-        ),
-        joinpath(
-            dirname(@__DIR__),
-            "plant_device_model_matrix_fixtures.jl",
-        ),
-        joinpath(dirname(@__DIR__), "plant_test_fixtures.jl"),
-        joinpath(
-            dirname(@__DIR__),
-            "prepared_execution_contract_helpers.jl",
-        ),
-        joinpath(
-            dirname(@__DIR__),
-            "plant_acquisition_interface_conformance.jl",
-        ),
         joinpath(
             dirname(@__DIR__),
             "wfs_four_pupil_interface_conformance.jl",
@@ -480,28 +149,14 @@ end
         if !isempty(spec.fixtures))
     @test fixture_users == (
         "ka-cpu",
-        "prepared-execution-contracts",
         "prepared-execution-interfaces",
         "direct-imaging-batch",
         "atmosphere-direction-batch",
-        "plant-device-batching",
-        "plant-device-model-matrix",
-        "plant-sampled-aberrations",
         DETECTOR_TEST_SUITE_NAMES...,
         "wfs-common",
         "wfs-shack-hartmann",
         "wfs-pyramid-bi-o-edge",
         "wfs-zernike-curvature",
-        "plant-preparation",
-        "plant-handoffs",
-        "plant-effective-command-routes",
-        "plant-command-fanout",
-        "plant-path-input-publications",
-        "plant-mixed-serial-execution",
-        "plant-mixed-serial-events",
-        "plant-resource-facts",
-        "plant-providers",
-        "plant-rng",
         "backend-smoke",
     )
 end

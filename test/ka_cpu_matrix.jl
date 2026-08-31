@@ -1074,32 +1074,6 @@ end
         mark_ka_cpu_kernel!(:dm_apply_pupil_kernel!)
         @test ka_cpu_close(dm_ka.state.opd, dm_scalar.state.opd)
 
-        # Validate the backend-neutral accelerator kernel through KA's CPU
-        # test backend; production CPU dispatch remains the scalar loop.
-        sampled_surface =
-            reshape(collect(range(0.0, 1.0; length=16)), 4, 4)
-        scalar_sampled = zeros(4, 4)
-        ka_sampled = zeros(4, 4)
-        sampled_transform = (1.0, 0.0, 0.0, 1.0)
-        sampled_offset = (-0.25, 0.25)
-        Plant._apply_sampled_pupil_surface!(
-            SCALAR_CPU_STYLE,
-            scalar_sampled,
-            sampled_surface,
-            sampled_transform,
-            sampled_offset,
-            DMAdditive(),
-        )
-        Plant._apply_sampled_pupil_surface!(
-            KA_CPU_STYLE,
-            ka_sampled,
-            sampled_surface,
-            sampled_transform,
-            sampled_offset,
-            DMAdditive(),
-        )
-        mark_ka_cpu_kernel!(:_sampled_pupil_surface_kernel!)
-        @test ka_cpu_close(ka_sampled, scalar_sampled)
     end
 
     @testset "Detector kernels" begin
