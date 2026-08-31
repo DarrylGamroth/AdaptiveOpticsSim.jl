@@ -358,6 +358,10 @@ frame rate. The demo opens the official `pyrtc-view` application and displays:
 - the current 5-by-5 pyRTC command in `wfc2D`
 - AOS uncompensated, deformable-mirror, and residual pupil OPD maps
 
+The viewer polls at half the requested graph rate, so each normal refresh
+interval spans two graph periods. This avoids pyRTC's transient `PAUSED` label
+between frames without altering the graph or RTC rate.
+
 The disturbance changes smoothly within the calibrated deformable-mirror
 space so the correction remains observable after the initial transient. Close
 the viewer window to stop the demonstration before its requested duration.

@@ -233,7 +233,12 @@ function worker_command(
     ])
 end
 
-function viewer_command()
+function viewer_refresh_rate(frame_rate::Real)
+    requested = clamp(Float64(frame_rate) / 2, 1.0, 60.0)
+    return floor(Int, requested)
+end
+
+function viewer_command(frame_rate::Real)
     executable = joinpath(dirname(pyrtc_python()), "pyrtc-view")
     isfile(executable) || error(
         "the selected pyRTC environment does not provide pyrtc-view; " *
@@ -245,7 +250,7 @@ function viewer_command()
         "--geometry",
         "2x3",
         "--fps",
-        "20",
+        string(viewer_refresh_rate(frame_rate)),
         "--pixel-scale",
         "6",
     ])
@@ -257,8 +262,8 @@ function viewer_command()
     return command
 end
 
-function start_viewer()
-    viewer = run(viewer_command(); wait=false)
+function start_viewer(frame_rate::Real)
+    viewer = run(viewer_command(frame_rate); wait=false)
     sleep(0.5)
     if !process_running(viewer)
         wait(viewer)
@@ -709,7 +714,7 @@ function run_viewer_demo(;
                 prepared,
                 applied_command,
             )
-            viewer = start_viewer()
+            viewer = start_viewer(frame_rate)
 
             println("Calibrating the pyRTC loop while the viewer is open...")
             _, interaction_matrix = calibrate_interaction_matrix!(
