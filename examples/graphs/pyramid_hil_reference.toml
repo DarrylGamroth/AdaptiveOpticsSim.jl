@@ -1,0 +1,135 @@
+# Fully declared Pyramid HIL reference system.
+#
+# This is a deterministic validation plant, not a REVOLT instrument model. It
+# owns real modulated diffractive Pyramid optics and complete EMCCD acquisition,
+# but every numerical and physical value is an explicit AOS reference-system
+# choice. The caller supplies a complete pupil-plane uncompensated OPD map and
+# receives one complete 36-by-36 WFS frame for each complete 25-element DM
+# command. Detector noise is disabled so calibration and external-RTC failures
+# are reproducible and attributable.
+
+schema_version = 1
+name = "pyramid_hil_reference"
+
+[[nodes]]
+name = "dm"
+type = "gaussian_deformable_mirror_surface_f32"
+
+[nodes.config]
+resolution = 64
+telescope_diameter_m = 1.0
+central_obstruction_ratio = 0.0
+pupil_reflectivity = 1.0
+aperture_revision = 1
+actuator_count = 25
+influence_width = 0.2577725423830145
+pdm_command_schema = "org.adaptiveopticssim.hil-reference.dm-command-surface-opd-m.f32/1"
+surface_opd_schema = "org.adaptiveopticssim.hil-reference.dm-surface-opd-m.f32/1"
+actuator_coordinates_schema = "org.adaptiveopticssim.hil-reference.dm-actuator-normalized-pupil-coordinates.f32/1"
+
+[[nodes]]
+name = "pupil_opd_composition"
+type = "pupil_opd_composition_f32"
+
+[nodes.config]
+resolution = 64
+uncompensated_opd_schema = "org.adaptiveopticssim.hil-reference.uncompensated-opd-m.f32/1"
+surface_opd_schema = "org.adaptiveopticssim.hil-reference.dm-surface-opd-m.f32/1"
+pupil_opd_schema = "org.adaptiveopticssim.hil-reference.pupil-opd-m.f32/1"
+
+[[nodes]]
+name = "pwfs"
+type = "pyramid_rate_f32"
+
+[nodes.config]
+resolution = 64
+telescope_diameter_m = 1.0
+central_obstruction_ratio = 0.0
+pupil_reflectivity = 1.0
+aperture_revision = 1
+pupil_samples = 16
+threshold = 0.05
+modulation = 2.0
+modulation_points = 8
+modulation_propagation_strategy = "pupil_tilt"
+light_ratio = 0.0
+diffraction_padding = 2
+psf_centering = true
+n_pix_separation = 2
+n_pix_edge = 1
+binning = 1
+source_band = "custom"
+source_magnitude = 0.0
+source_photon_irradiance_m2_s = 2.0e8
+source_wavelength_m = 7.5e-7
+source_separation_arcsec = 0.0
+source_position_angle_deg = 0.0
+opd_schema = "org.adaptiveopticssim.hil-reference.pupil-opd-m.f32/1"
+photon_rate_schema = "org.adaptiveopticssim.hil-reference.pyramid-photon-rate.f32/1"
+
+[[nodes]]
+name = "detector"
+type = "emccd_detector_acquisition_f32"
+
+[nodes.config]
+rows = 36
+columns = 36
+binning = 1
+normalized_pupil_sampling = 0.0625
+wavelength_m = 7.5e-7
+exposure_duration_s = 0.001
+quantum_efficiency = 1.0
+gain = 1.0
+dark_current_e_per_pixel_s = 0.0
+bits = 24
+full_well_e = 1.0e9
+photon_noise = false
+readout_noise = false
+readout_noise_e = 0.0
+excess_noise_factor = 1.0
+clock_induced_charge_e_per_pixel_frame = 0.0
+rng_seed = 1
+photon_rate_schema = "org.adaptiveopticssim.hil-reference.pyramid-photon-rate.f32/1"
+frame_schema = "org.adaptiveopticssim.hil-reference.pyramid-frame.f32/1"
+
+[[inputs]]
+name = "dm_command"
+destination = "dm.pdm_command"
+binding = "dm_command"
+
+[[inputs]]
+name = "uncompensated_opd"
+destination = "pupil_opd_composition.uncompensated_opd"
+binding = "uncompensated_opd"
+
+[[outputs]]
+name = "dm_surface_opd"
+source = "dm.surface_opd"
+
+[[outputs]]
+name = "pupil_opd"
+source = "pupil_opd_composition.pupil_opd"
+
+[[outputs]]
+name = "wfs_photon_rate"
+source = "pwfs.photon_rate"
+
+[[outputs]]
+name = "wfs_frame"
+source = "detector.frame"
+
+[[links]]
+source = "dm.surface_opd"
+destination = "pupil_opd_composition.surface_opd"
+
+[[links]]
+source = "pupil_opd_composition.pupil_opd"
+destination = "pwfs.opd"
+
+[[links]]
+source = "pwfs.photon_rate"
+destination = "detector.photon_rate"
+
+[[parameters]]
+destination = "dm.actuator_coordinates"
+binding = "dm_actuator_coordinates"

@@ -1,0 +1,179 @@
+# Fully declared Shack-Hartmann HIL reference system.
+#
+# This is a deterministic validation plant, not a REVOLT instrument model. It
+# owns real diffractive Shack-Hartmann optics and complete CCD acquisition, but
+# every numerical and physical value is an explicit AOS reference-system
+# choice. The caller supplies a complete pupil-plane uncompensated OPD map and
+# receives one complete 64-by-64 WFS frame for each complete 25-element DM
+# command. Detector noise is disabled so interaction-matrix and external-RTC
+# failures are reproducible and attributable.
+
+schema_version = 1
+name = "shack_hartmann_hil_reference"
+
+[[nodes]]
+name = "dm"
+type = "gaussian_deformable_mirror_surface_f32"
+
+[nodes.config]
+resolution = 64
+telescope_diameter_m = 1.0
+central_obstruction_ratio = 0.0
+pupil_reflectivity = 1.0
+aperture_revision = 1
+actuator_count = 25
+influence_width = 0.2577725423830145
+pdm_command_schema = "org.adaptiveopticssim.hil-reference.dm-command-surface-opd-m.f32/1"
+surface_opd_schema = "org.adaptiveopticssim.hil-reference.dm-surface-opd-m.f32/1"
+actuator_coordinates_schema = "org.adaptiveopticssim.hil-reference.dm-actuator-normalized-pupil-coordinates.f32/1"
+
+[[nodes]]
+name = "pupil_opd_composition"
+type = "pupil_opd_composition_f32"
+
+[nodes.config]
+resolution = 64
+uncompensated_opd_schema = "org.adaptiveopticssim.hil-reference.uncompensated-opd-m.f32/1"
+surface_opd_schema = "org.adaptiveopticssim.hil-reference.dm-surface-opd-m.f32/1"
+pupil_opd_schema = "org.adaptiveopticssim.hil-reference.pupil-opd-m.f32/1"
+
+[[nodes]]
+name = "shwfs"
+type = "shack_hartmann_rate_f32"
+
+[nodes.config]
+resolution = 64
+telescope_diameter_m = 1.0
+central_obstruction_ratio = 0.0
+pupil_reflectivity = 1.0
+aperture_revision = 1
+n_lenslets = 8
+n_pix_subap = 8
+diffraction_padding = 2
+pixel_scale_arcsec = 0.5
+valid_subaperture_threshold = 0.1
+threshold_convolution = 0.05
+half_pixel_shift = false
+shannon_sampling = true
+source_band = "custom"
+source_magnitude = 0.0
+source_photon_irradiance_m2_s = 2.0e8
+source_wavelength_m = 7.5e-7
+source_separation_arcsec = 0.0
+source_position_angle_deg = 0.0
+opd_schema = "org.adaptiveopticssim.hil-reference.pupil-opd-m.f32/1"
+photon_rate_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-photon-rate.f32/1"
+
+[[nodes]]
+name = "detector"
+type = "ccd_detector_acquisition_f32"
+
+[nodes.config]
+rows = 64
+columns = 64
+binning = 1
+pixel_scale_arcsec = 0.5
+wavelength_m = 7.5e-7
+exposure_duration_s = 0.001
+quantum_efficiency = 1.0
+photon_noise = false
+readout_noise = false
+readout_noise_e = 0.0
+rng_seed = 1
+photon_rate_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-photon-rate.f32/1"
+frame_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-frame.f32/1"
+
+[[nodes]]
+name = "centroid"
+type = "shack_hartmann_centroid_f32"
+
+[nodes.config]
+resolution = 64
+telescope_diameter_m = 1.0
+n_lenslets = 8
+n_pix_subap = 8
+centroid_cutoff_fraction = 0.0
+centroid_response = 1.0
+calibration_wavelength_m = 7.5e-7
+calibration_signature = 1
+frame_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-frame.f32/1"
+slopes_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-full-slopes.f32/1"
+valid_subapertures_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-valid-subapertures.bool/1"
+reference_signal_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-centroid-reference.f32/1"
+
+[[nodes]]
+name = "slope_selection"
+type = "shack_hartmann_slope_selection_f32"
+
+[nodes.config]
+n_lenslets = 8
+selected_lenslet_count = 52
+full_slopes_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-full-slopes.f32/1"
+selected_slopes_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-signal.f32/1"
+lenslet_order_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-lenslet-order.u32/1"
+
+[[inputs]]
+name = "dm_command"
+destination = "dm.pdm_command"
+binding = "dm_command"
+
+[[inputs]]
+name = "uncompensated_opd"
+destination = "pupil_opd_composition.uncompensated_opd"
+binding = "uncompensated_opd"
+
+[[outputs]]
+name = "dm_surface_opd"
+source = "dm.surface_opd"
+
+[[outputs]]
+name = "pupil_opd"
+source = "pupil_opd_composition.pupil_opd"
+
+[[outputs]]
+name = "wfs_photon_rate"
+source = "shwfs.photon_rate"
+
+[[outputs]]
+name = "wfs_frame"
+source = "detector.frame"
+
+[[outputs]]
+name = "wfs_signal"
+source = "slope_selection.selected_slopes"
+
+[[links]]
+source = "dm.surface_opd"
+destination = "pupil_opd_composition.surface_opd"
+
+[[links]]
+source = "pupil_opd_composition.pupil_opd"
+destination = "shwfs.opd"
+
+[[links]]
+source = "shwfs.photon_rate"
+destination = "detector.photon_rate"
+
+[[links]]
+source = "detector.frame"
+destination = "centroid.frame"
+
+[[links]]
+source = "centroid.slopes"
+destination = "slope_selection.full_slopes"
+
+[[parameters]]
+destination = "dm.actuator_coordinates"
+binding = "dm_actuator_coordinates"
+
+[[parameters]]
+destination = "centroid.valid_subapertures"
+binding = "valid_subapertures"
+
+[[parameters]]
+destination = "centroid.reference_signal"
+binding = "reference_signal"
+
+[[parameters]]
+destination = "slope_selection.lenslet_order"
+binding = "lenslet_order"

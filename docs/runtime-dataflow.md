@@ -144,6 +144,38 @@ snapshotted initial command and graph sequence. When a model-time driver is
 used through `step_hil_frame_at!`, reset both owners with
 `reset_hil_boundary!(boundary, driver)`.
 
+### Fully declared HIL reference systems
+
+The maintained SHWFS and Pyramid HIL reference systems validate external-RTC
+integration without depending on unmeasured instrument calibration. They share
+one explicit 25-command analytic Gaussian deformable mirror, accept a complete
+caller-owned uncompensated pupil OPD in metres, and publish a complete detector
+frame through `PreparedGraphHILBoundary`. Their parameters are AOS validation
+choices; neither system is a REVOLT profile.
+
+[`shack_hartmann_hil_reference.toml`](../examples/graphs/shack_hartmann_hil_reference.toml)
+publishes a noiseless 64-by-64 CCD frame and an AOS centroid signal for
+differential checks. [`pyramid_hil_reference.toml`](../examples/graphs/pyramid_hil_reference.toml)
+publishes a noiseless 36-by-36 four-pupil EMCCD frame. The helper in
+[`hil_reference_systems.jl`](../examples/support/hil_reference_systems.jl)
+owns the exact analytic actuator coordinates, SHWFS valid-lenslet rule, graph
+selection, and preparation recipe.
+
+The current integration matrix is deliberately small:
+
+| WFS | Detector response | Controller boundary | Evidence | Status |
+|---|---|---|---|---|
+| Shack–Hartmann | Deterministic, noiseless CCD | AOS lockstep reference controller | `algorithm-graphs` interaction-matrix and convergence tests | covered |
+| Pyramid | Deterministic, noiseless EMCCD | Command/frame lockstep | `algorithm-graphs` complete-frame and command-response tests | covered |
+| Shack–Hartmann | Deterministic, noiseless CCD | Synchronous pyRTC | Optional integration harness | planned |
+| Pyramid | Deterministic, noiseless EMCCD | Synchronous pyRTC | Optional integration harness | planned |
+| Either | Stochastic detector response | Any external RTC | Statistical closed-loop qualification | gap |
+
+Calibrate an external RTC by applying complete positive and negative commands
+through the reference boundary. This measures the interaction matrix in the
+same command units and WFS-signal order used by that RTC. Do not substitute an
+identity matrix or infer a command scale from an instrument name.
+
 The example transport functions above are application placeholders, not AOS
 APIs. The boundary deliberately defines no socket, PipeWire buffer, wall-clock
 deadline, timeout, last-command hold, queue, or concurrent callback. A direct

@@ -12,6 +12,12 @@ include(joinpath(
     "support",
     "revolt_hil_graphs.jl",
 ))
+include(joinpath(
+    dirname(dirname(@__DIR__)),
+    "examples",
+    "support",
+    "hil_reference_systems.jl",
+))
 
 function warmed_graph_step_allocation_bytes(graph)
     step_graph!(graph)
@@ -1806,6 +1812,165 @@ end
     @test graph_output(graph, Val(:surface_opd)) == Float32[2 3; 3 2]
     @test warmed_graph_step_allocation_bytes(graph) == 0
     @test @inferred(step_graph!(graph)) === graph
+end
+
+@testset "fully declared HIL reference systems" begin
+    @test HILReferenceSystems.supported_wavefront_sensors() ==
+        (:shack_hartmann, :pyramid)
+    @test HILReferenceSystems.actuator_count() == 25
+    @test basename(HILReferenceSystems.graph_path(:shack_hartmann)) ==
+        "shack_hartmann_hil_reference.toml"
+    @test basename(HILReferenceSystems.graph_path(:pyramid)) ==
+        "pyramid_hil_reference.toml"
+    @test_throws ArgumentError HILReferenceSystems.graph_path(:unknown)
+
+    coordinates = HILReferenceSystems.actuator_coordinates(Float32)
+    @test size(coordinates) == (2, 25)
+    @test coordinates[:, 1] == Float32[-0.8, -0.8]
+    @test coordinates[:, 13] == Float32[0, 0]
+    @test coordinates[:, 25] == Float32[0.8, 0.8]
+    pitch = coordinates[1, 2] - coordinates[1, 1]
+    width = HILReferenceSystems.influence_width(Float32)
+    @test exp(-(pitch * pitch) / (2 * width * width)) ≈ 0.3f0
+
+    valid_subapertures =
+        HILReferenceSystems.shack_hartmann_valid_subapertures()
+    lenslet_order = HILReferenceSystems.shack_hartmann_lenslet_order()
+    @test size(valid_subapertures) == (8, 8)
+    @test count(valid_subapertures) == 52
+    @test lenslet_order == UInt32.(findall(vec(valid_subapertures)))
+    @test size(HILReferenceSystems.shack_hartmann_reference_signal()) ==
+        (64, 2)
+
+    cases = (
+        (
+            wavefront_sensor=:shack_hartmann,
+            graph_name=:shack_hartmann_hil_reference,
+            frame_shape=(64, 64),
+        ),
+        (
+            wavefront_sensor=:pyramid,
+            graph_name=:pyramid_hil_reference,
+            frame_shape=(36, 36),
+        ),
+    )
+    for case in cases
+        prepared = HILReferenceSystems.prepare_hil_reference_system(
+            case.wavefront_sensor,
+        )
+        graph = prepared.graph
+        boundary = prepared.boundary
+        @test graph_name(graph) === case.graph_name
+        @test graph_input(graph, Val(:uncompensated_opd)) ===
+            prepared.uncompensated_opd
+        @test all(iszero, prepared.uncompensated_opd)
+
+        sequence = step_hil_frame!(boundary)
+        flat_frame = copy(hil_frame_buffer(boundary))
+        @test sequence == UInt64(1)
+        @test size(flat_frame) == case.frame_shape
+        @test all(isfinite, flat_frame)
+        @test sum(flat_frame) > 0
+        @test all(iszero, graph_output(graph, Val(:dm_surface_opd)))
+
+        fill!(hil_command_buffer(boundary), 0.0f0)
+        hil_command_buffer(boundary)[13] = 2.0f-8
+        adopt_hil_command!(boundary, sequence)
+        sequence = step_hil_frame!(boundary)
+        surface_opd = graph_output(graph, Val(:dm_surface_opd))
+        @test maximum(surface_opd) ≈ 2.0f-8 rtol = 5.0f-3
+        @test minimum(surface_opd) >= 0.0f0
+        @test graph_output(graph, Val(:pupil_opd)) ≈ surface_opd
+        @test hil_frame_buffer(boundary) != flat_frame
+
+        fill!(hil_command_buffer(boundary), 0.0f0)
+        adopt_hil_command!(boundary, sequence)
+        @test @allocated(step_hil_frame!(boundary)) == 0
+        @test all(iszero, graph_output(graph, Val(:dm_surface_opd)))
+    end
+end
+
+function calibrate_shack_hartmann_reference!(prepared; poke=2.0f-8)
+    graph = prepared.graph
+    boundary = prepared.boundary
+    sequence = step_hil_frame!(boundary)
+    flat_signal = copy(graph_output(graph, Val(:wfs_signal)))
+    interaction_matrix = Matrix{Float32}(
+        undef,
+        length(flat_signal),
+        HILReferenceSystems.actuator_count(),
+    )
+    positive_signal = similar(flat_signal)
+
+    for command_index in axes(interaction_matrix, 2)
+        fill!(hil_command_buffer(boundary), 0.0f0)
+        hil_command_buffer(boundary)[command_index] = poke
+        adopt_hil_command!(boundary, sequence)
+        sequence = step_hil_frame!(boundary)
+        copyto!(positive_signal, graph_output(graph, Val(:wfs_signal)))
+
+        fill!(hil_command_buffer(boundary), 0.0f0)
+        hil_command_buffer(boundary)[command_index] = -poke
+        adopt_hil_command!(boundary, sequence)
+        sequence = step_hil_frame!(boundary)
+        negative_signal = graph_output(graph, Val(:wfs_signal))
+        @views @. interaction_matrix[:, command_index] =
+            (positive_signal - negative_signal) / (2 * poke)
+    end
+
+    fill!(hil_command_buffer(boundary), 0.0f0)
+    adopt_hil_command!(boundary, sequence)
+    reset_hil_boundary!(boundary)
+    return flat_signal, interaction_matrix
+end
+
+@testset "SHWFS HIL reference system closes through its measured interaction" begin
+    prepared = HILReferenceSystems.prepare_hil_reference_system(
+        :shack_hartmann,
+    )
+    graph = prepared.graph
+    boundary = prepared.boundary
+    flat_signal, interaction_matrix =
+        calibrate_shack_hartmann_reference!(prepared)
+
+    singular_values = svdvals(interaction_matrix)
+    @test all(isfinite, interaction_matrix)
+    @test count(>(maximum(singular_values) * 1.0f-4), singular_values) ==
+        HILReferenceSystems.actuator_count()
+    @test maximum(singular_values) / minimum(singular_values) < 10
+
+    disturbance_command = zeros(Float32, HILReferenceSystems.actuator_count())
+    disturbance_command[8] = 3.0f-8
+    disturbance_command[12] = -2.0f-8
+    disturbance_command[14] = 2.0f-8
+    disturbance_command[18] = -3.0f-8
+
+    sequence = step_hil_frame!(boundary)
+    copyto!(hil_command_buffer(boundary), disturbance_command)
+    adopt_hil_command!(boundary, sequence)
+    sequence = step_hil_frame!(boundary)
+    disturbance_opd = copy(graph_output(graph, Val(:dm_surface_opd)))
+    fill!(hil_command_buffer(boundary), 0.0f0)
+    adopt_hil_command!(boundary, sequence)
+    reset_hil_boundary!(boundary)
+    copyto!(prepared.uncompensated_opd, disturbance_opd)
+
+    control_matrix = pinv(interaction_matrix; rtol=1.0f-4)
+    command = zeros(Float32, HILReferenceSystems.actuator_count())
+    residual_norms = Float32[]
+    sequence = step_hil_frame!(boundary)
+    for iteration in 1:15
+        residual_signal = graph_output(graph, Val(:wfs_signal)) .- flat_signal
+        push!(residual_norms, norm(residual_signal))
+        command .-= 0.4f0 .* (control_matrix * residual_signal)
+        copyto!(hil_command_buffer(boundary), command)
+        adopt_hil_command!(boundary, sequence)
+        iteration < 15 && (sequence = step_hil_frame!(boundary))
+    end
+
+    @test all(<(0), diff(residual_norms))
+    @test last(residual_norms) < first(residual_norms) * 1.0f-3
+    @test command ≈ -disturbance_command rtol = 1.0f-3 atol = 5.0f-11
 end
 
 
