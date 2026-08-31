@@ -44,6 +44,8 @@ import ..Backends:
     launch_kernel_async!,
     plan_fft_backend!,
     plan_ifft_backend!,
+    plan_repeated_fft_backend!,
+    plan_repeated_ifft_backend!,
     queue_kernel!,
     require_same_backend,
     synchronize_backend!

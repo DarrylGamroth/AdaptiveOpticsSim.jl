@@ -1,8 +1,8 @@
 #
 # Simple discrete-time controller models
 #
-# The current core controller is a leaky/discrete integrator followed by a
-# first-order DM lag state.
+# The current core controller is a discrete integrator followed by a first-order
+# DM lag state.
 #
 # For each update:
 # 1. integrate the incoming command-like input with gain `gain`
@@ -89,40 +89,178 @@ runtime_controller_ownership_roots(controller::AbstractController) =
     (controller,)
 
 """
-    DiscreteIntegratorController(n; gain=0.3, tau=0.02, T=Float64, backend::AbstractArrayBackend=CPUBackend())
+    DiscreteIntegratorPlan(gain, tau)
 
-Construct a simple discrete-time integral controller with a first-order DM lag
-state.
+Run-immutable coefficients for a discrete integrator followed by a first-order
+DM lag. `tau` is expressed in seconds.
 """
-mutable struct DiscreteIntegratorController{T<:AbstractFloat,V<:AbstractVector{T}} <: AbstractController
+struct DiscreteIntegratorPlan{T<:AbstractFloat}
     gain::T
-    tau::T
-    i_state::V
-    dm_state::V
+    tau_s::T
+
+    function DiscreteIntegratorPlan(gain::T, tau_s::T) where {T<:AbstractFloat}
+        isfinite(gain) ||
+            throw(InvalidConfiguration("controller gain must be finite"))
+        isfinite(tau_s) && tau_s > zero(T) || throw(InvalidConfiguration(
+            "controller tau must be finite and greater than zero",
+        ))
+        return new{T}(gain, tau_s)
+    end
 end
 
-@inline controller_output(ctrl::DiscreteIntegratorController) = ctrl.dm_state
+"""Persistent mathematical state for one discrete-integrator run."""
+mutable struct DiscreteIntegratorState{T<:AbstractFloat,V<:AbstractVector{T}}
+    integrated_command::V
+    command::V
+end
+
+"""
+Replaceable scratch for one discrete-integrator execution owner.
+
+Recreating this workspace cannot change the controller trajectory.
+"""
+struct DiscreteIntegratorWorkspace{T<:AbstractFloat,V<:AbstractVector{T}}
+    next_integrated_command::V
+    next_command::V
+end
+
+function DiscreteIntegratorState(reference::AbstractVector{T}) where {T<:AbstractFloat}
+    integrated_command = similar(reference, T, length(reference))
+    command = similar(reference, T, length(reference))
+    fill!(integrated_command, zero(T))
+    fill!(command, zero(T))
+    return DiscreteIntegratorState(integrated_command, command)
+end
+
+function DiscreteIntegratorWorkspace(reference::AbstractVector{T}) where {T<:AbstractFloat}
+    next_integrated_command = similar(reference, T, length(reference))
+    next_command = similar(reference, T, length(reference))
+    fill!(next_integrated_command, zero(T))
+    fill!(next_command, zero(T))
+    return DiscreteIntegratorWorkspace(next_integrated_command, next_command)
+end
+
+"""
+    DiscreteIntegratorController(n; gain=0.3, tau=0.02, T=Float64,
+                                 backend::AbstractArrayBackend=CPUBackend())
+
+Prepare a single-writer controller owner with a run-immutable plan, persistent
+state, and replaceable workspace.
+"""
+struct DiscreteIntegratorController{P<:DiscreteIntegratorPlan,
+    S<:DiscreteIntegratorState,W<:DiscreteIntegratorWorkspace} <: AbstractController
+    plan::P
+    state::S
+    workspace::W
+end
+
+@inline controller_output(ctrl::DiscreteIntegratorController) = ctrl.state.command
 @inline supports_controller_reset(::DiscreteIntegratorController) = true
 @inline runtime_controller_storage(ctrl::DiscreteIntegratorController) =
-    (ctrl.i_state, ctrl.dm_state)
+    (
+        ctrl.state.integrated_command,
+        ctrl.state.command,
+        ctrl.workspace.next_integrated_command,
+        ctrl.workspace.next_command,
+    )
+@inline runtime_controller_ownership_roots(ctrl::DiscreteIntegratorController) =
+    (ctrl.state, ctrl.workspace)
+
+@inline discrete_integrator_plan(ctrl::DiscreteIntegratorController) = ctrl.plan
+@inline discrete_integrator_state(ctrl::DiscreteIntegratorController) = ctrl.state
+@inline discrete_integrator_workspace(ctrl::DiscreteIntegratorController) = ctrl.workspace
+
+function reset_controller!(
+    state::DiscreteIntegratorState,
+    workspace::DiscreteIntegratorWorkspace,
+)
+    fill!(state.integrated_command, zero(eltype(state.integrated_command)))
+    fill!(state.command, zero(eltype(state.command)))
+    fill!(workspace.next_integrated_command, zero(eltype(workspace.next_integrated_command)))
+    fill!(workspace.next_command, zero(eltype(workspace.next_command)))
+    return state
+end
 
 function reset_controller!(ctrl::DiscreteIntegratorController)
-    fill!(ctrl.i_state, zero(eltype(ctrl.i_state)))
-    fill!(ctrl.dm_state, zero(eltype(ctrl.dm_state)))
+    reset_controller!(ctrl.state, ctrl.workspace)
     return ctrl
 end
 
-function DiscreteIntegratorController(n::Int; gain::Real=0.3, tau::Real=0.02, T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=CPUBackend())
+function DiscreteIntegratorController(n::Int; gain::Real=0.3, tau::Real=0.02,
+    T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=CPUBackend())
     n > 0 || throw(InvalidConfiguration("controller length must be greater than zero"))
-    tau_value = T(tau)
-    tau_value > zero(T) ||
-        throw(InvalidConfiguration("controller tau must be greater than zero at controller precision"))
     backend = _resolve_array_backend(backend)
-    i_state = backend{T}(undef, n)
-    dm_state = backend{T}(undef, n)
-    fill!(i_state, zero(T))
-    fill!(dm_state, zero(T))
-    return DiscreteIntegratorController{T, typeof(i_state)}(T(gain), tau_value, i_state, dm_state)
+    reference = backend{T}(undef, n)
+    fill!(reference, zero(T))
+    plan = DiscreteIntegratorPlan(T(gain), T(tau))
+    command = similar(reference)
+    fill!(command, zero(T))
+    state = DiscreteIntegratorState(reference, command)
+    workspace = DiscreteIntegratorWorkspace(reference)
+    return DiscreteIntegratorController(plan, state, workspace)
+end
+
+function _prepare_controller_update!(
+    state::DiscreteIntegratorState{T},
+    workspace::DiscreteIntegratorWorkspace{T},
+    plan::DiscreteIntegratorPlan{T},
+    input::AbstractVector,
+    dt::Real,
+) where {T}
+    axes(input) == axes(state.integrated_command) == axes(state.command) ==
+        axes(workspace.next_integrated_command) == axes(workspace.next_command) ||
+        throw(DimensionMismatchError(
+            "controller input, state, and workspace axes must match",
+        ))
+    dt_s = T(dt)
+    isfinite(dt_s) && dt_s >= zero(T) || throw(InvalidConfiguration(
+        "controller dt must be finite and nonnegative at controller precision",
+    ))
+    lag = dt_s / plan.tau_s
+    @. workspace.next_integrated_command =
+        state.integrated_command + plan.gain * input * dt_s
+    @. workspace.next_command =
+        state.command + (workspace.next_integrated_command - state.command) * lag
+
+    return nothing
+end
+
+@inline function _commit_controller_update!(
+    state::DiscreteIntegratorState,
+    workspace::DiscreteIntegratorWorkspace,
+)
+    copyto!(state.integrated_command, workspace.next_integrated_command)
+    copyto!(state.command, workspace.next_command)
+    return state.command
+end
+
+function update!(
+    state::DiscreteIntegratorState,
+    workspace::DiscreteIntegratorWorkspace,
+    plan::DiscreteIntegratorPlan,
+    input::AbstractVector,
+    dt::Real,
+)
+    _prepare_controller_update!(state, workspace, plan, input, dt)
+    return _commit_controller_update!(state, workspace)
+end
+
+function update!(
+    output::AbstractVector,
+    state::DiscreteIntegratorState,
+    workspace::DiscreteIntegratorWorkspace,
+    plan::DiscreteIntegratorPlan,
+    input::AbstractVector,
+    dt::Real,
+)
+    axes(output) == axes(state.command) || throw(DimensionMismatchError(
+        "controller output and state axes must match",
+    ))
+    _prepare_controller_update!(state, workspace, plan, input, dt)
+    copyto!(output, workspace.next_command)
+    _commit_controller_update!(state, workspace)
+    return output
 end
 
 """
@@ -130,18 +268,11 @@ end
 
 Advance the controller state by one sample period.
 
-`i_state` integrates the incoming command-like input, and `dm_state` then
-applies a first-order lag toward that integral state using the controller time
-constant.
+The persistent `integrated_command` integrates the incoming command-like input,
+and `command` then applies a first-order lag toward that integral state using
+the controller time constant. Replacement workspace is prepared before either
+state value commits.
 """
 function update!(ctrl::DiscreteIntegratorController, input::AbstractVector, dt::Real)
-    length(input) == length(ctrl.i_state) ||
-        throw(DimensionMismatchError("controller input length must match controller state"))
-    T = eltype(ctrl.i_state)
-    dt_value = T(dt)
-    dt_value >= zero(T) ||
-        throw(InvalidConfiguration("controller dt must be >= 0 at controller precision"))
-    ctrl.i_state .+= ctrl.gain .* input .* dt_value
-    ctrl.dm_state .+= (ctrl.i_state .- ctrl.dm_state) .* (dt_value / ctrl.tau)
-    return controller_output(ctrl)
+    return update!(ctrl.state, ctrl.workspace, ctrl.plan, input, dt)
 end

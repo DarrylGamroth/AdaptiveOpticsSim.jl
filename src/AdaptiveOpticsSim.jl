@@ -45,6 +45,7 @@ include("plant/plant.jl")
 include("calibration/calibration.jl")
 include("control/control.jl")
 include("tomography/tomography.jl")
+include("algorithm_graphs/algorithm_graphs.jl")
 
 include("exports.jl")
 

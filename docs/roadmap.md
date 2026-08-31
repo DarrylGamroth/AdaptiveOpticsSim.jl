@@ -76,6 +76,122 @@ external-RTC HIL development, following the maintained specifications indexed
 by [`hil-package-boundary.md`](hil-package-boundary.md) and tracking completion
 in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
 
+The default portable simulation path now uses AOS-native scientific
+implementations and a small graph-node adapter protocol owned by
+`AdaptiveOpticsSim.AlgorithmGraphs`. It does not require Calculon or create a
+universal numerical `process!` interface. Plant remains supported as the
+detailed physical-timing implementation and differential oracle, but new
+complete-frame orchestration should not expand Plant. PipeWireAO remains the
+advanced Linux deployment for paced HIL execution, while ordinary Julia scripts
+remain a first-class unrestricted composition path.
+
+The first complete-frame proof uses the native discrete-integrator controller.
+A second proof uses modal OPD expansion with a coefficient vector, an OPD
+matrix, and explicit basis and pupil-support ndarray parameters. The executable
+REVOLT Classic HIL sensor graph now accepts the external RTC's complete
+277-actuator PDM command as unit-peak actuator surface-OPD coefficients in
+metres, applies the exact on-sky command-map topology with explicitly
+provisional normalized-pupil placement and Gaussian influence model, advances
+the maintained five-layer atmosphere by exactly 1 ms per frame, adds the
+resulting surface OPD to the atmospheric OPD, and composes
+diffractive Shack–Hartmann photon-rate formation with single-read CCD
+acquisition through a completed 352-by-352 frame. The available BAX307/SPIDERS
+influence artifact is explicitly rejected as authority for the REVOLT HSDM277;
+an authoritative HSDM277 influence calibration and normalized-hardware-command
+conversion remain application bindings before this becomes an instrument
+model. The Copper HIL graph uses the same physical-DM boundary, advances the
+same atmosphere profile by 2 ms per frame, and then executes its Pyramid/EMCCD
+sensor path. A separate RTC-reference graph
+continues through calibrated full-grid centroid estimation with explicit
+valid-subaperture and reference-signal ndarray parameters. An explicit
+one-based lenslet-order parameter selects 188
+lenslets and converts the full block layout into 376 pair-interleaved
+components without teaching core to parse the detector ROI artifact. A
+run-immutable `ControlMatrixPlan` and graph adapter now apply a caller-bound
+221-by-376 calibrated matrix to those ordered slopes and publish 221
+reconstructed controller residual-error coordinates. A separate atomic
+`ClosedLoopCorrectionPlan` now applies the REVOLT Classic gain, pole, and
+anti-windup recurrence and publishes both the demanded correction and its
+integrator state; the RTC-reference TOML takes explicit external
+demanded-minus-realized correction feedback until downstream DM constraint and
+response nodes close that delay. Its centroid cutoff
+retains the AOS/OOPAO fractional-peak semantics; SPECULA's absolute-pedestal
+`ShSlopec` policy and compatibility with the operational matrix remain
+explicit parity items. The versioned TOML graph format compiles those same
+nodes into the same concrete graph definition as direct Julia construction.
+The optional
+`AdaptiveOpticsProperHIL.jl` companion adds a third proof: one complete-frame
+Julia-native Proper prescription with separate random state and scratch,
+square propagation inputs, a separately declared rectangular observation,
+exact graph-buffer binding, and focused CPU, AMDGPU, and CUDA
+residency/equivalence evidence. The companion records independent declarative
+LLOWFS and SCC sensor graphs so an application can drive their complete-frame
+observations at different model-time cadences. Each graph requires an
+application-captured, trusted Proper configuration and ends at the external-RTC
+publication boundary; neither graph embeds an RTC or returned-PDM policy.
+Calculon or FGN deployment adapters are separate boundaries that may wrap AOS
+implementations later; they do not own the AOS simulation API. This topology
+proof does not supply a qualified SPIDERS optical prescription, detector
+response, observation metadata, or asynchronous acquisition driver.
+
+The portable graph now also has a transport-neutral lockstep HIL boundary.
+It stages one completed frame in a reusable host buffer, requires one complete
+finite same-sequence command before the next frame, and adopts that command
+through a completed host-to-target copy. This closes the serial command/frame
+lifecycle needed by direct Julia scripts and CPU RTCs attached to GPU
+simulations. PipeWire buffer integration, timeout/hold policy, and wall-clock
+pacing remain deployment work rather than graph semantics.
+
+The delivery order for this boundary is:
+
+1. Stabilize the AOS-native graph-node protocol and versioned TOML static
+   subset without changing domain numerical APIs.
+2. Replace the REVOLT Classic and Copper HIL graphs' provisional Gaussian PDM
+   response with an authoritative HSDM277 influence calibration, bind the
+   normalized-hardware-command conversion, and add any additional path-local
+   aberration producers while keeping transport at the completed-frame and
+   complete-command boundaries. Bind the
+   authoritative ROI-derived order to the separate
+   RTC-reference graph; reconstruction and the first atomic controller are
+   executable there, and its next controller gate is downstream
+   constraint-feedback closure. The Copper HIL sensor file now reaches its
+   complete 64-by-64 EMCCD frame boundary. The companion now records separate
+   SPIDERS LLOWFS and SCC sensor-topology files; bind authoritative physical
+   prescriptions, detector models, observation metadata, and independent
+   acquisition drivers before treating those files as an instrument model.
+3. Preserve direct Julia graph construction for generated, conditional, and
+   multi-rate arrangements that exceed the TOML subset.
+4. Provide deterministic fixed-step and prepared-boundary model-time drivers;
+   wall-clock pacing remains outside core.
+5. Use the lockstep boundary for complete-frame external command adoption.
+   Bind stateful rolling-shutter integration, explicit physical delays, and
+   multi-rate behavior as semantically atomic prepared operations rather than
+   extending the lockstep protocol with implicit timing.
+6. Retain Plant scenarios as differential evidence for synchronized MCAO,
+   path-local MOAO, and rolling-shutter exposure across a mid-frame DM update.
+7. Use PipeWireAO for real paced HIL and capture canonical timestamps needed to
+   replay the same run through the portable graph or Plant oracle.
+
+```mermaid
+flowchart LR
+    SCI["AOS scientific implementation<br/>domain API"] --> NODE["AOS graph-node adapter"]
+    NODE --> NATIVE["AlgorithmGraphs<br/>portable model time"]
+    SCI --> FGN["Optional Calculon / FGN adapter"]
+    FGN --> PWAO["PipeWireAO<br/>paced HIL"]
+    PLANT["Plant<br/>precision physical timing"] --> ORACLE["Differential scenarios"]
+    NATIVE --> ORACLE
+    PWAO -->|"captured timestamps"| ORACLE
+```
+
+The first portable graph is deliberately single-writer and serial. Concrete
+tuple ownership keeps prepared algorithms and arrays type-stable without an
+`Any`-typed registry; explicit delayed links make feedback causal without a
+general event calendar. Topology-dependent specialization and service cost must
+be characterized at representative 4/8/16-node sizes before that executor is
+promoted for large MCAO/MOAO graphs. The existing Plant event loop stays
+available when sub-frame detector physics, trigger faults, command skew, or
+other detailed event semantics are the subject of the simulation.
+
 1. Preserve the completed HIL prerequisite Gates 0 and 1 and the qualified
    Gate 4A companion boundary while extending the general HIL runtime. Gate 0
    separates telescope aperture/geometry
@@ -302,8 +418,10 @@ in [`hil/compliance-matrix.md`](hil/compliance-matrix.md).
     values; normalize cold input into concrete execution-family ownership.
     Each slice must retain numerical correctness, concrete hot dispatch, CPU
     zero-allocation contracts, accelerator residency, and bounded topology
-    growth. Add no universal plan root, generic `process!` API, or compatibility
-    layer.
+    growth. Add no universal AdaptiveOpticsSim plan root, generic numerical
+    `process!` API, or compatibility layer. Graph adapters call the canonical
+    operation owned by each scientific domain; a separately maintained Calculon
+    adapter may be added for deployment without becoming the AOS API.
 11. Preserve the completed detector family qualification and evidence catalog.
     Product-neutral frame, counting-array, and channel models remain in the
     canonical `Detectors` namespace. Named camera profiles remain outside core.
@@ -372,7 +490,8 @@ parallel scheduler integrations.
 | `Control` | control reconstructors, controllers, delay lines, and prepared runtime operations | dependency direction is `Control` to `Calibration`; tomography remains separate |
 | `Tomography` | tomography geometry, atmosphere reconstruction, fitting, and DM-command mapping | general controller execution remains in `Control` |
 | `Ensembles` | coarse offline execution policies, sweeps, and optional parallel integrations | this is not an `AdaptiveOpticsHIL.jl` deadline scheduler |
-| `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, execution requirements, providers, and event composition | resource inventory, placement policy, pacing, rings, and workers belong to `AdaptiveOpticsHIL.jl`; physical domain models enter through explicit imports |
+| `AlgorithmGraphs` | portable static composition of AOS-native graph nodes, TOML graph compilation, exact graph-boundary storage, direct and delayed links, deterministic model-time drivers, and a serial host command/frame HIL boundary | scientific modules own domain implementations; Plant owns detailed physical event semantics; PipeWireAO and `AdaptiveOpticsHIL.jl` own wall-clock pacing and operational execution |
+| `Plant` | the existing HIL-neutral virtual plant, command/acquisition lifecycle, preparation, execution requirements, providers, detailed event composition, and precision-timing oracle | general algorithm-graph orchestration belongs to `AlgorithmGraphs`; resource inventory, placement policy, pacing, rings, and workers belong to `AdaptiveOpticsHIL.jl`; physical domain models enter through explicit imports |
 
 `AdaptiveOpticsSim` exports the canonical modules plus shared errors,
 fidelity profiles, and deliberately selected cross-domain workflow vocabulary.

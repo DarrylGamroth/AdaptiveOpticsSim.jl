@@ -472,14 +472,67 @@ julia --project=benchmarks benchmarks/benchmark_loop_order_simd.jl
 julia --project=benchmarks benchmarks/benchmark_detector_hil_latency.jl
 julia --project=benchmarks benchmarks/benchmark_gate0_latency.jl
 julia --project=benchmarks benchmarks/benchmark_pre_hil_backend_latency.jl cpu local_cpu
+julia --project=benchmarks benchmarks/benchmark_revolt_graph_nodes.jl
+AOS_REVOLT_GRAPH_PROFILE=fast_dm julia --project=benchmarks benchmarks/benchmark_revolt_graph_nodes.jl
 
 julia --project=benchmarks/amdgpu -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/amdgpu benchmarks/benchmark_amdgpu.jl
 julia --project=benchmarks/amdgpu benchmarks/benchmark_pre_hil_backend_latency.jl amdgpu local_amdgpu
+AOS_REVOLT_GRAPH_BACKEND=amdgpu julia --project=benchmarks/amdgpu benchmarks/benchmark_revolt_graph_nodes.jl
 
 julia --project=benchmarks/cuda -e 'using Pkg; Pkg.instantiate()'
 julia --project=benchmarks/cuda benchmarks/benchmark_pre_hil_backend_latency.jl cuda wsl_cuda
+AOS_REVOLT_GRAPH_BACKEND=cuda julia --project=benchmarks/cuda benchmarks/benchmark_revolt_graph_nodes.jl
 ```
+
+`benchmark_revolt_graph_nodes.jl` profiles the executable Classic and Copper
+external-RTC graphs, including atmosphere evolution. It reports each node with
+an exact graph-context synchronization, the ordinary complete graph boundary,
+and the separate frame-to-host, command-to-target, and full lockstep HIL
+boundaries. The sum of node times has one synchronization per node and is
+therefore diagnostic rather than an estimate of an asynchronously submitted
+graph. `AOS_REVOLT_GRAPH_ARCHITECTURES`, `AOS_REVOLT_GRAPH_SAMPLES`, and
+`AOS_REVOLT_GRAPH_WARMUP` select the graph subset and measurement length.
+`AOS_REVOLT_GRAPH_PROFILE` selects the run-immutable `full_optical` default or
+the explicit `fast_dm` workload. The fast-DM graphs change only the
+provisional HSDM277 surface implementation: they scatter the 277-element
+command into its regular 19-by-19 grid and use the separable Gaussian
+factorization. Pupil sampling, atmosphere evolution, WFS propagation and
+modulation, detector acquisition and noise, RTC frame sizes, and HIL sequencing
+remain unchanged. The default is a one-thread, closed-loop, self-paced
+service-cost measurement; it does not model fixed arrivals, transport,
+overload, or wall-clock pacing.
+
+The [fast-DM profile](../benchmarks/results/platform/2026-08-30-revolt-fast-dm-profile.toml)
+records clean local CPU and AMDGPU measurements plus a WSL CUDA measurement
+from an exact source archive. Relative to the general Gaussian node, the
+separable PDM is between 895 and 1,095 times faster on the tested CPU, between
+3.5 and 3.9 times faster on AMDGPU, and between 1.7 and 1.8 times faster on
+CUDA. Classic CPU host-ready throughput rises from 12.9 to 112.4 frames/s.
+Copper remains limited
+by its unchanged 32-point diffractive Pyramid propagation; its independently
+prepared CPU graphs show more propagation variation than the remaining DM
+cost, so no precise frame-rate gain is attributed to this change.
+
+The subsequent
+[shifted-mask Pyramid profile](../benchmarks/results/platform/2026-08-30-revolt-copper-shifted-mask-pyramid.toml)
+records the explicit throughput-oriented strategy selected by both maintained
+Copper graph files. For the fixed 32-point modulation cycle it performs one
+forward transform and 32 inverse transforms, instead of the reference
+pupil-tilt strategy's 32 forward and 32 inverse transforms. A deterministic
+full-resolution atmosphere-evolved comparison preserved total flux and measured
+1.20% relative L2 error and 1.98% maximum pixel error relative to the reference
+peak. This is evidence for that workload, not a general Pyramid equivalence
+claim; `PyramidPupilTiltStrategy` remains the API default.
+
+Host-ready Copper throughput increased from 2.34 to 4.64 frames/s on CPU and
+from 9.35 to 14.91 frames/s on AMDGPU. Three sustained CUDA repetitions measured
+43.68--43.77 frames/s, compared with the prior 16.22--21.60 frames/s range on
+the same RTX 3050 Ti. The tradeoff is approximately 256 MiB for the prepared
+32-mask stack plus a bounded 64 MiB accelerator field tile at the 1024-by-1024
+Copper propagation size. The strategy is valid only for fixed prepared
+modulation; changing the modulation path requires rebuilding the masks and
+re-preparing the graph.
 
 `benchmark_gate0_latency.jl` accepts `AOS_GATE0_CARD_IDS` as a comma-separated,
 predeclared subset. The artifact records the explicit selection mode and the

@@ -1,0 +1,327 @@
+artifact_id = "REVOLT-ALGORITHM-OPTIMIZATION-REVIEW-2026-08-30"
+generated_on = "2026-08-30"
+source_revision = "c989e0a1d92458596e9c20362c377db0e0fea6d4"
+source_tracked_dirty = false
+baseline_artifacts = [
+    "2026-08-30-revolt-algorithm-graph-node-profile.toml",
+    "2026-08-30-revolt-fast-dm-profile.toml",
+]
+evidence_class = "warmed synchronized diagnostic profile plus focused numerical equivalence tests"
+hypothesis = "The full-resolution REVOLT graphs can be accelerated without reducing pupil or detector resolution by exploiting exact regular-grid DM separability, amortizing CPU FFT planning, batching independent accelerator Pyramid modulation points, and fusing scalar Shack-Hartmann sampling passes."
+
+[contract]
+graph_profile = "fast_dm"
+load_model = "warmed serial closed loop"
+arrival_model = "the next step starts only after the prior step completes"
+coordinated_omission_correction = false
+timer = "time_ns; timer overhead is included and not subtracted"
+julia_threads = 1
+blas_threads = 1
+fft_threads = 1
+graph_boundary = "all graph nodes plus one exact graph-context synchronization"
+frame_host_ready_boundary = "graph boundary plus a completed target-to-host frame copy"
+command_target_ready_boundary = "finite host command validation plus a completed host-to-target command copy"
+tail_note = "The percentiles are diagnostic and do not establish a production tail-latency bound."
+fidelity_note = "Pupil, WFS, and detector resolutions are unchanged. The fast profile changes only the provisional HSDM277 implementation from dense Gaussian influence evaluation to its regular-grid separable form."
+
+[environment.local]
+host = "rtc-devel"
+os = "Linux"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+logical_cpu_threads = 16
+gpu = "AMD Radeon Graphics"
+gpu_architecture = "gfx1030"
+julia = "1.12.7"
+amdgpu_jl = "2.8.0"
+
+[environment.wsl_cuda]
+host = "wsl"
+os = "Linux 6.18.33.2-microsoft-standard-WSL2 x86_64 GNU/Linux"
+gpu = "NVIDIA GeForce RTX 3050 Ti Laptop GPU"
+gpu_memory_mib = 4096
+driver = "596.08"
+julia = "1.12.6"
+cuda_jl = "6.3.1"
+power_control = "Laptop GPU clocks and power state were not fixed. Observed sustained Copper runs entered P0 at different core clocks, producing material run-to-run dispersion."
+
+[algorithm_assessment.separable_grid_gaussian_dm]
+decision = "retain"
+equivalence = "Mathematically equivalent to dense analytic Gaussian evaluation for the declared regular Cartesian actuator grid; floating-point evaluation order is different."
+observed_relative_error = "approximately 5e-7 or less in focused CPU and accelerator comparisons"
+benefit = "Removes the dominant CPU DM cost without changing optical sampling."
+scope = "Provisional HSDM277 regular-grid response only; measured influence calibration remains the production-fidelity target when available."
+
+[algorithm_assessment.pyramid_modulation_batch]
+decision = "retain"
+equivalence = "Independent modulation points are evaluated in bounded accelerator tiles and accumulated in the original point order."
+observed_error = "Bitwise-identical full 480-by-480, 32-point AMDGPU native intensity in the direct sequential-versus-batched comparison at revision e4ead50."
+benefit = "Amortizes accelerator FFT and kernel-launch overhead while preserving the complete-frame Pyramid result."
+memory_tradeoff = "One bounded accelerator-only field stack with at most eight modulation planes; about 64 MiB for the REVOLT Copper Float32 configuration."
+
+[algorithm_assessment.repeated_cpu_fft_planning]
+decision = "retain"
+equivalence = "The DFT is unchanged, but FFTW.MEASURE may choose a different floating-point operation schedule and is therefore not bitwise equivalent to the estimate-planned path."
+observed_relative_error = "1.42e-7 for the full REVOLT Classic Shack-Hartmann photon-rate product in the focused comparison"
+benefit = "The full Classic Shack-Hartmann node decreased from about 3.60 ms to about 3.08 ms before the fused sampling change."
+preparation_tradeoff = "The first clean Classic CPU graph preparation took 5.50 s; a second preparation in the same process reused FFTW wisdom and took 0.12 s. Planning remains outside repeated execution."
+
+[algorithm_assessment.scalar_shack_hartmann_sampling]
+decision = "retain"
+equivalence = "Bitwise equivalent to the prior per-plane bin, centered resize, and stack-copy composition; the bin accumulation order is preserved."
+observed_error = "zero in the direct regression fixture"
+allocation_bytes_after_warmup = 0
+microbenchmark = "0.351 ms to 0.187 ms for the full Classic spot stack in the focused prototype, a 1.87x sampling-stage speedup"
+
+[algorithm_assessment.detector_poisson_sampling]
+decision = "retain current sampler"
+profile_share = "approximately 90 percent of the Classic detector node"
+workload_distribution = "mean expected count 6.15; 95.4 percent of pixels at or below 30 expected counts"
+rejected_alternative = "Exact inverse-CDF recurrence"
+reason = "The focused test increased the photon-sampling time from 2.55 ms to 2.81 ms. Counter-based or approximate alternatives would change reproducibility or noise fidelity and require an explicit model choice."
+
+[algorithm_assessment.valid_lenslet_compression]
+decision = "do not implement"
+workload = "212 of 256 Classic lenslets are valid"
+reason = "The maximum transform-count reduction is only 17.2 percent and does not justify a second packed layout, scatter path, and rebuild contract at this point."
+
+[algorithm_assessment.atmosphere]
+decision = "retain current finite multilayer evolution"
+current_classic_cpu_mean_ns = 1726335.83
+reason = "The five-layer 240-by-240 atmosphere is no longer the dominant node, and no lower-complexity replacement was identified that preserves the same evolving finite-screen model."
+
+[[results]]
+system = "local"
+backend = "cpu"
+architecture = "classic"
+samples = 100
+warmup_cycles = 10
+preparation_ns = 5497737830
+graph_mean_ns = 7388333.04
+graph_rate_hz = 135.34852781893545
+frame_host_ready_mean_ns = 7463778.16
+frame_host_ready_p50_ns = 7356415
+frame_host_ready_p90_ns = 7835647
+frame_host_ready_p99_ns = 8634367
+frame_host_ready_rate_hz = 133.98040222567386
+atmosphere_mean_ns = 1726335.83
+pdm_mean_ns = 58829.58
+composition_mean_ns = 9464.45
+wfs_mean_ns = 2886313.43
+detector_mean_ns = 2729068.71
+frame_rate_ratio_vs_fast_dm_baseline = 1.1918283233112599
+frame_rate_ratio_vs_original_dense_dm_baseline = 10.400512412871608
+
+[[results]]
+system = "local"
+backend = "cpu"
+architecture = "copper"
+samples = 30
+warmup_cycles = 5
+preparation_ns = 8772448534
+graph_mean_ns = 439977927.8666667
+graph_rate_hz = 2.272841287399866
+frame_host_ready_mean_ns = 426545031.8
+frame_host_ready_p50_ns = 422838271
+frame_host_ready_p90_ns = 439877631
+frame_host_ready_p99_ns = 444334079
+frame_host_ready_rate_hz = 2.344418350812919
+wfs_mean_ns = 431352053.3
+frame_rate_ratio_vs_fast_dm_baseline = 9.506360757945183
+
+[[results]]
+system = "local"
+backend = "amdgpu"
+architecture = "classic"
+samples = 50
+warmup_cycles = 10
+preparation_ns = 18277510759
+graph_mean_ns = 5563689.42
+graph_rate_hz = 179.73684807158054
+frame_host_ready_mean_ns = 5537873.02
+frame_host_ready_p50_ns = 5640191
+frame_host_ready_p90_ns = 5787647
+frame_host_ready_p99_ns = 5922815
+frame_host_ready_rate_hz = 180.57474347795718
+wfs_mean_ns = 1271009.06
+detector_mean_ns = 3710721.46
+frame_rate_ratio_vs_fast_dm_baseline = 1.0100329891637712
+
+[[results]]
+system = "local"
+backend = "amdgpu"
+architecture = "copper"
+samples = 50
+warmup_cycles = 10
+preparation_ns = 22494530425
+graph_mean_ns = 106876185.76
+graph_rate_hz = 9.356621336071901
+frame_host_ready_mean_ns = 106895925.24
+frame_host_ready_p50_ns = 106692607
+frame_host_ready_p90_ns = 109051903
+frame_host_ready_p99_ns = 111017983
+frame_host_ready_rate_hz = 9.354893535509662
+wfs_mean_ns = 106128108.72
+frame_rate_ratio_vs_fast_dm_baseline = 1.5637510807329629
+
+[cuda_benchmark_protocol]
+source_archive_revision = "b8fa1f9"
+source_transfer = "git archive of the exact committed revision into /tmp on the WSL host"
+command_template = "AOS_REVOLT_GRAPH_BACKEND=cuda AOS_REVOLT_GRAPH_PROFILE=fast_dm AOS_REVOLT_GRAPH_ARCHITECTURES=<architecture> AOS_REVOLT_GRAPH_SAMPLES=<samples> AOS_REVOLT_GRAPH_WARMUP=<warmup> julia --project=<archive>/benchmarks/cuda --startup-file=no <archive>/benchmarks/benchmark_revolt_graph_nodes.jl"
+repetitions = 2
+classic_samples_per_repetition = 1000
+classic_warmup_cycles_per_repetition = 200
+copper_samples_per_repetition = 500
+copper_warmup_cycles_per_repetition = 100
+result_selection = "Both sustained repetitions are retained. Earlier 100-sample exploratory results are excluded from the sustained range because their means varied substantially with GPU power state."
+raw_histograms_archived = false
+note = "The harness is closed-loop and synchronized. It reports HdrHistogram summaries, but does not retain raw samples and does not correct coordinated omission."
+
+[[cuda_results]]
+architecture = "classic"
+repetition = 1
+samples = 1000
+warmup_cycles = 200
+graph_mean_ns = 1336235
+graph_p50_ns = 1276927
+graph_p90_ns = 1545215
+graph_p95_ns = 1696767
+graph_p99_ns = 2590719
+graph_maximum_ns = 7647231
+graph_rate_hz = 748.371
+frame_host_ready_mean_ns = 1444236
+frame_host_ready_p50_ns = 1414143
+frame_host_ready_p90_ns = 1629183
+frame_host_ready_p95_ns = 1774591
+frame_host_ready_p99_ns = 2201599
+frame_host_ready_maximum_ns = 3127295
+frame_host_ready_rate_hz = 692.408
+atmosphere_mean_ns = 244466
+pdm_mean_ns = 248788
+composition_mean_ns = 54424
+wfs_mean_ns = 550863
+detector_mean_ns = 369148
+
+[[cuda_results]]
+architecture = "classic"
+repetition = 2
+samples = 1000
+warmup_cycles = 200
+graph_mean_ns = 1405272
+graph_p50_ns = 1369087
+graph_p90_ns = 1649663
+graph_p95_ns = 1753087
+graph_p99_ns = 2109439
+graph_maximum_ns = 3123199
+graph_rate_hz = 711.606
+frame_host_ready_mean_ns = 1596507
+frame_host_ready_p50_ns = 1580031
+frame_host_ready_p90_ns = 1815551
+frame_host_ready_p95_ns = 1918975
+frame_host_ready_p99_ns = 2306047
+frame_host_ready_maximum_ns = 3137535
+frame_host_ready_rate_hz = 626.367
+atmosphere_mean_ns = 269683
+pdm_mean_ns = 288261
+composition_mean_ns = 59793
+wfs_mean_ns = 603306
+detector_mean_ns = 415239
+
+[[cuda_results]]
+architecture = "copper"
+repetition = 1
+samples = 500
+warmup_cycles = 100
+graph_mean_ns = 55521277
+graph_p50_ns = 49053695
+graph_p90_ns = 82837503
+graph_p95_ns = 90701823
+graph_p99_ns = 109772799
+graph_maximum_ns = 252575743
+graph_rate_hz = 18.011
+frame_host_ready_mean_ns = 61637069
+frame_host_ready_p50_ns = 53706751
+frame_host_ready_p90_ns = 87687167
+frame_host_ready_p95_ns = 96403455
+frame_host_ready_p99_ns = 117047295
+frame_host_ready_maximum_ns = 171704319
+frame_host_ready_rate_hz = 16.224
+wfs_mean_ns = 38625348
+wfs_p50_ns = 35422207
+wfs_p90_ns = 54755327
+wfs_p99_ns = 65535999
+
+[[cuda_results]]
+architecture = "copper"
+repetition = 2
+samples = 500
+warmup_cycles = 100
+graph_mean_ns = 42740050
+graph_p50_ns = 39452671
+graph_p90_ns = 50266111
+graph_p95_ns = 54558719
+graph_p99_ns = 82575359
+graph_maximum_ns = 128712703
+graph_rate_hz = 23.397
+frame_host_ready_mean_ns = 46292958
+frame_host_ready_p50_ns = 44236799
+frame_host_ready_p90_ns = 53280767
+frame_host_ready_p95_ns = 58556415
+frame_host_ready_p99_ns = 87228415
+frame_host_ready_maximum_ns = 112459775
+frame_host_ready_rate_hz = 21.602
+wfs_mean_ns = 31446763
+wfs_p50_ns = 30539775
+wfs_p90_ns = 35028991
+wfs_p99_ns = 36208639
+
+[cuda_result_summary]
+classic_frame_host_ready_rate_hz_range = [626.367, 692.408]
+classic_frame_host_ready_mean_rate_hz = 659.3875
+classic_run_mean_dispersion_fraction = 0.10543499258421996
+copper_frame_host_ready_rate_hz_range = [16.224, 21.602]
+copper_frame_host_ready_mean_rate_hz = 18.913
+copper_run_mean_dispersion_fraction = 0.3314842209072979
+interpretation = "Classic sustains hundreds of complete atmosphere-enabled HIL frames per second. Copper remains dominated by the 32-point full-resolution Pyramid WFS and is sensitive to unmanaged laptop GPU clocks; the range, not either isolated maximum, is the defensible result."
+
+[cuda_same_session_pre_batch_baseline]
+source_revision = "1c2d7fe"
+architecture = "copper"
+samples = 500
+warmup_cycles = 100
+graph_mean_ns = 51654791
+graph_p50_ns = 50888703
+graph_p99_ns = 54427647
+graph_maximum_ns = 124977151
+frame_host_ready_mean_ns = 93142123
+frame_host_ready_p50_ns = 74448895
+frame_host_ready_p99_ns = 229244927
+frame_host_ready_maximum_ns = 1560281087
+wfs_mean_ns = 49622140
+wfs_p50_ns = 50659327
+wfs_p99_ns = 51249151
+wfs_maximum_ns = 564000000
+current_wfs_mean_speedup_range = [1.284704023896432, 1.5779729061461747]
+current_wfs_p50_speedup_range = [1.4301572739383517, 1.6587983048336146]
+interpretation = "The same-session sensor-node comparison isolates a material benefit from modulation batching. End-to-end baseline latency contained a 1.56-second outlier, so it is not used as the primary algorithm speedup claim."
+
+[cuda_validation]
+changed_surfaces_status = "passed within the full CUDA hardware target"
+algorithm_graph_status = "passed; the reduced AlgorithmGraphs smoke and both atmosphere-enabled REVOLT graph executions completed"
+full_target_status = "failed in legacy Plant and other non-AlgorithmGraphs checks"
+full_target_counts = "1379 passed, 5 failed, 2 errored; 1386 total"
+changed_surface_evidence = "CUDA selected the eight-plane Pyramid modulation workspace, CPU/CUDA WFS numerical parity passed, CUDA Shack-Hartmann plan and output checks passed, and both full-resolution atmosphere-enabled REVOLT graphs produced finite nonzero frames."
+remaining_assertion_failures = "Three legacy Plant Shack-Hartmann CPU/CUDA reference/fast/slow parity assertions and two direct-imaging device-path batch parity assertions."
+remaining_errors = "Two target-partition checks call a missing acquisition_id(::PreparedTargetLocalAcquisitionResources) method, once for CPU and once for CUDA resources."
+scope_note = "No failure was reported in the reduced AlgorithmGraphs scheduler, separable DM, direct CPU/CUDA WFS parity, batched Pyramid plan, or REVOLT benchmark paths. The legacy Plant mismatches do exercise shared Shack-Hartmann products and were not root-caused in this review; the overall CUDA target must not be represented as green until all seven remaining outcomes are resolved."
+
+[validation]
+cpu_shack_hartmann = "passed; 271 checks and two maintained broken checks, including the new bitwise-equivalence and zero-allocation regression"
+cpu_kernel_abstractions = "passed; 206 checks"
+cpu_quality = "passed; Aqua and maintained quality contracts"
+cpu_namespace = "passed; 7122 namespace, import, and baseline checks"
+cpu_graphs = "passed; all selected native and TOML algorithm-graph checks"
+cpu_optics_ownership = "passed; 31 checks"
+cpu_core_optics = "passed"
+cpu_pyramid_bioedge = "passed"
+amdgpu_execution = "Both full-resolution atmosphere-enabled REVOLT graphs completed with finite nonzero frames and clean source state."
+cuda_execution = "The reduced AlgorithmGraphs path and both REVOLT graphs passed on the RTX 3050 Ti. The complete target ran to completion but failed overall in legacy Plant, direct-imaging batch, and target-partition checks."

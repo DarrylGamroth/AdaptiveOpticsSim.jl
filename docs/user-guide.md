@@ -54,6 +54,8 @@ The package is organized around a small set of modeling objects:
 - modal-optic basis specs such as `CartesianTiltBasis`, `ZernikeOpticBasis`, and `MatrixModalBasis` when you want to choose controlled modes explicitly
 - `AdaptiveOpticsSim.Plant` when you need independent virtual-time commands,
   acquisitions, triggers, and detector lifecycles
+- `AdaptiveOpticsSim.AlgorithmGraphs` when you want one statically prepared,
+  portable graph of AOS-native algorithm nodes
 
 Import optical vocabulary and reusable physical components with
 `using AdaptiveOpticsSim.Optics`; import sensing vocabulary with
@@ -67,9 +69,9 @@ modal bases, and model-derived NCPA synthesis live in `Calibration`.
 Slopes-to-command reconstructors, controller models, and their preallocated
 composition live in `Control`.
 
-## Three Execution Layers
+## Four Execution Layers
 
-The package exposes three layers on purpose.
+The package exposes four layers on purpose.
 
 ### 1. Primitive physics layer
 
@@ -113,7 +115,130 @@ not define a second generic package runtime.
 After `using AdaptiveOpticsSim.Ensembles`, `SimulationEnsemble` may schedule
 several independent model instances for coarse offline work.
 
-### 3. Plant execution layer
+### 3. Portable algorithm-graph layer
+
+Use `AdaptiveOpticsSim.AlgorithmGraphs` for a fixed, serial composition of
+AOS-native algorithms. Each graph-node adapter calls the operation's canonical
+domain API and binds its plan, state, workspace, parameters, and exact buffers
+during preparation. The graph layer does not require Calculon and does not
+replace those domain APIs.
+
+```julia
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.AlgorithmGraphs
+
+residual = zeros(Float32, 4)
+controller = discrete_integrator_node(
+    :controller;
+    extent=4,
+    sample_period_s=0.001f0,
+    input_schema="org.example.residual-error/1",
+    output_schema="org.example.controller-command/1",
+    gain=0.3f0,
+    tau_s=0.02f0,
+)
+
+definition = algorithm_graph(
+    (controller,);
+    name=:controller_example,
+    inputs=(graph_input(:residual, :controller => :input, residual),),
+    outputs=(graph_output(:command, :controller => :output),),
+)
+graph = prepare_algorithm_graph(definition)
+
+residual .= (1, 2, 3, 4)
+step_graph!(graph)
+command = graph_output(graph, Val(:command))
+```
+
+For a maintained human-authored topology, `load_algorithm_graph` reads the
+versioned TOML subset and returns the same concrete definition. The file names
+external arrays; Julia supplies them explicitly through `bindings`. Use direct
+Julia construction for generated topology, conditional composition, multi-rate
+orchestration, and other arrangements outside the static file subset.
+
+Node declaration order is execution order. Use `link` only from an earlier
+node to a later node. Feedback requires `delayed_link` and an explicit initial
+ndarray. Graph inputs remain caller-owned; graph outputs alias prepared node
+storage and are valid after a successful step. `graph_step_sequence` identifies
+successful publications, and any node failure stops the graph until
+`reset_graph!`.
+
+For fixed-step model time, use the canonical Plant time values without
+introducing a wall clock:
+
+```julia
+using AdaptiveOpticsSim.Plant
+
+driver = FixedStepModelTimeDriver(
+    PeriodicSchedule(PlantDuration(1_000_000));
+    origin=PlantTimestamp(0),
+)
+timestamp = next_model_timestamp(driver)
+# Update `residual` from physics evaluated at `timestamp`.
+@assert step_graph_at!(graph, driver) == timestamp
+```
+
+`prepare_boundary_model_time_driver` instead seals a finite, strictly
+increasing set of physical boundaries. Its periodic overload expands admitted
+offsets during preparation. Use `advance_model_time!` only after the atomic
+boundary operation succeeds; the cursor owns no callback, task, queue, event
+phase, or wall-clock policy.
+
+For replay, first map external clock readings to run-local Plant time through
+an explicit transport adapter and origin. Store each mapped reading as a
+`CapturedModelTimestamp`, including its uncertainty and immutable concrete
+provenance, then seal the recording:
+
+```julia
+captures = (
+    CapturedModelTimestamp(
+        PlantTimestamp(0),
+        PlantDuration(20),
+        (source=UInt32(3), sequence=UInt64(81)),
+    ),
+    CapturedModelTimestamp(
+        PlantTimestamp(1_000_040),
+        PlantDuration(25),
+        (source=UInt32(3), sequence=UInt64(82)),
+    ),
+)
+replay = prepare_captured_model_time_driver(captures)
+capture = next_model_time_capture(replay)
+@assert next_model_timestamp(replay) == model_timestamp(capture)
+```
+
+The replay cursor schedules by the mapped timestamp and preserves uncertainty
+and provenance for inspection. It does not infer an origin from an absolute
+execution-clock value, pace against wall time, or serialize the recording.
+
+Loading PipeWireAO activates the optional acquisition-metadata adapter on
+Linux. Capture while the PipeWire buffer is still borrowed, then retain the
+owned `CapturedModelTimestamp` after returning the buffer:
+
+```julia
+using PipeWireAO
+
+metadata = buffer_acquisition(buffer)
+origin = capture_model_time_origin(metadata)
+capture = capture_model_timestamp(metadata, origin)
+```
+
+The adapter requires acquisition identity, exposure start, exposure duration,
+and a consistent clock domain. PTP-qualified TAI captures must name the same
+grandmaster and PTP domain as the origin. Host-monotonic captures are suitable
+only within the recording context that established their origin; unrelated
+hosts or boots are not comparable. PipeWireAO still owns live pacing and buffer
+lifetime, while AdaptiveOpticsSim owns only mapped deterministic replay.
+
+This first native path is complete-frame, single-writer, CPU storage. It
+supports typed construction configuration and startup sparse parameters. It
+does not yet provide coordinated runtime-property transactions, conditional
+publication of row blocks, wall-clock pacing, or device placement. Keep manual
+Julia composition for custom physics, Plant for detailed
+physical-event semantics, and PipeWireAO for paced Linux HIL deployment.
+
+### 4. Plant execution layer
 
 Use `AdaptiveOpticsSim.Plant` when the model needs explicit HIL-neutral
 ownership and virtual time.
@@ -759,6 +884,7 @@ For example:
 - `DenseInfluenceMatrix(modes)`
 - `MeasuredInfluenceFunctions(modes; metadata=...)`
 - `ActuatorGridTopology(16)`
+- `ActuatorGridTopology(19; actuator_pitch=0.125)`
 - `SampledActuatorTopology(coords; valid_actuators=mask, metadata=...)`
 - `ClippedActuators(-0.2, 0.2)`
 - `ActuatorHealthMap(gains)`
@@ -780,6 +906,8 @@ may materialize the lazy operator during setup when a dense matrix is genuinely
 required.
 Regular-grid command vectors follow Julia column-major `C[x, y]` ordering, so
 the x actuator coordinate is the first and fastest-varying axis.
+`actuator_pitch` is expressed in normalized pupil coordinates and places the
+square grid symmetrically about zero; omit it for the default `[-1, 1]` axis.
 
 Actuator print-through is represented only when it is already present in a
 sampled influence basis supplied through `DenseInfluenceMatrix` or

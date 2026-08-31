@@ -458,6 +458,13 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :runtime_reconstructor_storage)
     for name in (
         :NullReconstructor,
+        :ControlMatrixPlan,
+        :ClosedLoopCorrectionPlan,
+        :ControllerToVDMPlan,
+        :VDMToPDMPlan,
+        :PDMActuatorRangePlan,
+        :PDMFeedbackToVDMPlan,
+        :VDMFeedbackToControllerPlan,
         :ModalReconstructor,
         :FactorizedReconstructor,
         :MappedReconstructor,
@@ -467,6 +474,12 @@ end
         :DiscreteIntegratorController,
         :VectorDelayLine,
         :shift_delay!,
+        :apply_closed_loop_correction!,
+        :project_controller_to_vdm!,
+        :project_vdm_to_pdm!,
+        :apply_pdm_actuator_range!,
+        :project_pdm_feedback_to_vdm!,
+        :project_vdm_feedback_to_controller!,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)
@@ -478,6 +491,11 @@ end
         :controller_output,
         :reset_controller!,
         :supports_controller_reset,
+        :ClosedLoopCorrectionState,
+        :ClosedLoopCorrectionWorkspace,
+        :reset_closed_loop_correction!,
+        :VDMToPDMWorkspace,
+        :PDMFeedbackToVDMWorkspace,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)
@@ -609,6 +627,11 @@ end
     )
     host_device = compute_device(metadata_storage)
     @test host_device == AdaptiveOpticsSim.Backends.HostComputeDevice()
+    host_bits = trues(2, 2)
+    @test AdaptiveOpticsSim.Backends.execution_style(host_bits) isa
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle
+    @test backend(host_bits) isa CPUBackend
+    @test compute_device(host_bits) == host_device
     @test AdaptiveOpticsSim.Backends.compute_device_backend(host_device) ==
         CPUBackend()
     @test isnothing(
@@ -1220,6 +1243,16 @@ end
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.2)
     src = Source(band=:I, magnitude=0.0)
     wavefront = PupilFunction(tel)
+    opd_parent = zeros(Float64, 64, 64)
+    bound_opd = @view opd_parent[1:2:63, 2:2:64]
+    bound_wavefront = @inferred PupilFunction(tel, bound_opd)
+    @test bound_wavefront.opd === bound_opd
+    @test axes(bound_wavefront.opd) == (Base.OneTo(32), Base.OneTo(32))
+    @test backend(bound_wavefront) == backend(tel)
+    @test_throws DimensionMismatchError PupilFunction(
+        tel,
+        zeros(Float64, 31, 32),
+    )
     field = ElectricField(wavefront, src; zero_padding=2)
     formation = prepare_pupil_field(wavefront, src, field)
     fill_electric_field!(field, wavefront, formation)

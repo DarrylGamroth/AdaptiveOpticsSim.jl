@@ -35,6 +35,7 @@ import ..Backends:
     _resolve_array_backend,
     backend_fill,
     backend_sum_value,
+    compute_device,
     execute_fft_plan!,
     execution_style,
     gpu_backend_name,
@@ -70,6 +71,7 @@ import ..WavefrontSensors:
 
 include("inverse_policies.jl")
 include("modal_basis.jl")
+include("modal_opd_expansion.jl")
 include("ncpa.jl")
 include("interaction_matrix.jl")
 include("control_matrix.jl")

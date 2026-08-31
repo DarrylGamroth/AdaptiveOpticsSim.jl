@@ -337,18 +337,24 @@ end
 @inline _pupil_diameter_m(pupil::PupilFunction) =
     pupil.metadata.sampling[1] * _pupil_resolution(pupil)
 
-function PupilFunction(tel::Telescope;
-    T::Type{<:AbstractFloat}=eltype(pupil_reflectivity(tel)),
-    backend::AbstractArrayBackend=backend(tel))
-    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+function _pupil_function_with_opd(
+    tel::Telescope,
+    opd::AbstractMatrix{T},
+    selector::AbstractArrayBackend,
+) where {T<:AbstractFloat}
+    Base.require_one_based_indexing(opd)
+    expected = (tel.params.resolution, tel.params.resolution)
+    size(opd) == expected || throw(DimensionMismatchError(
+        "pupil OPD storage must match the telescope resolution"))
+    compute_device(opd) == compute_device(pupil_reflectivity(tel)) || throw(
+        InvalidConfiguration(
+            "pupil OPD storage and telescope occupy different compute devices"))
+    selector = require_same_backend(tel, selector)
     support = copy(pupil_mask(tel))
     amplitude = similar(pupil_reflectivity(tel), T,
         tel.params.resolution, tel.params.resolution)
-    opd = similar(pupil_reflectivity(tel), T, tel.params.resolution,
-        tel.params.resolution)
     reflectivity = pupil_reflectivity(tel)
     @. amplitude = sqrt(reflectivity)
-    fill!(opd, zero(T))
     sampling = (T(tel.aperture.sampling_m[1]),
         T(tel.aperture.sampling_m[2]))
     origin = (T(tel.aperture.origin_m[1]), T(tel.aperture.origin_m[2]))
@@ -363,6 +369,32 @@ function PupilFunction(tel::Telescope;
         typeof(metadata),typeof(support),typeof(amplitude),typeof(opd),
         typeof(selector),
     }(metadata, support, amplitude, opd, aperture_revision(tel))
+end
+
+function PupilFunction(tel::Telescope;
+    T::Type{<:AbstractFloat}=eltype(pupil_reflectivity(tel)),
+    backend::AbstractArrayBackend=backend(tel))
+    selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    opd = similar(pupil_reflectivity(tel), T, tel.params.resolution,
+        tel.params.resolution)
+    fill!(opd, zero(T))
+    return _pupil_function_with_opd(tel, opd, selector)
+end
+
+"""
+    PupilFunction(telescope, opd)
+
+Bind caller-owned OPD storage to a newly prepared pupil product on the
+telescope aperture. The support and amplitude are independently materialized
+from the telescope; `opd` retains its exact array identity and must already
+use one-based axes and occupy the same backend and compute device.
+"""
+function PupilFunction(
+    tel::Telescope,
+    opd::AbstractMatrix{T},
+) where {T<:AbstractFloat}
+    selector = require_same_backend(tel, backend(opd))
+    return _pupil_function_with_opd(tel, opd, selector)
 end
 
 """Create an independent optical-path product on the same prepared pupil grid."""

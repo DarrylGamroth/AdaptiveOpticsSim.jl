@@ -25,19 +25,116 @@ end
     @test isempty(findall(flux_mask .& .!geom_mask))
 end
 
+@testset "Shack-Hartmann ordered slope selection" begin
+    full_parent = Float32[-1; collect(1:9); collect(101:109); -1]
+    full_slopes = @view full_parent[2:19]
+    order_parent = UInt32[99, 7, 2, 9, 99]
+    lenslet_order = @view order_parent[2:4]
+    plan = ShackHartmannSlopeSelectionPlan(3, lenslet_order)
+    selected_parent = fill(-1.0f0, 8)
+    selected_slopes = @view selected_parent[2:7]
+
+    fill!(lenslet_order, UInt32(1))
+    @test selected_lenslet_count(plan) == 3
+    @test @inferred(select_shack_hartmann_slopes!(
+        selected_slopes,
+        plan,
+        full_slopes,
+    )) === selected_slopes
+    @test selected_slopes == Float32[7, 107, 2, 102, 9, 109]
+    select_shack_hartmann_slopes!(selected_slopes, plan, full_slopes)
+    @test @allocated(select_shack_hartmann_slopes!(
+        selected_slopes,
+        plan,
+        full_slopes,
+    )) == 0
+    @test selected_parent[[1, 8]] == Float32[-1, -1]
+
+    @test_throws InvalidConfiguration ShackHartmannSlopeSelectionPlan(
+        3,
+        Bool[true],
+    )
+    @test_throws InvalidConfiguration ShackHartmannSlopeSelectionPlan(
+        3,
+        UInt32[],
+    )
+    @test_throws InvalidConfiguration ShackHartmannSlopeSelectionPlan(
+        3,
+        UInt32[0],
+    )
+    @test_throws InvalidConfiguration ShackHartmannSlopeSelectionPlan(
+        3,
+        UInt32[1, 1],
+    )
+    @test_throws DimensionMismatchError ShackHartmannSlopeSelectionPlan(
+        3,
+        UInt32.(1:10),
+    )
+    @test_throws DimensionMismatchError select_shack_hartmann_slopes!(
+        zeros(Float32, 5),
+        plan,
+        full_slopes,
+    )
+    @test_throws InvalidConfiguration select_shack_hartmann_slopes!(
+        @view(full_slopes[1:6]),
+        plan,
+        full_slopes,
+    )
+end
+
 @testset "Shack-Hartmann optical rate map" begin
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.1)
     pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=7.0)
     sh = ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
-    rate = shack_hartmann_rate_map(sh, pupil, src)
-    prepared = prepare_wfs_optics(shack_hartmann_optics(sh, src),
-        pupil, rate)
+    optics = shack_hartmann_optics(sh, src)
+    rate_parent = zeros(eltype(pupil.opd), 256, 256)
+    rate_values = @view rate_parent[1:2:255, 2:2:256]
+    rate = shack_hartmann_rate_map(optics, pupil, rate_values)
+    prepared = prepare_wfs_optics(optics, pupil, rate)
+    form_wfs_optical_products!(rate, pupil, prepared)
     form_wfs_optical_products!(rate, pupil, prepared)
     @test WavefrontSensors.wfs_optical_products(prepared) === rate
+    @test rate.values === rate_values
     @test size(rate.values) == (128, 128)
     @test size(prepared.workspace.sampled_spot_cube) ==
         (16 * 16, 8, 8)
+end
+
+@testset "Shack-Hartmann scalar spot-stack sampling" begin
+    T = Float64
+    tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    pupil = PupilFunction(tel; T=T)
+    src = Source(band=:I, magnitude=zero(T), T=T)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
+        diffraction_padding=2, n_pix_subap=2, shannon_sampling=false, T=T)
+    WavefrontSensors.prepare_sampling!(wfs, pupil, src)
+    optics = WavefrontSensors.shack_hartmann_optics(wfs)
+    propagation = Optics.microlens_propagation_workspace(optics.propagation)
+    intensity_stack = propagation.intensity_stack
+    intensity_stack .= reshape(T.(1:length(intensity_stack)),
+        size(intensity_stack))
+
+    binning = propagation.binning_pixel_scale
+    n_binned = div(size(intensity_stack, 1), binning)
+    binned = zeros(T, n_binned, n_binned)
+    centered = zeros(T, size(propagation.sampled_spot_cube, 2),
+        size(propagation.sampled_spot_cube, 3))
+    expected = similar(propagation.sampled_spot_cube)
+    @inbounds for idx in axes(intensity_stack, 3)
+        bin2d!(binned, @view(intensity_stack[:, :, idx]), binning)
+        center_resize2d!(centered, binned)
+        @views expected[idx, :, :] .= centered
+    end
+
+    actual = WavefrontSensors.sample_spot_stack!(
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), optics)
+    @test actual == expected
+    WavefrontSensors.sample_spot_stack!(
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), optics)
+    @test @allocated(WavefrontSensors.sample_spot_stack!(
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(), optics)) == 0
 end
 
 @testset "Shack-Hartmann signal extraction branches" begin

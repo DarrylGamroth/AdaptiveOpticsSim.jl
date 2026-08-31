@@ -5061,6 +5061,99 @@ end
 
 run_optional_backend_plan_checks(::Type{<:AdaptiveOpticsSim.Backends.GPUBackendTag}, tel, backend) = nothing
 
+function run_optional_pyramid_shifted_mask_checks(
+    ::Type{B}, BackendArray,
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    resolution = 16
+    selector = backend_selector(B)
+    cpu_telescope = Telescope(
+        resolution=resolution,
+        diameter=T(8),
+        central_obstruction=zero(T),
+        T=T,
+        backend=CPUBackend(),
+    )
+    device_telescope = Telescope(
+        resolution=resolution,
+        diameter=T(8),
+        central_obstruction=zero(T),
+        T=T,
+        backend=selector,
+    )
+    source = Source(band=:I, magnitude=zero(T), T=T)
+    cpu_pupil = PupilFunction(cpu_telescope; T=T)
+    device_pupil = PupilFunction(device_telescope; T=T, backend=selector)
+    @inbounds for i in 1:resolution, j in 1:resolution
+        x = T(2 * (i - 1) / (resolution - 1) - 1)
+        y = T(2 * (j - 1) / (resolution - 1) - 1)
+        cpu_pupil.opd[i, j] = T(40e-9) *
+            (sinpi(x) + T(0.4) * cospi(y) + T(0.2) * x * y)
+    end
+    copyto!(device_pupil.amplitude, cpu_pupil.amplitude)
+    copyto!(device_pupil.opd, cpu_pupil.opd)
+
+    modulation_path = (
+        (T(1.3), T(0.7)),
+        (T(-0.4), T(1.1)),
+        (T(-0.9), T(-0.5)),
+        (T(0.6), T(-1.2)),
+    )
+    common = (
+        pupil_samples=4,
+        mode=Diffractive(),
+        modulation=zero(T),
+        user_modulation_path=modulation_path,
+        diffraction_padding=8,
+        T=T,
+    )
+    reference_sensor = PyramidWFS(
+        cpu_telescope;
+        common...,
+        modulation_propagation_strategy=
+            WavefrontSensors.PyramidPupilTiltStrategy(),
+    )
+    shifted_sensor = PyramidWFS(
+        device_telescope;
+        common...,
+        backend=selector,
+        modulation_propagation_strategy=
+            WavefrontSensors.PyramidShiftedMaskStrategy(),
+    )
+    reference_front_end = PyramidOpticalFrontEnd(reference_sensor, source)
+    shifted_front_end = PyramidOpticalFrontEnd(shifted_sensor, source)
+    reference_rate = pyramid_rate_map(reference_front_end, cpu_pupil)
+    shifted_rate = pyramid_rate_map(shifted_front_end, device_pupil)
+    reference_prepared = prepare_wfs_optics(
+        reference_front_end,
+        cpu_pupil,
+        reference_rate,
+    )
+    shifted_prepared = prepare_wfs_optics(
+        shifted_front_end,
+        device_pupil,
+        shifted_rate,
+    )
+    form_wfs_optical_products!(reference_rate, cpu_pupil, reference_prepared)
+    form_wfs_optical_products!(shifted_rate, device_pupil, shifted_prepared)
+    synchronize_backend!(execution_style(shifted_rate.values))
+
+    batch = pyramid_propagation_workspace(shifted_sensor).modulation_batch
+    @test batch isa WavefrontSensors.PyramidShiftedMaskModulationWorkspace
+    @test batch.batch_size == length(modulation_path)
+    @test batch.field_stack isa BackendArray
+    @test batch.shifted_masks isa BackendArray
+    @test batch.operating_weights isa BackendArray
+    @test batch.axis_1_shifts_rad isa BackendArray
+    @test batch.axis_2_shifts_rad isa BackendArray
+    @test shifted_rate.values isa BackendArray
+    shifted_host = Array(shifted_rate.values)
+    @test sum(shifted_host) ≈ sum(reference_rate.values) rtol = T(3e-5)
+    @test norm(shifted_host .- reference_rate.values) /
+        norm(reference_rate.values) < T(0.02)
+    return nothing
+end
+
 function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:AbstractFloat}
     H_host = T[1 0; 0 2; 1 1]
     residual_host = T[2, -1, 0.5]
@@ -5301,6 +5394,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         T=T)
     pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
     bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
+    @test pyr_propagation.modulation_batch isa
+        WavefrontSensors.PyramidModulationBatchWorkspace
+    @test pyr_propagation.modulation_batch.batch_size == 8
+    @test size(pyr_propagation.modulation_batch.field_stack, 3) == 8
     @test WavefrontSensors.grouped_accumulation_strategy(
         AdaptiveOpticsSim.Backends.execution_style(
             pyr_propagation.intensity), pyr) isa
@@ -5569,6 +5666,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         T=T)
     pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
     bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
+    @test pyr_propagation.modulation_batch isa
+        WavefrontSensors.PyramidModulationBatchWorkspace
+    @test pyr_propagation.modulation_batch.batch_size == 8
+    @test size(pyr_propagation.modulation_batch.field_stack, 3) == 8
     @test WavefrontSensors.grouped_accumulation_strategy(
         AdaptiveOpticsSim.Backends.execution_style(
             pyr_propagation.intensity), pyr) isa
@@ -6027,6 +6128,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_zernike_normalization(B, backend)
     run_optional_generic_wfs_acquisition_checks(B, backend)
     run_optional_wfs_stage_contracts(B, backend)
+    run_optional_pyramid_shifted_mask_checks(B, backend)
     run_optional_spad_qualification_checks(B, backend)
     run_optional_prepared_plant_checks(B, backend)
     run_optional_target_partition_checks(B, backend)

@@ -260,32 +260,50 @@ compute_intensity_spectral_stack!(style::AcceleratorStyle,
     wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource) =
     compute_intensity_spectral_stack!(style, wfs, pupil, src, nothing)
 
-@inline function copy_stack_plane_to_matrix!(dest::AbstractMatrix{T}, stack::AbstractArray{T,3}, idx::Int) where {T}
-    @inbounds for y in axes(dest, 2), x in axes(dest, 1)
-        dest[x, y] = stack[x, y, idx]
-    end
-    return dest
-end
-
-@inline function copy_matrix_to_stack_plane!(stack::AbstractArray{T,3}, idx::Int, src::AbstractMatrix{T}) where {T}
-    @inbounds for y in axes(src, 2), x in axes(src, 1)
-        stack[idx, x, y] = src[x, y]
-    end
-    return stack
-end
-
 function sample_spot_stack!(::ScalarCPUStyle,
     optics::ShackHartmannOptics)
     propagation = microlens_propagation_workspace(optics.propagation)
-    n_spots = size(propagation.sampled_spot_cube, 1)
-    @inbounds for idx in 1:n_spots
-        copy_stack_plane_to_matrix!(propagation.intensity,
-            propagation.intensity_stack, idx)
-        sample_spot!(optics, propagation.intensity)
-        copy_matrix_to_stack_plane!(propagation.sampled_spot_cube, idx,
-            propagation.spot)
+    intensity_stack = propagation.intensity_stack
+    sampled_spot_cube = propagation.sampled_spot_cube
+    pad_x = size(intensity_stack, 1)
+    pad_y = size(intensity_stack, 2)
+    binning = propagation.binning_pixel_scale
+    pad_x % binning == 0 && pad_y % binning == 0 || throw(
+        InvalidConfiguration(
+            "lenslet sampling is not divisible by binning_pixel_scale",
+        ),
+    )
+    n_binned_x = div(pad_x, binning)
+    n_binned_y = div(pad_y, binning)
+    n_out_x = size(sampled_spot_cube, 2)
+    n_out_y = size(sampled_spot_cube, 3)
+    offset_x = div(n_out_x - n_binned_x, 2)
+    offset_y = div(n_out_y - n_binned_y, 2)
+    T = eltype(sampled_spot_cube)
+
+    @inbounds for v in axes(sampled_spot_cube, 3),
+                  u in axes(sampled_spot_cube, 2),
+                  idx in axes(sampled_spot_cube, 1)
+        binned_x = u - offset_x
+        binned_y = v - offset_y
+        value = zero(T)
+        if 1 <= binned_x <= n_binned_x &&
+                1 <= binned_y <= n_binned_y
+            if binning == 1
+                value = intensity_stack[binned_x, binned_y, idx]
+            else
+                for ii in 1:binning, jj in 1:binning
+                    value += intensity_stack[
+                        (binned_x - 1) * binning + ii,
+                        (binned_y - 1) * binning + jj,
+                        idx,
+                    ]
+                end
+            end
+        end
+        sampled_spot_cube[idx, u, v] = value
     end
-    return propagation.sampled_spot_cube
+    return sampled_spot_cube
 end
 
 function sample_spot_stack!(style::AcceleratorStyle,

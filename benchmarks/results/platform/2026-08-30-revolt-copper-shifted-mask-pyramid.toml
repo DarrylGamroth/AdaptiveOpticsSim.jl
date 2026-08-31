@@ -1,0 +1,241 @@
+artifact_id = "REVOLT-COPPER-SHIFTED-MASK-PYRAMID-2026-08-30"
+generated_on = "2026-08-30"
+source_revision = "7feb5bd6671e73dd9b669897ccef892f75f62259"
+source_tracked_dirty = false
+baseline_artifact = "2026-08-30-revolt-algorithm-optimization-review.toml"
+evidence_class = "focused numerical comparison plus warmed synchronized diagnostic profile"
+raw_histograms_archived = false
+hypothesis = "For fixed prepared modulation, moving each quadrature point from a pupil-plane phase tilt to a precomputed shifted focal-plane Pyramid mask reduces a 32-point propagation from 64 logical transforms to 33 without reducing optical or detector sampling."
+
+[contract]
+graph_profile = "fast_dm"
+graph = "examples/graphs/revolt_copper_hil_fast_dm.toml"
+selection = "run immutable and selected before graph preparation"
+load_model = "warmed serial closed loop"
+arrival_model = "the next step starts only after the prior step completes"
+coordinated_omission_correction = false
+timer = "time_ns; timer overhead is included and not subtracted"
+julia_threads = 1
+blas_threads = 1
+fft_threads = 1
+graph_boundary = "all graph nodes plus one exact graph-context synchronization"
+frame_host_ready_boundary = "graph boundary plus a completed target-to-host frame copy"
+command_target_ready_boundary = "finite host command validation plus a completed host-to-target command copy"
+tail_note = "The percentiles are diagnostic and do not establish a production tail-latency bound."
+fidelity_note = "Pupil, focal-plane, detector, atmosphere, modulation-point, and DM sampling are unchanged. The shifted-mask propagation is an explicit detector-product approximation to the default pupil-tilt propagation."
+
+[workload]
+architecture = "REVOLT Copper"
+pupil_resolution = 480
+fft_plane_shape = [1024, 1024]
+sensor = "diffractive modulated Pyramid"
+modulation_points = 32
+modulation_radius = 5.0
+diffraction_padding = 2
+pyramid_pupils = 4
+pyramid_pupil_samples = 30
+detector_frame_shape = [64, 64]
+detector_noise = true
+atmosphere_layers = 5
+atmosphere_step_s = 0.002
+dm_actuators = 277
+dm_model = "provisional regular-grid separable analytic Gaussian HSDM277"
+
+[algorithm]
+reference_strategy = "PyramidPupilTiltStrategy"
+measured_strategy = "PyramidShiftedMaskStrategy"
+reference_logical_transforms_per_frame = 64
+measured_logical_transforms_per_frame = 33
+accelerator_inverse_transform_batch_size = 8
+api_default = "PyramidPupilTiltStrategy"
+graph_opt_in = "Both maintained REVOLT Copper TOML graphs explicitly select shifted_mask."
+validity_boundary = "Fixed prepared modulation only. A dynamic modulation-path update requires shifted-mask reconstruction and graph re-preparation."
+equivalence = "Not pointwise exact for fractional Fourier-grid shifts. Validate each admitted pupil sampling and aberration envelope against the reference strategy."
+
+[memory]
+element_type = "ComplexF32"
+shifted_mask_stack_shape = [1024, 1024, 32]
+shifted_mask_stack_bytes = 268435456
+shifted_mask_stack_mib = 256
+bounded_field_tile_shape = [1024, 1024, 8]
+bounded_field_tile_bytes = 67108864
+bounded_field_tile_mib = 64
+major_dedicated_array_bytes = 335544320
+major_dedicated_array_mib = 320
+note = "These prepared arrays trade approximately 320 MiB of additional storage for fewer forward transforms; other Pyramid and graph storage is additional."
+
+[numerical_comparison]
+backend = "cpu"
+input = "one deterministic full-resolution REVOLT Copper atmosphere-evolved pupil OPD"
+product = "64-by-64 binned Pyramid photon-rate image before detector noise"
+reference = "PyramidPupilTiltStrategy with the same 32-point quadrature"
+relative_l2_error = 0.012036034
+maximum_absolute_error_over_reference_peak = 0.019785527
+total_flux_ratio = 1.0
+interpretation = "The selected workload meets the focused two-percent product criterion. This single comparison does not establish a general error bound or pointwise equivalence."
+
+[environment.local]
+host = "rtc-devel"
+os = "Linux"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+logical_cpu_threads = 16
+gpu = "AMD Radeon Graphics"
+gpu_architecture = "gfx1030"
+julia = "1.12.7"
+amdgpu_jl = "2.7.0"
+
+[environment.wsl_cuda]
+host = "wsl"
+os = "Linux WSL2 x86_64"
+cpu = "12th Gen Intel Core i7-12700H"
+logical_cpu_threads = 20
+gpu = "NVIDIA GeForce RTX 3050 Ti Laptop GPU"
+gpu_memory_mib = 4096
+driver = "596.08"
+julia = "1.12.6"
+cuda_jl = "6.3.1"
+power_control = "Laptop GPU clocks and power state were not fixed."
+
+[[results]]
+system = "local"
+backend = "cpu"
+samples = 30
+warmup_cycles = 5
+preparation_ns = 9221618601
+graph_mean_ns = 239498679.03333333
+graph_p50_ns = 240386047
+graph_p90_ns = 257687551
+graph_p99_ns = 279445503
+graph_rate_hz = 4.175388373899216
+wfs_mean_ns = 213560507.06666666
+wfs_p50_ns = 211943423
+wfs_p90_ns = 225837055
+wfs_p99_ns = 243662847
+frame_host_ready_mean_ns = 215624817.86666667
+frame_host_ready_p50_ns = 212860927
+frame_host_ready_p90_ns = 223739903
+frame_host_ready_p99_ns = 246808575
+frame_host_ready_rate_hz = 4.637685076763093
+
+[[results]]
+system = "local"
+backend = "amdgpu"
+samples = 100
+warmup_cycles = 20
+preparation_ns = 29398759593
+graph_mean_ns = 65848662.44
+graph_p50_ns = 65830911
+graph_p90_ns = 66617343
+graph_p99_ns = 67436543
+graph_rate_hz = 15.18633732175168
+wfs_mean_ns = 64906009.85
+wfs_p50_ns = 64782335
+wfs_p90_ns = 66060287
+wfs_p99_ns = 67305471
+frame_host_ready_mean_ns = 67057694.35
+frame_host_ready_p50_ns = 66453503
+frame_host_ready_p90_ns = 68419583
+frame_host_ready_p99_ns = 80281599
+frame_host_ready_rate_hz = 14.912531808514231
+
+[[cuda_results]]
+repetition = 1
+source_capture = "working tree later committed unchanged as source_revision"
+samples = 500
+warmup_cycles = 100
+graph_mean_ns = 22307824.97
+wfs_mean_ns = 19471798.844
+wfs_p50_ns = 19447807
+wfs_p90_ns = 20054015
+wfs_p95_ns = 20201471
+wfs_p99_ns = 20643839
+wfs_maximum_ns = 21315583
+frame_host_ready_mean_ns = 22862653.578
+frame_host_ready_p50_ns = 22839295
+frame_host_ready_p90_ns = 24084479
+frame_host_ready_p95_ns = 24461311
+frame_host_ready_p99_ns = 25346047
+frame_host_ready_maximum_ns = 26066943
+frame_host_ready_rate_hz = 43.73945467827356
+
+[[cuda_results]]
+repetition = 2
+source_capture = "working tree later committed unchanged as source_revision"
+samples = 500
+warmup_cycles = 100
+graph_mean_ns = 21842809.106
+wfs_mean_ns = 19215464.614
+wfs_p50_ns = 19185663
+wfs_p90_ns = 19660799
+wfs_p95_ns = 19824639
+wfs_p99_ns = 20201471
+wfs_maximum_ns = 20447231
+frame_host_ready_mean_ns = 22893466.636
+frame_host_ready_p50_ns = 22331391
+frame_host_ready_p90_ns = 25722879
+frame_host_ready_p95_ns = 26214399
+frame_host_ready_p99_ns = 26984447
+frame_host_ready_maximum_ns = 27754495
+frame_host_ready_rate_hz = 43.680584330007015
+
+[[cuda_results]]
+repetition = 3
+source_capture = "git archive of source_revision"
+samples = 500
+warmup_cycles = 100
+preparation_ns = 25546273845
+graph_mean_ns = 24803661.398
+graph_p50_ns = 25133055
+graph_p90_ns = 26165247
+graph_p99_ns = 27443199
+wfs_mean_ns = 19024866.57
+wfs_p50_ns = 19005439
+wfs_p90_ns = 19513343
+wfs_p95_ns = 19644415
+wfs_p99_ns = 20086783
+wfs_maximum_ns = 20185087
+frame_host_ready_mean_ns = 22846356.662
+frame_host_ready_p50_ns = 22970367
+frame_host_ready_p90_ns = 23904255
+frame_host_ready_p95_ns = 24199167
+frame_host_ready_p99_ns = 24625151
+frame_host_ready_maximum_ns = 25296895
+frame_host_ready_rate_hz = 43.770655198747065
+
+[comparison.cpu]
+baseline_wfs_mean_ns = 431352053.3
+shifted_mask_wfs_mean_ns = 213560507.06666666
+wfs_speedup = 2.0198118988608034
+baseline_frame_host_ready_rate_hz = 2.344418350812919
+shifted_mask_frame_host_ready_rate_hz = 4.637685076763093
+frame_host_ready_rate_ratio = 1.9781815285462991
+
+[comparison.amdgpu]
+baseline_wfs_mean_ns = 106128108.72
+shifted_mask_wfs_mean_ns = 64906009.85
+wfs_speedup = 1.6351044990327654
+baseline_frame_host_ready_rate_hz = 9.354893535509662
+shifted_mask_frame_host_ready_rate_hz = 14.912531808514231
+frame_host_ready_rate_ratio = 1.5940888853420592
+
+[comparison.cuda]
+baseline_wfs_mean_ns_range = [31446763.0, 38625348.0]
+shifted_mask_wfs_mean_ns_range = [19024866.57, 19471798.844]
+wfs_speedup_range = [1.614990132752421, 2.0302559210011846]
+baseline_frame_host_ready_rate_hz_range = [16.224, 21.602]
+shifted_mask_frame_host_ready_rate_hz_range = [43.680584330007015, 43.770655198747065]
+frame_host_ready_rate_ratio_range = [2.022103455804473, 2.6978948946603816]
+interpretation = "Retain the sustained ranges because the laptop GPU power state was unmanaged."
+
+[excluded_run]
+system = "wsl"
+backend = "cuda"
+reason = "A requested second post-commit archive repetition produced no samples after the WSL guest stopped responding; the SSH process was cancelled and no partial timing data were retained."
+
+[validation]
+cpu_wfs = "passed; focused WFS suite, including deterministic approximation error and warmed zero-allocation checks"
+cpu_graphs = "passed; both maintained REVOLT graph files and a full atmosphere-enabled Copper graph execution"
+ownership_contract = "passed; 11834 prepared-execution ownership checks"
+quality_contracts = "passed; Aqua, execution-strategy terminology, inference, namespace, HIL import, and test-baseline checks"
+amdgpu = "passed; focused shifted-mask backend residency, scalar-indexing-disabled execution, flux, and error checks"
+cuda = "passed; focused shifted-mask backend residency, scalar-indexing-disabled execution, flux, and error checks on the RTX 3050 Ti"

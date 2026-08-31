@@ -99,6 +99,104 @@ Use the direct `Proper.prop_dm(wf, dm_surface)` path only when the external
 science prescription should own a DM surface internally. If the AO runtime has
 already applied the DM, pass the total sampled OPD instead.
 
+## Optional Proper Graph Node
+
+`Proper.jl` remains outside the AdaptiveOpticsSim core dependency graph. The
+optional `AdaptiveOpticsProperHIL.jl` companion exposes a
+[`Proper propagation graph node`](./glossary.md):
+
+```julia
+using AdaptiveOpticsProperHIL
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.AlgorithmGraphs
+
+configuration = ProperPropagationConfiguration(
+    coronagraph_prescription;
+    resolution=128,
+    output_rows=128,
+    output_columns=128,
+    diameter_m=8.0f0,
+    wavelength_um=1.65f0,
+)
+node = proper_propagation_node(:science_propagation, configuration)
+```
+
+The maintained node has two complete-frame inputs, `pupil_opd` and
+`pupil_amplitude`, and one output. Its configuration fixes the prescription,
+square propagation resolution, rectangular output shape, physical diameter,
+wavelength, random seed, port schemas, and numeric type before execution.
+`output_rows` and `output_columns` default to `resolution`.
+`prepare_algorithm_graph(...; target=...)` selects the exact CPU or GPU device
+for the complete graph. The default output schema is normalized intensity. A
+different schema may be declared only when the prescription and downstream
+integration actually satisfy that contract; the adapter does not invent a
+crop, resampling rule, photon-rate scale, or detector exposure.
+
+The adapter preserves the package ownership model:
+
+- its immutable execution plan contains only the run-immutable prescription
+  contract
+- evolving random state has a distinct persistent owner and resets to the
+  configured seed
+- the `Proper.RunContext`, wavefront field, prescription-specific assets, and
+  reusable scratch belong to the replaceable workspace owner
+- `AlgorithmGraphs` preparation binds the final admitted graph input and output
+  arrays exactly, so a graph step performs no frame copy at that node boundary
+
+A prescription that needs masks, propagation plans, or other prepared assets
+may specialize `prepare_proper_assets`. It must return a concrete named tuple;
+the preparation hook receives both the square propagation resolution and the
+declared output shape so it can prepare a target-resident mapping without
+allocating during a graph step. The prescription owns the physical meaning of
+that mapping; rectangular dimensions alone do not define detector sampling.
+`reset_proper_assets!` resets any replaceable asset state at a serialized graph
+boundary. The prescription remains an ordinary Julia function and receives the
+prepared `pupil_opd`, `pupil_amplitude`, `diameter_m`, field, wavefront, output,
+and run context as keyword arguments.
+
+For a TOML-defined graph, the application explicitly admits the trusted Julia
+prescription under a node-type name with `proper_propagation_node_factory` and
+passes that factory in the loader's immutable `node_types` map. The TOML file
+can select the admitted name and construction values, but it cannot resolve or
+evaluate Julia code. Direct Julia graph construction remains available when a
+SPIDERS prescription or topology is generated or conditional.
+
+The companion contains separate `spiders_llowfs_hil.toml` and
+`spiders_scc_hil.toml` topology files. An application registers each node type
+with `proper_propagation_node_factory(configuration)`, where the captured
+configuration owns the trusted prescription and all physical values. The files
+are separate because the simple executor invokes every node once per graph
+step; the caller can therefore drive LLOWFS and SCC at different complete-frame
+model-time boundaries. These files end at sensor observations. The primary HIL
+loop publishes those observations to PipeWireAO, receives one complete PDM
+command from the external RTC, applies the measured DM response in AOS, and
+then renders later path OPDs. An in-process RTC graph is useful for reference
+tests, but it is not implicit in either SPIDERS sensor file.
+
+One prepared Proper node is homogeneous in numeric type, array backend,
+and exact device. A complete algorithm graph may connect different element
+types through explicit conversion algorithms, but every array in one graph is
+currently placed on one exact compute target. Neither the node nor the
+graph inserts a fallback or transfer. A GPU-produced science frame therefore
+reaches a CPU RTC or PipeWireAO client only through an explicit
+application-owned device-to-host copy or prepared handoff after successful
+graph publication.
+
+Focused companion tests exercise square and rectangular outputs on CPU, local
+AMDGPU, and WSL CUDA hardware with GPU scalar indexing disabled. They establish
+CPU/GPU numerical agreement, exact residency, graph buffer identity, explicit
+host publication, and zero warmed Julia heap allocation on the CPU path. The
+SPIDERS files are also loaded and stepped independently with test
+prescriptions. These checks do not establish coronagraph fidelity, SPIDERS
+end-to-end validity, detector response, observation labeling, service time,
+acquisition cadence, or asynchronous failure isolation.
+
+The node is usable today from Julia scripts and
+`AdaptiveOpticsSim.AlgorithmGraphs`. Direct execution of Julia prescriptions in
+PipeWire remains a separate Julia-host/module adapter problem. This graph-node
+adapter does not turn Julia code into a native FGN shared-library plugin or
+make Calculon part of the AOS API.
+
 ## NCPA Ownership
 
 Use the native `NCPA` or `OPDMap` model for a static or slowly varying
@@ -172,6 +270,11 @@ For repeated HIL execution:
    `prop_run(science_model; payload=payload)`, update the caller-owned map, and
    execute the prepared detector acquisition.
 6. Benchmark the combined command-to-pixels path on each claimed backend.
+
+For a portable complete-frame graph, replace steps 2 and 5 with preparation of
+the optional Proper graph node and one `step_graph!` call. Keep the complete
+Proper path atomic: the prescription may evaluate every required optical plane
+internally, while the graph publishes only its completed output frame.
 
 Avoid host transfers in the frame loop. Use `Array(...)` only as an explicit
 boundary when the AO runtime and science model intentionally live on different

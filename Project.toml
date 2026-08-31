@@ -15,6 +15,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [weakdeps]
 AcceleratedKernels = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
@@ -25,6 +26,7 @@ CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 Dagger = "d58978e5-989f-55fb-8d15-ea34adc7bf54"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+PipeWireAO = "5d815c25-fdf3-4508-8205-db8be38ea5d0"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
 [extensions]
@@ -36,6 +38,7 @@ AdaptiveOpticsSimCUDAExt = "CUDA"
 AdaptiveOpticsSimDaggerExt = "Dagger"
 AdaptiveOpticsSimJSON3Ext = "JSON3"
 AdaptiveOpticsSimMetalExt = "Metal"
+AdaptiveOpticsSimPipeWireAOExt = "PipeWireAO"
 AdaptiveOpticsSimTablesExt = "Tables"
 
 [compat]
@@ -57,6 +60,7 @@ KernelAbstractions = "0.9.42"
 LinearAlgebra = "1.9"
 Logging = "1.9"
 Metal = "1"
+PipeWireAO = "0.4"
 Random = "1.9"
 SHA = "0.7"
 SparseArrays = "1.9"
@@ -74,7 +78,6 @@ InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [targets]
-test = ["Aqua", "DelimitedFiles", "InteractiveUtils", "SHA", "Tables", "Test", "TOML"]
+test = ["Aqua", "DelimitedFiles", "InteractiveUtils", "SHA", "Tables", "Test"]

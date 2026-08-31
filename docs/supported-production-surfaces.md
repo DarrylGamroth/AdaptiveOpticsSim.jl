@@ -391,6 +391,16 @@ Scientist-owned HEART boundary truth artifact:
 
 The following are outside the current support claim:
 
+- the portable `AlgorithmGraphs` executor and optional Proper propagation
+  graph node as production HIL surfaces. Focused CPU, AMDGPU, and CUDA tests
+  validate static complete-frame composition, square-to-rectangular Proper
+  output, exact device residency, an explicit GPU-to-host publication boundary,
+  and independent loading of declarative SPIDERS LLOWFS/SCC sensor topologies.
+  The SPIDERS checks use test prescriptions and establish topology only;
+  representative graph-size service cost, qualified physical prescriptions,
+  detector response and metadata, asynchronous acquisition pacing, independent
+  WFS/science failure isolation, full SPIDERS fidelity, and routine release
+  qualification remain open
 - CUDA execution. The extension, dedicated test project, focused 250/250
   detector target, complete 1,028/1,028 hardware target, and current manual WSL
   evidence—including the exact detector family scope in the

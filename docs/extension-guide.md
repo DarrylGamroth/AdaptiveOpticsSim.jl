@@ -158,6 +158,42 @@ barrier with inference and allocation evidence.
 The implementation migration and its required evidence are tracked in
 [issue #225](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/225).
 
+## Algorithm Graph Adapters
+
+Optional packages implement the qualified-public
+[`Algorithm graph adapter protocol`](./glossary.md) owned by
+`AdaptiveOpticsSim.AlgorithmGraphs`. The scientific module remains the authority
+for its plan, state, workspace, products, configuration, and canonical domain
+operation. The graph adapter only declares ports and binds an exact execution
+owner; it must not replace domain functions such as `update!`,
+`combine_basis!`, or a prescription-specific Proper call with a universal
+scientific API.
+
+The protocol methods are:
+
+| Method | Adapter obligation |
+|---|---|
+| `graph_node_ports(Node, config)` | Return one fixed tuple of `graph_port_contract(...)` values in declaration order. Names, direction, role, element type, shape, schema, and layout must depend only on construction and graph-rebuild config, never props. |
+| `prepare_graph_node(Node, config, props, inputs, outputs, parameters, target)` | After complete graph admission, return one concrete prepared owner that binds the exact plan, state, workspace, named buffers, sparse parameters, and target needed by the node. Every declared sparse parameter is required. |
+| `step_graph_node!(owner)` | Execute bounded repeated-path work through the domain API and the exact buffers retained by `owner`; do not replace their storage. |
+| `reset_graph_node!(owner)` | Reset persistent state at a serialized graph boundary without changing exact bindings. Stateless nodes return `nothing`. |
+
+Use these exact names through the `AlgorithmGraphs` module. They are public but
+not exported so extension code makes ownership visible. There are no
+underscore-prefixed aliases. A node with no persistent state still returns a
+small exact owner retaining its plan and buffers. A node that must prebind FFT
+plans, wavefronts, random state, or other resources does so only in
+`prepare_graph_node`, after all formats, topology, startup parameters, and
+storage have been admitted.
+
+Preparation may allocate and may fail. `step_graph_node!` and
+`reset_graph_node!` execute inside the graph's retained exact-device context;
+the adapter must not select a different device or stream. A CPU repeated path
+requires inference and an explicit warmed allocation budget. Accelerator claims
+require native storage, exact-device residency, scalar-index prohibition, and
+real-hardware evidence. Input/output aliasing, replacement, wrong schema or
+shape, and foreign or wrapped storage must fail before repeated execution.
+
 ## Exact Compute-Device Selection
 
 Gate 9A preparation distinguishes a semantic backend family from one exact
@@ -1313,6 +1349,15 @@ Use this split:
 
 Prefer concrete state and workspace fields. Avoid hidden allocations in the
 per-step control path.
+
+`DiscreteIntegratorController` is a prepared execution owner rather than an
+algorithm plan. Its qualified `discrete_integrator_plan`,
+`discrete_integrator_state`, and `discrete_integrator_workspace` accessors
+expose the run-immutable coefficients, persistent mathematical history, and
+replaceable scratch as separate concrete owners. A graph adapter may package
+the state and workspace together for an external interface that provides one
+mutable execution slot, but it must not reclassify persistent state as
+replaceable workspace.
 
 For large calibration/control surfaces:
 

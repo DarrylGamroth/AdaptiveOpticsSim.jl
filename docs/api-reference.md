@@ -1797,12 +1797,26 @@ Import the maintained control surface explicitly:
 using AdaptiveOpticsSim.Control
 ```
 
-- Reconstructors: `NullReconstructor`, `ModalReconstructor`,
+- Reconstructors: `NullReconstructor`, `ControlMatrixPlan`, `ModalReconstructor`,
   `FactorizedReconstructor`, `MappedReconstructor`,
   `ControlledReconstructor`, `reconstruct!`, `reconstruct`
-- Controller: `DiscreteIntegratorController`. `ControlledReconstructor`
-  composes a reconstructor and stateful controller without adding a runtime
-  branch.
+- Controllers: `DiscreteIntegratorController` and the complete-frame
+  `ClosedLoopCorrectionPlan` / `apply_closed_loop_correction!` recurrence.
+  The latter keeps persistent `ClosedLoopCorrectionState` and replaceable
+  `ClosedLoopCorrectionWorkspace` separate; its first step starts from zero,
+  and later steps consume the preceding demanded-minus-realized correction in
+  the same coordinates. `ControlledReconstructor` composes a reconstructor and
+  stateful controller without adding a runtime branch.
+- Deformable-mirror command routing: `ControllerToVDMPlan` /
+  `project_controller_to_vdm!`, `VDMToPDMPlan` /
+  `project_vdm_to_pdm!`, `PDMFeedbackToVDMPlan` /
+  `project_pdm_feedback_to_vdm!`, and `VDMFeedbackToControllerPlan` /
+  `project_vdm_feedback_to_controller!` apply explicit calibrated maps between
+  controller, active/full VDM, and physical-actuator coordinates.
+  `PDMActuatorRangePlan` / `apply_pdm_actuator_range!` applies only prepared
+  per-actuator lower and upper ranges and returns requested-minus-demanded
+  feedback. The two two-stage projections keep their full-VDM intermediate in
+  replaceable `VDMToPDMWorkspace` or `PDMFeedbackToVDMWorkspace` storage.
 
 Core calibration and configuration APIs perform no implicit filesystem I/O.
 They accept no cache path or serialization policy and do not select a file
@@ -1816,9 +1830,90 @@ the canonical representation of these results.
 - HIL-neutral orchestration: the `AdaptiveOpticsSim.Plant` definitions,
   prepared owners, command lifecycle, triggers, detector lifecycles, and event
   loop documented above
+- Portable complete-frame algorithm composition: import
+  `AdaptiveOpticsSim.AlgorithmGraphs`, declare AOS-native nodes, connect them
+  with `link` or an explicit `delayed_link`, call
+  `prepare_algorithm_graph`, and execute with `step_graph!`. The graph-node
+  protocol binds canonical scientific operations to exact graph storage; it is
+  not a second numerical algorithm interface or a wall-clock scheduler.
+- External-RTC lockstep staging: `prepare_graph_hil_boundary` binds one
+  prepared graph's complete command input and frame output to separate host
+  exchange buffers. `step_hil_frame!` produces one positive frame sequence,
+  and `adopt_hil_command!` requires a complete finite command with that same
+  sequence before another frame can run. `hil_frame_buffer`,
+  `hil_command_buffer`, and `hil_boundary_status` expose the reusable products
+  and lifecycle state. `step_hil_frame_at!` composes the same boundary with a
+  caller-owned model-time driver. This layer performs explicit completed
+  host/device copies but owns no transport, task, timeout, pacing, or
+  command-hold policy.
+- File-defined composition: `load_algorithm_graph` compiles version 1 TOML into
+  the same `AlgorithmGraphDefinition` as direct Julia construction. TOML node
+  `config` fixes construction and graph-rebuild values, node `props` supplies
+  scalar initial values, and named `bindings` supply caller-owned frame inputs,
+  delayed initial values, and ndarray sparse parameters. The loader performs no
+  Julia evaluation or calibration-file I/O. `builtin_graph_node_types()`
+  currently supplies the maintained native nodes listed in
+  [`runtime-dataflow.md`](runtime-dataflow.md), including
+  `closed_loop_correction_f32` and `control_matrix_reconstruction_f32`;
+  optional packages extend the file vocabulary by passing an explicitly
+  merged node-type map.
+- Native nodes retain their numerical implementation in the canonical
+  scientific module. `discrete_integrator_node` calls `Control.update!` with a
+  separate plan, state, and workspace. `modal_opd_expansion_node` calls
+  `Calibration.combine_basis!` with a `ModalOPDExpansionPlan` prepared from
+  explicit basis and pupil-support parameters. A
+  `deformable_mirror_surface_node` consumes a complete PDM command and calls
+  `Optics.set_command!` plus `Optics.update_surface!` on a native
+  `DeformableMirror` prepared from explicit measured actuator coordinates and
+  influence-function parameters; it does not invent a physical DM model.
+  `gaussian_deformable_mirror_surface_node` provides an explicitly analytic
+  alternative from caller-bound normalized-pupil actuator coordinates and a
+  configured Gaussian influence width. Its command values are unit-peak
+  actuator surface-OPD coefficients in metres, not normalized hardware
+  commands. `grid_gaussian_deformable_mirror_surface_node` specializes that
+  model for active actuators mapped into a declared square regular grid and
+  evaluates the same separable Gaussian product without changing the external
+  command or surface-OPD contracts.
+  `multilayer_atmosphere_opd_node` prepares one finite moving-screen
+  `MultiLayerAtmosphere` and on-axis renderer on the graph target. Its exact
+  prepared owner retains one RNG stream, advances by the explicitly configured
+  `atmosphere_step` on every invocation, and publishes a complete atmospheric
+  OPD map. Detector exposure and wall time do not determine this model step.
+  `pupil_opd_composition_node` adds that already calibrated surface OPD to an
+  uncompensated pupil OPD on the same grid and publishes the complete pupil
+  OPD consumed by downstream optics; it does not infer sign, conjugation,
+  registration, or timing.
+  `control_matrix_reconstruction_node` calls `Control.reconstruct!` with a
+  `ControlMatrixPlan` prepared from an explicit dense matrix parameter. A
+  `closed_loop_correction_node` owns its exact correction state and workspace,
+  publishes complete correction and state outputs atomically at node scope,
+  and consumes explicit same-coordinate constraint feedback. It does not hide
+  a DM constraint, coordinate transform, or physical response. A
+  Calculon or FGN wrapper for PipeWire deployment is a separate optional
+  adapter, not an AOS dependency.
+- Deterministic model time: `FixedStepModelTimeDriver` selects a nominal
+  recurrence; `prepare_boundary_model_time_driver` seals a finite list
+  or expands periodic offsets during preparation. `step_graph_at!` commits the
+  graph and its model-time cursor together after a successful complete-frame
+  call. The drivers reuse `PlantTimestamp`, `PlantDuration`, and
+  `PeriodicSchedule`; they do not use the Plant event loop.
+- Captured model-time replay: `CapturedModelTimestamp` stores one already
+  mapped run-local timestamp, mapping uncertainty, and concrete isbits source
+  provenance. `prepare_captured_model_time_driver` seals a finite strictly
+  increasing recording, while `next_model_time_capture` preserves the full
+  record and `next_model_timestamp` exposes its scheduling timestamp. External
+  clock mapping and persistence remain adapter/application responsibilities.
+- PipeWireAO timestamp adapter: loading PipeWireAO activates
+  `capture_model_time_origin(::AcquisitionMetadata)` and
+  `capture_model_timestamp(::AcquisitionMetadata, origin)`. The adapter copies
+  acquisition identity, source exposure timestamp, clock/PTP qualification,
+  exposure duration, and uncertainty before the borrowed buffer is returned;
+  it rejects incomplete metadata, clock mismatch, and time regression.
 - Independent `AdaptiveOpticsSim.Control` primitives: `VectorDelayLine`,
-  `shift_delay!`, `DiscreteIntegratorController`, and `reconstruct!`; command
-  application remains the `AdaptiveOpticsSim.Optics.set_command!` operation
+  `shift_delay!`, `DiscreteIntegratorController`,
+  `ClosedLoopCorrectionPlan`, `apply_closed_loop_correction!`, and
+  `reconstruct!`; command application remains the
+  `AdaptiveOpticsSim.Optics.set_command!` operation
 - WFS preparation helper: `prepare_runtime_wfs!` prepares the retained WFS
   family-specific scratch required by explicit model loops
 - Generic timing helper: `runtime_timing`

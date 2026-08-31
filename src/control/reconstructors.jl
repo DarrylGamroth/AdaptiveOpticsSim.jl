@@ -4,6 +4,7 @@
 # The core control law is always a linear map from WFS slopes to DM commands.
 # This file exposes two closely related forms:
 #
+# - `ControlMatrixPlan`: c = R * s for an already calibrated `R`
 # - `ModalReconstructor`: c = g * R * s
 # - `MappedReconstructor`: u = B * (g * R * s)
 #
@@ -84,6 +85,91 @@ end
 
 function reconstruct(::NullReconstructor, slopes::AbstractVector)
     throw(InvalidConfiguration("NullReconstructor does not define an internal slopes-to-command update; use set_command! with sense! for external-control runtimes"))
+end
+
+struct _OwnedControlMatrixPlan end
+
+const _OWNED_CONTROL_MATRIX_PLAN = _OwnedControlMatrixPlan()
+
+"""
+    ControlMatrixPlan(control_matrix)
+
+Prepare a run-immutable dense slopes-to-controller-coordinate operator from an
+already calibrated control matrix. Construction snapshots `control_matrix` on
+its existing compute device. This type does not estimate or invert an
+interaction matrix; use [`ModalReconstructor`](@ref) when inversion is part of
+preparation.
+"""
+struct ControlMatrixPlan{
+    T<:AbstractFloat,
+    M<:AbstractMatrix{T},
+} <: AbstractReconstructorOperator
+    matrix::M
+
+    function ControlMatrixPlan(
+        ::_OwnedControlMatrixPlan,
+        matrix::M,
+    ) where {T<:AbstractFloat,M<:AbstractMatrix{T}}
+        return new{T,M}(matrix)
+    end
+end
+
+function ControlMatrixPlan(matrix::AbstractMatrix{T}) where {T<:AbstractFloat}
+    Base.require_one_based_indexing(matrix)
+    size(matrix, 1) > 0 || throw(InvalidConfiguration(
+        "control matrix must contain at least one output coordinate",
+    ))
+    size(matrix, 2) > 0 || throw(InvalidConfiguration(
+        "control matrix must contain at least one input coordinate",
+    ))
+    return ControlMatrixPlan(_OWNED_CONTROL_MATRIX_PLAN, copy(matrix))
+end
+
+@inline runtime_reconstructor_storage(plan::ControlMatrixPlan) = (plan.matrix,)
+@inline reconstructor_output_length(plan::ControlMatrixPlan) =
+    size(plan.matrix, 1)
+
+"""
+    reconstruct!(out, plan::ControlMatrixPlan, slopes)
+
+Apply an already calibrated control matrix to one complete ordered slope
+vector. `out`, `slopes`, and the prepared matrix must occupy one exact compute
+device and must not alias in a way that permits the output write to overwrite
+an input. Successful warmed calls allocate no Julia heap storage.
+"""
+function reconstruct!(
+    out::AbstractVector{T},
+    plan::ControlMatrixPlan{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
+    Base.require_one_based_indexing(out, slopes)
+    length(out) == size(plan.matrix, 1) || throw(DimensionMismatchError(
+        "reconstruction output length must match control-matrix row count",
+    ))
+    length(slopes) == size(plan.matrix, 2) || throw(DimensionMismatchError(
+        "slope-vector length must match control-matrix column count",
+    ))
+    Base.mightalias(out, slopes) && throw(InvalidConfiguration(
+        "reconstruction output and slope-vector storage must not alias",
+    ))
+    Base.mightalias(out, plan.matrix) && throw(InvalidConfiguration(
+        "reconstruction output and prepared control-matrix storage must not alias",
+    ))
+    device = compute_device(out)
+    device == compute_device(slopes) &&
+        device == compute_device(plan.matrix) || throw(InvalidConfiguration(
+        "reconstruction output, slopes, and control matrix must occupy one compute device",
+    ))
+    mul!(out, plan.matrix, slopes)
+    return out
+end
+
+function reconstruct(
+    plan::ControlMatrixPlan{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
+    out = similar(slopes, T, size(plan.matrix, 1))
+    return reconstruct!(out, plan, slopes)
 end
 
 """

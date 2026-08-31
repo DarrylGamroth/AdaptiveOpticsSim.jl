@@ -447,15 +447,17 @@ function ensure_sh_buffers!(optics::ShackHartmannOptics,
             propagation.intensity_tmp_stack, eltype(propagation.intensity),
             pad, pad, total)
         propagation.temp = similar(propagation.temp, pad, pad)
-        propagation.fft_plan = plan_fft_backend!(propagation.fft_buffer)
-        propagation.fft_stack_plan = plan_fft_backend!(
+        propagation.fft_plan = plan_repeated_fft_backend!(
+            propagation.fft_buffer)
+        propagation.fft_stack_plan = plan_repeated_fft_backend!(
             propagation.fft_stack, (1, 2))
-        propagation.ifft_plan = plan_ifft_backend!(propagation.fft_buffer)
-        propagation.ifft_stack_plan = plan_ifft_backend!(
+        propagation.ifft_plan = plan_repeated_ifft_backend!(
+            propagation.fft_buffer)
+        propagation.ifft_stack_plan = plan_repeated_ifft_backend!(
             propagation.fft_stack, (1, 2))
         propagation.fft_asterism_stack = similar(
             propagation.fft_asterism_stack, pad, pad, total)
-        propagation.fft_asterism_plan = plan_fft_backend!(
+        propagation.fft_asterism_plan = plan_repeated_fft_backend!(
             propagation.fft_asterism_stack, (1, 2))
         propagation.phasor_ratio = eltype(propagation.intensity)(NaN)
     end
@@ -466,6 +468,22 @@ end
     wfs.calibration.calibrated = false
     wfs.calibration.revision += UInt(1)
     return nothing
+end
+
+"""
+    set_valid_subapertures!(sensor, valid_subapertures)
+
+Install an explicit Shack–Hartmann valid-subaperture mask and invalidate the
+sensor's prior centroid calibration. Install or derive a new calibration
+before preparing another estimator.
+"""
+function set_valid_subapertures!(
+    wfs::ShackHartmannWFS,
+    valid_subapertures::AbstractMatrix{Bool},
+)
+    set_valid_subapertures!(wfs.front_end.layout, valid_subapertures)
+    invalidate_sh_calibration!(wfs)
+    return wfs
 end
 
 function ensure_sh_asterism_buffers!(
@@ -481,7 +499,7 @@ function ensure_sh_asterism_buffers!(
         propagation.intensity_tmp_stack = similar(
             propagation.intensity_tmp_stack,
             eltype(propagation.intensity_tmp_stack), pad, pad, total)
-        propagation.fft_asterism_plan = plan_fft_backend!(
+        propagation.fft_asterism_plan = plan_repeated_fft_backend!(
             propagation.fft_asterism_stack, (1, 2))
         propagation.asterism_capacity = n_sources
     end
@@ -608,6 +626,15 @@ function _prepare_microlens_sampling_wavelength!(
         propagation.sampled_n_pix_subap = n_pix_subap
     end
 
+    n_binned = div(pad, binning_pixel_scale)
+    if size(propagation.bin_buffer) != (n_binned, n_binned)
+        propagation.bin_buffer = similar(
+            propagation.bin_buffer,
+            n_binned,
+            n_binned,
+        )
+    end
+
     propagation.binning_pixel_scale = binning_pixel_scale
     T = eltype(propagation.intensity)
     half_shift_ratio = microlens_array(optics).params.half_pixel_shift ?
@@ -681,15 +708,24 @@ function ensure_sh_acquisition_buffers!(wfs::ShackHartmannWFS,
     n_pix_subap::Int)
     n_spots = n_lenslets(wfs) * n_lenslets(wfs)
     expected = (n_spots, n_pix_subap, n_pix_subap)
-    size(wfs.workspace.spot_cube) == expected && return wfs
-    wfs.workspace.spot_cube = similar(wfs.workspace.spot_cube,
-        eltype(wfs.workspace.spot_cube), expected...)
-    wfs.products.legacy_spot_cube = similar(
-        wfs.products.legacy_spot_cube,
-        eltype(wfs.products.legacy_spot_cube), expected...)
-    wfs.workspace.detector_noise_cube = similar(
-        wfs.workspace.detector_noise_cube,
-        eltype(wfs.workspace.detector_noise_cube), expected...)
+    if size(wfs.workspace.spot_cube) != expected
+        wfs.workspace.spot_cube = similar(wfs.workspace.spot_cube,
+            eltype(wfs.workspace.spot_cube), expected...)
+        wfs.products.legacy_spot_cube = similar(
+            wfs.products.legacy_spot_cube,
+            eltype(wfs.products.legacy_spot_cube), expected...)
+        wfs.workspace.detector_noise_cube = similar(
+            wfs.workspace.detector_noise_cube,
+            eltype(wfs.workspace.detector_noise_cube), expected...)
+    end
+    centroid_shape = (n_pix_subap, n_pix_subap)
+    if size(wfs.workspace.centroid_host) != centroid_shape
+        wfs.workspace.centroid_host = similar(
+            wfs.workspace.centroid_host,
+            eltype(wfs.workspace.centroid_host),
+            centroid_shape...,
+        )
+    end
     return wfs
 end
 
