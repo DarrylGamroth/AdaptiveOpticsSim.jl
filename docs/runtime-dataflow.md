@@ -167,8 +167,10 @@ The current integration matrix is deliberately small:
 |---|---|---|---|---|
 | Shack–Hartmann | Deterministic, noiseless CCD | AOS lockstep reference controller | `algorithm-graphs` interaction-matrix and convergence tests | covered |
 | Pyramid | Deterministic, noiseless EMCCD | Command/frame lockstep | `algorithm-graphs` complete-frame and command-response tests | covered |
-| Shack–Hartmann | Deterministic, noiseless CCD | Synchronous pyRTC | Measured interaction and closed-loop convergence | covered |
-| Pyramid | Deterministic, noiseless EMCCD | Synchronous pyRTC | Measured interaction and closed-loop convergence | covered |
+| Shack–Hartmann | Deterministic, noiseless CCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
+| Pyramid | Deterministic, noiseless EMCCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
+| Shack–Hartmann | Deterministic, noiseless CCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, and closed-loop convergence | covered in lockstep |
+| Pyramid | Deterministic, noiseless EMCCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, and closed-loop convergence | covered in lockstep |
 | Either | Stochastic detector response | Any external RTC | Statistical closed-loop qualification | gap |
 
 Calibrate an external RTC by applying complete positive and negative commands
@@ -209,6 +211,63 @@ uses pyRTC's fixed Linux shared-memory stream names. It refuses to start if any
 of those names already exist, so stop a live pyRTC system before running it.
 PipeWireAO transport, GPU-to-CPU transfer policy, asynchronous pacing, dropped
 frames, and deadline behavior remain separate work.
+
+For process separation without embedding Python in Julia,
+[`pyrtc_shared_memory.jl`](../examples/integrations/pyrtc/pyrtc_shared_memory.jl)
+implements the numeric part of the current Linux pyRTC `ImageSHM` layout with
+POSIX shared memory and fixed-shape, non-owning `UnsafeArrays.jl` views. AOS
+calls this compatibility contract “v1”; pyRTC does not publish it as a
+separately versioned protocol. A stream has a payload segment named `<name>` and
+a ten-`Float64` segment named `<name>_meta`. The metadata
+records the write count, publication time, byte count, NumPy dtype code, and up
+to six dimension slots. The current Julia adapter admits numeric vectors and
+matrices, validates that the remaining slots are zero, checks exact segment
+sizes and type metadata, and converts matrices explicitly between Julia and
+NumPy C order. The creator alone unlinks a stream; every participant closes
+its own mappings.
+
+The upstream layout has one overwriteable payload slot and no in-progress
+publication marker. The maintained adapter therefore requires one producer and
+one outstanding frame in application-level lockstep. The producer writes the
+payload before the count and timestamp; the consumer copies into its own
+preallocated array and rechecks the metadata. This detects a publication that
+changes during a copy, but it cannot make a free-running overwrite race safe.
+An asynchronous deployment needs a new versioned protocol with slot ownership
+or double buffering. Warmed vector and matrix publication and immediate reads
+perform zero Julia heap allocations; this is not a hard-real-time or syscall
+claim.
+
+[`pyrtc_process_hil.jl`](../examples/integrations/pyrtc/pyrtc_process_hil.jl)
+uses that adapter to create `wfs`, `signal`, `signal2D`, and `wfc` in Julia. A
+separate Python worker attaches pyRTC's real `SlopesProcess` and `Loop`, while
+Julia retains graph stepping, calibration, disturbance injection, and stream
+lifetime ownership. The control pipe intentionally advances one operation at a
+time, so this validates process and data-boundary correctness rather than
+free-running RTC timing.
+
+Run the protocol matrix, including Julia-to-pyRTC and pyRTC-to-Julia vector and
+matrix transfers, with:
+
+~~~sh
+PYRTC_PYTHON=/tmp/aos-pyrtc/bin/python \
+  PYRTC_ROOT=/path/to/pyRTC \
+  julia --project=examples/integrations/pyrtc \
+  examples/integrations/pyrtc/runtests.jl
+~~~
+
+Add the separate-process SHWFS and Pyramid closed-loop matrix with:
+
+~~~sh
+AOS_PYRTC_PROCESS_TESTS=1 \
+  PYRTC_PYTHON=/tmp/aos-pyrtc/bin/python \
+  PYRTC_ROOT=/path/to/pyRTC \
+  julia --project=examples/integrations/pyrtc \
+  examples/integrations/pyrtc/runtests.jl
+~~~
+
+To run only the two process demonstrations, use
+[`run_process_reference_matrix.jl`](../examples/integrations/pyrtc/run_process_reference_matrix.jl)
+with the same `PYRTC_PYTHON` and `PYRTC_ROOT` settings.
 
 The example transport functions above are application placeholders, not AOS
 APIs. The boundary deliberately defines no socket, PipeWire buffer, wall-clock

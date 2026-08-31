@@ -80,11 +80,21 @@ graph-node adapter. Current tests establish ownership, shape, residency, and
 selected CPU/GPU behavior for the companion example; they do not qualify a
 SPIDERS prescription or coronagraph model scientifically.
 
+## Optional pyRTC Validation Integration
+
+The example environment contains a native Julia implementation of the numeric
+Linux pyRTC `ImageSHM` layout. It validates C-order vector and matrix exchange
+in both directions and runs the SHWFS and Pyramid reference systems against a
+separate pyRTC process. This is a lockstep integration and calibration surface,
+not an asynchronous transport or deadline guarantee. The one-slot upstream
+layout is used only with one producer and one outstanding frame.
+
 ## Explicitly Not Production-Supported
 
 - the retired `AdaptiveOpticsSim.Plant` event runtime
 - a general multi-rate or mid-frame event scheduler
-- wall-clock pacing, networking, PipeWire transport, or RTC protocol handling
+- wall-clock pacing, networking, PipeWire transport, or asynchronous RTC
+  protocol handling
 - automatic graph partitioning or hidden host/device transfers
 - PipeWire GPU-buffer execution
 - direct Julia embedding in a PipeWire process
