@@ -4,6 +4,9 @@ export AlgorithmLink, DelayedAlgorithmLink
 export GraphInputDefinition, GraphOutputDefinition
 export PreparedAlgorithmGraph
 export PreparedGraphHILBoundary
+export ModelTimestamp, ModelDuration, PeriodicSchedule
+export model_nanoseconds, model_time_seconds, model_duration_seconds
+export schedule_period, schedule_phase, schedule_timestamp
 export FixedStepModelTimeDriver, PreparedBoundaryModelTimeDriver
 export CapturedModelTimestamp, PreparedCapturedModelTimeDriver
 export algorithm_node, algorithm_graph, graph_input, graph_output

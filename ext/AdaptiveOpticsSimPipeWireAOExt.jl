@@ -1,6 +1,6 @@
 module AdaptiveOpticsSimPipeWireAOExt
 
-import AdaptiveOpticsSim: AlgorithmGraphs, Plant
+import AdaptiveOpticsSim: AlgorithmGraphs
 import PipeWireAO
 
 const AG = AlgorithmGraphs
@@ -86,11 +86,11 @@ function AlgorithmGraphs.capture_model_timestamp(
         "PipeWire acquisition timestamp precedes the capture origin",
     )
     start.uncertainty_nanoseconds <= typemax(Int64) || _capture_error(
-        "PipeWire acquisition uncertainty exceeds PlantDuration range",
+        "PipeWire acquisition uncertainty exceeds ModelDuration range",
     )
 
-    timestamp = Plant.PlantTimestamp(start.nanoseconds - origin.nanoseconds)
-    uncertainty = Plant.PlantDuration(start.uncertainty_nanoseconds)
+    timestamp = AG.ModelTimestamp(start.nanoseconds - origin.nanoseconds)
+    uncertainty = AG.ModelDuration(start.uncertainty_nanoseconds)
     provenance = PipeWireAcquisitionProvenance(
         identity,
         start.nanoseconds,

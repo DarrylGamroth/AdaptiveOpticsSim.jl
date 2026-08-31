@@ -5,23 +5,23 @@ end
 
 _ModelTimeDriverState() = _ModelTimeDriverState(UInt64(0), false)
 
-"""A deterministic fixed-step cursor on canonical plant time."""
+"""A deterministic fixed-step cursor on run-local model time."""
 struct FixedStepModelTimeDriver
     schedule::PeriodicSchedule
-    origin::PlantTimestamp
+    origin::ModelTimestamp
     state::_ModelTimeDriverState
 end
 
 function FixedStepModelTimeDriver(
     schedule::PeriodicSchedule;
-    origin::PlantTimestamp=zero(PlantTimestamp),
+    origin::ModelTimestamp=zero(ModelTimestamp),
 )
     return FixedStepModelTimeDriver(schedule, origin, _ModelTimeDriverState())
 end
 
 """A deterministic cursor over one finite, sealed set of model-time boundaries."""
 struct PreparedBoundaryModelTimeDriver{
-    Boundaries<:FixedSizeVector{PlantTimestamp},
+    Boundaries<:FixedSizeVector{ModelTimestamp},
 }
     boundaries::Boundaries
     state::_ModelTimeDriverState
@@ -29,13 +29,13 @@ end
 
 """One mapped run-local model timestamp with uncertainty and owned provenance."""
 struct CapturedModelTimestamp{Provenance}
-    timestamp::PlantTimestamp
-    uncertainty::PlantDuration
+    timestamp::ModelTimestamp
+    uncertainty::ModelDuration
     provenance::Provenance
 
     function CapturedModelTimestamp(
-        timestamp::PlantTimestamp,
-        uncertainty::PlantDuration,
+        timestamp::ModelTimestamp,
+        uncertainty::ModelDuration,
         provenance::Provenance,
     ) where {Provenance}
         isbitstype(Provenance) || throw(AlgorithmGraphError(
@@ -79,10 +79,10 @@ const _ModelTimeDriver = Union{
 }
 
 function _seal_model_time_boundaries(boundaries)
-    builder = PlantTimestamp[]
+    builder = ModelTimestamp[]
     for boundary in boundaries
-        boundary isa PlantTimestamp || throw(AlgorithmGraphError(
-            "model-time boundaries must be PlantTimestamp values, not " *
+        boundary isa ModelTimestamp || throw(AlgorithmGraphError(
+            "model-time boundaries must be ModelTimestamp values, not " *
             "$(typeof(boundary))",
         ))
         push!(builder, boundary)
@@ -95,13 +95,13 @@ function _seal_model_time_boundaries(boundaries)
             "model-time boundaries must be strictly increasing",
         ))
     end
-    return FixedSizeVectorDefault{PlantTimestamp}(builder)
+    return FixedSizeVectorDefault{ModelTimestamp}(builder)
 end
 
 """
     prepare_boundary_model_time_driver(boundaries)
 
-Copy a finite, strictly increasing sequence of canonical plant timestamps into
+Copy a finite, strictly increasing sequence of run-local model timestamps into
 sealed host storage. Equal-time physical transitions must be combined by the
 atomic operation that consumes the boundary; this cursor does not impose an
 event-phase order.
@@ -167,11 +167,11 @@ _checked_model_time_occurrences(::Bool) = throw(AlgorithmGraphError(
     "periodic model-time occurrence count must be an integer, not Bool",
 ))
 
-function _prepare_model_time_offsets(offsets, period::PlantDuration)
-    builder = PlantDuration[]
+function _prepare_model_time_offsets(offsets, period::ModelDuration)
+    builder = ModelDuration[]
     for offset in offsets
-        offset isa PlantDuration || throw(AlgorithmGraphError(
-            "periodic model-time offsets must be PlantDuration values, not " *
+        offset isa ModelDuration || throw(AlgorithmGraphError(
+            "periodic model-time offsets must be ModelDuration values, not " *
             "$(typeof(offset))",
         ))
         offset < period || throw(AlgorithmGraphError(
@@ -192,7 +192,7 @@ end
 
 """
     prepare_boundary_model_time_driver(schedule, offsets, occurrences;
-                                       origin=PlantTimestamp(0))
+                                       origin=ModelTimestamp(0))
 
 Expand a finite number of periodic occurrences and their strictly increasing,
 half-open-cycle offsets into one sealed boundary cursor. The expansion occurs
@@ -202,7 +202,7 @@ function prepare_boundary_model_time_driver(
     schedule::PeriodicSchedule,
     offsets,
     occurrences::Integer;
-    origin::PlantTimestamp=zero(PlantTimestamp),
+    origin::ModelTimestamp=zero(ModelTimestamp),
 )
     count = _checked_model_time_occurrences(occurrences)
     prepared_offsets = _prepare_model_time_offsets(offsets, schedule_period(schedule))
@@ -214,7 +214,7 @@ function prepare_boundary_model_time_driver(
             "periodic model-time boundary count exceeds host index range",
         ))
     end
-    boundaries = Vector{PlantTimestamp}(undef, total)
+    boundaries = Vector{ModelTimestamp}(undef, total)
     index = 1
     for occurrence in 1:count
         base = schedule_timestamp(schedule, occurrence, origin)

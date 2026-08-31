@@ -28,12 +28,6 @@ import ..Backends:
     compute_device_backend,
     execution_style,
     launch_kernel!
-import ..Plant:
-    PeriodicSchedule,
-    PlantDuration,
-    PlantTimestamp,
-    schedule_period,
-    schedule_timestamp
 import ..Calibration:
     ModalOPDExpansionPlan,
     combine_basis!
@@ -121,6 +115,7 @@ import ..WavefrontSensors:
     selected_lenslet_count
 
 include("definitions.jl")
+include("model_time_values.jl")
 include("preparation.jl")
 include("native_nodes.jl")
 include("graph_files.jl")
