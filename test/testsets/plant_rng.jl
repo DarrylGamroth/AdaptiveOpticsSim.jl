@@ -1,3 +1,12 @@
+using FixedSizeArrays: FixedSizeVectorDefault
+
+struct RNGRoleTopologyOwner
+    definition_slot::UInt32
+    token::Plant.RNGOwnerToken
+end
+
+Plant._rng_owner_binding_token(owner::RNGRoleTopologyOwner) = owner.token
+
 struct RNGTestPathModel{R}
     zero_padding::Int
     revision::R
@@ -321,6 +330,24 @@ end
     @test_throws InvalidConfiguration rng_test_definition(
         layer_ids=(:duplicate, :duplicate))
 
+    role_owners = (
+        RNGRoleTopologyOwner(UInt32(1), Plant.RNGOwnerToken()),
+        RNGRoleTopologyOwner(UInt32(2), Plant.RNGOwnerToken()),
+    )
+    role_bindings = Tuple[
+        Plant._rng_owner_bindings(
+            role_owners[1], :path, :first, (:provider,)),
+        Plant._rng_owner_bindings(
+            role_owners[2], :path, :second, (:provider, :device)),
+    ]
+    role_family = (values=FixedSizeVectorDefault{RNGRoleTopologyOwner}(
+        collect(role_owners)),)
+    assert_plant_preparation_error(
+        () -> Plant._prepare_owner_rng_family(
+            role_family, role_bindings, UInt64(0x7100),
+            RNGDerivationVersion(1)),
+        :rng, :owner_roles)
+
     plant = prepare_plant(definition, PLANT_TEST_HOST_TARGET;
         run_seed=0x7100,
         rng_derivation_version=RNGDerivationVersion(1))
@@ -416,11 +443,6 @@ end
     else
         allocation_bytes = prepared_selection_execution_allocations(
             selection, current_epoch(prepared_atmosphere(plant)))
-        selected_owner_count = length(prepared_paths(selection)) +
-            length(prepared_acquisitions(selection))
-        # Exact owner-family execution is allocation-free. The remaining
-        # bounded boxing comes from erased `PreparedPlantRNGs.paths` and
-        # `.acquisitions` storage; #287 owns that RNG-state migration.
-        @test allocation_bytes <= 256 * selected_owner_count
+        @test allocation_bytes == 0
     end
 end

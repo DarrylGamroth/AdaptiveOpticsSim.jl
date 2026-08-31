@@ -692,9 +692,6 @@ end
             native_selection,
             current_epoch(prepared_atmosphere(native_plant)),
         )
-        selected_owner_count =
-            length(prepared_paths(native_selection)) +
-            length(prepared_acquisitions(native_selection))
-        @test selection_bytes <= 256 * selected_owner_count
+        @test selection_bytes == 0
     end
 end

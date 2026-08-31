@@ -316,13 +316,7 @@ function run_selected_acquisition_materialization_tests()
         allocation_epoch = current_epoch(atmosphere)
         allocation_bytes = prepared_selection_execution_allocations(
             selection, allocation_epoch)
-        selected_owner_count = length(prepared_paths(selection)) +
-            length(prepared_acquisitions(selection))
-        # Exact path and acquisition family kernels remain allocation-free.
-        # This gate bounds the remaining boxing from erased
-        # `PreparedPlantRNGs.paths` and `.acquisitions` storage; #287 replaces
-        # those RNG registries with concrete family-grouped state.
-        @test allocation_bytes <= 256 * selected_owner_count
+        @test allocation_bytes == 0
     end
 
     retained_inputs = map(

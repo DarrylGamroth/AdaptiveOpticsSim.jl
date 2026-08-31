@@ -19,6 +19,20 @@ function topology_growth_native_generic_apply_count(function_value,
     return count("jl_apply_generic", native)
 end
 
+function topology_growth_selection_allocations(selection, epoch)
+    execute_acquisition_selection!(selection, epoch)
+    return @allocated execute_acquisition_selection!(selection, epoch)
+end
+
+function topology_growth_preparation_error(f)
+    try
+        f()
+    catch error
+        return error
+    end
+    return nothing
+end
+
 struct TopologyGrowthPathExecution{F,P,R}
     family::F
     input::P
@@ -417,8 +431,22 @@ end
             plant.acquisitions.groups)
         @test length(plant.paths.groups) == 1
         @test length(plant.acquisitions.groups) == 1
-        @test plant.rngs.paths isa Memory{PreparedOwnerRNGs}
-        @test plant.rngs.acquisitions isa Memory{PreparedOwnerRNGs}
+        @test plant.rngs.paths isa Plant._PreparedOwnerRNGRegistry
+        @test plant.rngs.acquisitions isa Plant._PreparedOwnerRNGRegistry
+        @test plant.rngs.paths.slots === plant.paths.slots
+        @test plant.rngs.acquisitions.slots === plant.acquisitions.slots
+        @test all(group -> group.values isa
+            FixedSizeVector{<:PreparedOwnerRNGs},
+            plant.rngs.paths.groups)
+        @test all(group -> group.values isa
+            FixedSizeVector{<:PreparedOwnerRNGs},
+            plant.rngs.acquisitions.groups)
+        @test !hasfield(typeof(selection), :path_rng_slots)
+        @test !hasfield(typeof(selection), :acquisition_rng_slots)
+        @test selection.sampled_aberration_path_plans isa
+            Plant._PreparedSampledAberrationPlanRegistry
+        @test all(group -> group.values isa FixedSizeVector,
+            selection.sampled_aberration_path_plans.groups)
         @test length(prepared_paths(plant)) == path_count
         @test length(prepared_acquisitions(plant)) == path_count
         @test length(prepared_paths(selection)) == path_count
@@ -583,35 +611,105 @@ topology_growth_group_family_indices(groups, family) =
     atmosphere = prepared_atmosphere(mixed.plant)
     epoch = current_epoch(atmosphere)
     Plant._validate_selection_epoch!(selection, atmosphere, epoch)
-    path_rngs = mixed.plant.rngs.paths[
-        Int(selection.path_rng_slots[1])]
-    acquisition_rngs = mixed.plant.rngs.acquisitions[
-        Int(selection.acquisition_rng_slots[1])]
     path_groups = mixed.plant.paths.groups
+    path_rng_groups = mixed.plant.rngs.paths.groups
     acquisition_groups = mixed.plant.acquisitions.groups
+    acquisition_rng_groups = mixed.plant.rngs.acquisitions.groups
 
     @test topology_growth_native_generic_apply_count(
         Plant._selected_path_materialize_family!, Tuple{
             typeof(path_groups),
+            typeof(path_rng_groups),
             Int,
             Int,
-            typeof(path_rngs),
             typeof(atmosphere),
             typeof(epoch),
         }) == 0
     @test topology_growth_native_generic_apply_count(
         Plant._selected_path_execute_family!, Tuple{
             typeof(path_groups),
+            typeof(path_rng_groups),
             Int,
             Int,
-            typeof(path_rngs),
         }) == 0
     @test topology_growth_native_generic_apply_count(
         Plant._selected_acquisition_execute_family!, Tuple{
             typeof(acquisition_groups),
+            typeof(acquisition_rng_groups),
             Int,
             Int,
-            typeof(acquisition_rngs),
         }) == 0
+    @test topology_growth_native_generic_apply_count(
+        Plant._materialize_selected_paths!, Tuple{
+            typeof(mixed.plant),
+            typeof(selection.paths),
+            typeof(atmosphere),
+            typeof(epoch),
+        }) == 0
+    @test topology_growth_native_generic_apply_count(
+        Plant._apply_selected_sampled_aberrations!, Tuple{
+            typeof(selection.paths),
+            typeof(selection.sampled_aberration_path_plans),
+        }) == 0
+    @test topology_growth_native_generic_apply_count(
+        Plant._execute_selected_paths!, Tuple{
+            typeof(mixed.plant),
+            typeof(selection.paths),
+        }) == 0
+    @test topology_growth_native_generic_apply_count(
+        Plant._execute_selected_acquisitions!, Tuple{
+            typeof(mixed.plant),
+            typeof(selection.acquisitions),
+        }) == 0
+
+    if coverage_instrumented()
+        @test_skip "mixed-family allocation gate disabled under coverage instrumentation"
+    else
+        @test topology_growth_selection_allocations(
+            selection, current_epoch(atmosphere)) == 0
+    end
+
+    first_path = first(prepared_paths(selection))
+    second_path = prepared_paths(selection)[2]
+    first_rngs = mixed.plant.rngs.paths[Int(first_path.definition_slot)]
+    rng_before = copy(rng_stream_state(first_rngs, Val(:provider)))
+    owner_error = topology_growth_preparation_error(
+        () -> Plant._require_rng_owner_binding(first_rngs, second_path))
+    @test owner_error isa PlantPreparationError
+    @test owner_error.component === :rng
+    @test owner_error.reason === :prepared_binding
+    @test rng_stream_state(first_rngs, Val(:provider)) == rng_before
+
+    copied_slots = copy(mixed.plant.paths.slots)
+    foreign_registry = Plant._PreparedOwnerRNGRegistry(
+        mixed.plant.rngs.paths.groups, copied_slots)
+    registry_error = topology_growth_preparation_error(
+        () -> Plant._require_rng_registry_binding(
+            foreign_registry, mixed.plant.paths, :path))
+    @test registry_error isa PlantPreparationError
+    @test registry_error.component === :rng
+    @test registry_error.reason === :owner_topology
+    path_rng_groups = mixed.plant.rngs.paths.groups
+    first_rng_family = first(path_rng_groups)
+    R = eltype(first_rng_family.values)
+    empty_rng_values = FixedSizeVectorDefault{R}(R[])
+    empty_rng_family = Plant._PreparedOwnerRNGFamily{
+        R,typeof(empty_rng_values)}(empty_rng_values)
+    short_registry = Plant._PreparedOwnerRNGRegistry(
+        (empty_rng_family, Base.tail(path_rng_groups)...),
+        mixed.plant.paths.slots)
+    cardinality_error = topology_growth_preparation_error(
+        () -> Plant._require_rng_registry_binding(
+            short_registry, mixed.plant.paths, :path))
+    @test cardinality_error isa PlantPreparationError
+    @test cardinality_error.component === :rng
+    @test cardinality_error.reason === :owner_topology
+    bounds_error = topology_growth_preparation_error(
+        () -> Plant._prepared_owner_rng_family_value(
+            mixed.plant.rngs.paths.groups,
+            1, length(first_rng_family.values) + 1))
+    @test bounds_error isa PlantPreparationError
+    @test bounds_error.component === :rng
+    @test bounds_error.reason === :owner_topology
 
 end

@@ -122,12 +122,72 @@ struct PreparedAtmosphereRNGs{B,O<:Tuple,S<:Tuple}
     streams::S
 end
 
-struct PreparedPlantRNGs{A}
+"""Fixed-capacity persistent RNG states for one exact execution family."""
+struct _PreparedOwnerRNGFamily{
+    R<:PreparedOwnerRNGs,
+    V<:FixedSizeVector{R},
+}
+    values::V
+end
+
+"""Canonical owner-order view over exact prepared RNG-state families."""
+struct _PreparedOwnerRNGRegistry{G<:Tuple,S<:FixedSizeVector}
+    groups::G
+    slots::S
+end
+
+Base.size(registry::_PreparedOwnerRNGRegistry) = (length(registry.slots),)
+Base.axes(registry::_PreparedOwnerRNGRegistry) = axes(registry.slots)
+Base.length(registry::_PreparedOwnerRNGRegistry) = length(registry.slots)
+Base.keys(registry::_PreparedOwnerRNGRegistry) = eachindex(registry.slots)
+Base.eachindex(registry::_PreparedOwnerRNGRegistry) = eachindex(registry.slots)
+Base.firstindex(registry::_PreparedOwnerRNGRegistry) =
+    firstindex(registry.slots)
+Base.lastindex(registry::_PreparedOwnerRNGRegistry) = lastindex(registry.slots)
+
+@noinline function _prepared_owner_rng_slot_error(family::Int, member::Int)
+    throw(PlantPreparationError(:rng, :owner_topology,
+        "prepared RNG family/member slot is out of bounds: ($family, $member)"))
+end
+
+@inline function _prepared_owner_rng_family_value(
+    ::Tuple{}, family::Int, member::Int)
+    return _prepared_owner_rng_slot_error(family, member)
+end
+
+@inline function _prepared_owner_rng_family_value(
+    groups::Tuple, family::Int, member::Int)
+    if family == 1
+        values = groups[1].values
+        checkbounds(Bool, values, member) ||
+            return _prepared_owner_rng_slot_error(family, member)
+        return @inbounds values[member]
+    end
+    return _prepared_owner_rng_family_value(
+        Base.tail(groups), family - 1, member)
+end
+
+@inline function Base.getindex(
+    registry::_PreparedOwnerRNGRegistry, index::Int)
+    checkbounds(registry.slots, index)
+    slot = @inbounds registry.slots[index]
+    return _prepared_owner_rng_family_value(registry.groups,
+        Int(slot.family_slot), Int(slot.member_slot))
+end
+
+@inline function Base.iterate(
+    registry::_PreparedOwnerRNGRegistry, state::Int=1)
+    state > length(registry) && return nothing
+    return (@inbounds registry[state], state + 1)
+end
+
+struct PreparedPlantRNGs{A,P<:_PreparedOwnerRNGRegistry,
+    Q<:_PreparedOwnerRNGRegistry}
     run_seed::UInt64
     derivation_version::RNGDerivationVersion
     atmosphere::A
-    paths::Memory{PreparedOwnerRNGs}
-    acquisitions::Memory{PreparedOwnerRNGs}
+    paths::P
+    acquisitions::Q
 end
 
 @inline rng_stream(group::PreparedOwnerRNGs, ::Val{role}) where {role} =

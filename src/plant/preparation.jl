@@ -2182,7 +2182,7 @@ function _prepare_acquisition_owners(definitions::AbstractVector, paths)
 end
 
 function _path_rng_owner_bindings(paths::_PreparedPathRegistry)
-    groups = Memory{Tuple}(undef, length(paths))
+    groups = Vector{Tuple}(undef, length(paths))
     @inbounds for index in eachindex(paths)
         path = paths[index]
         groups[index] = _rng_owner_bindings(path, :path,
@@ -2194,7 +2194,7 @@ end
 
 function _acquisition_rng_owner_bindings(
     acquisitions::_PreparedAcquisitionRegistry)
-    groups = Memory{Tuple}(undef, length(acquisitions))
+    groups = Vector{Tuple}(undef, length(acquisitions))
     @inbounds for index in eachindex(acquisitions)
         acquisition = acquisitions[index]
         groups[index] = _rng_owner_bindings(acquisition, :acquisition,
@@ -2210,6 +2210,55 @@ function _append_rng_binding_groups!(destination, groups)
         append!(destination, group)
     end
     return destination
+end
+
+function _prepare_owner_rng_family(owner_group, bindings,
+    run_seed::UInt64, version::RNGDerivationVersion)
+    owners = owner_group.values
+    isempty(owners) && throw(PlantPreparationError(:rng, :owner_topology,
+        "prepared execution families must not be empty"))
+    first_owner = first(owners)
+    first_rngs = _prepare_owner_rngs(
+        bindings[Int(first_owner.definition_slot)], run_seed, version)
+    R = typeof(first_rngs)
+    values = Vector{R}(undef, length(owners))
+    values[1] = first_rngs
+    @inbounds for index in 2:length(owners)
+        owner = owners[index]
+        prepared = _prepare_owner_rngs(
+            bindings[Int(owner.definition_slot)], run_seed, version)
+        typeof(prepared) === R || throw(PlantPreparationError(
+            :rng, :owner_roles,
+            "one exact execution family declared inconsistent RNG roles"))
+        values[index] = prepared
+    end
+    fixed = FixedSizeVectorDefault{R}(values)
+    return _PreparedOwnerRNGFamily{R,typeof(fixed)}(fixed)
+end
+
+@inline _prepare_owner_rng_families(::Tuple{}, bindings,
+    run_seed::UInt64, version::RNGDerivationVersion) = ()
+
+function _prepare_owner_rng_families(owner_groups::Tuple, bindings,
+    run_seed::UInt64, version::RNGDerivationVersion)
+    first = _prepare_owner_rng_family(
+        owner_groups[1], bindings, run_seed, version)
+    rest = _prepare_owner_rng_families(
+        Base.tail(owner_groups), bindings, run_seed, version)
+    return (first, rest...)
+end
+
+function _prepare_owner_rng_registry(owner_registry, bindings,
+    run_seed::UInt64, version::RNGDerivationVersion)
+    length(owner_registry) == length(bindings) || throw(
+        PlantPreparationError(:rng, :owner_topology,
+            "prepared RNG bindings do not match execution-owner cardinality"))
+    groups = _prepare_owner_rng_families(
+        owner_registry.groups, bindings, run_seed, version)
+    length(groups) == length(owner_registry.groups) || throw(
+        PlantPreparationError(:rng, :owner_topology,
+            "prepared RNG families do not match execution-owner families"))
+    return _PreparedOwnerRNGRegistry(groups, owner_registry.slots)
 end
 
 function _prepare_plant_rngs(atmosphere::AbstractTimedAtmosphere,
@@ -2230,10 +2279,10 @@ function _prepare_plant_rngs(atmosphere::AbstractTimedAtmosphere,
     _require_unique_rng_stream_seeds(all_bindings, run_seed, version)
     atmosphere_rngs = _prepare_atmosphere_rngs(atmosphere,
         atmosphere_bindings, run_seed, version)
-    path_rngs = _prepare_owner_rng_groups(path_bindings, run_seed,
-        version)
-    acquisition_rngs = _prepare_owner_rng_groups(acquisition_bindings,
-        run_seed, version)
+    path_rngs = _prepare_owner_rng_registry(
+        paths, path_bindings, run_seed, version)
+    acquisition_rngs = _prepare_owner_rng_registry(
+        acquisitions, acquisition_bindings, run_seed, version)
     return PreparedPlantRNGs(run_seed, version, atmosphere_rngs,
         path_rngs, acquisition_rngs)
 end
@@ -2401,23 +2450,19 @@ Cold, canonical selection of acquisition owners and the unique optical paths
 required by their full-optical providers. Reduced-order and synthetic/replay
 providers do not select an otherwise unused path. The selected paths and
 acquisitions use stable-ID order regardless of declaration or caller-selection
-order. This value owns no schedule or independent RNG state; fixed declaration
-slots resolve the exact selected plant-owned RNG groups.
+order. This value owns no schedule or independent RNG state; fixed
+family/member descriptors resolve the exact selected plant-owned RNG groups.
 """
 struct PreparedAcquisitionSelection{
     P<:PreparedPlant,
     V,
     W,
     B,
-    Q<:FixedSizeVector{UInt32},
-    R<:FixedSizeVector{UInt32},
 }
     plant::P
     paths::V
     acquisitions::W
     sampled_aberration_path_plans::B
-    path_rng_slots::Q
-    acquisition_rng_slots::R
 
     function PreparedAcquisitionSelection(
         ::_PreparedAcquisitionSelectionToken,
@@ -2425,23 +2470,17 @@ struct PreparedAcquisitionSelection{
         paths::V,
         acquisitions::W,
         sampled_aberration_path_plans::B,
-        path_rng_slots::Q,
-        acquisition_rng_slots::R,
     ) where {
         P<:PreparedPlant,
         V,
         W,
         B,
-        Q<:FixedSizeVector{UInt32},
-        R<:FixedSizeVector{UInt32},
     }
-        return new{P,V,W,B,Q,R}(
+        return new{P,V,W,B}(
             plant,
             paths,
             acquisitions,
             sampled_aberration_path_plans,
-            path_rng_slots,
-            acquisition_rng_slots,
         )
     end
 end
@@ -2544,17 +2583,6 @@ function _prepared_path_rngs(plant::PreparedPlant,
         "selected path has no exact prepared RNG owner"))
 end
 
-function _selected_path_rng_slots(plant::PreparedPlant,
-    paths::_PreparedPathSelection)
-    slots = Vector{UInt32}(undef, length(paths))
-    @inbounds for index in eachindex(paths)
-        path = paths[index]
-        _prepared_path_rngs(plant, path)
-        slots[index] = path.definition_slot
-    end
-    return FixedSizeVectorDefault{UInt32}(slots)
-end
-
 function _prepared_acquisition_rngs(plant::PreparedPlant,
     acquisition::PreparedAcquisitionOwner)
     index = Int(acquisition.definition_slot)
@@ -2565,15 +2593,134 @@ function _prepared_acquisition_rngs(plant::PreparedPlant,
         "selected acquisition has no exact prepared RNG owner"))
 end
 
-function _selected_acquisition_rng_slots(plant::PreparedPlant,
-    acquisitions::_PreparedAcquisitionOwnerSelection)
-    slots = Vector{UInt32}(undef, length(acquisitions))
-    @inbounds for index in eachindex(acquisitions)
-        owner = acquisitions[index]
-        _prepared_acquisition_rngs(plant, owner)
-        slots[index] = owner.definition_slot
+struct _PreparedSampledAberrationPlanSlot
+    family_slot::UInt32
+    member_slot::UInt32
+end
+
+struct _PreparedSampledAberrationPlanFamily{
+    P,
+    V<:FixedSizeVector{P},
+}
+    values::V
+end
+
+struct _PreparedSampledAberrationPlanRegistry{
+    G<:Tuple,
+    S<:FixedSizeVector{_PreparedSampledAberrationPlanSlot},
+}
+    groups::G
+    slots::S
+end
+
+
+@noinline function _prepared_sampled_aberration_plan_slot_error(
+    family::Int, member::Int)
+    throw(PlantPreparationError(:sampled_aberration, :plan_topology,
+        "sampled-aberration plan family/member slot is out of bounds: ($family, $member)"))
+end
+
+Base.length(registry::_PreparedSampledAberrationPlanRegistry) =
+    length(registry.slots)
+Base.eachindex(registry::_PreparedSampledAberrationPlanRegistry) =
+    eachindex(registry.slots)
+
+struct _PreparedSampledAberrationPlanFamilyType{
+    P,
+} end
+
+@inline _sampled_aberration_plan_family_matches(
+    ::_PreparedSampledAberrationPlanFamilyType{P}, ::Type{P}) where {
+    P,
+} = true
+
+@inline _sampled_aberration_plan_family_matches(
+    ::_PreparedSampledAberrationPlanFamilyType,
+    ::Type) = false
+
+function _sampled_aberration_plan_family_types(plans)
+    plan_types = DataType[]
+    @inbounds for plan in plans
+        plan_type = typeof(plan)::DataType
+        plan_type in plan_types || push!(plan_types, plan_type)
     end
-    return FixedSizeVectorDefault{UInt32}(slots)
+    sort!(plan_types; by=_prepared_owner_family_order_key)
+    families = ()
+    for plan_type in plan_types
+        family_type = Core.apply_type(
+            _PreparedSampledAberrationPlanFamilyType, plan_type)
+        families = (families..., family_type())
+    end
+    return families
+end
+
+function _prepare_sampled_aberration_plan_family(
+    ::_PreparedSampledAberrationPlanFamilyType{P}, plans,
+) where {P}
+    family_count = count(plan -> typeof(plan) === P, plans)
+    values = Vector{P}(undef, family_count)
+    next = 1
+    @inbounds for plan in plans
+        typeof(plan) === P || continue
+        values[next] = plan
+        next += 1
+    end
+    fixed = FixedSizeVectorDefault{P}(values)
+    return _PreparedSampledAberrationPlanFamily{P,typeof(fixed)}(fixed)
+end
+
+@inline _prepare_sampled_aberration_plan_families(::Tuple{}, plans) = ()
+
+function _prepare_sampled_aberration_plan_families(
+    family_types::Tuple, plans)
+    first = _prepare_sampled_aberration_plan_family(family_types[1], plans)
+    rest = _prepare_sampled_aberration_plan_families(
+        Base.tail(family_types), plans)
+    return (first, rest...)
+end
+
+@inline function _sampled_aberration_plan_family_index(
+    ::Tuple{}, ::Type, ::Int=1)
+    return 0
+end
+
+@inline function _sampled_aberration_plan_family_index(
+    families::Tuple, ::Type{P}, index::Int=1,
+) where {P}
+    _sampled_aberration_plan_family_matches(families[1], P) && return index
+    return _sampled_aberration_plan_family_index(
+        Base.tail(families), P, index + 1)
+end
+
+function _prepare_sampled_aberration_plan_slots(family_types, plans)
+    counts = zeros(UInt32, length(family_types))
+    slots = Vector{_PreparedSampledAberrationPlanSlot}(undef, length(plans))
+    @inbounds for index in eachindex(plans)
+        family = _sampled_aberration_plan_family_index(
+            family_types, typeof(plans[index]))
+        iszero(family) && throw(PlantPreparationError(
+            :sampled_aberration, :missing_plan_family,
+            "sampled-aberration path plan has no exact family"))
+        counts[family] == typemax(UInt32) && throw(PlantPreparationError(
+            :sampled_aberration, :family_capacity,
+            "sampled-aberration path-plan family exceeds UInt32 capacity"))
+        counts[family] += UInt32(1)
+        slots[index] = _PreparedSampledAberrationPlanSlot(
+            UInt32(family), counts[family])
+    end
+    return FixedSizeVectorDefault{_PreparedSampledAberrationPlanSlot}(slots)
+end
+
+
+function _require_sampled_aberration_plan_slots(groups, slots)
+    @inbounds for slot in slots
+        family = Int(slot.family_slot)
+        1 <= family <= length(groups) ||
+            _prepared_sampled_aberration_plan_slot_error(
+                family, Int(slot.member_slot))
+        checkbounds(groups[family].values, Int(slot.member_slot))
+    end
+    return slots
 end
 
 function _selected_sampled_aberration_path_plans(
@@ -2581,8 +2728,7 @@ function _selected_sampled_aberration_path_plans(
     paths::_PreparedPathSelection,
 )
     bindings = plant.sampled_aberration_path_bindings
-    plans = Memory{_PreparedSampledAberrationPathPlan}(
-        undef, length(paths))
+    plans = Vector{_PreparedSampledAberrationPathPlan}(undef, length(paths))
     @inbounds for index in eachindex(paths)
         plans[index] = _prepare_sampled_aberration_path_plan(
             plant.sampled_aberrations,
@@ -2590,7 +2736,11 @@ function _selected_sampled_aberration_path_plans(
             path_id(paths[index]),
         )
     end
-    return plans
+    family_types = _sampled_aberration_plan_family_types(plans)
+    groups = _prepare_sampled_aberration_plan_families(family_types, plans)
+    slots = _prepare_sampled_aberration_plan_slots(family_types, plans)
+    _require_sampled_aberration_plan_slots(groups, slots)
+    return _PreparedSampledAberrationPlanRegistry(groups, slots)
 end
 
 function _prepare_acquisition_selection(plant::PreparedPlant, ids)
@@ -2599,13 +2749,15 @@ function _prepare_acquisition_selection(plant::PreparedPlant, ids)
     paths = _canonical_selected_paths(plant, acquisitions)
     sampled_aberration_path_plans =
         _selected_sampled_aberration_path_plans(plant, paths)
-    path_rng_slots = _selected_path_rng_slots(plant, paths)
-    acquisition_rng_slots = _selected_acquisition_rng_slots(
-        plant, acquisitions)
+    for path in paths
+        _prepared_path_rngs(plant, path)
+    end
+    for acquisition in acquisitions
+        _prepared_acquisition_rngs(plant, acquisition)
+    end
     return PreparedAcquisitionSelection(
         _PREPARED_ACQUISITION_SELECTION_TOKEN, plant, paths, acquisitions,
-        sampled_aberration_path_plans, path_rng_slots,
-        acquisition_rng_slots)
+        sampled_aberration_path_plans)
 end
 
 """
@@ -2735,70 +2887,103 @@ function _require_selection_bindings(selection::PreparedAcquisitionSelection)
     _require_selected_acquisition_bindings(selection.acquisitions, context)
     validate_atmosphere_rng_binding(selection.plant.rngs.atmosphere,
         atmosphere)
+    _require_rng_registry_binding(selection.plant.rngs.paths,
+        selection.plant.paths, :path)
+    _require_rng_registry_binding(selection.plant.rngs.acquisitions,
+        selection.plant.acquisitions, :acquisition)
     _require_selected_path_rng_owner_bindings(selection.plant,
-        selection.paths,
-        selection.path_rng_slots)
+        selection.paths)
     _require_selected_acquisition_rng_owner_bindings(selection.plant,
-        selection.acquisitions,
-        selection.acquisition_rng_slots)
+        selection.acquisitions)
     return atmosphere
 end
 
-function _require_selected_path_rng_owner_bindings(plant, owners, slots)
-    length(owners) == length(slots) || throw(PlantPreparationError(
+@inline _require_rng_registry_group_cardinality(
+    ::Tuple{}, ::Tuple{}, ::Symbol) = nothing
+
+Base.@noinline function _require_rng_registry_group_cardinality(
+    ::Tuple{}, ::Tuple, category::Symbol)
+    throw(PlantPreparationError(:rng, :owner_topology,
+        "prepared $category RNG families exceed owner families"))
+end
+
+Base.@noinline function _require_rng_registry_group_cardinality(
+    ::Tuple, ::Tuple{}, category::Symbol)
+    throw(PlantPreparationError(:rng, :owner_topology,
+        "prepared $category RNG families do not cover all owner families"))
+end
+
+@inline function _require_rng_registry_group_cardinality(
+    rng_groups::Tuple, owner_groups::Tuple, category::Symbol)
+    length(rng_groups[1].values) == length(owner_groups[1].values) ||
+        throw(PlantPreparationError(:rng, :owner_topology,
+            "prepared $category RNG family cardinality does not match its owner family"))
+    return _require_rng_registry_group_cardinality(
+        Base.tail(rng_groups), Base.tail(owner_groups), category)
+end
+
+function _require_rng_registry_binding(rngs::_PreparedOwnerRNGRegistry,
+    owners, category::Symbol)
+    rngs.slots === owners.slots || throw(PlantPreparationError(
         :rng, :owner_topology,
-        "selected RNG-owner topology does not match selected owners"))
+        "prepared $category RNG descriptors do not retain their exact owner registry"))
+    length(rngs.groups) == length(owners.groups) || throw(
+        PlantPreparationError(:rng, :owner_topology,
+            "prepared $category RNG families do not match owner families"))
+    _require_rng_registry_group_cardinality(
+        rngs.groups, owners.groups, category)
+    return rngs
+end
+
+function _require_selected_path_rng_owner_bindings(plant, owners)
     groups = getfield(owners.plant, :paths).groups
+    rng_groups = plant.rngs.paths.groups
     @inbounds for index in eachindex(owners)
         slot = owners.slots[index]
-        rngs = plant.rngs.paths[Int(slots[index])]
-        _selected_path_rng_binding_family!(groups,
-            Int(slot.family_slot), Int(slot.member_slot), rngs)
+        _selected_path_rng_binding_family!(groups, rng_groups,
+            Int(slot.family_slot), Int(slot.member_slot))
     end
     return nothing
 end
 
 function _require_selected_acquisition_rng_owner_bindings(
-    plant, owners, slots)
-    length(owners) == length(slots) || throw(PlantPreparationError(
-        :rng, :owner_topology,
-        "selected RNG-owner topology does not match selected owners"))
+    plant, owners)
     groups = getfield(owners.plant, :acquisitions).groups
+    rng_groups = plant.rngs.acquisitions.groups
     @inbounds for index in eachindex(owners)
         slot = owners.slots[index]
-        rngs = plant.rngs.acquisitions[Int(slots[index])]
-        _selected_acquisition_rng_binding_family!(groups,
-            Int(slot.family_slot), Int(slot.member_slot), rngs)
+        _selected_acquisition_rng_binding_family!(groups, rng_groups,
+            Int(slot.family_slot), Int(slot.member_slot))
     end
     return nothing
 end
 
 @inline function _selected_path_rng_binding_family!(
-    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs)
+    ::Tuple{}, ::Tuple{}, family::Int, member::Int)
     return _prepared_path_slot_error(family, member)
 end
 
 Base.@noinline function _selected_path_rng_binding_family!(
-    groups::Tuple, family::Int, member::Int,
-    rngs::PreparedOwnerRNGs)
+    groups::Tuple, rng_groups::Tuple, family::Int, member::Int)
     family == 1 && return _require_selected_rng_owner_binding(
-        rngs, @inbounds(groups[1].values[member]))
+        @inbounds(rng_groups[1].values[member]),
+        @inbounds(groups[1].values[member]))
     return _selected_path_rng_binding_family!(Base.tail(groups),
-        family - 1, member, rngs)
+        Base.tail(rng_groups), family - 1, member)
 end
 
 @inline function _selected_acquisition_rng_binding_family!(
-    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs)
+    ::Tuple{}, ::Tuple{}, family::Int, member::Int)
     return _prepared_acquisition_slot_error(family, member)
 end
 
 Base.@noinline function _selected_acquisition_rng_binding_family!(
-    groups::Tuple, family::Int, member::Int,
-    rngs::PreparedOwnerRNGs)
+    groups::Tuple, rng_groups::Tuple, family::Int, member::Int)
     family == 1 && return _require_selected_rng_owner_binding(
-        rngs, @inbounds(groups[1].values[member]))
+        @inbounds(rng_groups[1].values[member]),
+        @inbounds(groups[1].values[member]))
     return _selected_acquisition_rng_binding_family!(Base.tail(groups),
-        family - 1, member, rngs)
+        Base.tail(rng_groups), family - 1, member)
 end
 
 Base.@noinline function _require_selected_rng_owner_binding(
@@ -2831,32 +3016,29 @@ Base.@noinline function _materialize_selected_path!(
 end
 
 @inline function _selected_path_materialize_family!(
-    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs,
+    ::Tuple{}, ::Tuple{}, family::Int, member::Int,
     atmosphere, epoch)
     return _prepared_path_slot_error(family, member)
 end
 
 Base.@noinline function _selected_path_materialize_family!(
-    groups::Tuple, family::Int, member::Int,
-    rngs::PreparedOwnerRNGs, atmosphere, epoch)
+    groups::Tuple, rng_groups::Tuple, family::Int, member::Int,
+    atmosphere, epoch)
     family == 1 && return _materialize_selected_path!(
-        @inbounds(groups[1].values[member]), rngs, atmosphere, epoch)
+        @inbounds(groups[1].values[member]),
+        @inbounds(rng_groups[1].values[member]), atmosphere, epoch)
     return _selected_path_materialize_family!(Base.tail(groups),
-        family - 1, member, rngs, atmosphere, epoch)
+        Base.tail(rng_groups), family - 1, member, atmosphere, epoch)
 end
 
-function _materialize_selected_paths!(plant,
-    paths::_PreparedPathSelection, rng_slots::FixedSizeVector{UInt32},
+function _materialize_selected_paths!(plant, paths::_PreparedPathSelection,
     atmosphere, epoch)
-    length(paths) == length(rng_slots) || throw(PlantPreparationError(
-        :rng, :owner_topology,
-        "selected path RNG topology does not match selected paths"))
     groups = getfield(paths.plant, :paths).groups
+    rng_groups = plant.rngs.paths.groups
     @inbounds for index in eachindex(paths)
         slot = paths.slots[index]
-        rngs = plant.rngs.paths[Int(rng_slots[index])]
-        _selected_path_materialize_family!(groups,
-            Int(slot.family_slot), Int(slot.member_slot), rngs,
+        _selected_path_materialize_family!(groups, rng_groups,
+            Int(slot.family_slot), Int(slot.member_slot),
             atmosphere, epoch)
     end
     return nothing
@@ -2883,19 +3065,38 @@ Base.@noinline function _selected_path_sampled_aberration_family!(
         family - 1, member, plan)
 end
 
+@inline function _selected_sampled_aberration_plan_family!(
+    path_groups::Tuple, ::Tuple{}, family::Int, member::Int,
+    path_family::Int, path_member::Int)
+    return _prepared_sampled_aberration_plan_slot_error(family, member)
+end
+
+Base.@noinline function _selected_sampled_aberration_plan_family!(
+    path_groups::Tuple, plan_groups::Tuple, family::Int, member::Int,
+    path_family::Int, path_member::Int)
+    family == 1 && return _selected_path_sampled_aberration_family!(
+        path_groups, path_family, path_member,
+        @inbounds(plan_groups[1].values[member]))
+    return _selected_sampled_aberration_plan_family!(path_groups,
+        Base.tail(plan_groups), family - 1, member,
+        path_family, path_member)
+end
+
 function _apply_selected_sampled_aberrations!(
     paths::_PreparedPathSelection,
-    plans::AbstractVector,
+    plans::_PreparedSampledAberrationPlanRegistry,
 )
     length(paths) == length(plans) || throw(PlantPreparationError(
         :sampled_aberration, :binding_topology,
         "selected sampled-aberration plans do not match selected paths"))
     groups = getfield(paths.plant, :paths).groups
+    plan_groups = plans.groups
     @inbounds for index in eachindex(paths)
-        slot = paths.slots[index]
-        plan = plans[index]
-        _selected_path_sampled_aberration_family!(groups,
-            Int(slot.family_slot), Int(slot.member_slot), plan)
+        path_slot = paths.slots[index]
+        plan_slot = plans.slots[index]
+        _selected_sampled_aberration_plan_family!(groups, plan_groups,
+            Int(plan_slot.family_slot), Int(plan_slot.member_slot),
+            Int(path_slot.family_slot), Int(path_slot.member_slot))
     end
     return nothing
 end
@@ -2907,30 +3108,26 @@ Base.@noinline function _execute_selected_path!(
 end
 
 @inline function _selected_path_execute_family!(
-    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs)
+    ::Tuple{}, ::Tuple{}, family::Int, member::Int)
     return _prepared_path_slot_error(family, member)
 end
 
 Base.@noinline function _selected_path_execute_family!(
-    groups::Tuple, family::Int, member::Int,
-    rngs::PreparedOwnerRNGs)
+    groups::Tuple, rng_groups::Tuple, family::Int, member::Int)
     family == 1 && return _execute_selected_path!(
-        @inbounds(groups[1].values[member]), rngs)
+        @inbounds(groups[1].values[member]),
+        @inbounds(rng_groups[1].values[member]))
     return _selected_path_execute_family!(Base.tail(groups),
-        family - 1, member, rngs)
+        Base.tail(rng_groups), family - 1, member)
 end
 
-function _execute_selected_paths!(plant,
-    paths::_PreparedPathSelection, rng_slots::FixedSizeVector{UInt32})
-    length(paths) == length(rng_slots) || throw(PlantPreparationError(
-        :rng, :owner_topology,
-        "selected path RNG topology does not match selected paths"))
+function _execute_selected_paths!(plant, paths::_PreparedPathSelection)
     groups = getfield(paths.plant, :paths).groups
+    rng_groups = plant.rngs.paths.groups
     @inbounds for index in eachindex(paths)
         slot = paths.slots[index]
-        rngs = plant.rngs.paths[Int(rng_slots[index])]
-        _selected_path_execute_family!(groups,
-            Int(slot.family_slot), Int(slot.member_slot), rngs)
+        _selected_path_execute_family!(groups, rng_groups,
+            Int(slot.family_slot), Int(slot.member_slot))
     end
     return nothing
 end
@@ -2942,32 +3139,27 @@ Base.@noinline function _execute_selected_acquisition!(
 end
 
 @inline function _selected_acquisition_execute_family!(
-    ::Tuple{}, family::Int, member::Int, rngs::PreparedOwnerRNGs)
+    ::Tuple{}, ::Tuple{}, family::Int, member::Int)
     return _prepared_acquisition_slot_error(family, member)
 end
 
 Base.@noinline function _selected_acquisition_execute_family!(
-    groups::Tuple, family::Int, member::Int,
-    rngs::PreparedOwnerRNGs)
+    groups::Tuple, rng_groups::Tuple, family::Int, member::Int)
     family == 1 && return _execute_selected_acquisition!(
-        @inbounds(groups[1].values[member]), rngs)
+        @inbounds(groups[1].values[member]),
+        @inbounds(rng_groups[1].values[member]))
     return _selected_acquisition_execute_family!(Base.tail(groups),
-        family - 1, member, rngs)
+        Base.tail(rng_groups), family - 1, member)
 end
 
 function _execute_selected_acquisitions!(
-    plant,
-    acquisitions::_PreparedAcquisitionOwnerSelection,
-    rng_slots::FixedSizeVector{UInt32})
-    length(acquisitions) == length(rng_slots) || throw(PlantPreparationError(
-        :rng, :owner_topology,
-        "selected acquisition RNG topology does not match selected owners"))
+    plant, acquisitions::_PreparedAcquisitionOwnerSelection)
     groups = getfield(acquisitions.plant, :acquisitions).groups
+    rng_groups = plant.rngs.acquisitions.groups
     @inbounds for index in eachindex(acquisitions)
         slot = acquisitions.slots[index]
-        rngs = plant.rngs.acquisitions[Int(rng_slots[index])]
-        _selected_acquisition_execute_family!(groups,
-            Int(slot.family_slot), Int(slot.member_slot), rngs)
+        _selected_acquisition_execute_family!(groups, rng_groups,
+            Int(slot.family_slot), Int(slot.member_slot))
     end
     return nothing
 end
@@ -2990,17 +3182,15 @@ end
 
 function _execute_selected_epoch!(selection::PreparedAcquisitionSelection,
     atmosphere::AbstractTimedAtmosphere, epoch::AtmosphereEpoch)
-    _materialize_selected_paths!(selection.plant, selection.paths,
-        selection.path_rng_slots, atmosphere, epoch)
+    _materialize_selected_paths!(
+        selection.plant, selection.paths, atmosphere, epoch)
     _apply_selected_sampled_aberrations!(
         selection.paths,
         selection.sampled_aberration_path_plans,
     )
-    _execute_selected_paths!(selection.plant, selection.paths,
-        selection.path_rng_slots)
-    _execute_selected_acquisitions!(selection.plant,
-        selection.acquisitions,
-        selection.acquisition_rng_slots)
+    _execute_selected_paths!(selection.plant, selection.paths)
+    _execute_selected_acquisitions!(
+        selection.plant, selection.acquisitions)
     return selection
 end
 

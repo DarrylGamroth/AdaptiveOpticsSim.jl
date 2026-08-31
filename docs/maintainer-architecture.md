@@ -241,7 +241,9 @@ Examples:
   `AcquisitionProducts` contract. The plant also owns exact
   stateful RNG groups derived from its required run seed, derivation version,
   and stable owner identities; selected execution references those groups
-  directly. `PathResultKey` performs cold source/optics/output/revision/backend/
+  through the same compact family/member descriptors as the exact path and
+  acquisition owners, without retaining duplicate selection slots.
+  `PathResultKey` performs cold source/optics/output/revision/backend/
   device compatibility checks without putting IDs, shapes, rates, or device
   ordinals in type parameters
 - `PreparedPlantEventLoop` as the HIL-neutral serial virtual-time composition

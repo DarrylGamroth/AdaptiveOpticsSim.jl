@@ -419,10 +419,7 @@ end
         epoch = current_epoch(fixture.atmosphere)
         allocation_bytes = prepared_selection_execution_allocations(
             fixture.selection, epoch)
-        selected_owner_count =
-            length(prepared_paths(fixture.selection)) +
-            length(prepared_acquisitions(fixture.selection))
-        @test allocation_bytes <= 256 * selected_owner_count
+        @test allocation_bytes == 0
     end
 end
 
