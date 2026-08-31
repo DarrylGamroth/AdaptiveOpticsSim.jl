@@ -491,8 +491,20 @@ function run_optional_shared_detector_ipc_checks(
         0.03 0.90 0.01
         0.00 0.04 0.00
     ]
-    row = DeviceModelMatrixM3GlobalCMOS()
-    map = device_model_matrix_detector_rate_map(row; backend=selector, T)
+    rate_values_host = zeros(T, 9, 9)
+    rate_values_host[5, 5] = T(4)
+    rate_values = BackendArray(rate_values_host)
+    rate_metadata = OpticalPlaneMetadata(
+        DetectorPlane(),
+        rate_values;
+        coordinate_domain=AngularCoordinates(),
+        sampling=(one(T), one(T)),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition(),
+        spectral=MonochromaticChannel(T(0.8e-6)),
+    )
+    map = IntensityMap(rate_metadata, rate_values)
     detector = Detector(
         noise=NoiseNone(),
         exposure_duration=T(0.75),
@@ -512,10 +524,10 @@ function run_optional_shared_detector_ipc_checks(
         AdaptiveOpticsSim.Backends.execution_style(output),
     )
 
-    expected = device_model_matrix_zero_extended_response(
-        Array(map.values), response_kernel)
+    expected = optional_zero_extended_response(
+        rate_values_host, response_kernel)
     expected .*= T(0.75 * 0.4)
-    expected = device_model_matrix_zero_extended_response(expected,
+    expected = optional_zero_extended_response(expected,
         ipc_kernel)
     device = compute_device(output)
     coupling = detector.params.charge_coupling_model
@@ -534,6 +546,27 @@ function run_optional_shared_detector_ipc_checks(
     @test detector_mtf(detector, T(0.19), T(0.31)) ==
         response_mtf_before
     return nothing
+end
+
+function optional_zero_extended_response(
+    input::AbstractMatrix{T},
+    kernel::AbstractMatrix{T},
+) where {T<:AbstractFloat}
+    output = zeros(T, size(input))
+    radius_i = fld(size(kernel, 1), 2)
+    radius_j = fld(size(kernel, 2), 2)
+    @inbounds for j in axes(output, 2), i in axes(output, 1)
+        value = zero(T)
+        for kj in axes(kernel, 2), ki in axes(kernel, 1)
+            ii = i - (ki - radius_i - 1)
+            jj = j - (kj - radius_j - 1)
+            if checkbounds(Bool, input, ii, jj)
+                value = muladd(kernel[ki, kj], input[ii, jj], value)
+            end
+        end
+        output[i, j] = value
+    end
+    return output
 end
 
 function run_optional_backend_selector_smoke(::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}

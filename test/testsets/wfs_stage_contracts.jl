@@ -1520,6 +1520,18 @@ end
     AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
         raw_geometric, pupil.opd,
         geometric.front_end.layout.valid_mask)
+    @test_throws DimensionMismatchError begin
+        AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
+            zeros(T, 8), zeros(T, 8, 7), trues(2, 2))
+    end
+    @test_throws DimensionMismatchError begin
+        AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
+            zeros(T, 8), zeros(T, 8, 8), trues(2, 1))
+    end
+    @test_throws DimensionMismatchError begin
+        AdaptiveOpticsSim.WavefrontSensors.edge_geometric_slopes!(
+            zeros(T, 8), zeros(T, 8, 8), trues(2, 2), trues(8, 7))
+    end
     n_geometric = length(raw_geometric) ÷ 2
     valid_geometric = vec(Array(geometric.front_end.layout.valid_mask))
     @views @test direct_measurement.storage[1:n_geometric][valid_geometric] ≈
