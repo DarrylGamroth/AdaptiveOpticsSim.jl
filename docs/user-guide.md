@@ -39,10 +39,11 @@ pupil = PupilFunction(telescope)
 atmosphere = MultiLayerAtmosphere(
     telescope;
     r0=0.15,
+    reference_wavelength_m=500e-9,
     L0=25.0,
     fractional_cn2=[0.6, 0.4],
     wind_speed=[8.0, 12.0],
-    wind_direction=[0.0, 90.0],
+    wind_direction_deg=[0.0, 90.0],
     altitude=[0.0, 5000.0],
 )
 
@@ -67,7 +68,8 @@ measurement = measure!(wfs, pupil, source)
 
 The atmosphere owns evolving turbulence state. The renderer owns a prepared
 direction mapping and writes the caller's pupil product. Rendering does not
-advance time or consume RNG.
+advance time or consume RNG. `r0` is defined at `reference_wavelength_m`;
+rendering converts the generated phase to wavelength-independent OPD in metres.
 
 ## Explicit Closed Loop
 

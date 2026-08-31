@@ -12,7 +12,8 @@ atmosphere_step = 1e-3
 
 tel = Telescope(resolution=32, diameter=8.0)
 src = Source()
-atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
+atm = MultiLayerAtmosphere(tel; r0=0.2, reference_wavelength_m=500e-9,
+    L0=25.0, fractional_cn2=[1.0],
     wind_speed=[7.0], wind_direction_deg=[10.0], altitude=[0.0])
 dm = DeformableMirror(tel; n_act=4, influence_width=0.2)
 wfs = ShackHartmannWFS(tel; n_lenslets=4)
@@ -50,7 +51,8 @@ renderer = prepare_atmosphere_renderer(atm, tel, src)
 run_segment!(atm, renderer, pupil, src, wfs, dm_coarse, dm_fine,
     recon_coarse, recon_fine, cmd_coarse, cmd_fine, rng, 3)
 
-changed_atm = KolmogorovAtmosphere(tel; r0=0.1, L0=25.0)
+changed_atm = KolmogorovAtmosphere(tel; r0=0.1,
+    reference_wavelength_m=500e-9, L0=25.0)
 changed_renderer = prepare_atmosphere_renderer(changed_atm, tel, src)
 @info "Atmosphere r0 updated to 0.1"
 run_segment!(changed_atm, changed_renderer, pupil, src, wfs, dm_coarse,

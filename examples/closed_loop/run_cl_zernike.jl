@@ -13,7 +13,8 @@ rng = MersenneTwister(4)
 
 tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
 src = Source(band=:I, magnitude=0.0)
-atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+atm = KolmogorovAtmosphere(tel; r0=0.2,
+    reference_wavelength_m=500e-9, L0=25.0)
 dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
 wfs = ZernikeWFS(tel; pupil_samples=8, diffraction_padding=2)
 det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1)

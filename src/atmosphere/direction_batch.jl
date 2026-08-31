@@ -41,9 +41,9 @@ end
 ) = ExtractedScreenDirectionBatchCapability()
 
 @inline _direction_batch_layer_screen(layer::MovingAtmosphereLayer) =
-    layer.generator.state.opd
+    layer.generator.state.phase_rad
 @inline _direction_batch_layer_screen(layer::InfiniteAtmosphereLayer) =
-    layer.screen.state.screen
+    layer.screen.state.phase_rad
 
 @inline _direction_batch_layer_sampling(layer::MovingAtmosphereLayer) =
     layer.params.sampling_m
@@ -54,8 +54,12 @@ end
     layer.state.offset_x
 @inline _direction_batch_layer_offset_y(layer::AbstractAtmosphereLayer) =
     layer.state.offset_y
-@inline _direction_batch_layer_amplitude(layer::AbstractAtmosphereLayer) =
-    layer.params.amplitude_scale
+@inline _direction_batch_layer_opd_scale(layer::MovingAtmosphereLayer) =
+    layer.params.cn2_amplitude_scale *
+    layer.generator.params.opd_per_radian
+@inline _direction_batch_layer_opd_scale(layer::InfiniteAtmosphereLayer) =
+    layer.params.cn2_amplitude_scale *
+    layer.screen.generator.params.opd_per_radian
 
 """
 Immutable scientific and storage contract for a prepared atmosphere-direction
@@ -708,7 +712,7 @@ end
     pupil,
     layer_offset_x,
     layer_offset_y,
-    amplitude_scale,
+    opd_scale,
     layer_index::Int,
     n::Int,
     m::Int,
@@ -749,7 +753,7 @@ end
             v01 = screen[iy0, ix1]
             v10 = screen[iy1, ix0]
             v11 = screen[iy1, ix1]
-            sample = amplitude_scale * (
+            sample = opd_scale * (
                 wy0 * (wx0 * v00 + fx * v01) +
                 fy * (wx0 * v10 + fx * v11)
             )
@@ -786,7 +790,7 @@ function _queue_atmosphere_direction_layer!(
         workspace.pupil,
         T(_direction_batch_layer_offset_x(layer)),
         T(_direction_batch_layer_offset_y(layer)),
-        T(_direction_batch_layer_amplitude(layer)),
+        T(_direction_batch_layer_opd_scale(layer)),
         layer_index,
         n,
         m,

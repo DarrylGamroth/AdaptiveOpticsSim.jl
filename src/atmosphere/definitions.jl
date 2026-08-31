@@ -41,16 +41,20 @@ end
 struct KolmogorovAtmosphereDefinition{T<:AbstractFloat} <:
     AbstractTimedAtmosphereDefinition
     r0::T
+    reference_wavelength_m::T
     L0::T
 end
 
 function KolmogorovAtmosphereDefinition(;
     r0::Real,
+    reference_wavelength_m::Real,
     L0::Real=25.0,
     T::Type{<:AbstractFloat}=Float64,
 )
     return KolmogorovAtmosphereDefinition{T}(
         _converted_positive_finite(r0, T, "atmosphere Fried parameter r0"),
+        _converted_positive_finite(reference_wavelength_m, T,
+            "atmosphere reference wavelength in metres"),
         _converted_positive_finite(L0, T, "atmosphere outer scale L0"),
     )
 end
@@ -68,6 +72,7 @@ struct MultiLayerAtmosphereDefinition{
 } <:
     AbstractTimedAtmosphereDefinition
     r0::T
+    reference_wavelength_m::T
     L0::T
     layers::L
 end
@@ -79,6 +84,7 @@ struct InfiniteMultiLayerAtmosphereDefinition{
 } <:
     AbstractTimedAtmosphereDefinition
     r0::T
+    reference_wavelength_m::T
     L0::T
     layers::L
     screen_resolution::Union{Nothing,Int}
@@ -141,6 +147,7 @@ end
 
 function MultiLayerAtmosphereDefinition(;
     r0::Real,
+    reference_wavelength_m::Real,
     L0::Real=25.0,
     fractional_cn2,
     wind_speed,
@@ -158,6 +165,8 @@ function MultiLayerAtmosphereDefinition(;
     )
     return MultiLayerAtmosphereDefinition{T,typeof(layers)}(
         _converted_positive_finite(r0, T, "atmosphere Fried parameter r0"),
+        _converted_positive_finite(reference_wavelength_m, T,
+            "atmosphere reference wavelength in metres"),
         _converted_positive_finite(L0, T, "atmosphere outer scale L0"),
         layers,
     )
@@ -189,6 +198,7 @@ end
 
 function InfiniteMultiLayerAtmosphereDefinition(;
     r0::Real,
+    reference_wavelength_m::Real,
     L0::Real=25.0,
     fractional_cn2,
     wind_speed,
@@ -208,6 +218,8 @@ function InfiniteMultiLayerAtmosphereDefinition(;
     )
     return InfiniteMultiLayerAtmosphereDefinition{T,typeof(layers)}(
         _converted_positive_finite(r0, T, "atmosphere Fried parameter r0"),
+        _converted_positive_finite(reference_wavelength_m, T,
+            "atmosphere reference wavelength in metres"),
         _converted_positive_finite(L0, T, "atmosphere outer scale L0"),
         layers,
         _optional_positive_resolution(screen_resolution,
@@ -239,6 +251,7 @@ function _prepare_timed_atmosphere(
 ) where {T}
     return KolmogorovAtmosphere(telescope;
         r0=definition.r0,
+        reference_wavelength_m=definition.reference_wavelength_m,
         L0=definition.L0,
         T,
         backend=selector,
@@ -252,6 +265,7 @@ function _prepare_timed_atmosphere(
 ) where {T}
     return MultiLayerAtmosphere(telescope;
         r0=definition.r0,
+        reference_wavelength_m=definition.reference_wavelength_m,
         L0=definition.L0,
         fractional_cn2=_definition_cn2_fractions(definition),
         wind_speed=_definition_wind_speeds(definition),
@@ -274,6 +288,7 @@ function _prepare_timed_atmosphere(
         default_infinite_stencil_size(telescope.params.resolution))
     return InfiniteMultiLayerAtmosphere(telescope;
         r0=definition.r0,
+        reference_wavelength_m=definition.reference_wavelength_m,
         L0=definition.L0,
         fractional_cn2=_definition_cn2_fractions(definition),
         wind_speed=_definition_wind_speeds(definition),
@@ -313,7 +328,8 @@ function _require_kolmogorov_target(
     target::AbstractComputeDevice,
 )
     state = atmosphere.state
-    _require_atmosphere_target_array(state.opd, target, "atmosphere OPD")
+    _require_atmosphere_target_array(state.phase_rad, target,
+        "atmosphere phase screen")
     _require_atmosphere_target_array(state.psd, target, "atmosphere PSD")
     _require_atmosphere_target_array(state.spectrum, target,
         "atmosphere spectrum")
@@ -378,9 +394,9 @@ end
 function _require_infinite_screen_target(screen, target)
     state = screen.state
     for (name, array) in (
-        (:screen, state.screen),
-        (:screen_scratch, state.screen_scratch),
-        (:extract_buffer, state.extract_buffer),
+        (:phase_rad, state.phase_rad),
+        (:phase_scratch_rad, state.phase_scratch_rad),
+        (:extract_phase_rad, state.extract_phase_rad),
         (:stencil_buffer, state.stencil_buffer),
         (:boundary_buffer, state.boundary_buffer),
         (:noise_buffer, state.noise_buffer),

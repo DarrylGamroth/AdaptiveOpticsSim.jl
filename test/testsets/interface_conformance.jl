@@ -3,7 +3,9 @@
     pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
     lgs = LGSSource()
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     det = Detector(noise=NoiseNone())
@@ -36,9 +38,13 @@
     curv_count = CurvatureWFS(tel; pupil_samples=2,
         readout_model=CurvatureChannelReadout())
     ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
-    moving_atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
+    moving_atm = MultiLayerAtmosphere(tel; r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0, fractional_cn2=[1.0],
         wind_speed=[0.0], wind_direction_deg=[0.0], altitude=[0.0])
-    infinite_atm = InfiniteMultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[1.0],
+    infinite_atm = InfiniteMultiLayerAtmosphere(tel; r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0, fractional_cn2=[1.0],
         wind_speed=[0.0], wind_direction_deg=[0.0], altitude=[0.0], screen_resolution=33, stencil_size=35)
     @test CCDSensor <: AbstractFrameSensor
     @test CMOSSensor <: AbstractFrameSensor

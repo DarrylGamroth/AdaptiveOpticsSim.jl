@@ -10,6 +10,9 @@ AdaptiveOpticsSim.jl. Scientific term definitions follow the
 
 - Internal runtime OPD fields are in meters.
 - Internal wavelength-dependent optical phase is in radians.
+- Atmosphere `r0` and generated phase are defined at the required
+  `reference_wavelength_m`. Atmosphere rendering converts phase to OPD in
+  metres with `reference_wavelength_m / (2π)` before optical propagation.
 - `MetricCoordinates()` declares plane sampling and origin in metres.
 - `AngularCoordinates()` declares plane sampling and origin in radians.
 - `NormalizedPupilCoordinates()` declares dimensionless sampling and origin in

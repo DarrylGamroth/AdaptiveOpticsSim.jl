@@ -38,6 +38,7 @@ function prepare_closed_loop_workload(;
     atmosphere = KolmogorovAtmosphere(
         telescope;
         r0=T(0.2),
+        reference_wavelength_m=T(500e-9),
         L0=T(25),
         T=T,
         backend=backend,

@@ -172,6 +172,7 @@ function specula_reference_cases()
             "atmosphere" => Dict(
                 "kind" => "finite",
                 "r0" => 0.2,
+                "reference_wavelength_m" => 500e-9,
                 "L0" => 25.0,
                 "fractional_cn2" => [0.7, 0.3],
                 "wind_speed" => [8.0, 4.0],
@@ -208,6 +209,7 @@ function specula_reference_cases()
             "atmosphere" => Dict(
                 "kind" => "finite",
                 "r0" => 0.2,
+                "reference_wavelength_m" => 500e-9,
                 "L0" => 25.0,
                 "fractional_cn2" => [1.0],
                 "wind_speed" => [6.0],
@@ -249,6 +251,7 @@ function specula_reference_cases()
             "atmosphere" => Dict(
                 "kind" => "finite",
                 "r0" => 0.2,
+                "reference_wavelength_m" => 500e-9,
                 "L0" => 25.0,
                 "fractional_cn2" => [0.4, 0.6],
                 "wind_speed" => [5.0, 9.0],

@@ -1,4 +1,4 @@
-@kernel function kolmogorov_psd_kernel!(psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n::Int)
+@kernel function kolmogorov_psd_kernel!(psd, freqs, coeff, inv_L0_sq, exponent, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         @inbounds begin
@@ -7,7 +7,7 @@
             psd[i, j] = ifelse(
                 i == 1 && j == 1,
                 zero(eltype(psd)),
-                coeff * (two_pi_sq * (fx * fx + fy * fy) + inv_L0_sq)^exponent,
+                coeff * (fx * fx + fy * fy + inv_L0_sq)^exponent,
             )
         end
     end
@@ -16,11 +16,13 @@ end
 struct KolmogorovParams{T<:AbstractFloat}
     r0::T
     L0::T
+    reference_wavelength_m::T
+    opd_per_radian::T
     sampling_m::T
 end
 
 mutable struct KolmogorovState{T<:AbstractFloat,A<:AbstractMatrix{T},B<:AbstractMatrix{Complex{T}},V<:AbstractVector{T},P}
-    opd::A
+    phase_rad::A
     psd::A
     spectrum::B
     noise_re::A
@@ -46,12 +48,41 @@ end
 @inline atmosphere_numeric_type(atm::KolmogorovAtmosphere) =
     typeof(atm.params.r0)
 
-function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<:AbstractFloat}=Float64, backend::AbstractArrayBackend=backend(tel))
+"""
+    KolmogorovAtmosphere(telescope; r0, reference_wavelength_m, L0=25, ...)
+
+Prepare one finite von Kármán phase screen. `r0` is the Fried parameter in
+metres at `reference_wavelength_m`. The persistent screen is phase in radians
+at that reference wavelength. Atmosphere rendering converts it to OPD in
+metres with `reference_wavelength_m / (2π)` before it enters an optical path.
+"""
+function KolmogorovAtmosphere(tel::Telescope;
+    r0::Real,
+    reference_wavelength_m::Real,
+    L0::Real=25.0,
+    T::Type{<:AbstractFloat}=Float64,
+    backend::AbstractArrayBackend=backend(tel),
+)
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
     backend = _resolve_array_backend(selector)
-    params = KolmogorovParams{T}(T(r0), T(L0), T(tel.aperture.sampling_m[1]))
+    r0_t = _converted_positive_finite(r0, T,
+        "atmosphere Fried parameter r0")
+    L0_t = _converted_positive_finite(L0, T,
+        "atmosphere outer scale L0")
+    reference_wavelength_t = _converted_positive_finite(
+        reference_wavelength_m,
+        T,
+        "atmosphere reference wavelength in metres",
+    )
+    params = KolmogorovParams{T}(
+        r0_t,
+        L0_t,
+        reference_wavelength_t,
+        reference_wavelength_t / T(2 * pi),
+        T(tel.aperture.sampling_m[1]),
+    )
     n = tel.params.resolution
-    opd = backend{T}(undef, n, n)
+    phase_rad = backend{T}(undef, n, n)
     psd = backend{T}(undef, n, n)
     spectrum = backend{Complex{T}}(undef, n, n)
     noise_re = backend{T}(undef, n, n)
@@ -60,11 +91,12 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
     noise_im_host = Matrix{T}(undef, n, n)
     freqs = backend{T}(undef, n)
     ifft_plan = plan_ifft_backend!(spectrum)
-    fill!(opd, zero(T))
+    fill!(phase_rad, zero(T))
     fill!(psd, zero(T))
     fill!(spectrum, zero(eltype(spectrum)))
-    state = KolmogorovState{T, typeof(opd), typeof(spectrum), typeof(freqs), typeof(ifft_plan)}(
-        opd,
+    state = KolmogorovState{T, typeof(phase_rad), typeof(spectrum),
+        typeof(freqs), typeof(ifft_plan)}(
+        phase_rad,
         psd,
         spectrum,
         noise_re,
@@ -84,31 +116,32 @@ function KolmogorovAtmosphere(tel::Telescope; r0::Real, L0::Real=25.0, T::Type{<
 end
 
 function update_psd!(atm::KolmogorovAtmosphere, delta::Real)
-    n = size(atm.state.opd, 1)
-    T = eltype(atm.state.opd)
+    n = size(atm.state.phase_rad, 1)
+    T = eltype(atm.state.phase_rad)
     fftfreq!(atm.state.freqs, n; d=delta)
     coeff = T(0.023) * atm.params.r0^(-T(5) / T(3))
     inv_L0_sq = (T(1) / atm.params.L0)^2
-    two_pi_sq = T(2 * pi)^2
     exponent = -T(11) / T(6)
-    update_psd!(execution_style(atm.state.psd), atm.state.psd, atm.state.freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n)
+    update_psd!(execution_style(atm.state.psd), atm.state.psd,
+        atm.state.freqs, coeff, inv_L0_sq, exponent, n)
     return atm
 end
 
 function update_psd!(::ScalarCPUStyle, psd::AbstractMatrix{T}, freqs::AbstractVector{T},
-    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, n::Int) where {T<:AbstractFloat}
+    coeff::T, inv_L0_sq::T, exponent::T, n::Int) where {T<:AbstractFloat}
     @inbounds for j in 1:n, i in 1:n
         fx = freqs[i]
         fy = freqs[j]
         psd[i, j] = i == 1 && j == 1 ? zero(T) :
-            coeff * (two_pi_sq * (fx * fx + fy * fy) + inv_L0_sq)^exponent
+            coeff * (fx * fx + fy * fy + inv_L0_sq)^exponent
     end
     return psd
 end
 
 function update_psd!(style::AcceleratorStyle, psd::AbstractMatrix{T}, freqs::AbstractVector{T},
-    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, n::Int) where {T<:AbstractFloat}
-    launch_kernel!(style, kolmogorov_psd_kernel!, psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n;
+    coeff::T, inv_L0_sq::T, exponent::T, n::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, kolmogorov_psd_kernel!, psd, freqs, coeff,
+        inv_L0_sq, exponent, n;
         ndrange=size(psd))
     return psd
 end
@@ -127,7 +160,7 @@ function regenerate_phase_screen!(atm::KolmogorovAtmosphere,
     rng::AbstractRNG)
     delta = atm.params.sampling_m
     ensure_psd!(atm, delta)
-    phase_screen_von_karman!(atm.state.opd, atm, delta, rng)
+    phase_screen_von_karman!(atm.state.phase_rad, atm, delta, rng)
     return atm
 end
 
@@ -151,7 +184,8 @@ function phase_screen_von_karman!(out::AbstractMatrix, atm::KolmogorovAtmosphere
     atm.state.noise_im_host = randn_phase_noise!(rng, atm.state.noise_im, atm.state.noise_im_host)
     @. atm.state.spectrum = complex(atm.state.noise_re, atm.state.noise_im) * sqrt(atm.state.psd)
     execute_fft_plan!(atm.state.spectrum, atm.state.ifft_plan)
-    @. out = real(atm.state.spectrum) * (n * delta)
+    phase_scale = eltype(out)(n) / eltype(out)(delta)
+    @. out = real(atm.state.spectrum) * phase_scale
     return out
 end
 
@@ -161,9 +195,9 @@ function randn_phase_noise!(rng::AbstractRNG, out::AbstractMatrix{T}, host::Matr
 end
 function render_atmosphere_opd_impl!(dest::AbstractMatrix,
     renderer::AtmosphereDirectionRenderer, atm::KolmogorovAtmosphere)
-    size(dest) == size(atm.state.opd) || throw(DimensionMismatchError(
+    size(dest) == size(atm.state.phase_rad) || throw(DimensionMismatchError(
         "Kolmogorov screen dimensions do not match prepared output"))
-    copyto!(dest, atm.state.opd)
-    dest .*= renderer.pupil
+    @. dest = atm.state.phase_rad * renderer.pupil *
+        atm.params.opd_per_radian
     return dest
 end

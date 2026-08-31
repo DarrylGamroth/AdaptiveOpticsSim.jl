@@ -16,6 +16,27 @@ function unmasked_atmosphere_opd(atm::AbstractTimedAtmosphere,
     return output
 end
 
+function sampled_phase_structure_function(
+    phase_rad::AbstractMatrix,
+    lag::Int,
+)
+    lag > 0 || throw(ArgumentError("lag must be positive"))
+    lag < min(size(phase_rad)...) || throw(ArgumentError(
+        "lag must be smaller than both phase-screen dimensions"))
+    horizontal_left = @view phase_rad[:, 1:(end - lag)]
+    horizontal_right = @view phase_rad[:, (1 + lag):end]
+    vertical_top = @view phase_rad[1:(end - lag), :]
+    vertical_bottom = @view phase_rad[(1 + lag):end, :]
+    total = zero(eltype(phase_rad))
+    @inbounds for index in eachindex(horizontal_left, horizontal_right)
+        total += abs2(horizontal_right[index] - horizontal_left[index])
+    end
+    @inbounds for index in eachindex(vertical_top, vertical_bottom)
+        total += abs2(vertical_bottom[index] - vertical_top[index])
+    end
+    return total / (length(horizontal_left) + length(vertical_top))
+end
+
 mutable struct MutableTimedAtmosphereTestDefinition <:
     AbstractTimedAtmosphereDefinition
 end
@@ -38,18 +59,23 @@ end
     )
 
     kolmogorov_definition = KolmogorovAtmosphereDefinition(
-        r0=T(0.2), L0=T(25), T=T)
+        r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
+        L0=T(25),
+        T=T,
+    )
     kolmogorov = prepare_timed_atmosphere(
         kolmogorov_definition, telescope, target)
     @test kolmogorov isa KolmogorovAtmosphere
     @test isconcretetype(typeof(kolmogorov))
-    @test compute_device(kolmogorov.state.opd) == target
+    @test compute_device(kolmogorov.state.phase_rad) == target
     @test compute_device(kolmogorov.state.psd) == target
     @test compute_device(kolmogorov.state.spectrum) == target
     @test compute_device(kolmogorov.state.freqs) == target
 
     multilayer_definition = MultiLayerAtmosphereDefinition(
         r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
         L0=T(25),
         fractional_cn2=T[0.7, 0.3],
         wind_speed=T[8, 3],
@@ -79,7 +105,8 @@ end
     @test first.state !== second.state
     @test map(layer -> layer.params.altitude, first.layers) == T[0, 8_000]
     @test first.params.layer_ids == second.params.layer_ids
-    @test all(layer -> compute_device(layer.generator.state.opd) == target,
+    @test all(layer ->
+        compute_device(layer.generator.state.phase_rad) == target,
         first.layers)
     @test all(layer -> compute_device(
         pupil_mask(layer.generator_telescope)) == target, first.layers)
@@ -89,6 +116,7 @@ end
 
     infinite_definition = InfiniteMultiLayerAtmosphereDefinition(
         r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
         L0=T(25),
         fractional_cn2=T[1],
         wind_speed=T[0],
@@ -102,12 +130,13 @@ end
     infinite = prepare_timed_atmosphere(
         infinite_definition, telescope, target)
     @test infinite isa InfiniteMultiLayerAtmosphere
-    @test compute_device(infinite.layers[1].screen.state.screen) == target
+    @test compute_device(infinite.layers[1].screen.state.phase_rad) == target
     @test compute_device(infinite.layers[1].screen.state.boundary_buffer) ==
         target
 
     @test_throws InvalidConfiguration MultiLayerAtmosphereDefinition(
         r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
         fractional_cn2=T[1],
         wind_speed=T[0],
         wind_direction_deg=T[0],
@@ -117,6 +146,7 @@ end
     )
     @test_throws InvalidConfiguration MultiLayerAtmosphereDefinition(
         r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
         fractional_cn2=T[0.5, 0.5],
         wind_speed=T[0, 0],
         wind_direction_deg=T[0, 0],
@@ -126,6 +156,7 @@ end
     )
     @test_throws InvalidConfiguration MultiLayerAtmosphereDefinition(
         r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
         fractional_cn2=T[0.4, 0.4],
         wind_speed=T[0, 0],
         wind_direction_deg=T[0, 0],
@@ -135,6 +166,7 @@ end
     )
     @test_throws InvalidConfiguration InfiniteMultiLayerAtmosphereDefinition(
         r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
         fractional_cn2=T[1],
         wind_speed=T[0],
         wind_direction_deg=T[0],
@@ -166,6 +198,7 @@ end
     lgs = LGSSource(coordinates=(5.0, 30.0), altitude=90_000.0)
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         fractional_cn2=[0.6, 0.4],
         wind_speed=[4.0, 2.0],
         wind_direction_deg=[0.0, 90.0],
@@ -241,6 +274,7 @@ end
 
     other = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         fractional_cn2=[0.6, 0.4],
         wind_speed=[4.0, 2.0],
         wind_direction_deg=[0.0, 90.0],
@@ -318,12 +352,16 @@ end
 
 @testset "Atmosphere propagation" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    atm = KolmogorovAtmosphere(tel;
+        r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0,
+    )
     advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(1))
     pupil = PupilFunction(tel)
     renderer = prepare_atmosphere_renderer(atm, tel)
     render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
-    @test size(atm.state.opd) == (32, 32)
+    @test size(atm.state.phase_rad) == (32, 32)
     @test sum(abs, pupil.opd) > 0
 
     delta = tel.params.diameter / tel.params.resolution
@@ -332,9 +370,104 @@ end
     ensure_psd!(atm, delta)
     @test psd_snapshot == atm.state.psd
 
-    atm = KolmogorovAtmosphere(tel; r0=0.1, L0=25.0)
+    atm = KolmogorovAtmosphere(tel;
+        r0=0.1,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0,
+    )
     ensure_psd!(atm, delta)
     @test psd_snapshot != atm.state.psd
+end
+
+@testset "Atmosphere physical normalization" begin
+    r0 = 0.2
+    L0 = 25.0
+    frequencies = [0.0, 0.1, 1.0]
+    expected_spectrum = @. 0.023 * r0^(-5 / 3) *
+        (frequencies^2 + L0^(-2))^(-11 / 6)
+    @test phase_spectrum(frequencies, r0, L0) ≈ expected_spectrum
+
+    telescope = Telescope(
+        resolution=32,
+        diameter=8.0,
+        central_obstruction=0.0,
+    )
+    atmosphere_500nm = KolmogorovAtmosphere(
+        telescope;
+        r0,
+        reference_wavelength_m=500e-9,
+        L0,
+    )
+    atmosphere_1000nm = KolmogorovAtmosphere(
+        telescope;
+        r0,
+        reference_wavelength_m=1000e-9,
+        L0,
+    )
+    epoch_500nm = advance_by!(
+        atmosphere_500nm, 0.0; rng=MersenneTwister(0x500))
+    epoch_1000nm = advance_by!(
+        atmosphere_1000nm, 0.0; rng=MersenneTwister(0x500))
+    @test atmosphere_500nm.state.phase_rad ==
+        atmosphere_1000nm.state.phase_rad
+
+    renderer_500nm = prepare_atmosphere_renderer(
+        atmosphere_500nm, telescope)
+    renderer_1000nm = prepare_atmosphere_renderer(
+        atmosphere_1000nm, telescope)
+    pupil_500nm = PupilFunction(telescope)
+    pupil_1000nm = PupilFunction(telescope)
+    render_atmosphere!(
+        pupil_500nm, renderer_500nm, atmosphere_500nm, epoch_500nm)
+    render_atmosphere!(
+        pupil_1000nm, renderer_1000nm, atmosphere_1000nm, epoch_1000nm)
+    expected_opd = atmosphere_500nm.state.phase_rad .*
+        renderer_500nm.pupil .* (500e-9 / (2pi))
+    @test pupil_500nm.opd ≈ expected_opd
+    @test pupil_1000nm.opd ≈ 2 .* pupil_500nm.opd
+
+    @test_throws UndefKeywordError KolmogorovAtmosphere(telescope; r0)
+    @test_throws InvalidConfiguration KolmogorovAtmosphere(
+        telescope; r0, reference_wavelength_m=0.0)
+
+    structure_resolution = 128
+    structure_diameter_m = 8.0
+    structure_r0_m = 0.2
+    structure_lag = 2
+    structure_telescope = Telescope(
+        resolution=structure_resolution,
+        diameter=structure_diameter_m,
+        central_obstruction=0.0,
+    )
+    structure_atmosphere = KolmogorovAtmosphere(
+        structure_telescope;
+        r0=structure_r0_m,
+        reference_wavelength_m=500e-9,
+        L0=1000.0,
+    )
+    structure_workspace = PhaseStatsWorkspace(
+        structure_resolution; T=Float64)
+    measured_structure = 0.0
+    sample_count = 12
+    sampling_m = structure_diameter_m / structure_resolution
+    for seed in 1:sample_count
+        phase_rad = ft_sh_phase_screen(
+            structure_atmosphere,
+            structure_resolution,
+            sampling_m;
+            rng=MersenneTwister(seed),
+            ws=structure_workspace,
+            subharmonics=true,
+            profile=ScientificProfile(),
+        )
+        measured_structure += sampled_phase_structure_function(
+            phase_rad, structure_lag)
+    end
+    measured_structure /= sample_count
+    separation_m = structure_lag * sampling_m
+    kolmogorov_structure = 6.88 *
+        (separation_m / structure_r0_m)^(5 / 3)
+    @test 0.75 < measured_structure / kolmogorov_structure < 1.30
 end
 
 @testset "Infinite atmosphere boundary math" begin
@@ -384,14 +517,21 @@ end
     @test isapprox(empirical_mean, expected_mean; rtol=0.08, atol=0.08)
     @test isapprox(empirical_cov, op.residual_covariance; rtol=0.12, atol=0.12)
 
-    screen = InfinitePhaseScreen(tel; r0=0.2, L0=25.0, screen_resolution=33, stencil_size=35)
-    @test size(screen.state.screen) == (35, 35)
-    @test size(screen.state.extract_buffer) == (32, 32)
+    screen = InfinitePhaseScreen(tel;
+        r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0,
+        screen_resolution=33,
+        stencil_size=35,
+    )
+    @test size(screen.state.phase_rad) == (35, 35)
+    @test size(screen.state.extract_phase_rad) == (32, 32)
     @test size(screen.state.column_positive.operator.predictor, 1) == 35
     @test size(screen.state.row_negative.operator.predictor, 1) == 35
 
     atm = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
@@ -406,7 +546,7 @@ end
     pupil = PupilFunction(tel)
     renderer = prepare_atmosphere_renderer(atm, tel)
     render_atmosphere!(pupil, renderer, atm, epoch)
-    @test size(atm.layers[1].screen.state.screen) == (35, 35)
+    @test size(atm.layers[1].screen.state.phase_rad) == (35, 35)
     @test atm.layers[1].screen.state.initialized
     @test atm.layers[1].state.integer_shift_x == 0
     @test atm.layers[1].state.integer_shift_y == 0
@@ -430,6 +570,7 @@ end
 
     stationary = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
@@ -447,6 +588,7 @@ end
 
     small_step = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[50.0],
@@ -466,6 +608,7 @@ end
 
     row_step = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[500.0],
@@ -481,6 +624,7 @@ end
     diagonal_speed = 250.0 * sqrt(2)
     diagonal_step = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[diagonal_speed],
@@ -502,6 +646,7 @@ end
         src_local = Source(band=:I, magnitude=0.0, coordinates=(15.0, 30.0))
         atm = InfiniteMultiLayerAtmosphere(tel_local;
             r0=0.2,
+            reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
             L0=25.0,
             fractional_cn2=[0.7, 0.3],
             wind_speed=[6.0, 3.0],
@@ -519,18 +664,22 @@ end
             render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
             push!(opd_trace, copy(Array(pupil.opd)))
         end
-        return (; opd_trace, screen=copy(Array(atm.layers[1].screen.state.screen)))
+        return (;
+            opd_trace,
+            phase_rad=copy(Array(atm.layers[1].screen.state.phase_rad)),
+        )
     end
 
     trace_a = infinite_trace()
     trace_b = infinite_trace()
     @test trace_a.opd_trace == trace_b.opd_trace
-    @test trace_a.screen == trace_b.screen
+    @test trace_a.phase_rad == trace_b.phase_rad
 
     function trajectory_std_windows(; seed::Integer=79, steps::Int=24)
         tel_local = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
         atm = InfiniteMultiLayerAtmosphere(tel_local;
             r0=0.2,
+            reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
             L0=25.0,
             fractional_cn2=[0.5, 0.5],
             wind_speed=[10.0, 6.0],
@@ -556,6 +705,7 @@ end
     wind_speed_px = tel.params.diameter / tel.params.resolution / TEST_ATMOSPHERE_STEP
     finite = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[wind_speed_px],
@@ -564,6 +714,7 @@ end
     )
     infinite = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[wind_speed_px],
@@ -619,6 +770,7 @@ end
     function offaxis_shift_regression(constructor; seed::Integer=41, kwargs...)
         atm = constructor(tel;
             r0=0.2,
+            reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
             L0=25.0,
             fractional_cn2=[1.0],
             wind_speed=[0.0],
@@ -628,11 +780,11 @@ end
         )
         advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(seed))
         if atm isa MultiLayerAtmosphere
-            fill_x_ramp!(atm.layers[1].generator.state.opd)
+            fill_x_ramp!(atm.layers[1].generator.state.phase_rad)
             atm.layers[1].state.offset_x = 0.0
             atm.layers[1].state.offset_y = 0.0
         else
-            fill_x_ramp!(atm.layers[1].screen.state.screen)
+            fill_x_ramp!(atm.layers[1].screen.state.phase_rad)
             atm.layers[1].state.offset_x = 0.0
             atm.layers[1].state.offset_y = 0.0
         end
@@ -662,6 +814,7 @@ end
     function path_local_renderer_regression(constructor; kwargs...)
         atm = constructor(tel;
             r0=0.2,
+            reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
             L0=25.0,
             fractional_cn2=[0.7, 0.3],
             wind_speed=[6.0, 3.0],
@@ -696,6 +849,8 @@ end
         for s in 1:nsamp
             atm = constructor(tel;
                 r0=0.2,
+                reference_wavelength_m=
+                    TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
                 L0=25.0,
                 fractional_cn2=fractions,
                 wind_speed=fill(0.0, length(fractions)),
@@ -720,7 +875,11 @@ end
 
 @testset "Sub-harmonic phase screens" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    atm = KolmogorovAtmosphere(tel;
+        r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0,
+    )
     delta = tel.params.diameter / tel.params.resolution
     rng = MersenneTwister(11)
     ws = PhaseStatsWorkspace(32; T=Float64)
@@ -732,7 +891,11 @@ end
     @test AdaptiveOpticsSim.Atmospheres.resolve_subharmonic_levels(25.0, 8.0) == 4
     @test AdaptiveOpticsSim.Atmospheres.resolve_subharmonic_levels(200.0, 8.0) > 4
 
-    atm_large = KolmogorovAtmosphere(tel; r0=0.2, L0=200.0)
+    atm_large = KolmogorovAtmosphere(tel;
+        r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=200.0,
+    )
     rng = MersenneTwister(11)
     phs_default = ft_sh_phase_screen(atm_large, 32, delta; rng=rng, ws=ws,
         subharmonics=true, mode=FidelitySubharmonics())
@@ -778,7 +941,11 @@ end
     @test default_ncpa_basis(fast_cal).method isa KLDMModes
 
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=0.15, L0=200.0)
+    atm = KolmogorovAtmosphere(tel;
+        r0=0.15,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=200.0,
+    )
     scientific = ft_sh_phase_screen(atm, 16, 0.1; rng=MersenneTwister(3), profile=ScientificProfile())
     fast = ft_sh_phase_screen(atm, 16, 0.1; rng=MersenneTwister(3), profile=FastProfile())
     @test !all(scientific .== fast)
@@ -799,6 +966,7 @@ end
 
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[one_pixel_speed],
@@ -818,6 +986,7 @@ end
 
     stationary = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
@@ -831,6 +1000,7 @@ end
 
     subpixel = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[quarter_pixel_speed],
@@ -850,6 +1020,8 @@ end
         for s in 1:nsamp
             atm_local = MultiLayerAtmosphere(tel;
                 r0=0.2,
+                reference_wavelength_m=
+                    TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
                 L0=25.0,
                 fractional_cn2=fractions,
                 wind_speed=fill(0.0, length(fractions)),

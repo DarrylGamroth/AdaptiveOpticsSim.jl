@@ -538,6 +538,7 @@ function _multilayer_atmosphere_opd_config(
     pupil_reflectivity::Real,
     aperture_revision::Integer,
     r0::Real,
+    reference_wavelength_m::Real,
     L0::Real,
     fractional_cn2,
     wind_speed,
@@ -579,6 +580,7 @@ function _multilayer_atmosphere_opd_config(
         )
         atmosphere = MultiLayerAtmosphereDefinition(
             r0=r0,
+            reference_wavelength_m=reference_wavelength_m,
             L0=L0,
             fractional_cn2=fractional_cn2,
             wind_speed=wind_speed,
@@ -603,7 +605,7 @@ end
 
 """
     multilayer_atmosphere_opd_node(name; resolution,
-        telescope_diameter_m, r0, fractional_cn2, wind_speed,
+        telescope_diameter_m, r0, reference_wavelength_m, fractional_cn2, wind_speed,
         wind_direction_deg, altitude, layer_ids, atmosphere_step,
         rng_seed, atmosphere_opd_schema, ...)
 
@@ -622,6 +624,7 @@ function multilayer_atmosphere_opd_node(
     resolution::Integer,
     telescope_diameter_m::Real,
     r0::Real,
+    reference_wavelength_m::Real,
     fractional_cn2,
     wind_speed,
     wind_direction_deg,
@@ -644,6 +647,7 @@ function multilayer_atmosphere_opd_node(
         pupil_reflectivity,
         aperture_revision,
         r0,
+        reference_wavelength_m,
         L0,
         fractional_cn2,
         wind_speed,

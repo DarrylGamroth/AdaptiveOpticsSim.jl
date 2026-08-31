@@ -44,6 +44,7 @@ central_obstruction_ratio = 0.20491803278688525
 pupil_reflectivity = 1.0
 aperture_revision = 1
 r0 = 0.15
+reference_wavelength_m = 5.0e-7
 L0 = 30.0
 fractional_cn2 = [0.45, 0.10, 0.10, 0.25, 0.10]
 wind_speed = [5.0, 5.0, 7.0, 10.0, 10.0]

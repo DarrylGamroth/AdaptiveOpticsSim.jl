@@ -413,6 +413,7 @@ function _multilayer_atmosphere_opd_f32_node(
         :layer_ids,
         :pupil_reflectivity,
         :r0,
+        :reference_wavelength_m,
         :resolution,
         :rng_seed,
         :telescope_diameter_m,
@@ -426,6 +427,7 @@ function _multilayer_atmosphere_opd_f32_node(
         :fractional_cn2,
         :layer_ids,
         :r0,
+        :reference_wavelength_m,
         :resolution,
         :rng_seed,
         :telescope_diameter_m,
@@ -461,6 +463,10 @@ function _multilayer_atmosphere_opd_f32_node(
         pupil_reflectivity,
         aperture_revision,
         r0=_file_real(config.r0, "$context.r0"),
+        reference_wavelength_m=_file_real(
+            config.reference_wavelength_m,
+            "$context.reference_wavelength_m",
+        ),
         L0,
         fractional_cn2=_file_real_tuple(
             config.fractional_cn2,

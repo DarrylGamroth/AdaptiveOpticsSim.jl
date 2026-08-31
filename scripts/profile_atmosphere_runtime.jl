@@ -135,6 +135,7 @@ function _benchmark_model(model_name::Symbol, tel, src, backend_tag, backend,
     atm = if model_name === :finite
         MultiLayerAtmosphere(tel;
             r0=cfg.r0,
+            reference_wavelength_m=T(500e-9),
             L0=cfg.L0,
             fractional_cn2=cfg.fractional_cn2,
             wind_speed=cfg.wind_speed,
@@ -146,6 +147,7 @@ function _benchmark_model(model_name::Symbol, tel, src, backend_tag, backend,
     elseif model_name === :infinite
         InfiniteMultiLayerAtmosphere(tel;
             r0=cfg.r0,
+            reference_wavelength_m=T(500e-9),
             L0=cfg.L0,
             fractional_cn2=cfg.fractional_cn2,
             wind_speed=cfg.wind_speed,
@@ -178,7 +180,9 @@ function _benchmark_model(model_name::Symbol, tel, src, backend_tag, backend,
         alloc_bytes=alloc_bytes,
         sync_count_per_sample=backend_tag === nothing ? 0 : 1,
         opd_std=std(vec(Array(opd_map(output)))),
-        screen_shape=model_name === :finite ? size(atm.layers[1].generator.state.opd) : size(atm.layers[1].screen.state.screen),
+        screen_shape=model_name === :finite ?
+                     size(atm.layers[1].generator.state.phase_rad) :
+                     size(atm.layers[1].screen.state.phase_rad),
     )
 end
 

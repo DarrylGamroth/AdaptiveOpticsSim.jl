@@ -12,7 +12,8 @@ atmosphere_step = 1e-3
 
 tel = Telescope(resolution=32, diameter=8.0)
 src = Source()
-atm = MultiLayerAtmosphere(tel; r0=0.2, L0=25.0, fractional_cn2=[0.7, 0.3],
+atm = MultiLayerAtmosphere(tel; r0=0.2, reference_wavelength_m=500e-9,
+    L0=25.0, fractional_cn2=[0.7, 0.3],
     wind_speed=[5.0, 10.0], wind_direction_deg=[0.0, 90.0], altitude=[0.0, 8000.0])
 dm = DeformableMirror(tel; n_act=4, influence_width=0.2)
 wfs = ShackHartmannWFS(tel; n_lenslets=4)

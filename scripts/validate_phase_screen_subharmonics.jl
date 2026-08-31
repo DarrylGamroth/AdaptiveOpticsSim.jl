@@ -63,7 +63,8 @@ function main()
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     println("L0\tmode\ttiptilt_power\tstructure_energy\tadded_variance\ttheory_variance\tratio")
     for L0 in (25.0, 50.0, 100.0, 200.0)
-        atm = KolmogorovAtmosphere(tel; r0=0.2, L0=L0)
+        atm = KolmogorovAtmosphere(tel; r0=0.2,
+            reference_wavelength_m=500e-9, L0=L0)
         for (label, kwargs, theory) in (
             ("none", (subharmonics=false,), nothing),
             ("fast", (subharmonics=true, mode=FastSubharmonics()),

@@ -1,7 +1,9 @@
 @testset "OPD maps and NCPA" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0)
     map = OPDMap(fill(1.0, 8, 8))
     pupil = PupilFunction(tel)
     apply_surface!(pupil, map, DMReplace())

@@ -355,6 +355,7 @@ function build_reference_atmosphere(cfg::AbstractDict{<:AbstractString,<:Any}, t
     kind = lowercase(String(get(cfg, "kind", "finite")))
     kwargs = (
         r0=Float64(cfg["r0"]),
+        reference_wavelength_m=Float64(cfg["reference_wavelength_m"]),
         L0=Float64(get(cfg, "L0", 25.0)),
         fractional_cn2=Float64.(cfg["fractional_cn2"]),
         wind_speed=Float64.(cfg["wind_speed"]),

@@ -110,7 +110,8 @@ function build_proper_hil_context(;
         backend=selector,
     )
     src = Source(band=:H, magnitude=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=T(0.2), L0=T(25.0))
+    atm = KolmogorovAtmosphere(tel; r0=T(0.2),
+        reference_wavelength_m=T(500e-9), L0=T(25.0))
     tiptilt = TipTiltMirror(tel; scale=T(0.05), T=T, backend=selector, label=:tiptilt)
     dm = DeformableMirror(tel; n_act=16, influence_width=T(0.3), T=T, backend=selector)
     wfs = _build_wfs(tel; T=T, backend=selector)

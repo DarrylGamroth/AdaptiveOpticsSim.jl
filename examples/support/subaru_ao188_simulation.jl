@@ -291,6 +291,7 @@ struct AO188SimulationParams{
     n_low_order_modes::Int
     influence_width::T
     r0::T
+    reference_wavelength_m::T
     L0::T
     source_magnitude::T
     interaction_amplitude::T
@@ -326,6 +327,7 @@ function AO188SimulationParams(;
     n_low_order_modes::Int=4,
     influence_width::Real=0.3,
     r0::Real=0.16,
+    reference_wavelength_m::Real=500e-9,
     L0::Real=25.0,
     source_magnitude::Real=8.0,
     interaction_amplitude::Real=0.05,
@@ -368,6 +370,8 @@ function AO188SimulationParams(;
         "high_detector_exposure")
     validated_ao188_duration(low_detector_exposure, T,
         "low_detector_exposure")
+    reference_wavelength_m > 0 || throw(InvalidConfiguration(
+        "reference_wavelength_m must be positive"))
     resolved_low_order_resolution = isnothing(low_order_resolution) ?
         default_ao188_low_order_resolution(resolution, low_order_lenslets) :
         low_order_resolution
@@ -387,6 +391,7 @@ function AO188SimulationParams(;
         n_low_order_modes,
         T(influence_width),
         T(r0),
+        T(reference_wavelength_m),
         T(L0),
         T(source_magnitude),
         T(interaction_amplitude),
@@ -735,7 +740,13 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
     pupil = PupilFunction(tel)
     low_pupil = PupilFunction(low_tel)
     src = Source(band=params.source_band, magnitude=params.source_magnitude, T=T)
-    atm = KolmogorovAtmosphere(tel; r0=params.r0, L0=params.L0, T=T, backend=backend)
+    atm = KolmogorovAtmosphere(tel;
+        r0=params.r0,
+        reference_wavelength_m=params.reference_wavelength_m,
+        L0=params.L0,
+        T=T,
+        backend=backend,
+    )
     atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
     dm = DeformableMirror(tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)
     low_dm = DeformableMirror(low_tel; n_act=params.n_act, influence_width=params.influence_width, T=T, backend=backend)

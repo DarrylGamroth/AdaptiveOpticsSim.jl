@@ -56,7 +56,11 @@ end
 
 @testset "Phase statistics" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    atm = KolmogorovAtmosphere(tel;
+        r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0,
+    )
     rho = [0.0, 1e-6, 0.1, 1.0]
     cov = phase_covariance(rho, atm)
     @test length(cov) == length(rho)
@@ -79,7 +83,7 @@ end
     helper_screen_rng = MersenneTwister(7)
     advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=runtime_screen_rng)
     helper_screen, helper_psd = ft_phase_screen(atm, tel.params.resolution, delta; rng=helper_screen_rng, return_psd=true)
-    @test helper_screen ≈ atm.state.opd
+    @test helper_screen ≈ atm.state.phase_rad
     @test helper_psd ≈ atm.state.psd
 
     for z in (1e-6, 1e-3, 0.1, 1.0, 4.0, 10.0, 40.0, 140.0)

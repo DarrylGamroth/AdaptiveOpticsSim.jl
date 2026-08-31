@@ -1,6 +1,6 @@
 @inline wrap_upper_index(i::Int, n::Int) = ifelse(i > n, i - n, i)
 
-@kernel function moving_layer_extract_kernel!(out, screen, start_x, start_y, footprint_scale, amplitude_scale, n::Int, m::Int)
+@kernel function moving_layer_extract_kernel!(out, screen, start_x, start_y, footprint_scale, output_scale, n::Int, m::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(out)
@@ -23,12 +23,12 @@
             v01 = screen[iy0, ix1]
             v10 = screen[iy1, ix0]
             v11 = screen[iy1, ix1]
-            out[i, j] = amplitude_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+            out[i, j] = output_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
 end
 
-@kernel function moving_layer_accumulate_kernel!(out, screen, start_x, start_y, footprint_scale, amplitude_scale, n::Int, m::Int)
+@kernel function moving_layer_accumulate_kernel!(out, screen, start_x, start_y, footprint_scale, output_scale, n::Int, m::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(out)
@@ -51,7 +51,7 @@ end
             v01 = screen[iy0, ix1]
             v10 = screen[iy1, ix0]
             v11 = screen[iy1, ix1]
-            out[i, j] += amplitude_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+            out[i, j] += output_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
 end
@@ -72,11 +72,12 @@ struct MultiLayerParams{T<:AbstractFloat,
     wind_velocity_y::V6
     layer_ids::I
     r0::T
+    reference_wavelength_m::T
     L0::T
 end
 
 struct MovingLayerParams{T<:AbstractFloat}
-    amplitude_scale::T
+    cn2_amplitude_scale::T
     wind_velocity_x::T
     wind_velocity_y::T
     altitude::T
@@ -144,6 +145,7 @@ end
 function MovingAtmosphereLayer(
     tel::Telescope;
     r0::Real,
+    reference_wavelength_m::Real,
     L0::Real,
     cn2_fraction::Real,
     wind_velocity_x::Real,
@@ -155,7 +157,13 @@ function MovingAtmosphereLayer(
     selector = require_same_backend(tel, backend)
     screen_resolution = moving_layer_screen_resolution(tel.params.resolution)
     screen_telescope = moving_layer_telescope(tel; resolution=screen_resolution, T=T, backend=selector)
-    generator = KolmogorovAtmosphere(screen_telescope; r0=r0, L0=L0, T=T, backend=selector)
+    generator = KolmogorovAtmosphere(screen_telescope;
+        r0,
+        reference_wavelength_m,
+        L0,
+        T,
+        backend=selector,
+    )
     params = MovingLayerParams(T(sqrt(cn2_fraction)), T(wind_velocity_x),
         T(wind_velocity_y), T(altitude), T(tel.aperture.sampling_m[1]))
     state = MovingLayerState(zero(T), zero(T), false)
@@ -174,7 +182,7 @@ end
 @inline normalize_start_coordinate(start::T, m::Int) where {T<:AbstractFloat} = mod(start - one(T), T(m)) + one(T)
 
 function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    offset_x::T, offset_y::T, amplitude_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
+    offset_x::T, offset_y::T, output_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
     n = size(out, 1)
     size(out, 2) == n || throw(DimensionMismatchError("output must be square"))
     m = size(screen, 1)
@@ -189,12 +197,12 @@ function extract_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{
     # boundary injection instead of wraparound.
     start_x = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_x
     start_y = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_y
-    _extract_shifted_screen!(execution_style(out), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
+    _extract_shifted_screen!(execution_style(out), out, screen, start_x, start_y, footprint_scale, output_scale, n, m)
     return out
 end
 
 function extract_shifted_screen_async!(out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    offset_x::T, offset_y::T, amplitude_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
+    offset_x::T, offset_y::T, output_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
     n = size(out, 1)
     size(out, 2) == n || throw(DimensionMismatchError("output must be square"))
     m = size(screen, 1)
@@ -203,12 +211,12 @@ function extract_shifted_screen_async!(out::AbstractMatrix{T}, screen::AbstractM
     footprint_scale > zero(T) || throw(InvalidConfiguration("footprint_scale must be positive"))
     start_x = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_x
     start_y = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_y
-    _extract_shifted_screen_async!(execution_style(out), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
+    _extract_shifted_screen_async!(execution_style(out), out, screen, start_x, start_y, footprint_scale, output_scale, n, m)
     return out
 end
 
 function _extract_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    start_x::T, start_y::T, footprint_scale::T, output_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     # Finite moving-screen backend: move a periodic canvas under the pupil with
     # bilinear subpixel interpolation.
     @inbounds for i in 1:n
@@ -231,22 +239,22 @@ function _extract_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, scre
             v01 = screen[iy0, ix1]
             v10 = screen[iy1, ix0]
             v11 = screen[iy1, ix1]
-            out[i, j] = amplitude_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+            out[i, j] = output_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
     return out
 end
 
 function _extract_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    start_x::T, start_y::T, footprint_scale::T, output_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     start_x_wrapped = normalize_start_coordinate(start_x, m)
     start_y_wrapped = normalize_start_coordinate(start_y, m)
-    launch_kernel!(style, moving_layer_extract_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    launch_kernel!(style, moving_layer_extract_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, output_scale, n, m; ndrange=size(out))
     return out
 end
 
 function accumulate_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    offset_x::T, offset_y::T, amplitude_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
+    offset_x::T, offset_y::T, output_scale::T, footprint_scale::T=one(T)) where {T<:AbstractFloat}
     n = size(out, 1)
     size(out, 2) == n || throw(DimensionMismatchError("output must be square"))
     m = size(screen, 1)
@@ -255,25 +263,25 @@ function accumulate_shifted_screen!(out::AbstractMatrix{T}, screen::AbstractMatr
     footprint_scale > zero(T) || throw(InvalidConfiguration("footprint_scale must be positive"))
     start_x = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_x
     start_y = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_y
-    _accumulate_shifted_screen!(execution_style(out), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
+    _accumulate_shifted_screen!(execution_style(out), out, screen, start_x, start_y, footprint_scale, output_scale, n, m)
     return out
 end
 
 @inline function _extract_shifted_screen_async!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
-    return _extract_shifted_screen!(ScalarCPUStyle(), out, screen, start_x, start_y, footprint_scale, amplitude_scale, n, m)
+    start_x::T, start_y::T, footprint_scale::T, output_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    return _extract_shifted_screen!(ScalarCPUStyle(), out, screen, start_x, start_y, footprint_scale, output_scale, n, m)
 end
 
 function _extract_shifted_screen_async!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    start_x::T, start_y::T, footprint_scale::T, output_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     start_x_wrapped = normalize_start_coordinate(start_x, m)
     start_y_wrapped = normalize_start_coordinate(start_y, m)
-    launch_kernel_async!(style, moving_layer_extract_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    launch_kernel_async!(style, moving_layer_extract_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, output_scale, n, m; ndrange=size(out))
     return out
 end
 
 function _accumulate_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    start_x::T, start_y::T, footprint_scale::T, output_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     @inbounds for i in 1:n
         y = start_y + footprint_scale * T(i - 1)
         y0 = floor(Int, y)
@@ -294,17 +302,17 @@ function _accumulate_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, s
             v01 = screen[iy0, ix1]
             v10 = screen[iy1, ix0]
             v11 = screen[iy1, ix1]
-            out[i, j] += amplitude_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
+            out[i, j] += output_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
     return out
 end
 
 function _accumulate_shifted_screen!(style::AcceleratorStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
-    start_x::T, start_y::T, footprint_scale::T, amplitude_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
+    start_x::T, start_y::T, footprint_scale::T, output_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     start_x_wrapped = normalize_start_coordinate(start_x, m)
     start_y_wrapped = normalize_start_coordinate(start_y, m)
-    launch_kernel!(style, moving_layer_accumulate_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, amplitude_scale, n, m; ndrange=size(out))
+    launch_kernel!(style, moving_layer_accumulate_kernel!, out, screen, start_x_wrapped, start_y_wrapped, footprint_scale, output_scale, n, m; ndrange=size(out))
     return out
 end
 
@@ -315,11 +323,12 @@ end
 
 function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,
     shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
-    amplitude_scale = T(layer.params.amplitude_scale)
-    extract_shifted_screen_async!(out, layer.generator.state.opd,
+    opd_scale = T(layer.params.cn2_amplitude_scale) *
+        T(layer.generator.params.opd_per_radian)
+    extract_shifted_screen_async!(out, layer.generator.state.phase_rad,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
-        amplitude_scale,
+        opd_scale,
         footprint_scale)
     return out
 end
@@ -331,11 +340,12 @@ end
 
 function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,
     shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
-    amplitude_scale = T(layer.params.amplitude_scale)
-    accumulate_shifted_screen!(out, layer.generator.state.opd,
+    opd_scale = T(layer.params.cn2_amplitude_scale) *
+        T(layer.generator.params.opd_per_radian)
+    accumulate_shifted_screen!(out, layer.generator.state.phase_rad,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
-        amplitude_scale,
+        opd_scale,
         footprint_scale)
     return out
 end
@@ -351,6 +361,7 @@ end
 
 function MultiLayerAtmosphere(tel::Telescope;
     r0::Real,
+    reference_wavelength_m::Real,
     L0::Real=25.0,
     fractional_cn2::AbstractVector,
     wind_speed::AbstractVector,
@@ -370,6 +381,15 @@ function MultiLayerAtmosphere(tel::Telescope;
     isapprox(sum(fractional_cn2), 1; atol=1e-6, rtol=1e-6) ||
         throw(InvalidConfiguration("fractional_cn2 must sum to 1"))
     prepared_layer_ids = _prepare_atmosphere_layer_ids(layer_ids, n_layers)
+    r0_t = _converted_positive_finite(r0, T,
+        "atmosphere Fried parameter r0")
+    reference_wavelength_t = _converted_positive_finite(
+        reference_wavelength_m,
+        T,
+        "atmosphere reference wavelength in metres",
+    )
+    L0_t = _converted_positive_finite(L0, T,
+        "atmosphere outer scale L0")
 
     params = MultiLayerParams(
         T.(fractional_cn2),
@@ -379,15 +399,17 @@ function MultiLayerAtmosphere(tel::Telescope;
         T[T(wind_speed[i]) * cosd(T(wind_direction_deg[i])) for i in 1:n_layers],
         T[T(wind_speed[i]) * sind(T(wind_direction_deg[i])) for i in 1:n_layers],
         prepared_layer_ids,
-        T(r0),
-        T(L0),
+        r0_t,
+        reference_wavelength_t,
+        L0_t,
     )
 
     layers = [
         MovingAtmosphereLayer(
             tel;
-            r0=r0,
-            L0=L0,
+            r0=params.r0,
+            reference_wavelength_m=params.reference_wavelength_m,
+            L0=params.L0,
             cn2_fraction=params.cn2_fractions[i],
             wind_velocity_x=params.wind_velocity_x[i],
             wind_velocity_y=params.wind_velocity_y[i],

@@ -9,7 +9,9 @@
     @test size(corr) == size(opd)
     @test size(turb) == size(opd)
 
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0)
     M2C, basis_hht = kl_modal_basis(KLHHtPSD(), dm, tel, atm; n_modes=2)
     @test size(M2C, 2) == 2
     @test size(basis_hht, 3) == 2
@@ -141,7 +143,9 @@ end
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
-    atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0)
+    atm = KolmogorovAtmosphere(tel; r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = ShackHartmannWFS(tel; n_lenslets=2)
     det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1)

@@ -53,7 +53,6 @@ AMDGPU.functional() ||
         phase_psd,
         frequencies,
         0.02f0,
-        Float32(4pi^2),
         0.01f0,
         Float32(-11 / 6),
         0.0f0,

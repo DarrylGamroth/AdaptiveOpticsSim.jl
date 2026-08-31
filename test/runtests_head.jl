@@ -23,6 +23,7 @@ BLAS.set_num_threads(1)
 Backends.set_fft_provider_threads!(1)
 
 const TEST_ATMOSPHERE_STEP = 1e-3
+const TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M = 500e-9
 
 # `Pkg.test(coverage=true)` normally sets Julia's coverage option in the test
 # process. The explicit workflow flag keeps allocation gating deterministic if
@@ -343,6 +344,7 @@ function moving_atmosphere_trace(;
     tel = Telescope(resolution=resolution, diameter=diameter, central_obstruction=0.0)
     atm = MultiLayerAtmosphere(tel;
         r0=r0,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=L0,
         fractional_cn2=fractional_cn2,
         wind_speed=wind_speed,
@@ -371,6 +373,7 @@ function moving_wfs_slope_trace(;
     delta = tel.params.diameter / tel.params.resolution
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[delta / atmosphere_step, 0.5 * delta / atmosphere_step],
@@ -401,6 +404,7 @@ function moving_closed_loop_trace(;
     delta = tel.params.diameter / tel.params.resolution
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[delta / atmosphere_step, 0.5 * delta / atmosphere_step],

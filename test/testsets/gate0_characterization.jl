@@ -17,11 +17,21 @@
         :gate0_atmosphere_directions,
     ))
     @test Set(case.kind for case in bundle.cases) == expected_kinds
+    superseded_reference_cases = Set(String.(
+        bundle.metadata["superseded_reference_cases"]))
+    @test superseded_reference_cases ==
+        Set(("atmosphere_short", "atmosphere_long"))
     for case in bundle.cases
-        @test case.baseline === :julia_gate0
-        result = validate_gate0_case(case)
-        @test size(result.actual) == size(result.expected)
-        @test result.ok
+        @testset "$(case.id)" begin
+            @test case.baseline === :julia_gate0
+            result = validate_gate0_case(case)
+            @test size(result.actual) == size(result.expected)
+            if case.id in superseded_reference_cases
+                @test !result.ok
+            else
+                @test result.ok
+            end
+        end
     end
 
     radiometric = only(case for case in bundle.cases

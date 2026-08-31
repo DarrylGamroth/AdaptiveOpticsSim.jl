@@ -53,6 +53,7 @@ boundary length both use `stencil_size`.
 struct InfinitePhaseScreenParams{T<:AbstractFloat}
     r0::T
     L0::T
+    reference_wavelength_m::T
     pixel_scale::T
     screen_resolution::Int
     stencil_size::Int
@@ -61,8 +62,9 @@ end
 """
 Mutable runtime state for a single infinite phase screen.
 
-- `screen` is the persistent full-screen buffer of size `stencil_size`.
-- `extract_buffer` is the pupil-sized sampling workspace.
+- `phase_rad` is the persistent full-screen phase buffer in radians with size
+  `stencil_size`.
+- `extract_phase_rad` is the pupil-sized phase sampling workspace.
 - `column_positive` / `column_negative` / `row_positive` / `row_negative`
   hold the precomputed boundary-injection models for each screen edge.
 """
@@ -73,9 +75,9 @@ mutable struct InfinitePhaseScreenState{
     I<:AbstractMatrix{Int},
     B,
 }
-    screen::A
-    screen_scratch::A
-    extract_buffer::A
+    phase_rad::A
+    phase_scratch_rad::A
+    extract_phase_rad::A
     stencil_buffer::V
     boundary_buffer::V
     noise_buffer::V
@@ -109,7 +111,7 @@ end
 Per-layer metadata for the infinite multilayer atmosphere backend.
 """
 struct InfiniteLayerParams{T<:AbstractFloat}
-    amplitude_scale::T
+    cn2_amplitude_scale::T
     wind_velocity_x::T
     wind_velocity_y::T
     altitude::T
@@ -161,6 +163,7 @@ struct InfiniteMultiLayerParams{T<:AbstractFloat,
     wind_velocity_y::V6
     layer_ids::I
     r0::T
+    reference_wavelength_m::T
     L0::T
 end
 
@@ -234,10 +237,10 @@ function _fill_stencil_data!(style::AcceleratorStyle, dest::AbstractVector{T}, s
     return dest
 end
 
-@inline function _swap_screen_buffers!(state::InfinitePhaseScreenState)
-    screen = state.screen
-    state.screen = state.screen_scratch
-    state.screen_scratch = screen
+@inline function _swap_phase_buffers!(state::InfinitePhaseScreenState)
+    phase_rad = state.phase_rad
+    state.phase_rad = state.phase_scratch_rad
+    state.phase_scratch_rad = phase_rad
     return state
 end
 
@@ -265,9 +268,11 @@ function _inject_column_positive!(style::AcceleratorStyle, screen::AbstractMatri
     m = size(screen, 1)
     _fill_stencil_data!(style, state.stencil_buffer, screen, state.column_positive_coords)
     sample_boundary_line!(state.boundary_buffer, state.column_positive.operator, state.stencil_buffer, state.noise_buffer, rng)
-    launch_kernel!(style, inject_column_positive_kernel!, state.screen_scratch, screen, state.boundary_buffer, m; ndrange=size(screen))
-    _swap_screen_buffers!(state)
-    return state.screen
+    launch_kernel!(style, inject_column_positive_kernel!,
+        state.phase_scratch_rad, screen, state.boundary_buffer, m;
+        ndrange=size(screen))
+    _swap_phase_buffers!(state)
+    return state.phase_rad
 end
 
 function _inject_column_negative!(screen::AbstractMatrix{T}, state::InfinitePhaseScreenState{T},
@@ -294,9 +299,11 @@ function _inject_column_negative!(style::AcceleratorStyle, screen::AbstractMatri
     m = size(screen, 1)
     _fill_stencil_data!(style, state.stencil_buffer, screen, state.column_negative_coords)
     sample_boundary_line!(state.boundary_buffer, state.column_negative.operator, state.stencil_buffer, state.noise_buffer, rng)
-    launch_kernel!(style, inject_column_negative_kernel!, state.screen_scratch, screen, state.boundary_buffer, m; ndrange=size(screen))
-    _swap_screen_buffers!(state)
-    return state.screen
+    launch_kernel!(style, inject_column_negative_kernel!,
+        state.phase_scratch_rad, screen, state.boundary_buffer, m;
+        ndrange=size(screen))
+    _swap_phase_buffers!(state)
+    return state.phase_rad
 end
 
 function _inject_row_positive!(screen::AbstractMatrix{T}, state::InfinitePhaseScreenState{T},
@@ -327,9 +334,11 @@ function _inject_row_positive!(style::AcceleratorStyle, screen::AbstractMatrix{T
     m = size(screen, 1)
     _fill_stencil_data!(style, state.stencil_buffer, screen, state.row_positive_coords)
     sample_boundary_line!(state.boundary_buffer, state.row_positive.operator, state.stencil_buffer, state.noise_buffer, rng)
-    launch_kernel!(style, inject_row_positive_kernel!, state.screen_scratch, screen, state.boundary_buffer, m; ndrange=size(screen))
-    _swap_screen_buffers!(state)
-    return state.screen
+    launch_kernel!(style, inject_row_positive_kernel!,
+        state.phase_scratch_rad, screen, state.boundary_buffer, m;
+        ndrange=size(screen))
+    _swap_phase_buffers!(state)
+    return state.phase_rad
 end
 
 function _inject_row_negative!(screen::AbstractMatrix{T}, state::InfinitePhaseScreenState{T},
@@ -360,43 +369,49 @@ function _inject_row_negative!(style::AcceleratorStyle, screen::AbstractMatrix{T
     m = size(screen, 1)
     _fill_stencil_data!(style, state.stencil_buffer, screen, state.row_negative_coords)
     sample_boundary_line!(state.boundary_buffer, state.row_negative.operator, state.stencil_buffer, state.noise_buffer, rng)
-    launch_kernel!(style, inject_row_negative_kernel!, state.screen_scratch, screen, state.boundary_buffer, m; ndrange=size(screen))
-    _swap_screen_buffers!(state)
-    return state.screen
+    launch_kernel!(style, inject_row_negative_kernel!,
+        state.phase_scratch_rad, screen, state.boundary_buffer, m;
+        ndrange=size(screen))
+    _swap_phase_buffers!(state)
+    return state.phase_rad
 end
 
 function ensure_initialized!(screen::InfinitePhaseScreen, rng::AbstractRNG)
     if !screen.state.initialized
         regenerate_phase_screen!(screen.generator, rng)
-        copyto!(screen.state.screen, screen.generator.state.opd)
+        copyto!(screen.state.phase_rad, screen.generator.state.phase_rad)
         screen.state.initialized = true
     end
     return screen
 end
 
 function _apply_integer_shift_x!(screen::InfinitePhaseScreen, shift::Int, rng::AbstractRNG)
-    style = execution_style(screen.state.screen)
+    style = execution_style(screen.state.phase_rad)
     if shift > 0
         for _ in 1:shift
-            _inject_column_positive!(style, screen.state.screen, screen.state, rng)
+            _inject_column_positive!(style, screen.state.phase_rad,
+                screen.state, rng)
         end
     elseif shift < 0
         for _ in 1:(-shift)
-            _inject_column_negative!(style, screen.state.screen, screen.state, rng)
+            _inject_column_negative!(style, screen.state.phase_rad,
+                screen.state, rng)
         end
     end
     return screen
 end
 
 function _apply_integer_shift_y!(screen::InfinitePhaseScreen, shift::Int, rng::AbstractRNG)
-    style = execution_style(screen.state.screen)
+    style = execution_style(screen.state.phase_rad)
     if shift > 0
         for _ in 1:shift
-            _inject_row_positive!(style, screen.state.screen, screen.state, rng)
+            _inject_row_positive!(style, screen.state.phase_rad,
+                screen.state, rng)
         end
     elseif shift < 0
         for _ in 1:(-shift)
-            _inject_row_negative!(style, screen.state.screen, screen.state, rng)
+            _inject_row_negative!(style, screen.state.phase_rad,
+                screen.state, rng)
         end
     end
     return screen
@@ -429,10 +444,12 @@ end
 
 function render_layer!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer,
     shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
-    extract_shifted_screen!(out, layer.screen.state.screen,
+    opd_scale = T(layer.params.cn2_amplitude_scale) *
+        T(layer.screen.generator.params.opd_per_radian)
+    extract_shifted_screen!(out, layer.screen.state.phase_rad,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
-        T(layer.params.amplitude_scale),
+        opd_scale,
         footprint_scale)
     return out
 end
@@ -444,29 +461,31 @@ end
 
 function render_layer_accumulate!(out::AbstractMatrix{T}, layer::InfiniteAtmosphereLayer,
     shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
-    accumulate_shifted_screen!(out, layer.screen.state.screen,
+    opd_scale = T(layer.params.cn2_amplitude_scale) *
+        T(layer.screen.generator.params.opd_per_radian)
+    accumulate_shifted_screen!(out, layer.screen.state.phase_rad,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
-        T(layer.params.amplitude_scale),
+        opd_scale,
         footprint_scale)
     return out
 end
 
 function _warmup_gpu_infinite_screen!(style::AcceleratorStyle, screen::InfinitePhaseScreen, rng::AbstractRNG)
     state = screen.state
-    fill!(state.screen, zero(eltype(state.screen)))
-    fill!(state.screen_scratch, zero(eltype(state.screen_scratch)))
-    fill!(state.extract_buffer, zero(eltype(state.extract_buffer)))
+    fill!(state.phase_rad, zero(eltype(state.phase_rad)))
+    fill!(state.phase_scratch_rad, zero(eltype(state.phase_scratch_rad)))
+    fill!(state.extract_phase_rad, zero(eltype(state.extract_phase_rad)))
     fill!(state.stencil_buffer, zero(eltype(state.stencil_buffer)))
     fill!(state.boundary_buffer, zero(eltype(state.boundary_buffer)))
     fill!(state.noise_buffer, zero(eltype(state.noise_buffer)))
-    _inject_column_positive!(style, state.screen, state, rng)
-    _inject_column_negative!(style, state.screen, state, rng)
-    _inject_row_positive!(style, state.screen, state, rng)
-    _inject_row_negative!(style, state.screen, state, rng)
-    fill!(state.screen, zero(eltype(state.screen)))
-    fill!(state.screen_scratch, zero(eltype(state.screen_scratch)))
-    fill!(state.extract_buffer, zero(eltype(state.extract_buffer)))
+    _inject_column_positive!(style, state.phase_rad, state, rng)
+    _inject_column_negative!(style, state.phase_rad, state, rng)
+    _inject_row_positive!(style, state.phase_rad, state, rng)
+    _inject_row_negative!(style, state.phase_rad, state, rng)
+    fill!(state.phase_rad, zero(eltype(state.phase_rad)))
+    fill!(state.phase_scratch_rad, zero(eltype(state.phase_scratch_rad)))
+    fill!(state.extract_phase_rad, zero(eltype(state.extract_phase_rad)))
     fill!(state.stencil_buffer, zero(eltype(state.stencil_buffer)))
     fill!(state.boundary_buffer, zero(eltype(state.boundary_buffer)))
     fill!(state.noise_buffer, zero(eltype(state.noise_buffer)))
@@ -478,6 +497,7 @@ end
 
 function InfinitePhaseScreen(tel::Telescope;
     r0::Real,
+    reference_wavelength_m::Real,
     L0::Real=25.0,
     screen_resolution::Int=default_infinite_screen_resolution(tel.params.resolution),
     stencil_size::Int=default_infinite_stencil_size(tel.params.resolution),
@@ -489,7 +509,23 @@ function InfinitePhaseScreen(tel::Telescope;
         throw(InvalidConfiguration("screen_resolution must be >= telescope resolution"))
     pixel_scale = T(tel.params.diameter / tel.params.resolution)
     validate_infinite_stencil(stencil_size, screen_resolution, :column, :positive, screen_resolution)
-    params = InfinitePhaseScreenParams(T(r0), T(L0), pixel_scale, screen_resolution, stencil_size)
+    r0_t = _converted_positive_finite(r0, T,
+        "atmosphere Fried parameter r0")
+    L0_t = _converted_positive_finite(L0, T,
+        "atmosphere outer scale L0")
+    reference_wavelength_t = _converted_positive_finite(
+        reference_wavelength_m,
+        T,
+        "atmosphere reference wavelength in metres",
+    )
+    params = InfinitePhaseScreenParams(
+        r0_t,
+        L0_t,
+        reference_wavelength_t,
+        pixel_scale,
+        screen_resolution,
+        stencil_size,
+    )
     column_positive = boundary_injection_model(screen_resolution, pixel_scale, params.r0, params.L0;
         stencil_size=stencil_size,
         orientation=:column,
@@ -515,17 +551,24 @@ function InfinitePhaseScreen(tel::Telescope;
         tail_stride=screen_resolution,
         T=T)
     screen_telescope = infinite_screen_telescope(tel; resolution=stencil_size, T=T, backend=selector)
-    generator = KolmogorovAtmosphere(screen_telescope; r0=params.r0, L0=params.L0, T=T, backend=selector)
-    screen = backend_array{T}(undef, stencil_size, stencil_size)
-    screen_scratch = backend_array{T}(undef, stencil_size, stencil_size)
-    extract_buffer = backend_array{T}(undef, tel.params.resolution, tel.params.resolution)
-    fill!(screen, zero(T))
-    fill!(screen_scratch, zero(T))
-    fill!(extract_buffer, zero(T))
+    generator = KolmogorovAtmosphere(screen_telescope;
+        r0=params.r0,
+        reference_wavelength_m=params.reference_wavelength_m,
+        L0=params.L0,
+        T,
+        backend=selector,
+    )
+    phase_rad = backend_array{T}(undef, stencil_size, stencil_size)
+    phase_scratch_rad = backend_array{T}(undef, stencil_size, stencil_size)
+    extract_phase_rad = backend_array{T}(undef, tel.params.resolution,
+        tel.params.resolution)
+    fill!(phase_rad, zero(T))
+    fill!(phase_scratch_rad, zero(T))
+    fill!(extract_phase_rad, zero(T))
     state = InfinitePhaseScreenState(
-        screen,
-        screen_scratch,
-        extract_buffer,
+        phase_rad,
+        phase_scratch_rad,
+        extract_phase_rad,
         _copy_atmosphere_state!(backend_array{T}(undef, size(column_positive.operator.predictor, 2)),
             Vector{T}(undef, size(column_positive.operator.predictor, 2))),
         _copy_atmosphere_state!(backend_array{T}(undef, size(column_positive.operator.predictor, 1)),
@@ -550,14 +593,14 @@ function InfinitePhaseScreen(tel::Telescope;
                 column_positive.stencil.side,
             ),
             InfiniteBoundaryOperator(
-                _copy_atmosphere_state(screen, column_positive.operator.predictor),
-                _copy_atmosphere_state(screen, column_positive.operator.residual_factor),
-                _copy_atmosphere_state(screen, column_positive.operator.cov_zz),
-                _copy_atmosphere_state(screen, column_positive.operator.cov_xx),
-                _copy_atmosphere_state(screen, column_positive.operator.cov_xz),
-                _copy_atmosphere_state(screen, column_positive.operator.cov_zx),
-                _copy_atmosphere_state(screen, column_positive.operator.residual_covariance),
-                _copy_atmosphere_state(screen, column_positive.operator.singular_values),
+                _copy_atmosphere_state(phase_rad, column_positive.operator.predictor),
+                _copy_atmosphere_state(phase_rad, column_positive.operator.residual_factor),
+                _copy_atmosphere_state(phase_rad, column_positive.operator.cov_zz),
+                _copy_atmosphere_state(phase_rad, column_positive.operator.cov_xx),
+                _copy_atmosphere_state(phase_rad, column_positive.operator.cov_xz),
+                _copy_atmosphere_state(phase_rad, column_positive.operator.cov_zx),
+                _copy_atmosphere_state(phase_rad, column_positive.operator.residual_covariance),
+                _copy_atmosphere_state(phase_rad, column_positive.operator.singular_values),
                 T(column_positive.operator.condition_ratio),
                 column_positive.operator.orientation,
                 column_positive.operator.side,
@@ -573,14 +616,14 @@ function InfinitePhaseScreen(tel::Telescope;
                 column_negative.stencil.side,
             ),
             InfiniteBoundaryOperator(
-                _copy_atmosphere_state(screen, column_negative.operator.predictor),
-                _copy_atmosphere_state(screen, column_negative.operator.residual_factor),
-                _copy_atmosphere_state(screen, column_negative.operator.cov_zz),
-                _copy_atmosphere_state(screen, column_negative.operator.cov_xx),
-                _copy_atmosphere_state(screen, column_negative.operator.cov_xz),
-                _copy_atmosphere_state(screen, column_negative.operator.cov_zx),
-                _copy_atmosphere_state(screen, column_negative.operator.residual_covariance),
-                _copy_atmosphere_state(screen, column_negative.operator.singular_values),
+                _copy_atmosphere_state(phase_rad, column_negative.operator.predictor),
+                _copy_atmosphere_state(phase_rad, column_negative.operator.residual_factor),
+                _copy_atmosphere_state(phase_rad, column_negative.operator.cov_zz),
+                _copy_atmosphere_state(phase_rad, column_negative.operator.cov_xx),
+                _copy_atmosphere_state(phase_rad, column_negative.operator.cov_xz),
+                _copy_atmosphere_state(phase_rad, column_negative.operator.cov_zx),
+                _copy_atmosphere_state(phase_rad, column_negative.operator.residual_covariance),
+                _copy_atmosphere_state(phase_rad, column_negative.operator.singular_values),
                 T(column_negative.operator.condition_ratio),
                 column_negative.operator.orientation,
                 column_negative.operator.side,
@@ -596,14 +639,14 @@ function InfinitePhaseScreen(tel::Telescope;
                 row_positive.stencil.side,
             ),
             InfiniteBoundaryOperator(
-                _copy_atmosphere_state(screen, row_positive.operator.predictor),
-                _copy_atmosphere_state(screen, row_positive.operator.residual_factor),
-                _copy_atmosphere_state(screen, row_positive.operator.cov_zz),
-                _copy_atmosphere_state(screen, row_positive.operator.cov_xx),
-                _copy_atmosphere_state(screen, row_positive.operator.cov_xz),
-                _copy_atmosphere_state(screen, row_positive.operator.cov_zx),
-                _copy_atmosphere_state(screen, row_positive.operator.residual_covariance),
-                _copy_atmosphere_state(screen, row_positive.operator.singular_values),
+                _copy_atmosphere_state(phase_rad, row_positive.operator.predictor),
+                _copy_atmosphere_state(phase_rad, row_positive.operator.residual_factor),
+                _copy_atmosphere_state(phase_rad, row_positive.operator.cov_zz),
+                _copy_atmosphere_state(phase_rad, row_positive.operator.cov_xx),
+                _copy_atmosphere_state(phase_rad, row_positive.operator.cov_xz),
+                _copy_atmosphere_state(phase_rad, row_positive.operator.cov_zx),
+                _copy_atmosphere_state(phase_rad, row_positive.operator.residual_covariance),
+                _copy_atmosphere_state(phase_rad, row_positive.operator.singular_values),
                 T(row_positive.operator.condition_ratio),
                 row_positive.operator.orientation,
                 row_positive.operator.side,
@@ -619,14 +662,14 @@ function InfinitePhaseScreen(tel::Telescope;
                 row_negative.stencil.side,
             ),
             InfiniteBoundaryOperator(
-                _copy_atmosphere_state(screen, row_negative.operator.predictor),
-                _copy_atmosphere_state(screen, row_negative.operator.residual_factor),
-                _copy_atmosphere_state(screen, row_negative.operator.cov_zz),
-                _copy_atmosphere_state(screen, row_negative.operator.cov_xx),
-                _copy_atmosphere_state(screen, row_negative.operator.cov_xz),
-                _copy_atmosphere_state(screen, row_negative.operator.cov_zx),
-                _copy_atmosphere_state(screen, row_negative.operator.residual_covariance),
-                _copy_atmosphere_state(screen, row_negative.operator.singular_values),
+                _copy_atmosphere_state(phase_rad, row_negative.operator.predictor),
+                _copy_atmosphere_state(phase_rad, row_negative.operator.residual_factor),
+                _copy_atmosphere_state(phase_rad, row_negative.operator.cov_zz),
+                _copy_atmosphere_state(phase_rad, row_negative.operator.cov_xx),
+                _copy_atmosphere_state(phase_rad, row_negative.operator.cov_xz),
+                _copy_atmosphere_state(phase_rad, row_negative.operator.cov_zx),
+                _copy_atmosphere_state(phase_rad, row_negative.operator.residual_covariance),
+                _copy_atmosphere_state(phase_rad, row_negative.operator.singular_values),
                 T(row_negative.operator.condition_ratio),
                 row_negative.operator.orientation,
                 row_negative.operator.side,
@@ -635,12 +678,14 @@ function InfinitePhaseScreen(tel::Telescope;
         false,
     )
     screen_model = InfinitePhaseScreen(params, state, generator, screen_telescope)
-    _warmup_gpu_infinite_screen!(execution_style(state.screen), screen_model, MersenneTwister(0))
+    _warmup_gpu_infinite_screen!(execution_style(state.phase_rad),
+        screen_model, MersenneTwister(0))
     return screen_model
 end
 
 function InfiniteMultiLayerAtmosphere(tel::Telescope;
     r0::Real,
+    reference_wavelength_m::Real,
     L0::Real=25.0,
     fractional_cn2::AbstractVector,
     wind_speed::AbstractVector,
@@ -661,6 +706,15 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
     isapprox(sum(fractional_cn2), 1; atol=1e-6, rtol=1e-6) ||
         throw(InvalidConfiguration("fractional_cn2 must sum to 1"))
     prepared_layer_ids = _prepare_atmosphere_layer_ids(layer_ids, n_layers)
+    r0_t = _converted_positive_finite(r0, T,
+        "atmosphere Fried parameter r0")
+    reference_wavelength_t = _converted_positive_finite(
+        reference_wavelength_m,
+        T,
+        "atmosphere reference wavelength in metres",
+    )
+    L0_t = _converted_positive_finite(L0, T,
+        "atmosphere outer scale L0")
 
     params = InfiniteMultiLayerParams(
         T.(fractional_cn2),
@@ -670,8 +724,9 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
         T[T(wind_speed[i]) * cosd(T(wind_direction_deg[i])) for i in 1:n_layers],
         T[T(wind_speed[i]) * sind(T(wind_direction_deg[i])) for i in 1:n_layers],
         prepared_layer_ids,
-        T(r0),
-        T(L0),
+        r0_t,
+        reference_wavelength_t,
+        L0_t,
     )
     layers = [
         InfiniteAtmosphereLayer(
@@ -683,6 +738,7 @@ function InfiniteMultiLayerAtmosphere(tel::Telescope;
             ),
             InfinitePhaseScreen(tel;
                 r0=params.r0,
+                reference_wavelength_m=params.reference_wavelength_m,
                 L0=params.L0,
                 screen_resolution=screen_resolution,
                 stencil_size=stencil_size,

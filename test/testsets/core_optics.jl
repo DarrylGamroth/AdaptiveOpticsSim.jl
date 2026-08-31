@@ -1292,6 +1292,7 @@ end
     atm_src = Source(band=:I, magnitude=0.0)
     atm = MultiLayerAtmosphere(atm_tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[8.0, 4.0],
@@ -1323,6 +1324,7 @@ end
 
     fresnel_atm = MultiLayerAtmosphere(atm_tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
@@ -1705,6 +1707,7 @@ end
     )
     atmosphere_arguments = (
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         fractional_cn2=[1.0],
         wind_speed=[0.0],
         altitude=[0.0],

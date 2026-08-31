@@ -19,6 +19,7 @@ function ensemble_std(tel::Telescope, constructor, fractions; nsamp::Int=16, kwa
     for s in 1:nsamp
         atm = constructor(tel;
             r0=0.2,
+            reference_wavelength_m=500e-9,
             L0=25.0,
             fractional_cn2=fractions,
             wind_speed=fill(0.0, length(fractions)),
@@ -40,6 +41,7 @@ function trajectory_std_windows(; seed::Integer=79, steps::Int=24)
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     atm = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=500e-9,
         L0=25.0,
         fractional_cn2=[0.5, 0.5],
         wind_speed=[10.0, 6.0],
@@ -68,6 +70,7 @@ function periodicity_metrics()
     wind_speed_px = delta / atmosphere_step
     finite = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=500e-9,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[wind_speed_px],
@@ -76,6 +79,7 @@ function periodicity_metrics()
     )
     infinite = InfiniteMultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=500e-9,
         L0=25.0,
         fractional_cn2=[1.0],
         wind_speed=[wind_speed_px],

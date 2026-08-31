@@ -266,7 +266,6 @@ function AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(
     psd::AMDGPU.ROCArray{T,2},
     freqs::AMDGPU.ROCArray{T,1},
     coeff::T,
-    two_pi_sq::T,
     inv_L0_sq::T,
     exponent::T,
     inv_fm_sq::T,
@@ -274,7 +273,7 @@ function AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(
 ) where {T<:AbstractFloat}
     host_psd = Matrix{T}(undef, size(psd))
     AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(Backends.ScalarCPUStyle(), host_psd,
-        Array(freqs), coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n)
+        Array(freqs), coeff, inv_L0_sq, exponent, inv_fm_sq, n)
     copyto!(psd, host_psd)
     return psd
 end

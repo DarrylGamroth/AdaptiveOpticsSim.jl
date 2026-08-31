@@ -43,6 +43,7 @@ src = Source(band=:I, magnitude=8.0)
 atm = MultiLayerAtmosphere(
     tel;
     r0=0.15,
+    reference_wavelength_m=500e-9,
     L0=25.0,
     fractional_cn2=[0.6, 0.4],
     wind_speed=[8.0, 12.0],

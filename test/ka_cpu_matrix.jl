@@ -770,15 +770,15 @@ end
         freqs = collect(range(0.0, 1.0; length=8))
         scalar_psd = Matrix{Float64}(undef, 8, 8)
         ka_psd = similar(scalar_psd)
-        AdaptiveOpticsSim.Atmospheres.update_psd!(SCALAR_CPU_STYLE, scalar_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 8)
-        AdaptiveOpticsSim.Atmospheres.update_psd!(KA_CPU_STYLE, ka_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 8)
+        AdaptiveOpticsSim.Atmospheres.update_psd!(SCALAR_CPU_STYLE, scalar_psd, freqs, 0.02, 0.01, -11 / 6, 8)
+        AdaptiveOpticsSim.Atmospheres.update_psd!(KA_CPU_STYLE, ka_psd, freqs, 0.02, 0.01, -11 / 6, 8)
         mark_ka_cpu_kernel!(:kolmogorov_psd_kernel!)
         @test ka_cpu_close(ka_psd, scalar_psd)
 
         scalar_phase_psd = similar(scalar_psd)
         ka_phase_psd = similar(scalar_psd)
-        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(SCALAR_CPU_STYLE, scalar_phase_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 0.0, 8)
-        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(KA_CPU_STYLE, ka_phase_psd, freqs, 0.02, 4pi^2, 0.01, -11 / 6, 0.0, 8)
+        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(SCALAR_CPU_STYLE, scalar_phase_psd, freqs, 0.02, 0.01, -11 / 6, 0.0, 8)
+        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(KA_CPU_STYLE, ka_phase_psd, freqs, 0.02, 0.01, -11 / 6, 0.0, 8)
         mark_ka_cpu_kernel!(:phase_screen_psd_kernel!)
         @test ka_cpu_close(ka_phase_psd, scalar_phase_psd)
 
@@ -786,7 +786,7 @@ end
         ka_spectrum_out = similar(freqs)
         T = eltype(freqs)
         coeff = T(0.023) * T(0.15)^(-T(5) / T(3))
-        AdaptiveOpticsSim.Atmospheres._phase_spectrum!(KA_CPU_STYLE, ka_spectrum_out, freqs, coeff, T(2pi)^2, inv(T(25.0))^2, -T(11) / T(6))
+        AdaptiveOpticsSim.Atmospheres._phase_spectrum!(KA_CPU_STYLE, ka_spectrum_out, freqs, coeff, inv(T(25.0))^2, -T(11) / T(6))
         mark_ka_cpu_kernel!(:phase_spectrum_kernel!)
         @test ka_cpu_close(ka_spectrum_out, scalar_spectrum)
 

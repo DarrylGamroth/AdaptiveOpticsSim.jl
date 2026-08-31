@@ -228,9 +228,11 @@ end
         bundle = load_reference_bundle(root)
         @test !isempty(bundle.cases)
         for case in bundle.cases
-            result = validate_reference_case(case)
-            @test size(result.actual) == size(result.expected)
-            @test result.ok
+            @testset "$(case.id)" begin
+                result = validate_reference_case(case)
+                @test size(result.actual) == size(result.expected)
+                @test result.ok
+            end
         end
     else
         @info "Skipping OOPAO reference regression; no manifest found" root=root
@@ -245,9 +247,11 @@ end
         cases = reference_cases(bundle, :specula)
         @test !isempty(cases)
         for case in cases
-            result = validate_reference_case(case)
-            @test size(result.actual) == size(result.expected)
-            @test result.ok
+            @testset "$(case.id)" begin
+                result = validate_reference_case(case)
+                @test size(result.actual) == size(result.expected)
+                @test result.ok
+            end
         end
     else
         @info "Skipping SPECULA reference regression; no manifest found" root=root

@@ -142,6 +142,7 @@ function run_algorithm_graph_backend_smoke(
                 resolution=8,
                 telescope_diameter_m=1.22,
                 r0=0.15,
+                reference_wavelength_m=500e-9,
                 L0=30.0,
                 fractional_cn2=(1.0,),
                 wind_speed=(5.0,),

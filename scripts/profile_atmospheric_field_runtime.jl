@@ -104,6 +104,7 @@ function _make_atmosphere(kind::Symbol, tel, cfg, T, backend)
     if kind === :finite
         return MultiLayerAtmosphere(tel;
             r0=cfg.r0,
+            reference_wavelength_m=T(500e-9),
             L0=cfg.L0,
             fractional_cn2=cfg.fractional_cn2,
             wind_speed=cfg.wind_speed,
@@ -115,6 +116,7 @@ function _make_atmosphere(kind::Symbol, tel, cfg, T, backend)
     elseif kind === :infinite
         return InfiniteMultiLayerAtmosphere(tel;
             r0=cfg.r0,
+            reference_wavelength_m=T(500e-9),
             L0=cfg.L0,
             fractional_cn2=cfg.fractional_cn2,
             wind_speed=cfg.wind_speed,

@@ -205,7 +205,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     end
 
     record_gpu_smoke!(failures, "atmosphere_step") do
-        atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
+        atm = KolmogorovAtmosphere(tel; r0=0.2,
+            reference_wavelength_m=T(500e-9), L0=25.0, T=T,
+            backend=backend)
         output = PupilFunction(tel; T=T, backend=backend)
         renderer = prepare_atmosphere_renderer(atm, tel)
         epoch = advance_by!(atm, atmosphere_step; rng=rng)
@@ -217,6 +219,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     record_gpu_smoke!(failures, "atmosphere_multilayer_step") do
         atm = MultiLayerAtmosphere(tel;
             r0=T(0.2),
+            reference_wavelength_m=T(500e-9),
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
@@ -229,7 +232,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         renderer = prepare_atmosphere_renderer(atm, tel)
         epoch = advance_by!(atm, atmosphere_step; rng=rng)
         render_atmosphere!(output, renderer, atm, epoch)
-        @assert atm.layers[1].generator.state.opd isa BackendArray
+        @assert atm.layers[1].generator.state.phase_rad isa BackendArray
         @assert output.opd isa BackendArray
         return output.opd
     end
@@ -237,6 +240,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     record_gpu_smoke!(failures, "atmosphere_multilayer_step_spiders") do
         atm = MultiLayerAtmosphere(spider_tel;
             r0=T(0.2),
+            reference_wavelength_m=T(500e-9),
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
@@ -249,7 +253,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         renderer = prepare_atmosphere_renderer(atm, spider_tel, src)
         epoch = advance_by!(atm, atmosphere_step; rng=rng)
         render_atmosphere!(output, renderer, atm, epoch)
-        @assert atm.layers[1].generator.state.opd isa BackendArray
+        @assert atm.layers[1].generator.state.phase_rad isa BackendArray
         @assert output.opd isa BackendArray
         return output.opd
     end
@@ -257,6 +261,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     record_gpu_smoke!(failures, "atmosphere_infinite_multilayer_step") do
         atm = InfiniteMultiLayerAtmosphere(tel;
             r0=T(0.2),
+            reference_wavelength_m=T(500e-9),
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
@@ -272,14 +277,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         epoch = advance_by!(atm, atmosphere_step; rng=rng)
         render_atmosphere!(output, renderer, atm, epoch)
         @assert output.opd isa BackendArray
-        @assert atm.layers[1].screen.state.screen isa BackendArray
-        @assert atm.layers[1].screen.state.screen_scratch isa BackendArray
+        @assert atm.layers[1].screen.state.phase_rad isa BackendArray
+        @assert atm.layers[1].screen.state.phase_scratch_rad isa BackendArray
         return output.opd
     end
 
     record_gpu_smoke!(failures, "atmosphere_infinite_multilayer_step_spiders") do
         atm = InfiniteMultiLayerAtmosphere(spider_tel;
             r0=T(0.2),
+            reference_wavelength_m=T(500e-9),
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
@@ -301,6 +307,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     record_gpu_smoke!(failures, "atmospheric_field_geometric") do
         atm = MultiLayerAtmosphere(tel;
             r0=T(0.2),
+            reference_wavelength_m=T(500e-9),
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
@@ -325,6 +332,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     record_gpu_smoke!(failures, "atmospheric_field_fresnel") do
         atm = MultiLayerAtmosphere(tel;
             r0=T(0.2),
+            reference_wavelength_m=T(500e-9),
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
@@ -350,6 +358,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             local_src = Source(band=:I, magnitude=0.0, coordinates=(30.0, 20.0), T=T)
             local_atm = InfiniteMultiLayerAtmosphere(local_tel;
                 r0=T(0.2),
+                reference_wavelength_m=T(500e-9),
                 L0=T(25.0),
                 fractional_cn2=T[0.7, 0.3],
                 wind_speed=T[8.0, 4.0],
@@ -390,20 +399,22 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     end
 
     record_gpu_smoke!(failures, "atmosphere_phase_helpers") do
-        atm = KolmogorovAtmosphere(tel; r0=0.2, L0=25.0, T=T, backend=backend)
+        atm = KolmogorovAtmosphere(tel; r0=0.2,
+            reference_wavelength_m=T(500e-9), L0=25.0, T=T,
+            backend=backend)
         ws = Atmospheres.PhaseStatsWorkspace(tel.params.resolution; T=T, backend=backend)
         screen, psd = Atmospheres.ft_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
             rng=rng, ws=ws, return_psd=true)
         sh_screen = Atmospheres.ft_sh_phase_screen(atm, tel.params.resolution, tel.params.diameter / tel.params.resolution;
             rng=rng, ws=ws, subharmonics=true, n_levels=2, subharmonic_radius=1)
-        rho = similar(atm.state.opd, T, 4, 4)
+        rho = similar(atm.state.phase_rad, T, 4, 4)
         copyto!(rho, reshape(T[0.0, 0.02, 0.05, 0.1, 0.15, 0.25, 0.4, 0.8, 1.2, 1.6, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0], 4, 4))
         cov = Atmospheres.phase_covariance(rho, atm)
         freqs = similar(atm.state.freqs, T, 4)
         copyto!(freqs, T[0.1, 0.2, 0.3, 0.4])
         covmat = Atmospheres.covariance_matrix(freqs, freqs, atm)
         spectrum = Atmospheres.phase_spectrum(freqs, atm)
-        freq_grid = similar(atm.state.opd, T, 2, 2)
+        freq_grid = similar(atm.state.phase_rad, T, 2, 2)
         copyto!(freq_grid, reshape(T[0.1, 0.2, 0.3, 0.4], 2, 2))
         spectrum_grid = Atmospheres.phase_spectrum(freq_grid, atm)
         @assert screen isa BackendArray
@@ -618,6 +629,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     record_gpu_smoke!(failures, "measure_curvature_atmosphere") do
         atm = MultiLayerAtmosphere(tel;
             r0=T(0.2),
+            reference_wavelength_m=T(500e-9),
             L0=T(25.0),
             fractional_cn2=T[0.7, 0.3],
             wind_speed=T[8.0, 4.0],
@@ -635,7 +647,9 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "closed_loop_step") do
         step_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
-        atm = KolmogorovAtmosphere(step_tel; r0=0.2, L0=25.0, T=T, backend=backend)
+        atm = KolmogorovAtmosphere(step_tel; r0=0.2,
+            reference_wavelength_m=T(500e-9), L0=25.0, T=T,
+            backend=backend)
         dm = DeformableMirror(step_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         wfs = ShackHartmannWFS(step_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
         det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)

@@ -1015,6 +1015,7 @@ end
         resolution=16,
         telescope_diameter_m=1.22,
         r0=0.15,
+        reference_wavelength_m=500e-9,
         L0=30.0,
         fractional_cn2=(0.7, 0.3),
         wind_speed=(5.0, 9.0),
@@ -1054,6 +1055,7 @@ end
         resolution=16,
         telescope_diameter_m=1.22,
         r0=0.15,
+        reference_wavelength_m=500e-9,
         fractional_cn2=(1.0,),
         wind_speed=(5.0,),
         wind_direction_deg=(0.0,),
@@ -1887,6 +1889,45 @@ end
         adopt_hil_command!(boundary, sequence)
         @test @allocated(step_hil_frame!(boundary)) == 0
         @test all(iszero, graph_output(graph, Val(:dm_surface_opd)))
+    end
+
+    for case in cases
+        prepared =
+            HILReferenceSystems.prepare_atmospheric_hil_reference_system(
+                case.wavefront_sensor;
+                atmosphere_step=1.0e-3,
+                rng_seed=7,
+            )
+        graph = prepared.graph
+        boundary = prepared.boundary
+        @test graph_name(graph) === Symbol(
+            case.wavefront_sensor,
+            "_atmosphere_hil_reference",
+        )
+        @test size(hil_frame_buffer(boundary)) == case.frame_shape
+
+        sequence = step_hil_frame!(boundary)
+        first_atmosphere = copy(graph_output(
+            graph,
+            Val(:atmosphere_opd),
+        ))
+        first_frame = copy(hil_frame_buffer(boundary))
+        @test all(isfinite, first_atmosphere)
+        @test !all(iszero, first_atmosphere)
+        @test all(isfinite, first_frame)
+        @test sum(first_frame) > 0
+
+        fill!(hil_command_buffer(boundary), 0.0f0)
+        adopt_hil_command!(boundary, sequence)
+        @test @allocated(step_hil_frame!(boundary)) == 0
+        @test graph_output(graph, Val(:atmosphere_opd)) != first_atmosphere
+
+        reset_hil_boundary!(boundary)
+        sequence = step_hil_frame!(boundary)
+        @test graph_output(graph, Val(:atmosphere_opd)) == first_atmosphere
+        @test hil_frame_buffer(boundary) == first_frame
+        fill!(hil_command_buffer(boundary), 0.0f0)
+        adopt_hil_command!(boundary, sequence)
     end
 end
 

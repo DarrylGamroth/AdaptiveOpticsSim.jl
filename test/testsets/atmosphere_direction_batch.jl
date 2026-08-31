@@ -6,6 +6,7 @@ function direction_batch_test_atmosphere(
     return MultiLayerAtmosphere(
         tel;
         r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
         L0=T(25),
         fractional_cn2=T[0.65, 0.35],
         wind_speed=T[7, 3],
@@ -24,6 +25,7 @@ function direction_batch_test_atmosphere(
     return InfiniteMultiLayerAtmosphere(
         tel;
         r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
         L0=T(25),
         fractional_cn2=T[0.65, 0.35],
         wind_speed=T[7, 3],
@@ -493,7 +495,11 @@ end
         Array{T}(undef, n, n, 1),
     )
 
-    kolmogorov = KolmogorovAtmosphere(tel; r0=T(0.2), T=T)
+    kolmogorov = KolmogorovAtmosphere(tel;
+        r0=T(0.2),
+        reference_wavelength_m=T(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
+        T=T,
+    )
     @test atmosphere_direction_batch_capability(typeof(kolmogorov)) isa
         UnsupportedAtmosphereDirectionBatchCapability
     @test_throws UnsupportedAlgorithm prepare_atmosphere_direction_batch(

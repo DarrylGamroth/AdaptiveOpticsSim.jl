@@ -20,6 +20,8 @@ required_reference_cases = [
     "curvature_quadratic_signal",
     "lift_interaction_matrix",
 ]
+superseded_reference_cases = ["atmosphere_short", "atmosphere_long"]
+supersession_reason = "The pre-HIL atmosphere arrays treated generated phase as OPD and used an inconsistent spatial-frequency/FFT normalization. They remain frozen historical evidence and must not match the corrected phase-to-OPD contract."
 
 [cases.telescope_planes]
 kind = "gate0_telescope_planes"
@@ -271,6 +273,7 @@ central_obstruction = 0.0
 [cases.atmosphere_short.atmosphere]
 kind = "finite"
 r0 = 0.2
+reference_wavelength_m = 5.0e-7
 L0 = 25.0
 fractional_cn2 = [0.6, 0.4]
 wind_speed = [7.0, 13.0]
@@ -314,6 +317,7 @@ central_obstruction = 0.0
 [cases.atmosphere_long.atmosphere]
 kind = "finite"
 r0 = 0.2
+reference_wavelength_m = 5.0e-7
 L0 = 25.0
 fractional_cn2 = [0.6, 0.4]
 wind_speed = [7.0, 13.0]

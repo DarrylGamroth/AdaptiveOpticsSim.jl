@@ -2866,6 +2866,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     pupil = PupilFunction(tel; T=T, backend=backend)
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),
+        reference_wavelength_m=T(500e-9),
         L0=T(25.0),
         fractional_cn2=T[1.0],
         wind_speed=T[0.0],
@@ -2947,7 +2948,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     cpu_phase_psd = zeros(T, 4, 4)
     gpu_phase_freqs = array_backend(phase_freqs)
     gpu_phase_psd = array_backend(zeros(T, 4, 4))
-    phase_args = (T(0.02), T(4pi^2), T(0.01), T(-11 / 6), zero(T), 4)
+    phase_args = (T(0.02), T(0.01), T(-11 / 6), zero(T), 4)
     AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
         cpu_phase_psd, phase_freqs, phase_args...)
     phase_style = AdaptiveOpticsSim.Backends.execution_style(gpu_phase_psd)
@@ -2957,7 +2958,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     phase_method = which(
         AdaptiveOpticsSim.Atmospheres._fill_phase_psd!,
         (typeof(phase_style), typeof(gpu_phase_psd), typeof(gpu_phase_freqs),
-            T, T, T, T, T, Int),
+            T, T, T, T, Int),
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(phase_method.file))
 
@@ -3138,6 +3139,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     pupil = PupilFunction(tel; T=T, backend=backend)
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),
+        reference_wavelength_m=T(500e-9),
         L0=T(25.0),
         fractional_cn2=T[1.0],
         wind_speed=T[0.0],
@@ -3656,6 +3658,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
 
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),
+        reference_wavelength_m=T(500e-9),
         L0=T(25.0),
         fractional_cn2=T[0.7, 0.3],
         wind_speed=T[8.0, 4.0],
@@ -3668,7 +3671,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     renderer = prepare_atmosphere_renderer(atm, tel, src)
     atmosphere_output = PupilFunction(tel; T=T)
     render_atmosphere!(atmosphere_output, renderer, atm, epoch)
-    @test atm.layers[1].generator.state.opd isa BackendArray
+    @test atm.layers[1].generator.state.phase_rad isa BackendArray
     @test atmosphere_output.opd isa BackendArray
     direction_sources = Asterism(AdaptiveOpticsSim.Optics.AbstractSource[
         src,
@@ -3703,6 +3706,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
 
     inf_atm = InfiniteMultiLayerAtmosphere(tel;
         r0=T(0.2),
+        reference_wavelength_m=T(500e-9),
         L0=T(25.0),
         fractional_cn2=T[0.7, 0.3],
         wind_speed=T[8.0, 4.0],
@@ -3717,7 +3721,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     infinite_renderer = prepare_atmosphere_renderer(inf_atm, tel, src)
     render_atmosphere!(atmosphere_output, infinite_renderer, inf_atm,
         infinite_epoch)
-    @test inf_atm.layers[1].screen.state.screen isa BackendArray
+    @test inf_atm.layers[1].screen.state.phase_rad isa BackendArray
     @test atmosphere_output.opd isa BackendArray
     run_optional_atmosphere_direction_batch_checks(
         inf_atm,

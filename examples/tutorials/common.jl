@@ -28,10 +28,12 @@ function base_source(; band::Symbol=:I, magnitude::Real=8.0, coordinates::Tuple{
     return Source(band=band, magnitude=magnitude, coordinates=coordinates)
 end
 
-function base_atmosphere(tel::Telescope; r0::Real=0.15, L0::Real=25.0)
+function base_atmosphere(tel::Telescope; r0::Real=0.15,
+    reference_wavelength_m::Real=500e-9, L0::Real=25.0)
     return MultiLayerAtmosphere(
         tel;
         r0=r0,
+        reference_wavelength_m=reference_wavelength_m,
         L0=L0,
         fractional_cn2=[1.0],
         wind_speed=[8.0],

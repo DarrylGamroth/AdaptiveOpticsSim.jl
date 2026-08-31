@@ -1,20 +1,21 @@
-@kernel function phase_screen_psd_kernel!(psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n::Int)
+@kernel function phase_screen_psd_kernel!(psd, freqs, coeff, inv_L0_sq, exponent, inv_fm_sq, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(psd)
         fx = freqs[i]
         fy = freqs[j]
         f_sq = fx * fx + fy * fy
-        base = coeff * (two_pi_sq * f_sq + inv_L0_sq)^exponent
+        base = coeff * (f_sq + inv_L0_sq)^exponent
         with_inner = inv_fm_sq == zero(T) ? base : base * exp(-f_sq * inv_fm_sq)
         @inbounds psd[i, j] = ifelse(i == 1 && j == 1, zero(T), with_inner)
     end
 end
 
-@kernel function phase_spectrum_kernel!(out, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, n::Int)
+@kernel function phase_spectrum_kernel!(out, freqs, coeff, inv_L0_sq, exponent, n::Int)
     i = @index(Global, Linear)
     if i <= n
-        @inbounds out[i] = coeff * (two_pi_sq * (freqs[i] * freqs[i]) + inv_L0_sq)^exponent
+        @inbounds out[i] = coeff *
+            (freqs[i] * freqs[i] + inv_L0_sq)^exponent
     end
 end
 
@@ -148,31 +149,41 @@ end
 
 phase_covariance(rho::AbstractArray, atm::KolmogorovAtmosphere) = phase_covariance(rho, atm.params.r0, atm.params.L0)
 
+"""
+    phase_spectrum(f, r0, L0)
+
+Evaluate the two-dimensional von Kármán phase power spectral density
+`0.023r0^(-5/3) * (f^2 + L0^(-2))^(-11/6)`. Spatial frequencies `f` are in
+cycles per metre, `r0` and `L0` are in metres, and the result has units of
+radian squared metre squared. `r0` and the returned phase use the same
+reference wavelength.
+"""
 function phase_spectrum(f::AbstractArray, r0::Real, L0::Real)
     T = promote_type(typeof(float(r0)), typeof(float(L0)), eltype(float.(f)))
     coeff = T(0.023) * T(r0)^(-T(5) / T(3))
     inv_L0_sq = inv(T(L0))^2
-    two_pi_sq = T(2 * pi)^2
     exponent = -T(11) / T(6)
     out = similar(f, T, size(f)...)
-    _phase_spectrum!(execution_style(out), out, f, coeff, two_pi_sq, inv_L0_sq, exponent)
+    _phase_spectrum!(execution_style(out), out, f, coeff, inv_L0_sq,
+        exponent)
     return out
 end
 
 phase_spectrum(f::AbstractArray, atm::KolmogorovAtmosphere) = phase_spectrum(f, atm.params.r0, atm.params.L0)
 
 function _phase_spectrum!(::ScalarCPUStyle, out::AbstractArray{T}, freqs::AbstractArray{T},
-    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T) where {T<:AbstractFloat}
+    coeff::T, inv_L0_sq::T, exponent::T) where {T<:AbstractFloat}
     @inbounds for i in eachindex(out, freqs)
         f = freqs[i]
-        out[i] = coeff * (two_pi_sq * (f * f) + inv_L0_sq)^exponent
+        out[i] = coeff * (f * f + inv_L0_sq)^exponent
     end
     return out
 end
 
 function _phase_spectrum!(style::AcceleratorStyle, out::AbstractArray{T}, freqs::AbstractArray{T},
-    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T) where {T<:AbstractFloat}
-    launch_kernel!(style, phase_spectrum_kernel!, out, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, length(out); ndrange=length(out))
+    coeff::T, inv_L0_sq::T, exponent::T) where {T<:AbstractFloat}
+    launch_kernel!(style, phase_spectrum_kernel!, out, freqs, coeff,
+        inv_L0_sq, exponent, length(out); ndrange=length(out))
     return out
 end
 
@@ -186,24 +197,25 @@ function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
     ws::Union{Nothing,PhaseStatsWorkspace}=nothing)
 
     if ws === nothing
-        ws = PhaseStatsWorkspace(atm.state.opd, n; T=eltype(atm.state.opd))
+        ws = PhaseStatsWorkspace(atm.state.phase_rad, n;
+            T=eltype(atm.state.phase_rad))
     end
     fftfreq!(ws.freqs, n; d=delta)
     T = eltype(ws.psd)
     coeff = T(0.023) * atm.params.r0^(-T(5) / T(3))
     inv_L0_sq = inv(T(atm.params.L0))^2
-    two_pi_sq = T(2 * pi)^2
     exponent = -T(11) / T(6)
     fm = T(5.92) / T(l0) / T(2 * pi)
     inv_fm_sq = isfinite(fm) && fm > zero(T) ? inv(fm)^2 : zero(T)
 
-    fill_phase_psd!(ws.psd, ws.freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n)
+    fill_phase_psd!(ws.psd, ws.freqs, coeff, inv_L0_sq, exponent,
+        inv_fm_sq, n)
 
     randn_backend!(rng, ws.noise_re)
     randn_backend!(rng, ws.noise_im)
     @. ws.spectrum = complex(ws.noise_re, ws.noise_im) * sqrt(ws.psd)
     execute_fft_plan!(ws.spectrum, ws.ifft_plan)
-    phs = real.(ws.spectrum) .* (n * T(delta))
+    phs = real.(ws.spectrum) .* (T(n) / T(delta))
     if return_psd
         return phs, ws.psd
     end
@@ -211,16 +223,19 @@ function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
 end
 
 function fill_phase_psd!(psd::AbstractMatrix{T}, freqs::AbstractVector{T},
-    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T, n::Int) where {T<:AbstractFloat}
-    _fill_phase_psd!(execution_style(psd), psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n)
+    coeff::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T,
+    n::Int) where {T<:AbstractFloat}
+    _fill_phase_psd!(execution_style(psd), psd, freqs, coeff, inv_L0_sq,
+        exponent, inv_fm_sq, n)
     return psd
 end
 
 function _fill_phase_psd!(::ScalarCPUStyle, psd::AbstractMatrix{T}, freqs::AbstractVector{T},
-    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T, n::Int) where {T<:AbstractFloat}
+    coeff::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T,
+    n::Int) where {T<:AbstractFloat}
     @inbounds for i in 1:n, j in 1:n
         f_sq = freqs[i]^2 + freqs[j]^2
-        base = coeff * (two_pi_sq * f_sq + inv_L0_sq)^exponent
+        base = coeff * (f_sq + inv_L0_sq)^exponent
         with_inner = inv_fm_sq == zero(T) ? base : base * exp(-f_sq * inv_fm_sq)
         psd[i, j] = i == 1 && j == 1 ? zero(T) : with_inner
     end
@@ -228,8 +243,10 @@ function _fill_phase_psd!(::ScalarCPUStyle, psd::AbstractMatrix{T}, freqs::Abstr
 end
 
 function _fill_phase_psd!(style::AcceleratorStyle, psd::AbstractMatrix{T}, freqs::AbstractVector{T},
-    coeff::T, two_pi_sq::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T, n::Int) where {T<:AbstractFloat}
-    launch_kernel!(style, phase_screen_psd_kernel!, psd, freqs, coeff, two_pi_sq, inv_L0_sq, exponent, inv_fm_sq, n; ndrange=size(psd))
+    coeff::T, inv_L0_sq::T, exponent::T, inv_fm_sq::T,
+    n::Int) where {T<:AbstractFloat}
+    launch_kernel!(style, phase_screen_psd_kernel!, psd, freqs, coeff,
+        inv_L0_sq, exponent, inv_fm_sq, n; ndrange=size(psd))
     return psd
 end
 
@@ -274,7 +291,6 @@ function _subharmonic_terms(::Type{T}, n::Int, r0::Real, L0::Real, delta::Real, 
     n_levels::Int, radius::Int) where {T<:AbstractFloat}
     base_coeff = T(0.023) * T(r0)^(-T(5) / T(3))
     inv_L0_sq = inv(T(L0))^2
-    two_pi_sq = T(2 * pi)^2
     exponent = -T(11) / T(6)
     fm = T(5.92) / T(l0) / T(2 * pi)
     inv_fm_sq = isfinite(fm) && fm > zero(T) ? inv(fm)^2 : zero(T)
@@ -292,7 +308,7 @@ function _subharmonic_terms(::Type{T}, n::Int, r0::Real, L0::Real, delta::Real, 
             fx_t = T(fx) * del_f
             fy_t = T(fy) * del_f
             f = sqrt(fx_t^2 + fy_t^2)
-            psd = base_coeff * (two_pi_sq * (f^2) + inv_L0_sq)^exponent
+            psd = base_coeff * (f^2 + inv_L0_sq)^exponent
             if inv_fm_sq != zero(T)
                 psd *= exp(-(f^2) * inv_fm_sq)
             end

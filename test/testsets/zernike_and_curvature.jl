@@ -476,6 +476,7 @@ end
 
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
+        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0,
         fractional_cn2=[0.7, 0.3],
         wind_speed=[8.0, 4.0],
