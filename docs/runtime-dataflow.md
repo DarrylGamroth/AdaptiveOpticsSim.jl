@@ -191,19 +191,9 @@ measures its own interaction matrix by push-pull commands, installs it in
 pyRTC, injects a disturbance that lies in the declared deformable-mirror span,
 and requires the pyRTC command to close the AOS optical loop.
 
-Use a Python environment in which a pyRTC checkout is installed, and select
-that interpreter before PythonCall starts:
-
-~~~sh
-python3 -m venv /tmp/aos-pyrtc
-/tmp/aos-pyrtc/bin/python -m pip install -e /path/to/pyRTC
-JULIA_PYTHONCALL_EXE=/tmp/aos-pyrtc/bin/python \
-  julia --project=examples/integrations/pyrtc -e 'using Pkg; Pkg.instantiate()'
-JULIA_PYTHONCALL_EXE=/tmp/aos-pyrtc/bin/python \
-  PYRTC_ROOT=/path/to/pyRTC \
-  julia --project=examples/integrations/pyrtc \
-  examples/integrations/pyrtc/run_reference_matrix.jl
-~~~
+The scientist-facing installation, validation, and execution workflow is in
+[`user-guide.md`](user-guide.md#use-aos-with-pyrtc). The in-process oracle uses
+the Python interpreter selected by `JULIA_PYTHONCALL_EXE`.
 
 This is a deterministic integration test, not a real-time transport or latency
 claim. The current path copies each AOS frame to a C-contiguous NumPy array and
@@ -245,29 +235,8 @@ lifetime ownership. The control pipe intentionally advances one operation at a
 time, so this validates process and data-boundary correctness rather than
 free-running RTC timing.
 
-Run the protocol matrix, including Julia-to-pyRTC and pyRTC-to-Julia vector and
-matrix transfers, with:
-
-~~~sh
-PYRTC_PYTHON=/tmp/aos-pyrtc/bin/python \
-  PYRTC_ROOT=/path/to/pyRTC \
-  julia --project=examples/integrations/pyrtc \
-  examples/integrations/pyrtc/runtests.jl
-~~~
-
-Add the separate-process SHWFS and Pyramid closed-loop matrix with:
-
-~~~sh
-AOS_PYRTC_PROCESS_TESTS=1 \
-  PYRTC_PYTHON=/tmp/aos-pyrtc/bin/python \
-  PYRTC_ROOT=/path/to/pyRTC \
-  julia --project=examples/integrations/pyrtc \
-  examples/integrations/pyrtc/runtests.jl
-~~~
-
-To run only the two process demonstrations, use
-[`run_process_reference_matrix.jl`](../examples/integrations/pyrtc/run_process_reference_matrix.jl)
-with the same `PYRTC_PYTHON` and `PYRTC_ROOT` settings.
+The user guide also gives the commands for the bidirectional protocol matrix,
+the opt-in separate-process test matrix, and the two-system demonstration.
 
 The example transport functions above are application placeholders, not AOS
 APIs. The boundary deliberately defines no socket, PipeWire buffer, wall-clock

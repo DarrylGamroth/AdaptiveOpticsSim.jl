@@ -18,6 +18,8 @@ backend behavior for maintained CPU/GPU execution paths.
 If you are a normal user, read these in order:
 
 - [docs/user-guide.md](docs/user-guide.md)
+- [Use AOS with pyRTC](docs/user-guide.md#use-aos-with-pyrtc) for the external-
+  RTC reference workflow
 - [docs/model-cookbook.md](docs/model-cookbook.md)
 - [docs/api-reference.md](docs/api-reference.md)
 - `examples/tutorials/`

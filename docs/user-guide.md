@@ -235,6 +235,133 @@ For GPU graphs, graph arrays remain device-resident and the HIL boundary makes
 the completed frame/device-command copies explicit through ordinary host
 `Array` buffers.
 
+## Use AOS With pyRTC
+
+The maintained pyRTC integration is a Linux, CPU-shared-memory validation path.
+AdaptiveOpticsSim runs the optical plant in Julia. A separate Python process
+runs pyRTC's actual `SlopesProcess` and `Loop`, consumes complete detector
+frames, and returns complete deformable-mirror commands. No camera or
+deformable-mirror hardware is required for the reference systems.
+
+The validated examples are controlled, noiseless, 25-command systems:
+
+- a 64-by-64 Shack–Hartmann detector frame with 104 pyRTC signals
+- a 36-by-36 Pyramid detector frame with 344 pyRTC signals
+
+These reference systems establish transport, calibration, and closed-loop
+behavior without depending on unavailable instrument calibration. They are not
+REVOLT instrument models.
+
+### Obtain And Install The Software
+
+Install Git, Python, and [Julia 1.12 or newer](https://julialang.org/downloads/).
+pyRTC currently supports Python 3.9 through 3.13; use a dedicated virtual
+environment. Clone both repositories into one working directory:
+
+~~~sh
+mkdir aos-pyrtc-work
+cd aos-pyrtc-work
+export AO_HIL_ROOT="$PWD"
+
+git clone https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl.git
+git clone https://github.com/jacotay7/pyRTC.git
+
+python3 -m venv "$AO_HIL_ROOT/.venv"
+"$AO_HIL_ROOT/.venv/bin/python" -m pip install --upgrade pip
+"$AO_HIL_ROOT/.venv/bin/python" -m pip install -e "$AO_HIL_ROOT/pyRTC"
+~~~
+
+Enter the AOS checkout and select the same Python interpreter for the native
+worker and the optional PythonCall oracle:
+
+~~~sh
+cd "$AO_HIL_ROOT/AdaptiveOpticsSim.jl"
+export PYRTC_ROOT="$AO_HIL_ROOT/pyRTC"
+export PYRTC_PYTHON="$AO_HIL_ROOT/.venv/bin/python"
+export JULIA_PYTHONCALL_EXE="$PYRTC_PYTHON"
+
+julia --project=. --startup-file=no \
+  -e 'using Pkg; Pkg.instantiate(); using AdaptiveOpticsSim'
+julia --project=examples/integrations/pyrtc --startup-file=no \
+  -e 'using Pkg; Pkg.instantiate()'
+~~~
+
+Re-export `PYRTC_ROOT`, `PYRTC_PYTHON`, and `JULIA_PYTHONCALL_EXE` after
+opening a new shell.
+
+### Verify Shared-Memory Compatibility
+
+Run the short interoperability suite first:
+
+~~~sh
+julia --project=examples/integrations/pyrtc --startup-file=no \
+  examples/integrations/pyrtc/runtests.jl
+~~~
+
+This checks Julia-to-pyRTC and pyRTC-to-Julia vectors and matrices, NumPy C
+order, metadata admission, segment ownership, cleanup, and zero warmed Julia
+heap allocation for immediate publication and reads. A passing command exits
+with status zero and prints passing test summaries.
+
+The integration uses pyRTC's conventional `wfs`, `signal`, `signal2D`, and
+`wfc` shared-memory names. Stop another pyRTC session before running it. The
+launcher refuses to reuse an occupied name.
+
+### Run Both Closed-Loop Reference Systems
+
+Run the Shack–Hartmann and Pyramid systems against a separate pyRTC process:
+
+~~~sh
+julia --project=examples/integrations/pyrtc --startup-file=no \
+  examples/integrations/pyrtc/run_process_reference_matrix.jl
+~~~
+
+Each run performs push-pull calibration, verifies that the interaction matrix
+has rank 25, installs the matrix in pyRTC, injects a known disturbance, and
+requires the returned command to close the AOS optical loop. The command prints
+the interaction condition, initial and final residuals, convergence ratio, and
+command-recovery error for both sensors.
+
+Run the same systems as assertions in the optional integration-test matrix:
+
+~~~sh
+AOS_PYRTC_PROCESS_TESTS=1 \
+  julia --project=examples/integrations/pyrtc --startup-file=no \
+  examples/integrations/pyrtc/runtests.jl
+~~~
+
+For debugging, `run_reference_matrix.jl` provides an in-process PythonCall
+oracle. The separate-process runner above is the representative native Julia
+shared-memory path.
+
+### Adapt A Scientific Graph
+
+A graph used with pyRTC needs one complete detector-frame output and one
+complete command input bound through `PreparedGraphHILBoundary`. Keep the
+scientific algorithms and graph independent of pyRTC. The application adapter
+then performs one ordered exchange:
+
+1. Step the graph and obtain its frame sequence.
+2. Publish the complete host frame to `wfs`.
+3. Let pyRTC publish `signal` and the next command to `wfc`.
+4. Read the complete command into `hil_command_buffer(boundary)`.
+5. Adopt it with the same AOS frame sequence before stepping again.
+
+Use
+[`pyrtc_process_hil.jl`](../examples/integrations/pyrtc/pyrtc_process_hil.jl)
+as the executable reference for stream creation, process lifecycle,
+interaction-matrix calibration, and command adoption. Use
+[`pyrtc_shared_memory.jl`](../examples/integrations/pyrtc/pyrtc_shared_memory.jl)
+directly only when implementing another application adapter.
+
+The current shared-memory layout has one overwriteable slot. It is valid for
+the demonstrated one-producer, one-outstanding-frame lockstep exchange. It is
+not a free-running asynchronous transport, a deadline guarantee, or a dropped-
+frame policy. AOS GPU graphs can copy their completed frames through the host
+HIL boundary, but the GPU-to-CPU pyRTC composition has not yet been qualified.
+See [`runtime-dataflow.md`](runtime-dataflow.md) for the protocol and ownership
+details.
+
 ## Model Time
 
 `ModelTimestamp` and `ModelDuration` use exact integer nanoseconds.
