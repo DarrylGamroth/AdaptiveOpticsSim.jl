@@ -168,7 +168,7 @@ The current integration matrix is deliberately small:
 | Shack–Hartmann | Deterministic, noiseless CCD | AOS lockstep reference controller | `algorithm-graphs` interaction-matrix and convergence tests | covered |
 | Pyramid | Deterministic, noiseless EMCCD | Command/frame lockstep | `algorithm-graphs` complete-frame and command-response tests | covered |
 | Shack–Hartmann | Deterministic, noiseless CCD | Synchronous pyRTC | Measured interaction and closed-loop convergence | covered |
-| Pyramid | Deterministic, noiseless EMCCD | Synchronous pyRTC | Optional integration harness | planned |
+| Pyramid | Deterministic, noiseless EMCCD | Synchronous pyRTC | Measured interaction and closed-loop convergence | covered |
 | Either | Stochastic detector response | Any external RTC | Statistical closed-loop qualification | gap |
 
 Calibrate an external RTC by applying complete positive and negative commands
@@ -179,13 +179,15 @@ identity matrix or infer a command scale from an instrument name.
 The initial pyRTC integration runs from Julia through PythonCall.jl because AOS
 owns graph stepping, frame sequence, and model time. PyJulia/JuliaCall would put
 Python in charge of that lifecycle and is not the initial integration
-direction. The maintained
-[`run_shack_hartmann_reference.jl`](../examples/integrations/pyrtc/run_shack_hartmann_reference.jl)
-harness uses pyRTC's real `ImageSHM`, `SlopesProcess`, `WavefrontCorrector`, and
-`Loop` implementations synchronously. It measures the 104-by-25 interaction
-matrix by push-pull commands, installs it in pyRTC, injects a disturbance that
-lies in the declared deformable-mirror span, and requires the pyRTC command to
-close the AOS optical loop.
+direction. The maintained SHWFS and Pyramid runners share
+[`pyrtc_reference_hil.jl`](../examples/integrations/pyrtc/pyrtc_reference_hil.jl),
+which uses pyRTC's real `ImageSHM`, `SlopesProcess`, `WavefrontCorrector`, and
+`Loop` implementations synchronously. The SHWFS permutation publishes 104
+signals from its 64-by-64 lenslet mosaic. The Pyramid permutation publishes 344
+signals from four 16-pixel pupils in its 36-by-36 frame. Each permutation
+measures its own interaction matrix by push-pull commands, installs it in
+pyRTC, injects a disturbance that lies in the declared deformable-mirror span,
+and requires the pyRTC command to close the AOS optical loop.
 
 Use a Python environment in which a pyRTC checkout is installed, and select
 that interpreter before PythonCall starts:
@@ -198,7 +200,7 @@ JULIA_PYTHONCALL_EXE=/tmp/aos-pyrtc/bin/python \
 JULIA_PYTHONCALL_EXE=/tmp/aos-pyrtc/bin/python \
   PYRTC_ROOT=/path/to/pyRTC \
   julia --project=examples/integrations/pyrtc \
-  examples/integrations/pyrtc/run_shack_hartmann_reference.jl
+  examples/integrations/pyrtc/run_reference_matrix.jl
 ~~~
 
 This is a deterministic integration test, not a real-time transport or latency
