@@ -316,6 +316,13 @@ external RTC consumes that frame and returns the next physical-DM command.
 The file records its layered parameter authority and does not claim that the
 symmetric simulated pupil registration already matches the measured
 `pwfsRoiOffsets_64.csv` positions or an operational pixel reconstructor.
+It explicitly selects `modulation_propagation_strategy = "shifted_mask"` for
+the fixed 32-point modulation cycle. That strategy retains the 480-sample
+pupil, 64-by-64 output, modulation points, quadrature weights, and photon-rate
+normalization, but it is a sampled detector-product approximation to the
+default pupil-tilt propagation. Use `"pupil_tilt"` when the reference
+formulation is required. Dynamic modulation updates require re-preparing the
+shifted masks rather than changing the cached quadrature in place.
 
 The REVOLT graph profile is selected before preparation. The example helper keeps
 the selection explicit:

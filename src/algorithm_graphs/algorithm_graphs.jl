@@ -98,7 +98,10 @@ import ..Detectors:
     reset_integration!
 import ..WavefrontSensors:
     Diffractive,
+    AbstractPyramidModulationPropagationStrategy,
     PyramidOpticalFrontEnd,
+    PyramidPupilTiltStrategy,
+    PyramidShiftedMaskStrategy,
     PyramidWFS,
     ShackHartmannSlopeSelectionPlan,
     ShackHartmannWFS,

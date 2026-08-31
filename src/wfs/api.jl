@@ -131,6 +131,9 @@ public PreparedPyramidOptics
 public PreparedPyramidOpticsBundle
 public PyramidEstimationPlan
 public PreparedPyramidEstimator
+public AbstractPyramidModulationPropagationStrategy
+public PyramidPupilTiltStrategy
+public PyramidShiftedMaskStrategy
 public BiOEdgeOpticsPlan
 public BiOEdgeOpticsBundlePlan
 public PreparedBiOEdgeOptics

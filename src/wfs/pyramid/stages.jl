@@ -93,6 +93,20 @@ end
         batch.batch_size)
 end
 
+
+@inline function _pyramid_modulation_batch_workspace_binding(
+    batch::PyramidShiftedMaskModulationWorkspace)
+    return (
+        batch.field_stack,
+        batch.shifted_masks,
+        batch.operating_weights,
+        batch.axis_1_shifts_rad,
+        batch.axis_2_shifts_rad,
+        batch.ifft_plan,
+        batch.batch_size,
+    )
+end
+
 @inline function _pyramid_propagation_workspace_binding(workspace)
     return (workspace.field, workspace.focal_field, workspace.pupil_field,
         workspace.pyramid_mask, workspace.phasor, workspace.intensity,

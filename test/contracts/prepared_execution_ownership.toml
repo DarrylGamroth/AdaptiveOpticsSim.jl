@@ -39,8 +39,8 @@ entries = [
 work_issue = 230
 delivery_state = "implemented"
 policy = "Zero-size implementation selectors use domain-owned Strategy terminology and own no prepared numerical contract."
-families = ["AbstractAtmosphericFieldExecutionStrategy","AbstractReductionExecutionStrategy","AbstractDetectorExecutionStrategy","AbstractGroupedAccumulationStrategy","AbstractShackHartmannWFSSensingStrategy"]
-selectors = ["GeometricFieldSynchronousStrategy","GeometricFieldAsyncStrategy","LayeredFresnelFieldSynchronousStrategy","LayeredFresnelFieldAsyncStrategy","DirectReductionStrategy","HostMirrorReductionStrategy","DetectorDirectStrategy","DetectorHostMirrorStrategy","GroupedDirectAccumulateStrategy","GroupedStackReduceStrategy","GroupedStaged2DStrategy","ShackHartmannWFSScalarStrategy","ShackHartmannWFSBatchedStrategy","ShackHartmannWFSDeviceStatsStrategy","ShackHartmannWFSROCmSafeStrategy","ShackHartmannWFSROCmHostStatsStrategy"]
+families = ["AbstractAtmosphericFieldExecutionStrategy","AbstractReductionExecutionStrategy","AbstractDetectorExecutionStrategy","AbstractGroupedAccumulationStrategy","AbstractPyramidModulationPropagationStrategy","AbstractShackHartmannWFSSensingStrategy"]
+selectors = ["GeometricFieldSynchronousStrategy","GeometricFieldAsyncStrategy","LayeredFresnelFieldSynchronousStrategy","LayeredFresnelFieldAsyncStrategy","DirectReductionStrategy","HostMirrorReductionStrategy","DetectorDirectStrategy","DetectorHostMirrorStrategy","GroupedDirectAccumulateStrategy","GroupedStackReduceStrategy","GroupedStaged2DStrategy","PyramidPupilTiltStrategy","PyramidShiftedMaskStrategy","ShackHartmannWFSScalarStrategy","ShackHartmannWFSBatchedStrategy","ShackHartmannWFSDeviceStatsStrategy","ShackHartmannWFSROCmSafeStrategy","ShackHartmannWFSROCmHostStatsStrategy"]
 selection_functions = ["atmospheric_field_execution_strategy","reduction_execution_strategy","detector_execution_strategy","counting_output_execution_strategy","grouped_accumulation_strategy","sh_sensing_execution_strategy"]
 
 [[interface_contracts]]
@@ -172,7 +172,7 @@ allowed_target_roles = ["definition","plan","plan_interface","state","workspace"
 allowed_product_visibility = ["internal","caller_visible"]
 allowed_backend_relevance = ["backend_neutral","backend_parameterized","backend_specific"]
 allowed_migration_gates = ["PE-00","PE-01","PE-02","PE-03","PE-04","PE-05","PE-06","PE-07"]
-baseline_type_count = 467
+baseline_type_count = 508
 baseline_mixed_type_count = 8
 
 [[type_inventory.files]]
@@ -208,6 +208,52 @@ path = "ext/AdaptiveOpticsSimDaggerExt.jl"
 owner = "Ensembles"
 entries = [
     ["DaggerSchedulerState","struct",0,"state",["state"],false,false,"internal",false,"backend_neutral",false,"PE-07"],
+]
+
+[[type_inventory.files]]
+path = "src/algorithm_graphs/definitions.jl"
+owner = "AlgorithmGraphs"
+entries = [
+    ["AlgorithmGraphDefinition","struct",7,"definition",["definition"],false,false,"internal",false,"backend_parameterized",false,"PE-00"],
+    ["AlgorithmNodeDefinition","struct",2,"definition",["definition"],false,false,"internal",false,"backend_parameterized",false,"PE-00"],
+    ["GraphInputDefinition","struct",2,"definition",["definition"],false,false,"internal",false,"backend_parameterized",false,"PE-00"],
+    ["GraphOutputDefinition","struct",1,"definition",["definition"],false,false,"internal",false,"backend_neutral",false,"PE-00"],
+]
+
+[[type_inventory.files]]
+path = "src/algorithm_graphs/hil_boundary.jl"
+owner = "AlgorithmGraphs"
+entries = [
+    ["GraphHILBoundaryState","mutable_struct",4,"state",["state"],true,true,"internal",false,"backend_neutral",true,"PE-05"],
+    ["PreparedGraphHILBoundary","struct",7,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/algorithm_graphs/model_time.jl"
+owner = "AlgorithmGraphs"
+entries = [
+    ["PreparedBoundaryModelTimeDriver","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_neutral",true,"PE-05"],
+    ["PreparedCapturedModelTimeDriver","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_neutral",true,"PE-05"],
+    ["_ModelTimeDriverState","mutable_struct",2,"state",["state"],true,true,"internal",false,"backend_neutral",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/algorithm_graphs/native_nodes.jl"
+owner = "AlgorithmGraphs"
+entries = [
+    ["_DiscreteIntegratorStepPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_neutral",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/algorithm_graphs/preparation.jl"
+owner = "AlgorithmGraphs"
+entries = [
+    ["AlgorithmGraphState","mutable_struct",3,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PreparedAlgorithmGraph","struct",8,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["PreparedGraphNode","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["_PreparedDelayedLink","struct",4,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["_PreparedGraphInput","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
+    ["_PreparedInputBinding","struct",2,"prepared",["prepared_owner"],false,false,"internal",true,"backend_parameterized",true,"PE-05"],
 ]
 
 [[type_inventory.files]]
@@ -326,6 +372,53 @@ path = "src/calibration/interaction_matrix.jl"
 owner = "Calibration"
 entries = [
     ["AbstractCalibrationCommandPlan","abstract_type",-1,"plan",["plan_interface"],false,false,"internal",false,"backend_parameterized",false,"PE-01"],
+]
+
+[[type_inventory.files]]
+path = "src/calibration/modal_opd_expansion.jl"
+owner = "Calibration"
+entries = [
+    ["ModalOPDExpansionPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["_OwnedModalOPDExpansionPlan","struct",0,"plan",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/control/closed_loop_correction.jl"
+owner = "Control"
+entries = [
+    ["ClosedLoopCorrectionPlan","struct",4,"plan",["plan"],false,false,"internal",false,"backend_neutral",true,"PE-05"],
+    ["ClosedLoopCorrectionState","mutable_struct",3,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["ClosedLoopCorrectionWorkspace","struct",2,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/control/controller.jl"
+owner = "Control"
+entries = [
+    ["DiscreteIntegratorPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_neutral",true,"PE-05"],
+    ["DiscreteIntegratorState","mutable_struct",2,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["DiscreteIntegratorWorkspace","struct",2,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/control/deformable_mirror_routing.jl"
+owner = "Control"
+entries = [
+    ["ControllerToVDMPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PDMActuatorRangePlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PDMFeedbackToVDMPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PDMFeedbackToVDMWorkspace","struct",1,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["VDMFeedbackToControllerPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["VDMToPDMPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["VDMToPDMWorkspace","struct",1,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/control/reconstructors.jl"
+owner = "Control"
+entries = [
+    ["ControlMatrixPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["_OwnedControlMatrixPlan","struct",0,"plan",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
 ]
 
 [[type_inventory.files]]
@@ -1060,6 +1153,7 @@ entries = [
 path = "src/wfs/pyramid/setup.jl"
 owner = "WavefrontSensors"
 entries = [
+    ["AbstractPyramidModulationPropagationStrategy","abstract_type",-1,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",false,"PE-02"],
     ["NoPyramidModulationBatchWorkspace","struct",0,"workspace",["workspace"],false,false,"internal",false,"backend_neutral",false,"PE-05"],
     ["PreparedPyramidPropagation","struct",2,"prepared",["prepared_owner"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidAcquisitionPlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
@@ -1070,8 +1164,11 @@ entries = [
     ["PyramidEstimatorState","mutable_struct",10,"state",["state"],true,true,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidEstimatorWorkspace","mutable_struct",10,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidModulationBatchWorkspace","struct",6,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",false,"PE-05"],
-    ["PyramidPropagationPlan","struct",4,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PyramidPropagationPlan","struct",5,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidPropagationWorkspace","mutable_struct",18,"workspace",["workspace"],true,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PyramidPupilTiltStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
+    ["PyramidShiftedMaskModulationWorkspace","struct",7,"workspace",["workspace"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["PyramidShiftedMaskStrategy","struct",0,"strategy",["strategy"],false,false,"internal",false,"backend_parameterized",true,"PE-02"],
 ]
 
 [[type_inventory.files]]
@@ -1084,6 +1181,14 @@ entries = [
     ["PyramidEstimationPlan","struct",5,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidOpticsBundlePlan","struct",1,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
     ["PyramidOpticsPlan","struct",6,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+]
+
+[[type_inventory.files]]
+path = "src/wfs/shack_hartmann/selection.jl"
+owner = "WavefrontSensors"
+entries = [
+    ["ShackHartmannSlopeSelectionPlan","struct",2,"plan",["plan"],false,false,"internal",false,"backend_parameterized",true,"PE-05"],
+    ["_OwnedShackHartmannSlopeSelectionPlan","struct",0,"plan",["binding_token"],false,false,"internal",true,"backend_neutral",false,"PE-05"],
 ]
 
 [[type_inventory.files]]
@@ -1606,9 +1711,19 @@ entries = [
 [stored_any]
 policy = "ratchet"
 columns = ["category","scope","binding","baseline_line","count","hot_path","replacement"]
-baseline_total = 25
+baseline_total = 29
 zero_tolerance_gate = "PE-07"
 interpretation = "stored fields, erased collection/reference signatures and returns, explicit or implicit erased constructors and array literals, and prepared Any returns; unconstrained dispatch wildcards are excluded"
+
+[[stored_any.files]]
+path = "src/algorithm_graphs/graph_files.jl"
+owner = "AlgorithmGraphs"
+entries = [
+    ["any_array_literal","_table_array_or_empty","value",155,1,false,"concrete TOML table-array builder sealed before graph preparation"],
+    ["erased_storage_constructor","_normalize_toml_value","builder",120,1,false,"concrete TOML value builder sealed as a tuple"],
+    ["erased_storage_constructor","_parse_entries","builder",1517,1,false,"concrete parsed-entry builder sealed as a tuple"],
+    ["erased_storage_constructor","_table_or_empty","value",142,1,false,"concrete TOML table value"],
+]
 
 [[stored_any.files]]
 path = "src/core/config.jl"

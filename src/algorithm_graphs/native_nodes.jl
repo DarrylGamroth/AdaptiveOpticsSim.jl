@@ -1959,13 +1959,14 @@ end
 struct PyramidRateNode{T<:AbstractFloat} end
 
 """Construction values for one diffractive Pyramid photon-rate node."""
-struct PyramidRateNodeConfig{T<:AbstractFloat,TD,S}
+struct PyramidRateNodeConfig{T<:AbstractFloat,TD,S,MS}
     telescope::TD
     source::S
     pupil_samples::Int
     threshold::T
     modulation::T
     modulation_points::Union{Nothing,Int}
+    modulation_propagation_strategy::MS
     light_ratio::T
     diffraction_padding::Int
     psf_centering::Bool
@@ -1987,6 +1988,8 @@ function _pyramid_rate_config(
     threshold::Real,
     modulation::Real,
     modulation_points::Union{Nothing,Integer},
+    modulation_propagation_strategy::
+        AbstractPyramidModulationPropagationStrategy,
     light_ratio::Real,
     diffraction_padding::Integer,
     psf_centering::Bool,
@@ -2103,6 +2106,7 @@ function _pyramid_rate_config(
         typed_threshold,
         typed_modulation,
         points,
+        modulation_propagation_strategy,
         typed_light_ratio,
         padding,
         psf_centering,
@@ -2136,6 +2140,9 @@ function pyramid_rate_node(
     threshold::Real=0.1,
     modulation::Real=2,
     modulation_points::Union{Nothing,Integer}=nothing,
+    modulation_propagation_strategy::
+        AbstractPyramidModulationPropagationStrategy=
+        PyramidPupilTiltStrategy(),
     light_ratio::Real=0,
     diffraction_padding::Integer=2,
     psf_centering::Bool=true,
@@ -2160,6 +2167,7 @@ function pyramid_rate_node(
         threshold,
         modulation,
         modulation_points,
+        modulation_propagation_strategy,
         light_ratio,
         diffraction_padding,
         psf_centering,
@@ -2248,6 +2256,8 @@ function prepare_graph_node(
         threshold=config.threshold,
         modulation=config.modulation,
         modulation_points=config.modulation_points,
+        modulation_propagation_strategy=
+            config.modulation_propagation_strategy,
         light_ratio=config.light_ratio,
         diffraction_padding=config.diffraction_padding,
         psf_centering=config.psf_centering,

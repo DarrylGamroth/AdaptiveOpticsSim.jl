@@ -468,6 +468,32 @@ function _require_exact_pyramid_modulation_batch_target(
     return nothing
 end
 
+
+function _require_exact_pyramid_modulation_batch_target(
+    batch::PyramidShiftedMaskModulationWorkspace,
+    target::AbstractComputeDevice,
+)
+    _require_exact_wfs_array_targets(
+        (
+            batch.field_stack,
+            batch.shifted_masks,
+            batch.operating_weights,
+            batch.axis_1_shifts_rad,
+            batch.axis_2_shifts_rad,
+        ),
+        (
+            "Pyramid shifted-mask field stack",
+            "Pyramid shifted focal masks",
+            "Pyramid shifted-mask operating weights",
+            "Pyramid shifted-mask axis-1 coordinate shifts",
+            "Pyramid shifted-mask axis-2 coordinate shifts",
+        ),
+        target,
+        :wfs_optics,
+    )
+    return nothing
+end
+
 function _require_exact_pyramid_front_end_target(
     front_end::PyramidOpticalFrontEnd,
     target::AbstractComputeDevice,

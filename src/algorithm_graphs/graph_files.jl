@@ -856,6 +856,7 @@ function _pyramid_rate_f32_node(
         :light_ratio,
         :modulation,
         :modulation_points,
+        :modulation_propagation_strategy,
         :n_pix_edge,
         :n_pix_separation,
         :opd_schema,
@@ -907,6 +908,27 @@ function _pyramid_rate_f32_node(
             config.modulation_points,
             "$context.modulation_points",
         ) : nothing
+    modulation_propagation_strategy = if hasproperty(
+        config,
+        :modulation_propagation_strategy,
+    )
+        strategy_name = _file_identifier(
+            config.modulation_propagation_strategy,
+            "$context.modulation_propagation_strategy",
+        )
+        if strategy_name === :pupil_tilt
+            PyramidPupilTiltStrategy()
+        elseif strategy_name === :shifted_mask
+            PyramidShiftedMaskStrategy()
+        else
+            throw(AlgorithmGraphError(
+                "$context.modulation_propagation_strategy must be " *
+                "'pupil_tilt' or 'shifted_mask'",
+            ))
+        end
+    else
+        PyramidPupilTiltStrategy()
+    end
     light_ratio = hasproperty(config, :light_ratio) ?
         _file_real(config.light_ratio, "$context.light_ratio") : 0.0
     diffraction_padding = hasproperty(config, :diffraction_padding) ?
@@ -972,6 +994,7 @@ function _pyramid_rate_f32_node(
         threshold,
         modulation,
         modulation_points,
+        modulation_propagation_strategy,
         light_ratio,
         diffraction_padding,
         psf_centering,

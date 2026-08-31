@@ -28,8 +28,8 @@ end
     terminology = contract["strategy_terminology"]
     @test terminology["work_issue"] == 230
     @test terminology["delivery_state"] == "implemented"
-    @test length(terminology["families"]) == 5
-    @test length(terminology["selectors"]) == 16
+    @test length(terminology["families"]) == 6
+    @test length(terminology["selectors"]) == 18
     @test length(terminology["selection_functions"]) == 6
     @test all(endswith("Strategy"), terminology["families"])
     @test all(endswith("Strategy"), terminology["selectors"])
@@ -41,6 +41,8 @@ end
         (Backends, :AbstractReductionExecutionStrategy),
         (Detectors, :AbstractDetectorExecutionStrategy),
         (WavefrontSensors, :AbstractGroupedAccumulationStrategy),
+        (WavefrontSensors,
+            :AbstractPyramidModulationPropagationStrategy),
         (WavefrontSensors, :AbstractShackHartmannWFSSensingStrategy),
     )
     selector_types = (
@@ -55,6 +57,8 @@ end
         (WavefrontSensors, :GroupedDirectAccumulateStrategy),
         (WavefrontSensors, :GroupedStackReduceStrategy),
         (WavefrontSensors, :GroupedStaged2DStrategy),
+        (WavefrontSensors, :PyramidPupilTiltStrategy),
+        (WavefrontSensors, :PyramidShiftedMaskStrategy),
         (WavefrontSensors, :ShackHartmannWFSScalarStrategy),
         (WavefrontSensors, :ShackHartmannWFSBatchedStrategy),
         (WavefrontSensors, :ShackHartmannWFSDeviceStatsStrategy),

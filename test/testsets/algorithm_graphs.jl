@@ -1896,8 +1896,12 @@ end
     pupil_opd = graph_output(graph, Val(:pupil_opd))
     photon_rate = graph_output(graph, Val(:pwfs_photon_rate))
     frame = graph_output(graph, Val(:pwfs_frame))
+    pwfs_owner = prepared_graph_node(graph, Val(:pwfs))
 
     @test graph_name(graph) === :revolt_copper_hil
+    @test pwfs_owner.prepared.plan.propagation.
+        modulation_propagation_strategy isa
+        WavefrontSensors.PyramidShiftedMaskStrategy
     @test maximum(surface_opd) ≈ 5.0f-8 rtol = 5.0f-3
     @test minimum(surface_opd) == 0.0f0
     @test !all(iszero, atmosphere_opd)

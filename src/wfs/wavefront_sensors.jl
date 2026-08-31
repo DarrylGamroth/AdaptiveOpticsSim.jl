@@ -140,6 +140,7 @@ import ..Optics:
     microlens_numeric_type,
     microlens_propagation_plan,
     microlens_propagation_workspace,
+    modulation_offset,
     modulation_point_count,
     photon_irradiance,
     prepare_focal_plane_modulation,

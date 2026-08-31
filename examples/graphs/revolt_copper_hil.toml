@@ -26,6 +26,9 @@
 # The symmetric AOS pupil-image placement is transport-shape compatible but is
 # not a claim that the current measured pwfsRoiOffsets_64.csv registration or
 # an operational pixel reconstructor is calibrated to this simulated image.
+# The fixed modulation cycle explicitly selects shifted-mask propagation for
+# throughput. It preserves the quadrature and output normalization but is a
+# sampled detector-product approximation to the pupil-tilt reference strategy.
 # The PDM input contains unit-peak actuator surface-OPD coefficients in metres,
 # not ALPAO normalized hardware commands.
 
@@ -99,6 +102,7 @@ pupil_samples = 30
 threshold = 0.1
 modulation = 5.0
 modulation_points = 32
+modulation_propagation_strategy = "shifted_mask"
 light_ratio = 0.1
 diffraction_padding = 2
 psf_centering = true
