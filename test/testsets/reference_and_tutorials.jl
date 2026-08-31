@@ -74,6 +74,34 @@
     @test cfg["src"]["radiometry"] == "physical_photon_irradiance"
     @test cfg["src"]["radiometric_value"] ==
         source_radiometric_value(src)
+    cfg_members = valtype(typeof(cfg)) isa Union ?
+        Base.uniontypes(valtype(typeof(cfg))) :
+        (valtype(typeof(cfg)),)
+    @test all(isconcretetype, cfg_members)
+
+    normalized = AdaptiveOpticsSim.config_dict(Dict(
+        "mixed" => Any[1, "two", Any[true, 3.0]],
+        "nested" => Dict("value" => 4),
+        "omitted" => nothing,
+    ))
+    @test normalized["mixed"] == Any[1, "two", Any[true, 3.0]]
+    @test eltype(normalized["mixed"]) !== Any
+    @test eltype(normalized["mixed"][3]) !== Any
+    @test normalized["nested"] == Dict("value" => 4)
+    @test !haskey(normalized, "omitted")
+    matrix = reshape(Any[1, "two", 3.0, true], 2, 2)
+    normalized_matrix = AdaptiveOpticsSim.config_value(matrix)
+    @test normalized_matrix == matrix
+    @test size(normalized_matrix) == size(matrix)
+    @test eltype(normalized_matrix) !== Any
+    normalized_view = AdaptiveOpticsSim.config_value(@view matrix[:, :])
+    @test normalized_view == matrix
+    @test normalized_view isa Matrix
+    @test eltype(normalized_view) !== Any
+    normalized_members = valtype(typeof(normalized)) isa Union ?
+        Base.uniontypes(valtype(typeof(normalized))) :
+        (valtype(typeof(normalized)),)
+    @test all(isconcretetype, normalized_members)
     @test !isdefined(AdaptiveOpticsSim, :write_config_toml)
 
     project = TOML.parsefile(joinpath(pkgdir(AdaptiveOpticsSim),

@@ -6,6 +6,7 @@ geometry, prepared directional rendering, and atmosphere-coupled propagation.
 """
 module Atmospheres
 
+using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
 using LinearAlgebra
 using Random
@@ -21,6 +22,7 @@ import ..AdaptiveOpticsSim:
     NumericalConditionError,
     ScientificProfile,
     UnsupportedAlgorithm,
+    _fixed_size_union_vector,
     _scaled_kv56_scalar,
     atmosphere_profile,
     default_fidelity_profile,

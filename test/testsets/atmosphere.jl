@@ -60,6 +60,9 @@ end
     )
     copied_layers = copy(multilayer_definition.layers)
     copied_layers[1] = copied_layers[2]
+    @test all(isconcretetype, fieldtypes(typeof(multilayer_definition)))
+    @test all(isconcretetype,
+        fieldtypes(typeof(multilayer_definition.layers)))
     @test multilayer_definition.layers[1].id == AtmosphereLayerID(:ground)
     @test_throws CanonicalIndexError multilayer_definition.layers[1] =
         multilayer_definition.layers[2]

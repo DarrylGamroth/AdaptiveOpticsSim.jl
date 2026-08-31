@@ -1662,6 +1662,13 @@ end
 end
 
 @testset "TOML graph files compile to native graph definitions" begin
+    normalized_toml =
+        AdaptiveOpticsSim.AlgorithmGraphs._normalize_toml_value(
+            Any[1, "two", Any[true, 3.0]],
+        )
+    @test normalized_toml == (1, "two", (true, 3.0))
+    @test isconcretetype(typeof(normalized_toml))
+
     residual = Float32[1, 2]
     basis = zeros(Float32, 2, 2, 2)
     fill!(@view(basis[:, :, 1]), 1.0f0)

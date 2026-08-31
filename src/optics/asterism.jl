@@ -1,13 +1,33 @@
-struct Asterism{S<:AbstractSource,V<:AbstractVector{S}} <: AbstractSource
+"""
+An ordered finite collection of leaf sources.
+
+Construction freezes every source and seals the collection at its final
+cardinality. Heterogeneous source families use a concrete union element type
+rather than abstract source storage.
+"""
+struct Asterism{V<:FixedSizeVector{<:AbstractSource}} <: AbstractSource
     sources::V
-    function Asterism(sources::AbstractVector{S}) where {S<:AbstractSource}
-        frozen = Vector{S}(undef, length(sources))
-        @inbounds for i in eachindex(sources)
-            require_leaf_source(sources[i], "Asterism child")
-            frozen[i] = freeze_source(sources[i])
-        end
-        return new{S,typeof(frozen)}(frozen)
+    function Asterism{V}(sources::V) where {
+        V<:FixedSizeVector{<:AbstractSource},
+    }
+        _union_members_are_concrete(eltype(V)) || throw(
+            InvalidConfiguration(
+                "asterism storage must have concrete source type members",
+            ),
+        )
+        return new{V}(sources)
     end
+end
+
+@inline function _freeze_asterism_source(source::AbstractSource)
+    require_leaf_source(source, "Asterism child")
+    return freeze_source(source)
+end
+
+function Asterism(sources::AbstractVector{<:AbstractSource})
+    frozen = Tuple(_freeze_asterism_source(source) for source in sources)
+    storage = _fixed_size_union_vector(frozen)
+    return Asterism{typeof(storage)}(storage)
 end
 
 freeze_source(ast::Asterism) = Asterism(ast.sources)

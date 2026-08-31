@@ -117,11 +117,7 @@ _normalize_toml_value(value::Union{Bool,Integer,AbstractFloat,AbstractString}) =
     value
 
 function _normalize_toml_value(values::AbstractVector)
-    builder = Vector{Any}(undef, length(values))
-    for index in eachindex(values)
-        builder[index] = _normalize_toml_value(values[index])
-    end
-    return Tuple(builder)
+    return Tuple(_normalize_toml_value(value) for value in values)
 end
 
 
@@ -139,7 +135,7 @@ function _normalize_toml_value(value)
 end
 
 function _table_or_empty(table::AbstractDict, key::String, context::AbstractString)
-    value = get(table, key, Dict{String,Any}())
+    value = get(table, key, Dict{String,Union{}}())
     value isa AbstractDict || throw(_file_error(
         context,
         "field '$key' must be a table",
@@ -152,8 +148,8 @@ function _table_array_or_empty(
     key::String,
     context::AbstractString,
 )
-    value = get(table, key, Any[])
-    value isa AbstractVector || throw(_file_error(
+    value = get(table, key, ())
+    value isa AbstractVector || value isa Tuple || throw(_file_error(
         context,
         "field '$key' must be an array of tables",
     ))
@@ -1513,12 +1509,11 @@ function _parse_file_parameter(
     return sparse_parameter(destination, values)
 end
 
-function _parse_entries(entries::AbstractVector, parse_entry)
-    builder = Vector{Any}(undef, length(entries))
-    for (index, entry) in pairs(entries)
-        builder[index] = parse_entry(entry, Int(index))
-    end
-    return Tuple(builder)
+function _parse_entries(entries, parse_entry)
+    return Tuple(
+        parse_entry(entry, Int(index))
+        for (index, entry) in pairs(entries)
+    )
 end
 
 """
