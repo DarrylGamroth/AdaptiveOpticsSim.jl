@@ -514,6 +514,26 @@ by its unchanged 32-point diffractive Pyramid propagation; its independently
 prepared CPU graphs show more propagation variation than the remaining DM
 cost, so no precise frame-rate gain is attributed to this change.
 
+The subsequent
+[shifted-mask Pyramid profile](../benchmarks/results/platform/2026-08-30-revolt-copper-shifted-mask-pyramid.toml)
+records the explicit throughput-oriented strategy selected by both maintained
+Copper graph files. For the fixed 32-point modulation cycle it performs one
+forward transform and 32 inverse transforms, instead of the reference
+pupil-tilt strategy's 32 forward and 32 inverse transforms. A deterministic
+full-resolution atmosphere-evolved comparison preserved total flux and measured
+1.20% relative L2 error and 1.98% maximum pixel error relative to the reference
+peak. This is evidence for that workload, not a general Pyramid equivalence
+claim; `PyramidPupilTiltStrategy` remains the API default.
+
+Host-ready Copper throughput increased from 2.34 to 4.64 frames/s on CPU and
+from 9.35 to 14.91 frames/s on AMDGPU. Three sustained CUDA repetitions measured
+43.68--43.77 frames/s, compared with the prior 16.22--21.60 frames/s range on
+the same RTX 3050 Ti. The tradeoff is approximately 256 MiB for the prepared
+32-mask stack plus a bounded 64 MiB accelerator field tile at the 1024-by-1024
+Copper propagation size. The strategy is valid only for fixed prepared
+modulation; changing the modulation path requires rebuilding the masks and
+re-preparing the graph.
+
 `benchmark_gate0_latency.jl` accepts `AOS_GATE0_CARD_IDS` as a comma-separated,
 predeclared subset. The artifact records the explicit selection mode and the
 ordered card IDs. Use this for incremental evidence owned by one PR so

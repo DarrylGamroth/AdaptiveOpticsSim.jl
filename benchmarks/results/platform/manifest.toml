@@ -64,3 +64,8 @@ path = "2026-08-30-revolt-fast-dm-profile.toml"
 purpose = "Deep algorithm review and post-optimization CPU/AMDGPU profile of the full-resolution atmosphere-enabled REVOLT graphs"
 id = "REVOLT-ALGORITHM-OPTIMIZATION-REVIEW-2026-08-30"
 path = "2026-08-30-revolt-algorithm-optimization-review.toml"
+
+[[artifacts]]
+purpose = "Accuracy, memory, and CPU/AMDGPU/CUDA performance evidence for the explicit REVOLT Copper shifted-mask Pyramid approximation"
+id = "REVOLT-COPPER-SHIFTED-MASK-PYRAMID-2026-08-30"
+path = "2026-08-30-revolt-copper-shifted-mask-pyramid.toml"
