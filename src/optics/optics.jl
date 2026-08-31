@@ -16,6 +16,8 @@ import ..AdaptiveOpticsSim:
     DimensionMismatchError,
     InvalidConfiguration,
     UnsupportedAlgorithm,
+    _fixed_size_union_vector,
+    _union_members_are_concrete,
     circshift2d!,
     config_value,
     fftfreq!,

@@ -718,6 +718,16 @@ end
         [0.5, 0.5])
     spectral_leaf = with_spectrum(physical_source, source_bundle)
     directional = Asterism([physical_source])
+    @test directional.sources isa FixedSizeVector
+    @test isconcretetype(eltype(directional.sources))
+    erased_sources = AdaptiveOpticsSim.FixedSizeVectorDefault{
+        AbstractSource,
+    }(AbstractSource[physical_source])
+    normalized_directional = Asterism(erased_sources)
+    @test isconcretetype(eltype(normalized_directional.sources))
+    @test_throws InvalidConfiguration Asterism{typeof(erased_sources)}(
+        erased_sources,
+    )
     extended = with_extended_source(physical_source,
         PointCloudSourceModel([(0.0, 0.0)], [1.0]))
     third_party_expansion = TestExpandedSourceWrapper(physical_source)

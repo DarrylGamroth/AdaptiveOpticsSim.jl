@@ -7,9 +7,12 @@ struct AtmosphereLayerDefinition{T<:AbstractFloat}
     altitude::T
 end
 
-struct _FixedAtmosphereLayerDefinitions{T<:AbstractFloat} <:
+struct _FixedAtmosphereLayerDefinitions{
+    T<:AbstractFloat,
+    S<:Tuple{Vararg{AtmosphereLayerDefinition{T}}},
+} <:
     AbstractVector{AtmosphereLayerDefinition{T}}
-    _storage::Tuple{Vararg{AtmosphereLayerDefinition{T}}}
+    _storage::S
 end
 
 Base.size(layers::_FixedAtmosphereLayerDefinitions) =
@@ -59,19 +62,25 @@ Layer parameters are copied into fixed-size homogeneous host configuration
 storage. Explicit `layer_ids` are required because tuple position and altitude
 are not stable stochastic-owner identities.
 """
-struct MultiLayerAtmosphereDefinition{T<:AbstractFloat} <:
+struct MultiLayerAtmosphereDefinition{
+    T<:AbstractFloat,
+    L<:_FixedAtmosphereLayerDefinitions{T},
+} <:
     AbstractTimedAtmosphereDefinition
     r0::T
     L0::T
-    layers::_FixedAtmosphereLayerDefinitions{T}
+    layers::L
 end
 
 """Cold declaration of one infinite boundary-injection multilayer atmosphere."""
-struct InfiniteMultiLayerAtmosphereDefinition{T<:AbstractFloat} <:
+struct InfiniteMultiLayerAtmosphereDefinition{
+    T<:AbstractFloat,
+    L<:_FixedAtmosphereLayerDefinitions{T},
+} <:
     AbstractTimedAtmosphereDefinition
     r0::T
     L0::T
-    layers::_FixedAtmosphereLayerDefinitions{T}
+    layers::L
     screen_resolution::Union{Nothing,Int}
     stencil_size::Union{Nothing,Int}
 end
@@ -109,9 +118,8 @@ function _cold_atmosphere_layer_definitions(
     length(layer_ids) == n_layers || throw(InvalidConfiguration(
         "layer_ids length must match fractional_cn2"))
 
-    layers = Memory{AtmosphereLayerDefinition{T}}(undef, n_layers)
-    @inbounds for index in eachindex(layers)
-        layers[index] = AtmosphereLayerDefinition(
+    layers = Tuple(
+        AtmosphereLayerDefinition(
             _as_atmosphere_layer_id(layer_ids[index]),
             _converted_nonnegative_finite(fractional_cn2[index], T,
                 "atmosphere Cn2 fraction"),
@@ -122,12 +130,13 @@ function _cold_atmosphere_layer_definitions(
             _converted_nonnegative_finite(altitude[index], T,
                 "atmosphere layer altitude"),
         )
-    end
+        for index in 1:n_layers
+    )
     isapprox(sum(layer -> layer.cn2_fraction, layers), one(T);
         atol=T(1e-6), rtol=T(1e-6)) || throw(InvalidConfiguration(
         "fractional_cn2 must sum to 1"))
     _require_unique_cold_atmosphere_layer_ids(layers)
-    return _FixedAtmosphereLayerDefinitions{T}(Tuple(layers))
+    return _FixedAtmosphereLayerDefinitions{T,typeof(layers)}(layers)
 end
 
 function MultiLayerAtmosphereDefinition(;
@@ -147,7 +156,7 @@ function MultiLayerAtmosphereDefinition(;
         altitude,
         layer_ids,
     )
-    return MultiLayerAtmosphereDefinition{T}(
+    return MultiLayerAtmosphereDefinition{T,typeof(layers)}(
         _converted_positive_finite(r0, T, "atmosphere Fried parameter r0"),
         _converted_positive_finite(L0, T, "atmosphere outer scale L0"),
         layers,
@@ -197,7 +206,7 @@ function InfiniteMultiLayerAtmosphereDefinition(;
         altitude,
         layer_ids,
     )
-    return InfiniteMultiLayerAtmosphereDefinition{T}(
+    return InfiniteMultiLayerAtmosphereDefinition{T,typeof(layers)}(
         _converted_positive_finite(r0, T, "atmosphere Fried parameter r0"),
         _converted_positive_finite(L0, T, "atmosphere outer scale L0"),
         layers,

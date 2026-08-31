@@ -1,3 +1,32 @@
+function _concrete_union_element_type(values)
+    element_type = Union{}
+    for value in values
+        element_type = Union{element_type,typeof(value)}
+    end
+    return element_type
+end
+
+function _union_members_are_concrete(::Type{T}) where {T}
+    T === Union{} && return true
+    return all(isconcretetype, Base.uniontypes(T))
+end
+
+function _concrete_union_vector(values)
+    element_type = _concrete_union_element_type(values)
+    builder = Vector{element_type}(undef, length(values))
+    index = 1
+    for value in values
+        builder[index] = value
+        index += 1
+    end
+    return builder
+end
+
+function _fixed_size_union_vector(values)
+    builder = _concrete_union_vector(values)
+    return FixedSizeVectorDefault{eltype(builder)}(builder)
+end
+
 @kernel function fftshift2d_kernel!(dest, src, sx::Int, sy::Int, n::Int, m::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= m

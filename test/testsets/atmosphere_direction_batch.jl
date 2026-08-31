@@ -67,6 +67,11 @@ function direction_batch_test_sources(::Type{T}=Float64) where {
     ])
 end
 
+function direction_batch_has_concrete_members(::Type{T}) where {T}
+    members = T isa Union ? Base.uniontypes(T) : (T,)
+    return all(isconcretetype, members)
+end
+
 mutable struct MutableDirectionSource{T<:AbstractFloat} <:
     AdaptiveOpticsSim.Optics.AbstractSource
     coordinates_xy_arcsec::NTuple{2,T}
@@ -125,6 +130,20 @@ end
             output,
         )
         @test prepared isa PreparedAtmosphereDirectionBatch
+        @test prepared.params.sources isa FixedSizeVector
+        @test prepared.params.source_geometry_bindings isa FixedSizeVector
+        @test prepared.params.source_bindings isa FixedSizeVector
+        @test prepared.params.layer_bindings isa FixedSizeVector
+        @test all(
+            direction_batch_has_concrete_members(eltype(storage))
+            for storage in (
+                prepared.params.sources,
+                prepared.params.source_geometry_bindings,
+                prepared.params.source_bindings,
+                prepared.params.layer_bindings,
+            )
+        )
+        @test all(isconcretetype, fieldtypes(typeof(prepared.params)))
         @test atmosphere_direction_output(prepared) === output
         @test atmosphere_direction_count(prepared) == length(sources)
         @test atmosphere_direction_capacity(prepared) == length(sources)
@@ -149,7 +168,11 @@ end
             T(1e-3);
             rng=MersenneTwister(70),
         )
-        rendered = render_atmosphere_directions!(prepared, atm, epoch)
+        rendered = @inferred render_atmosphere_directions!(
+            prepared,
+            atm,
+            epoch,
+        )
         reference = serial_atmosphere_direction_stack(
             atm,
             tel,

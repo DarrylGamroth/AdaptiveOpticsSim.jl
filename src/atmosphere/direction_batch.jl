@@ -14,12 +14,10 @@ struct ExtractedScreenDirectionBatchCapability <:
 struct UnsupportedAtmosphereDirectionBatchCapability <:
     AbstractAtmosphereDirectionBatchCapability end
 
-abstract type AbstractAtmosphereSourceGeometryBinding end
-
 struct AtmosphereSourceGeometryBinding{
     S,
     T<:AbstractFloat,
-} <: AbstractAtmosphereSourceGeometryBinding
+}
     source::S
     signature::NTuple{3,T}
 end
@@ -69,10 +67,10 @@ struct AtmosphereDirectionBatchParams{
     T<:AbstractFloat,
     I<:AtmosphereIdentity,
     C<:AbstractAtmosphereDirectionBatchCapability,
-    S,
-    G<:Memory{<:AbstractAtmosphereSourceGeometryBinding},
-    R<:Memory,
-    L<:Memory,
+    S<:FixedSizeVector,
+    G<:FixedSizeVector,
+    R<:FixedSizeVector,
+    L<:FixedSizeVector,
     M<:OpticalPlaneMetadata,
 }
     identity::I
@@ -102,10 +100,10 @@ function AtmosphereDirectionBatchParams{T}(
     T<:AbstractFloat,
     I<:AtmosphereIdentity,
     C<:AbstractAtmosphereDirectionBatchCapability,
-    S,
-    G<:Memory{<:AbstractAtmosphereSourceGeometryBinding},
-    R<:Memory,
-    L<:Memory,
+    S<:FixedSizeVector,
+    G<:FixedSizeVector,
+    R<:FixedSizeVector,
+    L<:FixedSizeVector,
     M<:OpticalPlaneMetadata,
 }
     return AtmosphereDirectionBatchParams{
@@ -172,12 +170,12 @@ end
     atmosphere_direction_metadata(prepared)
 
 @inline function _freeze_batch_sources(::Nothing)
-    return (nothing,)
+    return _fixed_size_union_vector((nothing,))
 end
 
 function _freeze_batch_sources(src::AbstractSource)
     require_leaf_source(src, "atmosphere direction batch source")
-    return (freeze_source(src),)
+    return _fixed_size_union_vector((freeze_source(src),))
 end
 
 function _freeze_batch_sources(
@@ -200,7 +198,7 @@ function _freeze_batch_sources(
             "numeric and radiometric storage contract"))
         frozen[direction] = source
     end
-    return frozen
+    return FixedSizeVectorDefault{S}(frozen)
 end
 
 function _freeze_batch_sources(ast::Asterism)
@@ -222,32 +220,22 @@ function _copy_source_geometry_bindings(
     sources,
     ::Type{T},
 ) where {T<:AbstractFloat}
-    bindings = Memory{AbstractAtmosphereSourceGeometryBinding}(
-        undef,
-        length(sources),
-    )
-    @inbounds for direction in eachindex(sources)
-        source = sources[direction]
-        bindings[direction] = AtmosphereSourceGeometryBinding(
+    bindings = (
+        AtmosphereSourceGeometryBinding(
             source,
             source_geometry_signature(source, T),
         )
-    end
-    return bindings
+        for source in sources
+    )
+    return _fixed_size_union_vector(bindings)
 end
 
 function _copy_source_bindings(sources)
-    bindings = Memory{eltype(sources)}(undef, length(sources))
-    @inbounds for direction in eachindex(sources)
-        bindings[direction] = sources[direction]
-    end
-    return bindings
+    return _fixed_size_union_vector(sources)
 end
 
-function _copy_layer_bindings(layers::AbstractVector{L}) where {L}
-    bindings = Memory{L}(undef, length(layers))
-    copyto!(bindings, layers)
-    return bindings
+function _copy_layer_bindings(layers::AbstractVector)
+    return _fixed_size_union_vector(layers)
 end
 
 function _prepare_batch_geometry(

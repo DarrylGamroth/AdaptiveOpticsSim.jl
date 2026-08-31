@@ -4,6 +4,7 @@ __precompile__(true)
 
 using AbstractFFTs
 import FFTW
+using FixedSizeArrays: FixedSizeVectorDefault
 using KernelAbstractions
 using LinearAlgebra
 using Logging

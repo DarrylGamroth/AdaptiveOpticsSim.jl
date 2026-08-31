@@ -20,6 +20,39 @@ end
 
 @test AdaptiveOpticsSim.PROJECT_STATUS == :in_development
 
+@testset "Implementation storage policy" begin
+    repository = pkgdir(AdaptiveOpticsSim)
+    implementation_paths = String[]
+    for directory in ("src", "ext")
+        for (root, _, files) in walkdir(joinpath(repository, directory))
+            for file in files
+                endswith(file, ".jl") || continue
+                push!(implementation_paths, joinpath(root, file))
+            end
+        end
+    end
+    sort!(implementation_paths)
+
+    forbidden = (
+        "direct Memory storage" => r"\bMemory\s*(?:\{|\()",
+        "Any collection construction" =>
+            r"\b(?:Array|Vector|Matrix|Dict|Set|Ref|FixedSizeArray|FixedSizeVector)\s*\{[^}\n]*\bAny\b[^\n]*\}\s*\(",
+        "Any array literal" => r"\bAny\s*\[",
+        "Any field or collection-field storage" =>
+            r"(?m)^\s*[A-Za-z_]\w*\s*::\s*(?:Any|(?:Array|Vector|Matrix|Dict|Set|Ref|FixedSizeArray|FixedSizeVector)\s*\{[^\n}]*\bAny\b[^\n]*\})\s*$",
+    )
+    violations = String[]
+    for path in implementation_paths
+        source = read(path, String)
+        relative = relpath(path, repository)
+        for (label, pattern) in forbidden
+            occursin(pattern, source) || continue
+            push!(violations, "$relative: $label")
+        end
+    end
+    @test isempty(violations)
+end
+
 @testset "Selective test registry" begin
     @test resolve_test_suites(String[]) === TEST_SUITE_SPECS
     @test resolve_test_suites(["all"]) === TEST_SUITE_SPECS
