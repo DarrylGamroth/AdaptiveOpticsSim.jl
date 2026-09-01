@@ -77,7 +77,8 @@ julia --project=. test/ci/run_selected_tests.jl algorithm-graphs
 julia --project=. benchmarks/benchmark_revolt_graph_nodes.jl
 ~~~
 
-Verify both REVOLT architectures and applicable `full_optical` / `fast_dm`
+Verify both REVOLT architectures and applicable `coordinate_gaussian` /
+`grid_gaussian`
 profiles. Record warmed service-time distributions and graph configuration.
 The result is a self-paced service-cost measurement, not fixed-arrival
 PipeWire/RTC latency.

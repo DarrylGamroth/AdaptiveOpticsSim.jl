@@ -37,8 +37,8 @@ They are not a promise for arbitrary user callbacks or every optional library.
 The REVOLT Classic and REVOLT Copper TOML files are maintained executable graph
 examples. They cover atmosphere evolution, the 277-element HSDM command map,
 pupil OPD composition, Shack-Hartmann or Pyramid optical formation, and
-completed detector frames. Full-optical and fast separable-grid DM profiles are
-available.
+completed detector frames. Coordinate-Gaussian and separable grid-Gaussian DM
+profiles are available.
 
 These examples are not a claim of instrument qualification. The HSDM influence
 model is provisional until measured HSDM277 calibration is supplied. Their
@@ -93,9 +93,9 @@ device draw-sequence model. Fixed-seed reset and replay are reproducible on each
 qualified backend. Cross-vendor bitwise floating-point identity is not claimed,
 because normal and Poisson transforms may use different vendor transcendental
 lowering.
-The maintained REVOLT `fast_dm` graphs are complete five-node captured graphs
-when detector binning is one. The `full_optical` profiles remain stream-only
-because their general coordinate-sampled Gaussian DM node is not qualified.
+The maintained REVOLT `coordinate_gaussian` and `grid_gaussian` graphs are
+complete five-node captured graphs when detector binning is one and the
+coordinate profile uses the built-in linear-static actuator response.
 
 Detector capture is deliberately narrower than the general detector API. It
 admits unit-binning, full-frame CCD single-read, global-shutter CMOS, and

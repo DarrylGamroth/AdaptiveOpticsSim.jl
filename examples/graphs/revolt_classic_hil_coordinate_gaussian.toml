@@ -1,4 +1,4 @@
-# REVOLT Classic HIL sensor boundary.
+# REVOLT Classic HIL sensor boundary with coordinate-Gaussian PDM evaluation.
 #
 # The graph owns one explicitly timed five-layer atmosphere and advances it by
 # 2 ms for every complete frame, matching the maintained 500 Hz camera setting.
@@ -34,7 +34,7 @@
 # before this graph boundary.
 
 schema_version = 1
-name = "revolt_classic_hil"
+name = "revolt_classic_hil_coordinate_gaussian"
 
 [[nodes]]
 name = "atmosphere"

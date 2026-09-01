@@ -116,16 +116,17 @@ recording, and native graph instantiation are cold preparation work; replay
 launches the retained native executable. AMDGPU therefore uses its blocking,
 allocation-light completion wait only for captured execution; ordinary stream
 execution retains HostCall-compatible synchronization. The maintained built-in
-qualification covers finite multilayer
-atmosphere evolution, the regular-grid separable Gaussian DM, pupil-OPD
-composition, diffractive Shack-Hartmann rate formation, both maintained Pyramid
-modulation strategies, and qualified complete-frame CCD, CMOS, and EMCCD
-acquisition. Captured atmosphere motion and random draws advance device-resident
-state during replay and publish matching host state only after successful
-completion. The maintained REVOLT `fast_dm` graphs therefore capture all five
-nodes. `captured_graph_node_count` reports the number of nodes in the captured
-step; requesting capture when any node is unsupported fails during preparation
-rather than silently changing policy.
+qualification covers finite multilayer atmosphere evolution, coordinate and
+regular-grid Gaussian DM evaluation, pupil-OPD composition, diffractive
+Shack-Hartmann rate formation, both maintained Pyramid modulation strategies,
+and qualified complete-frame CCD, CMOS, and EMCCD acquisition.
+Coordinate-Gaussian capture currently requires the built-in linear-static
+actuator response. Captured atmosphere motion and random draws advance
+device-resident state during replay and publish matching host state only after
+successful completion. Both maintained REVOLT Gaussian profiles therefore
+capture all five nodes. `captured_graph_node_count` reports the number of nodes
+in the captured step; requesting capture when any node is unsupported fails
+during preparation rather than silently changing policy.
 
 One graph may still connect port formats with different element types where a
 node explicitly declares that conversion. Exact target ownership does not
@@ -415,7 +416,8 @@ The built-in type map currently contains `ccd_detector_acquisition_f32`,
 map for optional packages such as the Proper companion.
 
 The maintained
-[`revolt_classic_hil.toml`](../examples/graphs/revolt_classic_hil.toml) file
+[`revolt_classic_hil_coordinate_gaussian.toml`](../examples/graphs/revolt_classic_hil_coordinate_gaussian.toml)
+file
 defines the intended external-RTC sensor boundary. Its
 `multilayer_atmosphere_opd_f32` node owns and advances the maintained REVOLT
 five-layer atmosphere by exactly 2 ms per graph step. A serialized adapter
@@ -451,7 +453,8 @@ can be replaced by `deformable_mirror_surface_f32` without changing the
 downstream surface-OPD contract.
 
 The maintained
-[`revolt_copper_hil.toml`](../examples/graphs/revolt_copper_hil.toml) file
+[`revolt_copper_hil_coordinate_gaussian.toml`](../examples/graphs/revolt_copper_hil_coordinate_gaussian.toml)
+file
 defines the corresponding external-RTC boundary for Copper. It combines the
 maintained REVOLT optical and iXon camera profile with the current RTC's
 64-by-64 frame and 30-by-30 Pyramid-pupil contract. It applies the same exact
@@ -477,16 +480,16 @@ the selection explicit:
 ```julia
 include("examples/support/revolt_hil_graphs.jl")
 
-path = REVOLTHILGraphs.graph_path(:copper, :fast_dm)
+path = REVOLTHILGraphs.graph_path(:copper, :grid_gaussian)
 definition = load_algorithm_graph(path; bindings)
 graph = prepare_algorithm_graph(definition; target)
 ```
 
-`full_optical` resolves to the primary files above.
-[`revolt_classic_hil_fast_dm.toml`](../examples/graphs/revolt_classic_hil_fast_dm.toml)
+`coordinate_gaussian` resolves to the coordinate-based files above.
+[`revolt_classic_hil_grid_gaussian.toml`](../examples/graphs/revolt_classic_hil_grid_gaussian.toml)
 and
-[`revolt_copper_hil_fast_dm.toml`](../examples/graphs/revolt_copper_hil_fast_dm.toml)
-change only the provisional HSDM277 implementation. They scatter the exact
+[`revolt_copper_hil_grid_gaussian.toml`](../examples/graphs/revolt_copper_hil_grid_gaussian.toml)
+change only the provisional HSDM277 evaluation. They scatter the exact
 277-element command into its regular 19-by-19 physical grid and evaluate the
 same Gaussian influence model with a separable matrix factorization. Internal
 pupil sampling, atmosphere evolution, WFS propagation and modulation,
@@ -532,8 +535,8 @@ Architecture-file status is therefore explicit:
 
 | Architecture | File-defined executable surface | Remaining authority or implementation gate |
 |---|---|---|
-| REVOLT Classic | The primary HIL file advances the maintained five-layer atmosphere at 2 ms, applies the exact HSDM277 command-map topology with provisional normalized-pupil placement and Gaussian surface response, composes atmospheric and surface OPD, and executes diffractive SHWFS optics plus complete-frame C-BLUE One IMX425 global-shutter CMOS acquisition through the 352-by-352 frame boundary. The camera path uses the maintained 500 Hz, 1896 µs, and 24 dB settings. Its 12-bit mode, noise, dark current, zero-gain full well, and approximate 800 nm QE are published typical IMX425 characterization because the maintained HEART snapshot does not contain pixel-format or unit-calibration data. The selectable fast-DM file preserves the same 240-sample optics and detector path through a regular-grid separable surface evaluation. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind a qualified normalized-hardware-command conversion and measured HSDM277 influence model before claiming an instrument model; add any required non-atmospheric path aberrations explicitly. Replace manufacturer-typical detector values with unit-specific pixel format, QE, bias/flat, noise, saturation, and ROI calibration before claiming camera parity. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
-| REVOLT Copper | The primary HIL file advances the maintained five-layer atmosphere at 2 ms, applies the same exact command map and provisional placement/Gaussian response, composes atmospheric and surface OPD, and executes maintained 32-point modulated Pyramid optics plus complete-frame noisy EMCCD acquisition through a 64-by-64 frame boundary. The selectable fast-DM file changes only the Gaussian surface evaluation and retains the 480-sample pupil and complete Pyramid/detector model. | Bind qualified command conversion and measured HSDM277 influences. Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; add any required non-atmospheric path aberrations explicitly. |
+| REVOLT Classic | The coordinate-Gaussian HIL file advances the maintained five-layer atmosphere at 2 ms, applies the exact HSDM277 command-map topology with provisional normalized-pupil placement and Gaussian surface response, composes atmospheric and surface OPD, and executes diffractive SHWFS optics plus complete-frame C-BLUE One IMX425 global-shutter CMOS acquisition through the 352-by-352 frame boundary. The camera path uses the maintained 500 Hz, 1896 µs, and 24 dB settings. Its 12-bit mode, noise, dark current, zero-gain full well, and approximate 800 nm QE are published typical IMX425 characterization because the maintained HEART snapshot does not contain pixel-format or unit-calibration data. The grid-Gaussian file preserves the same 240-sample optics and detector path through a regular-grid separable surface evaluation. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind a qualified normalized-hardware-command conversion and measured HSDM277 influence model before claiming an instrument model; add any required non-atmospheric path aberrations explicitly. Replace manufacturer-typical detector values with unit-specific pixel format, QE, bias/flat, noise, saturation, and ROI calibration before claiming camera parity. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
+| REVOLT Copper | The coordinate-Gaussian HIL file advances the maintained five-layer atmosphere at 2 ms, applies the same exact command map and provisional placement/Gaussian response, composes atmospheric and surface OPD, and executes maintained 32-point modulated Pyramid optics plus complete-frame noisy EMCCD acquisition through a 64-by-64 frame boundary. The grid-Gaussian file changes only the Gaussian surface evaluation and retains the 480-sample pupil and complete Pyramid/detector model. | Bind qualified command conversion and measured HSDM277 influences. Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; add any required non-atmospheric path aberrations explicitly. |
 | SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
 
 End-to-end REVOLT Classic, REVOLT Copper, and SPIDERS simulations are not

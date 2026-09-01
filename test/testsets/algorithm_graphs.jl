@@ -2188,7 +2188,7 @@ end
         dirname(dirname(@__DIR__)),
         "examples",
         "graphs",
-        "revolt_classic_hil.toml",
+        "revolt_classic_hil_coordinate_gaussian.toml",
     )
     definition = load_algorithm_graph(
         path;
@@ -2211,7 +2211,7 @@ end
     frame = graph_output(graph, Val(:shwfs_frame))
     pdm_owner = prepared_graph_node(graph, Val(:pdm))
 
-    @test graph_name(graph) === :revolt_classic_hil
+    @test graph_name(graph) === :revolt_classic_hil_coordinate_gaussian
     @test graph_step_sequence(graph) == UInt64(1)
     @test influence_model(pdm_owner.deformable_mirror) ==
         GaussianInfluenceWidth(
@@ -2253,7 +2253,7 @@ end
         dirname(dirname(@__DIR__)),
         "examples",
         "graphs",
-        "revolt_copper_hil.toml",
+        "revolt_copper_hil_coordinate_gaussian.toml",
     )
     definition = load_algorithm_graph(
         path;
@@ -2276,7 +2276,7 @@ end
     frame = graph_output(graph, Val(:pwfs_frame))
     pwfs_owner = prepared_graph_node(graph, Val(:pwfs))
 
-    @test graph_name(graph) === :revolt_copper_hil
+    @test graph_name(graph) === :revolt_copper_hil_coordinate_gaussian
     @test pwfs_owner.prepared.plan.propagation.
         modulation_propagation_strategy isa
         WavefrontSensors.PyramidShiftedMaskStrategy
@@ -2293,27 +2293,31 @@ end
     @test sum(frame) > 0
 end
 
-@testset "REVOLT HIL profile selection and fast-DM graphs" begin
+@testset "REVOLT HIL Gaussian profile selection" begin
     @test REVOLTHILGraphs.supported_architectures() == (:classic, :copper)
     @test REVOLTHILGraphs.supported_profiles() ==
-        (:full_optical, :fast_dm)
+        (:coordinate_gaussian, :grid_gaussian)
     @test basename(REVOLTHILGraphs.graph_path(:classic)) ==
-        "revolt_classic_hil.toml"
+        "revolt_classic_hil_grid_gaussian.toml"
     @test basename(REVOLTHILGraphs.graph_path(
         :classic,
-        :fast_dm,
-    )) == "revolt_classic_hil_fast_dm.toml"
+        :coordinate_gaussian,
+    )) == "revolt_classic_hil_coordinate_gaussian.toml"
     @test basename(REVOLTHILGraphs.graph_path(
         :copper,
-        :fast_dm,
-    )) == "revolt_copper_hil_fast_dm.toml"
+        :coordinate_gaussian,
+    )) == "revolt_copper_hil_coordinate_gaussian.toml"
+    @test basename(REVOLTHILGraphs.graph_path(
+        :copper,
+        :grid_gaussian,
+    )) == "revolt_copper_hil_grid_gaussian.toml"
     @test_throws ArgumentError REVOLTHILGraphs.graph_path(:unknown)
     @test_throws ArgumentError REVOLTHILGraphs.graph_path(:classic, :unknown)
 
     cases = (
         (
             architecture=:classic,
-            graph_name=:revolt_classic_hil_fast_dm,
+            graph_name=:revolt_classic_hil_grid_gaussian,
             command_index=143,
             atmosphere_shape=(240, 240),
             frame_output=:shwfs_frame,
@@ -2321,7 +2325,7 @@ end
         ),
         (
             architecture=:copper,
-            graph_name=:revolt_copper_hil_fast_dm,
+            graph_name=:revolt_copper_hil_grid_gaussian,
             command_index=139,
             atmosphere_shape=(480, 480),
             frame_output=:pwfs_frame,
@@ -2336,7 +2340,7 @@ end
         definition = load_algorithm_graph(
             REVOLTHILGraphs.graph_path(
                 case.architecture,
-                :fast_dm,
+                :grid_gaussian,
             );
             bindings=(;
                 pdm_command,
@@ -2458,7 +2462,8 @@ end
     @test HILReferenceSystems.open_loop_on_axis_strehl(diagnostics) ≈ 1.0f0
 
     atmospheric = REVOLTClassicHIL.prepare_hil_system()
-    @test graph_name(atmospheric.graph) === :revolt_classic_hil_fast_dm
+    @test graph_name(atmospheric.graph) ===
+        :revolt_classic_hil_grid_gaussian
     @test size(hil_frame_buffer(atmospheric.boundary)) == (352, 352)
 end
 

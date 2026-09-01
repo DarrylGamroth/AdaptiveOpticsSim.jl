@@ -47,7 +47,7 @@ const PROFILE_WARMUP = parse(Int, get(
 const PROFILE_GRAPH_PROFILE = Symbol(lowercase(strip(get(
     ENV,
     "AOS_REVOLT_GRAPH_PROFILE",
-    "full_optical",
+    "grid_gaussian",
 ))))
 const PROFILE_EXECUTION = Symbol(lowercase(strip(get(
     ENV,

@@ -5,11 +5,12 @@
 # physical grid and the same Gaussian influence model is evaluated with the
 # separable X * C * Y' factorization. Atmosphere, pupil sampling, 32-point
 # diffractive Pyramid modulation, detector noise, 64-by-64 RTC frame, and 2 ms
-# model-time step match revolt_copper_hil.toml. Both Copper graphs explicitly
-# use the same fixed-modulation shifted-mask detector-product approximation.
+# model-time step match revolt_copper_hil_coordinate_gaussian.toml. Both Copper
+# graphs explicitly use the same fixed-modulation shifted-mask detector-product
+# approximation.
 
 schema_version = 1
-name = "revolt_copper_hil_fast_dm"
+name = "revolt_copper_hil_grid_gaussian"
 
 [[nodes]]
 name = "atmosphere"

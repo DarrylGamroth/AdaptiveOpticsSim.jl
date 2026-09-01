@@ -153,7 +153,7 @@ scripts for measured frame service time:
 julia --project=. scripts/profile_revolt_hil_runtime.jl
 julia --project=. benchmarks/benchmark_revolt_graph_nodes.jl
 AOS_REVOLT_GRAPH_BACKEND=amdgpu \
-  AOS_REVOLT_GRAPH_PROFILE=fast_dm \
+  AOS_REVOLT_GRAPH_PROFILE=grid_gaussian \
   AOS_REVOLT_GRAPH_EXECUTION=captured \
   julia --project=benchmarks/amdgpu \
   benchmarks/benchmark_revolt_graph_nodes.jl
@@ -164,8 +164,9 @@ count, and synchronization boundary. The graph-node benchmark records
 submission, completion-ticket wait, and target-ready service time separately.
 `AOS_REVOLT_GRAPH_EXECUTION=stream` is the default. Captured execution requires
 an accelerator backend and requires every node in the graph to qualify. The
-maintained REVOLT `fast_dm` graphs satisfy this contract with unit detector
-binning; the `full_optical` graphs retain the general unqualified DM node.
+maintained REVOLT `coordinate_gaussian` and `grid_gaussian` graphs satisfy this
+contract with unit detector binning and the built-in linear-static actuator
+response.
 AMDGPU stream execution retains the backend's ordinary HostCall-compatible
 synchronization. Captured execution uses a blocking completion wait to avoid
 host event/task allocation after replay; this is valid because capture

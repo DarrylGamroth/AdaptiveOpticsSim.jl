@@ -5,10 +5,11 @@
 # physical grid and the same Gaussian influence model is evaluated with the
 # separable X * C * Y' factorization. Atmosphere, pupil sampling, diffractive
 # Shack-Hartmann formation, C-BLUE One IMX425 detector model, 352-by-352 RTC
-# frame, and 2 ms model-time step match revolt_classic_hil.toml.
+# frame, and 2 ms model-time step match
+# revolt_classic_hil_coordinate_gaussian.toml.
 
 schema_version = 1
-name = "revolt_classic_hil_fast_dm"
+name = "revolt_classic_hil_grid_gaussian"
 
 [[nodes]]
 name = "atmosphere"

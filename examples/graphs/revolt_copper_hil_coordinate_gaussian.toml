@@ -1,4 +1,4 @@
-# REVOLT Copper HIL sensor boundary.
+# REVOLT Copper HIL sensor boundary with coordinate-Gaussian PDM evaluation.
 #
 # The graph owns one explicitly timed five-layer atmosphere and advances it by
 # 2 ms for every complete frame. A serialized RTC adapter places one complete
@@ -33,7 +33,7 @@
 # not ALPAO normalized hardware commands.
 
 schema_version = 1
-name = "revolt_copper_hil"
+name = "revolt_copper_hil_coordinate_gaussian"
 
 [[nodes]]
 name = "atmosphere"

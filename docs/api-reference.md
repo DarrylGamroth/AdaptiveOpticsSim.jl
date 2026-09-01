@@ -225,15 +225,16 @@ captured_graph_node_count(graph)
 Capture is strict: preparation records the complete node sequence and
 delayed-link commits as one native graph, and fails when any node is unqualified
 or when the selected backend cannot capture the operation. The current built-in
-qualified operations are the finite multilayer-atmosphere node, regular-grid
-separable Gaussian DM, pupil-OPD composition, diffractive Shack-Hartmann rate
-formation, and Pyramid rate formation with either maintained modulation
-strategy. Unit-binning full-frame CCD, global-shutter CMOS, and linear
-sequential EMCCD acquisition nodes also qualify for their built-in simple
-response models. Preparation rejects richer or unsupported detector models
-instead of mixing stream execution into the captured graph. Consequently, the
-maintained REVOLT `fast_dm` graphs can be captured in full; the general
-coordinate-sampled DM in `full_optical` remains unqualified.
+qualified operations are the finite multilayer-atmosphere node, coordinate and
+regular-grid Gaussian DM evaluation, pupil-OPD composition, diffractive
+Shack-Hartmann rate formation, and Pyramid rate formation with either
+maintained modulation strategy. Unit-binning full-frame CCD, global-shutter
+CMOS, and linear sequential EMCCD acquisition nodes also qualify for their
+built-in simple response models. The coordinate-Gaussian node currently
+qualifies only with the built-in linear-static actuator response. Preparation
+rejects richer or unsupported detector and actuator models instead of mixing
+stream execution into the captured graph. Consequently, both maintained
+REVOLT Gaussian profiles can be captured in full.
 
 `step_graph!` completes the frame before returning. Advanced GPU applications
 may use the bounded capacity-one split boundary:

@@ -226,7 +226,7 @@ frame output:
 using AdaptiveOpticsSim.AlgorithmGraphs
 
 definition = load_algorithm_graph(
-    "examples/graphs/revolt_classic_hil.toml";
+    "examples/graphs/revolt_classic_hil_coordinate_gaussian.toml";
     bindings=(;
         pdm_command=zeros(Float32, 277),
         pdm_actuator_coordinates,

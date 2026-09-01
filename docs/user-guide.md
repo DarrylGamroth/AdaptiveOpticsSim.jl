@@ -204,7 +204,7 @@ bindings = (
 )
 
 definition = load_algorithm_graph(
-    "examples/graphs/revolt_classic_hil.toml";
+    "examples/graphs/revolt_classic_hil_coordinate_gaussian.toml";
     bindings,
 )
 graph = prepare_algorithm_graph(definition)
@@ -216,13 +216,14 @@ values, and large ndarray parameters by stable name.
 
 Maintained examples include:
 
-- `examples/graphs/revolt_classic_hil.toml`
-- `examples/graphs/revolt_classic_hil_fast_dm.toml`
-- `examples/graphs/revolt_copper_hil.toml`
-- `examples/graphs/revolt_copper_hil_fast_dm.toml`
+- `examples/graphs/revolt_classic_hil_coordinate_gaussian.toml`
+- `examples/graphs/revolt_classic_hil_grid_gaussian.toml`
+- `examples/graphs/revolt_copper_hil_coordinate_gaussian.toml`
+- `examples/graphs/revolt_copper_hil_grid_gaussian.toml`
 
-The fast profile changes the provisional Gaussian DM evaluation to a separable
-regular-grid implementation without reducing detector or pupil resolution.
+The `grid_gaussian` profile uses a separable regular-grid evaluation of the
+same provisional Gaussian DM model without reducing detector or pupil
+resolution.
 
 ## External RTC Lockstep
 

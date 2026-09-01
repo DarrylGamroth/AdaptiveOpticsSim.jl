@@ -61,13 +61,13 @@ end
 
 function _bindings(profile::Symbol)
     pdm_command = zeros(Float32, _COMMAND_COUNT)
-    if profile === :full_optical
+    if profile === :coordinate_gaussian
         return (;
             pdm_command,
             pdm_actuator_coordinates=
                 REVOLTHSDM277.actuator_coordinates(Float32),
         )
-    elseif profile === :fast_dm
+    elseif profile === :grid_gaussian
         return (;
             pdm_command,
             pdm_actuator_grid_indices=
@@ -89,16 +89,16 @@ function _definition(profile::Symbol)
 end
 
 """
-    prepare_hil_system(; profile=:fast_dm, target=HostComputeDevice())
+    prepare_hil_system(; profile=:grid_gaussian, target=HostComputeDevice())
 
 Prepare the maintained, atmosphere-backed REVOLT Classic detector-frame graph
-and its 277-command lockstep HIL boundary. `profile=:fast_dm` changes only the
-provisional regular-grid Gaussian HSDM277 surface evaluation; it retains the
-240-sample pupil, 16-by-16 diffractive Shack–Hartmann optics, noisy 352-by-352
-C-BLUE One IMX425 frame, and exact physical command order.
+and its 277-command lockstep HIL boundary. `profile=:grid_gaussian` selects the
+regular-grid separable evaluation of the provisional Gaussian HSDM277 surface;
+it retains the 240-sample pupil, 16-by-16 diffractive Shack–Hartmann optics,
+noisy 352-by-352 C-BLUE One IMX425 frame, and exact physical command order.
 """
 function prepare_hil_system(;
-    profile::Symbol=:fast_dm,
+    profile::Symbol=:grid_gaussian,
     target=HostComputeDevice(),
 )
     graph = prepare_algorithm_graph(_definition(profile); target)
@@ -138,7 +138,7 @@ function _calibration_detector(production_detector)
 end
 
 """
-    prepare_calibration_system(; profile=:fast_dm,
+    prepare_calibration_system(; profile=:grid_gaussian,
         target=HostComputeDevice())
 
 Prepare a flat, noiseless REVOLT Classic calibration graph. It retains the
@@ -148,7 +148,7 @@ OPD and disabling detector noise. It is intended only for a simulation-local
 interaction matrix; it is not an instrument calibration.
 """
 function prepare_calibration_system(;
-    profile::Symbol=:fast_dm,
+    profile::Symbol=:grid_gaussian,
     target=HostComputeDevice(),
 )
     production = _definition(profile)
