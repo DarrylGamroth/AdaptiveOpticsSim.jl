@@ -131,7 +131,8 @@ end
     context::CUDAPreparedDeviceExecutionContext,
 ) where {F}
     target_context = CUDA.context(context.device)
-    CUDA.isvalid(target_context) || throw(AdaptiveOpticsSim.InvalidConfiguration(
+    CUDA.CUDACore.isvalid(target_context) || throw(
+        AdaptiveOpticsSim.InvalidConfiguration(
         "the prepared CUDA context is no longer valid",
     ))
     old_context = CUDA.context!(target_context)
@@ -142,7 +143,7 @@ end
     finally
         CUDA.stream!(old_stream)
         if old_context !== nothing && old_context != target_context &&
-                CUDA.isvalid(old_context)
+                CUDA.CUDACore.isvalid(old_context)
             CUDA.context!(old_context)
         end
     end
