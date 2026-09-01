@@ -338,6 +338,55 @@ end
 end
 
 #
+# Prepared same-device stream dependencies
+#
+# A prepared event is an accelerator command-ordering primitive, not a host
+# completion notification. Recording publishes all earlier work on one retained
+# context stream. Waiting inserts a dependency into another retained context
+# stream on the same exact device without blocking the host. Implementations
+# must allocate their event storage during preparation and reuse it on every
+# graph step.
+#
+struct _HostPreparedDeviceExecutionEvent end
+
+@inline _prepare_device_execution_event(
+    ::_HostPreparedDeviceExecutionContext,
+) = _HostPreparedDeviceExecutionEvent()
+
+@inline _record_prepared_device_execution_event!(
+    ::_HostPreparedDeviceExecutionEvent,
+    ::_HostPreparedDeviceExecutionContext,
+) = nothing
+
+@inline _wait_prepared_device_execution_event!(
+    ::_HostPreparedDeviceExecutionEvent,
+    ::_HostPreparedDeviceExecutionContext,
+) = nothing
+
+function _prepare_device_execution_event(
+    context::_AbstractPreparedDeviceExecutionContext,
+)
+    throw(InvalidConfiguration(
+        "prepared execution context $(typeof(context)) does not support " *
+        "same-device stream dependency events",
+    ))
+end
+
+function _record_prepared_device_execution_event!(event, context)
+    throw(InvalidConfiguration(
+        "prepared execution event $(typeof(event)) cannot be recorded on " *
+        "context $(typeof(context))",
+    ))
+end
+
+function _wait_prepared_device_execution_event!(event, context)
+    throw(InvalidConfiguration(
+        "prepared execution context $(typeof(context)) cannot wait on " *
+        "event $(typeof(event))",
+    ))
+end
+
+#
 # Prepared accelerator command graphs
 #
 # Device-command-graph capture is deliberately an opt-in extension seam. The

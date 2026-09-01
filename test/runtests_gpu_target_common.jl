@@ -136,11 +136,160 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
         run_captured_wfs_replay_smoke(B)
         run_captured_detector_replay_smoke(B)
         run_algorithm_graph_backend_smoke(B)
+        run_grouped_graph_execution_smoke(B)
         run_graph_rng_capture_replay(B)
         run_optional_backend_smoke(B)
         run_gpu_builder_smoke(B)
         run_revolt_like_hil_backend_smoke(B)
     end
+    return nothing
+end
+
+function _grouped_modal_control_definition(
+    residual_a,
+    residual_b,
+    basis,
+    pupil_support,
+)
+    coefficient_schema = "test.graph.grouped-modal-coefficients.f32/1"
+    opd_schema = "test.graph.grouped-opd.f32/1"
+    controller(name, input_schema) = discrete_integrator_node(
+        name;
+        extent=2,
+        sample_period_s=0.1f0,
+        input_schema,
+        output_schema=coefficient_schema,
+        gain=2.0f0,
+        tau_s=0.2f0,
+    )
+    expansion(name) = modal_opd_expansion_node(
+        name;
+        pupil_rows=2,
+        pupil_columns=2,
+        mode_count=2,
+        coefficients_schema=coefficient_schema,
+        opd_schema,
+        basis_schema="test.graph.grouped-modal-basis.f32/1",
+        pupil_support_schema="test.graph.grouped-pupil-support.bool/1",
+    )
+    return algorithm_graph(
+        (
+            controller(
+                :controller_a,
+                "test.graph.grouped-residual-a.f32/1",
+            ),
+            controller(
+                :controller_b,
+                "test.graph.grouped-residual-b.f32/1",
+            ),
+            expansion(:modal_a),
+            expansion(:modal_b),
+        );
+        name=:gpu_grouped_modal_control,
+        inputs=(
+            graph_input(
+                :residual_a,
+                :controller_a => :input,
+                residual_a,
+            ),
+            graph_input(
+                :residual_b,
+                :controller_b => :input,
+                residual_b,
+            ),
+        ),
+        outputs=(
+            graph_output(:opd_a, :modal_a => :opd),
+            graph_output(:opd_b, :modal_b => :opd),
+        ),
+        links=(
+            link(
+                :controller_a => :output,
+                :modal_a => :coefficients,
+            ),
+            link(
+                :controller_b => :output,
+                :modal_b => :coefficients,
+            ),
+        ),
+        parameters=(
+            sparse_parameter(:modal_a => :basis, basis),
+            sparse_parameter(:modal_a => :pupil_support, pupil_support),
+            sparse_parameter(:modal_b => :basis, basis),
+            sparse_parameter(:modal_b => :pupil_support, pupil_support),
+        ),
+    )
+end
+
+function run_grouped_graph_execution_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    grouped_residual_a = BackendArray(Float32[1, 2])
+    grouped_residual_b = BackendArray(Float32[3, 4])
+    stream_residual_a = BackendArray(Float32[1, 2])
+    stream_residual_b = BackendArray(Float32[3, 4])
+    basis_host = zeros(Float32, 2, 2, 2)
+    fill!(@view(basis_host[:, :, 1]), 1.0f0)
+    fill!(@view(basis_host[:, :, 2]), 2.0f0)
+    basis = BackendArray(basis_host)
+    pupil_support = BackendArray(Bool[true false; true true])
+    target = compute_device(grouped_residual_a)
+    grouped_definition = _grouped_modal_control_definition(
+        grouped_residual_a,
+        grouped_residual_b,
+        basis,
+        pupil_support,
+    )
+    stream_definition = _grouped_modal_control_definition(
+        stream_residual_a,
+        stream_residual_b,
+        basis,
+        pupil_support,
+    )
+    policy = GroupedStreamGraphExecution(
+        (:controller_a, :controller_b),
+        (:modal_a, :modal_b),
+    )
+    grouped_graph = prepare_algorithm_graph(
+        grouped_definition;
+        target,
+        execution=policy,
+    )
+    stream_graph = prepare_algorithm_graph(stream_definition; target)
+
+    @test graph_execution_policy(grouped_graph) === policy
+    @test length(grouped_graph.execution.contexts) == 2
+    @test getfield(grouped_graph.execution.contexts[1], :stream) !==
+        getfield(grouped_graph.execution.contexts[2], :stream)
+    ticket = @inferred step_graph_async!(grouped_graph)
+    @test @inferred(wait_graph_step!(ticket)) === grouped_graph
+    step_graph!(stream_graph)
+    @test Array(graph_output(grouped_graph, Val(:opd_a))) ≈
+        Array(graph_output(stream_graph, Val(:opd_a)))
+    @test Array(graph_output(grouped_graph, Val(:opd_b))) ≈
+        Array(graph_output(stream_graph, Val(:opd_b)))
+
+    copyto!(grouped_residual_a, Float32[-2, 1])
+    copyto!(grouped_residual_b, Float32[4, -3])
+    copyto!(stream_residual_a, Float32[-2, 1])
+    copyto!(stream_residual_b, Float32[4, -3])
+    Backends.synchronize_backend!(Backends.execution_style(grouped_residual_a))
+    step_graph!(grouped_graph)
+    step_graph!(stream_graph)
+    @test Array(graph_output(grouped_graph, Val(:opd_a))) ≈
+        Array(graph_output(stream_graph, Val(:opd_a)))
+    @test Array(graph_output(grouped_graph, Val(:opd_b))) ≈
+        Array(graph_output(stream_graph, Val(:opd_b)))
+
+    reset_graph!(grouped_graph)
+    reset_graph!(stream_graph)
+    step_graph!(grouped_graph)
+    step_graph!(stream_graph)
+    @test Array(graph_output(grouped_graph, Val(:opd_a))) ≈
+        Array(graph_output(stream_graph, Val(:opd_a)))
+    @test Array(graph_output(grouped_graph, Val(:opd_b))) ≈
+        Array(graph_output(stream_graph, Val(:opd_b)))
     return nothing
 end
 

@@ -11,6 +11,81 @@ stream. This is the default graph execution policy.
 """
 struct StreamGraphExecution end
 
+"""One explicitly admitted group of same-step graph-node names."""
+struct _GraphExecutionGroup{Names} end
+
+@inline _graph_execution_group_names(
+    ::_GraphExecutionGroup{Names},
+) where {Names} = Names
+
+function _graph_execution_group(names::Tuple)
+    isempty(names) && throw(AlgorithmGraphError(
+        "a grouped stream execution group must contain at least one node",
+    ))
+    all(name -> name isa Symbol, names) || throw(AlgorithmGraphError(
+        "grouped stream execution node names must be Symbols",
+    ))
+    return _GraphExecutionGroup{names}()
+end
+
+@inline _normalize_graph_execution_groups(::Tuple{}) = ()
+@inline function _normalize_graph_execution_groups(groups::Tuple)
+    return (
+        _graph_execution_group(first(groups)),
+        _normalize_graph_execution_groups(Base.tail(groups))...,
+    )
+end
+
+@inline _flatten_graph_execution_group_names(::Tuple{}) = ()
+@inline function _flatten_graph_execution_group_names(groups::Tuple)
+    return (
+        _graph_execution_group_names(first(groups))...,
+        _flatten_graph_execution_group_names(Base.tail(groups))...,
+    )
+end
+
+"""
+    GroupedStreamGraphExecution(groups...)
+
+Execute an explicit, bounded sequence of node groups. Nodes in one group have
+no same-step direct dependency and may overlap on separate retained streams of
+one exact accelerator. Every group waits for the complete preceding group on
+the device. Host execution preserves the same schedule serially.
+
+Each argument is a nonempty tuple of node names. Flattening the groups must
+exactly reproduce graph declaration order, and every direct link must cross a
+group boundary. For example:
+
+```julia
+GroupedStreamGraphExecution(
+    (:guide_star_1, :guide_star_2),
+    (:wfs_1, :wfs_2),
+    (:tomography,),
+)
+```
+"""
+struct GroupedStreamGraphExecution{Groups<:Tuple}
+    groups::Groups
+
+    @inline function GroupedStreamGraphExecution{Groups}(
+        groups::Groups,
+    ) where {Groups<:Tuple}
+        return new{Groups}(groups)
+    end
+end
+
+function GroupedStreamGraphExecution(groups::Tuple...)
+    isempty(groups) && throw(AlgorithmGraphError(
+        "grouped stream execution requires at least one execution group",
+    ))
+    normalized = _normalize_graph_execution_groups(groups)
+    names = _flatten_graph_execution_group_names(normalized)
+    length(names) == length(unique(names)) || throw(AlgorithmGraphError(
+        "each grouped stream execution node must appear exactly once",
+    ))
+    return GroupedStreamGraphExecution{typeof(normalized)}(normalized)
+end
+
 """
     CapturedGraphExecution()
 

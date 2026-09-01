@@ -3,7 +3,8 @@ export AlgorithmNodeDefinition, AlgorithmGraphDefinition
 export AlgorithmLink, DelayedAlgorithmLink
 export GraphInputDefinition, GraphOutputDefinition
 export PreparedAlgorithmGraph, GraphStepTicket
-export StreamGraphExecution, CapturedGraphExecution
+export StreamGraphExecution, GroupedStreamGraphExecution
+export CapturedGraphExecution
 export PreparedGraphHILBoundary
 export ModelTimestamp, ModelDuration, PeriodicSchedule
 export model_nanoseconds, model_time_seconds, model_duration_seconds

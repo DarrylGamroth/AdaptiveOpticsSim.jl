@@ -75,6 +75,11 @@ advances both streams, and verifies RNG reset reproducibility. This is required
 evidence for `CapturedGraphExecution`; a standalone HIP Graph smoke test is not
 sufficient.
 
+The target also executes a two-lane `GroupedStreamGraphExecution` fixture. It
+must retain distinct streams, honor the device-event barrier before both
+dependent modal expansions, match the single-stream numerical result after
+changed inputs, and remain reproducible after reset.
+
 ## CUDA On WSL
 
 Run the CUDA target on the WSL host:
@@ -88,6 +93,9 @@ ssh wsl 'cd /home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl &&
 For detector-only changes, use `test/runtests_cuda_detectors.jl`. Record Julia,
 CUDA.jl, toolkit, driver, and GPU versions. CUDA is manually validated but is
 not a continuously available release gate.
+
+The full CUDA target applies the same grouped two-branch parity, stream-identity,
+changed-input, and reset checks as the AMDGPU target.
 
 Do not treat SSH success, `CUDA.functional()`, or compilation alone as model
 evidence. The test must execute the changed operation.

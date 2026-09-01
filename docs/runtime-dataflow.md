@@ -67,24 +67,27 @@ context identities. Domain algorithms keep their canonical APIs, such as
 adapter knows about graph ports. No binding or allocation occurs in
 `step_graph!`.
 
-One graph step invokes every node once in validated declaration order. A direct
-link exposes an earlier node's ordered output to a later node in the same step.
-On one retained accelerator stream, that dependency is device execution order;
-it does not require a host barrier between the nodes. A delayed link exposes
-only the value committed after the preceding successful step. Delayed-link
-state and the graph sequence publish only when the current frame's completion
-is observed. A node or device failure makes the run fail-stop until an explicit
-reset; the graph does not claim graph-wide rollback of outputs already written
-by earlier nodes.
+One graph step invokes every node once under a schedule that preserves validated
+declaration order. A direct link exposes an earlier node's ordered output to a
+later node in the same step. The default uses one retained accelerator stream,
+so that dependency is device execution order and requires no host barrier. The
+explicit grouped-stream policy may overlap independent nodes, but it admits
+only groups whose flattened names equal declaration order and requires every
+direct link to cross a group boundary. A delayed link exposes only the value
+committed after the preceding successful step. Delayed-link state and the graph
+sequence publish only when the current frame's completion is observed. A node
+or device failure makes the run fail-stop until an explicit reset; the graph
+does not claim graph-wide rollback of outputs already written by earlier nodes.
 
 This executor has one writer and no task, queue, wall-clock pacing, transport,
 or dynamic placement policy. `prepare_algorithm_graph` accepts one exact compute
 target, defaults to the host, allocates packed column-major node outputs and
 delayed storage there, and rejects graph inputs or sparse parameters that are
-not native packed storage on that same target. The prepared graph retains one
-device execution context. `step_graph_async!` submits one frame and returns a
-single-use `GraphStepTicket`; `wait_graph_step!` completes that context,
-publishes the sequence, and releases all mutable graph storage. The queue
+not native packed storage on that same target. The default and captured
+policies retain one device execution context. Grouped execution retains a fixed
+number equal to its widest group. `step_graph_async!` submits one frame and
+returns a single-use `GraphStepTicket`; `wait_graph_step!` completes the joined
+execution, publishes the sequence, and releases all mutable graph storage. The queue
 capacity is exactly one because the next frame would otherwise reuse node
 state, workspaces, outputs, delayed-link storage, and RNG state that may still
 be in flight. Before consuming the ticket, the caller must not read graph
@@ -99,13 +102,35 @@ not falsely classify every node as nonblocking. Multiple outstanding frames
 would require separately owned bounded slots and explicit publication, not an
 unbounded task or command queue.
 
-Preparation defaults to `StreamGraphExecution()`. An accelerator application
-may instead select `CapturedGraphExecution()`. That policy records each
-complete graph step as one native CUDA Graph or HIP Graph executable. Every
-node owner must qualify, and the recorded operation contains the ordered node
-sequence followed by delayed-link commits. There is no direct-stream fallback
-inside a captured graph. Dynamic values remain in fixed device buffers, while
-evolving state needed during replay must also remain device-resident.
+Preparation defaults to `StreamGraphExecution()`. A wide MCAO or MOAO graph may
+instead select an explicit bounded schedule:
+
+```julia
+execution = GroupedStreamGraphExecution(
+    (:guide_star_1, :guide_star_2),
+    (:wfs_1, :wfs_2),
+    (:tomography,),
+)
+graph = prepare_algorithm_graph(definition; target, execution)
+```
+
+Each argument is one nonempty group. On an accelerator, the group width fixes
+the retained stream and event count during preparation. Every lane waits on all
+events from the preceding group, so this is a deliberately coarse barrier
+rather than automatic edge-level scheduling. The primary stream joins the
+final group before committing delayed links; ordinary ticket completion on
+that stream therefore observes every lane. A failed partial submission drains
+all lanes before storage can be reset. The host executes the same grouping
+serially and creates no Julia worker tasks.
+
+An accelerator application may separately select `CapturedGraphExecution()`.
+That policy records each complete graph step as one native CUDA Graph or HIP
+Graph executable. Every node owner must qualify, and the recorded operation
+contains the ordered node sequence followed by delayed-link commits. There is
+no direct-stream fallback inside a captured graph, and captured and grouped
+execution are distinct policies. Dynamic values remain in fixed device
+buffers, while evolving state needed during replay must also remain
+device-resident.
 
 `graph_node_capture_capability` defaults to unsupported. An adapter may return
 `GraphNodeCaptureSafe()` only when its enqueue path has fixed array identities,

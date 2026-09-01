@@ -72,7 +72,7 @@ end
 function _drain_failed_graph_submission!(graph::PreparedAlgorithmGraph)
     try
         _with_prepared_device_execution_context(graph.context) do
-            _synchronize_prepared_graph_execution_context!(
+            _drain_prepared_graph_execution_contexts!(
                 graph.execution,
                 graph.context,
             )
@@ -198,10 +198,15 @@ function reset_graph!(graph::PreparedAlgorithmGraph)
                 graph.execution,
                 graph.context,
             )
-            _reset_nodes!(values(graph.nodes))
-            _reset_delayed_links!(graph.delayed_links, state.delayed_values)
+            _reset_prepared_graph_execution!(
+                graph.execution,
+                graph.nodes,
+                graph.delayed_links,
+                state.delayed_values,
+                graph.context,
+            )
         finally
-            _synchronize_prepared_graph_execution_context!(
+            _drain_prepared_graph_execution_contexts!(
                 graph.execution,
                 graph.context,
             )

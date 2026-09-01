@@ -74,6 +74,14 @@ paths. The qualified WFS FFT and detector acquisition paths enqueue directly
 on the retained device context; ordinary stream execution may still use a
 backend's documented detector host-mirror strategy.
 
+`GroupedStreamGraphExecution` is supported on the host, CUDA, and AMDGPU for an
+explicit sequence of complete dependency groups. Hardware fixtures compare a
+two-branch controller/modal-expansion graph with the single-stream result and
+verify distinct retained lane streams. The policy uses one reusable dependency
+event per lane and a full device-side barrier between groups. It does not claim
+automatic graph partitioning, CPU task parallelism, or a speedup for narrow
+graphs.
+
 Support is operation-specific. Preparing a graph for an accelerator succeeds
 only when every node and bound array supports that exact target. The lockstep
 HIL boundary explicitly copies complete products and commands through host

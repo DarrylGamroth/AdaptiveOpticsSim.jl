@@ -778,6 +778,152 @@ end
 
 @inline _node_name(::PreparedGraphNode{Name}) where {Name} = Name
 
+"""Cold resources that bind each declared node to one retained context lane."""
+struct _GraphExecutionPreparation{Contexts,NodeContexts<:Tuple}
+    contexts::Contexts
+    node_contexts::NodeContexts
+end
+
+@inline _repeat_graph_node_contexts(::Tuple{}, context) = ()
+@inline function _repeat_graph_node_contexts(nodes::Tuple, context)
+    return (
+        context,
+        _repeat_graph_node_contexts(Base.tail(nodes), context)...,
+    )
+end
+
+@inline function _prepare_graph_execution_preparation(
+    ::Union{StreamGraphExecution,CapturedGraphExecution},
+    nodes::Tuple,
+    links::Tuple,
+    target::AbstractComputeDevice,
+    context,
+)
+    return _GraphExecutionPreparation(
+        (context,),
+        _repeat_graph_node_contexts(nodes, context),
+    )
+end
+
+@inline _maximum_graph_execution_group_width(::Tuple{}) = 0
+@inline function _maximum_graph_execution_group_width(groups::Tuple)
+    width = length(_graph_execution_group_names(first(groups)))
+    return max(
+        width,
+        _maximum_graph_execution_group_width(Base.tail(groups)),
+    )
+end
+
+function _prepare_grouped_graph_contexts(
+    context,
+    target::AbstractComputeDevice,
+    width::Int,
+)
+    width > 0 || throw(AlgorithmGraphError(
+        "grouped stream execution requires at least one context lane",
+    ))
+    Context = typeof(context)
+    builder = Vector{Context}(undef, width)
+    builder[1] = context
+    for index in 2:width
+        candidate = _prepare_device_execution_context(target)
+        candidate isa Context || throw(AlgorithmGraphError(
+            "grouped stream execution contexts must have one concrete type; " *
+            "got $Context and $(typeof(candidate))",
+        ))
+        builder[index] = candidate
+    end
+    return FixedSizeVectorDefault{Context}(builder)
+end
+
+@inline function _graph_execution_group_contexts(
+    ::_GraphExecutionGroup{Names},
+    contexts,
+) where {Names}
+    return ntuple(index -> contexts[index], Val(length(Names)))
+end
+
+@inline _grouped_graph_node_contexts(::Tuple{}, contexts) = ()
+@inline function _grouped_graph_node_contexts(groups::Tuple, contexts)
+    return (
+        _graph_execution_group_contexts(first(groups), contexts)...,
+        _grouped_graph_node_contexts(Base.tail(groups), contexts)...,
+    )
+end
+
+function _graph_execution_group_ordinal(
+    groups::Tuple,
+    sought::Symbol,
+    ordinal::Int=1,
+)
+    isempty(groups) && throw(AlgorithmGraphError(
+        "grouped stream execution has no node named $sought",
+    ))
+    sought in _graph_execution_group_names(first(groups)) && return ordinal
+    return _graph_execution_group_ordinal(
+        Base.tail(groups),
+        sought,
+        ordinal + 1,
+    )
+end
+
+@inline _validate_grouped_graph_links!(groups, ::Tuple{}) = nothing
+@inline function _validate_grouped_graph_links!(groups, links::Tuple)
+    direct = first(links)
+    source_name = _node_name(direct.source)
+    destination_name = _node_name(direct.destination)
+    source_group = _graph_execution_group_ordinal(groups, source_name)
+    destination_group = _graph_execution_group_ordinal(
+        groups,
+        destination_name,
+    )
+    source_group < destination_group || throw(AlgorithmGraphError(
+        "grouped stream execution direct link $source_name => " *
+        "$destination_name must cross from an earlier execution group to " *
+        "a later execution group",
+    ))
+    _validate_grouped_graph_links!(groups, Base.tail(links))
+    return nothing
+end
+
+function _prepare_graph_execution_preparation(
+    execution::GroupedStreamGraphExecution,
+    nodes::Tuple,
+    links::Tuple,
+    target::AbstractComputeDevice,
+    context,
+)
+    groups = execution.groups
+    declared_names = _node_names(nodes)
+    grouped_names = _flatten_graph_execution_group_names(groups)
+    grouped_names == declared_names || throw(AlgorithmGraphError(
+        "flattened grouped stream execution names $grouped_names must " *
+        "exactly match graph declaration order $declared_names",
+    ))
+    _validate_grouped_graph_links!(groups, links)
+    width = _maximum_graph_execution_group_width(groups)
+    contexts = _prepare_grouped_graph_contexts(context, target, width)
+    node_contexts = _grouped_graph_node_contexts(groups, contexts)
+    return _GraphExecutionPreparation(contexts, node_contexts)
+end
+
+function _synchronize_graph_execution_preparation!(
+    preparation::_GraphExecutionPreparation,
+)
+    first_error = nothing
+    for context in preparation.contexts
+        try
+            _with_prepared_device_execution_context(context) do
+                _synchronize_prepared_device_execution_context!(context)
+            end
+        catch error
+            isnothing(first_error) && (first_error = error)
+        end
+    end
+    isnothing(first_error) || throw(first_error)
+    return nothing
+end
+
 function _prepare_exact_node(
     node::_AdmittedGraphNode{Name,Node},
     outputs::NamedTuple,
@@ -832,6 +978,7 @@ end
     bindings,
     parameter_bindings,
     target,
+    ::Tuple{},
 ) = ()
 @inline function _prepare_exact_nodes(
     nodes::Tuple,
@@ -839,21 +986,26 @@ end
     bindings,
     parameter_bindings,
     target,
+    contexts::Tuple,
 )
-    return (
+    prepared = _with_prepared_device_execution_context(first(contexts)) do
         _prepare_exact_node(
             first(nodes),
             first(outputs),
             bindings,
             parameter_bindings,
             target,
-        ),
+        )
+    end
+    return (
+        prepared,
         _prepare_exact_nodes(
             Base.tail(nodes),
             Base.tail(outputs),
             bindings,
             parameter_bindings,
             target,
+            Base.tail(contexts),
         )...,
     )
 end
@@ -924,7 +1076,9 @@ single-writer graph owner. Every graph buffer must be native packed storage on
 the exact `target`; preparation never inserts an implicit host/device transfer.
 `CapturedGraphExecution()` records the complete node and delayed-link sequence
 as one native device graph. Every node owner must explicitly satisfy the
-device-command-graph capture contract.
+device-command-graph capture contract. `GroupedStreamGraphExecution` retains
+one context lane per node in the widest explicit group and inserts reusable
+same-device event dependencies between groups.
 """
 function _prepare_algorithm_graph(
     definition::AlgorithmGraphDefinition,
@@ -956,51 +1110,75 @@ function _prepare_algorithm_graph(
         _delayed_bindings(prepared_delays, delayed_values)...,
     )
     _require_unique_destinations(bindings)
-
-    node_values = _prepare_exact_nodes(
-        values(admitted_nodes),
-        values(node_outputs),
-        bindings,
-        definition.parameters,
-        target,
-    )
-    nodes = NamedTuple{keys(admitted_nodes)}(node_values)
-    outputs = _prepare_graph_outputs(
-        definition.outputs,
-        admitted_nodes,
-        node_outputs,
-    )
-    state = AlgorithmGraphState(
-        delayed_values,
-        UInt64(0),
-        UInt64(0),
-        false,
-        false,
-    )
-    prepared_execution = _prepare_graph_execution(
+    execution_preparation = _prepare_graph_execution_preparation(
         execution,
-        values(nodes),
-        prepared_delays,
-        state.delayed_values,
-        context,
-    )
-    return PreparedAlgorithmGraph(
-        definition.name,
+        values(admitted_nodes),
+        definition.links,
         target,
         context,
-        nodes,
-        prepared_execution,
-        prepared_delays,
-        prepared_inputs,
-        outputs,
-        state,
     )
+
+    try
+        node_values = _prepare_exact_nodes(
+            values(admitted_nodes),
+            values(node_outputs),
+            bindings,
+            definition.parameters,
+            target,
+            execution_preparation.node_contexts,
+        )
+        nodes = NamedTuple{keys(admitted_nodes)}(node_values)
+        outputs = _prepare_graph_outputs(
+            definition.outputs,
+            admitted_nodes,
+            node_outputs,
+        )
+        state = AlgorithmGraphState(
+            delayed_values,
+            UInt64(0),
+            UInt64(0),
+            false,
+            false,
+        )
+        _synchronize_graph_execution_preparation!(execution_preparation)
+        prepared_execution = _prepare_graph_execution(
+            execution,
+            values(nodes),
+            prepared_delays,
+            state.delayed_values,
+            context,
+            execution_preparation,
+        )
+        return PreparedAlgorithmGraph(
+            definition.name,
+            target,
+            context,
+            nodes,
+            prepared_execution,
+            prepared_delays,
+            prepared_inputs,
+            outputs,
+            state,
+        )
+    catch
+        try
+            _synchronize_graph_execution_preparation!(execution_preparation)
+        catch
+            # Preserve the preparation failure while quiescing every retained
+            # context lane on a best-effort basis.
+        end
+        rethrow()
+    end
 end
 
 function prepare_algorithm_graph(
     definition::AlgorithmGraphDefinition;
     target::AbstractComputeDevice=HostComputeDevice(),
-    execution::Union{StreamGraphExecution,CapturedGraphExecution}=
+    execution::Union{
+        StreamGraphExecution,
+        GroupedStreamGraphExecution,
+        CapturedGraphExecution,
+    }=
         StreamGraphExecution(),
 )
     context = _prepare_device_execution_context(target)

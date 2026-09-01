@@ -161,6 +161,64 @@ end
 
 AOG.reset_graph_node!(::GraphTestAddOwner) = nothing
 
+struct GraphTestSumDeclaration end
+
+struct GraphTestSumConfiguration
+    extent::Int
+    schema::String
+end
+
+struct GraphTestSumOwner{L,R,O}
+    left::L
+    right::R
+    output::O
+end
+
+function AOG.graph_node_ports(
+    ::Type{GraphTestSumDeclaration},
+    configuration::GraphTestSumConfiguration,
+)
+    format(name, direction) = AOG.graph_port_contract(
+        name,
+        direction,
+        :data,
+        Float32,
+        (configuration.extent,),
+        configuration.schema,
+        :column_major,
+    )
+    return (
+        format(:left, :input),
+        format(:right, :input),
+        format(:output, :output),
+    )
+end
+
+function AOG.prepare_graph_node(
+    ::Type{GraphTestSumDeclaration},
+    ::GraphTestSumConfiguration,
+    props,
+    inputs::NamedTuple,
+    outputs::NamedTuple,
+    parameters::NamedTuple,
+    target,
+)
+    return GraphTestSumOwner(inputs.left, inputs.right, outputs.output)
+end
+
+function AOG.step_graph_node!(owner::GraphTestSumOwner)
+    @inbounds for index in eachindex(
+        owner.output,
+        owner.left,
+        owner.right,
+    )
+        owner.output[index] = owner.left[index] + owner.right[index]
+    end
+    return nothing
+end
+
+AOG.reset_graph_node!(::GraphTestSumOwner) = nothing
+
 struct GraphTestSourceDeclaration end
 
 struct GraphTestSourceConfiguration
@@ -501,6 +559,94 @@ end
 
     @test warmed_async_graph_step_allocation_bytes(graph) == 0
     @test !graph_step_pending(graph)
+end
+
+@testset "bounded grouped stream graph execution" begin
+    schema = "test.graph.signal.f32/1"
+    source_configuration_a = GraphTestSourceConfiguration(3, 2.0f0)
+    source_configuration_b = GraphTestSourceConfiguration(3, 5.0f0)
+    add_configuration_a = GraphTestAddConfiguration(3, schema, 1.0f0)
+    add_configuration_b = GraphTestAddConfiguration(3, schema, 3.0f0)
+    sum_configuration = GraphTestSumConfiguration(3, schema)
+    definition = algorithm_graph(
+        (
+            algorithm_node(
+                :source_a,
+                GraphTestSourceDeclaration,
+                source_configuration_a,
+            ),
+            algorithm_node(
+                :source_b,
+                GraphTestSourceDeclaration,
+                source_configuration_b,
+            ),
+            algorithm_node(
+                :add_a,
+                GraphTestAddDeclaration,
+                add_configuration_a,
+            ),
+            algorithm_node(
+                :add_b,
+                GraphTestAddDeclaration,
+                add_configuration_b,
+            ),
+            algorithm_node(
+                :sum,
+                GraphTestSumDeclaration,
+                sum_configuration,
+            ),
+        );
+        name=:grouped_stream_diamond,
+        outputs=(graph_output(:result, :sum => :output),),
+        links=(
+            link(:source_a => :output, :add_a => :input),
+            link(:source_b => :output, :add_b => :input),
+            link(:add_a => :output, :sum => :left),
+            link(:add_b => :output, :sum => :right),
+        ),
+    )
+    execution = GroupedStreamGraphExecution(
+        (:source_a, :source_b),
+        (:add_a, :add_b),
+        (:sum,),
+    )
+    graph = prepare_algorithm_graph(definition; execution)
+
+    @test graph_execution_policy(graph) === execution
+    @test captured_graph_node_count(graph) == 0
+    @test length(graph.execution.contexts) == 2
+    @test graph.execution.contexts isa FixedSizeVector
+    @test graph.execution.events isa FixedSizeVector
+    @test @inferred(step_graph!(graph)) === graph
+    @test graph_output(graph, Val(:result)) == fill(11.0f0, 3)
+    @test graph_step_sequence(graph) == UInt64(1)
+    @test warmed_async_graph_step_allocation_bytes(graph) == 0
+
+    @test reset_graph!(graph) === graph
+    @test iszero(graph_step_sequence(graph))
+    @test step_graph!(graph) === graph
+    @test graph_output(graph, Val(:result)) == fill(11.0f0, 3)
+
+    @test_throws AlgorithmGraphError GroupedStreamGraphExecution()
+    @test_throws AlgorithmGraphError GroupedStreamGraphExecution(())
+    @test_throws AlgorithmGraphError GroupedStreamGraphExecution(
+        (:source_a, :source_a),
+    )
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(
+        definition;
+        execution=GroupedStreamGraphExecution(
+            (:source_b, :source_a),
+            (:add_a, :add_b),
+            (:sum,),
+        ),
+    )
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(
+        definition;
+        execution=GroupedStreamGraphExecution(
+            (:source_a, :source_b, :add_a, :add_b),
+            (:sum,),
+        ),
+    )
 end
 
 @testset "portable algorithm graph admits pure sources and sinks" begin

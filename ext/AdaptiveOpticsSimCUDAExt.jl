@@ -157,6 +157,28 @@ end
     return nothing
 end
 
+@inline function Backends._prepare_device_execution_event(
+    ::CUDAPreparedDeviceExecutionContext,
+)
+    return CUDA.CuEvent(CUDA.EVENT_DISABLE_TIMING)
+end
+
+@inline function Backends._record_prepared_device_execution_event!(
+    event::CUDA.CuEvent,
+    context::CUDAPreparedDeviceExecutionContext,
+)
+    CUDA.record(event, context.stream)
+    return nothing
+end
+
+@inline function Backends._wait_prepared_device_execution_event!(
+    event::CUDA.CuEvent,
+    context::CUDAPreparedDeviceExecutionContext,
+)
+    CUDA.wait(event, context.stream)
+    return nothing
+end
+
 function Backends._capture_prepared_device_graph(
     f::F,
     context::CUDAPreparedDeviceExecutionContext,

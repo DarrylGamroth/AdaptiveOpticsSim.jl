@@ -208,9 +208,28 @@ step_graph!(graph)
 reset_graph!(graph)
 ~~~
 
-`StreamGraphExecution()` is the default. On CUDA or AMDGPU, an application may
-request native command-graph replay when every node in the graph is explicitly
-qualified:
+`StreamGraphExecution()` is the default. A graph with independent branches may
+declare bounded coarse execution groups. On CUDA or AMDGPU, nodes in each group
+use distinct retained streams; the host preserves the same schedule serially:
+
+~~~julia
+graph = prepare_algorithm_graph(
+    definition;
+    target,
+    execution=GroupedStreamGraphExecution(
+        (:guide_star_1, :guide_star_2),
+        (:wfs_1, :wfs_2),
+        (:tomography,),
+    ),
+)
+~~~
+
+Flattened group names must exactly match declaration order, and direct links
+must cross group boundaries. Grouped execution uses fixed reusable device
+events; it does not infer groups or create CPU tasks.
+
+On CUDA or AMDGPU, an application may instead request native command-graph
+replay when every node in the graph is explicitly qualified:
 
 ~~~julia
 graph = prepare_algorithm_graph(

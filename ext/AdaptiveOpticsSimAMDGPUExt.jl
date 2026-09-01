@@ -179,6 +179,36 @@ end
     return nothing
 end
 
+@inline function Backends._prepare_device_execution_event(
+    context::AMDGPUPreparedDeviceExecutionContext,
+)
+    return AMDGPU.HIP.HIPEvent(
+        context.stream;
+        do_record=false,
+        timing=false,
+    )
+end
+
+@inline function Backends._record_prepared_device_execution_event!(
+    event::AMDGPU.HIP.HIPEvent,
+    ::AMDGPUPreparedDeviceExecutionContext,
+)
+    AMDGPU.HIP.record(event)
+    return nothing
+end
+
+@inline function Backends._wait_prepared_device_execution_event!(
+    event::AMDGPU.HIP.HIPEvent,
+    context::AMDGPUPreparedDeviceExecutionContext,
+)
+    AMDGPU.HIP.hipStreamWaitEvent(
+        context.stream,
+        event,
+        AMDGPU.HIP.hipEventWaitDefault,
+    )
+    return nothing
+end
+
 function Backends._capture_prepared_device_graph(
     f::F,
     context::AMDGPUPreparedDeviceExecutionContext,
