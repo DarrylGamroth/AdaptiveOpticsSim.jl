@@ -128,8 +128,12 @@ For native CUDA Graph or HIP Graph execution, additionally require:
 - the adapter explicitly returns `GraphNodeCaptureSafe()`
 - every recorded address remains fixed for the prepared run
 - evolving replay state is device-resident
-- capture performs no allocation, synchronization, result query, or host-side
-  scientific-state mutation
+- the recorded device operation performs no dynamic execution-storage
+  allocation, synchronization, result query, or host-side scientific-state
+  mutation
+- Julia compilation, backend recording, and native graph instantiation remain
+  cold preparation work; repeated replay uses the retained executable and
+  bounded completion hooks
 - replay with changed input-buffer contents produces the corresponding changed
   output
 - every node in the graph explicitly satisfies the capture contract

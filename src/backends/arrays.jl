@@ -331,9 +331,10 @@ end
 #
 # Device-command-graph capture is deliberately an opt-in extension seam. The
 # callback must enqueue only fixed-address work on the retained context stream;
-# it must not synchronize, allocate execution storage, query device results, or
-# mutate host-side scientific state. Backend extensions retain both the native
-# graph and executable handles in one concrete owner.
+# it must not synchronize, allocate dynamic execution storage, query device
+# results, or mutate host-side scientific state. Julia compilation and backend
+# recording are cold work and may allocate host bookkeeping. Backend extensions
+# retain both the native graph and executable handles in one concrete owner.
 #
 function _capture_prepared_device_graph(
     ::F,

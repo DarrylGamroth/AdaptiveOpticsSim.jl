@@ -110,15 +110,19 @@ evolving state needed during replay must also remain device-resident.
 `graph_node_capture_capability` defaults to unsupported. An adapter may return
 `GraphNodeCaptureSafe()` only when its enqueue path has fixed array identities,
 keeps all evolving replay state on the device, does not mutate scientific host
-state, and performs no allocation, synchronization, or device-result query.
-The maintained built-in qualification currently covers the regular-grid
-separable Gaussian DM owner, the pupil-OPD composition owner, and the finite
-multilayer-atmosphere OPD owner. Captured atmosphere motion advances
-device-resident offsets during replay and publishes the matching host epoch
-only after successful completion. WFS transforms and detector acquisition are
-not yet qualified. `captured_graph_node_count` reports the number of nodes in
-the captured step; requesting capture when any node is unsupported fails during
-preparation rather than silently changing policy.
+state, and records no dynamic execution-storage allocation, synchronization,
+or device-result query. Julia compilation, backend recording, and native graph
+instantiation are cold preparation work; replay launches the retained native
+executable. The maintained built-in qualification covers finite multilayer
+atmosphere evolution, the regular-grid separable Gaussian DM, pupil-OPD
+composition, diffractive Shack-Hartmann rate formation, both maintained Pyramid
+modulation strategies, and qualified complete-frame CCD, CMOS, and EMCCD
+acquisition. Captured atmosphere motion and random draws advance device-resident
+state during replay and publish matching host state only after successful
+completion. The maintained REVOLT `fast_dm` graphs therefore capture all five
+nodes. `captured_graph_node_count` reports the number of nodes in the captured
+step; requesting capture when any node is unsupported fails during preparation
+rather than silently changing policy.
 
 One graph may still connect port formats with different element types where a
 node explicitly declares that conversion. Exact target ownership does not

@@ -26,8 +26,9 @@ struct GraphNodeCaptureUnsupported end
 
 """
 Trait value for a graph-node owner whose repeated enqueue operation is safe to
-record and replay as a fixed-address accelerator command graph. Reset must
-preserve every recorded storage address.
+record and replay as a fixed-address accelerator command graph. Recording is
+cold preparation; replay and its completion hooks are the repeated path. Reset
+must preserve every recorded storage address.
 """
 struct GraphNodeCaptureSafe end
 

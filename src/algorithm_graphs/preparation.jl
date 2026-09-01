@@ -174,9 +174,12 @@ end
 
 Return `GraphNodeCaptureSafe()` only when `enqueue_graph_node!` submits a
 fixed-address, replay-equivalent accelerator command sequence without host
-state mutation, allocation, synchronization, result queries, or pointer
-replacement, and when reset preserves those addresses. The conservative
-default is `GraphNodeCaptureUnsupported()`.
+scientific-state mutation, device synchronization, device-result queries,
+dynamic execution-storage allocation, or pointer replacement, and when reset
+preserves those addresses. Julia compilation, backend recording, and native
+graph instantiation are cold preparation work and may allocate; replay must
+execute only the retained native graph and its bounded completion hooks. The
+conservative default is `GraphNodeCaptureUnsupported()`.
 """
 @inline graph_node_capture_capability(owner) =
     GraphNodeCaptureUnsupported()
