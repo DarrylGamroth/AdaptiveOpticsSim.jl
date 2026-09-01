@@ -16,6 +16,12 @@ AMDGPU.functional() ||
     Backends.execute_fft_plan!(fft_buffer, inverse_plan)
     @test Array(fft_buffer) ≈ original rtol=2f-5 atol=2f-5
 
+    backward_plan = Backends.plan_bfft_backend!(fft_buffer)
+    copyto!(fft_buffer, original)
+    Backends.execute_fft_plan!(fft_buffer, forward_plan)
+    Backends.execute_fft_plan!(fft_buffer, backward_plan)
+    @test Array(fft_buffer) ≈ length(original) .* original rtol=2f-5 atol=2f-5
+
     build_backend = Calibration.default_build_backend(fft_buffer)
     build_input = Float32[1 2; 3 4]
     @test Calibration.prepare_build_matrix(

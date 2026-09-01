@@ -43,18 +43,27 @@ function validate_apple_fft_case(
     transformed = copy(original)
     fft_plan = Backends.plan_fft_backend!(transformed)
     ifft_plan = Backends.plan_ifft_backend!(transformed)
+    bfft_plan = Backends.plan_bfft_backend!(transformed)
     @test parentmodule(typeof(fft_plan)) === apple_fft_extension
     @test occursin("AdaptiveOpticsAppleFFTPlan", string(typeof(fft_plan)))
     @test occursin("AppleFFTForward", string(typeof(fft_plan)))
     @test occursin("AppleFFTInverse", string(typeof(ifft_plan)))
+    @test occursin("AppleFFTBackward", string(typeof(bfft_plan)))
     @test fft_plan.setup !== nothing
     @test ifft_plan.setup !== nothing
+    @test bfft_plan.setup !== nothing
 
     Backends.execute_fft_plan!(transformed, fft_plan)
     @test isapprox(transformed, reference;
         rtol=fft_rtol(T), atol=fft_rtol(T))
     Backends.execute_fft_plan!(transformed, ifft_plan)
     @test isapprox(transformed, original;
+        rtol=fft_rtol(T), atol=fft_rtol(T))
+
+    transformed .= original
+    Backends.execute_fft_plan!(transformed, fft_plan)
+    Backends.execute_fft_plan!(transformed, bfft_plan)
+    @test isapprox(transformed, length(original) .* original;
         rtol=fft_rtol(T), atol=fft_rtol(T))
 
     transformed .= original

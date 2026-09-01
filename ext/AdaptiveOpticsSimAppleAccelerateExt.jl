@@ -11,6 +11,7 @@ using LinearAlgebra
 abstract type AppleFFTDirection end
 struct AppleFFTForward <: AppleFFTDirection end
 struct AppleFFTInverse <: AppleFFTDirection end
+struct AppleFFTBackward <: AppleFFTDirection end
 
 """
 Type-stable Apple FFT plan with a vDSP fast path and an FFTW shape fallback.
@@ -56,6 +57,12 @@ end
     return scale * Backends._plan_fftw_bfft!(buffer, dims)
 end
 
+@inline function _fallback_plan(
+    ::Type{AppleFFTBackward}, buffer::Array{Complex{T},N}, dims,
+) where {T,N}
+    return Backends._plan_fftw_bfft!(buffer, dims)
+end
+
 function _prepare_apple_fft_plan(
     ::Type{D}, buffer::Array{Complex{T},N}, dims, use_vdsp::Bool,
 ) where {T<:Union{Float32,Float64},N,D<:AppleFFTDirection}
@@ -90,6 +97,16 @@ function _plan_inverse(buffer::Array{Complex{T},N}, dims) where {
         return _prepare_apple_fft_plan(AppleFFTInverse, buffer, dims, true)
     end
     return _prepare_apple_fft_plan(AppleFFTInverse, buffer, dims, false)
+end
+
+function _plan_backward(buffer::Array{Complex{T},N}, dims) where {
+    T<:Union{Float32,Float64},N,
+}
+    if _vdsp_shape_supported(buffer) &&
+            _full_transform_region(dims, Val(N))
+        return _prepare_apple_fft_plan(AppleFFTBackward, buffer, dims, true)
+    end
+    return _prepare_apple_fft_plan(AppleFFTBackward, buffer, dims, false)
 end
 
 function Backends.plan_fft_backend!(
@@ -140,14 +157,42 @@ function Backends.plan_ifft_backend!(
     return _plan_inverse(buffer, dims)
 end
 
+function Backends.plan_bfft_backend!(
+    buffer::Vector{Complex{T}},
+) where {T<:Union{Float32,Float64}}
+    return _plan_backward(buffer, (1,))
+end
+
+function Backends.plan_bfft_backend!(
+    buffer::Matrix{Complex{T}},
+) where {T<:Union{Float32,Float64}}
+    return _plan_backward(buffer, (1, 2))
+end
+
+function Backends.plan_bfft_backend!(
+    buffer::Vector{Complex{T}}, dims,
+) where {T<:Union{Float32,Float64}}
+    return _plan_backward(buffer, dims)
+end
+
+function Backends.plan_bfft_backend!(
+    buffer::Matrix{Complex{T}}, dims,
+) where {T<:Union{Float32,Float64}}
+    return _plan_backward(buffer, dims)
+end
+
 @inline _vdsp_direction(::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTForward}) where {T,N} =
     AppleAccelerate.FFT_FORWARD
 @inline _vdsp_direction(::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTInverse}) where {T,N} =
+    AppleAccelerate.FFT_INVERSE
+@inline _vdsp_direction(::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTBackward}) where {T,N} =
     AppleAccelerate.FFT_INVERSE
 @inline _output_scale(::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTForward}) where {T,N} =
     one(T)
 @inline _output_scale(plan::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTInverse}) where {T,N} =
     one(T) / length(plan.real_buffer)
+@inline _output_scale(::AdaptiveOpticsAppleFFTPlan{T,N,AppleFFTBackward}) where {T,N} =
+    one(T)
 
 @inline function _load_split_buffers!(
     plan::AdaptiveOpticsAppleFFTPlan{T,N}, buffer::Array{Complex{T},N},

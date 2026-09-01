@@ -86,14 +86,15 @@ end
 end
 
 @kernel function pyramid_modulation_batch_intensity_kernel!(out, stack,
-    pad::Int, batch_size::Int)
+    intensity_scale, pad::Int, batch_size::Int)
     i, j = @index(Global, NTuple)
     if i <= pad && j <= pad
         value = @inbounds out[i, j]
+        batch_intensity = zero(eltype(out))
         @inbounds for batch_index in 1:batch_size
-            value += abs2(stack[i, j, batch_index])
+            batch_intensity += abs2(stack[i, j, batch_index])
         end
-        @inbounds out[i, j] = value
+        @inbounds out[i, j] = value + intensity_scale * batch_intensity
     end
 end
 
@@ -269,12 +270,12 @@ end
 struct NoPyramidModulationBatchWorkspace end
 
 """Accelerator scratch and plans for one bounded modulation-point tile."""
-struct PyramidModulationBatchWorkspace{C,V,Pf,Pi}
+struct PyramidModulationBatchWorkspace{C,V,Pf,Pb}
     field_stack::C
     operating_weights::V
     calibration_weights::V
     fft_plan::Pf
-    ifft_plan::Pi
+    bfft_plan::Pb
     batch_size::Int
 end
 
@@ -284,13 +285,13 @@ Prepared shifted focal-plane masks and one bounded inverse-propagation tile.
 The masks are derived cache, not persistent scientific state. They are valid
 only for the fixed operating modulation used during preparation.
 """
-struct PyramidShiftedMaskModulationWorkspace{C,M,V,Pi}
+struct PyramidShiftedMaskModulationWorkspace{C,M,V,Pb}
     field_stack::C
     shifted_masks::M
     operating_weights::V
     axis_1_shifts_rad::V
     axis_2_shifts_rad::V
-    ifft_plan::Pi
+    bfft_plan::Pb
     batch_size::Int
 end
 
@@ -375,13 +376,13 @@ function _prepare_pyramid_modulation_batch(
     copyto!(operating_weights, modulation.amplitude_weights)
     copyto!(calibration_weights, calibration_modulation.amplitude_weights)
     fft_plan = plan_repeated_fft_backend!(field_stack, (1, 2))
-    ifft_plan = plan_repeated_ifft_backend!(field_stack, (1, 2))
+    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
     return PyramidModulationBatchWorkspace(
         field_stack,
         operating_weights,
         calibration_weights,
         fft_plan,
-        ifft_plan,
+        bfft_plan,
         batch_size,
     )
 end
@@ -420,14 +421,14 @@ function _prepare_pyramid_modulation_batch(
     copyto!(operating_weights, modulation.amplitude_weights)
     copyto!(axis_1_shifts_rad, host_axis_1_shifts_rad)
     copyto!(axis_2_shifts_rad, host_axis_2_shifts_rad)
-    ifft_plan = plan_repeated_ifft_backend!(field_stack, (1, 2))
+    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
     return PyramidShiftedMaskModulationWorkspace(
         field_stack,
         shifted_masks,
         operating_weights,
         axis_1_shifts_rad,
         axis_2_shifts_rad,
-        ifft_plan,
+        bfft_plan,
         batch_size,
     )
 end
@@ -448,13 +449,13 @@ function _resize_pyramid_modulation_batch(
         batch.batch_size,
     )
     fft_plan = plan_repeated_fft_backend!(field_stack, (1, 2))
-    ifft_plan = plan_repeated_ifft_backend!(field_stack, (1, 2))
+    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
     return PyramidModulationBatchWorkspace(
         field_stack,
         batch.operating_weights,
         batch.calibration_weights,
         fft_plan,
-        ifft_plan,
+        bfft_plan,
         batch.batch_size,
     )
 end
@@ -478,14 +479,14 @@ function _resize_pyramid_modulation_batch(
         pad,
         point_count,
     )
-    ifft_plan = plan_repeated_ifft_backend!(field_stack, (1, 2))
+    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
     return PyramidShiftedMaskModulationWorkspace(
         field_stack,
         shifted_masks,
         batch.operating_weights,
         batch.axis_1_shifts_rad,
         batch.axis_2_shifts_rad,
-        ifft_plan,
+        bfft_plan,
         batch.batch_size,
     )
 end

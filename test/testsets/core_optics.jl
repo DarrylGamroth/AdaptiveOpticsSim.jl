@@ -26,6 +26,8 @@ TestAbstractFFTs.plan_fft!(::TestBackendFFTArray) = :backend_fft
 TestAbstractFFTs.plan_fft!(::TestBackendFFTArray, dims) = (:backend_fft, dims)
 TestAbstractFFTs.plan_ifft!(::TestBackendFFTArray) = :backend_ifft
 TestAbstractFFTs.plan_ifft!(::TestBackendFFTArray, dims) = (:backend_ifft, dims)
+TestAbstractFFTs.plan_bfft!(::TestBackendFFTArray) = :backend_bfft
+TestAbstractFFTs.plan_bfft!(::TestBackendFFTArray, dims) = (:backend_bfft, dims)
 
 @testset "GPU backend registry" begin
     @test !gpu_backend_loaded(AdaptiveOpticsSim.Backends.CUDABackendTag)
@@ -63,15 +65,25 @@ end
         AdaptiveOpticsSim.Backends.execute_fft_plan!(first_dimension, dim_fft)
         AdaptiveOpticsSim.Backends.execute_fft_plan!(first_dimension, dim_ifft)
         @test first_dimension ≈ original
+
+        backward = copy(original)
+        backward_fft = AdaptiveOpticsSim.Backends.plan_fft_backend!(backward)
+        backward_plan = AdaptiveOpticsSim.Backends.plan_bfft_backend!(backward)
+        AdaptiveOpticsSim.Backends.execute_fft_plan!(backward, backward_fft)
+        AdaptiveOpticsSim.Backends.execute_fft_plan!(backward, backward_plan)
+        @test backward ≈ length(original) .* original
     end
 
     backend_array = TestBackendFFTArray(zeros(ComplexF32, 4, 4))
     @test AdaptiveOpticsSim.Backends.plan_fft_backend!(backend_array) === :backend_fft
     @test AdaptiveOpticsSim.Backends.plan_ifft_backend!(backend_array) === :backend_ifft
+    @test AdaptiveOpticsSim.Backends.plan_bfft_backend!(backend_array) === :backend_bfft
     @test AdaptiveOpticsSim.Backends.plan_fft_backend!(backend_array, (1, 2)) ==
         (:backend_fft, (1, 2))
     @test AdaptiveOpticsSim.Backends.plan_ifft_backend!(backend_array, (1, 2)) ==
         (:backend_ifft, (1, 2))
+    @test AdaptiveOpticsSim.Backends.plan_bfft_backend!(backend_array, (1, 2)) ==
+        (:backend_bfft, (1, 2))
 end
 
 function explicit_direct_image_cycle!(prepared)

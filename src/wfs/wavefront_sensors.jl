@@ -59,6 +59,7 @@ import ..Backends:
     packed_valid_pair_mean,
     plan_fft_backend!,
     plan_ifft_backend!,
+    plan_repeated_bfft_backend!,
     plan_repeated_fft_backend!,
     plan_repeated_ifft_backend!,
     queue_kernel!,

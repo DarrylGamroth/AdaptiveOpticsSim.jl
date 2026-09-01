@@ -559,10 +559,22 @@ function plan_ifft_backend!(buffer::Array{T,N}, dims) where {
     return scale * _plan_fftw_bfft!(buffer, dims)
 end
 
+function plan_bfft_backend!(buffer::Array{T,N}) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return plan_bfft_backend!(buffer, ntuple(identity, N))
+end
+
+function plan_bfft_backend!(buffer::Array{T,N}, dims) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return _plan_fftw_bfft!(buffer, dims)
+end
+
 plan_fft_backend!(buffer) = plan_fft!(buffer)
 plan_fft_backend!(buffer, dims) = plan_fft!(buffer, dims)
 plan_ifft_backend!(buffer) = plan_ifft!(buffer)
 plan_ifft_backend!(buffer, dims) = plan_ifft!(buffer, dims)
+plan_bfft_backend!(buffer) = plan_bfft!(buffer)
+plan_bfft_backend!(buffer, dims) = plan_bfft!(buffer, dims)
 
 # Optical workspaces execute these transforms once or more per simulated
 # frame, so the one-time FFTW search cost is repaid over a prepared run. Keep
@@ -591,10 +603,23 @@ function plan_repeated_ifft_backend!(buffer::Array{T,N}, dims) where {
     return FFTW.plan_ifft!(buffer, dims; flags=FFTW.MEASURE)
 end
 
+function plan_repeated_bfft_backend!(buffer::Array{T,N}) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    return plan_repeated_bfft_backend!(buffer, ntuple(identity, N))
+end
+
+function plan_repeated_bfft_backend!(buffer::Array{T,N}, dims) where {
+    T<:Union{ComplexF32,ComplexF64},N}
+    Sys.isapple() && return plan_bfft_backend!(buffer, dims)
+    return FFTW.plan_bfft!(buffer, dims; flags=FFTW.MEASURE)
+end
+
 plan_repeated_fft_backend!(buffer) = plan_fft_backend!(buffer)
 plan_repeated_fft_backend!(buffer, dims) = plan_fft_backend!(buffer, dims)
 plan_repeated_ifft_backend!(buffer) = plan_ifft_backend!(buffer)
 plan_repeated_ifft_backend!(buffer, dims) = plan_ifft_backend!(buffer, dims)
+plan_repeated_bfft_backend!(buffer) = plan_bfft_backend!(buffer)
+plan_repeated_bfft_backend!(buffer, dims) = plan_bfft_backend!(buffer, dims)
 
 set_fft_provider_threads!(n::Integer) = FFTW.set_num_threads(n)
 execute_fft_plan!(buffer, plan) = (mul!(buffer, plan, buffer); buffer)

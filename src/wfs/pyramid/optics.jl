@@ -364,12 +364,20 @@ function _prepare_pyramid_shifted_focal_field!(style::AcceleratorStyle,
     return focal_field
 end
 
+@inline function pyramid_bfft_intensity_scale(
+    ::Type{T}, pad::Integer,
+) where {T<:AbstractFloat}
+    inverse_scale = inv(T(pad) * T(pad))
+    return inverse_scale * inverse_scale
+end
+
 function _propagate_pyramid_shifted_masks!(::ScalarCPUStyle, out,
     front_end::PyramidOpticalFrontEnd,
     batch::PyramidShiftedMaskModulationWorkspace)
     stack = batch.field_stack
     focal_field = pyramid_propagation_workspace(front_end).focal_field
     pad = size(out, 1)
+    intensity_scale = pyramid_bfft_intensity_scale(eltype(out), pad)
     point_count = size(batch.shifted_masks, 3)
     @inbounds for first_point in 1:batch.batch_size:point_count
         for batch_index in 1:batch.batch_size
@@ -378,13 +386,14 @@ function _propagate_pyramid_shifted_masks!(::ScalarCPUStyle, out,
                 batch.operating_weights[point] * focal_field *
                 batch.shifted_masks[:, :, point]
         end
-        execute_fft_plan!(stack, batch.ifft_plan)
+        execute_fft_plan!(stack, batch.bfft_plan)
         for j in 1:pad, i in 1:pad
             value = out[i, j]
+            batch_intensity = zero(eltype(out))
             for batch_index in 1:batch.batch_size
-                value += abs2(stack[i, j, batch_index])
+                batch_intensity += abs2(stack[i, j, batch_index])
             end
-            out[i, j] = value
+            out[i, j] = value + intensity_scale * batch_intensity
         end
     end
     return nothing
@@ -396,14 +405,16 @@ function _propagate_pyramid_shifted_masks!(style::AcceleratorStyle, out,
     stack = batch.field_stack
     focal_field = pyramid_propagation_workspace(front_end).focal_field
     pad = size(out, 1)
+    intensity_scale = pyramid_bfft_intensity_scale(eltype(out), pad)
     point_count = size(batch.shifted_masks, 3)
     @inbounds for first_point in 1:batch.batch_size:point_count
         launch_kernel!(style, pyramid_shifted_mask_batch_kernel!, stack,
             focal_field, batch.shifted_masks, batch.operating_weights,
             first_point, pad, batch.batch_size; ndrange=size(stack))
-        execute_fft_plan!(stack, batch.ifft_plan)
+        execute_fft_plan!(stack, batch.bfft_plan)
         launch_kernel!(style, pyramid_modulation_batch_intensity_kernel!,
-            out, stack, pad, batch.batch_size; ndrange=size(out))
+            out, stack, intensity_scale, pad, batch.batch_size;
+            ndrange=size(out))
     end
     return nothing
 end
@@ -413,13 +424,15 @@ end
     batch::PyramidModulationBatchWorkspace, style::AcceleratorStyle)
     stack = batch.field_stack
     pad = size(out, 1)
+    intensity_scale = pyramid_bfft_intensity_scale(eltype(out), pad)
     execute_fft_plan!(stack, batch.fft_plan)
     launch_kernel!(style, pyramid_modulation_batch_mask_kernel!,
         stack, pyramid_propagation_workspace(front_end).pyramid_mask,
         pad, batch.batch_size; ndrange=size(stack))
-    execute_fft_plan!(stack, batch.ifft_plan)
+    execute_fft_plan!(stack, batch.bfft_plan)
     launch_kernel!(style, pyramid_modulation_batch_intensity_kernel!,
-        out, stack, pad, batch.batch_size; ndrange=size(out))
+        out, stack, intensity_scale, pad, batch.batch_size;
+        ndrange=size(out))
     return nothing
 end
 
@@ -519,6 +532,7 @@ end
         T(input.metadata.sampling[1] * input.metadata.sampling[2]))
     opd_to_cycles = T(2) / T(wavelength(source))
     point_count = modulation_point_count(front_end.modulation)
+    intensity_scale = pyramid_bfft_intensity_scale(T, pad)
 
     fill!(out, zero(T))
     @inbounds for first_point in 1:batch.batch_size:point_count
@@ -532,10 +546,11 @@ end
         launch_kernel_async!(style, pyramid_modulation_batch_mask_kernel!,
             batch.field_stack, propagation.pyramid_mask, pad,
             batch.batch_size; ndrange=size(batch.field_stack))
-        enqueue_fft_plan!(batch.field_stack, batch.ifft_plan)
+        enqueue_fft_plan!(batch.field_stack, batch.bfft_plan)
         launch_kernel_async!(style,
             pyramid_modulation_batch_intensity_kernel!, out,
-            batch.field_stack, pad, batch.batch_size; ndrange=size(out))
+            batch.field_stack, intensity_scale, pad, batch.batch_size;
+            ndrange=size(out))
     end
     return out
 end
@@ -556,6 +571,7 @@ end
     amplitude_scale = sqrt(T(photon_irradiance(source)) *
         T(input.metadata.sampling[1] * input.metadata.sampling[2]))
     opd_to_cycles = T(2) / T(wavelength(source))
+    intensity_scale = pyramid_bfft_intensity_scale(T, pad)
 
     fill!(out, zero(T))
     launch_kernel_async!(style, pyramid_unmodulated_pupil_field_kernel!,
@@ -570,10 +586,11 @@ end
             batch.field_stack, propagation.focal_field,
             batch.shifted_masks, batch.operating_weights, first_point, pad,
             batch.batch_size; ndrange=size(batch.field_stack))
-        enqueue_fft_plan!(batch.field_stack, batch.ifft_plan)
+        enqueue_fft_plan!(batch.field_stack, batch.bfft_plan)
         launch_kernel_async!(style,
             pyramid_modulation_batch_intensity_kernel!, out,
-            batch.field_stack, pad, batch.batch_size; ndrange=size(out))
+            batch.field_stack, intensity_scale, pad, batch.batch_size;
+            ndrange=size(out))
     end
     return out
 end

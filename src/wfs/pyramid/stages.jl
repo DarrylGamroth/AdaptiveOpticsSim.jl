@@ -89,7 +89,7 @@ end
 @inline function _pyramid_modulation_batch_workspace_binding(
     batch::PyramidModulationBatchWorkspace)
     return (batch.field_stack, batch.operating_weights,
-        batch.calibration_weights, batch.fft_plan, batch.ifft_plan,
+        batch.calibration_weights, batch.fft_plan, batch.bfft_plan,
         batch.batch_size)
 end
 
@@ -102,7 +102,7 @@ end
         batch.operating_weights,
         batch.axis_1_shifts_rad,
         batch.axis_2_shifts_rad,
-        batch.ifft_plan,
+        batch.bfft_plan,
         batch.batch_size,
     )
 end
