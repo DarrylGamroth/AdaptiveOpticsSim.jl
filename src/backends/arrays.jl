@@ -586,6 +586,16 @@ plan_repeated_ifft_backend!(buffer, dims) = plan_ifft_backend!(buffer, dims)
 
 set_fft_provider_threads!(n::Integer) = FFTW.set_num_threads(n)
 execute_fft_plan!(buffer, plan) = (mul!(buffer, plan, buffer); buffer)
+
+"""
+    enqueue_fft_plan!(buffer, plan)
+
+Enqueue one prepared in-place FFT on the current backend stream without adding
+a completion boundary. The caller owns stream ordering and the eventual
+synchronization. Backend extensions may specialize this seam when their
+in-place plan API differs from `mul!`.
+"""
+enqueue_fft_plan!(buffer, plan) = (mul!(buffer, plan, buffer); buffer)
 backend_matmul(A::AbstractMatrix, B::AbstractMatrix) = A * B
 backend_matmul_transpose_right(A::AbstractMatrix, B::AbstractMatrix) = A * transpose(B)
 

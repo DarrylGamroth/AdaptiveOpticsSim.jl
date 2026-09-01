@@ -2087,6 +2087,59 @@ end
     return nothing
 end
 
+@inline function _enqueue_shack_hartmann_rate!(
+    ::GraphNodeCaptureSafe,
+    owner::_ShackHartmannRateOwner,
+)
+    prepared = owner.prepared
+    enqueue_wfs_optical_products!(
+        prepared.output,
+        prepared.input,
+        prepared,
+    )
+    return nothing
+end
+
+@inline function _enqueue_shack_hartmann_rate!(
+    ::GraphNodeCaptureUnsupported,
+    owner::_ShackHartmannRateOwner,
+)
+    step_graph_node!(owner)
+    return nothing
+end
+
+@inline function enqueue_graph_node!(owner::_ShackHartmannRateOwner)
+    _enqueue_shack_hartmann_rate!(
+        graph_node_capture_capability(owner),
+        owner,
+    )
+    return nothing
+end
+
+@inline function _shack_hartmann_rate_capture_capability(
+    ::AcceleratorComputeDevice,
+    ::Source,
+)
+    return GraphNodeCaptureSafe()
+end
+
+@inline function _shack_hartmann_rate_capture_capability(
+    ::AbstractComputeDevice,
+    source,
+)
+    return GraphNodeCaptureUnsupported()
+end
+
+@inline function graph_node_capture_capability(
+    owner::_ShackHartmannRateOwner,
+)
+    prepared = owner.prepared
+    return _shack_hartmann_rate_capture_capability(
+        prepared.device,
+        prepared.plan.source,
+    )
+end
+
 @inline reset_graph_node!(::_ShackHartmannRateOwner) = nothing
 
 struct PyramidRateNode{T<:AbstractFloat} end
@@ -2415,6 +2468,74 @@ end
         prepared,
     )
     return nothing
+end
+
+@inline function _enqueue_pyramid_rate!(
+    ::GraphNodeCaptureSafe,
+    owner::_PyramidRateOwner,
+)
+    prepared = owner.prepared
+    enqueue_wfs_optical_products!(
+        prepared.output,
+        prepared.input,
+        prepared,
+    )
+    return nothing
+end
+
+@inline function _enqueue_pyramid_rate!(
+    ::GraphNodeCaptureUnsupported,
+    owner::_PyramidRateOwner,
+)
+    step_graph_node!(owner)
+    return nothing
+end
+
+@inline function enqueue_graph_node!(owner::_PyramidRateOwner)
+    _enqueue_pyramid_rate!(
+        graph_node_capture_capability(owner),
+        owner,
+    )
+    return nothing
+end
+
+@inline function _pyramid_rate_capture_capability(
+    ::AcceleratorComputeDevice,
+    ::Source,
+    ::NoPreparedFourPupilLGS,
+    ::PyramidModulationBatchWorkspace,
+)
+    return GraphNodeCaptureSafe()
+end
+
+@inline function _pyramid_rate_capture_capability(
+    ::AcceleratorComputeDevice,
+    ::Source,
+    ::NoPreparedFourPupilLGS,
+    ::PyramidShiftedMaskModulationWorkspace,
+)
+    return GraphNodeCaptureSafe()
+end
+
+@inline function _pyramid_rate_capture_capability(
+    ::AbstractComputeDevice,
+    source,
+    lgs_model,
+    modulation_batch,
+)
+    return GraphNodeCaptureUnsupported()
+end
+
+@inline function graph_node_capture_capability(
+    owner::_PyramidRateOwner,
+)
+    prepared = owner.prepared
+    return _pyramid_rate_capture_capability(
+        prepared.device,
+        prepared.plan.source,
+        prepared.plan.lgs_model,
+        prepared.workspace.modulation_batch,
+    )
 end
 
 @inline reset_graph_node!(::_PyramidRateOwner) = nothing

@@ -383,6 +383,34 @@ function form_wfs_optical_products!(output::IntensityMap,
     return output
 end
 
+@inline _enqueue_prepared_pyramid_lgs!(::NoPreparedFourPupilLGS) = nothing
+
+function enqueue_wfs_optical_products!(
+    output::IntensityMap,
+    input::PupilFunction,
+    plan::PreparedPyramidOptics,
+)
+    propagation = plan.workspace
+    native = _enqueue_pyramid_rate_batch!(
+        execution_style(propagation.intensity),
+        propagation.intensity,
+        plan.front_end,
+        input,
+        plan.front_end.source,
+        propagation.modulation_batch,
+    )
+    _enqueue_prepared_pyramid_lgs!(plan.plan.lgs_model)
+    factor = pyramid_output_sampling_factor(
+        plan.front_end,
+        input.metadata.dimensions[1],
+    )
+    style = execution_style(output.values)
+    launch_kernel_async!(style, bin2d_kernel!, output.values, native, factor,
+        size(output.values, 1), size(output.values, 2);
+        ndrange=size(output.values))
+    return output
+end
+
 function validate_wfs_optics_binding(output::IntensityMap,
     input::Union{PupilFunction,ElectricField},
     plan::PreparedPyramidOptics)

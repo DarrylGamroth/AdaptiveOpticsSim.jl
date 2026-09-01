@@ -438,6 +438,17 @@ end
 function form_wfs_optical_products! end
 
 """
+    enqueue_wfs_optical_products!(output, input, prepared)
+
+Internal prepared-runtime seam for a fixed-address accelerator owner. Methods
+enqueue the complete optical-product operation on the current device stream
+without synchronizing. Structural admission remains the responsibility of
+`prepare_wfs_optics`; callers must synchronize before reading or reusing any
+bound storage.
+"""
+function enqueue_wfs_optical_products! end
+
+"""
     wfs_optical_products(prepared)
 
 Return the caller-visible detector-facing photon-arrival-rate product or

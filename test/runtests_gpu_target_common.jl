@@ -132,12 +132,157 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     @testset "$(backend_label(B)) hardware target" begin
         run_captured_graph_execution_smoke(B)
         run_captured_atmosphere_replay_smoke(B)
+        run_captured_wfs_replay_smoke(B)
         run_algorithm_graph_backend_smoke(B)
         run_graph_rng_capture_replay(B)
         run_optional_backend_smoke(B)
         run_gpu_builder_smoke(B)
         run_revolt_like_hil_backend_smoke(B)
     end
+    return nothing
+end
+
+function _set_captured_wfs_opd!(opd, values)
+    copyto!(opd, values)
+    Backends.synchronize_backend!(Backends.execution_style(opd))
+    return opd
+end
+
+function _compare_captured_wfs_frame!(
+    stream_graph,
+    captured_graph,
+    output_name::Val,
+)
+    step_graph!(stream_graph)
+    step_graph!(captured_graph)
+    stream_frame = Array(graph_output(stream_graph, output_name))
+    captured_frame = Array(graph_output(captured_graph, output_name))
+    @test captured_frame ≈ stream_frame rtol = 3.0f-4 atol = 1.0f-8
+    return captured_frame
+end
+
+function run_captured_wfs_replay_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+
+    sh_opd = BackendArray(zeros(Float32, 16, 16))
+    sh_target = compute_device(sh_opd)
+    sh_definition = algorithm_graph(
+        (
+            shack_hartmann_rate_node(
+                :shwfs;
+                resolution=16,
+                telescope_diameter_m=8.0,
+                n_lenslets=4,
+                n_pix_subap=6,
+                pixel_scale_arcsec=0.1,
+                source_wavelength_m=0.75e-6,
+                source_photon_irradiance_m2_s=1.0,
+                opd_schema="test.graph.captured-pupil-opd.f32/1",
+                photon_rate_schema=
+                    "test.graph.captured-shwfs-rate.f32/1",
+            ),
+        );
+        name=:captured_shack_hartmann_rate,
+        inputs=(graph_input(:opd, :shwfs => :opd, sh_opd),),
+        outputs=(graph_output(:rate, :shwfs => :photon_rate),),
+    )
+    sh_stream = prepare_algorithm_graph(
+        sh_definition;
+        target=sh_target,
+        execution=StreamGraphExecution(),
+    )
+    sh_captured = prepare_algorithm_graph(
+        sh_definition;
+        target=sh_target,
+        execution=CapturedGraphExecution(),
+    )
+    @test captured_graph_node_count(sh_captured) == 1
+    sh_flat = _compare_captured_wfs_frame!(
+        sh_stream,
+        sh_captured,
+        Val(:rate),
+    )
+    sh_aberrated_opd = Float32[
+        (axis_1 - axis_2) * 1.0f-8 for axis_1 in 1:16, axis_2 in 1:16
+    ]
+    _set_captured_wfs_opd!(sh_opd, sh_aberrated_opd)
+    sh_aberrated = _compare_captured_wfs_frame!(
+        sh_stream,
+        sh_captured,
+        Val(:rate),
+    )
+    @test sh_aberrated != sh_flat
+    reset_graph!(sh_stream)
+    reset_graph!(sh_captured)
+    _set_captured_wfs_opd!(sh_opd, zeros(Float32, 16, 16))
+    @test _compare_captured_wfs_frame!(
+        sh_stream,
+        sh_captured,
+        Val(:rate),
+    ) ≈ sh_flat rtol = 3.0f-4 atol = 1.0f-8
+
+    pyramid_opd = BackendArray(zeros(Float32, 8, 8))
+    pyramid_target = compute_device(pyramid_opd)
+    pyramid_definition = algorithm_graph(
+        (
+            pyramid_rate_node(
+                :pwfs;
+                resolution=8,
+                telescope_diameter_m=1.22,
+                pupil_samples=4,
+                modulation=2,
+                modulation_points=4,
+                modulation_propagation_strategy=
+                    PyramidShiftedMaskStrategy(),
+                n_pix_separation=2,
+                n_pix_edge=1,
+                source_wavelength_m=0.55e-6,
+                source_photon_irradiance_m2_s=1.0,
+                opd_schema="test.graph.captured-pupil-opd.f32/1",
+                photon_rate_schema="test.graph.captured-pwfs-rate.f32/1",
+            ),
+        );
+        name=:captured_pyramid_rate,
+        inputs=(graph_input(:opd, :pwfs => :opd, pyramid_opd),),
+        outputs=(graph_output(:rate, :pwfs => :photon_rate),),
+    )
+    pyramid_stream = prepare_algorithm_graph(
+        pyramid_definition;
+        target=pyramid_target,
+        execution=StreamGraphExecution(),
+    )
+    pyramid_captured = prepare_algorithm_graph(
+        pyramid_definition;
+        target=pyramid_target,
+        execution=CapturedGraphExecution(),
+    )
+    @test captured_graph_node_count(pyramid_captured) == 1
+    pyramid_flat = _compare_captured_wfs_frame!(
+        pyramid_stream,
+        pyramid_captured,
+        Val(:rate),
+    )
+    pyramid_aberrated_opd = Float32[
+        (axis_1 + 2 * axis_2) * 1.0f-8
+        for axis_1 in 1:8, axis_2 in 1:8
+    ]
+    _set_captured_wfs_opd!(pyramid_opd, pyramid_aberrated_opd)
+    pyramid_aberrated = _compare_captured_wfs_frame!(
+        pyramid_stream,
+        pyramid_captured,
+        Val(:rate),
+    )
+    @test pyramid_aberrated != pyramid_flat
+    reset_graph!(pyramid_stream)
+    reset_graph!(pyramid_captured)
+    _set_captured_wfs_opd!(pyramid_opd, zeros(Float32, 8, 8))
+    @test _compare_captured_wfs_frame!(
+        pyramid_stream,
+        pyramid_captured,
+        Val(:rate),
+    ) ≈ pyramid_flat rtol = 3.0f-4 atol = 1.0f-8
     return nothing
 end
 

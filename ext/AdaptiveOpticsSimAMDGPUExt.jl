@@ -206,6 +206,20 @@ function Backends.execute_fft_plan!(buffer::AMDGPU.ROCArray, plan::AbstractFFTs.
     AMDGPU.synchronize()
     return buffer
 end
+function Backends.enqueue_fft_plan!(
+    buffer::AMDGPU.ROCArray,
+    plan::AMDGPU.rocFFT.ROCFFTPlan,
+)
+    plan * buffer
+    return buffer
+end
+function Backends.enqueue_fft_plan!(
+    buffer::AMDGPU.ROCArray,
+    plan::AbstractFFTs.ScaledPlan,
+)
+    plan * buffer
+    return buffer
+end
 Calibration.default_build_backend(::AMDGPU.ROCArray) =
     Calibration.GPUArrayBuildBackend(Backends.AMDGPUBackendTag)
 Calibration.prepare_build_matrix(

@@ -1042,6 +1042,75 @@ function _sh_stack_intensity!(style::AcceleratorStyle,
     return workspace.intensity_stack
 end
 
+@inline function _enqueue_shack_hartmann_rate!(
+    style::AcceleratorStyle,
+    output::IntensityMap,
+    input::PupilFunction,
+    optics::ShackHartmannOptics,
+    source::Source,
+    wavelength_m,
+)
+    workspace = microlens_propagation_workspace(optics.propagation)
+    n = input.metadata.dimensions[1]
+    n_sub = n_lenslets(optics)
+    sub = div(n, n_sub)
+    pad = size(workspace.fft_stack, 1)
+    offset_axis_1 = div(pad - sub, 2)
+    offset_axis_2 = div(pad - sub, 2)
+    T = eltype(workspace.intensity_stack)
+    pupil_cell_area = T(input.metadata.sampling[1] *
+        input.metadata.sampling[2])
+    amplitude_scale = sqrt(T(photon_irradiance(source)) * pupil_cell_area)
+    opd_to_cycles = T(2) / T(wavelength_m)
+
+    launch_kernel_async!(style, sh_explicit_pupil_stack_kernel!,
+        workspace.fft_stack, optics.front_end.layout.valid_mask,
+        input.amplitude, input.opd, workspace.phasor, amplitude_scale,
+        opd_to_cycles, n_sub, sub, offset_axis_1, offset_axis_2, n, pad;
+        ndrange=(pad, pad, n_sub, n_sub))
+    enqueue_fft_plan!(workspace.fft_stack, workspace.fft_stack_plan)
+
+    intensity_scale = sh_fft_intensity_scale(T, pad)
+    launch_kernel_async!(style, complex_abs2_stack_kernel!,
+        workspace.intensity_stack, workspace.fft_stack, intensity_scale,
+        pad, n_sub * n_sub; ndrange=size(workspace.intensity_stack))
+
+    binning = workspace.binning_pixel_scale
+    n_binned = div(pad, binning)
+    n_out = size(workspace.sampled_spot_cube, 2)
+    sample_offset_axis_1 = div(n_out - n_binned, 2)
+    sample_offset_axis_2 = div(n_out - n_binned, 2)
+    launch_kernel_async!(style, sh_sample_spot_stack_kernel!,
+        workspace.sampled_spot_cube, workspace.intensity_stack,
+        optics.front_end.layout.valid_mask, binning, n_sub, n_binned, n_out,
+        sample_offset_axis_1, sample_offset_axis_2;
+        ndrange=(n_sub, n_sub, n_out, n_out))
+
+    rate_map = output.values
+    launch_kernel_async!(style, _shack_hartmann_rate_map_copy_kernel!,
+        rate_map, workspace.sampled_spot_cube, n_sub, n_out, n_out, 0;
+        ndrange=(n_sub, n_sub, n_out, n_out))
+    return output
+end
+
+function enqueue_wfs_optical_products!(
+    output::IntensityMap,
+    input::PupilFunction,
+    prepared::PreparedShackHartmannOptics,
+)
+    optics = prepared.optics
+    source = optics.front_end.source
+    wavelength_m = _sh_front_end_wavelength(optics, input)
+    return _enqueue_shack_hartmann_rate!(
+        execution_style(input.opd),
+        output,
+        input,
+        optics,
+        source,
+        wavelength_m,
+    )
+end
+
 function form_wfs_optical_products!(output::IntensityMap, input,
     prepared::PreparedShackHartmannOptics)
     _require_sh_optics_binding(output, input, prepared)

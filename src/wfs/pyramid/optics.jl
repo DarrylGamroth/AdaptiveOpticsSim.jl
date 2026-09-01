@@ -502,6 +502,82 @@ function _pyramid_electric_field_modulation_batch!(
     return true
 end
 
+@inline function _enqueue_pyramid_rate_batch!(
+    style::AcceleratorStyle,
+    out,
+    front_end::PyramidOpticalFrontEnd,
+    input::PupilFunction,
+    source::Source,
+    batch::PyramidModulationBatchWorkspace,
+)
+    propagation = pyramid_propagation_workspace(front_end)
+    resolution = input.metadata.dimensions[1]
+    pad = size(propagation.field, 1)
+    offset = div(pad - resolution, 2)
+    T = eltype(propagation.intensity)
+    amplitude_scale = sqrt(T(photon_irradiance(source)) *
+        T(input.metadata.sampling[1] * input.metadata.sampling[2]))
+    opd_to_cycles = T(2) / T(wavelength(source))
+    point_count = modulation_point_count(front_end.modulation)
+
+    fill!(out, zero(T))
+    @inbounds for first_point in 1:batch.batch_size:point_count
+        launch_kernel_async!(style, pyramid_pupil_modulation_batch_kernel!,
+            batch.field_stack, input.amplitude, input.opd,
+            front_end.modulation.phases, batch.operating_weights,
+            propagation.phasor, amplitude_scale, opd_to_cycles, offset,
+            resolution, first_point, pad, batch.batch_size;
+            ndrange=size(batch.field_stack))
+        enqueue_fft_plan!(batch.field_stack, batch.fft_plan)
+        launch_kernel_async!(style, pyramid_modulation_batch_mask_kernel!,
+            batch.field_stack, propagation.pyramid_mask, pad,
+            batch.batch_size; ndrange=size(batch.field_stack))
+        enqueue_fft_plan!(batch.field_stack, batch.ifft_plan)
+        launch_kernel_async!(style,
+            pyramid_modulation_batch_intensity_kernel!, out,
+            batch.field_stack, pad, batch.batch_size; ndrange=size(out))
+    end
+    return out
+end
+
+@inline function _enqueue_pyramid_rate_batch!(
+    style::AcceleratorStyle,
+    out,
+    front_end::PyramidOpticalFrontEnd,
+    input::PupilFunction,
+    source::Source,
+    batch::PyramidShiftedMaskModulationWorkspace,
+)
+    propagation = pyramid_propagation_workspace(front_end)
+    resolution = input.metadata.dimensions[1]
+    pad = size(propagation.focal_field, 1)
+    offset = div(pad - resolution, 2)
+    T = eltype(propagation.intensity)
+    amplitude_scale = sqrt(T(photon_irradiance(source)) *
+        T(input.metadata.sampling[1] * input.metadata.sampling[2]))
+    opd_to_cycles = T(2) / T(wavelength(source))
+
+    fill!(out, zero(T))
+    launch_kernel_async!(style, pyramid_unmodulated_pupil_field_kernel!,
+        propagation.focal_field, input.amplitude, input.opd,
+        propagation.phasor, amplitude_scale, opd_to_cycles, offset,
+        resolution, pad; ndrange=size(propagation.focal_field))
+    enqueue_fft_plan!(propagation.focal_field, propagation.fft_plan)
+
+    point_count = size(batch.shifted_masks, 3)
+    @inbounds for first_point in 1:batch.batch_size:point_count
+        launch_kernel_async!(style, pyramid_shifted_mask_batch_kernel!,
+            batch.field_stack, propagation.focal_field,
+            batch.shifted_masks, batch.operating_weights, first_point, pad,
+            batch.batch_size; ndrange=size(batch.field_stack))
+        enqueue_fft_plan!(batch.field_stack, batch.ifft_plan)
+        launch_kernel_async!(style,
+            pyramid_modulation_batch_intensity_kernel!, out,
+            batch.field_stack, pad, batch.batch_size; ndrange=size(out))
+    end
+    return out
+end
+
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
     pupil::PupilFunction, src::AbstractSource) where {T<:AbstractFloat}
     return pyramid_intensity_core!(out, wfs, pupil, src,
