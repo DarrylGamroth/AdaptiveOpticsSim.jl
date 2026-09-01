@@ -1108,6 +1108,122 @@ function _ccd_detector_acquisition_f32_node(
     )
 end
 
+function _cmos_detector_acquisition_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    config_fields = (
+        :binning,
+        :bits,
+        :column_readout_noise_e,
+        :columns,
+        :dark_current_e_per_pixel_s,
+        :exposure_duration_s,
+        :frame_schema,
+        :full_well_e,
+        :gain,
+        :photon_noise,
+        :photon_rate_schema,
+        :pixel_scale_arcsec,
+        :quantum_efficiency,
+        :readout_noise,
+        :readout_noise_e,
+        :rng_seed,
+        :row_readout_noise_e,
+        :rows,
+        :wavelength_m,
+    )
+    required_fields = (
+        :columns,
+        :exposure_duration_s,
+        :frame_schema,
+        :photon_rate_schema,
+        :pixel_scale_arcsec,
+        :quantum_efficiency,
+        :rng_seed,
+        :rows,
+        :wavelength_m,
+    )
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+
+    binning = hasproperty(config, :binning) ? _file_integer(
+        config.binning,
+        "$context.binning",
+    ) : 1
+    gain = hasproperty(config, :gain) ?
+        _file_real(config.gain, "$context.gain") : 1.0
+    dark_current = hasproperty(config, :dark_current_e_per_pixel_s) ?
+        _file_real(
+            config.dark_current_e_per_pixel_s,
+            "$context.dark_current_e_per_pixel_s",
+        ) : 0.0
+    bits = hasproperty(config, :bits) ?
+        _file_integer(config.bits, "$context.bits") : nothing
+    full_well = hasproperty(config, :full_well_e) ?
+        _file_real(config.full_well_e, "$context.full_well_e") : nothing
+    photon_noise = hasproperty(config, :photon_noise) ?
+        _file_bool(config.photon_noise, "$context.photon_noise") : true
+    readout_noise = hasproperty(config, :readout_noise) ?
+        _file_bool(config.readout_noise, "$context.readout_noise") : false
+    readout_noise_e = hasproperty(config, :readout_noise_e) ?
+        _file_real(config.readout_noise_e, "$context.readout_noise_e") : 0.0
+    column_readout_noise = hasproperty(config, :column_readout_noise_e) ?
+        _file_real(
+            config.column_readout_noise_e,
+            "$context.column_readout_noise_e",
+        ) : 0.0
+    row_readout_noise = hasproperty(config, :row_readout_noise_e) ?
+        _file_real(
+            config.row_readout_noise_e,
+            "$context.row_readout_noise_e",
+        ) : 0.0
+
+    return cmos_detector_acquisition_node(
+        name;
+        rows=_file_integer(config.rows, "$context.rows"),
+        columns=_file_integer(config.columns, "$context.columns"),
+        binning,
+        pixel_scale_arcsec=_file_real(
+            config.pixel_scale_arcsec,
+            "$context.pixel_scale_arcsec",
+        ),
+        wavelength_m=_file_real(
+            config.wavelength_m,
+            "$context.wavelength_m",
+        ),
+        exposure_duration_s=_file_real(
+            config.exposure_duration_s,
+            "$context.exposure_duration_s",
+        ),
+        quantum_efficiency=_file_real(
+            config.quantum_efficiency,
+            "$context.quantum_efficiency",
+        ),
+        gain,
+        dark_current_e_per_pixel_s=dark_current,
+        bits,
+        full_well_e=full_well,
+        photon_noise,
+        readout_noise,
+        readout_noise_e,
+        column_readout_noise_e=column_readout_noise,
+        row_readout_noise_e=row_readout_noise,
+        rng_seed=_file_integer(config.rng_seed, "$context.rng_seed"),
+        photon_rate_schema=_file_string(
+            config.photon_rate_schema,
+            "$context.photon_rate_schema",
+        ),
+        frame_schema=_file_string(
+            config.frame_schema,
+            "$context.frame_schema",
+        ),
+        T=Float32,
+    )
+end
+
 function _emccd_detector_acquisition_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -1408,6 +1524,7 @@ function builtin_graph_node_types()
     return (
         ccd_detector_acquisition_f32=_ccd_detector_acquisition_f32_node,
         closed_loop_correction_f32=_closed_loop_correction_f32_node,
+        cmos_detector_acquisition_f32=_cmos_detector_acquisition_f32_node,
         control_matrix_reconstruction_f32=
             _control_matrix_reconstruction_f32_node,
         deformable_mirror_surface_f32=

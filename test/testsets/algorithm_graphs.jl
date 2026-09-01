@@ -1319,6 +1319,75 @@ end
     )
 end
 
+@testset "global-shutter CMOS detector-acquisition graph node" begin
+    photon_rate = fill(1_000.0f0, 4, 4)
+    node = cmos_detector_acquisition_node(
+        :detector;
+        rows=4,
+        columns=4,
+        pixel_scale_arcsec=0.1,
+        wavelength_m=0.8e-6,
+        exposure_duration_s=0.01,
+        quantum_efficiency=0.5,
+        gain=2,
+        dark_current_e_per_pixel_s=0,
+        bits=12,
+        full_well_e=1_000,
+        photon_noise=false,
+        readout_noise=false,
+        readout_noise_e=0,
+        column_readout_noise_e=0,
+        row_readout_noise_e=0,
+        rng_seed=0x1834,
+        photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+        frame_schema="test.graph.shwfs-frame.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:cmos_detector_acquisition,
+        inputs=(
+            graph_input(
+                :photon_rate,
+                :detector => :photon_rate,
+                photon_rate,
+            ),
+        ),
+        outputs=(graph_output(:frame, :detector => :frame),),
+    )
+    graph = prepare_algorithm_graph(definition)
+    owner = prepared_graph_node(graph, Val(:detector))
+    frame = graph_output(graph, Val(:frame))
+
+    @test owner.prepared.input.values === photon_rate
+    @test owner.output === frame
+    @test owner.prepared.detector.params.sensor isa
+        AdaptiveOpticsSim.Detectors.CMOSSensor
+    @test owner.prepared.detector.params.timing_model isa
+        AdaptiveOpticsSim.Detectors.GlobalShutter
+    step_graph!(graph)
+    @test frame == fill(41.0f0, 4, 4)
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+    reset_graph!(graph)
+    @test all(iszero, frame)
+    step_graph!(graph)
+    @test frame == fill(41.0f0, 4, 4)
+
+    @test_throws AlgorithmGraphError cmos_detector_acquisition_node(
+        :invalid_detector;
+        rows=4,
+        columns=4,
+        pixel_scale_arcsec=0.1,
+        wavelength_m=0.8e-6,
+        exposure_duration_s=0.01,
+        quantum_efficiency=0.5,
+        bits=12,
+        rng_seed=1,
+        photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+        frame_schema="test.graph.shwfs-frame.f32/1",
+    )
+end
+
 @testset "complete-frame EMCCD detector-acquisition graph node" begin
     photon_rate = fill(1_000.0f0, 4, 4)
     node = emccd_detector_acquisition_node(
@@ -1720,6 +1789,7 @@ end
     @test keys(builtin_graph_node_types()) == (
         :ccd_detector_acquisition_f32,
         :closed_loop_correction_f32,
+        :cmos_detector_acquisition_f32,
         :control_matrix_reconstruction_f32,
         :deformable_mirror_surface_f32,
         :discrete_integrator_f32,

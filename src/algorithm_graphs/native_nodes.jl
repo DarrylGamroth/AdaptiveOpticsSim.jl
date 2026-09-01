@@ -3145,6 +3145,332 @@ function reset_graph_node!(owner::_FrameDetectorAcquisitionOwner)
     return nothing
 end
 
+struct CMOSDetectorAcquisitionNode{T<:AbstractFloat} end
+
+@inline function _graph_adc_output_type(bits::Union{Nothing,Int})
+    bits === nothing && return nothing
+    bits <= 8 && return UInt8
+    bits <= 16 && return UInt16
+    bits <= 32 && return UInt32
+    return UInt64
+end
+
+"""Construction values for one complete-frame global-shutter CMOS acquisition."""
+struct CMOSDetectorAcquisitionNodeConfig{
+    T<:AbstractFloat,
+    N<:NoiseModel,
+}
+    rows::Int
+    columns::Int
+    binning::Int
+    pixel_scale_arcsec::T
+    wavelength_m::T
+    exposure_duration_s::T
+    quantum_efficiency::T
+    gain::T
+    dark_current_e_per_pixel_s::T
+    bits::Union{Nothing,Int}
+    full_well_e::Union{Nothing,T}
+    noise::N
+    column_readout_noise_e::T
+    row_readout_noise_e::T
+    rng_seed::UInt64
+    photon_rate_schema::String
+    frame_schema::String
+end
+
+function _cmos_detector_acquisition_config(
+    ::Type{T};
+    rows::Integer,
+    columns::Integer,
+    binning::Integer,
+    pixel_scale_arcsec::Real,
+    wavelength_m::Real,
+    exposure_duration_s::Real,
+    quantum_efficiency::Real,
+    gain::Real,
+    dark_current_e_per_pixel_s::Real,
+    bits::Union{Nothing,Integer},
+    full_well_e::Union{Nothing,Real},
+    photon_noise::Bool,
+    readout_noise::Bool,
+    readout_noise_e::Real,
+    column_readout_noise_e::Real,
+    row_readout_noise_e::Real,
+    rng_seed::Integer,
+    photon_rate_schema::AbstractString,
+    frame_schema::AbstractString,
+) where {T<:AbstractFloat}
+    n_rows = Int(rows)
+    n_columns = Int(columns)
+    bin = Int(binning)
+    output_bits = isnothing(bits) ? nothing : Int(bits)
+    n_rows > 0 && n_columns > 0 || throw(AlgorithmGraphError(
+        "CMOS photon-rate dimensions must be positive",
+    ))
+    bin > 0 || throw(AlgorithmGraphError(
+        "CMOS binning must be positive",
+    ))
+    n_rows % bin == 0 && n_columns % bin == 0 || throw(
+        AlgorithmGraphError(
+            "CMOS photon-rate dimensions must be divisible by binning",
+        ),
+    )
+    isnothing(output_bits) || 1 <= output_bits <= 64 || throw(
+        AlgorithmGraphError("CMOS bits must lie in 1:64"),
+    )
+    isnothing(output_bits) || !isnothing(full_well_e) || throw(
+        AlgorithmGraphError("CMOS bits requires full_well_e"),
+    )
+
+    pixel_scale = T(pixel_scale_arcsec)
+    wavelength = T(wavelength_m)
+    exposure = T(exposure_duration_s)
+    qe = T(quantum_efficiency)
+    linear_gain = T(gain)
+    dark_current = T(dark_current_e_per_pixel_s)
+    full_well = isnothing(full_well_e) ? nothing : T(full_well_e)
+    column_noise = T(column_readout_noise_e)
+    row_noise = T(row_readout_noise_e)
+
+    isfinite(pixel_scale) && pixel_scale > zero(T) || throw(
+        AlgorithmGraphError(
+            "CMOS pixel_scale_arcsec must be finite and positive",
+        ),
+    )
+    isfinite(wavelength) && wavelength > zero(T) || throw(
+        AlgorithmGraphError(
+            "CMOS wavelength_m must be finite and positive",
+        ),
+    )
+    isfinite(exposure) && exposure > zero(T) || throw(
+        AlgorithmGraphError(
+            "CMOS exposure_duration_s must be finite and positive",
+        ),
+    )
+    isfinite(qe) && zero(T) <= qe <= one(T) || throw(
+        AlgorithmGraphError(
+            "CMOS quantum_efficiency must lie in [0, 1]",
+        ),
+    )
+    isfinite(linear_gain) && linear_gain > zero(T) || throw(
+        AlgorithmGraphError("CMOS gain must be finite and positive"),
+    )
+    isfinite(dark_current) && dark_current >= zero(T) || throw(
+        AlgorithmGraphError(
+            "CMOS dark_current_e_per_pixel_s must be finite and nonnegative",
+        ),
+    )
+    isnothing(full_well) || isfinite(full_well) && full_well > zero(T) ||
+        throw(AlgorithmGraphError(
+            "CMOS full_well_e must be finite and positive",
+        ))
+    isfinite(column_noise) && column_noise >= zero(T) || throw(
+        AlgorithmGraphError(
+            "CMOS column_readout_noise_e must be finite and nonnegative",
+        ),
+    )
+    isfinite(row_noise) && row_noise >= zero(T) || throw(
+        AlgorithmGraphError(
+            "CMOS row_readout_noise_e must be finite and nonnegative",
+        ),
+    )
+    rng_seed >= 0 || throw(AlgorithmGraphError(
+        "CMOS rng_seed must be nonnegative",
+    ))
+    rng_seed <= typemax(UInt64) || throw(AlgorithmGraphError(
+        "CMOS rng_seed exceeds UInt64",
+    ))
+    isempty(photon_rate_schema) && throw(AlgorithmGraphError(
+        "CMOS photon_rate_schema must not be empty",
+    ))
+    isempty(frame_schema) && throw(AlgorithmGraphError(
+        "CMOS frame_schema must not be empty",
+    ))
+
+    noise = _frame_detector_noise(
+        T,
+        "CMOS",
+        photon_noise,
+        readout_noise,
+        readout_noise_e,
+    )
+    return CMOSDetectorAcquisitionNodeConfig(
+        n_rows,
+        n_columns,
+        bin,
+        pixel_scale,
+        wavelength,
+        exposure,
+        qe,
+        linear_gain,
+        dark_current,
+        output_bits,
+        full_well,
+        noise,
+        column_noise,
+        row_noise,
+        UInt64(rng_seed),
+        String(photon_rate_schema),
+        String(frame_schema),
+    )
+end
+
+"""
+    cmos_detector_acquisition_node(name; ...)
+
+Declare one complete-frame global-shutter CMOS acquisition. The node consumes
+a cell-integrated detector-plane photon-rate mosaic and writes one completed
+frame. Independent, shared-column, and shared-row read-noise components are
+configured separately. `gain` is a linear post-readout gain, not decibels.
+When `bits` is present, the internal detector readout uses the smallest
+unsigned integer type that contains the configured ADC range; the graph port
+remains `T` and therefore carries integer-valued samples in its floating-point
+buffer.
+Its RNG is explicit persistent state and is restored by `reset_graph!`.
+"""
+function cmos_detector_acquisition_node(
+    name::Symbol;
+    rows::Integer,
+    columns::Integer,
+    pixel_scale_arcsec::Real,
+    wavelength_m::Real,
+    exposure_duration_s::Real,
+    quantum_efficiency::Real,
+    rng_seed::Integer,
+    photon_rate_schema::AbstractString,
+    frame_schema::AbstractString,
+    binning::Integer=1,
+    gain::Real=1,
+    dark_current_e_per_pixel_s::Real=0,
+    bits::Union{Nothing,Integer}=nothing,
+    full_well_e::Union{Nothing,Real}=nothing,
+    photon_noise::Bool=true,
+    readout_noise::Bool=false,
+    readout_noise_e::Real=0,
+    column_readout_noise_e::Real=0,
+    row_readout_noise_e::Real=0,
+    T::Type{<:AbstractFloat}=Float32,
+)
+    config = _cmos_detector_acquisition_config(
+        T;
+        rows,
+        columns,
+        binning,
+        pixel_scale_arcsec,
+        wavelength_m,
+        exposure_duration_s,
+        quantum_efficiency,
+        gain,
+        dark_current_e_per_pixel_s,
+        bits,
+        full_well_e,
+        photon_noise,
+        readout_noise,
+        readout_noise_e,
+        column_readout_noise_e,
+        row_readout_noise_e,
+        rng_seed,
+        photon_rate_schema,
+        frame_schema,
+    )
+    return algorithm_node(
+        name,
+        CMOSDetectorAcquisitionNode{T},
+        config;
+        props=NamedTuple(),
+    )
+end
+
+function graph_node_ports(
+    ::Type{CMOSDetectorAcquisitionNode{T}},
+    config::CMOSDetectorAcquisitionNodeConfig{T},
+) where {T}
+    return (
+        graph_port_contract(
+            :photon_rate,
+            :input,
+            :data,
+            T,
+            (config.rows, config.columns),
+            config.photon_rate_schema,
+            :column_major,
+        ),
+        graph_port_contract(
+            :frame,
+            :output,
+            :data,
+            T,
+            (div(config.rows, config.binning),
+                div(config.columns, config.binning)),
+            config.frame_schema,
+            :column_major,
+        ),
+    )
+end
+
+function prepare_graph_node(
+    ::Type{CMOSDetectorAcquisitionNode{T}},
+    config::CMOSDetectorAcquisitionNodeConfig{T},
+    ::NamedTuple{()},
+    inputs::NamedTuple{(:photon_rate,)},
+    outputs::NamedTuple{(:frame,)},
+    ::NamedTuple{()},
+    target,
+) where {T}
+    sampling = _arcsec_to_rad(config.pixel_scale_arcsec)
+    metadata = OpticalPlaneMetadata(
+        DetectorPlane(),
+        inputs.photon_rate;
+        coordinate_domain=AngularCoordinates(),
+        sampling=(sampling, sampling),
+        spectral=MonochromaticChannel(config.wavelength_m),
+        normalization=PhotonRateNormalization(),
+        spatial_measure=CellIntegratedMeasure(),
+        coherence=IncoherentIntensityAddition(),
+    )
+    photon_rate = IntensityMap(metadata, inputs.photon_rate)
+    backend = compute_device_backend(target)
+    sensor = CMOSSensor(
+        column_readout_sigma=config.column_readout_noise_e,
+        row_readout_sigma=config.row_readout_noise_e,
+        timing_model=GlobalShutter(),
+        T=T,
+        backend=backend,
+    )
+    detector = Detector(
+        exposure_duration=config.exposure_duration_s,
+        qe=config.quantum_efficiency,
+        psf_sampling=1,
+        binning=config.binning,
+        gain=config.gain,
+        dark_current=config.dark_current_e_per_pixel_s,
+        bits=config.bits,
+        full_well=config.full_well_e,
+        output_type=_graph_adc_output_type(config.bits),
+        noise=config.noise,
+        sensor=sensor,
+        response_model=NullFrameResponse(),
+        T=T,
+        backend=backend,
+    )
+    prepared = prepare_detector_acquisition(detector, photon_rate)
+    size(output_frame(detector)) == size(outputs.frame) || throw(
+        AlgorithmGraphError(
+            "prepared CMOS output shape does not match its graph frame port",
+        ),
+    )
+    rng = runtime_rng(config.rng_seed)
+    state = detector_acquisition_state(prepared)
+    return _FrameDetectorAcquisitionOwner(
+        prepared,
+        rng,
+        outputs.frame,
+        state.latent_buffer,
+        config.rng_seed,
+    )
+end
+
 struct EMCCDDetectorAcquisitionNode{T<:AbstractFloat} end
 
 """Construction values for one complete-frame linear-mode EMCCD acquisition."""

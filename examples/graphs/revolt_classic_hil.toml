@@ -1,19 +1,22 @@
 # REVOLT Classic HIL sensor boundary.
 #
 # The graph owns one explicitly timed five-layer atmosphere and advances it by
-# 1 ms for every complete frame. A serialized RTC adapter places one complete
+# 2 ms for every complete frame, matching the maintained 500 Hz camera setting.
+# A serialized RTC adapter places one complete
 # PDM command in the caller-owned command buffer before each graph step. This
 # graph applies that command through an explicitly provisional
 # continuous-facesheet model, composes the resulting surface OPD with the
 # atmospheric OPD, forms the diffractive Shack-Hartmann photon-rate mosaic, and
-# completes one noisy CCD frame suitable for publication through a transport
-# adapter such as PipeWireAO.
+# completes one noisy C-BLUE One IMX425 global-shutter CMOS frame suitable for
+# publication through a transport adapter such as PipeWireAO.
 #
-# Optical and detector values follow
-# REVOLT/Python/specula/params_revolt_modal.yml. The atmosphere profile follows
-# the matching REVOLT OOPAO model and Julia common contract. The explicit RNG
-# seed is an AOS reproducibility choice because those sources do not declare
-# one.
+# Optical values follow REVOLT/Python/specula/params_revolt_modal.yml. The
+# detector identity, ROI, cadence, exposure, and gain follow the maintained
+# HEART REVOLT configuration and its C-BLUE One IMX425 handler. The remaining
+# detector values are published typical IMX425 characterization rather than
+# unit calibration. The atmosphere profile follows the matching REVOLT OOPAO
+# model and Julia common contract. The explicit RNG seed is an AOS
+# reproducibility choice because those sources do not declare one.
 # The exact 277-actuator command order comes from the matching 19-by-19 map
 # payloads in the maintained on-sky and Copper branches. The caller binds the
 # normalized-pupil coordinates produced by examples/support/revolt_hsdm277.jl.
@@ -57,7 +60,7 @@ layer_ids = [
     "revolt_10km",
     "revolt_12km",
 ]
-atmosphere_step = 0.001
+atmosphere_step = 0.002
 rng_seed = 1
 atmosphere_opd_schema = "org.revolt.classic.atmosphere-opd-m.f32/1"
 
@@ -115,7 +118,7 @@ photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
 
 [[nodes]]
 name = "detector"
-type = "ccd_detector_acquisition_f32"
+type = "cmos_detector_acquisition_f32"
 
 [nodes.config]
 rows = 352
@@ -123,11 +126,26 @@ columns = 352
 binning = 1
 pixel_scale_arcsec = 0.697
 wavelength_m = 8.0e-7
-exposure_duration_s = 0.001
-quantum_efficiency = 0.5
+exposure_duration_s = 0.001896
+# Approximate QE at the modeled 800 nm channel from the manufacturer's typical
+# 20 C IMX425 curve. Replace it with measured unit QE and optical throughput.
+quantum_efficiency = 0.27
+# The maintained camera configuration selects 24 dB analog gain. The graph
+# detector accepts a linear voltage gain: 10^(24/20).
+gain = 15.848931924611133
+dark_current_e_per_pixel_s = 0.96
+# The maintained HEART snapshot does not state its pixel format. Twelve-bit
+# mode selects the published high-sensitivity characterization used below.
+bits = 12
+# Published image full well at zero analog gain; with the configured 24 dB
+# gain this also supplies the ADC scale and gives an earlier output clip.
+full_well_e = 94000.0
 photon_noise = true
 readout_noise = true
-readout_noise_e = 2.7
+# Published RMS read noise for 12-bit high-sensitivity operation at 24 dB.
+readout_noise_e = 2.33
+column_readout_noise_e = 0.0
+row_readout_noise_e = 0.0
 rng_seed = 0
 photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
 frame_schema = "org.revolt.classic.shwfs-frame.f32/1"

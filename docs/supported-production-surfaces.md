@@ -87,9 +87,15 @@ Linux pyRTC `ImageSHM` layout. It validates C-order vector and matrix exchange
 in both directions and runs the SHWFS and Pyramid reference systems against a
 separate pyRTC process. This lockstep integration and calibration surface also
 verifies corrected science-image and on-axis Strehl improvement for a
-deterministically evolving four-layer atmosphere. It is not an asynchronous
-transport or deadline guarantee. The one-slot upstream layout is used only
-with one producer and one outstanding frame.
+deterministically evolving four-layer atmosphere. An independently enabled
+REVOLT Classic model-validation test covers its 352-by-352 frame, 376
+pair-interleaved slopes, 277-element PDM command, and maintained five-layer
+atmosphere for one modeled second. It admits a regularized interaction
+subspace and checks both Strehl and pupil OPD-RMS improvement. This does not
+qualify the provisional HSDM influence model or an operational
+control/extrapolation matrix. It is not an asynchronous transport or deadline
+guarantee. The one-slot upstream layout is used only with one producer and one
+outstanding frame.
 
 ## Explicitly Not Production-Supported
 

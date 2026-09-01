@@ -8,6 +8,11 @@ using .PyRTCSharedMemory
 
 include(joinpath(@__DIR__, "..", "..", "support", "hil_reference_systems.jl"))
 using .HILReferenceSystems
+include(joinpath(@__DIR__, "..", "..", "support", "revolt_hsdm277.jl"))
+include(joinpath(@__DIR__, "..", "..", "support", "revolt_hil_graphs.jl"))
+include(joinpath(@__DIR__, "..", "..", "support", "revolt_classic_hil.jl"))
+import .REVOLTClassicHIL
+import .REVOLTHSDM277
 
 const PYRTC_STREAM_NAMES = ("wfs", "wfc", "signal", "signal2D")
 const VIEWER_STREAM_NAMES = (
@@ -32,50 +37,156 @@ const WORKER_PREFIX = "AOS_PYRTC_WORKER "
 const REFERENCE_ATMOSPHERE_STEP_S = 1.0e-3
 const ATMOSPHERE_VALIDATION_FRAMES = 20
 const ATMOSPHERE_VALIDATION_BURN_IN_FRAMES = 10
+const REVOLT_CLASSIC_COMMAND_GRID_INDICES =
+    Tuple(REVOLTHSDM277.actuator_grid_indices(Int32))
 
-struct ProcessReferenceCase
+struct PyRTCProcessDefinition
+    name::Symbol
     wavefront_sensor::Symbol
     frame_shape::Tuple{Int,Int}
     signal_shape::Tuple{Int}
     signal_2d_shape::Tuple{Int,Int}
+    command_count::Int
     poke::Float32
     gain::Float32
+    control_rcond::Float32
     iterations::Int
     convergence_limit::Float32
 end
 
-@inline process_reference_case(::Val{:shack_hartmann}) = ProcessReferenceCase(
+@inline process_definition(::Val{:shack_hartmann}) = PyRTCProcessDefinition(
+    :shack_hartmann,
     :shack_hartmann,
     (64, 64),
     (104,),
     (16, 8),
+    actuator_count(),
     2.0f-8,
     0.4f0,
+    0.0f0,
     15,
     1.0f-3,
 )
 
-@inline process_reference_case(::Val{:pyramid}) = ProcessReferenceCase(
+@inline process_definition(::Val{:pyramid}) = PyRTCProcessDefinition(
+    :pyramid,
     :pyramid,
     (36, 36),
     (344,),
     (16, 32),
+    actuator_count(),
     2.0f-8,
     0.4f0,
+    0.0f0,
     15,
     1.0f-3,
 )
 
-function process_reference_case(wavefront_sensor::Symbol)
-    wavefront_sensor in supported_wavefront_sensors() || throw(ArgumentError(
-        "unsupported pyRTC process WFS '$wavefront_sensor'; expected one " *
-        "of $(join(supported_wavefront_sensors(), ", "))",
+@inline process_definition(::Val{:revolt_classic}) = PyRTCProcessDefinition(
+    :revolt_classic,
+    :shack_hartmann,
+    (352, 352),
+    (376,),
+    (32, 16),
+    REVOLTClassicHIL.command_count(),
+    2.0f-8,
+    0.2f0,
+    2.0f-2,
+    500,
+    0.1f0,
+)
+
+const PROCESS_DEFINITIONS = (:shack_hartmann, :pyramid, :revolt_classic)
+
+function process_definition(name::Symbol)
+    name in PROCESS_DEFINITIONS || throw(ArgumentError(
+        "unsupported pyRTC process definition '$name'; expected one of " *
+        join(PROCESS_DEFINITIONS, ", "),
     ))
-    return process_reference_case(Val(wavefront_sensor))
+    return process_definition(Val(name))
 end
 
-@inline reference_label(::Val{:shack_hartmann}) = "Shack-Hartmann"
-@inline reference_label(::Val{:pyramid}) = "Pyramid"
+@inline definition_label(::Val{:shack_hartmann}) = "Shack-Hartmann reference"
+@inline definition_label(::Val{:pyramid}) = "Pyramid reference"
+@inline definition_label(::Val{:revolt_classic}) =
+    "REVOLT Classic Shack-Hartmann"
+
+@inline function prepare_calibration_system(
+    definition::PyRTCProcessDefinition,
+)
+    return prepare_calibration_system(Val(definition.name), definition)
+end
+
+@inline function prepare_calibration_system(
+    ::Union{Val{:shack_hartmann},Val{:pyramid}},
+    definition::PyRTCProcessDefinition,
+)
+    return prepare_hil_reference_system(definition.wavefront_sensor)
+end
+
+@inline prepare_calibration_system(
+    ::Val{:revolt_classic},
+    ::PyRTCProcessDefinition,
+) = REVOLTClassicHIL.prepare_calibration_system()
+
+@inline function prepare_atmospheric_system(
+    definition::PyRTCProcessDefinition,
+)
+    return prepare_atmospheric_system(Val(definition.name), definition)
+end
+
+@inline function prepare_atmospheric_system(
+    ::Union{Val{:shack_hartmann},Val{:pyramid}},
+    definition::PyRTCProcessDefinition,
+)
+    return prepare_atmospheric_hil_reference_system(
+        definition.wavefront_sensor;
+        atmosphere_step=REFERENCE_ATMOSPHERE_STEP_S,
+        rng_seed=1,
+    )
+end
+
+@inline prepare_atmospheric_system(
+    ::Val{:revolt_classic},
+    ::PyRTCProcessDefinition,
+) = REVOLTClassicHIL.prepare_hil_system()
+
+@inline prepare_science_diagnostics(
+    ::Union{Val{:shack_hartmann},Val{:pyramid}},
+) = prepare_hil_science_diagnostics()
+@inline prepare_science_diagnostics(::Val{:revolt_classic}) =
+    REVOLTClassicHIL.prepare_science_diagnostics()
+
+@inline command_display(::Union{Val{:shack_hartmann},Val{:pyramid}}) =
+    zeros(Float32, 5, 5)
+@inline command_display(::Val{:revolt_classic}) = zeros(Float32, 19, 19)
+
+@inline function update_command_display!(
+    display::Matrix{Float32},
+    command::Vector{Float32},
+    ::Union{Val{:shack_hartmann},Val{:pyramid}},
+)
+    copyto!(vec(display), command)
+    return display
+end
+
+function update_command_display!(
+    display::Matrix{Float32},
+    command::Vector{Float32},
+    ::Val{:revolt_classic},
+)
+    fill!(display, 0.0f0)
+    for command_index in eachindex(command)
+        display[REVOLT_CLASSIC_COMMAND_GRID_INDICES[command_index]] =
+            command[command_index]
+    end
+    return display
+end
+
+@inline surface_opd(graph, ::Union{Val{:shack_hartmann},Val{:pyramid}}) =
+    graph_output(graph, Val(:dm_surface_opd))
+@inline surface_opd(graph, ::Val{:revolt_classic}) =
+    graph_output(graph, Val(:pdm_surface_opd))
 
 struct ProcessStreams{W,C,S,D}
     wfs::W
@@ -112,20 +223,20 @@ function require_available_stream_names()
     return nothing
 end
 
-function create_process_streams(case::ProcessReferenceCase)
+function create_process_streams(definition::PyRTCProcessDefinition)
     require_available_stream_names()
     wfs = nothing
     wfc = nothing
     signal = nothing
     signal_2d = nothing
     try
-        wfs = create_stream("wfs", Float32, case.frame_shape)
-        wfc = create_stream("wfc", Float32, (actuator_count(),))
-        signal = create_stream("signal", Float32, case.signal_shape)
+        wfs = create_stream("wfs", Float32, definition.frame_shape)
+        wfc = create_stream("wfc", Float32, (definition.command_count,))
+        signal = create_stream("signal", Float32, definition.signal_shape)
         signal_2d = create_stream(
             "signal2D",
             Float32,
-            case.signal_2d_shape,
+            definition.signal_2d_shape,
         )
         return ProcessStreams(wfs, wfc, signal, signal_2d)
     catch
@@ -157,7 +268,12 @@ function close_process_streams!(streams::ProcessStreams)
     return nothing
 end
 
-function create_viewer_streams(prepared, science_diagnostics)
+function create_viewer_streams(
+    definition::PyRTCProcessDefinition,
+    prepared,
+    science_diagnostics,
+    applied_command::Matrix{Float32},
+)
     occupied = String[]
     for name in VIEWER_STREAM_NAMES, suffix in ("", "_meta", "_gpu_handle")
         path = joinpath("/dev/shm", name * suffix)
@@ -166,10 +282,6 @@ function create_viewer_streams(prepared, science_diagnostics)
     isempty(occupied) || error(
         "refusing to reuse active viewer shared-memory streams: " *
         join(occupied, ", "),
-    )
-    actuator_axis_count = isqrt(actuator_count())
-    actuator_axis_count^2 == actuator_count() || error(
-        "the viewer requires a square deformable-mirror command layout",
     )
     command = nothing
     uncompensated_opd = nothing
@@ -183,12 +295,12 @@ function create_viewer_streams(prepared, science_diagnostics)
             graph,
             Val(:atmosphere_opd),
         )
-        dm_surface_opd_values = graph_output(graph, Val(:dm_surface_opd))
+        dm_surface_opd_values = surface_opd(graph, Val(definition.name))
         residual_opd_values = graph_output(graph, Val(:pupil_opd))
         command = create_stream(
             VIEWER_STREAM_NAMES[1],
             Float32,
-            (actuator_axis_count, actuator_axis_count),
+            size(applied_command),
         )
         uncompensated_opd = create_stream(
             VIEWER_STREAM_NAMES[2],
@@ -266,18 +378,50 @@ function pyrtc_python()
     return abspath(executable)
 end
 
-function worker_command(
-    wavefront_sensor::Symbol,
+@inline _worker_valid_subapertures_path(
+    ::Val{:shack_hartmann},
+    ::AbstractString,
+) = nothing
+@inline _worker_valid_subapertures_path(
+    ::Val{:pyramid},
+    ::AbstractString,
+) = nothing
+
+function _worker_valid_subapertures_path(
+    ::Val{:revolt_classic},
     temporary_directory::AbstractString,
 )
-    return Cmd(String[
+    path = joinpath(temporary_directory, "valid_subapertures.u8")
+    mask = REVOLTClassicHIL.valid_subapertures()
+    open(path, "w") do io
+        write(io, UInt8.(vec(mask)))
+    end
+    return path
+end
+
+function worker_command(
+    definition::PyRTCProcessDefinition,
+    temporary_directory::AbstractString,
+)
+    arguments = String[
         pyrtc_python(),
         joinpath(@__DIR__, "pyrtc_process_worker.py"),
-        "--sensor",
-        String(wavefront_sensor),
+        "--system",
+        String(definition.name),
         "--temporary-directory",
         abspath(temporary_directory),
-    ])
+    ]
+    valid_subapertures_path = _worker_valid_subapertures_path(
+        Val(definition.name),
+        temporary_directory,
+    )
+    if !isnothing(valid_subapertures_path)
+        append!(arguments, (
+            "--valid-subapertures-file",
+            abspath(valid_subapertures_path),
+        ))
+    end
+    return Cmd(arguments)
 end
 
 function viewer_refresh_rate(frame_rate::Real)
@@ -360,14 +504,11 @@ function await_worker_message(
 end
 
 function start_worker(
-    case::ProcessReferenceCase,
+    definition::PyRTCProcessDefinition,
     temporary_directory::AbstractString,
 )
     process = open(
-        worker_command(
-            case.wavefront_sensor,
-            temporary_directory,
-        ),
+        worker_command(definition, temporary_directory),
         "r+",
     )
     worker = PyRTCWorker(process, false)
@@ -376,13 +517,13 @@ function start_worker(
         length(ready) == 3 && first(ready) == "READY" || error(
             "unexpected pyRTC worker startup response: $(join(ready, " "))",
         )
-        parse(Int, ready[2]) == only(case.signal_shape) || error(
+        parse(Int, ready[2]) == only(definition.signal_shape) || error(
             "pyRTC worker signal length $(ready[2]) does not match " *
-            "$(only(case.signal_shape))",
+            "$(only(definition.signal_shape))",
         )
-        parse(Int, ready[3]) == actuator_count() || error(
+        parse(Int, ready[3]) == definition.command_count || error(
             "pyRTC worker command length $(ready[3]) does not match " *
-            "$(actuator_count())",
+            "$(definition.command_count)",
         )
         return worker
     catch
@@ -489,6 +630,7 @@ function calibrate_interaction_matrix!(
     prepared,
     signal::Vector{Float32};
     poke::Float32,
+    report_progress::Bool=false,
 )
     boundary = prepared.boundary
     sequence, flat_signal = set_flat_reference!(
@@ -500,11 +642,21 @@ function calibrate_interaction_matrix!(
     interaction_matrix = Matrix{Float32}(
         undef,
         length(signal),
-        actuator_count(),
+        length(hil_command_buffer(boundary)),
     )
     positive_signal = similar(signal)
 
     for command_index in axes(interaction_matrix, 2)
+        if report_progress && (command_index == 1 ||
+                command_index % 25 == 0 ||
+                command_index == last(axes(interaction_matrix, 2)))
+            println(
+                "  calibrated command ",
+                command_index,
+                " / ",
+                size(interaction_matrix, 2),
+            )
+        end
         fill!(hil_command_buffer(boundary), 0.0f0)
         hil_command_buffer(boundary)[command_index] = poke
         adopt_hil_command!(boundary, sequence)
@@ -544,6 +696,7 @@ function configure_worker_loop!(
     streams::ProcessStreams,
     interaction_matrix::Matrix{Float32},
     gain::Float32,
+    control_rcond::Float32,
     temporary_directory::AbstractString,
 )
     matrix_path = joinpath(temporary_directory, "interaction_matrix.f32")
@@ -552,12 +705,13 @@ function configure_worker_loop!(
     end
     send_worker_command!(
         worker,
-        "CONFIGURE $matrix_path $(Float64(gain))",
+        "CONFIGURE $matrix_path $(Float64(gain)) " *
+        "$(Float64(control_rcond))",
         "CONFIGURED";
         timeout=30.0,
     )
     send_worker_command!(worker, "FLATTEN", "FLATTENED")
-    flat_command = zeros(Float32, actuator_count())
+    flat_command = zeros(Float32, size(interaction_matrix, 2))
     read_next!(flat_command, streams.wfc; timeout=5.0)
     all(iszero, flat_command) || error(
         "pyRTC worker flatten command is nonzero",
@@ -587,6 +741,7 @@ function controlled_disturbance!(prepared)
 end
 
 function publish_viewer_outputs!(
+    definition::PyRTCProcessDefinition,
     streams::ViewerStreams,
     prepared,
     science_diagnostics,
@@ -600,7 +755,7 @@ function publish_viewer_outputs!(
     )
     publish!(
         streams.dm_surface_opd,
-        graph_output(graph, Val(:dm_surface_opd)),
+        surface_opd(graph, Val(definition.name)),
     )
     publish!(
         streams.residual_opd,
@@ -646,7 +801,7 @@ function close_loop!(
 )
     boundary = prepared.boundary
     residual_norms = Vector{Float32}(undef, iterations)
-    command = zeros(Float32, actuator_count())
+    command = zeros(Float32, length(hil_command_buffer(boundary)))
     sequence = step_hil_frame!(boundary)
 
     for iteration in 1:iterations
@@ -681,7 +836,7 @@ end
 function close_atmospheric_loop!(
     worker::PyRTCWorker,
     streams::ProcessStreams,
-    case::ProcessReferenceCase,
+    definition::PyRTCProcessDefinition,
     signal::Vector{Float32};
     frames::Int=ATMOSPHERE_VALIDATION_FRAMES,
 )
@@ -689,16 +844,16 @@ function close_atmospheric_loop!(
         "atmosphere validation requires more than " *
         "$(ATMOSPHERE_VALIDATION_BURN_IN_FRAMES) frames",
     ))
-    prepared = prepare_atmospheric_hil_reference_system(
-        case.wavefront_sensor;
-        atmosphere_step=REFERENCE_ATMOSPHERE_STEP_S,
-        rng_seed=1,
-    )
-    diagnostics = prepare_hil_science_diagnostics()
+    prepared = prepare_atmospheric_system(definition)
+    diagnostics = prepare_science_diagnostics(Val(definition.name))
     boundary = prepared.boundary
-    command = zeros(Float32, actuator_count())
+    command = zeros(Float32, definition.command_count)
     open_loop_values = Vector{Float32}(undef, frames)
     closed_loop_values = Vector{Float32}(undef, frames)
+    uncompensated_opd_rms_values = Vector{Float64}(undef, frames)
+    residual_opd_rms_values = Vector{Float64}(undef, frames)
+    pdm_command_rms_values = Vector{Float64}(undef, frames)
+    support = HILReferenceSystems.pupil_support(diagnostics)
     sequence = step_hil_frame!(boundary)
 
     for frame_index in 1:frames
@@ -713,6 +868,10 @@ function close_atmospheric_loop!(
             open_loop_on_axis_strehl(diagnostics)
         closed_loop_values[frame_index] =
             closed_loop_on_axis_strehl(diagnostics)
+        uncompensated_opd_rms_values[frame_index] =
+            pupil_opd_rms(atmosphere_opd, support)
+        residual_opd_rms_values[frame_index] =
+            pupil_opd_rms(residual_opd, support)
         maximum(open_loop_psf(diagnostics)) <= 1.001f0 || error(
             "open-loop PSF exceeds its exact diffraction-limited peak",
         )
@@ -729,6 +888,7 @@ function close_atmospheric_loop!(
             response="STEPPED",
         )
         read_next!(command, streams.wfc; timeout=5.0)
+        pdm_command_rms_values[frame_index] = root_mean_square(command)
         copyto!(hil_command_buffer(boundary), command)
         adopt_hil_command!(boundary, sequence)
         frame_index < frames && (sequence = step_hil_frame!(boundary))
@@ -739,29 +899,42 @@ function close_atmospheric_loop!(
         mean_from(open_loop_values, first_steady_frame)
     mean_closed_loop_on_axis_strehl =
         mean_from(closed_loop_values, first_steady_frame)
+    mean_uncompensated_opd_rms_m =
+        mean_from(uncompensated_opd_rms_values, first_steady_frame)
+    mean_residual_opd_rms_m =
+        mean_from(residual_opd_rms_values, first_steady_frame)
+    mean_pdm_command_rms_m =
+        mean_from(pdm_command_rms_values, first_steady_frame)
     return (;
         mean_open_loop_on_axis_strehl,
         mean_closed_loop_on_axis_strehl,
         improvement=mean_closed_loop_on_axis_strehl /
             mean_open_loop_on_axis_strehl,
+        mean_uncompensated_opd_rms_m,
+        mean_residual_opd_rms_m,
+        mean_pdm_command_rms_m,
     )
 end
 
 function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
-    case = process_reference_case(wavefront_sensor)
-    prepared = prepare_hil_reference_system(case.wavefront_sensor)
-    streams = create_process_streams(case)
+    definition = process_definition(wavefront_sensor)
+    definition.name === :revolt_classic && throw(ArgumentError(
+        "run_validation covers the maintained HIL reference systems; use " *
+        "run_revolt_classic_validation for REVOLT Classic",
+    ))
+    prepared = prepare_calibration_system(definition)
+    streams = create_process_streams(definition)
     worker = nothing
     return mktempdir() do temporary_directory
         try
-            worker = start_worker(case, temporary_directory)
-            signal = zeros(Float32, case.signal_shape)
+            worker = start_worker(definition, temporary_directory)
+            signal = zeros(Float32, definition.signal_shape)
             flat_signal, interaction_matrix = calibrate_interaction_matrix!(
                 worker,
                 streams,
                 prepared,
                 signal;
-                poke=case.poke,
+                poke=definition.poke,
             )
             norm(flat_signal) <= 1.0f-5 || error(
                 "pyRTC process flat reference left a nonzero residual: " *
@@ -773,16 +946,17 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
             singular_values = svdvals(interaction_matrix)
             rank_tolerance = maximum(singular_values) * 1.0f-4
             interaction_rank = count(>(rank_tolerance), singular_values)
-            interaction_rank == actuator_count() || error(
+            interaction_rank == definition.command_count || error(
                 "pyRTC process interaction matrix has rank $interaction_rank; " *
-                "expected $(actuator_count())",
+                "expected $(definition.command_count)",
             )
 
             configure_worker_loop!(
                 worker,
                 streams,
                 interaction_matrix,
-                case.gain,
+                definition.gain,
+                definition.control_rcond,
                 temporary_directory,
             )
             disturbance_command = controlled_disturbance!(prepared)
@@ -791,7 +965,7 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
                 streams,
                 prepared,
                 signal;
-                iterations=case.iterations,
+                iterations=definition.iterations,
             )
             all(isfinite, residual_norms) || error(
                 "pyRTC process loop produced a non-finite residual norm",
@@ -802,7 +976,7 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
             convergence_ratio = last(residual_norms) / first(residual_norms)
             command_error = norm(command + disturbance_command)
             command_scale = norm(disturbance_command)
-            convergence_ratio < case.convergence_limit || error(
+            convergence_ratio < definition.convergence_limit || error(
                 "pyRTC process loop did not converge: final/initial residual = " *
                 "$convergence_ratio",
             )
@@ -815,13 +989,14 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
                 worker,
                 streams,
                 interaction_matrix,
-                case.gain,
+                definition.gain,
+                definition.control_rcond,
                 temporary_directory,
             )
             atmosphere = close_atmospheric_loop!(
                 worker,
                 streams,
-                case,
+                definition,
                 signal,
             )
             atmosphere.mean_closed_loop_on_axis_strehl > 0.5 || error(
@@ -836,7 +1011,7 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
             stop_worker!(worker)
 
             return (
-                wavefront_sensor=case.wavefront_sensor,
+                wavefront_sensor=definition.wavefront_sensor,
                 signal_length=length(signal),
                 interaction_rank,
                 interaction_condition=maximum(singular_values) /
@@ -854,8 +1029,94 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
     end
 end
 
+function run_revolt_classic_validation()
+    definition = process_definition(:revolt_classic)
+    calibration = prepare_calibration_system(definition)
+    streams = create_process_streams(definition)
+    worker = nothing
+    return mktempdir() do temporary_directory
+        try
+            worker = start_worker(definition, temporary_directory)
+            signal = zeros(Float32, definition.signal_shape)
+            flat_signal, interaction_matrix = calibrate_interaction_matrix!(
+                worker,
+                streams,
+                calibration,
+                signal;
+                poke=definition.poke,
+                report_progress=true,
+            )
+            norm(flat_signal) <= 1.0f-5 || error(
+                "REVOLT Classic flat reference left a nonzero residual: " *
+                "$(norm(flat_signal))",
+            )
+            all(isfinite, interaction_matrix) || error(
+                "REVOLT Classic interaction matrix contains a non-finite value",
+            )
+
+            singular_values = svdvals(interaction_matrix)
+            maximum_singular_value = maximum(singular_values)
+            retained_tolerance =
+                maximum_singular_value * definition.control_rcond
+            retained_interaction_rank =
+                count(>(retained_tolerance), singular_values)
+            minimum_retained_rank = (4 * definition.command_count) ÷ 5
+            retained_interaction_rank >= minimum_retained_rank || error(
+                "REVOLT Classic interaction matrix retains only " *
+                "$retained_interaction_rank control directions at rcond=" *
+                "$(definition.control_rcond); expected at least " *
+                "$minimum_retained_rank",
+            )
+            retained_interaction_condition =
+                maximum_singular_value /
+                singular_values[retained_interaction_rank]
+
+            configure_worker_loop!(
+                worker,
+                streams,
+                interaction_matrix,
+                definition.gain,
+                definition.control_rcond,
+                temporary_directory,
+            )
+            atmosphere = close_atmospheric_loop!(
+                worker,
+                streams,
+                definition,
+                signal;
+                frames=definition.iterations,
+            )
+            atmosphere.mean_closed_loop_on_axis_strehl > 0.35 || error(
+                "REVOLT Classic did not produce a usable corrected on-axis " *
+                "PSF: mean Strehl = " *
+                "$(atmosphere.mean_closed_loop_on_axis_strehl)",
+            )
+            atmosphere.improvement > 10 || error(
+                "REVOLT Classic did not improve mean on-axis Strehl " *
+                "sufficiently: ratio = $(atmosphere.improvement)",
+            )
+            stop_worker!(worker)
+
+            return (;
+                system=definition.name,
+                frame_shape=definition.frame_shape,
+                signal_length=length(signal),
+                command_count=definition.command_count,
+                retained_interaction_rank,
+                retained_interaction_condition,
+                numerical_interaction_condition=
+                    maximum_singular_value / minimum(singular_values),
+                atmosphere...,
+            )
+        finally
+            !isnothing(worker) && stop_worker_noexcept!(worker)
+            close_process_streams!(streams)
+        end
+    end
+end
+
 function run_viewer_demo(;
-    wavefront_sensor::Symbol=:pyramid,
+    system::Symbol=:pyramid,
     duration::Real=60.0,
     frame_rate::Real=10.0,
 )
@@ -865,48 +1126,79 @@ function run_viewer_demo(;
     isfinite(frame_rate) && frame_rate > 0 || throw(ArgumentError(
         "frame_rate must be finite and positive",
     ))
-    case = process_reference_case(wavefront_sensor)
-    calibration = prepare_hil_reference_system(case.wavefront_sensor)
-    streams = create_process_streams(case)
+    definition = process_definition(system)
+    calibration = prepare_calibration_system(definition)
+    streams = create_process_streams(definition)
     viewer_streams = nothing
     worker = nothing
     viewer = nothing
     return mktempdir() do temporary_directory
         try
-            worker = start_worker(case, temporary_directory)
-            signal = zeros(Float32, case.signal_shape)
-            command = zeros(Float32, actuator_count())
-            actuator_axis_count = isqrt(actuator_count())
-            applied_command = reshape(
-                zeros(Float32, actuator_count()),
-                actuator_axis_count,
-                actuator_axis_count,
+            worker = start_worker(definition, temporary_directory)
+            signal = zeros(Float32, definition.signal_shape)
+            command = zeros(Float32, definition.command_count)
+            applied_command = zeros(Float32, definition.command_count)
+            applied_command_display = command_display(Val(definition.name))
+            println(
+                "Calibrating the pyRTC loop against the flat, noiseless ",
+                definition_label(Val(definition.name)),
+                " system...",
             )
-            println("Calibrating the pyRTC loop against the flat reference...")
-            _, interaction_matrix = calibrate_interaction_matrix!(
+            flat_signal, interaction_matrix = calibrate_interaction_matrix!(
                 worker,
                 streams,
                 calibration,
                 signal;
-                poke=case.poke,
+                poke=definition.poke,
+                report_progress=definition.name === :revolt_classic,
+            )
+            all(isfinite, flat_signal) || error(
+                "pyRTC flat reference contains a non-finite signal",
+            )
+            all(isfinite, interaction_matrix) || error(
+                "pyRTC interaction matrix contains a non-finite value",
+            )
+            singular_values = svdvals(interaction_matrix)
+            rank_relative_tolerance = max(
+                definition.control_rcond,
+                1.0f-4,
+            )
+            rank_tolerance =
+                maximum(singular_values) * rank_relative_tolerance
+            interaction_rank = count(>(rank_tolerance), singular_values)
+            println(
+                "  retained interaction rank at relative cutoff ",
+                rank_relative_tolerance,
+                ": ",
+                interaction_rank,
+                " / ",
+                definition.command_count,
+            )
+            interaction_rank > 0 || error(
+                "the pyRTC interaction matrix retains no control direction",
+            )
+            println(
+                "  retained interaction condition: ",
+                maximum(singular_values) /
+                singular_values[interaction_rank],
             )
             configure_worker_loop!(
                 worker,
                 streams,
                 interaction_matrix,
-                case.gain,
+                definition.gain,
+                definition.control_rcond,
                 temporary_directory,
             )
 
-            prepared = prepare_atmospheric_hil_reference_system(
-                case.wavefront_sensor;
-                atmosphere_step=REFERENCE_ATMOSPHERE_STEP_S,
-                rng_seed=1,
-            )
-            science_diagnostics = prepare_hil_science_diagnostics()
+            prepared = prepare_atmospheric_system(definition)
+            science_diagnostics =
+                prepare_science_diagnostics(Val(definition.name))
             viewer_streams = create_viewer_streams(
+                definition,
                 prepared,
                 science_diagnostics,
+                applied_command_display,
             )
             boundary = prepared.boundary
             sequence = step_hil_frame!(boundary)
@@ -921,10 +1213,11 @@ function run_viewer_demo(;
                 residual_opd,
             )
             publish_viewer_outputs!(
+                definition,
                 viewer_streams,
                 prepared,
                 science_diagnostics,
-                applied_command,
+                applied_command_display,
             )
             viewer = start_viewer(frame_rate)
             start_time = time()
@@ -934,17 +1227,18 @@ function run_viewer_demo(;
 
             println(
                 "Running the ",
-                reference_label(Val(wavefront_sensor)),
+                definition_label(Val(definition.name)),
                 " AOS/pyRTC live view for ",
                 Float64(duration),
                 " seconds; close the viewer to stop early.",
             )
             while time() - start_time < duration && process_running(viewer)
                 publish_viewer_outputs!(
+                    definition,
                     viewer_streams,
                     prepared,
                     science_diagnostics,
-                    applied_command,
+                    applied_command_display,
                 )
                 process_frame!(
                     worker,
@@ -1005,7 +1299,12 @@ function run_viewer_demo(;
                 (time() - start_time >= duration ||
                     !process_running(viewer)) && break
                 sequence = step_hil_frame!(boundary)
-                copyto!(vec(applied_command), command)
+                copyto!(applied_command, command)
+                update_command_display!(
+                    applied_command_display,
+                    applied_command,
+                    Val(definition.name),
+                )
                 atmosphere_opd = graph_output(
                     prepared.graph,
                     Val(:atmosphere_opd),
@@ -1035,7 +1334,7 @@ function main(wavefront_sensor::Symbol)
     result = run_validation(; wavefront_sensor)
     println(
         "AOS/native-SHM pyRTC ",
-        reference_label(Val(wavefront_sensor)),
+        definition_label(Val(wavefront_sensor)),
         " process loop passed",
     )
     println("  signal length: ", result.signal_length)
@@ -1054,15 +1353,64 @@ function main(wavefront_sensor::Symbol)
         result.mean_closed_loop_on_axis_strehl,
     )
     println("  atmospheric on-axis Strehl improvement: ", result.improvement)
+    println(
+        "  atmospheric mean OPD RMS: ",
+        1.0e9 * result.mean_uncompensated_opd_rms_m,
+        " -> ",
+        1.0e9 * result.mean_residual_opd_rms_m,
+        " nm",
+    )
+    return nothing
+end
+
+function revolt_classic_main()
+    result = run_revolt_classic_validation()
+    println("AOS/native-SHM pyRTC REVOLT Classic process loop passed")
+    println("  detector frame shape: ", result.frame_shape)
+    println("  signal length: ", result.signal_length)
+    println("  PDM command length: ", result.command_count)
+    println(
+        "  retained interaction rank: ",
+        result.retained_interaction_rank,
+    )
+    println(
+        "  retained interaction condition: ",
+        result.retained_interaction_condition,
+    )
+    println(
+        "  numerical interaction condition: ",
+        result.numerical_interaction_condition,
+    )
+    println(
+        "  atmospheric mean open-loop on-axis Strehl: ",
+        result.mean_open_loop_on_axis_strehl,
+    )
+    println(
+        "  atmospheric mean closed-loop on-axis Strehl: ",
+        result.mean_closed_loop_on_axis_strehl,
+    )
+    println("  atmospheric on-axis Strehl improvement: ", result.improvement)
+    println(
+        "  atmospheric mean OPD RMS: ",
+        1.0e9 * result.mean_uncompensated_opd_rms_m,
+        " -> ",
+        1.0e9 * result.mean_residual_opd_rms_m,
+        " nm",
+    )
+    println(
+        "  mean PDM surface-OPD command RMS: ",
+        1.0e9 * result.mean_pdm_command_rms_m,
+        " nm",
+    )
     return nothing
 end
 
 function viewer_main(
-    wavefront_sensor::Symbol;
+    system::Symbol;
     duration::Real=60.0,
     frame_rate::Real=10.0,
 )
-    run_viewer_demo(; wavefront_sensor, duration, frame_rate)
+    run_viewer_demo(; system, duration, frame_rate)
     return nothing
 end
 

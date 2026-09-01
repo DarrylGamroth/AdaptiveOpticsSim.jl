@@ -171,6 +171,7 @@ The current integration matrix is deliberately small:
 | Pyramid | Deterministic, noiseless EMCCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
 | Shack–Hartmann | Deterministic, noiseless CCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, static convergence, evolving-atmosphere PSFs, and on-axis Strehl improvement | covered in lockstep |
 | Pyramid | Deterministic, noiseless EMCCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, static convergence, evolving-atmosphere PSFs, and on-axis Strehl improvement | covered in lockstep |
+| REVOLT Classic Shack–Hartmann | Flat noiseless calibration graph, then maintained noisy 352-by-352 C-BLUE One IMX425 graph | Native Julia SHM to a pyRTC process | 188 valid subapertures, 376 pair-interleaved signals, self-calibrated 277-element PDM command, retained-rank admission, and one modeled second of corrected five-layer-atmosphere Strehl and OPD-RMS improvement | covered as model validation; instrument calibration remains external |
 | Either | Stochastic detector response | Any external RTC | Statistical closed-loop qualification | gap |
 
 Calibrate an external RTC by applying complete positive and negative commands
@@ -240,14 +241,17 @@ claim.
 uses that adapter to create `wfs`, `signal`, `signal2D`, and `wfc` in Julia. A
 separate Python worker attaches pyRTC's real `SlopesProcess` and `Loop`, while
 Julia retains graph stepping, calibration, atmosphere evolution, science-image
-formation, and stream lifetime ownership. The optional process test first
-closes a known static disturbance and then requires both sensor paths to
-improve the mean on-axis Strehl ratio of an evolving atmosphere. The control
-pipe intentionally advances one operation at a time, so this validates process
-and data-boundary correctness rather than free-running RTC timing.
+formation, and stream lifetime ownership. The short optional process test first
+closes a known static disturbance and then requires both reference sensor paths
+to improve the mean on-axis Strehl ratio of an evolving atmosphere. The
+independently enabled REVOLT Classic test calibrates its full
+352-by-352 detector/376-signal/277-command model and requires corrected Strehl
+improvement under the maintained five-layer atmosphere. The control pipe
+intentionally advances one operation at a time, so this validates process and
+data-boundary correctness rather than free-running RTC timing.
 
 The user guide also gives the commands for the bidirectional protocol matrix,
-the opt-in separate-process test matrix, and the two-system demonstration.
+the opt-in separate-process test matrices, and the live demonstrations.
 
 The example transport functions above are application placeholders, not AOS
 APIs. The boundary deliberately defines no socket, PipeWire buffer, wall-clock
@@ -353,6 +357,7 @@ graph = prepare_algorithm_graph(definition; target=target)
 
 The built-in type map currently contains `ccd_detector_acquisition_f32`,
 `closed_loop_correction_f32`, `control_matrix_reconstruction_f32`,
+`cmos_detector_acquisition_f32`,
 `deformable_mirror_surface_f32`,
 `discrete_integrator_f32`, `emccd_detector_acquisition_f32`,
 `gaussian_deformable_mirror_surface_f32`,
@@ -369,13 +374,14 @@ The maintained
 [`revolt_classic_hil.toml`](../examples/graphs/revolt_classic_hil.toml) file
 defines the intended external-RTC sensor boundary. Its
 `multilayer_atmosphere_opd_f32` node owns and advances the maintained REVOLT
-five-layer atmosphere by exactly 1 ms per graph step. A serialized adapter
+five-layer atmosphere by exactly 2 ms per graph step. A serialized adapter
 places the latest accepted complete PDM command in the caller-owned input
 buffer before that step. The graph applies the command with
 `gaussian_deformable_mirror_surface_f32`, composes the resulting sampled
 surface with the atmospheric OPD through `pupil_opd_composition_f32`, and
 produces the configured 352-by-352 diffractive SHWFS photon-rate mosaic and
-one completed noisy CCD frame for a transport adapter such as PipeWireAO. The
+one completed noisy C-BLUE One IMX425 frame for a transport adapter such as
+PipeWireAO. The
 RTC performs centroiding, reconstruction, control, and command production
 outside this graph.
 
@@ -445,6 +451,20 @@ unchanged. This is an exact specialization under the current provisional
 regular-grid registration, not a reduced-resolution optical model. A prepared
 run never changes profile in response to overload.
 
+The HEART SRT snapshot adds useful but bounded external evidence. Its
+`interactionMatrix25102022.fits` artifact (SHA-256
+`06bd5c164dc9f6f4638bbd06e1637e2ea4c871ee6331cb46a6a2b18240a35f34`) is a
+376-by-277 matrix and its `validSubapMask.fits` is byte-identical to the
+maintained 188-subaperture on-sky artifact. Direct composition with maintained
+on-sky command matrices is diagonally dominant, which corroborates the signal
+and command order. It does not establish command-to-OPD units, pupil
+registration, or a sampled influence function. SRT's separate
+`DM277_ActuatorIndex.csv` server-test geometry has a different physical outline
+from the maintained on-sky `dmActuatorMap_277.csv` and is therefore not used as
+the HSDM geometry authority. Historical REVOLT extrapolators in the same
+artifact collection have ranks 214, 217, and 221; the exact deployed
+extrapolator remains a caller-bound calibration rather than a model default.
+
 The separate
 [`revolt_classic_rtc_reference.toml`](../examples/graphs/revolt_classic_rtc_reference.toml)
 file extends the same sensor stages into an optional in-process RTC reference.
@@ -468,7 +488,7 @@ Architecture-file status is therefore explicit:
 
 | Architecture | File-defined executable surface | Remaining authority or implementation gate |
 |---|---|---|
-| REVOLT Classic | The primary HIL file advances the maintained five-layer atmosphere at 1 ms, applies the exact HSDM277 command-map topology with provisional normalized-pupil placement and Gaussian surface response, composes atmospheric and surface OPD, and executes diffractive SHWFS optics plus single-read CCD acquisition through the completed frame boundary. The selectable fast-DM file preserves the same 240-sample optics, noisy 352-by-352 frame, and provisional Gaussian surface through a regular-grid separable evaluation. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind a qualified normalized-hardware-command conversion and measured HSDM277 influence model before claiming an instrument model; add any required non-atmospheric path aberrations explicitly. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
+| REVOLT Classic | The primary HIL file advances the maintained five-layer atmosphere at 2 ms, applies the exact HSDM277 command-map topology with provisional normalized-pupil placement and Gaussian surface response, composes atmospheric and surface OPD, and executes diffractive SHWFS optics plus complete-frame C-BLUE One IMX425 global-shutter CMOS acquisition through the 352-by-352 frame boundary. The camera path uses the maintained 500 Hz, 1896 µs, and 24 dB settings. Its 12-bit mode, noise, dark current, zero-gain full well, and approximate 800 nm QE are published typical IMX425 characterization because the maintained HEART snapshot does not contain pixel-format or unit-calibration data. The selectable fast-DM file preserves the same 240-sample optics and detector path through a regular-grid separable surface evaluation. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind a qualified normalized-hardware-command conversion and measured HSDM277 influence model before claiming an instrument model; add any required non-atmospheric path aberrations explicitly. Replace manufacturer-typical detector values with unit-specific pixel format, QE, bias/flat, noise, saturation, and ROI calibration before claiming camera parity. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
 | REVOLT Copper | The primary HIL file advances the maintained five-layer atmosphere at 2 ms, applies the same exact command map and provisional placement/Gaussian response, composes atmospheric and surface OPD, and executes maintained 32-point modulated Pyramid optics plus complete-frame noisy EMCCD acquisition through a 64-by-64 frame boundary. The selectable fast-DM file changes only the Gaussian surface evaluation and retains the 480-sample pupil and complete Pyramid/detector model. | Bind qualified command conversion and measured HSDM277 influences. Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; add any required non-atmospheric path aberrations explicitly. |
 | SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
 

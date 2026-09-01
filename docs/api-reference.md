@@ -189,7 +189,8 @@ Factory functions include:
 - `grid_gaussian_deformable_mirror_surface_node`
 - `pupil_opd_composition_node`
 - `shack_hartmann_rate_node` and `pyramid_rate_node`
-- `ccd_detector_acquisition_node` and `emccd_detector_acquisition_node`
+- `ccd_detector_acquisition_node`, `cmos_detector_acquisition_node`, and
+  `emccd_detector_acquisition_node`
 - `shack_hartmann_centroid_node` and
   `shack_hartmann_slope_selection_node`
 - `control_matrix_reconstruction_node`

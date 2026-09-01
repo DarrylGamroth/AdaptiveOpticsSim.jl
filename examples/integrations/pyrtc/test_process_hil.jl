@@ -16,5 +16,8 @@ using .PyRTCProcessHIL
         @test 0 < result.mean_open_loop_on_axis_strehl < 1
         @test 0.5 < result.mean_closed_loop_on_axis_strehl <= 1
         @test result.improvement > 10
+        @test result.mean_residual_opd_rms_m <
+            result.mean_uncompensated_opd_rms_m
+        @test isfinite(result.mean_pdm_command_rms_m)
     end
 end

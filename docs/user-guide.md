@@ -245,7 +245,7 @@ runs pyRTC's actual `SlopesProcess` and `Loop`, consumes complete detector
 frames, and returns complete deformable-mirror commands. No camera or
 deformable-mirror hardware is required for the reference systems.
 
-The validated examples are controlled, noiseless, 25-command systems:
+The short validated references are controlled, noiseless, 25-command systems:
 
 - a 64-by-64 Shack–Hartmann detector frame with 104 pyRTC signals
 - a 36-by-36 Pyramid detector frame with 344 pyRTC signals
@@ -253,6 +253,32 @@ The validated examples are controlled, noiseless, 25-command systems:
 These reference systems establish transport, calibration, and closed-loop
 behavior without depending on unavailable instrument calibration. They are not
 REVOLT instrument models.
+
+The separate REVOLT Classic model-validation path uses the maintained
+352-by-352 C-BLUE One IMX425 global-shutter CMOS graph, 188 valid
+Shack–Hartmann subapertures, 376
+pair-interleaved slope components, and a complete 277-element HSDM command. It
+self-calibrates against the AOS model and therefore validates the complete
+model/pyRTC loop without claiming compatibility with an operational REVOLT
+interaction or command matrix. The normalized HSDM placement and Gaussian
+influence function remain provisional.
+
+The detector identity and operating geometry follow maintained HEART sources:
+the C-BLUE One uses the global-shutter Sony IMX425, and REVOLT selects a
+352-by-352 ROI at 500 Hz with 1896 µs exposure and 24 dB analog gain. The
+underlying sensor has 1608-by-1104 9 µm pixels; the graph's
+`pixel_scale_arcsec` is the projected optical sampling, not that physical pixel
+pitch.
+
+The maintained HEART snapshot does not state the operational pixel format or
+unit calibration. The graph therefore selects the published 12-bit
+high-sensitivity characterization: 2.33 e⁻ RMS read noise, 0.96 e⁻/pixel/s
+dark current, 94 ke⁻ zero-gain image full well, and an approximate 0.27 QE at
+the modeled 800 nm channel. It converts 24 dB to a linear post-readout voltage
+gain of 15.8489. The internal unsigned ADC result is copied as integer-valued
+`Float32` samples for the graph and pyRTC boundary. Replace these typical
+values with the camera's measured pixel format, QE, bias/flat, noise,
+saturation, and ROI calibration before claiming instrument parity.
 
 ### Obtain And Install The Software
 
@@ -313,7 +339,7 @@ The integration uses pyRTC's conventional `wfs`, `signal`, `signal2D`, and
 `wfc` shared-memory names. Stop another pyRTC session before running it. The
 launcher refuses to reuse an occupied name.
 
-### Run Both Closed-Loop Reference Systems
+### Run The Closed-Loop Systems
 
 Run the Shack–Hartmann and Pyramid systems against a separate pyRTC process:
 
@@ -331,10 +357,36 @@ open-loop result and an absolute acceptance floor. The command prints the
 interaction condition, static-disturbance convergence and command error, and
 the mean open-loop and corrected atmospheric Strehl ratios for both sensors.
 
+Run the larger REVOLT Classic model-validation system separately:
+
+~~~sh
+julia --project=examples/integrations/pyrtc --startup-file=no \
+  examples/integrations/pyrtc/run_revolt_classic_hil.jl
+~~~
+
+This performs push-pull calibration for all 277 physical command elements,
+uses a relative singular-value cutoff of `0.02`, and closes a 500-frame
+(one modeled second) loop against the deterministic maintained five-layer
+atmosphere. The cutoff rejects poorly conditioned directions that amplify the
+modeled 12-bit detector and centroid noise while retaining at least 80% of the
+277-dimensional command space. The test requires a finite retained interaction
+subspace, corrected mean 750 nm on-axis Strehl above 0.35, at least tenfold
+improvement over the open-loop mean, and more than a factor-of-two reduction
+in mean pupil OPD RMS. These are simulation acceptance checks, not REVOLT
+instrument qualification.
+
 Run the same systems as assertions in the optional integration-test matrix:
 
 ~~~sh
 AOS_PYRTC_PROCESS_TESTS=1 \
+  julia --project=examples/integrations/pyrtc --startup-file=no \
+  examples/integrations/pyrtc/runtests.jl
+~~~
+
+The longer REVOLT Classic assertion is independently opt-in:
+
+~~~sh
+AOS_PYRTC_REVOLT_CLASSIC_TESTS=1 \
   julia --project=examples/integrations/pyrtc --startup-file=no \
   examples/integrations/pyrtc/runtests.jl
 ~~~
@@ -355,12 +407,23 @@ julia --project=examples/integrations/pyrtc --startup-file=no \
 ~~~
 
 Use `shack_hartmann` in place of `pyramid` for the Shack–Hartmann reference
-system. The final two arguments are the run duration in seconds and requested
-frame rate. The demo opens the official `pyrtc-view` application and displays:
+system. Use `revolt_classic` to run the maintained REVOLT Classic model:
+
+~~~sh
+julia --project=examples/integrations/pyrtc --startup-file=no \
+  examples/integrations/pyrtc/run_process_viewer_demo.jl \
+  revolt_classic 60 10
+~~~
+
+The final two arguments are the run duration in seconds and requested frame
+rate. REVOLT Classic first calibrates 277 push-pull command columns, so its
+viewer takes longer to start than either 25-command reference. The demo opens
+the official `pyrtc-view` application and displays:
 
 - the complete AOS detector frame in `wfs`
 - pyRTC's `signal2D` slope product
-- the current 5-by-5 pyRTC command in `wfc2D`
+- the current pyRTC command in `wfc2D` (5-by-5 for a reference system or the
+  exact 19-by-19 HSDM physical grid for REVOLT Classic)
 - AOS uncompensated, deformable-mirror, and residual pupil OPD maps
 - diffraction-limited-normalized open-loop and corrected 750 nm science PSFs
 
@@ -373,12 +436,15 @@ image motion from residual tip and tilt.
 The viewer polls at half the requested wall-clock demonstration rate, so each
 normal refresh interval spans two graph periods. This avoids pyRTC's transient
 `PAUSED` label between frames without altering graph ordering or RTC command
-adoption. Each graph frame advances atmosphere model time by 1 ms; the lower
-wall-clock rate intentionally slows the modeled loop for inspection.
+adoption. The compact reference graphs advance atmosphere model time by 1 ms
+per frame; REVOLT Classic advances it by 2 ms to match its configured 500 Hz
+C-BLUE One cadence. The lower wall-clock rate intentionally slows the modeled
+loop for inspection.
 
-The live graph evolves the maintained four-layer reference atmosphere; it no
-longer substitutes a deformable-mirror-shaped synthetic disturbance. Close the
-viewer window to stop the demonstration before its requested duration.
+The reference graphs evolve the maintained four-layer reference atmosphere;
+REVOLT Classic evolves its maintained five-layer atmosphere. None substitutes
+a deformable-mirror-shaped synthetic disturbance. Close the viewer window to
+stop the demonstration before its requested duration.
 
 ### Adapt A Scientific Graph
 

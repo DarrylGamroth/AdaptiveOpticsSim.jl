@@ -318,6 +318,45 @@ function run_algorithm_graph_backend_smoke(
         2.0f-8 * diagonal_response - 1.0f-8
     @test gaussian_surface_host[2, 3] ≈ 1.0f-8 * cross_response
 
+    cmos_photon_rate = BackendArray(fill(1_000.0f0, 4, 4))
+    cmos_target = compute_device(cmos_photon_rate)
+    cmos_definition = algorithm_graph(
+        (
+            cmos_detector_acquisition_node(
+                :cmos_detector;
+                rows=4,
+                columns=4,
+                pixel_scale_arcsec=0.1,
+                wavelength_m=0.8e-6,
+                exposure_duration_s=0.01,
+                quantum_efficiency=0.5,
+                gain=2,
+                bits=12,
+                full_well_e=1_000,
+                photon_noise=false,
+                rng_seed=0x7ff,
+                photon_rate_schema="test.graph.shwfs-photon-rate.f32/1",
+                frame_schema="test.graph.shwfs-frame.f32/1",
+            ),
+        );
+        name=:gpu_cmos_detector_acquisition,
+        inputs=(
+            graph_input(
+                :photon_rate,
+                :cmos_detector => :photon_rate,
+                cmos_photon_rate,
+            ),
+        ),
+        outputs=(
+            graph_output(:frame, :cmos_detector => :frame),
+        ),
+    )
+    cmos_graph = prepare_algorithm_graph(cmos_definition; target=cmos_target)
+    step_graph!(cmos_graph)
+    cmos_frame = graph_output(cmos_graph, Val(:frame))
+    @test compute_device(cmos_frame) == cmos_target
+    @test Array(cmos_frame) == fill(41.0f0, 4, 4)
+
     pyramid_opd = BackendArray(zeros(Float32, 8, 8))
     pyramid_target = compute_device(pyramid_opd)
     pyramid_definition = algorithm_graph(

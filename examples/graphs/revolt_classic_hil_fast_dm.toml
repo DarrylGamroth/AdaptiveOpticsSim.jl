@@ -4,8 +4,8 @@
 # surface. The exact 277-element command is scattered into its regular 19-by-19
 # physical grid and the same Gaussian influence model is evaluated with the
 # separable X * C * Y' factorization. Atmosphere, pupil sampling, diffractive
-# Shack-Hartmann formation, detector noise, 352-by-352 RTC frame, and 1 ms
-# model-time step match revolt_classic_hil.toml.
+# Shack-Hartmann formation, C-BLUE One IMX425 detector model, 352-by-352 RTC
+# frame, and 2 ms model-time step match revolt_classic_hil.toml.
 
 schema_version = 1
 name = "revolt_classic_hil_fast_dm"
@@ -34,7 +34,7 @@ layer_ids = [
     "revolt_10km",
     "revolt_12km",
 ]
-atmosphere_step = 0.001
+atmosphere_step = 0.002
 rng_seed = 1
 atmosphere_opd_schema = "org.revolt.classic.atmosphere-opd-m.f32/1"
 
@@ -94,7 +94,7 @@ photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
 
 [[nodes]]
 name = "detector"
-type = "ccd_detector_acquisition_f32"
+type = "cmos_detector_acquisition_f32"
 
 [nodes.config]
 rows = 352
@@ -102,11 +102,26 @@ columns = 352
 binning = 1
 pixel_scale_arcsec = 0.697
 wavelength_m = 8.0e-7
-exposure_duration_s = 0.001
-quantum_efficiency = 0.5
+exposure_duration_s = 0.001896
+# Approximate QE at the modeled 800 nm channel from the manufacturer's typical
+# 20 C IMX425 curve. Replace it with measured unit QE and optical throughput.
+quantum_efficiency = 0.27
+# The maintained camera configuration selects 24 dB analog gain. The graph
+# detector accepts a linear voltage gain: 10^(24/20).
+gain = 15.848931924611133
+dark_current_e_per_pixel_s = 0.96
+# The maintained HEART snapshot does not state its pixel format. Twelve-bit
+# mode selects the published high-sensitivity characterization used below.
+bits = 12
+# Published image full well at zero analog gain; with the configured 24 dB
+# gain this also supplies the ADC scale and gives an earlier output clip.
+full_well_e = 94000.0
 photon_noise = true
 readout_noise = true
-readout_noise_e = 2.7
+# Published RMS read noise for 12-bit high-sensitivity operation at 24 dB.
+readout_noise_e = 2.33
+column_readout_noise_e = 0.0
+row_readout_noise_e = 0.0
 rng_seed = 0
 photon_rate_schema = "org.revolt.classic.shwfs-photon-rate.f32/1"
 frame_schema = "org.revolt.classic.shwfs-frame.f32/1"

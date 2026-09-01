@@ -76,8 +76,10 @@ import ..Optics:
     update_surface!
 import ..Detectors:
     CCDSensor,
+    CMOSSensor,
     Detector,
     EMCCDSensor,
+    GlobalShutter,
     NoiseModel,
     NoiseNone,
     NoisePhoton,

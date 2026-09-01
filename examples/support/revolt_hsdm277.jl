@@ -21,6 +21,14 @@ export provisional_mechanical_coupling
 # the fast actuator axis. Mapping the first row to positive normalized-pupil y
 # and the first column to negative x is an explicit provisional AOS convention,
 # not a measured pupil registration.
+#
+# The HEART SRT snapshot contains a separate server-test file named
+# `DM277_ActuatorIndex.csv` with a different 277-cell outline. It is retained
+# there as a least-squares/test-coordinate fixture and is not the geometry
+# authority for this model. The same snapshot's 376-by-277
+# `interactionMatrix25102022.fits` agrees with the maintained on-sky signal and
+# command ordering, but it does not define command-to-OPD units or a sampled
+# influence function.
 const _ACTUATOR_AXIS_COUNT = 19
 const _ACTUATOR_COUNT = 277
 const _PUPIL_ACTUATOR_AXIS_COUNT = 17

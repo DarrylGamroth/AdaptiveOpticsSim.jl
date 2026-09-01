@@ -95,7 +95,7 @@ Prepare the maintained, atmosphere-backed REVOLT Classic detector-frame graph
 and its 277-command lockstep HIL boundary. `profile=:fast_dm` changes only the
 provisional regular-grid Gaussian HSDM277 surface evaluation; it retains the
 240-sample pupil, 16-by-16 diffractive Shack–Hartmann optics, noisy 352-by-352
-CCD frame, and exact physical command order.
+C-BLUE One IMX425 frame, and exact physical command order.
 """
 function prepare_hil_system(;
     profile::Symbol=:fast_dm,
@@ -112,7 +112,7 @@ end
 
 function _calibration_detector(production_detector)
     config = production_detector.config
-    return ccd_detector_acquisition_node(
+    return cmos_detector_acquisition_node(
         :detector;
         rows=config.rows,
         columns=config.columns,
@@ -121,9 +121,15 @@ function _calibration_detector(production_detector)
         wavelength_m=config.wavelength_m,
         exposure_duration_s=config.exposure_duration_s,
         quantum_efficiency=config.quantum_efficiency,
+        gain=config.gain,
+        dark_current_e_per_pixel_s=0,
+        bits=config.bits,
+        full_well_e=config.full_well_e,
         photon_noise=false,
         readout_noise=false,
         readout_noise_e=0,
+        column_readout_noise_e=0,
+        row_readout_noise_e=0,
         rng_seed=config.rng_seed,
         photon_rate_schema=config.photon_rate_schema,
         frame_schema=config.frame_schema,
@@ -136,7 +142,7 @@ end
         target=HostComputeDevice())
 
 Prepare a flat, noiseless REVOLT Classic calibration graph. It retains the
-selected HSDM277 model and production Shack–Hartmann/CCD geometry while
+selected HSDM277 model and production Shack–Hartmann/CMOS geometry while
 replacing the evolving atmosphere with an explicit zero uncompensated pupil
 OPD and disabling detector noise. It is intended only for a simulation-local
 interaction matrix; it is not an instrument calibration.

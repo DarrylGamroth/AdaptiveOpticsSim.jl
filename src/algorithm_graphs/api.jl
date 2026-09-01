@@ -21,6 +21,7 @@ export pupil_opd_composition_node
 export shack_hartmann_rate_node
 export pyramid_rate_node
 export ccd_detector_acquisition_node
+export cmos_detector_acquisition_node
 export emccd_detector_acquisition_node
 export shack_hartmann_centroid_node
 export shack_hartmann_slope_selection_node
@@ -57,6 +58,7 @@ public PupilOPDCompositionNode, PupilOPDCompositionNodeConfig
 public ShackHartmannRateNode, ShackHartmannRateNodeConfig
 public PyramidRateNode, PyramidRateNodeConfig
 public CCDDetectorAcquisitionNode, CCDDetectorAcquisitionNodeConfig
+public CMOSDetectorAcquisitionNode, CMOSDetectorAcquisitionNodeConfig
 public EMCCDDetectorAcquisitionNode, EMCCDDetectorAcquisitionNodeConfig
 public ShackHartmannCentroidNode, ShackHartmannCentroidNodeConfig
 public ShackHartmannSlopeSelectionNode, ShackHartmannSlopeSelectionNodeConfig
