@@ -69,3 +69,8 @@ path = "2026-08-30-revolt-algorithm-optimization-review.toml"
 purpose = "Accuracy, memory, and CPU/AMDGPU/CUDA performance evidence for the explicit REVOLT Copper shifted-mask Pyramid approximation"
 id = "REVOLT-COPPER-SHIFTED-MASK-PYRAMID-2026-08-30"
 path = "2026-08-30-revolt-copper-shifted-mask-pyramid.toml"
+
+[[artifacts]]
+purpose = "Repeated AMDGPU stream-versus-HIP-Graph profile for node-local regular-grid DM capture in the full-resolution REVOLT graphs"
+id = "DEVICE-COMMAND-GRAPH-PROFILE-2026-09-01"
+path = "2026-09-01-device-command-graph-profile.toml"

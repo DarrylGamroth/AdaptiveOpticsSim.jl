@@ -1,0 +1,210 @@
+artifact_id = "DEVICE-COMMAND-GRAPH-PROFILE-2026-09-01"
+generated_on = "2026-09-01"
+source_revision = "ff910bb6b69184f2db9c20a6ed45d4d6b0522b7e"
+source_tracked_dirty = false
+evidence_class = "repeated warmed synchronized diagnostic profile"
+raw_histograms_archived = false
+
+[contract]
+graph_profile = "fast_dm"
+execution_sequence = ["stream-1", "captured-1", "stream-2", "captured-2"]
+runs_per_policy = 2
+samples_per_run = 100
+warmup_cycles_per_run = 10
+timer = "time_ns; overhead included and not subtracted"
+load_model = "warmed serial closed loop"
+arrival_model = "the next step starts only after the prior step completes"
+coordinated_omission_correction = false
+graph_boundary = "all graph nodes followed by exact graph-context synchronization"
+frame_host_ready_boundary = "graph boundary plus completed target-to-host frame copy"
+captured_scope = "one node-local HIP Graph executable containing the regular-grid separable Gaussian DM"
+uncaptured_scope = "atmosphere, pupil-OPD composition, WFS, detector, graph submission, HIL copies, and command adoption"
+tail_note = "Percentiles are diagnostic. Two runs do not establish a production tail-latency bound."
+attribution_note = "The benchmark's separately synchronized per-node table invokes science-node owners directly and is not a native command-graph launch measurement; only graph and HIL boundaries are compared here."
+
+[workload.classic]
+graph = "examples/graphs/revolt_classic_hil_fast_dm.toml"
+pupil_resolution = 240
+sensor = "diffractive Shack-Hartmann"
+detector_frame_shape = [352, 352]
+atmosphere_layers = 5
+atmosphere_step_s = 0.001
+detector_noise = true
+dm_actuators = 277
+captured_graph_nodes_stream = 0
+captured_graph_nodes_captured = 1
+
+[workload.copper]
+graph = "examples/graphs/revolt_copper_hil_fast_dm.toml"
+pupil_resolution = 480
+sensor = "32-point diffractive modulated Pyramid"
+detector_frame_shape = [64, 64]
+atmosphere_layers = 5
+atmosphere_step_s = 0.002
+detector_noise = true
+dm_actuators = 277
+captured_graph_nodes_stream = 0
+captured_graph_nodes_captured = 1
+
+[environment]
+host = "rtc-devel"
+os = "Linux 6.12.57+deb13-amd64"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+logical_cpu_threads = 16
+gpu = "AMD Radeon Graphics"
+gpu_architecture = "gfx1030"
+julia = "1.12.7"
+amdgpu_jl = "2.7.0"
+hip = "7.2.53211"
+rocm_installation = "7.2.1"
+julia_threads = 1
+blas_threads = 1
+fft_threads = 1
+
+[[runs]]
+id = "stream-1"
+policy = "stream"
+classic_graph_target_ready_mean_ns = 6704894.22
+classic_graph_target_ready_p50_ns = 6385663
+classic_graph_target_ready_p90_ns = 8798207
+classic_graph_target_ready_p99_ns = 9248767
+classic_frame_host_ready_mean_ns = 7020521.49
+classic_frame_host_ready_p50_ns = 6578175
+classic_frame_host_ready_p90_ns = 8912895
+classic_frame_host_ready_p99_ns = 9215999
+copper_graph_target_ready_mean_ns = 67615230.67
+copper_graph_target_ready_p50_ns = 65961983
+copper_graph_target_ready_p90_ns = 69861375
+copper_graph_target_ready_p99_ns = 91947007
+copper_frame_host_ready_mean_ns = 67524978.49
+copper_frame_host_ready_p50_ns = 65961983
+copper_frame_host_ready_p90_ns = 68091903
+copper_frame_host_ready_p99_ns = 101449727
+
+[[runs]]
+id = "captured-1"
+policy = "captured"
+classic_graph_target_ready_mean_ns = 6280808.17
+classic_graph_target_ready_p50_ns = 6004735
+classic_graph_target_ready_p90_ns = 6578175
+classic_graph_target_ready_p99_ns = 9019391
+classic_frame_host_ready_mean_ns = 6014653.45
+classic_frame_host_ready_p50_ns = 6004735
+classic_frame_host_ready_p90_ns = 6250495
+classic_frame_host_ready_p99_ns = 6402047
+copper_graph_target_ready_mean_ns = 66393026.67
+copper_graph_target_ready_p50_ns = 65142783
+copper_graph_target_ready_p90_ns = 67829759
+copper_graph_target_ready_p99_ns = 77987839
+copper_frame_host_ready_mean_ns = 65699568.87
+copper_frame_host_ready_p50_ns = 65077247
+copper_frame_host_ready_p90_ns = 67043327
+copper_frame_host_ready_p99_ns = 69009407
+
+[[runs]]
+id = "stream-2"
+policy = "stream"
+classic_graph_target_ready_mean_ns = 6236391.13
+classic_graph_target_ready_p50_ns = 6041599
+classic_graph_target_ready_p90_ns = 6688767
+classic_graph_target_ready_p99_ns = 8024063
+classic_frame_host_ready_mean_ns = 5996104.21
+classic_frame_host_ready_p50_ns = 5992447
+classic_frame_host_ready_p90_ns = 6127615
+classic_frame_host_ready_p99_ns = 6668287
+copper_graph_target_ready_mean_ns = 66046764.56
+copper_graph_target_ready_p50_ns = 65142783
+copper_graph_target_ready_p90_ns = 66289663
+copper_graph_target_ready_p99_ns = 70123519
+copper_frame_host_ready_mean_ns = 65837737.05
+copper_frame_host_ready_p50_ns = 64978943
+copper_frame_host_ready_p90_ns = 67108863
+copper_frame_host_ready_p99_ns = 83099647
+
+[[runs]]
+id = "captured-2"
+policy = "captured"
+classic_graph_target_ready_mean_ns = 6458310.02
+classic_graph_target_ready_p50_ns = 6098943
+classic_graph_target_ready_p90_ns = 7172095
+classic_graph_target_ready_p99_ns = 11862015
+classic_frame_host_ready_mean_ns = 6444552.41
+classic_frame_host_ready_p50_ns = 6164479
+classic_frame_host_ready_p90_ns = 7167999
+classic_frame_host_ready_p99_ns = 9420799
+copper_graph_target_ready_mean_ns = 66404923.96
+copper_graph_target_ready_p50_ns = 65077247
+copper_graph_target_ready_p90_ns = 67076095
+copper_graph_target_ready_p99_ns = 84082687
+copper_frame_host_ready_mean_ns = 66188584.44
+copper_frame_host_ready_p50_ns = 65077247
+copper_frame_host_ready_p90_ns = 67567615
+copper_frame_host_ready_p99_ns = 81723391
+
+[aggregate.classic.graph_target_ready.stream]
+mean_of_run_means_ns = 6470642.675
+throughput_from_mean_hz = 154.5441543022618
+run_mean_min_ns = 6236391.13
+run_mean_max_ns = 6704894.22
+
+[aggregate.classic.graph_target_ready.captured]
+mean_of_run_means_ns = 6369559.095
+throughput_from_mean_hz = 156.99673793512392
+run_mean_min_ns = 6280808.17
+run_mean_max_ns = 6458310.02
+delta_from_stream_percent = -1.5621876384945055
+
+[aggregate.classic.frame_host_ready.stream]
+mean_of_run_means_ns = 6508312.85
+throughput_from_mean_hz = 153.6496513070972
+run_mean_min_ns = 5996104.21
+run_mean_max_ns = 7020521.49
+
+[aggregate.classic.frame_host_ready.captured]
+mean_of_run_means_ns = 6229602.93
+throughput_from_mean_hz = 160.52387467334134
+run_mean_min_ns = 6014653.45
+run_mean_max_ns = 6444552.41
+delta_from_stream_percent = -4.282368202382891
+
+[aggregate.copper.graph_target_ready.stream]
+mean_of_run_means_ns = 66830997.615
+throughput_from_mean_hz = 14.963116453248233
+run_mean_min_ns = 66046764.56
+run_mean_max_ns = 67615230.67
+
+[aggregate.copper.graph_target_ready.captured]
+mean_of_run_means_ns = 66398975.315
+throughput_from_mean_hz = 15.060473377125941
+run_mean_min_ns = 66393026.67
+run_mean_max_ns = 66404923.96
+delta_from_stream_percent = -0.646439998530024
+
+[aggregate.copper.frame_host_ready.stream]
+mean_of_run_means_ns = 66681357.77
+throughput_from_mean_hz = 14.996695230010761
+run_mean_min_ns = 65837737.05
+run_mean_max_ns = 67524978.49
+
+[aggregate.copper.frame_host_ready.captured]
+mean_of_run_means_ns = 65944076.655
+throughput_from_mean_hz = 15.164364272347093
+run_mean_min_ns = 65699568.87
+run_mean_max_ns = 66188584.44
+delta_from_stream_percent = -1.1056780180497383
+
+[interpretation]
+verdict = "HIP Graph replay is functional, but this one-node capture scope does not establish a material end-to-end throughput gain."
+notes = [
+    "All captured-policy graphs reported exactly one native HIP Graph node and produced finite, nonzero frames while the atmosphere evolved.",
+    "Mean-of-run-means reductions were 1.6% for Classic graph target-ready, 4.3% for Classic frame host-ready, 0.6% for Copper graph target-ready, and 1.1% for Copper frame host-ready.",
+    "Every stream and captured run-mean range overlaps for the corresponding boundary, and the first Classic stream run showed substantially more unrelated detector and WFS variation than the repeat.",
+    "The captured DM is already a small fraction of either complete graph. Copper remains dominated by the 32-point Pyramid calculation; Classic remains dominated by noisy detector acquisition and Shack-Hartmann formation.",
+    "The result justifies retaining conservative opt-in capture as a foundation for future qualified clusters. It does not justify making capture the default or claiming whole-graph capture.",
+]
+
+[validation]
+cpu = "Pkg.test passed all registered CPU suites at ff910bb6b69184f2db9c20a6ed45d4d6b0522b7e"
+amdgpu = "AMDGPU hardware target passed 677/677 at ff910bb6b69184f2db9c20a6ed45d4d6b0522b7e"
+cuda = "CUDA hardware target passed 674/674 at ff910bb6b69184f2db9c20a6ed45d4d6b0522b7e"
+splitmix64 = "runtime_rng returns SplitMix64RNG; CPU and AMDGPU graph owners use it, while prepared CUDA stochastic owners use the device-resident SplitMix64 counter stream"
