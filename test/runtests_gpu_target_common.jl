@@ -133,12 +133,158 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
         run_captured_graph_execution_smoke(B)
         run_captured_atmosphere_replay_smoke(B)
         run_captured_wfs_replay_smoke(B)
+        run_captured_detector_replay_smoke(B)
         run_algorithm_graph_backend_smoke(B)
         run_graph_rng_capture_replay(B)
         run_optional_backend_smoke(B)
         run_gpu_builder_smoke(B)
         run_revolt_like_hil_backend_smoke(B)
     end
+    return nothing
+end
+
+function _compare_captured_detector_replay!(definition, target)
+    stream_graph = prepare_algorithm_graph(
+        definition;
+        target,
+        execution=StreamGraphExecution(),
+    )
+    captured_graph = prepare_algorithm_graph(
+        definition;
+        target,
+        execution=CapturedGraphExecution(),
+    )
+    @test captured_graph_node_count(captured_graph) == 1
+
+    first_frame = nothing
+    for frame_index in 1:2
+        step_graph!(stream_graph)
+        step_graph!(captured_graph)
+        stream_frame = Array(graph_output(stream_graph, Val(:frame)))
+        captured_frame = Array(graph_output(captured_graph, Val(:frame)))
+        @test captured_frame ≈ stream_frame rtol = 2.0f-5 atol = 1.0f-6
+        if frame_index == 1
+            first_frame = captured_frame
+        else
+            @test captured_frame != first_frame
+        end
+    end
+
+    reset_graph!(stream_graph)
+    reset_graph!(captured_graph)
+    step_graph!(stream_graph)
+    step_graph!(captured_graph)
+    replayed_frame = Array(graph_output(captured_graph, Val(:frame)))
+    @test replayed_frame ≈
+        Array(graph_output(stream_graph, Val(:frame))) rtol = 2.0f-5 atol = 1.0f-6
+    @test replayed_frame == first_frame
+    return nothing
+end
+
+function run_captured_detector_replay_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    target = compute_device(BackendArray(zeros(Float32, 1)))
+
+    ccd_rate = BackendArray(fill(1_000.0f0, 8, 8))
+    ccd_definition = algorithm_graph(
+        (
+            ccd_detector_acquisition_node(
+                :detector;
+                rows=8,
+                columns=8,
+                pixel_scale_arcsec=0.1,
+                wavelength_m=0.75e-6,
+                exposure_duration_s=0.01,
+                quantum_efficiency=0.5,
+                readout_noise_e=2.0,
+                photon_noise=true,
+                readout_noise=true,
+                rng_seed=0x1810,
+                photon_rate_schema="test.graph.captured-rate.f32/1",
+                frame_schema="test.graph.captured-frame.f32/1",
+            ),
+        );
+        name=:captured_ccd_acquisition,
+        inputs=(graph_input(
+            :rate,
+            :detector => :photon_rate,
+            ccd_rate,
+        ),),
+        outputs=(graph_output(:frame, :detector => :frame),),
+    )
+    _compare_captured_detector_replay!(ccd_definition, target)
+
+    cmos_rate = BackendArray(fill(200_000.0f0, 8, 8))
+    cmos_definition = algorithm_graph(
+        (
+            cmos_detector_acquisition_node(
+                :detector;
+                rows=8,
+                columns=8,
+                pixel_scale_arcsec=0.697,
+                wavelength_m=0.8e-6,
+                exposure_duration_s=0.001896,
+                quantum_efficiency=0.27,
+                gain=15.848931924611133,
+                dark_current_e_per_pixel_s=0.96,
+                bits=12,
+                full_well_e=94_000,
+                photon_noise=true,
+                readout_noise=true,
+                readout_noise_e=2.33,
+                column_readout_noise_e=0.25,
+                row_readout_noise_e=0.5,
+                rng_seed=0x1811,
+                photon_rate_schema="test.graph.captured-rate.f32/1",
+                frame_schema="test.graph.captured-frame.f32/1",
+            ),
+        );
+        name=:captured_cmos_acquisition,
+        inputs=(graph_input(
+            :rate,
+            :detector => :photon_rate,
+            cmos_rate,
+        ),),
+        outputs=(graph_output(:frame, :detector => :frame),),
+    )
+    _compare_captured_detector_replay!(cmos_definition, target)
+
+    emccd_rate = BackendArray(fill(4_000.0f0, 8, 8))
+    emccd_definition = algorithm_graph(
+        (
+            emccd_detector_acquisition_node(
+                :detector;
+                rows=8,
+                columns=8,
+                normalized_pupil_sampling=0.125,
+                wavelength_m=0.55e-6,
+                exposure_duration_s=0.002,
+                quantum_efficiency=0.95,
+                gain=4,
+                dark_current_e_per_pixel_s=20,
+                bits=14,
+                full_well_e=16_000,
+                photon_noise=true,
+                readout_noise=true,
+                readout_noise_e=1,
+                excess_noise_factor=1.4,
+                clock_induced_charge_e_per_pixel_frame=0.1,
+                rng_seed=0x1812,
+                photon_rate_schema="test.graph.captured-rate.f32/1",
+                frame_schema="test.graph.captured-frame.f32/1",
+            ),
+        );
+        name=:captured_emccd_acquisition,
+        inputs=(graph_input(
+            :rate,
+            :detector => :photon_rate,
+            emccd_rate,
+        ),),
+        outputs=(graph_output(:frame, :detector => :frame),),
+    )
+    _compare_captured_detector_replay!(emccd_definition, target)
     return nothing
 end
 

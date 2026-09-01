@@ -66,10 +66,14 @@ composition sequence as one HIP Graph, changes the retained command buffer
 between replays, and verifies the composed output. A separate captured
 multilayer-atmosphere graph is compared frame by frame with stream execution;
 the test verifies evolving turbulence, host epoch publication, and reset
-reproducibility. The target also captures the device-resident SplitMix64 normal
-and Poisson paths, verifies that replay advances both streams, and verifies RNG
-reset reproducibility. This is required evidence for `CapturedGraphExecution`;
-a standalone HIP Graph smoke test is not sufficient.
+reproducibility. Shack-Hartmann and both maintained Pyramid modulation paths
+are compared with stream execution. The CCD, global-shutter CMOS, and
+linear-mode EMCCD fixtures also verify stochastic evolution, stream parity,
+ADC output, and reset replay. The target separately captures the
+device-resident SplitMix64 normal and Poisson paths, verifies that replay
+advances both streams, and verifies RNG reset reproducibility. This is required
+evidence for `CapturedGraphExecution`; a standalone HIP Graph smoke test is not
+sufficient.
 
 ## CUDA On WSL
 
@@ -152,8 +156,10 @@ AOS_REVOLT_GRAPH_BACKEND=amdgpu \
 Record architecture, graph profile, resolution, noise settings, warmup, sample
 count, and synchronization boundary. The graph-node benchmark records
 submission, completion-ticket wait, and target-ready service time separately.
-`AOS_REVOLT_GRAPH_EXECUTION=stream` is the default; use `captured` only with an
-accelerator backend and a graph containing at least one qualified node.
+`AOS_REVOLT_GRAPH_EXECUTION=stream` is the default. Captured execution requires
+an accelerator backend and requires every node in the graph to qualify. The
+maintained REVOLT `fast_dm` graphs satisfy this contract with unit detector
+binning; the `full_optical` graphs retain the general unqualified DM node.
 Do not compare submission against synchronized target-ready or host-ready
 latency as though they were the same metric.
 

@@ -3385,6 +3385,44 @@ end
     return nothing
 end
 
+@inline function enqueue_captured_graph_node!(
+    owner::_FrameDetectorAcquisitionOwner,
+)
+    _enqueue_detector_acquisition!(
+        owner.prepared,
+        owner.rng,
+        owner.output,
+    )
+    return nothing
+end
+
+@inline function _preflight_captured_graph_node!(
+    owner::_FrameDetectorAcquisitionOwner,
+)
+    _preflight_enqueued_detector_acquisition!(owner.prepared)
+    return nothing
+end
+
+@inline function _complete_captured_graph_node!(
+    owner::_FrameDetectorAcquisitionOwner,
+)
+    _complete_enqueued_detector_acquisition!(owner.prepared)
+    return nothing
+end
+
+@inline function graph_node_capture_capability(
+    owner::_FrameDetectorAcquisitionOwner,
+)
+    if _supports_enqueued_detector_acquisition(
+        owner.prepared,
+        owner.rng,
+        owner.output,
+    )
+        return GraphNodeCaptureSafe()
+    end
+    return GraphNodeCaptureUnsupported()
+end
+
 function reset_graph_node!(owner::_FrameDetectorAcquisitionOwner)
     detector = detector_acquisition_detector(owner.prepared)
     reset_integration!(detector)

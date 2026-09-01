@@ -60,16 +60,19 @@ is not a continuously available release gate. Both policies require:
 
 The accelerator graph surface includes opt-in CUDA Graph and HIP Graph replay
 of a complete graph step when every node is qualified. The maintained captured
-fixtures cover the finite multilayer atmosphere and the regular-grid separable
-Gaussian DM followed by pupil-OPD composition; captured execution does not
-interleave unqualified stream nodes.
+fixtures cover finite multilayer atmosphere replay, the regular-grid separable
+Gaussian DM, pupil-OPD composition, diffractive Shack-Hartmann optics, both
+maintained Pyramid modulation strategies, and the built-in CCD, CMOS, and
+EMCCD complete-frame detector nodes. Captured execution does not interleave
+unqualified stream nodes.
 
 Prepared graphs provide a bounded capacity-one asynchronous submission
 boundary. The graph sequence and caller-visible output readiness publish only
 when the completion ticket is consumed. Atmosphere-layer accumulation and
 deformable-mirror staging use same-stream ordering on the covered accelerator
-paths. WFS FFT implementations and the documented AMDGPU detector host mirror
-may retain narrower required completion boundaries inside submission.
+paths. The qualified WFS FFT and detector acquisition paths enqueue directly
+on the retained device context; ordinary stream execution may still use a
+backend's documented detector host-mirror strategy.
 
 Support is operation-specific. Preparing a graph for an accelerator succeeds
 only when every node and bound array supports that exact target. The lockstep
@@ -83,9 +86,19 @@ composition graph with changed command contents. Prepared stochastic graph
 owners on both backends keep their counter state and normal, uniform, and
 Poisson array sampling on the selected device. Hardware tests also compare
 captured finite-atmosphere replay with stream execution and verify completed
-host epoch publication and reset. Complete REVOLT graphs are not yet
-capture-qualified because WFS and detector owners still need independent
-capture audits.
+host epoch publication and reset. They compare captured Shack-Hartmann,
+Pyramid, CCD, CMOS, and EMCCD execution with the corresponding stream results.
+The maintained REVOLT `fast_dm` graphs are complete five-node captured graphs
+when detector binning is one. The `full_optical` profiles remain stream-only
+because their general coordinate-sampled Gaussian DM node is not qualified.
+
+Detector capture is deliberately narrower than the general detector API. It
+admits unit-binning, full-frame CCD single-read, global-shutter CMOS, and
+linear sequential EMCCD acquisitions with the built-in null response,
+coupling, defect, correction, persistence, and thermal models. Prepared device
+SplitMix64 state drives photon, dark, CIC, multiplication, and readout noise.
+Other detector models and non-unit binning remain on stream execution until
+their fixed-address paths are independently qualified.
 
 Metal and AppleAccelerate are optional/manual surfaces and are not implied by
 the AMDGPU or CUDA claims.
