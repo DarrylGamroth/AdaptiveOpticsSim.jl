@@ -1549,6 +1549,8 @@ end
             :pyramid_modulation_batch_intensity_kernel!,
             :pyramid_modulation_batch_mask_kernel!,
             :pyramid_pupil_modulation_batch_kernel!,
+            :pyramid_separable_shifted_mask_batch_kernel!,
+            :pyramid_separable_shifted_mask_factors_kernel!,
             :pyramid_shifted_mask_batch_kernel!,
             :pyramid_shifted_mask_stack_kernel!,
             :pyramid_unmodulated_electric_field_kernel!,

@@ -167,6 +167,44 @@ end
     end
 end
 
+@kernel function pyramid_separable_shifted_mask_factors_kernel!(
+    axis_1_factors, axis_2_factors, axis_1_shifts_rad, axis_2_shifts_rad,
+    r, norma, coordinate_start, coordinate_step,
+    shift_x_positive, shift_x_negative,
+    shift_y_positive, shift_y_negative,
+    pad::Int, point_count::Int)
+    axis, point = @index(Global, NTuple)
+    if axis <= pad && point <= point_count
+        coordinate = coordinate_start + (axis - 1) * coordinate_step
+        axis_1_coordinate = coordinate + @inbounds(axis_1_shifts_rad[point])
+        axis_2_coordinate = coordinate + @inbounds(axis_2_shifts_rad[point])
+        axis_1_phase = -max(
+            axis_1_coordinate * (r + shift_x_positive),
+            axis_1_coordinate * (-r + shift_x_negative),
+        ) * norma
+        axis_2_phase = -max(
+            axis_2_coordinate * (r - shift_y_positive),
+            axis_2_coordinate * (-r - shift_y_negative),
+        ) * norma
+        @inbounds begin
+            axis_1_factors[axis, point] = cis(axis_1_phase)
+            axis_2_factors[axis, point] = cis(axis_2_phase)
+        end
+    end
+end
+
+@kernel function pyramid_separable_shifted_mask_batch_kernel!(stack,
+    focal_field, axis_1_factors, axis_2_factors, weights,
+    first_point::Int, pad::Int, batch_size::Int)
+    i, j, batch_index = @index(Global, NTuple)
+    if i <= pad && j <= pad && batch_index <= batch_size
+        point = first_point + batch_index - 1
+        @inbounds stack[i, j, batch_index] = weights[point] *
+            focal_field[i, j] * axis_1_factors[i, point] *
+            axis_2_factors[j, point]
+    end
+end
+
 @kernel function pyramid_slopes_kernel!(slopes, intensity, valid_mask, sub::Int, n_sub::Int, pad::Int, offset::Int,
     ox1::Int, oy1::Int, ox2::Int, oy2::Int, ox3::Int, oy3::Int, ox4::Int, oy4::Int,
     sx1::Int, sy1::Int, sx2::Int, sy2::Int, sx3::Int, sy3::Int, sx4::Int, sy4::Int)
@@ -279,15 +317,39 @@ struct PyramidModulationBatchWorkspace{C,V,Pf,Pb}
     batch_size::Int
 end
 
+"""Dispatch family for prepared shifted-mask modulation storage."""
+abstract type AbstractPyramidShiftedMaskModulationWorkspace end
+
 """
-Prepared shifted focal-plane masks and one bounded inverse-propagation tile.
+Prepared full shifted focal-plane masks and one bounded inverse-propagation tile.
 
 The masks are derived cache, not persistent scientific state. They are valid
 only for the fixed operating modulation used during preparation.
 """
-struct PyramidShiftedMaskModulationWorkspace{C,M,V,Pb}
+struct PyramidShiftedMaskModulationWorkspace{C,M,V,Pb} <:
+       AbstractPyramidShiftedMaskModulationWorkspace
     field_stack::C
     shifted_masks::M
+    operating_weights::V
+    axis_1_shifts_rad::V
+    axis_2_shifts_rad::V
+    bfft_plan::Pb
+    batch_size::Int
+end
+
+"""
+Prepared separable factors for an ideal shifted focal-plane Pyramid mask.
+
+This representation is exact for the shifted-mask formulation when physical
+mask rotation and rooftop terms are both zero. It replaces each `pad × pad`
+mask with two `pad`-element factors while retaining the same bounded inverse
+propagation tile.
+"""
+struct PyramidSeparableShiftedMaskModulationWorkspace{C,M,V,Pb} <:
+       AbstractPyramidShiftedMaskModulationWorkspace
+    field_stack::C
+    axis_1_factors::M
+    axis_2_factors::M
     operating_weights::V
     axis_1_shifts_rad::V
     axis_2_shifts_rad::V
@@ -378,6 +440,9 @@ end
     ::AcceleratorStyle, field, point_count::Int) =
     _pyramid_modulation_batch_size(field, point_count)
 
+@inline _pyramid_shifted_mask_is_separable(phase_mask) =
+    iszero(phase_mask.rotation_rad) && iszero(phase_mask.rooftop)
+
 @inline function _prepare_pyramid_modulation_batch(
     ::ScalarCPUStyle, field, phase_mask, modulation,
     calibration_modulation, ::PyramidPupilTiltStrategy)
@@ -432,7 +497,6 @@ function _prepare_pyramid_modulation_batch(
     batch_size = _pyramid_shifted_mask_batch_size(style, field, point_count)
     pad = size(field, 1)
     field_stack = similar(field, eltype(field), pad, pad, batch_size)
-    shifted_masks = similar(field, eltype(field), pad, pad, point_count)
     T = real(eltype(field))
     operating_weights = similar(field, T, point_count)
     axis_1_shifts_rad = similar(operating_weights)
@@ -449,6 +513,22 @@ function _prepare_pyramid_modulation_batch(
     copyto!(axis_1_shifts_rad, host_axis_1_shifts_rad)
     copyto!(axis_2_shifts_rad, host_axis_2_shifts_rad)
     bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
+    if _pyramid_shifted_mask_is_separable(phase_mask)
+        axis_1_factors = similar(
+            field, eltype(field), pad, point_count)
+        axis_2_factors = similar(axis_1_factors)
+        return PyramidSeparableShiftedMaskModulationWorkspace(
+            field_stack,
+            axis_1_factors,
+            axis_2_factors,
+            operating_weights,
+            axis_1_shifts_rad,
+            axis_2_shifts_rad,
+            bfft_plan,
+            batch_size,
+        )
+    end
+    shifted_masks = similar(field, eltype(field), pad, pad, point_count)
     return PyramidShiftedMaskModulationWorkspace(
         field_stack,
         shifted_masks,
@@ -457,6 +537,37 @@ function _prepare_pyramid_modulation_batch(
         axis_2_shifts_rad,
         bfft_plan,
         batch_size,
+    )
+end
+
+function _resize_pyramid_modulation_batch(
+    batch::PyramidSeparableShiftedMaskModulationWorkspace, field)
+    pad = size(field, 1)
+    point_count = size(batch.axis_1_factors, 2)
+    field_stack = similar(
+        batch.field_stack,
+        eltype(batch.field_stack),
+        pad,
+        pad,
+        batch.batch_size,
+    )
+    axis_1_factors = similar(
+        batch.axis_1_factors,
+        eltype(batch.axis_1_factors),
+        pad,
+        point_count,
+    )
+    axis_2_factors = similar(axis_1_factors)
+    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
+    return PyramidSeparableShiftedMaskModulationWorkspace(
+        field_stack,
+        axis_1_factors,
+        axis_2_factors,
+        batch.operating_weights,
+        batch.axis_1_shifts_rad,
+        batch.axis_2_shifts_rad,
+        bfft_plan,
+        batch.batch_size,
     )
 end
 

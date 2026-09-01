@@ -2539,6 +2539,15 @@ end
     ::AcceleratorComputeDevice,
     ::Source,
     ::NoPreparedFourPupilLGS,
+    ::PyramidSeparableShiftedMaskModulationWorkspace,
+)
+    return GraphNodeCaptureSafe()
+end
+
+@inline function _pyramid_rate_capture_capability(
+    ::AcceleratorComputeDevice,
+    ::Source,
+    ::NoPreparedFourPupilLGS,
     ::PyramidShiftedMaskModulationWorkspace,
 )
     return GraphNodeCaptureSafe()

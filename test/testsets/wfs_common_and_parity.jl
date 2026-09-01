@@ -213,6 +213,49 @@ end
         modulation_propagation_strategy=
             WavefrontSensors.PyramidShiftedMaskStrategy(),
     )
+    separable_batch = pyramid_propagation_workspace(
+        shifted_mask).modulation_batch
+    @test separable_batch isa
+        WavefrontSensors.PyramidSeparableShiftedMaskModulationWorkspace
+    point_count = size(separable_batch.axis_1_factors, 2)
+    pad = size(separable_batch.axis_1_factors, 1)
+    full_masks = similar(
+        pyramid_propagation_workspace(shifted_mask).pyramid_mask,
+        pad,
+        pad,
+        point_count,
+    )
+    full_batch = WavefrontSensors.PyramidShiftedMaskModulationWorkspace(
+        similar(separable_batch.field_stack),
+        full_masks,
+        separable_batch.operating_weights,
+        separable_batch.axis_1_shifts_rad,
+        separable_batch.axis_2_shifts_rad,
+        separable_batch.bfft_plan,
+        separable_batch.batch_size,
+    )
+    WavefrontSensors._build_pyramid_shifted_masks!(
+        AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
+        full_batch,
+        shifted_mask,
+        PupilFunction(tel),
+    )
+    for point in 1:point_count
+        separable_mask = separable_batch.axis_1_factors[:, point] *
+            transpose(separable_batch.axis_2_factors[:, point])
+        @test separable_mask ≈ full_masks[:, :, point] rtol = 2e-14
+    end
+    shifted_general_mask = PyramidWFS(
+        tel;
+        shifted_common...,
+        rooftop=0.25,
+        phase_mask_rotation_rad=0.1,
+        modulation_propagation_strategy=
+            WavefrontSensors.PyramidShiftedMaskStrategy(),
+    )
+    @test pyramid_propagation_workspace(
+        shifted_general_mask).modulation_batch isa
+        WavefrontSensors.PyramidShiftedMaskModulationWorkspace
     strategy_pupil = PupilFunction(tel)
     strategy_resolution = tel.params.resolution
     @inbounds for i in 1:strategy_resolution, j in 1:strategy_resolution
@@ -221,6 +264,21 @@ end
         strategy_pupil.opd[i, j] = 40e-9 *
             (sinpi(x) + 0.4 * cospi(y) + 0.2 * x * y)
     end
+    shifted_general_front_end = PyramidOpticalFrontEnd(
+        shifted_general_mask, src)
+    shifted_general_rate = pyramid_rate_map(
+        shifted_general_front_end, strategy_pupil)
+    shifted_general_prepared = prepare_wfs_optics(
+        shifted_general_front_end,
+        strategy_pupil,
+        shifted_general_rate,
+    )
+    form_wfs_optical_products!(
+        shifted_general_rate,
+        strategy_pupil,
+        shifted_general_prepared,
+    )
+    @test all(isfinite, shifted_general_rate.values)
     pupil_tilt_front_end = PyramidOpticalFrontEnd(pupil_tilt, src)
     shifted_mask_front_end = PyramidOpticalFrontEnd(shifted_mask, src)
     pupil_tilt_rate = pyramid_rate_map(pupil_tilt_front_end, strategy_pupil)

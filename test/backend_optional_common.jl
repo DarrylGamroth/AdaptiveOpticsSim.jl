@@ -2629,10 +2629,12 @@ function run_optional_pyramid_shifted_mask_checks(
     synchronize_backend!(execution_style(shifted_rate.values))
 
     batch = pyramid_propagation_workspace(shifted_sensor).modulation_batch
-    @test batch isa WavefrontSensors.PyramidShiftedMaskModulationWorkspace
+    @test batch isa
+        WavefrontSensors.PyramidSeparableShiftedMaskModulationWorkspace
     @test batch.batch_size == length(modulation_path)
     @test batch.field_stack isa BackendArray
-    @test batch.shifted_masks isa BackendArray
+    @test batch.axis_1_factors isa BackendArray
+    @test batch.axis_2_factors isa BackendArray
     @test batch.operating_weights isa BackendArray
     @test batch.axis_1_shifts_rad isa BackendArray
     @test batch.axis_2_shifts_rad isa BackendArray

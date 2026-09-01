@@ -120,6 +120,7 @@ import ..WavefrontSensors:
     PyramidModulationBatchWorkspace,
     PyramidOpticalFrontEnd,
     PyramidPupilTiltStrategy,
+    PyramidSeparableShiftedMaskModulationWorkspace,
     PyramidShiftedMaskModulationWorkspace,
     PyramidShiftedMaskStrategy,
     PyramidWFS,
