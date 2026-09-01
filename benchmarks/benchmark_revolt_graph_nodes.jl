@@ -273,6 +273,17 @@ function node_results(names::Tuple, recorders::Tuple)
     return results
 end
 
+@noinline function profile_graph_step_julia_allocation_bytes(graph)
+    return @allocated step_graph!(graph)
+end
+
+@noinline function profile_hil_cycle_julia_allocation_bytes(boundary)
+    return @allocated begin
+        sequence = step_hil_frame!(boundary)
+        adopt_hil_command!(boundary, sequence)
+    end
+end
+
 function profile_graph_execution(profile::RevoltGraphProfile, backend)
     prepared = prepare_profile_graph(profile, backend)
     graph = prepared.graph
@@ -313,6 +324,9 @@ function profile_graph_execution(profile::RevoltGraphProfile, backend)
     atmosphere_after != atmosphere_before || error(
         "$(profile.name) atmosphere did not evolve during profiling",
     )
+    profile_graph_step_julia_allocation_bytes(graph)
+    graph_step_julia_allocation_bytes =
+        profile_graph_step_julia_allocation_bytes(graph)
 
     submission_summary = latency_summary(submission_recorder)
     completion_wait_summary = latency_summary(completion_wait_recorder)
@@ -328,6 +342,8 @@ function profile_graph_execution(profile::RevoltGraphProfile, backend)
         "graph_submission" => submission_summary,
         "graph_completion_wait" => completion_wait_summary,
         "graph_target_ready" => target_ready_summary,
+        "graph_target_ready_calling_task_julia_allocation_bytes" =>
+            graph_step_julia_allocation_bytes,
         "separately_synchronized_node_sum_over_graph_mean" =>
             node_mean_sum / target_ready_summary["mean_ns"],
         "frame_shape" => collect(size(frame)),
@@ -372,6 +388,9 @@ function profile_hil_execution(profile::RevoltGraphProfile, backend)
     sum(frame) > 0 || error(
         "$(profile.name) HIL boundary produced an empty frame",
     )
+    profile_hil_cycle_julia_allocation_bytes(boundary)
+    hil_cycle_julia_allocation_bytes =
+        profile_hil_cycle_julia_allocation_bytes(boundary)
     return Dict{String,Any}(
         "preparation_ns" => prepared.preparation_ns,
         "target" => string(prepared.target),
@@ -380,6 +399,8 @@ function profile_hil_execution(profile::RevoltGraphProfile, backend)
         "frame_host_ready" => latency_summary(frame_recorder),
         "command_target_ready" => latency_summary(command_recorder),
         "lockstep_cycle" => latency_summary(cycle_recorder),
+        "lockstep_cycle_calling_task_julia_allocation_bytes" =>
+            hil_cycle_julia_allocation_bytes,
         "frame_shape" => collect(size(frame)),
         "frame_finite" => true,
         "frame_nonzero" => true,
@@ -473,6 +494,12 @@ function main()
             "lockstep_cycle_boundary" =>
                 "frame-host-ready boundary immediately followed by " *
                 "same-sequence command adoption",
+            "allocation_boundary" =>
+                "one separately warmed completed graph step or lockstep " *
+                "HIL cycle",
+            "allocation_scope" =>
+                "Julia @allocated bytes on the calling task; excludes native " *
+                "driver/device allocation and work performed by other tasks",
             "per_node_sum_caveat" =>
                 "each node is synchronized separately, so its sum includes " *
                 "more synchronization than graph execution",
