@@ -184,6 +184,14 @@ end
     @test WavefrontSensors.pyramid_propagation_plan(
         pyr_default).modulation_propagation_strategy isa
         WavefrontSensors.PyramidPupilTiltStrategy
+    @test WavefrontSensors._pyramid_modulation_batch_size(
+        32, 8 * 1024 * 1024) == 32
+    @test WavefrontSensors._pyramid_modulation_batch_size(
+        32, 16 * 1024 * 1024) == 16
+    @test WavefrontSensors._pyramid_modulation_batch_size(
+        32, 64 * 1024 * 1024) == 4
+    @test WavefrontSensors._pyramid_modulation_batch_size(
+        12, 40 * 1024 * 1024) == 6
 
     shifted_path = ((1.3, 0.7),)
     shifted_common = (

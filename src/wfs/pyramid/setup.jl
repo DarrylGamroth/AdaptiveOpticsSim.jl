@@ -335,21 +335,48 @@ struct PreparedPyramidPropagation{
     workspace::W
 end
 
-const _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT = 8
+# Larger batches amortize FFT submission and intermediate kernels, while this
+# scratch budget prevents the prepared field stack from scaling without bound
+# on larger propagation grids. The largest divisor within both limits is fixed
+# during preparation; the repeated path performs no device query or tuning.
+const _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT = 32
+const _PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES = 256 * 1024 * 1024
 
-function _pyramid_modulation_batch_size(point_count::Int)
-    for candidate in min(
-        point_count, _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT):-1:1
+function _pyramid_modulation_batch_size(
+    point_count::Int,
+    plane_bytes::Int,
+)
+    point_count >= 1 || throw(InvalidConfiguration(
+        "Pyramid modulation requires at least one point",
+    ))
+    plane_bytes >= 1 || throw(InvalidConfiguration(
+        "Pyramid modulation field planes must occupy at least one byte",
+    ))
+    memory_limit = max(1, div(
+        _PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES,
+        plane_bytes,
+    ))
+    candidate_limit = min(
+        point_count,
+        _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT,
+        memory_limit,
+    )
+    for candidate in candidate_limit:-1:1
         point_count % candidate == 0 && return candidate
     end
     return 1
 end
 
+@inline function _pyramid_modulation_batch_size(field, point_count::Int)
+    plane_bytes = Base.checked_mul(sizeof(eltype(field)), length(field))
+    return _pyramid_modulation_batch_size(point_count, plane_bytes)
+end
+
 @inline _pyramid_shifted_mask_batch_size(
-    ::ScalarCPUStyle, ::Int) = 1
+    ::ScalarCPUStyle, field, ::Int) = 1
 @inline _pyramid_shifted_mask_batch_size(
-    ::AcceleratorStyle, point_count::Int) =
-    _pyramid_modulation_batch_size(point_count)
+    ::AcceleratorStyle, field, point_count::Int) =
+    _pyramid_modulation_batch_size(field, point_count)
 
 @inline function _prepare_pyramid_modulation_batch(
     ::ScalarCPUStyle, field, phase_mask, modulation,
@@ -368,8 +395,8 @@ function _prepare_pyramid_modulation_batch(
             "Pyramid operating and calibration modulation counts must match",
         ),
     )
-    batch_size = _pyramid_modulation_batch_size(point_count)
     pad = size(field, 1)
+    batch_size = _pyramid_modulation_batch_size(field, point_count)
     field_stack = similar(field, eltype(field), pad, pad, batch_size)
     operating_weights = similar(field, real(eltype(field)), point_count)
     calibration_weights = similar(operating_weights)
@@ -402,7 +429,7 @@ function _prepare_pyramid_modulation_batch(
         "Pyramid shifted-mask modulation requires a pupil resolution greater than one",
     ))
     point_count = modulation_point_count(modulation)
-    batch_size = _pyramid_shifted_mask_batch_size(style, point_count)
+    batch_size = _pyramid_shifted_mask_batch_size(style, field, point_count)
     pad = size(field, 1)
     field_stack = similar(field, eltype(field), pad, pad, batch_size)
     shifted_masks = similar(field, eltype(field), pad, pad, point_count)
