@@ -101,22 +101,22 @@ unbounded task or command queue.
 
 Preparation defaults to `StreamGraphExecution()`. An accelerator application
 may instead select `CapturedGraphExecution()`. That policy records each
-explicitly qualified node as one native CUDA Graph or HIP Graph executable and
-launches unqualified nodes directly between those executables on the same
-retained stream. This is node-local command capture, not whole-graph capture.
-It preserves dynamic values held in fixed device buffers while avoiding replay
-of host-side operations.
+complete graph step as one native CUDA Graph or HIP Graph executable. Every
+node owner must qualify, and the recorded operation contains the ordered node
+sequence followed by delayed-link commits. There is no direct-stream fallback
+inside a captured graph. Dynamic values remain in fixed device buffers, while
+evolving state needed during replay must also remain device-resident.
 
 `graph_node_capture_capability` defaults to unsupported. An adapter may return
 `GraphNodeCaptureSafe()` only when its enqueue path has fixed array identities,
 keeps all evolving replay state on the device, does not mutate scientific host
 state, and performs no allocation, synchronization, or device-result query.
 The maintained built-in qualification currently covers the regular-grid
-separable Gaussian DM owner. Atmosphere model-time publication, WFS transforms
-with backend completion boundaries, and host-mirror detector paths remain
-ordinary stream operations. `captured_graph_node_count` reports the exact
-prepared count; requesting capture with a count of zero fails during
-preparation rather than silently changing policy.
+separable Gaussian DM owner and the pupil-OPD composition owner. Atmosphere
+model-time publication, WFS transforms with backend completion boundaries, and
+detector acquisition are not yet qualified. `captured_graph_node_count` reports
+the number of nodes in the captured step; requesting capture when any node is
+unsupported fails during preparation rather than silently changing policy.
 
 One graph may still connect port formats with different element types where a
 node explicitly declares that conversion. Exact target ownership does not

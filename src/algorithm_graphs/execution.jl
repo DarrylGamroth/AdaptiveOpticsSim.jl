@@ -111,9 +111,10 @@ function step_graph_async!(graph::PreparedAlgorithmGraph)
             _enqueue_prepared_graph_execution!(
                 graph.execution,
                 graph.nodes,
+                graph.delayed_links,
+                state.delayed_values,
                 graph.context,
             )
-            _commit_delayed_links!(graph.delayed_links, state.delayed_values)
         end
     catch
         state.failed = true

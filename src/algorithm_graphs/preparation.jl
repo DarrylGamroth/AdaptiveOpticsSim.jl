@@ -143,6 +143,19 @@ while deferring a narrower completion boundary.
 end
 
 """
+    enqueue_captured_graph_node!(owner)
+
+Submit the fixed-address device operation recorded for one capture-safe graph
+node. The default reuses [`enqueue_graph_node!`](@ref). Stateful adapters may
+specialize this seam when ordinary stream submission also performs host-side
+publication that native command-graph replay cannot repeat.
+"""
+@inline function enqueue_captured_graph_node!(owner)
+    enqueue_graph_node!(owner)
+    return nothing
+end
+
+"""
     reset_graph_node!(owner)
 
 Reset one prepared graph-node owner at a serialized graph boundary.
@@ -903,9 +916,9 @@ allocate intermediate and delayed storage, then prepare every node against its
 exact frame-data buffers and startup sparse parameters in one concrete
 single-writer graph owner. Every graph buffer must be native packed storage on
 the exact `target`; preparation never inserts an implicit host/device transfer.
-`CapturedGraphExecution()` records only node owners that explicitly satisfy the
-device-command-graph capture contract; other nodes retain ordinary same-stream
-execution.
+`CapturedGraphExecution()` records the complete node and delayed-link sequence
+as one native device graph. Every node owner must explicitly satisfy the
+device-command-graph capture contract.
 """
 function _prepare_algorithm_graph(
     definition::AlgorithmGraphDefinition,
@@ -951,17 +964,19 @@ function _prepare_algorithm_graph(
         admitted_nodes,
         node_outputs,
     )
-    prepared_execution = _prepare_graph_execution(
-        execution,
-        values(nodes),
-        context,
-    )
     state = AlgorithmGraphState(
         delayed_values,
         UInt64(0),
         UInt64(0),
         false,
         false,
+    )
+    prepared_execution = _prepare_graph_execution(
+        execution,
+        values(nodes),
+        prepared_delays,
+        state.delayed_values,
+        context,
     )
     return PreparedAlgorithmGraph(
         definition.name,

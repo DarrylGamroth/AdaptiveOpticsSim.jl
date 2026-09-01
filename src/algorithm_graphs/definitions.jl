@@ -14,11 +14,10 @@ struct StreamGraphExecution end
 """
     CapturedGraphExecution()
 
-Capture every explicitly eligible node as a backend command graph during
-preparation. Nodes that do not opt in continue to execute directly on the same
-retained stream, preserving declaration order. Preparation fails if the target
-cannot capture any eligible node or if a claimed-eligible node cannot be
-captured safely.
+Capture one complete graph step as a single backend command graph during
+preparation. Every node owner must explicitly opt in, and delayed-link commits
+are recorded after the node sequence. Preparation fails when any node is not
+capture-safe or when the selected backend cannot capture the complete step.
 """
 struct CapturedGraphExecution end
 

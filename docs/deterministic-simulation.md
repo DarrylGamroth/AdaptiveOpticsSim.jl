@@ -50,28 +50,28 @@ the same current epoch in any order before the atmosphere advances.
 A stochastic native graph node owns one prepared RNG and its immutable reset
 seed. For example, atmosphere and detector node configurations declare
 `rng_seed`. Preparation creates the stream, `step_graph!` is its only writer,
-and `reset_graph!` restores the configured seed and state. CPU and current
-AMDGPU graph owners retain an explicit `SplitMix64RNG`.
+and `reset_graph!` restores the configured seed and state. CPU graph owners
+retain an explicit `SplitMix64RNG`.
 
-CUDA graph owners instead use an internal array-only counter stream. Its seed
-is a run-immutable plan value and its draw sequence is persistent state stored
-on the selected CUDA device. Each array fill advances that sequence on the
-prepared CUDA stream, then derives samples with stable SplitMix64 domains for
-normal, uniform, and Poisson draws. Element and sub-draw indices are explicit,
-so a recorded CUDA random-fill graph produces a new field on every replay.
-Reset restores the device draw sequence without replacing its storage. This is
-an execution detail of prepared graph owners, not a scalar `AbstractRNG` API
-for scientific code.
+CUDA and AMDGPU graph owners instead use one internal array-only counter stream.
+Its seed is a run-immutable plan value and its draw sequence is persistent state
+stored on the selected device. Each array fill advances that sequence on the
+prepared accelerator stream, then derives samples with stable SplitMix64
+domains for normal, uniform, and Poisson draws. Element and sub-draw indices
+are explicit, so a recorded random-fill graph produces a new field on every
+replay. Reset restores the device draw sequence without replacing its storage.
+This is an execution detail of prepared graph owners, not a scalar
+`AbstractRNG` API for scientific code.
 
 Use distinct explicit seeds for independent nodes. Graph declaration order must
 not be used as an implicit seed derivation rule. A graph file and its bound
 configuration are therefore sufficient to identify the intended streams.
 
-The current graph runtime is serial and single-writer. CUDA array fills are
-addressed by a node-local draw sequence, random domain, element, and sub-draw.
-CPU and AMDGPU host-driven draws advance their node-local SplitMix64 state.
-If future execution replicates or distributes a stochastic owner, it will also
-need a stable owner identity and explicit frame or event sequence.
+The current graph runtime is serial and single-writer. Accelerator array fills
+are addressed by a node-local draw sequence, random domain, element, and
+sub-draw. CPU draws advance their node-local SplitMix64 state. If future
+execution replicates or distributes a stochastic owner, it will also need a
+stable owner identity and explicit frame or event sequence.
 
 ## Deterministic Configuration
 
@@ -117,16 +117,10 @@ Deterministic validation should default to CPU unless the specific accelerator
 path has a documented deterministic contract. A GPU-ready algorithm must avoid
 host scalar indexing and hidden host/device RNG transfers.
 
-The prepared CUDA counter stream keeps seed advancement and sample generation
-on the device and is compatible with capture of its asynchronous random-fill
-operations. This does not claim that an arbitrary complete AOS graph is CUDA
-Graph-capturable; every other operation in that graph must independently avoid
-capture-time allocation and synchronization.
-
-AMDGPU graph owners use `SplitMix64RNG`. The maintained AMDGPU detector path
-still mirrors Poisson sampling through preallocated host storage because the
-maintained AMDGPU compiler/runtime does not yet admit the exact per-pixel
-kernel. It consumes that owner's SplitMix64 stream and copies the completed
-noise product to the device. This is deterministic and tested, but it is not a
-device-only stochastic path and it is not part of the currently captured DM
-node.
+The prepared CUDA and AMDGPU counter streams keep draw advancement and sample
+generation on the device and are compatible with capture of their asynchronous
+random-fill operations. Both backends use the same bounded SplitMix64 source
+implementation. Backend math lowering can still differ, so cross-hardware
+bitwise equality is not claimed. This does not claim that an arbitrary complete
+AOS graph is command-graph capturable; every node in that graph must
+independently satisfy the capture contract.

@@ -1025,7 +1025,7 @@ end
     reset_graph!(graph)
     @test all(iszero, grid_surface)
 
-    @test_throws InvalidConfiguration prepare_algorithm_graph(
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(
         definition;
         execution=CapturedGraphExecution(),
     )

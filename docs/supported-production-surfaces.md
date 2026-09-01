@@ -59,8 +59,9 @@ is not a continuously available release gate. Both policies require:
 - numerical or statistical parity against the declared CPU reference
 
 The accelerator graph surface includes opt-in CUDA Graph and HIP Graph replay
-of the qualified regular-grid separable Gaussian DM node, interleaved with
-ordinary same-stream nodes.
+of a complete graph step when every node is qualified. The maintained captured
+fixture is the regular-grid separable Gaussian DM followed by pupil-OPD
+composition; captured execution does not interleave unqualified stream nodes.
 
 Prepared graphs provide a bounded capacity-one asynchronous submission
 boundary. The graph sequence and caller-visible output readiness publish only
@@ -74,15 +75,14 @@ only when every node and bound array supports that exact target. The lockstep
 HIL boundary explicitly copies complete products and commands through host
 `Array` buffers.
 
-`CapturedGraphExecution()` records only adapters that explicitly prove the
-fixed-address device replay contract. CUDA and AMDGPU hardware tests replay the
-regular-grid DM with changed command contents and then execute an uncaptured
-consumer on the same stream. Prepared CUDA stochastic graph owners additionally
-keep their counter state and array sampling on the selected device. These are
-not claims that a complete AOS graph can be captured. AMDGPU detector Poisson
-sampling consumes the graph owner's explicit SplitMix64 stream through its
-declared, preallocated host-mirror strategy and therefore is not a device-only
-random path.
+`CapturedGraphExecution()` requires every adapter to prove the fixed-address
+device replay contract, then records the complete node and delayed-link sequence
+as one executable. CUDA and AMDGPU hardware tests replay the two-node DM and
+composition graph with changed command contents. Prepared stochastic graph
+owners on both backends keep their counter state and normal, uniform, and
+Poisson array sampling on the selected device. Complete REVOLT graphs are not
+yet capture-qualified because atmosphere, WFS, and detector owners still need
+independent capture audits.
 
 Metal and AppleAccelerate are optional/manual surfaces and are not implied by
 the AMDGPU or CUDA claims.

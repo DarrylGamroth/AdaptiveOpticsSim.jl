@@ -209,8 +209,8 @@ reset_graph!(graph)
 ~~~
 
 `StreamGraphExecution()` is the default. On CUDA or AMDGPU, an application may
-request native command-graph replay for explicitly qualified nodes while all
-other nodes remain ordered on the same stream:
+request native command-graph replay when every node in the graph is explicitly
+qualified:
 
 ~~~julia
 graph = prepare_algorithm_graph(
@@ -222,10 +222,12 @@ graph = prepare_algorithm_graph(
 captured_graph_node_count(graph)
 ~~~
 
-Capture is strict: preparation fails when no node is qualified or when a
-qualified node cannot be captured by the selected backend. The current built-in
-qualified operation is the regular-grid separable Gaussian DM node. Atmosphere,
-WFS, and detector nodes remain direct-stream operations.
+Capture is strict: preparation records the complete node sequence and
+delayed-link commits as one native graph, and fails when any node is unqualified
+or when the selected backend cannot capture the operation. The current built-in
+qualified operations are the regular-grid separable Gaussian DM node and the
+pupil-OPD composition node. Graphs containing atmosphere, WFS, or detector
+nodes must currently use stream execution.
 
 `step_graph!` completes the frame before returning. Advanced GPU applications
 may use the bounded capacity-one split boundary:

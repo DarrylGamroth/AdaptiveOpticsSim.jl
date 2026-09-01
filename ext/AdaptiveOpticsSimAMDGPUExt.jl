@@ -37,6 +37,13 @@ Backends.backend_fill(::Type{Backends.AMDGPUBackendTag}, value, dims::Vararg{Int
 Backends.compute_device_identifier(array::AMDGPU.ROCArray) =
     AMDGPU.device_id(AMDGPU.device(array))
 
+function Backends._prepare_graph_rng(
+    device::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend},
+    seed::UInt64,
+)
+    return Backends._prepare_counter_rng(device, seed)
+end
+
 function Backends.compute_device_availability(
     device::Backends.AcceleratorComputeDevice{Backends.AMDGPUBackend,I},
 ) where {I<:Integer}
@@ -243,6 +250,45 @@ Backends.reduction_execution_strategy(
 ) = Backends.HostMirrorReductionStrategy()
 Backends.randn_backend_async!(::Backends.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
 Backends._randn_backend!(::Backends.AcceleratorStyle, rng::AbstractRNG, out::AMDGPU.ROCArray) = (Random.randn!(rng, out); out)
+function Backends.randn_backend_async!(
+    style::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    rng::Backends._PreparedCounterRNG,
+    out::AMDGPU.ROCArray{T},
+) where {T<:AbstractFloat}
+    return Backends._counter_randn_backend_async!(style, rng, out)
+end
+function Backends._randn_backend!(
+    style::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
+    rng::Backends._PreparedCounterRNG,
+    out::AMDGPU.ROCArray{T},
+) where {T<:AbstractFloat}
+    Backends._counter_randn_backend_async!(style, rng, out)
+    AMDGPU.synchronize()
+    return out
+end
+@inline function _prepared_randn_frame_noise!(
+    rng::Backends._PreparedCounterRNG,
+    out::AMDGPU.ROCArray{T,N},
+) where {T<:AbstractFloat,N}
+    Backends.randn_backend_async!(Backends.execution_style(out), rng, out)
+    return out
+end
+function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
+    det::AdaptiveOpticsSim.Detectors.Detector,
+    rng::Backends._PreparedCounterRNG,
+    out::AMDGPU.ROCArray{T,2},
+) where {T<:AbstractFloat}
+    return _prepared_randn_frame_noise!(rng, out)
+end
+function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
+    det::AdaptiveOpticsSim.Detectors.Detector,
+    rng::Backends._PreparedCounterRNG,
+    out::AMDGPU.ROCArray{T,3},
+) where {T<:AbstractFloat}
+    return _prepared_randn_frame_noise!(rng, out)
+end
 function AdaptiveOpticsSim.Detectors._randn_frame_noise!(
     ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
     det::AdaptiveOpticsSim.Detectors.Detector,
@@ -272,6 +318,21 @@ function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
     copyto!(img, host)
     return img
 end
+@inline function _prepared_poisson_noise_frame!(
+    rng::Backends._PreparedCounterRNG,
+    img::AMDGPU.ROCArray{T,N},
+) where {T<:AbstractFloat,N}
+    Backends.poisson_noise_async!(Backends.execution_style(img), rng, img)
+    return img
+end
+function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
+    det::AdaptiveOpticsSim.Detectors.Detector,
+    rng::Backends._PreparedCounterRNG,
+    img::AMDGPU.ROCArray{T,2},
+) where {T<:AbstractFloat}
+    return _prepared_poisson_noise_frame!(rng, img)
+end
 function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
     ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
     det::AdaptiveOpticsSim.Detectors.Detector,
@@ -283,12 +344,28 @@ function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
     copyto!(cube, host)
     return cube
 end
+function AdaptiveOpticsSim.Detectors._poisson_noise_frame!(
+    ::AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
+    det::AdaptiveOpticsSim.Detectors.Detector,
+    rng::Backends._PreparedCounterRNG,
+    img::AMDGPU.ROCArray{T,3},
+) where {T<:AbstractFloat}
+    return _prepared_poisson_noise_frame!(rng, img)
+end
 function AdaptiveOpticsSim.Atmospheres.randn_phase_noise!(rng::AbstractRNG, out::AMDGPU.ROCArray{T,2}, host::Matrix{T}) where {T<:AbstractFloat}
     if size(host) != size(out)
         host = Matrix{T}(undef, size(out)...)
     end
     randn!(rng, host)
     copyto!(out, host)
+    return host
+end
+function AdaptiveOpticsSim.Atmospheres.randn_phase_noise!(
+    rng::Backends._PreparedCounterRNG,
+    out::AMDGPU.ROCArray{T,2},
+    host::Matrix{T},
+) where {T<:AbstractFloat}
+    Backends.randn_backend_async!(Backends.execution_style(out), rng, out)
     return host
 end
 function AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(

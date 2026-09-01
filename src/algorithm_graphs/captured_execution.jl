@@ -1,93 +1,80 @@
 """Prepared direct-stream execution for an algorithm graph."""
 struct _PreparedStreamGraphExecution end
 
-"""One node that remains directly enqueued under captured execution."""
-struct _PreparedStreamGraphNode{Node}
-    node::Node
-end
-
-"""One node retained by a native CUDA Graph or HIP Graph executable."""
-struct _PreparedCapturedGraphNode{Captured}
+"""One complete prepared frame retained by a native device graph."""
+struct _PreparedCapturedGraphExecution{Captured}
     captured::Captured
-end
-
-"""Concrete mixed sequence of direct and captured graph-node executions."""
-struct _PreparedCapturedGraphExecution{Executions<:Tuple}
-    executions::Executions
     captured_count::Int
 end
 
 @inline function _prepare_graph_execution(
     ::StreamGraphExecution,
     nodes::Tuple,
+    delayed_links::Tuple,
+    delayed_values::Tuple,
     context,
 )
     return _PreparedStreamGraphExecution()
 end
 
-@inline function _prepare_captured_graph_node(
+@inline _capture_safe_node_count(::Tuple{}) = 0
+
+@inline _require_capture_safe_node(node, ::GraphNodeCaptureSafe) = 1
+
+@noinline function _require_capture_safe_node(
     node,
-    context,
     ::GraphNodeCaptureUnsupported,
 )
-    return _PreparedStreamGraphNode(node), 0
+    throw(AlgorithmGraphError(
+        "captured graph execution requires every node to be capture-safe; " *
+        "node $(_node_name(node)) with owner $(typeof(node.owner)) is unsupported",
+    ))
 end
 
-function _prepare_captured_graph_node(
-    node,
-    context,
-    ::GraphNodeCaptureSafe,
-)
-    # Compile and exercise the exact enqueue path before capture. Reset and
-    # synchronize restore the owner's initial scientific state and ensure no
-    # warm-up work can still access its storage.
-    enqueue_graph_node!(node.owner)
-    _synchronize_prepared_device_execution_context!(context)
-    reset_graph_node!(node.owner)
-    _synchronize_prepared_device_execution_context!(context)
-
-    captured = _capture_prepared_device_graph(context) do
-        enqueue_graph_node!(node.owner)
-        nothing
-    end
-    return _PreparedCapturedGraphNode(captured), 1
-end
-
-@inline function _prepare_captured_graph_nodes(
-    ::Tuple{},
-    context,
-)
-    return (), 0
-end
-
-@inline function _prepare_captured_graph_nodes(
-    nodes::Tuple,
-    context,
-)
+@inline function _capture_safe_node_count(nodes::Tuple)
     node = first(nodes)
-    prepared_node, captured = _prepare_captured_graph_node(
+    return _require_capture_safe_node(
         node,
-        context,
         graph_node_capture_capability(node.owner),
-    )
-    tail, tail_captured = _prepare_captured_graph_nodes(
-        Base.tail(nodes),
-        context,
-    )
-    return (prepared_node, tail...), captured + tail_captured
+    ) + _capture_safe_node_count(Base.tail(nodes))
+end
+
+@inline _enqueue_captured_nodes!(::Tuple{}) = nothing
+
+@inline function _enqueue_captured_nodes!(nodes::Tuple)
+    enqueue_captured_graph_node!(first(nodes).owner)
+    _enqueue_captured_nodes!(Base.tail(nodes))
+    return nothing
 end
 
 function _prepare_graph_execution(
     ::CapturedGraphExecution,
     nodes::Tuple,
+    delayed_links::Tuple,
+    delayed_values::Tuple,
     context,
 )
-    prepared, count = _prepare_captured_graph_nodes(nodes, context)
+    count = _capture_safe_node_count(nodes)
     count > 0 || throw(AlgorithmGraphError(
-        "captured graph execution requires at least one explicitly " *
-        "capture-safe node on a supported accelerator target",
+        "captured graph execution requires at least one capture-safe node",
     ))
-    return _PreparedCapturedGraphExecution(prepared, count)
+
+    # Compile and exercise the exact complete-frame enqueue path before
+    # capture. Reset and synchronize restore the graph's initial scientific
+    # state and ensure no warm-up work can still access retained storage.
+    _enqueue_captured_nodes!(nodes)
+    _commit_delayed_links!(delayed_links, delayed_values)
+    _synchronize_prepared_device_execution_context!(context)
+    _reset_nodes!(nodes)
+    _reset_delayed_links!(delayed_links, delayed_values)
+    _synchronize_prepared_device_execution_context!(context)
+
+    captured = _capture_prepared_device_graph(context) do
+        _enqueue_captured_nodes!(nodes)
+        _commit_delayed_links!(delayed_links, delayed_values)
+        nothing
+    end
+    return _PreparedCapturedGraphExecution(captured, count)
 end
 
 @inline graph_execution_policy(graph::PreparedAlgorithmGraph) =
@@ -106,44 +93,22 @@ end
 @inline function _enqueue_prepared_graph_execution!(
     ::_PreparedStreamGraphExecution,
     nodes::NamedTuple,
+    delayed_links::Tuple,
+    delayed_values::Tuple,
     context,
 )
     _enqueue_nodes!(values(nodes))
-    return nothing
-end
-
-@inline _enqueue_prepared_captured_nodes!(::Tuple{}, context) = nothing
-
-@inline function _enqueue_prepared_captured_nodes!(
-    nodes::Tuple,
-    context,
-)
-    _enqueue_prepared_captured_node!(first(nodes), context)
-    _enqueue_prepared_captured_nodes!(Base.tail(nodes), context)
-    return nothing
-end
-
-@inline function _enqueue_prepared_captured_node!(
-    node::_PreparedStreamGraphNode,
-    context,
-)
-    _enqueue_node!(node.node)
-    return nothing
-end
-
-@inline function _enqueue_prepared_captured_node!(
-    node::_PreparedCapturedGraphNode,
-    context,
-)
-    _launch_prepared_device_graph!(node.captured, context)
+    _commit_delayed_links!(delayed_links, delayed_values)
     return nothing
 end
 
 @inline function _enqueue_prepared_graph_execution!(
     execution::_PreparedCapturedGraphExecution,
     nodes::NamedTuple,
+    delayed_links::Tuple,
+    delayed_values::Tuple,
     context,
 )
-    _enqueue_prepared_captured_nodes!(execution.executions, context)
+    _launch_prepared_device_graph!(execution.captured, context)
     return nothing
 end

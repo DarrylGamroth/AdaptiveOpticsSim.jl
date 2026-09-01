@@ -2,6 +2,8 @@ const _RANDOM_DOMAIN_NORMAL = UInt64(0x6e6f726d616c5f31)
 const _RANDOM_DOMAIN_UNIFORM = UInt64(0x756e69666f726d31)
 const _RANDOM_DOMAIN_POISSON = UInt64(0x706f6973736f6e31)
 const _RANDOM_ELEMENT_STRIDE = UInt64(0x9e3779b97f4a7c15)
+const _POISSON_NORMAL_APPROXIMATION_MEAN = 30
+const _POISSON_INVERSION_DRAWS = 96
 
 """Run-immutable seed for an accelerator graph owner's random stream."""
 struct _CounterRandomPlan
@@ -53,6 +55,50 @@ end
 
 @inline function _counter_element_key(draw_key::UInt64, index::Int)
     return splitmix64(draw_key + _RANDOM_ELEMENT_STRIDE * UInt64(index))
+end
+
+"""
+Draw one Poisson variate from a per-element SplitMix64 key.
+
+The inversion branch has a fixed execution bound so the same implementation is
+valid in CPU, CUDA, and AMDGPU kernels. At the largest inversion mean, the
+probability of requiring more than `_POISSON_INVERSION_DRAWS` uniforms is below
+floating-point resolution; the normal fallback also keeps the work bounded for
+malformed or unusually unlucky inputs. Means at or above 30 use the same normal
+approximation that the accelerator implementation used previously.
+"""
+@inline function _poisson_sample_from_key(
+    ::Type{T},
+    λ::T,
+    element_key::UInt64,
+) where {T<:AbstractFloat}
+    λ <= zero(T) && return zero(T)
+
+    if λ < T(_POISSON_NORMAL_APPROXIMATION_MEAN)
+        limit = exp(-λ)
+        product = one(T)
+        count = 0
+        active = true
+        for draw in 1:_POISSON_INVERSION_DRAWS
+            if active
+                count += 1
+                product *= uniform01(
+                    T,
+                    splitmix64(element_key + UInt64(draw)),
+                )
+                active = product > limit
+            end
+        end
+        active || return T(count - 1)
+    end
+
+    z = normal01(
+        T,
+        element_key + _RANDOM_ELEMENT_STRIDE,
+        element_key + UInt64(2) * _RANDOM_ELEMENT_STRIDE,
+    )
+    sample = floor(λ + sqrt(λ) * z + T(0.5))
+    return max(zero(T), sample)
 end
 
 @kernel function _counter_randn_fill_kernel!(
@@ -118,27 +164,7 @@ end
                 _RANDOM_DOMAIN_POISSON,
             )
             element_key = _counter_element_key(draw_key, i)
-            if λ < T(30)
-                limit = exp(-λ)
-                product = one(T)
-                count = 0
-                while product > limit
-                    count += 1
-                    product *= uniform01(
-                        T,
-                        splitmix64(element_key + UInt64(count)),
-                    )
-                end
-                @inbounds img[i] = T(count - 1)
-            else
-                z = normal01(
-                    T,
-                    element_key,
-                    element_key + _RANDOM_ELEMENT_STRIDE,
-                )
-                sample = floor(λ + sqrt(λ) * z + T(0.5))
-                @inbounds img[i] = max(zero(T), sample)
-            end
+            @inbounds img[i] = _poisson_sample_from_key(T, λ, element_key)
         end
     end
 end
@@ -295,27 +321,8 @@ end
     if i <= n
         T = eltype(img)
         λ = @inbounds img[i]
-        if λ <= zero(T)
-            @inbounds img[i] = zero(T)
-        elseif λ < T(30)
-            limit = exp(-λ)
-            product = one(T)
-            count = 0
-            key = seed + UInt64(0x9e3779b97f4a7c15) * UInt64(i)
-            while product > limit
-                count += 1
-                product *= uniform01(T, splitmix64(key + UInt64(count)))
-            end
-            @inbounds img[i] = T(count - 1)
-        else
-            z = normal01(
-                T,
-                seed + UInt64(2 * i - 1),
-                seed + UInt64(2 * i),
-            )
-            sample = floor(λ + sqrt(λ) * z + T(0.5))
-            @inbounds img[i] = max(zero(T), sample)
-        end
+        element_key = _counter_element_key(seed, i)
+        @inbounds img[i] = _poisson_sample_from_key(T, λ, element_key)
     end
 end
 

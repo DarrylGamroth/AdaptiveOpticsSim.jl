@@ -64,8 +64,58 @@ backend_target_branch_mode(::Type{Backends.AMDGPUBackendTag}) =
     SequentialExecution()
 
 graph_rng_device_resident(::Type{Backends.CUDABackendTag}) = true
-graph_rng_device_resident(::Type{Backends.AMDGPUBackendTag}) = false
-run_graph_rng_capture_replay(::Type{<:Backends.GPUBackendTag}) = nothing
+graph_rng_device_resident(::Type{Backends.AMDGPUBackendTag}) = true
+
+function run_graph_rng_capture_replay(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    output = BackendArray(zeros(Float32, 256))
+    poisson_output = BackendArray(fill(8.0f0, 256))
+    target = compute_device(output)
+    context = Backends._prepare_device_execution_context(target)
+    rng = Backends._prepare_graph_rng(target, UInt64(0x5eed))
+    style = Backends.execution_style(output)
+
+    Backends._with_prepared_device_execution_context(context) do
+        # Compile every stochastic kernel before native command-graph capture
+        # begins. Both kernels consume the same device-resident draw sequence.
+        Backends.randn_backend_async!(style, rng, output)
+        Backends.poisson_noise_async!(style, rng, poisson_output)
+        Backends._synchronize_prepared_device_execution_context!(context)
+        Backends._reset_graph_rng!(rng, UInt64(0x5eed))
+        Backends._synchronize_prepared_device_execution_context!(context)
+
+        captured = Backends._capture_prepared_device_graph(context) do
+            Backends.randn_backend_async!(style, rng, output)
+            Backends.poisson_noise_async!(style, rng, poisson_output)
+        end
+
+        fill!(poisson_output, 8.0f0)
+        Backends._launch_prepared_device_graph!(captured, context)
+        Backends._synchronize_prepared_device_execution_context!(context)
+        first_draw = Array(output)
+        first_poisson_draw = Array(poisson_output)
+        @test all(x -> x >= 0 && isinteger(x), first_poisson_draw)
+
+        fill!(poisson_output, 8.0f0)
+        Backends._launch_prepared_device_graph!(captured, context)
+        Backends._synchronize_prepared_device_execution_context!(context)
+        second_draw = Array(output)
+        second_poisson_draw = Array(poisson_output)
+        @test second_draw != first_draw
+        @test second_poisson_draw != first_poisson_draw
+
+        Backends._reset_graph_rng!(rng, UInt64(0x5eed))
+        Backends._synchronize_prepared_device_execution_context!(context)
+        fill!(poisson_output, 8.0f0)
+        Backends._launch_prepared_device_graph!(captured, context)
+        Backends._synchronize_prepared_device_execution_context!(context)
+        @test Array(output) == first_draw
+        @test Array(poisson_output) == first_poisson_draw
+    end
+    return nothing
+end
 
 function require_backend_target!(::Type{B}) where {B<:Backends.GPUBackendTag}
     pkg = backend_package_name(B)
@@ -149,7 +199,7 @@ function run_captured_graph_execution_smoke(
         execution=CapturedGraphExecution(),
     )
     @test graph_execution_policy(graph) isa CapturedGraphExecution
-    @test captured_graph_node_count(graph) == 1
+    @test captured_graph_node_count(graph) == 2
     @test all(iszero, Array(graph_output(graph, Val(:surface))))
 
     ticket = step_graph_async!(graph)
@@ -171,7 +221,7 @@ function run_captured_graph_execution_smoke(
     @test Array(graph_output(graph, Val(:pupil_opd))) == second_surface
 
     reset_graph!(graph)
-    @test captured_graph_node_count(graph) == 1
+    @test captured_graph_node_count(graph) == 2
     @test all(iszero, Array(graph_output(graph, Val(:surface))))
     return nothing
 end

@@ -1766,6 +1766,10 @@ end
     return nothing
 end
 
+@inline graph_node_capture_capability(
+    ::_PupilOPDCompositionOwner,
+) = GraphNodeCaptureSafe()
+
 @inline function reset_graph_node!(owner::_PupilOPDCompositionOwner)
     fill!(owner.pupil_opd, zero(eltype(owner.pupil_opd)))
     return nothing

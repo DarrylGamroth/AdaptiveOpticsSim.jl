@@ -61,11 +61,13 @@ AMDGPU validation must record the Julia, AMDGPU, ROCm, kernel/driver, and device
 versions. Run with scalar indexing disabled. Check output values, exact device
 identity, and public completion behavior.
 
-The hardware target also records and replays the qualified regular-grid DM as a
-HIP Graph, changes the retained command buffer between replays, and verifies
-that the following uncaptured graph node observes the new result on the same
-stream. This is required evidence for `CapturedGraphExecution`; a standalone
-HIP Graph smoke test is not sufficient.
+The hardware target also records the qualified regular-grid DM and pupil-OPD
+composition sequence as one HIP Graph, changes the retained command buffer
+between replays, and verifies the composed output. It separately captures the
+device-resident SplitMix64 normal and Poisson paths, verifies that replay
+advances both streams, and verifies reset reproducibility. This is required
+evidence for `CapturedGraphExecution`; a standalone HIP Graph smoke test is not
+sufficient.
 
 ## CUDA On WSL
 
@@ -124,7 +126,8 @@ For native CUDA Graph or HIP Graph execution, additionally require:
   scientific-state mutation
 - replay with changed input-buffer contents produces the corresponding changed
   output
-- directly streamed nodes after a captured node observe same-stream ordering
+- every node in the graph explicitly satisfies the capture contract
+- the ordered node sequence and delayed-link commits form one native executable
 
 The lockstep HIL boundary intentionally owns host `Array` exchange buffers. A
 completed GPU detector frame is copied to that host buffer only after successful
