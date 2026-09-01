@@ -126,12 +126,25 @@ end
     context::CUDAPreparedDeviceExecutionContext,
 ) = context.compute_device
 
-function Backends._with_prepared_device_execution_context(
+@inline function Backends._with_prepared_device_execution_context(
     f::F,
     context::CUDAPreparedDeviceExecutionContext,
 ) where {F}
-    return CUDA.device!(context.device) do
-        CUDA.stream!(f, context.stream)
+    target_context = CUDA.context(context.device)
+    CUDA.isvalid(target_context) || throw(AdaptiveOpticsSim.InvalidConfiguration(
+        "the prepared CUDA context is no longer valid",
+    ))
+    old_context = CUDA.context!(target_context)
+    old_stream = CUDA.stream()
+    CUDA.stream!(context.stream)
+    try
+        return f()
+    finally
+        CUDA.stream!(old_stream)
+        if old_context !== nothing && old_context != target_context &&
+                CUDA.isvalid(old_context)
+            CUDA.context!(old_context)
+        end
     end
 end
 
