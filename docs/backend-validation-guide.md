@@ -154,27 +154,19 @@ completed GPU detector frame is copied to that host buffer only after successful
 graph execution, and a complete validated command is copied back before the next
 frame.
 
-Use `algorithm-graphs` for functional graph coverage and the REVOLT profiling
-scripts for measured frame service time:
+Use `algorithm-graphs` for functional graph coverage and the generic backend
+workload for measured frame service time:
 
 ~~~bash
-julia --project=. scripts/profile_revolt_hil_runtime.jl
-julia --project=. benchmarks/benchmark_revolt_graph_nodes.jl
-AOS_REVOLT_GRAPH_BACKEND=amdgpu \
-  AOS_REVOLT_GRAPH_PROFILE=grid_gaussian \
-  AOS_REVOLT_GRAPH_EXECUTION=captured \
-  julia --project=benchmarks/amdgpu \
-  benchmarks/benchmark_revolt_graph_nodes.jl
+julia --project=. test/ci/run_selected_tests.jl algorithm-graphs
+julia --project=. benchmarks/benchmark_pre_hil_backend_latency.jl
 ~~~
 
-Record architecture, graph profile, resolution, noise settings, warmup, sample
-count, and synchronization boundary. The graph-node benchmark records
-submission, completion-ticket wait, and target-ready service time separately.
-`AOS_REVOLT_GRAPH_EXECUTION=stream` is the default. Captured execution requires
-an accelerator backend and requires every node in the graph to qualify. The
-maintained REVOLT `coordinate_gaussian` and `grid_gaussian` graphs satisfy this
-contract with unit detector binning and the built-in linear-static actuator
-response.
+Record the exact workload, target, resolution, noise settings, warmup, sample
+count, and synchronization boundary. Captured execution requires an
+accelerator backend and requires every node in the graph to qualify. Downstream
+instrument packages own whole-graph profiling and must record submission,
+completion-ticket wait, and target-ready service time separately.
 AMDGPU stream execution retains the backend's ordinary HostCall-compatible
 synchronization. Captured execution uses a blocking completion wait to avoid
 host event/task allocation after replay; this is valid because capture

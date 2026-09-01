@@ -252,8 +252,8 @@ CMOS, and linear sequential EMCCD acquisition nodes also qualify for their
 built-in simple response models. The coordinate-Gaussian node currently
 qualifies only with the built-in linear-static actuator response. Preparation
 rejects richer or unsupported detector and actuator models instead of mixing
-stream execution into the captured graph. Consequently, both maintained
-REVOLT Gaussian profiles can be captured in full.
+stream execution into the captured graph. A downstream package must qualify its
+complete instrument graph separately.
 
 `step_graph!` completes the frame before returning. Advanced GPU applications
 may use the bounded capacity-one split boundary:

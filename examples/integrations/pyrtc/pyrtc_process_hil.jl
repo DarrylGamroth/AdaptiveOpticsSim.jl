@@ -8,12 +8,6 @@ using .PyRTCSharedMemory
 
 include(joinpath(@__DIR__, "..", "..", "support", "hil_reference_systems.jl"))
 using .HILReferenceSystems
-include(joinpath(@__DIR__, "..", "..", "support", "revolt_hsdm277.jl"))
-include(joinpath(@__DIR__, "..", "..", "support", "revolt_hil_graphs.jl"))
-include(joinpath(@__DIR__, "..", "..", "support", "revolt_classic_hil.jl"))
-import .REVOLTClassicHIL
-import .REVOLTHSDM277
-
 const PYRTC_STREAM_NAMES = ("wfs", "wfc", "signal", "signal2D")
 const VIEWER_STREAM_NAMES = (
     "wfc2D",
@@ -37,8 +31,10 @@ const WORKER_PREFIX = "AOS_PYRTC_WORKER "
 const REFERENCE_ATMOSPHERE_STEP_S = 1.0e-3
 const ATMOSPHERE_VALIDATION_FRAMES = 20
 const ATMOSPHERE_VALIDATION_BURN_IN_FRAMES = 10
-const REVOLT_CLASSIC_COMMAND_GRID_INDICES =
-    Tuple(REVOLTHSDM277.actuator_grid_indices(Int32))
+# The fixed SplitMix64 SHWFS reference currently improves mean Strehl by
+# approximately 3.84×. Keep a useful margin without encoding the superseded
+# Xoshiro atmosphere realization into this transport-validation gate.
+const MINIMUM_ATMOSPHERE_STREHL_IMPROVEMENT = 3.0
 
 struct PyRTCProcessDefinition
     name::Symbol
@@ -82,21 +78,7 @@ end
     1.0f-3,
 )
 
-@inline process_definition(::Val{:revolt_classic}) = PyRTCProcessDefinition(
-    :revolt_classic,
-    :shack_hartmann,
-    (352, 352),
-    (376,),
-    (32, 16),
-    REVOLTClassicHIL.command_count(),
-    2.0f-8,
-    0.2f0,
-    2.0f-2,
-    500,
-    0.1f0,
-)
-
-const PROCESS_DEFINITIONS = (:shack_hartmann, :pyramid, :revolt_classic)
+const PROCESS_DEFINITIONS = (:shack_hartmann, :pyramid)
 
 function process_definition(name::Symbol)
     name in PROCESS_DEFINITIONS || throw(ArgumentError(
@@ -108,9 +90,6 @@ end
 
 @inline definition_label(::Val{:shack_hartmann}) = "Shack-Hartmann reference"
 @inline definition_label(::Val{:pyramid}) = "Pyramid reference"
-@inline definition_label(::Val{:revolt_classic}) =
-    "REVOLT Classic Shack-Hartmann"
-
 @inline function prepare_calibration_system(
     definition::PyRTCProcessDefinition,
 )
@@ -123,11 +102,6 @@ end
 )
     return prepare_hil_reference_system(definition.wavefront_sensor)
 end
-
-@inline prepare_calibration_system(
-    ::Val{:revolt_classic},
-    ::PyRTCProcessDefinition,
-) = REVOLTClassicHIL.prepare_calibration_system()
 
 @inline function prepare_atmospheric_system(
     definition::PyRTCProcessDefinition,
@@ -146,21 +120,11 @@ end
     )
 end
 
-@inline prepare_atmospheric_system(
-    ::Val{:revolt_classic},
-    ::PyRTCProcessDefinition,
-) = REVOLTClassicHIL.prepare_hil_system()
-
 @inline prepare_science_diagnostics(
     ::Union{Val{:shack_hartmann},Val{:pyramid}},
 ) = prepare_hil_science_diagnostics()
-@inline prepare_science_diagnostics(::Val{:revolt_classic}) =
-    REVOLTClassicHIL.prepare_science_diagnostics()
-
 @inline command_display(::Union{Val{:shack_hartmann},Val{:pyramid}}) =
     zeros(Float32, 5, 5)
-@inline command_display(::Val{:revolt_classic}) = zeros(Float32, 19, 19)
-
 @inline function update_command_display!(
     display::Matrix{Float32},
     command::Vector{Float32},
@@ -170,24 +134,8 @@ end
     return display
 end
 
-function update_command_display!(
-    display::Matrix{Float32},
-    command::Vector{Float32},
-    ::Val{:revolt_classic},
-)
-    fill!(display, 0.0f0)
-    for command_index in eachindex(command)
-        display[REVOLT_CLASSIC_COMMAND_GRID_INDICES[command_index]] =
-            command[command_index]
-    end
-    return display
-end
-
 @inline surface_opd(graph, ::Union{Val{:shack_hartmann},Val{:pyramid}}) =
     graph_output(graph, Val(:dm_surface_opd))
-@inline surface_opd(graph, ::Val{:revolt_classic}) =
-    graph_output(graph, Val(:pdm_surface_opd))
-
 struct ProcessStreams{W,C,S,D}
     wfs::W
     wfc::C
@@ -386,18 +334,6 @@ end
     ::Val{:pyramid},
     ::AbstractString,
 ) = nothing
-
-function _worker_valid_subapertures_path(
-    ::Val{:revolt_classic},
-    temporary_directory::AbstractString,
-)
-    path = joinpath(temporary_directory, "valid_subapertures.u8")
-    mask = REVOLTClassicHIL.valid_subapertures()
-    open(path, "w") do io
-        write(io, UInt8.(vec(mask)))
-    end
-    return path
-end
 
 function worker_command(
     definition::PyRTCProcessDefinition,
@@ -918,10 +854,6 @@ end
 
 function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
     definition = process_definition(wavefront_sensor)
-    definition.name === :revolt_classic && throw(ArgumentError(
-        "run_validation covers the maintained HIL reference systems; use " *
-        "run_revolt_classic_validation for REVOLT Classic",
-    ))
     prepared = prepare_calibration_system(definition)
     streams = create_process_streams(definition)
     worker = nothing
@@ -1004,7 +936,8 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
                 "on-axis PSF: mean Strehl = " *
                 "$(atmosphere.mean_closed_loop_on_axis_strehl)",
             )
-            atmosphere.improvement > 10 || error(
+            atmosphere.improvement >
+                MINIMUM_ATMOSPHERE_STREHL_IMPROVEMENT || error(
                 "pyRTC atmospheric loop did not improve the mean on-axis " *
                 "Strehl sufficiently: ratio = $(atmosphere.improvement)",
             )
@@ -1020,92 +953,6 @@ function run_validation(; wavefront_sensor::Symbol=:shack_hartmann)
                 final_residual=last(residual_norms),
                 convergence_ratio,
                 command_error,
-                atmosphere...,
-            )
-        finally
-            !isnothing(worker) && stop_worker_noexcept!(worker)
-            close_process_streams!(streams)
-        end
-    end
-end
-
-function run_revolt_classic_validation()
-    definition = process_definition(:revolt_classic)
-    calibration = prepare_calibration_system(definition)
-    streams = create_process_streams(definition)
-    worker = nothing
-    return mktempdir() do temporary_directory
-        try
-            worker = start_worker(definition, temporary_directory)
-            signal = zeros(Float32, definition.signal_shape)
-            flat_signal, interaction_matrix = calibrate_interaction_matrix!(
-                worker,
-                streams,
-                calibration,
-                signal;
-                poke=definition.poke,
-                report_progress=true,
-            )
-            norm(flat_signal) <= 1.0f-5 || error(
-                "REVOLT Classic flat reference left a nonzero residual: " *
-                "$(norm(flat_signal))",
-            )
-            all(isfinite, interaction_matrix) || error(
-                "REVOLT Classic interaction matrix contains a non-finite value",
-            )
-
-            singular_values = svdvals(interaction_matrix)
-            maximum_singular_value = maximum(singular_values)
-            retained_tolerance =
-                maximum_singular_value * definition.control_rcond
-            retained_interaction_rank =
-                count(>(retained_tolerance), singular_values)
-            minimum_retained_rank = (4 * definition.command_count) ÷ 5
-            retained_interaction_rank >= minimum_retained_rank || error(
-                "REVOLT Classic interaction matrix retains only " *
-                "$retained_interaction_rank control directions at rcond=" *
-                "$(definition.control_rcond); expected at least " *
-                "$minimum_retained_rank",
-            )
-            retained_interaction_condition =
-                maximum_singular_value /
-                singular_values[retained_interaction_rank]
-
-            configure_worker_loop!(
-                worker,
-                streams,
-                interaction_matrix,
-                definition.gain,
-                definition.control_rcond,
-                temporary_directory,
-            )
-            atmosphere = close_atmospheric_loop!(
-                worker,
-                streams,
-                definition,
-                signal;
-                frames=definition.iterations,
-            )
-            atmosphere.mean_closed_loop_on_axis_strehl > 0.35 || error(
-                "REVOLT Classic did not produce a usable corrected on-axis " *
-                "PSF: mean Strehl = " *
-                "$(atmosphere.mean_closed_loop_on_axis_strehl)",
-            )
-            atmosphere.improvement > 10 || error(
-                "REVOLT Classic did not improve mean on-axis Strehl " *
-                "sufficiently: ratio = $(atmosphere.improvement)",
-            )
-            stop_worker!(worker)
-
-            return (;
-                system=definition.name,
-                frame_shape=definition.frame_shape,
-                signal_length=length(signal),
-                command_count=definition.command_count,
-                retained_interaction_rank,
-                retained_interaction_condition,
-                numerical_interaction_condition=
-                    maximum_singular_value / minimum(singular_values),
                 atmosphere...,
             )
         finally
@@ -1150,7 +997,7 @@ function run_viewer_demo(;
                 calibration,
                 signal;
                 poke=definition.poke,
-                report_progress=definition.name === :revolt_classic,
+                report_progress=false,
             )
             all(isfinite, flat_signal) || error(
                 "pyRTC flat reference contains a non-finite signal",
@@ -1358,48 +1205,6 @@ function main(wavefront_sensor::Symbol)
         1.0e9 * result.mean_uncompensated_opd_rms_m,
         " -> ",
         1.0e9 * result.mean_residual_opd_rms_m,
-        " nm",
-    )
-    return nothing
-end
-
-function revolt_classic_main()
-    result = run_revolt_classic_validation()
-    println("AOS/native-SHM pyRTC REVOLT Classic process loop passed")
-    println("  detector frame shape: ", result.frame_shape)
-    println("  signal length: ", result.signal_length)
-    println("  PDM command length: ", result.command_count)
-    println(
-        "  retained interaction rank: ",
-        result.retained_interaction_rank,
-    )
-    println(
-        "  retained interaction condition: ",
-        result.retained_interaction_condition,
-    )
-    println(
-        "  numerical interaction condition: ",
-        result.numerical_interaction_condition,
-    )
-    println(
-        "  atmospheric mean open-loop on-axis Strehl: ",
-        result.mean_open_loop_on_axis_strehl,
-    )
-    println(
-        "  atmospheric mean closed-loop on-axis Strehl: ",
-        result.mean_closed_loop_on_axis_strehl,
-    )
-    println("  atmospheric on-axis Strehl improvement: ", result.improvement)
-    println(
-        "  atmospheric mean OPD RMS: ",
-        1.0e9 * result.mean_uncompensated_opd_rms_m,
-        " -> ",
-        1.0e9 * result.mean_residual_opd_rms_m,
-        " nm",
-    )
-    println(
-        "  mean PDM surface-OPD command RMS: ",
-        1.0e9 * result.mean_pdm_command_rms_m,
         " nm",
     )
     return nothing

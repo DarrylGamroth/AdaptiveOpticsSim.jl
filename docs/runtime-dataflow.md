@@ -148,10 +148,11 @@ and qualified complete-frame CCD, CMOS, and EMCCD acquisition.
 Coordinate-Gaussian capture currently requires the built-in linear-static
 actuator response. Captured atmosphere motion and random draws advance
 device-resident state during replay and publish matching host state only after
-successful completion. Both maintained REVOLT Gaussian profiles therefore
-capture all five nodes. `captured_graph_node_count` reports the number of nodes
+successful completion. `captured_graph_node_count` reports the number of nodes
 in the captured step; requesting capture when any node is unsupported fails
-during preparation rather than silently changing policy.
+during preparation rather than silently changing policy. Downstream instrument
+packages qualify their complete graphs independently from these node-family
+claims.
 
 One graph may still connect port formats with different element types where a
 node explicitly declares that conversion. Exact target ownership does not
@@ -190,8 +191,8 @@ The serialized application loop is:
 ```julia
 boundary = prepare_graph_hil_boundary(
     graph;
-    command_input=:pdm_command,
-    frame_output=:shwfs_frame,
+    command_input=:dm_command,
+    frame_output=:wfs_frame,
 )
 
 sequence = step_hil_frame!(boundary)
@@ -221,7 +222,7 @@ integration without depending on unmeasured instrument calibration. They share
 one explicit 25-command analytic Gaussian deformable mirror, accept a complete
 caller-owned uncompensated pupil OPD in metres, and publish a complete detector
 frame through `PreparedGraphHILBoundary`. Their parameters are AOS validation
-choices; neither system is a REVOLT profile.
+choices; neither system is an instrument profile.
 
 [`shack_hartmann_hil_reference.toml`](../examples/graphs/shack_hartmann_hil_reference.toml)
 publishes a noiseless 64-by-64 CCD frame and an AOS centroid signal for
@@ -241,7 +242,6 @@ The current integration matrix is deliberately small:
 | Pyramid | Deterministic, noiseless EMCCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
 | Shack–Hartmann | Deterministic, noiseless CCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, static convergence, evolving-atmosphere PSFs, and on-axis Strehl improvement | covered in lockstep |
 | Pyramid | Deterministic, noiseless EMCCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, static convergence, evolving-atmosphere PSFs, and on-axis Strehl improvement | covered in lockstep |
-| REVOLT Classic Shack–Hartmann | Flat noiseless calibration graph, then maintained noisy 352-by-352 C-BLUE One IMX425 graph | Native Julia SHM to a pyRTC process | 188 valid subapertures, 376 pair-interleaved signals, self-calibrated 277-element PDM command, retained-rank admission, and one modeled second of corrected five-layer-atmosphere Strehl and OPD-RMS improvement | covered as model validation; instrument calibration remains external |
 | Either | Stochastic detector response | Any external RTC | Statistical closed-loop qualification | gap |
 
 Calibrate an external RTC by applying complete positive and negative commands
@@ -313,12 +313,11 @@ separate Python worker attaches pyRTC's real `SlopesProcess` and `Loop`, while
 Julia retains graph stepping, calibration, atmosphere evolution, science-image
 formation, and stream lifetime ownership. The short optional process test first
 closes a known static disturbance and then requires both reference sensor paths
-to improve the mean on-axis Strehl ratio of an evolving atmosphere. The
-independently enabled REVOLT Classic test calibrates its full
-352-by-352 detector/376-signal/277-command model and requires corrected Strehl
-improvement under the maintained five-layer atmosphere. The control pipe
-intentionally advances one operation at a time, so this validates process and
-data-boundary correctness rather than free-running RTC timing.
+to improve the mean on-axis Strehl ratio of an evolving atmosphere. The control
+pipe intentionally advances one operation at a time, so this validates process
+and data-boundary correctness rather than free-running RTC timing. Instrument
+packages reuse this transport contract and own their larger calibration and
+acceptance tests.
 
 The user guide also gives the commands for the bidirectional protocol matrix,
 the opt-in separate-process test matrices, and the live demonstrations.
@@ -388,17 +387,17 @@ For example:
 
 ```toml
 schema_version = 1
-name = "revolt_classic"
+name = "reference_controller"
 
 [[nodes]]
 name = "controller"
 type = "discrete_integrator_f32"
 
 [nodes.config]
-extent = 277
+extent = 16
 sample_period_s = 0.001
-input_schema = "org.revolt.residual-modes/1"
-output_schema = "org.revolt.command-modes/1"
+input_schema = "org.example.residual-modes/1"
+output_schema = "org.example.command-modes/1"
 
 [nodes.props]
 gain = 0.3
@@ -419,7 +418,7 @@ graph:
 
 ```julia
 definition = load_algorithm_graph(
-    "revolt_classic.toml";
+    "reference_controller.toml";
     bindings=(residual=residual_modes,),
 )
 graph = prepare_algorithm_graph(definition; target=target)
@@ -440,138 +439,27 @@ The built-in type map currently contains `ccd_detector_acquisition_f32`,
 `merge(builtin_graph_node_types(), companion_types)` creates an explicit larger
 map for optional packages such as the Proper companion.
 
-The maintained
-[`revolt_classic_hil_coordinate_gaussian.toml`](../examples/graphs/revolt_classic_hil_coordinate_gaussian.toml)
-file
-defines the intended external-RTC sensor boundary. Its
-`multilayer_atmosphere_opd_f32` node owns and advances the maintained REVOLT
-five-layer atmosphere by exactly 2 ms per graph step. A serialized adapter
-places the latest accepted complete PDM command in the caller-owned input
-buffer before that step. The graph applies the command with
-`gaussian_deformable_mirror_surface_f32`, composes the resulting sampled
-surface with the atmospheric OPD through `pupil_opd_composition_f32`, and
-produces the configured 352-by-352 diffractive SHWFS photon-rate mosaic and
-one completed noisy C-BLUE One IMX425 frame for a transport adapter such as
-PipeWireAO. The
-RTC performs centroiding, reconstruction, control, and command production
-outside this graph.
+### Downstream instrument packages
 
-The on-sky and Copper trees contain the same 277-actuator HSDM277 map payload;
-their raw files differ in header and have hashes
-`b75ae701627b24af51ecd50f019e91989a514441a0d510b418b5fe82b6127fd1`
-and `76b60effb1786a6cdb37ef3b51c12e34cdc592803f1b1161895b69ee85d51ecc`.
-[`revolt_hsdm277.jl`](../examples/support/revolt_hsdm277.jl) reproduces that
-exact command order. It places the 19-actuator physical grid at the REVOLT
-simulation assumption of 17 actuator centres across the pupil. The maintained
-OOPAO ideal profile's 0.35 adjacent coupling then gives a normalized Gaussian
-influence width of `0.08626550214129701`; an older OOMAO script uses 0.30.
-Command-map topology is source-backed, while pupil registration and coupling
-are explicitly provisional model assumptions. The graph command contains
-unit-peak actuator surface-OPD coefficients in metres, so an ALPAO normalized
-hardware command still requires separately qualified conversion.
+AOS owns the reusable graph nodes, static TOML schema, lockstep HIL boundary,
+and pyRTC-compatible shared-memory adapter. Instrument command geometry,
+detector settings, calibration policy, complete graph files, and scientific
+acceptance tests belong to downstream packages:
 
-No authoritative HSDM277 influence-function artifact has been identified. The
-locally available `AX307_Influences.fits` instead contains 468 BAX307
-influences over 5,813 pupil samples and belongs to the SPIDERS physical mirror.
-When qualified HSDM277 sampled influences become available, the analytic node
-can be replaced by `deformable_mirror_surface_f32` without changing the
-downstream surface-OPD contract.
+- [REVOLTClassicSim.jl](https://github.com/DarrylGamroth/REVOLTClassicSim.jl)
+  owns the Classic Shack–Hartmann graph, C-BLUE One IMX425 profile, HSDM277
+  geometry, RTC-reference composition, viewer, and full pyRTC calibration and
+  atmosphere test.
+- [REVOLTCopperSim.jl](https://github.com/DarrylGamroth/REVOLTCopperSim.jl)
+  owns the Copper Pyramid graph, HSDM277 geometry, calibration graph, viewer,
+  and opt-in pyRTC process test.
 
-The maintained
-[`revolt_copper_hil_coordinate_gaussian.toml`](../examples/graphs/revolt_copper_hil_coordinate_gaussian.toml)
-file
-defines the corresponding external-RTC boundary for Copper. It combines the
-maintained REVOLT optical and iXon camera profile with the current RTC's
-64-by-64 frame and 30-by-30 Pyramid-pupil contract. It applies the same exact
-command geometry and provisional surface model as Classic. Its own atmosphere
-node advances the same maintained five-layer profile by exactly 2 ms per graph
-step. That step composes the surface with atmospheric OPD, forms the modulated
-Pyramid photon-rate image, and completes one seeded EMCCD acquisition; the
-external RTC consumes that frame and returns the next physical-DM command.
-The file records its layered parameter authority and does not claim that the
-symmetric simulated pupil registration already matches the measured
-`pwfsRoiOffsets_64.csv` positions or an operational pixel reconstructor.
-It explicitly selects `modulation_propagation_strategy = "shifted_mask"` for
-the fixed 32-point modulation cycle. That strategy retains the 480-sample
-pupil, 64-by-64 output, modulation points, quadrature weights, and photon-rate
-normalization, but it is a sampled detector-product approximation to the
-default pupil-tilt propagation. Use `"pupil_tilt"` when the reference
-formulation is required. Dynamic modulation updates require re-preparing the
-shifted masks rather than changing the cached quadrature in place.
-
-The REVOLT graph profile is selected before preparation. The example helper keeps
-the selection explicit:
-
-```julia
-include("examples/support/revolt_hil_graphs.jl")
-
-path = REVOLTHILGraphs.graph_path(:copper, :grid_gaussian)
-definition = load_algorithm_graph(path; bindings)
-graph = prepare_algorithm_graph(definition; target)
-```
-
-`coordinate_gaussian` resolves to the coordinate-based files above.
-[`revolt_classic_hil_grid_gaussian.toml`](../examples/graphs/revolt_classic_hil_grid_gaussian.toml)
-and
-[`revolt_copper_hil_grid_gaussian.toml`](../examples/graphs/revolt_copper_hil_grid_gaussian.toml)
-change only the provisional HSDM277 evaluation. They scatter the exact
-277-element command into its regular 19-by-19 physical grid and evaluate the
-same Gaussian influence model with a separable matrix factorization. Internal
-pupil sampling, atmosphere evolution, WFS propagation and modulation,
-detector noise, external frame shapes, and lockstep HIL semantics are
-unchanged. This is an exact specialization under the current provisional
-regular-grid registration, not a reduced-resolution optical model. A prepared
-run never changes profile in response to overload.
-
-The HEART SRT snapshot adds useful but bounded external evidence. Its
-`interactionMatrix25102022.fits` artifact (SHA-256
-`06bd5c164dc9f6f4638bbd06e1637e2ea4c871ee6331cb46a6a2b18240a35f34`) is a
-376-by-277 matrix and its `validSubapMask.fits` is byte-identical to the
-maintained 188-subaperture on-sky artifact. Direct composition with maintained
-on-sky command matrices is diagonally dominant, which corroborates the signal
-and command order. It does not establish command-to-OPD units, pupil
-registration, or a sampled influence function. SRT's separate
-`DM277_ActuatorIndex.csv` server-test geometry has a different physical outline
-from the maintained on-sky `dmActuatorMap_277.csv` and is therefore not used as
-the HSDM geometry authority. Historical REVOLT extrapolators in the same
-artifact collection have ranks 214, 217, and 221; the exact deployed
-extrapolator remains a caller-bound calibration rather than a model default.
-
-The separate
-[`revolt_classic_rtc_reference.toml`](../examples/graphs/revolt_classic_rtc_reference.toml)
-file extends the same sensor stages into an optional in-process RTC reference.
-A calibrated centroid node consumes the completed frame using caller-bound
-valid-subaperture and reference-signal arrays and publishes the canonical full
-512-component slope vector. A selection node converts that vector into 376
-pair-interleaved components using a caller-bound one-based ordering for 188
-lenslets. The core graph does not parse or silently reinterpret the
-instrument's detector ROI-origin file. A control-matrix node snapshots and
-applies the caller-bound 221-by-376 calibrated matrix, then an atomic
-closed-loop correction node applies the REVOLT Classic gain `-0.3`, pole
-`0.99`, and anti-windup gain `1.0`. Its OOPAO-compatible fractional cutoff is
-not mapped from SPECULA's absolute-pedestal `thr_value`; numerical extractor
-parity and operational matrix compatibility remain open. Until the optional
-reference graph includes downstream constraint and DM nodes, the caller binds
-the preceding demanded-minus-realized correction feedback and the first step
-ignores that placeholder. The reference graph is a deterministic standalone
-and differential-testing aid, not the required HIL deployment topology.
-
-Architecture-file status is therefore explicit:
-
-| Architecture | File-defined executable surface | Remaining authority or implementation gate |
-|---|---|---|
-| REVOLT Classic | The coordinate-Gaussian HIL file advances the maintained five-layer atmosphere at 2 ms, applies the exact HSDM277 command-map topology with provisional normalized-pupil placement and Gaussian surface response, composes atmospheric and surface OPD, and executes diffractive SHWFS optics plus complete-frame C-BLUE One IMX425 global-shutter CMOS acquisition through the 352-by-352 frame boundary. The camera path uses the maintained 500 Hz, 1896 µs, and 24 dB settings. Its 12-bit mode, noise, dark current, zero-gain full well, and approximate 800 nm QE are published typical IMX425 characterization because the maintained HEART snapshot does not contain pixel-format or unit-calibration data. The grid-Gaussian file preserves the same 240-sample optics and detector path through a regular-grid separable surface evaluation. A separate RTC-reference file additionally executes AOS/OOPAO centroiding, explicit 188-lenslet/376-component slope selection, caller-bound 221-by-376 reconstruction, and atomic 221-coordinate correction. | Bind a qualified normalized-hardware-command conversion and measured HSDM277 influence model before claiming an instrument model; add any required non-atmospheric path aberrations explicitly. Replace manufacturer-typical detector values with unit-specific pixel format, QE, bias/flat, noise, saturation, and ROI calibration before claiming camera parity. For the optional RTC reference, bind the authoritative ROI order/matrix, qualify SPECULA extraction parity, and close downstream command constraints and feedback. |
-| REVOLT Copper | The coordinate-Gaussian HIL file advances the maintained five-layer atmosphere at 2 ms, applies the same exact command map and provisional placement/Gaussian response, composes atmospheric and surface OPD, and executes maintained 32-point modulated Pyramid optics plus complete-frame noisy EMCCD acquisition through a 64-by-64 frame boundary. The grid-Gaussian file changes only the Gaussian surface evaluation and retains the 480-sample pupil and complete Pyramid/detector model. | Bind qualified command conversion and measured HSDM277 influences. Bind measured Pyramid registration and an operationally compatible pixel reconstructor before claiming RTC numerical parity; add any required non-atmospheric path aberrations explicitly. |
-| SPIDERS | Optional atomic Proper propagation node in the companion; no complete architecture file | Select the maintained science/control topology and qualify its native or Proper optical nodes before fixing a static profile |
-
-End-to-end REVOLT Classic, REVOLT Copper, and SPIDERS simulations are not
-claimed until all nodes needed by those architectures are executable and
-scientifically qualified. This prevents a configuration file from becoming a
-catalog of plausible but non-running node names. Direct Julia construction
-remains the correct extension path in the meantime: an application may
-generate nodes, branch on configuration, admit a trusted Proper prescription
-factory, or compose several prepared graphs without expanding the static TOML
-language.
+Those packages bind AOS arrays and adapters directly; they do not require an
+instrument-specific scheduler in AOS. Their provisional influence functions,
+registration assumptions, calibration artifacts, and model-validity claims are
+documented and tested with the instrument definition that owns them. A future
+SPIDERS package can use the same graph protocol and the optional Proper
+companion seam without adding SPIDERS-specific topology to AOS.
 
 ## Direct Julia Composition
 

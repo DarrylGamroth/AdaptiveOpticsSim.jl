@@ -31,25 +31,6 @@ def shack_hartmann_valid_subapertures() -> np.ndarray:
     return np.concatenate((valid, valid), axis=0)
 
 
-def revolt_classic_valid_subapertures(path: Path) -> np.ndarray:
-    values = np.fromfile(path, dtype=np.uint8)
-    if values.size != 16 * 16:
-        raise ValueError(
-            f"REVOLT Classic valid-subaperture file contains {values.size} "
-            "entries; expected 256"
-        )
-    if not np.all((values == 0) | (values == 1)):
-        raise ValueError(
-            "REVOLT Classic valid-subaperture entries must be zero or one"
-        )
-    mask = values.astype(bool).reshape((16, 16), order="F")
-    if np.count_nonzero(mask) != 188:
-        raise ValueError(
-            "REVOLT Classic valid-subaperture mask must select 188 lenslets"
-        )
-    return np.concatenate((mask, mask), axis=0)
-
-
 def slopes_config(
     system: str,
     temporary_directory: Path,
@@ -78,26 +59,6 @@ def slopes_config(
             pupils=["9,9", "27,9", "9,27", "27,27"],
             pupilsRadius=8,
         )
-    if system == "revolt_classic":
-        if valid_subapertures_file is None:
-            raise ValueError(
-                "REVOLT Classic requires a valid-subaperture file"
-            )
-        valid_path = temporary_directory / "valid_subapertures.npy"
-        np.save(
-            valid_path,
-            revolt_classic_valid_subapertures(valid_subapertures_file),
-        )
-        return python_config(
-            type="SHWFS",
-            signalType="slopes",
-            subApSpacing=22,
-            subApOffsetX=0,
-            subApOffsetY=0,
-            imageNoise=0.0,
-            contrast=0,
-            validSubApsFile=str(valid_path),
-        )
     raise ValueError(f"unsupported system {system!r}")
 
 
@@ -123,15 +84,8 @@ def close_components(slopes, loop) -> None:
 
 
 def process_signal_order(system: str, signal_size: int) -> Optional[np.ndarray]:
-    if system != "revolt_classic":
-        return None
-    if signal_size % 2 != 0:
-        raise ValueError("REVOLT Classic requires paired x/y WFS signals")
-    lenslet_count = signal_size // 2
-    order = np.empty(signal_size, dtype=np.intp)
-    order[0::2] = np.arange(lenslet_count, dtype=np.intp)
-    order[1::2] = lenslet_count + np.arange(lenslet_count, dtype=np.intp)
-    return order
+    del system, signal_size
+    return None
 
 
 def compute_signal(slopes, order, ordered_signal) -> None:
@@ -226,7 +180,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--system",
         required=True,
-        choices=("shack_hartmann", "pyramid", "revolt_classic"),
+        choices=("shack_hartmann", "pyramid"),
     )
     parser.add_argument("--temporary-directory", required=True)
     parser.add_argument("--valid-subapertures-file")

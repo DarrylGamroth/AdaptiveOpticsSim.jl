@@ -1,6 +1,6 @@
 # Fully declared Shack-Hartmann HIL reference system.
 #
-# This is a deterministic validation plant, not a REVOLT instrument model. It
+# This is a deterministic validation plant, not an instrument model. It
 # owns real diffractive Shack-Hartmann optics and complete CCD acquisition, but
 # every numerical and physical value is an explicit AOS reference-system
 # choice. The caller supplies a complete pupil-plane uncompensated OPD map and

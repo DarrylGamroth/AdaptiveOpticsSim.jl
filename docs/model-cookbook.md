@@ -226,17 +226,21 @@ frame output:
 using AdaptiveOpticsSim.AlgorithmGraphs
 
 definition = load_algorithm_graph(
-    "examples/graphs/revolt_classic_hil_coordinate_gaussian.toml";
+    "examples/graphs/shack_hartmann_hil_reference.toml";
     bindings=(;
-        pdm_command=zeros(Float32, 277),
-        pdm_actuator_coordinates,
+        dm_command=zeros(Float32, 25),
+        uncompensated_opd=zeros(Float32, 64, 64),
+        dm_actuator_coordinates,
+        valid_subapertures,
+        reference_signal,
+        lenslet_order,
     ),
 )
 graph = prepare_algorithm_graph(definition)
 boundary = prepare_graph_hil_boundary(
     graph;
-    command_input=:pdm_command,
-    frame_output=:shwfs_frame,
+    command_input=:dm_command,
+    frame_output=:wfs_frame,
 )
 
 sequence = step_hil_frame!(boundary)

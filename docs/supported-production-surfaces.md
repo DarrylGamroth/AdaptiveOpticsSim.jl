@@ -32,18 +32,18 @@ The Julia 1.12 CPU baseline includes:
 Warmed allocation claims apply only to the concrete paths with allocation tests.
 They are not a promise for arbitrary user callbacks or every optional library.
 
-## REVOLT Graph Examples
+## Downstream Instrument Packages
 
-The REVOLT Classic and REVOLT Copper TOML files are maintained executable graph
-examples. They cover atmosphere evolution, the 277-element HSDM command map,
-pupil OPD composition, Shack-Hartmann or Pyramid optical formation, and
-completed detector frames. Coordinate-Gaussian and separable grid-Gaussian DM
-profiles are available.
+AOS supports the reusable algorithms, graph adapters, static TOML schema, and
+lockstep HIL boundary used by downstream instrument packages. It does not own
+an instrument's command geometry, detector profile, calibration policy, or
+scientific acceptance claim.
 
-These examples are not a claim of instrument qualification. The HSDM influence
-model is provisional until measured HSDM277 calibration is supplied. Their
-configuration comments identify external REVOLT/SPECULA/OOPAO sources and
-remaining assumptions.
+[REVOLTClassicSim.jl](https://github.com/DarrylGamroth/REVOLTClassicSim.jl)
+and
+[REVOLTCopperSim.jl](https://github.com/DarrylGamroth/REVOLTCopperSim.jl)
+maintain their executable graph files and pyRTC validation separately. Their
+support status is governed by their own tests and documented assumptions.
 
 ## Accelerator Surfaces
 
@@ -100,10 +100,8 @@ CUDA and AMDGPU use the same KernelAbstractions SplitMix64 counter kernels and
 device draw-sequence model. Fixed-seed reset and replay are reproducible on each
 qualified backend. Cross-vendor bitwise floating-point identity is not claimed,
 because normal and Poisson transforms may use different vendor transcendental
-lowering.
-The maintained REVOLT `coordinate_gaussian` and `grid_gaussian` graphs are
-complete five-node captured graphs when detector binning is one and the
-coordinate profile uses the built-in linear-static actuator response.
+lowering. Complete downstream instrument graphs require their own whole-graph
+capture qualification.
 
 Detector capture is deliberately narrower than the general detector API. It
 admits unit-binning, full-frame CCD single-read, global-shutter CMOS, and
@@ -140,15 +138,11 @@ Linux pyRTC `ImageSHM` layout. It validates C-order vector and matrix exchange
 in both directions and runs the SHWFS and Pyramid reference systems against a
 separate pyRTC process. This lockstep integration and calibration surface also
 verifies corrected science-image and on-axis Strehl improvement for a
-deterministically evolving four-layer atmosphere. An independently enabled
-REVOLT Classic model-validation test covers its 352-by-352 frame, 376
-pair-interleaved slopes, 277-element PDM command, and maintained five-layer
-atmosphere for one modeled second. It admits a regularized interaction
-subspace and checks both Strehl and pupil OPD-RMS improvement. This does not
-qualify the provisional HSDM influence model or an operational
-control/extrapolation matrix. It is not an asynchronous transport or deadline
-guarantee. The one-slot upstream layout is used only with one producer and one
-outstanding frame.
+deterministically evolving four-layer atmosphere. Downstream instrument
+packages reuse this adapter and own their full-size pyRTC calibration and
+closed-loop acceptance tests. This is not an asynchronous transport or
+deadline guarantee. The one-slot upstream layout is used only with one producer
+and one outstanding frame.
 
 ## Explicitly Not Production-Supported
 

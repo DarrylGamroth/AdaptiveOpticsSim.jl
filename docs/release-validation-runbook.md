@@ -74,14 +74,13 @@ suite:
 
 ~~~bash
 julia --project=. test/ci/run_selected_tests.jl algorithm-graphs
-julia --project=. benchmarks/benchmark_revolt_graph_nodes.jl
+julia --project=. benchmarks/benchmark_pre_hil_backend_latency.jl
 ~~~
 
-Verify both REVOLT architectures and applicable `coordinate_gaussian` /
-`grid_gaussian`
-profiles. Record warmed service-time distributions and graph configuration.
-The result is a self-paced service-cost measurement, not fixed-arrival
-PipeWire/RTC latency.
+Record warmed service-time distributions and graph configuration. The result
+is a self-paced service-cost measurement, not fixed-arrival PipeWire/RTC
+latency. Run instrument-specific graph and pyRTC gates from each downstream
+instrument package when that package is part of the release candidate.
 
 The lockstep HIL tests must cover complete-frame publication, same-sequence
 command adoption, nonfinite-command rejection, failure stop, reset, exact

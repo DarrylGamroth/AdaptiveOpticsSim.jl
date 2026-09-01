@@ -33,8 +33,8 @@ the maintained package.
   composition, Shack-Hartmann and Pyramid optical rates, detector acquisition,
   centroid/slope selection, reconstruction, and controller operations.
 - Lockstep host command/frame exchange for external RTC integration.
-- Executable REVOLT Classic and REVOLT Copper graph examples, including the
-  exact HSDM277 command map and a selectable fast separable-grid DM profile.
+- A downstream-package seam for instrument-owned graph files, geometry,
+  calibration policy, pyRTC tests, and model-validity claims.
 - Optional Proper.jl integration at an explicit application or graph-node
   boundary.
 
@@ -42,10 +42,10 @@ the maintained package.
 
 1. Validate the reduced scheduler and graph-file contract as the stable
    complete-frame orchestration surface.
-2. Finish instrument-faithful REVOLT Classic and Copper inputs, replace
-   provisional HSDM277 influence data when calibration is available, and
-   preserve measured CPU/GPU performance evidence.
-3. Build the SPIDERS prescription and graph from controlled Subaru/AO3k,
+2. Keep the generic graph, HIL, and pyRTC contracts stable for the separately
+   maintained REVOLT Classic and Copper packages; instrument calibration and
+   performance evidence remain with those packages.
+3. Build a separate SPIDERS instrument package from controlled Subaru/AO3k,
    SpiderMan, service, and optical-engineering inputs. Mark estimated chopper,
    stage, filter-wheel, and prescription values as provisional.
 4. Add a PipeWireAO output adapter after the simulated detector boundary. GPU
@@ -82,12 +82,9 @@ justifies a small, testable scheduler extension.
 - Direct loading of Julia algorithms inside a PipeWire process. Current planning
   keeps Julia embedding in a separate `module-julia`-style boundary.
 - PipeWire GPU-buffer execution.
-- Complete REVOLT qualification for whole-step CUDA Graph or HIP Graph replay.
-  The runtime records an entirely qualified node and delayed-link sequence as
-  one native graph, and both accelerator backends retain replay-safe device
-  counter state for random array fills. Finite multilayer-atmosphere replay is
-  qualified; WFS and detector owners still require independent synchronization
-  and backend audits.
+- Whole-step CUDA Graph or HIP Graph qualification for complete downstream
+  instrument graphs. AOS qualifies reusable node families; each instrument
+  package owns its composition-level evidence.
 - A general multi-rate event runtime.
 - Automatic graph partitioning, implicit host/device transfer, and dynamic
   topology mutation.

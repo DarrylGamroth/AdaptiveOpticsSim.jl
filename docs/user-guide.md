@@ -199,12 +199,16 @@ TOML is the convenient static authoring surface:
 
 ~~~julia
 bindings = (
-    pdm_command=zeros(Float32, 277),
-    pdm_actuator_coordinates=actuator_coordinates,
+    dm_command=zeros(Float32, 25),
+    uncompensated_opd=zeros(Float32, 64, 64),
+    dm_actuator_coordinates=actuator_coordinates,
+    valid_subapertures=valid_subapertures,
+    reference_signal=reference_signal,
+    lenslet_order=lenslet_order,
 )
 
 definition = load_algorithm_graph(
-    "examples/graphs/revolt_classic_hil_coordinate_gaussian.toml";
+    "examples/graphs/shack_hartmann_hil_reference.toml";
     bindings,
 )
 graph = prepare_algorithm_graph(definition)
@@ -214,24 +218,25 @@ Graph files embed scalar configuration but not large calibration arrays or
 arbitrary filenames. `bindings` supplies caller-owned inputs, delayed initial
 values, and large ndarray parameters by stable name.
 
-Maintained examples include:
+Maintained package-level reference examples include:
 
-- `examples/graphs/revolt_classic_hil_coordinate_gaussian.toml`
-- `examples/graphs/revolt_classic_hil_grid_gaussian.toml`
-- `examples/graphs/revolt_copper_hil_coordinate_gaussian.toml`
-- `examples/graphs/revolt_copper_hil_grid_gaussian.toml`
+- `examples/graphs/shack_hartmann_hil_reference.toml`
+- `examples/graphs/pyramid_hil_reference.toml`
 
-The `grid_gaussian` profile uses a separable regular-grid evaluation of the
-same provisional Gaussian DM model without reducing detector or pupil
-resolution.
+Instrument definitions, calibration inputs, and operational acceptance tests
+belong in downstream instrument packages. REVOLT Classic and Copper are
+maintained by
+[REVOLTClassicSim.jl](https://github.com/DarrylGamroth/REVOLTClassicSim.jl)
+and
+[REVOLTCopperSim.jl](https://github.com/DarrylGamroth/REVOLTCopperSim.jl).
 
 ## External RTC Lockstep
 
 ~~~julia
 boundary = prepare_graph_hil_boundary(
     graph;
-    command_input=:pdm_command,
-    frame_output=:shwfs_frame,
+    command_input=:dm_command,
+    frame_output=:wfs_frame,
 )
 
 while running
@@ -269,33 +274,9 @@ The short validated references are controlled, noiseless, 25-command systems:
 
 These reference systems establish transport, calibration, and closed-loop
 behavior without depending on unavailable instrument calibration. They are not
-REVOLT instrument models.
-
-The separate REVOLT Classic model-validation path uses the maintained
-352-by-352 C-BLUE One IMX425 global-shutter CMOS graph, 188 valid
-Shack–Hartmann subapertures, 376
-pair-interleaved slope components, and a complete 277-element HSDM command. It
-self-calibrates against the AOS model and therefore validates the complete
-model/pyRTC loop without claiming compatibility with an operational REVOLT
-interaction or command matrix. The normalized HSDM placement and Gaussian
-influence function remain provisional.
-
-The detector identity and operating geometry follow maintained HEART sources:
-the C-BLUE One uses the global-shutter Sony IMX425, and REVOLT selects a
-352-by-352 ROI at 500 Hz with 1896 µs exposure and 24 dB analog gain. The
-underlying sensor has 1608-by-1104 9 µm pixels; the graph's
-`pixel_scale_arcsec` is the projected optical sampling, not that physical pixel
-pitch.
-
-The maintained HEART snapshot does not state the operational pixel format or
-unit calibration. The graph therefore selects the published 12-bit
-high-sensitivity characterization: 2.33 e⁻ RMS read noise, 0.96 e⁻/pixel/s
-dark current, 94 ke⁻ zero-gain image full well, and an approximate 0.27 QE at
-the modeled 800 nm channel. It converts 24 dB to a linear post-readout voltage
-gain of 15.8489. The internal unsigned ADC result is copied as integer-valued
-`Float32` samples for the graph and pyRTC boundary. Replace these typical
-values with the camera's measured pixel format, QE, bias/flat, noise,
-saturation, and ROI calibration before claiming instrument parity.
+instrument models. The REVOLT packages apply the same generic graph and SHM
+interfaces to their own detector, WFS, command geometry, calibration, viewer,
+and pyRTC validation surfaces.
 
 ### Obtain And Install The Software
 
@@ -374,24 +355,6 @@ open-loop result and an absolute acceptance floor. The command prints the
 interaction condition, static-disturbance convergence and command error, and
 the mean open-loop and corrected atmospheric Strehl ratios for both sensors.
 
-Run the larger REVOLT Classic model-validation system separately:
-
-~~~sh
-julia --project=examples/integrations/pyrtc --startup-file=no \
-  examples/integrations/pyrtc/run_revolt_classic_hil.jl
-~~~
-
-This performs push-pull calibration for all 277 physical command elements,
-uses a relative singular-value cutoff of `0.02`, and closes a 500-frame
-(one modeled second) loop against the deterministic maintained five-layer
-atmosphere. The cutoff rejects poorly conditioned directions that amplify the
-modeled 12-bit detector and centroid noise while retaining at least 80% of the
-277-dimensional command space. The test requires a finite retained interaction
-subspace, corrected mean 750 nm on-axis Strehl above 0.35, at least tenfold
-improvement over the open-loop mean, and more than a factor-of-two reduction
-in mean pupil OPD RMS. These are simulation acceptance checks, not REVOLT
-instrument qualification.
-
 Run the same systems as assertions in the optional integration-test matrix:
 
 ~~~sh
@@ -400,17 +363,13 @@ AOS_PYRTC_PROCESS_TESTS=1 \
   examples/integrations/pyrtc/runtests.jl
 ~~~
 
-The longer REVOLT Classic assertion is independently opt-in:
-
-~~~sh
-AOS_PYRTC_REVOLT_CLASSIC_TESTS=1 \
-  julia --project=examples/integrations/pyrtc --startup-file=no \
-  examples/integrations/pyrtc/runtests.jl
-~~~
-
 For debugging, `run_reference_matrix.jl` provides an in-process PythonCall
 oracle. The separate-process runner above is the representative native Julia
 shared-memory path.
+
+The downstream REVOLT packages contain their own pinned pyRTC environments,
+opt-in process tests, calibration policies, and scientist-facing run
+instructions. AOS does not duplicate those instrument acceptance gates.
 
 ### View The Live Optical Loop
 
@@ -424,23 +383,12 @@ julia --project=examples/integrations/pyrtc --startup-file=no \
 ~~~
 
 Use `shack_hartmann` in place of `pyramid` for the Shack–Hartmann reference
-system. Use `revolt_classic` to run the maintained REVOLT Classic model:
-
-~~~sh
-julia --project=examples/integrations/pyrtc --startup-file=no \
-  examples/integrations/pyrtc/run_process_viewer_demo.jl \
-  revolt_classic 60 10
-~~~
-
-The final two arguments are the run duration in seconds and requested frame
-rate. REVOLT Classic first calibrates 277 push-pull command columns, so its
-viewer takes longer to start than either 25-command reference. The demo opens
-the official `pyrtc-view` application and displays:
+system. The final two arguments are the run duration in seconds and requested
+frame rate. The demo opens the official `pyrtc-view` application and displays:
 
 - the complete AOS detector frame in `wfs`
 - pyRTC's `signal2D` slope product
-- the current pyRTC command in `wfc2D` (5-by-5 for a reference system or the
-  exact 19-by-19 HSDM physical grid for REVOLT Classic)
+- the current pyRTC command in `wfc2D` as a 5-by-5 reference-system grid
 - AOS uncompensated, deformable-mirror, and residual pupil OPD maps
 - diffraction-limited-normalized open-loop and corrected 750 nm science PSFs
 
@@ -454,14 +402,12 @@ The viewer polls at half the requested wall-clock demonstration rate, so each
 normal refresh interval spans two graph periods. This avoids pyRTC's transient
 `PAUSED` label between frames without altering graph ordering or RTC command
 adoption. The compact reference graphs advance atmosphere model time by 1 ms
-per frame; REVOLT Classic advances it by 2 ms to match its configured 500 Hz
-C-BLUE One cadence. The lower wall-clock rate intentionally slows the modeled
-loop for inspection.
+per frame. The lower wall-clock rate intentionally slows the modeled loop for
+inspection.
 
 The reference graphs evolve the maintained four-layer reference atmosphere;
-REVOLT Classic evolves its maintained five-layer atmosphere. None substitutes
-a deformable-mirror-shaped synthetic disturbance. Close the viewer window to
-stop the demonstration before its requested duration.
+they do not substitute a deformable-mirror-shaped synthetic disturbance. Close
+the viewer window to stop the demonstration before its requested duration.
 
 ### Adapt A Scientific Graph
 
