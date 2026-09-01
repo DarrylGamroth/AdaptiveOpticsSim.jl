@@ -157,13 +157,19 @@ end
     end
 end
 
+# One work item owns every prepared modulation plane at a focal coordinate.
+# The 2-D launch therefore loads the shared focal field once per coordinate;
+# writes remain coalesced because all work items advance through the same plane.
 @kernel function pyramid_shifted_mask_batch_kernel!(stack, focal_field,
     shifted_masks, weights, first_point::Int, pad::Int, batch_size::Int)
-    i, j, batch_index = @index(Global, NTuple)
-    if i <= pad && j <= pad && batch_index <= batch_size
-        point = first_point + batch_index - 1
-        @inbounds stack[i, j, batch_index] = weights[point] *
-            focal_field[i, j] * shifted_masks[i, j, point]
+    i, j = @index(Global, NTuple)
+    if i <= pad && j <= pad
+        focal_value = @inbounds focal_field[i, j]
+        @inbounds for batch_index in 1:batch_size
+            point = first_point + batch_index - 1
+            stack[i, j, batch_index] = weights[point] *
+                focal_value * shifted_masks[i, j, point]
+        end
     end
 end
 
@@ -196,12 +202,15 @@ end
 @kernel function pyramid_separable_shifted_mask_batch_kernel!(stack,
     focal_field, axis_1_factors, axis_2_factors, weights,
     first_point::Int, pad::Int, batch_size::Int)
-    i, j, batch_index = @index(Global, NTuple)
-    if i <= pad && j <= pad && batch_index <= batch_size
-        point = first_point + batch_index - 1
-        @inbounds stack[i, j, batch_index] = weights[point] *
-            focal_field[i, j] * axis_1_factors[i, point] *
-            axis_2_factors[j, point]
+    i, j = @index(Global, NTuple)
+    if i <= pad && j <= pad
+        focal_value = @inbounds focal_field[i, j]
+        @inbounds for batch_index in 1:batch_size
+            point = first_point + batch_index - 1
+            stack[i, j, batch_index] = weights[point] *
+                focal_value * axis_1_factors[i, point] *
+                axis_2_factors[j, point]
+        end
     end
 end
 

@@ -506,7 +506,7 @@ function _fill_pyramid_shifted_mask_batch!(style::AcceleratorStyle, stack,
     first_point::Int, pad::Int)
     launch_kernel!(style, pyramid_shifted_mask_batch_kernel!, stack,
         focal_field, batch.shifted_masks, batch.operating_weights,
-        first_point, pad, batch.batch_size; ndrange=size(stack))
+        first_point, pad, batch.batch_size; ndrange=(pad, pad))
     return stack
 end
 
@@ -516,7 +516,7 @@ function _fill_pyramid_shifted_mask_batch!(style::AcceleratorStyle, stack,
     launch_kernel!(style, pyramid_separable_shifted_mask_batch_kernel!, stack,
         focal_field, batch.axis_1_factors, batch.axis_2_factors,
         batch.operating_weights, first_point, pad, batch.batch_size;
-        ndrange=size(stack))
+        ndrange=(pad, pad))
     return stack
 end
 
@@ -526,7 +526,7 @@ end
     first_point::Int, pad::Int)
     launch_kernel_async!(style, pyramid_shifted_mask_batch_kernel!, stack,
         focal_field, batch.shifted_masks, batch.operating_weights,
-        first_point, pad, batch.batch_size; ndrange=size(stack))
+        first_point, pad, batch.batch_size; ndrange=(pad, pad))
     return stack
 end
 
@@ -538,7 +538,7 @@ end
         pyramid_separable_shifted_mask_batch_kernel!, stack, focal_field,
         batch.axis_1_factors, batch.axis_2_factors,
         batch.operating_weights, first_point, pad, batch.batch_size;
-        ndrange=size(stack))
+        ndrange=(pad, pad))
     return stack
 end
 
