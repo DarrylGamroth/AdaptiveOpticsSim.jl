@@ -1107,6 +1107,33 @@ end
     return nothing
 end
 
+@inline function _coordinate_gaussian_capture_capability(
+    ::GaussianInfluenceOperator,
+    ::LinearStaticActuators,
+    ::AcceleratorStyle,
+)
+    return GraphNodeCaptureSafe()
+end
+
+@inline function _coordinate_gaussian_capture_capability(
+    influence,
+    actuator_response,
+    style,
+)
+    return GraphNodeCaptureUnsupported()
+end
+
+@inline function graph_node_capture_capability(
+    owner::_DeformableMirrorSurfaceOwner,
+)
+    deformable_mirror = owner.deformable_mirror
+    return _coordinate_gaussian_capture_capability(
+        deformable_mirror.state.modes,
+        actuator_model(deformable_mirror),
+        execution_style(owner.output),
+    )
+end
+
 @inline function reset_graph_node!(owner::_DeformableMirrorSurfaceOwner)
     fill!(surface_opd(owner.deformable_mirror), zero(eltype(owner.output)))
     fill!(owner.output, zero(eltype(owner.output)))

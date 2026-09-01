@@ -130,6 +130,7 @@ end
 function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     require_backend_target!(B)
     @testset "$(backend_label(B)) hardware target" begin
+        run_captured_coordinate_gaussian_graph_execution_smoke(B)
         run_captured_graph_execution_smoke(B)
         run_captured_atmosphere_replay_smoke(B)
         run_captured_wfs_replay_smoke(B)
@@ -140,6 +141,121 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
         run_gpu_builder_smoke(B)
         run_revolt_like_hil_backend_smoke(B)
     end
+    return nothing
+end
+
+function _coordinate_gaussian_capture_definition(command, coordinates)
+    uncompensated = similar(command, Float32, 16, 16)
+    fill!(uncompensated, 0.0f0)
+    command_schema = "test.graph.coordinate-command.f32/1"
+    surface_schema = "test.graph.coordinate-surface.f32/1"
+    pupil_schema = "test.graph.coordinate-pupil-opd.f32/1"
+    return algorithm_graph(
+        (
+            gaussian_deformable_mirror_surface_node(
+                :dm;
+                resolution=16,
+                telescope_diameter_m=1.22,
+                actuator_count=length(command),
+                influence_width=0.2f0,
+                pdm_command_schema=command_schema,
+                surface_opd_schema=surface_schema,
+                actuator_coordinates_schema=
+                    "test.graph.coordinate-actuator-coordinates.f32/1",
+            ),
+            pupil_opd_composition_node(
+                :compose;
+                resolution=16,
+                uncompensated_opd_schema=
+                    "test.graph.coordinate-uncompensated.f32/1",
+                surface_opd_schema=surface_schema,
+                pupil_opd_schema=pupil_schema,
+            ),
+        );
+        name=:captured_coordinate_gaussian_dm,
+        inputs=(
+            graph_input(:command, :dm => :pdm_command, command),
+            graph_input(
+                :uncompensated,
+                :compose => :uncompensated_opd,
+                uncompensated,
+            ),
+        ),
+        outputs=(
+            graph_output(:surface, :dm => :surface_opd),
+            graph_output(:pupil_opd, :compose => :pupil_opd),
+        ),
+        links=(link(:dm => :surface_opd, :compose => :surface_opd),),
+        parameters=(sparse_parameter(
+            :dm => :actuator_coordinates,
+            coordinates,
+        ),),
+    )
+end
+
+function run_captured_coordinate_gaussian_graph_execution_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    first_command = Float32[2, -1, 0.5, 1.5, -0.25] .* 1.0f-8
+    second_command = Float32[-1, 2, -0.5, 0.25, 1] .* 1.0f-8
+    coordinates_host = Float32[
+        -0.47 -0.13 0.08 0.31 0.44
+        -0.36 0.27 -0.09 0.41 -0.22
+    ]
+    stream_command = BackendArray(first_command)
+    captured_command = BackendArray(first_command)
+    stream_coordinates = BackendArray(coordinates_host)
+    captured_coordinates = BackendArray(coordinates_host)
+    stream_graph = prepare_algorithm_graph(
+        _coordinate_gaussian_capture_definition(
+            stream_command,
+            stream_coordinates,
+        );
+        target=compute_device(stream_command),
+        execution=StreamGraphExecution(),
+    )
+    captured_graph = prepare_algorithm_graph(
+        _coordinate_gaussian_capture_definition(
+            captured_command,
+            captured_coordinates,
+        );
+        target=compute_device(captured_command),
+        execution=CapturedGraphExecution(),
+    )
+    owner = AlgorithmGraphs.prepared_graph_node(captured_graph, Val(:dm))
+    @test AlgorithmGraphs.graph_node_capture_capability(owner) isa
+        AlgorithmGraphs.GraphNodeCaptureSafe
+    @test captured_graph_node_count(captured_graph) == 2
+
+    step_graph!(stream_graph)
+    step_graph!(captured_graph)
+    first_surface = Array(graph_output(captured_graph, Val(:surface)))
+    @test !all(iszero, first_surface)
+    @test first_surface ≈
+        Array(graph_output(stream_graph, Val(:surface))) rtol = 2.0f-5 atol = 1.0f-12
+    @test Array(graph_output(captured_graph, Val(:pupil_opd))) ==
+        first_surface
+
+    copyto!(stream_command, second_command)
+    copyto!(captured_command, second_command)
+    Backends.synchronize_backend!(Backends.execution_style(stream_command))
+    step_graph!(stream_graph)
+    step_graph!(captured_graph)
+    second_surface = Array(graph_output(captured_graph, Val(:surface)))
+    @test second_surface != first_surface
+    @test second_surface ≈
+        Array(graph_output(stream_graph, Val(:surface))) rtol = 2.0f-5 atol = 1.0f-12
+    step_graph!(captured_graph)
+    @test (@allocated step_graph!(captured_graph)) <= 256
+
+    reset_graph!(stream_graph)
+    reset_graph!(captured_graph)
+    @test all(iszero, Array(graph_output(captured_graph, Val(:surface))))
+    step_graph!(stream_graph)
+    step_graph!(captured_graph)
+    @test Array(graph_output(captured_graph, Val(:surface))) ≈
+        Array(graph_output(stream_graph, Val(:surface))) rtol = 2.0f-5 atol = 1.0f-12
     return nothing
 end
 
