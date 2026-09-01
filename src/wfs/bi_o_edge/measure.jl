@@ -157,12 +157,12 @@ function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism)
 end
 
 function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
 end
 
 function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, ast, det; rng=rng)
 end
 
@@ -185,7 +185,7 @@ function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGS
 end
 
 function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     ensure_bi_o_edge_calibration!(wfs, pupil, src, det)
     propagation = bi_o_edge_propagation_workspace(wfs)
     bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
@@ -199,7 +199,7 @@ function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::Abs
 end
 
 function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     ensure_bi_o_edge_calibration!(wfs, pupil, src, det)
     propagation = bi_o_edge_propagation_workspace(wfs)
     bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
@@ -225,7 +225,7 @@ function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Ast
 end
 
 function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     Base.require_one_based_indexing(pupil.opd)
     common_source = common_wfs_calibration_source(ast, "Bi-O-edge WFS")
     ensure_bi_o_edge_calibration!(wfs, pupil, common_source, det)

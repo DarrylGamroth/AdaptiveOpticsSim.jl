@@ -25,7 +25,8 @@ import ..AdaptiveOpticsSim:
     bin2d_abs2!,
     bin2d_abs2_kernel!,
     center_resize2d!,
-    ensure_psf_buffers!
+    ensure_psf_buffers!,
+    runtime_rng
 
 import ..Backends:
     AbstractArrayBackend,

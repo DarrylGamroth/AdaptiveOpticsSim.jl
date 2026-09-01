@@ -586,7 +586,7 @@ function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch:
 end
 
 function _capture_stack_fixed!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {T<:AbstractFloat}
     return _capture_stack_fixed!(det, cube, scratch, rng)
 end
 
@@ -626,7 +626,7 @@ function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,
 end
 
 function _apply_batched_detector_pipeline!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{T,3};
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {T<:AbstractFloat}
     return _apply_batched_detector_pipeline!(det, cube, scratch, rng)
 end
 
@@ -647,7 +647,7 @@ end
 
 function _capture_stack_generalized!(det::Detector,
     out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
-    rng::AbstractRNG=Random.default_rng(),
+    rng::AbstractRNG=runtime_rng(),
     qe=det.params.qe) where {TO,TI}
     _require_generalized_batched_detector_compat(det, out_cube, in_cube)
     require_whole_capture_idle(det)
@@ -697,12 +697,12 @@ function capture_stack_with_quantum_efficiency!(det::Detector,
 end
 
 function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3},
-    src::AbstractSource; rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat,S<:AbstractFloat}
+    src::AbstractSource; rng::AbstractRNG=runtime_rng()) where {T<:AbstractFloat,S<:AbstractFloat}
     return capture_stack!(det, cube, scratch, src, rng)
 end
 
 function capture_stack!(det::Detector, cube::AbstractArray{T,3}, scratch::AbstractArray{S,3};
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat,S<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {T<:AbstractFloat,S<:AbstractFloat}
     return capture_stack!(det, cube, scratch, rng)
 end
 
@@ -719,13 +719,13 @@ function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3},
 end
 
 function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3}, in_cube::AbstractArray{TI,3};
-    rng::AbstractRNG=Random.default_rng()) where {TO,TI<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {TO,TI<:AbstractFloat}
     return capture_stack!(det, out_cube, in_cube, rng)
 end
 
 function capture_stack!(det::Detector, out_cube::AbstractArray{TO,3},
     in_cube::AbstractArray{TI,3}, src::AbstractSource;
-    rng::AbstractRNG=Random.default_rng()) where {TO,TI<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {TO,TI<:AbstractFloat}
     return capture_stack!(det, out_cube, in_cube, src, rng)
 end
 

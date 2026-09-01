@@ -195,7 +195,7 @@ function finalize_linear_apd_capture!(det::LinearAPDDetector,
 end
 
 function capture!(det::LinearAPDDetector, photon_flux::AbstractVector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     channels = det.products.channels
     length(photon_flux) == length(channels) ||
         throw(DimensionMismatchError(
@@ -208,7 +208,7 @@ capture!(det::LinearAPDDetector, photon_flux::AbstractVector,
     rng::AbstractRNG) = capture!(det, photon_flux; rng=rng)
 
 function capture!(det::LinearAPDDetector, photon_flux::Real;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     length(det.products.channels) == 1 || throw(DimensionMismatchError(
         "scalar linear APD capture requires SingleElementLinearAPD topology"))
     fill!(det.products.channels, photon_flux)

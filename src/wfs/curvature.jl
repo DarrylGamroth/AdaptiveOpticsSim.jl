@@ -986,7 +986,7 @@ measure!(wfs::CurvatureWFS, pupil::PupilFunction,
 
 function measure!(wfs::CurvatureWFS, pupil::PupilFunction,
     src::AbstractSource, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
 end
 
@@ -996,7 +996,7 @@ end
 
 function measure!(wfs::CurvatureWFS, ::PupilFunction, ::Asterism,
     ::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     throw(InvalidConfiguration("CurvatureWFS asterism support is not implemented"))
 end
 
@@ -1019,7 +1019,7 @@ end
 
 function measure!(wfs::CurvatureWFS, pupil::PupilFunction,
     src::AbstractSource, atm::AbstractAtmosphere, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng(),
+    rng::AbstractRNG=runtime_rng(),
     propagation::Union{Nothing,AtmosphericFieldPropagation}=nothing,
     model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(curvature_propagation_workspace(wfs).frame_plus)))
     ensure_curvature_calibration!(wfs, pupil, src)
@@ -1052,7 +1052,7 @@ end
 
 function measure!(wfs::CurvatureWFS, pupil::PupilFunction,
     ast::Asterism, atm::AbstractAtmosphere, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng(),
+    rng::AbstractRNG=runtime_rng(),
     model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(curvature_propagation_workspace(wfs).frame_plus)))
     common_source = common_wfs_calibration_source(ast, "CurvatureWFS")
     measure!(wfs, pupil, ast, atm; model=model)
@@ -1063,7 +1063,7 @@ end
 
 function measure!(::Diffractive, wfs::CurvatureWFS,
     pupil::PupilFunction, src::AbstractSource,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     return measure_detector_coupled!(
         curvature_acquisition_plan(wfs).readout_model, wfs, pupil,
         src, det; rng=rng)
@@ -1071,14 +1071,15 @@ end
 
 function measure_detector_coupled!(::CurvatureChannelReadout,
     wfs::CurvatureWFS, ::PupilFunction,
-    src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     throw(InvalidConfiguration(
         "CurvatureChannelReadout requires a linear-mode APD channel bank or a counting detector"))
 end
 
 function measure_detector_coupled!(::CurvatureChannelReadout,
     wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource, det::AbstractCountingDetector; rng::AbstractRNG=Random.default_rng())
+    src::AbstractSource, det::AbstractCountingDetector;
+    rng::AbstractRNG=runtime_rng())
     ensure_curvature_calibration!(wfs, pupil, src)
     curvature_intensity!(wfs, pupil, src)
     frame = curvature_acquisition_products(wfs).frame
@@ -1091,7 +1092,7 @@ end
 function measure_detector_coupled!(::CurvatureChannelReadout,
     wfs::CurvatureWFS, pupil::PupilFunction,
     src::AbstractSource, det::LinearAPDDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     ensure_curvature_calibration!(wfs, pupil, src)
     curvature_intensity!(wfs, pupil, src)
     frame = curvature_acquisition_products(wfs).frame
@@ -1106,7 +1107,8 @@ end
 
 function measure_detector_coupled!(::CurvatureFrameReadout,
     wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    src::AbstractSource, det::AbstractDetector;
+    rng::AbstractRNG=runtime_rng())
     ensure_curvature_calibration!(wfs, pupil, src)
     curvature_intensity!(wfs, pupil, src)
     frame = curvature_acquisition_products(wfs).frame

@@ -58,7 +58,7 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
     amplitude, start_mode, end_mode, cutoff = f2
     n_modes = Int(end_mode)
     basis_grid = ncpa_basis(basis, tel, dm, atm; n_modes=n_modes, M2C=M2C)
-    rng = MersenneTwister(seed)
+    rng = runtime_rng(seed)
     coeffs = zeros(T, n_modes)
     for i in Int(start_mode):Int(end_mode)
         coeffs[i] = T(randn(rng)) / sqrt(T(i) + T(cutoff))

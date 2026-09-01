@@ -499,7 +499,7 @@ function run_algorithm_graph_backend_smoke(
             stochastic_owner.rng.state.draw_sequence,
         ) == compute_device(stochastic_rate)
     else
-        @test stochastic_owner.rng isa Xoshiro
+        @test stochastic_owner.rng isa SplitMix64RNG
     end
     step_graph!(stochastic_graph)
     stochastic_frame = graph_output(stochastic_graph, Val(:frame))

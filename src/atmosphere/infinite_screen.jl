@@ -679,7 +679,7 @@ function InfinitePhaseScreen(tel::Telescope;
     )
     screen_model = InfinitePhaseScreen(params, state, generator, screen_telescope)
     _warmup_gpu_infinite_screen!(execution_style(state.phase_rad),
-        screen_model, MersenneTwister(0))
+        screen_model, runtime_rng(0))
     return screen_model
 end
 

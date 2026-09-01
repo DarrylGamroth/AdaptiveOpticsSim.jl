@@ -12,6 +12,6 @@ export Control, Tomography, Ensembles
 export AlgorithmGraphs
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
-export runtime_rng, deterministic_reference_rng
+export SplitMix64RNG, runtime_rng, deterministic_reference_rng
 
 export runtime_timing

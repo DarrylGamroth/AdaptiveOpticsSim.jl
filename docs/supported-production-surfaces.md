@@ -80,8 +80,9 @@ regular-grid DM with changed command contents and then execute an uncaptured
 consumer on the same stream. Prepared CUDA stochastic graph owners additionally
 keep their counter state and array sampling on the selected device. These are
 not claims that a complete AOS graph can be captured. AMDGPU detector Poisson
-sampling uses its declared, preallocated host-mirror strategy and therefore is
-not a device-only random path.
+sampling consumes the graph owner's explicit SplitMix64 stream through its
+declared, preallocated host-mirror strategy and therefore is not a device-only
+random path.
 
 Metal and AppleAccelerate are optional/manual surfaces and are not implied by
 the AMDGPU or CUDA claims.
@@ -91,7 +92,9 @@ the AMDGPU or CUDA claims.
 CPU replay with fixed configuration, fixed explicit seeds, and single-threaded
 execution is the deterministic reference surface. Stored historical fixtures
 may use `deterministic_reference_rng`; new simulations use `runtime_rng`.
-Cross-hardware bitwise RNG or floating-point identity is not claimed.
+The latter returns `SplitMix64RNG` and does not depend on Julia's task-local
+default RNG. Cross-hardware bitwise RNG or floating-point identity is not
+claimed.
 
 ## Optional Proper.jl Integration
 

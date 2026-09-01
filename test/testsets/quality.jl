@@ -1,13 +1,28 @@
 using Aqua
 
-_rng_family(::Xoshiro) = :xoshiro
+_rng_family(::SplitMix64RNG) = :splitmix64
 _rng_family(::MersenneTwister) = :mersenne_twister
 _rng_family(::AbstractRNG) = :other
 
 @testset "RNG policy helpers" begin
-    @test _rng_family(runtime_rng(1)) == :xoshiro
+    @test _rng_family(runtime_rng(1)) == :splitmix64
     @test _rng_family(deterministic_reference_rng(1)) == :mersenne_twister
+    @test runtime_rng(1) isa SplitMix64RNG
+    @test rand(runtime_rng(1), UInt64) == 0x910a2dec89025cc1
     @test rand(runtime_rng(42), UInt64) == rand(runtime_rng(42), UInt64)
+    splitmix = runtime_rng(42)
+    splitmix_copy = copy(splitmix)
+    @test splitmix_copy == splitmix
+    @test rand(splitmix_copy, UInt64) == rand(splitmix, UInt64)
+    Random.seed!(splitmix, 42)
+    @test splitmix == runtime_rng(42)
+    @test randn(runtime_rng(42)) == randn(runtime_rng(42))
+    @test rand(runtime_rng(42), 1:10) == rand(runtime_rng(42), 1:10)
+    @test_throws InvalidConfiguration SplitMix64RNG(true)
+    @test_throws InvalidConfiguration SplitMix64RNG(-1)
+    @test_throws InvalidConfiguration SplitMix64RNG(
+        big(typemax(UInt64)) + 1,
+    )
     @test rand(deterministic_reference_rng(42), UInt64) ==
         rand(deterministic_reference_rng(42), UInt64)
     @test coverage_runner_flag("true")

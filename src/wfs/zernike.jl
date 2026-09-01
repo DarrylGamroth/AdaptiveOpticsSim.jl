@@ -843,7 +843,7 @@ function measure!(wfs::ZernikeWFS, pupil::PupilFunction, src::AbstractSource)
 end
 
 function measure!(wfs::ZernikeWFS, pupil::PupilFunction, src::AbstractSource, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
 end
 
@@ -852,7 +852,7 @@ function measure!(wfs::ZernikeWFS, pupil::PupilFunction, ast::Asterism)
 end
 
 function measure!(wfs::ZernikeWFS, pupil::PupilFunction, ast::Asterism, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     throw(InvalidConfiguration("ZernikeWFS asterism support is not implemented in the Phase 1 MVP"))
 end
 
@@ -867,7 +867,7 @@ function measure!(::Diffractive, wfs::ZernikeWFS, pupil::PupilFunction, src::Abs
 end
 
 function measure!(::Diffractive, wfs::ZernikeWFS, pupil::PupilFunction, src::AbstractSource,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     ensure_zernike_calibration!(wfs, pupil, src, det)
     propagation = zernike_propagation_workspace(wfs)
     camera_frame = zernike_acquisition_products(wfs).frame

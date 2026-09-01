@@ -192,7 +192,7 @@ function boundary_injection_model(screen_resolution::Int, pixel_scale::Real, r0:
 end
 
 function sample_boundary_line(op::InfiniteBoundaryOperator{T}, stencil_data::AbstractVector{T},
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {T<:AbstractFloat}
     length(stencil_data) == size(op.predictor, 2) ||
         throw(DimensionMismatchError("stencil_data length must match the predictor input dimension"))
     return op.predictor * stencil_data + op.residual_factor * randn(rng, T, size(op.residual_factor, 2))
@@ -200,7 +200,7 @@ end
 
 function sample_boundary_line!(out::AbstractVector{T}, op::InfiniteBoundaryOperator{T},
     stencil_data::AbstractVector{T}, noise::AbstractVector{T},
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {T<:AbstractFloat}
     length(stencil_data) == size(op.predictor, 2) ||
         throw(DimensionMismatchError("stencil_data length must match the predictor input dimension"))
     length(out) == size(op.predictor, 1) ||

@@ -26,7 +26,8 @@ import ..AdaptiveOpticsSim:
     _scaled_kv56_scalar,
     atmosphere_profile,
     default_fidelity_profile,
-    fftfreq!
+    fftfreq!,
+    runtime_rng
 
 import ..Backends:
     AbstractArrayBackend,

@@ -22,8 +22,9 @@ global/default RNG for validation artifacts or reference comparisons.
 
 Use `deterministic_reference_rng(seed)` when an established
 `MersenneTwister` stream is part of a frozen reference. Use
-`runtime_rng(seed)`, which returns `Xoshiro`, for new simulations and
-benchmarks.
+`runtime_rng(seed)`, which returns the package-owned `SplitMix64RNG`, for
+new simulations and benchmarks. Runtime simulation code does not use Julia's
+task-local default RNG.
 
 ~~~julia
 atmosphere_rng = runtime_rng(0x1234)
@@ -49,8 +50,8 @@ the same current epoch in any order before the atmosphere advances.
 A stochastic native graph node owns one prepared RNG and its immutable reset
 seed. For example, atmosphere and detector node configurations declare
 `rng_seed`. Preparation creates the stream, `step_graph!` is its only writer,
-and `reset_graph!` restores the configured seed and state. Host graphs use the
-ordinary `Xoshiro` runtime stream.
+and `reset_graph!` restores the configured seed and state. CPU and current
+AMDGPU graph owners retain an explicit `SplitMix64RNG`.
 
 CUDA graph owners instead use an internal array-only counter stream. Its seed
 is a run-immutable plan value and its draw sequence is persistent state stored
@@ -68,9 +69,9 @@ configuration are therefore sufficient to identify the intended streams.
 
 The current graph runtime is serial and single-writer. CUDA array fills are
 addressed by a node-local draw sequence, random domain, element, and sub-draw.
+CPU and AMDGPU host-driven draws advance their node-local SplitMix64 state.
 If future execution replicates or distributes a stochastic owner, it will also
-need a stable owner identity and explicit frame or event sequence. Sequential
-host seed consumption is not a correct multi-device policy.
+need a stable owner identity and explicit frame or event sequence.
 
 ## Deterministic Configuration
 
@@ -122,8 +123,10 @@ operations. This does not claim that an arbitrary complete AOS graph is CUDA
 Graph-capturable; every other operation in that graph must independently avoid
 capture-time allocation and synchronization.
 
-AMDGPU graph owners currently retain `Xoshiro`. In particular, the qualified
-AMDGPU detector path mirrors Poisson sampling through preallocated host
-storage because the maintained AMDGPU compiler/runtime does not yet admit the
-exact per-pixel kernel. This is deterministic and tested, but it is not a
-device-only stochastic path.
+AMDGPU graph owners use `SplitMix64RNG`. The maintained AMDGPU detector path
+still mirrors Poisson sampling through preallocated host storage because the
+maintained AMDGPU compiler/runtime does not yet admit the exact per-pixel
+kernel. It consumes that owner's SplitMix64 stream and copies the completed
+noise product to the device. This is deterministic and tested, but it is not a
+device-only stochastic path and it is not part of the currently captured DM
+node.

@@ -524,7 +524,7 @@ function _capture_counting!(det::AbstractCountingDetector,
 end
 
 function capture!(det::AbstractCountingDetector, channels::AbstractMatrix{T};
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {T<:AbstractFloat}
     source_throughput = one(eltype(counting_array(det)))
     return _capture_counting!(det, channels, source_throughput, rng)
 end
@@ -533,7 +533,7 @@ capture!(det::AbstractCountingDetector, channels::AbstractMatrix{T}, rng::Abstra
     capture!(det, channels; rng=rng)
 
 function capture!(det::AbstractCountingDetector, channels::AbstractMatrix{T}, src::AbstractSource;
-    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng()) where {T<:AbstractFloat}
     output_type = eltype(counting_array(det))
     source_throughput = counting_source_throughput(det, src, output_type)
     return _capture_counting!(det, channels, source_throughput, rng)

@@ -762,7 +762,8 @@ function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource, rn
         effective_qe(det, src, eltype(det.products.frame)), rng)
 end
 
-function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource; rng::AbstractRNG=Random.default_rng()) where {T}
+function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource;
+    rng::AbstractRNG=runtime_rng()) where {T}
     return capture!(det, psf, src, rng)
 end
 
@@ -778,7 +779,8 @@ function capture!(det::Detector, source::AbstractTemporalFrameSource, rng::Abstr
     return completed_whole_capture_output!(det)
 end
 
-function capture!(det::Detector, source::AbstractTemporalFrameSource; rng::AbstractRNG=Random.default_rng())
+function capture!(det::Detector, source::AbstractTemporalFrameSource;
+    rng::AbstractRNG=runtime_rng())
     return capture!(det, source, rng)
 end
 
@@ -834,7 +836,7 @@ function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
 end
 
 function capture!(det::Detector, photon_rate::AbstractMatrix{T};
-    rng::AbstractRNG=Random.default_rng(),
+    rng::AbstractRNG=runtime_rng(),
     integration_duration::Union{Nothing,Real}=nothing) where {T}
     if integration_duration === nothing
         return capture!(det, photon_rate, rng)

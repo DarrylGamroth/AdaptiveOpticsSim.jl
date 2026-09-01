@@ -59,17 +59,17 @@ function measure!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
 end
 
 function measure!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
 end
 
 function measure!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
 end
 
 function measure!(wfs::ShackHartmannWFS, pupil::PupilFunction, ast::Asterism, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, ast, det; rng=rng)
 end
 
@@ -108,7 +108,7 @@ The algorithm is:
 5. subtract the calibrated reference signal and apply the stored slope scaling
 """
 function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, src::AbstractSource,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     Base.require_one_based_indexing(pupil.opd)
     prepare_sampling!(wfs, pupil, src)
     ensure_sh_calibration!(wfs, pupil, src)
@@ -119,7 +119,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, sr
 end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, src::SpectralSource,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     Base.require_one_based_indexing(pupil.opd)
     prepare_sampling!(wfs, pupil, src)
     ensure_sh_calibration!(wfs, pupil, src)
@@ -155,7 +155,7 @@ function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, as
 end
 
 function measure!(::Diffractive, wfs::ShackHartmannWFS, pupil::PupilFunction, ast::Asterism,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     Base.require_one_based_indexing(pupil.opd)
     common_source = common_wfs_calibration_source(ast, "ShackHartmannWFS")
     prepare_sampling!(wfs, pupil, common_source)

@@ -181,7 +181,7 @@ end
 end
 
 function advance_by!(atm::AbstractTimedAtmosphere, duration::Real;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return advance_by!(atm, duration, rng)
 end
 
@@ -207,7 +207,7 @@ end
 end
 
 function advance_to!(atm::AbstractTimedAtmosphere, target_time::Real;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return advance_to!(atm, target_time, rng)
 end
 

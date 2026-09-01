@@ -45,17 +45,17 @@ function measure!(wfs::PyramidWFS, pupil::PupilFunction, src::LGSSource)
 end
 
 function measure!(wfs::PyramidWFS, pupil::PupilFunction, src::AbstractSource, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
 end
 
 function measure!(wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
 end
 
 function measure!(wfs::PyramidWFS, pupil::PupilFunction, ast::Asterism, det::AbstractDetector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     return measure!(sensing_mode(wfs), wfs, pupil, ast, det; rng=rng)
 end
 
@@ -79,7 +79,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, pupil::PupilFunction, src::Spe
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, pupil::PupilFunction, src::AbstractSource,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     ensure_pyramid_calibration!(wfs, pupil, src, det)
     propagation = pyramid_propagation_workspace(wfs)
     pyramid_intensity!(propagation.intensity, wfs, pupil, src)
@@ -93,7 +93,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, pupil::PupilFunction, src::Abs
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, pupil::PupilFunction, src::SpectralSource,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     ensure_pyramid_calibration!(wfs, pupil, src, det)
     propagation = pyramid_propagation_workspace(wfs)
     accumulate_pyramid_spectral_intensity!(execution_style(propagation.intensity),
@@ -109,7 +109,7 @@ end
 
 function measure!(::Diffractive, wfs::PyramidWFS, pupil::PupilFunction,
     src::SpectralSource, det::Detector;
-    rng::AbstractRNG=Random.default_rng())
+    rng::AbstractRNG=runtime_rng())
     qe_model = quantum_efficiency_model(det)
     ensure_pyramid_calibration!(wfs, pupil, src, det)
     propagation = pyramid_propagation_workspace(wfs)
@@ -138,7 +138,7 @@ function measure!(::Diffractive, wfs::PyramidWFS, pupil::PupilFunction, ast::Ast
 end
 
 function measure!(::Diffractive, wfs::PyramidWFS, pupil::PupilFunction, ast::Asterism,
-    det::AbstractDetector; rng::AbstractRNG=Random.default_rng())
+    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
     Base.require_one_based_indexing(pupil.opd)
     common_source = common_wfs_calibration_source(ast, "PyramidWFS")
     ensure_pyramid_calibration!(wfs, pupil, common_source, det)

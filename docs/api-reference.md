@@ -30,7 +30,7 @@ The root exports:
   `AlgorithmGraphs`
 - shared structured errors
 - `ScientificProfile`, `FastProfile`, and `default_fidelity_profile`
-- `runtime_rng` and `deterministic_reference_rng`
+- `SplitMix64RNG`, `runtime_rng`, and `deterministic_reference_rng`
 - the routine graph-definition, preparation, execution, model-time, and
   lockstep HIL vocabulary described below
 

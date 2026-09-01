@@ -144,14 +144,14 @@ end
 end
 
 function _prepare_graph_rng(device::HostComputeDevice, seed::UInt64)
-    return Xoshiro(seed)
+    return runtime_rng(seed)
 end
 
 function _prepare_graph_rng(
     ::AcceleratorComputeDevice,
     seed::UInt64,
 )
-    return Xoshiro(seed)
+    return runtime_rng(seed)
 end
 
 function _prepare_counter_rng(

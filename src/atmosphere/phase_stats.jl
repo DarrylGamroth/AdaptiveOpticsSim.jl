@@ -193,7 +193,7 @@ function covariance_matrix(rho1::AbstractVector, rho2::AbstractVector, atm::Kolm
 end
 
 function ft_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
-    l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false,
+    l0::Real=1e-10, rng::AbstractRNG=runtime_rng(), return_psd::Bool=false,
     ws::Union{Nothing,PhaseStatsWorkspace}=nothing)
 
     if ws === nothing
@@ -251,7 +251,7 @@ function _fill_phase_psd!(style::AcceleratorStyle, psd::AbstractMatrix{T}, freqs
 end
 
 function ft_sh_phase_screen(atm::KolmogorovAtmosphere, n::Int, delta::Real;
-    l0::Real=1e-10, rng::AbstractRNG=Random.default_rng(), return_psd::Bool=false,
+    l0::Real=1e-10, rng::AbstractRNG=runtime_rng(), return_psd::Bool=false,
     ws::Union{Nothing,PhaseStatsWorkspace}=nothing, subharmonics::Bool=true,
     profile::FidelityProfile=default_fidelity_profile(),
     mode::SubharmonicMode=default_subharmonic_mode(profile),
@@ -281,7 +281,7 @@ default_subharmonic_mode(::ScientificProfile) = FidelitySubharmonics()
 default_subharmonic_mode(::FastProfile) = FastSubharmonics()
 
 function add_subharmonics!(phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Real, l0::Real;
-    rng::AbstractRNG=Random.default_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
     n_levels >= 1 || throw(ArgumentError("n_levels must be >= 1"))
     radius >= 1 || throw(ArgumentError("radius must be >= 1"))
     return _add_subharmonics!(execution_style(phs), phs, r0, L0, delta, l0; rng=rng, n_levels=n_levels, radius=radius)
@@ -324,7 +324,7 @@ function _subharmonic_terms(::Type{T}, n::Int, r0::Real, L0::Real, delta::Real, 
 end
 
 function _add_subharmonics!(::ScalarCPUStyle, phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Real, l0::Real;
-    rng::AbstractRNG=Random.default_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
     n = size(phs, 1)
     offset = n ÷ 2
     delta_t = T(delta)
@@ -345,7 +345,7 @@ function _add_subharmonics!(::ScalarCPUStyle, phs::AbstractMatrix{T}, r0::Real, 
 end
 
 function _add_subharmonics!(style::AcceleratorStyle, phs::AbstractMatrix{T}, r0::Real, L0::Real, delta::Real, l0::Real;
-    rng::AbstractRNG=Random.default_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
+    rng::AbstractRNG=runtime_rng(), n_levels::Int=3, radius::Int=2) where {T<:AbstractFloat}
     n = size(phs, 1)
     terms = _subharmonic_terms(T, n, r0, L0, delta, l0, rng, n_levels, radius)
     n_terms = length(terms.freq_x)

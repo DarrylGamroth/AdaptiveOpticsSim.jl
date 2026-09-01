@@ -24,7 +24,8 @@ import ..AdaptiveOpticsSim:
     calibration_profile,
     default_fidelity_profile,
     fftfreq!,
-    fftshift2d!
+    fftshift2d!,
+    runtime_rng
 
 import ..Backends:
     AbstractArrayBackend,

@@ -19,6 +19,7 @@ import ..AdaptiveOpticsSim:
     InvalidConfiguration,
     normal01,
     poisson_sample,
+    runtime_rng,
     splitmix64,
     uniform01
 

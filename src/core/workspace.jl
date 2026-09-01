@@ -8,7 +8,7 @@ end
 
 function Workspace(n::Int; T=Float64,
     backend::Backends.AbstractArrayBackend=Backends.CPUBackend(),
-    rng=MersenneTwister(0))
+    rng=runtime_rng(0))
     backend = Backends._resolve_array_backend(backend)
     pupil_field = backend{Complex{T}}(undef, n, n)
     fft_buffer = similar(pupil_field)
@@ -17,7 +17,8 @@ function Workspace(n::Int; T=Float64,
     return Workspace(rng, pupil_field, fft_buffer, psf_buffer, fft_plan)
 end
 
-function Workspace(ref::AbstractArray{S}, n::Int; T::Type{<:Real}=real(S), rng=MersenneTwister(0)) where {S}
+function Workspace(ref::AbstractArray{S}, n::Int; T::Type{<:Real}=real(S),
+    rng=runtime_rng(0)) where {S}
     pupil_field = similar(ref, Complex{T}, n, n)
     fft_buffer = similar(pupil_field)
     psf_buffer = similar(ref, T, n, n)

@@ -955,7 +955,7 @@ function capture!(prepared::PreparedDetectorAcquisition,
 end
 
 function capture!(prepared::PreparedDetectorAcquisition;
-    rng::AbstractRNG=Random.default_rng(),
+    rng::AbstractRNG=runtime_rng(),
     integration_duration::Union{Nothing,Real}=nothing)
     integration_duration === nothing && return capture!(prepared, rng)
     _require_prepared_acquisition(prepared)
