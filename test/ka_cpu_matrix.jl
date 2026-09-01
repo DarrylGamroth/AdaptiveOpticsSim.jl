@@ -47,6 +47,17 @@ end
         @test @allocated(AdaptiveOpticsSim._circshift2d!(SCALAR_CPU_STYLE,
             scalar_shift, src, (1, -1))) == 0
 
+        packed_source = reshape(collect(1.0:12.0), 3, 4)
+        packed_destination = similar(packed_source)
+        Backends._copyto_backend_async!(
+            KA_CPU_STYLE,
+            packed_destination,
+            packed_source,
+        )
+        Backends.synchronize_backend!(KA_CPU_STYLE)
+        mark_ka_cpu_kernel!(:_copy_packed_array_kernel!)
+        @test packed_destination == packed_source
+
         scalar_bin = Matrix{Float64}(undef, 2, 2)
         ka_bin = similar(scalar_bin)
         AdaptiveOpticsSim._bin2d!(SCALAR_CPU_STYLE, scalar_bin, src, 2)
@@ -1138,6 +1149,18 @@ end
             SCALAR_CPU_STYLE, dm_scalar)
         AdaptiveOpticsSim.Optics._apply_opd_separable!(KA_CPU_STYLE, dm_ka)
         mark_ka_cpu_kernel!(:dm_apply_pupil_kernel!)
+        @test ka_cpu_close(dm_ka.state.opd, dm_scalar.state.opd)
+
+        fill!(dm_ka.state.opd, NaN)
+        AdaptiveOpticsSim.Optics._apply_opd_separable_async!(
+            KA_CPU_STYLE,
+            dm_ka,
+        )
+        Backends.synchronize_backend!(KA_CPU_STYLE)
+        mark_ka_cpu_kernel!(
+            :dm_separable_left_kernel!,
+            :dm_separable_right_pupil_kernel!,
+        )
         @test ka_cpu_close(dm_ka.state.opd, dm_scalar.state.opd)
 
     end
