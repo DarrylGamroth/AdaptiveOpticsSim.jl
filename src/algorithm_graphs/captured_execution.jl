@@ -47,6 +47,22 @@ end
     return nothing
 end
 
+@inline _preflight_captured_nodes!(::Tuple{}) = nothing
+
+@inline function _preflight_captured_nodes!(nodes::Tuple)
+    _preflight_captured_graph_node!(first(nodes).owner)
+    _preflight_captured_nodes!(Base.tail(nodes))
+    return nothing
+end
+
+@inline _complete_captured_nodes!(::Tuple{}) = nothing
+
+@inline function _complete_captured_nodes!(nodes::Tuple)
+    _complete_captured_graph_node!(first(nodes).owner)
+    _complete_captured_nodes!(Base.tail(nodes))
+    return nothing
+end
+
 function _prepare_graph_execution(
     ::CapturedGraphExecution,
     nodes::Tuple,
@@ -89,6 +105,36 @@ end
 @inline _captured_graph_node_count(::_PreparedStreamGraphExecution) = 0
 @inline _captured_graph_node_count(execution::_PreparedCapturedGraphExecution) =
     execution.captured_count
+
+@inline function _preflight_prepared_graph_execution!(
+    ::_PreparedStreamGraphExecution,
+    nodes::NamedTuple,
+)
+    return nothing
+end
+
+@inline function _preflight_prepared_graph_execution!(
+    ::_PreparedCapturedGraphExecution,
+    nodes::NamedTuple,
+)
+    _preflight_captured_nodes!(values(nodes))
+    return nothing
+end
+
+@inline function _complete_prepared_graph_execution!(
+    ::_PreparedStreamGraphExecution,
+    nodes::NamedTuple,
+)
+    return nothing
+end
+
+@inline function _complete_prepared_graph_execution!(
+    ::_PreparedCapturedGraphExecution,
+    nodes::NamedTuple,
+)
+    _complete_captured_nodes!(values(nodes))
+    return nothing
+end
 
 @inline function _enqueue_prepared_graph_execution!(
     ::_PreparedStreamGraphExecution,

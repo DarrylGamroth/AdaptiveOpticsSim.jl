@@ -63,6 +63,12 @@ replay. Reset restores the device draw sequence without replacing its storage.
 This is an execution detail of prepared graph owners, not a scalar
 `AbstractRNG` API for scientific code.
 
+Finite multilayer-atmosphere capture retains its moving-screen offsets on the
+selected device. Each native graph replay advances those offsets before
+rendering; after successful device completion, the single graph writer advances
+the matching host atmosphere offsets and publishes its epoch. `reset_graph!`
+restores both representations without replacing any recorded device storage.
+
 Use distinct explicit seeds for independent nodes. Graph declaration order must
 not be used as an implicit seed derivation rule. A graph file and its bound
 configuration are therefore sufficient to identify the intended streams.

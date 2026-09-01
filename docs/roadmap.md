@@ -85,8 +85,9 @@ justifies a small, testable scheduler extension.
 - Complete REVOLT qualification for whole-step CUDA Graph or HIP Graph replay.
   The runtime records an entirely qualified node and delayed-link sequence as
   one native graph, and both accelerator backends retain replay-safe device
-  counter state for random array fills. Atmosphere, WFS, and detector owners
-  still require independent state, synchronization, and backend audits.
+  counter state for random array fills. Finite multilayer-atmosphere replay is
+  qualified; WFS and detector owners still require independent synchronization
+  and backend audits.
 - A general multi-rate event runtime.
 - Automatic graph partitioning, implicit host/device transfer, and dynamic
   topology mutation.

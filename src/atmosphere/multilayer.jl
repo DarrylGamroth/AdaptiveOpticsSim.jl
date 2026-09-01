@@ -56,6 +56,97 @@ end
     end
 end
 
+@kernel function moving_layer_replay_kernel!(
+    out,
+    screen,
+    start_x,
+    start_y,
+    layer_index::Int,
+    footprint_scale,
+    output_scale,
+    accumulate::Bool,
+    n::Int,
+    m::Int,
+)
+    i, j = @index(Global, NTuple)
+    if i <= n && j <= n
+        T = eltype(out)
+        y = @inbounds(start_y[layer_index]) + footprint_scale * T(i - 1)
+        y0 = unsafe_trunc(Int, floor(y))
+        fy = y - T(y0)
+        wy0 = one(T) - fy
+        iy0 = wrap_upper_index(y0, m)
+        iy1 = wrap_upper_index(y0 + 1, m)
+
+        x = @inbounds(start_x[layer_index]) + footprint_scale * T(j - 1)
+        x0 = unsafe_trunc(Int, floor(x))
+        fx = x - T(x0)
+        wx0 = one(T) - fx
+        ix0 = wrap_upper_index(x0, m)
+        ix1 = wrap_upper_index(x0 + 1, m)
+
+        @inbounds begin
+            v00 = screen[iy0, ix0]
+            v01 = screen[iy0, ix1]
+            v10 = screen[iy1, ix0]
+            v11 = screen[iy1, ix1]
+            value = output_scale * (
+                wy0 * (wx0 * v00 + fx * v01) +
+                fy * (wx0 * v10 + fx * v11)
+            )
+            if accumulate
+                out[i, j] += value
+            else
+                out[i, j] = value
+            end
+        end
+    end
+end
+
+@inline function _normalize_replay_start(start::T, period::T) where {
+    T<:AbstractFloat,
+}
+    return start - floor((start - one(T)) / period) * period
+end
+
+@kernel function advance_moving_screen_replay_kernel!(
+    offset_x,
+    offset_y,
+    start_x,
+    start_y,
+    offset_increment_x,
+    offset_increment_y,
+    base_start_x,
+    base_start_y,
+    screen_period,
+    layer_count::Int,
+)
+    i = @index(Global, Linear)
+    if i <= layer_count
+        @inbounds begin
+            next_offset_x = offset_x[i] + offset_increment_x[i]
+            next_offset_y = offset_y[i] + offset_increment_y[i]
+            offset_x[i] = next_offset_x
+            offset_y[i] = next_offset_y
+            start_x[i] = _normalize_replay_start(
+                base_start_x[i] - next_offset_x,
+                screen_period[i],
+            )
+            start_y[i] = _normalize_replay_start(
+                base_start_y[i] - next_offset_y,
+                screen_period[i],
+            )
+        end
+    end
+end
+
+@kernel function apply_atmosphere_pupil_kernel!(opd, pupil, count::Int)
+    i = @index(Global, Linear)
+    if i <= count
+        @inbounds opd[i] *= pupil[i]
+    end
+end
+
 struct MultiLayerParams{T<:AbstractFloat,
     V1<:AbstractVector{T},
     V2<:AbstractVector{T},
@@ -117,6 +208,34 @@ struct MultiLayerAtmosphere{
     layers::L
     state::S
     identity::I
+end
+
+"""Run-immutable moving-screen coefficients used by device-graph replay."""
+struct _MovingScreenReplayPlan{T<:AbstractFloat,A<:AbstractVector{T}}
+    offset_increment_x::A
+    offset_increment_y::A
+    base_start_x::A
+    base_start_y::A
+    screen_period::A
+end
+
+"""Persistent device-resident moving-screen offsets for one graph owner."""
+mutable struct _MovingScreenReplayState{T<:AbstractFloat,A<:AbstractVector{T}}
+    offset_x::A
+    offset_y::A
+end
+
+"""Replaceable device storage derived from moving-screen replay state."""
+struct _MovingScreenReplayWorkspace{T<:AbstractFloat,A<:AbstractVector{T}}
+    start_x::A
+    start_y::A
+end
+
+"""Exact prepared owner for one renderer's device-resident screen motion."""
+struct _PreparedMovingScreenReplay{P,S,W}
+    plan::P
+    state::S
+    workspace::W
 end
 
 @inline backend(::MultiLayerAtmosphere{<:Any,<:Any,<:Any,<:Any,B}) where {B} = B()
@@ -488,4 +607,211 @@ function evolve_atmosphere!(atm::MultiLayerAtmosphere, duration::Real,
         evolve_layer!(layer, duration)
     end
     return atm
+end
+
+function _copy_moving_screen_replay_vector(
+    target::AbstractComputeDevice,
+    values::Vector{T},
+) where {T<:AbstractFloat}
+    storage = allocate_device_array(target, T, length(values))
+    copyto!(storage, values)
+    return storage
+end
+
+function _prepare_moving_screen_replay(
+    atm::MultiLayerAtmosphere,
+    renderer::AtmosphereDirectionRenderer,
+    duration::Real,
+)
+    _validate_atmosphere_renderer_binding(renderer, atm)
+    T = atmosphere_numeric_type(atm)
+    dt = _explicit_atmosphere_duration(duration, T)
+    dt > zero(T) || throw(AtmosphereTimeError(
+        "moving-screen replay duration must be positive",
+    ))
+    layers = atm.layers
+    layer_count = length(layers)
+    n = size(renderer.pupil, 1)
+    target = compute_device(renderer.pupil)
+    host_offset_increment_x = Vector{T}(undef, layer_count)
+    host_offset_increment_y = Vector{T}(undef, layer_count)
+    host_base_start_x = Vector{T}(undef, layer_count)
+    host_base_start_y = Vector{T}(undef, layer_count)
+    host_screen_period = Vector{T}(undef, layer_count)
+
+    @inbounds for i in eachindex(layers)
+        layer = layers[i]
+        screen = layer.generator.state.phase_rad
+        m = size(screen, 1)
+        size(screen, 2) == m || throw(DimensionMismatchError(
+            "moving atmosphere layer screen must be square",
+        ))
+        m >= n || throw(DimensionMismatchError(
+            "moving atmosphere layer screen is smaller than the pupil",
+        ))
+        screen_period = T(m)
+        footprint_scale = renderer.footprint_scale[i]
+        host_offset_increment_x[i] =
+            layer.params.wind_velocity_x * dt / layer.params.sampling_m
+        host_offset_increment_y[i] =
+            layer.params.wind_velocity_y * dt / layer.params.sampling_m
+        host_base_start_x[i] = _normalize_replay_start(
+            T(m + 1) / T(2) - footprint_scale * T(n - 1) / T(2) +
+            renderer.shift_x[i],
+            screen_period,
+        )
+        host_base_start_y[i] = _normalize_replay_start(
+            T(m + 1) / T(2) - footprint_scale * T(n - 1) / T(2) +
+            renderer.shift_y[i],
+            screen_period,
+        )
+        host_screen_period[i] = screen_period
+    end
+
+    offset_increment_x = _copy_moving_screen_replay_vector(
+        target,
+        host_offset_increment_x,
+    )
+    offset_increment_y = _copy_moving_screen_replay_vector(
+        target,
+        host_offset_increment_y,
+    )
+    base_start_x = _copy_moving_screen_replay_vector(
+        target,
+        host_base_start_x,
+    )
+    base_start_y = _copy_moving_screen_replay_vector(
+        target,
+        host_base_start_y,
+    )
+    screen_period = _copy_moving_screen_replay_vector(
+        target,
+        host_screen_period,
+    )
+    offset_x = allocate_device_array(target, T, layer_count)
+    offset_y = allocate_device_array(target, T, layer_count)
+    start_x = allocate_device_array(target, T, layer_count)
+    start_y = allocate_device_array(target, T, layer_count)
+    fill!(offset_x, zero(T))
+    fill!(offset_y, zero(T))
+    copyto!(start_x, base_start_x)
+    copyto!(start_y, base_start_y)
+
+    plan = _MovingScreenReplayPlan(
+        offset_increment_x,
+        offset_increment_y,
+        base_start_x,
+        base_start_y,
+        screen_period,
+    )
+    state = _MovingScreenReplayState(offset_x, offset_y)
+    workspace = _MovingScreenReplayWorkspace(start_x, start_y)
+    return _PreparedMovingScreenReplay(plan, state, workspace)
+end
+
+function _enqueue_moving_screen_replay!(
+    opd::AbstractMatrix{T},
+    renderer::AtmosphereDirectionRenderer,
+    atm::MultiLayerAtmosphere,
+    replay::_PreparedMovingScreenReplay,
+) where {T<:AbstractFloat}
+    style = execution_style(opd)
+    layers = atm.layers
+    layer_count = length(layers)
+    plan = replay.plan
+    state = replay.state
+    workspace = replay.workspace
+    launch_kernel_async!(
+        style,
+        advance_moving_screen_replay_kernel!,
+        state.offset_x,
+        state.offset_y,
+        workspace.start_x,
+        workspace.start_y,
+        plan.offset_increment_x,
+        plan.offset_increment_y,
+        plan.base_start_x,
+        plan.base_start_y,
+        plan.screen_period,
+        layer_count;
+        ndrange=layer_count,
+    )
+
+    n = size(opd, 1)
+    @inbounds for layer_index in eachindex(layers)
+        layer = layers[layer_index]
+        screen = layer.generator.state.phase_rad
+        m = size(screen, 1)
+        output_scale = T(layer.params.cn2_amplitude_scale) *
+            T(layer.generator.params.opd_per_radian)
+        launch_kernel_async!(
+            style,
+            moving_layer_replay_kernel!,
+            opd,
+            screen,
+            workspace.start_x,
+            workspace.start_y,
+            layer_index,
+            T(renderer.footprint_scale[layer_index]),
+            output_scale,
+            layer_index != firstindex(layers),
+            n,
+            m;
+            ndrange=size(opd),
+        )
+    end
+    launch_kernel_async!(
+        style,
+        apply_atmosphere_pupil_kernel!,
+        opd,
+        renderer.pupil,
+        length(opd);
+        ndrange=length(opd),
+    )
+    return opd
+end
+
+function _reset_moving_screen_replay!(replay::_PreparedMovingScreenReplay)
+    fill!(replay.state.offset_x, zero(eltype(replay.state.offset_x)))
+    fill!(replay.state.offset_y, zero(eltype(replay.state.offset_y)))
+    copyto!(replay.workspace.start_x, replay.plan.base_start_x)
+    copyto!(replay.workspace.start_y, replay.plan.base_start_y)
+    return replay
+end
+
+function _reset_multilayer_atmosphere!(
+    atm::MultiLayerAtmosphere,
+    rng::AbstractRNG,
+)
+    timeline = atm.state.timeline
+    timeline.model_time = zero(timeline.model_time)
+    timeline.sequence = UInt64(0)
+    timeline.initialized = false
+    @inbounds for layer in atm.layers
+        layer.state.offset_x = zero(layer.state.offset_x)
+        layer.state.offset_y = zero(layer.state.offset_y)
+        layer.state.initialized = false
+    end
+    advance_by!(atm, zero(timeline.model_time), rng)
+    return atm
+end
+
+function _preflight_atmosphere_replay_step(
+    atm::MultiLayerAtmosphere,
+    duration::Real,
+)
+    timeline = atm.state.timeline
+    timeline.initialized || throw(AtmosphereTimeError(
+        "moving-screen replay requires an initialized atmosphere",
+    ))
+    T = typeof(timeline.model_time)
+    dt = _explicit_atmosphere_duration(duration, T)
+    next_time = timeline.model_time + dt
+    isfinite(next_time) || throw(AtmosphereTimeError(
+        "atmosphere model time overflowed its numeric representation",
+    ))
+    timeline.sequence == typemax(UInt64) && throw(AtmosphereTimeError(
+        "atmosphere epoch sequence is exhausted",
+    ))
+    return nothing
 end

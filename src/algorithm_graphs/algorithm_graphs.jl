@@ -15,6 +15,7 @@ using TOML
 import ..AdaptiveOpticsSim: AdaptiveOpticsSimError
 import ..Backends:
     AbstractComputeDevice,
+    AcceleratorComputeDevice,
     AcceleratorStyle,
     HostComputeDevice,
     ScalarCPUStyle,
@@ -38,7 +39,12 @@ import ..Calibration:
     combine_basis!
 import ..Atmospheres:
     MultiLayerAtmosphereDefinition,
+    _enqueue_moving_screen_replay!,
+    _preflight_atmosphere_replay_step,
+    _prepare_moving_screen_replay,
     _render_atmosphere_async!,
+    _reset_multilayer_atmosphere!,
+    _reset_moving_screen_replay!,
     advance_by!,
     prepare_atmosphere_renderer,
     prepare_timed_atmosphere,

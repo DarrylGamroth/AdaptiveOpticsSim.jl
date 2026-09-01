@@ -131,12 +131,107 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     require_backend_target!(B)
     @testset "$(backend_label(B)) hardware target" begin
         run_captured_graph_execution_smoke(B)
+        run_captured_atmosphere_replay_smoke(B)
         run_algorithm_graph_backend_smoke(B)
         run_graph_rng_capture_replay(B)
         run_optional_backend_smoke(B)
         run_gpu_builder_smoke(B)
         run_revolt_like_hil_backend_smoke(B)
     end
+    return nothing
+end
+
+function run_captured_atmosphere_replay_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    target = compute_device(BackendArray(zeros(Float32, 1)))
+    atmosphere_step = 0.001f0
+    node = multilayer_atmosphere_opd_node(
+        :atmosphere;
+        resolution=16,
+        telescope_diameter_m=1.22f0,
+        r0=0.15f0,
+        reference_wavelength_m=500.0f-9,
+        L0=30.0f0,
+        fractional_cn2=(0.7f0, 0.3f0),
+        wind_speed=(5.0f0, 9.0f0),
+        wind_direction_deg=(0.0f0, 90.0f0),
+        altitude=(0.0f0, 5000.0f0),
+        layer_ids=(:ground, :high),
+        atmosphere_step,
+        rng_seed=UInt64(0x1701),
+        atmosphere_opd_schema="test.graph.captured-atmosphere-opd-m.f32/1",
+    )
+    definition = algorithm_graph(
+        (node,);
+        name=:captured_atmosphere_replay,
+        outputs=(graph_output(
+            :atmosphere_opd,
+            :atmosphere => :atmosphere_opd,
+        ),),
+    )
+    stream_graph = prepare_algorithm_graph(
+        definition;
+        target,
+        execution=StreamGraphExecution(),
+    )
+    captured_graph = prepare_algorithm_graph(
+        definition;
+        target,
+        execution=CapturedGraphExecution(),
+    )
+    @test captured_graph_node_count(captured_graph) == 1
+
+    first_captured_frame = nothing
+    for frame_index in 1:3
+        step_graph!(stream_graph)
+        step_graph!(captured_graph)
+        stream_frame = Array(graph_output(
+            stream_graph,
+            Val(:atmosphere_opd),
+        ))
+        captured_frame = Array(graph_output(
+            captured_graph,
+            Val(:atmosphere_opd),
+        ))
+        @test captured_frame ≈ stream_frame rtol = 2.0f-5 atol = 1.0f-12
+        if frame_index == 1
+            first_captured_frame = captured_frame
+        else
+            @test captured_frame != first_captured_frame
+        end
+        owner = AlgorithmGraphs.prepared_graph_node(
+            captured_graph,
+            Val(:atmosphere),
+        )
+        epoch = current_epoch(owner.atmosphere)
+        @test epoch_sequence(epoch) == UInt64(frame_index + 1)
+        @test epoch_time(epoch) ≈ Float32(frame_index) * atmosphere_step
+    end
+    allocation_owner = AlgorithmGraphs.prepared_graph_node(
+        captured_graph,
+        Val(:atmosphere),
+    )
+    AlgorithmGraphs._preflight_captured_graph_node!(allocation_owner)
+    AlgorithmGraphs._complete_captured_graph_node!(allocation_owner)
+    AlgorithmGraphs._preflight_captured_graph_node!(allocation_owner)
+    @test (@allocated begin
+        AlgorithmGraphs._complete_captured_graph_node!(allocation_owner)
+    end) == 0
+
+    reset_graph!(stream_graph)
+    reset_graph!(captured_graph)
+    @test all(iszero, Array(graph_output(
+        captured_graph,
+        Val(:atmosphere_opd),
+    )))
+    step_graph!(stream_graph)
+    step_graph!(captured_graph)
+    @test Array(graph_output(captured_graph, Val(:atmosphere_opd))) ≈
+        Array(graph_output(stream_graph, Val(:atmosphere_opd))) rtol = 2.0f-5 atol = 1.0f-12
+    @test Array(graph_output(captured_graph, Val(:atmosphere_opd))) ==
+        first_captured_frame
     return nothing
 end
 

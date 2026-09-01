@@ -692,6 +692,7 @@ mutable struct _MultiLayerAtmosphereOPDOwner{
     R,
     P,
     RNG,
+    REPLAY,
     T<:AbstractFloat,
 }
     definition::D
@@ -701,6 +702,7 @@ mutable struct _MultiLayerAtmosphereOPDOwner{
     renderer::R
     pupil::P
     rng::RNG
+    replay::REPLAY
     atmosphere_step::T
     rng_seed::UInt64
 end
@@ -724,6 +726,11 @@ function prepare_graph_node(
     pupil = PupilFunction(telescope, outputs.atmosphere_opd)
     rng = _prepare_graph_rng(target, config.rng_seed)
     advance_by!(atmosphere, zero(T), rng)
+    replay = _prepare_moving_screen_replay(
+        atmosphere,
+        renderer,
+        config.atmosphere_step,
+    )
     return _MultiLayerAtmosphereOPDOwner(
         config.atmosphere,
         telescope,
@@ -732,6 +739,7 @@ function prepare_graph_node(
         renderer,
         pupil,
         rng,
+        replay,
         config.atmosphere_step,
         config.rng_seed,
     )
@@ -767,17 +775,55 @@ end
     return nothing
 end
 
+@inline function enqueue_captured_graph_node!(
+    owner::_MultiLayerAtmosphereOPDOwner,
+)
+    _enqueue_moving_screen_replay!(
+        owner.pupil.opd,
+        owner.renderer,
+        owner.atmosphere,
+        owner.replay,
+    )
+    return nothing
+end
+
+@inline function _preflight_captured_graph_node!(
+    owner::_MultiLayerAtmosphereOPDOwner,
+)
+    _preflight_atmosphere_replay_step(
+        owner.atmosphere,
+        owner.atmosphere_step,
+    )
+    return nothing
+end
+
+@inline function _complete_captured_graph_node!(
+    owner::_MultiLayerAtmosphereOPDOwner,
+)
+    advance_by!(
+        owner.atmosphere,
+        owner.atmosphere_step,
+        owner.rng,
+    )
+    return nothing
+end
+
+@inline graph_node_capture_capability(
+    owner::_MultiLayerAtmosphereOPDOwner,
+) = _multilayer_atmosphere_capture_capability(owner.target)
+
+@inline _multilayer_atmosphere_capture_capability(
+    ::AcceleratorComputeDevice,
+) = GraphNodeCaptureSafe()
+
+@inline _multilayer_atmosphere_capture_capability(
+    ::AbstractComputeDevice,
+) = GraphNodeCaptureUnsupported()
+
 function reset_graph_node!(owner::_MultiLayerAtmosphereOPDOwner)
     _reset_graph_rng!(owner.rng, owner.rng_seed)
-    atmosphere = prepare_timed_atmosphere(
-        owner.definition,
-        owner.telescope,
-        owner.target,
-    )
-    renderer = prepare_atmosphere_renderer(atmosphere, owner.telescope)
-    advance_by!(atmosphere, zero(owner.atmosphere_step), owner.rng)
-    owner.atmosphere = atmosphere
-    owner.renderer = renderer
+    _reset_multilayer_atmosphere!(owner.atmosphere, owner.rng)
+    _reset_moving_screen_replay!(owner.replay)
     fill!(owner.pupil.opd, zero(eltype(owner.pupil.opd)))
     return nothing
 end

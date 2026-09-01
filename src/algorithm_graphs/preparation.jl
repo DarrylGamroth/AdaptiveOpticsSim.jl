@@ -155,6 +155,9 @@ publication that native command-graph replay cannot repeat.
     return nothing
 end
 
+@inline _preflight_captured_graph_node!(owner) = nothing
+@inline _complete_captured_graph_node!(owner) = nothing
+
 """
     reset_graph_node!(owner)
 

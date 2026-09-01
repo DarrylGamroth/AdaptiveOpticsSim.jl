@@ -112,11 +112,13 @@ evolving state needed during replay must also remain device-resident.
 keeps all evolving replay state on the device, does not mutate scientific host
 state, and performs no allocation, synchronization, or device-result query.
 The maintained built-in qualification currently covers the regular-grid
-separable Gaussian DM owner and the pupil-OPD composition owner. Atmosphere
-model-time publication, WFS transforms with backend completion boundaries, and
-detector acquisition are not yet qualified. `captured_graph_node_count` reports
-the number of nodes in the captured step; requesting capture when any node is
-unsupported fails during preparation rather than silently changing policy.
+separable Gaussian DM owner, the pupil-OPD composition owner, and the finite
+multilayer-atmosphere OPD owner. Captured atmosphere motion advances
+device-resident offsets during replay and publishes the matching host epoch
+only after successful completion. WFS transforms and detector acquisition are
+not yet qualified. `captured_graph_node_count` reports the number of nodes in
+the captured step; requesting capture when any node is unsupported fails during
+preparation rather than silently changing policy.
 
 One graph may still connect port formats with different element types where a
 node explicitly declares that conversion. Exact target ownership does not

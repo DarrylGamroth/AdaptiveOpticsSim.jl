@@ -107,6 +107,7 @@ function step_graph_async!(graph::PreparedAlgorithmGraph)
     state.pending_sequence = sequence
     state.pending = true
     try
+        _preflight_prepared_graph_execution!(graph.execution, graph.nodes)
         _with_prepared_device_execution_context(graph.context) do
             _enqueue_prepared_graph_execution!(
                 graph.execution,
@@ -145,6 +146,7 @@ function wait_graph_step!(ticket::GraphStepTicket)
         _with_prepared_device_execution_context(graph.context) do
             _synchronize_prepared_device_execution_context!(graph.context)
         end
+        _complete_prepared_graph_execution!(graph.execution, graph.nodes)
     catch
         state.failed = true
         state.pending = false

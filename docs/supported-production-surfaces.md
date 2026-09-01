@@ -60,8 +60,9 @@ is not a continuously available release gate. Both policies require:
 
 The accelerator graph surface includes opt-in CUDA Graph and HIP Graph replay
 of a complete graph step when every node is qualified. The maintained captured
-fixture is the regular-grid separable Gaussian DM followed by pupil-OPD
-composition; captured execution does not interleave unqualified stream nodes.
+fixtures cover the finite multilayer atmosphere and the regular-grid separable
+Gaussian DM followed by pupil-OPD composition; captured execution does not
+interleave unqualified stream nodes.
 
 Prepared graphs provide a bounded capacity-one asynchronous submission
 boundary. The graph sequence and caller-visible output readiness publish only
@@ -80,9 +81,11 @@ device replay contract, then records the complete node and delayed-link sequence
 as one executable. CUDA and AMDGPU hardware tests replay the two-node DM and
 composition graph with changed command contents. Prepared stochastic graph
 owners on both backends keep their counter state and normal, uniform, and
-Poisson array sampling on the selected device. Complete REVOLT graphs are not
-yet capture-qualified because atmosphere, WFS, and detector owners still need
-independent capture audits.
+Poisson array sampling on the selected device. Hardware tests also compare
+captured finite-atmosphere replay with stream execution and verify completed
+host epoch publication and reset. Complete REVOLT graphs are not yet
+capture-qualified because WFS and detector owners still need independent
+capture audits.
 
 Metal and AppleAccelerate are optional/manual surfaces and are not implied by
 the AMDGPU or CUDA claims.

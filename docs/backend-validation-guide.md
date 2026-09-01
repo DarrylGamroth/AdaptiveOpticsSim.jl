@@ -63,11 +63,13 @@ identity, and public completion behavior.
 
 The hardware target also records the qualified regular-grid DM and pupil-OPD
 composition sequence as one HIP Graph, changes the retained command buffer
-between replays, and verifies the composed output. It separately captures the
-device-resident SplitMix64 normal and Poisson paths, verifies that replay
-advances both streams, and verifies reset reproducibility. This is required
-evidence for `CapturedGraphExecution`; a standalone HIP Graph smoke test is not
-sufficient.
+between replays, and verifies the composed output. A separate captured
+multilayer-atmosphere graph is compared frame by frame with stream execution;
+the test verifies evolving turbulence, host epoch publication, and reset
+reproducibility. The target also captures the device-resident SplitMix64 normal
+and Poisson paths, verifies that replay advances both streams, and verifies RNG
+reset reproducibility. This is required evidence for `CapturedGraphExecution`;
+a standalone HIP Graph smoke test is not sufficient.
 
 ## CUDA On WSL
 

@@ -41,6 +41,7 @@ import ..Backends:
     _with_compute_device,
     _resolve_array_backend,
     _resolve_backend_selector,
+    allocate_device_array,
     backend,
     begin_kernel_phase,
     compute_device,

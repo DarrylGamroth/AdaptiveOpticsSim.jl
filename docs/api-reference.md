@@ -226,8 +226,8 @@ Capture is strict: preparation records the complete node sequence and
 delayed-link commits as one native graph, and fails when any node is unqualified
 or when the selected backend cannot capture the operation. The current built-in
 qualified operations are the regular-grid separable Gaussian DM node and the
-pupil-OPD composition node. Graphs containing atmosphere, WFS, or detector
-nodes must currently use stream execution.
+pupil-OPD composition node, plus the finite multilayer-atmosphere OPD node.
+Graphs containing WFS or detector nodes must currently use stream execution.
 
 `step_graph!` completes the frame before returning. Advanced GPU applications
 may use the bounded capacity-one split boundary:
