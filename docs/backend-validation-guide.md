@@ -107,6 +107,7 @@ A GPU graph is admitted only when:
 - node outputs and delayed storage can be allocated there
 - execution stays inside the retained context
 - no hidden host transfer or CPU fallback occurs
+- one pending completion ticket prevents graph storage reuse
 
 The lockstep HIL boundary intentionally owns host `Array` exchange buffers. A
 completed GPU detector frame is copied to that host buffer only after successful
@@ -122,9 +123,10 @@ julia --project=. benchmarks/benchmark_revolt_graph_nodes.jl
 ~~~
 
 Record architecture, graph profile, resolution, noise settings, warmup, sample
-count, and synchronization boundary. Do not compare a synchronized host latency
-against an asynchronous device submission time as though they were the same
-metric.
+count, and synchronization boundary. The graph-node benchmark records
+submission, completion-ticket wait, and target-ready service time separately.
+Do not compare submission against synchronized target-ready or host-ready
+latency as though they were the same metric.
 
 ## Performance Evidence
 

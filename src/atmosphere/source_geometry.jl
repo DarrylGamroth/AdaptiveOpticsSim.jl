@@ -515,6 +515,19 @@ function accumulate_rendered_layers!(opd::AbstractMatrix,
     return opd
 end
 
+function _accumulate_rendered_layers_async!(opd::AbstractMatrix,
+    layers, shift_x::AbstractVector, shift_y::AbstractVector,
+    footprint_scale::AbstractVector)
+    isempty(layers) && return fill!(opd, zero(eltype(opd)))
+    render_layer!(opd, layers[1], shift_x[1], shift_y[1],
+        footprint_scale[1])
+    @inbounds for i in 2:length(layers)
+        _render_layer_accumulate_async!(opd, layers[i], shift_x[i], shift_y[i],
+            footprint_scale[i])
+    end
+    return opd
+end
+
 function render_atmosphere_opd_impl!(dest::AbstractMatrix,
     renderer::AtmosphereDirectionRenderer, atm::AbstractTimedAtmosphere)
     layers = atmosphere_layers(atm)
@@ -549,5 +562,17 @@ function render_atmosphere!(dest::PupilFunction,
     validate_atmosphere_rendering(dest, renderer, atm, epoch)
     opd = dest.opd
     render_atmosphere_opd_impl!(opd, renderer, atm)
+    return dest
+end
+
+function _render_atmosphere_async!(dest::PupilFunction,
+    renderer::AtmosphereDirectionRenderer, atm::AbstractTimedAtmosphere,
+    epoch::AtmosphereEpoch)
+    validate_atmosphere_rendering(dest, renderer, atm, epoch)
+    opd = dest.opd
+    layers = atmosphere_layers(atm)
+    _accumulate_rendered_layers_async!(opd, layers, renderer.shift_x,
+        renderer.shift_y, renderer.footprint_scale)
+    opd .*= renderer.pupil
     return dest
 end

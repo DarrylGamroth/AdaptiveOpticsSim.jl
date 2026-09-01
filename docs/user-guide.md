@@ -177,6 +177,22 @@ command = graph_output(graph, :command)
 Use a delayed link for feedback. Direct links must follow node order and cannot
 form a cycle.
 
+For a GPU-resident application that has independent CPU work before it needs
+the frame, split submission from completion:
+
+~~~julia
+ticket = step_graph_async!(graph)
+do_independent_cpu_work()
+wait_graph_step!(ticket)
+command = graph_output(graph, :command)
+~~~
+
+One graph permits only one pending frame. Its inputs, outputs, node state,
+workspaces, delayed values, and RNG state remain owned by that frame until
+`wait_graph_step!` returns. Use separate prepared graphs for genuinely
+independent concurrent work. The lockstep HIL API already waits at its required
+host-visible frame boundary.
+
 ## TOML Graphs
 
 TOML is the convenient static authoring surface:

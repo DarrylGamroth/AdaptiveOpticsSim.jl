@@ -130,6 +130,19 @@ function step_graph_node!(owner)
 end
 
 """
+    enqueue_graph_node!(owner)
+
+Submit one prepared graph-node owner without adding a graph-boundary
+completion wait. The default calls [`step_graph_node!`](@ref), so adapters need
+no second implementation unless they can safely preserve same-context ordering
+while deferring a narrower completion boundary.
+"""
+@inline function enqueue_graph_node!(owner)
+    step_graph_node!(owner)
+    return nothing
+end
+
+"""
     reset_graph_node!(owner)
 
 Reset one prepared graph-node owner at a serialized graph boundary.
@@ -842,6 +855,8 @@ end
 mutable struct AlgorithmGraphState{DelayedValues}
     delayed_values::DelayedValues
     step_sequence::UInt64
+    pending_sequence::UInt64
+    pending::Bool
     failed::Bool
 end
 
@@ -917,7 +932,13 @@ function _prepare_algorithm_graph(
         admitted_nodes,
         node_outputs,
     )
-    state = AlgorithmGraphState(delayed_values, UInt64(0), false)
+    state = AlgorithmGraphState(
+        delayed_values,
+        UInt64(0),
+        UInt64(0),
+        false,
+        false,
+    )
     return PreparedAlgorithmGraph(
         definition.name,
         target,

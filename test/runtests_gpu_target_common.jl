@@ -134,7 +134,13 @@ function run_algorithm_graph_backend_smoke(
         ),
     )
     graph = prepare_algorithm_graph(definition; target)
-    step_graph!(graph)
+    ticket = @inferred step_graph_async!(graph)
+    @test graph_step_pending(graph)
+    @test iszero(graph_step_sequence(graph))
+    @test_throws AlgorithmGraphError step_graph_async!(graph)
+    @test @inferred(wait_graph_step!(ticket)) === graph
+    @test !graph_step_pending(graph)
+    @test graph_step_sequence(graph) == UInt64(1)
 
     @test compute_device(graph) == target
     @test compute_device(graph_output(graph, Val(:opd))) == target

@@ -752,6 +752,21 @@ end
     return nothing
 end
 
+@inline function enqueue_graph_node!(owner::_MultiLayerAtmosphereOPDOwner)
+    epoch = advance_by!(
+        owner.atmosphere,
+        owner.atmosphere_step,
+        owner.rng,
+    )
+    _render_atmosphere_async!(
+        owner.pupil,
+        owner.renderer,
+        owner.atmosphere,
+        epoch,
+    )
+    return nothing
+end
+
 function reset_graph_node!(owner::_MultiLayerAtmosphereOPDOwner)
     _reset_graph_rng!(owner.rng, owner.rng_seed)
     atmosphere = prepare_timed_atmosphere(
@@ -1029,6 +1044,13 @@ end
 @inline function step_graph_node!(owner::_DeformableMirrorSurfaceOwner)
     set_command!(owner.deformable_mirror, owner.pdm_command)
     update_surface!(owner.deformable_mirror)
+    copyto!(owner.output, surface_opd(owner.deformable_mirror))
+    return nothing
+end
+
+@inline function enqueue_graph_node!(owner::_DeformableMirrorSurfaceOwner)
+    set_command!(owner.deformable_mirror, owner.pdm_command)
+    _update_dm_surface_async!(owner.deformable_mirror)
     copyto!(owner.output, surface_opd(owner.deformable_mirror))
     return nothing
 end
@@ -1485,6 +1507,35 @@ end
     return grid_command
 end
 
+@inline function _scatter_grid_dm_command_async!(
+    ::ScalarCPUStyle,
+    grid_command,
+    active_command,
+    grid_indices,
+)
+    return _scatter_grid_dm_command!(ScalarCPUStyle(), grid_command,
+        active_command, grid_indices)
+end
+
+@inline function _scatter_grid_dm_command_async!(
+    style::AcceleratorStyle,
+    grid_command,
+    active_command,
+    grid_indices,
+)
+    fill!(grid_command, zero(eltype(grid_command)))
+    launch_kernel_async!(
+        style,
+        _scatter_grid_dm_command_kernel!,
+        grid_command,
+        active_command,
+        grid_indices,
+        length(active_command);
+        ndrange=length(active_command),
+    )
+    return grid_command
+end
+
 function prepare_graph_node(
     ::Type{GridGaussianDeformableMirrorSurfaceNode{T}},
     config::GridGaussianDeformableMirrorSurfaceNodeConfig,
@@ -1546,6 +1597,21 @@ end
         owner.actuator_grid_indices,
     )
     update_surface!(owner.deformable_mirror)
+    copyto!(owner.output, surface_opd(owner.deformable_mirror))
+    return nothing
+end
+
+@inline function enqueue_graph_node!(
+    owner::_GridGaussianDeformableMirrorSurfaceOwner,
+)
+    grid_command = command_storage(owner.deformable_mirror)
+    _scatter_grid_dm_command_async!(
+        execution_style(grid_command),
+        grid_command,
+        owner.pdm_command,
+        owner.actuator_grid_indices,
+    )
+    _update_dm_surface_async!(owner.deformable_mirror)
     copyto!(owner.output, surface_opd(owner.deformable_mirror))
     return nothing
 end

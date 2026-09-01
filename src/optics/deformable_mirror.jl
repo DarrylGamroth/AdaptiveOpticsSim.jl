@@ -948,6 +948,25 @@ function _mul_gaussian_influence!(style::AcceleratorStyle,
     return y
 end
 
+@inline function _mul_gaussian_influence_async!(::ScalarCPUStyle,
+    y::AbstractVector{T}, operator::GaussianInfluenceOperator{T},
+    x::AbstractVector{T}, alpha::T, beta::T) where {T<:AbstractFloat}
+    return _mul_gaussian_influence!(ScalarCPUStyle(), y, operator, x,
+        alpha, beta)
+end
+
+function _mul_gaussian_influence_async!(style::AcceleratorStyle,
+    y::AbstractVector{T}, operator::GaussianInfluenceOperator{T},
+    x::AbstractVector{T}, alpha::T, beta::T) where {T<:AbstractFloat}
+    n = operator.resolution
+    n_commands = size(operator, 2)
+    launch_kernel_async!(style, dm_apply_gaussian_operator_kernel!, y,
+        operator.pupil_backend, operator.coordinates_backend, x,
+        operator.center, operator.inv_scale, operator.inv_two_sigma2,
+        alpha, beta, n, n_commands; ndrange=(n, n))
+    return y
+end
+
 function LinearAlgebra.mul!(y::AbstractVector{T},
     operator::GaussianInfluenceOperator{T}, x::AbstractVector{T},
     alpha::Number, beta::Number) where {T<:AbstractFloat}
@@ -987,6 +1006,49 @@ end
     launch_kernel!(style, dm_apply_pupil_kernel!, dm.state.opd,
         _separable_surface_support(dm.state.modes);
         ndrange=size(dm.state.opd))
+    return dm.state.opd
+end
+
+@inline function _apply_opd_separable_async!(::ScalarCPUStyle,
+    dm::DeformableMirror)
+    return _apply_opd_separable!(ScalarCPUStyle(), dm)
+end
+
+@inline function _apply_opd_separable_async!(style::AcceleratorStyle,
+    dm::DeformableMirror)
+    xbasis = dm.state.separable_x::typeof(dm.state.opd)
+    ybasis_t = dm.state.separable_y_t::typeof(dm.state.opd)
+    tmp = dm.state.separable_tmp::typeof(dm.state.opd)
+    coefs_grid = dm.state.coefs_grid
+    coefs_grid === nothing && throw(InvalidConfiguration(
+        "separable DM application requires a grid-backed command buffer"))
+    mul!(tmp, xbasis, coefs_grid)
+    mul!(dm.state.opd, tmp, ybasis_t)
+    launch_kernel_async!(style, dm_apply_pupil_kernel!, dm.state.opd,
+        _separable_surface_support(dm.state.modes);
+        ndrange=size(dm.state.opd))
+    return dm.state.opd
+end
+
+@inline function _mul_dm_surface_async!(output, modes, coefficients)
+    mul!(output, modes, coefficients)
+    return output
+end
+
+@inline function _mul_dm_surface_async!(output,
+    modes::GaussianInfluenceOperator{T}, coefficients) where {T}
+    _check_gaussian_mul_dimensions(output, modes, coefficients)
+    return _mul_gaussian_influence_async!(execution_style(output), output,
+        modes, coefficients, one(T), zero(T))
+end
+
+@inline function _update_dm_surface_async!(dm::DeformableMirror)
+    prepare_actuator_commands!(dm)
+    if !isnothing(dm.state.separable_x)
+        return _apply_opd_separable_async!(execution_style(dm.state.opd), dm)
+    end
+    _mul_dm_surface_async!(dm.state.opd_vec, dm.state.modes,
+        dm.state.actuator_coefs)
     return dm.state.opd
 end
 

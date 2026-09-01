@@ -68,10 +68,12 @@ adapter knows about graph ports. No binding or allocation occurs in
 `step_graph!`.
 
 One graph step invokes every node once in validated declaration order. A direct
-link exposes an earlier node's complete output to a later node in the same
-step. A delayed link exposes only the value committed after the preceding
-successful step. Delayed-link state and the graph sequence commit after all
-nodes return normally. A node failure makes the run fail-stop until an explicit
+link exposes an earlier node's ordered output to a later node in the same step.
+On one retained accelerator stream, that dependency is device execution order;
+it does not require a host barrier between the nodes. A delayed link exposes
+only the value committed after the preceding successful step. Delayed-link
+state and the graph sequence publish only when the current frame's completion
+is observed. A node or device failure makes the run fail-stop until an explicit
 reset; the graph does not claim graph-wide rollback of outputs already written
 by earlier nodes.
 
@@ -80,8 +82,22 @@ or dynamic placement policy. `prepare_algorithm_graph` accepts one exact compute
 target, defaults to the host, allocates packed column-major node outputs and
 delayed storage there, and rejects graph inputs or sparse parameters that are
 not native packed storage on that same target. The prepared graph retains one
-device execution context. Preparation, stepping, and reset run inside it and
-complete its stream before successful publication or error return.
+device execution context. `step_graph_async!` submits one frame and returns a
+single-use `GraphStepTicket`; `wait_graph_step!` completes that context,
+publishes the sequence, and releases all mutable graph storage. The queue
+capacity is exactly one because the next frame would otherwise reuse node
+state, workspaces, outputs, delayed-link storage, and RNG state that may still
+be in flight. Before consuming the ticket, the caller must not read graph
+outputs, mutate graph inputs, reset the graph, or submit another frame. The
+last three operations are rejected where the graph API can enforce them.
+
+`step_graph!` is the synchronous compatibility surface and is equivalent to an
+immediate submission followed by its completion wait. Some admitted nodes have
+a necessary host or backend completion boundary and may block during
+submission; the asynchronous API removes the graph-boundary barrier but does
+not falsely classify every node as nonblocking. Multiple outstanding frames
+would require separately owned bounded slots and explicit publication, not an
+unbounded task or command queue.
 
 One graph may still connect port formats with different element types where a
 node explicitly declares that conversion. Exact target ownership does not

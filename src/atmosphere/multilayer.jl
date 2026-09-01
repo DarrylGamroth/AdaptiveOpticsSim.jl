@@ -316,6 +316,43 @@ function _accumulate_shifted_screen!(style::AcceleratorStyle, out::AbstractMatri
     return out
 end
 
+@inline function _accumulate_shifted_screen_async!(::ScalarCPUStyle,
+    out::AbstractMatrix{T}, screen::AbstractMatrix{T}, start_x::T,
+    start_y::T, footprint_scale::T, output_scale::T, n::Int,
+    m::Int) where {T<:AbstractFloat}
+    return _accumulate_shifted_screen!(ScalarCPUStyle(), out, screen,
+        start_x, start_y, footprint_scale, output_scale, n, m)
+end
+
+function _accumulate_shifted_screen_async!(style::AcceleratorStyle,
+    out::AbstractMatrix{T}, screen::AbstractMatrix{T}, start_x::T,
+    start_y::T, footprint_scale::T, output_scale::T, n::Int,
+    m::Int) where {T<:AbstractFloat}
+    start_x_wrapped = normalize_start_coordinate(start_x, m)
+    start_y_wrapped = normalize_start_coordinate(start_y, m)
+    launch_kernel_async!(style, moving_layer_accumulate_kernel!, out, screen,
+        start_x_wrapped, start_y_wrapped, footprint_scale, output_scale, n, m;
+        ndrange=size(out))
+    return out
+end
+
+function _accumulate_shifted_screen_async!(out::AbstractMatrix{T},
+    screen::AbstractMatrix{T}, offset_x::T, offset_y::T, output_scale::T,
+    footprint_scale::T=one(T)) where {T<:AbstractFloat}
+    n = size(out, 1)
+    size(out, 2) == n || throw(DimensionMismatchError("output must be square"))
+    m = size(screen, 1)
+    size(screen, 2) == m || throw(DimensionMismatchError("screen must be square"))
+    m >= n || throw(DimensionMismatchError(
+        "screen resolution must be at least as large as the pupil resolution"))
+    footprint_scale > zero(T) || throw(InvalidConfiguration(
+        "footprint_scale must be positive"))
+    start_x = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_x
+    start_y = T(m + 1) / 2 - footprint_scale * T(n - 1) / 2 - offset_y
+    return _accumulate_shifted_screen_async!(execution_style(out), out,
+        screen, start_x, start_y, footprint_scale, output_scale, n, m)
+end
+
 function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
     return render_layer!(out, layer, layer_render_context(src, layer, tel, T))
@@ -343,6 +380,19 @@ function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmospher
     opd_scale = T(layer.params.cn2_amplitude_scale) *
         T(layer.generator.params.opd_per_radian)
     accumulate_shifted_screen!(out, layer.generator.state.phase_rad,
+        layer.state.offset_x - shift_x,
+        layer.state.offset_y - shift_y,
+        opd_scale,
+        footprint_scale)
+    return out
+end
+
+function _render_layer_accumulate_async!(out::AbstractMatrix{T},
+    layer::MovingAtmosphereLayer, shift_x::T, shift_y::T,
+    footprint_scale::T) where {T<:AbstractFloat}
+    opd_scale = T(layer.params.cn2_amplitude_scale) *
+        T(layer.generator.params.opd_per_radian)
+    _accumulate_shifted_screen_async!(out, layer.generator.state.phase_rad,
         layer.state.offset_x - shift_x,
         layer.state.offset_y - shift_y,
         opd_scale,

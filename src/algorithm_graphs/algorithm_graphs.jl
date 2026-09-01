@@ -28,12 +28,14 @@ import ..Backends:
     compute_device,
     compute_device_backend,
     execution_style,
-    launch_kernel!
+    launch_kernel!,
+    launch_kernel_async!
 import ..Calibration:
     ModalOPDExpansionPlan,
     combine_basis!
 import ..Atmospheres:
     MultiLayerAtmosphereDefinition,
+    _render_atmosphere_async!,
     advance_by!,
     prepare_atmosphere_renderer,
     prepare_timed_atmosphere,
@@ -69,6 +71,7 @@ import ..Optics:
     SampledActuatorTopology,
     Source,
     TelescopeDefinition,
+    _update_dm_surface_async!,
     command_storage,
     photon_irradiance,
     prepare_telescope,

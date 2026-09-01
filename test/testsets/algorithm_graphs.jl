@@ -30,6 +30,11 @@ function warmed_graph_step_allocation_bytes(graph)
     return @allocated step_graph!(graph)
 end
 
+function warmed_async_graph_step_allocation_bytes(graph)
+    wait_graph_step!(step_graph_async!(graph))
+    return @allocated wait_graph_step!(step_graph_async!(graph))
+end
+
 struct GraphTestGainDeclaration end
 
 struct GraphTestGainConfiguration
@@ -463,6 +468,39 @@ end
     @test !graph_failed(graph)
     step_graph!(graph)
     @test graph_output(graph, Val(:result)) == Float32[2, 2]
+end
+
+@testset "portable algorithm graph asynchronous completion ownership" begin
+    input = Float32[1, 2, 3]
+    graph = prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(
+            :gain,
+            GraphTestGainDeclaration,
+            GraphTestGainConfiguration(3),
+        ),);
+        inputs=(graph_input(:input, :gain => :input, input),),
+        outputs=(graph_output(:output, :gain => :output),),
+        parameters=(sparse_parameter(:gain => :gain, Float32[2, 3, 4]),),
+    ))
+
+    ticket = @inferred step_graph_async!(graph)
+    @test ticket isa GraphStepTicket{typeof(graph)}
+    @test graph_step_pending(graph)
+    @test iszero(graph_step_sequence(graph))
+    @test_throws AlgorithmGraphError step_graph_async!(graph)
+    @test_throws AlgorithmGraphError reset_graph!(graph)
+    @test_throws AlgorithmGraphError wait_graph_step!(
+        GraphStepTicket(graph, UInt64(2)),
+    )
+
+    @test @inferred(wait_graph_step!(ticket)) === graph
+    @test !graph_step_pending(graph)
+    @test graph_step_sequence(graph) == UInt64(1)
+    @test graph_output(graph, Val(:output)) == Float32[2, 6, 12]
+    @test_throws AlgorithmGraphError wait_graph_step!(ticket)
+
+    @test warmed_async_graph_step_allocation_bytes(graph) == 0
+    @test !graph_step_pending(graph)
 end
 
 @testset "portable algorithm graph admits pure sources and sinks" begin

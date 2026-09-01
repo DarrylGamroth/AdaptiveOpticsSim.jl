@@ -278,11 +278,18 @@ function profile_graph_execution(profile::RevoltGraphProfile, backend)
         step_graph!(graph)
     end
     atmosphere_before = Array(graph_output(graph, Val(:atmosphere_opd)))
-    graph_recorder = latency_recorder()
+    submission_recorder = latency_recorder()
+    completion_wait_recorder = latency_recorder()
+    target_ready_recorder = latency_recorder()
     for _ in 1:PROFILE_SAMPLES
         start = time_ns()
-        step_graph!(graph)
-        record_latency!(graph_recorder, time_ns() - start)
+        ticket = step_graph_async!(graph)
+        submitted = time_ns()
+        wait_graph_step!(ticket)
+        ready = time_ns()
+        record_latency!(submission_recorder, submitted - start)
+        record_latency!(completion_wait_recorder, ready - submitted)
+        record_latency!(target_ready_recorder, ready - start)
     end
     atmosphere_after = Array(graph_output(graph, Val(:atmosphere_opd)))
     frame = Array(graph_output(graph, profile.frame_output))
@@ -292,16 +299,20 @@ function profile_graph_execution(profile::RevoltGraphProfile, backend)
         "$(profile.name) atmosphere did not evolve during profiling",
     )
 
-    graph_summary = latency_summary(graph_recorder)
+    submission_summary = latency_summary(submission_recorder)
+    completion_wait_summary = latency_summary(completion_wait_recorder)
+    target_ready_summary = latency_summary(target_ready_recorder)
     node_mean_sum = sum(result["mean_ns"] for result in per_node)
     return Dict{String,Any}(
         "preparation_ns" => prepared.preparation_ns,
         "target" => string(prepared.target),
         "nodes" => per_node,
         "node_mean_sum_ns" => node_mean_sum,
-        "graph_target_ready" => graph_summary,
+        "graph_submission" => submission_summary,
+        "graph_completion_wait" => completion_wait_summary,
+        "graph_target_ready" => target_ready_summary,
         "separately_synchronized_node_sum_over_graph_mean" =>
-            node_mean_sum / graph_summary["mean_ns"],
+            node_mean_sum / target_ready_summary["mean_ns"],
         "frame_shape" => collect(size(frame)),
         "atmosphere_evolved" => true,
         "frame_finite" => true,
@@ -415,7 +426,8 @@ function main()
 
     artifact = Dict{String,Any}(
         "artifact_id" => "REVOLT-ALGORITHM-GRAPH-NODE-PROFILE",
-        "evidence_class" => "warmed synchronized diagnostic profile",
+        "evidence_class" =>
+            "warmed submission and synchronized-completion diagnostic profile",
         "source_revision" => git_revision(),
         "source_tracked_dirty" => tracked_source_dirty(),
         "contract" => Dict{String,Any}(
@@ -428,8 +440,12 @@ function main()
             "coordinated_omission_correction" => false,
             "per_node_boundary" =>
                 "one node invocation plus exact graph-context synchronization",
+            "graph_submission_boundary" =>
+                "one bounded-capacity graph submission with no graph-boundary synchronization",
+            "graph_completion_wait_boundary" =>
+                "completion-ticket wait through exact graph-context synchronization",
             "graph_boundary" =>
-                "all nodes plus one exact graph-context synchronization",
+                "submission immediately followed by completion-ticket wait",
             "frame_host_ready_boundary" =>
                 "graph boundary plus completed target-to-host frame copy",
             "command_target_ready_boundary" =>

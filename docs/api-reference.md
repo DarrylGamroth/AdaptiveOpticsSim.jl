@@ -208,9 +208,23 @@ step_graph!(graph)
 reset_graph!(graph)
 ~~~
 
+`step_graph!` completes the frame before returning. Advanced GPU applications
+may use the bounded capacity-one split boundary:
+
+~~~julia
+ticket = step_graph_async!(graph)
+wait_graph_step!(ticket)
+~~~
+
+`graph_step_pending(graph)` reports ticket ownership. The committed
+`graph_step_sequence(graph)` changes only after the wait succeeds. Do not read
+outputs or mutate inputs while a ticket is pending.
+
 Use `prepared_graph_node` for qualified inspection. Node adapters implement the
 public `graph_node_ports`, `prepare_graph_node`, `step_graph_node!`, and
-`reset_graph_node!` protocol.
+`reset_graph_node!` protocol. An adapter may additionally specialize
+`enqueue_graph_node!` to defer a proven same-context completion boundary; the
+default calls `step_graph_node!`.
 
 ### Model Time
 

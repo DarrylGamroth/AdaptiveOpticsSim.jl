@@ -58,6 +58,13 @@ is not a continuously available release gate. Both policies require:
 - explicit synchronization at public completion boundaries
 - numerical or statistical parity against the declared CPU reference
 
+Prepared graphs provide a bounded capacity-one asynchronous submission
+boundary. The graph sequence and caller-visible output readiness publish only
+when the completion ticket is consumed. Atmosphere-layer accumulation and
+deformable-mirror staging use same-stream ordering on the covered accelerator
+paths. WFS FFT implementations and the documented AMDGPU detector host mirror
+may retain narrower required completion boundaries inside submission.
+
 Support is operation-specific. Preparing a graph for an accelerator succeeds
 only when every node and bound array supports that exact target. The lockstep
 HIL boundary explicitly copies complete products and commands through host

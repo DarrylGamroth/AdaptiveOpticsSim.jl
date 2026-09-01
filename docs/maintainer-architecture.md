@@ -96,9 +96,12 @@ outputs, direct links, and explicit one-frame delayed links. Preparation:
 - prepares each concrete node owner
 - fixes the backend/device execution context
 
-`step_graph!` executes that order with one writer and publishes graph outputs
-only for a completed step. `reset_graph!` restores node state, delayed links,
-RNG seeds, and sequence state according to each node contract.
+`step_graph_async!` submits that order with one writer and a strict capacity of
+one in-flight frame. Its completion ticket retains ownership of every mutable
+graph resource. `wait_graph_step!` observes device completion and publishes the
+step sequence; `step_graph!` composes both operations for synchronous callers.
+`reset_graph!` restores node state, delayed links, RNG seeds, and sequence state
+according to each node contract and rejects a still-pending frame.
 
 TOML graph files are a versioned static authoring surface. Julia definitions
 remain available for generated or application-specific composition. The graph

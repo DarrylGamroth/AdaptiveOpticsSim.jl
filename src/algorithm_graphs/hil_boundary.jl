@@ -92,6 +92,9 @@ function prepare_graph_hil_boundary(
     graph_failed(graph) && throw(AlgorithmGraphError(
         "a failed graph cannot be bound to a HIL boundary",
     ))
+    graph_step_pending(graph) && throw(AlgorithmGraphError(
+        "a graph with a pending frame cannot be bound to a HIL boundary",
+    ))
     iszero(graph_step_sequence(graph)) || throw(AlgorithmGraphError(
         "a HIL boundary requires an unstepped graph",
     ))
