@@ -722,7 +722,7 @@ function prepare_graph_node(
     )
     renderer = prepare_atmosphere_renderer(atmosphere, telescope)
     pupil = PupilFunction(telescope, outputs.atmosphere_opd)
-    rng = runtime_rng(config.rng_seed)
+    rng = _prepare_graph_rng(target, config.rng_seed)
     advance_by!(atmosphere, zero(T), rng)
     return _MultiLayerAtmosphereOPDOwner(
         config.atmosphere,
@@ -753,7 +753,7 @@ end
 end
 
 function reset_graph_node!(owner::_MultiLayerAtmosphereOPDOwner)
-    seed!(owner.rng, owner.rng_seed)
+    _reset_graph_rng!(owner.rng, owner.rng_seed)
     atmosphere = prepare_timed_atmosphere(
         owner.definition,
         owner.telescope,
@@ -3118,7 +3118,7 @@ function prepare_graph_node(
         AlgorithmGraphError(
             "prepared CCD output shape does not match its graph frame port",
         ))
-    rng = runtime_rng(config.rng_seed)
+    rng = _prepare_graph_rng(target, config.rng_seed)
     state = detector_acquisition_state(prepared)
     return _FrameDetectorAcquisitionOwner(
         prepared,
@@ -3141,7 +3141,7 @@ function reset_graph_node!(owner::_FrameDetectorAcquisitionOwner)
     fill!(owner.latent_buffer, zero(eltype(owner.latent_buffer)))
     fill!(output_frame(detector), zero(eltype(output_frame(detector))))
     fill!(owner.output, zero(eltype(owner.output)))
-    seed!(owner.rng, owner.rng_seed)
+    _reset_graph_rng!(owner.rng, owner.rng_seed)
     return nothing
 end
 
@@ -3460,7 +3460,7 @@ function prepare_graph_node(
             "prepared CMOS output shape does not match its graph frame port",
         ),
     )
-    rng = runtime_rng(config.rng_seed)
+    rng = _prepare_graph_rng(target, config.rng_seed)
     state = detector_acquisition_state(prepared)
     return _FrameDetectorAcquisitionOwner(
         prepared,
@@ -3801,7 +3801,7 @@ function prepare_graph_node(
             "prepared EMCCD output shape does not match its graph frame port",
         ),
     )
-    rng = runtime_rng(config.rng_seed)
+    rng = _prepare_graph_rng(target, config.rng_seed)
     state = detector_acquisition_state(prepared)
     return _FrameDetectorAcquisitionOwner(
         prepared,

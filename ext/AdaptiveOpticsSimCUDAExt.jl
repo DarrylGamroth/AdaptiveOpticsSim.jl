@@ -18,6 +18,13 @@ Backends.backend_fill(::Type{Backends.CUDABackendTag}, value, dims::Vararg{Int})
 Backends.compute_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
 
+function Backends._prepare_graph_rng(
+    device::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+    seed::UInt64,
+)
+    return Backends._prepare_counter_rng(device, seed)
+end
+
 function Backends.compute_device_availability(
     device::Backends.AcceleratorComputeDevice{Backends.CUDABackend,I},
 ) where {I<:Integer}

@@ -71,6 +71,72 @@ end
         mark_ka_cpu_kernel!(:fftfreq_kernel!)
         @test ka_freqs == scalar_freqs
 
+        counter_state = Backends._CounterRandomState(UInt64[0])
+        counter_rng = Backends._PreparedCounterRNG(
+            Backends._CounterRandomPlan(UInt64(0x1234)),
+            counter_state,
+        )
+        normal_draw = zeros(Float32, 32)
+        Backends.randn_backend_async!(
+            KA_CPU_STYLE,
+            counter_rng,
+            normal_draw,
+        )
+        Backends.synchronize_backend!(KA_CPU_STYLE)
+        first_normal_draw = copy(normal_draw)
+        @test counter_state.draw_sequence == UInt64[1]
+        @test all(isfinite, first_normal_draw)
+
+        Backends.randn_backend_async!(
+            KA_CPU_STYLE,
+            counter_rng,
+            normal_draw,
+        )
+        Backends.synchronize_backend!(KA_CPU_STYLE)
+        @test counter_state.draw_sequence == UInt64[2]
+        @test normal_draw != first_normal_draw
+
+        Backends._reset_graph_rng!(counter_rng, UInt64(0x1234))
+        Backends.randn_backend_async!(
+            KA_CPU_STYLE,
+            counter_rng,
+            normal_draw,
+        )
+        Backends.synchronize_backend!(KA_CPU_STYLE)
+        @test normal_draw == first_normal_draw
+
+        uniform_draw = zeros(Float32, 32)
+        Backends._rand_uniform_backend!(
+            KA_CPU_STYLE,
+            counter_rng,
+            uniform_draw,
+        )
+        @test all(x -> 0 < x < 1, uniform_draw)
+
+        poisson_draw = fill(8.0f0, 32)
+        Backends.poisson_noise_async!(
+            KA_CPU_STYLE,
+            counter_rng,
+            poisson_draw,
+        )
+        Backends.synchronize_backend!(KA_CPU_STYLE)
+        @test all(x -> x >= 0 && isinteger(x), poisson_draw)
+
+        Backends.launch_kernel!(
+            KA_CPU_STYLE,
+            Backends._reset_random_draw_kernel!,
+            counter_state.draw_sequence;
+            ndrange=1,
+        )
+        @test counter_state.draw_sequence == UInt64[0]
+        mark_ka_cpu_kernel!(
+            :_advance_random_draw_kernel!,
+            :_reset_random_draw_kernel!,
+            :_counter_randn_fill_kernel!,
+            :_counter_uniform_fill_kernel!,
+            :_counter_poisson_noise_kernel!,
+        )
+
         scalar_clamped = [-1.0, 0.5, 2.0]
         ka_clamped = copy(scalar_clamped)
         AdaptiveOpticsSim.Backends._clamp_array!(SCALAR_CPU_STYLE, scalar_clamped, 0.0, 1.0)

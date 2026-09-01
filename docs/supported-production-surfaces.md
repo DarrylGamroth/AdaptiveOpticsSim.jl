@@ -52,8 +52,9 @@ maintained local ROCm target. CUDA is manually validated on the WSL RTX host but
 is not a continuously available release gate. Both policies require:
 
 - scalar indexing disabled
-- exact device-resident inputs, plans, state, workspace, and products
-- no implicit CPU fallback
+- exact device residency for inputs, plans, state, workspace, and products,
+  except for an operation's documented preallocated host-mirror strategy
+- no undeclared CPU fallback
 - explicit synchronization at public completion boundaries
 - numerical or statistical parity against the declared CPU reference
 
@@ -61,6 +62,13 @@ Support is operation-specific. Preparing a graph for an accelerator succeeds
 only when every node and bound array supports that exact target. The lockstep
 HIL boundary explicitly copies complete products and commands through host
 `Array` buffers.
+
+Prepared CUDA stochastic graph owners keep their counter state and array
+sampling on the selected device; the asynchronous random-fill sequence has a
+CUDA Graph replay test. This is not yet a claim that every complete AOS graph
+can be captured. AMDGPU detector Poisson sampling uses its declared,
+preallocated host-mirror strategy and therefore is not a device-only random
+path.
 
 Metal and AppleAccelerate are optional/manual surfaces and are not implied by
 the AMDGPU or CUDA claims.

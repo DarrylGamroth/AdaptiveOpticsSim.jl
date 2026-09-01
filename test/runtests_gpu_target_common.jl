@@ -63,6 +63,10 @@ backend_target_branch_mode(::Type{Backends.CUDABackendTag}) =
 backend_target_branch_mode(::Type{Backends.AMDGPUBackendTag}) =
     SequentialExecution()
 
+graph_rng_device_resident(::Type{Backends.CUDABackendTag}) = true
+graph_rng_device_resident(::Type{Backends.AMDGPUBackendTag}) = false
+run_graph_rng_capture_replay(::Type{<:Backends.GPUBackendTag}) = nothing
+
 function require_backend_target!(::Type{B}) where {B<:Backends.GPUBackendTag}
     pkg = backend_package_name(B)
     pkg_path = Base.find_package(pkg)
@@ -77,6 +81,7 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     require_backend_target!(B)
     @testset "$(backend_label(B)) hardware target" begin
         run_algorithm_graph_backend_smoke(B)
+        run_graph_rng_capture_replay(B)
         run_optional_backend_smoke(B)
         run_gpu_builder_smoke(B)
         run_revolt_like_hil_backend_smoke(B)
@@ -356,6 +361,61 @@ function run_algorithm_graph_backend_smoke(
     cmos_frame = graph_output(cmos_graph, Val(:frame))
     @test compute_device(cmos_frame) == cmos_target
     @test Array(cmos_frame) == fill(41.0f0, 4, 4)
+
+    stochastic_rate = BackendArray(fill(1_000.0f0, 8, 8))
+    stochastic_definition = algorithm_graph(
+        (
+            ccd_detector_acquisition_node(
+                :detector;
+                rows=8,
+                columns=8,
+                pixel_scale_arcsec=0.1,
+                wavelength_m=0.75e-6,
+                exposure_duration_s=0.01,
+                quantum_efficiency=0.5,
+                readout_noise_e=2.0,
+                photon_noise=true,
+                readout_noise=true,
+                rng_seed=0x810,
+                photon_rate_schema=
+                    "test.graph.shwfs-photon-rate.f32/1",
+                frame_schema="test.graph.shwfs-frame.f32/1",
+            ),
+        );
+        name=:gpu_stochastic_ccd,
+        inputs=(
+            graph_input(
+                :photon_rate,
+                :detector => :photon_rate,
+                stochastic_rate,
+            ),
+        ),
+        outputs=(graph_output(:frame, :detector => :frame),),
+    )
+    stochastic_graph = prepare_algorithm_graph(
+        stochastic_definition;
+        target=compute_device(stochastic_rate),
+    )
+    stochastic_owner = AlgorithmGraphs.prepared_graph_node(
+        stochastic_graph,
+        Val(:detector),
+    )
+    if graph_rng_device_resident(B)
+        @test stochastic_owner.rng isa Backends._PreparedCounterRNG
+        @test compute_device(
+            stochastic_owner.rng.state.draw_sequence,
+        ) == compute_device(stochastic_rate)
+    else
+        @test stochastic_owner.rng isa Xoshiro
+    end
+    step_graph!(stochastic_graph)
+    stochastic_frame = graph_output(stochastic_graph, Val(:frame))
+    first_stochastic_frame = Array(stochastic_frame)
+    step_graph!(stochastic_graph)
+    @test Array(stochastic_frame) != first_stochastic_frame
+    reset_graph!(stochastic_graph)
+    step_graph!(stochastic_graph)
+    @test Array(stochastic_frame) == first_stochastic_frame
 
     pyramid_opd = BackendArray(zeros(Float32, 8, 8))
     pyramid_target = compute_device(pyramid_opd)

@@ -10,16 +10,17 @@ module AlgorithmGraphs
 
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
-using Random: seed!
 using TOML
 
-import ..AdaptiveOpticsSim: AdaptiveOpticsSimError, runtime_rng
+import ..AdaptiveOpticsSim: AdaptiveOpticsSimError
 import ..Backends:
     AbstractComputeDevice,
     AcceleratorStyle,
     HostComputeDevice,
     ScalarCPUStyle,
     _prepare_device_execution_context,
+    _prepare_graph_rng,
+    _reset_graph_rng!,
     _synchronize_prepared_device_execution_context!,
     _with_prepared_device_execution_context,
     allocate_device_array,

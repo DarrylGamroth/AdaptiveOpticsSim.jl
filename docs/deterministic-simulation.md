@@ -49,17 +49,28 @@ the same current epoch in any order before the atmosphere advances.
 A stochastic native graph node owns one prepared RNG and its immutable reset
 seed. For example, atmosphere and detector node configurations declare
 `rng_seed`. Preparation creates the stream, `step_graph!` is its only writer,
-and `reset_graph!` restores the configured seed and state.
+and `reset_graph!` restores the configured seed and state. Host graphs use the
+ordinary `Xoshiro` runtime stream.
+
+CUDA graph owners instead use an internal array-only counter stream. Its seed
+is a run-immutable plan value and its draw sequence is persistent state stored
+on the selected CUDA device. Each array fill advances that sequence on the
+prepared CUDA stream, then derives samples with stable SplitMix64 domains for
+normal, uniform, and Poisson draws. Element and sub-draw indices are explicit,
+so a recorded CUDA random-fill graph produces a new field on every replay.
+Reset restores the device draw sequence without replacing its storage. This is
+an execution detail of prepared graph owners, not a scalar `AbstractRNG` API
+for scientific code.
 
 Use distinct explicit seeds for independent nodes. Graph declaration order must
 not be used as an implicit seed derivation rule. A graph file and its bound
 configuration are therefore sufficient to identify the intended streams.
 
-The current graph runtime is serial and single-writer. If future execution
-replicates, reorders, or distributes stochastic element work, that work will
-need an addressable random domain derived from stable owner identity, event or
-frame sequence, and element/sample index. Sequential host seed consumption is
-not a correct multi-device policy.
+The current graph runtime is serial and single-writer. CUDA array fills are
+addressed by a node-local draw sequence, random domain, element, and sub-draw.
+If future execution replicates or distributes a stochastic owner, it will also
+need a stable owner identity and explicit frame or event sequence. Sequential
+host seed consumption is not a correct multi-device policy.
 
 ## Deterministic Configuration
 
@@ -104,3 +115,15 @@ GPU reductions and random providers may differ from CPU implementations.
 Deterministic validation should default to CPU unless the specific accelerator
 path has a documented deterministic contract. A GPU-ready algorithm must avoid
 host scalar indexing and hidden host/device RNG transfers.
+
+The prepared CUDA counter stream keeps seed advancement and sample generation
+on the device and is compatible with capture of its asynchronous random-fill
+operations. This does not claim that an arbitrary complete AOS graph is CUDA
+Graph-capturable; every other operation in that graph must independently avoid
+capture-time allocation and synchronization.
+
+AMDGPU graph owners currently retain `Xoshiro`. In particular, the qualified
+AMDGPU detector path mirrors Poisson sampling through preallocated host
+storage because the maintained AMDGPU compiler/runtime does not yet admit the
+exact per-pixel kernel. This is deterministic and tested, but it is not a
+device-only stochastic path.
