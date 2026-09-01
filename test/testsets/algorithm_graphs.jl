@@ -18,6 +18,12 @@ include(joinpath(
     "support",
     "hil_reference_systems.jl",
 ))
+include(joinpath(
+    dirname(dirname(@__DIR__)),
+    "examples",
+    "support",
+    "revolt_classic_hil.jl",
+))
 
 function warmed_graph_step_allocation_bytes(graph)
     step_graph!(graph)
@@ -1937,7 +1943,7 @@ end
             rng_seed=11,
         )
     diagnostics =
-        HILReferenceSystems.prepare_hil_reference_science_diagnostics()
+        HILReferenceSystems.prepare_hil_science_diagnostics()
     @test size(HILReferenceSystems.open_loop_psf(diagnostics)) == (128, 128)
     @test size(HILReferenceSystems.closed_loop_psf(diagnostics)) == (128, 128)
     @test HILReferenceSystems.open_loop_on_axis_strehl(diagnostics) ≈ 1.0f0
@@ -1948,7 +1954,7 @@ end
     sequence = step_hil_frame!(atmospheric.boundary)
     atmosphere_opd = graph_output(atmospheric.graph, Val(:atmosphere_opd))
     residual_opd = graph_output(atmospheric.graph, Val(:pupil_opd))
-    HILReferenceSystems.update_hil_reference_science_diagnostics!(
+    HILReferenceSystems.update_hil_science_diagnostics!(
         diagnostics,
         atmosphere_opd,
         residual_opd,
@@ -1965,7 +1971,7 @@ end
     @test HILReferenceSystems.closed_loop_on_axis_strehl(diagnostics) ≈
         HILReferenceSystems.open_loop_on_axis_strehl(diagnostics)
     @test @allocated(
-        HILReferenceSystems.update_hil_reference_science_diagnostics!(
+        HILReferenceSystems.update_hil_science_diagnostics!(
             diagnostics,
             atmosphere_opd,
             residual_opd,
@@ -2291,6 +2297,54 @@ end
     @test REVOLTHSDM277.provisional_mechanical_coupling(Float32) == 0.35f0
     @test REVOLTHSDM277.provisional_gaussian_influence_width(Float64) ≈
         0.08626550214129701
+end
+
+@testset "REVOLT Classic external-RTC preparation" begin
+    valid_subapertures = REVOLTClassicHIL.valid_subapertures()
+    @test size(valid_subapertures) == (16, 16)
+    @test count(valid_subapertures) == 188
+    @test Tuple(vec(sum(valid_subapertures; dims=2))) == (
+        4,
+        8,
+        10,
+        12,
+        14,
+        14,
+        16,
+        16,
+        16,
+        16,
+        14,
+        14,
+        12,
+        10,
+        8,
+        4,
+    )
+    @test REVOLTClassicHIL.command_count() == 277
+
+    calibration = REVOLTClassicHIL.prepare_calibration_system()
+    calibration_boundary = calibration.boundary
+    @test graph_name(calibration.graph) === :revolt_classic_hil_calibration
+    @test size(hil_frame_buffer(calibration_boundary)) == (352, 352)
+    @test all(iszero, calibration.uncompensated_opd)
+    sequence = step_hil_frame!(calibration_boundary)
+    flat_frame = copy(hil_frame_buffer(calibration_boundary))
+    @test all(isfinite, flat_frame)
+    @test sum(flat_frame) > 0
+    fill!(hil_command_buffer(calibration_boundary), 0.0f0)
+    hil_command_buffer(calibration_boundary)[143] = 2.0f-8
+    adopt_hil_command!(calibration_boundary, sequence)
+    @test step_hil_frame!(calibration_boundary) == UInt64(2)
+    @test hil_frame_buffer(calibration_boundary) != flat_frame
+
+    diagnostics = REVOLTClassicHIL.prepare_science_diagnostics()
+    @test size(HILReferenceSystems.open_loop_psf(diagnostics)) == (480, 480)
+    @test HILReferenceSystems.open_loop_on_axis_strehl(diagnostics) ≈ 1.0f0
+
+    atmospheric = REVOLTClassicHIL.prepare_hil_system()
+    @test graph_name(atmospheric.graph) === :revolt_classic_hil_fast_dm
+    @test size(hil_frame_buffer(atmospheric.boundary)) == (352, 352)
 end
 
 @testset "REVOLT Classic RTC-reference TOML path is executable" begin

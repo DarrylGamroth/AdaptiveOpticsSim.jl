@@ -694,7 +694,7 @@ function close_atmospheric_loop!(
         atmosphere_step=REFERENCE_ATMOSPHERE_STEP_S,
         rng_seed=1,
     )
-    diagnostics = prepare_hil_reference_science_diagnostics()
+    diagnostics = prepare_hil_science_diagnostics()
     boundary = prepared.boundary
     command = zeros(Float32, actuator_count())
     open_loop_values = Vector{Float32}(undef, frames)
@@ -704,7 +704,7 @@ function close_atmospheric_loop!(
     for frame_index in 1:frames
         atmosphere_opd = graph_output(prepared.graph, Val(:atmosphere_opd))
         residual_opd = graph_output(prepared.graph, Val(:pupil_opd))
-        update_hil_reference_science_diagnostics!(
+        update_hil_science_diagnostics!(
             diagnostics,
             atmosphere_opd,
             residual_opd,
@@ -903,8 +903,7 @@ function run_viewer_demo(;
                 atmosphere_step=REFERENCE_ATMOSPHERE_STEP_S,
                 rng_seed=1,
             )
-            science_diagnostics =
-                prepare_hil_reference_science_diagnostics()
+            science_diagnostics = prepare_hil_science_diagnostics()
             viewer_streams = create_viewer_streams(
                 prepared,
                 science_diagnostics,
@@ -916,7 +915,7 @@ function run_viewer_demo(;
                 Val(:atmosphere_opd),
             )
             residual_opd = graph_output(prepared.graph, Val(:pupil_opd))
-            update_hil_reference_science_diagnostics!(
+            update_hil_science_diagnostics!(
                 science_diagnostics,
                 atmosphere_opd,
                 residual_opd,
@@ -1015,7 +1014,7 @@ function run_viewer_demo(;
                     prepared.graph,
                     Val(:pupil_opd),
                 )
-                update_hil_reference_science_diagnostics!(
+                update_hil_science_diagnostics!(
                     science_diagnostics,
                     atmosphere_opd,
                     residual_opd,

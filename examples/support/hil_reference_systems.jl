@@ -12,8 +12,8 @@ export graph_path
 export influence_width
 export prepare_atmospheric_hil_reference_system
 export prepare_hil_reference_system
-export prepare_hil_reference_science_diagnostics
-export update_hil_reference_science_diagnostics!
+export prepare_hil_science_diagnostics
+export update_hil_science_diagnostics!
 export open_loop_psf
 export closed_loop_psf
 export open_loop_on_axis_strehl
@@ -36,7 +36,7 @@ const _REFERENCE_SCIENCE_WAVELENGTH_M = 750.0e-9
 const _REFERENCE_ATMOSPHERE_OPD_SCHEMA =
     "org.adaptiveopticssim.hil-reference.uncompensated-opd-m.f32/1"
 
-mutable struct PreparedHILReferenceScienceDiagnostics{P,I,A,T}
+mutable struct PreparedHILScienceDiagnostics{P,I,A,T}
     open_loop_pupil::P
     closed_loop_pupil::P
     open_loop_imaging::I
@@ -54,28 +54,32 @@ mutable struct PreparedHILReferenceScienceDiagnostics{P,I,A,T}
     closed_loop_on_axis_strehl::T
 end
 
-@inline open_loop_psf(diagnostics::PreparedHILReferenceScienceDiagnostics) =
+@inline open_loop_psf(diagnostics::PreparedHILScienceDiagnostics) =
     diagnostics.open_loop_psf
-@inline closed_loop_psf(diagnostics::PreparedHILReferenceScienceDiagnostics) =
+@inline closed_loop_psf(diagnostics::PreparedHILScienceDiagnostics) =
     diagnostics.closed_loop_psf
 @inline function open_loop_on_axis_strehl(
-    diagnostics::PreparedHILReferenceScienceDiagnostics,
+    diagnostics::PreparedHILScienceDiagnostics,
 )
     return diagnostics.open_loop_on_axis_strehl
 end
 @inline function closed_loop_on_axis_strehl(
-    diagnostics::PreparedHILReferenceScienceDiagnostics,
+    diagnostics::PreparedHILScienceDiagnostics,
 )
     return diagnostics.closed_loop_on_axis_strehl
 end
-@inline pupil_support(diagnostics::PreparedHILReferenceScienceDiagnostics) =
+@inline pupil_support(diagnostics::PreparedHILScienceDiagnostics) =
     pupil_support(diagnostics.open_loop_pupil)
 
-function _prepare_hil_reference_telescope()
+function _prepare_hil_science_telescope(
+    resolution::Integer,
+    telescope_diameter_m::Real,
+    central_obstruction_ratio::Real,
+)
     definition = TelescopeDefinition(
-        resolution=_REFERENCE_RESOLUTION,
-        diameter=_REFERENCE_TELESCOPE_DIAMETER_M,
-        central_obstruction=0.0,
+        resolution=resolution,
+        diameter=telescope_diameter_m,
+        central_obstruction=central_obstruction_ratio,
         pupil_reflectivity=1.0,
         revision=1,
         T=Float32,
@@ -84,22 +88,33 @@ function _prepare_hil_reference_telescope()
 end
 
 """
-    prepare_hil_reference_science_diagnostics()
+    prepare_hil_science_diagnostics(; resolution=64,
+        telescope_diameter_m=1.0, central_obstruction_ratio=0.0,
+        wavelength_m=750e-9)
 
-Prepare host-resident, diffraction-limited-normalized, 750 nm science imaging
-for the maintained HIL reference aperture. The two paths accept an
+Prepare host-resident, diffraction-limited-normalized science imaging for one
+explicitly declared HIL aperture and wavelength. The two paths accept an
 uncompensated OPD and its corrected residual independently. Each published PSF
 is normalized by the exact, unsampled diffraction-limited peak of the matching
-aperture. The on-axis Strehl ratio is evaluated independently from the
-coherent pupil sum, so it does not depend on whether the focal-plane sampling
-places the optical axis on a pixel. It includes image motion rather than
-recentering the PSF.
+aperture. The on-axis Strehl ratio is evaluated independently from the coherent
+pupil sum, so it does not depend on whether the focal-plane sampling places the
+optical axis on a pixel. It includes image motion rather than recentering the
+PSF.
 """
-function prepare_hil_reference_science_diagnostics()
-    telescope = _prepare_hil_reference_telescope()
+function prepare_hil_science_diagnostics(;
+    resolution::Integer=_REFERENCE_RESOLUTION,
+    telescope_diameter_m::Real=_REFERENCE_TELESCOPE_DIAMETER_M,
+    central_obstruction_ratio::Real=0.0,
+    wavelength_m::Real=_REFERENCE_SCIENCE_WAVELENGTH_M,
+)
+    telescope = _prepare_hil_science_telescope(
+        resolution,
+        telescope_diameter_m,
+        central_obstruction_ratio,
+    )
     source = Source(
         band=:custom,
-        wavelength=_REFERENCE_SCIENCE_WAVELENGTH_M,
+        wavelength=wavelength_m,
         photon_irradiance=1.0,
         T=Float32,
     )
@@ -141,7 +156,7 @@ function prepare_hil_reference_science_diagnostics()
     open_loop_psf_values ./= diffraction_limited_peak
     closed_loop_psf_values ./= diffraction_limited_peak
     one_strehl = one(diffraction_limited_peak)
-    return PreparedHILReferenceScienceDiagnostics(
+    return PreparedHILScienceDiagnostics(
         open_loop_pupil,
         closed_loop_pupil,
         open_loop_imaging,
@@ -154,21 +169,21 @@ function prepare_hil_reference_science_diagnostics()
         closed_loop_coherent_imag,
         diffraction_limited_peak,
         diffraction_limited_field_power,
-        Float32(_REFERENCE_SCIENCE_WAVELENGTH_M),
+        Float32(wavelength_m),
         one_strehl,
         one_strehl,
     )
 end
 
 """
-    update_hil_reference_science_diagnostics!(diagnostics,
+    update_hil_science_diagnostics!(diagnostics,
         uncompensated_opd, residual_opd)
 
 Form the open-loop and corrected science PSFs from complete pupil OPD maps in
 metres. This mutates only the prepared diagnostic owner and returns it.
 """
-function update_hil_reference_science_diagnostics!(
-    diagnostics::PreparedHILReferenceScienceDiagnostics,
+function update_hil_science_diagnostics!(
+    diagnostics::PreparedHILScienceDiagnostics,
     uncompensated_opd::AbstractMatrix,
     residual_opd::AbstractMatrix,
 )
