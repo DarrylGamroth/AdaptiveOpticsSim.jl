@@ -106,6 +106,22 @@ end
 @inline _captured_graph_node_count(execution::_PreparedCapturedGraphExecution) =
     execution.captured_count
 
+@inline function _synchronize_prepared_graph_execution_context!(
+    ::_PreparedStreamGraphExecution,
+    context,
+)
+    _synchronize_prepared_device_execution_context!(context)
+    return nothing
+end
+
+@inline function _synchronize_prepared_graph_execution_context!(
+    ::_PreparedCapturedGraphExecution,
+    context,
+)
+    _synchronize_prepared_device_execution_context_blocking!(context)
+    return nothing
+end
+
 @inline function _preflight_prepared_graph_execution!(
     ::_PreparedStreamGraphExecution,
     nodes::NamedTuple,

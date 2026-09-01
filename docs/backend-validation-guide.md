@@ -131,6 +131,8 @@ For native CUDA Graph or HIP Graph execution, additionally require:
 - the recorded device operation performs no dynamic execution-storage
   allocation, synchronization, result query, or host-side scientific-state
   mutation
+- recorded and replayed work does not depend on a GPU host callback or
+  AMDGPU HostCall
 - Julia compilation, backend recording, and native graph instantiation remain
   cold preparation work; repeated replay uses the retained executable and
   bounded completion hooks
@@ -164,6 +166,10 @@ submission, completion-ticket wait, and target-ready service time separately.
 an accelerator backend and requires every node in the graph to qualify. The
 maintained REVOLT `fast_dm` graphs satisfy this contract with unit detector
 binning; the `full_optical` graphs retain the general unqualified DM node.
+AMDGPU stream execution retains the backend's ordinary HostCall-compatible
+synchronization. Captured execution uses a blocking completion wait to avoid
+host event/task allocation after replay; this is valid because capture
+admission excludes HostCalls.
 Do not compare submission against synchronized target-ready or host-ready
 latency as though they were the same metric.
 

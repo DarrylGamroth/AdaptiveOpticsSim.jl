@@ -72,7 +72,10 @@ end
 function _drain_failed_graph_submission!(graph::PreparedAlgorithmGraph)
     try
         _with_prepared_device_execution_context(graph.context) do
-            _synchronize_prepared_device_execution_context!(graph.context)
+            _synchronize_prepared_graph_execution_context!(
+                graph.execution,
+                graph.context,
+            )
         end
     catch
         # Preserve the submission exception. The graph remains fail-stop, so
@@ -144,7 +147,10 @@ function wait_graph_step!(ticket::GraphStepTicket)
     ))
     try
         _with_prepared_device_execution_context(graph.context) do
-            _synchronize_prepared_device_execution_context!(graph.context)
+            _synchronize_prepared_graph_execution_context!(
+                graph.execution,
+                graph.context,
+            )
         end
         _complete_prepared_graph_execution!(graph.execution, graph.nodes)
     catch
@@ -188,11 +194,17 @@ function reset_graph!(graph::PreparedAlgorithmGraph)
         try
             # A prior submission or completion failure may have left backend
             # work outstanding even though no usable ticket remains.
-            _synchronize_prepared_device_execution_context!(graph.context)
+            _synchronize_prepared_graph_execution_context!(
+                graph.execution,
+                graph.context,
+            )
             _reset_nodes!(values(graph.nodes))
             _reset_delayed_links!(graph.delayed_links, state.delayed_values)
         finally
-            _synchronize_prepared_device_execution_context!(graph.context)
+            _synchronize_prepared_graph_execution_context!(
+                graph.execution,
+                graph.context,
+            )
         end
     end
     state.step_sequence = UInt64(0)

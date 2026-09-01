@@ -326,6 +326,17 @@ end
     ::_HostPreparedDeviceExecutionContext,
 ) = nothing
 
+# Captured execution may select a backend completion path that avoids host-side
+# event/task bookkeeping. The default preserves ordinary stream semantics;
+# accelerator extensions may specialize this only for capture-qualified work,
+# which cannot depend on device host callbacks.
+@inline function _synchronize_prepared_device_execution_context_blocking!(
+    context::_AbstractPreparedDeviceExecutionContext,
+)
+    _synchronize_prepared_device_execution_context!(context)
+    return nothing
+end
+
 #
 # Prepared accelerator command graphs
 #

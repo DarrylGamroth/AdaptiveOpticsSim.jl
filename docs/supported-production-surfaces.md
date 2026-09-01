@@ -88,6 +88,11 @@ Poisson array sampling on the selected device. Hardware tests also compare
 captured finite-atmosphere replay with stream execution and verify completed
 host epoch publication and reset. They compare captured Shack-Hartmann,
 Pyramid, CCD, CMOS, and EMCCD execution with the corresponding stream results.
+CUDA and AMDGPU use the same KernelAbstractions SplitMix64 counter kernels and
+device draw-sequence model. Fixed-seed reset and replay are reproducible on each
+qualified backend. Cross-vendor bitwise floating-point identity is not claimed,
+because normal and Poisson transforms may use different vendor transcendental
+lowering.
 The maintained REVOLT `fast_dm` graphs are complete five-node captured graphs
 when detector binning is one. The `full_optical` profiles remain stream-only
 because their general coordinate-sampled Gaussian DM node is not qualified.

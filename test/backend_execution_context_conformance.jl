@@ -32,5 +32,9 @@ function assert_prepared_device_execution_context_conformance(
     @test @inferred(
         Backends._synchronize_prepared_device_execution_context!(context)) ===
         nothing
+    @test @inferred(
+        Backends._synchronize_prepared_device_execution_context_blocking!(
+            context,
+        )) === nothing
     return nothing
 end

@@ -111,9 +111,12 @@ evolving state needed during replay must also remain device-resident.
 `GraphNodeCaptureSafe()` only when its enqueue path has fixed array identities,
 keeps all evolving replay state on the device, does not mutate scientific host
 state, and records no dynamic execution-storage allocation, synchronization,
-or device-result query. Julia compilation, backend recording, and native graph
-instantiation are cold preparation work; replay launches the retained native
-executable. The maintained built-in qualification covers finite multilayer
+device-result query, or GPU host callback. Julia compilation, backend
+recording, and native graph instantiation are cold preparation work; replay
+launches the retained native executable. AMDGPU therefore uses its blocking,
+allocation-light completion wait only for captured execution; ordinary stream
+execution retains HostCall-compatible synchronization. The maintained built-in
+qualification covers finite multilayer
 atmosphere evolution, the regular-grid separable Gaussian DM, pupil-OPD
 composition, diffractive Shack-Hartmann rate formation, both maintained Pyramid
 modulation strategies, and qualified complete-frame CCD, CMOS, and EMCCD

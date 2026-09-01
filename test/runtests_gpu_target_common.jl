@@ -605,6 +605,8 @@ function run_captured_graph_execution_smoke(
     @test second_surface != first_surface
     @test second_surface ≈ direct_surface rtol = 2.0f-5 atol = 1.0f-12
     @test Array(graph_output(graph, Val(:pupil_opd))) == second_surface
+    step_graph!(graph)
+    @test (@allocated step_graph!(graph)) <= 256
 
     reset_graph!(graph)
     @test captured_graph_node_count(graph) == 2

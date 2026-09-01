@@ -64,7 +64,10 @@ function _copy_hil_buffer!(graph::PreparedAlgorithmGraph, destination, source)
         try
             copyto!(destination, source)
         finally
-            _synchronize_prepared_device_execution_context!(graph.context)
+            _synchronize_prepared_graph_execution_context!(
+                graph.execution,
+                graph.context,
+            )
         end
     end
     return destination

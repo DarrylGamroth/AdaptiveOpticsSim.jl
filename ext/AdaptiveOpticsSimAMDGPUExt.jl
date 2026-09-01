@@ -165,6 +165,16 @@ end
 @inline function Backends._synchronize_prepared_device_execution_context!(
     context::AMDGPUPreparedDeviceExecutionContext,
 )
+    AMDGPU.synchronize(context.stream)
+    return nothing
+end
+
+# AMDGPU's blocking wait avoids event/task allocation but is incompatible with
+# active HostCalls. AlgorithmGraphs selects this method only for native captured
+# execution, whose admission contract excludes host callbacks.
+@inline function Backends._synchronize_prepared_device_execution_context_blocking!(
+    context::AMDGPUPreparedDeviceExecutionContext,
+)
     AMDGPU.synchronize(context.stream; blocking=true)
     return nothing
 end

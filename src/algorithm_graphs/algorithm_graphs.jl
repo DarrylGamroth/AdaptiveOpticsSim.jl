@@ -25,6 +25,7 @@ import ..Backends:
     _launch_prepared_device_graph!,
     _reset_graph_rng!,
     _synchronize_prepared_device_execution_context!,
+    _synchronize_prepared_device_execution_context_blocking!,
     _with_prepared_device_execution_context,
     allocate_device_array,
     array_backend_type,
