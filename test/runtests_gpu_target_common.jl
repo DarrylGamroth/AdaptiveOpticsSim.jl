@@ -66,6 +66,13 @@ backend_target_branch_mode(::Type{Backends.AMDGPUBackendTag}) =
 graph_rng_device_resident(::Type{Backends.CUDABackendTag}) = true
 graph_rng_device_resident(::Type{Backends.AMDGPUBackendTag}) = true
 
+# CUDA's capture-qualified completion path must bypass CUDA.jl's allocating
+# task-based wait. AMDGPU may retain a small runtime-owned event allocation in
+# these synthetic fixtures; the complete instrument benchmark gates its own
+# warmed cycle allocation separately.
+captured_graph_step_allocation_budget(::Type{Backends.CUDABackendTag}) = 0
+captured_graph_step_allocation_budget(::Type{Backends.AMDGPUBackendTag}) = 256
+
 function run_graph_rng_capture_replay(
     ::Type{B},
 ) where {B<:Backends.GPUBackendTag}
@@ -396,7 +403,8 @@ function run_captured_coordinate_gaussian_graph_execution_smoke(
     @test second_surface ≈
         Array(graph_output(stream_graph, Val(:surface))) rtol = 2.0f-5 atol = 1.0f-12
     step_graph!(captured_graph)
-    @test (@allocated step_graph!(captured_graph)) <= 256
+    @test (@allocated step_graph!(captured_graph)) <=
+        captured_graph_step_allocation_budget(B)
 
     reset_graph!(stream_graph)
     reset_graph!(captured_graph)
@@ -871,7 +879,8 @@ function run_captured_graph_execution_smoke(
     @test second_surface ≈ direct_surface rtol = 2.0f-5 atol = 1.0f-12
     @test Array(graph_output(graph, Val(:pupil_opd))) == second_surface
     step_graph!(graph)
-    @test (@allocated step_graph!(graph)) <= 256
+    @test (@allocated step_graph!(graph)) <=
+        captured_graph_step_allocation_budget(B)
 
     reset_graph!(graph)
     @test captured_graph_node_count(graph) == 2

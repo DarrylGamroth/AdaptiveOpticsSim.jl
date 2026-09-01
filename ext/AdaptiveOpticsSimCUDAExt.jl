@@ -157,6 +157,17 @@ end
     return nothing
 end
 
+# CUDA.jl's ordinary nonblocking wait coordinates through a helper thread and
+# Julia conditions. Native captured execution excludes host callbacks, so a
+# direct blocking stream wait is safe here and avoids repeated scheduler
+# latency and task bookkeeping at every graph and HIL transfer boundary.
+@inline function Backends._synchronize_prepared_device_execution_context_blocking!(
+    context::CUDAPreparedDeviceExecutionContext,
+)
+    CUDA.synchronize(context.stream; blocking=true)
+    return nothing
+end
+
 @inline function Backends._prepare_device_execution_event(
     ::CUDAPreparedDeviceExecutionContext,
 )
