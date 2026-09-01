@@ -60,6 +60,40 @@ end
     end
 end
 
+# Keep the asynchronous separable path within fixed prepared storage. Some
+# accelerator BLAS wrappers materialize scalar arguments in fresh device
+# allocations, which cannot be admitted by repeated command-graph capture.
+@kernel function dm_separable_left_kernel!(tmp, xbasis, coefs_grid)
+    i, j = @index(Global, NTuple)
+    if i <= size(tmp, 1) && j <= size(tmp, 2)
+        value = zero(eltype(tmp))
+        @inbounds for k in axes(xbasis, 2)
+            value = muladd(xbasis[i, k], coefs_grid[k, j], value)
+        end
+        @inbounds tmp[i, j] = value
+    end
+end
+
+@kernel function dm_separable_right_pupil_kernel!(
+    opd,
+    tmp,
+    ybasis_t,
+    pupil,
+)
+    i, j = @index(Global, NTuple)
+    if i <= size(opd, 1) && j <= size(opd, 2)
+        value = zero(eltype(opd))
+        @inbounds for k in axes(tmp, 2)
+            value = muladd(tmp[i, k], ybasis_t[k, j], value)
+        end
+        @inbounds opd[i, j] = ifelse(
+            pupil[i, j],
+            value,
+            zero(eltype(opd)),
+        )
+    end
+end
+
 abstract type AbstractDMTopology end
 abstract type AbstractDMInfluenceModel end
 abstract type AbstractDMActuatorModel end
@@ -1028,11 +1062,23 @@ end
     coefs_grid = dm.state.coefs_grid
     coefs_grid === nothing && throw(InvalidConfiguration(
         "separable DM application requires a grid-backed command buffer"))
-    mul!(tmp, xbasis, coefs_grid)
-    mul!(dm.state.opd, tmp, ybasis_t)
-    launch_kernel_async!(style, dm_apply_pupil_kernel!, dm.state.opd,
+    launch_kernel_async!(
+        style,
+        dm_separable_left_kernel!,
+        tmp,
+        xbasis,
+        coefs_grid;
+        ndrange=size(tmp),
+    )
+    launch_kernel_async!(
+        style,
+        dm_separable_right_pupil_kernel!,
+        dm.state.opd,
+        tmp,
+        ybasis_t,
         _separable_surface_support(dm.state.modes);
-        ndrange=size(dm.state.opd))
+        ndrange=size(dm.state.opd),
+    )
     return dm.state.opd
 end
 

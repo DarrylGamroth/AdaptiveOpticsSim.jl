@@ -161,9 +161,13 @@ function run_captured_graph_execution_smoke(
 
     copyto!(command, Float32[-1, 2, -0.5, 0.25, 1] .* 1.0f-8)
     Backends.synchronize_backend!(Backends.execution_style(command))
+    dm_owner = AlgorithmGraphs.prepared_graph_node(graph, Val(:dm))
+    AlgorithmGraphs.step_graph_node!(dm_owner)
+    direct_surface = Array(graph_output(graph, Val(:surface)))
     step_graph!(graph)
     second_surface = Array(graph_output(graph, Val(:surface)))
     @test second_surface != first_surface
+    @test second_surface ≈ direct_surface rtol = 2.0f-5 atol = 1.0f-12
     @test Array(graph_output(graph, Val(:pupil_opd))) == second_surface
 
     reset_graph!(graph)
