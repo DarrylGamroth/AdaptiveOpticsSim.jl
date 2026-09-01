@@ -89,6 +89,11 @@ struct CUDAPreparedDeviceExecutionContext{
     compute_device::D
 end
 
+struct CUDAPreparedDeviceGraph{Graph,Executable}
+    graph::Graph
+    executable::Executable
+end
+
 function Backends._prepare_device_execution_context(
     storage::CUDA.CuArray,
 )
@@ -134,6 +139,23 @@ end
     context::CUDAPreparedDeviceExecutionContext,
 )
     CUDA.synchronize(context.stream)
+    return nothing
+end
+
+function Backends._capture_prepared_device_graph(
+    f::F,
+    context::CUDAPreparedDeviceExecutionContext,
+) where {F}
+    graph = CUDA.capture(f)
+    executable = CUDA.instantiate(graph)
+    return CUDAPreparedDeviceGraph(graph, executable)
+end
+
+@inline function Backends._launch_prepared_device_graph!(
+    captured::CUDAPreparedDeviceGraph,
+    context::CUDAPreparedDeviceExecutionContext,
+)
+    CUDA.launch(captured.executable, context.stream)
     return nothing
 end
 

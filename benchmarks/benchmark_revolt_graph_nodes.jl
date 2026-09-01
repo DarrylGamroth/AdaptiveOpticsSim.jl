@@ -49,6 +49,11 @@ const PROFILE_GRAPH_PROFILE = Symbol(lowercase(strip(get(
     "AOS_REVOLT_GRAPH_PROFILE",
     "full_optical",
 ))))
+const PROFILE_EXECUTION = Symbol(lowercase(strip(get(
+    ENV,
+    "AOS_REVOLT_GRAPH_EXECUTION",
+    "stream",
+))))
 const PROFILE_ARCHITECTURES = Tuple(Symbol(strip(value)) for value in split(
     get(ENV, "AOS_REVOLT_GRAPH_ARCHITECTURES", "classic,copper"),
     ',';
@@ -140,8 +145,14 @@ function configure_profile!()
         "AOS_REVOLT_GRAPH_PROFILE must select one of " *
         join(REVOLTHILGraphs.supported_profiles(), ", "),
     )
+    PROFILE_EXECUTION in (:stream, :captured) || error(
+        "AOS_REVOLT_GRAPH_EXECUTION must be stream or captured",
+    )
     return nothing
 end
+
+@inline requested_graph_execution() = PROFILE_EXECUTION === :captured ?
+    CapturedGraphExecution() : StreamGraphExecution()
 
 function requested_backend()
     if REQUESTED_BACKEND == "cpu"
@@ -205,7 +216,11 @@ function prepare_profile_graph(
         ),
     )
     start = time_ns()
-    graph = prepare_algorithm_graph(definition; target)
+    graph = prepare_algorithm_graph(
+        definition;
+        target,
+        execution=requested_graph_execution(),
+    )
     preparation_ns = Int64(time_ns() - start)
     return (; graph, target, preparation_ns)
 end
@@ -306,6 +321,8 @@ function profile_graph_execution(profile::RevoltGraphProfile, backend)
     return Dict{String,Any}(
         "preparation_ns" => prepared.preparation_ns,
         "target" => string(prepared.target),
+        "execution_policy" => String(PROFILE_EXECUTION),
+        "captured_graph_nodes" => captured_graph_node_count(graph),
         "nodes" => per_node,
         "node_mean_sum_ns" => node_mean_sum,
         "graph_submission" => submission_summary,
@@ -358,6 +375,8 @@ function profile_hil_execution(profile::RevoltGraphProfile, backend)
     return Dict{String,Any}(
         "preparation_ns" => prepared.preparation_ns,
         "target" => string(prepared.target),
+        "execution_policy" => String(PROFILE_EXECUTION),
+        "captured_graph_nodes" => captured_graph_node_count(graph),
         "frame_host_ready" => latency_summary(frame_recorder),
         "command_target_ready" => latency_summary(command_recorder),
         "lockstep_cycle" => latency_summary(cycle_recorder),
@@ -418,6 +437,7 @@ function main()
         results[index] = Dict{String,Any}(
             "name" => String(profile.name),
             "graph_profile" => String(PROFILE_GRAPH_PROFILE),
+            "execution_policy" => String(PROFILE_EXECUTION),
             "graph_file" => relpath(profile.graph_file, REPOSITORY_ROOT),
             "graph_execution" => graph_execution,
             "hil_execution" => hil_execution,

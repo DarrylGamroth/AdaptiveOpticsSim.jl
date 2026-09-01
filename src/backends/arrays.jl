@@ -327,6 +327,35 @@ end
 ) = nothing
 
 #
+# Prepared accelerator command graphs
+#
+# Device-command-graph capture is deliberately an opt-in extension seam. The
+# callback must enqueue only fixed-address work on the retained context stream;
+# it must not synchronize, allocate execution storage, query device results, or
+# mutate host-side scientific state. Backend extensions retain both the native
+# graph and executable handles in one concrete owner.
+#
+function _capture_prepared_device_graph(
+    ::F,
+    context::_AbstractPreparedDeviceExecutionContext,
+) where {F}
+    throw(InvalidConfiguration(
+        "prepared execution context $(typeof(context)) does not support " *
+        "device-command-graph capture",
+    ))
+end
+
+function _launch_prepared_device_graph!(
+    captured,
+    context::_AbstractPreparedDeviceExecutionContext,
+)
+    throw(InvalidConfiguration(
+        "captured device graph $(typeof(captured)) cannot launch on " *
+        "prepared execution context $(typeof(context))",
+    ))
+end
+
+#
 # Prepared point-to-point array transfers
 #
 # A transfer implementation is deliberately opt-in for each supported source
@@ -586,6 +615,56 @@ end
         kernel(style.backend)(args...; ndrange=ndrange, workgroupsize=workgroupsize)
     end
     return nothing
+end
+
+@kernel function _copy_packed_array_kernel!(destination, source, count::Int)
+    index = @index(Global, Linear)
+    if index <= count
+        @inbounds destination[index] = source[index]
+    end
+end
+
+"""
+Queue a same-backend copy between fixed-shape packed arrays without imposing an
+accelerator completion boundary. Callers own shape and device admission before
+the repeated path.
+"""
+@inline function copyto_backend_async!(destination, source)
+    size(destination) == size(source) || throw(InvalidConfiguration(
+        "asynchronous backend copies require equal packed array shapes",
+    ))
+    destination === source && return destination
+    isempty(destination) && return destination
+    return _copyto_backend_async!(
+        execution_style(destination),
+        destination,
+        source,
+    )
+end
+
+@inline function _copyto_backend_async!(
+    ::ScalarCPUStyle,
+    destination,
+    source,
+)
+    copyto!(destination, source)
+    return destination
+end
+
+@inline function _copyto_backend_async!(
+    style::AcceleratorStyle,
+    destination,
+    source,
+)
+    launch_kernel_async!(
+        style,
+        _copy_packed_array_kernel!,
+        destination,
+        source,
+        length(destination);
+        ndrange=length(destination),
+    )
+    return destination
 end
 
 @inline function queue_kernel!(phase::KernelLaunchPhase{<:AcceleratorStyle}, kernel, args...; ndrange)

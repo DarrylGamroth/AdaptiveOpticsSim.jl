@@ -61,6 +61,12 @@ AMDGPU validation must record the Julia, AMDGPU, ROCm, kernel/driver, and device
 versions. Run with scalar indexing disabled. Check output values, exact device
 identity, and public completion behavior.
 
+The hardware target also records and replays the qualified regular-grid DM as a
+HIP Graph, changes the retained command buffer between replays, and verifies
+that the following uncaptured graph node observes the new result on the same
+stream. This is required evidence for `CapturedGraphExecution`; a standalone
+HIP Graph smoke test is not sufficient.
+
 ## CUDA On WSL
 
 Run the CUDA target on the WSL host:
@@ -109,6 +115,17 @@ A GPU graph is admitted only when:
 - no hidden host transfer or CPU fallback occurs
 - one pending completion ticket prevents graph storage reuse
 
+For native CUDA Graph or HIP Graph execution, additionally require:
+
+- the adapter explicitly returns `GraphNodeCaptureSafe()`
+- every recorded address remains fixed for the prepared run
+- evolving replay state is device-resident
+- capture performs no allocation, synchronization, result query, or host-side
+  scientific-state mutation
+- replay with changed input-buffer contents produces the corresponding changed
+  output
+- directly streamed nodes after a captured node observe same-stream ordering
+
 The lockstep HIL boundary intentionally owns host `Array` exchange buffers. A
 completed GPU detector frame is copied to that host buffer only after successful
 graph execution, and a complete validated command is copied back before the next
@@ -120,11 +137,18 @@ scripts for measured frame service time:
 ~~~bash
 julia --project=. scripts/profile_revolt_hil_runtime.jl
 julia --project=. benchmarks/benchmark_revolt_graph_nodes.jl
+AOS_REVOLT_GRAPH_BACKEND=amdgpu \
+  AOS_REVOLT_GRAPH_PROFILE=fast_dm \
+  AOS_REVOLT_GRAPH_EXECUTION=captured \
+  julia --project=benchmarks/amdgpu \
+  benchmarks/benchmark_revolt_graph_nodes.jl
 ~~~
 
 Record architecture, graph profile, resolution, noise settings, warmup, sample
 count, and synchronization boundary. The graph-node benchmark records
 submission, completion-ticket wait, and target-ready service time separately.
+`AOS_REVOLT_GRAPH_EXECUTION=stream` is the default; use `captured` only with an
+accelerator backend and a graph containing at least one qualified node.
 Do not compare submission against synchronized target-ready or host-ready
 latency as though they were the same metric.
 

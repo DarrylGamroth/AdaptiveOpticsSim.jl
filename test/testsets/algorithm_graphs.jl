@@ -1012,6 +1012,8 @@ end
         ),
     )
     graph = prepare_algorithm_graph(definition)
+    @test graph_execution_policy(graph) isa StreamGraphExecution
+    @test captured_graph_node_count(graph) == 0
     step_graph!(graph)
     general_surface = graph_output(graph, Val(:general_surface))
     grid_surface = graph_output(graph, Val(:grid_surface))
@@ -1022,6 +1024,11 @@ end
 
     reset_graph!(graph)
     @test all(iszero, grid_surface)
+
+    @test_throws InvalidConfiguration prepare_algorithm_graph(
+        definition;
+        execution=CapturedGraphExecution(),
+    )
 
     duplicate_mapping = algorithm_graph(
         (grid_node,);

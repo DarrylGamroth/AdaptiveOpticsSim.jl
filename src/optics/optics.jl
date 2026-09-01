@@ -39,6 +39,7 @@ import ..Backends:
     begin_kernel_phase,
     compute_device,
     compute_device_backend,
+    copyto_backend_async!,
     execute_fft_plan!,
     execution_style,
     finish_kernel_phase!,

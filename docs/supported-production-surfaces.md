@@ -58,6 +58,10 @@ is not a continuously available release gate. Both policies require:
 - explicit synchronization at public completion boundaries
 - numerical or statistical parity against the declared CPU reference
 
+The accelerator graph surface includes opt-in CUDA Graph and HIP Graph replay
+of the qualified regular-grid separable Gaussian DM node, interleaved with
+ordinary same-stream nodes.
+
 Prepared graphs provide a bounded capacity-one asynchronous submission
 boundary. The graph sequence and caller-visible output readiness publish only
 when the completion ticket is consumed. Atmosphere-layer accumulation and
@@ -70,12 +74,14 @@ only when every node and bound array supports that exact target. The lockstep
 HIL boundary explicitly copies complete products and commands through host
 `Array` buffers.
 
-Prepared CUDA stochastic graph owners keep their counter state and array
-sampling on the selected device; the asynchronous random-fill sequence has a
-CUDA Graph replay test. This is not yet a claim that every complete AOS graph
-can be captured. AMDGPU detector Poisson sampling uses its declared,
-preallocated host-mirror strategy and therefore is not a device-only random
-path.
+`CapturedGraphExecution()` records only adapters that explicitly prove the
+fixed-address device replay contract. CUDA and AMDGPU hardware tests replay the
+regular-grid DM with changed command contents and then execute an uncaptured
+consumer on the same stream. Prepared CUDA stochastic graph owners additionally
+keep their counter state and array sampling on the selected device. These are
+not claims that a complete AOS graph can be captured. AMDGPU detector Poisson
+sampling uses its declared, preallocated host-mirror strategy and therefore is
+not a device-only random path.
 
 Metal and AppleAccelerate are optional/manual surfaces and are not implied by
 the AMDGPU or CUDA claims.

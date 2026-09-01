@@ -3,6 +3,7 @@ export AlgorithmNodeDefinition, AlgorithmGraphDefinition
 export AlgorithmLink, DelayedAlgorithmLink
 export GraphInputDefinition, GraphOutputDefinition
 export PreparedAlgorithmGraph, GraphStepTicket
+export StreamGraphExecution, CapturedGraphExecution
 export PreparedGraphHILBoundary
 export ModelTimestamp, ModelDuration, PeriodicSchedule
 export model_nanoseconds, model_time_seconds, model_duration_seconds
@@ -33,6 +34,7 @@ export prepare_graph_hil_boundary, step_hil_frame!, step_hil_frame_at!
 export adopt_hil_command!, reset_hil_boundary!
 export hil_command_buffer, hil_frame_buffer, hil_boundary_status
 export graph_name, graph_step_sequence, graph_step_pending, graph_failed
+export graph_execution_policy, captured_graph_node_count
 export prepare_boundary_model_time_driver
 export prepare_captured_model_time_driver, next_model_time_capture
 export model_timestamp, model_time_uncertainty, model_time_provenance
@@ -44,6 +46,8 @@ public prepared_graph_node
 public graph_port_contract
 public graph_node_ports, prepare_graph_node
 public step_graph_node!, enqueue_graph_node!, reset_graph_node!
+public graph_node_capture_capability
+public GraphNodeCaptureSafe, GraphNodeCaptureUnsupported
 public DiscreteIntegratorNode, DiscreteIntegratorNodeConfig
 public DiscreteIntegratorNodeProps
 public ClosedLoopCorrectionNode, ClosedLoopCorrectionNodeConfig

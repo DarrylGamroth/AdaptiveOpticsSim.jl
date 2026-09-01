@@ -108,7 +108,11 @@ function step_graph_async!(graph::PreparedAlgorithmGraph)
     state.pending = true
     try
         _with_prepared_device_execution_context(graph.context) do
-            _enqueue_nodes!(values(graph.nodes))
+            _enqueue_prepared_graph_execution!(
+                graph.execution,
+                graph.nodes,
+                graph.context,
+            )
             _commit_delayed_links!(graph.delayed_links, state.delayed_values)
         end
     catch

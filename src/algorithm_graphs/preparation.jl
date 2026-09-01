@@ -153,6 +153,18 @@ function reset_graph_node!(owner)
     ))
 end
 
+"""
+    graph_node_capture_capability(owner)
+
+Return `GraphNodeCaptureSafe()` only when `enqueue_graph_node!` submits a
+fixed-address, replay-equivalent accelerator command sequence without host
+state mutation, allocation, synchronization, result queries, or pointer
+replacement, and when reset preserves those addresses. The conservative
+default is `GraphNodeCaptureUnsupported()`.
+"""
+@inline graph_node_capture_capability(owner) =
+    GraphNodeCaptureUnsupported()
+
 function _allocate_graph_buffer(
     target::AbstractComputeDevice,
     format::_GraphPortFormat{T,N},
@@ -197,7 +209,7 @@ function _validate_graph_buffer(
 end
 
 @inline function _copy_graph_buffer!(destination, source)
-    copyto!(destination, source)
+    copyto_backend_async!(destination, source)
     return destination
 end
 
@@ -865,6 +877,7 @@ struct PreparedAlgorithmGraph{
     Target<:AbstractComputeDevice,
     Context,
     Nodes<:NamedTuple,
+    Execution,
     DelayedLinks<:Tuple,
     Inputs<:NamedTuple,
     Outputs<:NamedTuple,
@@ -874,6 +887,7 @@ struct PreparedAlgorithmGraph{
     target::Target
     context::Context
     nodes::Nodes
+    execution::Execution
     delayed_links::DelayedLinks
     inputs::Inputs
     outputs::Outputs
@@ -881,18 +895,23 @@ struct PreparedAlgorithmGraph{
 end
 
 """
-    prepare_algorithm_graph(definition; target=HostComputeDevice())
+    prepare_algorithm_graph(definition; target=HostComputeDevice(),
+                            execution=StreamGraphExecution())
 
 Admit every node's fixed ports, validate all exact formats and connections,
 allocate intermediate and delayed storage, then prepare every node against its
 exact frame-data buffers and startup sparse parameters in one concrete
 single-writer graph owner. Every graph buffer must be native packed storage on
 the exact `target`; preparation never inserts an implicit host/device transfer.
+`CapturedGraphExecution()` records only node owners that explicitly satisfy the
+device-command-graph capture contract; other nodes retain ordinary same-stream
+execution.
 """
 function _prepare_algorithm_graph(
     definition::AlgorithmGraphDefinition,
     target::AbstractComputeDevice,
     context,
+    execution,
 )
     admitted_nodes = _admitted_graph_nodes(definition)
     _validate_parameters!(admitted_nodes, definition.parameters, target)
@@ -932,6 +951,11 @@ function _prepare_algorithm_graph(
         admitted_nodes,
         node_outputs,
     )
+    prepared_execution = _prepare_graph_execution(
+        execution,
+        values(nodes),
+        context,
+    )
     state = AlgorithmGraphState(
         delayed_values,
         UInt64(0),
@@ -944,6 +968,7 @@ function _prepare_algorithm_graph(
         target,
         context,
         nodes,
+        prepared_execution,
         prepared_delays,
         prepared_inputs,
         outputs,
@@ -954,11 +979,18 @@ end
 function prepare_algorithm_graph(
     definition::AlgorithmGraphDefinition;
     target::AbstractComputeDevice=HostComputeDevice(),
+    execution::Union{StreamGraphExecution,CapturedGraphExecution}=
+        StreamGraphExecution(),
 )
     context = _prepare_device_execution_context(target)
     return _with_prepared_device_execution_context(context) do
         try
-            return _prepare_algorithm_graph(definition, target, context)
+            return _prepare_algorithm_graph(
+                definition,
+                target,
+                context,
+                execution,
+            )
         finally
             _synchronize_prepared_device_execution_context!(context)
         end

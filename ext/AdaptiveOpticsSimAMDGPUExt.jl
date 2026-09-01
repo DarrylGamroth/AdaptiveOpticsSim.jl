@@ -101,6 +101,11 @@ struct AMDGPUPreparedDeviceExecutionContext{
     compute_device::D
 end
 
+struct AMDGPUPreparedDeviceGraph{Graph,Executable}
+    graph::Graph
+    executable::Executable
+end
+
 function Backends._prepare_device_execution_context(
     storage::AMDGPU.ROCArray,
 )
@@ -156,6 +161,31 @@ end
     context::AMDGPUPreparedDeviceExecutionContext,
 )
     AMDGPU.synchronize(context.stream)
+    return nothing
+end
+
+function Backends._capture_prepared_device_graph(
+    f::F,
+    context::AMDGPUPreparedDeviceExecutionContext,
+) where {F}
+    graph = try
+        AMDGPU.HIP.capture(f)
+    catch
+        # A rejected capture leaves a sticky HIP error on some ROCm releases.
+        # Consume it so cold preparation failure does not poison later cleanup
+        # or replace the original capture exception in the caller's boundary.
+        AMDGPU.HIP.clear_last_error()
+        rethrow()
+    end
+    executable = AMDGPU.HIP.instantiate(graph)
+    return AMDGPUPreparedDeviceGraph(graph, executable)
+end
+
+@inline function Backends._launch_prepared_device_graph!(
+    captured::AMDGPUPreparedDeviceGraph,
+    context::AMDGPUPreparedDeviceExecutionContext,
+)
+    AMDGPU.HIP.launch(captured.executable, context.stream)
     return nothing
 end
 

@@ -20,6 +20,8 @@ import ..Backends:
     ScalarCPUStyle,
     _prepare_device_execution_context,
     _prepare_graph_rng,
+    _capture_prepared_device_graph,
+    _launch_prepared_device_graph!,
     _reset_graph_rng!,
     _synchronize_prepared_device_execution_context!,
     _with_prepared_device_execution_context,
@@ -27,6 +29,7 @@ import ..Backends:
     array_backend_type,
     compute_device,
     compute_device_backend,
+    copyto_backend_async!,
     execution_style,
     launch_kernel!,
     launch_kernel_async!
@@ -124,6 +127,7 @@ include("definitions.jl")
 include("model_time_values.jl")
 include("preparation.jl")
 include("native_nodes.jl")
+include("captured_execution.jl")
 include("graph_files.jl")
 include("execution.jl")
 include("model_time.jl")

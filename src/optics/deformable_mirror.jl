@@ -678,6 +678,12 @@ end
     return dm.state.actuator_coefs
 end
 
+@inline function _prepare_actuator_commands_async!(dm::DeformableMirror)
+    copyto_backend_async!(dm.state.actuator_coefs, dm.state.coefs)
+    apply_actuator_model!(dm.state.actuator_coefs, actuator_model(dm))
+    return dm.state.actuator_coefs
+end
+
 @inline apply_actuator_model!(buffer, ::LinearStaticActuators) = buffer
 
 @inline function apply_actuator_model!(buffer, model::ClippedActuators)
@@ -1043,7 +1049,7 @@ end
 end
 
 @inline function _update_dm_surface_async!(dm::DeformableMirror)
-    prepare_actuator_commands!(dm)
+    _prepare_actuator_commands_async!(dm)
     if !isnothing(dm.state.separable_x)
         return _apply_opd_separable_async!(execution_style(dm.state.opd), dm)
     end

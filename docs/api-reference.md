@@ -208,6 +208,25 @@ step_graph!(graph)
 reset_graph!(graph)
 ~~~
 
+`StreamGraphExecution()` is the default. On CUDA or AMDGPU, an application may
+request native command-graph replay for explicitly qualified nodes while all
+other nodes remain ordered on the same stream:
+
+~~~julia
+graph = prepare_algorithm_graph(
+    definition;
+    target,
+    execution=CapturedGraphExecution(),
+)
+
+captured_graph_node_count(graph)
+~~~
+
+Capture is strict: preparation fails when no node is qualified or when a
+qualified node cannot be captured by the selected backend. The current built-in
+qualified operation is the regular-grid separable Gaussian DM node. Atmosphere,
+WFS, and detector nodes remain direct-stream operations.
+
 `step_graph!` completes the frame before returning. Advanced GPU applications
 may use the bounded capacity-one split boundary:
 
@@ -224,7 +243,10 @@ Use `prepared_graph_node` for qualified inspection. Node adapters implement the
 public `graph_node_ports`, `prepare_graph_node`, `step_graph_node!`, and
 `reset_graph_node!` protocol. An adapter may additionally specialize
 `enqueue_graph_node!` to defer a proven same-context completion boundary; the
-default calls `step_graph_node!`.
+default calls `step_graph_node!`. `graph_node_capture_capability` remains
+conservative unless an adapter proves fixed addresses, device-resident evolving
+state, and replay without host mutation, allocation, result queries, or
+synchronization.
 
 ### Model Time
 

@@ -80,12 +80,95 @@ end
 function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     require_backend_target!(B)
     @testset "$(backend_label(B)) hardware target" begin
+        run_captured_graph_execution_smoke(B)
         run_algorithm_graph_backend_smoke(B)
         run_graph_rng_capture_replay(B)
         run_optional_backend_smoke(B)
         run_gpu_builder_smoke(B)
         run_revolt_like_hil_backend_smoke(B)
     end
+    return nothing
+end
+
+function run_captured_graph_execution_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    command = BackendArray(Float32[2, -1, 0.5, 1.5, -0.25] .* 1.0f-8)
+    actuator_grid_indices = BackendArray(Int32[1, 3, 5, 7, 9])
+    uncompensated = BackendArray(zeros(Float32, 16, 16))
+    command_schema = "test.graph.captured-command.f32/1"
+    surface_schema = "test.graph.captured-surface.f32/1"
+    pupil_schema = "test.graph.captured-pupil-opd.f32/1"
+    definition = algorithm_graph(
+        (
+            grid_gaussian_deformable_mirror_surface_node(
+                :dm;
+                resolution=16,
+                telescope_diameter_m=1.22,
+                actuator_count=length(command),
+                actuator_axis_count=3,
+                actuator_pitch=0.4f0,
+                influence_width=0.2f0,
+                pdm_command_schema=command_schema,
+                surface_opd_schema=surface_schema,
+                actuator_grid_indices_schema=
+                    "test.graph.captured-grid-indices.i32/1",
+            ),
+            pupil_opd_composition_node(
+                :compose;
+                resolution=16,
+                uncompensated_opd_schema=
+                    "test.graph.captured-uncompensated.f32/1",
+                surface_opd_schema=surface_schema,
+                pupil_opd_schema=pupil_schema,
+            ),
+        );
+        name=:captured_gpu_dm,
+        inputs=(
+            graph_input(:command, :dm => :pdm_command, command),
+            graph_input(
+                :uncompensated,
+                :compose => :uncompensated_opd,
+                uncompensated,
+            ),
+        ),
+        outputs=(
+            graph_output(:surface, :dm => :surface_opd),
+            graph_output(:pupil_opd, :compose => :pupil_opd),
+        ),
+        links=(link(:dm => :surface_opd, :compose => :surface_opd),),
+        parameters=(sparse_parameter(
+            :dm => :actuator_grid_indices,
+            actuator_grid_indices,
+        ),),
+    )
+    graph = prepare_algorithm_graph(
+        definition;
+        target=compute_device(command),
+        execution=CapturedGraphExecution(),
+    )
+    @test graph_execution_policy(graph) isa CapturedGraphExecution
+    @test captured_graph_node_count(graph) == 1
+    @test all(iszero, Array(graph_output(graph, Val(:surface))))
+
+    ticket = step_graph_async!(graph)
+    @test graph_step_pending(graph)
+    wait_graph_step!(ticket)
+    first_surface = Array(graph_output(graph, Val(:surface)))
+    @test !all(iszero, first_surface)
+    @test Array(graph_output(graph, Val(:pupil_opd))) == first_surface
+
+    copyto!(command, Float32[-1, 2, -0.5, 0.25, 1] .* 1.0f-8)
+    Backends.synchronize_backend!(Backends.execution_style(command))
+    step_graph!(graph)
+    second_surface = Array(graph_output(graph, Val(:surface)))
+    @test second_surface != first_surface
+    @test Array(graph_output(graph, Val(:pupil_opd))) == second_surface
+
+    reset_graph!(graph)
+    @test captured_graph_node_count(graph) == 1
+    @test all(iszero, Array(graph_output(graph, Val(:surface))))
     return nothing
 end
 

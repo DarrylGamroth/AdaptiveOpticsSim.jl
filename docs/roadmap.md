@@ -82,9 +82,11 @@ justifies a small, testable scheduler extension.
 - Direct loading of Julia algorithms inside a PipeWire process. Current planning
   keeps Julia embedding in a separate `module-julia`-style boundary.
 - PipeWire GPU-buffer execution.
-- Whole-graph CUDA Graph capture. Prepared CUDA random fills have replay-safe
-  device counter state, but every graph operation still needs an independent
-  capture-safety and synchronization audit.
+- Whole-graph CUDA Graph or HIP Graph capture. The prepared graph can now replay
+  explicitly qualified node-local command graphs on both backends, and CUDA
+  random fills retain replay-safe device counter state. Atmosphere, WFS,
+  detector, and cross-node capture still require independent state,
+  synchronization, and backend audits.
 - Device-only AMDGPU Poisson sampling. The maintained detector path currently
   uses its explicit preallocated host mirror.
 - A general multi-rate event runtime.

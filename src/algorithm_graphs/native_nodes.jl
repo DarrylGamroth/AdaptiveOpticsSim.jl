@@ -1049,9 +1049,15 @@ end
 end
 
 @inline function enqueue_graph_node!(owner::_DeformableMirrorSurfaceOwner)
-    set_command!(owner.deformable_mirror, owner.pdm_command)
+    copyto_backend_async!(
+        command_storage(owner.deformable_mirror),
+        owner.pdm_command,
+    )
     _update_dm_surface_async!(owner.deformable_mirror)
-    copyto!(owner.output, surface_opd(owner.deformable_mirror))
+    copyto_backend_async!(
+        owner.output,
+        surface_opd(owner.deformable_mirror),
+    )
     return nothing
 end
 
@@ -1612,9 +1618,16 @@ end
         owner.actuator_grid_indices,
     )
     _update_dm_surface_async!(owner.deformable_mirror)
-    copyto!(owner.output, surface_opd(owner.deformable_mirror))
+    copyto_backend_async!(
+        owner.output,
+        surface_opd(owner.deformable_mirror),
+    )
     return nothing
 end
+
+@inline graph_node_capture_capability(
+    ::_GridGaussianDeformableMirrorSurfaceOwner,
+) = GraphNodeCaptureSafe()
 
 @inline function reset_graph_node!(
     owner::_GridGaussianDeformableMirrorSurfaceOwner,

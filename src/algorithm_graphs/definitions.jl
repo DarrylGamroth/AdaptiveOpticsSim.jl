@@ -3,6 +3,35 @@ struct AlgorithmGraphError <: AdaptiveOpticsSimError
     msg::String
 end
 
+"""
+    StreamGraphExecution()
+
+Execute every algorithm node directly on the retained host or accelerator
+stream. This is the default graph execution policy.
+"""
+struct StreamGraphExecution end
+
+"""
+    CapturedGraphExecution()
+
+Capture every explicitly eligible node as a backend command graph during
+preparation. Nodes that do not opt in continue to execute directly on the same
+retained stream, preserving declaration order. Preparation fails if the target
+cannot capture any eligible node or if a claimed-eligible node cannot be
+captured safely.
+"""
+struct CapturedGraphExecution end
+
+"""Trait value for a graph-node owner that must execute directly."""
+struct GraphNodeCaptureUnsupported end
+
+"""
+Trait value for a graph-node owner whose repeated enqueue operation is safe to
+record and replay as a fixed-address accelerator command graph. Reset must
+preserve every recorded storage address.
+"""
+struct GraphNodeCaptureSafe end
+
 """A typed reference to one named port on one named algorithm node."""
 struct AlgorithmPortReference{Node,Port} end
 
