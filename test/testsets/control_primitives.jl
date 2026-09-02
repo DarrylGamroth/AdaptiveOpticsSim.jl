@@ -308,6 +308,11 @@ end
     update_surface!(measured)
     @test measured.state.actuator_coefs ≈ [0.2, 0.0, -0.2, 0.1]
     @test topology_metadata(measured) == (source=:measured,)
+    if coverage_instrumented()
+        @test_skip "measured-DM allocation assertion is disabled under coverage instrumentation"
+    else
+        @test dm_surface_allocations(measured) == 0
+    end
 end
 
 @testset "Independent controllable optics compose additively" begin

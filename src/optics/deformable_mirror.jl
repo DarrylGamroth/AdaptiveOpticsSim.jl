@@ -730,11 +730,15 @@ end
     return buffer
 end
 
+@inline _apply_actuator_stages!(buffer, ::Tuple{}) = buffer
+
+@inline function _apply_actuator_stages!(buffer, stages::Tuple)
+    apply_actuator_model!(buffer, first(stages))
+    return _apply_actuator_stages!(buffer, Base.tail(stages))
+end
+
 @inline function apply_actuator_model!(buffer, model::CompositeDMActuatorModel)
-    for stage in model.stages
-        apply_actuator_model!(buffer, stage)
-    end
-    return buffer
+    return _apply_actuator_stages!(buffer, model.stages)
 end
 
 """
