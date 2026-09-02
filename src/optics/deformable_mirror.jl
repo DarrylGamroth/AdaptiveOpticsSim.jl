@@ -462,7 +462,8 @@ end
 function _resolve_dm_actuator_model(model::Union{Nothing,AbstractDMActuatorModel},
     ::Type{T}, backend, n_commands::Integer) where {T<:AbstractFloat}
     resolved = model === nothing ? LinearStaticActuators() : model
-    return validate_dm_actuator_model(_convert_dm_actuator_model(resolved, T, backend, n_commands))
+    validated = validate_dm_actuator_model(resolved)
+    return _convert_dm_actuator_model(validated, T, backend, n_commands)
 end
 
 @inline _is_identity_misregistration(mis::Misregistration) =
