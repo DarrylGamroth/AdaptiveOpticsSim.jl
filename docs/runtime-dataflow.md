@@ -279,7 +279,7 @@ This is a deterministic integration test, not a real-time transport or latency
 claim. The current path copies each AOS frame to a C-contiguous NumPy array and
 uses pyRTC's fixed Linux shared-memory stream names. It refuses to start if any
 of those names already exist, so stop a live pyRTC system before running it.
-PipeWireAO transport, GPU-to-CPU transfer policy, asynchronous pacing, dropped
+External transport, GPU-to-CPU transfer policy, asynchronous pacing, dropped
 frames, and deadline behavior remain separate work.
 
 For process separation without embedding Python in Julia,
@@ -325,8 +325,8 @@ the opt-in separate-process test matrices, and the live demonstrations.
 The example transport functions above are application placeholders, not AOS
 APIs. The boundary deliberately defines no socket, PipeWire buffer, wall-clock
 deadline, timeout, last-command hold, queue, or concurrent callback. A direct
-Julia script can perform the loop synchronously; a PipeWireAO adapter can map
-the same buffers and sequences to its transport lifecycle.
+Julia script can perform the loop synchronously; an external adapter can map the
+same buffers and sequences to its transport lifecycle.
 
 ## TOML Algorithm Graph Format
 

@@ -110,8 +110,7 @@ placement.
 
 `PreparedGraphHILBoundary` adds one lockstep host exchange: execute a complete
 frame, publish it to a host buffer, require a matching complete command, then
-allow the next frame. PipeWireAO or another application owns transport and
-pacing.
+allow the next frame. An external application owns transport and pacing.
 
 ## Backend Strategy
 

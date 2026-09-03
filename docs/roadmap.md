@@ -48,7 +48,7 @@ the maintained package.
 3. Build a separate SPIDERS instrument package from controlled Subaru/AO3k,
    SpiderMan, service, and optical-engineering inputs. Mark estimated chopper,
    stage, filter-wheel, and prescription values as provisional.
-4. Add a PipeWireAO output adapter after the simulated detector boundary. GPU
+4. Add an external transport adapter after the simulated detector boundary. GPU
    simulations may copy a completed frame to the CPU RTC boundary explicitly;
    hidden mixed-device execution is out of scope.
 5. Extend graph-node coverage only when an actual architecture needs it. Keep

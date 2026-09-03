@@ -168,17 +168,17 @@ configuration owns the trusted prescription and all physical values. The files
 are separate because the simple executor invokes every node once per graph
 step; the caller can therefore drive LLOWFS and SCC at different complete-frame
 model-time boundaries. These files end at sensor observations. The primary HIL
-loop publishes those observations to PipeWireAO, receives one complete PDM
-command from the external RTC, applies the measured DM response in AOS, and
-then renders later path OPDs. An in-process RTC graph is useful for reference
-tests, but it is not implicit in either SPIDERS sensor file.
+loop publishes those observations through an external transport, receives one
+complete PDM command from the external RTC, applies the measured DM response in
+AOS, and then renders later path OPDs. An in-process RTC graph is useful for
+reference tests, but it is not implicit in either SPIDERS sensor file.
 
 One prepared Proper node is homogeneous in numeric type, array backend,
 and exact device. A complete algorithm graph may connect different element
 types through explicit conversion algorithms, but every array in one graph is
 currently placed on one exact compute target. Neither the node nor the
 graph inserts a fallback or transfer. A GPU-produced science frame therefore
-reaches a CPU RTC or PipeWireAO client only through an explicit
+reaches a CPU RTC or external transport client only through an explicit
 application-owned device-to-host copy or prepared handoff after successful
 graph publication.
 
