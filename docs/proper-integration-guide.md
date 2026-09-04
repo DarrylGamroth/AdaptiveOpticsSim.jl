@@ -195,7 +195,7 @@ The node is usable today from Julia scripts and
 `AdaptiveOpticsSim.AlgorithmGraphs`. Direct execution of Julia prescriptions in
 PipeWire remains a separate Julia-host/module adapter problem. This graph-node
 adapter does not turn Julia code into a native FGN shared-library plugin or
-make Calculon part of the AOS API.
+make a particular FGN implementation part of the AOS API.
 
 ## NCPA Ownership
 
