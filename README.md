@@ -233,6 +233,8 @@ ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
 ```
 
 AMDGPU and CUDA both have current hardware validation through their dedicated
-targets. AMDGPU remains the release-gated production accelerator; CUDA is
-validated manually on the WSL RTX host but is not yet release-gated because a
-continuously available CUDA CI runner has not been established.
+targets. CUDA is the primary GPU performance-optimization target; AMDGPU is the
+secondary portability and qualification target. AMDGPU remains the automated
+release gate because a continuously available CUDA CI runner has not been
+established, while CUDA is validated manually on the WSL RTX host. Both targets
+retain the same correctness and steady-state allocation requirements.

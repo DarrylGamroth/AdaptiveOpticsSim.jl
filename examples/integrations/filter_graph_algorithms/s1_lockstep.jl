@@ -10,7 +10,7 @@ using JuliaFilterGraph
 using LinearAlgebra
 using Random
 
-export DETECTOR_FRAME_SCHEMA, DETECTOR_FRAME_CALIBRATION_SIGNATURE
+export DETECTOR_FRAME_SCHEMA
 export S1DetectorFrame, S1FrameDisposition, FrameAccepted
 export FrameRejectedBlocked, FrameRejectedNoOutstandingFrame
 export FrameRejectedSequence, FrameRejectedTimestamp, FrameRejectedIncomplete
@@ -24,9 +24,34 @@ export step_lockstep!, reset_s1_lockstep!
 
 const DETECTOR_FRAME_SCHEMA =
     "org.adaptiveopticssim.integration.shack-hartmann-electron-counts-row-column.f32/1"
-const DETECTOR_FRAME_CALIBRATION_SIGNATURE = UInt64(1)
 const _RNG_SEED = UInt64(0x5331)
 const _FRAME_PERIOD_NANOSECONDS = Int64(1_000_000)
+const _SIGNATURE_OFFSET = UInt64(0xcbf29ce484222325)
+const _SIGNATURE_PRIME = UInt64(0x00000100000001b3)
+
+const _TELESCOPE_RESOLUTION = 8
+const _TELESCOPE_DIAMETER_M = 1.0f0
+const _CENTRAL_OBSTRUCTION_RATIO = 0.0f0
+const _SOURCE_WAVELENGTH_M = 750.0f-9
+const _SOURCE_PHOTON_IRRADIANCE_M2_S = 2.0f8
+const _ACTUATOR_COORDINATES = ((0.0f0, 0.0f0),)
+const _DM_INFLUENCE_WIDTH = 0.35f0
+const _SHACK_HARTMANN_LENSLETS = 2
+const _SHACK_HARTMANN_PIXELS_PER_SUBAPERTURE = 4
+const _DETECTOR_EXPOSURE_S = 1.0f-3
+const _DETECTOR_QUANTUM_EFFICIENCY = 1.0f0
+const _WFS_FORMATION_MODEL = :diffractive_shack_hartmann
+const _DETECTOR_NOISE_MODEL = :none
+const _DETECTOR_RESPONSE_MODEL = :null_frame_response
+const _CALIBRATION_POKE_M = 2.0f-8
+const _DETECTOR_AXES = (:x, :y)
+const _ESTIMATOR_FRAME_AXES = (:row, :column)
+const _SUBAPERTURE_ORDER = ((0, 0), (0, 4), (4, 0), (4, 4))
+const _SLOPE_PAIR_ORDER = (:x, :y)
+const _PDM_ACTUATOR_ORDER = (1,)
+const _DETECTOR_UNITS = :electron_count
+const _SLOPE_UNITS = :pixel
+const _PDM_COMMAND_UNITS = :metre
 
 @enum S1FrameDisposition::UInt8 begin
     FrameAccepted = 0
@@ -60,6 +85,28 @@ struct S1DetectorFrame{A<:AbstractMatrix}
     corrupted::Bool
 end
 
+"""Exact cross-package interpretation of the cold S1 calibration products."""
+struct S1CalibrationIdentity{T<:AbstractFloat}
+    detector_axes::NTuple{2,Symbol}
+    estimator_frame_axes::NTuple{2,Symbol}
+    subaperture_order::NTuple{4,NTuple{2,Int}}
+    slope_pair_order::NTuple{2,Symbol}
+    pdm_actuator_order::NTuple{1,Int}
+    detector_units::Symbol
+    slope_units::Symbol
+    pdm_command_units::Symbol
+    numeric_type::Type{T}
+    plant_signature::UInt64
+    estimator_signature::UInt64
+    signature::UInt64
+end
+
+"""AOC numerical result bound to the exact S1 plant and RTC interpretation."""
+struct S1CalibrationProduct{T<:AbstractFloat,R}
+    identity::S1CalibrationIdentity{T}
+    reconstructor_product::R
+end
+
 mutable struct S1LockstepState
     sequence::UInt64
     outstanding::Bool
@@ -77,6 +124,7 @@ struct PreparedS1Lockstep{
     Graph,
     Outputs,
     Inputs,
+    Calibration,
 }
     pupil::Pupil
     dm::DM
@@ -88,11 +136,176 @@ struct PreparedS1Lockstep{
     graph::Graph
     outputs::Outputs
     inputs::Inputs
+    calibration::Calibration
     disturbance_opd::Matrix{Float32}
     fga_frame::Matrix{Float32}
     adopted_command::Vector{Float32}
     applied_command::Vector{Float32}
     state::S1LockstepState
+end
+
+# This is a deterministic configuration fingerprint for invalidation and
+# compatibility checks, not a cryptographic integrity mechanism.
+@inline function _signature_byte(signature::UInt64, byte::UInt8)
+    return xor(signature, UInt64(byte)) * _SIGNATURE_PRIME
+end
+
+function _signature_bytes(signature::UInt64, bytes)
+    value = signature
+    @inbounds for byte in bytes
+        value = _signature_byte(value, UInt8(byte))
+    end
+    return value
+end
+
+function _signature_blob(signature::UInt64, bytes)
+    result = _signature_uint64(signature, UInt64(length(bytes)))
+    return _signature_bytes(result, bytes)
+end
+
+@inline function _signature_uint64(signature::UInt64, value::UInt64)
+    result = signature
+    @inbounds for shift in 0:8:56
+        result = _signature_byte(result, UInt8((value >> shift) & 0xff))
+    end
+    return result
+end
+
+@inline _signature_integer(signature::UInt64, value::Integer) =
+    _signature_uint64(signature, reinterpret(UInt64, Int64(value)))
+
+@inline _signature_float32(signature::UInt64, value::Float32) =
+    _signature_uint64(signature, UInt64(reinterpret(UInt32, value)))
+
+@inline _signature_symbol(signature::UInt64, value::Symbol) =
+    _signature_blob(signature, codeunits(String(value)))
+
+function _signature_float32_array(signature::UInt64, values)
+    result = _signature_integer(signature, ndims(values))
+    for extent in size(values)
+        result = _signature_integer(result, extent)
+    end
+    @inbounds for value in values
+        result = _signature_float32(result, Float32(value))
+    end
+    return result
+end
+
+function _plant_signature(;
+    telescope_resolution=_TELESCOPE_RESOLUTION,
+    telescope_diameter_m=_TELESCOPE_DIAMETER_M,
+    central_obstruction_ratio=_CENTRAL_OBSTRUCTION_RATIO,
+    source_wavelength_m=_SOURCE_WAVELENGTH_M,
+    source_photon_irradiance_m2_s=_SOURCE_PHOTON_IRRADIANCE_M2_S,
+    actuator_coordinates=_ACTUATOR_COORDINATES,
+    dm_influence_width=_DM_INFLUENCE_WIDTH,
+    shack_hartmann_lenslets=_SHACK_HARTMANN_LENSLETS,
+    shack_hartmann_pixels_per_subaperture=
+        _SHACK_HARTMANN_PIXELS_PER_SUBAPERTURE,
+    detector_exposure_s=_DETECTOR_EXPOSURE_S,
+    detector_quantum_efficiency=_DETECTOR_QUANTUM_EFFICIENCY,
+    detector_units=_DETECTOR_UNITS,
+)
+    signature =
+        _signature_blob(_SIGNATURE_OFFSET, codeunits("AOS-S1-PLANT/1"))
+    signature = _signature_integer(signature, telescope_resolution)
+    signature = _signature_float32(signature, telescope_diameter_m)
+    signature = _signature_float32(signature, central_obstruction_ratio)
+    signature = _signature_float32(signature, source_wavelength_m)
+    signature = _signature_float32(signature, source_photon_irradiance_m2_s)
+    for coordinate in actuator_coordinates, value in coordinate
+        signature = _signature_float32(signature, value)
+    end
+    signature = _signature_float32(signature, dm_influence_width)
+    signature = _signature_integer(signature, shack_hartmann_lenslets)
+    signature = _signature_integer(
+        signature,
+        shack_hartmann_pixels_per_subaperture,
+    )
+    signature = _signature_float32(signature, detector_exposure_s)
+    signature = _signature_float32(signature, detector_quantum_efficiency)
+    signature = _signature_symbol(signature, _WFS_FORMATION_MODEL)
+    signature = _signature_symbol(signature, _DETECTOR_NOISE_MODEL)
+    signature = _signature_symbol(signature, _DETECTOR_RESPONSE_MODEL)
+    signature = _signature_uint64(signature, _RNG_SEED)
+    signature = _signature_symbol(signature, detector_units)
+    return signature
+end
+
+function _estimator_signature(
+    graph_path,
+    reference_slopes,
+    reconstructor_matrix,
+    controller_to_vdm,
+    active_to_full_vdm,
+    vdm_to_pdm,
+)
+    signature = _signature_blob(
+        _SIGNATURE_OFFSET,
+        codeunits("FGA-S1-ESTIMATOR/1"),
+    )
+    signature = _signature_blob(signature, read(graph_path))
+    signature = _signature_float32_array(signature, reference_slopes)
+    signature = _signature_float32_array(signature, reconstructor_matrix)
+    signature = _signature_float32_array(signature, controller_to_vdm)
+    signature = _signature_float32_array(signature, active_to_full_vdm)
+    signature = _signature_float32_array(signature, vdm_to_pdm)
+    signature = _signature_float32(signature, _CALIBRATION_POKE_M)
+    return signature
+end
+
+function _calibration_identity(
+    plant_signature,
+    estimator_signature;
+    detector_axes=_DETECTOR_AXES,
+    estimator_frame_axes=_ESTIMATOR_FRAME_AXES,
+    subaperture_order=_SUBAPERTURE_ORDER,
+    slope_pair_order=_SLOPE_PAIR_ORDER,
+    pdm_actuator_order=_PDM_ACTUATOR_ORDER,
+    detector_units=_DETECTOR_UNITS,
+    slope_units=_SLOPE_UNITS,
+    pdm_command_units=_PDM_COMMAND_UNITS,
+    numeric_type=Float32,
+)
+    signature = _signature_blob(
+        _SIGNATURE_OFFSET,
+        codeunits("AOS-FGA-S1-CALIBRATION/1"),
+    )
+    for axis in detector_axes
+        signature = _signature_symbol(signature, axis)
+    end
+    for axis in estimator_frame_axes
+        signature = _signature_symbol(signature, axis)
+    end
+    for origin in subaperture_order, coordinate in origin
+        signature = _signature_integer(signature, coordinate)
+    end
+    for component in slope_pair_order
+        signature = _signature_symbol(signature, component)
+    end
+    for actuator in pdm_actuator_order
+        signature = _signature_integer(signature, actuator)
+    end
+    signature = _signature_symbol(signature, detector_units)
+    signature = _signature_symbol(signature, slope_units)
+    signature = _signature_symbol(signature, pdm_command_units)
+    signature = _signature_blob(signature, codeunits(string(numeric_type)))
+    signature = _signature_uint64(signature, plant_signature)
+    signature = _signature_uint64(signature, estimator_signature)
+    return S1CalibrationIdentity(
+        detector_axes,
+        estimator_frame_axes,
+        subaperture_order,
+        slope_pair_order,
+        pdm_actuator_order,
+        detector_units,
+        slope_units,
+        pdm_command_units,
+        numeric_type,
+        plant_signature,
+        estimator_signature,
+        signature,
+    )
 end
 
 @inline function _all_finite(values)
@@ -113,29 +326,32 @@ end
 function _prepare_plant()
     T = Float32
     telescope = Telescope(
-        resolution=8,
-        diameter=T(1),
-        central_obstruction=zero(T),
+        resolution=_TELESCOPE_RESOLUTION,
+        diameter=_TELESCOPE_DIAMETER_M,
+        central_obstruction=_CENTRAL_OBSTRUCTION_RATIO,
         T=T,
     )
     pupil = PupilFunction(telescope; T=T)
     source = Source(
         band=:custom,
-        wavelength=T(750e-9),
-        photon_irradiance=T(2e8),
+        wavelength=_SOURCE_WAVELENGTH_M,
+        photon_irradiance=_SOURCE_PHOTON_IRRADIANCE_M2_S,
         T=T,
     )
-    topology = SampledActuatorTopology(reshape(T[0, 0], 2, 1); T=T)
+    topology = SampledActuatorTopology(
+        reshape(T[first(_ACTUATOR_COORDINATES)...], 2, 1);
+        T=T,
+    )
     dm = DeformableMirror(
         telescope;
         topology,
-        influence_width=T(0.35),
+        influence_width=_DM_INFLUENCE_WIDTH,
         T=T,
     )
     sensor = ShackHartmannWFS(
         telescope;
-        n_lenslets=2,
-        n_pix_subap=4,
+        n_lenslets=_SHACK_HARTMANN_LENSLETS,
+        n_pix_subap=_SHACK_HARTMANN_PIXELS_PER_SUBAPERTURE,
         mode=Diffractive(),
         T=T,
     )
@@ -144,14 +360,14 @@ function _prepare_plant()
     optics_plan = prepare_wfs_optics(optics, pupil, rate)
     detector = Detector(
         noise=NoiseNone(),
-        exposure_duration=T(1e-3),
-        qe=one(T),
+        exposure_duration=_DETECTOR_EXPOSURE_S,
+        qe=_DETECTOR_QUANTUM_EFFICIENCY,
         response_model=NullFrameResponse(),
         T=T,
     )
     observation = WFSObservation(
         similar(intensity_values(rate));
-        units=:electron_count,
+        units=_DETECTOR_UNITS,
         layout=:lenslet_mosaic,
     )
     acquisition_plan = prepare_wfs_acquisition(
@@ -168,6 +384,7 @@ function _prepare_plant()
         optics_plan,
         acquisition_plan,
         rng=Xoshiro(_RNG_SEED),
+        plant_signature=_plant_signature(),
     )
 end
 
@@ -190,7 +407,16 @@ end
     return observation_storage(prepared.observation)
 end
 
-function _calibrate_reconstructor!(prepared, graph, outputs, inputs)
+function _calibrate_reconstructor!(
+    prepared,
+    graph,
+    outputs,
+    inputs,
+    graph_path,
+    controller_to_vdm,
+    active_to_full_vdm,
+    vdm_to_pdm,
+)
     fill!(prepared.disturbance_opd, 0.0f0)
     fill!(prepared.adopted_command, 0.0f0)
     set_command!(prepared.dm, prepared.adopted_command)
@@ -203,12 +429,12 @@ function _calibrate_reconstructor!(prepared, graph, outputs, inputs)
         inputs,
         (image=SampleMetadata(1; terminal=true),),
     )
-    replace_parameters!(graph, Symbol("reference-slopes") => copy(outputs.slopes))
+    reference_slopes = copy(outputs.slopes)
+    replace_parameters!(graph, Symbol("reference-slopes") => reference_slopes)
 
-    poke = 2.0f-8
     positive = zeros(Float32, 8)
     negative = zeros(Float32, 8)
-    prepared.adopted_command[1] = poke
+    prepared.adopted_command[1] = _CALIBRATION_POKE_M
     set_command!(prepared.dm, prepared.adopted_command)
     _form_plant_frame!(prepared)
     permutedims!(prepared.fga_frame, observation_storage(prepared.observation), (2, 1))
@@ -220,7 +446,7 @@ function _calibrate_reconstructor!(prepared, graph, outputs, inputs)
     )
     _interleave_slopes!(positive, outputs.slopes)
 
-    prepared.adopted_command[1] = -poke
+    prepared.adopted_command[1] = -_CALIBRATION_POKE_M
     set_command!(prepared.dm, prepared.adopted_command)
     _form_plant_frame!(prepared)
     permutedims!(prepared.fga_frame, observation_storage(prepared.observation), (2, 1))
@@ -232,7 +458,11 @@ function _calibrate_reconstructor!(prepared, graph, outputs, inputs)
     )
     _interleave_slopes!(negative, outputs.slopes)
 
-    interaction = reshape((positive .- negative) ./ (2.0f0 * poke), 8, 1)
+    interaction = reshape(
+        (positive .- negative) ./ (2.0f0 * _CALIBRATION_POKE_M),
+        8,
+        1,
+    )
     specification = ReconstructorSpecification(8, 1, Float32)
     method = StrokeWeightedTikhonov(1; tikhonov_scale=0.0f0)
     plan = AdaptiveOpticsCalibration.prepare(method, specification)
@@ -249,7 +479,18 @@ function _calibrate_reconstructor!(prepared, graph, outputs, inputs)
         calibration_inputs,
     )
     replace_parameters!(graph, :reconstructor => reconstructor(product))
-    return product
+    identity = _calibration_identity(
+        prepared.plant_signature,
+        _estimator_signature(
+            graph_path,
+            reference_slopes,
+            reconstructor(product),
+            controller_to_vdm,
+            active_to_full_vdm,
+            vdm_to_pdm,
+        ),
+    )
+    return S1CalibrationProduct(identity, product)
 end
 
 """
@@ -261,8 +502,9 @@ reconstructor, and FGA/JFG own the per-frame estimator and RTC chain.
 """
 function prepare_s1_lockstep(; disturbance_command::Float32=3.0f-8)
     plant = _prepare_plant()
+    graph_path = joinpath(@__DIR__, "s1-shwfs-f32.conf")
     graph = prepare_graph(
-        joinpath(@__DIR__, "s1-shwfs-f32.conf");
+        graph_path;
         algorithms=algorithms(),
     )
     graph.input_formats.image.schema == DETECTOR_FRAME_SCHEMA || error(
@@ -271,11 +513,14 @@ function prepare_s1_lockstep(; disturbance_command::Float32=3.0f-8)
     graph.output_formats.demanded.schema == DEMANDED_PDM_COMMAND_V1 || error(
         "S1 demanded-PDM-command schema does not match FGA",
     )
+    controller_to_vdm = ones(Float32, 1, 1)
+    active_to_full_vdm = ones(Float32, 1, 1)
+    vdm_to_pdm = ones(Float32, 1, 1)
     replace_parameters!(
         graph,
-        Symbol("controller-to-vdm") => ones(Float32, 1, 1),
-        Symbol("active-to-full") => ones(Float32, 1, 1),
-        Symbol("vdm-to-pdm") => ones(Float32, 1, 1),
+        Symbol("controller-to-vdm") => controller_to_vdm,
+        Symbol("active-to-full") => active_to_full_vdm,
+        Symbol("vdm-to-pdm") => vdm_to_pdm,
     )
     fga_frame = zeros(Float32, 8, 8)
     outputs = (
@@ -286,6 +531,34 @@ function prepare_s1_lockstep(; disturbance_command::Float32=3.0f-8)
     )
     inputs = (image=fga_frame,)
     adopted_command = zeros(Float32, 1)
+    disturbance_opd = zeros(Float32, 8, 8)
+    applied_command = similar(adopted_command)
+    calibration_owner = (;
+        pupil=plant.pupil,
+        dm=plant.dm,
+        rate=plant.rate,
+        observation=plant.observation,
+        optics_plan=plant.optics_plan,
+        acquisition_plan=plant.acquisition_plan,
+        rng=plant.rng,
+        plant_signature=plant.plant_signature,
+        disturbance_opd,
+        fga_frame,
+        adopted_command,
+        applied_command,
+    )
+    calibration = _calibrate_reconstructor!(
+        calibration_owner,
+        graph,
+        outputs,
+        inputs,
+        graph_path,
+        controller_to_vdm,
+        active_to_full_vdm,
+        vdm_to_pdm,
+    )
+    JuliaFilterGraph.reset!(graph)
+
     prepared = PreparedS1Lockstep(
         plant.pupil,
         plant.dm,
@@ -297,14 +570,13 @@ function prepare_s1_lockstep(; disturbance_command::Float32=3.0f-8)
         graph,
         outputs,
         inputs,
-        zeros(Float32, 8, 8),
+        calibration,
+        disturbance_opd,
         fga_frame,
         adopted_command,
-        similar(adopted_command),
+        applied_command,
         S1LockstepState(0, false, false),
     )
-    _calibrate_reconstructor!(prepared, graph, outputs, inputs)
-    JuliaFilterGraph.reset!(graph)
 
     adopted_command[1] = disturbance_command
     set_command!(prepared.dm, adopted_command)
@@ -332,7 +604,7 @@ function produce_detector_frame!(prepared::PreparedS1Lockstep)
     return S1DetectorFrame(
         values,
         DETECTOR_FRAME_SCHEMA,
-        DETECTOR_FRAME_CALIBRATION_SIGNATURE,
+        prepared.calibration.identity.signature,
         sequence,
         timestamp,
         true,
@@ -363,7 +635,7 @@ function process_detector_frame!(
     !frame.corrupted || return _reject!(prepared, FrameRejectedCorrupted)
     frame.schema == DETECTOR_FRAME_SCHEMA ||
         return _reject!(prepared, FrameRejectedSchema)
-    frame.calibration_signature == DETECTOR_FRAME_CALIBRATION_SIGNATURE ||
+    frame.calibration_signature == prepared.calibration.identity.signature ||
         return _reject!(prepared, FrameRejectedCalibrationSignature)
     eltype(frame.values) === Float32 ||
         return _reject!(prepared, FrameRejectedNumericType)
