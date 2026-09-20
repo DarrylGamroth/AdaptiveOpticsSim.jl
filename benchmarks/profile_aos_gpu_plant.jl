@@ -16,8 +16,8 @@ The checked-stream path reports its warmed Julia host-launch allocation; native
 captured replay requires exactly zero Julia bytes, including completion.
 The named ranges let an external tool select just the repeated plant work:
 
-    nsys profile --trace=cuda,nvtx --capture-range=nvtx \
-      --stop-on-range-end=true -- ./julia-command cuda captured
+    nsys profile --trace=cuda,nvtx --capture-range=cudaProfilerApi \
+      --capture-range-end=stop -- ./julia-command cuda captured
 
     rocprofv3 --runtime-trace --marker-trace --selected-regions \
       --output-directory rocprof-aos -- ./julia-command amdgpu captured
@@ -242,8 +242,12 @@ _device_used_bytes(::Type{Backends.AMDGPUBackendTag}) = Int(AMDGPU.used_memory()
 ) where {F<:Function}
     ccall((:nvtxRangePushA, "libnvToolsExt"), Cint, (Cstring,), label)
     try
+        result = ccall((:cuProfilerStart, "libcuda"), Cint, ())
+        iszero(result) || error("cuProfilerStart failed with status $result")
         return f()
     finally
+        result = ccall((:cuProfilerStop, "libcuda"), Cint, ())
+        iszero(result) || error("cuProfilerStop failed with status $result")
         ccall((:nvtxRangePop, "libnvToolsExt"), Cint, ())
     end
 end
@@ -255,8 +259,26 @@ end
 ) where {F<:Function}
     ccall((:roctxRangePushA, "libroctx64"), Cint, (Cstring,), label)
     try
+        result = ccall(
+            (:roctxProfilerResume, "librocprofiler-sdk-roctx"),
+            Cint,
+            (UInt64,),
+            UInt64(0),
+        )
+        iszero(result) || error(
+            "roctxProfilerResume failed with status $result",
+        )
         return f()
     finally
+        result = ccall(
+            (:roctxProfilerPause, "librocprofiler-sdk-roctx"),
+            Cint,
+            (UInt64,),
+            UInt64(0),
+        )
+        iszero(result) || error(
+            "roctxProfilerPause failed with status $result",
+        )
         ccall((:roctxRangePop, "libroctx64"), Cint, ())
     end
 end
