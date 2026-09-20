@@ -2,10 +2,42 @@ using Test
 
 include("s1_lockstep.jl")
 using .AOSFGALockstep
+using AdaptiveOpticsCalibration.Reconstructors: reconstructor
 using AdaptiveOpticsSim.WavefrontSensors: observation_storage
 using FilterGraphAlgorithms: SampleMetadata
 using JuliaFilterGraph
 using LinearAlgebra
+
+# Bit-exact cold-calibration products captured from pre-S2 commit d0cfead.
+const S1_EXPECTED_INTERACTION = reshape(
+    Float32[
+        1.7699274f6,
+        1.7699275f6,
+        -1.7699278f6,
+        1.769927f6,
+        1.7699278f6,
+        -1.769929f6,
+        -1.7699292f6,
+        -1.7699292f6,
+    ],
+    8,
+    1,
+)
+
+const S1_EXPECTED_RECONSTRUCTOR = reshape(
+    Float32[
+        7.0624324f-8,
+        7.062432f-8,
+        -7.062433f-8,
+        7.0624296f-8,
+        7.062433f-8,
+        -7.062438f-8,
+        -7.062439f-8,
+        -7.062439f-8,
+    ],
+    1,
+    8,
+)
 
 function replace_frame(
     frame::S1DetectorFrame;
@@ -45,6 +77,10 @@ end
 
 @testset "AOS plant and FGA RTC S1 lockstep" begin
     prepared = prepare_s1_lockstep()
+
+    @test prepared.calibration.interaction_matrix == S1_EXPECTED_INTERACTION
+    @test reconstructor(prepared.calibration.reconstructor_product) ==
+        S1_EXPECTED_RECONSTRUCTOR
 
     frame = @inferred produce_detector_frame!(prepared)
     @test frame.values === observation_storage(prepared.observation)

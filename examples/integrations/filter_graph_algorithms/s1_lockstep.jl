@@ -115,8 +115,9 @@ struct S1CalibrationIdentity{T<:AbstractFloat}
 end
 
 """AOC numerical result bound to the exact S1 plant and RTC interpretation."""
-struct S1CalibrationProduct{T<:AbstractFloat,R}
+struct S1CalibrationProduct{T<:AbstractFloat,I,R}
     identity::S1CalibrationIdentity{T}
+    interaction_matrix::I
     reconstructor_product::R
 end
 
@@ -574,36 +575,56 @@ function _calibrate_reconstructor!(
     reference_slopes = copy(outputs.slopes)
     replace_parameters!(graph, Symbol("reference-slopes") => reference_slopes)
 
-    positive = zeros(Float32, 8)
-    negative = zeros(Float32, 8)
-    prepared.adopted_command[1] = _CALIBRATION_POKE_M
-    set_command!(prepared.dm, prepared.adopted_command)
-    _form_plant_frame!(prepared)
-    permutedims!(prepared.fga_frame, observation_storage(prepared.observation), (2, 1))
-    JuliaFilterGraph.process!(
-        outputs,
-        graph,
-        inputs,
-        (image=SampleMetadata(2; terminal=true),),
+    probe_plan = AdaptiveOpticsCalibration.prepare(
+        AdaptiveOpticsCalibration.ProbeBases.ZonalPushPull(
+            Float32[_CALIBRATION_POKE_M],
+        ),
+        nothing,
     )
-    _interleave_slopes!(positive, outputs.slopes)
-
-    prepared.adopted_command[1] = -_CALIBRATION_POKE_M
-    set_command!(prepared.dm, prepared.adopted_command)
-    _form_plant_frame!(prepared)
-    permutedims!(prepared.fga_frame, observation_storage(prepared.observation), (2, 1))
-    JuliaFilterGraph.process!(
-        outputs,
-        graph,
-        inputs,
-        (image=SampleMetadata(3; terminal=true),),
+    probe_product = AdaptiveOpticsCalibration.allocate_result(probe_plan)
+    AdaptiveOpticsCalibration.process!(
+        probe_product,
+        AdaptiveOpticsCalibration.allocate_workspace(probe_plan),
+        probe_plan,
+        nothing,
     )
-    _interleave_slopes!(negative, outputs.slopes)
+    probe_commands = AdaptiveOpticsCalibration.ProbeBases.probe_commands(
+        probe_product,
+    )
+    responses = zeros(Float32, size(probe_commands, 1), 8)
+    for exposure in axes(probe_commands, 1)
+        copyto!(prepared.adopted_command, @view probe_commands[exposure, :])
+        set_command!(prepared.dm, prepared.adopted_command)
+        _form_plant_frame!(prepared)
+        permutedims!(
+            prepared.fga_frame,
+            observation_storage(prepared.observation),
+            (2, 1),
+        )
+        JuliaFilterGraph.process!(
+            outputs,
+            graph,
+            inputs,
+            (image=SampleMetadata(exposure + 1; terminal=true),),
+        )
+        _interleave_slopes!(@view(responses[exposure, :]), outputs.slopes)
+    end
 
-    interaction = reshape(
-        (positive .- negative) ./ (2.0f0 * _CALIBRATION_POKE_M),
-        8,
-        1,
+    interaction_plan = AdaptiveOpticsCalibration.prepare(
+        AdaptiveOpticsCalibration.InteractionMatrices.ZonalPushPull(
+            Float32[_CALIBRATION_POKE_M],
+        ),
+        AdaptiveOpticsCalibration.InteractionMatrices.ResponseSpecification(8),
+    )
+    interaction_product = AdaptiveOpticsCalibration.allocate_result(interaction_plan)
+    AdaptiveOpticsCalibration.process!(
+        interaction_product,
+        AdaptiveOpticsCalibration.allocate_workspace(interaction_plan),
+        interaction_plan,
+        responses,
+    )
+    interaction = AdaptiveOpticsCalibration.InteractionMatrices.interaction_matrix(
+        interaction_product,
     )
     specification = ReconstructorSpecification(8, 1, Float32)
     method = StrokeWeightedTikhonov(1; tikhonov_scale=0.0f0)
@@ -634,15 +655,17 @@ function _calibrate_reconstructor!(
         ),
         subaperture_order=subaperture_order,
     )
-    return S1CalibrationProduct(identity, product)
+    return S1CalibrationProduct(identity, interaction, product)
 end
 
 """
     prepare_s1_lockstep(; disturbance_command=3f-8)
 
 Prepare the deterministic S1 Float32 composition. AOS owns the physical
-SHWFS and one-actuator plant, AdaptiveOpticsCalibration prepares the cold
-reconstructor, and FGA/JFG own the per-frame estimator and RTC chain.
+SHWFS, one-actuator plant, and probe exposures. AdaptiveOpticsCalibration
+constructs the zonal probe basis, decodes the complete response cycle, and
+prepares the cold reconstructor. FGA/JFG own the per-frame estimator and RTC
+chain.
 """
 function prepare_s1_lockstep(; disturbance_command::Float32=3.0f-8)
     plant = _prepare_plant()
