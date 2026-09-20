@@ -74,3 +74,8 @@ path = "2026-08-30-revolt-copper-shifted-mask-pyramid.toml"
 purpose = "Repeated AMDGPU stream-versus-HIP-Graph profile for node-local regular-grid DM capture in the full-resolution REVOLT graphs"
 id = "DEVICE-COMMAND-GRAPH-PROFILE-2026-09-01"
 path = "2026-09-01-device-command-graph-profile.toml"
+
+[[artifacts]]
+purpose = "S1 CUDA-primary and AMDGPU-secondary profile of the independently qualified AOS physical Shack-Hartmann plant"
+id = "S1-AOS-PLANT-GPU-PROFILE-2026-09-20"
+path = "2026-09-20-s1-aos-plant-gpu-profile.toml"
