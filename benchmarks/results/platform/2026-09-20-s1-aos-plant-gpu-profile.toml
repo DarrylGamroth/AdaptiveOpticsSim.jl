@@ -46,7 +46,10 @@ nsight_compute = "2026.3.1"
 [environment.amdgpu]
 device = "AMD Radeon Graphics"
 architecture = "gfx1030"
+hardware_architecture = "gfx1035"
+hsa_override_gfx_version = "10.3.0"
 wavefront_size = 32
+driver = "amdgpu (in-tree), Debian kernel 6.12.107+deb13-amd64, package/build 6.12.107-1 (2026-08-29)"
 runtime = "ROCm 7.2.1 / HIP 7.2.53211"
 amdgpu_jl = "2.8.0"
 rocprofiler = "rocprofv3 1.1.0"
@@ -155,8 +158,8 @@ nsight_compute_basic = "AOS_PROFILE_REPLAYS=1 ncu --profile-from-start off --gra
 nsight_compute_focused = "AOS_PROFILE_REPLAYS=1 ncu --profile-from-start off --graph-profiling node --target-processes application-only --kernel-name-base demangled --kernel-name 'regex:gpu_sh_explicit_pupil_stack_kernel_' --launch-count 1 --section ComputeWorkloadAnalysis --section SchedulerStats -- julia --startup-file=no --project=test/cuda benchmarks/profile_aos_gpu_plant.jl cuda captured"
 
 [validation]
-integration_tests = "44 accepted-path, 7 calibration-identity, and 50 rejection-path checks passed"
-cpu_lockstep_profile = "500000 steps; inferred; 0 warmed Julia bytes; no allocation samples; CPU oracle passed"
+integration_tests = "45 accepted-path, 24 calibration-identity, and 50 rejection-path checks passed"
+cpu_lockstep_profile = "500000 steps; 1954 samples; inferred; 0 warmed Julia bytes; no allocation samples; CPU oracle passed"
 cuda_pre_and_post_oracle = "passed"
 amdgpu_pre_and_post_oracle = "passed"
 raw_reports = "Nsight Systems, Nsight Compute, and rocprofv3 reports retained outside the repository under /tmp for this run; this TOML is the durable summary"

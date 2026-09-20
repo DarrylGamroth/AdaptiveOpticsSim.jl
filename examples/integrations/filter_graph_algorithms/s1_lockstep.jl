@@ -32,12 +32,25 @@ const _SIGNATURE_PRIME = UInt64(0x00000100000001b3)
 const _TELESCOPE_RESOLUTION = 8
 const _TELESCOPE_DIAMETER_M = 1.0f0
 const _CENTRAL_OBSTRUCTION_RATIO = 0.0f0
+const _TELESCOPE_FOV_ARCSEC = 0.0f0
+const _TELESCOPE_REFLECTIVITY = 1.0f0
+const _SOURCE_BAND = :custom
+const _SOURCE_MAGNITUDE = 0.0f0
+const _SOURCE_COORDINATES_ARCSEC_DEG = (0.0f0, 0.0f0)
 const _SOURCE_WAVELENGTH_M = 750.0f-9
 const _SOURCE_PHOTON_IRRADIANCE_M2_S = 2.0f8
+const _SOURCE_RADIOMETRY = PhysicalPhotonIrradianceSource()
 const _ACTUATOR_COORDINATES = ((0.0f0, 0.0f0),)
 const _DM_INFLUENCE_WIDTH = 0.35f0
 const _SHACK_HARTMANN_LENSLETS = 2
 const _SHACK_HARTMANN_PIXELS_PER_SUBAPERTURE = 4
+const _SHACK_HARTMANN_VALID_THRESHOLD = 0.1f0
+const _SHACK_HARTMANN_COG_THRESHOLD = 0.01f0
+const _SHACK_HARTMANN_CONVOLUTION_THRESHOLD = 0.05f0
+const _SHACK_HARTMANN_HALF_PIXEL_SHIFT = false
+const _SHACK_HARTMANN_DIFFRACTION_PADDING = 2
+const _SHACK_HARTMANN_PIXEL_SCALE = nothing
+const _SHACK_HARTMANN_SHANNON_SAMPLING = true
 const _DETECTOR_EXPOSURE_S = 1.0f-3
 const _DETECTOR_QUANTUM_EFFICIENCY = 1.0f0
 const _WFS_FORMATION_MODEL = :diffractive_shack_hartmann
@@ -46,12 +59,12 @@ const _DETECTOR_RESPONSE_MODEL = :null_frame_response
 const _CALIBRATION_POKE_M = 2.0f-8
 const _DETECTOR_AXES = (:x, :y)
 const _ESTIMATOR_FRAME_AXES = (:row, :column)
-const _SUBAPERTURE_ORDER = ((0, 0), (0, 4), (4, 0), (4, 4))
 const _SLOPE_PAIR_ORDER = (:x, :y)
 const _PDM_ACTUATOR_ORDER = (1,)
 const _DETECTOR_UNITS = :electron_count
 const _SLOPE_UNITS = :pixel
 const _PDM_COMMAND_UNITS = :metre
+const _OBSERVATION_LAYOUT = :lenslet_mosaic
 
 @enum S1FrameDisposition::UInt8 begin
     FrameAccepted = 0
@@ -180,6 +193,68 @@ end
 @inline _signature_symbol(signature::UInt64, value::Symbol) =
     _signature_blob(signature, codeunits(String(value)))
 
+@inline _signature_value(signature::UInt64, ::Nothing) =
+    _signature_blob(signature, codeunits("Nothing"))
+
+@inline function _signature_value(signature::UInt64, value::Bool)
+    result = _signature_blob(signature, codeunits("Bool"))
+    return _signature_byte(result, UInt8(value))
+end
+
+@inline function _signature_value(signature::UInt64, value::Integer)
+    result = _signature_blob(signature, codeunits(string(typeof(value))))
+    return _signature_blob(result, codeunits(string(value)))
+end
+
+@inline function _signature_value(signature::UInt64, value::AbstractFloat)
+    result = _signature_blob(signature, codeunits(string(typeof(value))))
+    return _signature_blob(result, codeunits(bitstring(value)))
+end
+
+@inline function _signature_value(signature::UInt64, value::Symbol)
+    result = _signature_blob(signature, codeunits("Symbol"))
+    return _signature_symbol(result, value)
+end
+
+@inline function _signature_value(signature::UInt64, value::Type)
+    result = _signature_blob(signature, codeunits("Type"))
+    return _signature_blob(result, codeunits(string(value)))
+end
+
+function _signature_value(signature::UInt64, values::Tuple)
+    result = _signature_blob(signature, codeunits(string(typeof(values))))
+    result = _signature_integer(result, length(values))
+    for value in values
+        result = _signature_value(result, value)
+    end
+    return result
+end
+
+function _signature_value(signature::UInt64, values::AbstractArray)
+    result = _signature_blob(signature, codeunits(string(typeof(values))))
+    result = _signature_integer(result, ndims(values))
+    for extent in size(values)
+        result = _signature_integer(result, extent)
+    end
+    @inbounds for value in values
+        result = _signature_value(result, value)
+    end
+    return result
+end
+
+function _signature_value(signature::UInt64, value)
+    value_type = typeof(value)
+    isstructtype(value_type) || error(
+        "unsupported S1 signature value type $value_type",
+    )
+    result = _signature_blob(signature, codeunits(string(value_type)))
+    for name in fieldnames(value_type)
+        result = _signature_symbol(result, name)
+        result = _signature_value(result, getfield(value, name))
+    end
+    return result
+end
+
 function _signature_float32_array(signature::UInt64, values)
     result = _signature_integer(signature, ndims(values))
     for extent in size(values)
@@ -195,33 +270,69 @@ function _plant_signature(;
     telescope_resolution=_TELESCOPE_RESOLUTION,
     telescope_diameter_m=_TELESCOPE_DIAMETER_M,
     central_obstruction_ratio=_CENTRAL_OBSTRUCTION_RATIO,
+    telescope_fov_arcsec=_TELESCOPE_FOV_ARCSEC,
+    telescope_reflectivity=_TELESCOPE_REFLECTIVITY,
+    source_band=_SOURCE_BAND,
+    source_magnitude=_SOURCE_MAGNITUDE,
+    source_coordinates_arcsec_deg=_SOURCE_COORDINATES_ARCSEC_DEG,
     source_wavelength_m=_SOURCE_WAVELENGTH_M,
     source_photon_irradiance_m2_s=_SOURCE_PHOTON_IRRADIANCE_M2_S,
+    source_radiometry=_SOURCE_RADIOMETRY,
     actuator_coordinates=_ACTUATOR_COORDINATES,
     dm_influence_width=_DM_INFLUENCE_WIDTH,
     shack_hartmann_lenslets=_SHACK_HARTMANN_LENSLETS,
     shack_hartmann_pixels_per_subaperture=
         _SHACK_HARTMANN_PIXELS_PER_SUBAPERTURE,
+    shack_hartmann_valid_threshold=_SHACK_HARTMANN_VALID_THRESHOLD,
+    shack_hartmann_cog_threshold=_SHACK_HARTMANN_COG_THRESHOLD,
+    shack_hartmann_convolution_threshold=
+        _SHACK_HARTMANN_CONVOLUTION_THRESHOLD,
+    shack_hartmann_half_pixel_shift=
+        _SHACK_HARTMANN_HALF_PIXEL_SHIFT,
+    shack_hartmann_diffraction_padding=
+        _SHACK_HARTMANN_DIFFRACTION_PADDING,
+    shack_hartmann_pixel_scale=_SHACK_HARTMANN_PIXEL_SCALE,
+    shack_hartmann_shannon_sampling=
+        _SHACK_HARTMANN_SHANNON_SAMPLING,
     detector_exposure_s=_DETECTOR_EXPOSURE_S,
     detector_quantum_efficiency=_DETECTOR_QUANTUM_EFFICIENCY,
     detector_units=_DETECTOR_UNITS,
+    observation_layout=_OBSERVATION_LAYOUT,
+    detector_metadata=nothing,
 )
     signature =
-        _signature_blob(_SIGNATURE_OFFSET, codeunits("AOS-S1-PLANT/1"))
+        _signature_blob(_SIGNATURE_OFFSET, codeunits("AOS-S1-PLANT/2"))
     signature = _signature_integer(signature, telescope_resolution)
     signature = _signature_float32(signature, telescope_diameter_m)
     signature = _signature_float32(signature, central_obstruction_ratio)
+    signature = _signature_float32(signature, telescope_fov_arcsec)
+    signature = _signature_float32(signature, telescope_reflectivity)
+    signature = _signature_symbol(signature, source_band)
+    signature = _signature_float32(signature, source_magnitude)
+    signature = _signature_value(signature, source_coordinates_arcsec_deg)
     signature = _signature_float32(signature, source_wavelength_m)
     signature = _signature_float32(signature, source_photon_irradiance_m2_s)
-    for coordinate in actuator_coordinates, value in coordinate
-        signature = _signature_float32(signature, value)
-    end
+    signature = _signature_value(signature, source_radiometry)
+    signature = _signature_value(signature, actuator_coordinates)
     signature = _signature_float32(signature, dm_influence_width)
     signature = _signature_integer(signature, shack_hartmann_lenslets)
     signature = _signature_integer(
         signature,
         shack_hartmann_pixels_per_subaperture,
     )
+    signature = _signature_float32(signature, shack_hartmann_valid_threshold)
+    signature = _signature_float32(signature, shack_hartmann_cog_threshold)
+    signature = _signature_float32(
+        signature,
+        shack_hartmann_convolution_threshold,
+    )
+    signature = _signature_value(signature, shack_hartmann_half_pixel_shift)
+    signature = _signature_integer(
+        signature,
+        shack_hartmann_diffraction_padding,
+    )
+    signature = _signature_value(signature, shack_hartmann_pixel_scale)
+    signature = _signature_value(signature, shack_hartmann_shannon_sampling)
     signature = _signature_float32(signature, detector_exposure_s)
     signature = _signature_float32(signature, detector_quantum_efficiency)
     signature = _signature_symbol(signature, _WFS_FORMATION_MODEL)
@@ -229,6 +340,8 @@ function _plant_signature(;
     signature = _signature_symbol(signature, _DETECTOR_RESPONSE_MODEL)
     signature = _signature_uint64(signature, _RNG_SEED)
     signature = _signature_symbol(signature, detector_units)
+    signature = _signature_symbol(signature, observation_layout)
+    signature = _signature_value(signature, detector_metadata)
     return signature
 end
 
@@ -239,10 +352,11 @@ function _estimator_signature(
     controller_to_vdm,
     active_to_full_vdm,
     vdm_to_pdm,
+    subaperture_order,
 )
     signature = _signature_blob(
         _SIGNATURE_OFFSET,
-        codeunits("FGA-S1-ESTIMATOR/1"),
+        codeunits("FGA-S1-ESTIMATOR/2"),
     )
     signature = _signature_blob(signature, read(graph_path))
     signature = _signature_float32_array(signature, reference_slopes)
@@ -250,6 +364,7 @@ function _estimator_signature(
     signature = _signature_float32_array(signature, controller_to_vdm)
     signature = _signature_float32_array(signature, active_to_full_vdm)
     signature = _signature_float32_array(signature, vdm_to_pdm)
+    signature = _signature_value(signature, subaperture_order)
     signature = _signature_float32(signature, _CALIBRATION_POKE_M)
     return signature
 end
@@ -259,7 +374,7 @@ function _calibration_identity(
     estimator_signature;
     detector_axes=_DETECTOR_AXES,
     estimator_frame_axes=_ESTIMATOR_FRAME_AXES,
-    subaperture_order=_SUBAPERTURE_ORDER,
+    subaperture_order,
     slope_pair_order=_SLOPE_PAIR_ORDER,
     pdm_actuator_order=_PDM_ACTUATOR_ORDER,
     detector_units=_DETECTOR_UNITS,
@@ -308,6 +423,18 @@ function _calibration_identity(
     )
 end
 
+function _prepared_subaperture_order(graph)
+    measure = first(graph.nodes)
+    measure.name === :measure || error(
+        "the first S1 FGA Node must be the Shack-Hartmann measurement Node",
+    )
+    origins = measure.prepared.plan.regions.origins
+    length(origins) == 4 || error(
+        "the prepared S1 measurement plan must contain four subapertures",
+    )
+    return (origins[1], origins[2], origins[3], origins[4])
+end
+
 @inline function _all_finite(values)
     @inbounds for value in values
         isfinite(value) || return false
@@ -329,13 +456,18 @@ function _prepare_plant()
         resolution=_TELESCOPE_RESOLUTION,
         diameter=_TELESCOPE_DIAMETER_M,
         central_obstruction=_CENTRAL_OBSTRUCTION_RATIO,
+        fov_arcsec=_TELESCOPE_FOV_ARCSEC,
+        pupil_reflectivity=_TELESCOPE_REFLECTIVITY,
         T=T,
     )
     pupil = PupilFunction(telescope; T=T)
     source = Source(
-        band=:custom,
+        band=_SOURCE_BAND,
+        magnitude=_SOURCE_MAGNITUDE,
+        coordinates=_SOURCE_COORDINATES_ARCSEC_DEG,
         wavelength=_SOURCE_WAVELENGTH_M,
         photon_irradiance=_SOURCE_PHOTON_IRRADIANCE_M2_S,
+        radiometry=_SOURCE_RADIOMETRY,
         T=T,
     )
     topology = SampledActuatorTopology(
@@ -351,7 +483,14 @@ function _prepare_plant()
     sensor = ShackHartmannWFS(
         telescope;
         n_lenslets=_SHACK_HARTMANN_LENSLETS,
+        threshold=_SHACK_HARTMANN_VALID_THRESHOLD,
+        threshold_cog=_SHACK_HARTMANN_COG_THRESHOLD,
+        threshold_convolution=_SHACK_HARTMANN_CONVOLUTION_THRESHOLD,
+        half_pixel_shift=_SHACK_HARTMANN_HALF_PIXEL_SHIFT,
+        diffraction_padding=_SHACK_HARTMANN_DIFFRACTION_PADDING,
+        pixel_scale_arcsec=_SHACK_HARTMANN_PIXEL_SCALE,
         n_pix_subap=_SHACK_HARTMANN_PIXELS_PER_SUBAPERTURE,
+        shannon_sampling=_SHACK_HARTMANN_SHANNON_SAMPLING,
         mode=Diffractive(),
         T=T,
     )
@@ -368,7 +507,7 @@ function _prepare_plant()
     observation = WFSObservation(
         similar(intensity_values(rate));
         units=_DETECTOR_UNITS,
-        layout=:lenslet_mosaic,
+        layout=_OBSERVATION_LAYOUT,
     )
     acquisition_plan = prepare_wfs_acquisition(
         detector,
@@ -384,7 +523,9 @@ function _prepare_plant()
         optics_plan,
         acquisition_plan,
         rng=Xoshiro(_RNG_SEED),
-        plant_signature=_plant_signature(),
+        plant_signature=_plant_signature(
+            detector_metadata=detector_export_metadata(detector),
+        ),
     )
 end
 
@@ -416,6 +557,7 @@ function _calibrate_reconstructor!(
     controller_to_vdm,
     active_to_full_vdm,
     vdm_to_pdm,
+    subaperture_order,
 )
     fill!(prepared.disturbance_opd, 0.0f0)
     fill!(prepared.adopted_command, 0.0f0)
@@ -488,7 +630,9 @@ function _calibrate_reconstructor!(
             controller_to_vdm,
             active_to_full_vdm,
             vdm_to_pdm,
+            subaperture_order,
         ),
+        subaperture_order=subaperture_order,
     )
     return S1CalibrationProduct(identity, product)
 end
@@ -522,6 +666,7 @@ function prepare_s1_lockstep(; disturbance_command::Float32=3.0f-8)
         Symbol("active-to-full") => active_to_full_vdm,
         Symbol("vdm-to-pdm") => vdm_to_pdm,
     )
+    subaperture_order = _prepared_subaperture_order(graph)
     fga_frame = zeros(Float32, 8, 8)
     outputs = (
         demanded=zeros(Float32, 1),
@@ -556,6 +701,7 @@ function prepare_s1_lockstep(; disturbance_command::Float32=3.0f-8)
         controller_to_vdm,
         active_to_full_vdm,
         vdm_to_pdm,
+        subaperture_order,
     )
     JuliaFilterGraph.reset!(graph)
 

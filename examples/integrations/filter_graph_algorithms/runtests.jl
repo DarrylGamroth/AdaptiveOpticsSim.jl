@@ -57,6 +57,9 @@ end
     @test identity.detector_axes == (:x, :y)
     @test identity.estimator_frame_axes == (:row, :column)
     @test identity.subaperture_order == ((0, 0), (0, 4), (4, 0), (4, 4))
+    @test identity.subaperture_order == Tuple(
+        prepared.graph.nodes[1].prepared.plan.regions.origins,
+    )
     @test identity.slope_pair_order == (:x, :y)
     @test identity.pdm_actuator_order == (1,)
     @test identity.detector_units === :electron_count
@@ -102,6 +105,50 @@ end
         AOSFGALockstep._plant_signature(telescope_resolution=9)
     @test plant_signature !=
         AOSFGALockstep._plant_signature(detector_units=:photon_count)
+    @test plant_signature !=
+        AOSFGALockstep._plant_signature(telescope_fov_arcsec=1.0f0)
+    @test plant_signature !=
+        AOSFGALockstep._plant_signature(telescope_reflectivity=0.9f0)
+    @test plant_signature !=
+        AOSFGALockstep._plant_signature(source_band=:I)
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        source_coordinates_arcsec_deg=(1.0f0, 0.0f0),
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        source_radiometry=AOSFGALockstep.NormalizedTestSource(),
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        actuator_coordinates=((0.0f0, 0.0f0), (0.1f0, 0.0f0)),
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        shack_hartmann_valid_threshold=0.2f0,
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        shack_hartmann_cog_threshold=0.02f0,
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        shack_hartmann_convolution_threshold=0.1f0,
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        shack_hartmann_diffraction_padding=3,
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        shack_hartmann_half_pixel_shift=true,
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        shack_hartmann_pixel_scale=0.1f0,
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        shack_hartmann_shannon_sampling=false,
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        observation_layout=:detector_frame,
+    )
+    @test AOSFGALockstep._plant_signature(
+        detector_metadata=(gain=1.0f0,),
+    ) != AOSFGALockstep._plant_signature(
+        detector_metadata=(gain=2.0f0,),
+    )
 
     graph_path = joinpath(@__DIR__, "s1-shwfs-f32.conf")
     reference_slopes = zeros(Float32, 4, 2)
@@ -109,6 +156,7 @@ end
     controller_to_vdm = ones(Float32, 1, 1)
     active_to_full_vdm = ones(Float32, 1, 1)
     vdm_to_pdm = ones(Float32, 1, 1)
+    subaperture_order = ((0, 0), (0, 4), (4, 0), (4, 4))
     estimator_signature = AOSFGALockstep._estimator_signature(
         graph_path,
         reference_slopes,
@@ -116,6 +164,7 @@ end
         controller_to_vdm,
         active_to_full_vdm,
         vdm_to_pdm,
+        subaperture_order,
     )
     changed_reconstructor = copy(reconstructor_matrix)
     changed_reconstructor[1] = 1.0f0
@@ -126,30 +175,50 @@ end
         controller_to_vdm,
         active_to_full_vdm,
         vdm_to_pdm,
+        subaperture_order,
+    )
+    @test estimator_signature != AOSFGALockstep._estimator_signature(
+        graph_path,
+        reference_slopes,
+        reconstructor_matrix,
+        controller_to_vdm,
+        active_to_full_vdm,
+        vdm_to_pdm,
+        reverse(subaperture_order),
     )
 
     identity = AOSFGALockstep._calibration_identity(
         plant_signature,
         estimator_signature,
+        subaperture_order=subaperture_order,
     )
     @test identity.signature != AOSFGALockstep._calibration_identity(
         plant_signature + UInt64(1),
         estimator_signature,
+        subaperture_order=subaperture_order,
     ).signature
     @test identity.signature != AOSFGALockstep._calibration_identity(
         plant_signature,
         estimator_signature;
+        subaperture_order=subaperture_order,
         slope_pair_order=(:y, :x),
     ).signature
     @test identity.signature != AOSFGALockstep._calibration_identity(
         plant_signature,
         estimator_signature;
+        subaperture_order=subaperture_order,
         pdm_command_units=:volt,
     ).signature
     @test identity.signature != AOSFGALockstep._calibration_identity(
         plant_signature,
         estimator_signature;
+        subaperture_order=subaperture_order,
         numeric_type=Float64,
+    ).signature
+    @test identity.signature != AOSFGALockstep._calibration_identity(
+        plant_signature,
+        estimator_signature;
+        subaperture_order=reverse(subaperture_order),
     ).signature
 end
 

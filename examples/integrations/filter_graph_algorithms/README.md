@@ -19,7 +19,9 @@ The contract is deliberately narrow:
 - the cold calibration result is bound to an immutable identity containing
   detector and estimator axes, ordered subapertures and slope pairs, physical
   actuator order, units, numeric type, and deterministic plant and estimator
-  signatures;
+  signatures; the plant signature fingerprints the explicit optical, WFS
+  sampling, observation, and detector configuration, while the subaperture
+  order is taken from the prepared FGA measurement plan;
 - command `n` is adopted only after frame `n` completes and becomes active for
   frame `n + 1`;
 - invalid frames block plant advancement without changing the adopted command;
