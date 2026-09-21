@@ -26,7 +26,7 @@ using AdaptiveOpticsSim
 The root exports:
 
 - canonical modules: `Backends`, `Optics`, `Atmospheres`, `Detectors`,
-  `WavefrontSensors`, `Calibration`, `Control`, `Tomography`, `Ensembles`, and
+  `WavefrontSensors`, `Calibration`, `Tomography`, `Ensembles`, and
   `AlgorithmGraphs`
 - shared structured errors
 - `ScientificProfile`, `FastProfile`, and `default_fidelity_profile`
@@ -129,7 +129,7 @@ using AdaptiveOpticsSim.Calibration
 ~~~
 
 `Calibration` owns simulated interaction-response acquisition, physical
-calibration observables, modal bases, fitting, temporary AOS runtime
+calibration observables, modal bases, fitting, plant-side runtime
 materialization, optical-gain calibration, and identification workflows.
 Reusable inverse methods and compact-SVD products come from
 `AdaptiveOpticsCalibration.Reconstructors`. Common entry points include
@@ -141,8 +141,7 @@ Reusable inverse methods and compact-SVD products come from
 pupil measure, and atmospheric OPD covariance, then materializes the accepted
 calibration product on the plant's runtime backend.
 
-`Control` is a temporary legacy namespace and is not a supported AOS RTC
-surface. The maintained cross-package reference is
+The maintained cross-package reference is
 [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/),
 where AOS supplies the plant and FilterGraphAlgorithms/JuliaFilterGraph supplies
 the RTC chain. The composing fixture is CPU-resident and retains concrete
