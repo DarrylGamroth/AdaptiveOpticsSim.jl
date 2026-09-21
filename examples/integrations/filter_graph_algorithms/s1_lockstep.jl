@@ -663,9 +663,9 @@ end
 
 Prepare the deterministic S1 Float32 composition. AOS owns the physical
 SHWFS, one-actuator plant, and probe exposures. AdaptiveOpticsCalibration
-constructs the zonal probe basis, decodes the complete response cycle, and
-prepares the cold reconstructor. FGA/JFG own the per-frame estimator and RTC
-chain.
+constructs the zonal probe basis, estimates the interaction matrix from the
+complete response cycle, and prepares the cold reconstructor. FGA/JFG own the
+per-frame estimator and RTC chain.
 """
 function prepare_s1_lockstep(; disturbance_command::Float32=3.0f-8)
     plant = _prepare_plant()
