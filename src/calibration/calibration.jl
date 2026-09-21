@@ -2,7 +2,7 @@
     Calibration
 
 Plant-side owner of simulated response acquisition, physical calibration
-observables, and temporary runtime materialization during the package split.
+observables, and accepted-product materialization for plant-side runtime use.
 Reusable numerical calibration methods and products are owned by
 AdaptiveOpticsCalibration.
 """

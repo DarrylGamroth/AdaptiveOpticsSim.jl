@@ -40,16 +40,16 @@ on CUDA and AMDGPU. This fixture does not claim shared device storage, a shared
 accelerator stream, zero-copy exchange, or one CUDA Graph or HIP Graph spanning
 both packages.
 
-For local migration work, develop the three package worktrees into an
-environment, then run:
+The nested environment resolves AdaptiveOpticsCalibration,
+FilterGraphAlgorithms, and JuliaFilterGraph from the configured registry and
+uses this AOS checkout as its path source. Run:
 
 ```sh
 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
-  julia --startup-file=no --project=/path/to/integration-env \
-  examples/integrations/filter_graph_algorithms/runtests.jl
+  julia --startup-file=no \
+    --project=examples/integrations/filter_graph_algorithms \
+    examples/integrations/filter_graph_algorithms/runtests.jl
 ```
 
-The nested `Project.toml` records package identities without embedding paths
-to sibling worktrees. A checked-out FGA/JFG development tree must therefore be
-developed locally until those packages are registered or a reviewed Git
-source revision is selected.
+Develop a sibling package into this environment only when testing an
+unpublished change to that package; do not commit the generated manifest.
