@@ -21,8 +21,9 @@ The runtime distinguishes six roles:
 2. Run-immutable plans describe validated numerical or physical execution,
    including mappings, coefficients, compatibility, and backend requirements.
 3. Persistent mutable state has a single writer and affects later scientific
-   results. It includes atmosphere evolution, detector persistence, controller
-   history, graph delays, and explicit RNG state.
+   results. It includes atmosphere evolution, detector persistence, graph
+   delays, and explicit RNG state. RTC controller state belongs to the RTC
+   owner; the legacy AOS `Control` state is temporary migration surface.
 4. Replaceable workspaces own scratch and execution resources. Recreating one
    cannot change the deterministic physical trajectory.
 5. Products are explicit caller-visible values such as a `PupilFunction`,
@@ -63,9 +64,12 @@ preparation proceeds in three stages:
 The final stage is necessary for AOS operations whose prepared execution owner
 must bind exact plan, state, workspace, product, backend, device, and execution-
 context identities. Domain algorithms keep their canonical APIs, such as
-`Control.update!` and `Calibration.combine_basis!`; only the small graph-node
-adapter knows about graph ports. No binding or allocation occurs in
-`step_graph!`.
+`Calibration.combine_basis!`; only the small graph-node adapter knows about
+graph ports. RTC algorithms are owned by FilterGraphAlgorithms/JuliaFilterGraph
+and are composed in the maintained
+[`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/).
+The temporary AOS `Control` namespace is not a new production integration
+surface. No binding or allocation occurs in `step_graph!`.
 
 One graph step invokes every node once under a schedule that preserves validated
 declaration order. A direct link exposes an earlier node's ordered output to a
@@ -236,7 +240,7 @@ The current integration matrix is deliberately small:
 
 | WFS | Detector response | Controller boundary | Evidence | Status |
 |---|---|---|---|---|
-| Shack–Hartmann | Deterministic, noiseless CCD | AOS lockstep reference controller | `algorithm-graphs` interaction-matrix and convergence tests | covered |
+| Shack–Hartmann | Deterministic, noiseless CCD | FGA/JFG lockstep reference controller | [`filter_graph_algorithms`](../examples/integrations/filter_graph_algorithms/) interaction-matrix and convergence tests | covered |
 | Pyramid | Deterministic, noiseless EMCCD | Command/frame lockstep | `algorithm-graphs` complete-frame and command-response tests | covered |
 | Shack–Hartmann | Deterministic, noiseless CCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
 | Pyramid | Deterministic, noiseless EMCCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
@@ -383,52 +387,23 @@ The version 1 tables are:
 | `[[delayed_links]]` | `source`, `destination`, `initial` | One-successful-step delayed link; `initial` is a binding name |
 | `[[parameters]]` | `destination`, `binding` | Required startup ndarray sparse parameter |
 
-For example:
+For example, an AOS TOML graph may describe the optical plant and detector
+sequence. AOS no longer documents a TOML controller example: reconstruction,
+controller recurrence, and VDM/PDM RTC routing are maintained by
+FilterGraphAlgorithms/JuliaFilterGraph. Use the
+[`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/)
+for the complete AOS-plant/FGA-RTC composition.
 
-```toml
-schema_version = 1
-name = "reference_controller"
-
-[[nodes]]
-name = "controller"
-type = "discrete_integrator_f32"
-
-[nodes.config]
-extent = 16
-sample_period_s = 0.001
-input_schema = "org.example.residual-modes/1"
-output_schema = "org.example.command-modes/1"
-
-[nodes.props]
-gain = 0.3
-tau_s = 0.02
-
-[[inputs]]
-name = "residual"
-destination = "controller.input"
-binding = "residual"
-
-[[outputs]]
-name = "command"
-source = "controller.output"
-```
-
-The application supplies the array explicitly and then prepares the ordinary
-graph:
-
-```julia
-definition = load_algorithm_graph(
-    "reference_controller.toml";
-    bindings=(residual=residual_modes,),
-)
-graph = prepare_algorithm_graph(definition; target=target)
-```
+Use the maintained plant graph files under `examples/graphs/` for AOS-native
+optical and detector composition. The application supplies graph bindings and
+prepares that plant graph with `load_algorithm_graph`; the RTC graph and its
+calibration products are prepared by FGA/JFG in the maintained
+[`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/).
 
 The built-in type map currently contains `ccd_detector_acquisition_f32`,
-`closed_loop_correction_f32`, `control_matrix_reconstruction_f32`,
 `cmos_detector_acquisition_f32`,
 `deformable_mirror_surface_f32`,
-`discrete_integrator_f32`, `emccd_detector_acquisition_f32`,
+`emccd_detector_acquisition_f32`,
 `gaussian_deformable_mirror_surface_f32`,
 `modal_opd_expansion_f32`,
 `multilayer_atmosphere_opd_f32`,
@@ -441,8 +416,8 @@ map for optional packages such as the Proper companion.
 
 ### Downstream instrument packages
 
-AOS owns the reusable graph nodes, static TOML schema, lockstep HIL boundary,
-and pyRTC-compatible shared-memory adapter. Instrument command geometry,
+AOS owns the reusable plant graph nodes, static TOML schema, lockstep HIL
+boundary, and pyRTC-compatible shared-memory adapter. Instrument command geometry,
 detector settings, calibration policy, complete graph files, and scientific
 acceptance tests belong to downstream packages:
 

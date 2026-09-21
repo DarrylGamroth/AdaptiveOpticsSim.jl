@@ -53,19 +53,6 @@ import ..Atmospheres:
     prepare_atmosphere_renderer,
     prepare_timed_atmosphere,
     render_atmosphere!
-import ..Control:
-    ClosedLoopCorrectionPlan,
-    ClosedLoopCorrectionState,
-    ClosedLoopCorrectionWorkspace,
-    ControlMatrixPlan,
-    DiscreteIntegratorPlan,
-    DiscreteIntegratorState,
-    DiscreteIntegratorWorkspace,
-    apply_closed_loop_correction!,
-    reconstruct!,
-    reset_closed_loop_correction!,
-    reset_controller!,
-    update!
 import ..Optics:
     ActuatorGridTopology,
     AngularCoordinates,

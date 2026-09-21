@@ -12,7 +12,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 AdaptiveOpticsSim = {path = "../../.."}
 
 [compat]
-AdaptiveOpticsCalibration = "0.5"
+AdaptiveOpticsCalibration = "0.8"
 AdaptiveOpticsSim = "0.1"
 FilterGraphAlgorithms = "0.1"
 JuliaFilterGraph = "0.1"

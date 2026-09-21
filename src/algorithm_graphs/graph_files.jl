@@ -175,97 +175,6 @@ function _require_binding(
     return getproperty(bindings, name)
 end
 
-function _discrete_integrator_f32_node(
-    name::Symbol,
-    config::NamedTuple,
-    props::NamedTuple,
-)
-    config_fields = (
-        :extent,
-        :input_schema,
-        :output_schema,
-        :sample_period_s,
-    )
-    prop_fields = (:gain, :tau_s)
-    _require_named_fields(
-        config,
-        config_fields,
-        config_fields,
-        "node '$name' config",
-    )
-    _require_named_fields(
-        props,
-        prop_fields,
-        prop_fields,
-        "node '$name' props",
-    )
-    return discrete_integrator_node(
-        name;
-        extent=_file_integer(config.extent, "node '$name' config.extent"),
-        sample_period_s=_file_real(
-            config.sample_period_s,
-            "node '$name' config.sample_period_s",
-        ),
-        input_schema=_file_string(
-            config.input_schema,
-            "node '$name' config.input_schema",
-        ),
-        output_schema=_file_string(
-            config.output_schema,
-            "node '$name' config.output_schema",
-        ),
-        gain=_file_real(props.gain, "node '$name' props.gain"),
-        tau_s=_file_real(props.tau_s, "node '$name' props.tau_s"),
-        T=Float32,
-    )
-end
-
-function _closed_loop_correction_f32_node(
-    name::Symbol,
-    config::NamedTuple,
-    props::NamedTuple,
-)
-    config_fields = (
-        :constraint_feedback_schema,
-        :controller_state_schema,
-        :correction_schema,
-        :extent,
-        :residual_error_schema,
-    )
-    prop_fields = (:anti_windup_gain, :gain, :pole)
-    context = "node '$name' config"
-    props_context = "node '$name' props"
-    _require_named_fields(config, config_fields, config_fields, context)
-    _require_named_fields(props, prop_fields, prop_fields, props_context)
-    return closed_loop_correction_node(
-        name;
-        extent=_file_integer(config.extent, "$context.extent"),
-        residual_error_schema=_file_string(
-            config.residual_error_schema,
-            "$context.residual_error_schema",
-        ),
-        constraint_feedback_schema=_file_string(
-            config.constraint_feedback_schema,
-            "$context.constraint_feedback_schema",
-        ),
-        correction_schema=_file_string(
-            config.correction_schema,
-            "$context.correction_schema",
-        ),
-        controller_state_schema=_file_string(
-            config.controller_state_schema,
-            "$context.controller_state_schema",
-        ),
-        gain=_file_real(props.gain, "$props_context.gain"),
-        pole=_file_real(props.pole, "$props_context.pole"),
-        anti_windup_gain=_file_real(
-            props.anti_windup_gain,
-            "$props_context.anti_windup_gain",
-        ),
-        T=Float32,
-    )
-end
-
 function _modal_opd_expansion_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -1471,47 +1380,6 @@ function _shack_hartmann_slope_selection_f32_node(
     )
 end
 
-function _control_matrix_reconstruction_f32_node(
-    name::Symbol,
-    config::NamedTuple,
-    props::NamedTuple,
-)
-    config_fields = (
-        :control_matrix_schema,
-        :reconstructed_count,
-        :reconstructed_schema,
-        :slope_count,
-        :slopes_schema,
-    )
-    context = "node '$name' config"
-    _require_named_fields(config, config_fields, config_fields, context)
-    _require_named_fields(props, (), (), "node '$name' props")
-    return control_matrix_reconstruction_node(
-        name;
-        slope_count=_file_integer(
-            config.slope_count,
-            "$context.slope_count",
-        ),
-        reconstructed_count=_file_integer(
-            config.reconstructed_count,
-            "$context.reconstructed_count",
-        ),
-        slopes_schema=_file_string(
-            config.slopes_schema,
-            "$context.slopes_schema",
-        ),
-        reconstructed_schema=_file_string(
-            config.reconstructed_schema,
-            "$context.reconstructed_schema",
-        ),
-        control_matrix_schema=_file_string(
-            config.control_matrix_schema,
-            "$context.control_matrix_schema",
-        ),
-        T=Float32,
-    )
-end
-
 """
     builtin_graph_node_types()
 
@@ -1523,13 +1391,9 @@ global registry or dynamic Julia evaluation is used.
 function builtin_graph_node_types()
     return (
         ccd_detector_acquisition_f32=_ccd_detector_acquisition_f32_node,
-        closed_loop_correction_f32=_closed_loop_correction_f32_node,
         cmos_detector_acquisition_f32=_cmos_detector_acquisition_f32_node,
-        control_matrix_reconstruction_f32=
-            _control_matrix_reconstruction_f32_node,
         deformable_mirror_surface_f32=
             _deformable_mirror_surface_f32_node,
-        discrete_integrator_f32=_discrete_integrator_f32_node,
         emccd_detector_acquisition_f32=
             _emccd_detector_acquisition_f32_node,
         gaussian_deformable_mirror_surface_f32=

@@ -71,9 +71,14 @@ direction mapping and writes the caller's pupil product. Rendering does not
 advance time or consume RNG. `r0` is defined at `reference_wavelength_m`;
 rendering converts the generated phase to wavelength-independent OPD in metres.
 
-## Explicit Closed Loop
+## Explicit Closed Loop (Temporary Legacy Surface)
 
-A direct loop keeps the science visible and is often the best starting point:
+A direct loop using `AdaptiveOpticsSim.Control` remains available temporarily
+for migration and older experiments. Do not add new production RTC callers to
+this namespace. For the maintained in-process RTC composition, use the
+[AOS plant/FGA RTC fixture](../examples/integrations/filter_graph_algorithms/),
+which keeps physical plant response in AOS and reconstruction, control, and
+VDM/PDM routing in FilterGraphAlgorithms/JuliaFilterGraph.
 
 ~~~julia
 using AdaptiveOpticsSim.Calibration
@@ -141,41 +146,15 @@ A graph definition contains a concrete tuple of nodes, graph inputs/outputs,
 same-frame links, explicit delayed links, and startup ndarray parameters.
 Preparation validates every port and binds exact storage.
 
-~~~julia
-using AdaptiveOpticsSim.AlgorithmGraphs
+The maintained AOS graph surface composes optical and detector plant nodes.
+The complete in-process RTC graph is maintained by FGA/JFG; see the
+[AOS plant/FGA RTC fixture](../examples/integrations/filter_graph_algorithms/)
+for calibration, reconstruction, control, controller-to-VDM, VDM-to-PDM, and
+PDM conditioning.
 
-definition = algorithm_graph(
-    (
-        discrete_integrator_node(
-            :controller;
-            extent=2,
-            sample_period_s=1e-3,
-            input_schema="example.residual.f32/1",
-            output_schema="example.command.f32/1",
-            gain=0.2f0,
-            tau_s=0.02f0,
-        ),
-    );
-    name=:controller,
-    inputs=(
-        graph_input(
-            :residual,
-            :controller => :input,
-            zeros(Float32, 2),
-        ),
-    ),
-    outputs=(
-        graph_output(:command, :controller => :output),
-    ),
-)
-
-graph = prepare_algorithm_graph(definition)
-step_graph!(graph)
-command = graph_output(graph, :command)
-~~~
-
-Use a delayed link for feedback. Direct links must follow node order and cannot
-form a cycle.
+Use a delayed link when a plant graph needs an explicit previous-frame value.
+Direct links must follow node order and cannot form a cycle. RTC feedback
+composition is maintained by FGA/JFG in the linked integration fixture.
 
 For a GPU-resident application that has independent CPU work before it needs
 the frame, split submission from completion:
