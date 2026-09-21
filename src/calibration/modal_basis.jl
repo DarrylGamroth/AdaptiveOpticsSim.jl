@@ -51,30 +51,26 @@ function basis_from_m2c(dm::DeformableMirror, tel::Telescope, M2C::AbstractMatri
 end
 
 """
-    basis_projector(basis; tol=1e-3, policy=...)
+    basis_projector(basis; method=..., build_backend=...)
 
 Construct a projector from sampled basis vectors back into modal coefficients.
 
-If the basis is close to diagonal in its Gram matrix, this uses the cheaper
-diagonal approximation. Otherwise it falls back to the configured inverse
-operator.
+The configured Calibration method owns the inverse construction and its
+rank-deficiency behavior. The accepted product is materialized on the selected
+runtime backend.
 """
-function basis_projector(basis::AbstractMatrix{T}; tol::Real=1e-3,
-    policy::InversePolicy=default_projector_inverse_policy(T)) where {T<:AbstractFloat}
-    cross = transpose(basis) * basis
-    diag_vals = diag(cross)
-    diag_sum = sum(abs, diag_vals)
-    if diag_sum == 0
-        projector, _ = inverse_operator(basis, policy)
-        return projector
-    end
-    non_diag_sum = sum(abs, cross) - diag_sum
-    criteria = abs(diag_sum - non_diag_sum) / diag_sum
-    if criteria <= tol && all(!iszero, diag_vals)
-        return Matrix(Diagonal(inv.(diag_vals)) * transpose(basis))
-    end
-    projector, _ = inverse_operator(basis, policy)
-    return projector
+function basis_projector(basis::AbstractMatrix{T};
+    method::_AOC_RECONSTRUCTORS.AbstractSVDInverse=
+        _default_svd_inverse_method(T),
+    build_backend::BuildBackend=
+        default_runtime_calibration_build_backend(basis),
+) where {T<:AbstractFloat}
+    product = _prepare_svd_reconstructor(basis, method)
+    return materialize_runtime_build_result(
+        build_backend,
+        basis,
+        _AOC_RECONSTRUCTORS.reconstructor(product),
+    )
 end
 
 """

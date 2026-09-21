@@ -237,7 +237,7 @@ forced into an area-frame API.
 | Atmospheres namespace | `AdaptiveOpticsSim.Atmospheres` owns atmosphere definitions and state, source-direction rendering and batching, and atmosphere-coupled propagation. |
 | Detectors namespace | `AdaptiveOpticsSim.Detectors` owns detector response, sensor families, shutter and readout behavior, prepared acquisition, and detector products. |
 | WavefrontSensors namespace | `AdaptiveOpticsSim.WavefrontSensors` owns composed WFS optical front ends, observations, measurements, detector bindings, estimators, geometric slopes, and LiFT. |
-| Calibration namespace | `AdaptiveOpticsSim.Calibration` owns interaction and control matrices, modal bases, inverse policies, fitting, identification, optical-gain calibration, and model-derived NCPA synthesis. |
+| Calibration namespace | `AdaptiveOpticsSim.Calibration` owns simulated physical response acquisition and plant-side calibration observables. It temporarily materializes accepted products for AOS runtime consumers during the package split. Reusable inverse methods, compact-SVD products, and numerical diagnostics are owned by `AdaptiveOpticsCalibration.Reconstructors`. |
 | Control namespace | `AdaptiveOpticsSim.Control` owns reconstruction, controller composition, delay lines, and prepared runtime control operations. |
 | Tomography namespace | `AdaptiveOpticsSim.Tomography` owns guide-star geometry, atmospheric reconstruction, fitting, and DM-command projection. |
 | Ensembles namespace | `AdaptiveOpticsSim.Ensembles` owns coarse-grained independent runs and optional offline scheduling policies. It is not an RTC deadline scheduler. |

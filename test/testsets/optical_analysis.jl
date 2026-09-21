@@ -29,6 +29,12 @@ end
     @test all(isfinite, og)
     @test Calibration.detector_metadata(gsc) === nothing
 
+    mixed_precision_frame = Float32.(frame)
+    mixed_precision_gsc = GainSensingCamera(mask, basis)
+    calibrate!(mixed_precision_gsc, mixed_precision_frame)
+    @test all(isfinite,
+        compute_optical_gains!(mixed_precision_gsc, mixed_precision_frame))
+
     weak_gsc = GainSensingCamera(mask, zeros(8, 8, 2); sensitivity_floor=1e-6)
     calibrate!(weak_gsc, frame)
     weak_og = compute_optical_gains!(weak_gsc, frame)

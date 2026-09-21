@@ -295,8 +295,8 @@ end
 
 function publish_frame_and_compute_signal!(
     components::PyRTCReferenceComponents,
-    frame::AbstractMatrix{Float32},
-)
+    frame::AbstractMatrix{T},
+) where {T<:AbstractFloat}
     python_frame = components.numpy.array(
         Py(frame);
         dtype=components.numpy.float32,
@@ -396,9 +396,9 @@ end
 
 function configure_pyrtc_loop!(
     components::PyRTCReferenceComponents,
-    interaction_matrix::AbstractMatrix{Float32},
-    gain::Float32,
-)
+    interaction_matrix::AbstractMatrix{T},
+    gain::S,
+) where {T<:AbstractFloat,S<:AbstractFloat}
     components.loop.IM = components.numpy.array(
         Py(interaction_matrix);
         dtype=components.numpy.float32,

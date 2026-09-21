@@ -1,5 +1,3 @@
-export InversePolicy, ExactPseudoInverse, TSVDInverse, TikhonovInverse
-export default_modal_inverse_policy
 export KLBasis, ZernikeModalBasis
 export ModalOPDExpansionPlan, combine_basis!
 export InteractionMatrix, interaction_matrix

@@ -6,14 +6,46 @@
     @test control_matrix.effective_rank == 3
     truncated_control_matrix = with_truncation(control_matrix, 1)
     @test truncated_control_matrix.n_trunc == 1
+    noninverted_control_matrix = ControlMatrix(D; invert=false, n_trunc=1)
+    @test noninverted_control_matrix.effective_rank == 0
+    @test noninverted_control_matrix.n_trunc == 1
 
     D_sing = [1.0 0.0; 0.0 1e-12]
-    exact_control_matrix = ControlMatrix(D_sing; policy=ExactPseudoInverse())
-    tsvd_control_matrix = ControlMatrix(D_sing; policy=TSVDInverse(rtol=1e-9))
+    exact_control_matrix = ControlMatrix(
+        D_sing;
+        method=AOCReconstructors.ExactPseudoInverse(),
+    )
+    tsvd_control_matrix = ControlMatrix(
+        D_sing;
+        method=AOCReconstructors.TSVDInverse(rtol=1e-9),
+    )
     @test exact_control_matrix.effective_rank == 2
     @test tsvd_control_matrix.effective_rank == 1
     @test maximum(abs, exact_control_matrix.M .- tsvd_control_matrix.M) > 0
-    @test ControlMatrix(D_sing).policy isa TSVDInverse
+    @test ControlMatrix(D_sing).method isa AOCReconstructors.TSVDInverse
+    method_truncated_control_matrix = ControlMatrix(
+        D;
+        method=AOCReconstructors.TSVDInverse(n_trunc=1),
+    )
+    @test method_truncated_control_matrix.n_trunc == 1
+
+    rank_deficient = [1.0 0.0; 0.0 0.0]
+    zero_regularization = ControlMatrix(
+        rank_deficient;
+        method=AOCReconstructors.TikhonovInverse(0.0),
+    )
+    @test all(isfinite, zero_regularization.M)
+    @test zero_regularization.M == rank_deficient
+    @test_throws ArgumentError ControlMatrix(
+        D_sing;
+        method=AOCReconstructors.TSVDInverse(rtol=-1.0),
+    )
+
+    collinear_basis = [1.0 1.0; 0.0 0.0]
+    @test Calibration.basis_projector(
+        collinear_basis;
+        method=AOCReconstructors.ExactPseudoInverse(),
+    ) ≈ pinv(collinear_basis)
 
     matrix_parent = reshape(Float32.(1:30), 5, 6)
     matrix_view = @view matrix_parent[2:4, 2:5]
@@ -75,16 +107,24 @@
     imat = InteractionMatrix(D_sing, 0.1)
     recon_exact = @inferred ModalReconstructor(
         imat;
-        policy=ExactPseudoInverse(),
+        method=AOCReconstructors.ExactPseudoInverse(),
     )
-    recon_tsvd = ModalReconstructor(imat; policy=TSVDInverse(rtol=1e-9))
+    recon_tsvd = ModalReconstructor(
+        imat;
+        method=AOCReconstructors.TSVDInverse(rtol=1e-9),
+    )
     recon_factorized = @inferred FactorizedReconstructor(imat;
-        policy=ExactPseudoInverse())
+        method=AOCReconstructors.ExactPseudoInverse())
+    recon_mapped = @inferred MappedReconstructor(
+        Matrix{Float64}(I, 2, 2),
+        imat;
+        method=AOCReconstructors.ExactPseudoInverse(),
+    )
     recon_rank_one = FactorizedReconstructor(imat;
-        policy=ExactPseudoInverse(), max_rank=1)
+        method=AOCReconstructors.ExactPseudoInverse(), max_rank=1)
     @test recon_exact.effective_rank == 2
     @test recon_tsvd.effective_rank == 1
-    @test ModalReconstructor(imat).policy isa TSVDInverse
+    @test ModalReconstructor(imat).method isa AOCReconstructors.TSVDInverse
     @test Control.factorized_rank(recon_factorized) == 2
     @test Control.factorized_rank(recon_rank_one) == 1
     probe_slopes = [0.3, -0.2]
@@ -97,11 +137,29 @@
     if coverage_instrumented()
         @test_skip "allocation assertions are disabled under coverage instrumentation"
     else
+        @test @allocated(reconstruct!(dense_command,
+            recon_exact, probe_slopes)) == 0
         @test @allocated(reconstruct!(factorized_command,
             recon_factorized, probe_slopes)) == 0
+        @test @allocated(reconstruct!(factorized_command,
+            recon_mapped, probe_slopes)) == 0
     end
     @test sum(length,
         Control.runtime_reconstructor_storage(recon_rank_one)) <
         sum(length,
             Control.runtime_reconstructor_storage(recon_factorized))
+
+    rectangular_matrix = [1.0 2.0; 3.0 5.0; 7.0 11.0]
+    rectangular_interaction = InteractionMatrix(rectangular_matrix, 0.1)
+    rectangular_dense = ModalReconstructor(
+        rectangular_interaction;
+        method=AOCReconstructors.ExactPseudoInverse(),
+    )
+    rectangular_factorized = FactorizedReconstructor(
+        rectangular_interaction;
+        method=AOCReconstructors.ExactPseudoInverse(),
+    )
+    rectangular_slopes = [0.2, -0.4, 0.7]
+    @test reconstruct(rectangular_factorized, rectangular_slopes) ≈
+        reconstruct(rectangular_dense, rectangular_slopes) atol=1e-12 rtol=1e-12
 end

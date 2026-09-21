@@ -18,6 +18,7 @@
 # clarity and performance. It avoids baking large dense `B * R` products into
 # one operator when the runtime wants separate modal and command-basis stages.
 #
+const _AOC_RECONSTRUCTORS = AdaptiveOpticsCalibration.Reconstructors
 """
     AbstractReconstructorOperator
 
@@ -49,8 +50,8 @@ empty tuple.
 runtime_reconstructor_storage(::Any) = nothing
 runtime_reconstructor_ownership_roots(::Any) = ()
 
-function inverse_policy(::AbstractReconstructorOperator)
-    throw(InvalidConfiguration("inverse_policy is not defined for this reconstructor family"))
+function calibration_method(::AbstractReconstructorOperator)
+    throw(InvalidConfiguration("calibration_method is not defined for this reconstructor family"))
 end
 
 function singular_values(::AbstractReconstructorOperator)
@@ -184,10 +185,15 @@ Mathematically this applies
 where `s` is the slope vector, `R` is the selected inverse of the interaction
 matrix, and `g` is the scalar gain stored in the reconstructor.
 """
-struct ModalReconstructor{T<:AbstractFloat,M<:AbstractMatrix{T},P<:InversePolicy,V<:AbstractVector{T}} <: AbstractReconstructorOperator
+struct ModalReconstructor{
+    T<:AbstractFloat,
+    M<:AbstractMatrix{T},
+    C<:_AOC_RECONSTRUCTORS.AbstractSVDInverse,
+    V<:AbstractVector{T},
+} <: AbstractReconstructorOperator
     reconstructor::M
     gain::T
-    policy::P
+    method::C
     singular_values::V
     cond::T
     effective_rank::Int
@@ -196,25 +202,33 @@ end
 @inline runtime_reconstructor_storage(recon::ModalReconstructor) =
     (recon.reconstructor,)
 
-@inline inverse_policy(recon::ModalReconstructor) = recon.policy
+@inline calibration_method(recon::ModalReconstructor) = recon.method
 @inline singular_values(recon::ModalReconstructor) = recon.singular_values
 @inline condition_number(recon::ModalReconstructor) = recon.cond
 @inline effective_rank(recon::ModalReconstructor) = recon.effective_rank
 
-function ModalReconstructor(imat::InteractionMatrix; gain::Real=1.0,
-    policy::InversePolicy=default_modal_inverse_policy(eltype(imat.matrix)),
-    build_backend::BuildBackend=default_runtime_calibration_build_backend(imat.matrix))
-    T = eltype(imat.matrix)
-    recon, stats = inverse_operator(build_backend, imat.matrix, policy)
-    recon_native = materialize_runtime_build_result(build_backend, imat.matrix, recon)
-    singular_values = materialize_runtime_build_result(build_backend, similar(imat.matrix, T, 0), stats.singular_values)
-    return ModalReconstructor{T, typeof(recon_native), typeof(policy), typeof(singular_values)}(
+function ModalReconstructor(imat::InteractionMatrix{T}; gain::Real=1.0,
+    method::_AOC_RECONSTRUCTORS.AbstractSVDInverse=
+        _default_svd_inverse_method(T),
+    build_backend::BuildBackend=default_runtime_calibration_build_backend(imat.matrix)) where {T<:AbstractFloat}
+    product = _prepare_svd_reconstructor(imat.matrix, method)
+    recon_native = materialize_runtime_build_result(
+        build_backend,
+        imat.matrix,
+        _AOC_RECONSTRUCTORS.reconstructor(product),
+    )
+    values = materialize_runtime_build_result(
+        build_backend,
+        similar(imat.matrix, T, 0),
+        _AOC_RECONSTRUCTORS.singular_values(product),
+    )
+    return ModalReconstructor{T, typeof(recon_native), typeof(method), typeof(values)}(
         recon_native,
         T(gain),
-        policy,
-        singular_values,
-        stats.cond,
-        stats.effective_rank,
+        method,
+        values,
+        _AOC_RECONSTRUCTORS.condition_number(product),
+        _AOC_RECONSTRUCTORS.effective_rank(product),
     )
 end
 
@@ -224,21 +238,29 @@ end
 Apply the modal control law `out = gain * R * slopes` in-place.
 
 This is the hot-path runtime form used by closed-loop control and keeps the
-output buffer under caller ownership.
+output buffer under caller ownership. Input, output, and prepared operator
+storage use the same floating-point element type.
 """
-function reconstruct!(out::AbstractVector, recon::ModalReconstructor, slopes::AbstractVector)
+function reconstruct!(
+    out::AbstractVector{T},
+    recon::ModalReconstructor{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
     mul!(out, recon.reconstructor, slopes)
     out .*= recon.gain
     return out
 end
 
-function reconstruct(recon::ModalReconstructor, slopes::AbstractVector)
+function reconstruct(
+    recon::ModalReconstructor{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
     out = similar(slopes, size(recon.reconstructor, 1))
     return reconstruct!(out, recon, slopes)
 end
 
 """
-    FactorizedReconstructor(imat; gain=1, policy=..., max_rank=nothing,
+    FactorizedReconstructor(imat; gain=1, method=..., max_rank=nothing,
                             build_backend=...)
 
 SVD-factor slopes-to-command operator that applies
@@ -256,7 +278,7 @@ struct FactorizedReconstructor{
     V<:AbstractMatrix{T},
     W<:AbstractVector{T},
     WS<:AbstractVector{T},
-    P<:InversePolicy,
+    C<:_AOC_RECONSTRUCTORS.AbstractSVDInverse,
     SV<:AbstractVector{T},
 } <: AbstractReconstructorOperator
     left_modes::U
@@ -264,7 +286,7 @@ struct FactorizedReconstructor{
     inverse_weights::W
     workspace::WS
     gain::T
-    policy::P
+    method::C
     singular_values::SV
     cond::T
     effective_rank::Int
@@ -280,64 +302,78 @@ end
 )
 @inline runtime_reconstructor_ownership_roots(recon::FactorizedReconstructor) =
     (recon.workspace,)
-@inline inverse_policy(recon::FactorizedReconstructor) = recon.policy
+@inline calibration_method(recon::FactorizedReconstructor) = recon.method
 @inline singular_values(recon::FactorizedReconstructor) = recon.singular_values
 @inline condition_number(recon::FactorizedReconstructor) = recon.cond
 @inline effective_rank(recon::FactorizedReconstructor) = recon.effective_rank
 @inline factorized_rank(recon::FactorizedReconstructor) = recon.factor_rank
 @inline truncation_count(recon::FactorizedReconstructor) = recon.n_trunc
 
-function _factorized_reconstructor_rank(inverse_weights::AbstractVector,
-    max_rank::Union{Integer,Nothing})
+function _factorized_reconstructor_rank(
+    inverse_weights::AbstractVector{T},
+    max_rank::Union{Integer,Nothing},
+) where {T<:AbstractFloat}
     available = something(findlast(!iszero, inverse_weights), 0)
     isnothing(max_rank) && return available
     max_rank >= 0 || throw(InvalidConfiguration("max_rank must be >= 0"))
     return min(Int(max_rank), available)
 end
 
-function _compact_factor_matrix(build_backend::BuildBackend,
-    ref::AbstractMatrix, factor::AbstractMatrix, rank::Int)
+function _compact_factor_matrix(
+    build_backend::BuildBackend,
+    ref::AbstractMatrix{T},
+    factor::AbstractMatrix{T},
+    rank::Int,
+) where {T<:AbstractFloat}
     compact = copy(@view(factor[:, 1:rank]))
     return materialize_runtime_build_result(build_backend, ref, compact)
 end
 
 function FactorizedReconstructor(imat::InteractionMatrix{T};
     gain::Real=1.0,
-    policy::InversePolicy=default_modal_inverse_policy(T),
+    method::_AOC_RECONSTRUCTORS.AbstractSVDInverse=
+        _default_svd_inverse_method(T),
     max_rank::Union{Integer,Nothing}=nothing,
     build_backend::BuildBackend=
         default_runtime_calibration_build_backend(imat.matrix),
 ) where {T<:AbstractFloat}
-    F, inverse_weights_host, stats = inverse_factorization(
+    product = _prepare_svd_reconstructor(imat.matrix, method)
+    inverse_weights_host = _AOC_RECONSTRUCTORS.spectral_gains(product)
+    rank = _factorized_reconstructor_rank(inverse_weights_host, max_rank)
+    left_modes = _compact_factor_matrix(
         build_backend,
         imat.matrix,
-        policy,
+        _AOC_RECONSTRUCTORS.measurement_singular_vectors(product),
+        rank,
     )
-    rank = _factorized_reconstructor_rank(inverse_weights_host, max_rank)
-    left_modes = _compact_factor_matrix(build_backend, imat.matrix, F.U,
-        rank)
-    command_modes = _compact_factor_matrix(build_backend, imat.matrix, F.V,
-        rank)
+    command_modes = _compact_factor_matrix(
+        build_backend,
+        imat.matrix,
+        _AOC_RECONSTRUCTORS.corrector_singular_vectors(product),
+        rank,
+    )
     weight_ref = similar(imat.matrix, T, 0)
     inverse_weights = materialize_runtime_build_result(
         build_backend,
         weight_ref,
         copy(@view(inverse_weights_host[1:rank])),
     )
-    singular_values = materialize_runtime_build_result(
+    values = materialize_runtime_build_result(
         build_backend,
         weight_ref,
-        stats.singular_values,
+        _AOC_RECONSTRUCTORS.singular_values(product),
     )
     workspace = similar(inverse_weights)
     fill!(workspace, zero(T))
-    effective = min(stats.effective_rank, rank)
+    product_effective_rank = _AOC_RECONSTRUCTORS.effective_rank(product)
+    effective = min(product_effective_rank, rank)
     cond = if effective == 0
         T(Inf)
-    elseif effective < stats.effective_rank
-        stats.singular_values[begin] / stats.singular_values[effective]
+    elseif effective < product_effective_rank
+        first(_AOC_RECONSTRUCTORS.singular_values(product)) /
+            _AOC_RECONSTRUCTORS.singular_values(product)[effective]
     else
-        stats.cond
+        _AOC_RECONSTRUCTORS.condition_number(product)
     end
     return FactorizedReconstructor{
         T,
@@ -345,32 +381,38 @@ function FactorizedReconstructor(imat::InteractionMatrix{T};
         typeof(command_modes),
         typeof(inverse_weights),
         typeof(workspace),
-        typeof(policy),
-        typeof(singular_values),
+        typeof(method),
+        typeof(values),
     }(
         left_modes,
         command_modes,
         inverse_weights,
         workspace,
         T(gain),
-        policy,
-        singular_values,
+        method,
+        values,
         cond,
         effective,
         rank,
-        length(stats.singular_values) - rank,
+        length(_AOC_RECONSTRUCTORS.singular_values(product)) - rank,
     )
 end
 
-function reconstruct!(out::AbstractVector, recon::FactorizedReconstructor,
-    slopes::AbstractVector)
+function reconstruct!(
+    out::AbstractVector{T},
+    recon::FactorizedReconstructor{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
     mul!(recon.workspace, adjoint(recon.left_modes), slopes)
     recon.workspace .= recon.gain .* recon.inverse_weights .* recon.workspace
     mul!(out, recon.command_modes, recon.workspace)
     return out
 end
 
-function reconstruct(recon::FactorizedReconstructor, slopes::AbstractVector)
+function reconstruct(
+    recon::FactorizedReconstructor{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
     out = similar(slopes, size(recon.command_modes, 1))
     return reconstruct!(out, recon, slopes)
 end
@@ -392,7 +434,7 @@ struct MappedReconstructor{
     T<:AbstractFloat,
     M<:AbstractMatrix{T},
     B<:AbstractMatrix{T},
-    P<:InversePolicy,
+    C<:_AOC_RECONSTRUCTORS.AbstractSVDInverse,
     V<:AbstractVector{T},
     W<:AbstractVector{T},
 } <: AbstractReconstructorOperator
@@ -400,7 +442,7 @@ struct MappedReconstructor{
     command_basis::B
     modal_workspace::W
     gain::T
-    policy::P
+    method::C
     singular_values::V
     cond::T
     effective_rank::Int
@@ -413,39 +455,51 @@ end
 @inline runtime_reconstructor_ownership_roots(recon::MappedReconstructor) =
     (recon.modal_workspace,)
 
-@inline inverse_policy(recon::MappedReconstructor) = recon.policy
+@inline calibration_method(recon::MappedReconstructor) = recon.method
 @inline singular_values(recon::MappedReconstructor) = recon.singular_values
 @inline condition_number(recon::MappedReconstructor) = recon.cond
 @inline effective_rank(recon::MappedReconstructor) = recon.effective_rank
 
 function MappedReconstructor(command_basis::AbstractMatrix{T}, imat::InteractionMatrix{T};
     gain::Real=1.0,
-    policy::InversePolicy=default_modal_inverse_policy(T),
-    inverse_build_backend::BuildBackend=default_runtime_calibration_build_backend(imat.matrix),
-    materialize_backend::BuildBackend=inverse_build_backend,
+    method::_AOC_RECONSTRUCTORS.AbstractSVDInverse=
+        _default_svd_inverse_method(T),
+    build_backend::BuildBackend=default_runtime_calibration_build_backend(imat.matrix),
     ref::AbstractMatrix{T}=imat.matrix) where {T<:AbstractFloat}
-    recon, stats = inverse_operator(inverse_build_backend, imat.matrix, policy)
-    recon_native = materialize_build(materialize_backend, ref, recon)
-    command_basis_native = materialize_build(materialize_backend, ref, command_basis)
-    singular_values = materialize_build(materialize_backend, similar(ref, T, 0), stats.singular_values)
-    modal_workspace = similar(ref, T, size(command_basis, 2))
+    product = _prepare_svd_reconstructor(imat.matrix, method)
+    recon_native = materialize_runtime_build_result(
+        build_backend,
+        ref,
+        _AOC_RECONSTRUCTORS.reconstructor(product),
+    )
+    command_basis_native = materialize_runtime_build_result(
+        build_backend,
+        ref,
+        command_basis,
+    )
+    values = materialize_runtime_build_result(
+        build_backend,
+        similar(ref, T, 0),
+        _AOC_RECONSTRUCTORS.singular_values(product),
+    )
+    modal_workspace = similar(recon_native, T, size(command_basis, 2))
     fill!(modal_workspace, zero(T))
     return MappedReconstructor{
         T,
         typeof(recon_native),
         typeof(command_basis_native),
-        typeof(policy),
-        typeof(singular_values),
+        typeof(method),
+        typeof(values),
         typeof(modal_workspace),
     }(
         recon_native,
         command_basis_native,
         modal_workspace,
         T(gain),
-        policy,
-        singular_values,
-        stats.cond,
-        stats.effective_rank,
+        method,
+        values,
+        _AOC_RECONSTRUCTORS.condition_number(product),
+        _AOC_RECONSTRUCTORS.effective_rank(product),
         size(command_basis, 2),
     )
 end
@@ -457,16 +511,24 @@ Apply the two-stage mapped control law
 
 `out = command_basis * (gain * reconstructor * slopes)`
 
-using the reconstructor's preallocated modal workspace.
+using the reconstructor's preallocated modal workspace. Input, output, and
+prepared operator storage use the same floating-point element type.
 """
-function reconstruct!(out::AbstractVector, recon::MappedReconstructor, slopes::AbstractVector)
+function reconstruct!(
+    out::AbstractVector{T},
+    recon::MappedReconstructor{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
     mul!(recon.modal_workspace, recon.reconstructor, slopes)
     recon.modal_workspace .*= recon.gain
     mul!(out, recon.command_basis, recon.modal_workspace)
     return out
 end
 
-function reconstruct(recon::MappedReconstructor, slopes::AbstractVector)
+function reconstruct(
+    recon::MappedReconstructor{T},
+    slopes::AbstractVector{T},
+) where {T<:AbstractFloat}
     out = similar(recon.command_basis, size(recon.command_basis, 1))
     return reconstruct!(out, recon, slopes)
 end
@@ -549,8 +611,8 @@ end
         runtime_controller_ownership_roots(recon.controller)...,
         recon.workspace,
     )
-@inline inverse_policy(recon::ControlledReconstructor) =
-    inverse_policy(recon.reconstructor)
+@inline calibration_method(recon::ControlledReconstructor) =
+    calibration_method(recon.reconstructor)
 @inline singular_values(recon::ControlledReconstructor) =
     singular_values(recon.reconstructor)
 @inline condition_number(recon::ControlledReconstructor) =
@@ -568,15 +630,31 @@ function reset_controller!(recon::ControlledReconstructor)
     return recon
 end
 
-function reconstruct!(out::AbstractVector, recon::ControlledReconstructor,
-    slopes::AbstractVector)
+function reconstruct!(
+    out::AbstractVector{T},
+    recon::ControlledReconstructor{R,C,W,T},
+    slopes::AbstractVector{T},
+) where {
+    T<:AbstractFloat,
+    R<:AbstractReconstructorOperator,
+    C<:AbstractController,
+    W<:AbstractVector{T},
+}
     reconstruct!(recon.workspace, recon.reconstructor, slopes)
     controlled = update!(recon.controller, recon.workspace, recon.dt)
     copyto!(out, controlled)
     return out
 end
 
-function reconstruct(recon::ControlledReconstructor, slopes::AbstractVector)
+function reconstruct(
+    recon::ControlledReconstructor{R,C,W,T},
+    slopes::AbstractVector{T},
+) where {
+    T<:AbstractFloat,
+    R<:AbstractReconstructorOperator,
+    C<:AbstractController,
+    W<:AbstractVector{T},
+}
     out = similar(controller_output(recon))
     return reconstruct!(out, recon, slopes)
 end

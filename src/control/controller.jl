@@ -48,8 +48,12 @@ end
 
 Insert `sample` and return the vector leaving the delay line. The returned
 vector aliases `line.scratch` and remains valid only until the next call.
+The sample and prepared delay storage use the same floating-point element type.
 """
-function shift_delay!(line::VectorDelayLine, sample::AbstractVector)
+function shift_delay!(
+    line::VectorDelayLine{A,V},
+    sample::AbstractVector{T},
+) where {T<:AbstractFloat,A<:AbstractMatrix{T},V<:AbstractVector{T}}
     length(sample) == length(line.scratch) ||
         throw(DimensionMismatchError(
             "delay-line sample length must match its reference length"))
@@ -205,9 +209,9 @@ function _prepare_controller_update!(
     state::DiscreteIntegratorState{T},
     workspace::DiscreteIntegratorWorkspace{T},
     plan::DiscreteIntegratorPlan{T},
-    input::AbstractVector,
+    input::AbstractVector{T},
     dt::Real,
-) where {T}
+) where {T<:AbstractFloat}
     axes(input) == axes(state.integrated_command) == axes(state.command) ==
         axes(workspace.next_integrated_command) == axes(workspace.next_command) ||
         throw(DimensionMismatchError(
@@ -227,33 +231,33 @@ function _prepare_controller_update!(
 end
 
 @inline function _commit_controller_update!(
-    state::DiscreteIntegratorState,
-    workspace::DiscreteIntegratorWorkspace,
-)
+    state::DiscreteIntegratorState{T},
+    workspace::DiscreteIntegratorWorkspace{T},
+) where {T<:AbstractFloat}
     copyto!(state.integrated_command, workspace.next_integrated_command)
     copyto!(state.command, workspace.next_command)
     return state.command
 end
 
 function update!(
-    state::DiscreteIntegratorState,
-    workspace::DiscreteIntegratorWorkspace,
-    plan::DiscreteIntegratorPlan,
-    input::AbstractVector,
+    state::DiscreteIntegratorState{T},
+    workspace::DiscreteIntegratorWorkspace{T},
+    plan::DiscreteIntegratorPlan{T},
+    input::AbstractVector{T},
     dt::Real,
-)
+) where {T<:AbstractFloat}
     _prepare_controller_update!(state, workspace, plan, input, dt)
     return _commit_controller_update!(state, workspace)
 end
 
 function update!(
-    output::AbstractVector,
-    state::DiscreteIntegratorState,
-    workspace::DiscreteIntegratorWorkspace,
-    plan::DiscreteIntegratorPlan,
-    input::AbstractVector,
+    output::AbstractVector{T},
+    state::DiscreteIntegratorState{T},
+    workspace::DiscreteIntegratorWorkspace{T},
+    plan::DiscreteIntegratorPlan{T},
+    input::AbstractVector{T},
     dt::Real,
-)
+) where {T<:AbstractFloat}
     axes(output) == axes(state.command) || throw(DimensionMismatchError(
         "controller output and state axes must match",
     ))
@@ -271,8 +275,18 @@ Advance the controller state by one sample period.
 The persistent `integrated_command` integrates the incoming command-like input,
 and `command` then applies a first-order lag toward that integral state using
 the controller time constant. Replacement workspace is prepared before either
-state value commits.
+state value commits. The input and prepared controller storage use the same
+floating-point element type.
 """
-function update!(ctrl::DiscreteIntegratorController, input::AbstractVector, dt::Real)
+function update!(
+    ctrl::DiscreteIntegratorController{P,S,W},
+    input::AbstractVector{T},
+    dt::Real,
+) where {
+    T<:AbstractFloat,
+    P<:DiscreteIntegratorPlan{T},
+    S<:DiscreteIntegratorState{T},
+    W<:DiscreteIntegratorWorkspace{T},
+}
     return update!(ctrl.state, ctrl.workspace, ctrl.plan, input, dt)
 end

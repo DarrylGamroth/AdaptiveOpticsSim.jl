@@ -2,6 +2,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
+using AdaptiveOpticsCalibration.Reconstructors: TSVDInverse
 using LinearAlgebra
 using Random
 using Statistics
@@ -71,14 +72,14 @@ function main()
     D = randn(rng, n_slopes, n_commands)
     input = randn(rng, n_slopes)
     interaction = InteractionMatrix(D, 0.1)
-    policy = TSVDInverse(rtol=0.0,
+    method = TSVDInverse(rtol=0.0,
         n_trunc=min(n_slopes, n_commands) - rank)
 
     dense_build_start = time_ns()
-    dense = ModalReconstructor(interaction; policy=policy)
+    dense = ModalReconstructor(interaction; method=method)
     dense_build_ns = time_ns() - dense_build_start
     factorized_build_start = time_ns()
-    factorized = FactorizedReconstructor(interaction; policy=policy)
+    factorized = FactorizedReconstructor(interaction; method=method)
     factorized_build_ns = time_ns() - factorized_build_start
     controlled = ControlledReconstructor(
         factorized,

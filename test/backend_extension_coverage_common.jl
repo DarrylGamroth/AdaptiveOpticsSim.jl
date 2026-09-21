@@ -1,6 +1,7 @@
 using Test
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Backends
+using LinearAlgebra
 using Random
 
 function run_backend_extension_coverage(
@@ -60,5 +61,35 @@ function run_backend_extension_coverage(
     ) === opd
     Backends.synchronize_backend!(Backends.execution_style(opd))
     @test Array(opd) == Float32[-3.25 0.0 -4.25; -3.5 -4.0 0.0]
+
+    interaction_host = Float32[2 0; 0 1]
+    interaction = AdaptiveOpticsSim.Calibration.InteractionMatrix(
+        interaction_host,
+        0.1f0,
+    )
+    mapped = AdaptiveOpticsSim.Control.MappedReconstructor(
+        Float32[1 0; 0 1],
+        interaction;
+        method=AdaptiveOpticsSim.Calibration._AOC_RECONSTRUCTORS.ExactPseudoInverse(),
+        build_backend=AdaptiveOpticsSim.Calibration.GPUArrayBuildBackend(B),
+    )
+    @test mapped.modal_workspace isa ArrayBackend
+    mapped_slopes = ArrayBackend(Float32[0.25, -0.5])
+    mapped_commands = Backends.backend_zeros(B, Float32, 2)
+    AdaptiveOpticsSim.Control.reconstruct!(
+        mapped_commands,
+        mapped,
+        mapped_slopes,
+    )
+    Backends.synchronize_backend!(Backends.execution_style(mapped_commands))
+    @test Array(mapped_commands) ≈ interaction_host \ Array(mapped_slopes)
+
+    projector_basis = ArrayBackend(Float32[1 1; 0 0])
+    projector = AdaptiveOpticsSim.Calibration.basis_projector(
+        projector_basis;
+        method=AdaptiveOpticsSim.Calibration._AOC_RECONSTRUCTORS.ExactPseudoInverse(),
+    )
+    @test projector isa ArrayBackend
+    @test Array(projector) ≈ pinv(Array(projector_basis))
     return nothing
 end

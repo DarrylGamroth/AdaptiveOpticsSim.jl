@@ -6,6 +6,7 @@ models, controller composition, and preallocated control-path execution.
 """
 module Control
 
+import AdaptiveOpticsCalibration
 using LinearAlgebra
 
 import ..AdaptiveOpticsSim:
@@ -23,14 +24,12 @@ import ..Backends:
 import ..Calibration:
     BuildBackend,
     InteractionMatrix,
-    InversePolicy,
+    _default_svd_inverse_method,
+    _prepare_svd_reconstructor,
+    calibration_method,
     condition_number,
-    default_modal_inverse_policy,
     default_runtime_calibration_build_backend,
     effective_rank,
-    inverse_factorization,
-    inverse_operator,
-    inverse_policy,
     materialize_build,
     materialize_runtime_build_result,
     singular_values,

@@ -57,7 +57,7 @@ end
 function _replace_modal_opd_basis(
     plan::ModalOPDExpansionPlan{T},
     basis::AbstractArray{T,3},
-) where {T}
+) where {T<:AbstractFloat}
     axes(basis) == axes(plan.basis) || throw(DimensionMismatchError(
         "replacement modal OPD basis axes must match the prepared basis axes",
     ))
