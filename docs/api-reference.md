@@ -145,8 +145,11 @@ calibration product on the plant's runtime backend.
 surface. The maintained cross-package reference is
 [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/),
 where AOS supplies the plant and FilterGraphAlgorithms/JuliaFilterGraph supplies
-the RTC chain. Its prepared hot paths retain concrete floating-point element
-types and caller-owned arrays for allocation-free CPU and GPU execution.
+the RTC chain. The composing fixture is CPU-resident and retains concrete
+floating-point element types and caller-owned arrays for allocation-free
+execution. AOS and FGA qualify their accelerator paths independently; the
+fixture does not claim shared device storage or one captured graph across
+packages.
 
 ## Tomography
 

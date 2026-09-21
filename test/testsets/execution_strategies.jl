@@ -2,6 +2,29 @@ import KernelAbstractions
 
 const PE02_REPOSITORY_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
 
+mutable struct EnsembleCounter{O}
+    value::Int
+    owner::O
+end
+
+struct ImmutableEnsembleMember{O}
+    owner::O
+end
+
+struct EnsembleMemberError <: Exception end
+
+EnsembleCounter(value::Int=0) = EnsembleCounter(value, Ref(value))
+
+Ensembles.ensemble_ownership_roots(counter::EnsembleCounter) =
+    (counter.owner,)
+Ensembles.ensemble_ownership_roots(member::ImmutableEnsembleMember) =
+    (member.owner,)
+
+function increment_counter!(counter::EnsembleCounter)
+    counter.value += 1
+    return counter
+end
+
 function pe02_maintained_text()
     paths = String[]
     for directory in ("src", "ext", "test", "docs")
@@ -155,4 +178,102 @@ end
         typeof(accelerated),
         WavefrontSensors.ShackHartmannWFS,
     )) isa WavefrontSensors.ShackHartmannWFSBatchedStrategy
+end
+
+@testset "Generic coarse ensembles" begin
+    first_counter = EnsembleCounter()
+    second_counter = EnsembleCounter(10)
+    ensemble = @inferred SimulationEnsemble(first_counter, second_counter)
+    @test @inferred(ensemble_members(ensemble)) ===
+        (first_counter, second_counter)
+    @test @inferred(execution_policy(ensemble)) isa SequentialExecution
+    @test @inferred(Ensembles.run_ensemble!(
+        increment_counter!,
+        ensemble,
+    )) === ensemble
+    @test (first_counter.value, second_counter.value) == (1, 11)
+    if !coverage_instrumented()
+        @test @allocated(Ensembles.run_ensemble!(
+            increment_counter!, ensemble)) == 0
+    end
+
+    visit_order = Int[]
+    ordered = SimulationEnsemble(
+        EnsembleCounter(1),
+        EnsembleCounter(2),
+        EnsembleCounter(3),
+    )
+    Ensembles.run_ensemble!(
+        member -> (push!(visit_order, member.value); member),
+        ordered,
+    )
+    @test visit_order == [1, 2, 3]
+
+    failing = SimulationEnsemble(
+        EnsembleCounter(1),
+        EnsembleCounter(2),
+        EnsembleCounter(3),
+    )
+    @test_throws EnsembleMemberError Ensembles.run_ensemble!(
+        member -> (member.value == 2 && throw(EnsembleMemberError()); member),
+        failing,
+    )
+    @test map(member -> member.value, ensemble_members(failing)) == (1, 2, 3)
+
+    immutable_values = SimulationEnsemble(1, 1)
+    @test ensemble_members(immutable_values) === (1, 1)
+
+    threaded = SimulationEnsemble(
+        EnsembleCounter(),
+        EnsembleCounter();
+        policy=ThreadedExecution(),
+    )
+    Ensembles.run_ensemble!(increment_counter!, threaded)
+    @test all(counter -> counter.value == 1, ensemble_members(threaded))
+
+    shared_owner = Ref(0)
+    @test_throws InvalidConfiguration SimulationEnsemble(
+        EnsembleCounter(0, shared_owner),
+        EnsembleCounter(0, shared_owner);
+        policy=ThreadedExecution(),
+    )
+    @test_throws InvalidConfiguration SimulationEnsemble(
+        ImmutableEnsembleMember(shared_owner),
+        ImmutableEnsembleMember(shared_owner);
+        policy=ThreadedExecution(),
+    )
+    @test_throws InvalidConfiguration SimulationEnsemble(())
+
+    for policy in (
+        BackendStreamExecution(),
+        AcceleratedKernelsExecution(),
+        DaggerExecution(),
+    )
+        unsupported = SimulationEnsemble(
+            EnsembleCounter();
+            policy=policy,
+        )
+        @test_throws UnsupportedAlgorithm Ensembles.run_ensemble!(
+            increment_counter!,
+            unsupported,
+        )
+    end
+
+    if Threads.nthreads() == 1
+        deterministic = SimulationEnsemble(
+            EnsembleCounter();
+            policy=DeterministicExecution(),
+        )
+        Ensembles.run_ensemble!(
+            increment_counter!,
+            deterministic,
+        )
+        @test first(ensemble_members(deterministic)).value == 1
+        @test BLAS.get_num_threads() == 1
+    else
+        @test_throws InvalidConfiguration SimulationEnsemble(
+            EnsembleCounter();
+            policy=DeterministicExecution(),
+        )
+    end
 end
