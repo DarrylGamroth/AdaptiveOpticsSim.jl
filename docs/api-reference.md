@@ -122,11 +122,10 @@ maintained staged contract is:
 `WFSObservation` and `WFSMeasurement` are typed products with explicit
 metadata and units.
 
-## Calibration And Control
+## Calibration And RTC Integration
 
 ~~~julia
 using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
 ~~~
 
 `Calibration` owns simulated interaction-response acquisition, physical
@@ -142,19 +141,12 @@ Reusable inverse methods and compact-SVD products come from
 pupil measure, and atmospheric OPD covariance, then materializes the accepted
 calibration product on the plant's runtime backend.
 
-`Control` is a temporary legacy AOS runtime surface during the package split. It
-currently contains reconstructors, delay lines, discrete integration,
-closed-loop correction, and controller/DM mappings; these RTC operations are
-being migrated to FilterGraphAlgorithms/JuliaFilterGraph and are not the
-maintained AOS RTC composition surface. The maintained cross-package reference
-is [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/),
-where AOS supplies the plant and FGA/JFG supplies the RTC chain. Do not add new
-production RTC callers to `AdaptiveOpticsSim.Control`.
-
-Prepared control hot paths require caller-owned input and output arrays to use
-the same floating-point element type as the prepared operator or state. This
-keeps CPU and GPU calls concrete and avoids implicit precision conversion in
-the allocation-free runtime path.
+`Control` is a temporary legacy namespace and is not a supported AOS RTC
+surface. The maintained cross-package reference is
+[`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/),
+where AOS supplies the plant and FilterGraphAlgorithms/JuliaFilterGraph supplies
+the RTC chain. Its prepared hot paths retain concrete floating-point element
+types and caller-owned arrays for allocation-free CPU and GPU execution.
 
 ## Tomography
 

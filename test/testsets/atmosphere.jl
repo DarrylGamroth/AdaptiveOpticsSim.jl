@@ -1081,14 +1081,4 @@ end
     @test any(norm(slopes_a[i + 1] - slopes_a[i]) > 0 for i in 1:length(slopes_a)-1)
     @test any(norm(slopes_a[i] - slopes_c[i]) > 0 for i in eachindex(slopes_a))
 
-    loop_a = moving_closed_loop_trace(seed=31, steps=5)
-    loop_b = moving_closed_loop_trace(seed=31, steps=5)
-    loop_c = moving_closed_loop_trace(seed=32, steps=5)
-    @test loop_a == loop_b
-    @test any(diff(loop_a.slope_norms) .!= 0)
-    @test all(isfinite, loop_a.command_norms)
-    @test maximum(loop_a.command_norms) > 0
-    @test all(>(0), loop_a.wfs_energy)
-    @test all(>(0), loop_a.science_energy)
-    @test any(abs.(loop_a.slope_norms .- loop_c.slope_norms) .> 0)
 end

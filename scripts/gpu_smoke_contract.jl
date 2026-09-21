@@ -5,7 +5,6 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
 using LinearAlgebra
 using Random
 using Statistics
@@ -645,7 +644,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return slopes
     end
 
-    record_gpu_smoke!(failures, "closed_loop_step") do
+    record_gpu_smoke!(failures, "plant_step") do
         step_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         atm = KolmogorovAtmosphere(step_tel; r0=0.2,
             reference_wavelength_m=T(500e-9), L0=25.0, T=T,
@@ -669,19 +668,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return frame
     end
 
-    record_gpu_smoke!(failures, "interaction_matrix_reconstructor") do
+    record_gpu_smoke!(failures, "interaction_matrix_calibration") do
         cal_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         dm = DeformableMirror(cal_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
         wfs = ShackHartmannWFS(cal_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
         calibration_pupil = PupilFunction(cal_tel; T=T, backend=backend)
         imat = interaction_matrix(dm, wfs, calibration_pupil, src;
             amplitude=T(0.05))
-        recon = ModalReconstructor(imat; gain=one(T))
-        measure!(wfs, calibration_pupil, src)
-        cmds = reconstruct(recon, slopes(wfs))
         @assert imat.matrix isa BackendArray
-        @assert cmds isa BackendArray
-        return cmds
+        return imat.matrix
     end
 
     record_gpu_smoke!(failures, "gain_sensing_camera") do

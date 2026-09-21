@@ -68,11 +68,6 @@ const TEST_SUITE_SPECS = (
         "testsets/atmosphere_direction_batch.jl",
         fixtures=("wfs_stage_contract_fixtures.jl",),
     ),
-    TestSuiteSpec("control-primitives", "testsets/control_primitives.jl"),
-    TestSuiteSpec(
-        "control-reconstruction",
-        "testsets/control_reconstruction.jl",
-    ),
     TestSuiteSpec(
         "detector-parameter-ownership",
         "testsets/detector_parameter_ownership.jl";
@@ -222,7 +217,6 @@ const TEST_GROUP_SPECS = (
         "atmosphere",
         "atmosphere-direction-batch",
     ),
-    "control" => ("control-primitives", "control-reconstruction"),
     "calibration" => ("calibration-workflows",),
     "sensors" => (
         DETECTOR_TEST_SUITE_NAMES...,
@@ -257,9 +251,7 @@ const TEST_CI_SHARD_SPECS = (
         "gate0",
         "backend-smoke",
     ),
-    "ci-sensors-control" => (
-        "control-primitives",
-        "control-reconstruction",
+    "ci-sensors" => (
         DETECTOR_TEST_SUITE_NAMES...,
         "wfs-acquisition-ownership",
         "wfs-common",

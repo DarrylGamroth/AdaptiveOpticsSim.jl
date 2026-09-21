@@ -247,8 +247,6 @@ end
         @test Base.ispublic(Detectors, name)
         @test parentmodule(getfield(Detectors, name)) === Detectors
     end
-    @test Base.isexported(Control, :FactorizedReconstructor)
-    @test Base.isexported(Control, :ControlledReconstructor)
     @test !Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
     @test !Base.isexported(AdaptiveOpticsSim, :BiOEdgeWFS)
     @test Base.isexported(WavefrontSensors, :PyramidWFS)
@@ -399,54 +397,6 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :set_fft_provider_threads!)
     @test !Base.isexported(AdaptiveOpticsSim, :GPUBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AbstractRuntimeExecutionPlan)
-    @test !Base.isexported(AdaptiveOpticsSim, :runtime_reconstructor_storage)
-    for name in (
-        :NullReconstructor,
-        :ControlMatrixPlan,
-        :ClosedLoopCorrectionPlan,
-        :ControllerToVDMPlan,
-        :VDMToPDMPlan,
-        :PDMActuatorRangePlan,
-        :PDMFeedbackToVDMPlan,
-        :VDMFeedbackToControllerPlan,
-        :ModalReconstructor,
-        :FactorizedReconstructor,
-        :MappedReconstructor,
-        :ControlledReconstructor,
-        :reconstruct!,
-        :reconstruct,
-        :DiscreteIntegratorController,
-        :VectorDelayLine,
-        :shift_delay!,
-        :apply_closed_loop_correction!,
-        :project_controller_to_vdm!,
-        :project_vdm_to_pdm!,
-        :apply_pdm_actuator_range!,
-        :project_pdm_feedback_to_vdm!,
-        :project_vdm_feedback_to_controller!,
-    )
-        @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test !Base.ispublic(AdaptiveOpticsSim, name)
-        @test Base.isexported(Control, name)
-        @test Base.ispublic(Control, name)
-        @test parentmodule(getfield(Control, name)) === Control
-    end
-    for name in (
-        :controller_output,
-        :reset_controller!,
-        :supports_controller_reset,
-        :ClosedLoopCorrectionState,
-        :ClosedLoopCorrectionWorkspace,
-        :reset_closed_loop_correction!,
-        :VDMToPDMWorkspace,
-        :PDMFeedbackToVDMWorkspace,
-    )
-        @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test !Base.ispublic(AdaptiveOpticsSim, name)
-        @test !Base.isexported(Control, name)
-        @test Base.ispublic(Control, name)
-        @test parentmodule(getfield(Control, name)) === Control
-    end
     for name in (
         :TomographyAtmosphereParams,
         :LGSAsterismParams,

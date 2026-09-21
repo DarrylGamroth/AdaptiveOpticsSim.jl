@@ -1,6 +1,7 @@
 using Test
 
 include("s1_lockstep.jl")
+include("rtc_parity.jl")
 using .AOSFGALockstep
 using AdaptiveOpticsCalibration.Reconstructors: reconstructor
 using AdaptiveOpticsSim.WavefrontSensors: observation_storage
@@ -38,6 +39,32 @@ const S1_EXPECTED_RECONSTRUCTOR = reshape(
     1,
     8,
 )
+
+# Deterministic accepted-frame trajectory from the AOS plant / FGA RTC boundary
+# at AOS commit d6a683008d9e40ca5bd90e5ccf748e5aa3384caa.  Residual norms are in
+# controller reconstruction coordinates; commands are PDM metres.
+const S1_EXPECTED_RESIDUAL_NORMS = Float32[
+    0.15002562,
+    0.09018742,
+    0.05413042,
+    0.032470427,
+    0.019473683,
+    0.011678018,
+    0.007003085,
+    0.0041994397,
+    0.002518242,
+]
+const S1_EXPECTED_DEMANDED_COMMANDS = Float32[
+    -1.1987396e-8,
+    -1.9193582e-8,
+    -2.3518728e-8,
+    -2.6113192e-8,
+    -2.7669184e-8,
+    -2.8602285e-8,
+    -2.9161848e-8,
+    -2.9497393e-8,
+    -2.9698606e-8,
+]
 
 function replace_frame(
     frame::S1DetectorFrame;
@@ -125,13 +152,23 @@ end
     @test @allocated(step_lockstep!(prepared)) == 0
 
     reset_s1_lockstep!(prepared)
-    residual_norms = Float32[]
-    for sequence in UInt64(1):UInt64(9)
+    for index in eachindex(S1_EXPECTED_RESIDUAL_NORMS)
+        sequence = UInt64(index)
         @test step_lockstep!(prepared) == sequence
-        push!(residual_norms, norm(prepared.outputs.slopes))
+        @test norm(prepared.outputs.slopes) ≈ S1_EXPECTED_RESIDUAL_NORMS[index] rtol=1f-6
+        @test prepared.outputs.demanded[1] ≈
+              S1_EXPECTED_DEMANDED_COMMANDS[index] rtol=1f-6
+        @test prepared.adopted_command[1] == prepared.outputs.demanded[1]
+        expected_applied = if isone(index)
+            0.0f0
+        else
+            S1_EXPECTED_DEMANDED_COMMANDS[index - 1]
+        end
+        @test prepared.applied_command[1] ≈ expected_applied rtol=1f-6
     end
-    @test all(<(0), diff(residual_norms))
-    @test last(residual_norms) < first(residual_norms) * 0.02f0
+    @test all(<(0), diff(S1_EXPECTED_RESIDUAL_NORMS))
+    @test last(S1_EXPECTED_RESIDUAL_NORMS) <
+          first(S1_EXPECTED_RESIDUAL_NORMS) * 0.02f0
     @test prepared.adopted_command[1] ≈ -3.0f-8 rtol=0.02f0
 end
 

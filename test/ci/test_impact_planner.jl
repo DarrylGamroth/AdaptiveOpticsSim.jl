@@ -40,7 +40,7 @@ include(joinpath(@__DIR__, "impact_planner.jl"))
     @test shack_hartmann.accelerator_scope == FullAccelerator
 
     atmosphere = plan_validation(("src/atmosphere/multilayer.jl",))
-    @test atmosphere.selectors == Set(("ci-foundations", "ci-sensors-control"))
+    @test atmosphere.selectors == Set(("ci-foundations", "ci-sensors"))
     @test atmosphere.accelerator_scope == FullAccelerator
 
     registered = plan_validation(("test/testsets/detector_cmos.jl",))

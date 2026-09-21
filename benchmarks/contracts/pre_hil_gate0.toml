@@ -20,7 +20,7 @@ scope_exclusions = [
 ]
 
 [contract]
-load_model = "closed_loop"
+load_model = "serial plant operation"
 arrival_model = "the next operation starts after the previous operation and histogram recording complete"
 coordinated_omission_correction = false
 coordinated_omission_reason = "these cards measure serial service time and do not make a fixed-arrival-rate claim"
@@ -96,17 +96,6 @@ resolution = 64
 zero_padding = 2
 rng_seed_a = 81
 rng_seed_b = 82
-absolute_p99_ns = 5000000
-max_alloc_bytes = 0
-
-[[cards]]
-id = "G0-PERF-08"
-label = "compact closed-loop runtime step"
-kind = "closed_loop_step"
-resolution = 16
-n_lenslets = 4
-n_actuators = 4
-rng_seed = 91
 absolute_p99_ns = 5000000
 max_alloc_bytes = 0
 

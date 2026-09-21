@@ -1907,54 +1907,6 @@ function run_optional_plane_product_checks(tel::Telescope,
     return nothing
 end
 
-function run_optional_scalable_reconstructor_checks(::Type{T}, selector,
-    BackendArray) where {T<:AbstractFloat}
-    rng = MersenneTwister(20260713)
-    n_slopes = 12
-    n_commands = 8
-    D_host = randn(rng, T, n_slopes, n_commands)
-    slopes_host = randn(rng, T, n_slopes)
-    D = BackendArray(D_host)
-    input = BackendArray(slopes_host)
-    interaction = InteractionMatrix(D, T(0.1))
-    dense = ModalReconstructor(interaction; gain=T(0.5))
-    factorized = FactorizedReconstructor(interaction; gain=T(0.5))
-    dense_out = BackendArray(zeros(T, n_commands))
-    factorized_out = BackendArray(zeros(T, n_commands))
-    reconstruct!(dense_out, dense, input)
-    reconstruct!(factorized_out, factorized, input)
-    AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(factorized_out))
-    @test Array(factorized_out) ≈ Array(dense_out) atol=T(2e-4) rtol=T(2e-4)
-    @test Control.factorized_rank(factorized) == n_commands
-    @test all(storage -> storage isa BackendArray,
-        Control.runtime_reconstructor_storage(factorized))
-
-    compact = FactorizedReconstructor(interaction; gain=T(0.5), max_rank=3)
-    @test Control.factorized_rank(compact) == 3
-    @test sum(length,
-        Control.runtime_reconstructor_storage(compact)) <
-        sum(length,
-            Control.runtime_reconstructor_storage(factorized))
-
-    controller = DiscreteIntegratorController(n_commands;
-        gain=T(0.7), tau=T(0.01), T=T, backend=selector)
-    controlled = ControlledReconstructor(factorized, controller; dt=T(1e-3))
-    reconstruct!(factorized_out, controlled, input)
-    AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(factorized_out))
-    @test all(isfinite, Array(factorized_out))
-    @test all(storage -> storage isa BackendArray,
-        Control.runtime_reconstructor_storage(controlled))
-    @test Control.reset_controller!(controlled) === controlled
-    @test_throws InvalidConfiguration ControlledReconstructor(
-        factorized,
-        DiscreteIntegratorController(n_commands; T=T, backend=CPUBackend());
-        dt=T(1e-3),
-    )
-    return nothing
-end
-
 function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:sh}) where {T<:AbstractFloat}
     return ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
 end
@@ -3828,8 +3780,6 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_lift_pipeline_checks(B, BackendArray, T)
     run_optional_backend_plan_checks(B, tel, selector)
     run_optional_independent_optics_parity(B, BackendArray)
-    run_optional_scalable_reconstructor_checks(T, selector, BackendArray)
-
     curv = CurvatureWFS(tel; pupil_samples=4, T=T, backend=selector)
     curv_slopes = measure!(curv, pupil, src, atm)
     @test curv_slopes isa BackendArray

@@ -7,7 +7,6 @@ using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim.AlgorithmGraphs

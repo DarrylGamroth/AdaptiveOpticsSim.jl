@@ -13,8 +13,6 @@ using SHA
 using Statistics
 using TOML
 
-include(joinpath(@__DIR__, "support", "closed_loop_workload.jl"))
-
 const GATE0_CONTRACT_PATH = get(ENV, "AOS_GATE0_CONTRACT",
     joinpath(@__DIR__, "contracts", "pre_hil_gate0.toml"))
 const GATE0_BASELINE_PATH = get(ENV, "AOS_GATE0_BASELINE", "")
@@ -196,20 +194,6 @@ function make_gate0_card(raw::AbstractDict)
                 capture!(acquisition_a, rng_a)
                 capture!(acquisition_b, rng_b)
             end
-        end
-    elseif kind == "closed_loop_step"
-        # `kind` is a frozen card identifier. The maintained operation is an
-        # explicit benchmark-owned composition of independent subsystems.
-        workload = prepare_closed_loop_workload(
-            ;
-            resolution=resolution,
-            n_lenslets=Int(raw["n_lenslets"]),
-            n_act=Int(raw["n_actuators"]),
-            T=Float64,
-            seed=Int(raw["rng_seed"]),
-        )
-        let workload=workload
-            () -> step_closed_loop_workload!(workload)
         end
     elseif kind == "zernike"
         tel = Telescope(resolution=resolution, diameter=8.0,
@@ -614,7 +598,7 @@ function run_gate0_latency_benchmarks()
     all_gates_passed = true
 
     println("pre_hil_gate0_latency_contract")
-    println("  load_model: warmed serial closed-loop")
+    println("  load_model: warmed serial plant operation")
     println("  samples_per_run: ", samples)
     println("  runs: ", runs_count)
     println("  warmup_operations: ", warmup)
