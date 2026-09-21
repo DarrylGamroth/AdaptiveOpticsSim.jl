@@ -20,6 +20,20 @@ struct AOCalibration{T<:AbstractFloat,
     calibration::C
 end
 
+function AOCalibration(
+    basis::B,
+    ::Nothing,
+    modal_to_command::M,
+    calibration::C,
+) where {
+    T<:AbstractFloat,
+    B<:AbstractMatrix{T},
+    M<:AbstractMatrix{T},
+    C<:ControlMatrix{T},
+}
+    return AOCalibration{T,B,M,M,C}(basis, nothing, modal_to_command, calibration)
+end
+
 @inline modal_to_command(calib::AOCalibration) = calib.M2C
 @inline sampled_basis(calib::AOCalibration) = calib.basis
 @inline modal_projector(calib::AOCalibration) = calib.projector
@@ -38,7 +52,9 @@ function ao_calibration(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS;
     n_modes::Int=size(dm.state.modes, 2), amplitude::Real=1e-9,
     projector::Bool=true, basis::Union{Nothing,ModalBasis}=nothing,
     pupil::PupilFunction=PupilFunction(tel),
-    method::KLBasisMethod=KLDMModes(), atm::Union{Nothing,AbstractAtmosphere}=nothing,
+    method::_AOC_MODAL_BASES.AbstractModalBasisMethod=
+        _AOC_MODAL_BASES.InfluenceFunctionEigenbasis(),
+    atm::Union{Nothing,AbstractAtmosphere}=nothing,
     build_backend::BuildBackend=default_runtime_calibration_build_backend(dm.state.coefs))
 
     if basis === nothing

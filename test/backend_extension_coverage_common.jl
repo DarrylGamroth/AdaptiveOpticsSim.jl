@@ -91,5 +91,30 @@ function run_backend_extension_coverage(
     )
     @test projector isa ArrayBackend
     @test Array(projector) ≈ pinv(Array(projector_basis))
+
+    selector = Backends.array_backend_selector(ArrayBackend)
+    modal_telescope = AdaptiveOpticsSim.Optics.Telescope(
+        resolution=8,
+        diameter=8.0f0,
+        central_obstruction=0.0f0,
+        T=Float32,
+        backend=selector,
+    )
+    modal_dm = AdaptiveOpticsSim.Optics.DeformableMirror(
+        modal_telescope;
+        n_act=2,
+        influence_width=0.4f0,
+        T=Float32,
+    )
+    modal_basis = AdaptiveOpticsSim.Calibration.modal_basis(
+        modal_dm,
+        modal_telescope;
+        n_modes=2,
+    )
+    @test modal_basis.M2C isa ArrayBackend
+    @test modal_basis.basis isa ArrayBackend
+    @test modal_basis.projector isa ArrayBackend
+    @test all(isfinite, Array(modal_basis.M2C))
+    @test all(isfinite, Array(modal_basis.basis))
     return nothing
 end

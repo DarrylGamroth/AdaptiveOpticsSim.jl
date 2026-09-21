@@ -1,13 +1,59 @@
 @testset "Modal bases and fitting" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    basis = modal_basis(dm, tel; n_modes=2)
+    basis = @inferred modal_basis(dm, tel; n_modes=2)
+    basis_without_projector = @inferred modal_basis(
+        dm, tel; n_modes=2, projector=false)
+    @test typeof(basis_without_projector) === typeof(basis)
+    @test basis_without_projector.projector === nothing
+    @test !isdefined(AdaptiveOpticsSim, :KLDMModes)
+    @test !isdefined(Calibration, :KLDMModes)
+    @test !isdefined(AdaptiveOpticsSim, :KLBasis)
+    @test !isdefined(Calibration, :KLBasis)
+    @test !isdefined(AdaptiveOpticsSim, :fitting_error)
+    @test !isdefined(Calibration, :fitting_error)
     @test size(basis.M2C, 2) == 2
+    sampled_influences = Matrix(sampled_influence_matrix(dm))
+    direct_plan = AdaptiveOpticsCalibration.prepare(
+        AOCModalBases.InfluenceFunctionEigenbasis(),
+        AOCModalBases.SampledInfluenceBasisSpecification(
+            size(sampled_influences, 1),
+            size(sampled_influences, 2),
+            2,
+            vec(pupil_mask(tel)),
+            eltype(sampled_influences),
+        ),
+    )
+    direct_basis = AdaptiveOpticsCalibration.process(direct_plan, sampled_influences)
+    direct_m2c = AOCModalBases.modal_to_command(direct_basis)
+    direct_sampled_modes = AOCModalBases.sampled_modes(direct_basis)
+    for mode in 1:2
+        sign = dot(
+            @view(basis.M2C[:, mode]),
+            @view(direct_m2c[:, mode]),
+        ) < 0 ? -1 : 1
+        @test @view(basis.M2C[:, mode]) ≈
+            sign .* (@view direct_m2c[:, mode])
+        @test @view(basis.basis[:, mode]) ≈
+            sign .* (@view direct_sampled_modes[:, mode])
+    end
     opd = rand(16, 16)
-    fit, corr, turb = fitting_error(opd, basis.projector, basis.basis)
-    @test size(fit) == size(opd)
-    @test size(corr) == size(opd)
-    @test size(turb) == size(opd)
+    fitting_plan = AdaptiveOpticsCalibration.prepare(
+        AOCModalBases.ModalFitting(),
+        AOCModalBases.ModalFittingSpecification(
+            size(opd, 1),
+            size(opd, 2),
+            size(basis.basis, 2),
+            eltype(opd),
+        ),
+    )
+    fitting = AdaptiveOpticsCalibration.process(
+        fitting_plan,
+        AOCModalBases.ModalFittingInputs(opd, basis.projector, basis.basis),
+    )
+    @test size(AOCModalBases.residual_opd(fitting)) == size(opd)
+    @test size(AOCModalBases.fitted_opd(fitting)) == size(opd)
+    @test size(AOCModalBases.input_opd(fitting)) == size(opd)
 
     atm = KolmogorovAtmosphere(tel; r0=0.2,
         reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,

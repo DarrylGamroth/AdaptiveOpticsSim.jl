@@ -13,21 +13,39 @@
     @test surface_opd(physical_ncpa) === sampled_opd
     @test fieldnames(typeof(physical_ncpa)) == (:opd,)
     @test parentmodule(typeof(physical_ncpa)) === Optics
-    @test parentmodule(typeof(KLBasis())) === Calibration
+    @test parentmodule(typeof(ModalCalibrationBasis())) === Calibration
 
-    basis_default = Calibration.ncpa_basis(KLBasis(), tel, dm, atm; n_modes=2)
-    basis_hht = Calibration.ncpa_basis(KLBasis(KLHHtPSD()), tel, dm, atm; n_modes=2)
-    basis_dm = Calibration.ncpa_basis(KLBasis(KLDMModes()), tel, dm, atm; n_modes=2)
+    basis_default = Calibration.ncpa_basis(ModalCalibrationBasis(), tel, dm, atm; n_modes=2)
+    basis_hht = Calibration.ncpa_basis(
+        ModalCalibrationBasis(KLHHtPSD()), tel, dm, atm; n_modes=2)
+    basis_dm = Calibration.ncpa_basis(
+        ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
+        tel,
+        dm,
+        atm;
+        n_modes=2,
+    )
     basis_dm_without_atmosphere =
-        Calibration.ncpa_basis(KLBasis(KLDMModes()), tel, dm; n_modes=2)
+        Calibration.ncpa_basis(
+            ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
+            tel,
+            dm;
+            n_modes=2,
+        )
     @test basis_default ≈ basis_hht
     @test sum(abs.(basis_default .- basis_dm)) > 0
     @test basis_dm_without_atmosphere ≈ basis_dm
     @test_throws InvalidConfiguration Calibration.ncpa_basis(
-        KLBasis(KLHHtPSD()), tel, dm; n_modes=2)
+        ModalCalibrationBasis(KLHHtPSD()), tel, dm; n_modes=2)
 
-    modal_to_command, _ =
-        kl_modal_basis(KLDMModes(), dm, tel; n_modes=2)
+    sampled_basis = modal_basis(
+        dm,
+        tel;
+        n_modes=2,
+        projector=false,
+        method=AOCModalBases.InfluenceFunctionEigenbasis(),
+    )
+    modal_to_command = sampled_basis.M2C
     @test_throws InvalidConfiguration Calibration.ncpa_basis(
         M2CBasis(), tel, dm; n_modes=2)
     external_basis = Calibration.ncpa_basis(
@@ -37,9 +55,21 @@
 
     coeffs = [1e-9, 2e-9]
     ncpa_default_kl = @inferred NCPA(
-        tel, dm, atm; basis=KLBasis(), coefficients=coeffs)
-    ncpa_hht = NCPA(tel, dm, atm; basis=KLBasis(KLHHtPSD()), coefficients=coeffs)
-    ncpa_dm = NCPA(tel, dm, atm; basis=KLBasis(KLDMModes()), coefficients=coeffs)
+        tel, dm, atm; basis=ModalCalibrationBasis(), coefficients=coeffs)
+    ncpa_hht = NCPA(
+        tel,
+        dm,
+        atm;
+        basis=ModalCalibrationBasis(KLHHtPSD()),
+        coefficients=coeffs,
+    )
+    ncpa_dm = NCPA(
+        tel,
+        dm,
+        atm;
+        basis=ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
+        coefficients=coeffs,
+    )
     ncpa_zero = NCPA(tel, dm, atm)
     @test eltype(ncpa_zero.opd) == eltype(pupil_reflectivity(tel))
     @test all(iszero, ncpa_zero.opd)
@@ -66,11 +96,11 @@
 
     amplitude = 2e-9
     random_ncpa = NCPA(tel, dm, atm;
-        basis=KLBasis(KLDMModes()),
+        basis=ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
         f2=(amplitude, 1, 2, 1.0),
         seed=17)
     repeated_random_ncpa = NCPA(tel, dm, atm;
-        basis=KLBasis(KLDMModes()),
+        basis=ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
         f2=(amplitude, 1, 2, 1.0),
         seed=17)
     @test random_ncpa.opd == repeated_random_ncpa.opd

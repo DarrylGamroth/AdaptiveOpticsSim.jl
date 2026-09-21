@@ -10,6 +10,7 @@ using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsCalibration.Reconstructors: AbstractSVDInverse, TSVDInverse
+using AdaptiveOpticsCalibration.ModalBases: InfluenceFunctionEigenbasis
 using LinearAlgebra
 using Random
 using Statistics
@@ -575,7 +576,13 @@ end
 
 function _low_order_command_basis(dm::DeformableMirror, tel::Telescope, active_mask::AbstractMatrix{Bool},
     n_modes::Int, T::Type{<:AbstractFloat})
-    M2C_native, _ = kl_modal_basis(KLDMModes(), dm, tel; n_modes=n_modes, remove_piston=true)
+    M2C_native = modal_basis(
+        dm,
+        tel;
+        n_modes=n_modes,
+        projector=false,
+        method=InfluenceFunctionEigenbasis(remove_piston=true),
+    ).M2C
     M2C = Matrix{T}(Array(M2C_native[:, 1:n_modes]))
     inactive = .!vec(active_mask)
     @views M2C[inactive, :] .= zero(T)

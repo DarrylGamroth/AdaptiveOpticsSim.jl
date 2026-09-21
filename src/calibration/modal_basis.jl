@@ -4,17 +4,21 @@
 # This file builds the command-basis operators used for modal calibration and
 # control.
 #
-# Supported Karhunen-Loeve-like constructions:
-# - `KLDMModes`: eigendecomposition of the DM-mode covariance `M' * M`
-# - `KLHHtPSD`: PSD-weighted covariance in Fourier space, which better reflects
-#   atmospheric statistics when an atmosphere model is available
+# Supported constructions:
+# - `InfluenceFunctionEigenbasis`: delegated sampled influence-function Gram
+#   eigenbasis from AdaptiveOpticsCalibration
+# - `KLHHtPSD`: retained PSD-weighted covariance in Fourier space
 #
 # The resulting `M2C` operator maps modal coefficients to actuator commands,
 # while `basis` stores the corresponding OPD modes on the pupil grid.
 #
-abstract type KLBasisMethod end
-struct KLDMModes <: KLBasisMethod end
-struct KLHHtPSD <: KLBasisMethod end
+const _AOC_MODAL_BASES = AdaptiveOpticsCalibration.ModalBases
+
+struct KLHHtPSD <: _AOC_MODAL_BASES.AbstractModalBasisMethod
+    remove_piston::Bool
+end
+
+KLHHtPSD(; remove_piston::Bool=true) = KLHHtPSD(remove_piston)
 
 """
     ModalBasis
@@ -32,6 +36,14 @@ struct ModalBasis{T<:AbstractFloat,
     M2C::M
     basis::B
     projector::Union{Nothing,P}
+end
+
+function ModalBasis(
+    modal_to_command::M,
+    basis::B,
+    ::Nothing,
+) where {T<:AbstractFloat,M<:AbstractMatrix{T},B<:AbstractMatrix{T}}
+    return ModalBasis{T,M,B,M}(modal_to_command, basis, nothing)
 end
 
 @inline modal_to_command(basis::ModalBasis) = basis.M2C
@@ -74,41 +86,18 @@ function basis_projector(basis::AbstractMatrix{T};
 end
 
 """
-    kl_modal_basis(method, dm, tel; ...)
+    kl_modal_basis(method::KLHHtPSD, dm, tel, atmosphere; ...)
 
-Build a KL-style modal basis and its modal-to-command matrix.
+Build the retained atmosphere-PSD-weighted KL modal basis and its
+modal-to-command matrix.
 
-The chosen method determines how modal covariance is approximated before the
-eigendecomposition that orders modes by decreasing expected variance.
+The Fourier convention, PSD normalization, and covariance contract remain an
+AOS migration item. Sampled influence-function eigenbases use
+AdaptiveOpticsCalibration instead of this API.
 """
-function kl_modal_basis(dm::DeformableMirror, tel::Telescope;
-    n_modes::Int=size(dm.state.modes, 2), remove_piston::Bool=true)
-    return kl_modal_basis(KLDMModes(), dm, tel; n_modes=n_modes, remove_piston=remove_piston)
-end
-
-function kl_modal_basis(::KLDMModes, dm::DeformableMirror, tel::Telescope;
-    n_modes::Int=size(dm.state.modes, 2), remove_piston::Bool=true)
-    M = sampled_influence_matrix(dm)
-    C = transpose(M) * M
-    evals, evecs = eigen(Symmetric(C))
-    order = sortperm(evals; rev=true)
-    n_keep = min(n_modes, length(order))
-    V = evecs[:, order[1:n_keep]]
-    basis_mat = M * V
-    if remove_piston
-        n = tel.params.resolution
-        for i in 1:n_keep
-            mode = reshape(view(basis_mat, :, i), n, n)
-            mean_mode = mean(mode[pupil_mask(tel)])
-            @views basis_mat[:, i] .-= mean_mode
-        end
-    end
-    basis = reshape(basis_mat, tel.params.resolution, tel.params.resolution, n_keep)
-    return V, basis
-end
-
-function kl_modal_basis(::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::AbstractAtmosphere;
-    n_modes::Int=size(dm.state.modes, 2), remove_piston::Bool=true, delta::Union{Nothing,Real}=nothing)
+function kl_modal_basis(method::KLHHtPSD, dm::DeformableMirror, tel::Telescope,
+    atm::AbstractAtmosphere;
+    n_modes::Int=size(dm.state.modes, 2), delta::Union{Nothing,Real}=nothing)
     n = tel.params.resolution
     mode_count = size(dm.state.modes, 2)
     n_keep = min(n_modes, mode_count)
@@ -156,7 +145,7 @@ function kl_modal_basis(::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::A
     order = sortperm(evals; rev=true)
     V = evecs[:, order[1:n_keep]]
     basis_mat = modes * V
-    if remove_piston
+    if method.remove_piston
         for i in 1:n_keep
             mode = reshape(view(basis_mat, :, i), n, n)
             mean_mode = mean(mode[pupil_mask(tel)])
@@ -188,25 +177,62 @@ This returns both the modal-to-command operator and the sampled pupil-space
 basis, with an optional projector back into modal coordinates.
 """
 function modal_basis(dm::DeformableMirror, tel::Telescope; n_modes::Int=size(dm.state.modes, 2),
-    remove_piston::Bool=true, projector::Bool=true, method::KLBasisMethod=KLDMModes(),
+    projector::Bool=true,
+    method::_AOC_MODAL_BASES.AbstractModalBasisMethod=
+        _AOC_MODAL_BASES.InfluenceFunctionEigenbasis(),
     atm::Union{Nothing,AbstractAtmosphere}=nothing)
-    M2C, basis = modal_basis_components(method, dm, tel, atm; n_modes=n_modes, remove_piston=remove_piston)
+    M2C, basis = modal_basis_components(method, dm, tel, atm; n_modes=n_modes)
     basis_mat = reshape(basis, :, size(basis, 3))
     proj = projector ? basis_projector(basis_mat) : nothing
     return ModalBasis(M2C, basis_mat, proj)
 end
 
-function modal_basis_components(method::KLBasisMethod, dm::DeformableMirror, tel::Telescope, atm;
-    n_modes::Int, remove_piston::Bool)
-    return kl_modal_basis(method, dm, tel; n_modes=n_modes, remove_piston=remove_piston)
+function modal_basis_components(
+    method::_AOC_MODAL_BASES.InfluenceFunctionEigenbasis,
+    dm::DeformableMirror,
+    tel::Telescope,
+    ::Union{Nothing,AbstractAtmosphere};
+    n_modes::Int,
+)
+    sampled_influences = sampled_influence_matrix(dm)
+    T = eltype(sampled_influences)
+    host_influences = prepare_build_matrix(CPUBuildBackend(), sampled_influences)
+    support = vec(Array(pupil_mask(tel)))
+    specification = _AOC_MODAL_BASES.SampledInfluenceBasisSpecification(
+        size(host_influences, 1),
+        size(host_influences, 2),
+        n_modes,
+        support,
+        T,
+    )
+    plan = AdaptiveOpticsCalibration.prepare(method, specification)
+    product = AdaptiveOpticsCalibration.process(plan, host_influences)
+    build_backend = default_runtime_calibration_build_backend(sampled_influences)
+    modal_to_command = materialize_runtime_build_result(
+        build_backend,
+        sampled_influences,
+        _AOC_MODAL_BASES.modal_to_command(product),
+    )
+    sampled_modes = materialize_runtime_build_result(
+        build_backend,
+        sampled_influences,
+        _AOC_MODAL_BASES.sampled_modes(product),
+    )
+    basis = reshape(
+        sampled_modes,
+        tel.params.resolution,
+        tel.params.resolution,
+        n_modes,
+    )
+    return modal_to_command, basis
 end
 
 function modal_basis_components(method::KLHHtPSD, dm::DeformableMirror, tel::Telescope, ::Nothing;
-    n_modes::Int, remove_piston::Bool)
+    n_modes::Int)
     throw(InvalidConfiguration("KLHHtPSD modal basis requires an atmosphere"))
 end
 
 function modal_basis_components(method::KLHHtPSD, dm::DeformableMirror, tel::Telescope, atm::AbstractAtmosphere;
-    n_modes::Int, remove_piston::Bool)
-    return kl_modal_basis(method, dm, tel, atm; n_modes=n_modes, remove_piston=remove_piston)
+    n_modes::Int)
+    return kl_modal_basis(method, dm, tel, atm; n_modes=n_modes)
 end

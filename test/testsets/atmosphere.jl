@@ -926,7 +926,8 @@ end
     @test default_subharmonic_mode(ScientificProfile()) isa FidelitySubharmonics
     @test default_subharmonic_mode(FastProfile()) isa FastSubharmonics
     @test default_ncpa_basis(ScientificProfile()).method isa KLHHtPSD
-    @test default_ncpa_basis(FastProfile()).method isa KLDMModes
+    @test default_ncpa_basis(FastProfile()).method isa
+        AOCModalBases.InfluenceFunctionEigenbasis
 
     mixed = ProfileBundle(ScientificProfile(); lift=FastProfile(), tomography=FastProfile())
     @test atmosphere_profile(mixed) isa ScientificProfile
@@ -938,7 +939,8 @@ end
     @test default_ncpa_basis(mixed).method isa KLHHtPSD
 
     fast_cal = ProfileBundle(ScientificProfile(); calibration=FastProfile())
-    @test default_ncpa_basis(fast_cal).method isa KLDMModes
+    @test default_ncpa_basis(fast_cal).method isa
+        AOCModalBases.InfluenceFunctionEigenbasis
 
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel;

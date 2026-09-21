@@ -1,12 +1,5 @@
-function fitting_error(opd::AbstractMatrix{T}, projector::AbstractMatrix{T}, basis::AbstractMatrix{T}) where {T<:AbstractFloat}
-    phi = reshape(opd, :)
-    coeffs = projector * phi
-    phi_corr = basis * coeffs
-    phi_fit = phi .- phi_corr
-    n, m = size(opd)
-    return reshape(phi_fit, n, m), reshape(phi_corr, n, m), copy(opd)
-end
-
+# Plant-specific fitting evaluation. Pure explicit-array modal fitting is owned
+# by AdaptiveOpticsCalibration.ModalBases.
 function fitting_error_dm(opd::AbstractMatrix{T}, projector::AbstractMatrix{T},
     pupil::PupilFunction, dm::DeformableMirror,
     M2C::AbstractMatrix{T}) where {T<:AbstractFloat}
