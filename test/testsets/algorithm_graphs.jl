@@ -844,8 +844,8 @@ end
     @test graph_output(graph, Val(:output)) == input
 end
 
-@testset "native controller and modal OPD graph nodes" begin
-    residual = Float32[1, 2]
+@testset "native modal OPD graph node" begin
+    coefficients = Float32[0.1, 0.2]
     basis = zeros(Float32, 2, 2, 2)
     fill!(@view(basis[:, :, 1]), 1.0f0)
     fill!(@view(basis[:, :, 2]), 2.0f0)
@@ -854,15 +854,6 @@ end
 
     definition = algorithm_graph(
         (
-            discrete_integrator_node(
-                :controller;
-                extent=2,
-                sample_period_s=0.1f0,
-                input_schema="test.graph.residual.f32/1",
-                output_schema=coefficient_schema,
-                gain=2.0f0,
-                tau_s=0.2f0,
-            ),
             modal_opd_expansion_node(
                 :modal_opd;
                 pupil_rows=2,
@@ -874,13 +865,13 @@ end
                 pupil_support_schema="test.graph.pupil-support.bool/1",
             ),
         );
-        name=:native_modal_control,
-        inputs=(graph_input(:residual, :controller => :input, residual),),
-        outputs=(
-            graph_output(:command, :controller => :output),
-            graph_output(:opd, :modal_opd => :opd),
-        ),
-        links=(link(:controller => :output, :modal_opd => :coefficients),),
+        name=:native_modal_opd,
+        inputs=(graph_input(
+            :coefficients,
+            :modal_opd => :coefficients,
+            coefficients,
+        ),),
+        outputs=(graph_output(:opd, :modal_opd => :opd),),
         parameters=(
             sparse_parameter(:modal_opd => :basis, basis),
             sparse_parameter(:modal_opd => :pupil_support, pupil_support),
@@ -888,17 +879,15 @@ end
     )
     graph = prepare_algorithm_graph(definition)
 
-    @test graph_name(definition) === :native_modal_control
-    @test graph_name(graph) === :native_modal_control
+    @test graph_name(definition) === :native_modal_opd
+    @test graph_name(graph) === :native_modal_opd
     @test step_graph!(graph) === graph
-    @test graph_output(graph, Val(:command)) ≈ Float32[0.1, 0.2]
     @test graph_output(graph, Val(:opd)) ≈ Float32[0.5 0.0; 0.5 0.5]
+    coefficients .= Float32[0.3, -0.1]
     step_graph!(graph)
+    @test graph_output(graph, Val(:opd)) ≈ Float32[0.1 0.0; 0.1 0.1]
     @test @allocated(step_graph!(graph)) == 0
     @test @inferred(step_graph!(graph)) === graph
-    reset_graph!(graph)
-    step_graph!(graph)
-    @test graph_output(graph, Val(:command)) ≈ Float32[0.1, 0.2]
 end
 
 @testset "measured deformable-mirror surface graph node" begin
@@ -1793,130 +1782,6 @@ end
     )
 end
 
-@testset "control-matrix reconstruction graph node" begin
-    slopes = Float32[1, 2, 3, 4]
-    control_matrix = Float32[
-        1 0 2 0
-        0 -1 0 2
-    ]
-    node = control_matrix_reconstruction_node(
-        :reconstruction;
-        slope_count=4,
-        reconstructed_count=2,
-        slopes_schema="test.graph.shwfs-selected-slopes.f32/1",
-        reconstructed_schema="test.graph.controller-error.f32/1",
-        control_matrix_schema="test.graph.control-matrix.f32/1",
-    )
-    definition = algorithm_graph(
-        (node,);
-        name=:control_matrix_reconstruction,
-        inputs=(graph_input(
-            :slopes,
-            :reconstruction => :slopes,
-            slopes,
-        ),),
-        outputs=(graph_output(
-            :reconstructed,
-            :reconstruction => :reconstructed,
-        ),),
-        parameters=(sparse_parameter(
-            :reconstruction => :control_matrix,
-            control_matrix,
-        ),),
-    )
-    graph = prepare_algorithm_graph(definition)
-    owner = prepared_graph_node(graph, Val(:reconstruction))
-    reconstructed = graph_output(graph, Val(:reconstructed))
-
-    fill!(control_matrix, 0.0f0)
-    step_graph!(graph)
-    @test owner.slopes === slopes
-    @test owner.reconstructed === reconstructed
-    @test reconstructed == Float32[7, 6]
-    @test warmed_graph_step_allocation_bytes(graph) == 0
-    @test @inferred(step_graph!(graph)) === graph
-    reset_graph!(graph)
-    @test all(iszero, reconstructed)
-
-    @test_throws AlgorithmGraphError control_matrix_reconstruction_node(
-        :invalid_reconstruction;
-        slope_count=0,
-        reconstructed_count=2,
-        slopes_schema="test.graph.shwfs-selected-slopes.f32/1",
-        reconstructed_schema="test.graph.controller-error.f32/1",
-        control_matrix_schema="test.graph.control-matrix.f32/1",
-    )
-end
-
-@testset "closed-loop correction graph node" begin
-    residual_error = Float32[1, 2]
-    constraint_feedback = fill(99.0f0, 2)
-    node = closed_loop_correction_node(
-        :controller;
-        extent=2,
-        residual_error_schema="test.graph.controller-error.f32/1",
-        constraint_feedback_schema="test.graph.constraint-feedback.f32/1",
-        correction_schema="test.graph.correction.f32/1",
-        controller_state_schema="test.graph.controller-state.f32/1",
-        gain=-0.3f0,
-        pole=0.99f0,
-        anti_windup_gain=1.0f0,
-    )
-    definition = algorithm_graph(
-        (node,);
-        name=:closed_loop_correction,
-        inputs=(
-            graph_input(
-                :residual_error,
-                :controller => :residual_error,
-                residual_error,
-            ),
-            graph_input(
-                :constraint_feedback,
-                :controller => :constraint_feedback,
-                constraint_feedback,
-            ),
-        ),
-        outputs=(
-            graph_output(:correction, :controller => :correction),
-            graph_output(
-                :controller_state,
-                :controller => :controller_state,
-            ),
-        ),
-    )
-    graph = prepare_algorithm_graph(definition)
-    correction = graph_output(graph, Val(:correction))
-    controller_state = graph_output(graph, Val(:controller_state))
-
-    @test @inferred(step_graph!(graph)) === graph
-    @test correction ≈ Float32[-0.3, -0.6]
-    @test all(iszero, controller_state)
-
-    residual_error .= Float32[0.5, -1]
-    constraint_feedback .= Float32[0.1, -0.2]
-    step_graph!(graph)
-    @test controller_state ≈ Float32[-0.4, -0.4]
-    @test correction ≈ Float32[-0.546, -0.096]
-    @test warmed_graph_step_allocation_bytes(graph) == 0
-
-    reset_graph!(graph)
-    @test all(iszero, correction)
-    @test all(iszero, controller_state)
-    owner = prepared_graph_node(graph, Val(:controller))
-    @test !owner.state.has_correction
-
-    @test_throws AlgorithmGraphError closed_loop_correction_node(
-        :invalid_controller;
-        extent=2,
-        residual_error_schema="test.graph.controller-error.f32/1",
-        constraint_feedback_schema="test.graph.constraint-feedback.f32/1",
-        correction_schema="test.graph.correction.f32/1",
-        controller_state_schema="test.graph.controller-state.f32/1",
-        pole=1.1f0,
-    )
-end
-
 @testset "TOML graph files compile to native graph definitions" begin
     normalized_toml =
         AdaptiveOpticsSim.AlgorithmGraphs._normalize_toml_value(
@@ -1925,7 +1790,7 @@ end
     @test normalized_toml == (1, "two", (true, 3.0))
     @test isconcretetype(typeof(normalized_toml))
 
-    residual = Float32[1, 2]
+    coefficients = Float32[0.1, 0.2]
     basis = zeros(Float32, 2, 2, 2)
     fill!(@view(basis[:, :, 1]), 1.0f0)
     fill!(@view(basis[:, :, 2]), 2.0f0)
@@ -1933,23 +1798,22 @@ end
     path = joinpath(
         dirname(@__DIR__),
         "graph_files",
-        "native_modal_control.toml",
+        "native_modal_opd.toml",
     )
 
     definition = load_algorithm_graph(
         path;
         bindings=(;
-            residual,
+            coefficients,
             basis,
             pupil_support,
         ),
     )
-    @test graph_name(definition) === :native_modal_control
+    @test graph_name(definition) === :native_modal_opd
     @test isconcretetype(typeof(definition))
     @test all(isconcretetype, fieldtypes(typeof(definition)))
     graph = prepare_algorithm_graph(definition)
     step_graph!(graph)
-    @test graph_output(graph, Val(:command)) ≈ Float32[0.1, 0.2]
     @test graph_output(graph, Val(:opd)) ≈ Float32[0.5 0.0; 0.5 0.5]
     step_graph!(graph)
     @test @allocated(step_graph!(graph)) == 0
@@ -1957,15 +1821,12 @@ end
 
     @test_throws AlgorithmGraphError load_algorithm_graph(
         path;
-        bindings=(; residual, basis),
+        bindings=(; coefficients, basis),
     )
     @test keys(builtin_graph_node_types()) == (
         :ccd_detector_acquisition_f32,
-        :closed_loop_correction_f32,
         :cmos_detector_acquisition_f32,
-        :control_matrix_reconstruction_f32,
         :deformable_mirror_surface_f32,
-        :discrete_integrator_f32,
         :emccd_detector_acquisition_f32,
         :gaussian_deformable_mirror_surface_f32,
         :grid_gaussian_deformable_mirror_surface_f32,

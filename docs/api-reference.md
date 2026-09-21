@@ -142,10 +142,14 @@ Reusable inverse methods and compact-SVD products come from
 pupil measure, and atmospheric OPD covariance, then materializes the accepted
 calibration product on the plant's runtime backend.
 
-`Control` owns reconstructors, delay lines, discrete integration, closed-loop
-correction, and controller/DM mappings. Common entry points include
-`reconstruct!`, `shift_delay!`, `apply_closed_loop_correction!`, and the
-projection/range operations.
+`Control` is a temporary legacy AOS runtime surface during the package split. It
+currently contains reconstructors, delay lines, discrete integration,
+closed-loop correction, and controller/DM mappings; these RTC operations are
+being migrated to FilterGraphAlgorithms/JuliaFilterGraph and are not the
+maintained AOS RTC composition surface. The maintained cross-package reference
+is [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/),
+where AOS supplies the plant and FGA/JFG supplies the RTC chain. Do not add new
+production RTC callers to `AdaptiveOpticsSim.Control`.
 
 Prepared control hot paths require caller-owned input and output arrays to use
 the same floating-point element type as the prepared operator or state. This
@@ -206,8 +210,6 @@ Factory functions include:
   `emccd_detector_acquisition_node`
 - `shack_hartmann_centroid_node` and
   `shack_hartmann_slope_selection_node`
-- `control_matrix_reconstruction_node`
-- `discrete_integrator_node` and `closed_loop_correction_node`
 - `modal_opd_expansion_node`
 
 `builtin_graph_node_types()` reports the file-loader type map.

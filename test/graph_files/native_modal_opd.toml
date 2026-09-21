@@ -1,19 +1,5 @@
 schema_version = 1
-name = "native_modal_control"
-
-[[nodes]]
-name = "controller"
-type = "discrete_integrator_f32"
-
-[nodes.config]
-extent = 2
-sample_period_s = 0.1
-input_schema = "test.graph.residual.f32/1"
-output_schema = "test.graph.modal-coefficients.f32/1"
-
-[nodes.props]
-gain = 2.0
-tau_s = 0.2
+name = "native_modal_opd"
 
 [[nodes]]
 name = "modal_opd"
@@ -29,21 +15,13 @@ basis_schema = "test.graph.modal-basis.f32/1"
 pupil_support_schema = "test.graph.pupil-support.bool/1"
 
 [[inputs]]
-name = "residual"
-destination = "controller.input"
-binding = "residual"
-
-[[outputs]]
-name = "command"
-source = "controller.output"
+name = "coefficients"
+destination = "modal_opd.coefficients"
+binding = "coefficients"
 
 [[outputs]]
 name = "opd"
 source = "modal_opd.opd"
-
-[[links]]
-source = "controller.output"
-destination = "modal_opd.coefficients"
 
 [[parameters]]
 destination = "modal_opd.basis"

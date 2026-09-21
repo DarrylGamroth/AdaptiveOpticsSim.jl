@@ -152,23 +152,14 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     return nothing
 end
 
-function _grouped_modal_control_definition(
-    residual_a,
-    residual_b,
+function _grouped_modal_opd_definition(
+    coefficients_a,
+    coefficients_b,
     basis,
     pupil_support,
 )
     coefficient_schema = "test.graph.grouped-modal-coefficients.f32/1"
     opd_schema = "test.graph.grouped-opd.f32/1"
-    controller(name, input_schema) = discrete_integrator_node(
-        name;
-        extent=2,
-        sample_period_s=0.1f0,
-        input_schema,
-        output_schema=coefficient_schema,
-        gain=2.0f0,
-        tau_s=0.2f0,
-    )
     expansion(name) = modal_opd_expansion_node(
         name;
         pupil_rows=2,
@@ -181,43 +172,25 @@ function _grouped_modal_control_definition(
     )
     return algorithm_graph(
         (
-            controller(
-                :controller_a,
-                "test.graph.grouped-residual-a.f32/1",
-            ),
-            controller(
-                :controller_b,
-                "test.graph.grouped-residual-b.f32/1",
-            ),
             expansion(:modal_a),
             expansion(:modal_b),
         );
-        name=:gpu_grouped_modal_control,
+        name=:gpu_grouped_modal_opd,
         inputs=(
             graph_input(
-                :residual_a,
-                :controller_a => :input,
-                residual_a,
+                :coefficients_a,
+                :modal_a => :coefficients,
+                coefficients_a,
             ),
             graph_input(
-                :residual_b,
-                :controller_b => :input,
-                residual_b,
+                :coefficients_b,
+                :modal_b => :coefficients,
+                coefficients_b,
             ),
         ),
         outputs=(
             graph_output(:opd_a, :modal_a => :opd),
             graph_output(:opd_b, :modal_b => :opd),
-        ),
-        links=(
-            link(
-                :controller_a => :output,
-                :modal_a => :coefficients,
-            ),
-            link(
-                :controller_b => :output,
-                :modal_b => :coefficients,
-            ),
         ),
         parameters=(
             sparse_parameter(:modal_a => :basis, basis),
@@ -232,32 +205,29 @@ function run_grouped_graph_execution_smoke(
     ::Type{B},
 ) where {B<:Backends.GPUBackendTag}
     BackendArray = Backends.gpu_backend_array_type(B)
-    grouped_residual_a = BackendArray(Float32[1, 2])
-    grouped_residual_b = BackendArray(Float32[3, 4])
-    stream_residual_a = BackendArray(Float32[1, 2])
-    stream_residual_b = BackendArray(Float32[3, 4])
+    grouped_coefficients_a = BackendArray(Float32[1, 2])
+    grouped_coefficients_b = BackendArray(Float32[3, 4])
+    stream_coefficients_a = BackendArray(Float32[1, 2])
+    stream_coefficients_b = BackendArray(Float32[3, 4])
     basis_host = zeros(Float32, 2, 2, 2)
     fill!(@view(basis_host[:, :, 1]), 1.0f0)
     fill!(@view(basis_host[:, :, 2]), 2.0f0)
     basis = BackendArray(basis_host)
     pupil_support = BackendArray(Bool[true false; true true])
-    target = compute_device(grouped_residual_a)
-    grouped_definition = _grouped_modal_control_definition(
-        grouped_residual_a,
-        grouped_residual_b,
+    target = compute_device(grouped_coefficients_a)
+    grouped_definition = _grouped_modal_opd_definition(
+        grouped_coefficients_a,
+        grouped_coefficients_b,
         basis,
         pupil_support,
     )
-    stream_definition = _grouped_modal_control_definition(
-        stream_residual_a,
-        stream_residual_b,
+    stream_definition = _grouped_modal_opd_definition(
+        stream_coefficients_a,
+        stream_coefficients_b,
         basis,
         pupil_support,
     )
-    policy = GroupedStreamGraphExecution(
-        (:controller_a, :controller_b),
-        (:modal_a, :modal_b),
-    )
+    policy = GroupedStreamGraphExecution((:modal_a, :modal_b))
     grouped_graph = prepare_algorithm_graph(
         grouped_definition;
         target,
@@ -277,11 +247,13 @@ function run_grouped_graph_execution_smoke(
     @test Array(graph_output(grouped_graph, Val(:opd_b))) ≈
         Array(graph_output(stream_graph, Val(:opd_b)))
 
-    copyto!(grouped_residual_a, Float32[-2, 1])
-    copyto!(grouped_residual_b, Float32[4, -3])
-    copyto!(stream_residual_a, Float32[-2, 1])
-    copyto!(stream_residual_b, Float32[4, -3])
-    Backends.synchronize_backend!(Backends.execution_style(grouped_residual_a))
+    copyto!(grouped_coefficients_a, Float32[-2, 1])
+    copyto!(grouped_coefficients_b, Float32[4, -3])
+    copyto!(stream_coefficients_a, Float32[-2, 1])
+    copyto!(stream_coefficients_b, Float32[4, -3])
+    Backends.synchronize_backend!(
+        Backends.execution_style(grouped_coefficients_a),
+    )
     step_graph!(grouped_graph)
     step_graph!(stream_graph)
     @test Array(graph_output(grouped_graph, Val(:opd_a))) ≈
@@ -892,26 +864,17 @@ function run_algorithm_graph_backend_smoke(
     ::Type{B},
 ) where {B<:Backends.GPUBackendTag}
     BackendArray = Backends.gpu_backend_array_type(B)
-    residual = BackendArray(Float32[1, 2])
+    coefficients = BackendArray(Float32[0.1, 0.2])
     basis_host = zeros(Float32, 2, 2, 2)
     fill!(@view(basis_host[:, :, 1]), 1.0f0)
     fill!(@view(basis_host[:, :, 2]), 2.0f0)
     basis = BackendArray(basis_host)
     pupil_support = BackendArray(Bool[true false; true true])
     coefficient_schema = "test.graph.modal-coefficients.f32/1"
-    target = compute_device(residual)
+    target = compute_device(coefficients)
 
     definition = algorithm_graph(
         (
-            discrete_integrator_node(
-                :controller;
-                extent=2,
-                sample_period_s=0.1f0,
-                input_schema="test.graph.residual.f32/1",
-                output_schema=coefficient_schema,
-                gain=2.0f0,
-                tau_s=0.2f0,
-            ),
             modal_opd_expansion_node(
                 :modal_opd;
                 pupil_rows=2,
@@ -923,10 +886,13 @@ function run_algorithm_graph_backend_smoke(
                 pupil_support_schema="test.graph.pupil-support.bool/1",
             ),
         );
-        name=:gpu_native_modal_control,
-        inputs=(graph_input(:residual, :controller => :input, residual),),
+        name=:gpu_native_modal_opd,
+        inputs=(graph_input(
+            :coefficients,
+            :modal_opd => :coefficients,
+            coefficients,
+        ),),
         outputs=(graph_output(:opd, :modal_opd => :opd),),
-        links=(link(:controller => :output, :modal_opd => :coefficients),),
         parameters=(
             sparse_parameter(:modal_opd => :basis, basis),
             sparse_parameter(:modal_opd => :pupil_support, pupil_support),
@@ -1285,11 +1251,6 @@ function run_algorithm_graph_backend_smoke(
 
     pupil_opd = BackendArray(zeros(Float32, 16, 16))
     shwfs_target = compute_device(pupil_opd)
-    reconstruction_matrix = BackendArray(Float32[
-        1 0 0 0 0 0
-        0 0 0 0 1 0
-    ])
-    controller_constraint_feedback = BackendArray(zeros(Float32, 2))
     shwfs_definition = algorithm_graph(
         (
             shack_hartmann_rate_node(
@@ -1346,42 +1307,9 @@ function run_algorithm_graph_backend_smoke(
                 lenslet_order_schema=
                     "test.graph.shwfs-lenslet-order.u32/1",
             ),
-            control_matrix_reconstruction_node(
-                :reconstruction;
-                slope_count=6,
-                reconstructed_count=2,
-                slopes_schema=
-                    "test.graph.shwfs-selected-slopes.f32/1",
-                reconstructed_schema=
-                    "test.graph.controller-error.f32/1",
-                control_matrix_schema=
-                    "test.graph.shwfs-control-matrix.f32/1",
-            ),
-            closed_loop_correction_node(
-                :controller;
-                extent=2,
-                residual_error_schema=
-                    "test.graph.controller-error.f32/1",
-                constraint_feedback_schema=
-                    "test.graph.controller-constraint-feedback.f32/1",
-                correction_schema=
-                    "test.graph.controller-command.f32/1",
-                controller_state_schema=
-                    "test.graph.controller-state.f32/1",
-                gain=-0.3f0,
-                pole=0.99f0,
-                anti_windup_gain=1.0f0,
-            ),
         );
         name=:gpu_shwfs_centroid,
-        inputs=(
-            graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),
-            graph_input(
-                :controller_constraint_feedback,
-                :controller => :constraint_feedback,
-                controller_constraint_feedback,
-            ),
-        ),
+        inputs=(graph_input(:pupil_opd, :shwfs => :opd, pupil_opd),),
         outputs=(
             graph_output(:shwfs_photon_rate, :shwfs => :photon_rate),
             graph_output(:shwfs_frame, :detector => :frame),
@@ -1390,18 +1318,6 @@ function run_algorithm_graph_backend_smoke(
                 :shwfs_selected_slopes,
                 :slope_selection => :selected_slopes,
             ),
-            graph_output(
-                :controller_residual_error,
-                :reconstruction => :reconstructed,
-            ),
-            graph_output(
-                :controller_correction,
-                :controller => :correction,
-            ),
-            graph_output(
-                :controller_state,
-                :controller => :controller_state,
-            ),
         ),
         links=(
             link(:shwfs => :photon_rate, :detector => :photon_rate),
@@ -1409,14 +1325,6 @@ function run_algorithm_graph_backend_smoke(
             link(
                 :centroid => :slopes,
                 :slope_selection => :full_slopes,
-            ),
-            link(
-                :slope_selection => :selected_slopes,
-                :reconstruction => :slopes,
-            ),
-            link(
-                :reconstruction => :reconstructed,
-                :controller => :residual_error,
             ),
         ),
         parameters=(
@@ -1432,10 +1340,6 @@ function run_algorithm_graph_backend_smoke(
                 :slope_selection => :lenslet_order,
                 BackendArray(UInt32[16, 1, 6]),
             ),
-            sparse_parameter(
-                :reconstruction => :control_matrix,
-                reconstruction_matrix,
-            ),
         ),
     )
     shwfs_graph = prepare_algorithm_graph(
@@ -1450,29 +1354,14 @@ function run_algorithm_graph_backend_smoke(
         shwfs_graph,
         Val(:shwfs_selected_slopes),
     )
-    controller_residual_error = graph_output(
-        shwfs_graph,
-        Val(:controller_residual_error),
-    )
-    controller_correction = graph_output(
-        shwfs_graph,
-        Val(:controller_correction),
-    )
-    controller_state = graph_output(shwfs_graph, Val(:controller_state))
     @test compute_device(photon_rate) == shwfs_target
     @test compute_device(frame) == shwfs_target
     @test compute_device(full_slopes) == shwfs_target
     @test compute_device(selected_slopes) == shwfs_target
-    @test compute_device(controller_residual_error) == shwfs_target
-    @test compute_device(controller_correction) == shwfs_target
-    @test compute_device(controller_state) == shwfs_target
     @test size(photon_rate) == (24, 24)
     @test size(frame) == (24, 24)
     @test size(full_slopes) == (32,)
     @test size(selected_slopes) == (6,)
-    @test size(controller_residual_error) == (2,)
-    @test size(controller_correction) == (2,)
-    @test size(controller_state) == (2,)
     @test sum(Array(photon_rate)) > 0
     @test sum(Array(frame)) ≈ sum(Array(photon_rate)) * 0.25f0
     @test all(isfinite, Array(full_slopes))
@@ -1485,17 +1374,9 @@ function run_algorithm_graph_backend_smoke(
         full_slopes_host[6],
         full_slopes_host[22],
     ]
-    @test Array(controller_residual_error) ==
-        Array(selected_slopes)[[1, 5]]
-    @test Array(controller_correction) ≈
-        -0.3f0 .* Array(controller_residual_error)
-    @test all(iszero, Array(controller_state))
     step_graph!(shwfs_graph)
     @test all(isfinite, Array(full_slopes))
     @test all(isfinite, Array(selected_slopes))
-    @test all(isfinite, Array(controller_residual_error))
-    @test all(isfinite, Array(controller_correction))
-    @test all(isfinite, Array(controller_state))
     return nothing
 end
 

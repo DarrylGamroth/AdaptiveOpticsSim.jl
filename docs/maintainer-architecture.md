@@ -42,7 +42,7 @@ vocabulary plus the modules themselves:
 | `Detectors` | detector response, sensor families, acquisition, readout, products |
 | `WavefrontSensors` | composed WFS optics, observations, measurements, estimators |
 | `Calibration` | simulated response acquisition, physical calibration observables, bases, fitting and identification; reusable inverse methods and products come from AdaptiveOpticsCalibration |
-| `Control` | reconstruction, controller state, delay lines, closed-loop operations |
+| `Control` | temporary legacy AOS reconstruction, controller state, delay lines, and closed-loop operations; new RTC composition belongs to FilterGraphAlgorithms/JuliaFilterGraph |
 | `Tomography` | guide-star geometry, atmospheric reconstruction, fitting, DM projection |
 | `Ensembles` | coarse independent runs and optional offline scheduling |
 | `AlgorithmGraphs` | static complete-frame graph composition and lockstep HIL exchange |
@@ -81,7 +81,12 @@ universal package-wide `process!` interface.
 
 Direct Julia composition is the unrestricted modeling surface. It owns explicit
 ordering when a scenario has generated topology, multiple cadences, conditional
-execution, or sub-frame optical sampling.
+execution, or sub-frame optical sampling. AdaptiveOpticsSim supplies the optical
+plant and physical deformable-mirror response; the maintained in-process RTC
+composition is the FGA/JFG fixture at
+[`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/).
+The AOS `Control` namespace is retained only temporarily while remaining S3
+callers migrate.
 
 ## Algorithm Graphs
 

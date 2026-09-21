@@ -13,7 +13,6 @@ export FixedStepModelTimeDriver, PreparedBoundaryModelTimeDriver
 export CapturedModelTimestamp, PreparedCapturedModelTimeDriver
 export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
-export discrete_integrator_node, closed_loop_correction_node
 export modal_opd_expansion_node
 export multilayer_atmosphere_opd_node
 export deformable_mirror_surface_node
@@ -27,7 +26,6 @@ export cmos_detector_acquisition_node
 export emccd_detector_acquisition_node
 export shack_hartmann_centroid_node
 export shack_hartmann_slope_selection_node
-export control_matrix_reconstruction_node
 export load_algorithm_graph, builtin_graph_node_types
 export prepare_algorithm_graph, step_graph_async!, wait_graph_step!
 export step_graph!, reset_graph!
@@ -49,10 +47,6 @@ public graph_node_ports, prepare_graph_node
 public step_graph_node!, enqueue_graph_node!, reset_graph_node!
 public graph_node_capture_capability
 public GraphNodeCaptureSafe, GraphNodeCaptureUnsupported
-public DiscreteIntegratorNode, DiscreteIntegratorNodeConfig
-public DiscreteIntegratorNodeProps
-public ClosedLoopCorrectionNode, ClosedLoopCorrectionNodeConfig
-public ClosedLoopCorrectionNodeProps
 public ModalOPDExpansionNode, ModalOPDExpansionNodeConfig
 public MultiLayerAtmosphereOPDNode, MultiLayerAtmosphereOPDNodeConfig
 public DeformableMirrorSurfaceNode, DeformableMirrorSurfaceNodeConfig
@@ -68,4 +62,3 @@ public CMOSDetectorAcquisitionNode, CMOSDetectorAcquisitionNodeConfig
 public EMCCDDetectorAcquisitionNode, EMCCDDetectorAcquisitionNodeConfig
 public ShackHartmannCentroidNode, ShackHartmannCentroidNodeConfig
 public ShackHartmannSlopeSelectionNode, ShackHartmannSlopeSelectionNodeConfig
-public ControlMatrixReconstructionNode, ControlMatrixReconstructionNodeConfig
