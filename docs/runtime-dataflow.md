@@ -22,8 +22,8 @@ The runtime distinguishes six roles:
    including mappings, coefficients, compatibility, and backend requirements.
 3. Persistent mutable state has a single writer and affects later scientific
    results. It includes atmosphere evolution, detector persistence, graph
-   delays, and explicit RNG state. RTC controller state belongs to the RTC
-   owner; the legacy AOS `Control` state is temporary migration surface.
+   delays, and explicit RNG state. RTC controller state belongs to its RTC
+   owner.
 4. Replaceable workspaces own scratch and execution resources. Recreating one
    cannot change the deterministic physical trajectory.
 5. Products are explicit caller-visible values such as a `PupilFunction`,
@@ -68,8 +68,7 @@ context identities. Domain algorithms keep their canonical APIs, such as
 graph ports. RTC algorithms are owned by FilterGraphAlgorithms/JuliaFilterGraph
 and are composed in the maintained
 [`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/).
-The temporary AOS `Control` namespace is not a new production integration
-surface. No binding or allocation occurs in `step_graph!`.
+No binding or allocation occurs in `step_graph!`.
 
 One graph step invokes every node once under a schedule that preserves validated
 declaration order. A direct link exposes an earlier node's ordered output to a

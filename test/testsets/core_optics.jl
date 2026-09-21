@@ -464,6 +464,7 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)
     for removed_name in (
+        :Control,
         :RuntimeCommandLayout,
         :RuntimeCommandSegment,
         :CompositeControllableOptic,

@@ -13,9 +13,9 @@ const RtcRouteResult = Union{
     VdmFeedbackToControllerFailure,
 }
 
-# These numerical fixtures freeze the public AOS Control behaviour at
-# d6a683008d9e40ca5bd90e5ccf748e5aa3384caa.  They exercise the replacement
-# FGA plans directly; no AOS RTC implementation participates at run time.
+# These numerical fixtures preserve the legacy AOS RTC oracle from
+# d6a683008d9e40ca5bd90e5ccf748e5aa3384caa. They exercise the replacement FGA
+# plans directly; no AOS RTC implementation participates at run time.
 
 function prepare_rtc_projection_fixture()
     controller_to_vdm = Float32[
