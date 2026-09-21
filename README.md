@@ -3,12 +3,11 @@
 [![CPU Validation](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml/badge.svg)](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml)
 [![Coverage](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl)
 
-Julia adaptive-optics simulation toolkit for external-RTC HIL development,
-deterministic validation, and offline CPU/GPU studies. OOPAO remains an
-important source of scientific reference cases and tutorial mappings, but its
-class layout and API are not compatibility constraints. The maintained design
-uses idiomatic Julia dispatch, explicit optical products, prepared workspaces,
-and backend-portable algorithms.
+AdaptiveOpticsSim.jl (AOS) is an independent Julia adaptive-optics plant
+simulator for external-RTC HIL development, deterministic validation, and
+offline CPU/GPU studies. The maintained design uses idiomatic Julia dispatch,
+explicit optical products, prepared workspaces, and backend-portable
+algorithms.
 
 Requires Julia 1.12 or newer. The package relies on current Julia atomics and
 backend behavior for maintained CPU/GPU execution paths.
@@ -134,7 +133,7 @@ The user-facing details for those surfaces live in:
 
 ## Tutorials
 
-Runnable tutorial ports live in `examples/tutorials/`. Start with:
+Runnable tutorials live in `examples/tutorials/`. Start with:
 
 ```bash
 julia --project=. examples/tutorials/image_formation.jl

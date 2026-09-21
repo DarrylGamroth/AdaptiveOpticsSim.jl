@@ -116,5 +116,36 @@ function run_backend_extension_coverage(
     @test modal_basis.projector isa ArrayBackend
     @test all(isfinite, Array(modal_basis.M2C))
     @test all(isfinite, Array(modal_basis.basis))
+
+    modal_atmosphere = AdaptiveOpticsSim.Atmospheres.KolmogorovAtmosphere(
+        modal_telescope;
+        r0=0.2f0,
+        reference_wavelength_m=500.0f-9,
+        L0=25.0f0,
+    )
+    atmospheric_basis = AdaptiveOpticsSim.Calibration.modal_basis(
+        modal_dm,
+        modal_telescope;
+        n_modes=2,
+        projector=true,
+        method=AdaptiveOpticsSim.Calibration.KarhunenLoeveBasis(),
+        atm=modal_atmosphere,
+    )
+    @test atmospheric_basis.M2C isa ArrayBackend
+    @test atmospheric_basis.basis isa ArrayBackend
+    @test atmospheric_basis.projector isa ArrayBackend
+    @test all(isfinite, Array(atmospheric_basis.M2C))
+    @test all(isfinite, Array(atmospheric_basis.basis))
+    sampled_influences = Array(
+        AdaptiveOpticsSim.Optics.sampled_influence_matrix(modal_dm),
+    )
+    @test Array(atmospheric_basis.basis) ≈
+        sampled_influences * Array(atmospheric_basis.M2C) rtol=2f-4 atol=2f-5
+    modal_support = vec(Array(AdaptiveOpticsSim.Optics.pupil_mask(modal_telescope)))
+    expected_projector = Array(atmospheric_basis.basis)' *
+                         Diagonal(Float32.(modal_support)) / count(modal_support)
+    @test Array(atmospheric_basis.projector) ≈
+        expected_projector rtol=2f-4 atol=2f-5
+    @test maximum(abs, Array(atmospheric_basis.projector)[:, .!modal_support]) == 0
     return nothing
 end

@@ -925,7 +925,7 @@ end
     @test default_fidelity_profile() isa ScientificProfile
     @test default_subharmonic_mode(ScientificProfile()) isa FidelitySubharmonics
     @test default_subharmonic_mode(FastProfile()) isa FastSubharmonics
-    @test default_ncpa_basis(ScientificProfile()).method isa KLHHtPSD
+    @test default_ncpa_basis(ScientificProfile()).method isa KarhunenLoeveBasis
     @test default_ncpa_basis(FastProfile()).method isa
         AOCModalBases.InfluenceFunctionEigenbasis
 
@@ -936,7 +936,7 @@ end
     @test lift_profile(mixed) isa FastProfile
     @test tomography_profile(mixed) isa FastProfile
     @test default_subharmonic_mode(mixed) isa FidelitySubharmonics
-    @test default_ncpa_basis(mixed).method isa KLHHtPSD
+    @test default_ncpa_basis(mixed).method isa KarhunenLoeveBasis
 
     fast_cal = ProfileBundle(ScientificProfile(); calibration=FastProfile())
     @test default_ncpa_basis(fast_cal).method isa

@@ -13,7 +13,7 @@ artifact exists.
 | Code | Evidence |
 |---|---|
 | `A` | analytic or invariant contract |
-| `R` | external reference, OOPAO trace, or instrument-owned input |
+| `R` | external reference input, including an OOPAO trace or instrument-owned input |
 | `G` | real accelerator execution |
 | `P` | measured performance/allocation evidence |
 | `M` | maintained integration or composed-model test |
@@ -40,8 +40,8 @@ real remaining qualification gap.
 
 ## Known Scope Limits
 
-- OOPAO is a source of reference data and tutorial mappings, not an API or
-  class-layout compatibility target.
+- OOPAO appears only as cited external-reference evidence or tutorial
+  provenance; it does not constrain AOS APIs or class layout.
 - Geometric and diffractive WFS modes answer different modeling questions and
   are not expected to be samplewise identical.
 - Full-optical and reduced-order providers must be named and validated

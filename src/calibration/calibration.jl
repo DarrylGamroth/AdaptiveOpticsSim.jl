@@ -9,6 +9,7 @@ AdaptiveOpticsCalibration.
 module Calibration
 
 import AdaptiveOpticsCalibration
+import AdaptiveOpticsCalibration.ModalBases: KarhunenLoeveBasis
 using KernelAbstractions
 using LinearAlgebra
 using Random
@@ -60,6 +61,7 @@ import ..Optics:
     topology_axis_count
 
 using ..Atmospheres
+import ..Atmospheres: phase_spectrum
 using ..Detectors
 import ..Detectors:
     detector_noise_symbol,

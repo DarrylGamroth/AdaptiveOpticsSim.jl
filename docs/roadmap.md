@@ -53,8 +53,9 @@ the maintained package.
    hidden mixed-device execution is out of scope.
 5. Extend graph-node coverage only when an actual architecture needs it. Keep
    large calibration arrays as prepared parameters, not scalar properties.
-6. Maintain deterministic explicit RNG ownership and OOPAO or instrument
-   reference comparisons for scientific changes.
+6. Maintain deterministic explicit RNG ownership and compare scientific changes
+   with cited external reference inputs, including OOPAO or instrument
+   references when they provide the relevant validation provenance.
 7. Improve rolling-shutter models by evaluating the optical path at row or
    row-group times while publishing one atomic completed frame.
 8. Close remaining production-surface gaps with local CPU, AMDGPU, WSL CUDA,

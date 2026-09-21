@@ -52,8 +52,8 @@ function _modal_mode_matrix(tel::Telescope, definitions::Tuple, ::Type{T}, backe
     backend = _resolve_array_backend(selector)
     n = tel.params.resolution
     pupil = Array(pupil_mask(tel))
-    # Match the existing reference-harness and OOPAO bundle convention:
-    # use an n+1 half-open normalized grid and drop the final endpoint.
+    # Sample the normalized pupil on the declared half-open interval [-1, 1).
+    # External reference adapters map their coordinates to this AOS convention.
     xs = collect(range(T(-1), T(1); length=n + 1))[1:n]
     ys = collect(range(T(-1), T(1); length=n + 1))[1:n]
     host = Matrix{T}(undef, n * n, length(definitions))

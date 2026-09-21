@@ -16,8 +16,8 @@
     @test parentmodule(typeof(ModalCalibrationBasis())) === Calibration
 
     basis_default = Calibration.ncpa_basis(ModalCalibrationBasis(), tel, dm, atm; n_modes=2)
-    basis_hht = Calibration.ncpa_basis(
-        ModalCalibrationBasis(KLHHtPSD()), tel, dm, atm; n_modes=2)
+    basis_kl = Calibration.ncpa_basis(
+        ModalCalibrationBasis(KarhunenLoeveBasis()), tel, dm, atm; n_modes=2)
     basis_dm = Calibration.ncpa_basis(
         ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
         tel,
@@ -32,11 +32,11 @@
             dm;
             n_modes=2,
         )
-    @test basis_default ≈ basis_hht
+    @test basis_default ≈ basis_kl
     @test sum(abs.(basis_default .- basis_dm)) > 0
     @test basis_dm_without_atmosphere ≈ basis_dm
     @test_throws InvalidConfiguration Calibration.ncpa_basis(
-        ModalCalibrationBasis(KLHHtPSD()), tel, dm; n_modes=2)
+        ModalCalibrationBasis(KarhunenLoeveBasis()), tel, dm; n_modes=2)
 
     sampled_basis = modal_basis(
         dm,
@@ -56,11 +56,11 @@
     coeffs = [1e-9, 2e-9]
     ncpa_default_kl = @inferred NCPA(
         tel, dm, atm; basis=ModalCalibrationBasis(), coefficients=coeffs)
-    ncpa_hht = NCPA(
+    ncpa_kl = NCPA(
         tel,
         dm,
         atm;
-        basis=ModalCalibrationBasis(KLHHtPSD()),
+        basis=ModalCalibrationBasis(KarhunenLoeveBasis()),
         coefficients=coeffs,
     )
     ncpa_dm = NCPA(
@@ -73,7 +73,7 @@
     ncpa_zero = NCPA(tel, dm, atm)
     @test eltype(ncpa_zero.opd) == eltype(pupil_reflectivity(tel))
     @test all(iszero, ncpa_zero.opd)
-    @test ncpa_default_kl.opd ≈ ncpa_hht.opd
+    @test ncpa_default_kl.opd ≈ ncpa_kl.opd
     @test sum(abs.(ncpa_default_kl.opd .- ncpa_dm.opd)) > 0
 
     expanded_opd = similar(pupil.opd)

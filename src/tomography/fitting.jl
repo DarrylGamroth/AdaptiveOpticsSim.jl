@@ -15,8 +15,8 @@ function TomographyFitting(
         throw(InvalidConfiguration("influence_functions must have at least one column"))
     regularization >= 0 || throw(InvalidConfiguration("regularization must be non-negative"))
 
-    # Match pyTomoAO/NumPy fitting behavior with a pseudoinverse rather than
-    # a regularized normal-equations solve.
+    # Use a pseudoinverse rather than a regularized normal-equations solve so
+    # rank-deficient sampled bases retain least-squares semantics.
     pinv_rtol = regularization == sqrt(eps(T)) ? T(1e-15) : T(regularization)
     fitting_matrix = pinv(Matrix(influence_functions); rtol=pinv_rtol)
     return TomographyFitting{T, typeof(fitting_matrix)}(

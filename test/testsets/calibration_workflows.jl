@@ -10,8 +10,13 @@
     @test !isdefined(Calibration, :KLDMModes)
     @test !isdefined(AdaptiveOpticsSim, :KLBasis)
     @test !isdefined(Calibration, :KLBasis)
+    @test !isdefined(AdaptiveOpticsSim, :KLHHtPSD)
+    @test !isdefined(Calibration, :KLHHtPSD)
+    @test !isdefined(AdaptiveOpticsSim, :kl_modal_basis)
+    @test !isdefined(Calibration, :kl_modal_basis)
     @test !isdefined(AdaptiveOpticsSim, :fitting_error)
     @test !isdefined(Calibration, :fitting_error)
+    @test parentmodule(KarhunenLoeveBasis) === AOCModalBases
     @test size(basis.M2C, 2) == 2
     sampled_influences = Matrix(sampled_influence_matrix(dm))
     direct_plan = AdaptiveOpticsCalibration.prepare(
@@ -58,11 +63,169 @@
     atm = KolmogorovAtmosphere(tel; r0=0.2,
         reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0)
-    M2C, basis_hht = kl_modal_basis(KLHHtPSD(), dm, tel, atm; n_modes=2)
-    @test size(M2C, 2) == 2
-    @test size(basis_hht, 3) == 2
-    basis2 = modal_basis(dm, tel; n_modes=2, method=KLHHtPSD(), atm=atm)
-    @test size(basis2.M2C, 2) == 2
+    atmospheric_basis = modal_basis(
+        dm,
+        tel;
+        n_modes=2,
+        projector=true,
+        method=KarhunenLoeveBasis(),
+        atm=atm,
+    )
+    @test size(atmospheric_basis.M2C, 2) == 2
+    @test size(atmospheric_basis.basis, 2) == 2
+    sampled_influences = sampled_influence_matrix(dm)
+    @test atmospheric_basis.basis ≈
+        sampled_influences * atmospheric_basis.M2C atol=2e-12
+    support = vec(Array(pupil_mask(tel)))
+    @test atmospheric_basis.basis[support, :]' *
+          atmospheric_basis.basis[support, :] / count(support) ≈
+        Matrix{Float64}(I, 2, 2) atol=2e-12
+    @test maximum(abs, atmospheric_basis.basis[.!support, :]) == 0
+    expected_atmospheric_projector =
+        atmospheric_basis.basis' * Diagonal(Float64.(support)) / count(support)
+    @test atmospheric_basis.projector ≈ expected_atmospheric_projector atol=2e-14
+    @test maximum(abs, atmospheric_basis.projector[:, .!support]) == 0
+    pupil_opd = randn(length(support))
+    exterior_changed_opd = copy(pupil_opd)
+    exterior_changed_opd[.!support] .= 1e6
+    @test atmospheric_basis.projector * exterior_changed_opd ≈
+        atmospheric_basis.projector * pupil_opd atol=2e-12
+
+    default_atmospheric_basis = @inferred modal_basis(
+        dm,
+        tel;
+        method=KarhunenLoeveBasis(),
+        atm=atm,
+    )
+    @test size(default_atmospheric_basis.M2C, 2) ==
+        size(sampled_influences, 2) - 1
+
+    sampling_m = tel.aperture.sampling_m[1]
+    covariance = projected_atmospheric_opd_covariance(
+        Matrix(sampled_influences),
+        support,
+        tel.params.resolution,
+        sampling_m,
+        atm,
+    )
+    @test covariance ≈ covariance' atol=2e-28
+    @test minimum(eigvals(Symmetric(covariance))) >= -1e-25
+    coordinate_scaling = Diagonal(range(0.5, 1.5; length=size(sampled_influences, 2)))
+    scaled_covariance = projected_atmospheric_opd_covariance(
+        Matrix(sampled_influences) * coordinate_scaling,
+        support,
+        tel.params.resolution,
+        sampling_m,
+        atm,
+    )
+    @test scaled_covariance ≈ coordinate_scaling' * covariance *
+        coordinate_scaling rtol=2e-12 atol=2e-28
+    outside_changed = Matrix(sampled_influences)
+    outside_changed[.!support, :] .= 100
+    @test projected_atmospheric_opd_covariance(
+        outside_changed,
+        support,
+        tel.params.resolution,
+        sampling_m,
+        atm,
+    ) ≈ covariance rtol=2e-12 atol=2e-28
+
+    oracle_resolution = 2
+    oracle_sampling_m = 0.7
+    oracle_influences = [
+        1.0 0.2
+        -0.3 0.7
+        0.4 -0.5
+        0.8 0.1
+    ]
+    oracle_support = trues(4)
+    oracle_telescope = Telescope(
+        resolution=oracle_resolution,
+        diameter=oracle_resolution * oracle_sampling_m,
+        central_obstruction=0.0,
+    )
+    oracle_atmosphere = KolmogorovAtmosphere(
+        oracle_telescope;
+        r0=0.31,
+        reference_wavelength_m=632.8e-9,
+        L0=18.0,
+    )
+    oracle_covariance = projected_atmospheric_opd_covariance(
+        oracle_influences,
+        oracle_support,
+        oracle_resolution,
+        oracle_sampling_m,
+        oracle_atmosphere,
+    )
+    spectral_resolution = 2 * oracle_resolution
+    frequency_step = 1 / (spectral_resolution * oracle_sampling_m)
+    frequencies = [0.0, frequency_step, 2 * frequency_step, -frequency_step]
+    direct_covariance = zeros(2, 2)
+    for frequency_column in 1:spectral_resolution,
+        frequency_row in 1:spectral_resolution
+        fx = frequencies[frequency_row]
+        fy = frequencies[frequency_column]
+        radial_frequency_squared = fx^2 + fy^2
+        phase_psd = 0.023 * 0.31^(-5 / 3) *
+                    (radial_frequency_squared + 18.0^(-2))^(-11 / 6)
+        opd_psd = phase_psd * (632.8e-9 / (2π))^2
+        transformed = zeros(ComplexF64, 2)
+        for corrector in 1:2, column in 1:oracle_resolution,
+            row in 1:oracle_resolution
+            sample = (column - 1) * oracle_resolution + row
+            phase = -2π * ((frequency_row - 1) * (row - 1) +
+                              (frequency_column - 1) * (column - 1)) /
+                    spectral_resolution
+            transformed[corrector] +=
+                oracle_influences[sample, corrector] * cis(phase) / 4
+        end
+        direct_covariance .+=
+            real.(conj.(transformed) * transpose(transformed)) .* opd_psd .* frequency_step^2
+    end
+    @test oracle_covariance ≈ direct_covariance rtol=3e-14 atol=1e-30
+    doubled_wavelength_atmosphere = KolmogorovAtmosphere(
+        tel;
+        r0=0.2,
+        reference_wavelength_m=2 * TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
+        L0=25.0,
+    )
+    doubled_wavelength_covariance = projected_atmospheric_opd_covariance(
+        Matrix(sampled_influences),
+        support,
+        tel.params.resolution,
+        sampling_m,
+        doubled_wavelength_atmosphere,
+    )
+    @test doubled_wavelength_covariance ≈ 4 .* covariance rtol=2e-12 atol=2e-28
+
+    telescope_f32 = Telescope(
+        resolution=8,
+        diameter=8.0f0,
+        central_obstruction=0.0f0,
+        T=Float32,
+    )
+    dm_f32 = DeformableMirror(
+        telescope_f32;
+        n_act=2,
+        influence_width=0.4f0,
+        T=Float32,
+    )
+    atmosphere_f32 = KolmogorovAtmosphere(
+        telescope_f32;
+        r0=0.2f0,
+        reference_wavelength_m=Float32(TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M),
+        L0=25.0f0,
+    )
+    atmospheric_basis_f32 = @inferred modal_basis(
+        dm_f32,
+        telescope_f32;
+        n_modes=2,
+        projector=false,
+        method=KarhunenLoeveBasis(),
+        atm=atmosphere_f32,
+    )
+    @test eltype(atmospheric_basis_f32.M2C) === Float32
+    @test eltype(atmospheric_basis_f32.basis) === Float32
 end
 
 @testset "Interaction-matrix WFS output finalization" begin

@@ -2,9 +2,11 @@
 
 Status: active
 
-This document maps high-value OOPAO tutorials to deterministic Julia examples in
-`examples/tutorials/`. The Julia versions favor multiple dispatch, explicit
-state transitions, and small runnable scripts over notebook-style mutation.
+This provenance map records high-value OOPAO source tutorials and external
+regression traces alongside AOS-native Julia examples in
+`examples/tutorials/`. The examples favor multiple dispatch, explicit state
+transitions, and small runnable scripts over notebook-style mutation; the
+mapping does not impose an OOPAO API or class layout.
 
 ## How to run
 
@@ -20,7 +22,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 
 ## Mapping table
 
-| OOPAO tutorial | Julia example | Coverage |
+| OOPAO source tutorial (provenance) | AOS Julia example | Coverage |
 | --- | --- | --- |
 | `tutorials/image_formation.py` | `examples/tutorials/image_formation.jl` | Telescope, source-scaled direct image, Zernike aberrations |
 | `tutorials/how_to_detector.py` | `examples/tutorials/detector.jl` | Detector sampling, binning, noise model wiring |
@@ -39,9 +41,9 @@ Each script exposes a `main()` function and logs a short completion summary with
 
 ## Julia patterns behind the mapping
 
-- OOPAO’s `ngs*tel*wfs` chain becomes explicit preparation and execution such
-  as `prepare_direct_imaging` plus `form_direct_image!`, or
-  `measure!(wfs, pupil, src)`.
+- Where an OOPAO tutorial is cited, its `ngs*tel*wfs` source expression maps to
+  explicit AOS preparation and execution such as `prepare_direct_imaging` plus
+  `form_direct_image!`, or `measure!(wfs, pupil, src)`.
 - WFS sensing mode is encoded in the WFS type parameter via
   `mode=Geometric()` or `mode=Diffractive()`, not a mutable string flag.
 - Detector noise is encoded by the detector’s `noise` type, for example
@@ -49,7 +51,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 - Closed-loop examples preallocate their work buffers and use `reconstruct!`
   for the hot path.
 
-## Representative translations
+## Representative AOS mappings
 
 The snippets below assume:
 
