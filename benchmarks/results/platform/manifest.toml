@@ -19,11 +19,11 @@ purpose = "CPU and AMDGPU REVOLT-like detector-output HIL diagnostic on the loca
 id = "REVOLT-HIL-CPU-AMDGPU-2026-07-13"
 path = "2026-07-13-revolt-hil-cpu-amdgpu.toml"
 [[artifacts]]
-purpose = "local CPU ensemble scheduler throughput comparison for sequential, Julia tasks, AcceleratedKernels, and Dagger policies"
+purpose = "historical local CPU ensemble scheduler comparison for the retired AOS-native RTC workload"
 id = "ENSEMBLE-SCHEDULERS-2026-07-13"
 path = "2026-07-13-ensemble-schedulers.toml"
 [[artifacts]]
-purpose = "synthetic dense versus factorized and controlled reconstruction latency/storage comparison"
+purpose = "historical dense, factorized, and controlled reconstruction comparison for the retired AOS-native RTC implementation"
 id = "CONTROL-OPERATORS-2026-07-13"
 path = "2026-07-13-control-operators.toml"
 [[artifacts]]

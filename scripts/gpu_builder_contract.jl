@@ -1,9 +1,7 @@
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
-using LinearAlgebra
 
 function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
@@ -14,22 +12,8 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
     build_backend = Calibration.GPUArrayBuildBackend(B)
 
     A = AdaptiveOpticsSim.Backends.backend_rand(B, T, 8, 4)
-    imat = InteractionMatrix(A, T(0.1))
-    cpu_A = Array(A)
     control_matrix = ControlMatrix(A; build_backend=build_backend)
     @assert control_matrix.M isa BackendArray
-
-    recon = ModalReconstructor(imat; build_backend=build_backend)
-    @assert recon.reconstructor isa BackendArray
-    recon_cpu = ModalReconstructor(InteractionMatrix(cpu_A, T(0.1));
-        build_backend=Calibration.CPUBuildBackend())
-    slopes_modal = reshape(T.(1:8), 8)
-    @assert isapprox(
-        Array(reconstruct(recon, Calibration.materialize_build(build_backend, slopes_modal))),
-        reconstruct(recon_cpu, slopes_modal);
-        rtol=1f-5,
-        atol=1f-6,
-    )
 
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=T(0.0),

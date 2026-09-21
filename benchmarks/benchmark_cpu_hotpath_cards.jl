@@ -2,7 +2,6 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
-using AdaptiveOpticsSim.Control
 using BenchmarkTools
 using LinearAlgebra
 
@@ -10,7 +9,6 @@ const CPU_HOTPATH_CARDS = (
     ("CPU-PERF-01", "extended-source stored quadrature", :extended_source_quadrature),
     ("CPU-PERF-02", "Shack-Hartmann reference subtraction", :sh_reference),
     ("CPU-PERF-03", "subaperture valid-index reuse", :subaperture_layout),
-    ("CPU-PERF-04", "VectorDelayLine ring buffer", :delay_line),
     ("CPU-PERF-05", "independent tip-tilt surface application", :independent_optic_apply),
     ("CPU-PERF-06", "SAPHIRA sampled frame response", :sampled_frame_response),
     ("CPU-PERF-07", "batched SAPHIRA sampled frame response", :batched_sampled_frame_response),
@@ -67,13 +65,6 @@ function subaperture_layout_probes()
     flux_probe = () -> WavefrontSensors.update_subaperture_layout!(
         layout, support, flux_policy)
     return geometry_probe, flux_probe
-end
-
-function delay_line_probe()
-    ref = zeros(Float64, 32)
-    line = VectorDelayLine(ref, 4)
-    sample = collect(range(0.0, 1.0; length=length(ref)))
-    return () -> shift_delay!(line, sample)
 end
 
 function independent_optic_apply_probe()
@@ -198,7 +189,6 @@ function run_cpu_hotpath_card_benchmarks()
         ("CPU-PERF-02", "sh_reference", sh_reference_probe()),
         ("CPU-PERF-03a", "subaperture_geometry", geometry_probe),
         ("CPU-PERF-03b", "subaperture_flux", flux_probe),
-        ("CPU-PERF-04", "delay_line", delay_line_probe()),
         ("CPU-PERF-05", "independent_optic_apply", independent_optic_apply_probe()),
         ("CPU-PERF-06", "sampled_frame_response", sampled_frame_response_probe()),
         ("CPU-PERF-07", "batched_sampled_frame_response", batched_sampled_frame_response_probe()),

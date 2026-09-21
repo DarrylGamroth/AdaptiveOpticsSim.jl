@@ -1,5 +1,10 @@
 const TestAbstractFFTs = AdaptiveOpticsSim.AbstractFFTs
 
+function dm_surface_allocations(dm)
+    update_surface!(dm)
+    return @allocated update_surface!(dm)
+end
+
 mutable struct MutableTelescopeTestDefinition <: AbstractTelescopeDefinition
 end
 
@@ -247,8 +252,6 @@ end
         @test Base.ispublic(Detectors, name)
         @test parentmodule(getfield(Detectors, name)) === Detectors
     end
-    @test Base.isexported(Control, :FactorizedReconstructor)
-    @test Base.isexported(Control, :ControlledReconstructor)
     @test !Base.isexported(AdaptiveOpticsSim, :PyramidWFS)
     @test !Base.isexported(AdaptiveOpticsSim, :BiOEdgeWFS)
     @test Base.isexported(WavefrontSensors, :PyramidWFS)
@@ -399,54 +402,6 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :set_fft_provider_threads!)
     @test !Base.isexported(AdaptiveOpticsSim, :GPUBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AbstractRuntimeExecutionPlan)
-    @test !Base.isexported(AdaptiveOpticsSim, :runtime_reconstructor_storage)
-    for name in (
-        :NullReconstructor,
-        :ControlMatrixPlan,
-        :ClosedLoopCorrectionPlan,
-        :ControllerToVDMPlan,
-        :VDMToPDMPlan,
-        :PDMActuatorRangePlan,
-        :PDMFeedbackToVDMPlan,
-        :VDMFeedbackToControllerPlan,
-        :ModalReconstructor,
-        :FactorizedReconstructor,
-        :MappedReconstructor,
-        :ControlledReconstructor,
-        :reconstruct!,
-        :reconstruct,
-        :DiscreteIntegratorController,
-        :VectorDelayLine,
-        :shift_delay!,
-        :apply_closed_loop_correction!,
-        :project_controller_to_vdm!,
-        :project_vdm_to_pdm!,
-        :apply_pdm_actuator_range!,
-        :project_pdm_feedback_to_vdm!,
-        :project_vdm_feedback_to_controller!,
-    )
-        @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test !Base.ispublic(AdaptiveOpticsSim, name)
-        @test Base.isexported(Control, name)
-        @test Base.ispublic(Control, name)
-        @test parentmodule(getfield(Control, name)) === Control
-    end
-    for name in (
-        :controller_output,
-        :reset_controller!,
-        :supports_controller_reset,
-        :ClosedLoopCorrectionState,
-        :ClosedLoopCorrectionWorkspace,
-        :reset_closed_loop_correction!,
-        :VDMToPDMWorkspace,
-        :PDMFeedbackToVDMWorkspace,
-    )
-        @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test !Base.ispublic(AdaptiveOpticsSim, name)
-        @test !Base.isexported(Control, name)
-        @test Base.ispublic(Control, name)
-        @test parentmodule(getfield(Control, name)) === Control
-    end
     for name in (
         :TomographyAtmosphereParams,
         :LGSAsterismParams,
@@ -1757,4 +1712,137 @@ end
     @test noll_to_nm(2) == (1, -1)
     @test noll_to_nm(3) == (1, 1)
     @test noll_to_nm(4) == (2, -2)
+end
+
+@testset "Deformable-mirror surface formation" begin
+    tel = Telescope(
+        resolution=32,
+        diameter=8.0,
+        central_obstruction=0.0,
+    )
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    @test dm.state.modes isa
+        AdaptiveOpticsSim.Optics.GaussianInfluenceOperator
+    @test Base.summarysize(dm.state.modes) <
+        prod(size(dm.state.modes)) * sizeof(eltype(dm.state.modes)) ÷ 10
+
+    dm.state.coefs .= range(-0.2, 0.3; length=length(dm.state.coefs))
+    update_surface!(dm)
+    dense_reference = reshape(
+        Array(dm.state.modes) * Array(dm.state.coefs),
+        size(dm.state.opd),
+    )
+    @test dm.state.opd ≈ dense_reference rtol=5e-14
+    if coverage_instrumented()
+        @test_skip "DM allocation assertions are disabled under coverage instrumentation"
+    else
+        @test dm_surface_allocations(dm) == 0
+    end
+
+    sampled_topology = SampledActuatorTopology(
+        actuator_coordinates(dm)[:, 1:4];
+        metadata=(source=:measured,),
+    )
+    measured_modes = Array(dm.state.modes[:, 1:4])
+    measured = DeformableMirror(
+        tel;
+        topology=sampled_topology,
+        influence_model=MeasuredInfluenceFunctions(measured_modes),
+        actuator_model=CompositeDMActuatorModel(
+            ActuatorHealthMap([1.0, 0.0, 0.5, 1.0]),
+            ClippedActuators(-0.2, 0.2),
+        ),
+    )
+    set_command!(measured, [0.5, 0.1, -1.0, 0.1])
+    update_surface!(measured)
+    @test measured.state.actuator_coefs ≈ [0.2, 0.0, -0.2, 0.1]
+    @test topology_metadata(measured) == (source=:measured,)
+    if coverage_instrumented()
+        @test_skip "measured-DM allocation assertion is disabled under coverage instrumentation"
+    else
+        @test dm_surface_allocations(measured) == 0
+    end
+end
+
+@testset "Independent controllable optics compose additively" begin
+    tel = Telescope(
+        resolution=24,
+        diameter=8.0,
+        central_obstruction=0.0,
+    )
+    tiptilt = TipTiltMirror(tel; scale=1.0)
+    focus = FocusStage(tel; scale=0.5)
+    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
+    @test command_storage(tiptilt) !== command_storage(focus)
+    @test command_storage(tiptilt) !== command_storage(dm)
+
+    set_command!(tiptilt, [5e-9, -2e-9])
+    set_command!(focus, [3e-9])
+    set_command!(dm, range(-1e-9, 1e-9; length=n_control_dofs(dm)))
+
+    individual_opd = map((tiptilt, focus, dm)) do optic
+        pupil = PupilFunction(tel)
+        update_surface!(optic)
+        apply_surface!(pupil, optic, DMReplace())
+        copy(opd_map(pupil))
+    end
+
+    combined = PupilFunction(tel)
+    reset_opd!(combined)
+    for optic in (tiptilt, focus, dm)
+        update_surface!(optic)
+        apply_surface!(combined, optic, DMAdditive())
+    end
+    @test opd_map(combined) ≈
+        individual_opd[1] .+ individual_opd[2] .+ individual_opd[3]
+
+    original_dm_command = copy(command_storage(dm))
+    set_command!(tiptilt, zeros(2))
+    @test command_storage(dm) == original_dm_command
+    @test_throws DimensionMismatchError set_command!(tiptilt, zeros(3))
+end
+
+@testset "Modal controllable-optic descriptors" begin
+    tel = Telescope(
+        resolution=16,
+        diameter=8.0,
+        central_obstruction=0.0,
+        backend=CPUBackend(),
+    )
+    function_modal = ModalControllableOptic(
+        tel,
+        FunctionModalBasis(((x, y) -> x, (x, y) -> y));
+        labels=:function_modal,
+    )
+    zernike = ModalControllableOptic(
+        tel,
+        ZernikeOpticBasis([2, 3]),
+    )
+    matrix_modal = ModalControllableOptic(
+        tel,
+        MatrixModalBasis(reshape(collect(1.0:512.0), 16 * 16, 2)),
+    )
+    cartesian = ModalControllableOptic(
+        tel,
+        CartesianTiltBasis(; scale=0.1),
+    )
+
+    @test function_modal.params.labels === :function_modal
+    @test zernike.params.labels == (:zernike_2, :zernike_3)
+    @test matrix_modal.params.labels === :modal_optic
+    @test cartesian.params.labels == (:x_tilt, :y_tilt)
+    for optic in (function_modal, zernike, matrix_modal, cartesian)
+        @test backend(optic) isa CPUBackend
+        @test command_storage(optic) isa Vector
+    end
+
+    set_command!(zernike, [0.01, -0.02])
+    pupil = PupilFunction(tel)
+    update_surface!(zernike)
+    apply_surface!(pupil, zernike, DMAdditive())
+    @test norm(opd_map(pupil)) > 0
+    @test_throws MethodError set_command!(
+        zernike,
+        (zernike_2=[0.01], zernike_3=[-0.02]),
+    )
 end

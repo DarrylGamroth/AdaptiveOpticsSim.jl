@@ -324,17 +324,4 @@ end
     @test length(tomography.commands) == 4
     @test all(isfinite, tomography.commands)
 
-    for name in ("closed_loop_shack_hartmann.jl", "closed_loop_pyramid.jl", "closed_loop_bi_o_edge.jl", "closed_loop_zernike.jl")
-        loop = run_tutorial_example(name)
-        @test length(loop.residual_before) == length(loop.residual_after)
-        @test all(isfinite, loop.residual_before)
-        @test all(isfinite, loop.residual_after)
-        if hasproperty(loop, :final_image)
-            @test maximum(loop.final_image) > 0
-        else
-            @test maximum(loop.final_frame) > 0
-            @test all(isfinite, loop.final_slopes)
-            @test all(isfinite, loop.final_command)
-        end
-    end
 end

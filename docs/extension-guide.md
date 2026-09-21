@@ -193,16 +193,19 @@ Reusable masks, microlens arrays, phase spots, and defocus optics belong in
 `Optics`. Detector physics belongs in `Detectors`. Do not hide a detector inside
 an estimator or use slope/flux vocabulary interchangeably.
 
-## Calibration, Control, And Tomography
+## Calibration, RTC Composition, And Tomography
 
-Calibration owns model identification and matrix/basis creation. Control owns
-runtime reconstruction and controller state. Tomography owns atmospheric
-reconstruction geometry and DM projection. Keep large prepared arrays in plans
-or parameter owners and mutable histories in state.
+AOS calibration owns simulated physical response acquisition and plant-side
+observables. AdaptiveOpticsCalibration owns reusable inverse methods and
+calibration products. FilterGraphAlgorithms/JuliaFilterGraph owns runtime
+reconstruction, controller state, frame delay, and VDM/PDM routing. Tomography
+owns atmospheric reconstruction geometry and DM projection. Keep large
+prepared arrays in plans or parameter owners and mutable histories in state.
 
-A controller that participates in a simulation graph is an ordinary explicit
-node. An external RTC instead connects through `PreparedGraphHILBoundary` and
-is not simulated by the graph unless the application deliberately includes it.
+An in-process RTC composes with the AOS plant at an explicit package boundary;
+it is not an AOS algorithm-graph node. An external RTC connects through
+`PreparedGraphHILBoundary`. Downstream applications own either composition and
+its system-level timing and acceptance evidence.
 
 ## Proper.jl
 

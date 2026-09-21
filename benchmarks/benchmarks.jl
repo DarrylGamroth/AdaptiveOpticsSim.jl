@@ -2,12 +2,8 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.WavefrontSensors
-using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
 using BenchmarkTools
 using Random
-
-include(joinpath(@__DIR__, "support", "closed_loop_workload.jl"))
 
 function bench_direct_imaging()
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.2)
@@ -46,42 +42,6 @@ function bench_pyramid()
         pupil.opd[i, j] = i + j
     end
     return @benchmark measure!($wfs, $pupil, $src)
-end
-
-function bench_reconstructor()
-    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    dm = DeformableMirror(tel; n_act=4)
-    wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
-    recon = ModalReconstructor(imat; gain=1.0)
-    slopes = AdaptiveOpticsSim.WavefrontSensors.slopes(wfs)
-    return @benchmark reconstruct($recon, $slopes)
-end
-
-function bench_reconstructor_inplace()
-    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    dm = DeformableMirror(tel; n_act=4)
-    wfs = ShackHartmannWFS(tel; n_lenslets=4)
-    imat = interaction_matrix(dm, wfs, PupilFunction(tel); amplitude=0.1)
-    recon = ModalReconstructor(imat; gain=1.0)
-    slopes = AdaptiveOpticsSim.WavefrontSensors.slopes(wfs)
-    out = similar(slopes, size(recon.reconstructor, 1))
-    return @benchmark reconstruct!($out, $recon, $slopes)
-end
-
-function bench_closed_loop_workload()
-    workload = prepare_closed_loop_workload(T=Float64, seed=0)
-    return @benchmark step_closed_loop_workload!($workload)
-end
-
-function bench_closed_loop_workload_timing()
-    workload = prepare_closed_loop_workload(T=Float64, seed=0)
-    return runtime_timing(
-        () -> step_closed_loop_workload!(workload);
-        warmup=10,
-        samples=200,
-        gc_before=false,
-    )
 end
 
 function prepare_lift_benchmark(numerical::Bool)
@@ -128,25 +88,9 @@ function alloc_checks()
     alloc_lift_n = @allocated AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
         H_n, lift_n, coeffs)
 
-    tel_r = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    dm = DeformableMirror(tel_r; n_act=4)
-    wfs = ShackHartmannWFS(tel_r; n_lenslets=4)
-    imat = interaction_matrix(dm, wfs, PupilFunction(tel_r); amplitude=0.1)
-    recon = ModalReconstructor(imat; gain=1.0)
-    slopes = AdaptiveOpticsSim.WavefrontSensors.slopes(wfs)
-    out = similar(slopes, size(recon.reconstructor, 1))
-    reconstruct!(out, recon, slopes)
-    alloc_recon = @allocated reconstruct!(out, recon, slopes)
-
-    workload = prepare_closed_loop_workload(T=Float64, seed=0)
-    alloc_closed_loop =
-        @allocated step_closed_loop_workload!(workload)
-
     println("Allocation checks:")
     println("  LiFT analytic (in-place): $(alloc_lift_a) bytes")
     println("  LiFT numerical (in-place): $(alloc_lift_n) bytes")
-    println("  Reconstructor! (in-place): $(alloc_recon) bytes")
-    println("  Closed-loop workload: $(alloc_closed_loop) bytes")
 end
 
 println("Direct-imaging benchmark:")
@@ -160,18 +104,6 @@ display(bench_wfs_lgs())
 
 println("Pyramid benchmark:")
 display(bench_pyramid())
-
-println("Reconstructor benchmark:")
-display(bench_reconstructor())
-
-println("Reconstructor in-place benchmark:")
-display(bench_reconstructor_inplace())
-
-println("Closed-loop workload benchmark:")
-display(bench_closed_loop_workload())
-
-println("Closed-loop workload timing:")
-display(bench_closed_loop_workload_timing())
 
 println("LiFT analytic benchmark:")
 display(bench_lift(false))

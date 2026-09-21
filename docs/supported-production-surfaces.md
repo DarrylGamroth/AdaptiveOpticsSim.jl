@@ -21,7 +21,9 @@ The Julia 1.12 CPU baseline includes:
   [`model-validity-matrix.md`](model-validity-matrix.md)
 - conventional frame and counting/channel detector families covered by their
   registered suites
-- calibration matrices/bases, reconstructors, controllers, and tomography
+- plant-side calibration observables, reusable AOC inverse products, and
+  tomography; maintained RTC reconstruction and controller execution is in
+  FilterGraphAlgorithms/JuliaFilterGraph
 - deterministic and ordinary coarse-grained ensemble execution
 - static `AlgorithmGraphs` definitions in Julia and TOML
 - direct and explicit one-frame delayed graph links
@@ -78,7 +80,7 @@ backend's documented detector host-mirror strategy.
 
 `GroupedStreamGraphExecution` is supported on the host, CUDA, and AMDGPU for an
 explicit sequence of complete dependency groups. Hardware fixtures compare a
-two-branch controller/modal-expansion graph with the single-stream result and
+two-branch modal-OPD graph with the single-stream result and
 verify distinct retained lane streams. The policy uses one reusable dependency
 event per lane and a full device-side barrier between groups. It does not claim
 automatic graph partitioning, CPU task parallelism, or a speedup for narrow

@@ -5,8 +5,6 @@ using AdaptiveOpticsSim.Tomography
 using BenchmarkTools
 using Random
 
-include(joinpath(@__DIR__, "support", "closed_loop_workload.jl"))
-
 for name in names(AdaptiveOpticsSim; all=true)
     s = String(name)
     if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
@@ -74,24 +72,6 @@ function _configure_benchmarks!()
     BenchmarkTools.DEFAULT_PARAMETERS.gctrial = false
     BenchmarkTools.DEFAULT_PARAMETERS.gcsample = false
     return nothing
-end
-
-function _closed_loop_case(target::BenchmarkExecutionTarget;
-    resolution::Int, n_lenslets::Int, n_act::Int)
-    policy = _benchmark_policy(target)
-    T = AdaptiveOpticsSim.Backends.gpu_runtime_type(policy)
-    backend = _benchmark_backend_array(target)
-    _require_benchmark_gpu_backend(target)
-    workload = prepare_closed_loop_workload(
-        ;
-        resolution=resolution,
-        n_lenslets=n_lenslets,
-        n_act=n_act,
-        T=T,
-        backend=backend,
-    )
-    _sync_target!(target, workload.command)
-    return workload
 end
 
 function _tomography_case_params(target::BenchmarkExecutionTarget; n_lenslets::Int, n_lgs::Int, n_fit_src::Int, n_dm::Int)
@@ -190,24 +170,12 @@ end
 function _canonical_suite(target::BenchmarkExecutionTarget)
     _configure_benchmarks!()
 
-    closed_loop = _closed_loop_case(
-        target;
-        resolution=16,
-        n_lenslets=4,
-        n_act=4,
-    )
-    closed_loop_trial = run(@benchmarkable begin
-        step_closed_loop_workload!($closed_loop)
-        _sync_target!($target, $closed_loop.command)
-    end)
-
     p = _tomography_case_params(target; n_lenslets=3, n_lgs=2, n_fit_src=2, n_dm=2)
     builder_label, builder_trial, builder_high_accuracy_label, builder_high_accuracy_trial =
         _builder_benchmarks(target, p)
 
     return (
         backend=_backend_name(target),
-        closed_loop_trial=closed_loop_trial,
         builder_label=builder_label,
         builder_trial=builder_trial,
         builder_high_accuracy_label=builder_high_accuracy_label,
@@ -269,7 +237,6 @@ end
 function run_backend_benchmark_suite(target::BenchmarkExecutionTarget)
     suite = _canonical_suite(target)
     println("backend_benchmark_suite backend=", suite.backend)
-    _print_trial("closed_loop_workload", suite.closed_loop_trial)
     _print_trial(suite.builder_label, suite.builder_trial)
     _print_trial(suite.builder_high_accuracy_label, suite.builder_high_accuracy_trial)
     return suite

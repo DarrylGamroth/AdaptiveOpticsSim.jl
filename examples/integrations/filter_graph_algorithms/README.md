@@ -29,6 +29,11 @@ The contract is deliberately narrow:
 - the warmed composed CPU step is inferred and allocates zero Julia heap
   bytes.
 
+The integration tests also retain the pre-split controller-command routing,
+constraint-feedback, fixed-frame-delay, and deterministic S1 boundary
+trajectory as numerical migration oracles. They run the public FGA/JFG and
+AOC interfaces only; AOS remains the plant owner.
+
 The composing bridge is intentionally CPU-resident and uses preallocated host
 storage. AOS plant execution and FGA RTC execution are qualified independently
 on CUDA and AMDGPU. This fixture does not claim shared device storage, a shared

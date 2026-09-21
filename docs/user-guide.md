@@ -71,47 +71,18 @@ direction mapping and writes the caller's pupil product. Rendering does not
 advance time or consume RNG. `r0` is defined at `reference_wavelength_m`;
 rendering converts the generated phase to wavelength-independent OPD in metres.
 
-## Explicit Closed Loop (Temporary Legacy Surface)
+## Closed-Loop AO And RTC Composition
 
-A direct loop using `AdaptiveOpticsSim.Control` remains available temporarily
-for migration and older experiments. Do not add new production RTC callers to
-this namespace. For the maintained in-process RTC composition, use the
-[AOS plant/FGA RTC fixture](../examples/integrations/filter_graph_algorithms/),
-which keeps physical plant response in AOS and reconstruction, control, and
-VDM/PDM routing in FilterGraphAlgorithms/JuliaFilterGraph.
+AOS is the plant owner, not the in-process RTC owner. For the maintained
+Shack–Hartmann closed-loop composition, use the
+[AOS plant/FGA RTC fixture](../examples/integrations/filter_graph_algorithms/).
+It keeps physical response and complete PDM-command application in AOS, while
+FilterGraphAlgorithms/JuliaFilterGraph owns reconstruction, controller state,
+frame delay, and VDM/PDM routing.
 
-~~~julia
-using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
-
-dm = DeformableMirror(telescope; n_act=4, influence_width=0.3)
-interaction = interaction_matrix(
-    dm,
-    wfs,
-    PupilFunction(telescope),
-    source;
-    amplitude=0.1,
-)
-reconstructor = ModalReconstructor(interaction; gain=0.5)
-command = similar(dm.state.coefs)
-
-for _ in 1:100
-    epoch = advance_by!(atmosphere, 1e-3; rng)
-    render_atmosphere!(pupil, renderer, atmosphere, epoch)
-
-    update_surface!(dm)
-    apply_surface!(pupil, dm, DMAdditive())
-
-    measure!(wfs, pupil, source)
-    reconstruct!(command, reconstructor, slopes(wfs))
-    @. command = -command
-    set_command!(dm, command)
-end
-~~~
-
-Controller delay, detector acquisition, and command timing should be explicit
-when they matter to the experiment. Use caller-owned state and separate RNGs
-for independently replayable stochastic components.
+The former AOS RTC examples and tutorials are retired. Pyramid, Bi-O-edge, and
+Zernike RTC composition, and the combined Subaru AO188/AO3k model, belong to
+downstream packages that also own their composition and acceptance evidence.
 
 ## Detector Acquisition
 

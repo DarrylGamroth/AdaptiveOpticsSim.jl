@@ -30,8 +30,10 @@ the maintained package.
 - Static graph definitions in Julia or TOML, direct and one-frame delayed links,
   model-time drivers, preparation-time validation, and reset.
 - Native graph nodes for atmosphere OPD, deformable-mirror surfaces, pupil OPD
-  composition, Shack-Hartmann and Pyramid optical rates, detector acquisition,
-  centroid/slope selection, reconstruction, and controller operations.
+  composition, Shack–Hartmann and Pyramid optical rates, detector acquisition,
+  and centroid/slope selection. RTC reconstruction, controller operations,
+  frame delay, and VDM/PDM routing are owned by FilterGraphAlgorithms and
+  JuliaFilterGraph.
 - Lockstep host command/frame exchange for external RTC integration.
 - A downstream-package seam for instrument-owned graph files, geometry,
   calibration policy, pyRTC tests, and model-validity claims.
@@ -45,9 +47,10 @@ the maintained package.
 2. Keep the generic graph, HIL, and pyRTC contracts stable for the separately
    maintained REVOLT Classic and Copper packages; instrument calibration and
    performance evidence remain with those packages.
-3. Build a separate SPIDERS instrument package from controlled Subaru/AO3k,
-   SpiderMan, service, and optical-engineering inputs. Mark estimated chopper,
-   stage, filter-wheel, and prescription values as provisional.
+3. Build a separate SPIDERS instrument package from the retired Subaru/AO188
+   and AO3k composition, SpiderMan, service, and optical-engineering inputs.
+   Mark estimated chopper, stage, filter-wheel, and prescription values as
+   provisional.
 4. Add an external transport adapter after the simulated detector boundary. GPU
    simulations may copy a completed frame to the CPU RTC boundary explicitly;
    hidden mixed-device execution is out of scope.

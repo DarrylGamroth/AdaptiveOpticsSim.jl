@@ -8,7 +8,6 @@ using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
 using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim.AlgorithmGraphs
@@ -98,14 +97,6 @@ for name in names(Calibration; all=true)
     end
 end
 
-for name in names(Control; all=true)
-    s = String(name)
-    if Base.isidentifier(s) && !startswith(s, "#") &&
-            !isdefined(@__MODULE__, name)
-        @eval const $(name) = getfield(Control, $(QuoteNode(name)))
-    end
-end
-
 for name in names(Tomography; all=true)
     s = String(name)
     if Base.isidentifier(s) && !startswith(s, "#") &&
@@ -129,10 +120,6 @@ for name in names(AlgorithmGraphs; all=true)
         @eval const $(name) = getfield(AlgorithmGraphs, $(QuoteNode(name)))
     end
 end
-
-include(joinpath(dirname(@__DIR__), "examples", "support", "subaru_ao3k_simulation.jl"))
-using .SubaruAO3kSimulation.SubaruAO188Simulation
-using .SubaruAO3kSimulation
 
 include("reference_harness.jl")
 include("gate0_characterization_harness.jl")
@@ -214,36 +201,6 @@ function assert_optical_element_interface(element, tel)
     @test applicable(surface_opd, element)
     @test applicable(apply_surface!, pupil, element, DMAdditive())
     @test applicable(apply_surface!, pupil, element, DMReplace())
-end
-
-function assert_reconstructor_interface(recon, slopes, expected_length::Int)
-    @test recon isa AbstractReconstructorOperator
-    out = zeros(eltype(slopes), expected_length)
-    @test applicable(reconstruct!, out, recon, slopes)
-    reconstruct!(out, recon, slopes)
-    @test length(out) == expected_length
-    method = calibration_method(recon)
-    spectrum = singular_values(recon)
-    cond = condition_number(recon)
-    rank = effective_rank(recon)
-    @test method isa AOCReconstructors.AbstractSVDInverse
-    @test spectrum isa AbstractVector
-    @test cond isa Real
-    @test rank isa Integer
-    @test 0 <= rank <= length(spectrum)
-    allocated = reconstruct(recon, slopes)
-    @test length(allocated) == expected_length
-end
-
-function assert_controller_interface(ctrl, input, dt::Real)
-    @test applicable(update!, ctrl, input, dt)
-    output = update!(ctrl, input, dt)
-    @test length(output) == length(input)
-    @test controller_output(ctrl) === output
-    if supports_controller_reset(ctrl)
-        reset_controller!(ctrl)
-        @test all(iszero, controller_output(ctrl))
-    end
 end
 
 function assert_interaction_matrix_contract(imat, expected_rows::Int, expected_cols::Int, amplitude::Real)
@@ -396,62 +353,4 @@ function moving_wfs_slope_trace(;
         trace[i] = copy(slopes(wfs))
     end
     return trace
-end
-
-function moving_closed_loop_trace(;
-    seed::Integer=1,
-    steps::Integer=5,
-)
-    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    src = Source(band=:I, magnitude=0.0)
-    atmosphere_step = 1e-3
-    delta = tel.params.diameter / tel.params.resolution
-    atm = MultiLayerAtmosphere(tel;
-        r0=0.2,
-        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
-        L0=25.0,
-        fractional_cn2=[0.7, 0.3],
-        wind_speed=[delta / atmosphere_step, 0.5 * delta / atmosphere_step],
-        wind_direction_deg=[0.0, 90.0],
-        altitude=[0.0, 5000.0],
-    )
-    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    wfs = ZernikeWFS(tel; pupil_samples=4, diffraction_padding=2)
-    calibration_pupil = PupilFunction(tel)
-    imat = interaction_matrix(dm, wfs, calibration_pupil, src;
-        amplitude=1e-8)
-    recon = ModalReconstructor(imat; gain=0.2)
-    wfs_det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1)
-    pupil = PupilFunction(tel)
-    atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
-    prepare_runtime_wfs!(wfs, pupil, src)
-    science_imaging = prepare_direct_imaging(pupil, src; zero_padding=1)
-    command = similar(command_storage(dm))
-    fill!(command, zero(eltype(command)))
-    delay = VectorDelayLine(command, 1)
-    rng = MersenneTwister(seed)
-
-    slope_norms = zeros(Float64, steps)
-    command_norms = zeros(Float64, steps)
-    wfs_energy = zeros(Float64, steps)
-    science_energy = zeros(Float64, steps)
-
-    for i in 1:steps
-        epoch = advance_by!(atm, atmosphere_step; rng=rng)
-        render_atmosphere!(pupil, atmosphere_renderer, atm, epoch)
-        update_surface!(dm)
-        apply_surface!(pupil, dm, DMAdditive())
-        measure!(wfs, pupil, src, wfs_det; rng=rng)
-        reconstruct!(command, recon, slopes(wfs))
-        delayed = shift_delay!(delay, command)
-        @. command_storage(dm) = -delayed
-        science = form_direct_image!(science_imaging)
-
-        slope_norms[i] = norm(slopes(wfs))
-        command_norms[i] = norm(command_storage(dm))
-        wfs_energy[i] = sum(abs, output_frame(wfs_det))
-        science_energy[i] = sum(abs, intensity_values(science))
-    end
-
-    return (; slope_norms, command_norms, wfs_energy, science_energy)
 end

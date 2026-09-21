@@ -93,9 +93,6 @@ end
     @test Tuple(spec.name for spec in resolve_test_suites(
         ["calibration"])) == ("calibration-workflows",)
     @test Tuple(spec.name for spec in resolve_test_suites(
-        ["control"])) ==
-        ("control-primitives", "control-reconstruction")
-    @test Tuple(spec.name for spec in resolve_test_suites(
         ["sensors"])) == (
             DETECTOR_TEST_SUITE_NAMES...,
             "wfs-acquisition-ownership",
@@ -169,7 +166,7 @@ end
     @test occursin("sensors =", listing_text)
     @test occursin("calibration =", listing_text)
     @test occursin("ci-foundations =", listing_text)
-    @test occursin("ci-sensors-control =", listing_text)
+    @test occursin("ci-sensors =", listing_text)
 
     actual_testsets = sort!(filter(
         path -> endswith(path, ".jl"),

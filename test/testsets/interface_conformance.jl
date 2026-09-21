@@ -16,17 +16,6 @@
         topology=LinearAPDChannelBank(length(psf)), noise=NoisePhoton())
     opd_map = OPDMap(fill(0.1, size(pupil.opd)))
     ncpa = NCPA(tel, dm, atm; coefficients=[0.01, -0.02])
-    imat = interaction_matrix(dm, wfs, pupil; amplitude=0.1)
-    modal = ModalReconstructor(imat; gain=1.0)
-    factorized = FactorizedReconstructor(imat; gain=1.0)
-    mapped = MappedReconstructor(Matrix{Float64}(I, length(dm.state.coefs), length(dm.state.coefs)), imat; gain=0.5)
-    ctrl = DiscreteIntegratorController(length(slopes(wfs)); gain=0.1, tau=0.02)
-    controlled = ControlledReconstructor(
-        factorized,
-        DiscreteIntegratorController(length(dm.state.coefs);
-            gain=0.1, tau=0.02);
-        dt=TEST_ATMOSPHERE_STEP,
-    )
     wfs_diffractive = ShackHartmannWFS(tel; n_lenslets=2, mode=Diffractive())
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
     poly_common = with_spectrum(src, SpectralBundle(
@@ -141,15 +130,6 @@
     # IF-OPT
     assert_optical_element_interface(opd_map, tel)
     assert_optical_element_interface(ncpa, tel)
-    # IF-REC
-    assert_reconstructor_interface(modal, slopes(wfs), length(dm.state.coefs))
-    assert_reconstructor_interface(factorized, slopes(wfs), length(dm.state.coefs))
-    assert_reconstructor_interface(mapped, slopes(wfs), length(dm.state.coefs))
-    assert_reconstructor_interface(controlled, slopes(wfs), length(dm.state.coefs))
-    @test reset_controller!(controlled) === controlled
-    # IF-CTRL
-    assert_controller_interface(ctrl, slopes(wfs), 0.01)
-    @test supports_controller_reset(ctrl)
     # WFS execution capabilities
     @test !supports_prepared_runtime(wfs, src)
     @test supports_prepared_runtime(wfs_diffractive, src)

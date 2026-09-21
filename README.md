@@ -74,41 +74,29 @@ render_atmosphere!(pupil, renderer, atm, epoch)
 slopes = measure!(wfs, pupil, src)
 ```
 
-### 3. Build a closed-loop AO model
+### 3. Compose an AO plant with an RTC
 
-```julia
-using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
+AOS owns the physical plant: atmosphere, optics, WFS products, detector
+acquisition, and application of complete PDM commands. The maintained
+in-process RTC reference is
+[`examples/integrations/filter_graph_algorithms/`](examples/integrations/filter_graph_algorithms/):
+FilterGraphAlgorithms/JuliaFilterGraph owns reconstruction, controller state,
+frame delay, and VDM/PDM routing. This fixture is the maintained
+Shack–Hartmann closed-loop reference. FilterGraphAlgorithms also owns the
+Pyramid estimator; a complete Pyramid plant/RTC composition belongs in its
+downstream composing package.
 
-dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-imat = interaction_matrix(dm, wfs, PupilFunction(tel), src; amplitude=0.1)
-recon = ModalReconstructor(imat; gain=0.5)
-pupil = PupilFunction(tel)
-renderer = prepare_atmosphere_renderer(atm, tel, src)
-command = similar(dm.state.coefs)
-
-for _ in 1:5
-    epoch = advance_by!(atm, 1e-3; rng=rng)
-    render_atmosphere!(pupil, renderer, atm, epoch)
-    update_surface!(dm)
-    apply_surface!(pupil, dm, DMAdditive())
-    measure!(wfs, pupil, src)
-    reconstruct!(command, recon, slopes(wfs))
-    @. command = -command
-    set_command!(dm, command)
-end
-```
-
-This explicit loop shows the numerical building blocks. Model packages may
-wrap their composition in model-specific `prepare!`, `step!`, and `readout`
-functions.
+The legacy AOS closed-loop scripts and tutorials were retired. Bi-O-edge and
+Zernike RTC composition belongs in a downstream package with its calibration
+and acceptance evidence; the combined Subaru AO188/AO3k model likewise moves
+to a downstream instrument package.
 
 The main modeling objects are:
 
 - `Telescope` and `Source` for optical geometry and illumination
 - `MultiLayerAtmosphere` or `KolmogorovAtmosphere` for turbulence
 - `ShackHartmannWFS`, `PyramidWFS`, `BiOEdgeWFS`, `CurvatureWFS`, `ZernikeWFS` for sensing
-- `DeformableMirror` plus a reconstructor for control
+- `DeformableMirror` for the physical response to a complete PDM command
 - `AdaptiveOpticsSim.AlgorithmGraphs` for static, single-rate, complete-frame
   composition on CPU, CUDA, or AMDGPU arrays
 - direct Julia composition for generated topology, multiple rates, conditional
@@ -138,11 +126,12 @@ Runnable tutorials live in `examples/tutorials/`. Start with:
 ```bash
 julia --project=. examples/tutorials/image_formation.jl
 julia --project=. examples/tutorials/detector.jl
-julia --project=. examples/tutorials/closed_loop_shack_hartmann.jl
-julia --project=. examples/tutorials/closed_loop_pyramid.jl
 ```
 
-Use `examples/closed_loop_demo.jl` for the smallest direct closed-loop script.
+For the maintained Shack–Hartmann closed-loop RTC reference, use
+`examples/integrations/filter_graph_algorithms/` with its documented
+cross-package environment. Pyramid, Bi-O-edge, and Zernike RTC composition is
+not an AOS tutorial surface.
 To verify the maintained core examples as a group, run:
 
 ```bash

@@ -150,49 +150,21 @@ rolling-shutter, or frame-transfer acquisition explicitly. Nondestructive reads
 and up-the-ramp sampling are detector lifecycle state; frame transfer changes
 acquisition timing, not optical performance or MTF.
 
-## Recipe 4: Explicit Closed-Loop Composition
+## Recipe 4: Closed-Loop Composition Across The Plant/RTC Boundary
 
-Use a direct loop when you want the reusable numerical and control primitives
-without HIL scheduling:
+AOS owns atmospheric and optical propagation, WFS products, detector
+acquisition, and application of a complete PDM command. It does not own the
+in-process RTC. For the maintained Shack–Hartmann closed-loop composition,
+start from the
+[AOS plant/FGA RTC fixture](../examples/integrations/filter_graph_algorithms/).
+FilterGraphAlgorithms/JuliaFilterGraph owns reconstruction, controller state,
+frame delay, and VDM/PDM routing; AdaptiveOpticsCalibration owns reusable
+inverse products.
 
-```julia
-using AdaptiveOpticsSim
-using AdaptiveOpticsSim.Optics
-using AdaptiveOpticsSim.WavefrontSensors
-using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
-
-dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-interaction = interaction_matrix(
-    dm,
-    wfs,
-    PupilFunction(tel),
-    src;
-    amplitude=0.1,
-)
-reconstructor = ModalReconstructor(interaction; gain=0.5)
-command = similar(dm.state.coefs)
-
-for _ in 1:100
-    epoch = advance_by!(atm, 1e-3; rng)
-    render_atmosphere!(pupil, renderer, atm, epoch)
-    update_surface!(dm)
-    apply_surface!(pupil, dm, DMAdditive())
-    measure!(wfs, pupil, src)
-    reconstruct!(command, reconstructor, slopes(wfs))
-    @. command = -command
-    set_command!(dm, command)
-end
-```
-
-Model packages may wrap a fixed composition in model-specific `prepare!`,
-`step!`, and `readout` functions. The Subaru AO188/AO3k example modules use
-that pattern.
-
-Use `AdaptiveOpticsSim.Control.VectorDelayLine`,
-`AdaptiveOpticsSim.Control.DiscreteIntegratorController`, or a custom controller
-between reconstruction and `set_command!` when the numerical experiment needs
-latency or control dynamics.
+The legacy AOS closed-loop examples are retired. Pyramid, Bi-O-edge, and
+Zernike RTC composition must be defined and accepted by the downstream package
+that owns the assembled system. The combined Subaru AO188/AO3k plant/RTC model
+is likewise retired from AOS pending its downstream instrument-package home.
 
 ## Recipe 5: Independent Controllable Optics
 

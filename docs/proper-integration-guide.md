@@ -9,8 +9,8 @@ This guide records the maintained boundary between `AdaptiveOpticsSim.jl` and
 
 Use this when:
 
-- `AdaptiveOpticsSim.jl` owns AO runtime state, RTC commands, WFS products, and
-  DM-to-OPD modeling
+- `AdaptiveOpticsSim.jl` owns plant state, WFS products, application of complete
+  PDM commands, and DM-to-OPD modeling
 - `Proper.jl` owns an external wave-optics science prescription
 - both packages may run on CPU, CUDA, or AMDGPU without unnecessary host/device
   transfers
@@ -19,7 +19,8 @@ Use this when:
 
 Keep the packages loosely coupled.
 
-- `AdaptiveOpticsSim.jl` should receive RTC commands and update AO runtime state.
+- `AdaptiveOpticsSim.jl` should accept a complete PDM command at the plant
+  boundary and update its physical state.
 - `AdaptiveOpticsSim.jl` should convert actuator commands into a sampled OPD
   surface when its DM model is being used.
 - `AdaptiveOpticsSim.jl` should own common AO-path aberrations and sampled

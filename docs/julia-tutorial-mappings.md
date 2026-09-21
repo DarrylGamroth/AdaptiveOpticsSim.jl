@@ -14,7 +14,6 @@ From the package root:
 
 ```bash
 julia --project examples/tutorials/image_formation.jl
-julia --project examples/tutorials/closed_loop_pyramid.jl
 ```
 
 Each script exposes a `main()` function and logs a short completion summary with
@@ -33,10 +32,10 @@ Each script exposes a `main()` function and logs a short completion summary with
 | `tutorials/how_to_LIFT.ipynb` | `examples/tutorials/lift.jl` | LiFT setup and coefficient recovery |
 | `tutorials/how_to_SPRINT.py` | `examples/tutorials/sprint.jl` | Mis-registration sensitivity and estimation |
 | `tutorials/AO_transfer_function.py` | `examples/tutorials/transfer_function.jl` | Closed-loop rejection and closed-loop transfer functions |
-| `tutorials/AO_closed_loop_ShackHartmannWFS_WFS.py` | `examples/tutorials/closed_loop_shack_hartmann.jl` | Deterministic diffractive SH loop; compact OOPAO regression trace committed |
-| `tutorials/AO_closed_loop_Pyramid_WFS.py` | `examples/tutorials/closed_loop_pyramid.jl` | Deterministic diffractive Pyramid loop; compact OOPAO regression trace committed |
-| `tutorials/AO_closed_loop_BioEdge_WFS.py` | `examples/tutorials/closed_loop_bi_o_edge.jl` | Deterministic diffractive Bi-O-edge loop; compact OOPAO regression trace committed |
-| `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | `examples/tutorials/gain_sensing_camera.jl` | Pyramid modulation-frame, optical-gain estimation, and compact GSC closed-loop regression |
+| `tutorials/AO_closed_loop_ShackHartmannWFS_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained Shack–Hartmann plant/RTC fixture; AOS owns the plant and FGA/JFG owns the RTC |
+| `tutorials/AO_closed_loop_Pyramid_WFS.py` | Downstream package | AOS Pyramid sensing and the FGA Pyramid estimator remain available; their complete RTC composition and acceptance are not an AOS tutorial surface |
+| `tutorials/AO_closed_loop_BioEdge_WFS.py` | Downstream package | AOS Bi-O-edge sensing remains available; its RTC composition and acceptance are not an AOS tutorial surface |
+| `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | `examples/tutorials/gain_sensing_camera.jl` | Pyramid modulation-frame and optical-gain estimation; no maintained AOS RTC composition |
 | `tutorials/how_to_tomography.py` | `examples/tutorials/tomography.jl` | Compact model-based tomography workflow plus committed pyTomoAO KAPA regression for wavefront and DM-command reconstruction |
 
 ## Julia patterns behind the mapping
@@ -48,8 +47,8 @@ Each script exposes a `main()` function and logs a short completion summary with
   `mode=Geometric()` or `mode=Diffractive()`, not a mutable string flag.
 - Detector noise is encoded by the detector’s `noise` type, for example
   `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.
-- Closed-loop examples preallocate their work buffers and use `reconstruct!`
-  for the hot path.
+- The maintained closed-loop fixtures keep the AOS plant and the FGA/JFG RTC
+  in separate packages with explicit cross-package products.
 
 ## Representative AOS mappings
 
@@ -60,7 +59,6 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
 ```
 
@@ -83,25 +81,6 @@ pupil = PupilFunction(tel)
 slopes = measure!(wfs, pupil, src)
 ```
 
-### Closed loop
-
-```julia
-calibration_pupil = PupilFunction(tel)
-imat = interaction_matrix(dm, wfs, calibration_pupil, src; amplitude=1e-9)
-recon = ModalReconstructor(imat; gain=0.4)
-cmd = similar(dm.state.coefs)
-renderer = prepare_atmosphere_renderer(atm, tel, src)
-pupil = PupilFunction(tel)
-
-epoch = advance_by!(atm, 1e-3; rng=rng)
-render_atmosphere!(pupil, renderer, atm, epoch)
-measure!(wfs, pupil, src)
-reconstruct!(cmd, recon, slopes(wfs))
-dm.state.coefs .= -cmd
-update_surface!(dm)
-apply_surface!(pupil, dm, DMAdditive())
-```
-
 ## Logging in examples
 
 Use structured logging instead of print statements:
@@ -109,7 +88,7 @@ Use structured logging instead of print statements:
 ```julia
 using Logging
 
-@info "Closed-loop Pyramid tutorial complete" final_residual=result.residual_after[end]
+@info "Pyramid sensing tutorial complete" measurement_length=length(slopes(wfs))
 ```
 
 That keeps examples composable in scripts, tests, and notebooks.

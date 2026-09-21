@@ -3,7 +3,6 @@ using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
-using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Tomography
 import AdaptiveOpticsSim.Optics: filter!
 using Logging
@@ -62,46 +61,4 @@ function combine_modes(basis::AbstractArray{T,3}, coeffs::AbstractVector{<:Real}
         @views @. opd += T(coeffs[k]) * basis[:, :, k]
     end
     return opd
-end
-
-function run_closed_loop_example(make_wfs::Function; n_iter::Int=4, seed::Integer=0,
-    resolution::Int=16, wfs_samples::Int=4, n_act::Int=3,
-    amplitude::Real=1e-9, gain::Real=0.4,
-    atmosphere_step::Real=1e-3)
-    rng = tutorial_rng(seed)
-    tel = base_telescope(resolution=resolution, central_obstruction=0.0)
-    src = base_source()
-    atm = base_atmosphere(tel)
-    dm = DeformableMirror(tel; n_act=n_act, influence_width=0.35)
-    wfs = make_wfs(tel, wfs_samples)
-    pupil = PupilFunction(tel)
-    imat = interaction_matrix(dm, wfs, pupil, src; amplitude=amplitude)
-    recon = ModalReconstructor(imat; gain=gain)
-    cmd = similar(dm.state.coefs)
-    residual_before = zeros(Float64, n_iter)
-    residual_after = similar(residual_before)
-    atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
-
-    for k in 1:n_iter
-        epoch = advance_by!(atm, atmosphere_step; rng=rng)
-        render_atmosphere!(pupil, atmosphere_renderer, atm, epoch)
-        residual_before[k] = pupil_rms(pupil.opd, pupil_support(pupil))
-        measure!(wfs, pupil, src)
-        reconstruct!(cmd, recon, slopes(wfs))
-        dm.state.coefs .= -cmd
-        update_surface!(dm)
-        apply_surface!(pupil, dm, DMAdditive())
-        residual_after[k] = pupil_rms(pupil.opd, pupil_support(pupil))
-    end
-
-    science_pupil = PupilFunction(pupil)
-    imaging = prepare_direct_imaging(science_pupil, src; zero_padding=2)
-    form_direct_image!(imaging)
-    image = copy(intensity_values(direct_imaging_output(imaging)))
-    return (
-        residual_before=residual_before,
-        residual_after=residual_after,
-        final_image=image,
-        final_slopes=copy(slopes(wfs)),
-    )
 end
