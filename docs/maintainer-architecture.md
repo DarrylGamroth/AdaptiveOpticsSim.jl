@@ -41,7 +41,7 @@ vocabulary plus the modules themselves:
 | `Atmospheres` | turbulence definitions/state, evolution, source-direction rendering and batches |
 | `Detectors` | detector response, sensor families, acquisition, readout, products |
 | `WavefrontSensors` | composed WFS optics, observations, measurements, estimators |
-| `Calibration` | interaction/control matrices, bases, inverse policies, fitting and identification |
+| `Calibration` | simulated response acquisition, physical calibration observables, bases, fitting and identification; reusable inverse methods and products come from AdaptiveOpticsCalibration |
 | `Control` | reconstruction, controller state, delay lines, closed-loop operations |
 | `Tomography` | guide-star geometry, atmospheric reconstruction, fitting, DM projection |
 | `Ensembles` | coarse independent runs and optional offline scheduling |
@@ -110,8 +110,7 @@ placement.
 
 `PreparedGraphHILBoundary` adds one lockstep host exchange: execute a complete
 frame, publish it to a host buffer, require a matching complete command, then
-allow the next frame. PipeWireAO or another application owns transport and
-pacing.
+allow the next frame. An external application owns transport and pacing.
 
 ## Backend Strategy
 

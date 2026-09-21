@@ -66,12 +66,12 @@ backend_target_branch_mode(::Type{Backends.AMDGPUBackendTag}) =
 graph_rng_device_resident(::Type{Backends.CUDABackendTag}) = true
 graph_rng_device_resident(::Type{Backends.AMDGPUBackendTag}) = true
 
-# CUDA's capture-qualified completion path must bypass CUDA.jl's allocating
-# task-based wait. AMDGPU may retain a small runtime-owned event allocation in
-# these synthetic fixtures; the complete instrument benchmark gates its own
-# warmed cycle allocation separately.
+# Native captured execution uses a blocking stream completion path on both
+# backends. A warmed complete graph step must therefore allocate no Julia heap
+# storage; preparation, compilation, capture, and exceptional paths remain
+# outside this steady-state gate.
 captured_graph_step_allocation_budget(::Type{Backends.CUDABackendTag}) = 0
-captured_graph_step_allocation_budget(::Type{Backends.AMDGPUBackendTag}) = 256
+captured_graph_step_allocation_budget(::Type{Backends.AMDGPUBackendTag}) = 0
 
 function run_graph_rng_capture_replay(
     ::Type{B},

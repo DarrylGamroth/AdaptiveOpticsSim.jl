@@ -522,6 +522,8 @@ function stop_worker_noexcept!(worker::PyRTCWorker)
     return nothing
 end
 
+# The pyRTC shared-memory stream has an exact Float32 wire schema; accepting a
+# different element type here would defer a transport mismatch into publish!.
 function process_frame!(
     worker::PyRTCWorker,
     streams::ProcessStreams,

@@ -1,4 +1,5 @@
 using Test
+import AdaptiveOpticsCalibration
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 import AdaptiveOpticsSim.Optics: filter!
@@ -21,6 +22,9 @@ using TOML
 
 BLAS.set_num_threads(1)
 Backends.set_fft_provider_threads!(1)
+
+const AOCReconstructors = AdaptiveOpticsCalibration.Reconstructors
+const AOCModalBases = AdaptiveOpticsCalibration.ModalBases
 
 const TEST_ATMOSPHERE_STEP = 1e-3
 const TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M = 500e-9
@@ -218,11 +222,11 @@ function assert_reconstructor_interface(recon, slopes, expected_length::Int)
     @test applicable(reconstruct!, out, recon, slopes)
     reconstruct!(out, recon, slopes)
     @test length(out) == expected_length
-    policy = inverse_policy(recon)
+    method = calibration_method(recon)
     spectrum = singular_values(recon)
     cond = condition_number(recon)
     rank = effective_rank(recon)
-    @test policy isa InversePolicy
+    @test method isa AOCReconstructors.AbstractSVDInverse
     @test spectrum isa AbstractVector
     @test cond isa Real
     @test rank isa Integer
@@ -253,7 +257,7 @@ function assert_control_matrix_contract(control_matrix, forward::AbstractMatrix;
     @test control_matrix isa ControlMatrix
     @test control_matrix.D === forward
     @test forward_operator(control_matrix) === forward
-    @test inverse_policy(control_matrix) === control_matrix.policy
+    @test calibration_method(control_matrix) === control_matrix.method
     @test singular_values(control_matrix) === control_matrix.singular_values
     @test isequal(condition_number(control_matrix), control_matrix.cond)
     @test effective_rank(control_matrix) == control_matrix.effective_rank

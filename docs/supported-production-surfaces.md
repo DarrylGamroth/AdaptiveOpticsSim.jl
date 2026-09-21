@@ -47,9 +47,11 @@ support status is governed by their own tests and documented assumptions.
 
 ## Accelerator Surfaces
 
-AMDGPU is the release-gated accelerator for the operations exercised by the
-maintained local ROCm target. CUDA is manually validated on the WSL RTX host but
-is not a continuously available release gate. Both policies require:
+CUDA is the primary GPU performance-optimization target. AMDGPU is the
+secondary portability and qualification target and remains the automated
+release-gated accelerator because the maintained local ROCm target is
+continuously available. CUDA is manually validated on the WSL RTX host. Both
+targets require:
 
 - scalar indexing disabled
 - exact device residency for inputs, plans, state, workspace, and products,

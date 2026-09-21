@@ -250,8 +250,8 @@ adopt_hil_command!(boundary, sequence)
 ~~~
 
 The boundary validates finite complete commands, enforces sequence matching, and
-keeps host exchange buffers distinct from graph-owned arrays. PipeWireAO,
-shared memory, or another application owns transport and pacing.
+keeps host exchange buffers distinct from graph-owned arrays. An external
+application owns transport and pacing.
 
 A graph with several DMs may expose one structured or packed command input if
 that is the declared RTC contract. Preserve the semantic command map and units;

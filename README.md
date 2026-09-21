@@ -3,12 +3,11 @@
 [![CPU Validation](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml/badge.svg)](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/actions/workflows/cpu-validation.yml)
 [![Coverage](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/DarrylGamroth/AdaptiveOpticsSim.jl)
 
-Julia adaptive-optics simulation toolkit for external-RTC HIL development,
-deterministic validation, and offline CPU/GPU studies. OOPAO remains an
-important source of scientific reference cases and tutorial mappings, but its
-class layout and API are not compatibility constraints. The maintained design
-uses idiomatic Julia dispatch, explicit optical products, prepared workspaces,
-and backend-portable algorithms.
+AdaptiveOpticsSim.jl (AOS) is an independent Julia adaptive-optics plant
+simulator for external-RTC HIL development, deterministic validation, and
+offline CPU/GPU studies. The maintained design uses idiomatic Julia dispatch,
+explicit optical products, prepared workspaces, and backend-portable
+algorithms.
 
 Requires Julia 1.12 or newer. The package relies on current Julia atomics and
 backend behavior for maintained CPU/GPU execution paths.
@@ -134,7 +133,7 @@ The user-facing details for those surfaces live in:
 
 ## Tutorials
 
-Runnable tutorial ports live in `examples/tutorials/`. Start with:
+Runnable tutorials live in `examples/tutorials/`. Start with:
 
 ```bash
 julia --project=. examples/tutorials/image_formation.jl
@@ -233,6 +232,8 @@ ADAPTIVEOPTICS_VALIDATE_CUDA=1 ./scripts/run_release_validation.sh
 ```
 
 AMDGPU and CUDA both have current hardware validation through their dedicated
-targets. AMDGPU remains the release-gated production accelerator; CUDA is
-validated manually on the WSL RTX host but is not yet release-gated because a
-continuously available CUDA CI runner has not been established.
+targets. CUDA is the primary GPU performance-optimization target; AMDGPU is the
+secondary portability and qualification target. AMDGPU remains the automated
+release gate because a continuously available CUDA CI runner has not been
+established, while CUDA is validated manually on the WSL RTX host. Both targets
+retain the same correctness and steady-state allocation requirements.

@@ -17,8 +17,8 @@ publishes complete frames. Graphs can be declared in Julia or in a versioned
 TOML file.
 
 Use `PreparedGraphHILBoundary` when an external RTC consumes each completed
-simulated frame and returns one complete command for the next frame. PipeWireAO
-or another application owns transport and wall-clock pacing.
+simulated frame and returns one complete command for the next frame. An external
+application owns transport and wall-clock pacing.
 
 ## Direct Optical Model
 

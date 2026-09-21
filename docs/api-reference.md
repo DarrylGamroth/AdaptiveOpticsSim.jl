@@ -129,15 +129,28 @@ using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
 ~~~
 
-`Calibration` owns interaction/control matrices, modal bases, inverse policies,
-fitting, optical-gain calibration, and identification workflows. Common entry
-points include `interaction_matrix`, `control_matrix`, `ao_calibration`,
-`kl_modal_basis`, and `compute_optical_gains!`.
+`Calibration` owns simulated interaction-response acquisition, physical
+calibration observables, modal bases, fitting, temporary AOS runtime
+materialization, optical-gain calibration, and identification workflows.
+Reusable inverse methods and compact-SVD products come from
+`AdaptiveOpticsCalibration.Reconstructors`. Common entry points include
+`interaction_matrix`, `control_matrix`, `ao_calibration`, `modal_basis`, and
+`compute_optical_gains!`.
+
+`KarhunenLoeveBasis` is owned by
+`AdaptiveOpticsCalibration.ModalBases`. AOS supplies the sampled physical DM,
+pupil measure, and atmospheric OPD covariance, then materializes the accepted
+calibration product on the plant's runtime backend.
 
 `Control` owns reconstructors, delay lines, discrete integration, closed-loop
 correction, and controller/DM mappings. Common entry points include
 `reconstruct!`, `shift_delay!`, `apply_closed_loop_correction!`, and the
 projection/range operations.
+
+Prepared control hot paths require caller-owned input and output arrays to use
+the same floating-point element type as the prepared operator or state. This
+keeps CPU and GPU calls concrete and avoids implicit precision conversion in
+the allocation-free runtime path.
 
 ## Tomography
 

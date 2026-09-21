@@ -1,6 +1,7 @@
 using Test
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Backends
+using LinearAlgebra
 using Random
 
 function run_backend_extension_coverage(
@@ -60,5 +61,91 @@ function run_backend_extension_coverage(
     ) === opd
     Backends.synchronize_backend!(Backends.execution_style(opd))
     @test Array(opd) == Float32[-3.25 0.0 -4.25; -3.5 -4.0 0.0]
+
+    interaction_host = Float32[2 0; 0 1]
+    interaction = AdaptiveOpticsSim.Calibration.InteractionMatrix(
+        interaction_host,
+        0.1f0,
+    )
+    mapped = AdaptiveOpticsSim.Control.MappedReconstructor(
+        Float32[1 0; 0 1],
+        interaction;
+        method=AdaptiveOpticsSim.Calibration._AOC_RECONSTRUCTORS.ExactPseudoInverse(),
+        build_backend=AdaptiveOpticsSim.Calibration.GPUArrayBuildBackend(B),
+    )
+    @test mapped.modal_workspace isa ArrayBackend
+    mapped_slopes = ArrayBackend(Float32[0.25, -0.5])
+    mapped_commands = Backends.backend_zeros(B, Float32, 2)
+    AdaptiveOpticsSim.Control.reconstruct!(
+        mapped_commands,
+        mapped,
+        mapped_slopes,
+    )
+    Backends.synchronize_backend!(Backends.execution_style(mapped_commands))
+    @test Array(mapped_commands) ≈ interaction_host \ Array(mapped_slopes)
+
+    projector_basis = ArrayBackend(Float32[1 1; 0 0])
+    projector = AdaptiveOpticsSim.Calibration.basis_projector(
+        projector_basis;
+        method=AdaptiveOpticsSim.Calibration._AOC_RECONSTRUCTORS.ExactPseudoInverse(),
+    )
+    @test projector isa ArrayBackend
+    @test Array(projector) ≈ pinv(Array(projector_basis))
+
+    selector = Backends.array_backend_selector(ArrayBackend)
+    modal_telescope = AdaptiveOpticsSim.Optics.Telescope(
+        resolution=8,
+        diameter=8.0f0,
+        central_obstruction=0.0f0,
+        T=Float32,
+        backend=selector,
+    )
+    modal_dm = AdaptiveOpticsSim.Optics.DeformableMirror(
+        modal_telescope;
+        n_act=2,
+        influence_width=0.4f0,
+        T=Float32,
+    )
+    modal_basis = AdaptiveOpticsSim.Calibration.modal_basis(
+        modal_dm,
+        modal_telescope;
+        n_modes=2,
+    )
+    @test modal_basis.M2C isa ArrayBackend
+    @test modal_basis.basis isa ArrayBackend
+    @test modal_basis.projector isa ArrayBackend
+    @test all(isfinite, Array(modal_basis.M2C))
+    @test all(isfinite, Array(modal_basis.basis))
+
+    modal_atmosphere = AdaptiveOpticsSim.Atmospheres.KolmogorovAtmosphere(
+        modal_telescope;
+        r0=0.2f0,
+        reference_wavelength_m=500.0f-9,
+        L0=25.0f0,
+    )
+    atmospheric_basis = AdaptiveOpticsSim.Calibration.modal_basis(
+        modal_dm,
+        modal_telescope;
+        n_modes=2,
+        projector=true,
+        method=AdaptiveOpticsSim.Calibration.KarhunenLoeveBasis(),
+        atm=modal_atmosphere,
+    )
+    @test atmospheric_basis.M2C isa ArrayBackend
+    @test atmospheric_basis.basis isa ArrayBackend
+    @test atmospheric_basis.projector isa ArrayBackend
+    @test all(isfinite, Array(atmospheric_basis.M2C))
+    @test all(isfinite, Array(atmospheric_basis.basis))
+    sampled_influences = Array(
+        AdaptiveOpticsSim.Optics.sampled_influence_matrix(modal_dm),
+    )
+    @test Array(atmospheric_basis.basis) ≈
+        sampled_influences * Array(atmospheric_basis.M2C) rtol=2f-4 atol=2f-5
+    modal_support = vec(Array(AdaptiveOpticsSim.Optics.pupil_mask(modal_telescope)))
+    expected_projector = Array(atmospheric_basis.basis)' *
+                         Diagonal(Float32.(modal_support)) / count(modal_support)
+    @test Array(atmospheric_basis.projector) ≈
+        expected_projector rtol=2f-4 atol=2f-5
+    @test maximum(abs, Array(atmospheric_basis.projector)[:, .!modal_support]) == 0
     return nothing
 end

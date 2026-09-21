@@ -3,6 +3,7 @@ module AdaptiveOpticsSim
 __precompile__(true)
 
 using AbstractFFTs
+import AdaptiveOpticsCalibration
 import FFTW
 using FixedSizeArrays: FixedSizeVectorDefault
 using KernelAbstractions

@@ -1,12 +1,15 @@
 """
     Calibration
 
-Canonical owner of inverse policy, interaction and control matrices, modal
-basis construction, model-derived NCPA synthesis, fitting analysis, optical
-gain calibration, and registration-identification workflows.
+Plant-side owner of simulated response acquisition, physical calibration
+observables, and temporary runtime materialization during the package split.
+Reusable numerical calibration methods and products are owned by
+AdaptiveOpticsCalibration.
 """
 module Calibration
 
+import AdaptiveOpticsCalibration
+import AdaptiveOpticsCalibration.ModalBases: KarhunenLoeveBasis
 using KernelAbstractions
 using LinearAlgebra
 using Random
@@ -42,8 +45,7 @@ import ..Backends:
     gpu_backend_name,
     launch_kernel!,
     plan_fft_backend!,
-    plan_ifft_backend!,
-    use_host_build_algebra
+    plan_ifft_backend!
 
 using ..Optics
 import ..Optics:
@@ -59,6 +61,7 @@ import ..Optics:
     topology_axis_count
 
 using ..Atmospheres
+import ..Atmospheres: phase_spectrum
 using ..Detectors
 import ..Detectors:
     detector_noise_symbol,
@@ -70,7 +73,8 @@ import ..WavefrontSensors:
     AbstractWFS,
     apply_shift_wfs!
 
-include("inverse_policies.jl")
+include("build_backends.jl")
+include("reconstructor_products.jl")
 include("modal_basis.jl")
 include("modal_opd_expansion.jl")
 include("ncpa.jl")

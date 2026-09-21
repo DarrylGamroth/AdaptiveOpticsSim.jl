@@ -13,7 +13,7 @@ artifact exists.
 | Code | Evidence |
 |---|---|
 | `A` | analytic or invariant contract |
-| `R` | external reference, OOPAO trace, or instrument-owned input |
+| `R` | external reference input, including an OOPAO trace or instrument-owned input |
 | `G` | real accelerator execution |
 | `P` | measured performance/allocation evidence |
 | `M` | maintained integration or composed-model test |
@@ -29,7 +29,7 @@ real remaining qualification gap.
 | `MV-02` | Atmosphere evolution and direction rendering | `A, R, G, M` — [`atmosphere.jl`](../test/testsets/atmosphere.jl), [`atmosphere_direction_batch.jl`](../test/testsets/atmosphere_direction_batch.jl), [`backend_optional_common.jl`](../test/backend_optional_common.jl) | Finite/infinite screens, explicit epochs, NGS/LGS direction geometry, and homogeneous batches. Broad external profile equivalence remains scenario-specific. | strong within implemented models |
 | `MV-03` | WFS optical and estimation families | `A, R, G, M` — [`wfs_common_and_parity.jl`](../test/testsets/wfs_common_and_parity.jl), [`shack_hartmann_and_sources.jl`](../test/testsets/shack_hartmann_and_sources.jl), [`pyramid_bi_o_edge_and_lgs.jl`](../test/testsets/pyramid_bi_o_edge_and_lgs.jl), [`zernike_and_curvature.jl`](../test/testsets/zernike_and_curvature.jl), [`wfs_lift.jl`](../test/testsets/wfs_lift.jl) | Separate optical formation, acquisition, and estimation; family-specific outputs and calibration. Instrument-specific optical gain and non-common-path calibration remain external. | strong for declared numerical models |
 | `MV-04` | Detector families and acquisition | `A, G, M` — registered `detector-*` suites under [`test/testsets`](../test/testsets), [`backend_optional_common.jl`](../test/backend_optional_common.jl) | CCD, EMCCD, CMOS, InGaAs, HgCdTe, avalanche, Skipper, SPAD, MKID, and linear APD envelopes as tested. Reusable named commercial profiles, unit-specific calibration, and untested long-timescale effects are excluded and belong to instrument packages. | strong by family; calibration partial |
-| `MV-05` | Calibration and control | `A, R, M` — [`calibration_workflows.jl`](../test/testsets/calibration_workflows.jl), [`control_primitives.jl`](../test/testsets/control_primitives.jl), [`control_reconstruction.jl`](../test/testsets/control_reconstruction.jl) | Matrix/basis construction, inverse policies, reconstruction, controller state, delays, and explicit closed-loop composition. Production RTC software is not implied. | strong |
+| `MV-05` | Calibration and control | `A, R, M` — [`calibration_workflows.jl`](../test/testsets/calibration_workflows.jl), [`control_primitives.jl`](../test/testsets/control_primitives.jl), [`control_reconstruction.jl`](../test/testsets/control_reconstruction.jl) | Physical response acquisition and basis construction, AdaptiveOpticsCalibration-authored inverse products, runtime reconstruction, controller state, delays, and explicit closed-loop composition. Production RTC software is not implied. | strong |
 | `MV-06` | Tomography | `A, M` — [`tomography.jl`](../test/tomography.jl) | Guide-star/layer geometry, model- and interaction-matrix reconstruction, fitting, and DM projection. Instrument MCAO/MOAO calibration remains scenario work. | implemented; external equivalence partial |
 | `MV-07` | CPU/CUDA/AMDGPU backend execution | `G, P, M` — [`ka_cpu_matrix.jl`](../test/ka_cpu_matrix.jl), [`backend_optional_common.jl`](../test/backend_optional_common.jl), [`backend-validation-guide.md`](backend-validation-guide.md) | Exact-device storage and covered algorithms with scalar indexing disabled. Support is per operation; no implicit CPU fallback, multi-GPU placement, or universal bitwise parity. | strong for tested targets |
 | `MV-08` | Static complete-frame algorithm graphs | `A, P, M` — [`algorithm_graphs.jl`](../test/testsets/algorithm_graphs.jl), [`runtests_gpu_target_common.jl`](../test/runtests_gpu_target_common.jl) | Concrete nodes, exact port contracts, direct/delayed links, TOML loading, sparse parameters, preparation, capacity-one completion-ticket ownership, reset, model time, failure state, and zero warmed allocation for covered paths. CUDA Graph/HIP Graph replay is opt-in and captures one complete step only when every node owner qualifies. Maintained hardware fixtures cover evolving finite multilayer atmosphere, coordinate and regular-grid Gaussian DM evaluation, pupil-OPD composition, diffractive Shack-Hartmann optics, both Pyramid modulation strategies, complete-frame CCD/CMOS/EMCCD acquisition, reset, and stochastic replay. Multiple in-flight frames and unsupported detector or actuator configurations remain excluded; complete instrument graphs require downstream qualification. | strong |
@@ -40,8 +40,8 @@ real remaining qualification gap.
 
 ## Known Scope Limits
 
-- OOPAO is a source of reference data and tutorial mappings, not an API or
-  class-layout compatibility target.
+- OOPAO appears only as cited external-reference evidence or tutorial
+  provenance; it does not constrain AOS APIs or class layout.
 - Geometric and diffractive WFS modes answer different modeling questions and
   are not expected to be samplewise identical.
 - Full-optical and reduced-order providers must be named and validated

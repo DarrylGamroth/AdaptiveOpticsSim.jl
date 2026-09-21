@@ -1,0 +1,165 @@
+artifact_id = "S1-AOS-PLANT-GPU-PROFILE-2026-09-20"
+generated_on = "2026-09-20"
+source_revision = "799668f060d432df8f1037be9a9400a38729c5e2"
+source_was_clean = true
+evidence_class = "warmed synchronized allocation gate and selected-region GPU profile"
+claim_boundary = "AOS physical plant only; no FGA RTC or device-resident cross-package composition"
+optimization_priority = "CUDA primary; AMDGPU secondary portability and qualification"
+
+[contract]
+workload = "25-element PDM command through Gaussian DM, pupil OPD composition, diffractive Shack-Hartmann photon-rate formation, and noiseless CCD frame"
+element_type = "Float32"
+pupil_resolution = 352
+detector_frame_shape = [352, 352]
+lenslets_per_axis = 16
+pixels_per_lenslet = 22
+actuator_count = 25
+warmup_replays = 32
+measured_replays = 200
+completion_boundary = "wait_graph_step! after every stream or retained native-graph submission"
+correctness_oracle = "independent CPU AOS graph before and after each GPU run"
+type_stability = "@inferred on the exact concrete synchronized step"
+cpu_host_allocation_bytes_per_step = 0
+captured_host_allocation_budget_bytes_per_replay = 0
+device_memory_contract = "process-local CUDA.used_memory or AMDGPU.used_memory unchanged across the replay region"
+stream_contract = "diagnostic checked-stream launch; vendor launch bookkeeping is measured and reported, not claimed zero"
+capture_contract = "production GPU replay; zero Julia heap bytes including completion"
+
+[environment]
+host = "rtc-devel"
+os = "Linux"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+julia = "1.12.7"
+julia_threads = 1
+blas_threads = 1
+openmp_threads = 1
+
+[environment.cuda]
+device = "NVIDIA GeForce RTX 3080"
+compute_capability = "8.6"
+driver = "615.71.09"
+runtime = "CUDA 13.4.0"
+cuda_jl = "6.4.0"
+nsight_systems = "2026.3.2"
+nsight_compute = "2026.3.1"
+
+[environment.amdgpu]
+device = "AMD Radeon Graphics"
+architecture = "gfx1030"
+hardware_architecture = "gfx1035"
+hsa_override_gfx_version = "10.3.0"
+wavefront_size = 32
+driver = "amdgpu (in-tree), Debian kernel 6.12.107+deb13-amd64, package/build 6.12.107-1 (2026-08-29)"
+runtime = "ROCm 7.2.1 / HIP 7.2.53211"
+amdgpu_jl = "2.8.0"
+rocprofiler = "rocprofv3 1.1.0"
+
+[unprofiled.cuda.before]
+stream_mean_nanoseconds = 337688.02
+stream_host_allocation_bytes = 27248
+stream_device_used_bytes = 21384100
+captured_mean_nanoseconds = 294601.885
+captured_host_allocation_bytes = 0
+captured_device_used_bytes = 41528860
+captured_execution_nodes = 4
+cpu_oracle = "passed"
+
+[unprofiled.cuda.after]
+stream_mean_nanoseconds = 325987.49
+stream_host_allocation_bytes = 27248
+stream_device_used_bytes = 21384100
+captured_mean_nanoseconds = 293981.7
+captured_host_allocation_bytes = 0
+captured_device_used_bytes = 41528860
+captured_execution_nodes = 4
+cpu_oracle = "passed"
+
+[unprofiled.amdgpu.before]
+stream_mean_nanoseconds = 1378132.36
+stream_host_allocation_bytes = 38080
+stream_device_used_bytes = 33309972
+captured_mean_nanoseconds = 1198949.895
+captured_host_allocation_bytes = 0
+captured_device_used_bytes = 92996236
+captured_execution_nodes = 4
+cpu_oracle = "passed"
+
+[unprofiled.amdgpu.after]
+stream_mean_nanoseconds = 1367259.025
+stream_host_allocation_bytes = 38080
+stream_device_used_bytes = 33309972
+captured_mean_nanoseconds = 1174114.85
+captured_host_allocation_bytes = 0
+captured_device_used_bytes = 65380492
+captured_execution_nodes = 4
+cpu_oracle = "passed"
+
+[nsight_systems]
+profiled_replays = 200
+capture_range = "cuProfilerStart through cuProfilerStop around warmed retained CUDA Graph replay"
+cuda_graph_trace = "node:nvtx-precapture"
+selected_interval_milliseconds = 21.694702
+selected_gpu_kernel_time_milliseconds = 16.07614
+graph_launch_calls = 200
+stream_synchronize_calls = 200
+pupil_stack_calls = 200
+pupil_stack_mean_microseconds = 17.6597
+pupil_stack_kernel_time_percent = 22.0
+complex_abs2_mean_microseconds = 12.4324
+complex_abs2_kernel_time_percent = 15.5
+dm_mean_microseconds = 8.8610
+dm_kernel_time_percent = 11.0
+interpretation = "Timeline attribution only; node tracing perturbs latency. Use the unprofiled synchronized measurements for service time."
+
+[rocprofiler]
+profiled_replays = 200
+capture_range = "roctxProfilerResume through roctxProfilerPause around warmed retained HIP Graph replay"
+selected_interval_milliseconds = 199.172132
+selected_gpu_kernel_time_milliseconds = 179.207422
+kernel_dispatches = 2600
+fft_calls = 400
+fft_total_milliseconds = 58.029175
+fft_kernel_time_percent = 32.381011
+pupil_stack_calls = 200
+pupil_stack_mean_microseconds = 199.36606
+pupil_stack_kernel_time_percent = 22.249755
+complex_abs2_mean_microseconds = 171.75305
+complex_abs2_kernel_time_percent = 19.168073
+interpretation = "Secondary portability timeline; selected-region tracing only, with no AMD-focused counter optimization claim."
+
+[nsight_compute]
+kernel = "gpu_sh_explicit_pupil_stack_kernel_"
+selection_basis = "largest CUDA kernel in the 200-replay selected-region Nsight Systems timeline"
+graph_profiling = "node"
+launch_count = 1
+basic_replay_passes = 8
+grid_blocks = 768
+threads_per_block = 748
+registers_per_thread = 30
+diagnostic_duration_microseconds = 18.24
+compute_throughput_percent_of_sustained_peak = 61.23
+dram_throughput_percent_of_sustained_peak = 30.30
+waves_per_sm = 5.65
+theoretical_occupancy_percent = 100.0
+achieved_occupancy_percent = 82.61
+issue_slots_busy_percent = 61.01
+active_warps_per_scheduler = 9.92
+eligible_warps_per_scheduler = 3.53
+cycles_without_eligible_warp_percent = 29.61
+interpretation = "The CUDA-primary hotspot is more compute-utilized than memory-utilized. Its 748-thread block is not a warp multiple; Nsight estimates 2.604% local speedup from removing masked lanes, so this is a bounded tuning opportunity rather than an S1 correctness blocker."
+timing_caveat = "Kernel replay perturbs duration; compare service time using the unprofiled synchronized baseline."
+
+[commands]
+unprofiled_cuda = "AOS_PROFILE_REPLAYS=200 julia --startup-file=no --project=test/cuda benchmarks/profile_aos_gpu_plant.jl cuda both"
+unprofiled_amdgpu = "AOS_PROFILE_REPLAYS=200 julia --startup-file=no --project=test/amdgpu benchmarks/profile_aos_gpu_plant.jl amdgpu both"
+nsight_systems = "AOS_PROFILE_REPLAYS=200 nsys profile --trace=cuda,nvtx --capture-range=cudaProfilerApi --capture-range-end=stop --cuda-graph-trace=node:nvtx-precapture --sample=none --cpuctxsw=none -- julia --startup-file=no --project=test/cuda benchmarks/profile_aos_gpu_plant.jl cuda captured"
+rocprofiler = "AOS_PROFILE_REPLAYS=200 rocprofv3 --runtime-trace --marker-trace --selected-regions --output-format csv -- julia --startup-file=no --project=test/amdgpu benchmarks/profile_aos_gpu_plant.jl amdgpu captured"
+nsight_compute_basic = "AOS_PROFILE_REPLAYS=1 ncu --profile-from-start off --graph-profiling node --target-processes application-only --kernel-name-base demangled --kernel-name 'regex:gpu_sh_explicit_pupil_stack_kernel_' --launch-count 1 --set basic -- julia --startup-file=no --project=test/cuda benchmarks/profile_aos_gpu_plant.jl cuda captured"
+nsight_compute_focused = "AOS_PROFILE_REPLAYS=1 ncu --profile-from-start off --graph-profiling node --target-processes application-only --kernel-name-base demangled --kernel-name 'regex:gpu_sh_explicit_pupil_stack_kernel_' --launch-count 1 --section ComputeWorkloadAnalysis --section SchedulerStats -- julia --startup-file=no --project=test/cuda benchmarks/profile_aos_gpu_plant.jl cuda captured"
+
+[validation]
+integration_tests = "45 accepted-path, 24 calibration-identity, and 50 rejection-path checks passed"
+cpu_lockstep_profile = "500000 steps; 1954 samples; inferred; 0 warmed Julia bytes; no allocation samples; CPU oracle passed"
+cuda_pre_and_post_oracle = "passed"
+amdgpu_pre_and_post_oracle = "passed"
+raw_reports = "Nsight Systems, Nsight Compute, and rocprofv3 reports retained outside the repository under /tmp for this run; this TOML is the durable summary"

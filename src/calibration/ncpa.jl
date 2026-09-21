@@ -1,8 +1,8 @@
 # NCPA synthesis policy
 #
 # Supported basis families:
-# - KL modes built from DM covariance (`KLDMModes`)
-# - KL modes weighted by atmospheric PSD (`KLHHtPSD`)
+# - sampled influence-function eigenmodes (`InfluenceFunctionEigenbasis`)
+# - atmospheric Karhunen–Loève modes (`KarhunenLoeveBasis`)
 # - Zernike modes on the pupil
 # - externally supplied modal-to-command bases (`M2C`)
 #
@@ -11,17 +11,18 @@
 # construction policy and adds synthesis constructors to the physical type.
 #
 abstract type NCPABasis end
-struct KLBasis{M<:KLBasisMethod} <: NCPABasis
+struct ModalCalibrationBasis{M<:_AOC_MODAL_BASES.AbstractModalBasisMethod} <: NCPABasis
     method::M
 end
 struct ZernikeModalBasis <: NCPABasis end
 struct M2CBasis <: NCPABasis end
 
-KLBasis() = KLBasis(KLHHtPSD())
+ModalCalibrationBasis() = ModalCalibrationBasis(KarhunenLoeveBasis())
 
 default_ncpa_basis(profile::FidelityProfile) = default_ncpa_basis(calibration_profile(profile))
-default_ncpa_basis(::ScientificProfile) = KLBasis(KLHHtPSD())
-default_ncpa_basis(::FastProfile) = KLBasis(KLDMModes())
+default_ncpa_basis(::ScientificProfile) = ModalCalibrationBasis(KarhunenLoeveBasis())
+default_ncpa_basis(::FastProfile) =
+    ModalCalibrationBasis(_AOC_MODAL_BASES.InfluenceFunctionEigenbasis())
 
 @kernel function combine_basis_kernel!(opd, basis, coeffs, pupil, n_modes::Int)
     I = @index(Global, Cartesian)
@@ -71,27 +72,55 @@ function NCPA(tel::Telescope, dm::DeformableMirror, atm::AbstractAtmosphere;
     return NCPA(opd)
 end
 
-function ncpa_basis(basis::KLBasis{<:KLDMModes}, tel::Telescope, dm::DeformableMirror,
+function ncpa_basis(
+    basis::ModalCalibrationBasis{<:_AOC_MODAL_BASES.InfluenceFunctionEigenbasis},
+    tel::Telescope,
+    dm::DeformableMirror,
     ::AbstractAtmosphere; n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
-    _, basis_grid = kl_modal_basis(KLDMModes(), dm, tel; n_modes=n_modes)
+    _, basis_grid = modal_basis_components(
+        basis.method,
+        dm,
+        tel,
+        nothing;
+        n_modes=n_modes,
+    )
     return basis_grid
 end
 
-function ncpa_basis(basis::KLBasis{<:KLDMModes}, tel::Telescope, dm::DeformableMirror;
+function ncpa_basis(
+    basis::ModalCalibrationBasis{<:_AOC_MODAL_BASES.InfluenceFunctionEigenbasis},
+    tel::Telescope,
+    dm::DeformableMirror;
     n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
-    _, basis_grid = kl_modal_basis(KLDMModes(), dm, tel; n_modes=n_modes)
+    _, basis_grid = modal_basis_components(
+        basis.method,
+        dm,
+        tel,
+        nothing;
+        n_modes=n_modes,
+    )
     return basis_grid
 end
 
-function ncpa_basis(basis::KLBasis{<:KLHHtPSD}, tel::Telescope, dm::DeformableMirror,
+function ncpa_basis(basis::ModalCalibrationBasis{<:KarhunenLoeveBasis},
+    tel::Telescope, dm::DeformableMirror,
     atm::AbstractAtmosphere; n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
-    _, basis_grid = kl_modal_basis(basis.method, dm, tel, atm; n_modes=n_modes)
+    _, basis_grid = modal_basis_components(
+        basis.method,
+        dm,
+        tel,
+        atm;
+        n_modes=n_modes,
+    )
     return basis_grid
 end
 
-function ncpa_basis(::KLBasis{<:KLHHtPSD}, tel::Telescope, dm::DeformableMirror;
+function ncpa_basis(::ModalCalibrationBasis{<:KarhunenLoeveBasis},
+    tel::Telescope, dm::DeformableMirror;
     n_modes::Int=1, M2C::Union{Nothing,AbstractMatrix}=nothing)
-    throw(InvalidConfiguration("KLBasis(KLHHtPSD()) requires an atmosphere"))
+    throw(InvalidConfiguration(
+        "ModalCalibrationBasis(KarhunenLoeveBasis()) requires an atmosphere",
+    ))
 end
 
 function ncpa_basis(::ZernikeModalBasis, tel::Telescope, dm::DeformableMirror; n_modes::Int=1,

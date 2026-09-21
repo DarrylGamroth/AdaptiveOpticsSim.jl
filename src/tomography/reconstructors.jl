@@ -1,7 +1,7 @@
 #
 # Model-based and interaction-matrix tomography reconstructors
 #
-# This file implements the pyTomoAO/OOPAO-style covariance formulation used to
+# This file implements covariance-based minimum-variance tomography used to
 # recover layered or fitted wavefront estimates from guide-star slopes.
 #
 # Core operators:
@@ -20,7 +20,7 @@ abstract type AbstractTomographyMethod end
 abstract type AbstractSlopeOrder end
 abstract type TomographyNoiseModel end
 
-const PYTOMOAO_DEFAULT_CROSS_SAMPLING = 49
+const DEFAULT_TOMOGRAPHY_CROSS_SAMPLING = 49
 
 struct ModelBasedTomography <: AbstractTomographyMethod end
 
@@ -1003,7 +1003,7 @@ function cross_correlation(
     tomography::TomographyParams{T};
     grid_mask::Union{Nothing,AbstractMatrix{Bool}}=nothing,
 ) where {T<:AbstractFloat}
-    sampling = isnothing(grid_mask) ? PYTOMOAO_DEFAULT_CROSS_SAMPLING : size(grid_mask, 1)
+    sampling = isnothing(grid_mask) ? DEFAULT_TOMOGRAPHY_CROSS_SAMPLING : size(grid_mask, 1)
     mask = isnothing(grid_mask) ? trues(sampling, sampling) : grid_mask
     size(mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
     row_mask = vec(mask)
@@ -1095,7 +1095,7 @@ function cross_correlation(
     tomography::TomographyParams{T};
     grid_mask::Union{Nothing,AbstractMatrix{Bool}}=nothing,
 ) where {B,T<:AbstractFloat}
-    sampling = isnothing(grid_mask) ? PYTOMOAO_DEFAULT_CROSS_SAMPLING : size(grid_mask, 1)
+    sampling = isnothing(grid_mask) ? DEFAULT_TOMOGRAPHY_CROSS_SAMPLING : size(grid_mask, 1)
     mask = isnothing(grid_mask) ? trues(sampling, sampling) : grid_mask
     size(mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
     row_mask = vec(mask)

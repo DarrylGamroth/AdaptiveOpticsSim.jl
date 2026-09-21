@@ -282,12 +282,12 @@ function compute_optical_gains!(gsc::GainSensingCamera, frame::AbstractMatrix)
     return gsc.og
 end
 
-function compute_optical_gains!(out::AbstractVector{T}, sensi_sky::AbstractVector, sensi_calib::AbstractVector,
+function compute_optical_gains!(out::AbstractVector{T}, sensi_sky::AbstractVector{Complex{T}}, sensi_calib::AbstractVector{Complex{T}},
     weak_mode_mask::AbstractVector{Bool}) where {T<:AbstractFloat}
     return compute_optical_gains!(execution_style(out), out, sensi_sky, sensi_calib, weak_mode_mask)
 end
 
-function compute_optical_gains!(::ScalarCPUStyle, out::AbstractVector{T}, sensi_sky::AbstractVector, sensi_calib::AbstractVector,
+function compute_optical_gains!(::ScalarCPUStyle, out::AbstractVector{T}, sensi_sky::AbstractVector{Complex{T}}, sensi_calib::AbstractVector{Complex{T}},
     weak_mode_mask::AbstractVector{Bool}) where {T<:AbstractFloat}
     @inbounds for i in eachindex(out, sensi_sky, sensi_calib, weak_mode_mask)
         out[i] = weak_mode_mask[i] ? one(T) : real(sensi_sky[i] / sensi_calib[i])
@@ -295,13 +295,17 @@ function compute_optical_gains!(::ScalarCPUStyle, out::AbstractVector{T}, sensi_
     return out
 end
 
-function compute_optical_gains!(::AcceleratorStyle, out::AbstractVector{T}, sensi_sky::AbstractVector, sensi_calib::AbstractVector,
+function compute_optical_gains!(::AcceleratorStyle, out::AbstractVector{T}, sensi_sky::AbstractVector{Complex{T}}, sensi_calib::AbstractVector{Complex{T}},
     weak_mode_mask::AbstractVector{Bool}) where {T<:AbstractFloat}
     @. out = ifelse(weak_mode_mask, one(T), real(sensi_sky / sensi_calib))
     return out
 end
 
-function normalize_frame!(out::AbstractMatrix{T}, frame::AbstractMatrix, total::Real) where {T<:AbstractFloat}
+function normalize_frame!(
+    out::AbstractMatrix{T},
+    frame::AbstractMatrix{S},
+    total::Real,
+) where {T<:AbstractFloat,S<:AbstractFloat}
     inv_total = inv(T(total))
     @. out = frame * inv_total
     return out

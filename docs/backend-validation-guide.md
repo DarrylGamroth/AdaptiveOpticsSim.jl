@@ -42,6 +42,12 @@ Set Julia, BLAS, FFT-provider, OpenMP, and vendor math-library thread counts
 deliberately. Deterministic evidence uses one thread. Performance evidence must
 record the complete thread configuration and avoid nested oversubscription.
 
+CUDA is the primary GPU performance-optimization target. AMDGPU is the
+secondary portability and qualification target. Apply the same correctness,
+device-residency, type-stability, and steady-state allocation gates to both;
+focused tuning and counter work defaults to CUDA unless backend-specific
+evidence identifies an AMDGPU defect or regression.
+
 ## AMDGPU
 
 The maintained local ROCm target is:

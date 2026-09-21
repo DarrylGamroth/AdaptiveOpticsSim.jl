@@ -9,6 +9,8 @@ using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Control
 using AdaptiveOpticsSim.Ensembles
+using AdaptiveOpticsCalibration.Reconstructors: AbstractSVDInverse, TSVDInverse
+using AdaptiveOpticsCalibration.ModalBases: InfluenceFunctionEigenbasis
 using LinearAlgebra
 using Random
 using Statistics
@@ -574,7 +576,13 @@ end
 
 function _low_order_command_basis(dm::DeformableMirror, tel::Telescope, active_mask::AbstractMatrix{Bool},
     n_modes::Int, T::Type{<:AbstractFloat})
-    M2C_native, _ = kl_modal_basis(KLDMModes(), dm, tel; n_modes=n_modes, remove_piston=true)
+    M2C_native = modal_basis(
+        dm,
+        tel;
+        n_modes=n_modes,
+        projector=false,
+        method=InfluenceFunctionEigenbasis(remove_piston=true),
+    ).M2C
     M2C = Matrix{T}(Array(M2C_native[:, 1:n_modes]))
     inactive = .!vec(active_mask)
     @views M2C[inactive, :] .= zero(T)
@@ -589,15 +597,14 @@ function _low_order_command_basis(dm::DeformableMirror, tel::Telescope, active_m
 end
 
 function _full_command_reconstructor(M2C_host::AbstractMatrix{T}, imat::InteractionMatrix{T};
-    gain::Real, policy::InversePolicy, inverse_build_backend::BuildBackend,
-    materialize_backend::BuildBackend, ref::AbstractMatrix{T}) where {T<:AbstractFloat}
+    gain::Real, method::AbstractSVDInverse, build_backend::BuildBackend,
+    ref::AbstractMatrix{T}) where {T<:AbstractFloat}
     return MappedReconstructor(
         M2C_host,
         imat;
         gain=gain,
-        policy=policy,
-        inverse_build_backend=inverse_build_backend,
-        materialize_backend=materialize_backend,
+        method=method,
+        build_backend=build_backend,
         ref=ref,
     )
 end
@@ -779,7 +786,7 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
 
     high_M2C = materialize_build(resolved_materialize_backend, dm.state.modes, high_M2C_host)
     low_M2C = materialize_build(resolved_materialize_backend, dm.state.modes, low_M2C_host)
-    policy = default_modal_inverse_policy(T)
+    method = TSVDInverse(rtol=sqrt(eps(T)))
 
     calibration_pupil = PupilFunction(calibration_tel)
     calibration_low_pupil = PupilFunction(calibration_low_tel)
@@ -790,11 +797,11 @@ function subaru_ao188_simulation(; params::AO188SimulationParams=AO188Simulation
         calibration_low_pupil, low_M2C_host,
         calibration_src; amplitude=params.interaction_amplitude)
     high_recon = _full_command_reconstructor(high_M2C_host, high_imat;
-        gain=params.control_gain, policy=policy, inverse_build_backend=resolved_calibration_backend,
-        materialize_backend=resolved_materialize_backend, ref=dm.state.modes)
+        gain=params.control_gain, method=method,
+        build_backend=resolved_materialize_backend, ref=dm.state.modes)
     low_recon = _full_command_reconstructor(low_M2C_host, low_imat;
-        gain=params.low_order_gain, policy=policy, inverse_build_backend=resolved_calibration_backend,
-        materialize_backend=resolved_materialize_backend, ref=dm.state.modes)
+        gain=params.low_order_gain, method=method,
+        build_backend=resolved_materialize_backend, ref=dm.state.modes)
 
     high_command = similar(dm.state.coefs)
     low_command = similar(dm.state.coefs)

@@ -20,11 +20,11 @@ function _snapshot_projection_matrix(
 end
 
 function _validate_projection_application(
-    output::AbstractVector,
-    matrix::AbstractMatrix,
-    input::AbstractVector,
+    output::AbstractVector{T},
+    matrix::AbstractMatrix{T},
+    input::AbstractVector{T},
     role::AbstractString,
-)
+) where {T<:AbstractFloat}
     Base.require_one_based_indexing(output, matrix, input)
     length(output) == size(matrix, 1) || throw(DimensionMismatchError(
         "$role output length must match projection row count",
@@ -47,11 +47,11 @@ function _validate_projection_application(
 end
 
 @inline function _apply_projection!(
-    output::AbstractVector,
-    matrix::AbstractMatrix,
-    input::AbstractVector,
+    output::AbstractVector{T},
+    matrix::AbstractMatrix{T},
+    input::AbstractVector{T},
     role::AbstractString,
-)
+) where {T<:AbstractFloat}
     _validate_projection_application(output, matrix, input, role)
     mul!(output, matrix, input)
     return output

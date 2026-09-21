@@ -104,16 +104,22 @@ AMDGPU.functional() ||
 
     inverse_host = Float32[2 0; 0 1]
     inverse_input = AMDGPU.ROCArray(inverse_host)
-    for policy in (
-        Calibration.ExactPseudoInverse(),
-        Calibration.TSVDInverse(rtol=1.0f-6),
-        Calibration.TikhonovInverse(0.1f0),
+    inverse_backend = Calibration.GPUArrayBuildBackend(
+        Backends.AMDGPUBackendTag,
     )
-        inverse, stats = Calibration.inverse_operator(
-            build_backend, inverse_input, policy)
-        @test size(inverse) == reverse(size(inverse_host))
-        @test all(isfinite, Array(inverse))
-        @test stats.effective_rank == 2
+    for method in (
+        Calibration._AOC_RECONSTRUCTORS.ExactPseudoInverse(),
+        Calibration._AOC_RECONSTRUCTORS.TSVDInverse(rtol=1.0f-6),
+        Calibration._AOC_RECONSTRUCTORS.TikhonovInverse(0.1f0),
+    )
+        product = Calibration.ControlMatrix(
+            inverse_input;
+            method=method,
+            build_backend=inverse_backend,
+        )
+        @test size(product.M) == reverse(size(inverse_host))
+        @test all(isfinite, Array(product.M))
+        @test product.effective_rank == 2
     end
 
     gram_host = Float32[2 0; 0 4]

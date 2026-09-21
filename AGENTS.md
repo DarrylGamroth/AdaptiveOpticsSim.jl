@@ -1,6 +1,8 @@
 # LLM Agent Instructions for AdaptiveOpticsSim.jl
 #
-# Project name: AdaptiveOpticsSim.jl (Julia port of OOPAO).
+# Project name: AdaptiveOpticsSim.jl, an independent Julia adaptive-optics
+# plant simulator. Mention OOPAO only at explicit external-validation or
+# tutorial-provenance boundaries; it does not constrain AOS architecture or APIs.
 #
 # Core design principles:
 # - Use multiple dispatch + traits; avoid OO-style inheritance patterns.
@@ -68,7 +70,8 @@
 # - Centralize RNG state in an explicit single-writer state or prepared owner;
 #   fixed seeds for reproducibility. Do not classify an evolving RNG as
 #   replaceable workspace scratch.
-# - Compare outputs against OOPAO reference datasets within tolerance.
+# - Compare outputs against cited external reference datasets, including OOPAO
+#   datasets when used, within tolerance.
 #
 # Validation and GitHub Actions cost:
 # - Validate locally first. Use the local CPU/AMDGPU host, `ssh wsl` for CUDA
@@ -106,7 +109,8 @@
 # - Define new public scientific terms in the glossary before adding APIs.
 #
 # Tutorials:
-# - Port most OOPAO tutorials to Julia scripts/notebooks.
+# - Maintain Julia tutorials; cite an OOPAO source tutorial only in an explicit
+#   tutorial-provenance mapping.
 # - Use deterministic inputs for reference comparisons where possible.
 
 # Reference docs:

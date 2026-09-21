@@ -149,7 +149,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     @test occursin("include(\"lift.jl\")", common_entry)
 end
 
-@testset "OOPAO parity knobs" begin
+@testset "WFS convention controls" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0)
