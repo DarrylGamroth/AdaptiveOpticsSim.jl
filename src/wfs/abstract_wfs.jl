@@ -6,8 +6,10 @@ struct WFSPreparationError <: AdaptiveOpticsSimError
 end
 
 """
-Wavefront sensors implement `measure!(wfs, pupil[, source])` and may extend the
-prepared WFS optics, acquisition, and estimation protocols.
+Wavefront sensors expose the physical stages they own and may extend the
+prepared WFS optics, acquisition, and estimation protocols. Sensor families
+that also own an in-package estimator implement
+`measure!(wfs, pupil[, source])`; a physical-only front end need not do so.
 
 Optional detector coupling, runtime preparation, stacked-source support, and
 grouped execution are expressed through capability queries rather than

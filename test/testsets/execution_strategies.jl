@@ -49,7 +49,6 @@ end
         (WavefrontSensors, :AbstractGroupedAccumulationStrategy),
         (WavefrontSensors,
             :AbstractPyramidModulationPropagationStrategy),
-        (WavefrontSensors, :AbstractShackHartmannWFSSensingStrategy),
     )
     selector_types = (
         (Atmospheres, :GeometricFieldSynchronousStrategy),
@@ -65,11 +64,6 @@ end
         (WavefrontSensors, :GroupedStaged2DStrategy),
         (WavefrontSensors, :PyramidPupilTiltStrategy),
         (WavefrontSensors, :PyramidShiftedMaskStrategy),
-        (WavefrontSensors, :ShackHartmannWFSScalarStrategy),
-        (WavefrontSensors, :ShackHartmannWFSBatchedStrategy),
-        (WavefrontSensors, :ShackHartmannWFSDeviceStatsStrategy),
-        (WavefrontSensors, :ShackHartmannWFSROCmSafeStrategy),
-        (WavefrontSensors, :ShackHartmannWFSROCmHostStatsStrategy),
     )
     selection_functions = (
         :atmospheric_field_execution_strategy,
@@ -77,11 +71,10 @@ end
         :detector_execution_strategy,
         :counting_output_execution_strategy,
         :grouped_accumulation_strategy,
-        :sh_sensing_execution_strategy,
     )
-    @test length(family_types) == 6
-    @test length(selector_types) == 18
-    @test length(selection_functions) == 6
+    @test length(family_types) == 5
+    @test length(selector_types) == 13
+    @test length(selection_functions) == 5
     @test all(endswith("Strategy"), String(name) for (_, name) in family_types)
     @test all(endswith("Strategy"), String(name) for (_, name) in selector_types)
     @test all(name -> !endswith(String(name), "_plan"), selection_functions)
@@ -109,12 +102,6 @@ end
         "GroupedDirectAccumulate",
         "GroupedStackReduce",
         "GroupedStaged2D",
-        "AbstractShackHartmannWFSSensing",
-        "ShackHartmannWFSScalar",
-        "ShackHartmannWFSBatched",
-        "ShackHartmannWFSDeviceStats",
-        "ShackHartmannWFSRocmSafe",
-        "ShackHartmannWFSRocmHostStats",
     )
     previous_function_stems = (
         "atmospheric_field_execution",
@@ -122,11 +109,6 @@ end
         "detector_execution",
         "counting_output_execution",
         "grouped_accumulation",
-        "sh_sensing_execution",
-        "sh_uses_rocm_safe_sensing",
-        "sh_uses_host_stats_sensing",
-        "sh_uses_batched_sensing",
-        "sh_uses_device_stats_sensing",
         "_detector_value",
     )
     previous_names = (
@@ -170,14 +152,6 @@ end
         typeof(scalar),
         WavefrontSensors.ShackHartmannWFS,
     )) isa WavefrontSensors.GroupedStackReduceStrategy
-    @test @inferred(WavefrontSensors.sh_sensing_execution_strategy(
-        typeof(scalar),
-        WavefrontSensors.ShackHartmannWFS,
-    )) isa WavefrontSensors.ShackHartmannWFSScalarStrategy
-    @test @inferred(WavefrontSensors.sh_sensing_execution_strategy(
-        typeof(accelerated),
-        WavefrontSensors.ShackHartmannWFS,
-    )) isa WavefrontSensors.ShackHartmannWFSBatchedStrategy
 end
 
 @testset "Generic coarse ensembles" begin

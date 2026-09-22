@@ -18,20 +18,22 @@ const REVOLT_COMMAND_SCALE_M = 1e-7
     end
 end
 
-struct RevoltLikeHILContext{TEL,PUPIL,SRC,DM,WFS,DET,AI,AC,EC,EB,TF,RNG}
+struct RevoltLikeHILContext{TEL,PUPIL,SRC,DM,WFS,DET,RM,OBS,OP,AP,AI,AC,EC,EB,TF,RNG}
     tel::TEL
     pupil::PUPIL
     src::SRC
     dm::DM
     wfs::WFS
     det::DET
+    rate_mosaic::RM
+    observation::OBS
+    optics_plan::OP
+    acquisition_plan::AP
     active_indices_backend::AI
     active_command::AC
     extrapolated_command::EC
     extrapolation_backend::EB
     tiled_frame::TF
-    n_lenslets::Int
-    roi::Int
     rng::RNG
 end
 
@@ -128,13 +130,6 @@ function revolt_scatter_active_command!(style::AdaptiveOpticsSim.Backends.Accele
     return full_command
 end
 
-function revolt_tile_spot_cube!(mosaic::AbstractMatrix{T}, spot_cube::AbstractArray{T,3}, n_lenslets::Int, roi::Int) where {T<:AbstractFloat}
-    size(spot_cube, 2) == roi && size(spot_cube, 3) == roi ||
-        throw(DimensionMismatch("spot cube ROI does not match requested mosaic ROI"))
-    return WavefrontSensors._tile_shack_hartmann_spot_cube!(
-        mosaic, spot_cube, n_lenslets)
-end
-
 function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", config_dir::AbstractString,
     sensor=CMOSSensor(), response_model=nothing,
     thermal_model=nothing, T::Type{<:AbstractFloat}=Float32,
@@ -161,7 +156,7 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     pupil = PupilFunction(tel)
     src = Source(band=:I, magnitude=0.0, T=T)
     dm = DeformableMirror(tel; n_act=n_act, influence_width=0.3, T=T, backend=backend_cfg.selector)
-    wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, mode=Diffractive(), n_pix_subap=roi,
+    wfs = ShackHartmannWFS(tel; n_lenslets=n_lenslets, n_pix_subap=roi,
         diffraction_padding=2, T=T, backend=backend_cfg.selector)
     det = Detector(noise=NoiseNone(), exposure_duration=T(1), qe=T(1), binning=1,
         dark_current=dark_current, sensor=sensor, response_model=response_model,
@@ -173,10 +168,16 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
     extrapolation_backend = backend_cfg.array_backend{T}(undef, size(extrapolation_host)...)
     copyto!(extrapolation_backend, extrapolation_host)
     revolt_fill_active_command!(active_command)
-    tiled_frame = backend_cfg.array_backend{T}(undef, resolution, resolution)
-
-    WavefrontSensors.ensure_sh_calibration!(wfs, pupil, src)
-    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(wfs)))
+    rate_mosaic = shack_hartmann_rate_map(wfs, pupil, src)
+    optics_plan = prepare_wfs_optics(shack_hartmann_optics(wfs, src),
+        pupil, rate_mosaic)
+    tiled_frame = backend_cfg.array_backend{T}(undef, size(rate_mosaic.values)...)
+    observation = WFSObservation(tiled_frame; units=:electron_count,
+        layout=:lenslet_mosaic)
+    acquisition_plan = prepare_wfs_acquisition(det, rate_mosaic,
+        observation; source=src)
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(rate_mosaic.values))
 
     return RevoltLikeHILContext(
         tel,
@@ -185,15 +186,28 @@ function build_revolt_like_hil_context(; backend_name::AbstractString="cpu", con
         dm,
         wfs,
         det,
+        rate_mosaic,
+        observation,
+        optics_plan,
+        acquisition_plan,
         active_indices_backend,
         active_command,
         extrapolated_command,
         extrapolation_backend,
         tiled_frame,
-        n_lenslets,
-        roi,
         rng,
     )
+end
+
+@inline function revolt_like_form_rate!(ctx::RevoltLikeHILContext)
+    form_wfs_optical_products!(ctx.rate_mosaic, ctx.pupil, ctx.optics_plan)
+    return ctx.rate_mosaic
+end
+
+@inline function revolt_like_acquire!(ctx::RevoltLikeHILContext)
+    acquire_wfs_observation!(ctx.observation, ctx.rate_mosaic,
+        ctx.acquisition_plan, ctx.rng)
+    return ctx.tiled_frame
 end
 
 function revolt_like_command_map!(ctx::RevoltLikeHILContext)
@@ -218,10 +232,10 @@ function revolt_like_sense!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
-    measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    spots = WavefrontSensors._legacy_shack_hartmann_spot_cube(ctx.wfs)
+    revolt_like_form_rate!(ctx)
+    revolt_like_acquire!(ctx)
     AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(spots))
+        AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
     return nothing
 end
 
@@ -230,11 +244,12 @@ function revolt_like_mosaic!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
-    measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    revolt_tile_spot_cube!(ctx.tiled_frame,
-        WavefrontSensors._legacy_shack_hartmann_spot_cube(ctx.wfs),
-        ctx.n_lenslets, ctx.roi)
-    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
+    revolt_like_form_rate!(ctx)
+    revolt_like_acquire!(ctx)
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(ctx.rate_mosaic.values))
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
     return nothing
 end
 
@@ -244,12 +259,11 @@ function revolt_like_step!(ctx::RevoltLikeHILContext)
     revolt_scatter_active_command!(ctx.dm.state.coefs, ctx.extrapolated_command, ctx.active_indices_backend)
     update_surface!(ctx.dm)
     apply_surface!(ctx.pupil, ctx.dm, DMReplace())
-    measure!(ctx.wfs, ctx.pupil, ctx.src, ctx.det; rng=ctx.rng)
-    spots = WavefrontSensors._legacy_shack_hartmann_spot_cube(ctx.wfs)
-    revolt_tile_spot_cube!(ctx.tiled_frame, spots, ctx.n_lenslets, ctx.roi)
+    revolt_like_form_rate!(ctx)
+    revolt_like_acquire!(ctx)
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.dm.state.coefs))
     AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(spots))
+        AdaptiveOpticsSim.Backends.execution_style(ctx.rate_mosaic.values))
     AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(ctx.tiled_frame))
     return nothing
 end

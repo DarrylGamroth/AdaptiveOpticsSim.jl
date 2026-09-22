@@ -227,7 +227,10 @@ end
     if has_reference_bundle(root)
         bundle = load_reference_bundle(root)
         @test !isempty(bundle.cases)
-        for case in bundle.cases
+        cases = maintained_reference_cases(bundle, :oopao)
+        @test !isempty(cases)
+        @test all(!retired_sh_estimator_reference(case) for case in cases)
+        for case in cases
             @testset "$(case.id)" begin
                 result = validate_reference_case(case)
                 @test size(result.actual) == size(result.expected)
@@ -244,8 +247,9 @@ end
     root = default_specula_reference_root()
     if has_specula_reference_bundle(root)
         bundle = load_reference_bundle(root)
-        cases = reference_cases(bundle, :specula)
+        cases = maintained_reference_cases(bundle, :specula)
         @test !isempty(cases)
+        @test all(!retired_sh_estimator_reference(case) for case in cases)
         for case in cases
             @testset "$(case.id)" begin
                 result = validate_reference_case(case)
@@ -285,9 +289,9 @@ end
 
     sh_subaps = run_tutorial_example("shack_hartmann_subapertures.jl")
     @test sh_subaps.n_valid > 0
-    @test sh_subaps.calibrated
     @test sh_subaps.metadata.n_valid_subap == sh_subaps.n_valid
-    @test all(isfinite, sh_subaps.slopes)
+    @test all(isfinite, sh_subaps.photon_rate)
+    @test sum(sh_subaps.photon_rate) > 0
 
     spatial = run_tutorial_example("spatial_filter.jl")
     @test size(spatial.filtered_phase) == size(spatial.filtered_amplitude)

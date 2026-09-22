@@ -1,35 +1,3 @@
-function apply_lgs_elongation!(::NoSodiumLayerProfileStyle,
-    wfs::ShackHartmannWFS, ::PupilFunction, src::LGSSource, ::Int)
-    wfs.optics.propagation.workspace.elongation_kernel = apply_elongation!(
-        wfs.optics.propagation.workspace.intensity,
-        lgs_elongation_factor(src),
-        wfs.optics.propagation.workspace.temp,
-        wfs.optics.propagation.workspace.elongation_kernel,
-    )
-    return wfs
-end
-
-function apply_lgs_elongation!(::SampledSodiumLayerProfileStyle, wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource, idx::Int)
-    ensure_lgs_kernels!(wfs, pupil, src)
-    apply_lgs_convolution!(
-        wfs.optics.propagation.workspace.intensity,
-        wfs.optics.propagation.workspace.lgs_kernel_fft,
-        wfs.optics.propagation.workspace.fft_buffer,
-        wfs.optics.propagation.workspace.fft_plan,
-        wfs.optics.propagation.workspace.ifft_plan,
-        idx,
-    )
-    return wfs
-end
-
-function ensure_lgs_kernels!(wfs::ShackHartmannWFS, pupil::PupilFunction, src::LGSSource)
-    dimensions = (_pupil_resolution(pupil), _pupil_resolution(pupil))
-    ensure_lgs_kernels!(wfs.optics, src, dimensions,
-        _pupil_diameter_m(pupil),
-        pupil.metadata.sampling, pupil.metadata.origin, wavelength(src))
-    return wfs
-end
-
 function ensure_lgs_kernels!(model::ShackHartmannOptics,
     src::LGSSource,
     pupil_dimensions::NTuple{2,Int}, pupil_diameter::Real,
@@ -80,12 +48,6 @@ function apply_lgs_convolution!(intensity::AbstractMatrix{T}, kernels_fft::Abstr
     kernel = @view kernels_fft[:, :, idx]
     apply_lgs_convolution!(intensity, kernel, fft_buffer, fft_plan, ifft_plan)
     return intensity
-end
-
-function lgs_spot_kernels_fft(pupil::PupilFunction, wfs::ShackHartmannWFS, src::LGSSource, pad::Int)
-    return lgs_spot_kernels_fft(_pupil_diameter_m(pupil), wfs.optics, src,
-        pad,
-        wavelength(src))
 end
 
 function lgs_spot_kernels_fft(pupil_diameter::Real,

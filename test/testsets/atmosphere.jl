@@ -1074,11 +1074,11 @@ end
 end
 
 @testset "Moving-atmosphere regressions" begin
-    slopes_a = moving_wfs_slope_trace(seed=21, steps=4)
-    slopes_b = moving_wfs_slope_trace(seed=21, steps=4)
-    slopes_c = moving_wfs_slope_trace(seed=22, steps=4)
-    @test slopes_a == slopes_b
-    @test any(norm(slopes_a[i + 1] - slopes_a[i]) > 0 for i in 1:length(slopes_a)-1)
-    @test any(norm(slopes_a[i] - slopes_c[i]) > 0 for i in eachindex(slopes_a))
+    rates_a = moving_wfs_rate_trace(seed=21, steps=4)
+    rates_b = moving_wfs_rate_trace(seed=21, steps=4)
+    rates_c = moving_wfs_rate_trace(seed=22, steps=4)
+    @test rates_a == rates_b
+    @test any(norm(rates_a[i + 1] - rates_a[i]) > 0 for i in 1:length(rates_a)-1)
+    @test any(norm(rates_a[i] - rates_c[i]) > 0 for i in eachindex(rates_a))
 
 end

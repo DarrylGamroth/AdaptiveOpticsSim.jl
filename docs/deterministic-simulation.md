@@ -32,7 +32,13 @@ detector_rng = runtime_rng(0x5678)
 
 epoch = advance_by!(atmosphere, 1e-3; rng=atmosphere_rng)
 render_atmosphere!(pupil, renderer, atmosphere, epoch)
-measure!(wfs, pupil, source, detector; rng=detector_rng)
+form_wfs_optical_products!(photon_rate, pupil, prepared_optics)
+acquire_wfs_observation!(
+    observation,
+    photon_rate,
+    prepared_acquisition,
+    detector_rng,
+)
 ~~~
 
 An evolving RNG is persistent scientific state, not replaceable workspace

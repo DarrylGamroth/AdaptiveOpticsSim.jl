@@ -159,10 +159,7 @@ end
     end
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedMicrolensPropagation)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :ShackHartmannDirectFrontEnd)
-    @test Base.isexported(WavefrontSensors,
-        :ShackHartmannDirectFrontEnd)
+    @test !isdefined(WavefrontSensors, :ShackHartmannDirectFrontEnd)
     @test !Base.isexported(AdaptiveOpticsSim,
         :ShackHartmannOpticalFrontEnd)
     @test Base.isexported(WavefrontSensors,
@@ -218,10 +215,7 @@ end
     end
     @test !Base.isexported(AdaptiveOpticsSim,
         :PreparedFocalPlaneModulation)
-    @test !Base.isexported(AdaptiveOpticsSim,
-        :set_subaperture_calibration!)
-    @test Base.isexported(WavefrontSensors,
-        :set_subaperture_calibration!)
+    @test !isdefined(WavefrontSensors, :set_subaperture_calibration!)
     for name in (
         :Detector,
         :CMOSReadNoiseMap,

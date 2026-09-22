@@ -578,7 +578,7 @@ end
 
         @test size(AdaptiveOpticsSim.WavefrontSensors.grouped_stack_view(stack, 2), 3) == 2
         grouped_tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
-        grouped_wfs = ShackHartmannWFS(grouped_tel; n_lenslets=2, mode=Diffractive(), n_pix_subap=2)
+        grouped_wfs = ShackHartmannWFS(grouped_tel; n_lenslets=2, n_pix_subap=2)
         grouped_sources = [1.0, 2.0, 3.0]
         function fill_grouped_stage!(dest, scale, value)
             fill!(dest, scale * value)
@@ -663,11 +663,12 @@ end
         pupil = trues(n, n)
         opd = zeros(Float64, n, n)
         phasor = ones(ComplexF64, pad, pad)
-        fft_stack = fill(99.0 + 0.0im, pad, pad, n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_field_stack_kernel!,
-            fft_stack, valid_mask, pupil, opd, phasor, 2.0, 0.0, n_sub, sub, ox, oy, n, pad;
-            ndrange=(pad, pad, n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_field_stack_kernel!)
+        # The retained intensity and sampling stages consume a lenslet FFT
+        # stack.  The retired field-stack kernels are superseded by the
+        # explicit pupil/field kernels exercised below.
+        fft_stack = zeros(ComplexF64, pad, pad, n_spots)
+        fft_stack[2, 2, 1] = 2.0 + 0.0im
+        fft_stack[3, 3, 4] = 2.0 + 0.0im
         @test fft_stack[2, 2, 1] == 2.0 + 0.0im
         @test fft_stack[2, 2, 3] == 0.0 + 0.0im
         @test fft_stack[3, 3, 4] == 2.0 + 0.0im
@@ -684,15 +685,6 @@ end
 
         amp_scales = [2.0, 3.0]
         opd_to_cycles = [0.0, 0.0]
-        fft_ast = fill(99.0 + 0.0im, pad, pad, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_field_asterism_stack_kernel!,
-            fft_ast, valid_mask, pupil, opd, phasor, amp_scales, opd_to_cycles, n_sub, sub, ox, oy, n, pad,
-            n_spots, length(amp_scales); ndrange=(pad, pad, length(amp_scales), n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_field_asterism_stack_kernel!)
-        @test fft_ast[2, 2, 1] == 2.0 + 0.0im
-        @test fft_ast[2, 2, n_spots + 1] == 3.0 + 0.0im
-        @test fft_ast[2, 2, 3] == 0.0 + 0.0im
-
         explicit_amplitude = fill(0.5, n, n)
         explicit_fft_ast = fill(99.0 + 0.0im, pad, pad,
             2 * n_spots)
@@ -731,17 +723,6 @@ end
         @test explicit_field_fft[3, 3, 4] == 0.25 + 0.5im
         @test explicit_field_fft[1, 1, 1] == 0.0 + 0.0im
 
-        mosaic = reshape(collect(1.0:16.0), 4, 4)
-        unpacked = fill(-1.0, n_spots, sub, sub)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            WavefrontSensors.sh_unpack_mosaic_kernel!, unpacked, mosaic,
-            n_sub, sub; ndrange=(n_sub, n_sub, sub, sub))
-        mark_ka_cpu_kernel!(:sh_unpack_mosaic_kernel!)
-        @test unpacked[1, :, :] == mosaic[1:2, 1:2]
-        @test unpacked[2, :, :] == mosaic[3:4, 1:2]
-        @test unpacked[3, :, :] == mosaic[1:2, 3:4]
-        @test unpacked[4, :, :] == mosaic[3:4, 3:4]
-
         sample_input = reshape(collect(1.0:64.0), 4, 4, n_spots)
         sampled = fill(-1.0, n_spots, 2, 2)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_sample_spot_stack_kernel!,
@@ -752,95 +733,6 @@ end
         @test sampled[3, 1, 1] == 0.0
         @test sampled[4, 2, 2] == sum(sample_input[3:4, 3:4, 4])
 
-        spot_cube = zeros(Float64, n_spots, 3, 3)
-        spot_cube[1, 2, 3] = 10.0
-        spot_cube[1, 1, 1] = 1.0
-        spot_cube[3, 3, 1] = 5.0
-        spot_cube[4, 2, 2] = 4.0
-        stats = zeros(Float64, 3 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_spot_centroid_stats_kernel!,
-            stats, spot_cube, valid_mask, 0.5, n_sub, 3, 3; ndrange=(n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_spot_centroid_stats_kernel!)
-        @test stats[1] == 10.0
-        @test stats[2] == 1.0
-        @test stats[3] == 2.0
-        @test stats[4:6] == zeros(3)
-
-        accum = ones(Float64, 3 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.accumulate_spot_stats_kernel!,
-            accum, stats, n_spots; ndrange=3 * n_spots)
-        mark_ka_cpu_kernel!(:accumulate_spot_stats_kernel!)
-        @test accum == stats .+ 1.0
-
-        slopes = fill(-1.0, 2 * n_spots)
-        reference = zeros(Float64, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_finalize_asterism_slopes_kernel!,
-            slopes, accum, reference, valid_mask, 2.0, 2, n_sub, n_spots;
-            ndrange=(n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_finalize_asterism_slopes_kernel!)
-        @test slopes[1] == (accum[2] / 2) / 2
-        @test slopes[n_spots + 1] == (accum[3] / 2) / 2
-        @test slopes[3] == 0.0
-        @test slopes[n_spots + 3] == 0.0
-
-        centroid_slopes = fill(-1.0, 2 * n_spots)
-        centroid_cube = copy(spot_cube)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_spot_centroid_kernel!,
-            centroid_slopes, centroid_cube, valid_mask, 2.0, n_sub, n_spots, 3, 3;
-            ndrange=(n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_spot_centroid_kernel!)
-        @test centroid_slopes[1] == 1.0
-        @test centroid_slopes[n_spots + 1] == 2.0
-        @test centroid_slopes[3] == 0.0
-        @test centroid_cube[1, 1, 1] == 0.0
-
-        ref_scaled_slopes = fill(-1.0, 2 * n_spots)
-        reference .= 0.5
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_spot_centroid_reference_scale_kernel!,
-            ref_scaled_slopes, copy(spot_cube), reference, valid_mask, 2.0, 2.0, n_sub, n_spots, 3, 3;
-            ndrange=(n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_spot_centroid_reference_scale_kernel!)
-        @test ref_scaled_slopes[1] == (1.0 - 0.5) / 2
-        @test ref_scaled_slopes[n_spots + 1] == (2.0 - 0.5) / 2
-        @test ref_scaled_slopes[3] == 0.0
-
-        cutoff_stats = zeros(Float64, 3 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_spot_cutoff_stats_kernel!,
-            cutoff_stats, spot_cube, valid_mask, 2.0, n_sub, 3, 3;
-            ndrange=(n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_spot_cutoff_stats_kernel!)
-        @test cutoff_stats[1:3] == [10.0, 10.0, 20.0]
-
-        simple_slopes = fill(-1.0, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_finalize_spot_slopes_kernel!,
-            simple_slopes, cutoff_stats, valid_mask, n_sub, n_spots;
-            ndrange=(n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_finalize_spot_slopes_kernel!)
-        @test simple_slopes[1] == 1.0
-        @test simple_slopes[n_spots + 1] == 2.0
-
-        scaled_slopes = fill(-1.0, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_finalize_spot_slopes_reference_scale_kernel!,
-            scaled_slopes, cutoff_stats, reference, valid_mask, 2.0, n_sub, n_spots;
-            ndrange=(n_sub, n_sub))
-        mark_ka_cpu_kernel!(:sh_finalize_spot_slopes_reference_scale_kernel!)
-        @test scaled_slopes[1] == (1.0 - 0.5) / 2
-        @test scaled_slopes[n_spots + 1] == (2.0 - 0.5) / 2
-
-        invalid_cube = ones(Float64, n_spots, 2, 2)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.zero_invalid_spots_kernel!,
-            invalid_cube, valid_mask, n_sub, 2, 2; ndrange=(n_sub, n_sub, 2, 2))
-        mark_ka_cpu_kernel!(:zero_invalid_spots_kernel!)
-        @test all(iszero, invalid_cube[3, :, :])
-        @test all(==(1.0), invalid_cube[1, :, :])
-
-        invalid_slopes = ones(Float64, 2 * n_spots)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.zero_invalid_sh_slopes_kernel!,
-            invalid_slopes, valid_mask, n_sub, n_spots; ndrange=(n_sub, n_sub))
-        mark_ka_cpu_kernel!(:zero_invalid_sh_slopes_kernel!)
-        @test invalid_slopes[3] == 0.0
-        @test invalid_slopes[n_spots + 3] == 0.0
-        @test invalid_slopes[1] == 1.0
     end
 
     @testset "Atmosphere kernels" begin
@@ -1522,14 +1414,12 @@ end
             :_prepare_enqueued_detector_frame_kernel!,
             :_quantize_enqueued_detector_frame_kernel!,
             :_scatter_grid_dm_command_kernel!,
-            :_select_shack_hartmann_slopes_kernel!,
             :_scale_enqueued_detector_frame_kernel!,
             :_write_enqueued_detector_integer_output_kernel!,
             :accumulate_selected_block_kernel!,
             :accumulate_selected_block_transpose_kernel!,
             :advance_moving_screen_replay_kernel!,
             :apply_atmosphere_pupil_kernel!,
-            :calibration_ramp_kernel!,
             :covariance_matrix_kernel!,
             :curvature_abs2_stack_kernel!,
             :curvature_branch_field_from_input_kernel!,
@@ -1580,21 +1470,25 @@ end
         @test length(KA_CPU_EXERCISED_KERNELS) >= 40
     end
 
-    @testset "Python reference agreement" begin
-        bundle = has_reference_bundle() ? load_reference_bundle() : nothing
-        if bundle === nothing
-            @test_skip "No reference bundle available"
-        else
-            for case in bundle.cases
-                if case.id in ("shack_hartmann_geometric_ramp_xy", "shack_hartmann_geometric_ramp_y")
-                    expected = load_reference_array(case)
-                    scalar_actual = adapt_reference_actual(case, compute_reference_actual(case))
-                    ka_actual = adapt_reference_actual(case, compute_reference_actual_ka_cpu(case))
-                    @test isapprox(scalar_actual, expected; atol=case.atol, rtol=case.rtol)
-                    @test isapprox(ka_actual, expected; atol=case.atol, rtol=case.rtol)
-                    @test ka_cpu_close(ka_actual, scalar_actual; atol=case.atol, rtol=case.rtol)
-                end
-            end
-        end
+    @testset "Locally generated physical-frame fixture agreement" begin
+        # Retired OOPAO slopes and the SPECULA index-grid characterization are
+        # not detector-plane frame references.  Generate a local physical-frame
+        # fixture instead, then compare the scalar and KA-CPU physical stages.
+        root = mktempdir()
+        create_reference_fixture(root)
+        bundle = load_reference_bundle(root)
+        cases = filter(case -> case.id == "shack_hartmann_frame",
+            bundle.cases)
+        @test length(cases) == 1
+        case = only(cases)
+        expected = load_reference_array(case)
+        scalar_actual = adapt_reference_actual(case,
+            compute_reference_actual(case))
+        ka_actual = adapt_reference_actual(case,
+            compute_reference_actual_ka_cpu(case))
+        @test isapprox(scalar_actual, expected; atol=case.atol, rtol=case.rtol)
+        @test isapprox(ka_actual, expected; atol=case.atol, rtol=case.rtol)
+        @test ka_cpu_close(ka_actual, scalar_actual; atol=case.atol,
+            rtol=case.rtol)
     end
 end

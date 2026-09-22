@@ -13,12 +13,8 @@ function main(; resolution::Int=24)
     pupil = PupilFunction(tel)
     @. pupil.opd = 5e-8 * zb.modes[:, :, 5]
 
-    sh_point = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
-    sh_ext = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
-    point_peak = WavefrontSensors.sampled_spots_peak!(sh_point, pupil, src)
-    ext_peak = WavefrontSensors.sampled_spots_peak!(sh_ext, pupil, ext)
-    point_slopes = copy(measure!(sh_point, pupil, src))
-    ext_slopes = copy(measure!(sh_ext, pupil, ext))
+    sh_point = ShackHartmannWFS(tel; n_lenslets=6)
+    sh_ext = ShackHartmannWFS(tel; n_lenslets=6)
 
     pyr_point = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
     pyr_ext = PyramidWFS(tel; pupil_samples=6, mode=Diffractive(), modulation=1.0)
@@ -53,6 +49,8 @@ function main(; resolution::Int=24)
         extended_rate, pupil, extended_optics)
     point_spots = point_rate.values
     extended_spots = extended_rate.values
+    point_peak = maximum(point_spots)
+    ext_peak = maximum(extended_spots)
     sh_delta = copy(extended_spots .- point_spots)
     pyramid_frame_delta = pyr_extended_frame .- pyr_point_frame
     sh_relative_morphology = norm(sh_delta) / norm(point_spots)
@@ -69,8 +67,6 @@ function main(; resolution::Int=24)
     return (
         sh_point_peak=point_peak,
         sh_extended_peak=ext_peak,
-        sh_point_slopes=point_slopes,
-        sh_extended_slopes=ext_slopes,
         sh_point_rate=sum(point_spots),
         sh_extended_rate=sum(extended_spots),
         sh_spot_delta=sh_delta,

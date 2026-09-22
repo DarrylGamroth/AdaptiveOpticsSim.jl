@@ -41,10 +41,13 @@ Each script exposes a `main()` function and logs a short completion summary with
 ## Julia patterns behind the mapping
 
 - Where an OOPAO tutorial is cited, its `ngs*tel*wfs` source expression maps to
-  explicit AOS preparation and execution such as `prepare_direct_imaging` plus
-  `form_direct_image!`, or `measure!(wfs, pupil, src)`.
-- WFS sensing mode is encoded in the WFS type parameter via
-  `mode=Geometric()` or `mode=Diffractive()`, not a mutable string flag.
+  explicit AOS preparation and execution. Shack–Hartmann composition uses
+  `prepare_wfs_optics` plus `form_wfs_optical_products!`, followed by explicit
+  detector acquisition; operational estimation belongs to FGA.
+- Sensor families that retain alternate sensing models encode them in a type
+  parameter, not a mutable string flag. The AOS Shack–Hartmann surface is the
+  physical diffractive front end; direct OPD-gradient truth uses the explicitly
+  named `geometric_wavefront_slopes!` calculation.
 - Detector noise is encoded by the detector’s `noise` type, for example
   `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.
 - The maintained closed-loop fixtures keep the AOS plant and the FGA/JFG RTC

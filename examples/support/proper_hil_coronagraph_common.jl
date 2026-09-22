@@ -25,7 +25,7 @@ struct CoronagraphPayload{P,A,T}
 end
 
 mutable struct ProperHILCoronagraphContext{
-    TEL,S,A,R,P,O1,O2,W,PM,CP,SP,C1,C2,RNG,T,
+    TEL,S,A,R,P,O1,O2,W,WR,WP,PM,CP,SP,C1,C2,RNG,T,
 }
     telescope::TEL
     source::S
@@ -35,6 +35,8 @@ mutable struct ProperHILCoronagraphContext{
     tiptilt::O1
     dm::O2
     wfs::W
+    wfs_rate::WR
+    wfs_optics_plan::WP
     science_model::PM
     payload::CP
     science_pupil::SP
@@ -88,7 +90,8 @@ function hil_coronagraph_prescription(λm, n; payload::CoronagraphPayload)
 end
 
 function _build_wfs(tel::Telescope; T::Type{<:AbstractFloat}, backend::AbstractArrayBackend)
-    return ShackHartmannWFS(tel; n_lenslets=16, mode=Diffractive(), threshold=T(0), T=T, backend=backend)
+    return ShackHartmannWFS(tel; n_lenslets=16, threshold=T(0), T=T,
+        backend=backend)
 end
 
 function build_proper_hil_context(;
@@ -109,14 +112,16 @@ function build_proper_hil_context(;
         T=T,
         backend=selector,
     )
-    src = Source(band=:H, magnitude=0.0)
+    src = Source(band=:H, magnitude=0.0, T=T)
     atm = KolmogorovAtmosphere(tel; r0=T(0.2),
         reference_wavelength_m=T(500e-9), L0=T(25.0))
     tiptilt = TipTiltMirror(tel; scale=T(0.05), T=T, backend=selector, label=:tiptilt)
     dm = DeformableMirror(tel; n_act=16, influence_width=T(0.3), T=T, backend=selector)
     wfs = _build_wfs(tel; T=T, backend=selector)
     wfs_pupil = PupilFunction(tel)
-    prepare_runtime_wfs!(wfs, wfs_pupil, src)
+    wfs_rate = shack_hartmann_rate_map(wfs, wfs_pupil, src)
+    wfs_optics_plan = prepare_wfs_optics(
+        shack_hartmann_optics(wfs, src), wfs_pupil, wfs_rate)
     atmosphere_renderer = prepare_atmosphere_renderer(atm, tel, src)
     science_pupil = PupilFunction(tel)
     proper_ctx = Proper.RunContext(typeof(opd_map(science_pupil)))
@@ -152,6 +157,8 @@ function build_proper_hil_context(;
         tiptilt,
         dm,
         wfs,
+        wfs_rate,
+        wfs_optics_plan,
         science_model,
         payload,
         science_pupil,
@@ -177,6 +184,13 @@ function _stage_command!(ctx::ProperHILCoronagraphContext)
     return (tiptilt=ctx.tiptilt_command, dm=ctx.dm_command)
 end
 
+"""
+    ao_step!(ctx)
+
+Advance the physical AO plant and return its detector-plane Shack-Hartmann
+photon-rate mosaic. Detector acquisition, estimation, and RTC control remain
+outside this Proper coupling example.
+"""
 function ao_step!(ctx::ProperHILCoronagraphContext)
     _stage_command!(ctx)
     epoch = advance_by!(ctx.atmosphere, 1e-3; rng=ctx.rng)
@@ -190,8 +204,9 @@ function ao_step!(ctx::ProperHILCoronagraphContext)
         update_surface!(optic)
         apply_surface!(ctx.wfs_pupil, optic, DMAdditive())
     end
-    measure!(ctx.wfs, ctx.wfs_pupil, ctx.source)
-    return slopes(ctx.wfs)
+    form_wfs_optical_products!(ctx.wfs_rate, ctx.wfs_pupil,
+        ctx.wfs_optics_plan)
+    return intensity_values(ctx.wfs_rate)
 end
 
 function science_step!(ctx::ProperHILCoronagraphContext)

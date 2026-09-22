@@ -1727,7 +1727,6 @@ function prepare_graph_node(
         pixel_scale_arcsec=config.pixel_scale_arcsec,
         n_pix_subap=config.n_pix_subap,
         shannon_sampling=config.shannon_sampling,
-        mode=Diffractive(),
         T=T,
         backend=compute_device_backend(target),
     )
