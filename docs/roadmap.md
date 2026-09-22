@@ -47,21 +47,26 @@ the maintained package.
 2. Keep the generic graph, HIL, and pyRTC contracts stable for the separately
    maintained REVOLT Classic and Copper packages; instrument calibration and
    performance evidence remain with those packages.
-3. Build a separate SPIDERS instrument package from the retired Subaru/AO188
+3. Complete target-first migration of the retained Bi-O-edge, Zernike, and
+   Curvature estimators to their approved FGA complete-frame contracts, and of
+   LiFT inverse estimation to its approved AdaptiveOpticsCalibration contract.
+   Keep each AOS implementation until its target is released, parity-tested,
+   and adopted; weighted-centroid estimation is not an AOS target.
+4. Build a separate SPIDERS instrument package from the retired Subaru/AO188
    and AO3k composition, SpiderMan, service, and optical-engineering inputs.
    Mark estimated chopper, stage, filter-wheel, and prescription values as
    provisional.
-4. Add an external transport adapter after the simulated detector boundary. GPU
+5. Add an external transport adapter after the simulated detector boundary. GPU
    simulations may copy a completed frame to the CPU RTC boundary explicitly;
    hidden mixed-device execution is out of scope.
-5. Extend graph-node coverage only when an actual architecture needs it. Keep
+6. Extend graph-node coverage only when an actual architecture needs it. Keep
    large calibration arrays as prepared parameters, not scalar properties.
-6. Maintain deterministic explicit RNG ownership and compare scientific changes
+7. Maintain deterministic explicit RNG ownership and compare scientific changes
    with cited external reference inputs, including OOPAO or instrument
    references when they provide the relevant validation provenance.
-7. Improve rolling-shutter models by evaluating the optical path at row or
+8. Improve rolling-shutter models by evaluating the optical path at row or
    row-group times while publishing one atomic completed frame.
-8. Close remaining production-surface gaps with local CPU, AMDGPU, WSL CUDA,
+9. Close remaining production-surface gaps with local CPU, AMDGPU, WSL CUDA,
    and aarch64 evidence as applicable.
 
 ## Graph Scope

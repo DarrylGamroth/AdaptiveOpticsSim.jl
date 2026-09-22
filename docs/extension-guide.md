@@ -183,11 +183,17 @@ node; never look up a global stream in the hot path.
 
 ## Wavefront-Sensor Extensions
 
-A composed WFS should implement the staged contracts where applicable:
+A composed WFS should implement only the staged contracts that its maintained
+ownership boundary requires:
 
 1. optical formation into detector-facing products
 2. acquisition into `WFSObservation`
-3. estimation into `WFSMeasurement`
+3. estimation into `WFSMeasurement`, where AOS owns a retained estimator
+
+Bi-O-edge, Zernike, and Curvature currently implement all three stages.
+Shack–Hartmann and Pyramid stop at the complete detector observation and use
+FGA for operational estimation. LiFT uses its own forward and phase-retrieval
+products rather than a detector slope-estimation contract.
 
 Reusable masks, microlens arrays, phase spots, and defocus optics belong in
 `Optics`. Detector physics belongs in `Detectors`. Do not hide a detector inside

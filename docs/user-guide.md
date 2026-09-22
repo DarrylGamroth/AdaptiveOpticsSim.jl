@@ -84,9 +84,14 @@ frame delay, and VDM/PDM routing. The Pyramid S4 fixture qualifies the
 complete-frame estimator and command boundary; it does not feed that command
 back into the plant.
 
-The former AOS RTC examples and tutorials are retired. Bi-O-edge and Zernike
-RTC composition, and the combined Subaru AO188/AO3k model, belong to downstream
-packages that also own their composition and acceptance evidence.
+The former AOS RTC examples and tutorials are retired. Bi-O-edge, Zernike, and
+Curvature RTC composition, and the combined Subaru AO188/AO3k model, belong to
+downstream packages that also own their composition and acceptance evidence.
+The three family estimators remain maintained AOS surfaces until their
+approved FGA targets are released and adopted; this interim ownership does not
+make AOS the RTC owner. LiFT remains an AOS forward and phase-retrieval workflow
+until its approved AdaptiveOpticsCalibration inverse target is released and
+adopted.
 
 ## Detector Acquisition
 
@@ -133,7 +138,9 @@ external measurement estimation separate:
 
 For Shack–Hartmann and Pyramid operation, step 3 belongs to
 FilterGraphAlgorithms. AOS retains no detector-frame-to-slope convenience
-path for either family.
+path for either family. Bi-O-edge, Zernike, and Curvature retain step 3 in AOS
+until their approved FGA targets are released and adopted. LiFT uses its own
+forward and inverse products rather than this detector-slope convention.
 
 ## Complete-Frame Algorithm Graphs
 
