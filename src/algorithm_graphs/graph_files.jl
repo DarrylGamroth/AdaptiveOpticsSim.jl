@@ -1266,120 +1266,6 @@ function _emccd_detector_acquisition_f32_node(
     )
 end
 
-function _shack_hartmann_centroid_f32_node(
-    name::Symbol,
-    config::NamedTuple,
-    props::NamedTuple,
-)
-    config_fields = (
-        :calibration_signature,
-        :calibration_wavelength_m,
-        :centroid_response,
-        :centroid_cutoff_fraction,
-        :frame_schema,
-        :n_lenslets,
-        :n_pix_subap,
-        :reference_signal_schema,
-        :resolution,
-        :slopes_schema,
-        :telescope_diameter_m,
-        :valid_subapertures_schema,
-    )
-    context = "node '$name' config"
-    _require_named_fields(config, config_fields, config_fields, context)
-    _require_named_fields(props, (), (), "node '$name' props")
-    return shack_hartmann_centroid_node(
-        name;
-        resolution=_file_integer(config.resolution, "$context.resolution"),
-        telescope_diameter_m=_file_real(
-            config.telescope_diameter_m,
-            "$context.telescope_diameter_m",
-        ),
-        n_lenslets=_file_integer(
-            config.n_lenslets,
-            "$context.n_lenslets",
-        ),
-        n_pix_subap=_file_integer(
-            config.n_pix_subap,
-            "$context.n_pix_subap",
-        ),
-        centroid_cutoff_fraction=_file_real(
-            config.centroid_cutoff_fraction,
-            "$context.centroid_cutoff_fraction",
-        ),
-        centroid_response=_file_real(
-            config.centroid_response,
-            "$context.centroid_response",
-        ),
-        calibration_wavelength_m=_file_real(
-            config.calibration_wavelength_m,
-            "$context.calibration_wavelength_m",
-        ),
-        calibration_signature=_file_integer(
-            config.calibration_signature,
-            "$context.calibration_signature",
-        ),
-        frame_schema=_file_string(
-            config.frame_schema,
-            "$context.frame_schema",
-        ),
-        slopes_schema=_file_string(
-            config.slopes_schema,
-            "$context.slopes_schema",
-        ),
-        valid_subapertures_schema=_file_string(
-            config.valid_subapertures_schema,
-            "$context.valid_subapertures_schema",
-        ),
-        reference_signal_schema=_file_string(
-            config.reference_signal_schema,
-            "$context.reference_signal_schema",
-        ),
-        T=Float32,
-    )
-end
-
-function _shack_hartmann_slope_selection_f32_node(
-    name::Symbol,
-    config::NamedTuple,
-    props::NamedTuple,
-)
-    config_fields = (
-        :full_slopes_schema,
-        :lenslet_order_schema,
-        :n_lenslets,
-        :selected_lenslet_count,
-        :selected_slopes_schema,
-    )
-    context = "node '$name' config"
-    _require_named_fields(config, config_fields, config_fields, context)
-    _require_named_fields(props, (), (), "node '$name' props")
-    return shack_hartmann_slope_selection_node(
-        name;
-        n_lenslets=_file_integer(
-            config.n_lenslets,
-            "$context.n_lenslets",
-        ),
-        selected_lenslet_count=_file_integer(
-            config.selected_lenslet_count,
-            "$context.selected_lenslet_count",
-        ),
-        full_slopes_schema=_file_string(
-            config.full_slopes_schema,
-            "$context.full_slopes_schema",
-        ),
-        selected_slopes_schema=_file_string(
-            config.selected_slopes_schema,
-            "$context.selected_slopes_schema",
-        ),
-        lenslet_order_schema=_file_string(
-            config.lenslet_order_schema,
-            "$context.lenslet_order_schema",
-        ),
-        T=Float32,
-    )
-end
-
 """
     builtin_graph_node_types()
 
@@ -1405,10 +1291,7 @@ function builtin_graph_node_types()
             _multilayer_atmosphere_opd_f32_node,
         pupil_opd_composition_f32=_pupil_opd_composition_f32_node,
         pyramid_rate_f32=_pyramid_rate_f32_node,
-        shack_hartmann_centroid_f32=_shack_hartmann_centroid_f32_node,
         shack_hartmann_rate_f32=_shack_hartmann_rate_f32_node,
-        shack_hartmann_slope_selection_f32=
-            _shack_hartmann_slope_selection_f32_node,
     )
 end
 

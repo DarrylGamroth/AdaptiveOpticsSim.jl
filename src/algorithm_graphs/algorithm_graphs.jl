@@ -114,23 +114,13 @@ import ..WavefrontSensors:
     PyramidShiftedMaskModulationWorkspace,
     PyramidShiftedMaskStrategy,
     PyramidWFS,
-    ShackHartmannSlopeSelectionPlan,
     ShackHartmannWFS,
-    WFSMeasurement,
-    WFSObservation,
-    estimate_wfs_measurement!,
     enqueue_wfs_optical_products!,
     form_wfs_optical_products!,
-    prepare_wfs_estimation,
     prepare_wfs_optics,
     pyramid_rate_map,
-    select_shack_hartmann_slopes!,
-    set_subaperture_calibration!,
-    set_valid_subapertures!,
     shack_hartmann_optics,
-    shack_hartmann_rate_map,
-    subaperture_calibration,
-    selected_lenslet_count
+    shack_hartmann_rate_map
 
 include("definitions.jl")
 include("model_time_values.jl")
