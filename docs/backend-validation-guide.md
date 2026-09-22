@@ -219,6 +219,37 @@ timeline identifies the kernel of interest. The script reports synchronized
 target-ready time and warmed host allocation; it does not claim an arrival-rate
 deadline or include an AOS/FGA device-resident bridge.
 
+For the retained Bi-O-edge plant boundary, use the corresponding prepared
+optics-plus-acquisition driver. Its CPU mode also emits a warmed Julia sampling
+profile:
+
+~~~bash
+ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  julia --project=. --startup-file=no \
+  scripts/profile_bi_o_edge_plant_runtime.jl
+
+ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  julia --project=test/cuda --startup-file=no \
+  scripts/profile_bi_o_edge_plant_runtime.jl
+
+ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  julia --project=test/amdgpu --startup-file=no \
+  scripts/profile_bi_o_edge_plant_runtime.jl
+~~~
+
+The Bi-O-edge driver requires zero warmed Julia heap allocation for one
+complete CPU target-ready step. Direct GPU stream execution reports its Julia
+launch overhead; zero host allocation, including completion, is a captured
+CUDA/HIP Graph replay contract. Existing captured plant-graph drivers validate
+that contract for the Shack-Hartmann graph. This Bi-O-edge driver exercises
+direct streams and makes no Bi-O-edge graph-capture claim. Use the CUDA run as
+the primary accelerator profile and the AMDGPU run as the secondary
+portability profile. The measured replay is marked as
+`aos_bi_o_edge_plant`; CUDA also uses the profiler API, and AMDGPU uses the
+ROCTx profiler controls, so vendor tools can select only the warmed repeated
+region.
+
 ## Release Entry Point
 
 ~~~bash

@@ -188,9 +188,12 @@ ownership boundary requires:
 
 1. optical formation into detector-facing products
 2. acquisition into `WFSObservation`
-3. estimation into `WFSMeasurement`, where AOS owns a retained estimator
+3. estimation into `WFSMeasurement`, when the owning package provides that
+   estimator
 
-Bi-O-edge, Zernike, and Curvature currently implement all three stages.
+Zernike and Curvature currently implement all three stages in AOS. Bi-O-edge
+implements the first two stages in AOS; registered FilterGraphAlgorithms owns
+its calibrated estimation and RTC processing.
 Shack–Hartmann and Pyramid stop at the complete detector observation and use
 FGA for operational estimation. LiFT uses its own forward and phase-retrieval
 products rather than a detector slope-estimation contract.

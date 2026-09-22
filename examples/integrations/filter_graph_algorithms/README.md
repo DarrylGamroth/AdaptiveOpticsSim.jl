@@ -37,7 +37,7 @@ AOC interfaces only; AOS remains the plant owner.
 S4 is a separate complete-frame Pyramid fixture. AOS forms a diffractive
 four-pupil photon-rate frame and performs one explicit noiseless detector
 acquisition. The composing layer transposes the acquired `(x, y)` detector
-storage into a preallocated `(row=y, column=x)` FGA image, then uses FGA 0.2's
+storage into a preallocated `(row=y, column=x)` FGA image, then uses FGA 0.3.0's
 `PyramidImageF32`, `PyramidReconstructorF32`, and leaky integrator to produce
 one adopted command. Its flat acquired frame defines the explicit reference
 I4Q signal; the support, unity optical gain, pupil order `q1, q2, q3, q4`,
@@ -59,6 +59,15 @@ storage. AOS plant execution and FGA RTC execution are qualified independently
 on CUDA and AMDGPU. This fixture does not claim shared device storage, a shared
 accelerator stream, zero-copy exchange, or one CUDA Graph or HIP Graph spanning
 both packages.
+
+S4 also contains a Bi-O-edge detector-frame fixture. AOS owns only the
+diffractive four-pupil photon-rate formation and noiseless detector acquisition;
+FGA 0.3.0 owns the calibrated Bi-O-edge differential signal. The boundary uses
+the same explicit `(x, y)` AOS to `(row=y, column=x)` FGA transpose. Its frozen
+asymmetric oracle binds q1/q2/q3/q4 as top-left, bottom-left, bottom-right,
+top-right, respectively; origins `((0,0), (2,0), (2,2), (0,2))`; and the
+non-rectangular support `[true true; false true]`. It checks both FGA
+normalization policies with nonzero reference signal and unequal optical gain.
 
 The nested environment resolves AdaptiveOpticsCalibration,
 FilterGraphAlgorithms, and JuliaFilterGraph from the configured registry and

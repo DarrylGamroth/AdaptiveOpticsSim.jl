@@ -40,7 +40,7 @@ end
     front_end = PyramidOpticalFrontEnd(pyramid, src)
     rate = pyramid_rate_map(front_end, pupil)
     plan = prepare_wfs_optics(front_end, pupil, rate)
-    form_wfs_optical_products!(rate, pupil, plan)
+    @test @inferred(form_wfs_optical_products!(rate, pupil, plan)) === rate
     @test all(isfinite, rate.values)
     @test sum(rate.values) > zero(T)
     @test @allocated(form_wfs_optical_products!(rate, pupil, plan)) == 0
@@ -126,36 +126,60 @@ end
     @test sum(path_rates[1].values) / sum(path_rates[2].values) ≈ T(10 / 3)
 end
 
-@testset "Bi-O-edge estimator remains independent" begin
-    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    pupil = PupilFunction(tel)
-    src = Source(band=:I, magnitude=0.0)
-    bio = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
-    @test length(measure!(bio, pupil, src)) == 8
+@testset "Bi-O-edge physical four-pupil propagation" begin
+    T = Float64
+    tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    pupil = PupilFunction(tel; T=T)
+    pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
+    src = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(10), T=T)
+    bio = BiOEdgeWFS(tel; pupil_samples=2, modulation=zero(T), T=T)
 
-    bio.acquisition.workspace.nominal_detector_resolution = 4
-    WavefrontSensors.resize_bi_o_edge_signal_buffers!(bio, 4)
-    bio.estimator.state.valid_i4q .= Bool[1 0; 1 1]
-    WavefrontSensors.update_bi_o_edge_valid_signal!(bio)
-    @test WavefrontSensors.update_bi_o_edge_valid_signal_indices!(bio) == 3
-    WavefrontSensors.resize_bi_o_edge_slope_buffers!(bio)
-    fill!(bio.estimator.state.reference_signal_2d, 0.0)
-    fill!(bio.estimator.state.optical_gain, 2.0)
-    frame = [4.0 4.0 1.0 1.0;
-             4.0 4.0 1.0 1.0;
-             3.0 3.0 2.0 2.0;
-             3.0 3.0 2.0 2.0]
-    signal = WavefrontSensors.bi_o_edge_signal!(bio, pupil, frame)
-    @test length(signal) == 6
-    @test signal[1:3] ≈ fill(0.8, 3)
-    @test signal[4:6] ≈ zeros(3)
-    @test WavefrontSensors.bi_o_edge_signal!(KA_CPU_STYLE, bio, pupil, frame, nothing) ≈ signal
+    @test !hasfield(typeof(bio), :estimator)
+    @test !applicable(measure!, bio, pupil, src)
+    @test !applicable(slopes, bio)
+    @test !supports_valid_subaperture_mask(bio)
+    @test valid_subaperture_mask(bio) === nothing
+    @test !supports_reference_signal(bio)
+    @test reference_signal(bio) === nothing
 
-    spectral = with_spectrum(src, SpectralBundle([0.70e-6, 0.80e-6], [0.5, 0.5]))
-    extended = with_extended_source(src, PointCloudSourceModel([(0.0, 0.0)], [1.0]))
-    for expanded in (spectral, extended)
-        @test_throws UnsupportedAlgorithm measure!(BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive()), pupil, expanded)
-    end
+    front_end = BiOEdgeOpticalFrontEnd(bio, src)
+    rate = bi_o_edge_rate_map(front_end, pupil)
+    plan = prepare_wfs_optics(front_end, pupil, rate)
+    @test @inferred(form_wfs_optical_products!(rate, pupil, plan)) === rate
+    @test all(isfinite, rate.values)
+    @test sum(rate.values) > zero(T)
+    @test @allocated(form_wfs_optical_products!(rate, pupil, plan)) == 0
+
+    detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
+        qe=T(0.5), T=T)
+    captured = capture!(detector, rate.values, src; rng=MersenneTwister(19))
+    @test captured === output_frame(detector)
+    @test size(captured) == size(rate.values)
+    @test captured ≈ rate.values .* T(0.125)
+
+    spectral = with_spectrum(src,
+        SpectralBundle(T[0.70e-6, 0.80e-6], T[0.25, 0.75]; T=T))
+    spectral_front_end = BiOEdgeOpticalFrontEnd(bio, spectral)
+    spectral_rates = bi_o_edge_rate_map(spectral_front_end, pupil)
+    spectral_plan = prepare_wfs_optics(
+        spectral_front_end, pupil, spectral_rates)
+    form_wfs_optical_products!(spectral_rates, pupil, spectral_plan)
+    @test all(product -> all(isfinite, product.values), spectral_rates)
+
+    path_source = Asterism([src, Source(band=:custom,
+        wavelength=wavelength(src), photon_irradiance=T(3), T=T)])
+    second_pupil = PupilFunction(tel; T=T)
+    copyto!(second_pupil.opd, pupil.opd)
+    path_front_end = BiOEdgeOpticalFrontEnd(bio, path_source)
+    path_rates = bi_o_edge_rate_map(
+        path_front_end, (pupil, second_pupil))
+    path_plan = prepare_wfs_optics(
+        path_front_end, (pupil, second_pupil), path_rates)
+    form_wfs_optical_products!(
+        path_rates, (pupil, second_pupil), path_plan)
+    @test sum(path_rates[1].values) / sum(path_rates[2].values) ≈ T(10 / 3)
 end
 
 @testset "Four-pupil pupil-reflectivity throughput" begin
@@ -175,8 +199,8 @@ end
     @test sum(full_intensity) > 0
     @test sum(attenuated_intensity) ≈ transmission * sum(full_intensity)
 
-    full_bio = BiOEdgeWFS(full_tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
-    attenuated_bio = BiOEdgeWFS(attenuated_tel; pupil_samples=2, mode=Diffractive(), modulation=0.0)
+    full_bio = BiOEdgeWFS(full_tel; pupil_samples=2, modulation=0.0)
+    attenuated_bio = BiOEdgeWFS(attenuated_tel; pupil_samples=2, modulation=0.0)
     bi_o_edge_intensity!(full_bio.front_end.propagation.workspace.intensity, full_bio, full_pupil, src)
     bi_o_edge_intensity!(attenuated_bio.front_end.propagation.workspace.intensity, attenuated_bio, attenuated_pupil, src)
     @test sum(attenuated_bio.front_end.propagation.workspace.intensity) ≈

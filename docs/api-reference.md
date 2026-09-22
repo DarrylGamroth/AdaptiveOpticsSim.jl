@@ -116,16 +116,19 @@ Curvature, and LiFT paths. The general staged contract is:
 
 1. `prepare_wfs_optics` / `form_wfs_optical_products!`
 2. `prepare_wfs_acquisition` / `acquire_wfs_observation!`
-3. `prepare_wfs_estimation` / `estimate_wfs_measurement!`
+3. `prepare_wfs_estimation` / `estimate_wfs_measurement!` when the WFS owner
+   provides an estimation stage
 
 `WFSObservation` and `WFSMeasurement` are typed products with explicit
 metadata and units.
 
 The AOS Shack–Hartmann and Pyramid surfaces implement stages 1 and 2 only.
 Their complete detector observations are package boundaries; maintained
-operational estimation is provided by FilterGraphAlgorithms. Bi-O-edge,
-Zernike, and Curvature retain all three AOS stages until their approved FGA
-complete-frame targets are released, parity-tested, and adopted. LiFT retains
+operational estimation is provided by FilterGraphAlgorithms. Bi-O-edge also
+ends at the complete detector observation in AOS, with calibrated estimation
+provided by registered FilterGraphAlgorithms v0.3.0 and runtime processing by
+JuliaFilterGraph v0.2.1. Zernike and Curvature retain all three AOS stages until
+their approved FGA complete-frame targets are released, parity-tested, and adopted. LiFT retains
 its AOS physical forward and inverse APIs until its approved
 AdaptiveOpticsCalibration inverse target is released and adopted; LiFT is a
 phase-retrieval workflow, not a slope or centroid estimator. AOS has no

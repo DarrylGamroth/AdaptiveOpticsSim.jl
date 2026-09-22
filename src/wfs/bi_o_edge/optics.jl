@@ -115,128 +115,67 @@ function bi_o_edge_intensity!(out::AbstractMatrix{T}, wfs::BiOEdgeWFS, pupil::Pu
     return bi_o_edge_intensity_core!(out, wfs, pupil, src; apply_lgs=true)
 end
 
-function measure!(mode::Geometric, wfs::BiOEdgeWFS, pupil::PupilFunction)
-    slopes = bi_o_edge_estimator_products(wfs).slopes
-    edge_geometric_slopes!(slopes, pupil.opd,
-        wfs.estimator.state.valid_mask, wfs.estimator.state.edge_mask)
-    @. slopes *= wfs.estimator.state.optical_gain
-    return slopes
-end
-
-function measure!(::Geometric, wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource)
-    require_leaf_source(src, "geometric Bi-O-edge WFS")
-    return measure!(Geometric(), wfs, pupil)
-end
-
-function measure!(::Geometric, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource)
-    slopes = measure!(Geometric(), wfs, pupil)
-    n_sub = wfs.estimator.params.pupil_samples
-    factor = lgs_elongation_factor(src)
-    @views slopes[n_sub * n_sub + 1:end] .*= factor
-    return slopes
-end
-
-function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction)
-    throw(InvalidConfiguration("Diffractive Bi-O-edge WFS requires a source; call measure!(wfs, pupil, src)."))
-end
-
-function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction)
-    return measure!(sensing_mode(wfs), wfs, pupil)
-end
-
-function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource)
-    return measure!(sensing_mode(wfs), wfs, pupil, src)
-end
-
-function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource)
-    return measure!(sensing_mode(wfs), wfs, pupil, src)
-end
-
-function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism)
-    return measure!(sensing_mode(wfs), wfs, pupil, ast)
-end
-
-function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource, det::AbstractDetector;
-    rng::AbstractRNG=runtime_rng())
-    return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
-end
-
-function measure!(wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism, det::AbstractDetector;
-    rng::AbstractRNG=runtime_rng())
-    return measure!(sensing_mode(wfs), wfs, pupil, ast, det; rng=rng)
-end
-
-function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource)
-    ensure_bi_o_edge_calibration!(wfs, pupil, src)
+function apply_lgs_elongation!(::NoSodiumLayerProfileStyle,
+    intensity::AbstractMatrix{T}, wfs::BiOEdgeWFS, ::PupilFunction,
+    src::LGSSource) where {T<:AbstractFloat}
     propagation = bi_o_edge_propagation_workspace(wfs)
-    bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
-        propagation.intensity)
-    return bi_o_edge_signal!(wfs, pupil, intensity, src)
+    propagation.elongation_kernel = apply_elongation!(
+        intensity,
+        lgs_elongation_factor(src),
+        propagation.scratch,
+        propagation.elongation_kernel,
+    )
+    return wfs
 end
 
-function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource)
-    ensure_bi_o_edge_calibration!(wfs, pupil, src)
+function apply_lgs_elongation!(::SampledSodiumLayerProfileStyle,
+    intensity::AbstractMatrix{T}, wfs::BiOEdgeWFS, pupil::PupilFunction,
+    src::LGSSource) where {T<:AbstractFloat}
+    ensure_lgs_kernel!(wfs, pupil, src)
     propagation = bi_o_edge_propagation_workspace(wfs)
-    bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
-        propagation.intensity)
-    return bi_o_edge_signal!(wfs, pupil, intensity, src)
+    apply_lgs_convolution!(
+        intensity,
+        propagation.lgs_kernel_fft,
+        propagation.fft_buffer,
+        propagation.fft_plan,
+        propagation.pupil_field,
+        propagation.ifft_plan,
+    )
+    return wfs
 end
 
-function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::AbstractSource,
-    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
-    ensure_bi_o_edge_calibration!(wfs, pupil, src, det)
+function ensure_lgs_kernel!(wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource)
+    profile = src.params.sodium_layer_profile
+    if profile === nothing
+        return wfs
+    end
     propagation = bi_o_edge_propagation_workspace(wfs)
-    bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
-        propagation.intensity)
-    frame = capture!(det, intensity, src; rng=rng)
-    resize_bi_o_edge_signal_buffers!(wfs, size(frame, 1), det)
-    normalization_scale = wfs_detector_incidence_scale(det, src,
-        eltype(frame))
-    return bi_o_edge_signal!(wfs, pupil, frame, src, normalization_scale)
-end
-
-function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, src::LGSSource,
-    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
-    ensure_bi_o_edge_calibration!(wfs, pupil, src, det)
-    propagation = bi_o_edge_propagation_workspace(wfs)
-    bi_o_edge_intensity!(propagation.intensity, wfs, pupil, src)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
-        propagation.intensity)
-    frame = capture!(det, intensity, src; rng=rng)
-    resize_bi_o_edge_signal_buffers!(wfs, size(frame, 1), det)
-    normalization_scale = wfs_detector_incidence_scale(det, src,
-        eltype(frame))
-    return bi_o_edge_signal!(wfs, pupil, frame, src, normalization_scale)
-end
-
-function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism)
-    Base.require_one_based_indexing(pupil.opd)
-    common_source = common_wfs_calibration_source(ast, "Bi-O-edge WFS")
-    ensure_bi_o_edge_calibration!(wfs, pupil, common_source)
-    propagation = bi_o_edge_propagation_workspace(wfs)
-    accumulate_bi_o_edge_asterism_intensity!(
-        execution_style(propagation.intensity), wfs, pupil, ast)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
-        propagation.intensity)
-    return bi_o_edge_signal!(wfs, pupil, intensity, ast)
-end
-
-function measure!(::Diffractive, wfs::BiOEdgeWFS, pupil::PupilFunction, ast::Asterism,
-    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
-    Base.require_one_based_indexing(pupil.opd)
-    common_source = common_wfs_calibration_source(ast, "Bi-O-edge WFS")
-    ensure_bi_o_edge_calibration!(wfs, pupil, common_source, det)
-    propagation = bi_o_edge_propagation_workspace(wfs)
-    accumulate_bi_o_edge_asterism_intensity!(
-        execution_style(propagation.intensity), wfs, pupil, ast)
-    intensity = sample_bi_o_edge_intensity!(wfs, pupil,
-        propagation.intensity)
-    frame = capture!(det, intensity, common_source; rng=rng)
-    resize_bi_o_edge_signal_buffers!(wfs, size(frame, 1), det)
-    normalization_scale = wfs_detector_incidence_scale(det, common_source,
-        eltype(frame))
-    return bi_o_edge_signal!(wfs, pupil, frame, ast, normalization_scale)
+    pad = size(propagation.fft_buffer, 1)
+    padding = propagation.effective_resolution / _pupil_resolution(pupil)
+    pixel_scale = lgs_pixel_scale(_pupil_diameter_m(pupil), padding,
+        wavelength(src))
+    tag = lgs_kernel_signature(
+        pupil,
+        src,
+        pad,
+        wfs.front_end.pupil_samples,
+        pixel_scale,
+        eltype(propagation.intensity);
+        model=:subaperture_average,
+    )
+    if size(propagation.lgs_kernel_fft, 1) == pad &&
+        propagation.lgs_kernel_tag == tag
+        return wfs
+    end
+    propagation.lgs_kernel_fft = lgs_average_kernel_fft(
+        pupil,
+        src,
+        pad,
+        wfs.front_end.pupil_samples,
+        pixel_scale,
+        propagation.fft_buffer,
+        propagation.fft_plan,
+    )
+    propagation.lgs_kernel_tag = tag
+    return wfs
 end

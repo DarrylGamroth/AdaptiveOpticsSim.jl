@@ -106,6 +106,27 @@ function acquire_pyramid_observation!(wfs::PyramidWFS, pupil, source,
     return observation
 end
 
+"""Form a Bi-O-edge four-pupil detector-plane photon-rate product."""
+function form_bi_o_edge_rate!(wfs::BiOEdgeWFS, pupil, source)
+    front_end = BiOEdgeOpticalFrontEnd(wfs, source)
+    rate = bi_o_edge_rate_map(front_end, pupil)
+    optics = prepare_wfs_optics(front_end, pupil, rate)
+    form_wfs_optical_products!(rate, pupil, optics)
+    return rate
+end
+
+"""Form a Bi-O-edge photon-rate frame and acquire its detector observation."""
+function acquire_bi_o_edge_observation!(wfs::BiOEdgeWFS, pupil, source,
+    detector::Detector, rng)
+    rate = form_bi_o_edge_rate!(wfs, pupil, source)
+    observation = WFSObservation(similar(intensity_values(rate));
+        units=:electron_count, layout=:four_pupil_mosaic)
+    acquisition = prepare_wfs_acquisition(detector, rate, observation;
+        source=source)
+    acquire_wfs_observation!(observation, rate, acquisition, rng)
+    return observation
+end
+
 function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     disable_scalar_backend!(B)
     failures = String[]
@@ -649,18 +670,24 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return observation_storage(observation)
     end
 
-    record_gpu_smoke!(failures, "measure_bi_o_edge_geometric") do
-        wfs = BiOEdgeWFS(tel; pupil_samples=4, modulation=0.0, T=T, backend=backend)
-        slopes = measure!(wfs, pupil)
-        @assert slopes isa BackendArray
-        return slopes
+    record_gpu_smoke!(failures, "bi_o_edge_photon_rate") do
+        wfs = BiOEdgeWFS(tel; pupil_samples=4, modulation=0.0, T=T,
+            backend=backend)
+        rate = form_bi_o_edge_rate!(wfs, pupil, src)
+        @assert intensity_values(rate) isa BackendArray
+        @assert all(isfinite, Array(intensity_values(rate)))
+        return intensity_values(rate)
     end
 
-    record_gpu_smoke!(failures, "measure_bi_o_edge_diffractive") do
-        wfs = BiOEdgeWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, src)
-        @assert slopes isa BackendArray
-        return slopes
+    record_gpu_smoke!(failures, "bi_o_edge_detector_acquisition") do
+        wfs = BiOEdgeWFS(tel; pupil_samples=4, modulation=2.0, T=T,
+            backend=backend)
+        det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
+            binning=1, T=T, backend=backend)
+        observation = acquire_bi_o_edge_observation!(
+            wfs, pupil, src, det, rng)
+        @assert observation_storage(observation) isa BackendArray
+        return observation_storage(observation)
     end
 
     record_gpu_smoke!(failures, "measure_zernike_diffractive") do

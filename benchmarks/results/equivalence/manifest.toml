@@ -1,4 +1,4 @@
 [[artifacts]]
-purpose = "historical external-equivalence artifact for retired AOS Pyramid estimation and retained Bi-O-edge estimation"
+purpose = "historical external-equivalence artifact for retired AOS Pyramid and Bi-O-edge estimation"
 id = "OOPAO-EQUIV-2026-04-09"
 path = "2026-04-09-oopao-production-equivalence.toml"

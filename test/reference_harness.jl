@@ -49,8 +49,6 @@ struct ReferenceBundle
     cases::Vector{ReferenceCase}
 end
 
-const OOPAO_BI_O_EDGE_KIND = :bioedge_slopes
-
 abstract type ReferenceStorageConvention end
 
 struct JuliaColumnMajorStorage <: ReferenceStorageConvention end
@@ -956,27 +954,6 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             n_pix_edge=get(cfg, "n_pix_edge", nothing),
             binning=Int(get(cfg, "binning", 1)),
         )
-    elseif kind === OOPAO_BI_O_EDGE_KIND
-        pupil_samples = Int(cfg["pupil_samples"])
-        return BiOEdgeWFS(tel;
-            pupil_samples=pupil_samples,
-            threshold=threshold,
-            modulation=Float64(get(cfg, "modulation", 0.0)),
-            light_ratio=Float64(get(cfg, "light_ratio", 0.0)),
-            normalization=parse_wfs_normalization(get(cfg, "normalization", "mean_valid_flux")),
-            modulation_points=get(cfg, "modulation_points", nothing),
-            extra_modulation_factor=Int(get(cfg, "extra_modulation_factor", 0)),
-            modulation_phase_offset_rad=Float64(get(cfg,
-                "delta_theta", 0.0)),
-            grey_width=Float64(get(cfg, "grey_width", 0.0)),
-            grey_length=get(cfg, "grey_length", false),
-            diffraction_padding=Int(get(cfg, "diffraction_padding", 2)),
-            psf_centering=Bool(get(cfg, "psf_centering", true)),
-            n_pix_separation=get(cfg, "n_pix_separation", nothing),
-            n_pix_edge=get(cfg, "n_pix_edge", nothing),
-            binning=Int(get(cfg, "binning", 1)),
-            mode=mode,
-        )
     elseif kind === :zernike_signal
         pupil_samples = Int(cfg["pupil_samples"])
         return ZernikeWFS(tel;
@@ -1029,8 +1006,7 @@ function compute_reference_actual(case::ReferenceCase)
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
         return copy(reference_direct_image(pupil, src;
             zero_padding=zero_padding))
-    elseif case.kind in (OOPAO_BI_O_EDGE_KIND, :zernike_signal,
-        :curvature_signal)
+    elseif case.kind in (:zernike_signal, :curvature_signal)
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
         src = build_reference_measurement_source(case.config["source"])
