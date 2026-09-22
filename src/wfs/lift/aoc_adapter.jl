@@ -1,11 +1,11 @@
 """
     LiFTForwardModel(forward)
 
-Adapt the run-immutable physical plan of a CPU `PreparedLiFTForward` to
-`AdaptiveOpticsCalibration.PhaseRetrieval`. The adapter does not retain the
-prepared forward owner's OPD input, output, or replaceable scratch. Each
-AdaptiveOpticsCalibration LiFT workspace receives independent AOS physical
-forward scratch.
+Adapt the run-immutable physical plan of a CPU, CUDA, or AMDGPU
+`PreparedLiFTForward` to `AdaptiveOpticsCalibration.PhaseRetrieval`. The
+adapter does not retain the prepared forward owner's OPD input, output, or
+replaceable scratch. Each AdaptiveOpticsCalibration LiFT workspace receives
+independent AOS physical forward scratch.
 """
 struct LiFTForwardModel{T<:AbstractFloat,P<:LiFTForwardPlan{T}} <:
        PhaseRetrieval.AbstractLiFTForwardModel{T}
@@ -22,9 +22,11 @@ struct LiFTForwardModelWorkspace{
 end
 
 @inline _require_lift_calibration_backend(::CPUBackend) = nothing
+@inline _require_lift_calibration_backend(::CUDABackend) = nothing
+@inline _require_lift_calibration_backend(::AMDGPUBackend) = nothing
 function _require_lift_calibration_backend(::AbstractArrayBackend)
     throw(UnsupportedAlgorithm(
-        "AdaptiveOpticsCalibration LiFT integration currently supports CPU LiFT forward models only",
+        "AdaptiveOpticsCalibration LiFT integration supports CPU, CUDA, and AMDGPU LiFT forward models",
     ))
 end
 

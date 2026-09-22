@@ -1,4 +1,5 @@
 [deps]
+AdaptiveOpticsCalibration = "3c8b5851-926e-4ebb-af30-f8544b98d45f"
 AdaptiveOpticsSim = "002fb5eb-ad68-44a0-adbe-b299bfc2febc"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -10,6 +11,7 @@ AdaptiveOpticsSim = {path = "../.."}
 HdrHistogram = {url = "https://github.com/DarrylGamroth/HdrHistogram.jl.git", rev = "cd42987e0739c06d29d20b4341f088b85e7a620c"}
 
 [compat]
+AdaptiveOpticsCalibration = "0.10"
 AdaptiveOpticsSim = "0.1"
 BenchmarkTools = "1"
 CUDA = "6"

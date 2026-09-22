@@ -1,5 +1,7 @@
 using Test
 using AdaptiveOpticsSim
+import AdaptiveOpticsCalibration
+import KernelAbstractions
 using AdaptiveOpticsSim.Optics
 import AdaptiveOpticsSim.Optics: filter!
 using AdaptiveOpticsSim.Backends
@@ -14,6 +16,8 @@ using FixedSizeArrays: FixedSizeVector
 using LinearAlgebra
 using Random
 using Statistics
+
+const AOCPhaseRetrieval = AdaptiveOpticsCalibration.PhaseRetrieval
 
 # Hardware targets exercise qualified-public and internal backend contracts in
 # addition to the routine exported workflow.
