@@ -87,7 +87,12 @@ negative-defocus branch order. For a branch-by-channel detector, the complete
 passes directly without a copy or transpose. Registered FGA 0.5.0 owns the
 support, reference signal, branch scales, calibration signature, and
 differential Curvature estimate. Frozen asymmetric image and channel oracles
-prove that both boundaries produce the same ordered signal, and actual AOS
+use independent positive- and negative-branch patterns, reject reordered
+channels, and prove that both boundaries produce the same ordered signal. The
+AOS-side composing layer keeps each complete acquisition associated with its
+layout, calibration signature, sequence, detector exposure duration, and model
+timestamp through FGA publication. Invalid association metadata is rejected
+before the retained signal or published association changes. Actual AOS
 acquisitions prove the package composition without restoring an estimator to
 AOS core.
 

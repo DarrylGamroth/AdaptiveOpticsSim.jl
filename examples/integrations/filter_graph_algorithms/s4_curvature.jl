@@ -12,14 +12,60 @@ import FilterGraphAlgorithms: process!
 export prepare_s4_curvature
 export produce_s4_curvature_frame!, produce_s4_curvature_channels!
 export process_s4_curvature_image!, process_s4_curvature_channels!
+export step_s4_curvature_frame!, step_s4_curvature_channels!
+export reset_s4_curvature_exchange!
 export transpose_aos_curvature_frame!, frozen_aos_curvature_frame
 export frozen_aos_curvature_channels
+export S4CurvatureObservation, S4CurvatureDisposition
+export S4CurvatureAccepted, S4CurvatureRejectedBlocked
+export S4CurvatureRejectedNoOutstandingObservation
+export S4CurvatureRejectedSequence, S4CurvatureRejectedModelTimestamp
+export S4CurvatureRejectedExposure, S4CurvatureRejectedLayout
+export S4CurvatureRejectedCalibrationSignature, S4CurvatureRejectedEstimator
 
 const _FGA_VERSION_CLAIM = v"0.5.0"
 const _JFG_VERSION_CLAIM = v"0.2.3"
 const _FGA_TREE_CLAIM = "0ce4ceae4904446fba170ee25324d65b435c06e6"
 const _JFG_TREE_CLAIM = "1893cea2d29f0cd89303939308e23ce7546bc240"
 const _CALIBRATION_SIGNATURE = UInt64(0x43555256)
+const _NANOSECONDS_PER_SECOND = Int64(1_000_000_000)
+const _FRAME_LAYOUT = :curvature_branch_regions
+const _CHANNEL_LAYOUT = :curvature_branch_channels
+
+@enum S4CurvatureDisposition::UInt8 begin
+    S4CurvatureAccepted = 0
+    S4CurvatureRejectedBlocked = 1
+    S4CurvatureRejectedNoOutstandingObservation = 2
+    S4CurvatureRejectedSequence = 3
+    S4CurvatureRejectedModelTimestamp = 4
+    S4CurvatureRejectedExposure = 5
+    S4CurvatureRejectedLayout = 6
+    S4CurvatureRejectedCalibrationSignature = 7
+    S4CurvatureRejectedEstimator = 8
+end
+
+"""One complete acquired Curvature observation at the AOS/FGA boundary."""
+struct S4CurvatureObservation{A<:AbstractMatrix,T<:AbstractFloat}
+    values::A
+    layout::Symbol
+    calibration_signature::UInt64
+    sequence::UInt64
+    exposure_duration::T
+    model_timestamp_nanoseconds::Int64
+end
+
+"""Single-writer association state for one Curvature observation layout."""
+mutable struct S4CurvatureExchangeState{T<:AbstractFloat}
+    sequence::UInt64
+    outstanding::Bool
+    blocked::Bool
+    published_sequence::UInt64
+    published_exposure_duration::T
+    published_model_timestamp_nanoseconds::Int64
+end
+
+S4CurvatureExchangeState(::Type{T}) where {T<:AbstractFloat} =
+    S4CurvatureExchangeState(UInt64(0), false, false, UInt64(0), zero(T), Int64(0))
 
 const _FGA_SUPPORT = Bool[
     true false
@@ -46,14 +92,14 @@ end
 frozen_aos_curvature_frame() = Float32[
     10 30
     20 40
-    2 6
-    4 8
+    2 9
+    7 5
 ]
 
 """The same paired branches in AOS branch-by-channel order."""
 frozen_aos_curvature_channels() = Float32[
     10 30 20 40
-    2 6 4 8
+    2 9 7 5
 ]
 
 function _image_owner(; support=_FGA_SUPPORT, reference=_FGA_REFERENCE,
@@ -124,7 +170,9 @@ function _prepare_plant()
     )
     return (; pupil, rates, frame_observation, channel_observation,
         optics_plan, frame_acquisition_plan, channel_acquisition_plan,
-        rng=Xoshiro(0x43555256))
+        rng=Xoshiro(0x43555256),
+        frame_state=S4CurvatureExchangeState(T),
+        channel_state=S4CurvatureExchangeState(T))
 end
 
 """
@@ -152,13 +200,45 @@ function prepare_s4_curvature()
         jfg_tree_claim=_JFG_TREE_CLAIM)
 end
 
+@inline function _model_timestamp_nanoseconds(sequence::UInt64,
+    exposure_duration::AbstractFloat)
+    period = round(Int64,
+        Float64(exposure_duration) * Float64(_NANOSECONDS_PER_SECOND))
+    return Int64(sequence) * period
+end
+
+@inline function _publish_observation!(state::S4CurvatureExchangeState,
+    values::AbstractMatrix, layout::Symbol, exposure_duration::T,
+) where {T<:AbstractFloat}
+    state.blocked && throw(ArgumentError(
+        "the Curvature exchange is blocked; reset is required"))
+    state.outstanding && throw(ArgumentError(
+        "the outstanding Curvature observation must be accepted or reset before acquisition"))
+    sequence = state.sequence + UInt64(1)
+    state.sequence = sequence
+    state.outstanding = true
+    return S4CurvatureObservation(
+        values,
+        layout,
+        _CALIBRATION_SIGNATURE,
+        sequence,
+        exposure_duration,
+        _model_timestamp_nanoseconds(sequence, exposure_duration),
+    )
+end
+
 """Form and acquire one complete packed Curvature detector image in AOS."""
 @inline function produce_s4_curvature_frame!(prepared)
     form_wfs_optical_products!(prepared.rates, prepared.pupil,
         prepared.optics_plan)
     acquire_wfs_observation!(prepared.frame_observation, prepared.rates,
         prepared.frame_acquisition_plan, prepared.rng)
-    return observation_storage(prepared.frame_observation)
+    return _publish_observation!(
+        prepared.frame_state,
+        observation_storage(prepared.frame_observation),
+        _FRAME_LAYOUT,
+        prepared.frame_acquisition_plan.detector_exposure_duration,
+    )
 end
 
 """Form and acquire one complete branch-by-channel Curvature readout in AOS."""
@@ -167,7 +247,12 @@ end
         prepared.optics_plan)
     acquire_wfs_observation!(prepared.channel_observation, prepared.rates,
         prepared.channel_acquisition_plan, prepared.rng)
-    return observation_storage(prepared.channel_observation)
+    return _publish_observation!(
+        prepared.channel_state,
+        observation_storage(prepared.channel_observation),
+        _CHANNEL_LAYOUT,
+        prepared.channel_acquisition_plan.detector_exposure_duration,
+    )
 end
 
 """Transpose a complete AOS packed image and run the FGA paired-image plan."""
@@ -181,6 +266,117 @@ end
 @inline function process_s4_curvature_channels!(owner, aos_channels)
     return process!(owner.signal, owner.workspace, owner.plan, aos_channels,
         owner.signature)
+end
+
+@inline function _reject_curvature!(state::S4CurvatureExchangeState,
+    disposition::S4CurvatureDisposition)
+    state.blocked = true
+    return disposition
+end
+
+@inline function _validate_curvature_observation!(
+    state::S4CurvatureExchangeState,
+    observation::S4CurvatureObservation,
+    expected_layout::Symbol,
+    expected_exposure_duration::AbstractFloat,
+)
+    state.blocked && return S4CurvatureRejectedBlocked
+    state.outstanding || return _reject_curvature!(state,
+        S4CurvatureRejectedNoOutstandingObservation)
+    observation.sequence == state.sequence || return _reject_curvature!(state,
+        S4CurvatureRejectedSequence)
+    expected_timestamp = _model_timestamp_nanoseconds(
+        observation.sequence, expected_exposure_duration)
+    observation.model_timestamp_nanoseconds == expected_timestamp ||
+        return _reject_curvature!(state,
+            S4CurvatureRejectedModelTimestamp)
+    isequal(observation.exposure_duration, expected_exposure_duration) ||
+        return _reject_curvature!(state, S4CurvatureRejectedExposure)
+    observation.layout === expected_layout || return _reject_curvature!(state,
+        S4CurvatureRejectedLayout)
+    observation.calibration_signature == _CALIBRATION_SIGNATURE ||
+        return _reject_curvature!(state,
+            S4CurvatureRejectedCalibrationSignature)
+    return S4CurvatureAccepted
+end
+
+@inline function _accept_curvature!(state::S4CurvatureExchangeState,
+    observation::S4CurvatureObservation)
+    state.published_sequence = observation.sequence
+    state.published_exposure_duration = observation.exposure_duration
+    state.published_model_timestamp_nanoseconds =
+        observation.model_timestamp_nanoseconds
+    state.outstanding = false
+    return S4CurvatureAccepted
+end
+
+"""Validate an acquired image's association and run the FGA image estimator."""
+@inline function process_s4_curvature_image!(prepared,
+    observation::S4CurvatureObservation)
+    state = prepared.frame_state
+    disposition = _validate_curvature_observation!(
+        state,
+        observation,
+        _FRAME_LAYOUT,
+        prepared.frame_acquisition_plan.detector_exposure_duration,
+    )
+    disposition === S4CurvatureAccepted || return disposition
+    process_s4_curvature_image!(prepared.plant_fga_frame,
+        prepared.plant_image, observation.values) === nothing ||
+        return _reject_curvature!(state, S4CurvatureRejectedEstimator)
+    return _accept_curvature!(state, observation)
+end
+
+"""Validate acquired channels' association and run the FGA channel estimator."""
+@inline function process_s4_curvature_channels!(prepared,
+    observation::S4CurvatureObservation)
+    state = prepared.channel_state
+    disposition = _validate_curvature_observation!(
+        state,
+        observation,
+        _CHANNEL_LAYOUT,
+        prepared.channel_acquisition_plan.detector_exposure_duration,
+    )
+    disposition === S4CurvatureAccepted || return disposition
+    process_s4_curvature_channels!(prepared.plant_channels,
+        observation.values) === nothing ||
+        return _reject_curvature!(state, S4CurvatureRejectedEstimator)
+    return _accept_curvature!(state, observation)
+end
+
+"""Run one associated AOS-image/FGA-estimator Curvature step."""
+@inline function step_s4_curvature_frame!(prepared)
+    observation = produce_s4_curvature_frame!(prepared)
+    disposition = process_s4_curvature_image!(prepared, observation)
+    disposition === S4CurvatureAccepted || error(
+        "the internally formed Curvature image was rejected with $disposition")
+    return observation.sequence
+end
+
+"""Run one associated AOS-channel/FGA-estimator Curvature step."""
+@inline function step_s4_curvature_channels!(prepared)
+    observation = produce_s4_curvature_channels!(prepared)
+    disposition = process_s4_curvature_channels!(prepared, observation)
+    disposition === S4CurvatureAccepted || error(
+        "the internally formed Curvature channels were rejected with $disposition")
+    return observation.sequence
+end
+
+@inline function _reset_curvature_state!(state::S4CurvatureExchangeState)
+    state.sequence = UInt64(0)
+    state.outstanding = false
+    state.blocked = false
+    state.published_sequence = UInt64(0)
+    state.published_exposure_duration = zero(state.published_exposure_duration)
+    state.published_model_timestamp_nanoseconds = Int64(0)
+    return state
+end
+
+"""Reset Curvature frame/channel association state without replacing storage."""
+function reset_s4_curvature_exchange!(prepared)
+    _reset_curvature_state!(prepared.frame_state)
+    _reset_curvature_state!(prepared.channel_state)
+    return prepared
 end
 
 end # module AOSFGACurvature
