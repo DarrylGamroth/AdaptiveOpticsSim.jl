@@ -17,8 +17,11 @@ The Julia 1.12 CPU baseline includes:
 - Kolmogorov, finite multilayer, and infinite multilayer atmosphere evolution
   plus direction rendering/batching
 - Shack-Hartmann and Pyramid physical formation and acquisition, plus the
-  retained Bi-O-edge, Zernike, Curvature, and LiFT workflows within the limits recorded in
-  [`model-validity-matrix.md`](model-validity-matrix.md)
+  retained Bi-O-edge, Zernike, and Curvature estimators and LiFT forward/inverse
+  workflow within the limits recorded in
+  [`model-validity-matrix.md`](model-validity-matrix.md); these remain supported
+  until their approved target releases are adopted, and weighted-centroid
+  estimation is not an AOS surface
 - conventional frame and counting/channel detector families covered by their
   registered suites
 - plant-side calibration observables, reusable AOC inverse products, and

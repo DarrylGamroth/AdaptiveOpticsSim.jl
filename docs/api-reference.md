@@ -123,7 +123,13 @@ metadata and units.
 
 The AOS Shack–Hartmann and Pyramid surfaces implement stages 1 and 2 only.
 Their complete detector observations are package boundaries; maintained
-operational estimation is provided by FilterGraphAlgorithms. The explicitly named
+operational estimation is provided by FilterGraphAlgorithms. Bi-O-edge,
+Zernike, and Curvature retain all three AOS stages until their approved FGA
+complete-frame targets are released, parity-tested, and adopted. LiFT retains
+its AOS physical forward and inverse APIs until its approved
+AdaptiveOpticsCalibration inverse target is released and adopted; LiFT is a
+phase-retrieval workflow, not a slope or centroid estimator. AOS has no
+weighted-centroid estimator or graph surface. The explicitly named
 `geometric_wavefront_slopes!` operation remains available for plant truth and
 reference calculations, not as a detector-derived RTC measurement.
 

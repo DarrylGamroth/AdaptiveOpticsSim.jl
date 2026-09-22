@@ -40,7 +40,7 @@ vocabulary plus the modules themselves:
 | `Optics` | telescope/source geometry, optical products and planes, propagation, direct imaging, NCPA, deformable mirrors and other physical optics |
 | `Atmospheres` | turbulence definitions/state, evolution, source-direction rendering and batches |
 | `Detectors` | detector response, sensor families, acquisition, readout, products |
-| `WavefrontSensors` | composed WFS optics, observations, measurements, estimators |
+| `WavefrontSensors` | composed WFS optics, observations, measurements, retained Bi-O-edge/Zernike/Curvature estimators, and LiFT |
 | `Calibration` | simulated response acquisition, physical calibration observables, bases, fitting and identification; reusable inverse methods and products come from AdaptiveOpticsCalibration |
 | `Tomography` | guide-star geometry, atmospheric reconstruction, fitting, DM projection |
 | `Ensembles` | coarse independent runs and optional offline scheduling |
@@ -79,10 +79,13 @@ Domain operations keep specific verbs such as `render_atmosphere!`,
 universal package-wide `process!` interface.
 
 These verbs are capability-specific, not promises that every sensor family
-implements every stage. In particular, AOS Shack–Hartmann execution stops at
-the complete detector observation; FGA owns its maintained operational
-estimator. `geometric_wavefront_slopes!` is an explicitly named plant
-truth/reference calculation.
+implements every stage. AOS Shack–Hartmann and Pyramid execution stops at the
+complete detector observation; FGA owns their maintained operational
+estimators. Bi-O-edge, Zernike, and Curvature retain AOS estimators until their
+approved FGA targets are released and adopted. LiFT retains its physical
+forward and inverse workflow until its approved AdaptiveOpticsCalibration
+inverse target is released and adopted. `geometric_wavefront_slopes!` is an
+explicitly named plant truth/reference calculation.
 
 Direct Julia composition is the unrestricted modeling surface. It owns explicit
 ordering when a scenario has generated topology, multiple cadences, conditional

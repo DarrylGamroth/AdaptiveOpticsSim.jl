@@ -99,8 +99,12 @@ Shack–Hartmann and complete-frame Pyramid plant/RTC references.
 
 The legacy AOS closed-loop scripts and tutorials were retired. Bi-O-edge and
 Zernike RTC composition belongs in a downstream package with its calibration
-and acceptance evidence; the combined Subaru AO188/AO3k model likewise moves
-to a downstream instrument package.
+and acceptance evidence; AOS retains their current detector-frame estimators,
+and the Curvature estimator, until the corresponding FGA targets are released
+and adopted. AOS retains the LiFT forward model and retains its inverse workflow
+until the AdaptiveOpticsCalibration target is released and adopted. The
+combined Subaru AO188/AO3k model likewise moves to a downstream instrument
+package.
 
 The main modeling objects are:
 
@@ -142,7 +146,9 @@ julia --project=. examples/tutorials/detector.jl
 For the maintained Shack–Hartmann closed-loop reference and Pyramid
 plant-to-command reference, use `examples/integrations/filter_graph_algorithms/`
 with its documented cross-package environment. Bi-O-edge and Zernike RTC
-composition is not an AOS tutorial surface.
+composition is not an AOS tutorial surface. Curvature RTC composition is
+likewise downstream; LiFT remains a distinct AOS forward and phase-retrieval
+tutorial while its calibration-package inverse target is pending.
 To verify the maintained core examples as a group, run:
 
 ```bash
