@@ -33,7 +33,6 @@ export zernike_rate_map
 export CurvatureOpticalFrontEnd
 export curvature_rate_maps
 export CurvaturePackedAcquisition
-export set_zernike_calibration!
 export set_curvature_calibration!
 export ShackHartmannWFS
 export PyramidWFS
@@ -123,8 +122,6 @@ public PreparedBiOEdgeOptics
 public PreparedBiOEdgeOpticsBundle
 public ZernikeOpticsPlan
 public PreparedZernikeOptics
-public ZernikeEstimationPlan
-public PreparedZernikeEstimator
 public CurvatureOpticsPlan
 public PreparedCurvatureOptics
 public CurvatureEstimationPlan

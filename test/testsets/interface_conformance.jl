@@ -125,7 +125,11 @@
     bio_optics = prepare_wfs_optics(bio_front_end, pupil, bio_rate)
     @test applicable(form_wfs_optical_products!, bio_rate, pupil,
         bio_optics)
-    assert_wfs_interface(zwfs, tel)
+    @test !applicable(update_valid_mask!, zwfs, pupil)
+    @test !applicable(measure!, zwfs, pupil)
+    @test !applicable(slopes, zwfs)
+    @test !supports_valid_subaperture_mask(zwfs)
+    @test !supports_reference_signal(zwfs)
     assert_wfs_interface(curv, tel)
     assert_wfs_interface(curv_count, tel)
     @test supports_valid_subaperture_mask(wfs)
@@ -178,7 +182,10 @@
     @test supports_grouped_execution(pyr, poly)
     @test supports_grouped_execution(bio, ast)
     prepare_runtime_wfs!(zwfs, pupil, src)
-    @test zwfs.estimator.state.calibrated
+    zernike_front_end = ZernikeOpticalFrontEnd(zwfs, src)
+    zernike_rate = zernike_rate_map(zernike_front_end, pupil)
+    zernike_optics = prepare_wfs_optics(zernike_front_end, pupil, zernike_rate)
+    @test applicable(form_wfs_optical_products!, zernike_rate, pupil, zernike_optics)
     prepare_runtime_wfs!(curv, pupil, src)
     @test curv.estimator.state.calibrated
 end

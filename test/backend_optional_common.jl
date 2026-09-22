@@ -799,65 +799,6 @@ function run_optional_sodium_layer_profile_wfs(::Type{B},
     return nothing
 end
 
-function run_optional_zernike_normalization(
-    ::Type{B}, BackendArray) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
-    selector = backend_selector(B)
-    T = Float32
-    cpu_tel = Telescope(resolution=16, diameter=T(8),
-        central_obstruction=zero(T), T=T, backend=CPUBackend())
-    gpu_tel = Telescope(resolution=16, diameter=T(8),
-        central_obstruction=zero(T), T=T, backend=selector)
-    cpu_pupil = PupilFunction(cpu_tel; T=T, backend=CPUBackend())
-    gpu_pupil = PupilFunction(gpu_tel; T=T, backend=selector)
-    src = Source(band=:custom, wavelength=T(0.75e-6),
-        photon_irradiance=T(10), T=T)
-    normalization_scale = T(0.375)
-    frame_host = reshape(collect(range(T(0.25), T(2); length=16)),
-        4, 4)
-
-    for normalization in (MeanValidFluxNormalization(),
-            IncidenceFluxNormalization())
-        cpu_wfs = ZernikeWFS(cpu_tel; pupil_samples=8, binning=2,
-            normalization=normalization, T=T, backend=CPUBackend())
-        gpu_wfs = ZernikeWFS(gpu_tel; pupil_samples=8, binning=2,
-            normalization=normalization, T=T, backend=selector)
-        fill!(cpu_wfs.estimator.state.reference_signal_2d, zero(T))
-        fill!(gpu_wfs.estimator.state.reference_signal_2d, zero(T))
-        frame = BackendArray(copy(frame_host))
-
-        expected_normalization = AdaptiveOpticsSim.WavefrontSensors.zernike_normalization(
-            normalization, cpu_wfs, cpu_pupil, src, frame_host,
-            normalization_scale)
-        actual_normalization = AdaptiveOpticsSim.WavefrontSensors.zernike_normalization(
-            normalization, gpu_wfs, gpu_pupil, src, frame,
-            normalization_scale)
-        @test actual_normalization ≈ expected_normalization rtol=T(2e-5)
-
-        expected = copy(AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(cpu_wfs,
-            cpu_pupil, frame_host, src, normalization_scale))
-        actual = AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(gpu_wfs, gpu_pupil,
-            frame, src, normalization_scale)
-        AdaptiveOpticsSim.Backends.synchronize_backend!(
-            AdaptiveOpticsSim.Backends.execution_style(actual))
-        @test gpu_wfs.estimator.workspace.normalization_sum isa BackendArray
-        @test actual isa BackendArray
-        @test Array(actual) ≈ expected rtol=T(2e-5) atol=T(2e-6)
-    end
-
-    zero_src = Source(band=:custom, wavelength=wavelength(src),
-        photon_irradiance=zero(T), T=T)
-    zero_wfs = ZernikeWFS(gpu_tel; pupil_samples=8, binning=2,
-        normalization=IncidenceFluxNormalization(), T=T,
-        backend=selector)
-    fill!(zero_wfs.estimator.state.reference_signal_2d, zero(T))
-    zero_signal = AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(zero_wfs, gpu_pupil,
-        BackendArray(copy(frame_host)), zero_src, one(T))
-    AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(zero_signal))
-    @test all(iszero, Array(zero_signal))
-    @test all(isfinite, Array(zero_signal))
-    return nothing
-end
 
 function run_optional_generic_wfs_acquisition_checks(
     ::Type{B}, BackendArray) where {
@@ -1368,21 +1309,8 @@ function run_optional_zernike_curvature_stages(
         gpu_zernike_rate, zernike_observation)
     acquire_wfs_observation!(zernike_observation, gpu_zernike_rate,
         zernike_acquisition, Xoshiro(0x5a47))
-    zernike_reference = similar(gpu_zernike.estimator.workspace.signal_2d)
-    fill!(zernike_reference, zero(T))
-    set_zernike_calibration!(gpu_zernike, zernike_reference;
-        wavelength_m=wavelength(source), signature=UInt(0x5a47))
-    zernike_measurement = WFSMeasurement(similar(slopes(gpu_zernike));
-        units=:dimensionless, kind=:normalized_pupil_signal)
-    zernike_estimator = prepare_wfs_estimation(gpu_zernike,
-        zernike_observation, zernike_measurement; source=source)
-    estimate_wfs_measurement!(zernike_measurement, zernike_observation,
-        zernike_estimator)
-    AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(zernike_measurement.storage))
     @test zernike_observation.storage isa BackendArray
-    @test zernike_measurement.storage isa BackendArray
-    @test all(isfinite, Array(zernike_measurement.storage))
+    @test all(isfinite, Array(zernike_observation.storage))
 
     cpu_curvature = CurvatureWFS(cpu_tel; pupil_samples=4, T=T)
     gpu_curvature = CurvatureWFS(gpu_tel; pupil_samples=4, T=T,
@@ -1443,14 +1371,18 @@ function run_optional_zernike_curvature_stages(
         packed_acquisition, Xoshiro(0x4356))
     packed_host = Array(packed_observation.storage)
     @test packed_observation.storage isa BackendArray
-    @test isapprox(packed_host[1:4, :], Array(gpu_rates[1].values) .* T(0.125);
+    @test isapprox(packed_host[1:4, :],
+        Array(gpu_rates[1].values) .* T(0.125);
         rtol=T(3e-5), atol=T(3e-5))
-    @test isapprox(packed_host[5:8, :], Array(gpu_rates[2].values) .* T(0.125);
+    @test isapprox(packed_host[5:8, :],
+        Array(gpu_rates[2].values) .* T(0.125);
         rtol=T(3e-5), atol=T(3e-5))
 
-    spad = SPADArrayDetector((2, 16); exposure_duration=T(0.25), noise=NoiseNone(),
-        sensor=SPADArraySensor(active_area_detection_efficiency=T(0.5), dark_count_rate=zero(T),
-            fill_factor=one(T)), T=T, backend=selector)
+    spad = SPADArrayDetector((2, 16); exposure_duration=T(0.25),
+        noise=NoiseNone(),
+        sensor=SPADArraySensor(active_area_detection_efficiency=T(0.5),
+            dark_count_rate=zero(T), fill_factor=one(T)),
+        T=T, backend=selector)
     counting_model = CurvaturePackedAcquisition(spad;
         readout_model=CurvatureChannelReadout(), source=source)
     counting_storage = similar(gpu_rates[1].values, T, 2, 16)
@@ -3503,7 +3435,6 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_backend_selector_smoke(B, backend)
     run_optional_lgs_convolution_normalization(B)
     run_optional_sodium_layer_profile_wfs(B, backend)
-    run_optional_zernike_normalization(B, backend)
     run_optional_generic_wfs_acquisition_checks(B, backend)
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_pyramid_shifted_mask_checks(B, backend)

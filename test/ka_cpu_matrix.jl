@@ -515,49 +515,6 @@ end
         @test ka_converted_rate_map == scalar_converted_rate_map
     end
 
-    @testset "Zernike estimator kernels" begin
-        T = Float64
-        tel = Telescope(resolution=16, diameter=T(8),
-            central_obstruction=zero(T), T=T)
-        pupil = PupilFunction(tel; T=T)
-        source = Source(band=:custom, wavelength=T(0.75e-6),
-            photon_irradiance=T(10), T=T)
-        frame = reshape(collect(range(T(0.25), T(2); length=16)), 4, 4)
-        normalization_scale = T(0.375)
-
-        for normalization in (MeanValidFluxNormalization(),
-                IncidenceFluxNormalization())
-            scalar_sensor = ZernikeWFS(tel; pupil_samples=8, binning=2,
-                normalization=normalization, T=T)
-            ka_sensor = ZernikeWFS(tel; pupil_samples=8, binning=2,
-                normalization=normalization, T=T)
-            fill!(scalar_sensor.estimator.state.reference_signal_2d, zero(T))
-            fill!(ka_sensor.estimator.state.reference_signal_2d, zero(T))
-
-            scalar_signal = copy(WavefrontSensors.zernike_signal!(
-                SCALAR_CPU_STYLE, scalar_sensor, pupil, frame, source,
-                normalization_scale))
-            ka_signal = copy(WavefrontSensors.zernike_signal!(
-                KA_CPU_STYLE, ka_sensor, pupil, frame, source,
-                normalization_scale))
-            @test ka_cpu_close(ka_signal, scalar_signal)
-
-            scalar_stage_signal = copy(
-                WavefrontSensors._estimate_zernike_signal!(
-                    SCALAR_CPU_STYLE, scalar_sensor, frame, source,
-                    normalization_scale))
-            ka_stage_signal = copy(WavefrontSensors._estimate_zernike_signal!(
-                KA_CPU_STYLE, ka_sensor, frame, source,
-                normalization_scale))
-            @test ka_cpu_close(ka_stage_signal, scalar_stage_signal)
-        end
-        mark_ka_cpu_kernel!(
-            :bin2d_abs2_kernel!,
-            :gather_zernike_signal_kernel!,
-            :zernike_signal_kernel!,
-        )
-    end
-
     @testset "Grouped and Shack-Hartmann stack kernels" begin
         stack = reshape(collect(1.0:48.0), 4, 4, 3)
         scalar_group = Matrix{Float64}(undef, 4, 4)
@@ -630,21 +587,6 @@ end
         host_parent = zeros(Float64, size(values)...)
         @test first(AdaptiveOpticsSim.Backends.masked_sum2d(KA_CPU_STYLE, values_view, mask, mask,
             scalar_buffer, scalar_host, host_parent)) == 8.0
-        normalization_partials = zeros(Float64, size(values, 1))
-        normalization_sum = zeros(Float64, 1)
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.WavefrontSensors.zernike_masked_row_sum_kernel!,
-            normalization_partials, values, mask, size(values, 1),
-            size(values, 2); ndrange=size(values, 1))
-        AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE,
-            AdaptiveOpticsSim.WavefrontSensors.zernike_finalize_normalization_sum_kernel!,
-            normalization_sum, normalization_partials,
-            length(normalization_partials); ndrange=1)
-        mark_ka_cpu_kernel!(
-            :zernike_masked_row_sum_kernel!,
-            :zernike_finalize_normalization_sum_kernel!,
-        )
-        @test only(normalization_sum) == 8.0
         @test AdaptiveOpticsSim.Backends.backend_maximum_value(KA_CPU_STYLE, values) == 4.0
         signal = collect(1.0:8.0)
         @test AdaptiveOpticsSim.Backends.packed_valid_pair_mean(KA_CPU_STYLE, signal, mask) ==

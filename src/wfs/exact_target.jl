@@ -826,52 +826,6 @@ function _require_exact_wfs_target(
     return plan
 end
 
-function _require_exact_wfs_target(
-    plan::PreparedZernikeEstimator,
-    target::AbstractComputeDevice,
-)
-    validate_wfs_estimation_binding(
-        plan.measurement, plan.input, plan)
-    _require_exact_wfs_observation_target(plan.input, target, :estimation)
-    _require_exact_wfs_measurement_target(plan.measurement, target)
-    state = plan.state
-    workspace = plan.workspace
-    products = plan.products
-    _require_exact_wfs_array_targets(
-        (
-            state.valid_mask,
-            state.reference_signal_2d,
-        ),
-        (
-            "Zernike valid mask",
-            "Zernike calibration reference",
-        ),
-        target,
-        :estimation,
-    )
-    _require_exact_wfs_array_targets(
-        (
-            workspace.valid_signal_indices,
-            workspace.signal_2d,
-            workspace.normalization_frame,
-            workspace.normalization_partials,
-            workspace.normalization_sum,
-        ),
-        (
-            "Zernike valid-signal indices",
-            "Zernike signal",
-            "Zernike normalization frame",
-            "Zernike normalization partials",
-            "Zernike normalization sum",
-        ),
-        target,
-        :estimation,
-    )
-    _require_exact_wfs_storage_target(products.signal, target,
-        :estimation, "Zernike signal product")
-    return plan
-end
-
 function _require_exact_curvature_mapping_target(
     mapping::CurvatureImagePairMapping,
     target::AbstractComputeDevice,

@@ -250,6 +250,29 @@ portability profile. The measured replay is marked as
 ROCTx profiler controls, so vendor tools can select only the warmed repeated
 region.
 
+Use the same procedure for the retained Zernike phase-spot plant boundary:
+
+~~~bash
+ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  julia --project=. --startup-file=no \
+  scripts/profile_zernike_plant_runtime.jl
+
+ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  julia --project=test/cuda --startup-file=no \
+  scripts/profile_zernike_plant_runtime.jl
+
+ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  julia --project=test/amdgpu --startup-file=no \
+  scripts/profile_zernike_plant_runtime.jl
+~~~
+
+This driver includes only phase-spot optical formation and complete noiseless
+detector acquisition. Registered FGA evidence covers Zernike pupil-signal
+estimation and captured CUDA/HIP Graph replay. The AOS direct-stream driver
+makes no standalone Zernike plant graph-capture claim. Its selected profiler
+region is `aos_zernike_plant`.
+
 ## Release Entry Point
 
 ~~~bash

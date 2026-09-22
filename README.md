@@ -97,12 +97,12 @@ FilterGraphAlgorithms/JuliaFilterGraph owns reconstruction, controller state,
 frame delay, and VDM/PDM routing. The fixture contains maintained
 Shack–Hartmann and complete-frame Pyramid plant/RTC references.
 
-The legacy AOS closed-loop scripts and tutorials were retired. Bi-O-edge RTC
-composition belongs in a downstream package with its calibration and acceptance
-evidence: AOS supplies the physical optics and complete detector acquisition,
-while registered FilterGraphAlgorithms v0.3.0 and JuliaFilterGraph v0.2.1 own
-signal estimation and RTC processing. AOS retains the Zernike and Curvature
-estimators until their corresponding FGA targets are released and adopted. AOS
+The legacy AOS closed-loop scripts and tutorials were retired. Bi-O-edge and
+Zernike RTC composition belongs in a downstream package with its calibration
+and acceptance evidence: AOS supplies the physical optics and complete detector
+acquisition, while registered FilterGraphAlgorithms and JuliaFilterGraph own
+signal estimation and RTC processing. AOS retains the Curvature estimator until
+its corresponding FGA target is released and adopted. AOS
 retains the LiFT forward model and retains its inverse workflow
 until the AdaptiveOpticsCalibration target is released and adopted. The
 combined Subaru AO188/AO3k model likewise moves to a downstream instrument
@@ -145,7 +145,7 @@ julia --project=. examples/tutorials/image_formation.jl
 julia --project=. examples/tutorials/detector.jl
 ```
 
-For the maintained Shack–Hartmann, Pyramid, and Bi-O-edge plant/RTC references,
+For the maintained Shack–Hartmann, Pyramid, Bi-O-edge, and Zernike plant/RTC references,
 use `examples/integrations/filter_graph_algorithms/` with its documented
 cross-package environment. Bi-O-edge and Zernike RTC composition is not an AOS
 tutorial surface. Curvature RTC composition is

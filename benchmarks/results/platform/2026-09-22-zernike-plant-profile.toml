@@ -1,0 +1,190 @@
+artifact_id = "S4-ZERNIKE-PLANT-PROFILE-2026-09-22"
+generated_on = "2026-09-22"
+purpose = "CPU, CUDA-primary, and AMDGPU-secondary profile of the retained AdaptiveOpticsSim Zernike phase-spot plant boundary"
+source_revision = "2c15bc97eba8bf158c253fae877aad0a556ea220"
+source_was_clean_for_exact_revision_runs = true
+evidence_class = "warmed synchronized allocation gate, CPU sampling and counters, and selected-region GPU profiles"
+claim_boundary = "AOS Zernike phase-spot optics and noiseless detector acquisition only; registered FGA owns pupil-signal estimation"
+optimization_priority = "CUDA primary; AMDGPU secondary portability and qualification"
+
+[contract]
+workload = "64-by-64 Float32 pupil through padded phase-spot diffraction, 16-by-16 pupil photon-rate formation, and noiseless detector acquisition"
+element_type = "Float32"
+pupil_resolution = 64
+pupil_samples = 16
+diffraction_padding = 2
+detector_frame_shape = [16, 16]
+warmup_steps = 20
+unprofiled_steps = 1000
+completion_boundary = "backend synchronization after every complete optics-plus-acquisition step"
+correctness_oracle = "finite positive acquired detector observation with the same deterministic output sum on CPU, CUDA, and AMDGPU within Float32 rounding"
+cpu_heap_allocation_budget_bytes_per_step = 0
+cpu_heap_allocation_bytes_per_step = 0
+gpu_stream_contract = "direct synchronized stream launch; Julia GPU-runtime launch bookkeeping is measured and reported, not claimed zero"
+captured_graph_contract = "registered FGA Zernike estimator replay allocates zero warmed host bytes including completion and keeps device memory stable; this AOS plant slice makes no standalone Zernike graph-capture claim"
+
+[environment]
+host = "rtc-devel"
+os = "Linux 6.12.107+deb13-amd64 x86_64"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_cores = 8
+cpu_threads = 16
+cpu_governor = "powersave"
+julia = "1.12.7"
+julia_threads = 1
+blas_threads = 1
+shared_host_note = "Other Julia language-service workloads were active on the shared host; the measurements are diagnostic profiles rather than real-time limits."
+
+[environment.cuda]
+device = "NVIDIA GeForce RTX 3080"
+compute_capability = "8.6"
+driver = "615.71.09"
+runtime = "CUDA 13.4.0"
+cuda_jl = "6.4.0"
+nsight_systems = "2026.3.2"
+nsight_compute = "2026.3.1"
+
+[environment.amdgpu]
+device = "AMD Radeon Graphics (Radeon 680M)"
+compiled_architecture = "gfx1030"
+hardware_architecture = "gfx1035"
+wavefront_size = 32
+compute_units = 12
+runtime = "ROCm 7.2.1 / HIP 7.2.53211"
+amdgpu_jl = "2.8.0"
+rocprofiler = "rocprofv3 1.1.0"
+
+[cpu]
+unprofiled_steps = 1000
+unprofiled_mean_nanoseconds = 187199.377
+long_run_mean_nanoseconds = [171520.34774, 163436.16279, 182825.03199]
+heap_allocation_bytes_per_step = 0
+output_sum = 8.964318e6
+sampling_profile_steps = 5000
+sampling_profile_snapshots = 932
+sampling_profile_utilization_percent = 100.0
+sampling_profile_interpretation = "FFTW execution dominates the sampled plant step, followed by pupil-field formation broadcasts and binning; no GC path appeared in the warmed measured region."
+
+[cpu.hardware_counters]
+tool = "Linux perf stat"
+measurement = "three complete processes with 100000 warmed measured steps each; counters include Julia startup and preparation because the driver has no perf-event ROI marker"
+cycles = 94305941269
+instructions = 235151910939
+instructions_per_cycle = 2.49
+branches = 12177256792
+branch_misses = 174069958
+branch_miss_percent = 1.43
+cache_references = 13034877285
+cache_misses = 684946628
+cache_miss_percent = 5.25
+page_faults = 52084
+context_switches = 128
+cpu_migrations = 5
+counter_multiplexing_percent = 83.34
+relative_standard_deviation_percent = 3.45
+interpretation = "Process-wide causal context only. The sampling profile, zero-allocation gate, and internally timed region characterize the warmed plant step."
+
+[cuda]
+unprofiled_steps = 1000
+unprofiled_mean_nanoseconds = 230412.867
+stream_host_allocation_bytes_per_step = 21776
+output_sum = 8.964317e6
+interpretation = "Primary GPU result. The small complete-frame workload is launch dominated and direct stream execution does not satisfy a captured-graph zero-host-allocation contract."
+
+[cuda.nsight_systems]
+profiled_steps = 1000
+capture_range = "cuProfilerStart through cuProfilerStop around the warmed repeated plant region"
+profiled_mean_nanoseconds = 3144466.878
+kernel_dispatches = 13000
+kernel_dispatches_per_step = 13.0
+device_to_device_copies = 6000
+stream_synchronizations = 2000
+aggregate_gpu_kernel_time_nanoseconds = 30120924
+aggregate_gpu_kernel_time_per_step_nanoseconds = 30120.924
+hottest_kernel_family = "cuFFT regular_fft length 128"
+hottest_family_calls = 2000
+hottest_family_total_nanoseconds = 7763835
+hottest_family_kernel_time_percent = 25.8
+hottest_family_mean_nanoseconds = 3881.9
+interpretation = "Timeline instrumentation perturbs wall time. Thirteen small kernels and six device-to-device copies per step leave launch and completion overhead as the main CUDA-primary tuning opportunity."
+
+[cuda.nsight_compute]
+selection = "all 13 kernels in one selected Zernike plant step"
+replay_passes_per_kernel = 45
+local_spill_requests = 0
+shared_spill_requests = 0
+hottest_aggregate_kernel = "regular_fft length 128"
+hottest_kernel_duration_microseconds = [5.088, 5.056]
+hottest_kernel_grid_blocks = 4
+hottest_kernel_threads_per_block = 256
+hottest_kernel_registers_per_thread = 64
+hottest_kernel_dynamic_shared_memory_kibibytes_per_block = 16.0
+hottest_kernel_compute_throughput_percent_of_sustained_peak = [1.10, 1.11]
+hottest_kernel_theoretical_occupancy_percent = 66.67
+hottest_kernel_achieved_occupancy_percent = [16.60, 16.89]
+hottest_kernel_l2_hit_rate_percent = [63.49, 63.60]
+interpretation = "The transforms and one-block 16-by-16 binning kernel underfill 68 SMs. This is a batching and launch-fusion opportunity for larger composed workloads, not evidence for changing the physical model."
+timing_caveat = "Counter replay perturbs duration; compare service time with the clean unprofiled CUDA run."
+
+[amdgpu]
+unprofiled_steps = 1000
+unprofiled_mean_nanoseconds = 364577.677
+stream_host_allocation_bytes_per_step = 30208
+output_sum = 8.964319e6
+interpretation = "Secondary portability result; direct HIP stream execution is functionally qualified but slower than CUDA for this workload."
+
+[amdgpu.rocprofiler]
+profiled_steps = 1000
+capture_range = "roctxProfilerResume through roctxProfilerPause around the warmed repeated plant region"
+profiled_mean_nanoseconds = 760516.839
+kernel_dispatches_including_copy_kernels = 21000
+kernel_dispatches_including_copy_kernels_per_step = 21.0
+aggregate_gpu_kernel_time_nanoseconds = 57011976
+aggregate_gpu_kernel_time_per_step_nanoseconds = 57011.976
+hottest_kernel_family = "__amd_rocclr_copyBuffer"
+hottest_family_calls = 8000
+hottest_family_total_nanoseconds = 13265847
+hottest_family_kernel_time_percent = 23.27
+largest_scientific_kernel_family = "GPUArrays complex broadcast"
+largest_scientific_family_calls = 2000
+largest_scientific_family_total_nanoseconds = 9618690
+largest_scientific_family_kernel_time_percent = 16.87
+hip_api_total_nanoseconds = 213718824
+interpretation = "Runtime tracing is the AMDGPU-secondary attribution result. No AMD-focused counter optimization claim is made."
+
+[captured_graph_evidence]
+fga_artifact = "FilterGraphAlgorithms benchmark/results/zernike-pupil-signal-profile-2026-09-22.toml at source revision fe586b61c3cc2a119e6932e3c3071ba4e85730f9"
+fga_scope = "registered FGA 0.4 Zernike pupil-signal estimator; CUDA and HIP captured replay allocate zero host bytes including completion and keep device memory stable"
+fga_cuda_native_graph_nodes = 3
+fga_cuda_host_allocation_bytes = 0
+fga_cuda_device_memory_stable = true
+fga_amdgpu_native_graph_nodes = 3
+fga_amdgpu_host_allocation_bytes = 0
+fga_amdgpu_device_memory_stable = true
+integration_scope = "the registered AOS/FGA fixture validates the CPU acquired-frame boundary; it does not claim a device-resident or captured cross-package bridge"
+
+[registered_integration]
+filter_graph_algorithms_version = "0.4.0"
+filter_graph_algorithms_tree = "598a10402690250190ad1dd976b03577281e6388"
+julia_filter_graph_version = "0.2.2"
+julia_filter_graph_tree = "edaa8b14e2a2b9266cff5674ecbe9c9f6c20c17c"
+zernike_boundary_checks = 30
+result = "passed"
+
+[validation]
+full_cpu_composition = "passed, including Aqua, every registered CPU suite, 15 OOPAO and 14 SPECULA reference checks, 35 tutorial passes with 2 expected broken tests, and Gate 0"
+cuda_hardware_target = "676/676 passed"
+amdgpu_hardware_target = "682/682 passed"
+cpu_type_inference = "prepared Zernike optics, acquired-frame production, frame transpose, and FGA estimation inference checks passed"
+cpu_zero_allocation = "physical optics, detector acquisition, preallocated transpose, and FGA estimation each passed their warmed zero-allocation checks"
+raw_reports = "Nsight Systems, Nsight Compute, and rocprofv3 reports are retained outside the repository under /tmp; this TOML is the durable summary"
+
+[commands]
+cpu = "ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 ADAPTIVEOPTICS_PROFILE_PRINT_CPU_SAMPLES=0 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --startup-file=no --project=. scripts/profile_zernike_plant_runtime.jl"
+cpu_sampling = "ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=5000 ADAPTIVEOPTICS_PROFILE_PRINT_CPU_SAMPLES=1 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --startup-file=no --project=. scripts/profile_zernike_plant_runtime.jl"
+cpu_counters = "perf stat -r 3 -e cycles,instructions,branches,branch-misses,cache-references,cache-misses,page-faults,context-switches,cpu-migrations -- env ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=100000 ADAPTIVEOPTICS_PROFILE_PRINT_CPU_SAMPLES=0 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --startup-file=no --project=. scripts/profile_zernike_plant_runtime.jl"
+cuda = "ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --startup-file=no --project=test/cuda scripts/profile_zernike_plant_runtime.jl"
+nsight_systems = "nsys profile --trace=cuda,nvtx,osrt --capture-range=cudaProfilerApi --capture-range-end=stop --sample=none --output=/tmp/aos-zernike-plant-2c15bc9 --force-overwrite=true env ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --startup-file=no --project=test/cuda scripts/profile_zernike_plant_runtime.jl"
+nsight_compute = "/opt/nvidia/nsight-compute/2026.3.1/ncu --set full --nvtx --nvtx-include aos_zernike_plant/ --target-processes all --force-overwrite --export /tmp/aos-zernike-plant-2c15bc9 env ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --startup-file=no --project=test/cuda scripts/profile_zernike_plant_runtime.jl"
+amdgpu = "ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --startup-file=no --project=test/amdgpu scripts/profile_zernike_plant_runtime.jl"
+rocprofiler = "rocprofv3 --runtime-trace --stats --selected-regions --kernel-rename --output-format csv -- env ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --startup-file=no --project=test/amdgpu scripts/profile_zernike_plant_runtime.jl"

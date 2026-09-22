@@ -55,9 +55,9 @@ end
     @test identity.detector_units === :electron_count
     @test identity.signal_units === :normalized_pyramid_i4q
     @test identity.command_units === :metre
-    @test identity.fga_version == v"0.3.0"
+    @test identity.fga_version == v"0.4.0"
     @test identity.fga_tree_claim ==
-          "9216d2b44e5362ba1f342ff67951ab70b8d46107"
+          "598a10402690250190ad1dd976b03577281e6388"
     @test !iszero(identity.signature)
     @test !iszero(identity.calibration_signature)
     @test !iszero(identity.order_signature)

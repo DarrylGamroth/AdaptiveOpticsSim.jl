@@ -4,11 +4,14 @@ include("s1_lockstep.jl")
 include("rtc_parity.jl")
 include("s4_pyramid.jl")
 include("s4_bi_o_edge.jl")
+include("s4_zernike.jl")
 using .AOSFGALockstep
 using .AOSFGAPyramid
 using .AOSFGABiOEdge
+using .AOSFGAZernike
 include("s4_pyramid_test.jl")
 include("s4_bi_o_edge_test.jl")
+include("s4_zernike_test.jl")
 using AdaptiveOpticsCalibration.Reconstructors: reconstructor
 using AdaptiveOpticsSim.WavefrontSensors: observation_storage
 using FilterGraphAlgorithms: SampleMetadata

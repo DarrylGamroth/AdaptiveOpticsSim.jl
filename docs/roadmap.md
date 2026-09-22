@@ -47,10 +47,10 @@ the maintained package.
 2. Keep the generic graph, HIL, and pyRTC contracts stable for the separately
    maintained REVOLT Classic and Copper packages; instrument calibration and
    performance evidence remain with those packages.
-3. Complete target-first migration of the retained Zernike and
-   Curvature estimators through [FGA #18](https://github.com/DarrylGamroth/JuliaFilterGraph.jl/issues/18),
-   and [FGA #19](https://github.com/DarrylGamroth/JuliaFilterGraph.jl/issues/19),
-   respectively. Move LiFT inverse estimation through
+3. Complete target-first migration of the retained Curvature estimator through
+   [FGA #19](https://github.com/DarrylGamroth/JuliaFilterGraph.jl/issues/19).
+   Zernike estimation has moved to registered FGA 0.4.0. Move LiFT inverse
+   estimation through
    [AdaptiveOpticsCalibration #5](https://github.com/DarrylGamroth/AdaptiveOpticsCalibration.jl/issues/5).
    Keep each remaining AOS implementation until its target is released,
    parity-tested, and adopted; weighted-centroid estimation is not an AOS target.

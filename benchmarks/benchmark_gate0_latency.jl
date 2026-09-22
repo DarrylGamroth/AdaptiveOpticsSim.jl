@@ -221,23 +221,13 @@ function make_gate0_card(raw::AbstractDict)
             units=:electron_count, layout=:zernike_pupil_image)
         acquisition_plan = prepare_wfs_acquisition(detector, rate,
             observation)
-        set_zernike_calibration!(wfs,
-            zeros(size(wfs.estimator.state.reference_signal_2d));
-            wavelength_m=wavelength(src), signature=UInt(0x47305039))
-        measurement = WFSMeasurement(similar(slopes(wfs));
-            units=:dimensionless, kind=:normalized_pupil_signal)
-        estimator_plan = prepare_wfs_estimation(wfs, observation,
-            measurement; source=src)
         rng = runtime_rng(Int(raw["rng_seed"]))
         let rate=rate, pupil=pupil, optics_plan=optics_plan,
-            observation=observation, acquisition_plan=acquisition_plan,
-            measurement=measurement, estimator_plan=estimator_plan, rng=rng
+            observation=observation, acquisition_plan=acquisition_plan, rng=rng
             () -> begin
                 form_wfs_optical_products!(rate, pupil, optics_plan)
                 acquire_wfs_observation!(observation, rate,
                     acquisition_plan, rng)
-                estimate_wfs_measurement!(measurement, observation,
-                    estimator_plan)
             end
         end
     elseif kind == "curvature_two_detectors"
