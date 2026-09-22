@@ -24,8 +24,6 @@ export pyramid_rate_node
 export ccd_detector_acquisition_node
 export cmos_detector_acquisition_node
 export emccd_detector_acquisition_node
-export shack_hartmann_centroid_node
-export shack_hartmann_slope_selection_node
 export load_algorithm_graph, builtin_graph_node_types
 export prepare_algorithm_graph, step_graph_async!, wait_graph_step!
 export step_graph!, reset_graph!
@@ -60,5 +58,3 @@ public PyramidRateNode, PyramidRateNodeConfig
 public CCDDetectorAcquisitionNode, CCDDetectorAcquisitionNodeConfig
 public CMOSDetectorAcquisitionNode, CMOSDetectorAcquisitionNodeConfig
 public EMCCDDetectorAcquisitionNode, EMCCDDetectorAcquisitionNodeConfig
-public ShackHartmannCentroidNode, ShackHartmannCentroidNodeConfig
-public ShackHartmannSlopeSelectionNode, ShackHartmannSlopeSelectionNodeConfig

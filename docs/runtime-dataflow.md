@@ -228,9 +228,11 @@ frame through `PreparedGraphHILBoundary`. Their parameters are AOS validation
 choices; neither system is an instrument profile.
 
 [`shack_hartmann_hil_reference.toml`](../examples/graphs/shack_hartmann_hil_reference.toml)
-publishes a noiseless 64-by-64 CCD frame and an AOS centroid signal for
-differential checks. [`pyramid_hil_reference.toml`](../examples/graphs/pyramid_hil_reference.toml)
-publishes a noiseless 36-by-36 four-pupil EMCCD frame. The helper in
+publishes a noiseless 64-by-64 CCD frame. [`pyramid_hil_reference.toml`](../examples/graphs/pyramid_hil_reference.toml)
+publishes a noiseless 36-by-36 four-pupil EMCCD frame. AOS built-in graph
+execution stops at these detector frames; use the maintained
+[`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/)
+for the Shack–Hartmann FGA/JFG estimator and RTC composition. The helper in
 [`hil_reference_systems.jl`](../examples/support/hil_reference_systems.jl)
 owns the exact analytic actuator coordinates, SHWFS valid-lenslet rule, graph
 selection, and preparation recipe.
@@ -408,8 +410,7 @@ The built-in type map currently contains `ccd_detector_acquisition_f32`,
 `multilayer_atmosphere_opd_f32`,
 `pupil_opd_composition_f32`,
 `pyramid_rate_f32`,
-`shack_hartmann_centroid_f32`, `shack_hartmann_rate_f32`, and
-`shack_hartmann_slope_selection_f32`.
+and `shack_hartmann_rate_f32`.
 `merge(builtin_graph_node_types(), companion_types)` creates an explicit larger
 map for optional packages such as the Proper companion.
 

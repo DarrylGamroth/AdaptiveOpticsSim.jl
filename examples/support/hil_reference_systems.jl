@@ -282,16 +282,14 @@ function shack_hartmann_valid_subapertures()
     return mask
 end
 
-"""Return the zero centroid reference for all 64 declared SHWFS lenslets."""
+"""Return the zero reference signal for all 64 declared SHWFS lenslets."""
 shack_hartmann_reference_signal(::Type{T}=Float32) where {T<:AbstractFloat} =
     zeros(T, _SHACK_HARTMANN_LENSLET_COUNT^2, 2)
 
 """
     shack_hartmann_lenslet_order([T=UInt32])
 
-Return valid lenslets in canonical Julia column-major lenslet order. The
-SHWFS slope-selection node publishes interleaved axis-1/axis-2 pairs in this
-order.
+Return valid lenslets in canonical Julia column-major lenslet order.
 """
 function shack_hartmann_lenslet_order(
     ::Type{T}=UInt32,
@@ -325,9 +323,6 @@ function _bindings(::Val{:shack_hartmann}, ::Type{T}) where {T<:AbstractFloat}
         dm_command=zeros(T, _ACTUATOR_COUNT),
         uncompensated_opd=zeros(T, 64, 64),
         dm_actuator_coordinates=actuator_coordinates(T),
-        valid_subapertures=shack_hartmann_valid_subapertures(),
-        reference_signal=shack_hartmann_reference_signal(T),
-        lenslet_order=shack_hartmann_lenslet_order(),
     )
 end
 

@@ -31,9 +31,9 @@ the maintained package.
   model-time drivers, preparation-time validation, and reset.
 - Native graph nodes for atmosphere OPD, deformable-mirror surfaces, pupil OPD
   composition, Shack–Hartmann and Pyramid optical rates, detector acquisition,
-  and centroid/slope selection. RTC reconstruction, controller operations,
-  frame delay, and VDM/PDM routing are owned by FilterGraphAlgorithms and
-  JuliaFilterGraph.
+  ending at complete detector frames. RTC estimation, reconstruction,
+  controller operations, frame delay, and VDM/PDM routing are owned by
+  FilterGraphAlgorithms and JuliaFilterGraph.
 - Lockstep host command/frame exchange for external RTC integration.
 - A downstream-package seam for instrument-owned graph files, geometry,
   calibration policy, pyRTC tests, and model-validity claims.

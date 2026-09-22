@@ -25,6 +25,40 @@ end
     @test isempty(findall(flux_mask .& .!geom_mask))
 end
 
+@testset "Shack-Hartmann valid subaperture replacement" begin
+    telescope = Telescope(resolution=4, diameter=2.0)
+    sensor = ShackHartmannWFS(
+        telescope;
+        n_lenslets=2,
+        n_pix_subap=2,
+        mode=Diffractive(),
+        T=Float32,
+    )
+    set_subaperture_calibration!(
+        subaperture_calibration(sensor),
+        zeros(Float32, 4, 2);
+        centroid_response=1.0f0,
+        output_units=:pixel,
+        wavelength=0.75f-6,
+        signature=UInt(7),
+    )
+    @test sensor.calibration.calibrated
+
+    layout_revision = subaperture_layout_revision(sensor.front_end.layout)
+    @test_throws DimensionMismatchError set_valid_subapertures!(
+        sensor,
+        fill(true, 1, 1),
+    )
+    mask_parent = fill(false, 4, 4)
+    mask_parent[2:3, 2:3] .= Bool[true false; false true]
+    mask_view = @view mask_parent[2:3, 2:3]
+    @test @inferred(set_valid_subapertures!(sensor, mask_view)) === sensor
+    @test subaperture_layout_revision(sensor.front_end.layout) ==
+        layout_revision + UInt(1)
+    @test n_valid_subapertures(sensor.front_end.layout) == 2
+    @test !sensor.calibration.calibrated
+end
+
 @testset "Shack-Hartmann ordered slope selection" begin
     full_parent = Float32[-1; collect(1:9); collect(101:109); -1]
     full_slopes = @view full_parent[2:19]

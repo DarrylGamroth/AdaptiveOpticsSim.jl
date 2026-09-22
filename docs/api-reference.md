@@ -202,9 +202,12 @@ Factory functions include:
 - `shack_hartmann_rate_node` and `pyramid_rate_node`
 - `ccd_detector_acquisition_node`, `cmos_detector_acquisition_node`, and
   `emccd_detector_acquisition_node`
-- `shack_hartmann_centroid_node` and
-  `shack_hartmann_slope_selection_node`
 - `modal_opd_expansion_node`
+
+The built-in graph catalog stops at complete detector frames. For a maintained
+Shack–Hartmann estimator and RTC composition, use the
+[`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/),
+where FilterGraphAlgorithms owns the RTC operations.
 
 `builtin_graph_node_types()` reports the file-loader type map.
 

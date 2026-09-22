@@ -83,35 +83,6 @@ rng_seed = 1
 photon_rate_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-photon-rate.f32/1"
 frame_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-frame.f32/1"
 
-[[nodes]]
-name = "centroid"
-type = "shack_hartmann_centroid_f32"
-
-[nodes.config]
-resolution = 64
-telescope_diameter_m = 1.0
-n_lenslets = 8
-n_pix_subap = 8
-centroid_cutoff_fraction = 0.0
-centroid_response = 1.0
-calibration_wavelength_m = 7.5e-7
-calibration_signature = 1
-frame_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-frame.f32/1"
-slopes_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-full-slopes.f32/1"
-valid_subapertures_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-valid-subapertures.bool/1"
-reference_signal_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-centroid-reference.f32/1"
-
-[[nodes]]
-name = "slope_selection"
-type = "shack_hartmann_slope_selection_f32"
-
-[nodes.config]
-n_lenslets = 8
-selected_lenslet_count = 52
-full_slopes_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-full-slopes.f32/1"
-selected_slopes_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-signal.f32/1"
-lenslet_order_schema = "org.adaptiveopticssim.hil-reference.shack-hartmann-lenslet-order.u32/1"
-
 [[inputs]]
 name = "dm_command"
 destination = "dm.pdm_command"
@@ -138,10 +109,6 @@ source = "shwfs.photon_rate"
 name = "wfs_frame"
 source = "detector.frame"
 
-[[outputs]]
-name = "wfs_signal"
-source = "slope_selection.selected_slopes"
-
 [[links]]
 source = "dm.surface_opd"
 destination = "pupil_opd_composition.surface_opd"
@@ -154,26 +121,6 @@ destination = "shwfs.opd"
 source = "shwfs.photon_rate"
 destination = "detector.photon_rate"
 
-[[links]]
-source = "detector.frame"
-destination = "centroid.frame"
-
-[[links]]
-source = "centroid.slopes"
-destination = "slope_selection.full_slopes"
-
 [[parameters]]
 destination = "dm.actuator_coordinates"
 binding = "dm_actuator_coordinates"
-
-[[parameters]]
-destination = "centroid.valid_subapertures"
-binding = "valid_subapertures"
-
-[[parameters]]
-destination = "centroid.reference_signal"
-binding = "reference_signal"
-
-[[parameters]]
-destination = "slope_selection.lenslet_order"
-binding = "lenslet_order"
