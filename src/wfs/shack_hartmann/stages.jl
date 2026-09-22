@@ -2,6 +2,122 @@
 # Prepared Shack-Hartmann stage composition
 #
 
+@inline sh_fft_intensity_scale(::Type{T}, pad::Integer) where {T} =
+    inv(T(pad) * T(pad))
+
+@inline sh_stacked_asterism_compatible(source::Asterism) =
+    !isempty(source.sources) && all(!is_lgs_source, source.sources)
+
+@kernel function complex_abs2_stack_kernel!(intensity_stack, fft_stack,
+    intensity_scale, pad::Int, n_spots::Int)
+    x, y, index = @index(Global, NTuple)
+    if x <= pad && y <= pad && index <= n_spots
+        @inbounds intensity_stack[x, y, index] =
+            abs2(fft_stack[x, y, index]) * intensity_scale
+    end
+end
+
+@kernel function sh_sample_spot_stack_kernel!(spot_cube, intensity_stack,
+    valid_mask, binning::Int, n_sub::Int, n_binned::Int, n_out::Int,
+    offset_axis_1::Int, offset_axis_2::Int)
+    i, j, u, v = @index(Global, NTuple)
+    if i <= n_sub && j <= n_sub && u <= n_out && v <= n_out
+        index = sh_lenslet_index(i, j, n_sub)
+        T = eltype(spot_cube)
+        value = zero(T)
+        if @inbounds valid_mask[i, j]
+            binned_axis_1 = u - offset_axis_1
+            binned_axis_2 = v - offset_axis_2
+            if 1 <= binned_axis_1 <= n_binned &&
+                    1 <= binned_axis_2 <= n_binned
+                if binning == 1
+                    @inbounds value = intensity_stack[
+                        binned_axis_1, binned_axis_2, index]
+                else
+                    @inbounds for axis_2 in 1:binning,
+                            axis_1 in 1:binning
+                        value += intensity_stack[
+                            (binned_axis_1 - 1) * binning + axis_1,
+                            (binned_axis_2 - 1) * binning + axis_2,
+                            index,
+                        ]
+                    end
+                end
+            end
+        end
+        @inbounds spot_cube[index, u, v] = value
+    end
+end
+
+function sample_spot_stack!(::ScalarCPUStyle,
+    optics::ShackHartmannOptics)
+    propagation = microlens_propagation_workspace(optics.propagation)
+    intensity_stack = propagation.intensity_stack
+    sampled_spot_cube = propagation.sampled_spot_cube
+    pad_axis_1 = size(intensity_stack, 1)
+    pad_axis_2 = size(intensity_stack, 2)
+    binning = propagation.binning_pixel_scale
+    pad_axis_1 % binning == 0 && pad_axis_2 % binning == 0 || throw(
+        InvalidConfiguration(
+            "lenslet sampling is not divisible by binning_pixel_scale",
+        ),
+    )
+    n_binned_axis_1 = div(pad_axis_1, binning)
+    n_binned_axis_2 = div(pad_axis_2, binning)
+    n_out_axis_1 = size(sampled_spot_cube, 2)
+    n_out_axis_2 = size(sampled_spot_cube, 3)
+    offset_axis_1 = div(n_out_axis_1 - n_binned_axis_1, 2)
+    offset_axis_2 = div(n_out_axis_2 - n_binned_axis_2, 2)
+    T = eltype(sampled_spot_cube)
+
+    @inbounds for axis_2 in axes(sampled_spot_cube, 3),
+            axis_1 in axes(sampled_spot_cube, 2),
+            index in axes(sampled_spot_cube, 1)
+        binned_axis_1 = axis_1 - offset_axis_1
+        binned_axis_2 = axis_2 - offset_axis_2
+        value = zero(T)
+        if 1 <= binned_axis_1 <= n_binned_axis_1 &&
+                1 <= binned_axis_2 <= n_binned_axis_2
+            if binning == 1
+                value = intensity_stack[
+                    binned_axis_1, binned_axis_2, index]
+            else
+                for bin_axis_2 in 1:binning,
+                        bin_axis_1 in 1:binning
+                    value += intensity_stack[
+                        (binned_axis_1 - 1) * binning + bin_axis_1,
+                        (binned_axis_2 - 1) * binning + bin_axis_2,
+                        index,
+                    ]
+                end
+            end
+        end
+        sampled_spot_cube[index, axis_1, axis_2] = value
+    end
+    return sampled_spot_cube
+end
+
+function sample_spot_stack!(style::AcceleratorStyle,
+    optics::ShackHartmannOptics)
+    propagation = microlens_propagation_workspace(optics.propagation)
+    pad = size(propagation.intensity_stack, 1)
+    binning = propagation.binning_pixel_scale
+    pad % binning == 0 || throw(InvalidConfiguration(
+        "lenslet sampling is not divisible by binning_pixel_scale",
+    ))
+    n_binned = div(pad, binning)
+    n_out = size(propagation.sampled_spot_cube, 2)
+    offset_axis_1 = div(n_out - n_binned, 2)
+    offset_axis_2 = div(n_out - n_binned, 2)
+    n_sub = n_lenslets(optics)
+    launch_kernel!(style, sh_sample_spot_stack_kernel!,
+        propagation.sampled_spot_cube, propagation.intensity_stack,
+        optics.front_end.layout.valid_mask, binning, n_sub, n_binned, n_out,
+        offset_axis_1, offset_axis_2;
+        ndrange=(n_sub, n_sub, n_out, n_out))
+    return propagation.sampled_spot_cube
+end
+
 """Run-immutable physical and numerical contract for one SH rate plane."""
 struct ShackHartmannOpticsPlan{M,S,T<:AbstractFloat,SS} <:
         AbstractWFSOpticsPlan
@@ -56,48 +172,6 @@ end
 @inline photon_irradiance(source::ShackHartmannSpectralComponent) =
     source.photon_rate_m2_s
 
-"""Run-immutable Shack-Hartmann estimation and calibration contract."""
-struct ShackHartmannEstimationPlan{
-    E,P<:AbstractWFSMeasurementPath,C} <: AbstractWFSEstimationPlan
-    extraction::E
-    path::P
-    calibration_binding::C
-    n_lenslets::Int
-    n_pixels_per_lenslet::Int
-end
-
-"""Exact live owner for one prepared Shack-Hartmann estimator."""
-struct PreparedShackHartmannEstimator{P,W,WS,PR,I,M,WB,PB,B,D}
-    plan::P
-    sensor::W
-    workspace::WS
-    products::PR
-    input::I
-    measurement::M
-    workspace_binding::WB
-    products_binding::PB
-    backend::B
-    device::D
-end
-
-struct ShackHartmannCalibrationBinding{
-    T<:AbstractFloat,R<:AbstractMatrix{T},U}
-    layout_revision::UInt
-    revision::UInt
-    wavelength_m::T
-    signature::UInt
-    centroid_response::T
-    output_units::U
-    reference_signal::R
-end
-
-struct ShackHartmannLayoutBinding
-    revision::UInt
-end
-
-@inline wfs_measurement_path(prepared::PreparedShackHartmannEstimator) =
-    prepared.plan.path
-
 @inline function _sh_microlens_workspace_binding(workspace)
     return (
         workspace.field,
@@ -132,27 +206,9 @@ end
         layout.valid_indices_host)
 end
 
-@inline function _sh_estimator_workspace_binding(workspace)
-    return (workspace.spot_cube, workspace.detector_noise_cube,
-        workspace.spot_stats, workspace.spot_stats_accum,
-        workspace.slopes_host, workspace.centroid_host)
-end
-
-@inline _sh_estimator_workspace_binding(::Nothing) = ()
-
-@inline function _sh_estimator_owner_binding(sensor::ShackHartmannWFS)
-    return (_sh_estimator_workspace_binding(sensor.workspace),
-        _sh_layout_storage_binding(sensor.front_end.layout))
-end
-
-@inline function _sh_products_binding(products)
-    return (products.slopes, products.legacy_spot_cube)
-end
-
 @inline _sh_input_storages(input::PupilFunction) =
     (input.amplitude, input.opd)
 @inline _sh_input_storages(input::ElectricField) = (input.values,)
-@inline _sh_input_storages(input::WFSObservation) = (input.storage,)
 
 @inline _sh_mightalias_any(::AbstractArray, ::Tuple{}) = false
 @inline function _sh_mightalias_any(value::AbstractArray, values::Tuple)
@@ -176,24 +232,6 @@ end
         _sh_any_alias(input_storages, resources)) &&
         throw(WFSPreparationError(:wfs_optics, :aliasing,
             "Shack-Hartmann input, rate product, layout, and workspace storage must not alias"))
-    return nothing
-end
-
-@inline function _require_sh_estimation_aliases(sensor::ShackHartmannWFS,
-    input, measurement::WFSMeasurement)
-    input_storages = _sh_input_storages(input)
-    resources = (_sh_estimator_workspace_binding(sensor.workspace)...,
-        sensor.products.slopes,
-        sensor.products.legacy_spot_cube,
-        sensor.front_end.layout.valid_mask,
-        sensor.front_end.layout.valid_mask_host,
-        sensor.calibration.reference_signal_2d,
-        sensor.calibration.reference_signal_host)
-    (_sh_mightalias_any(measurement.storage, input_storages) ||
-        _sh_mightalias_any(measurement.storage, resources) ||
-        _sh_any_alias(input_storages, resources)) &&
-        throw(WFSPreparationError(:estimation, :aliasing,
-            "Shack-Hartmann estimator input, measurement, calibration, workspace, and products must not alias"))
     return nothing
 end
 
@@ -1154,289 +1192,6 @@ function validate_wfs_optics_binding(
     return nothing
 end
 
-function _require_sh_observation_semantics(observation::WFSObservation)
-    isequal(observation.metadata.layout, :lenslet_mosaic) ||
-        throw(WFSPreparationError(:acquisition, :detector_mapping,
-            "Shack-Hartmann detector observations require :lenslet_mosaic layout"))
-    return nothing
-end
-
-function _require_sh_real_observation(observation::WFSObservation,
-    stage::Symbol)
-    observation.metadata.numeric_type <: Real ||
-        throw(WFSPreparationError(stage, :numeric_type,
-            "Shack-Hartmann observations require real detector samples"))
-    return nothing
-end
-
-function _require_sh_floating_measurement(measurement::WFSMeasurement)
-    measurement.metadata.numeric_type <: AbstractFloat ||
-        throw(WFSPreparationError(:estimation, :numeric_type,
-            "Shack-Hartmann measurements require floating-point storage"))
-    return nothing
-end
-
-function _require_sh_measurement_semantics(
-    sensor::ShackHartmannWFS{<:Diffractive},
-    measurement::WFSMeasurement)
-    isequal(measurement.units, sensor.calibration.output_units) ||
-        throw(WFSPreparationError(:estimation, :units,
-            "diffractive Shack-Hartmann measurement units must match the calibration output units"))
-    isequal(measurement.metadata.kind, :centroid_slopes) ||
-        throw(WFSPreparationError(:estimation, :estimator,
-            "diffractive Shack-Hartmann measurements require :centroid_slopes kind"))
-    return nothing
-end
-
-function _require_sh_measurement_semantics(
-    ::ShackHartmannWFS{<:Geometric}, measurement::WFSMeasurement)
-    isequal(measurement.units, :radian) ||
-        throw(WFSPreparationError(:estimation, :units,
-            "geometric Shack-Hartmann measurements require :radian units"))
-    isequal(measurement.metadata.kind, :geometric_slopes) ||
-        throw(WFSPreparationError(:estimation, :estimator,
-            "geometric Shack-Hartmann measurements require :geometric_slopes kind"))
-    return nothing
-end
-
-function _require_sh_storage_domain(stage::Symbol, metadata, storage,
-    label::AbstractString)
-    return _require_wfs_storage_domain(stage, metadata, storage, label)
-end
-
-function _prepare_sh_calibration_binding(sensor::ShackHartmannWFS)
-    calibration = sensor.calibration
-    calibration.calibrated || throw(WFSPreparationError(:estimation,
-        :estimator,
-        "diffractive Shack-Hartmann estimation requires explicit calibration"))
-    isfinite(calibration.centroid_response) &&
-        calibration.centroid_response != zero(calibration.centroid_response) ||
-        throw(WFSPreparationError(:estimation, :estimator,
-            "Shack-Hartmann slope calibration must be finite and nonzero"))
-    isfinite(calibration.wavelength) &&
-        calibration.wavelength > zero(calibration.wavelength) ||
-        throw(WFSPreparationError(:estimation, :estimator,
-            "Shack-Hartmann calibration wavelength must be finite and positive"))
-    return ShackHartmannCalibrationBinding(
-        subaperture_layout_revision(sensor.front_end.layout),
-        calibration.revision,
-        calibration.wavelength, calibration.signature,
-        calibration.centroid_response, calibration.output_units,
-        calibration.reference_signal_2d)
-end
-
-function _require_sh_calibration_binding(sensor::ShackHartmannWFS,
-    binding::ShackHartmannCalibrationBinding)
-    calibration = sensor.calibration
-    subaperture_layout_revision(sensor.front_end.layout) ==
-        binding.layout_revision &&
-        calibration.calibrated &&
-        calibration.revision == binding.revision &&
-        isequal(calibration.wavelength, binding.wavelength_m) &&
-        calibration.signature == binding.signature &&
-        isequal(calibration.centroid_response, binding.centroid_response) &&
-        isequal(calibration.output_units, binding.output_units) &&
-        calibration.reference_signal_2d === binding.reference_signal ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "Shack-Hartmann layout or calibration changed after estimator preparation"))
-    return nothing
-end
-
-
-@inline function _require_sh_layout_binding(sensor::ShackHartmannWFS,
-    binding::ShackHartmannLayoutBinding)
-    subaperture_layout_revision(sensor.front_end.layout) ==
-        binding.revision ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "Shack-Hartmann subaperture layout changed after estimator preparation"))
-    return nothing
-end
-
-function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Diffractive},
-    observation::WFSObservation, measurement::WFSMeasurement)
-    validate_wfs_observation(observation)
-    validate_wfs_measurement(measurement)
-    _require_sh_observation_semantics(observation)
-    _require_sh_real_observation(observation, :estimation)
-    _require_sh_floating_measurement(measurement)
-    _require_sh_measurement_semantics(sensor, measurement)
-    _require_sh_storage_domain(:estimation, observation.metadata,
-        sensor.workspace.spot_cube, "observation")
-    _require_sh_storage_domain(:estimation, measurement.metadata,
-        sensor.products.slopes, "measurement")
-    _require_sh_storage_domain(:estimation, observation.metadata,
-        sensor.front_end.layout.valid_mask, "observation/layout")
-    n_sub = n_lenslets(sensor)
-    observation_shape = size(observation.storage)
-    length(observation_shape) == 2 ||
-        throw(WFSPreparationError(:estimation, :shape,
-            "Shack-Hartmann estimator requires a two-dimensional lenslet mosaic"))
-    observation_shape[1] == observation_shape[2] ||
-        throw(WFSPreparationError(:estimation, :shape,
-            "Shack-Hartmann estimator requires a square tiled lenslet mosaic"))
-    observation_shape[1] % n_sub == 0 ||
-        throw(WFSPreparationError(:estimation, :shape,
-            "Shack-Hartmann mosaic extent must be divisible by the lenslet count"))
-    n_pix = div(observation_shape[1], n_sub)
-    n_pix > 0 ||
-        throw(WFSPreparationError(:estimation, :shape,
-            "Shack-Hartmann lenslet blocks must not be empty"))
-    size(measurement.storage) == size(sensor.products.slopes) ||
-        throw(WFSPreparationError(:estimation, :shape,
-            "Shack-Hartmann measurement storage has the wrong slope shape"))
-    calibration_binding = _prepare_sh_calibration_binding(sensor)
-    ensure_sh_acquisition_buffers!(sensor, n_pix)
-    _require_sh_estimation_aliases(sensor, observation, measurement)
-    plan = ShackHartmannEstimationPlan(slope_extraction_model(sensor),
-        AcquiredObservationPath(), calibration_binding, n_sub, n_pix)
-    return PreparedShackHartmannEstimator(plan, sensor, sensor.workspace,
-        sensor.products, observation, measurement,
-        _sh_estimator_owner_binding(sensor),
-        _sh_products_binding(sensor.products), measurement.metadata.backend,
-        measurement.metadata.device)
-end
-
-@kernel function sh_unpack_mosaic_kernel!(spot_cube, mosaic, n_sub::Int,
-    n_pix::Int)
-    i, j, x, y = @index(Global, NTuple)
-    if i <= n_sub && j <= n_sub && x <= n_pix && y <= n_pix
-        index = sh_lenslet_index(i, j, n_sub)
-        @inbounds spot_cube[index, x, y] =
-            mosaic[(i - 1) * n_pix + x, (j - 1) * n_pix + y]
-    end
-end
-
-function _unpack_sh_mosaic!(::ScalarCPUStyle, spot_cube, mosaic,
-    n_sub::Int, n_pix::Int)
-    @inbounds for y in 1:n_pix, x in 1:n_pix, j in 1:n_sub, i in 1:n_sub
-        index = sh_lenslet_index(i, j, n_sub)
-        spot_cube[index, x, y] =
-            mosaic[(i - 1) * n_pix + x, (j - 1) * n_pix + y]
-    end
-    return spot_cube
-end
-
-function _unpack_sh_mosaic!(style::AcceleratorStyle, spot_cube, mosaic,
-    n_sub::Int, n_pix::Int)
-    launch_kernel!(style, sh_unpack_mosaic_kernel!, spot_cube, mosaic,
-        n_sub, n_pix; ndrange=(n_sub, n_sub, n_pix, n_pix))
-    return spot_cube
-end
-
-function _require_sh_estimation_binding(measurement::WFSMeasurement,
-    input, prepared::PreparedShackHartmannEstimator)
-    measurement === prepared.measurement && input === prepared.input ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "Shack-Hartmann estimator storage does not match its prepared owner"))
-    sensor = prepared.sensor
-    sensor.workspace === prepared.workspace &&
-        sensor.products === prepared.products &&
-        _sh_estimator_owner_binding(sensor) ===
-            prepared.workspace_binding &&
-        _sh_products_binding(prepared.products) ===
-            prepared.products_binding ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "Shack-Hartmann estimator workspace or products were replaced after preparation"))
-    measurement.metadata.backend === prepared.backend &&
-        input.metadata.backend === prepared.backend &&
-        measurement.metadata.device == prepared.device &&
-        input.metadata.device == prepared.device ||
-        throw(WFSPreparationError(:estimation, :prepared_binding,
-            "Shack-Hartmann estimator backend or device binding changed after preparation"))
-    _require_sh_estimation_aliases(sensor, input, measurement)
-    return sensor
-end
-
-function estimate_wfs_measurement!(measurement::WFSMeasurement,
-    observation::WFSObservation,
-    prepared::PreparedShackHartmannEstimator{
-        <:ShackHartmannEstimationPlan{
-            E,<:AcquiredObservationPath}}) where {E}
-    sensor = _require_sh_estimation_binding(measurement, observation,
-        prepared)
-    plan = prepared.plan
-    _require_sh_calibration_binding(sensor, plan.calibration_binding)
-    n_sub = plan.n_lenslets
-    n_pix = plan.n_pixels_per_lenslet
-    style = execution_style(observation.storage)
-    _unpack_sh_mosaic!(style, prepared.workspace.spot_cube,
-        observation.storage, n_sub, n_pix)
-    peak = sh_safe_peak_value(prepared.workspace.spot_cube)
-    sh_signal_from_spots_calibrated!(sensor, peak,
-        plan.extraction)
-    copyto!(measurement.storage, prepared.products.slopes)
-    return measurement
-end
-
-function validate_wfs_estimation_binding(measurement::WFSMeasurement, input,
-    prepared::PreparedShackHartmannEstimator)
-    sensor = _require_sh_estimation_binding(measurement, input, prepared)
-    binding = prepared.plan.calibration_binding
-    _require_sh_estimation_state_binding(sensor, binding)
-    return nothing
-end
-
-
-@inline _require_sh_estimation_state_binding(sensor::ShackHartmannWFS,
-    binding::ShackHartmannCalibrationBinding) =
-    _require_sh_calibration_binding(sensor, binding)
-
-@inline _require_sh_estimation_state_binding(sensor::ShackHartmannWFS,
-    binding::ShackHartmannLayoutBinding) =
-    _require_sh_layout_binding(sensor, binding)
-
-function prepare_wfs_estimation(sensor::ShackHartmannWFS{<:Geometric},
-    input::PupilFunction, measurement::WFSMeasurement)
-    validate_wfs_optical_input(input)
-    validate_wfs_measurement(measurement)
-    _require_sh_pupil_semantics(input, :estimation)
-    _require_sh_layout_geometry(sensor.front_end.layout,
-        n_lenslets(sensor), input,
-        :estimation)
-    _require_sh_measurement_semantics(sensor, measurement)
-    _require_sh_floating_measurement(measurement)
-    _require_sh_storage_domain(:estimation, input.metadata,
-        sensor.products.slopes, "geometric input")
-    _require_sh_storage_domain(:estimation, input.metadata,
-        sensor.front_end.layout.valid_mask, "geometric input/layout")
-    _require_sh_storage_domain(:estimation, measurement.metadata,
-        sensor.products.slopes, "geometric measurement")
-    size(measurement.storage) == size(sensor.products.slopes) ||
-        throw(WFSPreparationError(:estimation, :shape,
-            "geometric Shack-Hartmann measurement storage has the wrong slope shape"))
-    binding = ShackHartmannLayoutBinding(
-        subaperture_layout_revision(sensor.front_end.layout))
-    _require_sh_estimation_aliases(sensor, input, measurement)
-    plan = ShackHartmannEstimationPlan(slope_extraction_model(sensor),
-        DirectMeasurementPath(), binding, n_lenslets(sensor), 0)
-    return PreparedShackHartmannEstimator(plan, sensor, sensor.workspace,
-        sensor.products, input, measurement,
-        _sh_estimator_owner_binding(sensor),
-        _sh_products_binding(sensor.products), measurement.metadata.backend,
-        measurement.metadata.device)
-end
-
-
-function prepare_wfs_estimation(::ShackHartmannWFS{<:Geometric},
-    ::ElectricField, ::WFSMeasurement)
-    throw(WFSPreparationError(:estimation, :unsupported,
-        "geometric Shack-Hartmann estimation requires OPD-bearing PupilFunction input"))
-end
-
-function estimate_wfs_measurement!(measurement::WFSMeasurement,
-    input::PupilFunction,
-    prepared::PreparedShackHartmannEstimator{
-        <:ShackHartmannEstimationPlan{
-            E,<:DirectMeasurementPath}}) where {E}
-    sensor = _require_sh_estimation_binding(measurement, input, prepared)
-    _require_sh_layout_binding(sensor,
-        prepared.plan.calibration_binding)
-    geometric_wavefront_slopes!(prepared.products.slopes, input.opd,
-        sensor.front_end.layout.valid_mask, input.metadata.sampling)
-    copyto!(measurement.storage, prepared.products.slopes)
-    return measurement
-end
-
 """
     shack_hartmann_rate_map(sensor, input, source=nothing)
     shack_hartmann_rate_map(model, input, values)
@@ -1447,7 +1202,7 @@ the `values` overload binds an already allocated caller-owned, one-based output
 matrix.
 """
 function shack_hartmann_rate_map(
-    sensor::ShackHartmannWFS{<:Diffractive},
+    sensor::ShackHartmannWFS,
     input::Union{PupilFunction,ElectricField}, source::SpectralSource)
     return shack_hartmann_rate_map(
         ShackHartmannOptics(sensor.optics, source), input,
@@ -1479,7 +1234,7 @@ function shack_hartmann_rate_map(
 end
 
 
-function shack_hartmann_rate_map(sensor::ShackHartmannWFS{<:Diffractive},
+function shack_hartmann_rate_map(sensor::ShackHartmannWFS,
     input::Union{PupilFunction,ElectricField}, source=nothing)
     optics = source === nothing ? sensor.optics :
         ShackHartmannOptics(sensor.optics, source)

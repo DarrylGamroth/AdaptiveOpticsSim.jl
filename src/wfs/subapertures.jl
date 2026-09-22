@@ -1,4 +1,3 @@
-abstract type AbstractSlopeExtractionModel end
 abstract type AbstractValidSubaperturePolicy end
 
 struct GeometryValidSubapertures{T<:AbstractFloat} <: AbstractValidSubaperturePolicy
@@ -27,24 +26,8 @@ function FluxThresholdValidSubapertures(; light_ratio::Real=0.5,
     return FluxThresholdValidSubapertures{T}(value)
 end
 
-struct CenterOfGravityExtraction{T<:AbstractFloat,W<:Union{Nothing,AbstractMatrix{T}}} <: AbstractSlopeExtractionModel
-    threshold::T
-    window::W
-end
-
 mutable struct SubapertureLayoutState
     revision::UInt
-end
-
-function CenterOfGravityExtraction(threshold::Real; window=nothing,
-    T::Type{<:AbstractFloat}=typeof(float(threshold)))
-    value = T(threshold)
-    isfinite(value) && zero(T) <= value <= one(T) ||
-        throw(InvalidConfiguration(
-            "CenterOfGravityExtraction threshold must lie in [0, 1]"))
-    window === nothing || throw(UnsupportedAlgorithm(
-        "windowed center-of-gravity extraction is not implemented"))
-    return CenterOfGravityExtraction{T,Nothing}(value, nothing)
 end
 
 """
@@ -64,20 +47,6 @@ struct SubapertureLayout{T<:AbstractFloat,A<:AbstractMatrix{Bool},M<:Matrix{Bool
     valid_mask_host::M
     valid_indices_host::V
     state::SubapertureLayoutState
-end
-
-mutable struct SubapertureCalibration{T<:AbstractFloat,
-    R<:AbstractMatrix{T},V<:AbstractVector{T},
-    E<:AbstractSlopeExtractionModel,U}
-    extraction::E
-    reference_signal_2d::R
-    reference_signal_host::V
-    centroid_response::T
-    output_units::U
-    calibrated::Bool
-    wavelength::T
-    signature::UInt
-    revision::UInt
 end
 
 function SubapertureLayout(n_subap::Int, pupil_resolution::Int, diameter::Real, threshold::Real,
@@ -159,7 +128,7 @@ end
 Snapshot an explicit one-based square lenslet mask into a subaperture layout.
 The execution mask, host mirror, and column-major valid-index list are updated
 together before the cold-configuration revision advances. Prepared optics and
-estimators that bind the prior revision must be prepared again.
+other owners that bind the prior revision must be prepared again.
 """
 function set_valid_subapertures!(
     layout::SubapertureLayout,
@@ -175,41 +144,6 @@ function set_valid_subapertures!(
     _refresh_valid_indices_host!(layout)
     _advance_subaperture_layout_revision!(layout)
     return layout
-end
-
-function SubapertureCalibration(reference_signal_2d::AbstractMatrix{T},
-    reference_signal_host::AbstractVector{T},
-    extraction::AbstractSlopeExtractionModel=CenterOfGravityExtraction(
-        T(0.01); T=T);
-    output_units=:pixel) where {T<:AbstractFloat}
-    size(reference_signal_2d, 2) == 2 ||
-        throw(DimensionMismatchError(
-            "SubapertureCalibration reference must have two component columns"))
-    n_lenslet_values = size(reference_signal_2d, 1)
-    n_subap = isqrt(n_lenslet_values)
-    n_subap * n_subap == n_lenslet_values ||
-        throw(DimensionMismatchError(
-            "SubapertureCalibration reference rows must form a square lenslet grid"))
-    length(reference_signal_host) == length(reference_signal_2d) ||
-        throw(DimensionMismatchError(
-            "SubapertureCalibration host reference length must match reference storage"))
-    _require_declared_wfs_units(output_units, :estimation)
-    reference_host = vec(Array(reference_signal_2d))
-    all(isfinite, reference_host) || throw(InvalidConfiguration(
-        "SubapertureCalibration reference must contain only finite values"))
-    copyto!(reference_signal_host, reference_host)
-    return SubapertureCalibration{T,typeof(reference_signal_2d),
-        typeof(reference_signal_host),typeof(extraction),typeof(output_units)}(
-        extraction,
-        reference_signal_2d,
-        reference_signal_host,
-        one(T),
-        output_units,
-        false,
-        zero(T),
-        UInt(0),
-        UInt(0),
-    )
 end
 
 function update_subaperture_layout!(layout::SubapertureLayout, pupil::AbstractMatrix{Bool})
@@ -327,78 +261,7 @@ function update_subaperture_layout_from_amplitude!(
     return layout
 end
 
-function set_reference_signal!(calibration::SubapertureCalibration, signal_2d::AbstractMatrix)
-    size(signal_2d) == size(calibration.reference_signal_2d) ||
-        throw(DimensionMismatchError("reference signal shape must match SubapertureCalibration storage"))
-    copyto!(calibration.reference_signal_2d, signal_2d)
-    copyto!(calibration.reference_signal_host, vec(Array(calibration.reference_signal_2d)))
-    calibration.calibrated = false
-    calibration.revision += UInt(1)
-    return calibration
-end
-
-"""
-    set_subaperture_calibration!(calibration, reference_signal;
-        centroid_response, output_units=:pixel, wavelength, signature=0)
-
-Validate and install an explicit Shack-Hartmann reference and centroid
-calibration under the package's single-writer state contract.
-`centroid_response` is the raw reference-subtracted centroid response per
-reported output unit. Prepared estimators bind the resulting revision, output
-units, and calibration state and reject subsequent changes made through this
-API.
-"""
-function set_subaperture_calibration!(
-    calibration::SubapertureCalibration,
-    reference_signal::AbstractMatrix;
-    centroid_response::Real,
-    output_units=calibration.output_units,
-    wavelength::Real,
-    signature::Integer=0)
-    size(reference_signal) == size(calibration.reference_signal_2d) ||
-        throw(DimensionMismatchError(
-            "reference signal shape must match SubapertureCalibration storage"))
-    T = typeof(calibration.centroid_response)
-    response = T(centroid_response)
-    isfinite(response) && response != zero(T) ||
-        throw(InvalidConfiguration(
-            "centroid_response must be finite and nonzero"))
-    wavelength_m = T(wavelength)
-    isfinite(wavelength_m) && wavelength_m > zero(T) ||
-        throw(InvalidConfiguration(
-            "calibration wavelength must be finite and positive"))
-    reference_host = Array(reference_signal)
-    all(isfinite, reference_host) || throw(InvalidConfiguration(
-        "reference signal must contain only finite values"))
-    _require_declared_wfs_units(output_units, :estimation)
-    typeof(output_units) === typeof(calibration.output_units) ||
-        throw(InvalidConfiguration(
-            "calibration output-unit descriptor type cannot change in place"))
-    signature >= 0 || throw(InvalidConfiguration(
-        "calibration signature must be nonnegative"))
-    signature <= typemax(UInt) || throw(InvalidConfiguration(
-        "calibration signature exceeds UInt range"))
-    signature_value = UInt(signature)
-
-    copyto!(calibration.reference_signal_2d, reference_host)
-    copyto!(calibration.reference_signal_host, vec(reference_host))
-    calibration.centroid_response = response
-    calibration.output_units = output_units
-    calibration.calibrated = true
-    calibration.wavelength = wavelength_m
-    calibration.signature = signature_value
-    calibration.revision += UInt(1)
-    return calibration
-end
-
-@inline centroid_cutoff(model::CenterOfGravityExtraction{T}, peak::T) where {T<:AbstractFloat} =
-    peak <= zero(T) ? zero(T) : model.threshold * peak
-
-@inline slope_extraction_model(calibration::SubapertureCalibration) = calibration.extraction
-@inline reference_signal(calibration::SubapertureCalibration) = calibration.reference_signal_2d
-@inline reference_signal_host(calibration::SubapertureCalibration) = calibration.reference_signal_host
 @inline valid_subaperture_indices(layout::SubapertureLayout) = layout.valid_indices_host
 @inline n_valid_subapertures(layout::SubapertureLayout) = length(layout.valid_indices_host)
 
 function subaperture_layout end
-function subaperture_calibration end

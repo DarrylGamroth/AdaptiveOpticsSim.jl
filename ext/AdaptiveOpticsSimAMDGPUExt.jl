@@ -271,13 +271,6 @@ WavefrontSensors.grouped_accumulation_strategy(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:WavefrontSensors.BiOEdgeWFS},
 ) = WavefrontSensors.GroupedStaged2DStrategy()
-function WavefrontSensors.sh_sensing_execution_strategy(
-    ::Backends.AcceleratorStyle{<:AMDGPU.ROCBackend},
-    ::WavefrontSensors.ShackHartmannWFS,
-)
-    return WavefrontSensors.ShackHartmannWFSROCmHostStatsStrategy()
-end
-
 AdaptiveOpticsSim.Detectors.detector_execution_strategy(
     ::Type{<:Backends.AcceleratorStyle{<:AMDGPU.ROCBackend}},
     ::Type{<:AdaptiveOpticsSim.Detectors.Detector},

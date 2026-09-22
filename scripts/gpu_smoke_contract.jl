@@ -53,6 +53,29 @@ function gpu_direct_image(tel::Telescope, src;
     return form_direct_image!(prepared)
 end
 
+"""Form a Shack--Hartmann detector-plane photon-rate mosaic explicitly."""
+function form_shack_hartmann_rate!(wfs::ShackHartmannWFS, pupil,
+    source=nothing)
+    rate = shack_hartmann_rate_map(wfs, pupil, source)
+    optics = prepare_wfs_optics(shack_hartmann_optics(wfs, source),
+        pupil, rate)
+    form_wfs_optical_products!(rate, pupil, optics)
+    return rate
+end
+
+"""Form an SH photon-rate mosaic and acquire its detector observation."""
+function acquire_shack_hartmann_observation!(wfs::ShackHartmannWFS,
+    pupil, source, detector::Detector, rng)
+    rate = form_shack_hartmann_rate!(wfs, pupil, source)
+    frame = similar(rate.values)
+    observation = WFSObservation(frame; units=:electron_count,
+        layout=:lenslet_mosaic)
+    acquisition = prepare_wfs_acquisition(detector, rate, observation;
+        source=source)
+    acquire_wfs_observation!(observation, rate, acquisition, rng)
+    return observation
+end
+
 function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     disable_scalar_backend!(B)
     failures = String[]
@@ -442,100 +465,97 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return dm_pupil.opd
     end
 
-    record_gpu_smoke!(failures, "measure_shack_geometric") do
+    record_gpu_smoke!(failures, "shack_hartmann_photon_rate") do
         wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
-        slopes = measure!(wfs, pupil)
-        @assert slopes isa BackendArray
-        return slopes
+        rate = form_shack_hartmann_rate!(wfs, pupil, src)
+        @assert rate.values isa BackendArray
+        return rate.values
     end
 
-    record_gpu_smoke!(failures, "measure_shack_diffractive") do
-        wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, src)
-        @assert slopes isa BackendArray
-        return slopes
+    record_gpu_smoke!(failures, "shack_hartmann_optics_and_acquisition") do
+        wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
+        det = Detector(noise=NoiseNone(), exposure_duration=one(T), qe=one(T),
+            binning=1, T=T, backend=backend)
+        observation = acquire_shack_hartmann_observation!(wfs, pupil, src,
+            det, rng)
+        @assert observation_storage(observation) isa BackendArray
+        return observation_storage(observation)
     end
 
-    record_gpu_smoke!(failures, "measure_shack_diffractive_spectral_common_grid") do
+    record_gpu_smoke!(failures, "shack_hartmann_spectral_rate_bundle") do
         bundle = SpectralBundle(fill(wavelength(src), 2), T[0.4, 0.6]; T=T)
         spectral = with_spectrum(src, bundle)
-        wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, spectral)
-        @assert slopes isa BackendArray
-        return slopes
+        wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
+        rates = form_shack_hartmann_rate!(wfs, pupil, spectral)
+        @assert all(rate.values isa BackendArray for rate in rates)
+        return rates[1].values
     end
 
-    record_gpu_smoke!(failures, "reject_shack_diffractive_distinct_wavelength_grids") do
+    record_gpu_smoke!(failures, "shack_hartmann_spectral_distinct_wavelengths") do
         bundle = SpectralBundle(
             T[0.9 * wavelength(src), 1.1 * wavelength(src)],
             T[0.4, 0.6]; T=T)
         spectral = with_spectrum(src, bundle)
-        wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(),
-            T=T, backend=backend)
-        rejected = false
-        try
-            measure!(wfs, pupil, spectral)
-        catch err
-            err isa InvalidConfiguration || rethrow()
-            rejected = true
-        end
-        @assert rejected
-        return nothing
+        wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
+        rates = form_shack_hartmann_rate!(wfs, pupil, spectral)
+        @assert all(rate.values isa BackendArray for rate in rates)
+        return rates[1].values
     end
 
-    record_gpu_smoke!(failures, "measure_shack_diffractive_extended") do
+    record_gpu_smoke!(failures, "shack_hartmann_extended_source_rate") do
         model = GaussianDiskSourceModel(sigma_arcsec=T(0.35), n_side=5, T=T)
         ext = with_extended_source(src, model)
-        wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, ext)
-        @assert slopes isa BackendArray
-        return slopes
+        wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
+        rate = form_shack_hartmann_rate!(wfs, pupil, ext)
+        @assert rate.values isa BackendArray
+        return rate.values
     end
 
-    record_gpu_smoke!(failures, "measure_shack_diffractive_spiders") do
-        wfs = ShackHartmannWFS(spider_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, spider_pupil, src)
-        @assert slopes isa BackendArray
-        return slopes
+    record_gpu_smoke!(failures, "shack_hartmann_spider_rate") do
+        wfs = ShackHartmannWFS(spider_tel; n_lenslets=4, T=T, backend=backend)
+        rate = form_shack_hartmann_rate!(wfs, spider_pupil, src)
+        @assert rate.values isa BackendArray
+        return rate.values
     end
 
-    record_gpu_smoke!(failures, "measure_shack_lgs") do
-        wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, lgs)
-        @assert slopes isa BackendArray
-        return slopes
+    record_gpu_smoke!(failures, "shack_hartmann_lgs_rate") do
+        wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
+        rate = form_shack_hartmann_rate!(wfs, pupil, lgs)
+        @assert rate.values isa BackendArray
+        return rate.values
     end
 
-    record_gpu_smoke!(failures, "measure_shack_diffractive_asterism") do
+    record_gpu_smoke!(failures, "shack_hartmann_asterism_rate") do
         ast = Asterism([
             Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0), T=T),
             Source(band=:I, magnitude=0.0, coordinates=(1.0, 45.0), T=T),
         ])
-        wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, ast)
-        @assert slopes isa BackendArray
-        return slopes
+        wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
+        rate = form_shack_hartmann_rate!(wfs, pupil, ast)
+        @assert rate.values isa BackendArray
+        return rate.values
     end
 
-    record_gpu_smoke!(failures, "measure_shack_diffractive_asterism_detector") do
+    record_gpu_smoke!(failures, "shack_hartmann_asterism_acquisition") do
         ast = Asterism([
             Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0), T=T),
             Source(band=:I, magnitude=0.0, coordinates=(1.0, 45.0), T=T),
         ])
-        wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+        wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
         det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)
-        slopes = measure!(wfs, pupil, ast, det; rng=rng)
-        @assert slopes isa BackendArray
-        return slopes
+        observation = acquire_shack_hartmann_observation!(wfs, pupil, ast,
+            det, rng)
+        @assert observation_storage(observation) isa BackendArray
+        return observation_storage(observation)
     end
 
-    record_gpu_smoke!(failures, "measure_shack_diffractive_detector_equivalence") do
+    record_gpu_smoke!(failures, "shack_hartmann_detector_equivalence") do
         cpu_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=CPUBackend())
         gpu_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         cpu_src = Source(band=:I, magnitude=0.0, T=T)
         gpu_src = Source(band=:I, magnitude=0.0, T=T)
-        cpu_wfs = ShackHartmannWFS(cpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=CPUBackend())
-        gpu_wfs = ShackHartmannWFS(gpu_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+        cpu_wfs = ShackHartmannWFS(cpu_tel; n_lenslets=4, T=T, backend=CPUBackend())
+        gpu_wfs = ShackHartmannWFS(gpu_tel; n_lenslets=4, T=T, backend=backend)
         cpu_det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
             sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T, backend=CPUBackend())
         gpu_det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
@@ -543,13 +563,13 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
         cpu_pupil = PupilFunction(cpu_tel; T=T, backend=CPUBackend())
         gpu_pupil = PupilFunction(gpu_tel; T=T, backend=backend)
-        measure!(cpu_wfs, cpu_pupil, cpu_src, cpu_det; rng=rng)
-        measure!(gpu_wfs, gpu_pupil, gpu_src, gpu_det; rng=rng)
+        cpu_observation = acquire_shack_hartmann_observation!(cpu_wfs,
+            cpu_pupil, cpu_src, cpu_det, rng)
+        gpu_observation = acquire_shack_hartmann_observation!(gpu_wfs,
+            gpu_pupil, gpu_src, gpu_det, rng)
 
-        cpu_export = Array(
-            WavefrontSensors._legacy_shack_hartmann_spot_cube(cpu_wfs))
-        gpu_export = Array(
-            WavefrontSensors._legacy_shack_hartmann_spot_cube(gpu_wfs))
+        cpu_export = Array(observation_storage(cpu_observation))
+        gpu_export = Array(observation_storage(gpu_observation))
 
         @assert size(gpu_export) == size(cpu_export)
         @assert isapprox(gpu_export, cpu_export; rtol=1f-5, atol=1f-4)
@@ -650,7 +670,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             reference_wavelength_m=T(500e-9), L0=25.0, T=T,
             backend=backend)
         dm = DeformableMirror(step_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
-        wfs = ShackHartmannWFS(step_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
+        wfs = ShackHartmannWFS(step_tel; n_lenslets=4, T=T, backend=backend)
         det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)
         step_pupil = PupilFunction(step_tel; T=T, backend=backend)
         renderer = prepare_atmosphere_renderer(atm, step_tel, src)
@@ -658,25 +678,15 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         render_atmosphere!(step_pupil, renderer, atm, epoch)
         update_surface!(dm)
         apply_surface!(step_pupil, dm, DMAdditive())
-        slopes = measure!(wfs, step_pupil, src, det; rng=rng)
+        observation = acquire_shack_hartmann_observation!(wfs, step_pupil,
+            src, det, rng)
         imaging = prepare_direct_imaging(step_pupil, src; zero_padding=2)
         rate_map = form_direct_image!(imaging)
         acquisition = prepare_detector_acquisition(det, rate_map)
         frame = capture!(acquisition; rng=rng)
-        @assert slopes isa BackendArray
+        @assert observation_storage(observation) isa BackendArray
         @assert frame isa BackendArray
         return frame
-    end
-
-    record_gpu_smoke!(failures, "interaction_matrix_calibration") do
-        cal_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
-        dm = DeformableMirror(cal_tel; n_act=4, influence_width=0.3, T=T, backend=backend)
-        wfs = ShackHartmannWFS(cal_tel; n_lenslets=4, mode=Diffractive(), T=T, backend=backend)
-        calibration_pupil = PupilFunction(cal_tel; T=T, backend=backend)
-        imat = interaction_matrix(dm, wfs, calibration_pupil, src;
-            amplitude=T(0.05))
-        @assert imat.matrix isa BackendArray
-        return imat.matrix
     end
 
     record_gpu_smoke!(failures, "gain_sensing_camera") do

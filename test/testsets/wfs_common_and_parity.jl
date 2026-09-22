@@ -73,10 +73,8 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     @test !Base.isexported(WavefrontSensors, :reconstruct)
     for name in (
         :ShackHartmannWFS,
-        :ShackHartmannDirectFrontEnd,
         :ShackHartmannOpticalFrontEnd,
         :SubapertureLayout,
-        :SubapertureCalibration,
         :PyramidWFS,
         :BiOEdgeWFS,
         :PyramidOpticalFrontEnd,
@@ -154,14 +152,6 @@ end
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         pupil.opd[i, j] = i + j / 10
     end
-
-    sh_plain = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
-    sh_shift = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8,
-        half_pixel_shift=true)
-    sh_thresh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8,
-        threshold_cog=0.2)
-    @test measure!(sh_plain, pupil, src) != measure!(sh_shift, pupil, src)
-    @test measure!(sh_plain, pupil, src) != measure!(sh_thresh, pupil, src)
 
     pyr_auto = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
     @test size(pyr_auto.front_end.modulation.phases, 3) == 8
@@ -432,7 +422,6 @@ end
     detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
         qe=1.0, binning=1)
     sensors = (
-        ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive()),
         PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
         BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
     )
@@ -442,9 +431,8 @@ end
         @test_throws InvalidConfiguration measure!(wfs, pupil,
             heterogeneous, detector)
     end
-    @test !sensors[1].calibration.calibrated
+    @test !sensors[1].estimator.state.calibrated
     @test !sensors[2].estimator.state.calibrated
-    @test !sensors[3].estimator.state.calibrated
 
     common_lgs = Asterism([
         LGSSource(wavelength=589e-9, elongation_factor=1.4,

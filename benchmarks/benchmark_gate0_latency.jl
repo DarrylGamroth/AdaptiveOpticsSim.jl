@@ -122,15 +122,33 @@ function make_gate0_card(raw::AbstractDict)
             end
         end
     elseif kind == "shack_hartmann"
+        # The retained card ID measures the plant boundary only: physical
+        # rate formation followed by a complete detector acquisition.
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.0)
         src = Source(band=:I, magnitude=0.0)
         pupil = PupilFunction(tel)
         gate0_opd_ramp!(pupil)
         wfs = ShackHartmannWFS(tel; n_lenslets=Int(raw["n_lenslets"]),
-            n_pix_subap=Int(raw["n_pix_subap"]), mode=Diffractive())
-        let wfs=wfs, pupil=pupil, src=src
-            () -> measure!(wfs, pupil, src)
+            n_pix_subap=Int(raw["n_pix_subap"]))
+        rate = shack_hartmann_rate_map(wfs, pupil, src)
+        optics_plan = prepare_wfs_optics(
+            shack_hartmann_optics(wfs, src), pupil, rate)
+        detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
+            qe=1.0, response_model=NullFrameResponse())
+        observation = WFSObservation(similar(rate.values);
+            units=:electron_count, layout=:lenslet_mosaic)
+        acquisition_plan = prepare_wfs_acquisition(detector, rate,
+            observation; source=src)
+        rng = runtime_rng(60)
+        let rate=rate, pupil=pupil, optics_plan=optics_plan,
+            observation=observation, acquisition_plan=acquisition_plan,
+            rng=rng
+            () -> begin
+                form_wfs_optical_products!(rate, pupil, optics_plan)
+                acquire_wfs_observation!(observation, rate,
+                    acquisition_plan, rng)
+            end
         end
     elseif kind == "pyramid"
         tel = Telescope(resolution=resolution, diameter=8.0,

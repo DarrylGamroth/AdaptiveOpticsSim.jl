@@ -2,6 +2,7 @@ Base.find_package("Proper") === nothing &&
     error("Proper.jl is not available in the active environment. Install it with `using Pkg; Pkg.add(\"Proper\")`, or use `Pkg.develop(path=\"../proper.jl\")` for a sibling checkout, before running this example.")
 
 using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using Proper
 
@@ -17,13 +18,13 @@ function main()
     println("proper_hil_coronagraph_example")
     println("  backend: ", backend_name)
     println("  wavelength_um: ", ctx.wavelength_um)
-    println("  command_length: ", length(command(ctx.scenario)))
-    println("  slopes_length: ", length(slopes(ctx.scenario)))
+    println("  command_length: ", length(ctx.dm.state.coefs))
+    println("  wfs_rate_shape: ", size(intensity_values(ctx.wfs_rate)))
 
     for _ in 1:n_steps
         image, sampling = hil_step!(ctx)
         println("  step=", ctx.step_index,
-            " slopes_l2=", sqrt(sum(abs2, slopes(ctx.scenario))),
+            " wfs_rate_sum=", sum(intensity_values(ctx.wfs_rate)),
             " image_shape=", size(image),
             " science_sampling=", sampling)
     end

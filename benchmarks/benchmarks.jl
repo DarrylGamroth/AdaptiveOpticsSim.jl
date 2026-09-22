@@ -19,18 +19,25 @@ function bench_wfs()
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         pupil.opd[i, j] = i
     end
-    return @benchmark measure!($wfs, $pupil)
+    src = Source(band=:I, magnitude=0.0)
+    rate = shack_hartmann_rate_map(wfs, pupil, src)
+    optics_plan = prepare_wfs_optics(shack_hartmann_optics(wfs, src),
+        pupil, rate)
+    return @benchmark form_wfs_optical_products!($rate, $pupil, $optics_plan)
 end
 
 function bench_wfs_lgs()
     tel = Telescope(resolution=48, diameter=8.0, central_obstruction=0.0)
-    wfs = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive())
+    wfs = ShackHartmannWFS(tel; n_lenslets=6)
     lgs = LGSSource(elongation_factor=1.3, photon_irradiance=1.0)
     pupil = PupilFunction(tel)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         pupil.opd[i, j] = i - j
     end
-    return @benchmark measure!($wfs, $pupil, $lgs)
+    rate = shack_hartmann_rate_map(wfs, pupil, lgs)
+    optics_plan = prepare_wfs_optics(shack_hartmann_optics(wfs, lgs),
+        pupil, rate)
+    return @benchmark form_wfs_optical_products!($rate, $pupil, $optics_plan)
 end
 
 function bench_pyramid()

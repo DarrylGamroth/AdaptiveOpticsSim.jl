@@ -33,10 +33,10 @@ function _resolve_backend(name::AbstractString)
     error("unsupported backend '$name'; use cpu, cuda, or amdgpu")
 end
 
-_sync_wfs!(::Nothing, _) = nothing
+_sync_array!(::Nothing, _) = nothing
 
-function _sync_wfs!(::Type{B}, wfs) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
-    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(slopes(wfs)))
+function _sync_array!(::Type{B}, storage) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    AdaptiveOpticsSim.Backends.synchronize_backend!(AdaptiveOpticsSim.Backends.execution_style(storage))
     return nothing
 end
 
@@ -80,7 +80,7 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
         T=T,
     )
     ast = Asterism([lgs, second_lgs])
-    wfs = ShackHartmannWFS(tel; n_lenslets=14, mode=Diffractive(), T=T, backend=backend)
+    wfs = ShackHartmannWFS(tel; n_lenslets=14, T=T, backend=backend)
     det = Detector(noise=NoiseNone(), exposure_duration=T(1e-3), qe=T(1), binning=1, T=T, backend=backend)
     pupil = PupilFunction(tel; T=T, backend=backend)
 
@@ -88,24 +88,37 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     AdaptiveOpticsSim.Backends.randn_backend!(rng, pupil.opd)
     pupil.opd .*= T(5e-8)
 
+    rate = shack_hartmann_rate_map(wfs, pupil, ast)
+    optics = prepare_wfs_optics(shack_hartmann_optics(wfs, ast), pupil,
+        rate)
+    frame = similar(rate.values)
+    observation = WFSObservation(frame; units=:electron_count,
+        layout=:lenslet_mosaic)
+    acquisition = prepare_wfs_acquisition(det, rate, observation;
+        source=ast)
+
+    step! = () -> begin
+        form_wfs_optical_products!(rate, pupil, optics)
+        acquire_wfs_observation!(observation, rate, acquisition, rng)
+        _sync_array!(backend_tag, observation_storage(observation))
+        return observation
+    end
+
     t0 = time_ns()
-    measure!(wfs, pupil, ast, det; rng=rng)
-    _sync_wfs!(backend_tag, wfs)
+    step!()
     build_time_ns = time_ns() - t0
 
-    timing = runtime_timing(() -> begin
-        measure!(wfs, pupil, ast, det; rng=rng)
-        _sync_wfs!(backend_tag, wfs)
-    end; warmup=warmup, samples=samples, gc_before=false)
+    timing = runtime_timing(step!; warmup=warmup, samples=samples,
+        gc_before=false)
 
-    println("common_calibration_lgs_asterism_runtime_profile")
+    println("shack_hartmann_lgs_asterism_optical_acquisition_profile")
     println("  backend: ", backend_label)
     println("  build_time_ns: ", build_time_ns)
-    println("  measure_mean_ns: ", timing.mean_ns)
-    println("  measure_p95_ns: ", timing.p95_ns)
+    println("  optical_acquisition_mean_ns: ", timing.mean_ns)
+    println("  optical_acquisition_p95_ns: ", timing.p95_ns)
     println("  frame_rate_hz: ", 1.0e9 / timing.mean_ns)
-    println("  spot_cube_shape: ",
-        size(WavefrontSensors._legacy_shack_hartmann_spot_cube(wfs)))
+    println("  photon_rate_mosaic_shape: ", size(rate.values))
+    println("  observation_shape: ", size(observation_storage(observation)))
     return nothing
 end
 

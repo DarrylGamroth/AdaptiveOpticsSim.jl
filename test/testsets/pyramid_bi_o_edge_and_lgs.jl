@@ -101,10 +101,7 @@ end
             photon_irradiance=1.0,
         )
         wfs = if family === :shack_hartmann
-            sensor = ShackHartmannWFS(tel; n_lenslets=4,
-                mode=Diffractive(), n_pix_subap=4)
-            prepare_sampling!(sensor, pupil, src)
-            sensor
+            ShackHartmannWFS(tel; n_lenslets=4, n_pix_subap=4)
         elseif family === :pyramid
             PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=0.0)
@@ -112,22 +109,27 @@ end
             BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
                 modulation=0.0)
         end
-        ensure_kernel! = family === :shack_hartmann ?
-            WavefrontSensors.ensure_lgs_kernels! :
-            WavefrontSensors.ensure_lgs_kernel!
         kernel_state = family === :shack_hartmann ?
             wfs.optics.propagation.workspace :
             wfs.front_end.propagation.workspace
 
-        ensure_kernel!(wfs, pupil, src)
+        ensure_kernel! = if family === :shack_hartmann
+            rate = shack_hartmann_rate_map(wfs, pupil, src)
+            optics = shack_hartmann_optics(wfs, src)
+            () -> prepare_wfs_optics(optics, pupil, rate)
+        else
+            () -> WavefrontSensors.ensure_lgs_kernel!(wfs, pupil, src)
+        end
+
+        ensure_kernel!()
         original_tag = kernel_state.lgs_kernel_tag
         original_kernel = copy(kernel_state.lgs_kernel_fft)
-        ensure_kernel!(wfs, pupil, src)
+        ensure_kernel!()
         @test kernel_state.lgs_kernel_tag == original_tag
 
         src.params.sodium_layer_profile.relative_weights .=
             [0.8, 0.1, 0.1]
-        ensure_kernel!(wfs, pupil, src)
+        ensure_kernel!()
         @test kernel_state.lgs_kernel_tag != original_tag
         @test !isapprox(kernel_state.lgs_kernel_fft, original_kernel;
             rtol=1e-12, atol=1e-14)
@@ -377,21 +379,10 @@ end
         KA_CPU_STYLE, bio_flux_select_accel, pupil,
         ngs) === bio_flux_select_accel
     @test bio_flux_select_accel.estimator.workspace.valid_signal_count > 0
-    sh = ShackHartmannWFS(tel; n_lenslets=4)
-    lgs = LGSSource(elongation_factor=2.0)
-    slopes_ngs = measure!(sh, pupil, ngs)
-    slopes_lgs = measure!(sh, pupil, lgs)
-    n_lenslets = microlens_array(sh.front_end).params.n_lenslets
-    n = n_lenslets * n_lenslets
-    @test slopes_lgs[n+1:end] ≈ slopes_ngs[n+1:end] .* 2.0
-
-    bio_lgs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    @test WavefrontSensors.ensure_lgs_kernel!(bio_lgs, pupil, lgs) ===
-        bio_lgs
-    sodium_layer_profile = SodiumLayerProfile(
+    sodium_profile = SodiumLayerProfile(
         [80_000.0, 90_000.0, 100_000.0], [0.2, 0.6, 0.2])
     sodium_lgs = LGSSource(elongation_factor=1.2,
-        sodium_layer_profile=sodium_layer_profile, fwhm_spot_up=1.0)
+        sodium_layer_profile=sodium_profile, fwhm_spot_up=1.0)
     bio_sodium_lgs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     @test WavefrontSensors.ensure_lgs_kernel!(bio_sodium_lgs, pupil,
         sodium_lgs) === bio_sodium_lgs
@@ -402,42 +393,28 @@ end
         cached_tag
 end
 
-@testset "Diffractive WFS" begin
+@testset "Diffractive Pyramid and Bi-O-edge WFS" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         pupil.opd[i, j] = i
     end
     ngs = Source(band=:I, magnitude=0.0)
-    lgs = LGSSource(elongation_factor=1.5, photon_irradiance=1.0)
-
-    sh = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    @test_throws InvalidConfiguration measure!(sh, pupil)
-    sh_slopes = measure!(sh, pupil, ngs)
-    @test length(sh_slopes) == 2 * 4 * 4
-    @test all(isfinite, sh_slopes)
-    sh_lgs = measure!(sh, pupil, lgs)
-    @test all(isfinite, sh_lgs)
 
     sodium_layer_profile = SodiumLayerProfile(
         [80_000.0, 90_000.0, 100_000.0], [0.2, 0.6, 0.2])
     sodium_lgs = LGSSource(elongation_factor=1.2,
         sodium_layer_profile=sodium_layer_profile,
         fwhm_spot_up=1.0, photon_irradiance=1.0)
-    sh_profile = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    sh_profile_slopes = measure!(sh_profile, pupil, sodium_lgs)
-    @test all(isfinite, sh_profile_slopes)
-
-    sh_sampled = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8)
-    sh_sampled_slopes = measure!(sh_sampled, pupil, ngs)
-    @test length(sh_sampled_slopes) == 2 * 4 * 4
 
     pyr_sampled = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
         n_pix_separation=4, n_pix_edge=2, binning=2)
     pyr_sampled_slopes = measure!(pyr_sampled, pupil, ngs)
-    @test length(pyr_sampled_slopes) == 2 * count(pyr_sampled.estimator.state.valid_i4q)
+    @test length(pyr_sampled_slopes) ==
+        2 * count(pyr_sampled.estimator.state.valid_i4q)
     pyr_intensity = reshape(
-        Float64.(1:length(pyr_sampled.front_end.propagation.workspace.intensity)),
+        Float64.(1:length(
+            pyr_sampled.front_end.propagation.workspace.intensity)),
         size(pyr_sampled.front_end.propagation.workspace.intensity),
     )
     pyr_frame = copy(WavefrontSensors.sample_pyramid_intensity!(
@@ -448,16 +425,19 @@ end
     AdaptiveOpticsSim.bin2d!(pyr_manual, pyr_camera, 2)
     @test pyr_frame == pyr_manual
 
-    bio_sampled = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), binning=2)
+    bio_sampled = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+        binning=2)
     bio_sampled_slopes = measure!(bio_sampled, pupil, ngs)
-    @test length(bio_sampled_slopes) == 2 * count(bio_sampled.estimator.state.valid_i4q)
+    @test length(bio_sampled_slopes) ==
+        2 * count(bio_sampled.estimator.state.valid_i4q)
     bio_intensity = reshape(Float64.(1:length(pupil.opd)), size(pupil.opd))
     bio_frame = copy(WavefrontSensors.sample_bi_o_edge_intensity!(
         bio_sampled, pupil, bio_intensity))
     bio_camera = zeros(Float64, 4, 4)
     bio_manual = similar(bio_frame)
     AdaptiveOpticsSim.bin2d!(bio_camera, bio_intensity, 8)
-    AdaptiveOpticsSim.bin2d!(bio_manual, bio_camera, div(size(bio_camera, 1), size(bio_frame, 1)))
+    AdaptiveOpticsSim.bin2d!(bio_manual, bio_camera,
+        div(size(bio_camera, 1), size(bio_frame, 1)))
     @test bio_frame == bio_manual
 
     pyr_profile = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
@@ -479,14 +459,6 @@ end
     @test length(bio_slopes) == 2 * 4 * 4
 
     det = Detector(noise=NoiseNone(), binning=1)
-    sh_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    sh_det_slopes = measure!(sh_det, pupil, ngs, det)
-    @test length(sh_det_slopes) == 2 * 4 * 4
-    @test_throws InvalidConfiguration wfs_detector_image(sh_det, det)
-    sh_adu_det = Detector(noise=NoiseNone(), binning=1, full_well=30_000.0, bits=12, output_type=UInt16)
-    sh_adu = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    measure!(sh_adu, pupil, ngs, sh_adu_det; rng=MersenneTwister(15))
-    @test_throws InvalidConfiguration wfs_detector_image(sh_adu, sh_adu_det)
     pyr_det = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_det_slopes = measure!(pyr_det, pupil, ngs, det)
     @test length(pyr_det_slopes) == 2 * 4 * 4
@@ -496,50 +468,36 @@ end
     @test length(bio_det_slopes) == 2 * 4 * 4
     @test wfs_detector_image(bio_det, det) === output_frame(det)
 
-    ast = Asterism([ngs, Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))])
-    sh_ast = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    sh_ast_slopes = copy(measure!(sh_ast, pupil, ast))
-    @test length(sh_ast_slopes) == 2 * 4 * 4
-    sh_ast_serial = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    WavefrontSensors.prepare_sampling!(sh_ast_serial, pupil, ast.sources[1])
-    WavefrontSensors.ensure_sh_calibration!(sh_ast_serial, pupil,
-        ast.sources[1])
-    fill!(sh_ast_serial.workspace.detector_noise_cube, zero(eltype(sh_ast_serial.workspace.detector_noise_cube)))
-    for src in ast.sources
-        WavefrontSensors.sampled_spots_peak!(sh_ast_serial, pupil, src)
-        sh_ast_serial.workspace.detector_noise_cube .+= sh_ast_serial.workspace.spot_cube
-    end
-    copyto!(sh_ast_serial.workspace.spot_cube, sh_ast_serial.workspace.detector_noise_cube)
-    sh_ast_serial_peak = maximum(sh_ast_serial.workspace.spot_cube)
-    WavefrontSensors.sh_signal_from_spots!(sh_ast_serial, sh_ast_serial_peak, slope_extraction_model(sh_ast_serial))
-    WavefrontSensors.subtract_reference_and_scale!(sh_ast_serial)
-    sh_ast_serial_slopes = copy(slopes(sh_ast_serial))
-    @test norm(sh_ast_slopes - sh_ast_serial_slopes) / norm(sh_ast_slopes) < 0.07
-    mixed_ngs = Source(wavelength=wavelength(sodium_lgs), magnitude=0.0, coordinates=(0.0, 0.0))
-    mixed_ast = Asterism([mixed_ngs, sodium_lgs])
-    sh_mixed_det = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
-    @test_throws InvalidConfiguration measure!(sh_mixed_det, pupil,
-        mixed_ast, det; rng=MersenneTwister(14))
-    @test !sh_mixed_det.calibration.calibrated
+    ast = Asterism([
+        ngs,
+        Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0)),
+    ])
     pyr_ast = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_ast_slopes = copy(measure!(pyr_ast, pupil, ast))
     @test length(pyr_ast_slopes) == 2 * 4 * 4
     pyr_ast_serial = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     WavefrontSensors.ensure_pyramid_calibration!(pyr_ast_serial, pupil,
         ast.sources[1])
-    pyr_ast_stack = @view WavefrontSensors.ensure_pyramid_asterism_stack!(pyr_ast_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
-    fill!(pyr_ast_serial.front_end.propagation.workspace.intensity, zero(eltype(pyr_ast_serial.front_end.propagation.workspace.intensity)))
+    pyr_ast_stack = @view WavefrontSensors.ensure_pyramid_asterism_stack!(
+        pyr_ast_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
+    fill!(pyr_ast_serial.front_end.propagation.workspace.intensity,
+        zero(eltype(
+            pyr_ast_serial.front_end.propagation.workspace.intensity)))
     for (src_idx, src) in pairs(ast.sources)
         WavefrontSensors.pyramid_intensity!(
             @view(pyr_ast_stack[:, :, src_idx]), pyr_ast_serial, pupil, src)
-        pyr_ast_serial.front_end.propagation.workspace.intensity .+= @view(pyr_ast_stack[:, :, src_idx])
+        pyr_ast_serial.front_end.propagation.workspace.intensity .+=
+            @view(pyr_ast_stack[:, :, src_idx])
     end
     pyr_ast_intensity = WavefrontSensors.sample_pyramid_intensity!(
-        pyr_ast_serial, pupil, pyr_ast_serial.front_end.propagation.workspace.intensity)
+        pyr_ast_serial, pupil,
+        pyr_ast_serial.front_end.propagation.workspace.intensity)
     WavefrontSensors.pyramid_signal!(pyr_ast_serial, pupil,
         pyr_ast_intensity)
-    slopes(pyr_ast_serial) .*= pyr_ast_serial.estimator.state.optical_gain
+    slopes(pyr_ast_serial) .*=
+        pyr_ast_serial.estimator.state.optical_gain
     @test pyr_ast_slopes ≈ slopes(pyr_ast_serial)
+
     bio_ast = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_ast_slopes = copy(measure!(bio_ast, pupil, ast))
     @test length(bio_ast_slopes) == 2 * 4 * 4
@@ -548,7 +506,8 @@ end
         ast.sources[1])
     bio_ast_serial_intensity = similar(
         bio_ast_serial.front_end.propagation.workspace.intensity)
-    fill!(bio_ast_serial_intensity, zero(eltype(bio_ast_serial_intensity)))
+    fill!(bio_ast_serial_intensity,
+        zero(eltype(bio_ast_serial_intensity)))
     for src in ast.sources
         WavefrontSensors.bi_o_edge_intensity!(
             bio_ast_serial.front_end.propagation.workspace.intensity,
@@ -557,40 +516,49 @@ end
             bio_ast_serial.front_end.propagation.workspace.intensity
     end
     bio_ast_intensity = WavefrontSensors.sample_bi_o_edge_intensity!(
-        bio_ast_serial, pupil,
-        bio_ast_serial_intensity)
+        bio_ast_serial, pupil, bio_ast_serial_intensity)
     WavefrontSensors.bi_o_edge_signal!(bio_ast_serial, pupil,
         bio_ast_intensity)
     @test bio_ast_slopes ≈ slopes(bio_ast_serial)
 
     pyr_ast_det = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
     pyr_ast_det_slopes = copy(measure!(pyr_ast_det, pupil, ast, det))
-    pyr_ast_det_serial = PyramidWFS(tel; pupil_samples=4, mode=Diffractive())
+    pyr_ast_det_serial = PyramidWFS(tel; pupil_samples=4,
+        mode=Diffractive())
     WavefrontSensors.ensure_pyramid_calibration!(pyr_ast_det_serial, pupil,
         ast.sources[1])
-    pyr_ast_det_stack = @view WavefrontSensors.ensure_pyramid_asterism_stack!(pyr_ast_det_serial, length(ast.sources))[:, :, 1:length(ast.sources)]
-    fill!(pyr_ast_det_serial.front_end.propagation.workspace.intensity, zero(eltype(pyr_ast_det_serial.front_end.propagation.workspace.intensity)))
+    pyr_ast_det_stack =
+        @view WavefrontSensors.ensure_pyramid_asterism_stack!(
+            pyr_ast_det_serial,
+            length(ast.sources))[:, :, 1:length(ast.sources)]
+    fill!(pyr_ast_det_serial.front_end.propagation.workspace.intensity,
+        zero(eltype(
+            pyr_ast_det_serial.front_end.propagation.workspace.intensity)))
     for (src_idx, src) in pairs(ast.sources)
         WavefrontSensors.pyramid_intensity!(
             @view(pyr_ast_det_stack[:, :, src_idx]), pyr_ast_det_serial,
             pupil, src)
-        pyr_ast_det_serial.front_end.propagation.workspace.intensity .+= @view(pyr_ast_det_stack[:, :, src_idx])
+        pyr_ast_det_serial.front_end.propagation.workspace.intensity .+=
+            @view(pyr_ast_det_stack[:, :, src_idx])
     end
     pyr_ast_det_intensity = WavefrontSensors.sample_pyramid_intensity!(
         pyr_ast_det_serial, pupil,
         pyr_ast_det_serial.front_end.propagation.workspace.intensity)
     pyr_ast_det_frame = capture!(det, pyr_ast_det_intensity,
         first(ast.sources); rng=MersenneTwister(12))
-    WavefrontSensors.resize_pyramid_signal_buffers!(pyr_ast_det_serial, size(pyr_ast_det_frame, 1))
+    WavefrontSensors.resize_pyramid_signal_buffers!(pyr_ast_det_serial,
+        size(pyr_ast_det_frame, 1))
     WavefrontSensors.pyramid_signal!(pyr_ast_det_serial, pupil,
         pyr_ast_det_frame)
-    slopes(pyr_ast_det_serial) .*= pyr_ast_det_serial.estimator.state.optical_gain
+    slopes(pyr_ast_det_serial) .*=
+        pyr_ast_det_serial.estimator.state.optical_gain
     @test pyr_ast_det_slopes ≈ slopes(pyr_ast_det_serial)
 
     bio_ast_det = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     bio_ast_det_slopes = copy(measure!(bio_ast_det, pupil, ast, det;
         rng=MersenneTwister(13)))
-    bio_ast_det_serial = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    bio_ast_det_serial = BiOEdgeWFS(tel; pupil_samples=4,
+        mode=Diffractive())
     WavefrontSensors.ensure_bi_o_edge_calibration!(bio_ast_det_serial, pupil,
         ast.sources[1])
     bio_ast_det_serial_intensity = similar(
@@ -605,11 +573,11 @@ end
             bio_ast_det_serial.front_end.propagation.workspace.intensity
     end
     bio_ast_det_intensity = WavefrontSensors.sample_bi_o_edge_intensity!(
-        bio_ast_det_serial, pupil,
-        bio_ast_det_serial_intensity)
+        bio_ast_det_serial, pupil, bio_ast_det_serial_intensity)
     bio_ast_det_frame = capture!(det, bio_ast_det_intensity,
         first(ast.sources); rng=MersenneTwister(13))
-    WavefrontSensors.resize_bi_o_edge_signal_buffers!(bio_ast_det_serial, size(bio_ast_det_frame, 1))
+    WavefrontSensors.resize_bi_o_edge_signal_buffers!(bio_ast_det_serial,
+        size(bio_ast_det_frame, 1))
     WavefrontSensors.bi_o_edge_signal!(bio_ast_det_serial, pupil,
         bio_ast_det_frame)
     @test bio_ast_det_slopes ≈ slopes(bio_ast_det_serial)
@@ -665,7 +633,6 @@ end
         BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
         pupil, mixed_qe_ast, bio_sampled_qe_det)
 end
-
 @testset "Pyramid and Bi-O-edge incidence-normalization contracts" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
@@ -1100,48 +1067,4 @@ end
     @test full_bi_o_edge_rate > 0
     @test sum(attenuated_bi_o_edge.front_end.propagation.workspace.intensity) ≈
         transmission * full_bi_o_edge_rate rtol=1e-12
-end
-
-@testset "Shack-Hartmann subapertures" begin
-    tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.1)
-    pupil = PupilFunction(tel)
-    src = Source(band=:I, magnitude=0.0)
-    sh = ShackHartmannWFS(tel; n_lenslets=6, mode=Diffractive(), pixel_scale_arcsec=0.06, n_pix_subap=8, threshold_cog=0.02)
-
-    layout = subaperture_layout(sh.front_end)
-    calibration = subaperture_calibration(sh)
-    @test layout isa SubapertureLayout
-    @test calibration isa SubapertureCalibration
-    @test layout.n_subap == 6
-    @test layout.subap_pixels == 4
-    @test layout.pitch_m ≈ tel.params.diameter / 6
-    @test !calibration.calibrated
-    @test slope_extraction_model(sh) isa CenterOfGravityExtraction
-    @test slope_extraction_model(sh).threshold ≈ 0.02
-    @test n_valid_subapertures(layout) == count(layout.valid_mask_host)
-    @test valid_subaperture_indices(layout) == findall(layout.valid_mask_host)
-
-    prepare_runtime_wfs!(sh, pupil, src)
-    @test calibration.calibrated
-    @test calibration.centroid_response == sh.calibration.centroid_response
-    @test calibration.wavelength == sh.calibration.wavelength
-    @test calibration.signature == sh.calibration.signature
-    @test calibration.reference_signal_2d ===
-        sh.calibration.reference_signal_2d
-    @test calibration.reference_signal_host ===
-        sh.calibration.reference_signal_host
-    @test length(valid_subaperture_indices(layout)) == n_valid_subapertures(layout)
-
-    slopes = measure!(sh, pupil, src)
-    @test all(isfinite, slopes)
-    meta = AdaptiveOpticsSim.WavefrontSensors.wfs_output_metadata(sh)
-    @test meta.n_valid_subap == n_valid_subapertures(layout)
-    @test meta.subap_pixels == layout.subap_pixels
-    @test meta.calibrated
-
-    dm = DeformableMirror(tel; n_act=5)
-    imat = interaction_matrix(dm, sh, pupil, src; amplitude=1e-8)
-    @test size(imat.matrix, 1) ==
-        length(AdaptiveOpticsSim.WavefrontSensors.slopes(sh))
-    @test size(imat.matrix, 2) == length(dm.state.coefs)
 end

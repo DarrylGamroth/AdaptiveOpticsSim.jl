@@ -78,6 +78,12 @@ Domain operations keep specific verbs such as `render_atmosphere!`,
 `estimate_wfs_measurement!`, `reconstruct!`, and `update_surface!`. There is no
 universal package-wide `process!` interface.
 
+These verbs are capability-specific, not promises that every sensor family
+implements every stage. In particular, AOS Shack–Hartmann execution stops at
+the complete detector observation; FGA owns its maintained operational
+estimator. `geometric_wavefront_slopes!` is an explicitly named plant
+truth/reference calculation.
+
 Direct Julia composition is the unrestricted modeling surface. It owns explicit
 ordering when a scenario has generated topology, multiple cadences, conditional
 execution, or sub-frame optical sampling. AdaptiveOpticsSim supplies the optical

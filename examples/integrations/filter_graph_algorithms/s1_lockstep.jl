@@ -485,14 +485,12 @@ function _prepare_plant()
         telescope;
         n_lenslets=_SHACK_HARTMANN_LENSLETS,
         threshold=_SHACK_HARTMANN_VALID_THRESHOLD,
-        threshold_cog=_SHACK_HARTMANN_COG_THRESHOLD,
         threshold_convolution=_SHACK_HARTMANN_CONVOLUTION_THRESHOLD,
         half_pixel_shift=_SHACK_HARTMANN_HALF_PIXEL_SHIFT,
         diffraction_padding=_SHACK_HARTMANN_DIFFRACTION_PADDING,
         pixel_scale_arcsec=_SHACK_HARTMANN_PIXEL_SCALE,
         n_pix_subap=_SHACK_HARTMANN_PIXELS_PER_SUBAPERTURE,
         shannon_sampling=_SHACK_HARTMANN_SHANNON_SAMPLING,
-        mode=Diffractive(),
         T=T,
     )
     rate = shack_hartmann_rate_map(sensor, pupil, source)

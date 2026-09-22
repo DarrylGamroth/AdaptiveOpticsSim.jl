@@ -59,11 +59,13 @@ render_atmosphere!(pupil, renderer, atmosphere, epoch)
 wfs = ShackHartmannWFS(
     telescope;
     n_lenslets=4,
-    mode=Diffractive(),
     pixel_scale_arcsec=0.1,
     n_pix_subap=6,
 )
-measurement = measure!(wfs, pupil, source)
+photon_rate = shack_hartmann_rate_map(wfs, pupil, source)
+optics = shack_hartmann_optics(wfs, source)
+prepared_optics = prepare_wfs_optics(optics, pupil, photon_rate)
+form_wfs_optical_products!(photon_rate, pupil, prepared_optics)
 ~~~
 
 The atmosphere owns evolving turbulence state. The renderer owns a prepared
@@ -97,19 +99,38 @@ detector = Detector(
 )
 
 detector_rng = runtime_rng(2)
-measure!(wfs, pupil, source, detector; rng=detector_rng)
-frame = wfs_detector_image(wfs, detector)
+observation = WFSObservation(
+    similar(intensity_values(photon_rate), UInt16);
+    units=:adu,
+    layout=:lenslet_mosaic,
+)
+acquisition = prepare_wfs_acquisition(
+    detector,
+    photon_rate,
+    observation;
+    source,
+)
+acquire_wfs_observation!(
+    observation,
+    photon_rate,
+    acquisition,
+    detector_rng,
+)
+frame = observation_storage(observation)
 ~~~
 
 Detector quantization (`bits` and `full_well`) is separate from the Julia output
 element type. Use `output_type=nothing` for floating-point internal readout.
 
-For staged WFS models, keep optical formation, detector acquisition, and
-measurement estimation separate:
+For staged WFS models, keep optical formation, detector acquisition, and any
+external measurement estimation separate:
 
 1. `form_wfs_optical_products!`
 2. `acquire_wfs_observation!`
-3. `estimate_wfs_measurement!`
+3. pass the complete observation to its maintained estimator owner
+
+For Shack–Hartmann operation, step 3 belongs to FilterGraphAlgorithms. AOS
+retains no detector-frame-to-slope convenience path.
 
 ## Complete-Frame Algorithm Graphs
 

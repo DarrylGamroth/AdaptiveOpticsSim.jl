@@ -145,17 +145,16 @@ Average the sampled OPD gradient over each valid subaperture. `opd` and
 wavefront angle conventionally reported in radians.
 """
 function geometric_wavefront_slopes!(
-    slopes::AbstractVector,
-    opd::AbstractMatrix,
+    slopes::AbstractVector{T},
+    opd::AbstractMatrix{S},
     valid_mask::AbstractMatrix{Bool},
     sampling_m::NTuple{2,<:Real},
-)
+) where {T<:AbstractFloat,S<:Real}
     all(value -> isfinite(value) && value > zero(value), sampling_m) ||
         throw(InvalidConfiguration(
             "geometric wavefront sampling must be finite and positive"))
     sub, n_sub, offset = _geometric_slope_layout(
         slopes, opd, valid_mask)
-    T = eltype(slopes)
     scale_x = inv(T(sampling_m[1]))
     scale_y = inv(T(sampling_m[2]))
     _geometric_slopes!(

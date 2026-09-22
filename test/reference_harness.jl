@@ -49,13 +49,7 @@ struct ReferenceBundle
     cases::Vector{ReferenceCase}
 end
 
-const LEGACY_SH_INDEX_GRID_REFERENCE_ID =
-    "shack_hartmann_polychromatic_frame"
 const OOPAO_BI_O_EDGE_KIND = :bioedge_slopes
-
-@inline uses_legacy_sh_index_grid_reference(case::ReferenceCase) =
-    case.baseline === :specula &&
-    case.id == LEGACY_SH_INDEX_GRID_REFERENCE_ID
 
 abstract type ReferenceStorageConvention end
 
@@ -168,6 +162,22 @@ function load_reference_bundle(root::AbstractString=default_reference_root())
 end
 
 reference_cases(bundle::ReferenceBundle, baseline::Symbol) = [case for case in bundle.cases if case.baseline === baseline]
+
+function retired_sh_estimator_reference(case::ReferenceCase)
+    case.kind === :shack_hartmann_slopes && return true
+    if case.kind === :closed_loop_trace
+        wfs = get(case.config, "wfs", nothing)
+        wfs isa AbstractDict &&
+            Symbol(get(wfs, "kind", "")) === :shack_hartmann_slopes &&
+            return true
+    end
+    return case.baseline === :specula &&
+        case.id == "shack_hartmann_polychromatic_frame"
+end
+
+maintained_reference_cases(bundle::ReferenceBundle, baseline::Symbol) =
+    [case for case in reference_cases(bundle, baseline)
+     if !retired_sh_estimator_reference(case)]
 
 function load_reference_array(case::ReferenceCase)
     flat = vec(readdlm(case.data_path, Float64))
@@ -295,37 +305,6 @@ function build_reference_measurement_source(cfg::AbstractDict{<:AbstractString,<
         Float64.(spectrum_cfg["weights"]),
     )
     return with_spectrum(src, bundle)
-end
-
-"""
-    legacy_reference_sh_index_grid_frame!(wfs, pupil, src)
-
-Reproduce the retired Shack-Hartmann spectral index-grid approximation solely
-to characterize frozen external reference data.  This adapter intentionally
-prepares one detector grid at the wrapped source wavelength and adds the
-per-channel sampled spots by array index.  Production Shack-Hartmann APIs must
-not use this helper: distinct-wavelength channels require an explicit
-native-to-detector grid mapping.
-"""
-function legacy_reference_sh_index_grid_frame!(wfs::ShackHartmannWFS,
-    pupil::PupilFunction, src::SpectralSource)
-    WavefrontSensors.prepare_sampling!(wfs, pupil,
-        AdaptiveOpticsSim.Optics.spectral_reference_source(src))
-    fill!(wfs.optics.propagation.workspace.spot_cube_accum,
-        zero(eltype(wfs.optics.propagation.workspace.spot_cube_accum)))
-    total_irradiance = AdaptiveOpticsSim.Optics.photon_irradiance(src)
-    @inbounds for sample in AdaptiveOpticsSim.Optics.spectral_bundle(src)
-        variant = AdaptiveOpticsSim.Optics.source_with_wavelength_and_radiometric_value(
-            src, sample.wavelength,
-            eltype(slopes(wfs))(total_irradiance * sample.weight))
-        WavefrontSensors.sampled_spots_peak!(
-            AdaptiveOpticsSim.Backends.ScalarCPUStyle(), wfs, pupil, variant)
-        wfs.optics.propagation.workspace.spot_cube_accum .+=
-            wfs.workspace.spot_cube
-    end
-    copyto!(wfs.workspace.spot_cube,
-        wfs.optics.propagation.workspace.spot_cube_accum)
-    return wfs.workspace.spot_cube
 end
 
 function build_reference_detector(cfg::AbstractDict{<:AbstractString,<:Any})
@@ -1081,29 +1060,28 @@ end
 function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:Any}, tel::Telescope)
     threshold = Float64(get(cfg, "threshold", 0.1))
     mode = parse_sensing_mode(get(cfg, "mode", "geometric"))
-    if kind in (:shack_hartmann_slopes, :shack_hartmann_frame)
+    if kind === :shack_hartmann_frame
         n_lenslets = Int(cfg["n_lenslets"])
         pixel_scale = get(cfg, "pixel_scale", nothing)
         n_pix_subap = get(cfg, "n_pix_subap", nothing)
-        threshold_cog = Float64(get(cfg, "threshold_cog", 0.01))
         threshold_convolution = Float64(get(cfg, "threshold_convolution", 0.05))
         half_pixel_shift = Bool(get(cfg, "half_pixel_shift", false))
         if pixel_scale === nothing && n_pix_subap === nothing
-            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
-                threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
+            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold,
+                threshold_convolution=threshold_convolution,
                 half_pixel_shift=half_pixel_shift)
         elseif n_pix_subap === nothing
-            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
-                pixel_scale_arcsec=Float64(pixel_scale), threshold_cog=threshold_cog,
+            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold,
+                pixel_scale_arcsec=Float64(pixel_scale),
                 threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         elseif pixel_scale === nothing
-            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
-                n_pix_subap=Int(n_pix_subap), threshold_cog=threshold_cog,
+            return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold,
+                n_pix_subap=Int(n_pix_subap),
                 threshold_convolution=threshold_convolution, half_pixel_shift=half_pixel_shift)
         end
-        return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold, mode=mode,
+        return ShackHartmannWFS(tel; n_lenslets=n_lenslets, threshold=threshold,
             pixel_scale_arcsec=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap),
-            threshold_cog=threshold_cog, threshold_convolution=threshold_convolution,
+            threshold_convolution=threshold_convolution,
             half_pixel_shift=half_pixel_shift)
     elseif kind in (:pyramid_slopes, :pyramid_frame)
         pupil_samples = Int(cfg["pupil_samples"])
@@ -1201,7 +1179,7 @@ function compute_reference_actual(case::ReferenceCase)
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
         return copy(reference_direct_image(pupil, src;
             zero_padding=zero_padding))
-    elseif case.kind in (:shack_hartmann_slopes, :pyramid_slopes,
+    elseif case.kind in (:pyramid_slopes,
         OOPAO_BI_O_EDGE_KIND, :zernike_signal, :curvature_signal)
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
@@ -1233,13 +1211,11 @@ function compute_reference_actual(case::ReferenceCase)
         if haskey(case.config, "opd")
             apply_reference_opd!(pupil, case.config["opd"])
         end
-        if src isa SpectralSource && uses_legacy_sh_index_grid_reference(case)
-            legacy_reference_sh_index_grid_frame!(wfs, pupil, src)
-        else
-            WavefrontSensors.prepare_sampling!(wfs, pupil, src)
-            WavefrontSensors.sampled_spots_peak!(wfs, pupil, src)
-        end
-        @views return copy(wfs.workspace.spot_cube[1, :, :])
+        rate = shack_hartmann_rate_map(wfs, pupil, src)
+        prepared = prepare_wfs_optics(shack_hartmann_optics(wfs, src),
+            pupil, rate)
+        form_wfs_optical_products!(rate, pupil, prepared)
+        return copy(rate.values)
     elseif case.kind === :pyramid_frame
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
@@ -1507,25 +1483,23 @@ function compute_reference_actual_ka_cpu(case::ReferenceCase)
     if haskey(case.config, "opd")
         apply_reference_opd!(pupil, case.config["opd"])
     end
-    if case.kind === :shack_hartmann_slopes
-        src = build_reference_source(case.config["source"])
+    if case.kind === :shack_hartmann_frame
+        src = build_reference_measurement_source(case.config["source"])
         wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
-        mode_name = lowercase(String(get(case.config["wfs"], "mode", "geometric")))
-        if mode_name != "geometric"
-            throw(InvalidConfiguration("KA CPU reference path currently supports only geometric Shack-Hartmann cases"))
-        end
-        update_valid_mask!(wfs, pupil)
-        n_sub = n_lenslets(wfs.front_end)
-        sub = div(tel.params.resolution, n_sub)
-        offset = n_sub * n_sub
-        slopes = similar(AdaptiveOpticsSim.WavefrontSensors.slopes(wfs))
-        style = AdaptiveOpticsSim.Backends.AcceleratorStyle(KernelAbstractions.CPU())
-        AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!(
-            style, slopes, pupil.opd,
-            AdaptiveOpticsSim.WavefrontSensors.valid_subaperture_mask(wfs),
-            sub, n_sub,
-            offset)
-        return slopes
+        rate = shack_hartmann_rate_map(wfs, pupil, src)
+        prepared = prepare_wfs_optics(shack_hartmann_optics(wfs, src),
+            pupil, rate)
+        optics = prepared.optics
+        WavefrontSensors._enqueue_shack_hartmann_rate!(
+            KA_CPU_STYLE,
+            rate,
+            pupil,
+            optics,
+            src,
+            WavefrontSensors._sh_front_end_wavelength(optics, pupil),
+        )
+        Backends.synchronize_backend!(KA_CPU_STYLE)
+        return copy(rate.values)
     end
     throw(InvalidConfiguration("KA CPU reference path not implemented for reference kind '$(case.kind)'"))
 end
@@ -1596,18 +1570,7 @@ function specula_legacy_radiometric_factor(case::ReferenceCase)
     case.baseline === :specula || return nothing
     duration = legacy_reference_optical_duration(case, SPECULA_LEGACY_OPTICAL_INTEGRATION_KINDS)
     duration === nothing && return nothing
-    factor = duration * legacy_reference_spectral_weight_sum(case)
-    if case.kind === :shack_hartmann_frame &&
-            uses_legacy_sh_index_grid_reference(case)
-        tel = build_reference_telescope(case.config["telescope"])
-        src = build_reference_measurement_source(case.config["source"])
-        wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
-        WavefrontSensors.prepare_sampling!(wfs, PupilFunction(tel),
-            AdaptiveOpticsSim.Optics.spectral_reference_source(src))
-        pad = size(wfs.optics.propagation.workspace.fft_stack, 1)
-        factor *= pad * pad
-    end
-    return factor
+    return duration * legacy_reference_spectral_weight_sum(case)
 end
 
 function legacy_reference_radiometric_factor(case::ReferenceCase)
@@ -1700,9 +1663,9 @@ function create_reference_fixture(root::AbstractString)
     manifest["cases"]["psf_baseline"] = psf_case
 
     sh_case = Dict{String,Any}(
-        "kind" => "shack_hartmann_slopes",
-        "data" => "shack_hartmann_slopes.txt",
-        "shape" => [32],
+        "kind" => "shack_hartmann_frame",
+        "data" => "shack_hartmann_frame.txt",
+        "shape" => [32, 32],
         "atol" => 1e-12,
         "rtol" => 1e-12,
         "telescope" => Dict(
@@ -1724,13 +1687,12 @@ function create_reference_fixture(root::AbstractString)
         ),
         "wfs" => Dict(
             "n_lenslets" => 4,
-            "mode" => "geometric",
             "threshold" => 0.1,
         ),
     )
-    sh_ref = compute_reference_expected(parse_reference_case("shack_hartmann_slopes", sh_case, root))
+    sh_ref = compute_reference_expected(parse_reference_case("shack_hartmann_frame", sh_case, root))
     write_reference_array(joinpath(root, sh_case["data"]), sh_ref)
-    manifest["cases"]["shack_hartmann_slopes"] = sh_case
+    manifest["cases"]["shack_hartmann_frame"] = sh_case
 
     transfer_case = Dict{String,Any}(
         "kind" => "transfer_function_rejection",
@@ -1812,9 +1774,9 @@ function create_reference_fixture(root::AbstractString)
             "n_modes" => 2,
         ),
         "wfs" => Dict(
-            "kind" => "shack_hartmann_slopes",
-            "n_lenslets" => 4,
-            "mode" => "geometric",
+            "kind" => "pyramid_slopes",
+            "pupil_samples" => 4,
+            "mode" => "diffractive",
             "threshold" => 0.1,
         ),
         "compute" => Dict(

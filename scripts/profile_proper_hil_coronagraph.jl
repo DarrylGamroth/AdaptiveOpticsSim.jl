@@ -63,7 +63,7 @@ function main()
     println("  ao_step_alloc_bytes: ", ao_alloc)
     println("  science_step_alloc_bytes: ", science_alloc)
     println("  total_alloc_bytes: ", total_alloc)
-    println("  slopes_length: ", length(slopes(ctx.scenario)))
+    println("  photon_rate_mosaic_shape: ", size(ctx.wfs_rate.values))
     println("  psf_shape: ", size(psf))
     println("  science_sampling: ", sampling)
 end

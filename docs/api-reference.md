@@ -112,8 +112,7 @@ using AdaptiveOpticsSim.WavefrontSensors
 ~~~
 
 Implemented WFS families include Shack-Hartmann, Pyramid, Bi-O-edge, Zernike,
-Curvature, and LiFT paths. High-level `measure!` remains convenient. The
-maintained staged contract is:
+Curvature, and LiFT paths. The general staged contract is:
 
 1. `prepare_wfs_optics` / `form_wfs_optical_products!`
 2. `prepare_wfs_acquisition` / `acquire_wfs_observation!`
@@ -121,6 +120,12 @@ maintained staged contract is:
 
 `WFSObservation` and `WFSMeasurement` are typed products with explicit
 metadata and units.
+
+The AOS Shack–Hartmann surface implements stages 1 and 2 only. Its complete
+detector observation is the package boundary; maintained operational
+estimation is provided by FilterGraphAlgorithms. The explicitly named
+`geometric_wavefront_slopes!` operation remains available for plant truth and
+reference calculations, not as a detector-derived RTC measurement.
 
 ## Calibration And RTC Integration
 

@@ -70,7 +70,7 @@ max_alloc_bytes = 0
 
 [[cards]]
 id = "G0-PERF-05"
-label = "diffractive Shack-Hartmann measurement"
+label = "staged diffractive Shack-Hartmann rate and detector acquisition"
 kind = "shack_hartmann"
 resolution = 64
 n_lenslets = 8

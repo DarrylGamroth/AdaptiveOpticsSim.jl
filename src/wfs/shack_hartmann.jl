@@ -6,27 +6,11 @@
 #
 
 include("shack_hartmann/setup.jl")
-include("shack_hartmann/measure.jl")
-include("shack_hartmann/stacks.jl")
-include("shack_hartmann/signals.jl")
-include("shack_hartmann/selection.jl")
 include("shack_hartmann/lgs.jl")
 include("shack_hartmann/stages.jl")
 
-@inline slopes(wfs::ShackHartmannWFS) = wfs.products.slopes
 @inline valid_subaperture_mask(wfs::ShackHartmannWFS) =
     wfs.front_end.layout.valid_mask
-@inline reference_signal(wfs::ShackHartmannWFS) = wfs.calibration.reference_signal_2d
-@inline wfs_calibration_signature(wfs::ShackHartmannWFS) =
-    wfs.calibration.signature
-
-function wfs_detector_image(::ShackHartmannWFS,
-    ::AbstractDetector)
-    throw(InvalidConfiguration(
-        "legacy Shack-Hartmann detector-coupled measurement does not " *
-        "publish a detector-owned two-dimensional image; use prepared " *
-        "WFS acquisition and observation_storage(observation)"))
-end
 
 @kernel function _shack_hartmann_rate_map_kernel!(rate_map, spot_cube,
     n_sub::Int, n_axis_1::Int, n_axis_2::Int, gap::Int, gap_value)
@@ -131,59 +115,19 @@ function _tile_shack_hartmann_spot_cube!(style::AcceleratorStyle{B},
 end
 @inline function wfs_output_metadata(wfs::ShackHartmannWFS)
     layout = wfs.front_end.layout
-    calibration = subaperture_calibration(wfs)
     return (
         n_lenslets=layout.n_subap,
         n_valid_subap=n_valid_subapertures(layout),
         subap_pixels=layout.subap_pixels,
         pitch_m=layout.pitch_m,
-        centroid_response=calibration.centroid_response,
-        calibrated=calibration.calibrated,
     )
 end
 
-@inline supports_prepared_runtime(::ShackHartmannWFS{<:Diffractive}, ::AbstractSource) = true
-@inline supports_prepared_runtime(wfs::ShackHartmannWFS{<:Diffractive},
-    src::SpectralSource) = sh_has_common_spectral_grid(wfs, src)
-@inline supports_prepared_runtime(::ShackHartmannWFS{<:Diffractive}, ::Asterism) = true
-@inline supports_detector_output(::ShackHartmannWFS{<:Diffractive}, ::AbstractDetector) = true
 @inline supports_stacked_sources(::ShackHartmannWFS, ::Asterism) = true
-@inline supports_stacked_sources(::ShackHartmannWFS, ::SpectralSource) = true
-@inline supports_stacked_sources(wfs::ShackHartmannWFS{<:Diffractive},
+@inline supports_stacked_sources(wfs::ShackHartmannWFS,
     src::SpectralSource) = sh_has_common_spectral_grid(wfs, src)
 @inline supports_stacked_sources(::ShackHartmannWFS, ::ExtendedSource) = true
-@inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::Asterism) = true
-@inline supports_grouped_execution(wfs::ShackHartmannWFS{<:Diffractive},
+@inline supports_grouped_execution(::ShackHartmannWFS, ::Asterism) = true
+@inline supports_grouped_execution(wfs::ShackHartmannWFS,
     src::SpectralSource) = sh_has_common_spectral_grid(wfs, src)
-@inline supports_grouped_execution(::ShackHartmannWFS{<:Diffractive}, ::ExtendedSource) = true
-
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, src::AbstractSource)
-    prepare_sampling!(wfs, pupil, src)
-    ensure_sh_calibration!(wfs, pupil, src)
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, src::SpectralSource)
-    prepare_sampling!(wfs, pupil, src)
-    ensure_sh_calibration!(wfs, pupil, src)
-    return wfs
-end
-
-@inline function prepare_runtime_wfs!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, ast::Asterism)
-    common_source = common_wfs_calibration_source(ast, "ShackHartmannWFS")
-    prepare_sampling!(wfs, pupil, common_source)
-    ensure_sh_calibration!(wfs, pupil, common_source)
-    return wfs
-end
-
-@inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, src::AbstractSource)
-    prepare_sampling!(wfs, pupil, src)
-    ensure_sh_calibration!(wfs, pupil, src)
-    return measure!(wfs, pupil, src)
-end
-
-@inline function _measure_for_calibration!(wfs::ShackHartmannWFS{<:Diffractive}, pupil::PupilFunction, src::SpectralSource)
-    prepare_sampling!(wfs, pupil, src)
-    ensure_sh_calibration!(wfs, pupil, src)
-    return measure!(wfs, pupil, src)
-end
+@inline supports_grouped_execution(::ShackHartmannWFS, ::ExtendedSource) = true

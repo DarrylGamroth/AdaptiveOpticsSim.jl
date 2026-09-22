@@ -324,7 +324,7 @@ function moving_atmosphere_trace(;
     return trace
 end
 
-function moving_wfs_slope_trace(;
+function moving_wfs_rate_trace(;
     seed::Integer=1,
     steps::Integer=4,
 )
@@ -343,14 +343,17 @@ function moving_wfs_slope_trace(;
     )
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     pupil = PupilFunction(tel)
+    rate = shack_hartmann_rate_map(wfs, pupil, src)
+    optics = shack_hartmann_optics(wfs, src)
+    prepared = prepare_wfs_optics(optics, pupil, rate)
     renderer = prepare_atmosphere_renderer(atm, tel, src)
     rng = MersenneTwister(seed)
-    trace = Vector{Vector{Float64}}(undef, steps)
+    trace = Vector{Matrix{Float64}}(undef, steps)
     for i in 1:steps
         advance_by!(atm, atmosphere_step; rng=rng)
         render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
-        measure!(wfs, pupil, src)
-        trace[i] = copy(slopes(wfs))
+        form_wfs_optical_products!(rate, pupil, prepared)
+        trace[i] = copy(rate.values)
     end
     return trace
 end

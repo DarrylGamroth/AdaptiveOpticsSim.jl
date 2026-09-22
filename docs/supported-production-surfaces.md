@@ -16,8 +16,9 @@ The Julia 1.12 CPU baseline includes:
   imaging, NCPA, and controllable-optic operations
 - Kolmogorov, finite multilayer, and infinite multilayer atmosphere evolution
   plus direction rendering/batching
-- Shack-Hartmann, Pyramid, Bi-O-edge, Zernike, Curvature, and LiFT workflows
-  within the limits recorded in
+- Shack-Hartmann physical formation and acquisition, plus the retained
+  Pyramid, Bi-O-edge, Zernike, Curvature, and LiFT workflows within the limits
+  recorded in
   [`model-validity-matrix.md`](model-validity-matrix.md)
 - conventional frame and counting/channel detector families covered by their
   registered suites

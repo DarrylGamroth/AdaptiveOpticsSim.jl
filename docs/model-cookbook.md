@@ -53,7 +53,6 @@ atm = MultiLayerAtmosphere(
 wfs = ShackHartmannWFS(
     tel;
     n_lenslets=4,
-    mode=Diffractive(),
     pixel_scale_arcsec=0.1,
     n_pix_subap=6,
 )
@@ -63,13 +62,16 @@ renderer = prepare_atmosphere_renderer(atm, tel, src)
 pupil = PupilFunction(tel)
 epoch = advance_by!(atm, 1e-3; rng)
 render_atmosphere!(pupil, renderer, atm, epoch)
-signal = measure!(wfs, pupil, src)
+photon_rate = shack_hartmann_rate_map(wfs, pupil, src)
+optics = shack_hartmann_optics(wfs, src)
+prepared_optics = prepare_wfs_optics(optics, pupil, photon_rate)
+form_wfs_optical_products!(photon_rate, pupil, prepared_optics)
 ```
 
 Use `PyramidWFS`, `BiOEdgeWFS`, `CurvatureWFS`, or `ZernikeWFS` when the
 sensing physics changes. A `ShackHartmannWFS` composes a `MicrolensArray`;
-WFS optics, detector acquisition, and estimation remain distinct
-stages.
+its AOS surface ends at physical optical products and complete detector
+observations. FilterGraphAlgorithms owns maintained Shack–Hartmann estimation.
 
 ## Recipe 3: Detector-Backed Sensing
 
@@ -85,8 +87,19 @@ detector = Detector(
     binning=1,
 )
 
-measure!(wfs, pupil, src, detector; rng)
-frame = output_frame(detector)
+observation = WFSObservation(
+    similar(intensity_values(photon_rate));
+    units=:electron_count,
+    layout=:lenslet_mosaic,
+)
+acquisition = prepare_wfs_acquisition(
+    detector,
+    photon_rate,
+    observation;
+    source=src,
+)
+acquire_wfs_observation!(observation, photon_rate, acquisition, rng)
+frame = observation_storage(observation)
 ```
 
 Use the generic frame detector for CCD, EMCCD, CMOS, sCMOS, configured

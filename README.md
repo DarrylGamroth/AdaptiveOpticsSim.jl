@@ -64,15 +64,28 @@ atm = MultiLayerAtmosphere(
     altitude=[0.0, 5000.0],
 )
 
-wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), pixel_scale_arcsec=0.1, n_pix_subap=6)
+wfs = ShackHartmannWFS(
+    tel;
+    n_lenslets=4,
+    pixel_scale_arcsec=0.1,
+    n_pix_subap=6,
+)
 
 rng = runtime_rng(0)
 renderer = prepare_atmosphere_renderer(atm, tel, src)
 pupil = PupilFunction(tel)
 epoch = advance_by!(atm, 1e-3; rng=rng)
 render_atmosphere!(pupil, renderer, atm, epoch)
-slopes = measure!(wfs, pupil, src)
+photon_rate = shack_hartmann_rate_map(wfs, pupil, src)
+optics = shack_hartmann_optics(wfs, src)
+prepared_optics = prepare_wfs_optics(optics, pupil, photon_rate)
+form_wfs_optical_products!(photon_rate, pupil, prepared_optics)
 ```
+
+The resulting mosaic is the physical detector-plane photon rate. A detector
+acquisition produces the complete frame consumed by an external RTC. AOS does
+not convert Shack–Hartmann frames to operational slopes; the maintained FGA/JFG
+composition below owns that estimation contract.
 
 ### 3. Compose an AO plant with an RTC
 
@@ -153,8 +166,19 @@ det = Detector(
 )
 
 rng = runtime_rng(0)
-measure!(wfs, pupil, src, det; rng=rng)
-adu = wfs_detector_image(wfs, det)
+observation = WFSObservation(
+    similar(intensity_values(photon_rate), UInt16);
+    units=:adu,
+    layout=:lenslet_mosaic,
+)
+acquisition = prepare_wfs_acquisition(
+    det,
+    photon_rate,
+    observation;
+    source=src,
+)
+acquire_wfs_observation!(observation, photon_rate, acquisition, rng)
+adu = observation_storage(observation)
 ```
 
 In this example, `adu` is a `UInt16` detector image with 12-bit quantized

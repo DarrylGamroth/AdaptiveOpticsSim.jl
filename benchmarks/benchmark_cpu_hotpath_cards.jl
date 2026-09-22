@@ -7,7 +7,7 @@ using LinearAlgebra
 
 const CPU_HOTPATH_CARDS = (
     ("CPU-PERF-01", "extended-source stored quadrature", :extended_source_quadrature),
-    ("CPU-PERF-02", "Shack-Hartmann reference subtraction", :sh_reference),
+    ("CPU-PERF-02", "prepared Shack-Hartmann photon-rate formation", :sh_rate_formation),
     ("CPU-PERF-03", "subaperture valid-index reuse", :subaperture_layout),
     ("CPU-PERF-05", "independent tip-tilt surface application", :independent_optic_apply),
     ("CPU-PERF-06", "SAPHIRA sampled frame response", :sampled_frame_response),
@@ -41,21 +41,20 @@ function extended_source_quadrature_probe()
     return () -> extended_source_asterism(ext)
 end
 
-function sh_reference_probe()
+function sh_rate_formation_probe()
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive(), n_pix_subap=4)
-    wfs.calibration.reference_signal_2d .= 0.25
-    wfs.calibration.centroid_response = 2.0
-    return function ()
-        fill!(slopes(wfs), 1.0)
-        WavefrontSensors.subtract_reference_and_scale!(wfs)
-        return slopes(wfs)
-    end
+    src = Source(band=:I, magnitude=0.0)
+    pupil = PupilFunction(tel)
+    wfs = ShackHartmannWFS(tel; n_lenslets=4, n_pix_subap=4)
+    rate = shack_hartmann_rate_map(wfs, pupil, src)
+    optics_plan = prepare_wfs_optics(shack_hartmann_optics(wfs, src),
+        pupil, rate)
+    return () -> form_wfs_optical_products!(rate, pupil, optics_plan)
 end
 
 function subaperture_layout_probes()
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    wfs = ShackHartmannWFS(tel; n_lenslets=4, mode=Diffractive())
+    wfs = ShackHartmannWFS(tel; n_lenslets=4)
     layout = subaperture_layout(wfs.front_end)
     geometry_policy = WavefrontSensors.GeometryValidSubapertures(threshold=0.1)
     flux_policy = FluxThresholdValidSubapertures(light_ratio=0.5)
@@ -186,7 +185,7 @@ function run_cpu_hotpath_card_benchmarks()
     geometry_probe, flux_probe = subaperture_layout_probes()
     probes = (
         ("CPU-PERF-01", "extended_source_quadrature", extended_source_quadrature_probe()),
-        ("CPU-PERF-02", "sh_reference", sh_reference_probe()),
+        ("CPU-PERF-02", "sh_rate_formation", sh_rate_formation_probe()),
         ("CPU-PERF-03a", "subaperture_geometry", geometry_probe),
         ("CPU-PERF-03b", "subaperture_flux", flux_probe),
         ("CPU-PERF-05", "independent_optic_apply", independent_optic_apply_probe()),
