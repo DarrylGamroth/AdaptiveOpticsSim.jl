@@ -954,17 +954,6 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             n_pix_edge=get(cfg, "n_pix_edge", nothing),
             binning=Int(get(cfg, "binning", 1)),
         )
-    elseif kind === :zernike_signal
-        pupil_samples = Int(cfg["pupil_samples"])
-        return ZernikeWFS(tel;
-            pupil_samples=pupil_samples,
-            threshold=threshold,
-            phase_shift_pi=Float64(get(cfg, "phase_shift_pi", 0.5)),
-            spot_radius_lambda_over_d=Float64(get(cfg, "spot_radius_lambda_over_d", 1.0)),
-            normalization=parse_wfs_normalization(get(cfg, "normalization", "mean_valid_flux")),
-            diffraction_padding=Int(get(cfg, "diffraction_padding", 2)),
-            binning=Int(get(cfg, "binning", 1)),
-        )
     elseif kind === :curvature_signal
         pupil_samples = Int(cfg["pupil_samples"])
         readout_name = lowercase(String(get(cfg, "readout_model", "frame")))
@@ -1006,7 +995,7 @@ function compute_reference_actual(case::ReferenceCase)
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
         return copy(reference_direct_image(pupil, src;
             zero_padding=zero_padding))
-    elseif case.kind in (:zernike_signal, :curvature_signal)
+    elseif case.kind === :curvature_signal
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
         src = build_reference_measurement_source(case.config["source"])

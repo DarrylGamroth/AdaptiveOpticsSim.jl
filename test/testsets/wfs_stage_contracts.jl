@@ -58,24 +58,22 @@ function contract_sampled_response(input::AbstractMatrix{T},
     return output
 end
 
-@testset "Prepared Zernike stages" begin
+@testset "Prepared Zernike plant stages" begin
     T = Float64
     coverage_enabled = coverage_instrumented()
-    tel = Telescope(resolution=16, diameter=T(8),
+    telescope = Telescope(resolution=16, diameter=T(8),
         central_obstruction=zero(T), T=T)
     source = Source(band=:custom, wavelength=T(0.75e-6),
         photon_irradiance=T(10), T=T)
-    pupil = PupilFunction(tel; T=T)
+    pupil = PupilFunction(telescope; T=T)
     pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
     pupil_before = copy(pupil.opd)
 
-    sensor = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
+    sensor = ZernikeWFS(telescope; pupil_samples=4, binning=1, T=T)
     @test !hasfield(typeof(sensor), :state)
+    @test !hasfield(typeof(sensor), :estimator)
     @test !hasfield(typeof(sensor.acquisition), :workspace)
     @test sensor.acquisition.plan.binning == 1
-    @test sensor.acquisition.products !== sensor.estimator.products
-    @test sensor.estimator.state !== sensor.estimator.workspace
-    @test sensor.estimator.workspace !== sensor.estimator.products
     front_end = ZernikeOpticalFrontEnd(sensor, source)
     @test front_end.phase_spot isa ZernikePhaseSpot{T}
     @test front_end.source === source
@@ -88,7 +86,7 @@ end
     @test size(sensor_rate.values) == size(rate.values)
     @test sensor_rate.metadata.spectral == rate.metadata.spectral
 
-    bad_zernike_rates = (
+    bad_rates = (
         (contract_rate_map(copy(rate.values);
             sampling=rate.metadata.sampling,
             coordinate_domain=AngularCoordinates(),
@@ -112,7 +110,7 @@ end
             coordinate_domain=NormalizedPupilCoordinates(),
             spectral=rate.metadata.spectral), :numeric_type),
     )
-    for (bad_rate, reason) in bad_zernike_rates
+    for (bad_rate, reason) in bad_rates
         err = contract_captured_error() do
             prepare_wfs_optics(front_end, pupil, bad_rate)
         end
@@ -120,6 +118,7 @@ end
         @test err.stage === :wfs_optics
         @test err.reason === reason
     end
+
     optics_plan = @inferred prepare_wfs_optics(front_end, pupil, rate)
     @test optics_plan.plan isa WavefrontSensors.ZernikeOpticsPlan
     @test optics_plan.workspace === sensor.front_end.propagation.workspace
@@ -138,11 +137,11 @@ end
     @test alias_error isa WFSPreparationError
     @test alias_error.reason === :aliasing
 
-    AdaptiveOpticsSim.WavefrontSensors.zernike_pupil_intensity!(sensor, pupil, source)
-    AdaptiveOpticsSim.WavefrontSensors.sample_zernike_frame!(sensor.acquisition.products.frame,
+    WavefrontSensors.zernike_pupil_intensity!(sensor, pupil, source)
+    WavefrontSensors.sample_zernike_frame!(
+        sensor.acquisition.products.frame,
         sensor.front_end.propagation.workspace.nominal_frame, sensor,
-        sensor.front_end.propagation.workspace.pupil_intensity,
-        pupil)
+        sensor.front_end.propagation.workspace.pupil_intensity, pupil)
     @test rate.values ≈ sensor.acquisition.products.frame rtol=T(2e-12) atol=T(2e-12)
 
     field = ElectricField(pupil, source;
@@ -150,11 +149,10 @@ end
     field_plan = prepare_pupil_field(pupil, source, field;
         center_even_grid=false)
     fill_electric_field!(field, pupil, field_plan)
-    field_sensor = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
+    field_sensor = ZernikeWFS(telescope; pupil_samples=4, binning=1, T=T)
     field_front_end = ZernikeOpticalFrontEnd(field_sensor)
     field_rate = zernike_rate_map(field_front_end, field)
-    prepared_field = prepare_wfs_optics(field_front_end, field,
-        field_rate)
+    prepared_field = prepare_wfs_optics(field_front_end, field, field_rate)
     @test @inferred(WavefrontSensors.wfs_optical_products(prepared_field)) === field_rate
     form_wfs_optical_products!(field_rate, field, prepared_field)
     @test field_rate.values ≈ rate.values rtol=T(2e-12) atol=T(2e-12)
@@ -167,17 +165,16 @@ end
         pupil, optics_plan)
     @test replacement.values == replacement_before
 
-    original_propagation_field = sensor.front_end.propagation.workspace.field
-    sensor.front_end.propagation.workspace.field =
-        copy(original_propagation_field)
-    rate_before_workspace_replacement = copy(rate.values)
-    workspace_replacement_error = contract_captured_error() do
+    original_field = sensor.front_end.propagation.workspace.field
+    sensor.front_end.propagation.workspace.field = copy(original_field)
+    rate_before_replacement = copy(rate.values)
+    workspace_error = contract_captured_error() do
         form_wfs_optical_products!(rate, pupil, optics_plan)
     end
-    @test workspace_replacement_error isa WFSPreparationError
-    @test workspace_replacement_error.reason === :prepared_binding
-    @test rate.values == rate_before_workspace_replacement
-    sensor.front_end.propagation.workspace.field = original_propagation_field
+    @test workspace_error isa WFSPreparationError
+    @test workspace_error.reason === :prepared_binding
+    @test rate.values == rate_before_replacement
+    sensor.front_end.propagation.workspace.field = original_field
     form_wfs_optical_products!(rate, pupil, optics_plan)
 
     detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
@@ -191,133 +188,20 @@ end
     @test observation.storage ≈ rate.values .* T(0.1) atol=0 rtol=0
     @test rate.values == rate_before_acquisition
 
-    reference = zeros(T, size(sensor.estimator.state.reference_signal_2d))
-    invalid_reference = copy(reference)
-    invalid_reference[1] = T(NaN)
-    calibration_revision_before_error =
-        sensor.estimator.state.calibration_revision
-    reference_before_error = copy(sensor.estimator.state.reference_signal_2d)
-    @test_throws InvalidConfiguration set_zernike_calibration!(sensor,
-        invalid_reference; wavelength_m=wavelength(source),
-        signature=UInt(0x5a45524e))
-    @test sensor.estimator.state.calibration_revision ==
-        calibration_revision_before_error
-    @test sensor.estimator.state.reference_signal_2d == reference_before_error
-    set_zernike_calibration!(sensor, reference;
-        wavelength_m=wavelength(source), signature=UInt(0x5a45524e))
-
-    aliased_measurement = WFSMeasurement(sensor.estimator.products.signal;
-        units=:dimensionless, kind=:normalized_pupil_signal)
-    estimation_alias_error = contract_captured_error() do
-        prepare_wfs_estimation(sensor, observation, aliased_measurement;
-            source=source)
-    end
-    @test estimation_alias_error isa WFSPreparationError
-    @test estimation_alias_error.reason === :aliasing
-
-    measurement = WFSMeasurement(similar(slopes(sensor));
-        units=:dimensionless, kind=:normalized_pupil_signal)
-    estimator_plan = @inferred prepare_wfs_estimation(sensor, observation,
-        measurement; source=source)
-    @test estimator_plan.plan isa WavefrontSensors.ZernikeEstimationPlan
-    @test wfs_measurement_path(estimator_plan) isa AcquiredObservationPath
-    expected_signal = copy(AdaptiveOpticsSim.WavefrontSensors.zernike_signal!(sensor, pupil,
-        observation.storage, source))
-    @test @inferred(estimate_wfs_measurement!(measurement, observation,
-        estimator_plan)) === measurement
-    @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
-
-    incidence_sensor = ZernikeWFS(tel; pupil_samples=4, binning=1,
-        normalization=IncidenceFluxNormalization(), T=T)
-    set_zernike_calibration!(incidence_sensor,
-        zeros(T, size(incidence_sensor.estimator.state.reference_signal_2d));
-        wavelength_m=wavelength(source), signature=UInt(0x494e4349))
-    incidence_measurement = WFSMeasurement(similar(slopes(incidence_sensor));
-        units=:dimensionless, kind=:normalized_pupil_signal)
-    missing_incidence_source = contract_captured_error() do
-        prepare_wfs_estimation(incidence_sensor, observation,
-            incidence_measurement)
-    end
-    @test missing_incidence_source isa WFSPreparationError
-    @test missing_incidence_source.stage === :estimation
-    @test missing_incidence_source.reason === :radiometry
-    incidence_plan = prepare_wfs_estimation(incidence_sensor, observation,
-        incidence_measurement; source=source, normalization_scale=T(0.5))
-    @test wfs_measurement_path(incidence_plan) isa AcquiredObservationPath
-    estimate_wfs_measurement!(incidence_measurement, observation,
-        incidence_plan)
-    @test all(isfinite, incidence_measurement.storage)
-    @test any(!iszero, incidence_measurement.storage)
-
-    integer_storage = reshape(UInt16.(1:16), 4, 4)
-    integer_observation = WFSObservation(integer_storage;
-        units=:adu, layout=:zernike_pupil_image)
-    integer_measurement = WFSMeasurement(similar(slopes(sensor));
-        units=:dimensionless, kind=:normalized_pupil_signal)
-    integer_plan = prepare_wfs_estimation(sensor, integer_observation,
-        integer_measurement; source=source)
-    estimate_wfs_measurement!(integer_measurement, integer_observation,
-        integer_plan)
-    floating_observation = WFSObservation(T.(integer_storage);
-        units=:adu, layout=:zernike_pupil_image)
-    floating_measurement = WFSMeasurement(similar(slopes(sensor));
-        units=:dimensionless, kind=:normalized_pupil_signal)
-    floating_plan = prepare_wfs_estimation(sensor, floating_observation,
-        floating_measurement; source=source)
-    estimate_wfs_measurement!(floating_measurement, floating_observation,
-        floating_plan)
-    @test integer_measurement.storage == floating_measurement.storage
-
-    for (owner, field) in (
-        (sensor.estimator.state, :valid_mask),
-        (sensor.estimator.workspace, :signal_2d),
-        (sensor.estimator.products, :signal),
-    )
-        original = getfield(owner, field)
-        setfield!(owner, field, copy(original))
-        fill!(measurement.storage, T(42))
-        measurement_before_replacement = copy(measurement.storage)
-        replacement_error = contract_captured_error() do
-            estimate_wfs_measurement!(measurement, observation,
-                estimator_plan)
-        end
-        @test replacement_error isa WFSPreparationError
-        @test replacement_error.reason === :prepared_binding
-        @test measurement.storage == measurement_before_replacement
-        setfield!(owner, field, original)
-        estimate_wfs_measurement!(measurement, observation, estimator_plan)
-    end
-
-    stale_before = copy(measurement.storage)
-    set_zernike_calibration!(sensor, reference;
-        wavelength_m=wavelength(source), signature=UInt(0x5a45524f))
-    @test_throws WFSPreparationError estimate_wfs_measurement!(measurement,
-        observation, estimator_plan)
-    @test measurement.storage == stale_before
-    estimator_plan = prepare_wfs_estimation(sensor, observation,
-        measurement; source=source)
-    integer_plan = prepare_wfs_estimation(sensor, integer_observation,
-        integer_measurement; source=source)
-
     if coverage_enabled
-        @test_skip "Zernike stage allocation assertions are disabled under coverage instrumentation"
+        @test_skip "Zernike plant allocation assertions are disabled under coverage instrumentation"
     else
         form_wfs_optical_products!(rate, pupil, optics_plan)
         acquire_wfs_observation!(observation, rate, acquisition_plan, rng)
-        estimate_wfs_measurement!(measurement, observation, estimator_plan)
         @test @allocated(form_wfs_optical_products!(rate, pupil,
             optics_plan)) == 0
         @test @allocated(acquire_wfs_observation!(observation, rate,
             acquisition_plan, rng)) == 0
-        @test @allocated(estimate_wfs_measurement!(measurement,
-            observation, estimator_plan)) == 0
-        @test @allocated(estimate_wfs_measurement!(integer_measurement,
-            integer_observation, integer_plan)) == 0
     end
 
-    trajectory_pupil = PupilFunction(tel; T=T)
-    first_sensor = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
-    second_sensor = ZernikeWFS(tel; pupil_samples=4, binning=1, T=T)
+    trajectory_pupil = PupilFunction(telescope; T=T)
+    first_sensor = ZernikeWFS(telescope; pupil_samples=4, binning=1, T=T)
+    second_sensor = ZernikeWFS(telescope; pupil_samples=4, binning=1, T=T)
     first_front_end = ZernikeOpticalFrontEnd(first_sensor, source)
     second_front_end = ZernikeOpticalFrontEnd(second_sensor, source)
     @test first_front_end.propagation.workspace !==
@@ -2652,16 +2536,6 @@ end
         detector, zernike_rate, zernike_observation)
     @test WavefrontSensors.validate_wfs_target(
         zernike_acquisition, target) === zernike_acquisition
-    set_zernike_calibration!(zernike,
-        zeros(T, size(zernike.estimator.state.reference_signal_2d));
-        wavelength_m=wavelength(source), signature=UInt(0x2051))
-    zernike_measurement = WFSMeasurement(similar(slopes(zernike));
-        units=:dimensionless, kind=:normalized_pupil_signal)
-    zernike_estimation = prepare_wfs_estimation(
-        zernike, zernike_observation, zernike_measurement; source=source)
-    @test WavefrontSensors.validate_wfs_target(
-        zernike_estimation, target) === zernike_estimation
-
     curvature = CurvatureWFS(tel; pupil_samples=4,
         readout_pixels_per_sample=1, T=T)
     curvature_front_end = CurvatureOpticalFrontEnd(curvature, source)

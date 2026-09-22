@@ -48,10 +48,10 @@ Each script exposes a `main()` function and logs a short completion summary with
   parameter, not a mutable string flag. The AOS Shack–Hartmann and Pyramid
   surfaces are physical diffractive front ends; direct OPD-gradient truth uses
   the explicitly named `geometric_wavefront_slopes!` calculation.
-- Bi-O-edge plant optics and acquisition remain covered by the focused WFS test
-  suite; its registered FGA estimator is covered by the downstream integration.
-  Zernike and Curvature estimator examples remain covered by their focused WFS
-  test suites while their approved FGA targets are pending. LiFT's
+- Bi-O-edge and Zernike plant optics and acquisition remain covered by the
+  focused WFS test suite; their registered FGA estimators are covered by the
+  downstream integration. Curvature estimator examples remain covered by the
+  focused WFS test suite while its approved FGA target is pending. LiFT's
   maintained tutorial covers the distinct forward and phase-retrieval workflow.
 - Detector noise is encoded by the detector’s `noise` type, for example
   `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.

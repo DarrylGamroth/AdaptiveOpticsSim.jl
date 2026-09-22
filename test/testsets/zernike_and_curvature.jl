@@ -1,287 +1,83 @@
-function zernike_normalization_allocations(normalization, wfs, pupil, src,
-    frame, normalization_scale)
-    return @allocated zernike_normalization(normalization, wfs, pupil, src,
-        frame, normalization_scale)
-end
-
-function zernike_signal_allocations(wfs, pupil, src, frame,
-    normalization_scale)
-    return @allocated zernike_signal!(wfs, pupil, frame, src,
-        normalization_scale)
-end
-
 @inline wfs_optical_rate_storage(wfs::ZernikeWFS) =
     wfs.acquisition.products.frame
 @inline wfs_optical_rate_storage(wfs) =
     wfs.acquisition.products.frame
 
-@testset "Zernike WFS" begin
+@testset "Zernike optical front end" begin
     tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
     pupil = PupilFunction(tel)
-    src = Source(band=:I, magnitude=0.0)
+    source = Source(band=:custom, wavelength=0.75e-6, photon_irradiance=10.0)
     wfs = ZernikeWFS(tel; pupil_samples=8, diffraction_padding=2)
-
-    @test size(wfs_optical_rate_storage(wfs)) == (8, 8)
-    @test length(slopes(wfs)) == count(valid_subaperture_mask(wfs))
-    @test_throws InvalidConfiguration measure!(wfs, pupil)
-    @test_throws InvalidConfiguration measure!(wfs, pupil,
-        Asterism([src, Source(band=:I, magnitude=0.0)]))
-
-    flat_slopes = copy(measure!(wfs, pupil, src))
-    @test wfs.estimator.state.calibrated
-    @test all(isfinite, flat_slopes)
-    @test all(>=(0.0), wfs_optical_rate_storage(wfs))
-    @test flat_slopes ≈ zero.(flat_slopes) atol=1e-10
-
-    incompatible_tel = Telescope(resolution=16, diameter=8.0,
-        central_obstruction=0.0)
-    incompatible_pupil = PupilFunction(incompatible_tel)
-    fill!(incompatible_pupil.opd, 1e-8)
-    incompatible_opd_before = copy(incompatible_pupil.opd)
-    calibration_before = (
-        calibrated=wfs.estimator.state.calibrated,
-        revision=wfs.estimator.state.calibration_revision,
-        wavelength=wfs.estimator.state.calibration_wavelength,
-        signature=wfs.estimator.state.calibration_signature,
-        valid_mask=copy(wfs.estimator.state.valid_mask),
-        reference=copy(wfs.estimator.state.reference_signal_2d),
-        signal=copy(wfs.estimator.products.signal),
-    )
-    @test_throws DimensionMismatchError measure!(wfs, incompatible_pupil, src)
-    @test incompatible_pupil.opd == incompatible_opd_before
-    @test wfs.estimator.state.calibrated == calibration_before.calibrated
-    @test wfs.estimator.state.calibration_revision == calibration_before.revision
-    @test wfs.estimator.state.calibration_wavelength == calibration_before.wavelength
-    @test wfs.estimator.state.calibration_signature == calibration_before.signature
-    @test wfs.estimator.state.valid_mask == calibration_before.valid_mask
-    @test wfs.estimator.state.reference_signal_2d == calibration_before.reference
-    @test wfs.estimator.products.signal == calibration_before.signal
-
-    det = Detector(noise=NoiseNone(), binning=1)
-    det_slopes = copy(measure!(wfs, pupil, src, det))
-    @test det_slopes ≈ flat_slopes atol=1e-10
-    @test size(output_frame(det)) == size(wfs_optical_rate_storage(wfs))
-    @test wfs_detector_image(wfs, det) === output_frame(det)
-
-    zb = ZernikeBasis(tel, 5)
-    compute_zernike!(zb, tel)
-    focus = @view zb.modes[:, :, 5]
-    @. pupil.opd = 5e-8 * focus
-    slopes_plus = copy(measure!(wfs, pupil, src))
-    @. pupil.opd = -5e-8 * focus
-    slopes_minus = copy(measure!(wfs, pupil, src))
-    fill!(pupil.opd, 0.0)
-
-    @test norm(slopes_plus) > 1e-6
-    @test norm(slopes_minus) > 1e-6
-    @test dot(slopes_plus, slopes_minus) < 0
-end
-
-@testset "Zernike normalization hot-path contract" begin
-    tel = Telescope(resolution=32, diameter=8.0,
-        central_obstruction=0.0)
-    pupil = PupilFunction(tel)
-    src = Source(band=:custom, wavelength=0.75e-6,
-        photon_irradiance=10.0)
-    frame = reshape(collect(range(0.25, 2.0; length=64)), 8, 8)
-    normalization_scale = 0.375
-
-    for normalization in (MeanValidFluxNormalization(),
-            IncidenceFluxNormalization())
-        wfs = ZernikeWFS(tel; pupil_samples=8,
-            normalization=normalization)
-        fill!(reference_signal(wfs), 0.0)
-        valid = Array(valid_subaperture_mask(wfs))
-        expected = if normalization isa MeanValidFluxNormalization
-            max(sum(frame[valid]) / count(valid), eps(eltype(frame)))
-        else
-            photon_rate = pupil_photon_rate_map(tel, src)
-            nominal = similar(wfs.front_end.propagation.workspace.nominal_frame)
-            sampled = similar(wfs.estimator.workspace.normalization_frame)
-            sample_zernike_frame!(sampled, nominal, wfs, photon_rate, pupil)
-            sum(sampled[valid]) / count(valid) * normalization_scale
-        end
-
-        actual = zernike_normalization(normalization, wfs, pupil, src,
-            frame, normalization_scale)
-        @test actual ≈ expected rtol=2e-15
-        @test zernike_normalization_allocations(normalization, wfs, pupil,
-            src, frame, normalization_scale) == 0
-
-        zernike_signal!(wfs, pupil, frame, src, normalization_scale)
-        @test zernike_signal_allocations(wfs, pupil, src, frame,
-            normalization_scale) == 0
-        @test all(isfinite, slopes(wfs))
-    end
-end
-
-@testset "Zernike incidence-normalization contract" begin
-    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    pupil = PupilFunction(tel)
-    @inbounds for j in axes(pupil.opd, 2), i in axes(pupil.opd, 1)
-        pupil.opd[i, j] = 2e-8 * sinpi(2 * i / 32) * cospi(2 * j / 32)
-    end
-    src = Source(band=:custom, wavelength=0.75e-6,
-        photon_irradiance=10.0)
-    reference_wfs = ZernikeWFS(tel; pupil_samples=8,
-        normalization=IncidenceFluxNormalization())
-    asymmetric_response = [0.0 0.0 0.0;
-                           0.0 0.2 0.8;
-                           0.0 0.0 0.0]
-    reference = copy(measure!(reference_wfs, pupil, src,
-        Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0,
-            response_model=SampledFrameResponse(asymmetric_response))))
-    scaled_wfs = ZernikeWFS(tel; pupil_samples=8,
-        normalization=IncidenceFluxNormalization())
-    scaled = copy(measure!(scaled_wfs, pupil, src,
-        Detector(noise=NoiseNone(), exposure_duration=0.5, qe=0.25,
-            response_model=SampledFrameResponse(asymmetric_response))))
-    @test norm(reference) > 1e-6
-    @test scaled ≈ reference atol=1e-12 rtol=1e-12
-
-    zero_src = Source(band=:custom, wavelength=wavelength(src),
-        photon_irradiance=0.0)
-    for normalization in (MeanValidFluxNormalization(),
-            IncidenceFluxNormalization())
-        zero_wfs = ZernikeWFS(tel; pupil_samples=8,
-            normalization=normalization)
-        @test all(iszero, measure!(zero_wfs, pupil, zero_src))
-        @test all(isfinite, slopes(zero_wfs))
-    end
-end
-
-@testset "Zernike detector-response references" begin
-    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    pupil = PupilFunction(tel)
-    src = Source(band=:custom, wavelength=0.75e-6,
-        photon_irradiance=10.0)
-    asymmetric_response = [0.0 0.0 0.0;
-                           0.0 0.2 0.8;
-                           0.0 0.0 0.0]
-    responses = (
-        GaussianPixelResponse(response_width_px=0.75),
-        SampledFrameResponse(asymmetric_response),
-    )
-
-    for response in responses
-        wfs = ZernikeWFS(tel; pupil_samples=8)
-        det = Detector(noise=NoiseNone(), exposure_duration=0.4, qe=0.3,
-            response_model=response)
-        flat = copy(measure!(wfs, pupil, src, det))
-        @test all(iszero, flat)
-        @test wfs_calibration_signature(wfs) ==
-            detector_calibration_signature(det,
-                pupil_aperture_calibration_signature(pupil,
-                    calibration_signature(src)))
-        @test measure!(wfs, pupil, src, det) == flat
+    front_end = ZernikeOpticalFrontEnd(wfs, source)
+    rate = zernike_rate_map(front_end, pupil)
+    plan = prepare_wfs_optics(front_end, pupil, rate)
+    form_wfs_optical_products!(rate, pupil, plan)
+    @test all(isfinite, rate.values)
+    @test all(>=(0.0), rate.values)
+    if coverage_instrumented()
+        @test_skip "Zernike optical allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(rate, pupil, plan)) == 0
     end
 
-    probe_wfs = ZernikeWFS(tel; pupil_samples=8)
-    probe_detector = Detector(noise=NoiseNone(), sensor=CMOSSensor())
-    measure!(probe_wfs, pupil, src, probe_detector;
-        rng=MersenneTwister(705))
-    detector_size = size(output_frame(probe_detector))
-    gain_map = ones(detector_size)
-    gain_map[1:2:end] .= 0.6
-    bad_mask = falses(detector_size)
-    bad_mask[2, 2] = true
-    prnu = PixelResponseNonuniformity(gain_map)
-    bad_pixels = BadPixelMask(bad_mask; throughput=0.0)
-    detector = Detector(noise=NoiseNone(), sensor=CMOSSensor(),
-        defect_model=CompositeDetectorDefectModel(prnu, bad_pixels))
-    wfs = ZernikeWFS(tel; pupil_samples=8)
-
-    flat = copy(measure!(wfs, pupil, src, detector;
-        rng=MersenneTwister(706)))
-    @test all(iszero, flat)
-    @test all(iszero, measure!(wfs, pupil, src, detector;
-        rng=MersenneTwister(707)))
-    signature = wfs_calibration_signature(wfs)
-
-    prnu.gain_map[1, 1] = 0.2
-    bad_pixels.mask[end, end] = true
-    @test detector_calibration_signature(detector,
-        pupil_aperture_calibration_signature(pupil,
-            calibration_signature(src))) == signature
-
-    replacement_gain = copy(gain_map)
-    replacement_gain[1, 1] = 0.35
-    replacement_mask = copy(bad_mask)
-    replacement_mask[end, end] = true
-    replacement = Detector(noise=NoiseNone(), sensor=CMOSSensor(),
-        defect_model=CompositeDetectorDefectModel(
-            PixelResponseNonuniformity(replacement_gain),
-            BadPixelMask(replacement_mask; throughput=0.0)))
-    replacement_signature = detector_calibration_signature(replacement,
-        pupil_aperture_calibration_signature(pupil,
-            calibration_signature(src)))
-    @test replacement_signature != signature
-    @test all(iszero, measure!(wfs, pupil, src, replacement;
-        rng=MersenneTwister(708)))
-    @test wfs_calibration_signature(wfs) == replacement_signature
-
-    fill!(pupil.opd, 1e-8)
-    opd_before_failure = copy(pupil.opd)
-    @test_throws DimensionMismatchError measure!(
-        ZernikeWFS(tel; pupil_samples=8), pupil, src,
-        Detector(noise=NoiseNone(), psf_sampling=3))
-    @test pupil.opd == opd_before_failure
+    attenuated_tel = Telescope(resolution=32, diameter=8.0,
+        central_obstruction=0.0, pupil_reflectivity=0.25)
+    attenuated_pupil = PupilFunction(attenuated_tel)
+    attenuated_wfs = ZernikeWFS(attenuated_tel; pupil_samples=8,
+        diffraction_padding=2)
+    attenuated_front_end = ZernikeOpticalFrontEnd(attenuated_wfs, source)
+    attenuated_rate = zernike_rate_map(attenuated_front_end, attenuated_pupil)
+    attenuated_plan = prepare_wfs_optics(attenuated_front_end, attenuated_pupil,
+        attenuated_rate)
+    form_wfs_optical_products!(attenuated_rate, attenuated_pupil, attenuated_plan)
+    @test sum(attenuated_rate.values) ≈ 0.25 * sum(rate.values) rtol=1e-12
 end
 
 @testset "Zernike and Curvature source-composition support boundaries" begin
-    tel = Telescope(resolution=16, diameter=8.0,
+    telescope = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
-    pupil = PupilFunction(tel)
-    src = Source(band=:custom, wavelength=0.75e-6,
+    pupil = PupilFunction(telescope)
+    source = Source(band=:custom, wavelength=0.75e-6,
         photon_irradiance=1.0)
-    spectral = with_spectrum(src,
+    spectral = with_spectrum(source,
         SpectralBundle([0.70e-6, 0.80e-6], [0.5, 0.5]))
-    extended = with_extended_source(src,
+    extended = with_extended_source(source,
         PointCloudSourceModel([(0.0, 0.0)], [1.0]))
 
     for expanded in (spectral, extended)
+        zernike = ZernikeWFS(telescope; pupil_samples=2)
+        front_end = ZernikeOpticalFrontEnd(zernike, expanded)
+        rate = zernike_rate_map(front_end, pupil)
+        @test_throws UnsupportedAlgorithm prepare_wfs_optics(
+            front_end, pupil, rate)
         @test_throws UnsupportedAlgorithm measure!(
-            ZernikeWFS(tel; pupil_samples=2), pupil, expanded)
-        @test_throws UnsupportedAlgorithm measure!(
-            CurvatureWFS(tel; pupil_samples=2), pupil, expanded)
+            CurvatureWFS(telescope; pupil_samples=2), pupil, expanded)
     end
 end
 
-@testset "Zernike and curvature pupil-reflectivity throughput" begin
+@testset "Curvature pupil-reflectivity throughput" begin
     transmission = 0.25
-    src = Source(band=:custom, wavelength=0.75e-6,
+    source = Source(band=:custom, wavelength=0.75e-6,
         photon_irradiance=1.0)
-    full_tel = Telescope(resolution=16, diameter=8.0,
+    full_telescope = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0)
-    attenuated_tel = Telescope(resolution=16, diameter=8.0,
+    attenuated_telescope = Telescope(resolution=16, diameter=8.0,
         central_obstruction=0.0, pupil_reflectivity=transmission)
-    full_pupil = PupilFunction(full_tel)
-    attenuated_pupil = PupilFunction(attenuated_tel)
-
-    full_zernike = ZernikeWFS(full_tel; pupil_samples=2,
-        diffraction_padding=2)
-    attenuated_zernike = ZernikeWFS(attenuated_tel; pupil_samples=2,
-        diffraction_padding=2)
-    zernike_pupil_intensity!(full_zernike, full_pupil, src)
-    zernike_pupil_intensity!(attenuated_zernike, attenuated_pupil, src)
-    full_zernike_rate = sum(
-        full_zernike.front_end.propagation.workspace.pupil_intensity)
-    @test full_zernike_rate > 0
-    @test sum(attenuated_zernike.front_end.propagation.workspace.pupil_intensity) ≈
-        transmission * full_zernike_rate rtol=1e-12
+    full_pupil = PupilFunction(full_telescope)
+    attenuated_pupil = PupilFunction(attenuated_telescope)
 
     for style in (ScalarCPUStyle(), KA_CPU_STYLE)
-        full_curvature = CurvatureWFS(full_tel; pupil_samples=2,
+        full_sensor = CurvatureWFS(full_telescope; pupil_samples=2,
             diffraction_padding=2)
-        attenuated_curvature = CurvatureWFS(attenuated_tel; pupil_samples=2,
-            diffraction_padding=2)
-        curvature_intensity!(style, full_curvature, full_pupil, src)
-        curvature_intensity!(style, attenuated_curvature,
-            attenuated_pupil, src)
-        full_curvature_rate = sum(wfs_optical_rate_storage(full_curvature))
-        @test full_curvature_rate > 0
-        @test sum(wfs_optical_rate_storage(attenuated_curvature)) ≈
-            transmission * full_curvature_rate rtol=1e-12
+        attenuated_sensor = CurvatureWFS(attenuated_telescope;
+            pupil_samples=2, diffraction_padding=2)
+        curvature_intensity!(style, full_sensor, full_pupil, source)
+        curvature_intensity!(style, attenuated_sensor, attenuated_pupil,
+            source)
+        full_rate = sum(wfs_optical_rate_storage(full_sensor))
+        @test full_rate > 0
+        @test sum(wfs_optical_rate_storage(attenuated_sensor)) ≈
+            transmission * full_rate rtol=1e-12
     end
 end
 

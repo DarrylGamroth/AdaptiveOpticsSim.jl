@@ -3,10 +3,10 @@ using AdaptiveOpticsSim.WavefrontSensors: observation_storage
 using FilterGraphAlgorithms
 using JuliaFilterGraph
 
-@testset "AOS Bi-O-edge plant and FGA 0.3 image-estimator boundary" begin
+@testset "AOS Bi-O-edge plant and FGA 0.4 image-estimator boundary" begin
     prepared = prepare_s4_bi_o_edge()
-    @test Base.pkgversion(FilterGraphAlgorithms) == v"0.3.0"
-    @test Base.pkgversion(JuliaFilterGraph) == v"0.2.1"
+    @test Base.pkgversion(FilterGraphAlgorithms) == v"0.4.0"
+    @test Base.pkgversion(JuliaFilterGraph) == v"0.2.2"
 
     # The frozen fixture is deliberately asymmetric. It establishes the AOS
     # (x,y) -> FGA (row=y,column=x) transfer, q1/q2/q3/q4 order TL/BL/BR/TR,

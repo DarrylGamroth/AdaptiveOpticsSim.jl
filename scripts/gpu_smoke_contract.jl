@@ -690,19 +690,19 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return observation_storage(observation)
     end
 
-    record_gpu_smoke!(failures, "measure_zernike_diffractive") do
-        wfs = ZernikeWFS(tel; pupil_samples=4, T=T, backend=backend)
-        slopes = measure!(wfs, pupil, src)
-        @assert slopes isa BackendArray
-        return slopes
-    end
-
-    record_gpu_smoke!(failures, "measure_zernike_detector") do
+    record_gpu_smoke!(failures, "zernike_optics") do
         wfs = ZernikeWFS(tel; pupil_samples=4, T=T, backend=backend)
         det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)
-        slopes = measure!(wfs, pupil, src, det; rng=rng)
-        @assert slopes isa BackendArray
-        return slopes
+        front_end = ZernikeOpticalFrontEnd(wfs, src)
+        rate = zernike_rate_map(front_end, pupil)
+        optics = prepare_wfs_optics(front_end, pupil, rate)
+        observation = WFSObservation(similar(rate.values);
+            units=:electron_count, layout=:zernike_pupil_image)
+        acquisition = prepare_wfs_acquisition(det, rate, observation)
+        form_wfs_optical_products!(rate, pupil, optics)
+        acquire_wfs_observation!(observation, rate, acquisition, rng)
+        @assert observation_storage(observation) isa BackendArray
+        return observation_storage(observation)
     end
 
     record_gpu_smoke!(failures, "measure_curvature_atmosphere") do

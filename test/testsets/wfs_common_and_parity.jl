@@ -86,7 +86,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :ZernikeWFS,
         :ZernikeOpticalFrontEnd,
         :zernike_rate_map,
-        :set_zernike_calibration!,
         :CurvatureWFS,
         :CurvatureOpticalFrontEnd,
         :curvature_rate_maps,

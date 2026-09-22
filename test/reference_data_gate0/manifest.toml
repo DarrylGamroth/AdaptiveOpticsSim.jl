@@ -12,8 +12,6 @@ required_reference_cases = [
     "shack_hartmann_diffractive_ramp",
     "shack_hartmann_polychromatic_frame",
     "pyramid_polychromatic_frame",
-    "zernike_flat_signal",
-    "zernike_quadratic_signal",
     "curvature_flat_signal",
     "curvature_quadratic_signal",
     "lift_interaction_matrix",
