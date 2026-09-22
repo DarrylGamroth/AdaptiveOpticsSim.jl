@@ -61,9 +61,10 @@ end
     workspace::LiFTForwardModelWorkspace)
     _require_lift_forward_workspace(model.plan, workspace.forward)
     _require_lift_forward_input(model.plan, workspace.opd)
-    _lift_mightalias_any(workspace.opd,
-        (_lift_forward_plan_arrays(model.plan)...,
-            _lift_forward_workspace_arrays(workspace.forward)...)) && throw(
+    (_lift_mightalias_any(workspace.opd,
+        _lift_forward_plan_arrays(model.plan)) ||
+        _lift_mightalias_forward_workspace(workspace.opd,
+            workspace.forward)) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT OPD workspace must not alias physical-plan or forward scratch storage"))
     return workspace
 end
@@ -74,13 +75,11 @@ end
     length(coefficients) == PhaseRetrieval.coefficient_count(model) || throw(
         DimensionMismatchError("AdaptiveOpticsCalibration LiFT coefficients must cover the complete AOS modal basis"))
     plan_arrays = _lift_forward_plan_arrays(model.plan)
-    workspace_arrays = (
-        workspace.opd,
-        _lift_forward_workspace_arrays(workspace.forward)...,
-    )
     _lift_mightalias_any(coefficients, plan_arrays) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT coefficients must not alias physical-plan storage"))
-    _lift_mightalias_any(coefficients, workspace_arrays) && throw(
+    (Base.mightalias(coefficients, workspace.opd) ||
+        _lift_mightalias_forward_workspace(coefficients,
+            workspace.forward)) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT coefficients must not alias physical-model scratch"))
     plan = model.plan
     lift_basis_expansion!(workspace.opd, plan.basis, coefficients,
@@ -100,8 +99,8 @@ end
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT photon-rate output must use the AOS forward backend"))
     compute_device(out) == compute_device(model.plan.pupil_amplitude) || throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT photon-rate output must occupy the AOS forward compute device"))
-    _lift_mightalias_any(out,
-        (workspace.opd, _lift_forward_workspace_arrays(workspace.forward)...)) && throw(
+    (Base.mightalias(out, workspace.opd) ||
+        _lift_mightalias_forward_workspace(out, workspace.forward)) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT photon-rate output must not alias model scratch"))
     _lift_mightalias_any(out, _lift_forward_plan_arrays(model.plan)) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT photon-rate output must not alias physical-plan storage"))
@@ -139,13 +138,11 @@ function PhaseRetrieval.analytic_photon_rate_jacobian!(jacobian::AbstractMatrix{
         throw(InvalidConfiguration(
             "AdaptiveOpticsCalibration LiFT Jacobian must occupy the AOS forward compute device"))
     plan_arrays = _lift_forward_plan_arrays(model.plan)
-    workspace_arrays = (
-        workspace.opd,
-        _lift_forward_workspace_arrays(workspace.forward)...,
-    )
     _lift_mightalias_any(jacobian, plan_arrays) && throw(InvalidConfiguration(
         "AdaptiveOpticsCalibration LiFT Jacobian must not alias physical-plan storage"))
-    _lift_mightalias_any(jacobian, workspace_arrays) && throw(
+    (Base.mightalias(jacobian, workspace.opd) ||
+        _lift_mightalias_forward_workspace(jacobian,
+            workspace.forward)) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT Jacobian must not alias physical-model scratch"))
     Base.mightalias(jacobian, coefficients) && throw(InvalidConfiguration(
         "AdaptiveOpticsCalibration LiFT Jacobian must not alias coefficients"))

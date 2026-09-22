@@ -95,9 +95,9 @@ function predict_lift_observation!(dest::AbstractMatrix,
     compute_device(dest) == compute_device(forward.output.values) || throw(
         InvalidConfiguration(
             "LiFT prediction destination must occupy the prepared compute device"))
-    _lift_mightalias_any(dest,
-        (forward.input, forward.output.values,
-            _lift_forward_workspace_arrays(forward.workspace)...)) && throw(
+    (Base.mightalias(dest, forward.input) ||
+        Base.mightalias(dest, forward.output.values) ||
+        _lift_mightalias_forward_workspace(dest, forward.workspace)) && throw(
         InvalidConfiguration(
             "LiFT prediction destination must not alias its prepared owner"))
     rate = _lift_rate_values_from_opd!(forward, forward.input)

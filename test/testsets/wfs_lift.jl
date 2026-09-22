@@ -304,6 +304,20 @@ end
         aoc_numerical_workspace.model_workspace,
         aliased_coefficients,
     )
+    propagation = aoc_analytic_workspace.model_workspace.forward.propagation
+    aliased_jacobian = reshape(view(
+        reinterpret(Float64, vec(propagation.fft_buffer)), 1:128), 64, 2)
+    propagation_snapshot = copy(propagation.fft_buffer)
+    @test_throws InvalidConfiguration begin
+        AOCPhaseRetrieval.analytic_photon_rate_jacobian!(
+            aliased_jacobian,
+            aoc_model,
+            aoc_analytic_workspace.model_workspace,
+            adaptive_truth,
+            [1, 2],
+        )
+    end
+    @test propagation.fft_buffer == propagation_snapshot
     invalid_jacobian = similar(aoc_numerical_workspace.jacobian)
     @test_throws DimensionMismatchError begin
         AOCPhaseRetrieval.analytic_photon_rate_jacobian!(
