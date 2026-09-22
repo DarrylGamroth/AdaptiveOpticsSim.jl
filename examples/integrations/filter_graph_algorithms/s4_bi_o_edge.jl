@@ -12,8 +12,8 @@ import FilterGraphAlgorithms: process!
 export prepare_s4_bi_o_edge, produce_s4_bi_o_edge_frame!, process_s4_bi_o_edge!
 export transpose_aos_bi_o_edge_frame!, frozen_aos_bi_o_edge_frame
 
-const _FGA_VERSION_CLAIM = v"0.4.0"
-const _JFG_VERSION_CLAIM = v"0.2.2"
+const _FGA_VERSION_CLAIM = v"0.5.0"
+const _JFG_VERSION_CLAIM = v"0.2.3"
 const _ORIGINS = ((0, 0), (2, 0), (2, 2), (0, 2))
 const _SUPPORT = Bool[true true; false true]
 const _CALIBRATION_SIGNATURE = UInt64(7177611906121727310)
@@ -94,7 +94,7 @@ function _prepare_plant()
 end
 
 """
-Prepare a physical AOS Bi-O-edge plant and the independent FGA 0.4.0 image
+Prepare a physical AOS Bi-O-edge plant and the independent FGA 0.5.0 image
 estimator. AOS owns detector formation/acquisition; FGA owns differential
 signal calibration and normalization.
 """

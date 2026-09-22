@@ -253,23 +253,13 @@ function make_gate0_card(raw::AbstractDict)
         observations = (plus_observation, minus_observation)
         acquisition_plan = prepare_wfs_acquisition(
             (plus_detector, minus_detector), rates, observations)
-        set_curvature_calibration!(wfs,
-            zeros(size(wfs.estimator.state.reference_signal_2d));
-            wavelength_m=wavelength(src), signature=UInt(0x4730503a))
-        measurement = WFSMeasurement(similar(slopes(wfs));
-            units=:dimensionless, kind=:curvature_signal)
-        estimator_plan = prepare_wfs_estimation(wfs, observations,
-            measurement; branch_rate_scales=(2.0, 1.0))
         rng = runtime_rng(Int(raw["rng_seed"]))
         let rates=rates, pupil=pupil, optics_plan=optics_plan,
-            observations=observations, acquisition_plan=acquisition_plan,
-            measurement=measurement, estimator_plan=estimator_plan, rng=rng
+            observations=observations, acquisition_plan=acquisition_plan, rng=rng
             () -> begin
                 form_wfs_optical_products!(rates, pupil, optics_plan)
                 acquire_wfs_observation!(observations, rates,
                     acquisition_plan, rng)
-                estimate_wfs_measurement!(measurement, observations,
-                    estimator_plan)
             end
         end
     elseif kind == "lift_reconstruct"

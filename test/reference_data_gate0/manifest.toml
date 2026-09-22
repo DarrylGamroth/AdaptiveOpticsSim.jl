@@ -12,8 +12,6 @@ required_reference_cases = [
     "shack_hartmann_diffractive_ramp",
     "shack_hartmann_polychromatic_frame",
     "pyramid_polychromatic_frame",
-    "curvature_flat_signal",
-    "curvature_quadratic_signal",
     "lift_interaction_matrix",
 ]
 superseded_reference_cases = ["atmosphere_short", "atmosphere_long"]

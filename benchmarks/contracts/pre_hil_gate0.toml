@@ -111,7 +111,7 @@ max_alloc_bytes = 0
 
 [[cards]]
 id = "G0-PERF-10"
-label = "staged Curvature two-plane, two-detector measurement"
+label = "staged Curvature two-plane formation and detector acquisition"
 kind = "curvature_two_detectors"
 resolution = 48
 pupil_samples = 6

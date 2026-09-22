@@ -49,46 +49,6 @@ specula_contract = "spectral atmospheric propagation with a chromatic reference 
     zero_padding = 2
     chromatic_reference_wavelength = 5.89e-7
 
-[cases.curvature_quadratic_signal]
-rtol = 1.0e-10
-data = "curvature_quadratic_signal.txt"
-shape = [144]
-specula_test = "test_curvature_sensor.py::TestCurvatureSensor::test_full_chain_focus_response"
-kind = "curvature_signal"
-atol = 1.0e-10
-baseline = "specula"
-specula_contract = "low-order quadratic phase produces a non-trivial curvature signal"
-
-    [cases.curvature_quadratic_signal.wfs]
-    readout_crop_resolution = 48
-    readout_pixels_per_sample = 1
-    pupil_samples = 12
-    threshold = 0.0
-    diffraction_padding = 2
-    mode = "diffractive"
-    defocus_rms_nm = 500.0
-    readout_model = "frame"
-
-    [cases.curvature_quadratic_signal.opd]
-    kind = "basis_mode"
-    mode_index = 4
-    amplitude = 5.0e-8
-
-    [cases.curvature_quadratic_signal.telescope]
-    central_obstruction = 0.0
-    resolution = 48
-    sampling_time = 0.001
-    diameter = 8.0
-
-    [cases.curvature_quadratic_signal.basis]
-    kind = "cartesian_polynomials"
-    n_modes = 4
-
-    [cases.curvature_quadratic_signal.source]
-    kind = "ngs"
-    magnitude = 0.0
-    band = "I"
-
 [cases.pyramid_polychromatic_frame]
 rtol = 1.0e-10
 data = "pyramid_polychromatic_frame.txt"
@@ -125,40 +85,6 @@ specula_contract = "polychromatic pyramid sensing yields a stable sampled detect
         [cases.pyramid_polychromatic_frame.source.spectrum]
         wavelengths = [5.0e-7, 6.0e-7]
         weights = [1.0, 1.0]
-
-[cases.curvature_flat_signal]
-rtol = 1.0e-10
-data = "curvature_flat_signal.txt"
-shape = [144]
-specula_test = "test_curvature_sensor.py::TestCurvatureSensor::test_flat_wavefront_flux"
-kind = "curvature_signal"
-atol = 1.0e-10
-baseline = "specula"
-specula_contract = "flat wavefront produces zero curvature signal after reference subtraction"
-
-    [cases.curvature_flat_signal.wfs]
-    readout_crop_resolution = 48
-    readout_pixels_per_sample = 1
-    pupil_samples = 12
-    threshold = 0.0
-    diffraction_padding = 2
-    mode = "diffractive"
-    defocus_rms_nm = 500.0
-    readout_model = "frame"
-
-    [cases.curvature_flat_signal.opd]
-    kind = "zeros"
-
-    [cases.curvature_flat_signal.telescope]
-    central_obstruction = 0.0
-    resolution = 48
-    sampling_time = 0.001
-    diameter = 8.0
-
-    [cases.curvature_flat_signal.source]
-    kind = "ngs"
-    magnitude = 0.0
-    band = "I"
 
 [cases.atmospheric_fresnel_intensity]
 rtol = 1.0e-10

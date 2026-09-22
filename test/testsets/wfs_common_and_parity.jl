@@ -90,7 +90,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :CurvatureOpticalFrontEnd,
         :curvature_rate_maps,
         :CurvaturePackedAcquisition,
-        :set_curvature_calibration!,
         :CurvatureReadoutModel,
         :CurvatureFrameReadout,
         :CurvatureChannelReadout,
