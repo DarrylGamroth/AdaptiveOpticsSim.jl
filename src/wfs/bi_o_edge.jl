@@ -6,16 +6,23 @@
 #
 
 include("bi_o_edge/setup.jl")
-include("bi_o_edge/measure.jl")
-include("bi_o_edge/signals.jl")
+include("bi_o_edge/optics.jl")
 include("bi_o_edge/stages.jl")
 
-@inline valid_subaperture_mask(wfs::BiOEdgeWFS) = wfs.estimator.state.valid_mask
-@inline reference_signal(wfs::BiOEdgeWFS) = wfs.estimator.state.reference_signal_2d
-@inline slopes(wfs::BiOEdgeWFS) = bi_o_edge_estimator_products(wfs).slopes
-@inline wfs_calibration_signature(wfs::BiOEdgeWFS) =
-    wfs.estimator.state.calibration_signature
-
-@inline supports_detector_output(::BiOEdgeWFS{<:Diffractive}, ::AbstractDetector) = true
+@inline supports_prepared_runtime(::BiOEdgeWFS, ::AbstractSource) = true
+@inline supports_prepared_runtime(::BiOEdgeWFS, ::Asterism) = true
+@inline supports_detector_output(::BiOEdgeWFS, ::AbstractDetector) = true
 @inline supports_stacked_sources(::BiOEdgeWFS, ::Asterism) = true
-@inline supports_grouped_execution(::BiOEdgeWFS{<:Diffractive}, ::Asterism) = true
+@inline supports_grouped_execution(::BiOEdgeWFS, ::Asterism) = true
+
+@inline function prepare_runtime_wfs!(wfs::BiOEdgeWFS,
+    pupil::PupilFunction, ::AbstractSource)
+    prepare_bi_o_edge_sampling!(wfs, pupil)
+    return wfs
+end
+
+@inline function prepare_runtime_wfs!(wfs::BiOEdgeWFS,
+    pupil::PupilFunction, ::Asterism)
+    prepare_bi_o_edge_sampling!(wfs, pupil)
+    return wfs
+end

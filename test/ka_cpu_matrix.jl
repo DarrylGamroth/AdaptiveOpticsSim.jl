@@ -1288,15 +1288,8 @@ end
 
     @testset "Bi-O-edge kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-        wfs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+        wfs = BiOEdgeWFS(tel; pupil_samples=4)
         propagation = WavefrontSensors.bi_o_edge_propagation_workspace(wfs)
-
-        scalar_edge_mask = similar(wfs.estimator.state.edge_mask)
-        ka_edge_mask = similar(wfs.estimator.state.edge_mask)
-        WavefrontSensors._update_edge_mask!(SCALAR_CPU_STYLE, scalar_edge_mask, pupil_mask(tel), tel.params.resolution)
-        WavefrontSensors._update_edge_mask!(KA_CPU_STYLE, ka_edge_mask, pupil_mask(tel), tel.params.resolution)
-        mark_ka_cpu_kernel!(:edge_mask_kernel!)
-        @test ka_edge_mask == scalar_edge_mask
 
         scalar_phasor = similar(propagation.phasor)
         ka_phasor = similar(propagation.phasor)
@@ -1312,14 +1305,6 @@ end
         mark_ka_cpu_kernel!(:bi_o_edge_masks_kernel!)
         @test ka_cpu_close(ka_masks, scalar_masks)
 
-        mask = falses(8, 8)
-        mask[1:2:end, :] .= true
-        scalar_binned = Matrix{Bool}(undef, 4, 4)
-        ka_binned = similar(scalar_binned)
-        WavefrontSensors._bin_edge_mask!(SCALAR_CPU_STYLE, scalar_binned, mask, 2, 4, 4)
-        WavefrontSensors._bin_edge_mask!(KA_CPU_STYLE, ka_binned, mask, 2, 4, 4)
-        mark_ka_cpu_kernel!(:bin_edge_mask_kernel!)
-        @test ka_binned == scalar_binned
     end
 
     @testset "Elongation kernel" begin
@@ -1417,7 +1402,6 @@ end
             :diagonal_matrix_kernel!,
             :dm_apply_gaussian_operator_kernel!,
             :fit_source_average_kernel!,
-            :gather_bi_o_edge_slopes_kernel!,
             :gather_stencil_data_kernel!,
             :guide_grid_kernel!,
             :guide_grid_stack_kernel!,

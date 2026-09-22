@@ -81,7 +81,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :BiOEdgeOpticalFrontEnd,
         :pyramid_rate_map,
         :bi_o_edge_rate_map,
-        :set_bi_o_edge_calibration!,
         :pyramid_modulation_frame,
         :pyramid_modulation_frame!,
         :ZernikeWFS,
@@ -326,8 +325,8 @@ end
     @test_throws InvalidConfiguration BiOEdgeWFS(tel;
         pupil_samples=4, modulation_phase_offset_rad=NaN)
 
-    bio_plain = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
-    bio_gray = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
+    bio_plain = BiOEdgeWFS(tel; pupil_samples=4, modulation=1.0)
+    bio_gray = BiOEdgeWFS(tel; pupil_samples=4, modulation=1.0,
         grey_width=0.5, grey_length=1.0)
     amps = real.(bi_o_edge_propagation_workspace(
         bio_gray).bi_o_edge_masks[:, :, 1])
@@ -335,12 +334,15 @@ end
     @test bi_o_edge_propagation_workspace(bio_plain).bi_o_edge_masks !=
         bi_o_edge_propagation_workspace(bio_gray).bi_o_edge_masks
 
-    bio_gray_slopes = measure!(bio_gray, pupil, src)
-    @test length(bio_gray_slopes) == 2 * 4 * 4
-    @test all(isfinite, bio_gray_slopes)
+    bio_gray_front_end = BiOEdgeOpticalFrontEnd(bio_gray, src)
+    bio_gray_rate = bi_o_edge_rate_map(bio_gray_front_end, pupil)
+    bio_gray_plan = prepare_wfs_optics(
+        bio_gray_front_end, pupil, bio_gray_rate)
+    form_wfs_optical_products!(bio_gray_rate, pupil, bio_gray_plan)
+    @test all(isfinite, bio_gray_rate.values)
 end
 
-@testset "WFS asterism calibration and pupil-image geometry" begin
+@testset "WFS asterism and pupil-image geometry" begin
     tel = Telescope(resolution=20, diameter=8.0,
         central_obstruction=0.0)
     pupil = PupilFunction(tel)
@@ -348,67 +350,30 @@ end
     @test_throws InvalidConfiguration PyramidWFS(tel;
         pupil_samples=5, binning=2)
     @test_throws InvalidConfiguration BiOEdgeWFS(tel;
-        pupil_samples=5, binning=2, mode=Diffractive())
+        pupil_samples=5, binning=2)
     @test_throws InvalidConfiguration PyramidWFS(tel;
         pupil_samples=0)
     @test_throws InvalidConfiguration BiOEdgeWFS(tel;
-        pupil_samples=0, mode=Diffractive())
+        pupil_samples=0)
 
     pyramid = PyramidWFS(tel; pupil_samples=4, diffraction_padding=3)
     WavefrontSensors.prepare_pyramid_sampling!(pyramid, pupil)
     @test size(pyramid_acquisition_products(pyramid).frame) == (12, 12)
 
-    bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    @test_throws InvalidConfiguration begin
-        WavefrontSensors.resize_bi_o_edge_signal_buffers!(bi_o_edge, 7, 1)
-    end
-    @test_throws DimensionMismatchError begin
-        WavefrontSensors.bi_o_edge_signal!(bi_o_edge, pupil, zeros(8, 6))
-    end
-
-    compact_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=2,
-        mode=Diffractive())
-    WavefrontSensors.bi_o_edge_acquisition_workspace(
-        compact_bi_o_edge).nominal_detector_resolution = 4
-    WavefrontSensors.resize_bi_o_edge_signal_buffers!(compact_bi_o_edge, 4)
-    fill!(compact_bi_o_edge.estimator.state.valid_i4q, true)
-    WavefrontSensors.update_bi_o_edge_valid_signal!(compact_bi_o_edge)
-    WavefrontSensors.update_bi_o_edge_valid_signal_indices!(compact_bi_o_edge)
-    WavefrontSensors.resize_bi_o_edge_slope_buffers!(compact_bi_o_edge)
-    fill!(compact_bi_o_edge.estimator.state.reference_signal_2d, 0.0)
-    compact_frame = [4.0 4.0 1.0 1.0;
-                     4.0 4.0 1.0 1.0;
-                     3.0 3.0 2.0 2.0;
-                     3.0 3.0 2.0 2.0]
-    compact_slopes = copy(WavefrontSensors.bi_o_edge_signal!(
-        compact_bi_o_edge, pupil, compact_frame))
-
-    padded_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=2,
-        mode=Diffractive())
-    WavefrontSensors.bi_o_edge_acquisition_workspace(
-        padded_bi_o_edge).nominal_detector_resolution = 4
-    WavefrontSensors.resize_bi_o_edge_signal_buffers!(padded_bi_o_edge, 8)
-    fill!(padded_bi_o_edge.estimator.state.valid_i4q, true)
-    WavefrontSensors.update_bi_o_edge_valid_signal!(padded_bi_o_edge)
-    WavefrontSensors.update_bi_o_edge_valid_signal_indices!(padded_bi_o_edge)
-    WavefrontSensors.resize_bi_o_edge_slope_buffers!(padded_bi_o_edge)
-    fill!(padded_bi_o_edge.estimator.state.reference_signal_2d, 0.0)
-    padded_frame = zeros(8, 8)
-    @views padded_frame[3:6, 3:6] .= compact_frame
-    @test WavefrontSensors.bi_o_edge_signal!(padded_bi_o_edge, pupil,
-        padded_frame) ≈ compact_slopes
+    bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4, diffraction_padding=3)
+    WavefrontSensors.prepare_bi_o_edge_sampling!(bi_o_edge, pupil)
+    @test size(WavefrontSensors.bi_o_edge_acquisition_products(
+        bi_o_edge).frame) == (24, 24)
 
     ngs = Source(wavelength=589e-9, photon_irradiance=1.0)
     lgs = LGSSource(wavelength=589e-9, elongation_factor=1.4,
         photon_irradiance=1.0)
     heterogeneous = Asterism(AdaptiveOpticsSim.Optics.AbstractSource[ngs, lgs])
-    detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
-        qe=1.0, binning=1)
-    bio_sensor = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
-    @test_throws InvalidConfiguration measure!(bio_sensor, pupil,
-        heterogeneous)
-    @test_throws InvalidConfiguration measure!(bio_sensor, pupil,
-        heterogeneous, detector)
+    bio_sensor = BiOEdgeWFS(tel; pupil_samples=4)
+    heterogeneous_front_end = BiOEdgeOpticalFrontEnd(
+        bio_sensor, heterogeneous)
+    @test_throws WFSPreparationError bi_o_edge_rate_map(
+        heterogeneous_front_end, pupil)
 
     common_lgs = Asterism([
         LGSSource(wavelength=589e-9, elongation_factor=1.4,

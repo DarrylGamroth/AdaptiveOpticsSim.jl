@@ -28,7 +28,6 @@ export PyramidOpticalFrontEnd
 export pyramid_rate_map
 export BiOEdgeOpticalFrontEnd
 export bi_o_edge_rate_map
-export set_bi_o_edge_calibration!
 export ZernikeOpticalFrontEnd
 export zernike_rate_map
 export CurvatureOpticalFrontEnd
@@ -122,8 +121,6 @@ public BiOEdgeOpticsPlan
 public BiOEdgeOpticsBundlePlan
 public PreparedBiOEdgeOptics
 public PreparedBiOEdgeOpticsBundle
-public BiOEdgeEstimationPlan
-public PreparedBiOEdgeEstimator
 public ZernikeOpticsPlan
 public PreparedZernikeOptics
 public ZernikeEstimationPlan

@@ -1,3 +1,34 @@
+mutable struct CalibrationContractWFS{M<:AbstractMatrix,V<:AbstractVector} <:
+        WavefrontSensors.AbstractWFS
+    projection::M
+    measurement::V
+end
+
+function calibration_contract_wfs(tel::Telescope; rows::Int=8)
+    T = eltype(pupil_reflectivity(tel))
+    resolution = tel.params.resolution
+    projection = Matrix{T}(undef, rows, resolution * resolution)
+    @inbounds for column in axes(projection, 2)
+        for row in axes(projection, 1)
+            projection[row, column] = (
+                sinpi(T(row * column) / T(rows + 1)) +
+                cospi(T((row + 2) * (column + 1)) /
+                    T(resolution * resolution + 1))
+            ) / T(rows)
+        end
+    end
+    return CalibrationContractWFS(projection, zeros(T, rows))
+end
+
+@inline WavefrontSensors.slopes(wfs::CalibrationContractWFS) =
+    wfs.measurement
+
+function WavefrontSensors.measure!(wfs::CalibrationContractWFS,
+    pupil::PupilFunction)
+    mul!(wfs.measurement, wfs.projection, vec(pupil.opd))
+    return wfs.measurement
+end
+
 @testset "Modal bases and fitting" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
@@ -228,72 +259,10 @@
     @test eltype(atmospheric_basis_f32.basis) === Float32
 end
 
-@testset "Interaction-matrix WFS output finalization" begin
-    T = Float32
-    tel = Telescope(
-        resolution=480,
-        diameter=8.0,
-        central_obstruction=0.0,
-        T=T,
-    )
-    src = Source(band=:R, magnitude=3.0, T=T)
-    dm = DeformableMirror(tel; n_act=2, influence_width=T(0.2), T=T)
-    wfs = BiOEdgeWFS(
-        tel;
-        pupil_samples=20,
-        threshold=T(0.1),
-        modulation=zero(T),
-        modulation_points=1,
-        light_ratio=T(0.1),
-        n_pix_separation=4,
-        n_pix_edge=2,
-        psf_centering=true,
-        mode=Diffractive(),
-        T=T,
-    )
-    initial_rows = length(slopes(wfs))
-    imat = interaction_matrix(
-        dm,
-        wfs,
-        PupilFunction(tel; T=T),
-        src;
-        amplitude=T(5e-9),
-    )
-
-    @test length(slopes(wfs)) < initial_rows
-    @test size(imat.matrix) ==
-        (length(slopes(wfs)), length(dm.state.coefs))
-    @test all(isfinite, imat.matrix)
-
-    stale_wfs = BiOEdgeWFS(
-        tel;
-        pupil_samples=20,
-        threshold=T(0.1),
-        modulation=zero(T),
-        modulation_points=1,
-        light_ratio=T(0.1),
-        n_pix_separation=4,
-        n_pix_edge=2,
-        psf_centering=true,
-        mode=Diffractive(),
-        T=T,
-    )
-    stale_out = zeros(T, initial_rows, length(dm.state.coefs))
-    @test_throws DimensionMismatchError interaction_matrix!(
-        stale_out,
-        dm,
-        stale_wfs,
-        PupilFunction(tel; T=T),
-        src;
-        amplitude=T(5e-9),
-    )
-    @test length(slopes(stale_wfs)) == size(imat.matrix, 1)
-end
-
 @testset "Mis-registration identification" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = BiOEdgeWFS(tel; pupil_samples=2)
+    wfs = calibration_contract_wfs(tel)
     basis = modal_basis(dm, tel; n_modes=2)
     fields = collect(Calibration.MISREG_FIELDS)
     meta, meta_fd, meta_ad = mktempdir() do root
@@ -351,7 +320,7 @@ end
         reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = BiOEdgeWFS(tel; pupil_samples=2)
+    wfs = calibration_contract_wfs(tel)
     det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1)
 
     basis = modal_basis(dm, tel; n_modes=2)

@@ -20,7 +20,7 @@
     poly_common = with_spectrum(src, SpectralBundle(
         fill(wavelength(src), 2), [0.7, 0.3]))
     pyr = PyramidWFS(tel; pupil_samples=2)
-    bio = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive())
+    bio = BiOEdgeWFS(tel; pupil_samples=2)
     zwfs = ZernikeWFS(tel; pupil_samples=2)
     curv = CurvatureWFS(tel; pupil_samples=2)
     curv_count = CurvatureWFS(tel; pupil_samples=2,
@@ -115,7 +115,16 @@
         pyramid_rate)
     @test applicable(form_wfs_optical_products!, pyramid_rate, pupil,
         pyramid_optics)
-    assert_wfs_interface(bio, tel)
+    @test !applicable(update_valid_mask!, bio, pupil)
+    @test !applicable(measure!, bio, pupil)
+    @test !applicable(slopes, bio)
+    @test !supports_valid_subaperture_mask(bio)
+    @test !supports_reference_signal(bio)
+    bio_front_end = BiOEdgeOpticalFrontEnd(bio, src)
+    bio_rate = bi_o_edge_rate_map(bio_front_end, pupil)
+    bio_optics = prepare_wfs_optics(bio_front_end, pupil, bio_rate)
+    @test applicable(form_wfs_optical_products!, bio_rate, pupil,
+        bio_optics)
     assert_wfs_interface(zwfs, tel)
     assert_wfs_interface(curv, tel)
     assert_wfs_interface(curv_count, tel)
@@ -148,6 +157,7 @@
     @test supports_prepared_runtime(zwfs, src)
     @test supports_prepared_runtime(curv, src)
     @test supports_prepared_runtime(PyramidWFS(tel; pupil_samples=2), src)
+    @test supports_prepared_runtime(bio, src)
     @test !supports_detector_output(wfs, det)
     @test supports_detector_output(pyr, det)
     @test supports_detector_output(bio, det)

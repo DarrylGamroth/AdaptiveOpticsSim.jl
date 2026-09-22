@@ -629,9 +629,6 @@ function _require_exact_bi_o_edge_front_end_target(
     )
     _require_exact_focal_plane_modulation_target(
         front_end.modulation, target, "Bi-O-edge operating modulation")
-    _require_exact_focal_plane_modulation_target(
-        front_end.calibration_modulation, target,
-        "Bi-O-edge calibration modulation")
     return front_end
 end
 
@@ -826,93 +823,6 @@ function _require_exact_wfs_target(
         target,
         :acquisition,
     )
-    return plan
-end
-
-function _require_exact_bi_o_edge_estimator_state_target(
-    state::BiOEdgeEstimatorState,
-    target::AbstractComputeDevice,
-)
-    _require_exact_wfs_array_targets(
-        (
-            state.valid_mask,
-            state.edge_mask,
-            state.optical_gain,
-            state.valid_i4q,
-            state.reference_signal_2d,
-        ),
-        (
-            "Bi-O-edge valid mask",
-            "Bi-O-edge edge mask",
-            "Bi-O-edge optical gain",
-            "Bi-O-edge valid I4Q mask",
-            "Bi-O-edge calibration reference",
-        ),
-        target,
-        :estimation,
-    )
-    return state
-end
-
-function _require_exact_bi_o_edge_estimator_workspace_target(
-    workspace::BiOEdgeEstimatorWorkspace,
-    target::AbstractComputeDevice,
-)
-    _require_exact_wfs_array_targets(
-        (
-            workspace.valid_signal,
-            workspace.valid_signal_indices,
-            workspace.valid_flux_sum_buffer,
-            workspace.flux_i4q,
-            workspace.signal_2d,
-            workspace.binned_phase,
-            workspace.edge_mask_binned,
-        ),
-        (
-            "Bi-O-edge valid-signal mask",
-            "Bi-O-edge valid-signal indices",
-            "Bi-O-edge flux-sum buffer",
-            "Bi-O-edge I4Q flux",
-            "Bi-O-edge signal",
-            "Bi-O-edge binned phase",
-            "Bi-O-edge binned edge mask",
-        ),
-        target,
-        :estimation,
-    )
-    return workspace
-end
-
-function _require_exact_bi_o_edge_estimator_products_target(
-    products::BiOEdgeEstimatorProducts,
-    target::AbstractComputeDevice,
-)
-    _require_exact_wfs_storage_target(products.slopes, target, :estimation,
-        "Bi-O-edge slopes")
-    return products
-end
-
-function _require_exact_wfs_target(
-    plan::PreparedBiOEdgeEstimator,
-    target::AbstractComputeDevice,
-)
-    validate_wfs_estimation_binding(
-        plan.measurement, plan.input, plan)
-    _require_exact_wfs_estimator_input_target(plan.input, target)
-    _require_exact_wfs_measurement_target(plan.measurement, target)
-    _require_exact_bi_o_edge_estimator_state_target(
-        plan.state, target)
-    _require_exact_bi_o_edge_estimator_workspace_target(
-        plan.workspace, target)
-    _require_exact_bi_o_edge_estimator_products_target(
-        plan.products, target)
-    if plan.sensor.front_end !== nothing
-        _require_exact_bi_o_edge_front_end_target(
-            plan.sensor.front_end, target)
-        acquisition = bi_o_edge_acquisition_products(plan.sensor)
-        _require_exact_wfs_storage_target(acquisition.frame, target,
-            :estimation, "Bi-O-edge acquisition frame")
-    end
     return plan
 end
 

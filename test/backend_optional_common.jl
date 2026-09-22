@@ -767,26 +767,33 @@ function run_optional_sodium_layer_profile_wfs(::Type{B},
             photon_irradiance=one(T),
             T=T,
         )
-        wfs = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
+        wfs = BiOEdgeWFS(tel; pupil_samples=4,
             modulation=zero(T), T=T, backend=selector)
 
-        WavefrontSensors.ensure_lgs_kernel!(wfs, pupil, src)
-        propagation = WavefrontSensors.bi_o_edge_propagation_workspace(wfs)
-        @test propagation.lgs_kernel_fft isa BackendArray
-        original_tag = propagation.lgs_kernel_tag
-        original_kernel = Array(propagation.lgs_kernel_fft)
+        front_end = BiOEdgeOpticalFrontEnd(wfs, src)
+        rate = bi_o_edge_rate_map(front_end, pupil)
+        optics = prepare_wfs_optics(front_end, pupil, rate)
+        prepared_kernel = optics.plan.lgs_model.kernel_fft
+        @test prepared_kernel isa BackendArray
+        original_kernel = Array(prepared_kernel)
         @test all(isfinite, original_kernel)
-        slopes = measure!(wfs, pupil, src)
+        form_wfs_optical_products!(rate, pupil, optics)
         AdaptiveOpticsSim.Backends.synchronize_backend!(
-            AdaptiveOpticsSim.Backends.execution_style(slopes))
-        @test slopes isa BackendArray
-        @test all(isfinite, Array(slopes))
+            AdaptiveOpticsSim.Backends.execution_style(rate.values))
+        @test rate.values isa BackendArray
+        @test all(isfinite, Array(rate.values))
 
-        src.params.sodium_layer_profile.relative_weights .=
-            T[0.8, 0.1, 0.1]
-        WavefrontSensors.ensure_lgs_kernel!(wfs, pupil, src)
-        @test propagation.lgs_kernel_tag != original_tag
-        @test !isapprox(Array(propagation.lgs_kernel_fft), original_kernel;
+        changed_src = LGSSource(
+            sodium_layer_profile=SodiumLayerProfile(
+                T[80_000, 90_000, 100_000], T[0.8, 0.1, 0.1]),
+            laser_coordinates=(T(1), T(-0.5)),
+            fwhm_spot_up=T(0.8), photon_irradiance=one(T), T=T)
+        changed_front_end = BiOEdgeOpticalFrontEnd(wfs, changed_src)
+        changed_rate = bi_o_edge_rate_map(changed_front_end, pupil)
+        changed_optics = prepare_wfs_optics(
+            changed_front_end, pupil, changed_rate)
+        @test !isapprox(
+            Array(changed_optics.plan.lgs_model.kernel_fft), original_kernel;
             rtol=T(1e-5), atol=T(1e-6))
     end
     return nothing
@@ -1185,10 +1192,10 @@ function run_optional_wfs_stage_contracts(
         central_obstruction=zero(T), T=T, backend=CPUBackend())
     four_pupil_cpu = PupilFunction(four_pupil_cpu_tel; T=T)
     copyto!(four_pupil_cpu.opd, Array(pupil.opd))
-    @testset "Bi-O-edge prepared estimator stages" begin
+    @testset "Bi-O-edge prepared plant stages" begin
         cpu_sensor = BiOEdgeWFS(four_pupil_cpu_tel; pupil_samples=2,
-            mode=Diffractive(), modulation=0, T=T)
-        gpu_sensor = BiOEdgeWFS(tel; pupil_samples=2, mode=Diffractive(),
+            modulation=0, T=T)
+        gpu_sensor = BiOEdgeWFS(tel; pupil_samples=2,
             modulation=0, T=T, backend=selector)
         cpu_front_end = BiOEdgeOpticalFrontEnd(cpu_sensor, src)
         gpu_front_end = BiOEdgeOpticalFrontEnd(gpu_sensor, src)
@@ -1207,7 +1214,7 @@ function run_optional_wfs_stage_contracts(
             rtol=T(3e-5), atol=T(3e-5))
 
         field_sensor = BiOEdgeWFS(tel; pupil_samples=2,
-            mode=Diffractive(), modulation=0, T=T, backend=selector)
+            modulation=0, T=T, backend=selector)
         field_front_end = BiOEdgeOpticalFrontEnd(field_sensor)
         field_rate = bi_o_edge_rate_map(field_front_end, field)
         field_plan = prepare_wfs_optics(field_front_end, field,
@@ -1234,94 +1241,6 @@ function run_optional_wfs_stage_contracts(
         @test four_pupil_observation.storage isa BackendArray
         @test isapprox(Array(four_pupil_observation.storage),
             Array(gpu_rate.values) .* T(0.2); rtol=T(3e-5), atol=T(3e-5))
-
-        reference = similar(gpu_sensor.estimator.state.reference_signal_2d)
-        fill!(reference, zero(T))
-        set_bi_o_edge_calibration!(gpu_sensor, reference;
-            wavelength_m=wavelength(src), signature=UInt(0x5042))
-
-        host_observation = WFSObservation(zeros(T, size(gpu_rate.values));
-            units=:electron_count, layout=:four_pupil_mosaic)
-        host_observation_error = try
-            prepare_wfs_estimation(gpu_sensor, host_observation,
-                WFSMeasurement(similar(slopes(gpu_sensor));
-                    units=:dimensionless, kind=:differential_slopes))
-            nothing
-        catch err
-            err
-        end
-        @test host_observation_error isa WFSPreparationError
-        @test host_observation_error.reason === :backend
-
-        host_measurement = WFSMeasurement(
-            zeros(T, length(slopes(gpu_sensor))); units=:dimensionless,
-            kind=:differential_slopes)
-        host_measurement_error = try
-            prepare_wfs_estimation(gpu_sensor, four_pupil_observation,
-                host_measurement)
-            nothing
-        catch err
-            err
-        end
-        @test host_measurement_error isa WFSPreparationError
-        @test host_measurement_error.reason === :backend
-
-        four_pupil_measurement = WFSMeasurement(similar(slopes(gpu_sensor));
-            units=:dimensionless, kind=:differential_slopes)
-        four_pupil_estimator = prepare_wfs_estimation(gpu_sensor,
-            four_pupil_observation, four_pupil_measurement)
-        estimate_wfs_measurement!(four_pupil_measurement,
-            four_pupil_observation, four_pupil_estimator)
-        AdaptiveOpticsSim.Backends.synchronize_backend!(
-            AdaptiveOpticsSim.Backends.execution_style(
-                four_pupil_measurement.storage))
-        @test four_pupil_measurement.storage isa BackendArray
-        @test all(isfinite, Array(four_pupil_measurement.storage))
-
-        quantized_host = reshape(UInt16.(1:length(gpu_rate.values)),
-            size(gpu_rate.values))
-        quantized_storage = similar(gpu_rate.values, UInt16)
-        copyto!(quantized_storage, quantized_host)
-        quantized_observation = WFSObservation(quantized_storage;
-            units=:adu, layout=:four_pupil_mosaic)
-        quantized_measurement = WFSMeasurement(similar(slopes(gpu_sensor));
-            units=:dimensionless, kind=:differential_slopes)
-        quantized_estimator = prepare_wfs_estimation(gpu_sensor,
-            quantized_observation, quantized_measurement)
-        estimate_wfs_measurement!(quantized_measurement,
-            quantized_observation, quantized_estimator)
-        AdaptiveOpticsSim.Backends.synchronize_backend!(
-            AdaptiveOpticsSim.Backends.execution_style(quantized_measurement.storage))
-
-        cpu_reference = zeros(T,
-            size(cpu_sensor.estimator.state.reference_signal_2d))
-        set_bi_o_edge_calibration!(cpu_sensor, cpu_reference;
-            wavelength_m=wavelength(src), signature=UInt(0x5042))
-        cpu_quantized_observation = WFSObservation(quantized_host;
-            units=:adu, layout=:four_pupil_mosaic)
-        cpu_quantized_measurement = WFSMeasurement(similar(slopes(cpu_sensor));
-            units=:dimensionless, kind=:differential_slopes)
-        cpu_quantized_estimator = prepare_wfs_estimation(cpu_sensor,
-            cpu_quantized_observation, cpu_quantized_measurement)
-        estimate_wfs_measurement!(cpu_quantized_measurement,
-            cpu_quantized_observation, cpu_quantized_estimator)
-        @test quantized_measurement.storage isa BackendArray
-        @test isapprox(Array(quantized_measurement.storage),
-            cpu_quantized_measurement.storage; rtol=T(3e-5), atol=T(3e-5))
-
-        geometric = BiOEdgeWFS(tel; pupil_samples=2, mode=Geometric(), T=T,
-            backend=selector)
-        geometric_measurement = WFSMeasurement(similar(slopes(geometric));
-            units=:metre, kind=:geometric_slopes)
-        geometric_plan = prepare_wfs_estimation(geometric, pupil,
-            geometric_measurement)
-        estimate_wfs_measurement!(geometric_measurement, pupil,
-            geometric_plan)
-        AdaptiveOpticsSim.Backends.synchronize_backend!(
-            AdaptiveOpticsSim.Backends.execution_style(
-                geometric_measurement.storage))
-        @test geometric_measurement.storage isa BackendArray
-        @test all(isfinite, Array(geometric_measurement.storage))
 
         spectral_source = with_spectrum(src,
             SpectralBundle(T[0.7e-6, 0.9e-6], T[0.25, 0.75]; T=T))
@@ -1363,9 +1282,9 @@ function run_optional_wfs_stage_contracts(
                 fwhm_spot_up=T(0.8), T=T),
         )
             cpu_lgs_sensor = BiOEdgeWFS(four_pupil_cpu_tel;
-                pupil_samples=2, mode=Diffractive(), modulation=0, T=T)
+                pupil_samples=2, modulation=0, T=T)
             gpu_lgs_sensor = BiOEdgeWFS(tel; pupil_samples=2,
-                mode=Diffractive(), modulation=0, T=T, backend=selector)
+                modulation=0, T=T, backend=selector)
             cpu_lgs_front_end = BiOEdgeOpticalFrontEnd(cpu_lgs_sensor, lgs)
             gpu_lgs_front_end = BiOEdgeOpticalFrontEnd(gpu_lgs_sensor, lgs)
             cpu_lgs_rate = bi_o_edge_rate_map(
@@ -1898,7 +1817,7 @@ function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val
 end
 
 function _build_optional_low_order_wfs(tel::Telescope, backend, ::Type{T}, ::Val{:bio}) where {T<:AbstractFloat}
-    return BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    return BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
 end
 
 function _build_optional_low_order_optic(tel::Telescope, backend,
@@ -1972,8 +1891,20 @@ function _prepare_optional_independent_wfs(wfs::PyramidWFS, pupil,
     return (; rate, optics, observation, acquisition)
 end
 
-@inline _prepare_optional_independent_wfs(::BiOEdgeWFS, args...) =
-    (; rate=nothing, optics=nothing, observation=nothing, acquisition=nothing)
+function _prepare_optional_independent_wfs(wfs::BiOEdgeWFS, pupil,
+    source, detector)
+    front_end = BiOEdgeOpticalFrontEnd(wfs, source)
+    rate = bi_o_edge_rate_map(front_end, pupil)
+    optics = prepare_wfs_optics(front_end, pupil, rate)
+    observation = WFSObservation(
+        similar(intensity_values(rate));
+        units=:electron_count,
+        layout=:four_pupil_mosaic,
+    )
+    acquisition = prepare_wfs_acquisition(
+        detector, rate, observation; source)
+    return (; rate, optics, observation, acquisition)
+end
 
 function _build_optional_independent_optics_case(backend, ::Type{T},
     case::Val, wfs_case::Val) where {T<:AbstractFloat}
@@ -2015,7 +1946,7 @@ function _build_optional_independent_optics_case(backend, ::Type{T},
 end
 
 function _optional_independent_wfs_products!(prepared,
-    ::PyramidWFS)
+    ::Union{PyramidWFS,BiOEdgeWFS})
     form_wfs_optical_products!(
         prepared.rate, prepared.pupil, prepared.optics)
     acquire_wfs_observation!(
@@ -2026,18 +1957,6 @@ function _optional_independent_wfs_products!(prepared,
     )
     return intensity_values(prepared.rate),
         observation_storage(prepared.observation)
-end
-
-function _optional_independent_wfs_products!(prepared,
-    ::BiOEdgeWFS)
-    measure!(
-        prepared.wfs,
-        prepared.pupil,
-        prepared.source,
-        prepared.detector;
-        rng=MersenneTwister(91),
-    )
-    return slopes(prepared.wfs), output_frame(prepared.detector)
 end
 
 function _optional_independent_optics_snapshot!(prepared,
@@ -2831,7 +2750,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     T = Float32
     array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
-    bio = BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    bio = BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
     det_capture = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, bits=12, full_well=T(100),
         sensor=CMOSSensor(T=T), T=T, backend=backend)
@@ -3095,7 +3014,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     T = Float32
     array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
     pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
-    bio = BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), mode=Diffractive(), T=T, backend=backend)
+    bio = BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     pupil = PupilFunction(tel; T=T, backend=backend)

@@ -87,9 +87,11 @@ back into the plant.
 The former AOS RTC examples and tutorials are retired. Bi-O-edge, Zernike, and
 Curvature RTC composition, and the combined Subaru AO188/AO3k model, belong to
 downstream packages that also own their composition and acceptance evidence.
-The three family estimators remain maintained AOS surfaces until their
-approved FGA targets are released and adopted; this interim ownership does not
-make AOS the RTC owner. LiFT remains an AOS forward and phase-retrieval workflow
+Bi-O-edge physical optics and complete acquisition are maintained in AOS, while
+registered FilterGraphAlgorithms v0.3.0 and JuliaFilterGraph v0.2.1 provide its
+calibrated estimation and RTC processing. Zernike and Curvature estimators
+remain AOS surfaces until their approved FGA targets are released and adopted.
+LiFT remains an AOS forward and phase-retrieval workflow
 until its approved AdaptiveOpticsCalibration inverse target is released and
 adopted.
 
@@ -138,8 +140,9 @@ external measurement estimation separate:
 
 For Shack–Hartmann and Pyramid operation, step 3 belongs to
 FilterGraphAlgorithms. AOS retains no detector-frame-to-slope convenience
-path for either family. Bi-O-edge, Zernike, and Curvature retain step 3 in AOS
-until their approved FGA targets are released and adopted. LiFT uses its own
+path for either family. Bi-O-edge step 3 belongs to registered
+FilterGraphAlgorithms. Zernike and Curvature retain step 3 in AOS until their
+approved FGA targets are released and adopted. LiFT uses its own
 forward and inverse products rather than this detector-slope convention.
 
 ## Complete-Frame Algorithm Graphs

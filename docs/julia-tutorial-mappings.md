@@ -34,7 +34,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 | `tutorials/AO_transfer_function.py` | `examples/tutorials/transfer_function.jl` | Closed-loop rejection and closed-loop transfer functions |
 | `tutorials/AO_closed_loop_ShackHartmannWFS_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained Shack–Hartmann plant/RTC fixture; AOS owns the plant and FGA/JFG owns the RTC |
 | `tutorials/AO_closed_loop_Pyramid_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained complete-frame Pyramid plant/RTC fixture; AOS owns optical formation and detector acquisition, and FGA owns I4Q estimation and control |
-| `tutorials/AO_closed_loop_BioEdge_WFS.py` | Downstream package | AOS Bi-O-edge optics and estimation remain maintained pending the approved FGA target; RTC composition and acceptance are not an AOS tutorial surface |
+| `tutorials/AO_closed_loop_BioEdge_WFS.py` | Downstream package | AOS Bi-O-edge optics and complete detector acquisition compose with registered FilterGraphAlgorithms v0.3.0 / JuliaFilterGraph v0.2.1 for estimation and RTC processing; acceptance is owned by the downstream integration |
 | `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | `examples/tutorials/gain_sensing_camera.jl` | Pyramid modulation-frame and optical-gain estimation; no maintained AOS RTC composition |
 | `tutorials/how_to_tomography.py` | `examples/tutorials/tomography.jl` | Compact model-based tomography workflow plus committed pyTomoAO KAPA regression for wavefront and DM-command reconstruction |
 
@@ -48,8 +48,10 @@ Each script exposes a `main()` function and logs a short completion summary with
   parameter, not a mutable string flag. The AOS Shack–Hartmann and Pyramid
   surfaces are physical diffractive front ends; direct OPD-gradient truth uses
   the explicitly named `geometric_wavefront_slopes!` calculation.
-- Bi-O-edge, Zernike, and Curvature estimator examples remain covered by their
-  focused WFS test suites while their approved FGA targets are pending. LiFT's
+- Bi-O-edge plant optics and acquisition remain covered by the focused WFS test
+  suite; its registered FGA estimator is covered by the downstream integration.
+  Zernike and Curvature estimator examples remain covered by their focused WFS
+  test suites while their approved FGA targets are pending. LiFT's
   maintained tutorial covers the distinct forward and phase-retrieval workflow.
 - Detector noise is encoded by the detector’s `noise` type, for example
   `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.

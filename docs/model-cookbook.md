@@ -72,9 +72,10 @@ Use `PyramidWFS`, `BiOEdgeWFS`, `CurvatureWFS`, or `ZernikeWFS` when the
 sensing physics changes. A `ShackHartmannWFS` composes a `MicrolensArray`.
 The AOS Shack–Hartmann and Pyramid surfaces end at physical optical products
 and complete detector observations. FilterGraphAlgorithms owns their maintained
-operational estimation. Bi-O-edge, Curvature, and Zernike retain their AOS
-optical, acquisition, and estimation paths until their approved FGA targets
-are released and adopted. LiFT remains an AOS forward and phase-retrieval
+operational estimation. Bi-O-edge uses AOS optical formation and acquisition,
+then registered FilterGraphAlgorithms for operational estimation. Curvature and
+Zernike retain their AOS optical, acquisition, and estimation paths until their
+approved FGA targets are released and adopted. LiFT remains an AOS forward and phase-retrieval
 workflow until its approved AdaptiveOpticsCalibration inverse target is
 released and adopted.
 
@@ -181,9 +182,10 @@ inverse products.
 
 The legacy AOS closed-loop examples are retired. A complete Pyramid feedback
 loop, and Bi-O-edge, Zernike, and Curvature RTC composition, must be defined and
-accepted by the downstream package that owns the assembled system. Their
-current AOS estimators remain maintained pending their approved FGA targets;
-that does not make AOS the RTC owner. The combined Subaru AO188/AO3k plant/RTC
+accepted by the downstream package that owns the assembled system. Bi-O-edge
+uses the registered FGA estimator; Zernike and Curvature remain AOS estimators
+until their approved FGA targets are released and adopted. That does not make
+AOS the RTC owner. The combined Subaru AO188/AO3k plant/RTC
 model is likewise retired from AOS pending its downstream instrument-package
 home.
 
