@@ -241,9 +241,11 @@ ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
 The Bi-O-edge driver requires zero warmed Julia heap allocation for one
 complete CPU target-ready step. Direct GPU stream execution reports its Julia
 launch overhead; zero host allocation, including completion, is a captured
-CUDA/HIP Graph replay contract and is validated by the captured plant-graph
-drivers. Use the CUDA run as the primary accelerator profile and the AMDGPU
-run as the secondary portability profile. The measured replay is marked as
+CUDA/HIP Graph replay contract. Existing captured plant-graph drivers validate
+that contract for the Shack-Hartmann graph. This Bi-O-edge driver exercises
+direct streams and makes no Bi-O-edge graph-capture claim. Use the CUDA run as
+the primary accelerator profile and the AMDGPU run as the secondary
+portability profile. The measured replay is marked as
 `aos_bi_o_edge_plant`; CUDA also uses the profiler API, and AMDGPU uses the
 ROCTx profiler controls, so vendor tools can select only the warmed repeated
 region.

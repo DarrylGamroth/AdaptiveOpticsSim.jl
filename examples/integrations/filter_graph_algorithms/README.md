@@ -37,7 +37,7 @@ AOC interfaces only; AOS remains the plant owner.
 S4 is a separate complete-frame Pyramid fixture. AOS forms a diffractive
 four-pupil photon-rate frame and performs one explicit noiseless detector
 acquisition. The composing layer transposes the acquired `(x, y)` detector
-storage into a preallocated `(row=y, column=x)` FGA image, then uses FGA 0.2's
+storage into a preallocated `(row=y, column=x)` FGA image, then uses FGA 0.3.0's
 `PyramidImageF32`, `PyramidReconstructorF32`, and leaky integrator to produce
 one adopted command. Its flat acquired frame defines the explicit reference
 I4Q signal; the support, unity optical gain, pupil order `q1, q2, q3, q4`,
