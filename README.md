@@ -94,10 +94,8 @@ acquisition, and application of complete PDM commands. The maintained
 in-process RTC reference is
 [`examples/integrations/filter_graph_algorithms/`](examples/integrations/filter_graph_algorithms/):
 FilterGraphAlgorithms/JuliaFilterGraph owns reconstruction, controller state,
-frame delay, and VDM/PDM routing. This fixture is the maintained
-Shack–Hartmann closed-loop reference. FilterGraphAlgorithms also owns the
-Pyramid estimator; a complete Pyramid plant/RTC composition belongs in its
-downstream composing package.
+frame delay, and VDM/PDM routing. The fixture contains maintained
+Shack–Hartmann and complete-frame Pyramid plant/RTC references.
 
 The legacy AOS closed-loop scripts and tutorials were retired. Bi-O-edge and
 Zernike RTC composition belongs in a downstream package with its calibration
@@ -141,10 +139,10 @@ julia --project=. examples/tutorials/image_formation.jl
 julia --project=. examples/tutorials/detector.jl
 ```
 
-For the maintained Shack–Hartmann closed-loop RTC reference, use
-`examples/integrations/filter_graph_algorithms/` with its documented
-cross-package environment. Pyramid, Bi-O-edge, and Zernike RTC composition is
-not an AOS tutorial surface.
+For the maintained Shack–Hartmann closed-loop reference and Pyramid
+plant-to-command reference, use `examples/integrations/filter_graph_algorithms/`
+with its documented cross-package environment. Bi-O-edge and Zernike RTC
+composition is not an AOS tutorial surface.
 To verify the maintained core examples as a group, run:
 
 ```bash

@@ -42,13 +42,18 @@ end
 
 function bench_pyramid()
     tel = Telescope(resolution=48, diameter=8.0, central_obstruction=0.0)
-    wfs = PyramidWFS(tel; pupil_samples=6, modulation=3.0, modulation_points=4, mode=Diffractive())
+    wfs = PyramidWFS(tel; pupil_samples=6, modulation=3.0,
+        modulation_points=4)
     src = Source(band=:I, magnitude=0.0)
     pupil = PupilFunction(tel)
     for i in 1:tel.params.resolution, j in 1:tel.params.resolution
         pupil.opd[i, j] = i + j
     end
-    return @benchmark measure!($wfs, $pupil, $src)
+    front_end = PyramidOpticalFrontEnd(wfs, src)
+    rate = pyramid_rate_map(front_end, pupil)
+    optics_plan = prepare_wfs_optics(front_end, pupil, rate)
+    return @benchmark form_wfs_optical_products!(
+        $rate, $pupil, $optics_plan)
 end
 
 function prepare_lift_benchmark(numerical::Bool)

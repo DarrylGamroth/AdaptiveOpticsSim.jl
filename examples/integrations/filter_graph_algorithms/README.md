@@ -34,6 +34,26 @@ constraint-feedback, fixed-frame-delay, and deterministic S1 boundary
 trajectory as numerical migration oracles. They run the public FGA/JFG and
 AOC interfaces only; AOS remains the plant owner.
 
+S4 is a separate complete-frame Pyramid fixture. AOS forms a diffractive
+four-pupil photon-rate frame and performs one explicit noiseless detector
+acquisition. The composing layer transposes the acquired `(x, y)` detector
+storage into a preallocated `(row=y, column=x)` FGA image, then uses FGA 0.2's
+`PyramidImageF32`, `PyramidReconstructorF32`, and leaky integrator to produce
+one adopted command. Its flat acquired frame defines the explicit reference
+I4Q signal; the support, unity optical gain, pupil order `q1, q2, q3, q4`,
+component order `(X, Y)`, units, type, model timestamps, and FGA release/tree
+claim are held in one immutable identity. An independent direct I4Q equation
+checks the FGA result.
+
+S4 is intentionally a package boundary, not a shared estimator. It does not
+call an AOS Pyramid estimator, measurement API, slope product, calibration
+state, or compatibility API. It has no shared GPU buffers, streams, CUDA/HIP
+graph, or zero-copy claim. Wrong sequence, model timestamp, identity,
+calibration or order signature, schema, shape, numeric type, non-finite data,
+discontinuity, corruption, or an FGA failure blocks the exchange before the
+adopted command changes. `reset_s4_pyramid!` discards that blocked exchange and
+restores FGA control state; it does not silently hold the previous command.
+
 The composing bridge is intentionally CPU-resident and uses preallocated host
 storage. AOS plant execution and FGA RTC execution are qualified independently
 on CUDA and AMDGPU. This fixture does not claim shared device storage, a shared
@@ -45,10 +65,25 @@ FilterGraphAlgorithms, and JuliaFilterGraph from the configured registry and
 uses this AOS checkout as its path source. Run:
 
 ```sh
+JULIA_NUM_THREADS=1 julia --startup-file=no \
+  --project=examples/integrations/filter_graph_algorithms \
+  -e 'using Pkg; Pkg.instantiate()'
+
 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
   julia --startup-file=no \
     --project=examples/integrations/filter_graph_algorithms \
     examples/integrations/filter_graph_algorithms/runtests.jl
+```
+
+The CPU profile exercises both warmed S1 and S4 composed steps and verifies
+zero Julia heap allocation before sampling:
+
+```sh
+AOS_FGA_PROFILE_STEPS=500000 JULIA_NUM_THREADS=1 \
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+  julia --startup-file=no \
+    --project=examples/integrations/filter_graph_algorithms \
+    examples/integrations/filter_graph_algorithms/profile_cpu.jl
 ```
 
 Develop a sibling package into this environment only when testing an

@@ -22,14 +22,27 @@ end
 
 function build_pyramid_mask!(wfs::PyramidWFS, pupil::PupilFunction)
     mask = pyramid_propagation_workspace(wfs).pyramid_mask
+    _build_pyramid_mask!(execution_style(mask), mask, wfs, pupil)
+    return mask
+end
+
+@inline function _build_pyramid_mask!(::ScalarCPUStyle, mask,
+    wfs::PyramidWFS, pupil::PupilFunction)
+    if wfs.front_end.phase_mask.old_mask
+        build_pyramid_mask_old_host!(mask, wfs, pupil)
+    else
+        build_pyramid_mask_new_host!(mask, wfs, pupil)
+    end
+    return mask
+end
+
+function _build_pyramid_mask!(::AcceleratorStyle, mask,
+    wfs::PyramidWFS, pupil::PupilFunction)
     copyto!(mask, host_pyramid_mask(wfs, pupil))
     return mask
 end
 
-@inline build_pyramid_shifted_masks!(::PyramidWFS{<:Geometric},
-    ::PupilFunction) = nothing
-
-function build_pyramid_shifted_masks!(wfs::PyramidWFS{<:Diffractive},
+function build_pyramid_shifted_masks!(wfs::PyramidWFS,
     pupil::PupilFunction)
     batch = pyramid_propagation_workspace(wfs).modulation_batch
     return _build_pyramid_shifted_masks!(
@@ -66,7 +79,7 @@ end
     masks = batch.shifted_masks
     T = real(eltype(masks))
     pad = size(masks, 1)
-    n_sub = wfs.estimator.params.pupil_samples
+    n_sub = wfs.front_end.pupil_samples
     phase_mask = wfs.front_end.phase_mask
     separation = something(phase_mask.n_pix_separation, 0)
     r = (T(n_sub) + T(separation)) * phase_mask.mask_scale / T(2)
@@ -76,8 +89,8 @@ end
     coordinate_start = -T(pi) * (one(T) - inv(T(pad)))
     coordinate_step = T(2pi) / T(pad)
     rotation_sin, rotation_cos = sincos(phase_mask.rotation_rad)
-    shift_x = wfs.estimator.state.shift_x
-    shift_y = wfs.estimator.state.shift_y
+    shift_x = phase_mask.pupil_shift_x_pixels
+    shift_y = phase_mask.pupil_shift_y_pixels
     return (
         masks,
         batch.axis_1_shifts_rad,
@@ -150,7 +163,7 @@ end
     axis_1_factors = batch.axis_1_factors
     T = real(eltype(axis_1_factors))
     pad = size(axis_1_factors, 1)
-    n_sub = wfs.estimator.params.pupil_samples
+    n_sub = wfs.front_end.pupil_samples
     phase_mask = wfs.front_end.phase_mask
     separation = something(phase_mask.n_pix_separation, 0)
     r = (T(n_sub) + T(separation)) * phase_mask.mask_scale / T(2)
@@ -159,8 +172,8 @@ end
     coordinate_step = T(2pi) / T(pad)
     shift_x_positive, shift_x_negative, shift_y_positive, shift_y_negative =
         _pyramid_separable_shift_components(
-            wfs.estimator.state.shift_x,
-            wfs.estimator.state.shift_y,
+            phase_mask.pupil_shift_x_pixels,
+            phase_mask.pupil_shift_y_pixels,
         )
     return (
         axis_1_factors,
@@ -229,7 +242,7 @@ end
 
 function host_pyramid_mask(wfs::PyramidWFS, pupil::PupilFunction)
     n = size(pyramid_propagation_workspace(wfs).pyramid_mask, 1)
-    T = eltype(pyramid_estimator_products(wfs).slopes)
+    T = real(eltype(pyramid_propagation_workspace(wfs).pyramid_mask))
     host = Matrix{Complex{T}}(undef, n, n)
     if wfs.front_end.phase_mask.old_mask
         build_pyramid_mask_old_host!(host, wfs, pupil)
@@ -241,7 +254,7 @@ end
 
 function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, pupil::PupilFunction) where {T<:AbstractFloat}
     n = size(mask, 1)
-    n_sub = wfs.estimator.params.pupil_samples
+    n_sub = wfs.front_end.pupil_samples
     sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
     rooftop_pixels = wfs.front_end.phase_mask.rooftop * wfs.front_end.phase_mask.diffraction_padding / sqrt(T(2))
     norma = T(_pupil_resolution(pupil)) / T(n_sub)
@@ -252,8 +265,8 @@ function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::Pyr
         xvals = range(-lim, lim; length=n + 1)[1:n]
     end
     r = (T(n_sub) + T(sep)) * wfs.front_end.phase_mask.mask_scale / 2
-    sx = wfs.estimator.state.shift_x
-    sy = wfs.estimator.state.shift_y
+    sx = wfs.front_end.phase_mask.pupil_shift_x_pixels
+    sy = wfs.front_end.phase_mask.pupil_shift_y_pixels
     θ = wfs.front_end.phase_mask.rotation_rad
     cθ = cos(θ)
     sθ = sin(θ)
@@ -274,10 +287,10 @@ end
 
 function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, pupil::PupilFunction) where {T<:AbstractFloat}
     n_tot = size(mask, 1)
-    n_sub = wfs.estimator.params.pupil_samples
+    n_sub = wfs.front_end.pupil_samples
     sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
-    sx = wfs.estimator.state.shift_x
-    sy = wfs.estimator.state.shift_y
+    sx = wfs.front_end.phase_mask.pupil_shift_x_pixels
+    sy = wfs.front_end.phase_mask.pupil_shift_y_pixels
     norma = (T(_pupil_resolution(pupil)) / T(n_sub)) / 4
     fill!(mask, complex(zero(T), zero(T)))
     if wfs.front_end.phase_mask.psf_centering
@@ -335,45 +348,6 @@ function axis_values(::Type{T}, n::Int, lo::T, hi::T; endpoint::Bool) where {T<:
     return reshape(range(lo; step=(hi - lo) / n, length=n), n, 1)
 end
 
-function _build_pyramid_mask!(::ScalarCPUStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, pupil::PupilFunction) where {T<:AbstractFloat}
-    n = size(mask, 1)
-    n_sub = wfs.estimator.params.pupil_samples
-    sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
-    r = (T(n_sub) + T(sep)) * wfs.front_end.phase_mask.mask_scale / 2
-    pix_per_subap = T(_pupil_resolution(pupil)) / T(n_sub)
-    norma = pix_per_subap
-    lim = T(pi)
-    x_vals = if wfs.front_end.phase_mask.psf_centering
-        range(-lim * (one(T) - one(T) / T(n)), lim * (one(T) - one(T) / T(n)); length=n)
-    else
-        range(-lim, lim; length=n, endpoint=false)
-    end
-    @inbounds for i in 1:n, j in 1:n
-        x = x_vals[i]
-        y = x_vals[j]
-        p1 = x * r + y * r
-        p2 = -x * r + y * r
-        p3 = -x * r - y * r
-        p4 = x * r - y * r
-        phase = -max(max(p1, p2), max(p3, p4)) * norma
-        mask[i, j] = cis(phase)
-    end
-    return mask
-end
-
-function _build_pyramid_mask!(style::AcceleratorStyle, mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, pupil::PupilFunction) where {T<:AbstractFloat}
-    n = size(mask, 1)
-    n_sub = wfs.estimator.params.pupil_samples
-    sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
-    r = (T(n_sub) + T(sep)) * wfs.front_end.phase_mask.mask_scale / 2
-    norma = T(_pupil_resolution(pupil)) / T(n_sub)
-    lim = T(pi)
-    start = wfs.front_end.phase_mask.psf_centering ? -lim * (one(T) - one(T) / T(n)) : -lim
-    step = T(2) * lim / T(n)
-    launch_kernel!(style, pyramid_mask_kernel!, mask, r, norma, start, step, n; ndrange=size(mask))
-    return mask
-end
-
 function accumulate_pyramid_focal_intensity!(out::AbstractMatrix,
     front_end::PyramidOpticalFrontEnd)
     propagation = pyramid_propagation_workspace(front_end)
@@ -395,15 +369,12 @@ function accumulate_pyramid_focal_intensity!(out::AbstractMatrix,
 end
 
 @inline accumulate_pyramid_focal_intensity!(out::AbstractMatrix,
-    wfs::PyramidWFS{<:Diffractive}) =
+    wfs::PyramidWFS) =
     accumulate_pyramid_focal_intensity!(out, wfs.front_end)
 
 @inline function _pyramid_modulation_batch_weights(batch,
     front_end::PyramidOpticalFrontEnd, modulation)
-    modulation === front_end.modulation && return batch.operating_weights
-    modulation === front_end.calibration_modulation &&
-        return batch.calibration_weights
-    return nothing
+    return modulation === front_end.modulation ? batch.operating_weights : nothing
 end
 
 function _prepare_pyramid_shifted_focal_field!(::ScalarCPUStyle,
@@ -918,7 +889,7 @@ Allocate and form the focal-plane modulation-cycle intensity used by a
 gain-sensing camera. The returned array has the prepared Pyramid front end's
 native focal-plane sampling.
 """
-function pyramid_modulation_frame(wfs::PyramidWFS{<:Diffractive},
+function pyramid_modulation_frame(wfs::PyramidWFS,
     pupil::PupilFunction, src::AbstractSource)
     out = similar(pyramid_propagation_workspace(wfs).intensity)
     return pyramid_modulation_frame!(out, wfs, pupil, src)
@@ -967,7 +938,7 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, pupil::PupilFunction, src::LGSSourc
         pupil,
         src,
         pad,
-        wfs.estimator.params.pupil_samples,
+        wfs.front_end.pupil_samples,
         pixel_scale,
         eltype(propagation.intensity);
         model=:subaperture_average,
@@ -980,7 +951,7 @@ function ensure_lgs_kernel!(wfs::PyramidWFS, pupil::PupilFunction, src::LGSSourc
         pupil,
         src,
         pad,
-        wfs.estimator.params.pupil_samples,
+        wfs.front_end.pupil_samples,
         pixel_scale,
         propagation.focal_field,
         propagation.fft_plan,

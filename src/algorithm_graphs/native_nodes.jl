@@ -1812,11 +1812,9 @@ struct PyramidRateNodeConfig{T<:AbstractFloat,TD,S,MS}
     telescope::TD
     source::S
     pupil_samples::Int
-    threshold::T
     modulation::T
     modulation_points::Union{Nothing,Int}
     modulation_propagation_strategy::MS
-    light_ratio::T
     diffraction_padding::Int
     psf_centering::Bool
     n_pix_separation::Union{Nothing,Int}
@@ -1834,12 +1832,10 @@ function _pyramid_rate_config(
     pupil_reflectivity::Real,
     aperture_revision::Integer,
     pupil_samples::Integer,
-    threshold::Real,
     modulation::Real,
     modulation_points::Union{Nothing,Integer},
     modulation_propagation_strategy::
         AbstractPyramidModulationPropagationStrategy,
-    light_ratio::Real,
     diffraction_padding::Integer,
     psf_centering::Bool,
     n_pix_separation::Union{Nothing,Integer},
@@ -1901,22 +1897,12 @@ function _pyramid_rate_config(
         ))
     end
 
-    typed_threshold = T(threshold)
     typed_modulation = T(modulation)
-    typed_light_ratio = T(light_ratio)
-    isfinite(typed_threshold) &&
-        zero(T) <= typed_threshold <= one(T) || throw(
-            AlgorithmGraphError("Pyramid threshold must lie in [0, 1]"),
-        )
     isfinite(typed_modulation) && typed_modulation >= zero(T) || throw(
         AlgorithmGraphError(
             "Pyramid modulation must be finite and nonnegative",
         ),
     )
-    isfinite(typed_light_ratio) &&
-        zero(T) <= typed_light_ratio <= one(T) || throw(
-            AlgorithmGraphError("Pyramid light_ratio must lie in [0, 1]"),
-        )
     isempty(opd_schema) && throw(AlgorithmGraphError(
         "Pyramid opd_schema must not be empty",
     ))
@@ -1952,11 +1938,9 @@ function _pyramid_rate_config(
         telescope,
         source,
         samples,
-        typed_threshold,
         typed_modulation,
         points,
         modulation_propagation_strategy,
-        typed_light_ratio,
         padding,
         psf_centering,
         separation,
@@ -1986,13 +1970,11 @@ function pyramid_rate_node(
     central_obstruction_ratio::Real=0,
     pupil_reflectivity::Real=1,
     aperture_revision::Integer=0,
-    threshold::Real=0.1,
     modulation::Real=2,
     modulation_points::Union{Nothing,Integer}=nothing,
     modulation_propagation_strategy::
         AbstractPyramidModulationPropagationStrategy=
         PyramidPupilTiltStrategy(),
-    light_ratio::Real=0,
     diffraction_padding::Integer=2,
     psf_centering::Bool=true,
     n_pix_separation::Union{Nothing,Integer}=nothing,
@@ -2013,11 +1995,9 @@ function pyramid_rate_node(
         pupil_reflectivity,
         aperture_revision,
         pupil_samples,
-        threshold,
         modulation,
         modulation_points,
         modulation_propagation_strategy,
-        light_ratio,
         diffraction_padding,
         psf_centering,
         n_pix_separation,
@@ -2102,18 +2082,15 @@ function prepare_graph_node(
     sensor = PyramidWFS(
         telescope;
         pupil_samples=config.pupil_samples,
-        threshold=config.threshold,
         modulation=config.modulation,
         modulation_points=config.modulation_points,
         modulation_propagation_strategy=
             config.modulation_propagation_strategy,
-        light_ratio=config.light_ratio,
         diffraction_padding=config.diffraction_padding,
         psf_centering=config.psf_centering,
         n_pix_separation=config.n_pix_separation,
         n_pix_edge=config.n_pix_edge,
         binning=config.binning,
-        mode=Diffractive(),
         T=T,
         backend=compute_device_backend(target),
     )

@@ -15,11 +15,7 @@ function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirro
         tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     direction_epsilon::Real=sqrt(eps(eltype(pupil_reflectivity(tel)))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
-    amplitude::Real=1e-9,
-    wfs_mis_registered::Bool=false)
-    wfs_mis_registered &&
-        throw(UnsupportedAlgorithm(
-            "AD sensitivity supports DM misregistration only; use sensitivity=:finite_difference for WFS misregistration"))
+    amplitude::Real=1e-9)
     _require_cpu_ad_probe(tel, dm, wfs)
 
     T = eltype(pupil_reflectivity(tel))

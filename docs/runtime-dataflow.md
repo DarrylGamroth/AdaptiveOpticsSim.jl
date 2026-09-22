@@ -232,7 +232,7 @@ publishes a noiseless 64-by-64 CCD frame. [`pyramid_hil_reference.toml`](../exam
 publishes a noiseless 36-by-36 four-pupil EMCCD frame. AOS built-in graph
 execution stops at these detector frames; use the maintained
 [`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/)
-for the Shack–Hartmann FGA/JFG estimator and RTC composition. The helper in
+for the Shack–Hartmann and Pyramid FGA/JFG estimator and RTC compositions. The helper in
 [`hil_reference_systems.jl`](../examples/support/hil_reference_systems.jl)
 owns the exact analytic actuator coordinates, SHWFS valid-lenslet rule, graph
 selection, and preparation recipe.
@@ -242,7 +242,7 @@ The current integration matrix is deliberately small:
 | WFS | Detector response | Controller boundary | Evidence | Status |
 |---|---|---|---|---|
 | Shack–Hartmann | Deterministic, noiseless CCD | FGA/JFG lockstep reference controller | [`filter_graph_algorithms`](../examples/integrations/filter_graph_algorithms/) interaction-matrix and convergence tests | covered |
-| Pyramid | Deterministic, noiseless EMCCD | Command/frame lockstep | `algorithm-graphs` complete-frame and command-response tests | covered |
+| Pyramid | Deterministic, noiseless EMCCD | FGA/JFG complete-frame S4 plant-to-command path | `algorithm-graphs` complete-frame tests plus the [`filter_graph_algorithms`](../examples/integrations/filter_graph_algorithms/) S4 boundary tests | covered |
 | Shack–Hartmann | Deterministic, noiseless CCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
 | Pyramid | Deterministic, noiseless EMCCD | In-process pyRTC oracle | Measured interaction and closed-loop convergence | covered |
 | Shack–Hartmann | Deterministic, noiseless CCD | Native Julia SHM to a pyRTC process | Bidirectional protocol checks, measured interaction, static convergence, evolving-atmosphere PSFs, and on-axis Strehl improvement | covered in lockstep |

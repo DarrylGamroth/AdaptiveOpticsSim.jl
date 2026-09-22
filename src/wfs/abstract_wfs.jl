@@ -16,8 +16,3 @@ grouped execution are expressed through capability queries rather than
 subtype-specific conditionals.
 """
 abstract type AbstractWFS <: AbstractOpticalElement end
-
-function apply_shift_wfs!(::AbstractWFS; sx, sy)
-    throw(InvalidConfiguration(
-        "apply_shift_wfs! is not supported for this WFS"))
-end

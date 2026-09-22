@@ -101,8 +101,7 @@ end
 function gsc_profile()
     tel = Telescope(resolution=24, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:R, magnitude=8.0)
-    wfs = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), threshold=0.5, modulation=3.0,
-        normalization=IncidenceFluxNormalization(),
+    wfs = PyramidWFS(tel; pupil_samples=4, modulation=3.0,
         modulation_points=8, diffraction_padding=2, n_pix_separation=2, n_pix_edge=1)
     basis = cartesian_basis(tel, 4)
     t0 = time_ns()

@@ -161,11 +161,11 @@ end
 """
     GainSensingCamera(wfs::WavefrontSensors.PyramidWFS, basis; ...)
 
-Construct a gain-sensing camera from a prepared diffractive Pyramid WFS. The
+Construct a gain-sensing camera from a physical Pyramid WFS. The
 front end supplies its complex focal-plane phase mask without exposing its
 propagation workspace through the user API.
 """
-function GainSensingCamera(wfs::WavefrontSensors.PyramidWFS{<:WavefrontSensors.Diffractive},
+function GainSensingCamera(wfs::WavefrontSensors.PyramidWFS,
     basis::AbstractArray; kwargs...)
     propagation = WavefrontSensors.pyramid_propagation_workspace(wfs)
     return GainSensingCamera(propagation.pyramid_mask, basis; kwargs...)

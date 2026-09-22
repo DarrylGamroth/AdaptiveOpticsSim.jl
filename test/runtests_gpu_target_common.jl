@@ -613,66 +613,76 @@ function run_captured_wfs_replay_smoke(
         Val(:rate),
     ) ≈ sh_flat rtol = 3.0f-4 atol = 1.0f-8
 
-    pyramid_opd = BackendArray(zeros(Float32, 8, 8))
-    pyramid_target = compute_device(pyramid_opd)
-    pyramid_definition = algorithm_graph(
-        (
-            pyramid_rate_node(
-                :pwfs;
-                resolution=8,
-                telescope_diameter_m=1.22,
-                pupil_samples=4,
-                modulation=2,
-                modulation_points=4,
-                modulation_propagation_strategy=
-                    PyramidShiftedMaskStrategy(),
-                n_pix_separation=2,
-                n_pix_edge=1,
-                source_wavelength_m=0.55e-6,
-                source_photon_irradiance_m2_s=1.0,
-                opd_schema="test.graph.captured-pupil-opd.f32/1",
-                photon_rate_schema="test.graph.captured-pwfs-rate.f32/1",
-            ),
-        );
-        name=:captured_pyramid_rate,
-        inputs=(graph_input(:opd, :pwfs => :opd, pyramid_opd),),
-        outputs=(graph_output(:rate, :pwfs => :photon_rate),),
+    for (strategy_name, strategy) in (
+        (:pupil_tilt, PyramidPupilTiltStrategy()),
+        (:shifted_mask, PyramidShiftedMaskStrategy()),
     )
-    pyramid_stream = prepare_algorithm_graph(
-        pyramid_definition;
-        target=pyramid_target,
-        execution=StreamGraphExecution(),
-    )
-    pyramid_captured = prepare_algorithm_graph(
-        pyramid_definition;
-        target=pyramid_target,
-        execution=CapturedGraphExecution(),
-    )
-    @test captured_graph_node_count(pyramid_captured) == 1
-    pyramid_flat = _compare_captured_wfs_frame!(
-        pyramid_stream,
-        pyramid_captured,
-        Val(:rate),
-    )
-    pyramid_aberrated_opd = Float32[
-        (axis_1 + 2 * axis_2) * 1.0f-8
-        for axis_1 in 1:8, axis_2 in 1:8
-    ]
-    _set_captured_wfs_opd!(pyramid_opd, pyramid_aberrated_opd)
-    pyramid_aberrated = _compare_captured_wfs_frame!(
-        pyramid_stream,
-        pyramid_captured,
-        Val(:rate),
-    )
-    @test pyramid_aberrated != pyramid_flat
-    reset_graph!(pyramid_stream)
-    reset_graph!(pyramid_captured)
-    _set_captured_wfs_opd!(pyramid_opd, zeros(Float32, 8, 8))
-    @test _compare_captured_wfs_frame!(
-        pyramid_stream,
-        pyramid_captured,
-        Val(:rate),
-    ) ≈ pyramid_flat rtol = 3.0f-4 atol = 1.0f-8
+        @testset "captured Pyramid $(strategy_name) replay" begin
+            pyramid_opd = BackendArray(zeros(Float32, 8, 8))
+            pyramid_target = compute_device(pyramid_opd)
+            pyramid_definition = algorithm_graph(
+                (
+                    pyramid_rate_node(
+                        :pwfs;
+                        resolution=8,
+                        telescope_diameter_m=1.22,
+                        pupil_samples=4,
+                        modulation=2,
+                        modulation_points=4,
+                        modulation_propagation_strategy=strategy,
+                        n_pix_separation=2,
+                        n_pix_edge=1,
+                        source_wavelength_m=0.55e-6,
+                        source_photon_irradiance_m2_s=1.0,
+                        opd_schema="test.graph.captured-pupil-opd.f32/1",
+                        photon_rate_schema=
+                            "test.graph.captured-pwfs-rate.f32/1",
+                    ),
+                );
+                name=Symbol(:captured_pyramid_rate_, strategy_name),
+                inputs=(graph_input(:opd, :pwfs => :opd, pyramid_opd),),
+                outputs=(graph_output(:rate, :pwfs => :photon_rate),),
+            )
+            pyramid_stream = prepare_algorithm_graph(
+                pyramid_definition;
+                target=pyramid_target,
+                execution=StreamGraphExecution(),
+            )
+            pyramid_captured = prepare_algorithm_graph(
+                pyramid_definition;
+                target=pyramid_target,
+                execution=CapturedGraphExecution(),
+            )
+            @test captured_graph_node_count(pyramid_captured) == 1
+            pyramid_flat = _compare_captured_wfs_frame!(
+                pyramid_stream,
+                pyramid_captured,
+                Val(:rate),
+            )
+            pyramid_aberrated_opd = Float32[
+                (axis_1 + 2 * axis_2) * 1.0f-8
+                for axis_1 in 1:8, axis_2 in 1:8
+            ]
+            _set_captured_wfs_opd!(pyramid_opd, pyramid_aberrated_opd)
+            pyramid_aberrated = _compare_captured_wfs_frame!(
+                pyramid_stream,
+                pyramid_captured,
+                Val(:rate),
+            )
+            @test pyramid_aberrated != pyramid_flat
+            step_graph!(pyramid_captured)
+            @test (@allocated step_graph!(pyramid_captured)) <=
+                captured_graph_step_allocation_budget(B)
+            reset_graph!(pyramid_stream)
+            reset_graph!(pyramid_captured)
+            _set_captured_wfs_opd!(pyramid_opd, zeros(Float32, 8, 8))
+            @test _compare_captured_wfs_frame!(
+                pyramid_stream,
+                pyramid_captured,
+                Val(:rate),
+            ) ≈ pyramid_flat rtol = 3.0f-4 atol = 1.0f-8
+        end
+    end
     return nothing
 end
 

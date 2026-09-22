@@ -455,12 +455,10 @@ function _require_exact_pyramid_modulation_batch_target(
         (
             batch.field_stack,
             batch.operating_weights,
-            batch.calibration_weights,
         ),
         (
             "Pyramid modulation field stack",
             "Pyramid operating modulation weights",
-            "Pyramid calibration modulation weights",
         ),
         target,
         :wfs_optics,
@@ -559,9 +557,6 @@ function _require_exact_pyramid_front_end_target(
     )
     _require_exact_focal_plane_modulation_target(
         front_end.modulation, target, "Pyramid operating modulation")
-    _require_exact_focal_plane_modulation_target(
-        front_end.calibration_modulation, target,
-        "Pyramid calibration modulation")
     _require_exact_pyramid_modulation_batch_target(
         propagation.modulation_batch, target)
     return front_end
@@ -831,87 +826,6 @@ function _require_exact_wfs_target(
         target,
         :acquisition,
     )
-    return plan
-end
-
-function _require_exact_pyramid_estimator_state_target(
-    state::PyramidEstimatorState,
-    target::AbstractComputeDevice,
-)
-    _require_exact_wfs_array_targets(
-        (
-            state.valid_mask,
-            state.optical_gain,
-            state.valid_i4q,
-            state.reference_signal_2d,
-        ),
-        (
-            "Pyramid valid mask",
-            "Pyramid optical gain",
-            "Pyramid valid I4Q mask",
-            "Pyramid calibration reference",
-        ),
-        target,
-        :estimation,
-    )
-    return state
-end
-
-function _require_exact_pyramid_estimator_workspace_target(
-    workspace::PyramidEstimatorWorkspace,
-    target::AbstractComputeDevice,
-)
-    _require_exact_wfs_array_targets(
-        (
-            workspace.valid_signal,
-            workspace.valid_signal_indices,
-            workspace.valid_flux_sum_buffer,
-            workspace.flux_i4q,
-            workspace.signal_2d,
-        ),
-        (
-            "Pyramid valid-signal mask",
-            "Pyramid valid-signal indices",
-            "Pyramid flux-sum buffer",
-            "Pyramid I4Q flux",
-            "Pyramid signal",
-        ),
-        target,
-        :estimation,
-    )
-    return workspace
-end
-
-function _require_exact_pyramid_estimator_products_target(
-    products::PyramidEstimatorProducts,
-    target::AbstractComputeDevice,
-)
-    _require_exact_wfs_storage_target(products.slopes, target, :estimation,
-        "Pyramid slopes")
-    return products
-end
-
-function _require_exact_wfs_target(
-    plan::PreparedPyramidEstimator,
-    target::AbstractComputeDevice,
-)
-    validate_wfs_estimation_binding(
-        plan.measurement, plan.input, plan)
-    _require_exact_wfs_estimator_input_target(plan.input, target)
-    _require_exact_wfs_measurement_target(plan.measurement, target)
-    _require_exact_pyramid_estimator_state_target(
-        plan.state, target)
-    _require_exact_pyramid_estimator_workspace_target(
-        plan.workspace, target)
-    _require_exact_pyramid_estimator_products_target(
-        plan.products, target)
-    if plan.sensor.front_end !== nothing
-        _require_exact_pyramid_front_end_target(
-            plan.sensor.front_end, target)
-        acquisition = pyramid_acquisition_products(plan.sensor)
-        _require_exact_wfs_storage_target(acquisition.frame, target,
-            :estimation, "Pyramid acquisition frame")
-    end
     return plan
 end
 

@@ -44,38 +44,19 @@ function atmosphere_gsc_trace(
     wfs::PyramidWFS,
     basis::AbstractArray{<:Real,3},
     atm::AbstractAtmosphere;
-    gain::Real=0.2,
-    frame_delay::Int=2,
-    calibration_amplitude::Real=1e-9,
     psf_zero_padding::Int=2,
-    og_floor::Real=0.05,
     n_iter::Int=6,
     seed::Integer=7,
     atmosphere_step::Real=1e-3,
 )
     rng = tutorial_rng(seed)
     pupil = PupilFunction(tel)
-    H = zeros(Float64, length(slopes(wfs)), size(basis, 3))
-    for k in 1:size(basis, 3)
-        apply_opd!(pupil, calibration_amplitude .* view(basis, :, :, k))
-        measure!(wfs, pupil, ngs)
-        H[:, k] .= slopes(wfs)
-    end
-    reset_opd!(pupil)
-
-    recon = pinv(H)
-    control_coeffs = zeros(Float64, size(basis, 3))
-    delayed_slopes = zeros(Float64, size(H, 1))
-    forcing_opd = similar(pupil.opd)
-    correction_opd = similar(forcing_opd)
-    residual_opd = similar(forcing_opd)
 
     gsc = GainSensingCamera(wfs, basis)
     reset_opd!(pupil)
     calibration_frame = pyramid_modulation_frame(wfs, pupil, ngs)
     calibrate!(gsc, calibration_frame)
     frame = similar(calibration_frame)
-    og_safe = similar(gsc.og)
 
     reset_opd!(pupil)
     ngs_imaging = prepare_direct_imaging(pupil, ngs;
@@ -91,33 +72,21 @@ function atmosphere_gsc_trace(
     for iter in 1:n_iter
         epoch = advance_by!(atm, atmosphere_step; rng=rng)
         render_atmosphere!(atmosphere_output, atmosphere_renderer, atm, epoch)
-        forcing_opd .= atmosphere_output.opd
-        combine_modes!(correction_opd, basis, control_coeffs)
-        @. residual_opd = forcing_opd - correction_opd
-        apply_opd!(pupil, residual_opd)
+        apply_opd!(pupil, atmosphere_output.opd)
 
-        trace[iter, 1] = pupil_rms(forcing_opd, pupil_support(pupil)) * 1e9
-        trace[iter, 2] = pupil_rms(residual_opd, pupil_support(pupil)) * 1e9
+        trace[iter, 1] = pupil_rms(
+            atmosphere_output.opd, pupil_support(pupil)) * 1e9
         ngs_image = intensity_values(form_direct_image!(ngs_imaging))
-        trace[iter, 4] = maximum(ngs_image) / maximum(ngs_image_ref)
-        slopes = measure!(wfs, pupil, ngs)
-        trace[iter, 6] = norm(slopes)
+        trace[iter, 2] = maximum(ngs_image) / maximum(ngs_image_ref)
         pyramid_modulation_frame!(frame, wfs, pupil, ngs)
         og = compute_optical_gains!(gsc, frame)
-        @. og_safe = max(abs(og), og_floor)
 
-        trace[iter, 3] = pupil_rms(residual_opd, pupil_support(pupil)) * 1e9
         sci_image = intensity_values(form_direct_image!(sci_imaging))
-        trace[iter, 5] = maximum(sci_image) / maximum(sci_image_ref)
-
-        if frame_delay == 1
-            delayed_slopes .= slopes
-        end
-        control_coeffs .+= gain .* ((recon * delayed_slopes) ./ og_safe)
-        trace[iter, 7] = sum(og_safe) / length(og_safe)
-        if frame_delay == 2
-            delayed_slopes .= slopes
-        end
+        trace[iter, 3] = maximum(sci_image) / maximum(sci_image_ref)
+        trace[iter, 4] = norm(frame)
+        trace[iter, 5] = norm(og)
+        trace[iter, 6] = minimum(abs, og)
+        trace[iter, 7] = sum(abs, og) / length(og)
     end
 
     return trace
@@ -127,8 +96,7 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
     tel = base_telescope(resolution=resolution, central_obstruction=0.0)
     src = base_source(band=:R, magnitude=8.0)
     sci = base_source(band=:K, magnitude=8.0, coordinates=(0.5, 0.0))
-    wfs = PyramidWFS(tel; pupil_samples=pupil_samples, mode=Diffractive(), threshold=0.5, modulation=3.0,
-        normalization=IncidenceFluxNormalization(),
+    wfs = PyramidWFS(tel; pupil_samples=pupil_samples, modulation=3.0,
         modulation_points=8, diffraction_padding=2, n_pix_separation=2, n_pix_edge=1)
     basis = cartesian_basis(tel, 4)
     gsc = GainSensingCamera(wfs, basis)
@@ -150,32 +118,19 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
         -1.0e-8 1.25e-8 0.5e-8 -0.5e-8
         0.5e-8 -0.75e-8 1.0e-8 0.25e-8
     ]
-    H = zeros(Float64, length(slopes(wfs)), size(basis, 3))
-    for k in 1:size(basis, 3)
-        apply_opd!(pupil, 1e-9 .* view(basis, :, :, k))
-        measure!(wfs, pupil, src)
-        H[:, k] .= slopes(wfs)
-    end
-    reset_opd!(pupil)
-    recon = pinv(H)
-    delayed_slopes = zeros(Float64, size(H, 1))
-    control_coeffs = zeros(Float64, size(basis, 3))
     trace = Matrix{Float64}(undef, size(forcing_coeffs, 1), 3)
     imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
     image_ref = copy(intensity_values(form_direct_image!(imaging)))
 
     for iter in 1:size(forcing_coeffs, 1)
-        opd = combine_modes(basis, @view forcing_coeffs[iter, :]) .- combine_modes(basis, control_coeffs)
+        opd = combine_modes(basis, @view forcing_coeffs[iter, :])
         apply_opd!(pupil, opd)
         trace[iter, 1] = pupil_rms(pupil.opd, pupil_support(pupil)) * 1e9
         image = intensity_values(form_direct_image!(imaging))
         trace[iter, 2] = maximum(image) / maximum(image_ref)
-        slopes = measure!(wfs, pupil, src)
         pyramid_modulation_frame!(frame, wfs, pupil, src)
         og = compute_optical_gains!(gsc, frame)
-        control_coeffs .+= 0.2 .* ((recon * delayed_slopes) ./ max.(abs.(og), 0.05))
-        delayed_slopes .= slopes
-        trace[iter, 3] = sum(og) / length(og)
+        trace[iter, 3] = sum(abs, og) / length(og)
     end
 
     atm = MultiLayerAtmosphere(
@@ -190,7 +145,7 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
     )
     atmosphere_trace = atmosphere_gsc_trace(tel, src, sci, wfs, basis, atm)
 
-    @info "Gain sensing camera tutorial complete" n_modes=length(optical_gains) final_mean_og=trace[end, 3] final_loop_mean_og=atmosphere_trace[end, 7]
+    @info "Gain sensing camera tutorial complete" n_modes=length(optical_gains) final_mean_og=trace[end, 3] final_atmosphere_mean_og=atmosphere_trace[end, 7]
     return (
         coeffs=coeffs,
         calibration_frame=calibration_frame,

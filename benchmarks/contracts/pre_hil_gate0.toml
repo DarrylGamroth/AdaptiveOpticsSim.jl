@@ -80,7 +80,7 @@ max_alloc_bytes = 0
 
 [[cards]]
 id = "G0-PERF-06"
-label = "modulated diffractive pyramid measurement"
+label = "modulated diffractive Pyramid rate and detector acquisition"
 kind = "pyramid"
 resolution = 48
 pupil_samples = 6

@@ -173,7 +173,6 @@ end
         :BiOEdgeOpticalFrontEnd,
         :pyramid_rate_map,
         :bi_o_edge_rate_map,
-        :set_pyramid_calibration!,
         :set_bi_o_edge_calibration!,
         :pyramid_modulation_frame,
         :pyramid_modulation_frame!,

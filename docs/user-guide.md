@@ -76,15 +76,17 @@ rendering converts the generated phase to wavelength-independent OPD in metres.
 ## Closed-Loop AO And RTC Composition
 
 AOS is the plant owner, not the in-process RTC owner. For the maintained
-Shack–Hartmann closed-loop composition, use the
-[AOS plant/FGA RTC fixture](../examples/integrations/filter_graph_algorithms/).
+Shack–Hartmann closed-loop composition or Pyramid plant-to-command composition,
+use the [AOS plant/FGA RTC fixture](../examples/integrations/filter_graph_algorithms/).
 It keeps physical response and complete PDM-command application in AOS, while
 FilterGraphAlgorithms/JuliaFilterGraph owns reconstruction, controller state,
-frame delay, and VDM/PDM routing.
+frame delay, and VDM/PDM routing. The Pyramid S4 fixture qualifies the
+complete-frame estimator and command boundary; it does not feed that command
+back into the plant.
 
-The former AOS RTC examples and tutorials are retired. Pyramid, Bi-O-edge, and
-Zernike RTC composition, and the combined Subaru AO188/AO3k model, belong to
-downstream packages that also own their composition and acceptance evidence.
+The former AOS RTC examples and tutorials are retired. Bi-O-edge and Zernike
+RTC composition, and the combined Subaru AO188/AO3k model, belong to downstream
+packages that also own their composition and acceptance evidence.
 
 ## Detector Acquisition
 
@@ -129,8 +131,9 @@ external measurement estimation separate:
 2. `acquire_wfs_observation!`
 3. pass the complete observation to its maintained estimator owner
 
-For Shack–Hartmann operation, step 3 belongs to FilterGraphAlgorithms. AOS
-retains no detector-frame-to-slope convenience path.
+For Shack–Hartmann and Pyramid operation, step 3 belongs to
+FilterGraphAlgorithms. AOS retains no detector-frame-to-slope convenience
+path for either family.
 
 ## Complete-Frame Algorithm Graphs
 

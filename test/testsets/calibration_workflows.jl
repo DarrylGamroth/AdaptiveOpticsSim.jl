@@ -238,7 +238,7 @@ end
     )
     src = Source(band=:R, magnitude=3.0, T=T)
     dm = DeformableMirror(tel; n_act=2, influence_width=T(0.2), T=T)
-    wfs = PyramidWFS(
+    wfs = BiOEdgeWFS(
         tel;
         pupil_samples=20,
         threshold=T(0.1),
@@ -265,7 +265,7 @@ end
         (length(slopes(wfs)), length(dm.state.coefs))
     @test all(isfinite, imat.matrix)
 
-    stale_wfs = PyramidWFS(
+    stale_wfs = BiOEdgeWFS(
         tel;
         pupil_samples=20,
         threshold=T(0.1),
@@ -293,7 +293,7 @@ end
 @testset "Mis-registration identification" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = PyramidWFS(tel; pupil_samples=2)
+    wfs = BiOEdgeWFS(tel; pupil_samples=2)
     basis = modal_basis(dm, tel; n_modes=2)
     fields = collect(Calibration.MISREG_FIELDS)
     meta, meta_fd, meta_ad = mktempdir() do root
@@ -341,13 +341,6 @@ end
         influence_model=MeasuredInfluenceFunctions(Array(dm.state.modes[:, 1:2])))
     @test_throws UnsupportedAlgorithm Calibration.compute_meta_sensitivity_matrix(
         tel, measured_dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
-    @test_throws UnsupportedAlgorithm Calibration.compute_meta_sensitivity_matrix(
-        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2, wfs_mis_registered=true)
-    wfs_meta = Calibration.compute_meta_sensitivity_matrix(
-        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2, wfs_mis_registered=true,
-        sensitivity=:finite_difference)
-    @test wfs_meta.field_order == [:shift_x, :shift_y]
-    assert_meta_sensitivity_contract(wfs_meta, 2)
 end
 
 @testset "Calibration workflow contracts" begin
@@ -358,7 +351,7 @@ end
         reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = PyramidWFS(tel; pupil_samples=2)
+    wfs = BiOEdgeWFS(tel; pupil_samples=2)
     det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1)
 
     basis = modal_basis(dm, tel; n_modes=2)
