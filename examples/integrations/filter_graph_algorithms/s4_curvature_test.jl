@@ -3,6 +3,19 @@ using AdaptiveOpticsSim.WavefrontSensors: observation_storage
 using FilterGraphAlgorithms
 using JuliaFilterGraph
 
+function perturb_s4_curvature_pupil!(pupil)
+    opd = pupil.opd
+    T = eltype(opd)
+    row_scale = T(max(size(opd, 1) - 1, 1))
+    column_scale = T(max(size(opd, 2) - 1, 1))
+    @inbounds for column in axes(opd, 2), row in axes(opd, 1)
+        opd[row, column] += T(100e-9) * (
+            T(row - 1) / row_scale - T(0.4) *
+            T(column - 1) / column_scale)
+    end
+    return pupil
+end
+
 function replace_s4_curvature_observation(
     observation::S4CurvatureObservation;
     values=observation.values,
@@ -41,7 +54,18 @@ function verify_s4_curvature_frame_rejection!(prepared, transform, expected)
     ) == retained_association
     @test prepared.frame_state.blocked
     @test prepared.frame_state.outstanding
+    retained_observation = copy(observation.values)
+    retained_rates = (
+        copy(prepared.rates[1].values),
+        copy(prepared.rates[2].values),
+    )
+    retained_rng = copy(prepared.rng)
+    perturb_s4_curvature_pupil!(prepared.pupil)
     @test_throws ArgumentError produce_s4_curvature_frame!(prepared)
+    @test observation.values == retained_observation
+    @test prepared.rates[1].values == retained_rates[1]
+    @test prepared.rates[2].values == retained_rates[2]
+    @test prepared.rng == retained_rng
     return nothing
 end
 
@@ -173,6 +197,43 @@ end
         prepared.plant_image, raw_frame)) == 0
     @test @allocated(process_s4_curvature_channels!(
         prepared.plant_channels, raw_channels)) == 0
+end
+
+@testset "Curvature production preserves outstanding observations" begin
+    frame_prepared = prepare_s4_curvature()
+    frame = produce_s4_curvature_frame!(frame_prepared)
+    retained_frame = copy(frame.values)
+    retained_frame_rates = (
+        copy(frame_prepared.rates[1].values),
+        copy(frame_prepared.rates[2].values),
+    )
+    retained_frame_rng = copy(frame_prepared.rng)
+    perturb_s4_curvature_pupil!(frame_prepared.pupil)
+    @test_throws ArgumentError produce_s4_curvature_frame!(frame_prepared)
+    @test frame.values == retained_frame
+    @test frame_prepared.rates[1].values == retained_frame_rates[1]
+    @test frame_prepared.rates[2].values == retained_frame_rates[2]
+    @test frame_prepared.rng == retained_frame_rng
+    @test frame_prepared.frame_state.sequence == UInt64(1)
+    @test frame_prepared.frame_state.outstanding
+
+    channel_prepared = prepare_s4_curvature()
+    channels = produce_s4_curvature_channels!(channel_prepared)
+    retained_channels = copy(channels.values)
+    retained_channel_rates = (
+        copy(channel_prepared.rates[1].values),
+        copy(channel_prepared.rates[2].values),
+    )
+    retained_channel_rng = copy(channel_prepared.rng)
+    perturb_s4_curvature_pupil!(channel_prepared.pupil)
+    @test_throws ArgumentError produce_s4_curvature_channels!(
+        channel_prepared)
+    @test channels.values == retained_channels
+    @test channel_prepared.rates[1].values == retained_channel_rates[1]
+    @test channel_prepared.rates[2].values == retained_channel_rates[2]
+    @test channel_prepared.rng == retained_channel_rng
+    @test channel_prepared.channel_state.sequence == UInt64(1)
+    @test channel_prepared.channel_state.outstanding
 end
 
 @testset "Curvature observation association rejects before FGA publication" begin

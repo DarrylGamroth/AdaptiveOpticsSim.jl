@@ -210,10 +210,7 @@ end
 @inline function _publish_observation!(state::S4CurvatureExchangeState,
     values::AbstractMatrix, layout::Symbol, exposure_duration::T,
 ) where {T<:AbstractFloat}
-    state.blocked && throw(ArgumentError(
-        "the Curvature exchange is blocked; reset is required"))
-    state.outstanding && throw(ArgumentError(
-        "the outstanding Curvature observation must be accepted or reset before acquisition"))
+    _require_curvature_acquisition_ready(state)
     sequence = state.sequence + UInt64(1)
     state.sequence = sequence
     state.outstanding = true
@@ -227,8 +224,18 @@ end
     )
 end
 
+@inline function _require_curvature_acquisition_ready(
+    state::S4CurvatureExchangeState)
+    state.blocked && throw(ArgumentError(
+        "the Curvature exchange is blocked; reset is required"))
+    state.outstanding && throw(ArgumentError(
+        "the outstanding Curvature observation must be accepted or reset before acquisition"))
+    return nothing
+end
+
 """Form and acquire one complete packed Curvature detector image in AOS."""
 @inline function produce_s4_curvature_frame!(prepared)
+    _require_curvature_acquisition_ready(prepared.frame_state)
     form_wfs_optical_products!(prepared.rates, prepared.pupil,
         prepared.optics_plan)
     acquire_wfs_observation!(prepared.frame_observation, prepared.rates,
@@ -243,6 +250,7 @@ end
 
 """Form and acquire one complete branch-by-channel Curvature readout in AOS."""
 @inline function produce_s4_curvature_channels!(prepared)
+    _require_curvature_acquisition_ready(prepared.channel_state)
     form_wfs_optical_products!(prepared.rates, prepared.pupil,
         prepared.optics_plan)
     acquire_wfs_observation!(prepared.channel_observation, prepared.rates,
