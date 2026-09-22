@@ -79,3 +79,8 @@ path = "2026-09-01-device-command-graph-profile.toml"
 purpose = "S1 CUDA-primary and AMDGPU-secondary profile of the independently qualified AOS physical Shack-Hartmann plant"
 id = "S1-AOS-PLANT-GPU-PROFILE-2026-09-20"
 path = "2026-09-20-s1-aos-plant-gpu-profile.toml"
+
+[[artifacts]]
+purpose = "S4 CPU, CUDA-primary, and AMDGPU-secondary profile of the retained AOS Bi-O-edge physical plant boundary"
+id = "S4-BI-O-EDGE-PLANT-PROFILE-2026-09-22"
+path = "2026-09-22-bi-o-edge-plant-profile.toml"
