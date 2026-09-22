@@ -1433,30 +1433,6 @@ function run_optional_zernike_curvature_stages(
     @test isapprox(linear_host, expected_linear;
         rtol=T(3e-5), atol=T(3e-5))
 
-    curvature_reference = similar(gpu_curvature.estimator.workspace.signal_2d)
-    fill!(curvature_reference, zero(T))
-    set_curvature_calibration!(gpu_curvature, curvature_reference;
-        wavelength_m=wavelength(source), signature=UInt(0x4355))
-    curvature_measurement = WFSMeasurement(similar(slopes(gpu_curvature));
-        units=:dimensionless, kind=:curvature_signal)
-    curvature_estimator = prepare_wfs_estimation(gpu_curvature,
-        observations, curvature_measurement;
-        branch_rate_scales=(T(10), T(4)))
-    estimate_wfs_measurement!(curvature_measurement, observations,
-        curvature_estimator)
-    packed_measurement = WFSMeasurement(similar(slopes(gpu_curvature));
-        units=:dimensionless, kind=:curvature_signal)
-    packed_estimator = prepare_wfs_estimation(gpu_curvature,
-        packed_observation, packed_measurement;
-        branch_rate_scales=(T(8), T(8)))
-    estimate_wfs_measurement!(packed_measurement, packed_observation,
-        packed_estimator)
-    AdaptiveOpticsSim.Backends.synchronize_backend!(
-        AdaptiveOpticsSim.Backends.execution_style(curvature_measurement.storage))
-    @test curvature_measurement.storage isa BackendArray
-    @test packed_measurement.storage isa BackendArray
-    @test isapprox(Array(curvature_measurement.storage),
-        Array(packed_measurement.storage); rtol=T(5e-5), atol=T(5e-5))
     return nothing
 end
 
@@ -3663,8 +3639,14 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_backend_plan_checks(B, tel, selector)
     run_optional_independent_optics_parity(B, BackendArray)
     curv = CurvatureWFS(tel; pupil_samples=4, T=T, backend=selector)
-    curv_slopes = measure!(curv, pupil, src, atm)
-    @test curv_slopes isa BackendArray
+    curv_front_end = CurvatureOpticalFrontEnd(curv, src)
+    curv_rates = curvature_rate_maps(curv_front_end, pupil)
+    curv_optics = prepare_wfs_optics(curv_front_end, pupil, curv_rates)
+    form_wfs_optical_products!(curv_rates, pupil, curv_optics)
+    AdaptiveOpticsSim.Backends.synchronize_backend!(
+        AdaptiveOpticsSim.Backends.execution_style(curv_rates[1].values))
+    @test all(rate -> rate.values isa BackendArray, curv_rates)
+    @test all(rate -> all(isfinite, Array(rate.values)), curv_rates)
 
     return nothing
 end

@@ -237,8 +237,8 @@ end
     sensor = CurvatureWFS(tel; pupil_samples=4,
         readout_pixels_per_sample=1, T=T)
     @test !hasfield(typeof(sensor), :state)
+    @test !hasfield(typeof(sensor), :estimator)
     @test sensor.front_end.propagation.workspace !== sensor.acquisition.products
-    @test sensor.acquisition.products !== sensor.estimator.state
     front_end = CurvatureOpticalFrontEnd(sensor, source)
     @test front_end.defocus_pair isa CurvatureDefocusPair{T}
     @test front_end.source === source
@@ -462,49 +462,6 @@ end
     @test wrong_linear_error isa WFSPreparationError
     @test wrong_linear_error.reason === :shape
 
-    reference = zeros(T, size(sensor.estimator.state.reference_signal_2d))
-    set_curvature_calibration!(sensor, reference;
-        wavelength_m=wavelength(source), signature=UInt(0x43555256))
-    aliased_measurement = WFSMeasurement(sensor.estimator.products.signal;
-        units=:dimensionless, kind=:curvature_signal)
-    estimator_alias_error = contract_captured_error() do
-        prepare_wfs_estimation(sensor, observations, aliased_measurement)
-    end
-    @test estimator_alias_error isa WFSPreparationError
-    @test estimator_alias_error.reason === :aliasing
-    copyto!(sensor.estimator.workspace.reduced_plus, rates[1].values)
-    copyto!(sensor.estimator.workspace.reduced_minus, rates[2].values)
-    expected_signal = copy(
-        AdaptiveOpticsSim.WavefrontSensors.curvature_signal_from_planes!(sensor))
-    measurement = WFSMeasurement(similar(slopes(sensor));
-        units=:dimensionless, kind=:curvature_signal)
-    estimator_plan = prepare_wfs_estimation(sensor, observations,
-        measurement; branch_rate_scales=(T(10), T(20 / 3)))
-    @test estimator_plan.plan isa CurvatureEstimationPlan
-    @test estimator_plan.state === sensor.estimator.state
-    @test estimator_plan.workspace === sensor.estimator.workspace
-    @test estimator_plan.products === sensor.estimator.products
-    @test wfs_measurement_path(estimator_plan) isa AcquiredObservationPath
-    estimate_wfs_measurement!(measurement, observations, estimator_plan)
-    @test measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
-
-    packed_measurement = WFSMeasurement(similar(slopes(sensor));
-        units=:dimensionless, kind=:curvature_signal)
-    packed_estimator = prepare_wfs_estimation(sensor, packed_observation,
-        packed_measurement; branch_rate_scales=(T(5), T(5)))
-    estimate_wfs_measurement!(packed_measurement, packed_observation,
-        packed_estimator)
-    @test packed_measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
-
-    counting_measurement = WFSMeasurement(similar(slopes(sensor));
-        units=:dimensionless, kind=:curvature_signal)
-    counting_estimator = prepare_wfs_estimation(sensor,
-        counting_observation, counting_measurement;
-        branch_rate_scales=(T(5), T(5)))
-    estimate_wfs_measurement!(counting_measurement, counting_observation,
-        counting_estimator)
-    @test counting_measurement.storage ≈ expected_signal rtol=T(2e-12) atol=T(2e-12)
-
     bad_geometry = (rates[1], contract_rate_map(copy(rates[2].values);
         sampling=(T(0.5), T(0.25)),
         coordinate_domain=NormalizedPupilCoordinates(),
@@ -547,29 +504,8 @@ end
     @test counting_radiometry_error isa WFSPreparationError
     @test counting_radiometry_error.reason === :radiometry
 
-    scale_error = contract_captured_error() do
-        prepare_wfs_estimation(sensor, observations, measurement;
-            branch_rate_scales=(one(T),))
-    end
-    @test scale_error isa WFSPreparationError
-    @test scale_error.reason === :radiometry
-
-    stale_before = copy(measurement.storage)
-    set_curvature_calibration!(sensor, reference;
-        wavelength_m=wavelength(source), signature=UInt(0x43555257))
-    @test_throws WFSPreparationError estimate_wfs_measurement!(measurement,
-        observations, estimator_plan)
-    @test measurement.storage == stale_before
-    estimator_plan = prepare_wfs_estimation(sensor, observations,
-        measurement; branch_rate_scales=(T(10), T(20 / 3)))
-    packed_estimator = prepare_wfs_estimation(sensor, packed_observation,
-        packed_measurement; branch_rate_scales=(T(5), T(5)))
-    counting_estimator = prepare_wfs_estimation(sensor,
-        counting_observation, counting_measurement;
-        branch_rate_scales=(T(5), T(5)))
-
     if coverage_enabled
-        @test_skip "Curvature stage allocation assertions are disabled under coverage instrumentation"
+        @test_skip "Curvature plant allocation assertions are disabled under coverage instrumentation"
     else
         form_wfs_optical_products!(rates, pupil, optics_plan)
         acquire_wfs_observation!(observations, rates, acquisition_plan, rng)
@@ -579,12 +515,6 @@ end
         acquire_wfs_observation!(mkid_observation, rates, mkid_plan, rng)
         acquire_wfs_observation!(linear_observation, rates,
             linear_plan, rng)
-        estimate_wfs_measurement!(measurement, observations,
-            estimator_plan)
-        estimate_wfs_measurement!(packed_measurement, packed_observation,
-            packed_estimator)
-        estimate_wfs_measurement!(counting_measurement,
-            counting_observation, counting_estimator)
         @test @allocated(form_wfs_optical_products!(rates, pupil,
             optics_plan)) == 0
         @test @allocated(acquire_wfs_observation!(observations, rates,
@@ -597,12 +527,6 @@ end
             rates, mkid_plan, rng)) == 0
         @test @allocated(acquire_wfs_observation!(linear_observation,
             rates, linear_plan, rng)) == 0
-        @test @allocated(estimate_wfs_measurement!(measurement,
-            observations, estimator_plan)) == 0
-        @test @allocated(estimate_wfs_measurement!(packed_measurement,
-            packed_observation, packed_estimator)) == 0
-        @test @allocated(estimate_wfs_measurement!(counting_measurement,
-            counting_observation, counting_estimator)) == 0
     end
 
     counting_before_replacement = copy(counting_observation.storage)
@@ -629,15 +553,6 @@ end
     @test rates[1].values == optics_output_before_replacement[1]
     @test rates[2].values == optics_output_before_replacement[2]
 
-    measurement_before_replacement = copy(measurement.storage)
-    sensor.estimator.workspace.signal_2d =
-        similar(sensor.estimator.workspace.signal_2d)
-    estimator_binding_error = contract_captured_error() do
-        estimate_wfs_measurement!(measurement, observations, estimator_plan)
-    end
-    @test estimator_binding_error isa WFSPreparationError
-    @test estimator_binding_error.reason === :prepared_binding
-    @test measurement.storage == measurement_before_replacement
 end
 
 @testset "Prepared photon-counting WFS acquisition" begin

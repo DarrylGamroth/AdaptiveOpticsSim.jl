@@ -273,6 +273,30 @@ estimation and captured CUDA/HIP Graph replay. The AOS direct-stream driver
 makes no standalone Zernike plant graph-capture claim. Its selected profiler
 region is `aos_zernike_plant`.
 
+The retained Curvature plant uses the same procedure and profiles complete
+paired-defocus formation plus packed detector acquisition:
+
+~~~bash
+ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  julia --project=. --startup-file=no \
+  scripts/profile_curvature_plant_runtime.jl
+
+ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  julia --project=test/cuda --startup-file=no \
+  scripts/profile_curvature_plant_runtime.jl
+
+ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  julia --project=test/amdgpu --startup-file=no \
+  scripts/profile_curvature_plant_runtime.jl
+~~~
+
+The AOS driver requires zero warmed CPU heap allocation and makes no standalone
+plant graph-capture claim. Registered FGA 0.5 evidence covers paired-image and
+paired-channel estimation, including captured CUDA/HIP Graph replay. The
+selected AOS profiler region is `aos_curvature_plant`; CUDA is the primary
+optimization target and AMDGPU is the secondary portability target.
+
 ## Release Entry Point
 
 ~~~bash

@@ -7,43 +7,14 @@
 # 2. apply equal-and-opposite defocus masks to form two branches
 # 3. propagate both branches with a batched centered FFT
 # 4. crop back to the pupil support and bin to the exported readout
-# 5. apply branch response terms and form the normalized signal
-#    `(I⁺ - I⁻) / (I⁺ + I⁻)`
-#
-# The exported `slopes(wfs)` product contains one scalar signal per valid
-# subaperture and implements the controller's family-neutral WFS signal
-# contract.
+# 5. apply branch response terms and export the paired photon-rate products
+#    to detector acquisition or an external RTC estimator
 #
 
 @kernel function curvature_phasor_kernel!(phasor, scale, n::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         @inbounds phasor[i, j] = cis(scale * (i + j - 2))
-    end
-end
-
-@kernel function curvature_signal_from_frame_kernel!(signal_2d, slopes, frame_plus, frame_minus, reference_signal_2d, valid_mask,
-    epsval, n_sub::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n_sub && j <= n_sub
-        idx = (i - 1) * n_sub + j
-        if @inbounds valid_mask[i, j]
-            plus = @inbounds frame_plus[i, j]
-            minus = @inbounds frame_minus[i, j]
-            total = plus + minus
-            corrected = total > epsval ?
-                (plus - minus) / (total + epsval) - @inbounds(reference_signal_2d[i, j]) :
-                zero(eltype(signal_2d))
-            @inbounds begin
-                signal_2d[i, j] = corrected
-                slopes[idx] = corrected
-            end
-        else
-            @inbounds begin
-                signal_2d[i, j] = zero(eltype(signal_2d))
-                slopes[idx] = zero(eltype(slopes))
-            end
-        end
     end
 end
 
@@ -100,16 +71,6 @@ end
     end
 end
 
-@kernel function curvature_frame_unpack_kernel!(frame_plus, frame_minus, camera_frame, side::Int)
-    i, j = @index(Global, NTuple)
-    if i <= side && j <= size(camera_frame, 2)
-        @inbounds begin
-            frame_plus[i, j] = camera_frame[i, j]
-            frame_minus[i, j] = camera_frame[i + side, j]
-        end
-    end
-end
-
 @kernel function curvature_channel_pack_kernel!(camera_frame, frame_plus, frame_minus, n_sub::Int)
     i, j = @index(Global, NTuple)
     if i <= n_sub && j <= n_sub
@@ -121,39 +82,13 @@ end
     end
 end
 
-@kernel function curvature_signal_from_channels_kernel!(signal_2d, slopes, frame, reference_signal_2d, valid_mask,
-    epsval, n_sub::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n_sub && j <= n_sub
-        idx = (i - 1) * n_sub + j
-        if @inbounds valid_mask[i, j]
-            plus = @inbounds frame[1, idx]
-            minus = @inbounds frame[2, idx]
-            total = plus + minus
-            corrected = total > epsval ?
-                (plus - minus) / (total + epsval) - @inbounds(reference_signal_2d[i, j]) :
-                zero(eltype(signal_2d))
-            @inbounds begin
-                signal_2d[i, j] = corrected
-                slopes[idx] = corrected
-            end
-        else
-            @inbounds begin
-                signal_2d[i, j] = zero(eltype(signal_2d))
-                slopes[idx] = zero(eltype(slopes))
-            end
-        end
-    end
-end
-
 """
     CurvatureWFS
 
 Curvature wavefront sensor using propagated intra-/extra-focal detector planes.
 
-The sensor generates two defocused propagated intensity maps and exports them as
-a configurable readout surface. The 1-D `state.slopes` vector is the normalized
-curvature signal sampled on the valid subaperture grid.
+The sensor generates two defocused propagated photon-rate maps and exports them
+as a configurable detector-facing readout. Signal estimation belongs to the RTC.
 """
 abstract type CurvatureReadoutModel end
 struct CurvatureFrameReadout <: CurvatureReadoutModel end
@@ -191,12 +126,6 @@ function CurvatureBranchResponse(; plus_throughput::Real=1.0, minus_throughput::
     plus_background >= 0 || throw(InvalidConfiguration("plus_background must be >= 0"))
     minus_background >= 0 || throw(InvalidConfiguration("minus_background must be >= 0"))
     return CurvatureBranchResponse{T}(T(plus_throughput), T(minus_throughput), T(plus_background), T(minus_background))
-end
-
-"""Immutable configuration for differential Curvature signal estimation."""
-struct CurvatureEstimatorParams{T<:AbstractFloat}
-    pupil_samples::Int
-    threshold::T
 end
 
 """Run-immutable contract for two-branch defocus propagation and sampling."""
@@ -267,56 +196,14 @@ struct CurvatureDetectorAcquisition{P,PR}
     products::PR
 end
 
-"""Persistent support and reference-calibration state."""
-mutable struct CurvatureEstimatorState{
-    T<:AbstractFloat,
-    A<:AbstractMatrix{Bool},
-    R<:AbstractMatrix{T},
-}
-    valid_mask::A
-    reference_signal_2d::R
-    calibrated::Bool
-    calibration_wavelength::T
-    calibration_signature::UInt
-    calibration_revision::UInt
-end
-
-"""Replaceable single-writer reduction and signal-image scratch."""
-mutable struct CurvatureEstimatorWorkspace{
-    T<:AbstractFloat,R<:AbstractMatrix{T}}
-    reduced_plus::R
-    reduced_minus::R
-    signal_2d::R
-end
-
-"""Caller-visible differential Curvature signal product."""
-mutable struct CurvatureEstimatorProducts{
-    T<:AbstractFloat,V<:AbstractVector{T}}
-    signal::V
-end
-
-struct CurvatureDifferentialEstimator{P<:CurvatureEstimatorParams,S,W,PR}
-    params::P
-    state::S
-    workspace::W
-    products::PR
-end
-
-struct CurvatureWFS{F,A,E,B<:AbstractArrayBackend} <:
+struct CurvatureWFS{F,A,B<:AbstractArrayBackend} <:
     AbstractWFS
     front_end::F
     acquisition::A
-    estimator::E
 end
 
-@inline backend(::CurvatureWFS{F,A,E,B}) where {F,A,E,B} = B()
+@inline backend(::CurvatureWFS{F,A,B}) where {F,A,B} = B()
 
-@inline curvature_estimator_params(wfs::CurvatureWFS) = wfs.estimator.params
-@inline curvature_estimator_state(wfs::CurvatureWFS) = wfs.estimator.state
-@inline curvature_estimator_workspace(wfs::CurvatureWFS) =
-    wfs.estimator.workspace
-@inline curvature_estimator_products(wfs::CurvatureWFS) =
-    wfs.estimator.products
 @inline curvature_acquisition_plan(wfs::CurvatureWFS) = wfs.acquisition.plan
 @inline curvature_acquisition_products(wfs::CurvatureWFS) =
     wfs.acquisition.products
@@ -329,7 +216,7 @@ end
     curvature_propagation_workspace(front_end.propagation)
 
 """
-    CurvatureWFS(tel; pupil_samples, threshold=0.1, defocus_rms_nm=500.0, diffraction_padding=2,
+    CurvatureWFS(tel; pupil_samples, defocus_rms_nm=500.0, diffraction_padding=2,
                  readout_crop_resolution=tel.params.resolution, readout_pixels_per_sample=1,
                  readout_model=CurvatureFrameReadout(), branch_response=CurvatureBranchResponse(), ...)
 
@@ -341,7 +228,7 @@ Construct a curvature WFS using two propagated defocus branches.
 `readout_pixels_per_sample` controls the exported frame sampling for frame-style
 readout.
 """
-function CurvatureWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, defocus_rms_nm::Real=500.0,
+function CurvatureWFS(tel::Telescope; pupil_samples::Int, defocus_rms_nm::Real=500.0,
     diffraction_padding::Int=2, readout_model::CurvatureReadoutModel=CurvatureFrameReadout(),
     readout_crop_resolution::Integer=tel.params.resolution, readout_pixels_per_sample::Integer=1,
     branch_response::CurvatureBranchResponse=CurvatureBranchResponse(),
@@ -372,9 +259,6 @@ function CurvatureWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, d
     propagation_plan = CurvaturePropagationPlan(defocus_pair, n,
         pupil_samples, Int(readout_crop_resolution),
         Int(readout_pixels_per_sample), response)
-    estimator_params = CurvatureEstimatorParams(pupil_samples, T(threshold))
-    valid_mask = backend{Bool}(undef, pupil_samples, pupil_samples)
-    slopes = backend{T}(undef, pupil_samples * pupil_samples)
     n_branches = 2
     phasor = backend{Complex{T}}(undef, pad, pad)
     field_stack = backend{Complex{T}}(undef, pad, pad, n_branches)
@@ -387,23 +271,14 @@ function CurvatureWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, d
         propagation_plan.readout_pixels_per_sample
     frame_plus = backend{T}(undef, frame_side, frame_side)
     frame_minus = backend{T}(undef, frame_side, frame_side)
-    reduced_plus = backend{T}(undef, pupil_samples, pupil_samples)
-    reduced_minus = similar(reduced_plus)
-    signal_2d = backend{T}(undef, pupil_samples, pupil_samples)
-    reference_signal_2d = similar(signal_2d)
     camera_frame = curvature_camera_frame(backend, T, pupil_samples, readout_model;
         readout_pixels_per_sample=Int(readout_pixels_per_sample))
-    fill!(slopes, zero(T))
     fill!(field_stack, zero(eltype(field_stack)))
     fill!(intensity_stack, zero(T))
     fill!(cropped_plus, zero(T))
     fill!(cropped_minus, zero(T))
     fill!(frame_plus, zero(T))
     fill!(frame_minus, zero(T))
-    fill!(reduced_plus, zero(T))
-    fill!(reduced_minus, zero(T))
-    fill!(signal_2d, zero(T))
-    fill!(reference_signal_2d, zero(T))
     fill!(camera_frame, zero(T))
     fft_stack_plan = plan_fft_backend!(field_stack, (1, 2))
     propagation_workspace = CurvaturePropagationWorkspace{
@@ -429,29 +304,10 @@ function CurvatureWFS(tel::Telescope; pupil_samples::Int, threshold::Real=0.1, d
     acquisition = CurvatureDetectorAcquisition(
         CurvatureAcquisitionPlan(readout_model),
         CurvatureAcquisitionProducts(camera_frame))
-    estimator_state = CurvatureEstimatorState{
-        T,
-        typeof(valid_mask),
-        typeof(signal_2d),
-    }(
-        valid_mask,
-        reference_signal_2d,
-        false,
-        zero(T),
-        zero(UInt),
-        zero(UInt),
-    )
-    estimator_workspace = CurvatureEstimatorWorkspace(reduced_plus,
-        reduced_minus, signal_2d)
-    estimator_products = CurvatureEstimatorProducts(slopes)
-    estimator = CurvatureDifferentialEstimator(estimator_params,
-        estimator_state, estimator_workspace, estimator_products)
     front_end = CurvatureOpticalFrontEnd(defocus_pair, propagation, nothing)
     wfs = CurvatureWFS{
-        typeof(front_end),typeof(acquisition),typeof(estimator),typeof(selector),
-    }(front_end, acquisition, estimator)
-    initial_pupil = PupilFunction(tel; T=T, backend=selector)
-    update_valid_mask!(wfs, initial_pupil)
+        typeof(front_end),typeof(acquisition),typeof(selector),
+    }(front_end, acquisition)
     build_curvature_phasor!(curvature_propagation_workspace(wfs).phasor)
     build_curvature_defocus_masks!(wfs)
     return wfs
@@ -475,15 +331,6 @@ curvature_camera_dims(pupil_samples::Int, readout_pixels_per_sample::Int, ::Curv
 curvature_camera_frame(backend, ::Type{T}, pupil_samples::Int, readout_model::CurvatureReadoutModel;
     readout_pixels_per_sample::Int=1) where {T<:AbstractFloat} =
     backend{T}(undef, curvature_camera_dims(pupil_samples, readout_pixels_per_sample, readout_model)...)
-
-function update_valid_mask!(wfs::CurvatureWFS, pupil::PupilFunction)
-    _require_curvature_pupil_geometry(wfs, pupil)
-    params = curvature_estimator_params(wfs)
-    state = curvature_estimator_state(wfs)
-    set_valid_subapertures!(state.valid_mask, pupil.support,
-        params.threshold)
-    return wfs
-end
 
 @inline function _require_curvature_pupil_geometry(wfs::CurvatureWFS,
     pupil::PupilFunction)
@@ -652,7 +499,7 @@ end
 function pack_curvature_readout!(style::AcceleratorStyle, ::CurvatureChannelReadout, wfs::CurvatureWFS)
     workspace = curvature_propagation_workspace(wfs)
     frame = curvature_acquisition_products(wfs).frame
-    n_sub = curvature_estimator_params(wfs).pupil_samples
+    n_sub = curvature_propagation_plan(wfs).pupil_samples
     launch_kernel!(style, curvature_channel_pack_kernel!, frame,
         workspace.frame_plus, workspace.frame_minus, n_sub;
         ndrange=size(workspace.frame_plus))
@@ -777,355 +624,6 @@ function curvature_intensity!(wfs::CurvatureWFS, pupil::PupilFunction,
     return curvature_intensity_from_field!(wfs, pupil, field)
 end
 
-function curvature_signal!(wfs::CurvatureWFS, frame::AbstractMatrix{T}) where {T<:AbstractFloat}
-    return curvature_signal!(execution_style(frame),
-        curvature_acquisition_plan(wfs).readout_model, wfs, frame)
-end
-
-function curvature_signal!(::ScalarCPUStyle, ::CurvatureFrameReadout, wfs::CurvatureWFS,
-    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
-    size(frame) == size(curvature_acquisition_products(wfs).frame) ||
-        throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled camera frame"))
-    unpack_curvature_frame!(wfs, frame)
-    reduce_curvature_frame_signal!(wfs)
-    return curvature_signal_from_planes!(wfs)
-end
-
-function curvature_signal!(style::AcceleratorStyle, ::CurvatureFrameReadout, wfs::CurvatureWFS,
-    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
-    size(frame) == size(curvature_acquisition_products(wfs).frame) ||
-        throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled camera frame"))
-    unpack_curvature_frame!(wfs, frame)
-    reduce_curvature_frame_signal!(wfs)
-    return curvature_signal_from_planes!(style, wfs)
-end
-
-function unpack_curvature_frame!(wfs::CurvatureWFS, frame::AbstractMatrix)
-    return _unpack_curvature_frame!(execution_style(frame), wfs, frame)
-end
-
-function _unpack_curvature_frame!(::ScalarCPUStyle, wfs::CurvatureWFS, frame::AbstractMatrix)
-    workspace = curvature_propagation_workspace(wfs)
-    side = size(workspace.frame_plus, 1)
-    @views copyto!(workspace.frame_plus, frame[1:side, :])
-    @views copyto!(workspace.frame_minus, frame[side+1:2*side, :])
-    return wfs
-end
-
-function _unpack_curvature_frame!(style::AcceleratorStyle, wfs::CurvatureWFS,
-    frame::AbstractMatrix)
-    workspace = curvature_propagation_workspace(wfs)
-    side = size(workspace.frame_plus, 1)
-    launch_kernel!(style, curvature_frame_unpack_kernel!, workspace.frame_plus,
-        workspace.frame_minus, frame, side; ndrange=size(workspace.frame_plus))
-    return wfs
-end
-
-function reduce_curvature_frame_signal!(wfs::CurvatureWFS)
-    factor = curvature_propagation_plan(wfs).readout_pixels_per_sample
-    propagation_workspace = curvature_propagation_workspace(wfs)
-    estimator_workspace = curvature_estimator_workspace(wfs)
-    if factor == 1
-        copyto!(estimator_workspace.reduced_plus,
-            propagation_workspace.frame_plus)
-        copyto!(estimator_workspace.reduced_minus,
-            propagation_workspace.frame_minus)
-    else
-        bin2d!(estimator_workspace.reduced_plus,
-            propagation_workspace.frame_plus, factor)
-        bin2d!(estimator_workspace.reduced_minus,
-            propagation_workspace.frame_minus, factor)
-    end
-    return wfs
-end
-
-function curvature_signal_from_planes!(wfs::CurvatureWFS)
-    n_sub = curvature_estimator_params(wfs).pupil_samples
-    state = curvature_estimator_state(wfs)
-    workspace = curvature_estimator_workspace(wfs)
-    products = curvature_estimator_products(wfs)
-    epsval = eps(eltype(workspace.signal_2d))
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        idx = (i - 1) * n_sub + j
-        if state.valid_mask[i, j]
-            plus = workspace.reduced_plus[i, j]
-            minus = workspace.reduced_minus[i, j]
-            total = plus + minus
-            corrected = total > epsval ?
-                (plus - minus) / (total + epsval) - state.reference_signal_2d[i, j] :
-                zero(eltype(workspace.signal_2d))
-            workspace.signal_2d[i, j] = corrected
-            products.signal[idx] = corrected
-        else
-            workspace.signal_2d[i, j] = zero(eltype(workspace.signal_2d))
-            products.signal[idx] = zero(eltype(products.signal))
-        end
-    end
-    return products.signal
-end
-
-function curvature_signal_from_planes!(style::AcceleratorStyle, wfs::CurvatureWFS)
-    n_sub = curvature_estimator_params(wfs).pupil_samples
-    state = curvature_estimator_state(wfs)
-    workspace = curvature_estimator_workspace(wfs)
-    products = curvature_estimator_products(wfs)
-    epsval = eps(eltype(workspace.signal_2d))
-    launch_kernel!(style, curvature_signal_from_frame_kernel!,
-        workspace.signal_2d, products.signal, workspace.reduced_plus,
-        workspace.reduced_minus, state.reference_signal_2d,
-        state.valid_mask, epsval, n_sub;
-        ndrange=size(workspace.signal_2d))
-    return products.signal
-end
-
-function curvature_signal_from_current_frames!(wfs::CurvatureWFS)
-    return curvature_signal_from_current_frames!(execution_style(
-        curvature_acquisition_products(wfs).frame), wfs)
-end
-
-function curvature_signal_from_current_frames!(::ScalarCPUStyle, wfs::CurvatureWFS)
-    reduce_curvature_frame_signal!(wfs)
-    return curvature_signal_from_planes!(wfs)
-end
-
-function curvature_signal_from_current_frames!(style::AcceleratorStyle, wfs::CurvatureWFS)
-    reduce_curvature_frame_signal!(wfs)
-    return curvature_signal_from_planes!(style, wfs)
-end
-
-function curvature_signal!(::ScalarCPUStyle, ::CurvatureChannelReadout, wfs::CurvatureWFS,
-    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
-    size(frame) == size(curvature_acquisition_products(wfs).frame) ||
-        throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled channel readout"))
-    n_sub = curvature_estimator_params(wfs).pupil_samples
-    state = curvature_estimator_state(wfs)
-    workspace = curvature_estimator_workspace(wfs)
-    products = curvature_estimator_products(wfs)
-    epsval = eps(eltype(workspace.signal_2d))
-    @inbounds for i in 1:n_sub, j in 1:n_sub
-        idx = (i - 1) * n_sub + j
-        if state.valid_mask[i, j]
-            plus = frame[1, idx]
-            minus = frame[2, idx]
-            total = plus + minus
-            corrected = total > epsval ?
-                (plus - minus) / (total + epsval) - state.reference_signal_2d[i, j] :
-                zero(eltype(workspace.signal_2d))
-            workspace.signal_2d[i, j] = corrected
-            products.signal[idx] = corrected
-        else
-            workspace.signal_2d[i, j] = zero(eltype(workspace.signal_2d))
-            products.signal[idx] = zero(eltype(products.signal))
-        end
-    end
-    return products.signal
-end
-
-function curvature_signal!(style::AcceleratorStyle, ::CurvatureChannelReadout, wfs::CurvatureWFS,
-    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
-    size(frame) == size(curvature_acquisition_products(wfs).frame) ||
-        throw(DimensionMismatchError("CurvatureWFS frame size must match the sampled channel readout"))
-    n_sub = curvature_estimator_params(wfs).pupil_samples
-    state = curvature_estimator_state(wfs)
-    workspace = curvature_estimator_workspace(wfs)
-    products = curvature_estimator_products(wfs)
-    epsval = eps(eltype(workspace.signal_2d))
-    launch_kernel!(style, curvature_signal_from_channels_kernel!,
-        workspace.signal_2d, products.signal, frame,
-        state.reference_signal_2d, state.valid_mask, epsval, n_sub;
-        ndrange=size(workspace.signal_2d))
-    return products.signal
-end
-
-function ensure_curvature_calibration!(wfs::CurvatureWFS,
-    pupil::PupilFunction, src::AbstractSource)
-    require_leaf_source(src, "CurvatureWFS calibration")
-    state = curvature_estimator_state(wfs)
-    workspace = curvature_estimator_workspace(wfs)
-    products = curvature_estimator_products(wfs)
-    frame = curvature_acquisition_products(wfs).frame
-    λ = calibration_wavelength(src, eltype(products.signal))
-    sig = pupil_aperture_calibration_signature(pupil,
-        calibration_signature(src))
-    if calibration_matches(state.calibrated,
-        state.calibration_wavelength, λ,
-        state.calibration_signature, sig)
-        return wfs
-    end
-    update_valid_mask!(wfs, pupil)
-    opd_saved = save_zero_opd!(pupil)
-    try
-        curvature_intensity!(wfs, pupil, src)
-        fill!(state.reference_signal_2d,
-            zero(eltype(state.reference_signal_2d)))
-        curvature_signal!(wfs, frame)
-        copyto!(state.reference_signal_2d, workspace.signal_2d)
-    finally
-        restore_opd!(pupil, opd_saved)
-    end
-    state.calibrated = true
-    state.calibration_wavelength = λ
-    state.calibration_signature = sig
-    state.calibration_revision += UInt(1)
-    return wfs
-end
-
-
-include("curvature/stages.jl")
-
-function measure!(::Diffractive, wfs::CurvatureWFS,
-    pupil::PupilFunction)
-    throw(InvalidConfiguration(
-        "CurvatureWFS requires a source; call measure!(wfs, pupil, src)."))
-end
-
-measure!(wfs::CurvatureWFS, pupil::PupilFunction) =
-    measure!(sensing_mode(wfs), wfs, pupil)
-measure!(wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource) = measure!(sensing_mode(wfs), wfs, pupil, src)
-
-function measure!(wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource, det::AbstractDetector;
-    rng::AbstractRNG=runtime_rng())
-    return measure!(sensing_mode(wfs), wfs, pupil, src, det; rng=rng)
-end
-
-function measure!(wfs::CurvatureWFS, ::PupilFunction, ::Asterism)
-    throw(InvalidConfiguration("CurvatureWFS asterism support is not implemented"))
-end
-
-function measure!(wfs::CurvatureWFS, ::PupilFunction, ::Asterism,
-    ::AbstractDetector;
-    rng::AbstractRNG=runtime_rng())
-    throw(InvalidConfiguration("CurvatureWFS asterism support is not implemented"))
-end
-
-function measure!(::Diffractive, wfs::CurvatureWFS,
-    pupil::PupilFunction, src::AbstractSource)
-    ensure_curvature_calibration!(wfs, pupil, src)
-    curvature_intensity!(wfs, pupil, src)
-    return curvature_signal_from_current_frames!(wfs)
-end
-
-function measure!(wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource, atm::AbstractAtmosphere;
-    propagation::Union{Nothing,AtmosphericFieldPropagation}=nothing,
-    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(curvature_propagation_workspace(wfs).frame_plus)))
-    ensure_curvature_calibration!(wfs, pupil, src)
-    curvature_intensity!(wfs, pupil, src, atm; propagation=propagation,
-        model=model)
-    return curvature_signal_from_current_frames!(wfs)
-end
-
-function measure!(wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource, atm::AbstractAtmosphere, det::AbstractDetector;
-    rng::AbstractRNG=runtime_rng(),
-    propagation::Union{Nothing,AtmosphericFieldPropagation}=nothing,
-    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(curvature_propagation_workspace(wfs).frame_plus)))
-    ensure_curvature_calibration!(wfs, pupil, src)
-    curvature_intensity!(wfs, pupil, src, atm; propagation=propagation,
-        model=model)
-    capture!(det, curvature_acquisition_products(wfs).frame, src; rng=rng)
-    return curvature_signal!(wfs, output_frame(det))
-end
-
-function measure!(wfs::CurvatureWFS, pupil::PupilFunction,
-    ast::Asterism, atm::AbstractAtmosphere;
-    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(curvature_propagation_workspace(wfs).frame_plus)))
-    common_source = common_wfs_calibration_source(ast, "CurvatureWFS")
-    ensure_curvature_calibration!(wfs, pupil, common_source)
-    propagation_workspace = curvature_propagation_workspace(wfs)
-    acc_plus = similar(propagation_workspace.frame_plus)
-    acc_minus = similar(propagation_workspace.frame_minus)
-    fill!(acc_plus, zero(eltype(acc_plus)))
-    fill!(acc_minus, zero(eltype(acc_minus)))
-    @inbounds for src in ast.sources
-        curvature_intensity!(wfs, pupil, src, atm; model=model)
-        acc_plus .+= propagation_workspace.frame_plus
-        acc_minus .+= propagation_workspace.frame_minus
-    end
-    copyto!(propagation_workspace.frame_plus, acc_plus)
-    copyto!(propagation_workspace.frame_minus, acc_minus)
-    pack_curvature_readout!(wfs)
-    return curvature_signal_from_current_frames!(wfs)
-end
-
-function measure!(wfs::CurvatureWFS, pupil::PupilFunction,
-    ast::Asterism, atm::AbstractAtmosphere, det::AbstractDetector;
-    rng::AbstractRNG=runtime_rng(),
-    model::AbstractAtmosphericFieldModel=LayeredFresnelAtmosphericPropagation(T=eltype(curvature_propagation_workspace(wfs).frame_plus)))
-    common_source = common_wfs_calibration_source(ast, "CurvatureWFS")
-    measure!(wfs, pupil, ast, atm; model=model)
-    capture!(det, curvature_acquisition_products(wfs).frame, common_source;
-        rng=rng)
-    return curvature_signal!(wfs, output_frame(det))
-end
-
-function measure!(::Diffractive, wfs::CurvatureWFS,
-    pupil::PupilFunction, src::AbstractSource,
-    det::AbstractDetector; rng::AbstractRNG=runtime_rng())
-    return measure_detector_coupled!(
-        curvature_acquisition_plan(wfs).readout_model, wfs, pupil,
-        src, det; rng=rng)
-end
-
-function measure_detector_coupled!(::CurvatureChannelReadout,
-    wfs::CurvatureWFS, ::PupilFunction,
-    src::AbstractSource, det::AbstractDetector; rng::AbstractRNG=runtime_rng())
-    throw(InvalidConfiguration(
-        "CurvatureChannelReadout requires a linear-mode APD channel bank or a counting detector"))
-end
-
-function measure_detector_coupled!(::CurvatureChannelReadout,
-    wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource, det::AbstractCountingDetector;
-    rng::AbstractRNG=runtime_rng())
-    ensure_curvature_calibration!(wfs, pupil, src)
-    curvature_intensity!(wfs, pupil, src)
-    frame = curvature_acquisition_products(wfs).frame
-    capture!(det, frame, src; rng=rng)
-    size(output_frame(det)) == size(frame) ||
-        throw(InvalidConfiguration("CurvatureWFS counting-detector output size must match the sampled channel readout"))
-    return curvature_signal!(wfs, output_frame(det))
-end
-
-function measure_detector_coupled!(::CurvatureChannelReadout,
-    wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource, det::LinearAPDDetector;
-    rng::AbstractRNG=runtime_rng())
-    ensure_curvature_calibration!(wfs, pupil, src)
-    curvature_intensity!(wfs, pupil, src)
-    frame = curvature_acquisition_products(wfs).frame
-    input = vec(frame)
-    length(input) == length(channel_output(det)) || throw(
-        InvalidConfiguration(
-            "CurvatureWFS linear-APD channel count must match the sampled channel readout"))
-    capture!(det, input; rng=rng)
-    copyto!(frame, channel_output(det))
-    return curvature_signal!(wfs, frame)
-end
-
-function measure_detector_coupled!(::CurvatureFrameReadout,
-    wfs::CurvatureWFS, pupil::PupilFunction,
-    src::AbstractSource, det::AbstractDetector;
-    rng::AbstractRNG=runtime_rng())
-    ensure_curvature_calibration!(wfs, pupil, src)
-    curvature_intensity!(wfs, pupil, src)
-    frame = curvature_acquisition_products(wfs).frame
-    capture!(det, frame, src; rng=rng)
-    size(output_frame(det)) == size(frame) ||
-        throw(InvalidConfiguration("CurvatureWFS detector output size must match the sampled camera frame"))
-    return curvature_signal!(wfs, output_frame(det))
-end
-
-@inline slopes(wfs::CurvatureWFS) = curvature_estimator_products(wfs).signal
-@inline valid_subaperture_mask(wfs::CurvatureWFS) =
-    curvature_estimator_state(wfs).valid_mask
-@inline reference_signal(wfs::CurvatureWFS) =
-    curvature_estimator_state(wfs).reference_signal_2d
-@inline wfs_calibration_signature(wfs::CurvatureWFS) =
-    curvature_estimator_state(wfs).calibration_signature
-
 @inline wfs_output_metadata(wfs::CurvatureWFS) = wfs_output_metadata(
     curvature_acquisition_plan(wfs).readout_model, wfs)
 @inline wfs_output_metadata(::CurvatureFrameReadout, wfs::CurvatureWFS) = nothing
@@ -1148,6 +646,8 @@ end
 @inline function prepare_runtime_wfs!(wfs::CurvatureWFS,
     pupil::PupilFunction, src::AbstractSource)
     require_leaf_source(src, "CurvatureWFS runtime preparation")
-    ensure_curvature_calibration!(wfs, pupil, src)
+    _require_curvature_pupil_geometry(wfs, pupil)
     return wfs
 end
+
+include("curvature/stages.jl")

@@ -954,32 +954,6 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             n_pix_edge=get(cfg, "n_pix_edge", nothing),
             binning=Int(get(cfg, "binning", 1)),
         )
-    elseif kind === :curvature_signal
-        pupil_samples = Int(cfg["pupil_samples"])
-        readout_name = lowercase(String(get(cfg, "readout_model", "frame")))
-        readout_model = if readout_name == "frame"
-            CurvatureFrameReadout()
-        elseif readout_name == "channel"
-            CurvatureChannelReadout()
-        else
-            throw(InvalidConfiguration("unknown curvature readout model '$readout_name'"))
-        end
-        branch_response = CurvatureBranchResponse(
-            plus_throughput=Float64(get(cfg, "plus_throughput", 1.0)),
-            minus_throughput=Float64(get(cfg, "minus_throughput", 1.0)),
-            plus_background=Float64(get(cfg, "plus_background", 0.0)),
-            minus_background=Float64(get(cfg, "minus_background", 0.0)),
-        )
-        return CurvatureWFS(tel;
-            pupil_samples=pupil_samples,
-            threshold=threshold,
-            defocus_rms_nm=Float64(get(cfg, "defocus_rms_nm", 500.0)),
-            diffraction_padding=Int(get(cfg, "diffraction_padding", 2)),
-            readout_crop_resolution=Int(get(cfg, "readout_crop_resolution", tel.params.resolution)),
-            readout_pixels_per_sample=Int(get(cfg, "readout_pixels_per_sample", 1)),
-            readout_model=readout_model,
-            branch_response=branch_response,
-        )
     end
     throw(InvalidConfiguration("unsupported WFS reference kind '$(kind)'"))
 end
@@ -995,29 +969,6 @@ function compute_reference_actual(case::ReferenceCase)
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
         return copy(reference_direct_image(pupil, src;
             zero_padding=zero_padding))
-    elseif case.kind === :curvature_signal
-        tel = build_reference_telescope(case.config["telescope"])
-        pupil = PupilFunction(tel)
-        src = build_reference_measurement_source(case.config["source"])
-        wfs = build_reference_wfs(case.kind, case.config["wfs"], tel)
-        residual = load_case_residual_opd(case)
-        if residual !== nothing
-            apply_opd!(pupil, residual)
-        elseif haskey(case.config, "controllable_optic")
-            optic = build_reference_controllable_optic(case.config["controllable_optic"], tel)
-            cmd = Float64.(get(case.config["controllable_optic"], "command", Float64[]))
-            isempty(cmd) && throw(InvalidConfiguration("controllable_optic reference cases require a non-empty command"))
-            set_reference_controllable_commands!(optic, cmd)
-            apply_reference_controllable_optics!(pupil, optic, DMReplace())
-        elseif haskey(case.config, "opd")
-            if haskey(case.config, "basis")
-                basis = build_reference_basis(case.config["basis"], tel)
-                apply_reference_opd!(pupil, case.config["opd"], basis)
-            else
-                apply_reference_opd!(pupil, case.config["opd"])
-            end
-        end
-        return copy(measure!(wfs, pupil, src))
     elseif case.kind === :shack_hartmann_frame
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)

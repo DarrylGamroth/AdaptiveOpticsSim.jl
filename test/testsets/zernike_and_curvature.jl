@@ -50,8 +50,11 @@ end
         rate = zernike_rate_map(front_end, pupil)
         @test_throws UnsupportedAlgorithm prepare_wfs_optics(
             front_end, pupil, rate)
-        @test_throws UnsupportedAlgorithm measure!(
-            CurvatureWFS(telescope; pupil_samples=2), pupil, expanded)
+        curvature = CurvatureWFS(telescope; pupil_samples=2)
+        curvature_front_end = CurvatureOpticalFrontEnd(curvature, expanded)
+        curvature_rates = curvature_rate_maps(curvature_front_end, pupil)
+        @test_throws UnsupportedAlgorithm prepare_wfs_optics(
+            curvature_front_end, pupil, curvature_rates)
     end
 end
 
@@ -157,193 +160,87 @@ end
             KA_CPU_STYLE, accelerated_workspace, field))
     @test accelerated_field_stack ≈ scalar_field_stack
 
-    set_curvature_calibration!(accelerated_sensor, zeros(T, 2, 2);
-        wavelength_m=wavelength(source), signature=UInt(0x4b414350))
-    observation = WFSObservation(zeros(T, 2, 4);
-        units=:photon_count, layout=:curvature_branch_channels)
-    measurement = WFSMeasurement(zeros(T, 4);
-        units=:dimensionless, kind=:curvature_signal)
-    estimator = prepare_wfs_estimation(
-        accelerated_sensor, observation, measurement)
-    @test validate_wfs_target(estimator, HostComputeDevice()) === estimator
+    accelerated_rates = curvature_rate_maps(accelerated_front_end, pupil)
+    optics = prepare_wfs_optics(accelerated_front_end, pupil,
+        accelerated_rates)
+    @test validate_wfs_target(optics, HostComputeDevice()) === optics
 end
 
-@testset "Curvature WFS" begin
-    tel = Telescope(resolution=32, diameter=8.0, central_obstruction=0.0)
-    pupil = PupilFunction(tel)
-    src = Source(band=:I, magnitude=0.0)
-    wfs = CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0)
+@testset "Curvature optical front end" begin
+    T = Float64
+    telescope = Telescope(resolution=32, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    pupil = PupilFunction(telescope; T=T)
+    source = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(10), T=T)
+    sensor = CurvatureWFS(telescope; pupil_samples=8,
+        defocus_rms_nm=T(500), T=T)
 
-    @test size(wfs_optical_rate_storage(wfs)) == (16, 8)
-    @test length(slopes(wfs)) == 64
-    @test_throws InvalidConfiguration measure!(wfs, pupil)
-    @test_throws InvalidConfiguration measure!(wfs, pupil,
-        Asterism([src, Source(band=:I, magnitude=0.0)]))
+    @test !hasfield(typeof(sensor), :estimator)
+    front_end = CurvatureOpticalFrontEnd(sensor, source)
+    rates = curvature_rate_maps(front_end, pupil)
+    optics = prepare_wfs_optics(front_end, pupil, rates)
+    @test validate_wfs_target(optics, HostComputeDevice()) === optics
+    form_wfs_optical_products!(rates, pupil, optics)
+    @test size(rates[1].values) == (8, 8)
+    @test size(rates[2].values) == (8, 8)
+    @test all(isfinite, rates[1].values)
+    @test all(isfinite, rates[2].values)
+    @test all(>=(zero(T)), rates[1].values)
+    @test all(>=(zero(T)), rates[2].values)
+    if coverage_instrumented()
+        @test_skip "Curvature optical allocation assertion is disabled under coverage instrumentation"
+    else
+        @test @allocated(form_wfs_optical_products!(rates, pupil,
+            optics)) == 0
+    end
 
-    flat_slopes = copy(measure!(wfs, pupil, src))
-    @test wfs.estimator.state.calibrated
-    @test all(isfinite, flat_slopes)
-    @test all(>=(0.0), wfs_optical_rate_storage(wfs))
-    @test flat_slopes ≈ zero.(flat_slopes) atol=1e-10
+    flat_plus = copy(rates[1].values)
+    flat_minus = copy(rates[2].values)
+    basis = ZernikeBasis(telescope, 5)
+    compute_zernike!(basis, telescope)
+    focus = @view basis.modes[:, :, 5]
+    @. pupil.opd = T(5e-8) * focus
+    form_wfs_optical_products!(rates, pupil, optics)
+    positive_plus = copy(rates[1].values)
+    positive_minus = copy(rates[2].values)
+    @. pupil.opd = -T(5e-8) * focus
+    form_wfs_optical_products!(rates, pupil, optics)
+    @test norm(rates[1].values - flat_plus) > T(1e-6)
+    @test norm(rates[2].values - flat_minus) > T(1e-6)
+    @test !(rates[1].values ≈ positive_plus)
+    @test !(rates[2].values ≈ positive_minus)
+    fill!(pupil.opd, zero(T))
 
-    det = Detector(noise=NoiseNone(), binning=1)
-    det_slopes = copy(measure!(wfs, pupil, src, det))
-    @test det_slopes ≈ flat_slopes atol=1e-10
-    @test size(output_frame(det)) == size(wfs_optical_rate_storage(wfs))
-    @test wfs_detector_image(wfs, det) === output_frame(det)
+    response = CurvatureBranchResponse(T=T, plus_throughput=T(1.2),
+        minus_throughput=T(0.8), plus_background=T(5),
+        minus_background=one(T))
+    imbalanced = CurvatureWFS(telescope; pupil_samples=8,
+        defocus_rms_nm=T(500), branch_response=response, T=T)
+    imbalanced_front_end = CurvatureOpticalFrontEnd(imbalanced, source)
+    imbalanced_rates = curvature_rate_maps(imbalanced_front_end, pupil)
+    imbalanced_optics = prepare_wfs_optics(imbalanced_front_end, pupil,
+        imbalanced_rates)
+    form_wfs_optical_products!(imbalanced_rates, pupil, imbalanced_optics)
+    @test mean(imbalanced_rates[1].values) >
+        mean(imbalanced_rates[2].values)
+    @test_throws InvalidConfiguration CurvatureBranchResponse(
+        plus_throughput=-1.0)
 
-    zb = ZernikeBasis(tel, 5)
-    compute_zernike!(zb, tel)
-    focus = @view zb.modes[:, :, 5]
-    @. pupil.opd = 5e-8 * focus
-    slopes_plus = copy(measure!(wfs, pupil, src))
-    @. pupil.opd = -5e-8 * focus
-    slopes_minus = copy(measure!(wfs, pupil, src))
-    fill!(pupil.opd, 0.0)
-
-    @test norm(slopes_plus) > 1e-6
-    @test norm(slopes_minus) > 1e-6
-    @test dot(slopes_plus, slopes_minus) < 0
-
-    counting = CurvatureWFS(tel; pupil_samples=8,
-        defocus_rms_nm=500.0, readout_model=CurvatureChannelReadout())
-    counting_flat = copy(measure!(counting, pupil, src))
-    @test size(wfs_optical_rate_storage(counting)) == (2, 64)
-    @test counting_flat ≈ zero.(counting_flat) atol=1e-10
-    @test_throws InvalidConfiguration measure!(counting, pupil, src, det)
-    apd = LinearAPDDetector(topology=LinearAPDChannelBank(128),
-        exposure_duration=1.0, qe=1.0, avalanche_gain=1.0,
-        dark_current=0.0, noise=NoiseNone())
-    counting_apd = copy(measure!(counting, pupil, src, apd))
-    @test counting_apd ≈ counting_flat atol=1e-10
-    @test detector_export_metadata(apd).n_channels ==
-        length(wfs_optical_rate_storage(counting))
-    spad = SPADArrayDetector(size(wfs_optical_rate_storage(counting));
-        exposure_duration=1.0,
-        noise=NoiseNone(),
-        sensor=SPADArraySensor(active_area_detection_efficiency=1.0, dark_count_rate=0.0, fill_factor=1.0),
-    )
-    counting_spad = copy(measure!(counting, pupil, src, spad))
-    @test counting_spad ≈ counting_flat atol=1e-10
-    @test detector_export_metadata(spad).readout.output_size ==
-        size(wfs_optical_rate_storage(counting))
-    mkid = MKIDArrayDetector(
-        exposure_duration=1.0,
-        noise=NoiseNone(),
-        sensor=MKIDArraySensor(qe=1.0, dark_count_rate=0.0, fill_factor=1.0,
-            characteristics=MKIDArrayCharacteristics(
-                wavelength_passband_m=(
-                    0.9 * wavelength(src), 1.1 * wavelength(src)))),
-    )
-    counting_mkid = copy(measure!(counting, pupil, src, mkid))
-    @test counting_mkid ≈ counting_flat atol=1e-10
-    outside_mkid_band = Source(band=:custom, magnitude=0.0,
-        wavelength=2 * wavelength(src), photon_irradiance=1.0)
-    counting_mkid_outside = copy(measure!(counting, pupil,
-        outside_mkid_band, mkid))
-    @test all(iszero, output_frame(mkid))
-    @test all(iszero, counting_mkid_outside)
-    wrong_bank = LinearAPDDetector(topology=LinearAPDChannelBank(64),
-        noise=NoiseNone())
-    @test_throws InvalidConfiguration measure!(counting, pupil, src,
-        wrong_bank)
-    @test_throws InvalidConfiguration CurvatureWFS(tel; pupil_samples=8, readout_model=CurvatureChannelReadout(),
-        readout_pixels_per_sample=2)
-
-    response = CurvatureBranchResponse(T=Float64, plus_throughput=1.2, minus_throughput=0.8,
-        plus_background=5.0, minus_background=1.0)
-    imbalanced = CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0, branch_response=response)
-    imbalanced_flat = copy(measure!(imbalanced, pupil, src))
-    @test imbalanced_flat ≈ zero.(imbalanced_flat) atol=1e-10
-    plus_mean = mean(@view wfs_optical_rate_storage(imbalanced)[
-        1:imbalanced.estimator.params.pupil_samples, :])
-    minus_mean = mean(@view wfs_optical_rate_storage(imbalanced)[
-        imbalanced.estimator.params.pupil_samples+1:end, :])
-    @test plus_mean > minus_mean
-    @test_throws InvalidConfiguration CurvatureBranchResponse(plus_throughput=-1.0)
-
-    oversampled = CurvatureWFS(tel; pupil_samples=8, readout_crop_resolution=16, readout_pixels_per_sample=2)
-    oversampled_flat = copy(measure!(oversampled, pupil, src))
-    @test size(wfs_optical_rate_storage(oversampled)) == (32, 16)
-    @test size(oversampled.front_end.propagation.workspace.frame_plus) == (16, 16)
-    @test size(oversampled.estimator.workspace.reduced_plus) == (8, 8)
-    @test oversampled_flat ≈ zero.(oversampled_flat) atol=1e-10
-    @test_throws InvalidConfiguration CurvatureWFS(tel; pupil_samples=8, readout_crop_resolution=18, readout_pixels_per_sample=2)
-
-    atm = MultiLayerAtmosphere(tel;
-        r0=0.2,
-        reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
-        L0=25.0,
-        fractional_cn2=[0.7, 0.3],
-        wind_speed=[8.0, 4.0],
-        wind_direction_deg=[0.0, 90.0],
-        altitude=[0.0, 5000.0],
-    )
-    advance_by!(atm, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(3))
-    atm_slopes = copy(measure!(wfs, pupil, src, atm))
-    @test all(isfinite, atm_slopes)
-    @test norm(atm_slopes) > 0
-
-    det_atm = Detector(noise=NoiseNone(), binning=1)
-    det_atm_slopes = copy(measure!(wfs, pupil, src, atm, det_atm))
-    @test all(isfinite, det_atm_slopes)
-
-    ast = Asterism([src, Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0))])
-    ast_slopes = copy(measure!(wfs, pupil, ast, atm))
-    @test length(ast_slopes) == length(slopes(wfs))
-    @test all(isfinite, ast_slopes)
-    @test norm(ast_slopes) > 0
-
-    common_qe_wavelength = 550e-9
-    common_qe_ast = Asterism([
-        Source(band=:custom, wavelength=common_qe_wavelength,
-            photon_irradiance=1.0, coordinates=(0.0, 0.0)),
-        Source(band=:custom, wavelength=common_qe_wavelength,
-            photon_irradiance=2.0, coordinates=(0.5, 90.0)),
-    ])
-    wavelength_dependent_qe = SampledQuantumEfficiency(
-        [500e-9, common_qe_wavelength, 600e-9], [0.1, 0.35, 0.9])
-    sampled_qe_wfs = CurvatureWFS(tel; pupil_samples=8,
-        defocus_rms_nm=500.0)
-    sampled_qe_det = Detector(noise=NoiseNone(),
-        qe=wavelength_dependent_qe, exposure_duration=1.0, binning=1)
-    sampled_qe_slopes = copy(measure!(sampled_qe_wfs, pupil,
-        common_qe_ast, atm, sampled_qe_det; rng=MersenneTwister(23)))
-    sampled_qe_frame = copy(output_frame(sampled_qe_det))
-
-    scalar_qe_wfs = CurvatureWFS(tel; pupil_samples=8,
-        defocus_rms_nm=500.0)
-    scalar_qe_det = Detector(noise=NoiseNone(), qe=0.35,
-        exposure_duration=1.0, binning=1)
-    scalar_qe_slopes = copy(measure!(scalar_qe_wfs, pupil,
-        common_qe_ast, atm, scalar_qe_det; rng=MersenneTwister(23)))
-    @test sum(sampled_qe_frame) > 0
-    @test sampled_qe_frame ≈ output_frame(scalar_qe_det)
-    @test sampled_qe_slopes ≈ scalar_qe_slopes
-
-    mixed_qe_ast = Asterism([
-        Source(band=:custom, wavelength=common_qe_wavelength,
-            photon_irradiance=1.0),
-        Source(band=:custom, wavelength=600e-9,
-            photon_irradiance=1.0),
-    ])
-    @test_throws InvalidConfiguration measure!(
-        CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0),
-        pupil, mixed_qe_ast, atm)
-    @test_throws InvalidConfiguration measure!(
-        CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0),
-        pupil, mixed_qe_ast, atm, sampled_qe_det)
-
-    mixed_ngs_lgs = Asterism(AdaptiveOpticsSim.Optics.AbstractSource[
-        Source(band=:custom, wavelength=589e-9,
-            photon_irradiance=1.0),
-        LGSSource(wavelength=589e-9, elongation_factor=1.3,
-            photon_irradiance=1.0),
-    ])
-    @test_throws InvalidConfiguration measure!(
-        CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0),
-        pupil, mixed_ngs_lgs, atm)
-    @test_throws InvalidConfiguration measure!(
-        CurvatureWFS(tel; pupil_samples=8, defocus_rms_nm=500.0),
-        pupil, mixed_ngs_lgs, atm, sampled_qe_det)
+    oversampled = CurvatureWFS(telescope; pupil_samples=8,
+        readout_crop_resolution=16, readout_pixels_per_sample=2, T=T)
+    oversampled_front_end = CurvatureOpticalFrontEnd(oversampled, source)
+    oversampled_rates = curvature_rate_maps(oversampled_front_end, pupil)
+    oversampled_optics = prepare_wfs_optics(oversampled_front_end, pupil,
+        oversampled_rates)
+    form_wfs_optical_products!(oversampled_rates, pupil,
+        oversampled_optics)
+    @test size.(getfield.(oversampled_rates, :values)) ==
+        ((16, 16), (16, 16))
+    @test_throws InvalidConfiguration CurvatureWFS(telescope;
+        pupil_samples=8, readout_crop_resolution=18,
+        readout_pixels_per_sample=2, T=T)
+    @test_throws InvalidConfiguration CurvatureWFS(telescope;
+        pupil_samples=8, readout_model=CurvatureChannelReadout(),
+        readout_pixels_per_sample=2, T=T)
 end

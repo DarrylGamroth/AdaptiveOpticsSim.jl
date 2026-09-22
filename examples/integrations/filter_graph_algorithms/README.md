@@ -37,7 +37,7 @@ AOC interfaces only; AOS remains the plant owner.
 S4 is a separate complete-frame Pyramid fixture. AOS forms a diffractive
 four-pupil photon-rate frame and performs one explicit noiseless detector
 acquisition. The composing layer transposes the acquired `(x, y)` detector
-storage into a preallocated `(row=y, column=x)` FGA image, then uses FGA 0.4.0's
+storage into a preallocated `(row=y, column=x)` FGA image, then uses FGA 0.5.0's
 `PyramidImageF32`, `PyramidReconstructorF32`, and leaky integrator to produce
 one adopted command. Its flat acquired frame defines the explicit reference
 I4Q signal; the support, unity optical gain, pupil order `q1, q2, q3, q4`,
@@ -62,7 +62,7 @@ both packages.
 
 S4 also contains a Bi-O-edge detector-frame fixture. AOS owns only the
 diffractive four-pupil photon-rate formation and noiseless detector acquisition;
-FGA 0.4.0 owns the calibrated Bi-O-edge differential signal. The boundary uses
+FGA 0.5.0 owns the calibrated Bi-O-edge differential signal. The boundary uses
 the same explicit `(x, y)` AOS to `(row=y, column=x)` FGA transpose. Its frozen
 asymmetric oracle binds q1/q2/q3/q4 as top-left, bottom-left, bottom-right,
 top-right, respectively; origins `((0,0), (2,0), (2,2), (0,2))`; and the
@@ -72,12 +72,29 @@ normalization policies with nonzero reference signal and unequal optical gain.
 The Zernike S4 fixture keeps the same package boundary. AOS forms the
 phase-spot pupil-plane photon-rate image and performs detector acquisition.
 The composing layer transposes AOS `(x, y)` storage into a preallocated FGA
-`(row=y, column=x)` image. Registered FGA 0.4.0 then applies the selected pupil
+`(row=y, column=x)` image. Registered FGA 0.5.0 then applies the selected pupil
 support, reference pupil image, calibration signature, and either mean-valid-
 flux or incidence-flux normalization. The asymmetric frozen oracle fixes the
 pixel and support order independently of the physical plant, while the plant
 case proves that an actual acquired AOS frame is accepted without restoring an
 AOS estimator or adding an FGA dependency to AOS core.
+
+The Curvature S4 fixture exercises both complete physical boundaries. For a
+packed detector image, the composing layer transposes AOS `(x, y)` storage to
+FGA `(row=y, column=x)` storage while preserving positive- then
+negative-defocus branch order. For a branch-by-channel detector, the complete
+`2 × N²` AOS observation already matches FGA's column-major signal order and
+passes directly without a copy or transpose. Registered FGA 0.5.0 owns the
+support, reference signal, branch scales, calibration signature, and
+differential Curvature estimate. Frozen asymmetric image and channel oracles
+use independent positive- and negative-branch patterns, reject reordered
+channels, and prove that both boundaries produce the same ordered signal. The
+AOS-side composing layer keeps each complete acquisition associated with its
+layout, calibration signature, sequence, detector exposure duration, and model
+timestamp through FGA publication. Invalid association metadata is rejected
+before the retained signal or published association changes. Actual AOS
+acquisitions prove the package composition without restoring an estimator to
+AOS core.
 
 The nested environment resolves AdaptiveOpticsCalibration,
 FilterGraphAlgorithms, and JuliaFilterGraph from the configured registry and

@@ -1,0 +1,210 @@
+artifact_id = "S4-CURVATURE-PLANT-PROFILE-2026-09-22"
+generated_on = "2026-09-22"
+purpose = "CPU, CUDA-primary, and AMDGPU-secondary profile of the retained AdaptiveOpticsSim Curvature paired-defocus plant boundary"
+source_revision = "ccf6b2b134a5b5f474163a5651c8d1748946a174"
+source_was_clean_for_exact_revision_runs = true
+evidence_class = "warmed synchronized allocation gate, CPU sampling and counters, and selected-region GPU profiles"
+claim_boundary = "AOS Curvature paired-defocus optics and packed noiseless detector acquisition only; registered FGA owns paired-image and paired-channel signal estimation"
+optimization_priority = "CUDA primary; AMDGPU secondary portability and qualification"
+
+[contract]
+workload = "64-by-64 Float32 pupil through paired-defocus padded diffraction, two 16-by-16 photon-rate planes, and one packed 32-by-16 noiseless detector acquisition"
+element_type = "Float32"
+pupil_resolution = 64
+pupil_samples = 16
+diffraction_padding = 2
+detector_frame_shape = [32, 16]
+warmup_steps = 20
+unprofiled_steps = 1000
+completion_boundary = "backend synchronization after every complete optics-plus-acquisition step"
+correctness_oracle = "finite positive acquired detector observation with the same deterministic output sum on CPU, CUDA, and AMDGPU within Float32 rounding"
+cpu_heap_allocation_budget_bytes_per_step = 0
+cpu_heap_allocation_bytes_per_step = 0
+gpu_stream_contract = "direct synchronized stream launch; Julia GPU-runtime launch bookkeeping is measured and reported, not claimed zero"
+captured_graph_contract = "registered FGA 0.5 paired-image and paired-channel estimator replay allocates zero warmed host bytes including completion and keeps device memory stable; this AOS plant slice makes no standalone Curvature graph-capture claim"
+
+[environment]
+host = "rtc-devel"
+os = "Linux 6.12.107+deb13-amd64 x86_64"
+cpu = "AMD Ryzen 7 6800H with Radeon Graphics"
+cpu_cores = 8
+cpu_threads = 16
+cpu_governor = "powersave"
+julia = "1.12.7"
+julia_threads = 1
+blas_threads = 1
+shared_host_note = "Other Julia language-service workloads were active on the shared host; the measurements are diagnostic profiles rather than real-time limits."
+
+[environment.cuda]
+device = "NVIDIA GeForce RTX 3080"
+compute_capability = "8.6"
+driver = "615.71.09"
+runtime = "CUDA 13.4.0"
+cuda_jl = "6.4.0"
+kernel_abstractions = "0.9.42"
+nsight_systems = "2026.3.2"
+nsight_compute = "2026.3.1"
+
+[environment.amdgpu]
+device = "AMD Radeon Graphics (Radeon 680M)"
+compiled_architecture = "gfx1030"
+hardware_architecture = "gfx1035"
+hsa_override_gfx_version = "10.3.0"
+wavefront_size = 32
+compute_units = 12
+runtime = "ROCm 7.2.1 / HIP 7.2.53211"
+amdgpu_jl = "2.8.0"
+kernel_abstractions = "0.9.42"
+rocprofiler = "rocprofv3 1.1.0"
+
+[cpu]
+pinning = "taskset -c 4"
+unprofiled_steps = 1000
+unprofiled_mean_nanoseconds = [175712.525, 177644.084, 175389.69]
+unprofiled_median_of_run_means_nanoseconds = 175712.525
+long_run_mean_nanoseconds = [165751.48481, 175220.44689, 159405.7547]
+heap_allocation_bytes_per_step = 0
+output_sum = 1.9969084e7
+sampling_profile_steps = 5000
+sampling_profile_snapshots = 902
+sampling_profile_utilization_percent = 100.0
+sampling_profile_interpretation = "FFTW execution dominates the sampled plant step, followed by paired branch-field formation, rate-plane sampling, packing, and detector acquisition; no GC path appeared in the warmed measured region."
+
+[cpu.hardware_counters]
+tool = "Linux perf stat"
+measurement = "three complete processes with 100000 warmed measured steps each; counters include Julia startup and preparation because the driver has no perf-event ROI marker"
+task_clock_milliseconds = 22277.18
+cycles = 92940089111
+instructions = 213315092224
+instructions_per_cycle = 2.30
+branches = 15980743383
+branch_misses = 181882831
+branch_miss_percent = 1.14
+cache_references = 13023008975
+cache_misses = 1017572728
+cache_miss_percent = 7.81
+page_faults = 52365
+context_switches = 69
+cpu_migrations = 0
+counter_multiplexing_percent = 83.33
+relative_standard_deviation_percent = 3.33
+interpretation = "Process-wide causal context only. The sampling profile, zero-allocation gate, and internally timed region characterize the warmed plant step."
+
+[cuda]
+unprofiled_steps = 1000
+unprofiled_mean_nanoseconds = 103186.26
+stream_host_allocation_bytes_per_step = 15632
+output_sum = 1.9969082e7
+interpretation = "Primary GPU result. The small complete-frame workload is launch dominated and direct stream execution does not satisfy a captured-graph zero-host-allocation contract."
+
+[cuda.nsight_systems]
+profiled_steps = 1000
+capture_range = "cuProfilerStart through cuProfilerStop around the warmed repeated plant region"
+profiled_mean_nanoseconds = 2578938.643
+kernel_dispatches = 9000
+kernel_dispatches_per_step = 9.0
+device_to_device_copies = 3000
+device_to_device_copies_per_step = 3.0
+stream_synchronizations = 4000
+aggregate_gpu_kernel_time_nanoseconds = 21626742
+aggregate_gpu_kernel_time_per_step_nanoseconds = 21626.742
+hottest_kernel_family = "Curvature branch rate-plane sampling"
+hottest_family_calls = 2000
+hottest_family_total_nanoseconds = 5675245
+hottest_family_kernel_time_percent = 26.24
+hottest_family_mean_nanoseconds = 2837.6
+cuda_api_total_nanoseconds = 66489905
+interpretation = "Timeline instrumentation perturbs wall time. Nine small kernels, three device-to-device copies, and four stream synchronizations per step leave launch and completion overhead as the main CUDA-primary tuning opportunity."
+
+[cuda.nsight_compute]
+selection = "all nine kernels in one selected Curvature plant step"
+replay_passes_per_kernel = 45
+local_spill_requests = 0
+shared_spill_requests = 0
+hottest_aggregate_kernel = "Curvature branch rate-plane sampling"
+hottest_kernel_duration_microseconds = [3.68, 3.71]
+hottest_kernel_grid_blocks = 1
+hottest_kernel_threads_per_block = 256
+hottest_kernel_registers_per_thread = 40
+hottest_kernel_compute_throughput_percent_of_sustained_peak = [0.25, 0.25]
+hottest_kernel_dram_throughput_percent_of_sustained_peak = [0.91, 0.91]
+hottest_kernel_theoretical_occupancy_percent = 100.0
+hottest_kernel_achieved_occupancy_percent = [16.29, 16.31]
+largest_grid_kernel = "Curvature branch-field formation"
+largest_grid_blocks = 256
+largest_grid_threads_per_block = 128
+largest_grid_duration_microseconds = 3.74
+largest_grid_compute_throughput_percent_of_sustained_peak = 14.19
+largest_grid_dram_throughput_percent_of_sustained_peak = 18.24
+interpretation = "The rate-plane sampling, packing, and detector-scale kernels use one block on a 68-SM device. The branch-field and FFT work exposes more parallelism, but this workload remains launch dominated; batching complete plant instances is the main optimization opportunity."
+timing_caveat = "Counter replay perturbs duration; compare service time with the clean unprofiled CUDA run."
+
+[amdgpu]
+unprofiled_steps = 1000
+unprofiled_mean_nanoseconds = 246486.048
+stream_host_allocation_bytes_per_step = 24144
+output_sum = 1.9969084e7
+interpretation = "Secondary portability result; direct HIP stream execution is functionally qualified but slower than CUDA for this workload."
+
+[amdgpu.rocprofiler]
+profiled_steps = 1000
+capture_range = "roctxProfilerResume through roctxProfilerPause around the warmed repeated plant region"
+profiled_mean_nanoseconds = 496379.993
+profiled_stream_host_allocation_bytes_per_step = 24112
+kernel_dispatches_including_copy_kernels = 14000
+kernel_dispatches_including_copy_kernels_per_step = 14.0
+scientific_kernel_dispatches = 9000
+copy_kernel_dispatches = 5000
+aggregate_gpu_kernel_time_nanoseconds = 53619013
+aggregate_gpu_kernel_time_per_step_nanoseconds = 53619.013
+hottest_kernel_family = "__amd_rocclr_copyBuffer"
+hottest_family_calls = 5000
+hottest_family_total_nanoseconds = 12374108
+hottest_family_kernel_time_percent = 23.08
+largest_scientific_kernel_family = "Curvature branch-field formation"
+largest_scientific_family_calls = 1000
+largest_scientific_family_total_nanoseconds = 9590905
+largest_scientific_family_kernel_time_percent = 17.89
+hip_api_total_nanoseconds = 159061182
+hardware_counter_status = "unavailable: rocprofiler-sdk 7.2.1 reports no supported counter metrics for the gfx1035 hardware target"
+interpretation = "Runtime tracing is the AMDGPU-secondary attribution result. No AMD-focused counter optimization claim is made."
+
+[captured_graph_evidence]
+fga_artifact = "FilterGraphAlgorithms benchmark/results/curvature-paired-signal-profile-2026-09-22.toml at source revision 9d09f8bd870db20a5c8f216d50524f8bea619c33"
+fga_scope = "registered FGA 0.5 paired-image and paired-channel estimators; CUDA and HIP captured replay allocate zero host bytes including completion and keep device memory stable"
+fga_cuda_native_graph_nodes = 5
+fga_cuda_host_allocation_bytes = 0
+fga_cuda_image_device_memory_stable = true
+fga_cuda_channel_device_memory_stable = true
+fga_amdgpu_native_graph_nodes = 5
+fga_amdgpu_host_allocation_bytes = 0
+fga_amdgpu_image_device_memory_stable = true
+fga_amdgpu_channel_device_memory_stable = true
+integration_scope = "the registered AOS/FGA fixture validates both acquired-image and acquired-channel CPU boundaries, including calibration, ordering, sequence, detector-exposure, and model-timestamp association; it does not claim a device-resident or captured cross-package bridge"
+
+[registered_integration]
+integration_revision = "4c59d16f2f58b0091f4ca8129b6cd594429eaa79"
+filter_graph_algorithms_version = "0.5.0"
+filter_graph_algorithms_tree = "0ce4ceae4904446fba170ee25324d65b435c06e6"
+julia_filter_graph_version = "0.2.3"
+julia_filter_graph_tree = "1893cea2d29f0cd89303939308e23ce7546bc240"
+curvature_boundary_checks = 139
+result = "passed"
+
+[validation]
+full_cpu_composition = "passed, including Aqua, every registered CPU suite, 15 OOPAO and 10 SPECULA reference checks, 35 tutorial passes with 2 expected broken tests, and Gate 0"
+cuda_hardware_target = "674/674 passed"
+amdgpu_hardware_target = "680/680 passed"
+cpu_type_inference = "prepared Curvature optics, associated acquired-frame and acquired-channel production, frame transpose, and FGA estimation inference checks passed"
+cpu_zero_allocation = "physical optics, detector acquisition, associated composed steps, preallocated transpose, and FGA image/channel estimation each passed their warmed zero-allocation checks"
+raw_reports = "Nsight Systems, Nsight Compute, and rocprofv3 reports are retained outside the repository under /tmp; this TOML is the durable summary"
+
+[commands]
+cpu = "taskset -c 4 env ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 ADAPTIVEOPTICS_PROFILE_PRINT_CPU_SAMPLES=0 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --project=. --startup-file=no scripts/profile_curvature_plant_runtime.jl"
+cpu_sampling = "taskset -c 4 env ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=5000 ADAPTIVEOPTICS_PROFILE_PRINT_CPU_SAMPLES=1 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --project=. --startup-file=no scripts/profile_curvature_plant_runtime.jl"
+cpu_counters = "taskset -c 4 perf stat -r 3 -e task-clock,cycles,instructions,branches,branch-misses,cache-references,cache-misses,page-faults,context-switches,cpu-migrations -- env ADAPTIVEOPTICS_PROFILE_BACKEND=cpu ADAPTIVEOPTICS_PROFILE_STEPS=100000 ADAPTIVEOPTICS_PROFILE_PRINT_CPU_SAMPLES=0 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --project=. --startup-file=no scripts/profile_curvature_plant_runtime.jl"
+cuda = "ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --project=test/cuda --startup-file=no scripts/profile_curvature_plant_runtime.jl"
+nsight_systems = "ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 nsys profile --trace=cuda,nvtx --capture-range=cudaProfilerApi --capture-range-end=stop --sample=none --cpuctxsw=none --output=/tmp/aos-curvature-plant-ccf6b2b --force-overwrite=true -- julia --project=test/cuda --startup-file=no scripts/profile_curvature_plant_runtime.jl"
+nsight_compute = "/opt/nvidia/nsight-compute/2026.3.1/ncu --set full --nvtx --nvtx-include aos_curvature_plant/ --target-processes all --force-overwrite --export /tmp/aos-curvature-plant-ccf6b2b env ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --project=test/cuda --startup-file=no scripts/profile_curvature_plant_runtime.jl"
+amdgpu = "ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 julia --project=test/amdgpu --startup-file=no scripts/profile_curvature_plant_runtime.jl"
+rocprofiler = "ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 rocprofv3 --runtime-trace --stats --selected-regions --kernel-rename --output-format csv --output-directory /tmp/aos-curvature-plant-ccf6b2b-rocp --output-file curvature -- julia --project=test/amdgpu --startup-file=no scripts/profile_curvature_plant_runtime.jl"

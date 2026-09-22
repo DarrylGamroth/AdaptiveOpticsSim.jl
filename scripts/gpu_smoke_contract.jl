@@ -705,7 +705,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return observation_storage(observation)
     end
 
-    record_gpu_smoke!(failures, "measure_curvature_atmosphere") do
+    record_gpu_smoke!(failures, "curvature_atmosphere_optics") do
         atm = MultiLayerAtmosphere(tel;
             r0=T(0.2),
             reference_wavelength_m=T(500e-9),
@@ -717,11 +717,17 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
             T=T,
             backend=backend,
         )
-        advance_by!(atm, atmosphere_step; rng=rng)
+        epoch = advance_by!(atm, atmosphere_step; rng=rng)
+        atmospheric_pupil = PupilFunction(tel; T=T, backend=backend)
+        renderer = prepare_atmosphere_renderer(atm, tel, src)
+        render_atmosphere!(atmospheric_pupil, renderer, atm, epoch)
         wfs = CurvatureWFS(tel; pupil_samples=4, T=T, backend=backend)
-        slopes = measure!(wfs, pupil, src, atm)
-        @assert slopes isa BackendArray
-        return slopes
+        front_end = CurvatureOpticalFrontEnd(wfs, src)
+        rates = curvature_rate_maps(front_end, atmospheric_pupil)
+        optics = prepare_wfs_optics(front_end, atmospheric_pupil, rates)
+        form_wfs_optical_products!(rates, atmospheric_pupil, optics)
+        @assert all(rate -> rate.values isa BackendArray, rates)
+        return rates[1].values
     end
 
     record_gpu_smoke!(failures, "plant_step") do

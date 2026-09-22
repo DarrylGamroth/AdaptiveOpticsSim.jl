@@ -130,8 +130,22 @@
     @test !applicable(slopes, zwfs)
     @test !supports_valid_subaperture_mask(zwfs)
     @test !supports_reference_signal(zwfs)
-    assert_wfs_interface(curv, tel)
-    assert_wfs_interface(curv_count, tel)
+    @test !applicable(update_valid_mask!, curv, pupil)
+    @test !applicable(measure!, curv, pupil)
+    @test !applicable(slopes, curv)
+    @test !supports_valid_subaperture_mask(curv)
+    @test !supports_reference_signal(curv)
+    @test !applicable(update_valid_mask!, curv_count, pupil)
+    @test !applicable(measure!, curv_count, pupil)
+    @test !applicable(slopes, curv_count)
+    @test !supports_valid_subaperture_mask(curv_count)
+    @test !supports_reference_signal(curv_count)
+    curvature_front_end = CurvatureOpticalFrontEnd(curv, src)
+    curvature_rates = curvature_rate_maps(curvature_front_end, pupil)
+    curvature_optics = prepare_wfs_optics(curvature_front_end, pupil,
+        curvature_rates)
+    @test applicable(form_wfs_optical_products!, curvature_rates, pupil,
+        curvature_optics)
     @test supports_valid_subaperture_mask(wfs)
     @test valid_subaperture_mask(wfs) === wfs.front_end.layout.valid_mask
     @test !isdefined(WavefrontSensors, :camera_frame)
@@ -186,6 +200,5 @@
     zernike_rate = zernike_rate_map(zernike_front_end, pupil)
     zernike_optics = prepare_wfs_optics(zernike_front_end, pupil, zernike_rate)
     @test applicable(form_wfs_optical_products!, zernike_rate, pupil, zernike_optics)
-    prepare_runtime_wfs!(curv, pupil, src)
-    @test curv.estimator.state.calibrated
+    @test prepare_runtime_wfs!(curv, pupil, src) === curv
 end

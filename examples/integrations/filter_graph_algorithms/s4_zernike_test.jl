@@ -3,12 +3,12 @@ using AdaptiveOpticsSim.WavefrontSensors: observation_storage
 using FilterGraphAlgorithms
 using JuliaFilterGraph
 
-@testset "AOS Zernike plant and FGA 0.4 pupil-signal boundary" begin
+@testset "AOS Zernike plant and FGA 0.5 pupil-signal boundary" begin
     prepared = prepare_s4_zernike()
-    @test Base.pkgversion(FilterGraphAlgorithms) == v"0.4.0"
-    @test Base.pkgversion(JuliaFilterGraph) == v"0.2.2"
-    @test prepared.fga_tree_claim == "598a10402690250190ad1dd976b03577281e6388"
-    @test prepared.jfg_tree_claim == "edaa8b14e2a2b9266cff5674ecbe9c9f6c20c17c"
+    @test Base.pkgversion(FilterGraphAlgorithms) == v"0.5.0"
+    @test Base.pkgversion(JuliaFilterGraph) == v"0.2.3"
+    @test prepared.fga_tree_claim == "0ce4ceae4904446fba170ee25324d65b435c06e6"
+    @test prepared.jfg_tree_claim == "1893cea2d29f0cd89303939308e23ce7546bc240"
 
     # The asymmetric fixture freezes the AOS (x,y) to FGA
     # (row=y,column=x) transfer, support order, reference image, calibration
