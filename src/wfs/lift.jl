@@ -8,4 +8,5 @@
 include("lift/kernels.jl")
 include("lift/contracts.jl")
 include("lift/forward.jl")
+include("lift/aoc_adapter.jl")
 include("lift/estimation.jl")

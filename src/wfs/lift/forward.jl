@@ -33,10 +33,9 @@ function _apply_lift_mapping!(mapping::LiFTFrameMapping,
     return workspace.mapped_rate_buffer
 end
 
-function _lift_rate_values_from_opd!(forward::PreparedLiFTForward,
-    opd::AbstractMatrix; rate_scale::Real=1.0)
-    model = forward.plan
-    workspace = forward.workspace
+function _lift_rate_values_from_opd!(model::LiFTForwardPlan,
+    workspace::LiFTForwardWorkspace, opd::AbstractMatrix;
+    rate_scale::Real=1.0)
     size(opd) == size(model.diversity_opd) || throw(DimensionMismatchError(
         "LiFT forward OPD must match the prepared pupil dimensions"))
     T = eltype(workspace.optical_rate_buffer)
@@ -46,13 +45,19 @@ function _lift_rate_values_from_opd!(forward::PreparedLiFTForward,
     amplitude_scale = sqrt(model.photon_irradiance * scale *
         model.pupil_cell_area_m2)
     @. workspace.amplitude_buffer = model.pupil_amplitude * amplitude_scale
-    oversampling = focal_field_from_opd!(workspace.focal_buffer, forward,
-        workspace.amplitude_buffer, opd)
+    oversampling = focal_field_from_opd!(workspace.focal_buffer, model,
+        workspace, workspace.amplitude_buffer, opd)
     field_intensity!(workspace.optical_rate_buffer, workspace.focal_buffer,
         oversampling, workspace.field_scratch)
-    maybe_object_convolve!(forward, workspace.optical_rate_buffer)
+    maybe_object_convolve!(model, workspace, workspace.optical_rate_buffer)
     return _apply_lift_mapping!(model.mapping, workspace,
         workspace.optical_rate_buffer)
+end
+
+@inline function _lift_rate_values_from_opd!(forward::PreparedLiFTForward,
+    opd::AbstractMatrix; rate_scale::Real=1.0)
+    return _lift_rate_values_from_opd!(forward.plan, forward.workspace, opd;
+        rate_scale=rate_scale)
 end
 
 """
@@ -114,10 +119,14 @@ function center_crop!(dest::AbstractMatrix, src::AbstractMatrix)
     return dest
 end
 
-@inline function maybe_object_convolve!(
-    forward::PreparedLiFTForward, matrix::AbstractMatrix)
-    return _maybe_object_convolve!(forward.plan.object_kernel,
-        forward.workspace, matrix)
+@inline function maybe_object_convolve!(model::LiFTForwardPlan,
+    workspace::LiFTForwardWorkspace, matrix::AbstractMatrix)
+    return _maybe_object_convolve!(model.object_kernel, workspace, matrix)
+end
+
+@inline function maybe_object_convolve!(forward::PreparedLiFTForward,
+    matrix::AbstractMatrix)
+    return maybe_object_convolve!(forward.plan, forward.workspace, matrix)
 end
 
 @inline _maybe_object_convolve!(::Nothing, ::LiFTForwardWorkspace,
@@ -310,14 +319,13 @@ end
 end
 
 function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}},
-    forward::PreparedLiFTForward,
+    model::LiFTForwardPlan, workspace::LiFTForwardWorkspace,
     amplitude::AbstractMatrix{T}, opd::AbstractMatrix) where {T<:AbstractFloat}
-    model = forward.plan
     n = size(model.pupil_mask, 1)
     oversampling = lift_oversampling(model.zero_padding)
     n_pad = lift_pad_size(n, model.zero_padding)
     image_size = model.focal_resolution * oversampling
-    ws = forward.workspace.propagation
+    ws = workspace.propagation
     ensure_psf_buffers!(ws, n_pad)
     if size(dest) != (image_size, image_size)
         throw(DimensionMismatchError("LiFT focal field buffer size must match oversampled image size"))
@@ -348,6 +356,13 @@ function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}},
     stop = Int(ceil(n_pad / 2)) + div(image_size, 2) + shift_pix
     @views copyto!(dest, ws.fft_buffer[start:stop, start:stop])
     return oversampling
+end
+
+@inline function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}},
+    forward::PreparedLiFTForward, amplitude::AbstractMatrix{T},
+    opd::AbstractMatrix) where {T<:AbstractFloat}
+    return focal_field_from_opd!(dest, forward.plan, forward.workspace,
+        amplitude, opd)
 end
 
 function field_intensity!(dest::AbstractMatrix{T}, field::AbstractMatrix{Complex{T}}, oversampling::Int,

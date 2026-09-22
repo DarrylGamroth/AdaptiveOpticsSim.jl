@@ -14,6 +14,8 @@ using LinearAlgebra
 using Random
 using Statistics
 
+import ..AdaptiveOpticsCalibration: PhaseRetrieval
+
 import ..AdaptiveOpticsSim:
     AdaptiveOpticsSimError,
     AbstractDetector,

@@ -89,6 +89,7 @@ export LiFTVarianceMapWeighting
 export LiFTTotalRateMatching
 export LiFTPeakRateMatching
 export LiFTPhysicalRatePreservation
+export LiFTForwardModel
 
 public supports_prepared_runtime
 public supports_detector_output
