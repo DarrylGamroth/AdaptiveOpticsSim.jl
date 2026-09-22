@@ -572,6 +572,14 @@ function _prepare_lift_forward(plan::LiFTForwardPlan)
     return _require_lift_forward_owner(forward)
 end
 
+@inline function _lift_propagation_workspace_arrays(
+    workspace::LiFTForwardWorkspace,
+)
+    propagation = workspace.propagation
+    return (propagation.pupil_field, propagation.fft_buffer,
+        propagation.psf_buffer)
+end
+
 @inline function _lift_forward_workspace_arrays(workspace::LiFTForwardWorkspace)
     return (workspace.optical_rate_buffer, workspace.amplitude_buffer,
         workspace.field_scratch, workspace.focal_buffer,
@@ -708,6 +716,16 @@ end
 end
 @inline _lift_mightalias_any(::Any, ::Tuple) = false
 
+@inline function _lift_mightalias_forward_workspace(
+    value::AbstractArray,
+    workspace::LiFTForwardWorkspace,
+)
+    return _lift_mightalias_any(
+        value,
+        _lift_propagation_workspace_arrays(workspace),
+    ) || _lift_mightalias_any(value, _lift_forward_workspace_arrays(workspace))
+end
+
 function _require_lift_forward_owner(forward::PreparedLiFTForward)
     _require_lift_forward_input(forward.plan, forward.input)
     _require_lift_forward_workspace(forward.plan, forward.workspace)
@@ -734,7 +752,11 @@ function _require_lift_forward_owner(forward::PreparedLiFTForward)
     storages = (_lift_forward_plan_arrays(forward.plan)..., forward.input,
         forward.output.values,
         _lift_forward_workspace_arrays(forward.workspace)...)
-    _lift_any_alias(storages) && throw(
+    propagation_storages =
+        _lift_propagation_workspace_arrays(forward.workspace)
+    (_lift_any_alias(storages) ||
+        _lift_any_alias(propagation_storages) ||
+        _lift_any_cross_alias(propagation_storages, storages)) && throw(
         InvalidConfiguration(
             "LiFT forward plan, input, output, and workspace must not alias"))
     return forward
@@ -1023,6 +1045,12 @@ end
         _lift_any_alias(remaining)
 end
 
+@inline _lift_any_cross_alias(::Tuple{}, ::Tuple) = false
+@inline function _lift_any_cross_alias(values::Tuple, other_values::Tuple)
+    return _lift_mightalias_any(first(values), other_values) ||
+        _lift_any_cross_alias(Base.tail(values), other_values)
+end
+
 function _require_lift_estimation_array(array::AbstractArray,
     ::Type{E}, dimensions::Tuple, lift::PreparedLiFTEstimator,
     label::AbstractString) where {E<:Number}
@@ -1069,6 +1097,8 @@ end
 
 function _require_lift_estimation_aliases(lift::PreparedLiFTEstimator)
     forward_plan_arrays = _lift_forward_plan_arrays(lift.forward.plan)
+    propagation_arrays =
+        _lift_propagation_workspace_arrays(lift.forward.workspace)
     forward_arrays = _lift_forward_workspace_arrays(lift.forward.workspace)
     estimation_plan_arrays = _lift_estimation_plan_arrays(lift.plan)
     estimation_arrays = _lift_estimation_workspace_arrays(lift.workspace)
@@ -1077,7 +1107,9 @@ function _require_lift_estimation_aliases(lift::PreparedLiFTEstimator)
         estimation_plan_arrays..., estimation_arrays...,
         lift.observation.values, lift.coefficients,
         lift.initial_coefficients)
-    _lift_any_alias(storages) && throw(
+    (_lift_any_alias(storages) ||
+        _lift_any_alias(propagation_arrays) ||
+        _lift_any_cross_alias(propagation_arrays, storages)) && throw(
         InvalidConfiguration(
             "LiFT plan, input, product, observation, and workspace storage must not alias"))
     return lift

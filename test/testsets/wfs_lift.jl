@@ -223,6 +223,118 @@ end
         check_convergence=false)
     adaptive_estimate = WavefrontSensors.reconstruct(lift_adaptive_truth)
     @test adaptive_estimate ≈ adaptive_truth rtol=2e-3 atol=eps(Float64)
+
+    aoc_model = LiFTForwardModel(adaptive_forward)
+    @test aoc_model isa AOCPhaseRetrieval.AbstractLiFTForwardModel{Float64}
+    @test fieldnames(typeof(aoc_model)) == (:plan,)
+    @test !hasfield(typeof(aoc_model), :forward)
+    @test !hasfield(typeof(aoc_model), :workspace)
+    @test aoc_model.plan === lift_forward_plan(adaptive_forward)
+    @test isconcretetype(typeof(aoc_model))
+    @test AOCPhaseRetrieval.coefficient_count(aoc_model) == 2
+    @test AOCPhaseRetrieval.observation_axes(aoc_model) == axes(adaptive_target)
+
+    aoc_specification = AOCPhaseRetrieval.LiFTSpecification(aoc_model,
+        AOCPhaseRetrieval.LiFTPhotonRate())
+    aoc_analytic_plan = AdaptiveOpticsCalibration.prepare(
+        AOCPhaseRetrieval.LiFT(iterations=3,
+            jacobian_method=AOCPhaseRetrieval.LiFTAnalyticJacobian(),
+            solve_mode=AOCPhaseRetrieval.LiFTSolveNormalEquations(),
+            damping=AOCPhaseRetrieval.LiFTAdaptiveLevenbergMarquardt(),
+            mode_indices=(1, 2), check_convergence=false),
+        aoc_specification)
+    aoc_analytic_result = AdaptiveOpticsCalibration.allocate_result(
+        aoc_analytic_plan)
+    aoc_analytic_workspace = AdaptiveOpticsCalibration.allocate_workspace(
+        aoc_analytic_plan)
+    aoc_inputs = AOCPhaseRetrieval.LiFTInputs(copy(adaptive_target))
+    @test isconcretetype(typeof(aoc_analytic_workspace))
+    @test isconcretetype(typeof(aoc_analytic_workspace.model_workspace))
+    aoc_prediction = AOCPhaseRetrieval.allocate_photon_rate(aoc_model)
+    @test (@inferred AOCPhaseRetrieval.predict_photon_rate!(aoc_prediction,
+        aoc_model, aoc_analytic_workspace.model_workspace,
+        adaptive_truth)) === aoc_prediction
+    @test aoc_prediction ≈ adaptive_target rtol=2e-3 atol=eps(Float64)
+    @test (@inferred AdaptiveOpticsCalibration.process!(aoc_analytic_result,
+        aoc_analytic_workspace, aoc_analytic_plan, aoc_inputs)) ===
+        aoc_analytic_result
+    @test AOCPhaseRetrieval.lift_coefficients(aoc_analytic_result) ≈
+        adaptive_estimate rtol=2e-3 atol=eps(Float64)
+    @test AOCPhaseRetrieval.lift_coefficients(aoc_analytic_result) ≈
+        adaptive_truth rtol=2e-3 atol=eps(Float64)
+    if coverage_instrumented()
+        @test_skip "AdaptiveOpticsCalibration LiFT allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(AdaptiveOpticsCalibration.process!(
+            aoc_analytic_result, aoc_analytic_workspace,
+            aoc_analytic_plan, aoc_inputs)) == 0
+    end
+
+    lift_numerical_truth = prepare_test_lift(adaptive_forward,
+        adaptive_observation; iterations=3,
+        jacobian_method=LiFTNumericalJacobian(),
+        solve_mode=LiFTSolveNormalEquations(),
+        damping=LiFTAdaptiveLevenbergMarquardt(),
+        check_convergence=false)
+    numerical_estimate = WavefrontSensors.reconstruct(lift_numerical_truth)
+    aoc_numerical_plan = AdaptiveOpticsCalibration.prepare(
+        AOCPhaseRetrieval.LiFT(iterations=3,
+            jacobian_method=AOCPhaseRetrieval.LiFTNumericalJacobian(1e-9),
+            solve_mode=AOCPhaseRetrieval.LiFTSolveNormalEquations(),
+            damping=AOCPhaseRetrieval.LiFTAdaptiveLevenbergMarquardt(),
+            mode_indices=(1, 2), check_convergence=false),
+        aoc_specification)
+    aoc_numerical_result = AdaptiveOpticsCalibration.allocate_result(
+        aoc_numerical_plan)
+    aoc_numerical_workspace = AdaptiveOpticsCalibration.allocate_workspace(
+        aoc_numerical_plan)
+    @test (@inferred AdaptiveOpticsCalibration.process!(aoc_numerical_result,
+        aoc_numerical_workspace, aoc_numerical_plan, aoc_inputs)) ===
+        aoc_numerical_result
+    @test AOCPhaseRetrieval.lift_coefficients(aoc_numerical_result) ≈
+        numerical_estimate rtol=2e-3 atol=eps(Float64)
+    analytic_coefficients = AOCPhaseRetrieval.lift_coefficients(
+        aoc_analytic_result)
+    @test AOCPhaseRetrieval.lift_coefficients(aoc_numerical_result) ≈
+        analytic_coefficients rtol=2e-3 atol=eps(Float64)
+    aliased_coefficients = @view aoc_numerical_workspace.model_workspace.opd[1:2]
+    @test_throws InvalidConfiguration AOCPhaseRetrieval.predict_photon_rate!(
+        aoc_prediction,
+        aoc_model,
+        aoc_numerical_workspace.model_workspace,
+        aliased_coefficients,
+    )
+    propagation = aoc_analytic_workspace.model_workspace.forward.propagation
+    aliased_jacobian = reshape(view(
+        reinterpret(Float64, vec(propagation.fft_buffer)), 1:128), 64, 2)
+    propagation_snapshot = copy(propagation.fft_buffer)
+    @test_throws InvalidConfiguration begin
+        AOCPhaseRetrieval.analytic_photon_rate_jacobian!(
+            aliased_jacobian,
+            aoc_model,
+            aoc_analytic_workspace.model_workspace,
+            adaptive_truth,
+            [1, 2],
+        )
+    end
+    @test propagation.fft_buffer == propagation_snapshot
+    invalid_jacobian = similar(aoc_numerical_workspace.jacobian)
+    @test_throws DimensionMismatchError begin
+        AOCPhaseRetrieval.analytic_photon_rate_jacobian!(
+            invalid_jacobian,
+            aoc_model,
+            aoc_numerical_workspace.model_workspace,
+            adaptive_truth,
+            [1, 3],
+        )
+    end
+    if coverage_instrumented()
+        @test_skip "AdaptiveOpticsCalibration numerical-LiFT allocation assertions are disabled under coverage instrumentation"
+    else
+        @test @allocated(AdaptiveOpticsCalibration.process!(
+            aoc_numerical_result, aoc_numerical_workspace,
+            aoc_numerical_plan, aoc_inputs)) == 0
+    end
     initialized_product = zeros(2)
     initialized_lift = prepare_lift_estimator(
         LiFT(iterations=1, solve_mode=LiFTSolveNormalEquations(),

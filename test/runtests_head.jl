@@ -24,6 +24,7 @@ Backends.set_fft_provider_threads!(1)
 
 const AOCReconstructors = AdaptiveOpticsCalibration.Reconstructors
 const AOCModalBases = AdaptiveOpticsCalibration.ModalBases
+const AOCPhaseRetrieval = AdaptiveOpticsCalibration.PhaseRetrieval
 
 const TEST_ATMOSPHERE_STEP = 1e-3
 const TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M = 500e-9
