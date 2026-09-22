@@ -48,8 +48,11 @@ the maintained package.
    maintained REVOLT Classic and Copper packages; instrument calibration and
    performance evidence remain with those packages.
 3. Complete target-first migration of the retained Bi-O-edge, Zernike, and
-   Curvature estimators to their approved FGA complete-frame contracts, and of
-   LiFT inverse estimation to its approved AdaptiveOpticsCalibration contract.
+   Curvature estimators through [FGA #17](https://github.com/DarrylGamroth/JuliaFilterGraph.jl/issues/17),
+   [FGA #18](https://github.com/DarrylGamroth/JuliaFilterGraph.jl/issues/18),
+   and [FGA #19](https://github.com/DarrylGamroth/JuliaFilterGraph.jl/issues/19),
+   respectively. Move LiFT inverse estimation through
+   [AdaptiveOpticsCalibration #5](https://github.com/DarrylGamroth/AdaptiveOpticsCalibration.jl/issues/5).
    Keep each AOS implementation until its target is released, parity-tested,
    and adopted; weighted-centroid estimation is not an AOS target.
 4. Build a separate SPIDERS instrument package from the retired Subaru/AO188
