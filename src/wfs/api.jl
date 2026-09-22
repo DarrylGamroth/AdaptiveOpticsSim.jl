@@ -28,7 +28,6 @@ export PyramidOpticalFrontEnd
 export pyramid_rate_map
 export BiOEdgeOpticalFrontEnd
 export bi_o_edge_rate_map
-export set_pyramid_calibration!
 export set_bi_o_edge_calibration!
 export ZernikeOpticalFrontEnd
 export zernike_rate_map
@@ -116,8 +115,6 @@ public PyramidOpticsPlan
 public PyramidOpticsBundlePlan
 public PreparedPyramidOptics
 public PreparedPyramidOpticsBundle
-public PyramidEstimationPlan
-public PreparedPyramidEstimator
 public AbstractPyramidModulationPropagationStrategy
 public PyramidPupilTiltStrategy
 public PyramidShiftedMaskStrategy

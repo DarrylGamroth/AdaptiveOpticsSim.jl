@@ -1013,9 +1013,6 @@ end
     source) = WavefrontSensors.bi_o_edge_intensity!(output, sensor, pupil,
     source)
 
-@inline contract_four_pupil_set_calibration!(::Val{:pyramid}, sensor,
-    reference; kwargs...) = set_pyramid_calibration!(sensor, reference;
-    kwargs...)
 @inline contract_four_pupil_set_calibration!(::Val{:bi_o_edge}, sensor,
     reference; kwargs...) = set_bi_o_edge_calibration!(sensor, reference;
     kwargs...)
@@ -1027,13 +1024,6 @@ end
     WavefrontSensors.pyramid_acquisition_products(sensor).frame
 @inline contract_four_pupil_acquisition_frame(::Val{:bi_o_edge}, sensor) =
     WavefrontSensors.bi_o_edge_acquisition_products(sensor).frame
-
-@inline function contract_four_pupil_resize_calibration!(::Val{:pyramid},
-    sensor)
-    resize_pyramid_signal_buffers!(sensor,
-        div(size(contract_four_pupil_acquisition_frame(
-            Val(:pyramid), sensor), 1), 2))
-end
 
 @inline function contract_four_pupil_resize_calibration!(::Val{:bi_o_edge},
     sensor)
@@ -1952,16 +1942,12 @@ end
     pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
     pupil_before = copy(pupil.opd)
 
-    pyramid = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+    pyramid = PyramidWFS(tel; pupil_samples=4,
         modulation=0, T=T)
     bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive(),
         modulation=0, T=T)
-    geometric_pyramid = PyramidWFS(tel; pupil_samples=4,
-        mode=Geometric(), T=T)
     geometric_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4,
         mode=Geometric(), T=T)
-    @test_throws WFSPreparationError PyramidOpticalFrontEnd(
-        geometric_pyramid, source)
     @test_throws WFSPreparationError BiOEdgeOpticalFrontEnd(
         geometric_bi_o_edge, source)
     @test pyramid.front_end.phase_mask isa PyramidPhaseMask{T}
@@ -1995,22 +1981,13 @@ end
 
     user_path = [(T(0), T(0), T(0.25)),
         (T(1), T(-0.5), T(0.75))]
-    user_pyramid = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(),
+    user_pyramid = PyramidWFS(tel; pupil_samples=4,
         modulation=2, user_modulation_path=user_path, T=T)
     @test user_pyramid.front_end.modulation.policy isa SampledModulation
-    @test user_pyramid.front_end.calibration_modulation.policy ===
-        user_pyramid.front_end.modulation.policy
-    @test user_pyramid.front_end.calibration_modulation.phases !==
-        user_pyramid.front_end.modulation.phases
     circular_pyramid = PyramidWFS(tel; pupil_samples=4,
-        mode=Diffractive(), modulation=2, modulation_points=8,
-        calib_modulation=3, T=T)
+        modulation=2, modulation_points=8, T=T)
     @test circular_pyramid.front_end.modulation.policy isa CircularModulation
-    @test circular_pyramid.front_end.calibration_modulation.policy isa
-        CircularModulation
     @test circular_pyramid.front_end.modulation.policy.radius == T(2)
-    @test circular_pyramid.front_end.calibration_modulation.policy.radius ==
-        T(3)
     circular_bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4,
         mode=Diffractive(), modulation=2, modulation_points=8,
         calib_modulation=3, T=T)
@@ -2025,12 +2002,10 @@ end
         exposure_duration=one(T), qe=one(T), binning=1,
         sensor=CMOSSensor(T=T), T=T)
     flat_pupil = PupilFunction(tel; T=T)
-    measure!(circular_pyramid, flat_pupil, source, calibration_detector)
-    @test norm(Array(slopes(circular_pyramid))) <= T(2e-2)
     measure!(circular_bi_o_edge, flat_pupil, source)
     @test norm(Array(slopes(circular_bi_o_edge))) <= T(2e-2)
 
-    for family in (Val(:pyramid), Val(:bi_o_edge))
+    for family in (Val(:bi_o_edge),)
         staged = contract_four_pupil_sensor(family, tel; pupil_samples=4,
             mode=Diffractive(), modulation=0, T=T)
         front_end = contract_four_pupil_front_end(family, staged, source)
@@ -2337,7 +2312,7 @@ end
 
     alternate_telescope = Telescope(resolution=32, diameter=T(8),
         central_obstruction=zero(T), T=T)
-    for family in (Val(:pyramid), Val(:bi_o_edge))
+    for family in (Val(:bi_o_edge),)
         stale_sensor = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         stale_front_end = contract_four_pupil_front_end(family, stale_sensor,
@@ -2357,7 +2332,7 @@ end
         @test stale_rate.values == stale_before
     end
 
-    for family in (Val(:pyramid), Val(:bi_o_edge))
+    for family in (Val(:bi_o_edge),)
         trajectory_pupil = PupilFunction(tel; T=T)
         first_sensor = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
@@ -2390,7 +2365,7 @@ end
         end
     end
 
-    for family in (Val(:pyramid), Val(:bi_o_edge))
+    for family in (Val(:bi_o_edge),)
         zero_sensor = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         circular_sensor = contract_four_pupil_sensor(family, tel;
@@ -2425,7 +2400,7 @@ end
     extended = with_extended_source(source, PointCloudSourceModel(
         [(T(0), T(0)), (T(0.2), T(-0.1))], T[0.3, 0.7]; T=T))
 
-    for family in (Val(:pyramid), Val(:bi_o_edge))
+    for family in (Val(:bi_o_edge),)
         spectral_sensor = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         spectral_front_end = contract_four_pupil_front_end(family,
@@ -2482,7 +2457,7 @@ end
             T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
         laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     heterogeneous_source = Asterism(AbstractSource[source, simple_lgs])
-    for family in (Val(:pyramid), Val(:bi_o_edge))
+    for family in (Val(:bi_o_edge),)
         sensor = contract_four_pupil_sensor(family, tel; pupil_samples=4,
             mode=Diffractive(), modulation=0, T=T)
         front_end = contract_four_pupil_front_end(family, sensor,
@@ -2501,7 +2476,7 @@ end
                 plan)) == 0
         end
     end
-    for family in (Val(:pyramid), Val(:bi_o_edge)),
+    for family in (Val(:bi_o_edge),),
             lgs in (simple_lgs, sodium_lgs)
         sensor = contract_four_pupil_sensor(family, tel; pupil_samples=4,
             mode=Diffractive(), modulation=0, T=T)
@@ -2944,7 +2919,7 @@ end
     @test WavefrontSensors._require_exact_wfs_target(
         curvature_optics, target) === curvature_optics
 
-    for family in (Val(:pyramid), Val(:bi_o_edge))
+    for family in (Val(:bi_o_edge),)
         four_pupil = contract_four_pupil_sensor(family, tel;
             pupil_samples=4, mode=Diffractive(), modulation=0, T=T)
         four_pupil_front_end = contract_four_pupil_front_end(

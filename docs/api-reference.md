@@ -121,11 +121,16 @@ Curvature, and LiFT paths. The general staged contract is:
 `WFSObservation` and `WFSMeasurement` are typed products with explicit
 metadata and units.
 
-The AOS Shack–Hartmann surface implements stages 1 and 2 only. Its complete
-detector observation is the package boundary; maintained operational
-estimation is provided by FilterGraphAlgorithms. The explicitly named
+The AOS Shack–Hartmann and Pyramid surfaces implement stages 1 and 2 only.
+Their complete detector observations are package boundaries; maintained
+operational estimation is provided by FilterGraphAlgorithms. The explicitly named
 `geometric_wavefront_slopes!` operation remains available for plant truth and
 reference calculations, not as a detector-derived RTC measurement.
+
+A prepared four-pupil LGS optics plan owns the sodium-profile kernel derived
+during preparation. To change sodium-layer altitudes or relative weights,
+construct the changed `LGSSource` and prepare a new optics plan; profile changes
+are not a repeated-path cache refresh.
 
 ## Calibration And RTC Integration
 

@@ -200,6 +200,25 @@ Historical artifacts remain attached to their recorded revision. If the
 implementation they measured was removed, label them historical rather than
 using them as current qualification.
 
+For a focused target-ready profile of the retained Pyramid plant boundary,
+run both modulation strategies with scalar indexing disabled:
+
+~~~bash
+ADAPTIVEOPTICS_PROFILE_BACKEND=cuda ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  julia --project=test/cuda --startup-file=no \
+  scripts/profile_pyramid_plant_runtime.jl
+
+ADAPTIVEOPTICS_PROFILE_BACKEND=amdgpu ADAPTIVEOPTICS_PROFILE_STEPS=1000 \
+  julia --project=test/amdgpu --startup-file=no \
+  scripts/profile_pyramid_plant_runtime.jl
+~~~
+
+Wrap the same command with Nsight Systems or ROCprofiler when collecting a
+timeline. Use Nsight Compute for CUDA kernel-counter investigation after the
+timeline identifies the kernel of interest. The script reports synchronized
+target-ready time and warmed host allocation; it does not claim an arrival-rate
+deadline or include an AOS/FGA device-resident bridge.
+
 ## Release Entry Point
 
 ~~~bash

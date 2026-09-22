@@ -69,9 +69,7 @@ import ..Detectors:
 
 import ..WavefrontSensors
 using ..WavefrontSensors
-import ..WavefrontSensors:
-    AbstractWFS,
-    apply_shift_wfs!
+import ..WavefrontSensors: AbstractWFS
 
 include("build_backends.jl")
 include("reconstructor_products.jl")

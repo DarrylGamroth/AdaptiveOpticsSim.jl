@@ -1252,7 +1252,7 @@ end
 
     @testset "Pyramid kernels" begin
         tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, modulation_points=3, mode=Diffractive())
+        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, modulation_points=3)
         propagation = WavefrontSensors.pyramid_propagation_workspace(wfs)
         @test propagation.modulation_batch isa
             WavefrontSensors.NoPyramidModulationBatchWorkspace
@@ -1264,15 +1264,9 @@ end
         mark_ka_cpu_kernel!(:pyramid_phasor_kernel!)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
-        scalar_mask = similar(propagation.pyramid_mask)
-        ka_mask = similar(propagation.pyramid_mask)
         pupil = PupilFunction(tel)
-        WavefrontSensors._build_pyramid_mask!(SCALAR_CPU_STYLE,
-            scalar_mask, wfs, pupil)
-        WavefrontSensors._build_pyramid_mask!(KA_CPU_STYLE, ka_mask, wfs,
-            pupil)
-        mark_ka_cpu_kernel!(:pyramid_mask_kernel!)
-        @test ka_cpu_close(ka_mask, scalar_mask)
+        build_pyramid_mask!(wfs, pupil)
+        @test @allocated(build_pyramid_mask!(wfs, pupil)) == 0
 
         modulation_policy = CircularModulation(2.0;
             samples=5, phase_offset_rad=0.3)
@@ -1290,16 +1284,6 @@ end
         @test ka_cpu_close(
             ka_modulation.phases, scalar_modulation.phases)
 
-        intensity = reshape(collect(1.0:(4 * 4 * 4 * 4)), 16, 16)
-        scalar_slopes = similar(slopes(wfs))
-        ka_slopes = similar(slopes(wfs))
-        valid_mask = trues(4, 4)
-        WavefrontSensors._pyramid_slopes!(SCALAR_CPU_STYLE, scalar_slopes, intensity, valid_mask, 2, 4, 16, 16,
-            0, 0, 0, 8, 8, 0, 8, 8, (0, 0, 0, 0), (0, 0, 0, 0))
-        WavefrontSensors._pyramid_slopes!(KA_CPU_STYLE, ka_slopes, intensity, valid_mask, 2, 4, 16, 16,
-            0, 0, 0, 8, 8, 0, 8, 8, (0, 0, 0, 0), (0, 0, 0, 0))
-        mark_ka_cpu_kernel!(:pyramid_slopes_kernel!)
-        @test ka_slopes == scalar_slopes
     end
 
     @testset "Bi-O-edge kernels" begin
@@ -1434,7 +1418,6 @@ end
             :dm_apply_gaussian_operator_kernel!,
             :fit_source_average_kernel!,
             :gather_bi_o_edge_slopes_kernel!,
-            :gather_pyramid_slopes_kernel!,
             :gather_stencil_data_kernel!,
             :guide_grid_kernel!,
             :guide_grid_stack_kernel!,

@@ -764,7 +764,6 @@ function _pyramid_rate_f32_node(
         :binning,
         :central_obstruction_ratio,
         :diffraction_padding,
-        :light_ratio,
         :modulation,
         :modulation_points,
         :modulation_propagation_strategy,
@@ -783,7 +782,6 @@ function _pyramid_rate_f32_node(
         :source_separation_arcsec,
         :source_wavelength_m,
         :telescope_diameter_m,
-        :threshold,
     )
     required_fields = (
         :opd_schema,
@@ -810,8 +808,6 @@ function _pyramid_rate_f32_node(
     aperture_revision = hasproperty(config, :aperture_revision) ?
         _file_integer(config.aperture_revision, "$context.aperture_revision") :
         0
-    threshold = hasproperty(config, :threshold) ?
-        _file_real(config.threshold, "$context.threshold") : 0.1
     modulation = hasproperty(config, :modulation) ?
         _file_real(config.modulation, "$context.modulation") : 2.0
     modulation_points = hasproperty(config, :modulation_points) ?
@@ -840,8 +836,6 @@ function _pyramid_rate_f32_node(
     else
         PyramidPupilTiltStrategy()
     end
-    light_ratio = hasproperty(config, :light_ratio) ?
-        _file_real(config.light_ratio, "$context.light_ratio") : 0.0
     diffraction_padding = hasproperty(config, :diffraction_padding) ?
         _file_integer(
             config.diffraction_padding,
@@ -902,11 +896,9 @@ function _pyramid_rate_f32_node(
             config.pupil_samples,
             "$context.pupil_samples",
         ),
-        threshold,
         modulation,
         modulation_points,
         modulation_propagation_strategy,
-        light_ratio,
         diffraction_padding,
         psf_centering,
         n_pix_separation,

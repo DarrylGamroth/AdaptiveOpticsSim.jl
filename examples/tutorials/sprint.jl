@@ -56,7 +56,7 @@ function main(; resolution::Int=16)
         collect(fields),
     )
     sprint = Calibration.SPRINT(meta, Misregistration(T=Float64),
-        Misregistration(T=Float64), false, :finite_difference)
+        Misregistration(T=Float64), :finite_difference)
     injected = Misregistration(shift_x=5e-4, shift_y=-5e-4, T=Float64)
     dm_in = DeformableMirror(tel; n_act=dm.params.n_act,
         influence_model=influence_model(dm), misregistration=injected)

@@ -7,8 +7,8 @@ using BenchmarkTools
 function bench_misregistration_wfs_ad_probe()
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
-    wfs = PyramidWFS(tel; pupil_samples=2, modulation=0.0,
-        mode=Geometric())
+    wfs = BiOEdgeWFS(tel; pupil_samples=2, modulation=0.0,
+        mode=Diffractive())
     basis = modal_basis(dm, tel; n_modes=2).M2C[:, 1:2]
     fields = [:shift_x, :shift_y, :rotation_deg]
 

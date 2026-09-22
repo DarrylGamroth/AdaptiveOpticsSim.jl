@@ -69,9 +69,10 @@ form_wfs_optical_products!(photon_rate, pupil, prepared_optics)
 ```
 
 Use `PyramidWFS`, `BiOEdgeWFS`, `CurvatureWFS`, or `ZernikeWFS` when the
-sensing physics changes. A `ShackHartmannWFS` composes a `MicrolensArray`;
-its AOS surface ends at physical optical products and complete detector
-observations. FilterGraphAlgorithms owns maintained Shack–Hartmann estimation.
+sensing physics changes. A `ShackHartmannWFS` composes a `MicrolensArray`.
+The AOS Shack–Hartmann and Pyramid surfaces end at physical optical products
+and complete detector observations. FilterGraphAlgorithms owns their maintained
+operational estimation.
 
 ## Recipe 3: Detector-Backed Sensing
 
@@ -167,17 +168,18 @@ acquisition timing, not optical performance or MTF.
 
 AOS owns atmospheric and optical propagation, WFS products, detector
 acquisition, and application of a complete PDM command. It does not own the
-in-process RTC. For the maintained Shack–Hartmann closed-loop composition,
-start from the
+in-process RTC. For the maintained Shack–Hartmann closed-loop composition and
+Pyramid plant-to-command composition, start from the
 [AOS plant/FGA RTC fixture](../examples/integrations/filter_graph_algorithms/).
 FilterGraphAlgorithms/JuliaFilterGraph owns reconstruction, controller state,
 frame delay, and VDM/PDM routing; AdaptiveOpticsCalibration owns reusable
 inverse products.
 
-The legacy AOS closed-loop examples are retired. Pyramid, Bi-O-edge, and
-Zernike RTC composition must be defined and accepted by the downstream package
-that owns the assembled system. The combined Subaru AO188/AO3k plant/RTC model
-is likewise retired from AOS pending its downstream instrument-package home.
+The legacy AOS closed-loop examples are retired. A complete Pyramid feedback
+loop, and Bi-O-edge and Zernike RTC composition, must be defined and accepted
+by the downstream package that owns the assembled system. The combined Subaru
+AO188/AO3k plant/RTC model is likewise retired from AOS pending its downstream
+instrument-package home.
 
 ## Recipe 5: Independent Controllable Optics
 

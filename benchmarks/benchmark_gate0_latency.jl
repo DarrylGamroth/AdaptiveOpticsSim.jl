@@ -158,8 +158,7 @@ function make_gate0_card(raw::AbstractDict)
         gate0_opd_ramp!(pupil)
         wfs = PyramidWFS(tel; pupil_samples=Int(raw["pupil_samples"]),
             modulation=3.0,
-            modulation_points=Int(raw["modulation_points"]),
-            mode=Diffractive())
+            modulation_points=Int(raw["modulation_points"]))
         front_end = PyramidOpticalFrontEnd(wfs, src)
         rate = pyramid_rate_map(front_end, pupil)
         optics_plan = prepare_wfs_optics(front_end, pupil, rate)
@@ -168,24 +167,15 @@ function make_gate0_card(raw::AbstractDict)
         observation = WFSObservation(similar(rate.values);
             units=:electron_count, layout=:four_pupil_mosaic)
         acquisition_plan = prepare_wfs_acquisition(detector, rate,
-            observation)
-        set_pyramid_calibration!(wfs,
-            zeros(size(wfs.estimator.state.reference_signal_2d));
-            wavelength_m=wavelength(src), signature=UInt(0x47305036))
-        measurement = WFSMeasurement(similar(slopes(wfs));
-            units=:dimensionless, kind=:differential_slopes)
-        estimator_plan = prepare_wfs_estimation(wfs, observation,
-            measurement)
+            observation; source=src)
         rng = runtime_rng(61)
         let rate=rate, pupil=pupil, optics_plan=optics_plan,
             observation=observation, acquisition_plan=acquisition_plan,
-            measurement=measurement, estimator_plan=estimator_plan, rng=rng
+            rng=rng
             () -> begin
                 form_wfs_optical_products!(rate, pupil, optics_plan)
                 acquire_wfs_observation!(observation, rate,
                     acquisition_plan, rng)
-                estimate_wfs_measurement!(measurement, observation,
-                    estimator_plan)
             end
         end
     elseif kind == "direct_science_two_detectors"

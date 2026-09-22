@@ -76,6 +76,36 @@ function acquire_shack_hartmann_observation!(wfs::ShackHartmannWFS,
     return observation
 end
 
+"""Form a Pyramid four-pupil detector-plane photon-rate product explicitly."""
+function form_pyramid_rate!(wfs::PyramidWFS, pupil, source)
+    front_end = PyramidOpticalFrontEnd(wfs, source)
+    rate = pyramid_rate_map(front_end, pupil)
+    optics = prepare_wfs_optics(front_end, pupil, rate)
+    form_wfs_optical_products!(rate, pupil, optics)
+    return rate
+end
+
+"""Form path-local Pyramid products for an asterism or extended source."""
+function form_pyramid_path_rates!(wfs::PyramidWFS, pupils, source)
+    front_end = PyramidOpticalFrontEnd(wfs, source)
+    rates = pyramid_rate_map(front_end, pupils)
+    optics = prepare_wfs_optics(front_end, pupils, rates)
+    form_wfs_optical_products!(rates, pupils, optics)
+    return rates
+end
+
+"""Form a Pyramid photon-rate frame and acquire its detector observation."""
+function acquire_pyramid_observation!(wfs::PyramidWFS, pupil, source,
+    detector::Detector, rng)
+    rate = form_pyramid_rate!(wfs, pupil, source)
+    observation = WFSObservation(similar(intensity_values(rate));
+        units=:electron_count, layout=:four_pupil_mosaic)
+    acquisition = prepare_wfs_acquisition(detector, rate, observation;
+        source=source)
+    acquire_wfs_observation!(observation, rate, acquisition, rng)
+    return observation
+end
+
 function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     disable_scalar_backend!(B)
     failures = String[]
@@ -576,44 +606,47 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return gpu_export
     end
 
-    record_gpu_smoke!(failures, "measure_pyramid_geometric") do
+    record_gpu_smoke!(failures, "pyramid_photon_rate") do
         wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, T=T, backend=backend)
-        slopes = measure!(wfs, pupil)
-        @assert slopes isa BackendArray
-        return slopes
+        rate = form_pyramid_rate!(wfs, pupil, src)
+        @assert intensity_values(rate) isa BackendArray
+        return intensity_values(rate)
     end
 
-    record_gpu_smoke!(failures, "measure_pyramid_diffractive") do
-        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, src)
-        @assert slopes isa BackendArray
-        return slopes
+    record_gpu_smoke!(failures, "pyramid_lgs_photon_rate") do
+        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, T=T,
+            backend=backend)
+        rate = form_pyramid_rate!(wfs, pupil, lgs)
+        @assert intensity_values(rate) isa BackendArray
+        @assert all(isfinite, Array(intensity_values(rate)))
+        return intensity_values(rate)
     end
 
-    record_gpu_smoke!(failures, "measure_pyramid_diffractive_polychromatic") do
+    record_gpu_smoke!(failures, "pyramid_spectral_rate_bundle") do
         bundle = SpectralBundle(T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6]; T=T)
         poly = with_spectrum(src, bundle)
-        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, poly)
-        @assert slopes isa BackendArray
-        return slopes
+        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, T=T, backend=backend)
+        rates = form_pyramid_rate!(wfs, pupil, poly)
+        @assert all(rate -> intensity_values(rate) isa BackendArray, rates)
+        return intensity_values(first(rates))
     end
 
-    record_gpu_smoke!(failures, "measure_pyramid_diffractive_extended") do
+    record_gpu_smoke!(failures, "pyramid_extended_source_rate_bundle") do
         model = GaussianDiskSourceModel(sigma_arcsec=T(0.35), n_side=5, T=T)
         ext = with_extended_source(src, model)
-        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
-        slopes = measure!(wfs, pupil, ext)
-        @assert slopes isa BackendArray
-        return slopes
+        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, T=T, backend=backend)
+        pupils = ntuple(_ -> pupil, length(extended_source_asterism(ext)))
+        rates = form_pyramid_path_rates!(wfs, pupils, ext)
+        @assert all(rate -> intensity_values(rate) isa BackendArray, rates)
+        return intensity_values(first(rates))
     end
 
-    record_gpu_smoke!(failures, "measure_pyramid_detector") do
-        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, mode=Diffractive(), T=T, backend=backend)
+    record_gpu_smoke!(failures, "pyramid_detector_acquisition") do
+        wfs = PyramidWFS(tel; pupil_samples=4, modulation=2.0, T=T, backend=backend)
         det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)
-        slopes = measure!(wfs, pupil, src, det; rng=rng)
-        @assert slopes isa BackendArray
-        return slopes
+        observation = acquire_pyramid_observation!(wfs, pupil, src, det, rng)
+        @assert observation_storage(observation) isa BackendArray
+        return observation_storage(observation)
     end
 
     record_gpu_smoke!(failures, "measure_bi_o_edge_geometric") do

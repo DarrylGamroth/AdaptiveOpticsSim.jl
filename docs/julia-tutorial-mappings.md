@@ -33,7 +33,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 | `tutorials/how_to_SPRINT.py` | `examples/tutorials/sprint.jl` | Mis-registration sensitivity and estimation |
 | `tutorials/AO_transfer_function.py` | `examples/tutorials/transfer_function.jl` | Closed-loop rejection and closed-loop transfer functions |
 | `tutorials/AO_closed_loop_ShackHartmannWFS_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained Shack–Hartmann plant/RTC fixture; AOS owns the plant and FGA/JFG owns the RTC |
-| `tutorials/AO_closed_loop_Pyramid_WFS.py` | Downstream package | AOS Pyramid sensing and the FGA Pyramid estimator remain available; their complete RTC composition and acceptance are not an AOS tutorial surface |
+| `tutorials/AO_closed_loop_Pyramid_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained complete-frame Pyramid plant/RTC fixture; AOS owns optical formation and detector acquisition, and FGA owns I4Q estimation and control |
 | `tutorials/AO_closed_loop_BioEdge_WFS.py` | Downstream package | AOS Bi-O-edge sensing remains available; its RTC composition and acceptance are not an AOS tutorial surface |
 | `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | `examples/tutorials/gain_sensing_camera.jl` | Pyramid modulation-frame and optical-gain estimation; no maintained AOS RTC composition |
 | `tutorials/how_to_tomography.py` | `examples/tutorials/tomography.jl` | Compact model-based tomography workflow plus committed pyTomoAO KAPA regression for wavefront and DM-command reconstruction |
@@ -41,13 +41,13 @@ Each script exposes a `main()` function and logs a short completion summary with
 ## Julia patterns behind the mapping
 
 - Where an OOPAO tutorial is cited, its `ngs*tel*wfs` source expression maps to
-  explicit AOS preparation and execution. Shack–Hartmann composition uses
+  explicit AOS preparation and execution. Shack–Hartmann and Pyramid composition use
   `prepare_wfs_optics` plus `form_wfs_optical_products!`, followed by explicit
   detector acquisition; operational estimation belongs to FGA.
 - Sensor families that retain alternate sensing models encode them in a type
-  parameter, not a mutable string flag. The AOS Shack–Hartmann surface is the
-  physical diffractive front end; direct OPD-gradient truth uses the explicitly
-  named `geometric_wavefront_slopes!` calculation.
+  parameter, not a mutable string flag. The AOS Shack–Hartmann and Pyramid
+  surfaces are physical diffractive front ends; direct OPD-gradient truth uses
+  the explicitly named `geometric_wavefront_slopes!` calculation.
 - Detector noise is encoded by the detector’s `noise` type, for example
   `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.
 - The maintained closed-loop fixtures keep the AOS plant and the FGA/JFG RTC
@@ -76,12 +76,15 @@ form_direct_image!(imaging)
 photon_rate_image = intensity_values(direct_imaging_output(imaging))
 ```
 
-### Diffractive WFS measurement
+### Diffractive Pyramid optical product
 
 ```julia
-wfs = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0, modulation_points=4)
+wfs = PyramidWFS(tel; pupil_samples=4, modulation=1.0, modulation_points=4)
 pupil = PupilFunction(tel)
-slopes = measure!(wfs, pupil, src)
+front_end = PyramidOpticalFrontEnd(wfs, src)
+photon_rate = pyramid_rate_map(front_end, pupil)
+prepared = prepare_wfs_optics(front_end, pupil, photon_rate)
+form_wfs_optical_products!(photon_rate, pupil, prepared)
 ```
 
 ## Logging in examples
@@ -91,7 +94,7 @@ Use structured logging instead of print statements:
 ```julia
 using Logging
 
-@info "Pyramid sensing tutorial complete" measurement_length=length(slopes(wfs))
+@info "Pyramid optical formation complete" photon_rate=sum(intensity_values(photon_rate))
 ```
 
 That keeps examples composable in scripts, tests, and notebooks.

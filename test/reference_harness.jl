@@ -859,152 +859,6 @@ function closed_loop_trace(wfs::AbstractWFS, tel::Telescope, src::AbstractSource
     return trace
 end
 
-function gsc_closed_loop_trace(tel::Telescope, src::AbstractSource, wfs::PyramidWFS,
-    control_basis::AbstractArray{<:Real,3}, forcing_coeffs::AbstractMatrix{<:Real};
-    gain::Real, frame_delay::Int, calibration_amplitude::Real, psf_zero_padding::Int,
-    og_floor::Real)
-    n_iter, n_modes = size(forcing_coeffs)
-    pupil = PupilFunction(tel)
-    H = reference_interaction_matrix(wfs, pupil, src, control_basis;
-        amplitude=calibration_amplitude)
-    recon = pinv(H)
-    control_coeffs = zeros(Float64, n_modes)
-    delayed_slopes = zeros(Float64, size(H, 1))
-    forcing_opd = zeros(Float64, size(pupil.opd))
-    correction_opd = similar(forcing_opd)
-    residual_opd = similar(forcing_opd)
-    gsc = GainSensingCamera(wfs, control_basis)
-    reset_opd!(pupil)
-    calibration_frame = pyramid_modulation_frame(wfs, pupil, src)
-    calibrate!(gsc, calibration_frame)
-    frame = similar(calibration_frame)
-    og_safe = similar(gsc.og)
-    reset_opd!(pupil)
-    science = prepare_reference_direct_imaging(pupil, src;
-        zero_padding=psf_zero_padding)
-    psf_ref = copy(intensity_values(
-        execute_reference_direct_imaging!(science, pupil)))
-    trace = Matrix{Float64}(undef, n_iter, 6)
-
-    for iter in 1:n_iter
-        @views combine_reference_modes!(forcing_opd, control_basis, forcing_coeffs[iter, :])
-        combine_reference_modes!(correction_opd, control_basis, control_coeffs)
-        @. residual_opd = forcing_opd - correction_opd
-        pupil.opd .= residual_opd
-        trace[iter, 1] = pupil_rms_nm(forcing_opd, pupil_mask(tel))
-        trace[iter, 2] = pupil_rms_nm(residual_opd, pupil_mask(tel))
-        psf = intensity_values(execute_reference_direct_imaging!(science,
-            pupil))
-        trace[iter, 3] = strehl_ratio(psf, psf_ref)
-        slopes = measure!(wfs, pupil, src)
-        trace[iter, 4] = norm(slopes)
-        pyramid_modulation_frame!(frame, wfs, pupil, src)
-        og = compute_optical_gains!(gsc, frame)
-        @. og_safe = max(abs(og), og_floor)
-        trace[iter, 5] = sum(og_safe) / length(og_safe)
-        if frame_delay == 1
-            delayed_slopes .= slopes
-        end
-        control_coeffs .+= gain .* ((recon * delayed_slopes) ./ og_safe)
-        trace[iter, 6] = norm(control_coeffs)
-        if frame_delay == 2
-            delayed_slopes .= slopes
-        elseif frame_delay != 1
-            throw(InvalidConfiguration("unsupported frame delay $(frame_delay)"))
-        end
-    end
-    return trace
-end
-
-function gsc_atmosphere_replay_trace(
-    tel::Telescope,
-    ngs::AbstractSource,
-    sci::AbstractSource,
-    wfs::PyramidWFS,
-    control_basis::AbstractArray{<:Real,3},
-    forcing_ngs::AbstractArray{<:Real,3},
-    forcing_src::AbstractArray{<:Real,3};
-    gain::Real,
-    frame_delay::Int,
-    calibration_amplitude::Real,
-    psf_zero_padding::Int,
-    og_floor::Real,
-)
-    size(forcing_ngs) == size(forcing_src) ||
-        throw(DimensionMismatchError("forcing_ngs and forcing_src must have matching shapes"))
-    pupil = PupilFunction(tel)
-    size(forcing_ngs, 1) == size(pupil.opd, 1) == size(forcing_ngs, 2) ==
-        size(pupil.opd, 2) ||
-        throw(DimensionMismatchError("forcing OPD stack must match telescope resolution"))
-
-    n_iter = size(forcing_ngs, 3)
-    n_modes = size(control_basis, 3)
-    H = reference_interaction_matrix(wfs, pupil, ngs, control_basis;
-        amplitude=calibration_amplitude)
-    recon = pinv(H)
-    control_coeffs = zeros(Float64, n_modes)
-    delayed_slopes = zeros(Float64, size(H, 1))
-    correction_opd = zeros(Float64, size(pupil.opd))
-    residual_ngs = similar(correction_opd)
-    residual_src = similar(correction_opd)
-    gsc = GainSensingCamera(wfs, control_basis)
-    reset_opd!(pupil)
-    calibration_frame = pyramid_modulation_frame(wfs, pupil, ngs)
-    calibrate!(gsc, calibration_frame)
-    frame = similar(calibration_frame)
-    og_safe = similar(gsc.og)
-
-    reset_opd!(pupil)
-    ngs_science = prepare_reference_direct_imaging(pupil, ngs;
-        zero_padding=psf_zero_padding)
-    sci_science = prepare_reference_direct_imaging(pupil, sci;
-        zero_padding=psf_zero_padding)
-    ngs_psf_ref = copy(intensity_values(
-        execute_reference_direct_imaging!(ngs_science, pupil)))
-    sci_psf_ref = copy(intensity_values(
-        execute_reference_direct_imaging!(sci_science, pupil)))
-
-    trace = Matrix{Float64}(undef, n_iter, 7)
-    for iter in 1:n_iter
-        forcing_ngs_i = @view forcing_ngs[:, :, iter]
-        forcing_src_i = @view forcing_src[:, :, iter]
-        combine_reference_modes!(correction_opd, control_basis, control_coeffs)
-        @. residual_ngs = forcing_ngs_i - correction_opd
-        @. residual_src = forcing_src_i - correction_opd
-
-        apply_opd!(pupil, residual_ngs)
-        trace[iter, 1] = pupil_rms_nm(forcing_ngs_i, pupil_mask(tel))
-        trace[iter, 2] = pupil_rms_nm(residual_ngs, pupil_mask(tel))
-        ngs_psf = intensity_values(execute_reference_direct_imaging!(
-            ngs_science, pupil))
-        trace[iter, 4] = strehl_ratio(ngs_psf, ngs_psf_ref)
-        slopes = measure!(wfs, pupil, ngs)
-        trace[iter, 6] = norm(slopes)
-        pyramid_modulation_frame!(frame, wfs, pupil, ngs)
-        og = compute_optical_gains!(gsc, frame)
-        @. og_safe = max(abs(og), og_floor)
-
-        apply_opd!(pupil, residual_src)
-        trace[iter, 3] = pupil_rms_nm(residual_src, pupil_mask(tel))
-        src_psf = intensity_values(execute_reference_direct_imaging!(
-            sci_science, pupil))
-        trace[iter, 5] = strehl_ratio(src_psf, sci_psf_ref)
-
-        if frame_delay == 1
-            delayed_slopes .= slopes
-        end
-        control_coeffs .+= gain .* ((recon * delayed_slopes) ./ og_safe)
-        trace[iter, 7] = sum(og_safe) / length(og_safe)
-        if frame_delay == 2
-            delayed_slopes .= slopes
-        elseif frame_delay != 1
-            throw(InvalidConfiguration("unsupported frame delay $(frame_delay)"))
-        end
-    end
-
-    return trace
-end
-
 function transfer_functions(freq::AbstractVector{T}, loop_gain::T, Ti::T, Tau::T, Tdm::T) where {T<:AbstractFloat}
     S = complex.(zero(T), T(2π)) .* freq
     H_wfs = exp.(-Ti * S / 2)
@@ -1083,14 +937,11 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             pixel_scale_arcsec=Float64(pixel_scale), n_pix_subap=Int(n_pix_subap),
             threshold_convolution=threshold_convolution,
             half_pixel_shift=half_pixel_shift)
-    elseif kind in (:pyramid_slopes, :pyramid_frame)
+    elseif kind === :pyramid_frame
         pupil_samples = Int(cfg["pupil_samples"])
         return PyramidWFS(tel;
             pupil_samples=pupil_samples,
-            threshold=threshold,
             modulation=Float64(get(cfg, "modulation", 0.0)),
-            light_ratio=Float64(get(cfg, "light_ratio", 0.0)),
-            normalization=parse_wfs_normalization(get(cfg, "normalization", "mean_valid_flux")),
             modulation_points=get(cfg, "modulation_points", nothing),
             extra_modulation_factor=Int(get(cfg, "extra_modulation_factor", 0)),
             old_mask=Bool(get(cfg, "old_mask", false)),
@@ -1104,7 +955,6 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             n_pix_separation=get(cfg, "n_pix_separation", nothing),
             n_pix_edge=get(cfg, "n_pix_edge", nothing),
             binning=Int(get(cfg, "binning", 1)),
-            mode=mode,
         )
     elseif kind === OOPAO_BI_O_EDGE_KIND
         pupil_samples = Int(cfg["pupil_samples"])
@@ -1179,8 +1029,8 @@ function compute_reference_actual(case::ReferenceCase)
         zero_padding = Int(get(case.config["compute"], "zero_padding", 2))
         return copy(reference_direct_image(pupil, src;
             zero_padding=zero_padding))
-    elseif case.kind in (:pyramid_slopes,
-        OOPAO_BI_O_EDGE_KIND, :zernike_signal, :curvature_signal)
+    elseif case.kind in (OOPAO_BI_O_EDGE_KIND, :zernike_signal,
+        :curvature_signal)
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
         src = build_reference_measurement_source(case.config["source"])
@@ -1260,7 +1110,7 @@ function compute_reference_actual(case::ReferenceCase)
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
         src = build_reference_source(case.config["source"])
-        wfs = build_reference_wfs(:pyramid_slopes, case.config["wfs"], tel)
+        wfs = build_reference_wfs(:pyramid_frame, case.config["wfs"], tel)
         basis = build_reference_basis(case.config["basis"], tel)
         gsc = GainSensingCamera(wfs, basis)
         reset_opd!(pupil)
@@ -1279,7 +1129,7 @@ function compute_reference_actual(case::ReferenceCase)
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)
         src = build_reference_source(case.config["source"])
-        wfs = build_reference_wfs(:pyramid_slopes, case.config["wfs"], tel)
+        wfs = build_reference_wfs(:pyramid_frame, case.config["wfs"], tel)
         basis = build_reference_basis(case.config["basis"], tel)
         residual = load_case_residual_opd(case)
         if residual !== nothing
@@ -1433,46 +1283,6 @@ function compute_reference_actual(case::ReferenceCase)
             frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
             calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
             psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)))
-    elseif case.kind === :gsc_closed_loop_trace
-        tel = build_reference_telescope(case.config["telescope"])
-        src = build_reference_source(case.config["source"])
-        basis = build_reference_basis(case.config["basis"], tel)
-        wfs = build_reference_wfs(Symbol(case.config["wfs"]["kind"]), case.config["wfs"], tel)
-        wfs isa PyramidWFS || throw(InvalidConfiguration("GSC closed-loop trace requires a PyramidWFS"))
-        compute_cfg = case.config["compute"]
-        forcing_coeffs = matrix_from_rows(get(compute_cfg, "forcing_coefficients", Any[]))
-        return gsc_closed_loop_trace(tel, src, wfs, basis, forcing_coeffs;
-            gain=Float64(get(compute_cfg, "gain", 0.4)),
-            frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
-            calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
-            psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)),
-            og_floor=Float64(get(compute_cfg, "og_floor", 0.05)))
-    elseif case.kind === :gsc_atmosphere_replay_trace
-        tel = build_reference_telescope(case.config["telescope"])
-        ngs = build_reference_source(case.config["source"])
-        sci = build_reference_source(case.config["science_source"])
-        basis = build_reference_basis(case.config["basis"], tel)
-        wfs = build_reference_wfs(Symbol(case.config["wfs"]["kind"]), case.config["wfs"], tel)
-        wfs isa PyramidWFS || throw(InvalidConfiguration("GSC atmosphere replay trace requires a PyramidWFS"))
-        compute_cfg = case.config["compute"]
-        ngs_stack = load_reference_aux_array(
-            case,
-            compute_cfg["forcing_ngs_data"],
-            compute_cfg["forcing_shape"],
-            get(compute_cfg, "forcing_storage_order", "C"),
-        )
-        src_stack = load_reference_aux_array(
-            case,
-            compute_cfg["forcing_src_data"],
-            compute_cfg["forcing_shape"],
-            get(compute_cfg, "forcing_storage_order", "C"),
-        )
-        return gsc_atmosphere_replay_trace(tel, ngs, sci, wfs, basis, ngs_stack, src_stack;
-            gain=Float64(get(compute_cfg, "gain", 0.2)),
-            frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
-            calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
-            psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)),
-            og_floor=Float64(get(compute_cfg, "og_floor", 0.05)))
     end
     throw(InvalidConfiguration("unsupported reference case kind '$(case.kind)'"))
 end
@@ -1752,98 +1562,7 @@ function create_reference_fixture(root::AbstractString)
     write_reference_array(joinpath(root, lift_case["data"]), lift_ref)
     manifest["cases"]["lift_interaction_matrix"] = lift_case
 
-    closed_loop_case = Dict{String,Any}(
-        "kind" => "closed_loop_trace",
-        "data" => "closed_loop_trace.txt",
-        "shape" => [4, 5],
-        "atol" => 1e-12,
-        "rtol" => 1e-12,
-        "telescope" => Dict(
-            "resolution" => 16,
-            "diameter" => 8.0,
-            "sampling_time" => 1e-3,
-            "central_obstruction" => 0.0,
-        ),
-        "source" => Dict(
-            "kind" => "ngs",
-            "band" => "I",
-            "magnitude" => 0.0,
-        ),
-        "basis" => Dict(
-            "kind" => "cartesian_polynomials",
-            "n_modes" => 2,
-        ),
-        "wfs" => Dict(
-            "kind" => "pyramid_slopes",
-            "pupil_samples" => 4,
-            "mode" => "diffractive",
-            "threshold" => 0.1,
-        ),
-        "compute" => Dict(
-            "gain" => 0.4,
-            "frame_delay" => 2,
-            "calibration_amplitude" => 1e-9,
-            "psf_zero_padding" => 2,
-            "forcing_coefficients" => [
-                [2e-8, -1e-8],
-                [1.5e-8, 0.5e-8],
-                [-1e-8, 1.25e-8],
-                [0.5e-8, -0.75e-8],
-            ],
-        ),
-    )
-    closed_loop_ref = compute_reference_expected(parse_reference_case("closed_loop_trace", closed_loop_case, root))
-    write_reference_array(joinpath(root, closed_loop_case["data"]), closed_loop_ref)
-    manifest["cases"]["closed_loop_trace"] = closed_loop_case
 
-    gsc_closed_loop_case = Dict{String,Any}(
-        "kind" => "gsc_closed_loop_trace",
-        "data" => "gsc_closed_loop_trace.txt",
-        "shape" => [4, 6],
-        "atol" => 1e-12,
-        "rtol" => 1e-12,
-        "telescope" => Dict(
-            "resolution" => 16,
-            "diameter" => 8.0,
-            "sampling_time" => 1e-3,
-            "central_obstruction" => 0.0,
-        ),
-        "source" => Dict(
-            "kind" => "ngs",
-            "band" => "R",
-            "magnitude" => 8.0,
-        ),
-        "basis" => Dict(
-            "kind" => "cartesian_polynomials",
-            "n_modes" => 4,
-        ),
-        "wfs" => Dict(
-            "kind" => "pyramid_slopes",
-            "pupil_samples" => 4,
-            "mode" => "diffractive",
-            "threshold" => 0.0,
-            "modulation" => 3.0,
-            "modulation_points" => 8,
-            "n_pix_separation" => 2,
-            "n_pix_edge" => 1,
-        ),
-        "compute" => Dict(
-            "gain" => 0.2,
-            "frame_delay" => 2,
-            "calibration_amplitude" => 1e-9,
-            "psf_zero_padding" => 2,
-            "og_floor" => 0.05,
-            "forcing_coefficients" => [
-                [2e-8, -1e-8, 5e-9, -2.5e-9],
-                [1.5e-8, 5e-9, -7.5e-9, 5e-9],
-                [-1e-8, 1.25e-8, 5e-9, -5e-9],
-                [5e-9, -7.5e-9, 1e-8, 2.5e-9],
-            ],
-        ),
-    )
-    gsc_closed_loop_ref = compute_reference_expected(parse_reference_case("gsc_closed_loop_trace", gsc_closed_loop_case, root))
-    write_reference_array(joinpath(root, gsc_closed_loop_case["data"]), gsc_closed_loop_ref)
-    manifest["cases"]["gsc_closed_loop_trace"] = gsc_closed_loop_case
 
     open(reference_manifest_path(root), "w") do io
         TOML.print(io, manifest)

@@ -81,7 +81,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :BiOEdgeOpticalFrontEnd,
         :pyramid_rate_map,
         :bi_o_edge_rate_map,
-        :set_pyramid_calibration!,
         :set_bi_o_edge_calibration!,
         :pyramid_modulation_frame,
         :pyramid_modulation_frame!,
@@ -153,17 +152,17 @@ end
         pupil.opd[i, j] = i + j / 10
     end
 
-    pyr_auto = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
+    pyr_auto = PyramidWFS(tel; pupil_samples=4, modulation=1.0)
     @test size(pyr_auto.front_end.modulation.phases, 3) == 8
 
-    pyr_path = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=0.0,
+    pyr_path = PyramidWFS(tel; pupil_samples=4, modulation=0.0,
         user_modulation_path=((1.0, 0.0), (0.0, 1.0)))
     @test size(pyr_path.front_end.modulation.phases, 3) == 2
 
-    pyr_default = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0)
-    pyr_rooftop = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0,
+    pyr_default = PyramidWFS(tel; pupil_samples=4, modulation=1.0)
+    pyr_rooftop = PyramidWFS(tel; pupil_samples=4, modulation=1.0,
         rooftop=0.5, phase_mask_rotation_rad=0.2)
-    pyr_old = PyramidWFS(tel; pupil_samples=4, mode=Diffractive(), modulation=1.0, old_mask=true)
+    pyr_old = PyramidWFS(tel; pupil_samples=4, modulation=1.0, old_mask=true)
     @test pyramid_propagation_workspace(pyr_default).pyramid_mask !=
         pyramid_propagation_workspace(pyr_rooftop).pyramid_mask
     @test pyramid_propagation_workspace(pyr_default).pyramid_mask !=
@@ -184,7 +183,6 @@ end
     shifted_path = ((1.3, 0.7),)
     shifted_common = (
         pupil_samples=4,
-        mode=Diffractive(),
         modulation=0.0,
         user_modulation_path=shifted_path,
         diffraction_padding=4,
@@ -314,14 +312,6 @@ end
     @test_throws InvalidConfiguration PyramidWFS(
         tel;
         pupil_samples=4,
-        mode=Geometric(),
-        modulation_propagation_strategy=
-            WavefrontSensors.PyramidShiftedMaskStrategy(),
-    )
-    @test_throws InvalidConfiguration PyramidWFS(
-        tel;
-        pupil_samples=4,
-        mode=Diffractive(),
         old_mask=true,
         modulation_propagation_strategy=
             WavefrontSensors.PyramidShiftedMaskStrategy(),
@@ -329,7 +319,6 @@ end
     @test_throws InvalidConfiguration PyramidWFS(
         tel;
         pupil_samples=4,
-        mode=Diffractive(),
         psf_centering=false,
         modulation_propagation_strategy=
             WavefrontSensors.PyramidShiftedMaskStrategy(),
@@ -357,23 +346,17 @@ end
     pupil = PupilFunction(tel)
 
     @test_throws InvalidConfiguration PyramidWFS(tel;
-        pupil_samples=5, binning=2, mode=Diffractive())
+        pupil_samples=5, binning=2)
     @test_throws InvalidConfiguration BiOEdgeWFS(tel;
         pupil_samples=5, binning=2, mode=Diffractive())
     @test_throws InvalidConfiguration PyramidWFS(tel;
-        pupil_samples=0, mode=Diffractive())
+        pupil_samples=0)
     @test_throws InvalidConfiguration BiOEdgeWFS(tel;
         pupil_samples=0, mode=Diffractive())
 
-    pyramid = PyramidWFS(tel; pupil_samples=4,
-        diffraction_padding=3, mode=Diffractive())
+    pyramid = PyramidWFS(tel; pupil_samples=4, diffraction_padding=3)
     WavefrontSensors.prepare_pyramid_sampling!(pyramid, pupil)
-    @test_throws InvalidConfiguration begin
-        WavefrontSensors.resize_pyramid_signal_buffers!(pyramid, 3)
-    end
-    @test_throws DimensionMismatchError begin
-        WavefrontSensors.pyramid_signal!(pyramid, pupil, zeros(8, 6))
-    end
+    @test size(pyramid_acquisition_products(pyramid).frame) == (12, 12)
 
     bi_o_edge = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
     @test_throws InvalidConfiguration begin
@@ -421,18 +404,11 @@ end
     heterogeneous = Asterism(AdaptiveOpticsSim.Optics.AbstractSource[ngs, lgs])
     detector = Detector(noise=NoiseNone(), exposure_duration=1.0,
         qe=1.0, binning=1)
-    sensors = (
-        PyramidWFS(tel; pupil_samples=4, mode=Diffractive()),
-        BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive()),
-    )
-    for wfs in sensors
-        @test_throws InvalidConfiguration measure!(wfs, pupil,
-            heterogeneous)
-        @test_throws InvalidConfiguration measure!(wfs, pupil,
-            heterogeneous, detector)
-    end
-    @test !sensors[1].estimator.state.calibrated
-    @test !sensors[2].estimator.state.calibrated
+    bio_sensor = BiOEdgeWFS(tel; pupil_samples=4, mode=Diffractive())
+    @test_throws InvalidConfiguration measure!(bio_sensor, pupil,
+        heterogeneous)
+    @test_throws InvalidConfiguration measure!(bio_sensor, pupil,
+        heterogeneous, detector)
 
     common_lgs = Asterism([
         LGSSource(wavelength=589e-9, elongation_factor=1.4,

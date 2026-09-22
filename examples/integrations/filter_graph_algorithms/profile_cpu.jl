@@ -1,62 +1,72 @@
 using Profile
 
 include("s1_lockstep.jl")
+include("s4_pyramid.jl")
 using .AOSFGALockstep
+using .AOSFGAPyramid
 
-const PROFILE_STEPS = 500_000
+const PROFILE_STEPS = parse(Int,
+    get(ENV, "AOS_FGA_PROFILE_STEPS", "500000"))
 
-function run_steps!(prepared, steps)
+function run_steps!(prepared, step!, steps)
     for _ in 1:steps
-        step_lockstep!(prepared)
+        step!(prepared)
     end
     return prepared
 end
 
-function collect_allocation_profile(prepared, steps)
+function collect_allocation_profile(prepared, step!, steps)
     Profile.Allocs.clear()
     Profile.Allocs.start(sample_rate=1.0)
     try
-        run_steps!(prepared, steps)
+        run_steps!(prepared, step!, steps)
     finally
         Profile.Allocs.stop()
     end
     return Profile.Allocs.fetch()
 end
 
-prepared = prepare_s1_lockstep()
-for _ in 1:32
-    step_lockstep!(prepared)
+function profile_workload!(label, prepared, step!, command_values;
+    steps::Int=PROFILE_STEPS)
+    for _ in 1:32
+        step!(prepared)
+    end
+
+    allocation_bytes = @allocated step!(prepared)
+    allocation_bytes == 0 || error(
+        "warmed $label step allocated $allocation_bytes Julia heap bytes",
+    )
+    all(isfinite, command_values(prepared)) || error(
+        "$label command is not finite before profiling",
+    )
+
+    Profile.clear()
+    Profile.init(n=10^7, delay=0.001)
+    @profile run_steps!(prepared, step!, steps)
+
+    println(label, "_CPU_PROFILE_BEGIN")
+    Profile.print(format=:flat, sortedby=:count, mincount=10)
+    println(label, "_CPU_PROFILE_END")
+
+    allocation_profile = collect_allocation_profile(prepared, step!, 100)
+    println(label, "_CPU_ALLOCATION_PROFILE_BEGIN")
+    Profile.Allocs.print(stdout, allocation_profile)
+    println(label, "_CPU_ALLOCATION_PROFILE_END")
+
+    all(isfinite, command_values(prepared)) || error(
+        "$label command is not finite after profiling",
+    )
+    println(label, "_profile_steps=", steps)
+    println(label, "_final_sequence=", prepared.state.sequence)
+    println(label, "_warmed_allocation_bytes=", allocation_bytes)
+    return prepared
 end
 
-allocation_bytes = @allocated step_lockstep!(prepared)
-allocation_bytes == 0 || error(
-    "warmed S1 lockstep allocated $allocation_bytes Julia heap bytes",
-)
-all(isfinite, prepared.outputs.demanded) || error(
-    "pre-profile demanded command is not finite",
+s1 = profile_workload!("S1", prepare_s1_lockstep(), step_lockstep!,
+    prepared -> prepared.outputs.demanded)
+abs(s1.outputs.demanded[1] + 3.0f-8) <= 1.0f-10 || error(
+    "post-profile S1 demanded command did not retain the closed-loop oracle",
 )
 
-Profile.clear()
-Profile.init(n=10^7, delay=0.001)
-@profile run_steps!(prepared, PROFILE_STEPS)
-
-println("S1_CPU_PROFILE_BEGIN")
-Profile.print(format=:flat, sortedby=:count, mincount=10)
-println("S1_CPU_PROFILE_END")
-
-allocation_profile = collect_allocation_profile(prepared, 100)
-println("S1_CPU_ALLOCATION_PROFILE_BEGIN")
-Profile.Allocs.print(stdout, allocation_profile)
-println("S1_CPU_ALLOCATION_PROFILE_END")
-
-all(isfinite, prepared.outputs.demanded) || error(
-    "post-profile demanded command is not finite",
-)
-abs(prepared.outputs.demanded[1] + 3.0f-8) <= 1.0f-10 || error(
-    "post-profile demanded command did not retain the closed-loop oracle",
-)
-
-println("profile_steps=$PROFILE_STEPS")
-println("final_sequence=$(prepared.state.sequence)")
-println("final_demanded=$(prepared.outputs.demanded[1])")
-println("warmed_allocation_bytes=$allocation_bytes")
+profile_workload!("S4", prepare_s4_pyramid(), step_s4_pyramid!,
+    prepared -> prepared.adopted_command)

@@ -102,9 +102,7 @@ specula_contract = "polychromatic pyramid sensing yields a stable sampled detect
     [cases.pyramid_polychromatic_frame.wfs]
     n_pix_edge = 10
     binning = 1
-    threshold = 0.0
     diffraction_padding = 2
-    mode = "diffractive"
     modulation = 3.0
     n_pix_separation = 20
     modulation_points = 16
