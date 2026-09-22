@@ -180,22 +180,23 @@ fga_amdgpu_native_graph_nodes = 5
 fga_amdgpu_host_allocation_bytes = 0
 fga_amdgpu_image_device_memory_stable = true
 fga_amdgpu_channel_device_memory_stable = true
-integration_scope = "the registered AOS/FGA fixture validates both acquired-image and acquired-channel CPU boundaries; it does not claim a device-resident or captured cross-package bridge"
+integration_scope = "the registered AOS/FGA fixture validates both acquired-image and acquired-channel CPU boundaries, including calibration, ordering, sequence, detector-exposure, and model-timestamp association; it does not claim a device-resident or captured cross-package bridge"
 
 [registered_integration]
+integration_revision = "f70ea123160b5e3a6a213c2b86ddc7c933e44ac8"
 filter_graph_algorithms_version = "0.5.0"
 filter_graph_algorithms_tree = "0ce4ceae4904446fba170ee25324d65b435c06e6"
 julia_filter_graph_version = "0.2.3"
 julia_filter_graph_tree = "1893cea2d29f0cd89303939308e23ce7546bc240"
-curvature_boundary_checks = 42
+curvature_boundary_checks = 101
 result = "passed"
 
 [validation]
 full_cpu_composition = "passed, including Aqua, every registered CPU suite, 15 OOPAO and 10 SPECULA reference checks, 35 tutorial passes with 2 expected broken tests, and Gate 0"
 cuda_hardware_target = "674/674 passed"
 amdgpu_hardware_target = "680/680 passed"
-cpu_type_inference = "prepared Curvature optics, acquired-frame and acquired-channel production, frame transpose, and FGA estimation inference checks passed"
-cpu_zero_allocation = "physical optics, detector acquisition, preallocated transpose, and FGA image/channel estimation each passed their warmed zero-allocation checks"
+cpu_type_inference = "prepared Curvature optics, associated acquired-frame and acquired-channel production, frame transpose, and FGA estimation inference checks passed"
+cpu_zero_allocation = "physical optics, detector acquisition, associated composed steps, preallocated transpose, and FGA image/channel estimation each passed their warmed zero-allocation checks"
 raw_reports = "Nsight Systems, Nsight Compute, and rocprofv3 reports are retained outside the repository under /tmp; this TOML is the durable summary"
 
 [commands]
