@@ -47,7 +47,7 @@ nsight_compute = "2026.3.1"
 [environment.amdgpu]
 device = "AMD Radeon Graphics (Radeon 680M)"
 compiled_architecture = "gfx1030"
-hardware_architecture = "gfx1030"
+hardware_architecture = "gfx1035"
 wavefront_size = 32
 compute_units = 12
 runtime = "ROCm 7.2.1 / HIP 7.2.53211"
@@ -118,7 +118,7 @@ hottest_kernel_duration_microseconds = [5.088, 5.056]
 hottest_kernel_grid_blocks = 4
 hottest_kernel_threads_per_block = 256
 hottest_kernel_registers_per_thread = 64
-hottest_kernel_dynamic_shared_memory_kibibytes_per_block = 16.38
+hottest_kernel_dynamic_shared_memory_kibibytes_per_block = 16.0
 hottest_kernel_compute_throughput_percent_of_sustained_peak = [1.10, 1.11]
 hottest_kernel_theoretical_occupancy_percent = 66.67
 hottest_kernel_achieved_occupancy_percent = [16.60, 16.89]
@@ -168,7 +168,7 @@ filter_graph_algorithms_version = "0.4.0"
 filter_graph_algorithms_tree = "598a10402690250190ad1dd976b03577281e6388"
 julia_filter_graph_version = "0.2.2"
 julia_filter_graph_tree = "edaa8b14e2a2b9266cff5674ecbe9c9f6c20c17c"
-zernike_boundary_checks = 23
+zernike_boundary_checks = 30
 result = "passed"
 
 [validation]

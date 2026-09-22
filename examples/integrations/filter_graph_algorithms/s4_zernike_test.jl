@@ -43,6 +43,27 @@ using JuliaFilterGraph
         1.8038461, 0.9153846, 1.8730769,
     ] rtol=2f-7
 
+    # The calibration signature travels with the acquired frame. Expected FGA
+    # rejections must not publish a partial signal or normalization divisor.
+    @test prepared.mean.signature == UInt64[prepared.mean.plan.calibration_signature]
+    retained_signal = copy(prepared.mean.signal)
+    retained_divisor = copy(prepared.mean.divisor)
+    prepared.mean.signature[1] += UInt64(1)
+    @test @inferred(Union{Nothing,ZernikePupilSignalFailure},
+        process_s4_zernike!(prepared.frozen_fga_frame, prepared.mean,
+            frozen_aos)) === ZernikePupilSignalCalibrationMismatch
+    @test prepared.mean.signal == retained_signal
+    @test prepared.mean.divisor == retained_divisor
+    prepared.mean.signature[1] = prepared.mean.plan.calibration_signature
+
+    nonfinite_aos = copy(frozen_aos)
+    nonfinite_aos[2, 3] = NaN32
+    @test @inferred(Union{Nothing,ZernikePupilSignalFailure},
+        process_s4_zernike!(prepared.frozen_fga_frame, prepared.mean,
+            nonfinite_aos)) === ZernikePupilSignalNonFiniteInput
+    @test prepared.mean.signal == retained_signal
+    @test prepared.mean.divisor == retained_divisor
+
     @test @inferred(Union{Nothing,ZernikePupilSignalFailure},
         process_s4_zernike!(prepared.frozen_fga_frame, prepared.incidence,
             frozen_aos)) === nothing
