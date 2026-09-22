@@ -183,12 +183,12 @@ fga_amdgpu_channel_device_memory_stable = true
 integration_scope = "the registered AOS/FGA fixture validates both acquired-image and acquired-channel CPU boundaries, including calibration, ordering, sequence, detector-exposure, and model-timestamp association; it does not claim a device-resident or captured cross-package bridge"
 
 [registered_integration]
-integration_revision = "f70ea123160b5e3a6a213c2b86ddc7c933e44ac8"
+integration_revision = "4c59d16f2f58b0091f4ca8129b6cd594429eaa79"
 filter_graph_algorithms_version = "0.5.0"
 filter_graph_algorithms_tree = "0ce4ceae4904446fba170ee25324d65b435c06e6"
 julia_filter_graph_version = "0.2.3"
 julia_filter_graph_tree = "1893cea2d29f0cd89303939308e23ce7546bc240"
-curvature_boundary_checks = 101
+curvature_boundary_checks = 139
 result = "passed"
 
 [validation]
