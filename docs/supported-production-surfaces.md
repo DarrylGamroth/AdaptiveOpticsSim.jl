@@ -95,6 +95,13 @@ only when every node and bound array supports that exact target. The lockstep
 HIL boundary explicitly copies complete products and commands through host
 `Array` buffers.
 
+The LiFT `LiFTForwardModel` adapter supplies AOS physical photon-rate prediction
+and analytic Jacobians to registered AdaptiveOpticsCalibration v0.10 on CPU,
+CUDA, and AMDGPU. Its accelerator inverse is a direct synchronized calibration
+operation with measured host and device allocations; it is outside the captured
+plant-graph replay claim. The [live integration profile](../benchmarks/results/platform/2026-09-22-lift-aoc-adapter-profile.toml)
+records its current performance boundary.
+
 `CapturedGraphExecution()` requires every adapter to prove the fixed-address
 device replay contract, then records the complete node and delayed-link sequence
 as one executable. CUDA and AMDGPU hardware tests replay the two-node DM and

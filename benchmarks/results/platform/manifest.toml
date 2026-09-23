@@ -94,3 +94,8 @@ path = "2026-09-22-zernike-plant-profile.toml"
 purpose = "S4 CPU, CUDA-primary, and AMDGPU-secondary profile of the retained AOS Curvature paired-defocus physical plant boundary"
 id = "S4-CURVATURE-PLANT-PROFILE-2026-09-22"
 path = "2026-09-22-curvature-plant-profile.toml"
+
+[[artifacts]]
+purpose = "S4 CPU, CUDA-primary, and AMDGPU-secondary profile of live AOS LiFT optics with registered AOC v0.10 inverse execution"
+id = "S4-LIFT-AOS-AOC-ADAPTER-PROFILE-2026-09-22"
+path = "2026-09-22-lift-aoc-adapter-profile.toml"
