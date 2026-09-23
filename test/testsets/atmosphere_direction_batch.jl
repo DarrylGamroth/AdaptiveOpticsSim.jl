@@ -45,25 +45,25 @@ function direction_batch_test_sources(::Type{T}=Float64) where {
         Source(
             band=:I,
             magnitude=zero(T),
-            coordinates=(zero(T), zero(T)),
+            separation_arcsec=zero(T), position_angle_deg=zero(T),
             T=T,
         ),
         Source(
             band=:I,
             magnitude=zero(T),
-            coordinates=(T(8), T(35)),
+            separation_arcsec=T(8), position_angle_deg=T(35),
             T=T,
         ),
         LGSSource(
             magnitude=zero(T),
-            coordinates=(T(-12), T(70)),
+            separation_arcsec=T(-12), position_angle_deg=T(70),
             altitude=T(90_000),
             T=T,
         ),
         Source(
             band=:K,
             magnitude=one(T),
-            coordinates=(T(5), T(120)),
+            separation_arcsec=T(5), position_angle_deg=T(120),
             T=T,
         ),
     ])
@@ -245,7 +245,7 @@ end
     source = Source(
         band=:I,
         magnitude=zero(T),
-        coordinates=(T(3), T(40)),
+        separation_arcsec=T(3), position_angle_deg=T(40),
         T=T,
     )
     extended = with_extended_source(

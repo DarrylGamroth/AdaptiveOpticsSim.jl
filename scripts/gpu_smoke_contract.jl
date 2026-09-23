@@ -144,7 +144,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     lgs = LGSSource(; magnitude=0.0, wavelength=589e-9, altitude=90_000.0,
-        laser_coordinates=(0.0, 0.0), photon_irradiance=one(T), T=T)
+        laser_launch_xy_m=(0.0, 0.0), photon_irradiance=one(T), T=T)
     spider_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
     apply_spiders!(spider_tel; thickness=0.5, angles_deg=[0.0, 90.0])
     pupil = PupilFunction(tel; T=T, backend=backend)
@@ -162,7 +162,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         sample_arcsec = focal_plane_pixel_scale_arcsec(
             direct_imaging_output(on_axis))
         positive_x = Source(band=:I, magnitude=zero(T),
-            coordinates=(T(sample_arcsec), zero(T)), T=T)
+            separation_arcsec=T(sample_arcsec), position_angle_deg=zero(T), T=T)
         off_axis = prepare_direct_imaging(image_pupil, positive_x;
             zero_padding=2)
         @assert off_axis.plan.shift_samples == (1, 0)
@@ -233,8 +233,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "direct_image_asterism") do
         ast = Asterism([
-            Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0)),
-            Source(band=:I, magnitude=0.0, coordinates=(1.0, 90.0)),
+            Source(band=:I, magnitude=0.0, separation_arcsec=0.0, position_angle_deg=0.0),
+            Source(band=:I, magnitude=0.0, separation_arcsec=1.0, position_angle_deg=90.0),
         ])
         rate_map = gpu_direct_image(tel, ast; zero_padding=2, T=T)
         @assert rate_map.values isa BackendArray
@@ -432,7 +432,7 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
     record_gpu_smoke!(failures, "atmosphere_infinite_statistical_agreement") do
         function trajectory_stats(backend; steps::Int=10)
             local_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
-            local_src = Source(band=:I, magnitude=0.0, coordinates=(30.0, 20.0), T=T)
+            local_src = Source(band=:I, magnitude=0.0, separation_arcsec=30.0, position_angle_deg=20.0, T=T)
             local_atm = InfiniteMultiLayerAtmosphere(local_tel;
                 r0=T(0.2),
                 reference_wavelength_m=T(500e-9),
@@ -582,8 +582,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "shack_hartmann_asterism_rate") do
         ast = Asterism([
-            Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0), T=T),
-            Source(band=:I, magnitude=0.0, coordinates=(1.0, 45.0), T=T),
+            Source(band=:I, magnitude=0.0, separation_arcsec=0.0, position_angle_deg=0.0, T=T),
+            Source(band=:I, magnitude=0.0, separation_arcsec=1.0, position_angle_deg=45.0, T=T),
         ])
         wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
         rate = form_shack_hartmann_rate!(wfs, pupil, ast)
@@ -593,8 +593,8 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
 
     record_gpu_smoke!(failures, "shack_hartmann_asterism_acquisition") do
         ast = Asterism([
-            Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0), T=T),
-            Source(band=:I, magnitude=0.0, coordinates=(1.0, 45.0), T=T),
+            Source(band=:I, magnitude=0.0, separation_arcsec=0.0, position_angle_deg=0.0, T=T),
+            Source(band=:I, magnitude=0.0, separation_arcsec=1.0, position_angle_deg=45.0, T=T),
         ])
         wfs = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
         det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1, T=T, backend=backend)

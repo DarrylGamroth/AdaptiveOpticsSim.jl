@@ -87,7 +87,7 @@ end
     asterism = Asterism([
         source,
         Source(band=:custom, wavelength=wavelength(source),
-            photon_irradiance=T(4), coordinates=(T(0.1), T(-0.05)), T=T),
+            photon_irradiance=T(4), separation_arcsec=T(0.1), position_angle_deg=T(-0.05), T=T),
     ])
     asterism_sensor = ShackHartmannWFS(telescope; n_lenslets=4,
         n_pix_subap=4, T=T)

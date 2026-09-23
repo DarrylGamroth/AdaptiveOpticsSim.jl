@@ -690,7 +690,7 @@ function run_optional_sodium_layer_profile_wfs(::Type{B},
         src = LGSSource(
             sodium_layer_profile=SodiumLayerProfile(
                 T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
-            laser_coordinates=(T(1), T(-0.5)),
+            laser_launch_xy_m=(T(1), T(-0.5)),
             fwhm_spot_up=T(0.8),
             photon_irradiance=one(T),
             T=T,
@@ -728,7 +728,7 @@ function run_optional_sodium_layer_profile_wfs(::Type{B},
         changed_src = LGSSource(
             sodium_layer_profile=SodiumLayerProfile(
                 T[80_000, 90_000, 100_000], T[0.8, 0.1, 0.1]),
-            laser_coordinates=(T(1), T(-0.5)),
+            laser_launch_xy_m=(T(1), T(-0.5)),
             fwhm_spot_up=T(0.8),
             photon_irradiance=one(T),
             T=T,
@@ -762,7 +762,7 @@ function run_optional_sodium_layer_profile_wfs(::Type{B},
         src = LGSSource(
             sodium_layer_profile=SodiumLayerProfile(
                 T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
-            laser_coordinates=(T(1), T(-0.5)),
+            laser_launch_xy_m=(T(1), T(-0.5)),
             fwhm_spot_up=T(0.8),
             photon_irradiance=one(T),
             T=T,
@@ -786,7 +786,7 @@ function run_optional_sodium_layer_profile_wfs(::Type{B},
         changed_src = LGSSource(
             sodium_layer_profile=SodiumLayerProfile(
                 T[80_000, 90_000, 100_000], T[0.8, 0.1, 0.1]),
-            laser_coordinates=(T(1), T(-0.5)),
+            laser_launch_xy_m=(T(1), T(-0.5)),
             fwhm_spot_up=T(0.8), photon_irradiance=one(T), T=T)
         changed_front_end = BiOEdgeOpticalFrontEnd(wfs, changed_src)
         changed_rate = bi_o_edge_rate_map(changed_front_end, pupil)
@@ -1038,7 +1038,7 @@ function run_optional_wfs_stage_contracts(
         photon_irradiance=T(4),
         sodium_layer_profile=SodiumLayerProfile(
             T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
-        laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
+        laser_launch_xy_m=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     spectral_sodium = with_spectrum(sodium_lgs, SpectralBundle(
         T[0.9 * wavelength(src), 1.1 * wavelength(src)], T[0.4, 0.6];
         T=T))
@@ -1219,7 +1219,7 @@ function run_optional_wfs_stage_contracts(
                 photon_irradiance=T(4),
                 sodium_layer_profile=SodiumLayerProfile(
                     T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
-                laser_coordinates=(T(1), T(-0.5)),
+                laser_launch_xy_m=(T(1), T(-0.5)),
                 fwhm_spot_up=T(0.8), T=T),
         )
             cpu_lgs_sensor = BiOEdgeWFS(four_pupil_cpu_tel;
@@ -1489,7 +1489,7 @@ function run_optional_plane_product_checks(tel::Telescope,
         sum(Array(pupil_photon_rate_map(tel, src))) atol=T(2e-5) rtol=T(2e-5)
 
     off_axis_src = Source(band=:I, magnitude=zero(T),
-        coordinates=(T(0.08), T(90)), T=T)
+        separation_arcsec=T(0.08), position_angle_deg=T(90), T=T)
     off_axis = prepare_direct_imaging(wavefront, off_axis_src; zero_padding=2)
     off_axis_map = form_direct_image!(off_axis)
     @test off_axis_map.values isa BackendArray
@@ -3306,7 +3306,7 @@ function run_optional_direct_imaging_batch_checks(
         band=:custom,
         wavelength=wavelengths[2],
         photon_irradiance=T(6),
-        coordinates=(T(0.08), T(90)),
+        separation_arcsec=T(0.08), position_angle_deg=T(90),
         T=T,
     )
     sources = with_spectrum(
@@ -3608,19 +3608,19 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         Source(
             band=:I,
             magnitude=zero(T),
-            coordinates=(T(6), T(35)),
+            separation_arcsec=T(6), position_angle_deg=T(35),
             T=T,
         ),
         LGSSource(
             magnitude=zero(T),
-            coordinates=(T(-9), T(70)),
+            separation_arcsec=T(-9), position_angle_deg=T(70),
             altitude=T(90_000),
             T=T,
         ),
         Source(
             band=:K,
             magnitude=one(T),
-            coordinates=(T(5), T(120)),
+            separation_arcsec=T(5), position_angle_deg=T(120),
             T=T,
         ),
     ])
@@ -3719,7 +3719,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     @test all(product -> all(isfinite, Array(product.values)),
         distinct_rate.products)
 
-    science_src = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0), T=T)
+    science_src = Source(band=:K, magnitude=1.0, separation_arcsec=4.0, position_angle_deg=90.0, T=T)
     split_dm = DeformableMirror(tel; n_act=4, influence_width=T(0.3), T=T,
         backend=selector)
     split_det = Detector(noise=NoiseNone(), exposure_duration=one(T), qe=one(T),

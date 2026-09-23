@@ -368,9 +368,9 @@ end
 
     common_lgs = Asterism([
         LGSSource(wavelength=589e-9, elongation_factor=1.4,
-            coordinates=(0.0, 0.0), photon_irradiance=1.0),
+            separation_arcsec=0.0, position_angle_deg=0.0, photon_irradiance=1.0),
         LGSSource(wavelength=589e-9, elongation_factor=1.4,
-            coordinates=(3.0, 90.0), photon_irradiance=2.0),
+            separation_arcsec=3.0, position_angle_deg=90.0, photon_irradiance=2.0),
     ])
     @test AdaptiveOpticsSim.WavefrontSensors.common_wfs_calibration_source(
         common_lgs, "test WFS") === first(common_lgs.sources)

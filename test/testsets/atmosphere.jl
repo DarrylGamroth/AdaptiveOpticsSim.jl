@@ -194,8 +194,8 @@ end
 @testset "Explicit atmosphere epochs and prepared renderers" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     onaxis = Source(band=:I, magnitude=0.0)
-    offaxis = Source(band=:I, magnitude=0.0, coordinates=(5.0, 30.0))
-    lgs = LGSSource(coordinates=(5.0, 30.0), altitude=90_000.0)
+    offaxis = Source(band=:I, magnitude=0.0, separation_arcsec=5.0, position_angle_deg=30.0)
+    lgs = LGSSource(separation_arcsec=5.0, position_angle_deg=30.0, altitude=90_000.0)
     atm = MultiLayerAtmosphere(tel;
         r0=0.2,
         reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
@@ -643,7 +643,7 @@ end
 
     function infinite_trace(; seed::Integer=73, steps::Int=10)
         tel_local = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-        src_local = Source(band=:I, magnitude=0.0, coordinates=(15.0, 30.0))
+        src_local = Source(band=:I, magnitude=0.0, separation_arcsec=15.0, position_angle_deg=30.0)
         atm = InfiniteMultiLayerAtmosphere(tel_local;
             r0=0.2,
             reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
@@ -748,9 +748,9 @@ end
 
 @testset "Source-aware atmosphere extraction" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    onaxis = Source(band=:I, magnitude=0.0, coordinates=(0.0, 0.0))
-    offaxis = Source(band=:I, magnitude=0.0, coordinates=(100.0, 0.0))
-    lgs = LGSSource(magnitude=0.0, coordinates=(100.0, 0.0), altitude=10_000.0)
+    onaxis = Source(band=:I, magnitude=0.0, separation_arcsec=0.0, position_angle_deg=0.0)
+    offaxis = Source(band=:I, magnitude=0.0, separation_arcsec=100.0, position_angle_deg=0.0)
+    lgs = LGSSource(magnitude=0.0, separation_arcsec=100.0, position_angle_deg=0.0, altitude=10_000.0)
 
     shift_x_ngs, shift_y_ngs, footprint_ngs = AdaptiveOpticsSim.Atmospheres.layer_source_geometry(offaxis, 5000.0, tel, Float64)
     shift_x_lgs, shift_y_lgs, footprint_lgs = AdaptiveOpticsSim.Atmospheres.layer_source_geometry(lgs, 5000.0, tel, Float64)

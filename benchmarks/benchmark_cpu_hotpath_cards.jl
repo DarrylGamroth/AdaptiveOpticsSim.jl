@@ -143,7 +143,7 @@ end
 
 function science_detector_fanout_probe()
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
-    science = Source(band=:K, magnitude=1.0, coordinates=(4.0, 90.0))
+    science = Source(band=:K, magnitude=1.0, separation_arcsec=4.0, position_angle_deg=90.0)
     pupil = PupilFunction(tel)
     imaging = prepare_direct_imaging(pupil, science; zero_padding=1)
     rate = direct_imaging_output(imaging)

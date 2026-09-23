@@ -23,8 +23,10 @@ function base_telescope(; resolution::Int=32, diameter::Real=8.0,
     )
 end
 
-function base_source(; band::Symbol=:I, magnitude::Real=8.0, coordinates::Tuple{<:Real,<:Real}=(0.0, 0.0))
-    return Source(band=band, magnitude=magnitude, coordinates=coordinates)
+function base_source(; band::Symbol=:I, magnitude::Real=8.0,
+    separation_arcsec::Real=0.0, position_angle_deg::Real=0.0)
+    return Source(band=band, magnitude=magnitude,
+        separation_arcsec=separation_arcsec, position_angle_deg=position_angle_deg)
 end
 
 function base_atmosphere(tel::Telescope; r0::Real=0.15,

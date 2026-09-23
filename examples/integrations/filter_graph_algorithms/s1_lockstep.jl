@@ -36,7 +36,8 @@ const _TELESCOPE_FOV_ARCSEC = 0.0f0
 const _TELESCOPE_REFLECTIVITY = 1.0f0
 const _SOURCE_BAND = :custom
 const _SOURCE_MAGNITUDE = 0.0f0
-const _SOURCE_COORDINATES_ARCSEC_DEG = (0.0f0, 0.0f0)
+const _SOURCE_SEPARATION_ARCSEC = 0.0f0
+const _SOURCE_POSITION_ANGLE_DEG = 0.0f0
 const _SOURCE_WAVELENGTH_M = 750.0f-9
 const _SOURCE_PHOTON_IRRADIANCE_M2_S = 2.0f8
 const _SOURCE_RADIOMETRY = PhysicalPhotonIrradianceSource()
@@ -267,6 +268,10 @@ function _signature_float32_array(signature::UInt64, values)
     return result
 end
 
+@inline _source_direction_signature(signature::UInt64,
+    separation_arcsec, position_angle_deg) = _signature_value(signature,
+    (separation_arcsec, position_angle_deg))
+
 function _plant_signature(;
     telescope_resolution=_TELESCOPE_RESOLUTION,
     telescope_diameter_m=_TELESCOPE_DIAMETER_M,
@@ -275,7 +280,8 @@ function _plant_signature(;
     telescope_reflectivity=_TELESCOPE_REFLECTIVITY,
     source_band=_SOURCE_BAND,
     source_magnitude=_SOURCE_MAGNITUDE,
-    source_coordinates_arcsec_deg=_SOURCE_COORDINATES_ARCSEC_DEG,
+    source_separation_arcsec=_SOURCE_SEPARATION_ARCSEC,
+    source_position_angle_deg=_SOURCE_POSITION_ANGLE_DEG,
     source_wavelength_m=_SOURCE_WAVELENGTH_M,
     source_photon_irradiance_m2_s=_SOURCE_PHOTON_IRRADIANCE_M2_S,
     source_radiometry=_SOURCE_RADIOMETRY,
@@ -310,7 +316,8 @@ function _plant_signature(;
     signature = _signature_float32(signature, telescope_reflectivity)
     signature = _signature_symbol(signature, source_band)
     signature = _signature_float32(signature, source_magnitude)
-    signature = _signature_value(signature, source_coordinates_arcsec_deg)
+    signature = _source_direction_signature(signature,
+        source_separation_arcsec, source_position_angle_deg)
     signature = _signature_float32(signature, source_wavelength_m)
     signature = _signature_float32(signature, source_photon_irradiance_m2_s)
     signature = _signature_value(signature, source_radiometry)
@@ -465,7 +472,8 @@ function _prepare_plant()
     source = Source(
         band=_SOURCE_BAND,
         magnitude=_SOURCE_MAGNITUDE,
-        coordinates=_SOURCE_COORDINATES_ARCSEC_DEG,
+        separation_arcsec=_SOURCE_SEPARATION_ARCSEC,
+        position_angle_deg=_SOURCE_POSITION_ANGLE_DEG,
         wavelength=_SOURCE_WAVELENGTH_M,
         photon_irradiance=_SOURCE_PHOTON_IRRADIANCE_M2_S,
         radiometry=_SOURCE_RADIOMETRY,

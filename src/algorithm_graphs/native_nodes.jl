@@ -1582,7 +1582,8 @@ function _shack_hartmann_rate_config(
         guide_source = Source(
             band=source_band,
             magnitude=source_magnitude,
-            coordinates=(source_separation_arcsec, source_position_angle_deg),
+            separation_arcsec=source_separation_arcsec,
+            position_angle_deg=source_position_angle_deg,
             wavelength=source_wavelength_m,
             photon_irradiance=source_photon_irradiance_m2_s,
             T=T,
@@ -1922,7 +1923,8 @@ function _pyramid_rate_config(
         guide_source = Source(
             band=source_band,
             magnitude=source_magnitude,
-            coordinates=(source_separation_arcsec, source_position_angle_deg),
+            separation_arcsec=source_separation_arcsec,
+            position_angle_deg=source_position_angle_deg,
             wavelength=source_wavelength_m,
             photon_irradiance=source_photon_irradiance_m2_s,
             T=T,

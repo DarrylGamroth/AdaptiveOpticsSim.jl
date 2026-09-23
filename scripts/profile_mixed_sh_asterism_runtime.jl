@@ -60,9 +60,9 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     lgs = LGSSource(
         magnitude=8.0,
         wavelength=589e-9,
-        coordinates=(0.0, 0.0),
+        separation_arcsec=0.0, position_angle_deg=0.0,
         altitude=90000.0,
-        laser_coordinates=(5.0, 0.0),
+        laser_launch_xy_m=(5.0, 0.0),
         sodium_layer_profile=_sodium_layer_profile(T),
         fwhm_spot_up=1.0,
         photon_irradiance=one(T),
@@ -71,9 +71,9 @@ function run_profile(; backend_name::AbstractString="cpu", samples::Int=20, warm
     second_lgs = LGSSource(
         magnitude=8.0,
         wavelength=589e-9,
-        coordinates=(5.0, 90.0),
+        separation_arcsec=5.0, position_angle_deg=90.0,
         altitude=90000.0,
-        laser_coordinates=(5.0, 0.0),
+        laser_launch_xy_m=(5.0, 0.0),
         sodium_layer_profile=_sodium_layer_profile(T),
         fwhm_spot_up=1.0,
         photon_irradiance=T(0.75),

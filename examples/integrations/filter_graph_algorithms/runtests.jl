@@ -191,6 +191,12 @@ end
 
 @testset "S1 calibration identity binds configuration and interpretation" begin
     plant_signature = AOSFGALockstep._plant_signature()
+    old_direction_shape = AOSFGALockstep._signature_value(UInt64(0),
+        (0.0f0, 0.0f0))
+    scalar_direction_shape = AOSFGALockstep._source_direction_signature(
+        UInt64(0), AOSFGALockstep._SOURCE_SEPARATION_ARCSEC,
+        AOSFGALockstep._SOURCE_POSITION_ANGLE_DEG)
+    @test scalar_direction_shape == old_direction_shape
     @test plant_signature !=
         AOSFGALockstep._plant_signature(telescope_resolution=9)
     @test plant_signature !=
@@ -202,7 +208,10 @@ end
     @test plant_signature !=
         AOSFGALockstep._plant_signature(source_band=:I)
     @test plant_signature != AOSFGALockstep._plant_signature(
-        source_coordinates_arcsec_deg=(1.0f0, 0.0f0),
+        source_separation_arcsec=1.0f0,
+    )
+    @test plant_signature != AOSFGALockstep._plant_signature(
+        source_position_angle_deg=1.0f0,
     )
     @test plant_signature != AOSFGALockstep._plant_signature(
         source_radiometry=AOSFGALockstep.NormalizedTestSource(),

@@ -47,7 +47,8 @@ function profile_sources(count::Int, ::Type{T}) where {T<:AbstractFloat}
             band=:custom,
             wavelength=T(650e-9) + fraction * T(300e-9),
             photon_irradiance=one(T) + fraction,
-            coordinates=(fraction * T(0.12), fraction * T(210)),
+            separation_arcsec=fraction * T(0.12),
+            position_angle_deg=fraction * T(210),
             T=T,
         )
     end

@@ -26,7 +26,7 @@
     curv = CurvatureWFS(tel; pupil_samples=2)
     curv_count = CurvatureWFS(tel; pupil_samples=2,
         readout_model=CurvatureChannelReadout())
-    ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
+    ast = Asterism([src, Source(band=:I, magnitude=1.0, separation_arcsec=1.0, position_angle_deg=-45.0)])
     moving_atm = MultiLayerAtmosphere(tel; r0=0.2,
         reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0, fractional_cn2=[1.0],

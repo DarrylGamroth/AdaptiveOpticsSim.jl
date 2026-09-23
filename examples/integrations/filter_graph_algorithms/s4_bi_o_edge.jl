@@ -72,7 +72,7 @@ function _prepare_plant()
     )
     pupil = PupilFunction(telescope; T=T)
     source = Source(
-        band=:custom, magnitude=zero(T), coordinates=(zero(T), zero(T)),
+        band=:custom, magnitude=zero(T), separation_arcsec=zero(T), position_angle_deg=zero(T),
         wavelength=750.0f-9, photon_irradiance=2.0f8,
         radiometry=PhysicalPhotonIrradianceSource(), T=T,
     )

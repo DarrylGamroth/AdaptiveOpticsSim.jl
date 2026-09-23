@@ -1621,7 +1621,7 @@ end
         photon_irradiance=T(6),
         sodium_layer_profile=SodiumLayerProfile(
             T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
-        laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
+        laser_launch_xy_m=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     staged_sodium = ShackHartmannWFS(tel; n_lenslets=4, n_pix_subap=4, T=T)
     sodium_rate = shack_hartmann_rate_map(staged_sodium, pupil, sodium_lgs)
     sodium_plan = @inferred prepare_wfs_optics(
@@ -1943,9 +1943,9 @@ end
         T[0.7e-6, 0.9e-6], T[0.25, 0.75]; T=T))
     path_source = Asterism([
         Source(band=:custom, wavelength=wavelength(source),
-            coordinates=(T(0), T(0)), photon_irradiance=T(3), T=T),
+            separation_arcsec=T(0), position_angle_deg=T(0), photon_irradiance=T(3), T=T),
         Source(band=:custom, wavelength=wavelength(source),
-            coordinates=(T(0.2), T(-0.1)), photon_irradiance=T(7), T=T),
+            separation_arcsec=T(0.2), position_angle_deg=T(-0.1), photon_irradiance=T(7), T=T),
     ])
     second_pupil = PupilFunction(tel; T=T)
     second_pupil.opd .= reverse(pupil.opd; dims=1)
@@ -2008,7 +2008,7 @@ end
         photon_irradiance=T(6),
         sodium_layer_profile=SodiumLayerProfile(
             T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
-        laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
+        laser_launch_xy_m=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     heterogeneous_source = Asterism(AbstractSource[source, simple_lgs])
     for family in (Val(:bi_o_edge),)
         sensor = contract_four_pupil_sensor(family, tel; pupil_samples=4,

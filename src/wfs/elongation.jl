@@ -202,7 +202,7 @@ function lgs_kernel_signature(src::LGSSource, pad::Int,
     sig = hash(pixel_scale, sig)
     sig = hash(threshold, sig)
     sig = hash(wavelength_m, sig)
-    sig = hash(params.laser_coordinates, sig)
+    sig = hash(params.laser_launch_xy_m, sig)
     sig = hash(params.fwhm_spot_up, sig)
     sig = hash(pupil_dimensions, sig)
     sig = hash(pupil_diameter, sig)
@@ -286,8 +286,8 @@ function lgs_spot_kernel!(kernel::AbstractMatrix{T}, pupil_diameter::Real,
     center::Real, x_subap::Real, y_subap::Real,
     ref_vec::Tuple{<:Real,<:Real,<:Real}) where {T<:AbstractFloat}
     fill!(kernel, zero(T))
-    x0 = src.params.laser_coordinates[2]
-    y0 = -src.params.laser_coordinates[1]
+    x0 = src.params.laser_launch_xy_m[2]
+    y0 = -src.params.laser_launch_xy_m[1]
     @inbounds for k in eachindex(altitudes)
         vec = lgs_reference_vector(pupil_diameter, x0, y0, altitudes[k])
         vec = (vec[1] - ref_vec[1], vec[2] - ref_vec[2], vec[3] - ref_vec[3])
@@ -413,8 +413,8 @@ function lgs_average_kernel_fft(pupil_diameter::Real, src::LGSSource,
     temp = similar(kernel)
     fill!(kernel, zero(T))
 
-    x0 = src.params.laser_coordinates[2]
-    y0 = -src.params.laser_coordinates[1]
+    x0 = src.params.laser_launch_xy_m[2]
+    y0 = -src.params.laser_launch_xy_m[1]
     ref_idx = Int(cld(length(altitudes), 2))
     ref_vec = lgs_reference_vector(pupil_diameter, x0, y0,
         altitudes[ref_idx])

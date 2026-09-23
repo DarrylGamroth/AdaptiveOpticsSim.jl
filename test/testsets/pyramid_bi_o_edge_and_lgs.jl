@@ -100,7 +100,7 @@ end
 
     lgs = LGSSource(wavelength=T(589e-9), photon_irradiance=T(4),
         sodium_layer_profile=SodiumLayerProfile(T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
-        laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
+        laser_launch_xy_m=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     @test WavefrontSensors.ensure_lgs_kernel!(pyramid, pupil, lgs) === pyramid
     lgs_tag = pyramid_propagation_workspace(pyramid).lgs_kernel_tag
     lgs_front_end = PyramidOpticalFrontEnd(pyramid, lgs)

@@ -291,12 +291,14 @@ end
 function build_reference_source(cfg::AbstractDict{<:AbstractString,<:Any})
     kind = lowercase(String(get(cfg, "kind", "ngs")))
     coordinates_raw = get(cfg, "coordinates", [0.0, 0.0])
-    coordinates = (Float64(coordinates_raw[1]), Float64(coordinates_raw[2]))
+    separation_arcsec = Float64(coordinates_raw[1])
+    position_angle_deg = Float64(coordinates_raw[2])
     if kind == "ngs"
         return Source(
             band=Symbol(cfg["band"]),
             magnitude=Float64(get(cfg, "magnitude", 0.0)),
-            coordinates=coordinates,
+            separation_arcsec=separation_arcsec,
+            position_angle_deg=position_angle_deg,
         )
     elseif kind == "lgs"
         sodium_layer_profile = nothing
@@ -306,12 +308,13 @@ function build_reference_source(cfg::AbstractDict{<:AbstractString,<:Any})
             sodium_layer_profile = SodiumLayerProfile(altitudes, weights)
         end
         laser_raw = get(cfg, "laser_coordinates", [0.0, 0.0])
-        laser_coordinates = (Float64(laser_raw[1]), Float64(laser_raw[2]))
+        laser_launch_xy_m = (Float64(laser_raw[1]), Float64(laser_raw[2]))
         return LGSSource(
             elongation_factor=Float64(get(cfg, "elongation_factor", 1.0)),
             magnitude=Float64(get(cfg, "magnitude", 0.0)),
-            coordinates=coordinates,
-            laser_coordinates=laser_coordinates,
+            separation_arcsec=separation_arcsec,
+            position_angle_deg=position_angle_deg,
+            laser_launch_xy_m=laser_launch_xy_m,
             fwhm_spot_up=Float64(get(cfg, "fwhm_spot_up", 0.0)),
             sodium_layer_profile=sodium_layer_profile,
             photon_irradiance=1.0,

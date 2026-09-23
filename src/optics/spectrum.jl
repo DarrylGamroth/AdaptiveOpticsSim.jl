@@ -185,7 +185,7 @@ end
 function source_with_wavelength_and_radiometric_value(src::LGSSource, λ::T,
     radiometric_value::T) where {T<:AbstractFloat}
     params = src.params
-    lcoords = (T(params.laser_coordinates[1]), T(params.laser_coordinates[2]))
+    launch_xy_m = (T(params.laser_launch_xy_m[1]), T(params.laser_launch_xy_m[2]))
     coords = (T(params.coordinates_xy_arcsec[1]), T(params.coordinates_xy_arcsec[2]))
     profile = isnothing(params.sodium_layer_profile) ? nothing :
         copy(params.sodium_layer_profile)
@@ -196,7 +196,7 @@ function source_with_wavelength_and_radiometric_value(src::LGSSource, λ::T,
         λ,
         T(params.altitude),
         T(params.elongation_factor),
-        lcoords,
+        launch_xy_m,
         profile,
         T(params.fwhm_spot_up),
         radiometric_value,

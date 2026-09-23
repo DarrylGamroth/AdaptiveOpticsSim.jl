@@ -83,7 +83,7 @@ end
         band=:custom,
         wavelength=wavelength_m,
         photon_irradiance=T(0.75),
-        coordinates=(T(25) * output_sample_arcsec, T(0)),
+        separation_arcsec=T(25) * output_sample_arcsec, position_angle_deg=T(0),
         T=T,
     )
     inputs = [first_pupil, second_pupil]
@@ -297,7 +297,7 @@ end
         band=:custom,
         wavelength=T(800e-9),
         photon_irradiance=T(4),
-        coordinates=(T(0.04), T(35)),
+        separation_arcsec=T(0.04), position_angle_deg=T(35),
         T=T,
     )
     wavelengths = T[650e-9, 800e-9, 950e-9]

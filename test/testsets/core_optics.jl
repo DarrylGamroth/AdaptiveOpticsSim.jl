@@ -746,24 +746,34 @@ end
     @test source_radiometric_value(Source(band=:custom,
         wavelength=1.0e-6, normalized_power=0.0, T=Float32)) === 0.0f0
 
+    directed_source = Source(band=:I, magnitude=0.0,
+        separation_arcsec=2.0, position_angle_deg=30.0)
+    @test all(isapprox.(coordinates_xy_arcsec(directed_source),
+        (sqrt(3.0), 1.0)))
+    directed_lgs = LGSSource(separation_arcsec=2.0,
+        position_angle_deg=30.0, laser_launch_xy_m=(1.0, -0.5))
+    @test all(isapprox.(coordinates_xy_arcsec(directed_lgs),
+        (sqrt(3.0), 1.0)))
+    @test directed_lgs.params.laser_launch_xy_m == (1.0, -0.5)
+
     for invalid_finite_value in (Inf, -Inf, NaN, float32_overflow)
         @test_throws InvalidConfiguration Source(band=:custom,
             wavelength=1.0e-6, magnitude=invalid_finite_value,
             normalized_power=1.0, T=Float32)
         @test_throws InvalidConfiguration Source(band=:custom,
             wavelength=1.0e-6,
-            coordinates=(invalid_finite_value, 0.0),
+            separation_arcsec=invalid_finite_value, position_angle_deg=0.0,
             normalized_power=1.0, T=Float32)
         @test_throws InvalidConfiguration Source(band=:custom,
             wavelength=1.0e-6,
-            coordinates=(1.0, invalid_finite_value),
+            separation_arcsec=1.0, position_angle_deg=invalid_finite_value,
             normalized_power=1.0, T=Float32)
         @test_throws InvalidConfiguration LGSSource(
             magnitude=invalid_finite_value, T=Float32)
         @test_throws InvalidConfiguration LGSSource(
-            coordinates=(invalid_finite_value, 0.0), T=Float32)
+            separation_arcsec=invalid_finite_value, position_angle_deg=0.0, T=Float32)
         @test_throws InvalidConfiguration LGSSource(
-            laser_coordinates=(invalid_finite_value, 0.0), T=Float32)
+            laser_launch_xy_m=(invalid_finite_value, 0.0), T=Float32)
     end
     for invalid_altitude in (0.0, -1.0, Inf, -Inf, NaN,
         float32_overflow)
