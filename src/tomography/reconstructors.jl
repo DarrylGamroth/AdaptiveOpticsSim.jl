@@ -1239,13 +1239,17 @@ function stable_hermitian_right_division(
     ))
 end
 
+_covariance_input_type(::Type{T}, matrix::AbstractMatrix{T}) where {T<:AbstractFloat} = matrix
+_covariance_input_type(::Type{T}, matrix::AbstractMatrix) where {T<:AbstractFloat} =
+    Matrix{T}(matrix)
+
 function _tomographic_covariance_reconstructor(
     ::ScalarCPUStyle,
     ::BuildBackend,
-    projection::AbstractMatrix{T},
-    phase_covariance::AbstractMatrix{T},
-    fit_phase_covariance::AbstractMatrix{T},
-    measurement_noise_covariance::AbstractMatrix{T},
+    projection::AbstractMatrix,
+    phase_covariance::AbstractMatrix,
+    fit_phase_covariance::AbstractMatrix,
+    measurement_noise_covariance::AbstractMatrix,
     ::AbstractMatrix{T},
 ) where {T<:AbstractFloat}
     aoc_tomography = AdaptiveOpticsCalibration.Tomography
@@ -1254,8 +1258,10 @@ function _tomographic_covariance_reconstructor(
     plan = AdaptiveOpticsCalibration.prepare(
         aoc_tomography.CovarianceReconstructor(), specification)
     inputs = aoc_tomography.CovarianceReconstructorInputs(
-        projection, phase_covariance, fit_phase_covariance,
-        measurement_noise_covariance)
+        _covariance_input_type(T, projection),
+        _covariance_input_type(T, phase_covariance),
+        _covariance_input_type(T, fit_phase_covariance),
+        _covariance_input_type(T, measurement_noise_covariance))
     return aoc_tomography.reconstructor(
         AdaptiveOpticsCalibration.process(plan, inputs))
 end
@@ -1263,12 +1269,12 @@ end
 function _tomographic_covariance_reconstructor(
     ::AcceleratorStyle,
     backend::BuildBackend,
-    projection::AbstractMatrix{T},
-    ::AbstractMatrix{T},
-    fit_phase_covariance::AbstractMatrix{T},
-    ::AbstractMatrix{T},
-    system::AbstractMatrix{T},
-) where {T<:AbstractFloat}
+    projection::AbstractMatrix,
+    ::AbstractMatrix,
+    fit_phase_covariance::AbstractMatrix,
+    ::AbstractMatrix,
+    system::AbstractMatrix,
+)
     return stable_hermitian_right_division(backend,
         backend_matmul_transpose_right(fit_phase_covariance, projection), system)
 end

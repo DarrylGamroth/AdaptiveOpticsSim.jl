@@ -234,6 +234,22 @@ end
         recon_cpu.operators.cxx, recon_cpu.operators.cox,
         recon_cpu.operators.cnz, cpu_system)) ≈ recon_cpu.operators.recstat
 
+    # The measured interaction matrix may have a different precision from the
+    # physical covariance model. The source builder promotes the cold solve.
+    imat32 = Float32.(imat)
+    recon_mixed = build_reconstructor(
+        InteractionMatrixTomography(), imat32, grid_mask, atm, lgs, wfs,
+        tomo, dm)
+    @test eltype(recon_mixed.reconstructor) === Float64
+    @test recon_mixed.operators.recstat ≈ aoc_covariance_reconstructor(
+        Float64.(imat32), recon_mixed.operators.cxx,
+        recon_mixed.operators.cox, recon_mixed.operators.cnz)
+    recon_mixed_cpu = build_reconstructor(
+        InteractionMatrixTomography(), imat32, grid_mask, atm, lgs, wfs,
+        tomo, dm; build_backend=Calibration.CPUBuildBackend())
+    @test eltype(recon_mixed_cpu.reconstructor) === Float64
+    @test recon_mixed_cpu.operators.recstat ≈ recon_mixed.operators.recstat
+
     det = Detector(noise=NoiseReadout(0.2), qe=0.8, binning=2)
     detector_noise = PhotonReadoutSlopeNoise(det; photons_per_subaperture=1000.0, excess_noise=1.2)
     recon_detector_noise = build_reconstructor(
