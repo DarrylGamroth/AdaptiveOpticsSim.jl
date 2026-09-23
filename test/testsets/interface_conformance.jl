@@ -15,7 +15,7 @@
     linear_apd = LinearAPDDetector(
         topology=LinearAPDChannelBank(length(psf)), noise=NoisePhoton())
     opd_map = OPDMap(fill(0.1, size(pupil.opd)))
-    ncpa = NCPA(tel, dm, atm; coefficients=[0.01, -0.02])
+    ncpa = NCPA(fill(0.01, size(pupil.opd)))
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
     poly_common = with_spectrum(src, SpectralBundle(
         fill(wavelength(src), 2), [0.7, 0.3]))

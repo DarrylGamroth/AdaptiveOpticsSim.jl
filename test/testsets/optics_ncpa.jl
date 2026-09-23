@@ -8,106 +8,106 @@
     pupil = PupilFunction(tel)
     apply_surface!(pupil, map, DMReplace())
     @test sum(pupil.opd) ≈ 64.0
+
     sampled_opd = fill(3e-9, 8, 8)
     physical_ncpa = @inferred NCPA(sampled_opd)
     @test surface_opd(physical_ncpa) === sampled_opd
     @test fieldnames(typeof(physical_ncpa)) == (:opd,)
     @test parentmodule(typeof(physical_ncpa)) === Optics
-    @test parentmodule(typeof(ModalCalibrationBasis())) === Calibration
 
-    basis_default = Calibration.ncpa_basis(ModalCalibrationBasis(), tel, dm, atm; n_modes=2)
-    basis_kl = Calibration.ncpa_basis(
-        ModalCalibrationBasis(KarhunenLoeveBasis()), tel, dm, atm; n_modes=2)
-    basis_dm = Calibration.ncpa_basis(
-        ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
-        tel,
-        dm,
-        atm;
-        n_modes=2,
-    )
-    basis_dm_without_atmosphere =
-        Calibration.ncpa_basis(
-            ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
-            tel,
-            dm;
-            n_modes=2,
-        )
-    @test basis_default ≈ basis_kl
-    @test sum(abs.(basis_default .- basis_dm)) > 0
-    @test basis_dm_without_atmosphere ≈ basis_dm
-    @test_throws InvalidConfiguration Calibration.ncpa_basis(
-        ModalCalibrationBasis(KarhunenLoeveBasis()), tel, dm; n_modes=2)
+    _, basis_kl = Calibration.modal_basis_components(
+        KarhunenLoeveBasis(), dm, tel, atm; n_modes=2)
+    _, basis_dm = Calibration.modal_basis_components(
+        AOCModalBases.InfluenceFunctionEigenbasis(), dm, tel, nothing; n_modes=2)
+    @test sum(abs.(basis_kl .- basis_dm)) > 0
+    @test_throws InvalidConfiguration Calibration.modal_basis_components(
+        KarhunenLoeveBasis(), dm, tel, nothing; n_modes=2)
 
-    sampled_basis = modal_basis(
-        dm,
-        tel;
-        n_modes=2,
-        projector=false,
-        method=AOCModalBases.InfluenceFunctionEigenbasis(),
-    )
-    modal_to_command = sampled_basis.M2C
-    @test_throws InvalidConfiguration Calibration.ncpa_basis(
-        M2CBasis(), tel, dm; n_modes=2)
-    external_basis = Calibration.ncpa_basis(
-        M2CBasis(), tel, dm, atm; n_modes=2, M2C=modal_to_command)
-    @test external_basis ≈
-        basis_from_m2c(dm, tel, modal_to_command)
+    sampled_basis = modal_basis(dm, tel; n_modes=2, projector=false,
+        method=AOCModalBases.InfluenceFunctionEigenbasis())
+    external_basis = basis_from_m2c(dm, tel, sampled_basis.M2C)
+    for mode in axes(external_basis, 3)
+        raw_mode = @view external_basis[:, :, mode]
+        centered_mode = raw_mode .- mean(raw_mode[pupil_mask(tel)])
+        @test centered_mode ≈ @view(basis_dm[:, :, mode])
+    end
 
-    coeffs = [1e-9, 2e-9]
-    ncpa_default_kl = @inferred NCPA(
-        tel, dm, atm; basis=ModalCalibrationBasis(), coefficients=coeffs)
-    ncpa_kl = NCPA(
-        tel,
-        dm,
-        atm;
-        basis=ModalCalibrationBasis(KarhunenLoeveBasis()),
-        coefficients=coeffs,
-    )
-    ncpa_dm = NCPA(
-        tel,
-        dm,
-        atm;
-        basis=ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
-        coefficients=coeffs,
-    )
-    ncpa_zero = NCPA(tel, dm, atm)
-    @test eltype(ncpa_zero.opd) == eltype(pupil_reflectivity(tel))
-    @test all(iszero, ncpa_zero.opd)
-    @test ncpa_default_kl.opd ≈ ncpa_kl.opd
-    @test sum(abs.(ncpa_default_kl.opd .- ncpa_dm.opd)) > 0
+    coefficients = [1e-9, 2e-9]
+    specification = AOCModalBases.ModalOPDExpansionSpecification(
+        size(basis_kl, 1), size(basis_kl, 2), size(basis_kl, 3), pupil_mask(tel), Float64)
+    plan = AdaptiveOpticsCalibration.prepare(AOCModalBases.ModalOPDExpansion(), specification)
+    product = AdaptiveOpticsCalibration.process(
+        plan, AOCModalBases.ModalOPDExpansionInputs(basis_kl, coefficients))
+    ncpa_kl = NCPA(product.opd)
+    dm_plan = AdaptiveOpticsCalibration.prepare(
+        AOCModalBases.ModalOPDExpansion(),
+        AOCModalBases.ModalOPDExpansionSpecification(8, 8, 2, pupil_mask(tel), Float64))
+    ncpa_dm = NCPA(AdaptiveOpticsCalibration.process(
+        dm_plan, AOCModalBases.ModalOPDExpansionInputs(basis_dm, coefficients)).opd)
+    @test sum(abs.(ncpa_kl.opd .- ncpa_dm.opd)) > 0
+    @test all(iszero, NCPA(zeros(eltype(pupil_reflectivity(tel)), 8, 8)).opd)
 
+    # The plant graph retains its separately qualified prepared executor until
+    # graph ownership moves. It must agree with the cold AOC product.
     expanded_opd = similar(pupil.opd)
-    @test @inferred(Calibration.combine_basis!(
-        expanded_opd, basis_dm, coeffs, pupil_mask(tel))) === expanded_opd
     expansion_plan = ModalOPDExpansionPlan(basis_dm, pupil_mask(tel))
     @test expansion_plan.basis !== basis_dm
     @test expansion_plan.pupil_support !== pupil_mask(tel)
-    @test @inferred(combine_basis!(
-        expanded_opd, expansion_plan, coeffs)) === expanded_opd
+    @test @inferred(combine_basis!(expanded_opd, expansion_plan, coefficients)) === expanded_opd
+    @test expanded_opd ≈ ncpa_dm.opd
     if coverage_instrumented()
         @test_skip "allocation assertions are disabled under coverage instrumentation"
-        @test_skip "allocation assertions are disabled under coverage instrumentation"
     else
-        @test @allocated(Calibration.combine_basis!(
-            expanded_opd, basis_dm, coeffs, pupil_mask(tel))) == 0
-        @test @allocated(combine_basis!(
-            expanded_opd, expansion_plan, coeffs)) == 0
+        @test @allocated(combine_basis!(expanded_opd, expansion_plan, coefficients)) == 0
     end
 
-    amplitude = 2e-9
-    random_ncpa = NCPA(tel, dm, atm;
-        basis=ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
-        f2=(amplitude, 1, 2, 1.0),
-        seed=17)
-    repeated_random_ncpa = NCPA(tel, dm, atm;
-        basis=ModalCalibrationBasis(AOCModalBases.InfluenceFunctionEigenbasis()),
-        f2=(amplitude, 1, 2, 1.0),
-        seed=17)
-    @test random_ncpa.opd == repeated_random_ncpa.opd
-    @test std(random_ncpa.opd[pupil_mask(tel)]) ≈ amplitude
-    @test_throws InvalidConfiguration NCPA(tel, dm, atm;
-        f2=(amplitude, 1, 2))
+    apply_surface!(pupil, ncpa_kl, DMReplace())
+    @test pupil.opd ≈ ncpa_kl.opd
+end
 
-    ncpa = NCPA(tel, dm, atm; basis=ZernikeModalBasis(), coefficients=[0.0, 1e-9, 2e-9])
-    @test size(ncpa.opd) == (8, 8)
+@testset "Frozen AOS NCPA synthesis parity" begin
+    fixture = TOML.parsefile(joinpath(@__DIR__, "..", "fixtures", "aos_ncpa_opd.toml"))
+    @test fixture["schema"] == "test.adaptive-optics-sim/ncpa-opd/1"
+    @test fixture["source_revision"] == "6fb8617e172a29affc82631df79cfc8dc303220e"
+    @test fixture["matrix_order"] == "row-major"
+    @test fixture["opd_unit"] == "m"
+
+    rows = fixture["resolution"]
+    row_major_matrix(values) = permutedims(reshape(values, rows, rows))
+    tel = Telescope(resolution=rows, diameter=fixture["diameter_m"],
+        central_obstruction=fixture["central_obstruction"])
+    dm = DeformableMirror(tel; n_act=fixture["actuator_count_per_axis"],
+        influence_width=fixture["influence_width"])
+    zernike = ZernikeBasis(tel, fixture["mode_count"])
+    compute_zernike!(zernike, tel)
+    basis = zernike.modes
+    support = pupil_mask(tel)
+    @test support == row_major_matrix(fixture["pupil_support"])
+
+    plan = AdaptiveOpticsCalibration.prepare(
+        AOCModalBases.ModalOPDExpansion(),
+        AOCModalBases.ModalOPDExpansionSpecification(
+            rows, rows, fixture["mode_count"], support, Float64))
+    explicit = fixture["explicit_coefficients"]
+    product = AdaptiveOpticsCalibration.process(plan,
+        AOCModalBases.ModalOPDExpansionInputs(basis, explicit["coefficients"]))
+    @test product.opd ≈ row_major_matrix(explicit["expected_opd"]) atol=1e-22 rtol=1e-12
+    @test surface_opd(NCPA(product.opd)) === product.opd
+
+    # The historical `f2` tuple is now an explicit composing-layer policy:
+    # seeded coefficients followed by a target supported-pupil sample std.
+    seeded = fixture["seeded_power_law"]
+    rng = runtime_rng(seeded["seed"])
+    coefficients = zeros(Float64, fixture["mode_count"])
+    for mode in seeded["start_mode"]:seeded["end_mode"]
+        coefficients[mode] = randn(rng) / sqrt(mode + seeded["cutoff"])
+    end
+    @test coefficients ≈ seeded["expected_unscaled_coefficients"] atol=1e-15 rtol=1e-14
+    seeded_product = AdaptiveOpticsCalibration.process(plan,
+        AOCModalBases.ModalOPDExpansionInputs(basis, coefficients))
+    sampled_std = std(seeded_product.opd[support])
+    @test sampled_std > 0
+    seeded_product.opd .*= seeded["target_supported_pupil_std_m"] / sampled_std
+    @test seeded_product.opd ≈ row_major_matrix(seeded["expected_opd"]) atol=1e-21 rtol=1e-12
+    @test std(seeded_product.opd[support]) ≈ seeded["target_supported_pupil_std_m"]
 end

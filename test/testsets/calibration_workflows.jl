@@ -346,12 +346,21 @@ end
     truncated_control_matrix = with_truncation(control_matrix, 0)
     assert_control_matrix_contract(truncated_control_matrix, imat.matrix)
     @test truncated_control_matrix.n_trunc == 0
-    calib = ao_calibration(tel, dm, wfs; n_modes=2, amplitude=0.1)
-    assert_ao_calibration_contract(calib, length(dm.state.coefs), 2)
+    default_basis = modal_basis(dm, tel; n_modes=2)
+    assert_modal_basis_contract(default_basis, length(dm.state.coefs), 2)
+    default_imat = interaction_matrix(dm, wfs, pupil, default_basis.M2C;
+        amplitude=0.1)
+    assert_interaction_matrix_contract(
+        default_imat, length(slopes(wfs)), size(default_basis.M2C, 2), 0.1)
+    default_control_matrix = ControlMatrix(default_imat.matrix)
+    assert_control_matrix_contract(default_control_matrix, default_imat.matrix)
 
-    calib = ao_calibration(tel, dm, wfs; n_modes=2, amplitude=0.1, basis=basis)
-    assert_ao_calibration_contract(calib, length(dm.state.coefs), 2)
-    @test calib.calibration.D == imat_basis.matrix
+    basis_imat = interaction_matrix(dm, wfs, pupil, basis.M2C; amplitude=0.1)
+    assert_interaction_matrix_contract(
+        basis_imat, length(slopes(wfs)), size(basis.M2C, 2), 0.1)
+    basis_control_matrix = ControlMatrix(basis_imat.matrix)
+    assert_control_matrix_contract(basis_control_matrix, basis_imat.matrix)
+    @test basis_control_matrix.D == imat_basis.matrix
 
     meta = Calibration.compute_meta_sensitivity_matrix(
         tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)

@@ -1,4 +1,47 @@
-# Prepared modal OPD expansion
+# Prepared plant-graph modal OPD expansion
+
+# This AOS execution path serves the plant graph until its graph-node owner is
+# retired. Cold scientific OPD-product construction belongs to
+# AdaptiveOpticsCalibration.ModalBases.ModalOPDExpansion.
+
+@kernel function combine_basis_kernel!(opd, basis, coeffs, pupil, n_modes::Int)
+    I = @index(Global, Cartesian)
+    i, j = Tuple(I)
+    if i <= size(opd, 1) && j <= size(opd, 2)
+        acc = zero(eltype(opd))
+        @inbounds for k in 1:n_modes
+            acc += coeffs[k] * basis[i, j, k]
+        end
+        @inbounds opd[i, j] = ifelse(pupil[i, j], acc, zero(acc))
+    end
+end
+
+function _combine_basis!(opd::AbstractMatrix{T}, basis::AbstractArray{T,3},
+    coeffs::AbstractVector{T}, pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    return _combine_basis!(execution_style(opd), opd, basis, coeffs, pupil)
+end
+
+function _combine_basis!(::ScalarCPUStyle, opd::AbstractMatrix{T}, basis::AbstractArray{T,3},
+    coeffs::AbstractVector{T}, pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n_modes = min(size(basis, 3), length(coeffs))
+    fill!(opd, zero(T))
+    @inbounds for k in 1:n_modes
+        @views @. opd += coeffs[k] * basis[:, :, k]
+    end
+    @. opd *= pupil
+    return opd
+end
+
+function _combine_basis!(style::AcceleratorStyle, opd::AbstractMatrix{T}, basis::AbstractArray{T,3},
+    coeffs::AbstractVector{T}, pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n_modes = min(size(basis, 3), length(coeffs))
+    if n_modes == 0
+        fill!(opd, zero(T))
+        return opd
+    end
+    launch_kernel!(style, combine_basis_kernel!, opd, basis, coeffs, pupil, n_modes; ndrange=size(opd))
+    return opd
+end
 
 struct _OwnedModalOPDExpansionPlan end
 const _OWNED_MODAL_OPD_EXPANSION_PLAN = _OwnedModalOPDExpansionPlan()
@@ -118,5 +161,5 @@ function combine_basis!(
             "modal OPD input, output, basis, and pupil support must occupy one compute device",
         ),
     )
-    return combine_basis!(opd, plan.basis, coefficients, plan.pupil_support)
+    return _combine_basis!(opd, plan.basis, coefficients, plan.pupil_support)
 end

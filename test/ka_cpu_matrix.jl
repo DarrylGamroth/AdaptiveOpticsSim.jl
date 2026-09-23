@@ -843,16 +843,16 @@ end
         coeffs = [0.25, -0.5]
         scalar_opd = Matrix{Float64}(undef, 4, 4)
         ka_opd = similar(scalar_opd)
-        AdaptiveOpticsSim.Calibration.combine_basis!(
+        AdaptiveOpticsSim.Calibration._combine_basis!(
             SCALAR_CPU_STYLE, scalar_opd, basis, coeffs, pupil)
-        AdaptiveOpticsSim.Calibration.combine_basis!(
+        AdaptiveOpticsSim.Calibration._combine_basis!(
             KA_CPU_STYLE, ka_opd, basis, coeffs, pupil)
         mark_ka_cpu_kernel!(:combine_basis_kernel!)
         @test ka_cpu_close(ka_opd, scalar_opd)
 
         fill!(ka_opd, 1.0)
         empty_basis = Array{Float64}(undef, 4, 4, 0)
-        AdaptiveOpticsSim.Calibration.combine_basis!(
+        AdaptiveOpticsSim.Calibration._combine_basis!(
             KA_CPU_STYLE, ka_opd, empty_basis, Float64[], pupil)
         @test all(iszero, ka_opd)
 

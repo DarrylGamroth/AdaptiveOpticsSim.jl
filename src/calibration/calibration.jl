@@ -12,23 +12,15 @@ import AdaptiveOpticsCalibration
 import AdaptiveOpticsCalibration.ModalBases: KarhunenLoeveBasis
 using KernelAbstractions
 using LinearAlgebra
-using Random
 using SparseArrays
-using Statistics
 
 import ..AdaptiveOpticsSim:
     DimensionMismatchError,
-    FastProfile,
-    FidelityProfile,
     InvalidConfiguration,
     NumericalConditionError,
-    ScientificProfile,
     UnsupportedAlgorithm,
-    calibration_profile,
-    default_fidelity_profile,
     fftfreq!,
-    fftshift2d!,
-    runtime_rng
+    fftshift2d!
 
 import ..Backends:
     AbstractArrayBackend,
@@ -50,7 +42,6 @@ import ..Backends:
 using ..Optics
 import ..Optics:
     AbstractSource,
-    NCPA,
     actuator_coordinates,
     anamorphosis_angle_deg,
     misregistration_component,
@@ -75,11 +66,9 @@ include("build_backends.jl")
 include("reconstructor_products.jl")
 include("modal_basis.jl")
 include("modal_opd_expansion.jl")
-include("ncpa.jl")
 include("interaction_matrix.jl")
 include("control_matrix.jl")
 include("fitting_error.jl")
-include("ao_calibration.jl")
 include("gain_sensing_camera.jl")
 include("misregistration_identification.jl")
 include("ad_sensitivities.jl")

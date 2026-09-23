@@ -1,0 +1,40 @@
+schema = "test.adaptive-optics-sim/ncpa-opd/1"
+source_repository = "AdaptiveOpticsSim.jl"
+source_revision = "6fb8617e172a29affc82631df79cfc8dc303220e"
+source_path = "src/calibration/ncpa.jl"
+source_test_path = "test/testsets/optics_ncpa.jl"
+matrix_order = "row-major"
+opd_unit = "m"
+resolution = 4
+diameter_m = 8.0
+central_obstruction = 0.0
+actuator_count_per_axis = 2
+influence_width = 0.4
+mode_count = 3
+pupil_support = [false, true, true, false, true, true, true, true,
+                 true, true, true, true, false, true, true, false]
+
+[explicit_coefficients]
+coefficients = [0.0, 1.0e-9, 2.0e-9]
+expected_opd = [0.0, -1.7500000000000004e-9, -1.25e-9, 0.0,
+                -1.2500000000000004e-9, -7.500000000000001e-10,
+                -2.4999999999999996e-10, 2.4999999999999986e-10,
+                -2.5000000000000007e-10, 2.500000000000001e-10,
+                7.500000000000001e-10, 1.25e-9,
+                0.0, 1.2500000000000002e-9, 1.7500000000000002e-9, 0.0]
+
+[seeded_power_law]
+seed = 17
+start_mode = 1
+end_mode = 3
+cutoff = 1.0
+target_supported_pupil_std_m = 2.0e-9
+expected_unscaled_coefficients = [-0.3734871695705471,
+                                  -0.45626200952812546,
+                                  0.8739024711793312]
+expected_opd = [0.0, -3.7119552846450267e-9, -4.637586216632481e-9, 0.0,
+                -1.013415054992282e-9, -1.9390459869797352e-9,
+                -2.8646769189671893e-9, -3.790307850954643e-9,
+                7.594942426730095e-10, -1.6613668931444408e-10,
+                -1.091767621301898e-9, -2.017398553289352e-9,
+                0.0, 1.6067726083508468e-9, 6.811416763633932e-10, 0.0]

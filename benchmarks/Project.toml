@@ -13,7 +13,7 @@ HdrHistogram = {url = "https://github.com/DarrylGamroth/HdrHistogram.jl.git", re
 
 [compat]
 AcceleratedKernels = "0.4"
-AdaptiveOpticsCalibration = "0.10"
+AdaptiveOpticsCalibration = "0.11"
 AdaptiveOpticsSim = "0.1"
 BenchmarkTools = "1"
 Dagger = "0.19"

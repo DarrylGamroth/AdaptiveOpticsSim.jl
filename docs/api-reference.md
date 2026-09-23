@@ -165,13 +165,23 @@ calibration observables, modal bases, fitting, plant-side runtime
 materialization, optical-gain calibration, and identification workflows.
 Reusable inverse methods and compact-SVD products come from
 `AdaptiveOpticsCalibration.Reconstructors`. Common entry points include
-`interaction_matrix`, `control_matrix`, `ao_calibration`, `modal_basis`, and
-`compute_optical_gains!`.
+`interaction_matrix`, `control_matrix`, `modal_basis`, and
+`compute_optical_gains!`. Compose modal-basis construction, plant response
+acquisition, and inverse construction explicitly so the AOC numerical products
+remain separate from AOS plant behavior.
 
 `KarhunenLoeveBasis` is owned by
 `AdaptiveOpticsCalibration.ModalBases`. AOS supplies the sampled physical DM,
 pupil measure, and atmospheric OPD covariance, then materializes the accepted
 calibration product on the plant's runtime backend.
+
+For NCPA, acquire a physical sampled basis in AOS, pass that basis, explicit
+modal coefficients, and pupil support to
+`AdaptiveOpticsCalibration.ModalBases.ModalOPDExpansion`, then construct
+`Optics.NCPA` from the returned OPD matrix. The numerical product does not
+choose an optical branch or normalize a stochastic coefficient profile;
+the composing workflow owns those choices. See
+[`examples/tutorials/ncpa.jl`](../examples/tutorials/ncpa.jl).
 
 The maintained cross-package reference is
 [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/),
