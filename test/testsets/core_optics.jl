@@ -120,6 +120,7 @@ end
     @test Base.isexported(AdaptiveOpticsSim, :Detectors)
     @test Base.isexported(AdaptiveOpticsSim, :Atmospheres)
     @test Base.isexported(AdaptiveOpticsSim, :AlgorithmGraphs)
+    @test !Base.ispublic(AdaptiveOpticsSim, :runtime_timing)
     @test Base.ispublic(AdaptiveOpticsSim, :Backends)
     @test Base.ispublic(AdaptiveOpticsSim, :Optics)
     @test Base.ispublic(AdaptiveOpticsSim, :Detectors)
@@ -323,26 +324,37 @@ end
     for name in (
         :AbstractPropagationPlan,
         :FraunhoferPropagationPlan,
-        :FraunhoferPropagationWorkspace,
         :FresnelPropagationPlan,
-        :FresnelPropagationWorkspace,
         :DirectImagingPlan,
-        :DirectImagingWorkspace,
         :PreparedDirectImaging,
         :SpatialFilterPlan,
-        :SpatialFilterWorkspace,
         :PreparedSpatialFilter,
         :PreparedDirectImagingBatch,
-        :DirectImagingBatchCompatibilitySignature,
-        :DirectImagingBatchWorkspace,
         :direct_imaging_batch_capability,
-        :direct_imaging_batch_signature,
         :validate_direct_imaging_batch,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)
         @test !Base.isexported(Optics, name)
         @test Base.ispublic(Optics, name)
+    end
+    for name in (
+        :DirectImagingBatchSampleParams,
+        :DirectImagingBatchProductContract,
+        :DirectImagingBatchCompatibilitySignature,
+        :DirectImagingBatchWorkspace,
+        :direct_imaging_batch_signature,
+        :FraunhoferPropagationWorkspace,
+        :FresnelPropagationWorkspace,
+        :MicrolensPropagationWorkspace,
+        :DirectImagingWorkspace,
+        :SpatialFilterWorkspace,
+        :propagation_workspace,
+        :microlens_propagation_workspace,
+        :direct_imaging_workspace,
+        :spatial_filter_workspace,
+    )
+        @test !Base.ispublic(Optics, name)
     end
     for name in (
         :AbstractAtmosphere,
@@ -368,7 +380,6 @@ end
     for name in (
         :AbstractTimedAtmosphere,
         :PreparedAtmosphereDirectionBatch,
-        :AbstractAtmosphereDirectionBatchCapability,
         :validate_atmosphere_direction_batch,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
@@ -376,6 +387,16 @@ end
         @test !Base.isexported(Atmospheres, name)
         @test Base.ispublic(Atmospheres, name)
         @test parentmodule(getfield(Atmospheres, name)) === Atmospheres
+    end
+    for name in (
+        :AbstractAtmosphereDirectionBatchCapability,
+        :ExtractedScreenDirectionBatchCapability,
+        :UnsupportedAtmosphereDirectionBatchCapability,
+        :AtmosphereDirectionBatchParams,
+        :AtmosphereDirectionBatchWorkspace,
+        :atmosphere_direction_batch_capability,
+    )
+        @test !Base.ispublic(Atmospheres, name)
     end
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeParams)
     @test !Base.isexported(AdaptiveOpticsSim, :TelescopeState)
@@ -392,6 +413,10 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :set_fft_provider_threads!)
     @test !Base.isexported(AdaptiveOpticsSim, :GPUBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AbstractRuntimeExecutionPlan)
+    for name in (:ModalOPDExpansionPlan, :combine_basis!)
+        @test !Base.isexported(Calibration, name)
+        @test Base.ispublic(Calibration, name)
+    end
     for name in (
         :TomographyAtmosphereParams,
         :LGSAsterismParams,
@@ -436,6 +461,15 @@ end
         :run_ensemble!,
         :ensemble_members,
         :execution_policy,
+    )
+        @test !Base.isexported(AdaptiveOpticsSim, name)
+        @test !Base.ispublic(AdaptiveOpticsSim, name)
+        @test !isdefined(AdaptiveOpticsSim, name)
+        @test Base.isexported(Ensembles, name)
+        @test Base.ispublic(Ensembles, name)
+        @test parentmodule(getfield(Ensembles, name)) === Ensembles
+    end
+    for name in (
         :ensemble_ownership_roots,
         :init_ensemble_scheduler,
         :execute_ensemble!,
@@ -746,24 +780,34 @@ end
     @test source_radiometric_value(Source(band=:custom,
         wavelength=1.0e-6, normalized_power=0.0, T=Float32)) === 0.0f0
 
+    directed_source = Source(band=:I, magnitude=0.0,
+        separation_arcsec=2.0, position_angle_deg=30.0)
+    @test all(isapprox.(coordinates_xy_arcsec(directed_source),
+        (sqrt(3.0), 1.0)))
+    directed_lgs = LGSSource(separation_arcsec=2.0,
+        position_angle_deg=30.0, laser_launch_xy_m=(1.0, -0.5))
+    @test all(isapprox.(coordinates_xy_arcsec(directed_lgs),
+        (sqrt(3.0), 1.0)))
+    @test directed_lgs.params.laser_launch_xy_m == (1.0, -0.5)
+
     for invalid_finite_value in (Inf, -Inf, NaN, float32_overflow)
         @test_throws InvalidConfiguration Source(band=:custom,
             wavelength=1.0e-6, magnitude=invalid_finite_value,
             normalized_power=1.0, T=Float32)
         @test_throws InvalidConfiguration Source(band=:custom,
             wavelength=1.0e-6,
-            coordinates=(invalid_finite_value, 0.0),
+            separation_arcsec=invalid_finite_value, position_angle_deg=0.0,
             normalized_power=1.0, T=Float32)
         @test_throws InvalidConfiguration Source(band=:custom,
             wavelength=1.0e-6,
-            coordinates=(1.0, invalid_finite_value),
+            separation_arcsec=1.0, position_angle_deg=invalid_finite_value,
             normalized_power=1.0, T=Float32)
         @test_throws InvalidConfiguration LGSSource(
             magnitude=invalid_finite_value, T=Float32)
         @test_throws InvalidConfiguration LGSSource(
-            coordinates=(invalid_finite_value, 0.0), T=Float32)
+            separation_arcsec=invalid_finite_value, position_angle_deg=0.0, T=Float32)
         @test_throws InvalidConfiguration LGSSource(
-            laser_coordinates=(invalid_finite_value, 0.0), T=Float32)
+            laser_launch_xy_m=(invalid_finite_value, 0.0), T=Float32)
     end
     for invalid_altitude in (0.0, -1.0, Inf, -Inf, NaN,
         float32_overflow)
@@ -1835,3 +1879,5 @@ end
         (zernike_2=[0.01], zernike_3=[-0.02]),
     )
 end
+
+include(joinpath(@__DIR__, "..", "reviewed_supported_api.jl"))

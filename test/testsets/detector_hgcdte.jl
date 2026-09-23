@@ -2,12 +2,12 @@
     @test !isdefined(AdaptiveOpticsSim.Detectors, :detector_ramp_times)
     @test !isdefined(AdaptiveOpticsSim, :detector_ramp_times)
 
-    zero_psf = zeros(4, 4)
+    zero_photon_arrival_rate = zeros(4, 4)
     det_hgcdte_single = Detector(exposure_duration=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor())
-    frame_hgcdte_single = copy(capture!(det_hgcdte_single, zero_psf; rng=MersenneTwister(16)))
+    frame_hgcdte_single = copy(capture!(det_hgcdte_single,
+        zero_photon_arrival_rate; rng=MersenneTwister(16)))
     single_products = readout_products(det_hgcdte_single)
-    @test single_products isa HgCdTeReadoutProducts
     @test single_products isa MultiReadFrameReadoutProducts
     @test detector_reference_frame(det_hgcdte_single) === nothing
     @test detector_signal_frame(det_hgcdte_single) !== nothing
@@ -43,7 +43,8 @@
     det_hgcdte_ndr = Detector(exposure_duration=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=AveragedNonDestructiveReads(4)))
-    frame_hgcdte_ndr = copy(capture!(det_hgcdte_ndr, zero_psf; rng=MersenneTwister(16)))
+    frame_hgcdte_ndr = copy(capture!(det_hgcdte_ndr,
+        zero_photon_arrival_rate; rng=MersenneTwister(16)))
     @test std(vec(frame_hgcdte_ndr)) < std(vec(frame_hgcdte_single))
     @test supports_nondestructive_reads(det_hgcdte_ndr.params.sensor)
     @test supports_readout_correction(det_hgcdte_ndr.params.sensor)
@@ -68,7 +69,8 @@
     det_hgcdte_cds = Detector(exposure_duration=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=CorrelatedDoubleSampling()))
-    frame_hgcdte_cds = copy(capture!(det_hgcdte_cds, zero_psf; rng=MersenneTwister(16)))
+    frame_hgcdte_cds = copy(capture!(det_hgcdte_cds,
+        zero_photon_arrival_rate; rng=MersenneTwister(16)))
     @test std(vec(frame_hgcdte_cds)) > std(vec(frame_hgcdte_single))
     cds_meta = detector_export_metadata(det_hgcdte_cds)
     @test cds_meta.sampling_mode == :correlated_double_sampling
@@ -86,7 +88,8 @@
     det_hgcdte_fowler = Detector(exposure_duration=1.0, noise=NoiseReadout(4.0), qe=1.0, binning=1,
         gain=1.0, sensor=HgCdTeSensor(
             sampling_mode=FowlerSampling(8)))
-    frame_hgcdte_fowler = copy(capture!(det_hgcdte_fowler, zero_psf; rng=MersenneTwister(16)))
+    frame_hgcdte_fowler = copy(capture!(det_hgcdte_fowler,
+        zero_photon_arrival_rate; rng=MersenneTwister(16)))
     fowler_meta = detector_export_metadata(det_hgcdte_fowler)
     @test fowler_meta.sampling_mode == :fowler_sampling
     @test fowler_meta.sampling_reads == 16
@@ -214,25 +217,29 @@
     det_hgcdte_timed_single = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0,
         sensor=HgCdTeSensor(read_duration=1.0))
-    frame_hgcdte_timed_single = copy(capture!(det_hgcdte_timed_single, zero_psf; rng=MersenneTwister(17)))
+    frame_hgcdte_timed_single = copy(capture!(det_hgcdte_timed_single,
+        zero_photon_arrival_rate; rng=MersenneTwister(17)))
     det_hgcdte_timed_cds = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=1000.0, gain=1.0,
         sensor=HgCdTeSensor(read_duration=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
-    frame_hgcdte_timed_cds = copy(capture!(det_hgcdte_timed_cds, zero_psf; rng=MersenneTwister(17)))
+    frame_hgcdte_timed_cds = copy(capture!(det_hgcdte_timed_cds,
+        zero_photon_arrival_rate; rng=MersenneTwister(17)))
     @test sum(frame_hgcdte_timed_cds) > sum(frame_hgcdte_timed_single)
     det_hgcdte_timed_glow = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=3.0, gain=1.0,
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(glow_rate=2.0, read_duration=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
-    frame_hgcdte_timed_glow = copy(capture!(det_hgcdte_timed_glow, zero_psf; rng=MersenneTwister(17)))
+    frame_hgcdte_timed_glow = copy(capture!(det_hgcdte_timed_glow,
+        zero_photon_arrival_rate; rng=MersenneTwister(17)))
     det_hgcdte_timed_noglow = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         dark_current=3.0, gain=1.0,
         response_model=NullFrameResponse(),
         sensor=HgCdTeSensor(read_duration=1.0,
             sampling_mode=CorrelatedDoubleSampling()))
-    frame_hgcdte_timed_noglow = copy(capture!(det_hgcdte_timed_noglow, zero_psf; rng=MersenneTwister(17)))
+    frame_hgcdte_timed_noglow = copy(capture!(det_hgcdte_timed_noglow,
+        zero_photon_arrival_rate; rng=MersenneTwister(17)))
     @test sum(frame_hgcdte_timed_glow) > sum(frame_hgcdte_timed_noglow)
     timed_meta = detector_export_metadata(det_hgcdte_timed_cds)
     @test timed_meta.sampling_read_duration == 1.0

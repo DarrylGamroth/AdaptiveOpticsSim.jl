@@ -179,7 +179,7 @@ end
         band=:custom,
         wavelength=wavelength(src),
         photon_irradiance=one(T),
-        coordinates=(T(0.01), T(0)),
+        separation_arcsec=T(0.01), position_angle_deg=T(0),
         T=T,
     )
     one_source = prepare_direct_imaging_batch(pupil, src; zero_padding=2)

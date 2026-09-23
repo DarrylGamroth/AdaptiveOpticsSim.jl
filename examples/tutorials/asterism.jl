@@ -3,10 +3,10 @@ include(joinpath(@__DIR__, "common.jl"))
 function main(; resolution::Int=24, zero_padding::Int=2)
     tel = base_telescope(resolution=resolution, fov_arcsec=4.0)
     sources = (
-        base_source(coordinates=(0.0, 0.0)),
-        base_source(coordinates=(1.0, 0.0)),
-        base_source(coordinates=(1.0, 120.0)),
-        base_source(coordinates=(1.0, 240.0)),
+        base_source(separation_arcsec=0.0, position_angle_deg=0.0),
+        base_source(separation_arcsec=1.0, position_angle_deg=0.0),
+        base_source(separation_arcsec=1.0, position_angle_deg=120.0),
+        base_source(separation_arcsec=1.0, position_angle_deg=240.0),
     )
     asterism = Asterism(collect(sources))
     pupil = PupilFunction(tel)

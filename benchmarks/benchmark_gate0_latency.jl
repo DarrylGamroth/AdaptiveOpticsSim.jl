@@ -112,7 +112,7 @@ function make_gate0_card(raw::AbstractDict)
             reference_wavelength_m=500e-9, L0=25.0,
             fractional_cn2=[0.6, 0.4], wind_speed=[7.0, 13.0],
             wind_direction_deg=[0.0, 120.0], altitude=[0.0, 6000.0])
-        src = Source(band=:I, magnitude=0.0, coordinates=(3.0, 45.0))
+        src = Source(band=:I, magnitude=0.0, separation_arcsec=3.0, position_angle_deg=45.0)
         rng = runtime_rng(Int(raw["rng_seed"]))
         duration = 1e-3
         renderer = prepare_atmosphere_renderer(atmosphere, tel, src)
@@ -185,7 +185,7 @@ function make_gate0_card(raw::AbstractDict)
         zero_padding = Int(raw["zero_padding"])
         tel = Telescope(resolution=resolution, diameter=8.0,
             central_obstruction=0.2)
-        src = Source(band=:I, magnitude=1.0, coordinates=(0.08, 90.0))
+        src = Source(band=:I, magnitude=1.0, separation_arcsec=0.08, position_angle_deg=90.0)
         pupil = PupilFunction(tel)
         gate0_opd_ramp!(pupil)
         imaging = prepare_direct_imaging(pupil, src; zero_padding=zero_padding)

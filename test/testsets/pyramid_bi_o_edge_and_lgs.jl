@@ -33,8 +33,6 @@ end
         pyramid_propagation_workspace(pyramid).pyramid_mask
     @test @allocated(pyramid_focal_mask(pyramid)) == 0
     @test !hasfield(typeof(pyramid), :estimator)
-    @test !applicable(measure!, pyramid, pupil, src)
-    @test !applicable(slopes, pyramid)
     @test !supports_valid_subaperture_mask(pyramid)
     @test valid_subaperture_mask(pyramid) === nothing
     @test !supports_reference_signal(pyramid)
@@ -100,7 +98,7 @@ end
 
     lgs = LGSSource(wavelength=T(589e-9), photon_irradiance=T(4),
         sodium_layer_profile=SodiumLayerProfile(T[80_000, 90_000, 100_000], T[0.2, 0.6, 0.2]),
-        laser_coordinates=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
+        laser_launch_xy_m=(T(1), T(-0.5)), fwhm_spot_up=T(0.8), T=T)
     @test WavefrontSensors.ensure_lgs_kernel!(pyramid, pupil, lgs) === pyramid
     lgs_tag = pyramid_propagation_workspace(pyramid).lgs_kernel_tag
     lgs_front_end = PyramidOpticalFrontEnd(pyramid, lgs)
@@ -140,8 +138,6 @@ end
     bio = BiOEdgeWFS(tel; pupil_samples=2, modulation=zero(T), T=T)
 
     @test !hasfield(typeof(bio), :estimator)
-    @test !applicable(measure!, bio, pupil, src)
-    @test !applicable(slopes, bio)
     @test !supports_valid_subaperture_mask(bio)
     @test valid_subaperture_mask(bio) === nothing
     @test !supports_reference_signal(bio)

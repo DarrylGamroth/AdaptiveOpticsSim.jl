@@ -29,6 +29,7 @@ import ..Backends:
     ExecutionStyle,
     ScalarCPUStyle,
     _resolve_array_backend,
+    backend,
     backend_fill,
     backend_sum_value,
     compute_device,
@@ -60,7 +61,6 @@ import ..Detectors:
 
 import ..WavefrontSensors
 using ..WavefrontSensors
-import ..WavefrontSensors: AbstractWFS
 
 include("build_backends.jl")
 include("reconstructor_products.jl")

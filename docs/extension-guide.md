@@ -15,6 +15,18 @@ products, and one concrete prepared owner.
 
 ## Prepared Numerical Operations
 
+Plant-side response calibration composes the physical WFS with a caller-owned
+estimator. Supply an explicitly ordered `WFSMeasurement` vector with declared
+units and kind, then
+pass a callable `(measurement, pupil)` to
+`Calibration.interaction_matrix` or
+`Calibration.compute_meta_sensitivity_matrix`. The callable writes the exact
+storage returned by `measurement_storage(measurement)`; it may retain a source,
+detector, and prepared estimator in its concrete closure or callable fields.
+The calibration methods restore DM coefficients and pupil OPD if the callable
+throws. AOS does not define a universal estimator or slope accessor for its
+physical WFS families.
+
 A new repeated operation should normally provide:
 
 1. an immutable configuration/params value

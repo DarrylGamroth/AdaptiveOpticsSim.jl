@@ -177,14 +177,14 @@ end
 function assert_wfs_interface(wfs, tel)
     pupil = PupilFunction(tel)
     @test applicable(update_valid_mask!, wfs, pupil)
-    @test applicable(measure!, wfs, pupil)
-    @test slopes(wfs) isa AbstractVector
+    @test !isdefined(WavefrontSensors, :measure!)
+    @test !isdefined(WavefrontSensors, :slopes)
     @test supports_valid_subaperture_mask(wfs) == !isnothing(valid_subaperture_mask(wfs))
     @test supports_reference_signal(wfs) == !isnothing(reference_signal(wfs))
 end
 
-function assert_detector_interface(det, psf)
-    @test applicable(capture!, det, psf)
+function assert_detector_interface(det, photon_arrival_rate)
+    @test applicable(capture!, det, photon_arrival_rate)
 end
 
 function assert_dm_interface(dm, tel)

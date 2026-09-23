@@ -35,8 +35,12 @@ julia --project=. test/ci/impact_planner.jl path/to/changed_file.jl
 ## CPU Matrix
 
 `ka-cpu` exercises KernelAbstractions CPU kernels and style constraints.
-`backend-smoke` loads optional backend paths when their packages and devices are
-available in the active environment; a skip is not hardware qualification.
+`backend-smoke` exercises an optional backend only when its package was imported
+before `AdaptiveOpticsSim` loaded and its device is functional. It does not
+dynamically import a backend after AOS has loaded; that ordering is unsafe on
+Julia 1.12. The dedicated AMDGPU and CUDA hardware entry points below preload
+their backends. A skip in the CPU composition suite is not hardware
+qualification.
 
 Set Julia, BLAS, FFT-provider, OpenMP, and vendor math-library thread counts
 deliberately. Deterministic evidence uses one thread. Performance evidence must

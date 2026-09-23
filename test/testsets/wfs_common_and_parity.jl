@@ -13,8 +13,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :acquire_wfs_observation!,
         :prepare_wfs_estimation,
         :estimate_wfs_measurement!,
-        :measure!,
-        :slopes,
     )
         @test parentmodule(getfield(WavefrontSensors, name)) ===
             WavefrontSensors
@@ -22,6 +20,13 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         @test !Base.ispublic(AdaptiveOpticsSim, name)
         @test !isdefined(AdaptiveOpticsSim, name)
     end
+
+    @test !isdefined(WavefrontSensors, :measure!)
+    @test !isdefined(WavefrontSensors, :slopes)
+    @test !isdefined(WavefrontSensors, :WFSNormalization)
+    @test !isdefined(WavefrontSensors, :MeanValidFluxNormalization)
+    @test !isdefined(WavefrontSensors, :IncidenceFluxNormalization)
+    @test !isdefined(WavefrontSensors, :FluxThresholdValidSubapertures)
 
 
     for name in (
@@ -368,9 +373,9 @@ end
 
     common_lgs = Asterism([
         LGSSource(wavelength=589e-9, elongation_factor=1.4,
-            coordinates=(0.0, 0.0), photon_irradiance=1.0),
+            separation_arcsec=0.0, position_angle_deg=0.0, photon_irradiance=1.0),
         LGSSource(wavelength=589e-9, elongation_factor=1.4,
-            coordinates=(3.0, 90.0), photon_irradiance=2.0),
+            separation_arcsec=3.0, position_angle_deg=90.0, photon_irradiance=2.0),
     ])
     @test AdaptiveOpticsSim.WavefrontSensors.common_wfs_calibration_source(
         common_lgs, "test WFS") === first(common_lgs.sources)

@@ -6,7 +6,7 @@ function lgs_optical_signature(src::LGSSource, sig::UInt)
     params = src.params
     sig = hash(params.altitude, sig)
     sig = hash(params.elongation_factor, sig)
-    sig = hash(params.laser_coordinates, sig)
+    sig = hash(params.laser_launch_xy_m, sig)
     sig = hash(params.fwhm_spot_up, sig)
     profile = params.sodium_layer_profile
     if profile !== nothing

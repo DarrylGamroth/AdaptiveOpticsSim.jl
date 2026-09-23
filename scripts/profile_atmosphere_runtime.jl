@@ -103,9 +103,9 @@ function _resolve_source(name::AbstractString, T::Type{<:AbstractFloat})
     if lowered == "onaxis"
         return Source(band=:I, magnitude=0.0, T=T), "onaxis"
     elseif lowered == "offaxis"
-        return Source(band=:I, magnitude=0.0, coordinates=(45.0, 30.0), T=T), "offaxis"
+        return Source(band=:I, magnitude=0.0, separation_arcsec=45.0, position_angle_deg=30.0, T=T), "offaxis"
     elseif lowered == "lgs"
-        return LGSSource(magnitude=0.0, coordinates=(45.0, 30.0), altitude=90_000.0, T=T), "lgs"
+        return LGSSource(magnitude=0.0, separation_arcsec=45.0, position_angle_deg=30.0, altitude=90_000.0, T=T), "lgs"
     end
     error("unsupported source '$name'; use onaxis, offaxis, or lgs")
 end

@@ -68,8 +68,10 @@ function _prepare_plant()
         fov_arcsec=zero(T), pupil_reflectivity=one(T), T=T,
     )
     pupil = PupilFunction(telescope; T=T)
-    source = Source(
-        band=:custom, magnitude=zero(T), coordinates=(zero(T), zero(T)),
+    source = Source(;
+        band=:custom, magnitude=zero(T),
+        Main.source_direction_keywords(Main.AOS_FGA_SOURCE_DIRECTION_STYLE,
+            zero(T), zero(T))...,
         wavelength=750.0f-9, photon_irradiance=12.0f0,
         radiometry=PhysicalPhotonIrradianceSource(), T=T,
     )

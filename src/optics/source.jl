@@ -206,7 +206,7 @@ end
 @inline function polar_arcsec_deg_to_xy_arcsec(radius_arcsec, theta_deg,
     ::Type{T}) where {T<:AbstractFloat}
     r = _converted_finite(radius_arcsec, T,
-        "source angular-separation radius")
+        "source angular separation")
     theta = _converted_finite(theta_deg, T,
         "source position angle")
     θ = _converted_finite(deg2rad(theta), T,
@@ -254,8 +254,17 @@ function source_radiometric_value(::NormalizedTestSource, ::Symbol, ::Any,
         "normalized sources cannot declare physical photon_irradiance"))
 end
 
+"""
+    Source(; separation_arcsec=0.0, position_angle_deg=0.0, ...)
+
+Create an astronomical source. `separation_arcsec` and `position_angle_deg`
+declare its signed radial angular offset from the optical axis and its position
+angle, respectively. The stored source direction is
+`coordinates_xy_arcsec = (separation_arcsec * cosd(position_angle_deg),
+separation_arcsec * sind(position_angle_deg))` in arcseconds.
+"""
 function Source(; band::Symbol=:I, magnitude::Real=0.0,
-    coordinates=(0.0, 0.0), wavelength=nothing,
+    separation_arcsec::Real=0.0, position_angle_deg::Real=0.0, wavelength=nothing,
     photon_irradiance::Union{Nothing,Real}=nothing,
     normalized_power::Real=1.0,
     radiometry::Union{Nothing,AbstractSourceRadiometry}=nothing,
@@ -270,7 +279,8 @@ function Source(; band::Symbol=:I, magnitude::Real=0.0,
     wavelength_value = _converted_positive_finite(wavelength, T,
         "source wavelength")
     magnitude_value = _converted_finite(magnitude, T, "source magnitude")
-    coords_xy_arcsec = polar_arcsec_deg_to_xy_arcsec(coordinates[1], coordinates[2], T)
+    coords_xy_arcsec = polar_arcsec_deg_to_xy_arcsec(separation_arcsec,
+        position_angle_deg, T)
     resolved_radiometry = default_source_radiometry(band,
         isnothing(radiometry) ? photon_irradiance : radiometry)
     radiometric_value = source_radiometric_value(resolved_radiometry, band,
@@ -322,7 +332,7 @@ struct LGSSourceParams{T<:AbstractFloat,P,R<:AbstractSourceRadiometry}
     wavelength::T
     altitude::T
     elongation_factor::T
-    laser_coordinates::NTuple{2,T}
+    laser_launch_xy_m::NTuple{2,T}
     sodium_layer_profile::P
     fwhm_spot_up::T
     radiometric_value::T
@@ -358,8 +368,21 @@ function _freeze_sodium_layer_profile(::Any,
         "sodium_layer_profile must be a SodiumLayerProfile or nothing"))
 end
 
-function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Real=589e-9,
-    altitude::Real=90000.0, elongation_factor::Real=1.2, laser_coordinates=(0.0, 0.0),
+"""
+    LGSSource(; separation_arcsec=0.0, position_angle_deg=0.0,
+        laser_launch_xy_m=(0.0, 0.0), ...)
+
+Create a finite-height laser guide star. `separation_arcsec` and
+`position_angle_deg` define the source direction as for `Source`, with stored
+`coordinates_xy_arcsec = (separation_arcsec * cosd(position_angle_deg),
+separation_arcsec * sind(position_angle_deg))` in arcseconds.
+`laser_launch_xy_m` is the homogeneous `(x, y)` laser-launch position in
+metres used by the LGS elongation model; it is not a source direction.
+"""
+function LGSSource(; magnitude::Real=0.0, separation_arcsec::Real=0.0,
+    position_angle_deg::Real=0.0, wavelength::Real=589e-9,
+    altitude::Real=90000.0, elongation_factor::Real=1.2,
+    laser_launch_xy_m::Tuple{<:Real,<:Real}=(0.0, 0.0),
     sodium_layer_profile=nothing, fwhm_spot_up::Real=0.0,
     photon_irradiance::Union{Nothing,Real}=nothing,
     normalized_power::Real=1.0,
@@ -372,15 +395,15 @@ function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Re
         (nothing, altitude_value) :
         _freeze_sodium_layer_profile(sodium_layer_profile, T)
     magnitude_value = _converted_finite(magnitude, T, "LGS magnitude")
-    coordinates_value = polar_arcsec_deg_to_xy_arcsec(
-        coordinates[1], coordinates[2], T)
+    coordinates_value = polar_arcsec_deg_to_xy_arcsec(separation_arcsec,
+        position_angle_deg, T)
     elongation_value = _converted_nonnegative_finite(elongation_factor, T,
         "LGS elongation factor")
-    laser_coordinates_value = (
-        _converted_finite(laser_coordinates[1], T,
-            "LGS laser x coordinate"),
-        _converted_finite(laser_coordinates[2], T,
-            "LGS laser y coordinate"),
+    laser_launch_xy_m_value = (
+        _converted_finite(laser_launch_xy_m[1], T,
+            "LGS laser-launch x position in metres"),
+        _converted_finite(laser_launch_xy_m[2], T,
+            "LGS laser-launch y position in metres"),
     )
     fwhm_value = _converted_nonnegative_finite(fwhm_spot_up, T,
         "LGS uplink spot FWHM")
@@ -399,7 +422,7 @@ function LGSSource(; magnitude::Real=0.0, coordinates=(0.0, 0.0), wavelength::Re
         wavelength_value,
         alt_val,
         elongation_value,
-        laser_coordinates_value,
+        laser_launch_xy_m_value,
         frozen_profile,
         fwhm_value,
         radiometric_value,
@@ -457,7 +480,7 @@ function freeze_source(src::LGSSource)
         params.wavelength,
         params.altitude,
         params.elongation_factor,
-        params.laser_coordinates,
+        params.laser_launch_xy_m,
         profile,
         params.fwhm_spot_up,
         params.radiometric_value,

@@ -129,39 +129,59 @@ function randn_frame_noise!(det::Detector, rng::AbstractRNG, out::AbstractArray{
     return _randn_frame_noise!(strategy, det, rng, out)
 end
 
-function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_duration)
+function capture_signal!(det::Detector{NoiseNone},
+    photon_arrival_rate::AbstractMatrix{T}, rng::AbstractRNG,
+    exposure_duration::Real) where {T}
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration)
     return nothing
 end
-function capture_signal!(det::Detector{NoiseNone}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real, qe) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe)
-    return nothing
-end
-
-function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_duration)
-    return nothing
-end
-function capture_signal!(det::Detector{NoisePhoton}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real, qe) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe)
+function capture_signal!(det::Detector{NoiseNone},
+    photon_arrival_rate::AbstractMatrix{T}, rng::AbstractRNG,
+    exposure_duration::Real, qe) where {T}
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration,
+        qe)
     return nothing
 end
 
-function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_duration)
+function capture_signal!(det::Detector{NoisePhoton},
+    photon_arrival_rate::AbstractMatrix{T}, rng::AbstractRNG,
+    exposure_duration::Real) where {T}
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration)
     return nothing
 end
-function capture_signal!(det::Detector{<:NoiseReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real, qe) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe)
+function capture_signal!(det::Detector{NoisePhoton},
+    photon_arrival_rate::AbstractMatrix{T}, rng::AbstractRNG,
+    exposure_duration::Real, qe) where {T}
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration,
+        qe)
     return nothing
 end
 
-function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_duration)
+function capture_signal!(det::Detector{<:NoiseReadout},
+    photon_arrival_rate::AbstractMatrix{T}, rng::AbstractRNG,
+    exposure_duration::Real) where {T}
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration)
     return nothing
 end
-function capture_signal!(det::Detector{<:NoisePhotonReadout}, psf::AbstractMatrix{T}, rng::AbstractRNG, exposure_duration::Real, qe) where {T}
-    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe)
+function capture_signal!(det::Detector{<:NoiseReadout},
+    photon_arrival_rate::AbstractMatrix{T}, rng::AbstractRNG,
+    exposure_duration::Real, qe) where {T}
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration,
+        qe)
+    return nothing
+end
+
+function capture_signal!(det::Detector{<:NoisePhotonReadout},
+    photon_arrival_rate::AbstractMatrix{T}, rng::AbstractRNG,
+    exposure_duration::Real) where {T}
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration)
+    return nothing
+end
+function capture_signal!(det::Detector{<:NoisePhotonReadout},
+    photon_arrival_rate::AbstractMatrix{T}, rng::AbstractRNG,
+    exposure_duration::Real, qe) where {T}
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration,
+        qe)
     return nothing
 end
 
@@ -731,11 +751,11 @@ end
 end
 
 function capture_with_quantum_efficiency!(det::Detector,
-    photon_rate::AbstractMatrix{T}, quantum_efficiency::Real,
+    photon_arrival_rate::AbstractMatrix{T}, quantum_efficiency::Real,
     rng::AbstractRNG) where {T}
     require_whole_capture_idle(det)
     exposure_duration = det.params.exposure_duration
-    capture_signal!(det, photon_rate, rng, exposure_duration,
+    capture_signal!(det, photon_arrival_rate, rng, exposure_duration,
         quantum_efficiency)
     finalize_capture!(det, rng, exposure_duration)
     advance_thermal!(det, exposure_duration)
@@ -743,7 +763,7 @@ function capture_with_quantum_efficiency!(det::Detector,
 end
 
 """
-    capture!(detector, photon_rate, rng)
+    capture!(detector, photon_arrival_rate, rng)
 
 Legacy matrix acquisition path. Each matrix value is interpreted as a
 cell-integrated photon-arrival rate on the input optical grid. The detector
@@ -751,20 +771,23 @@ applies its configured exposure duration exactly once. Use
 `prepare_detector_acquisition` with an `IntensityMap` when geometry,
 radiometry, backend, and device contracts must be checked explicitly.
 """
-function capture!(det::Detector, psf::AbstractMatrix{T},
+function capture!(det::Detector, photon_arrival_rate::AbstractMatrix{T},
     rng::AbstractRNG) where {T}
-    return capture_with_quantum_efficiency!(det, psf, det.params.qe, rng)
+    return capture_with_quantum_efficiency!(det, photon_arrival_rate,
+        det.params.qe, rng)
 end
 
-function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource, rng::AbstractRNG) where {T}
+function capture!(det::Detector, photon_arrival_rate::AbstractMatrix{T},
+    src::AbstractSource, rng::AbstractRNG) where {T}
     require_whole_capture_idle(det)
-    return capture_with_quantum_efficiency!(det, psf,
+    return capture_with_quantum_efficiency!(det, photon_arrival_rate,
         effective_qe(det, src, eltype(det.products.frame)), rng)
 end
 
-function capture!(det::Detector, psf::AbstractMatrix{T}, src::AbstractSource;
+function capture!(det::Detector, photon_arrival_rate::AbstractMatrix{T},
+    src::AbstractSource;
     rng::AbstractRNG=runtime_rng()) where {T}
-    return capture!(det, psf, src, rng)
+    return capture!(det, photon_arrival_rate, src, rng)
 end
 
 function capture!(det::Detector, source::AbstractTemporalFrameSource, rng::AbstractRNG)
@@ -785,7 +808,7 @@ function capture!(det::Detector, source::AbstractTemporalFrameSource;
 end
 
 """
-    capture_incremental!(detector, photon_rate, rng, integration_duration,
+    capture_incremental!(detector, photon_arrival_rate, rng, integration_duration,
         quantum_efficiency=detector.params.qe)
 
 Accumulate one positive `integration_duration` in seconds from a cell-integrated
@@ -794,15 +817,15 @@ when the configured exposure duration is reached. `integration_duration`
 is neither an absolute timestamp nor the period between consecutive samples;
 scheduled detector events own their timestamps and completion semantics.
 """
-function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
+function capture_incremental!(det::Detector, photon_arrival_rate::AbstractMatrix,
     rng::AbstractRNG, integration_duration::Real, qe=det.params.qe)
     if !iszero(det.state.integrated_time) || !det.state.readout_ready
-        size(photon_rate) == size(det.workspace.presampling_buffer) ||
+        size(photon_arrival_rate) == size(det.workspace.presampling_buffer) ||
             throw(DimensionMismatchError(
                 "incremental detector input dimensions cannot change while " *
                 "an exposure is pending"))
     end
-    prepare_detector_buffers!(det, size(photon_rate))
+    prepare_detector_buffers!(det, size(photon_arrival_rate))
     T = eltype(det.products.frame)
     dt = T(integration_duration)
     isfinite(dt) && dt > zero(T) || throw(InvalidConfiguration(
@@ -818,7 +841,7 @@ function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
     exposure_start = iszero(det.state.integrated_time)
     exposure_start && fill!(det.state.accum_buffer,
         zero(eltype(det.state.accum_buffer)))
-    capture_signal_pipeline!(det, photon_rate, rng, dt, qe, exposure_start,
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, dt, qe, exposure_start,
         det.params.exposure_duration)
     accumulate_incremental_charge_generation!(det, rng, dt)
     det.state.accum_buffer .+= det.products.frame
@@ -835,11 +858,12 @@ function capture_incremental!(det::Detector, photon_rate::AbstractMatrix,
     return write_output!(det)
 end
 
-function capture!(det::Detector, photon_rate::AbstractMatrix{T};
+function capture!(det::Detector, photon_arrival_rate::AbstractMatrix{T};
     rng::AbstractRNG=runtime_rng(),
     integration_duration::Union{Nothing,Real}=nothing) where {T}
     if integration_duration === nothing
-        return capture!(det, photon_rate, rng)
+        return capture!(det, photon_arrival_rate, rng)
     end
-    return capture_incremental!(det, photon_rate, rng, integration_duration)
+    return capture_incremental!(det, photon_arrival_rate, rng,
+        integration_duration)
 end

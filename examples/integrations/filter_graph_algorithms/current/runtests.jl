@@ -4,6 +4,8 @@ using JuliaFilterGraph
 using LinearAlgebra
 using Test
 
+const AOS_FGA_SOURCE_DIRECTION_STYLE = Val(:current)
+include("../source_direction_keywords.jl")
 include("../s1_lockstep.jl")
 using .AOSFGALockstep
 

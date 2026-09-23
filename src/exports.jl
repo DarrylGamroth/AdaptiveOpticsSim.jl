@@ -13,5 +13,3 @@ export AlgorithmGraphs
 
 export FidelityProfile, ScientificProfile, FastProfile, default_fidelity_profile
 export SplitMix64RNG, runtime_rng, deterministic_reference_rng
-
-export runtime_timing

@@ -77,8 +77,8 @@ function lgs_spot_kernels_fft(pupil_diameter::Real,
     kernels_fft = similar(propagation.fft_buffer, Complex{T}, pad, pad,
         n_sub * n_sub)
 
-    x0 = src.params.laser_coordinates[2]
-    y0 = -src.params.laser_coordinates[1]
+    x0 = src.params.laser_launch_xy_m[2]
+    y0 = -src.params.laser_launch_xy_m[1]
     ref_idx = Int(cld(length(altitudes), 2))
     ref_vec = lgs_reference_vector(pupil_diameter, x0, y0,
         altitudes[ref_idx])

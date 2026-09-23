@@ -4,8 +4,8 @@ struct GeometryValidSubapertures{T<:AbstractFloat} <: AbstractValidSubaperturePo
     threshold::T
 end
 
-struct FluxThresholdValidSubapertures{T<:AbstractFloat} <: AbstractValidSubaperturePolicy
-    light_ratio::T
+struct RelativeIlluminationValidSubapertures{T<:AbstractFloat} <: AbstractValidSubaperturePolicy
+    peak_fraction::T
 end
 
 function GeometryValidSubapertures(; threshold::Real=0.1,
@@ -17,13 +17,13 @@ function GeometryValidSubapertures(; threshold::Real=0.1,
     return GeometryValidSubapertures{T}(value)
 end
 
-function FluxThresholdValidSubapertures(; light_ratio::Real=0.5,
-    T::Type{<:AbstractFloat}=typeof(float(light_ratio)))
-    value = T(light_ratio)
+function RelativeIlluminationValidSubapertures(; peak_fraction::Real=0.5,
+    T::Type{<:AbstractFloat}=typeof(float(peak_fraction)))
+    value = T(peak_fraction)
     isfinite(value) && zero(T) <= value <= one(T) ||
         throw(InvalidConfiguration(
-            "FluxThresholdValidSubapertures light_ratio must lie in [0, 1]"))
-    return FluxThresholdValidSubapertures{T}(value)
+            "RelativeIlluminationValidSubapertures peak_fraction must lie in [0, 1]"))
+    return RelativeIlluminationValidSubapertures{T}(value)
 end
 
 mutable struct SubapertureLayoutState
@@ -198,7 +198,7 @@ end
 @inline _host_support_map(::ExecutionStyle, support_map::AbstractMatrix) = Array(support_map)
 
 function update_subaperture_layout!(layout::SubapertureLayout, support_map::AbstractMatrix{T},
-    policy::FluxThresholdValidSubapertures) where {T<:Real}
+    policy::RelativeIlluminationValidSubapertures) where {T<:Real}
     n_sub = layout.n_subap
     sub = layout.subap_pixels
     size(support_map, 1) == n_sub * sub || throw(DimensionMismatchError("support map size must match subaperture layout"))
@@ -213,7 +213,7 @@ function update_subaperture_layout!(layout::SubapertureLayout, support_map::Abst
         total = sum(@view support_host[xs:xe, ys:ye])
         peak = max(peak, total)
     end
-    cutoff = convert(eltype(support_host), policy.light_ratio) * peak
+    cutoff = convert(eltype(support_host), policy.peak_fraction) * peak
     @inbounds for j in 1:n_sub, i in 1:n_sub
         xs = (i - 1) * sub + 1
         ys = (j - 1) * sub + 1
@@ -229,7 +229,7 @@ end
 
 function update_subaperture_layout_from_amplitude!(
     layout::SubapertureLayout, amplitude::AbstractMatrix{T},
-    policy::FluxThresholdValidSubapertures) where {T<:Real}
+    policy::RelativeIlluminationValidSubapertures) where {T<:Real}
     n_sub = layout.n_subap
     sub = layout.subap_pixels
     size(amplitude) == (n_sub * sub, n_sub * sub) ||
@@ -246,7 +246,7 @@ function update_subaperture_layout_from_amplitude!(
         total = sum(abs2, @view amplitude_host[xs:xe, ys:ye])
         peak = max(peak, total)
     end
-    cutoff = convert(eltype(amplitude_host), policy.light_ratio) * peak
+    cutoff = convert(eltype(amplitude_host), policy.peak_fraction) * peak
     @inbounds for j in 1:n_sub, i in 1:n_sub
         xs = (i - 1) * sub + 1
         ys = (j - 1) * sub + 1

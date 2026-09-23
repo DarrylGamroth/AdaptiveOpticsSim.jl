@@ -83,10 +83,10 @@ end
     one_sample_arcsec = focal_plane_pixel_scale_arcsec(output)
     positive_x = Source(band=:custom, wavelength=wavelength(src),
         photon_irradiance=photon_irradiance(src),
-        coordinates=(one_sample_arcsec, 0.0))
+        separation_arcsec=one_sample_arcsec, position_angle_deg=0.0)
     positive_y = Source(band=:custom, wavelength=wavelength(src),
         photon_irradiance=photon_irradiance(src),
-        coordinates=(one_sample_arcsec, 90.0))
+        separation_arcsec=one_sample_arcsec, position_angle_deg=90.0)
     on_axis = prepare_direct_imaging(pupil, src; zero_padding=2)
     x_shifted = prepare_direct_imaging(pupil, positive_x;
         zero_padding=2)
@@ -142,7 +142,7 @@ end
 
     huge_offset = Source(band=:custom, wavelength=wavelength(src),
         photon_irradiance=photon_irradiance(src),
-        coordinates=(1.0e17, 0.0))
+        separation_arcsec=1.0e17, position_angle_deg=0.0)
     field_before = copy(field.values)
     output_before_huge_offset = copy(output.values)
     @test_throws InvalidConfiguration prepare_direct_imaging(huge_offset,
@@ -160,7 +160,7 @@ end
     one_pixel_arcsec = (180 * 3600 / pi) * wavelength_m /
         tel.params.diameter / 2
     off_axis = Source(band=:custom, wavelength=wavelength_m,
-        photon_irradiance=1.0, coordinates=(one_pixel_arcsec, 0.0))
+        photon_irradiance=1.0, separation_arcsec=one_pixel_arcsec, position_angle_deg=0.0)
     pupil = PupilFunction(tel)
 
     asterism = prepare_direct_imaging(pupil,
@@ -204,7 +204,7 @@ end
     form_direct_image!(asterism)
 
     mixed_lgs = LGSSource(wavelength=wavelength_m,
-        photon_irradiance=0.5, coordinates=(one_pixel_arcsec, 90.0))
+        photon_irradiance=0.5, separation_arcsec=one_pixel_arcsec, position_angle_deg=90.0)
     mixed_sources = AdaptiveOpticsSim.Optics.AbstractSource[on_axis, mixed_lgs]
     mixed = prepare_direct_imaging(pupil, Asterism(mixed_sources);
         zero_padding=2)
@@ -273,7 +273,7 @@ end
         photon_irradiance=0.0)
     zero_off_axis = Source(band=:custom, wavelength=wavelength_m,
         photon_irradiance=0.0,
-        coordinates=(one_pixel_arcsec, 0.0))
+        separation_arcsec=one_pixel_arcsec, position_angle_deg=0.0)
     zero_asterism = prepare_direct_imaging(pupil,
         Asterism([zero_source, zero_off_axis]); zero_padding=2)
     @test all(iszero, form_direct_image!(zero_asterism).values)

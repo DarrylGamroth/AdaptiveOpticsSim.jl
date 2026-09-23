@@ -11,9 +11,10 @@
     det = Detector(noise=NoiseNone())
     spad = SPADArrayDetector((8, 8); noise=NoisePhoton())
     mkid = MKIDArrayDetector(noise=NoisePhoton())
-    psf = fill(1.0, 8, 8)
+    photon_arrival_rate = fill(1.0, 8, 8)
     linear_apd = LinearAPDDetector(
-        topology=LinearAPDChannelBank(length(psf)), noise=NoisePhoton())
+        topology=LinearAPDChannelBank(length(photon_arrival_rate)),
+        noise=NoisePhoton())
     opd_map = OPDMap(fill(0.1, size(pupil.opd)))
     ncpa = NCPA(fill(0.01, size(pupil.opd)))
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
@@ -25,7 +26,7 @@
     curv = CurvatureWFS(tel; pupil_samples=2)
     curv_count = CurvatureWFS(tel; pupil_samples=2,
         readout_model=CurvatureChannelReadout())
-    ast = Asterism([src, Source(band=:I, magnitude=1.0, coordinates=(1.0, -45.0))])
+    ast = Asterism([src, Source(band=:I, magnitude=1.0, separation_arcsec=1.0, position_angle_deg=-45.0)])
     moving_atm = MultiLayerAtmosphere(tel; r0=0.2,
         reference_wavelength_m=TEST_ATMOSPHERE_REFERENCE_WAVELENGTH_M,
         L0=25.0, fractional_cn2=[1.0],
@@ -103,8 +104,6 @@
     @test supports_valid_subaperture_mask(wfs)
     @test !supports_reference_signal(wfs)
     @test !applicable(update_valid_mask!, pyr, pupil)
-    @test !applicable(measure!, pyr, pupil)
-    @test !applicable(slopes, pyr)
     @test !supports_valid_subaperture_mask(pyr)
     @test !supports_reference_signal(pyr)
     pyramid_front_end = PyramidOpticalFrontEnd(pyr, src)
@@ -116,8 +115,6 @@
     @test applicable(form_wfs_optical_products!, pyramid_rate, pupil,
         pyramid_optics)
     @test !applicable(update_valid_mask!, bio, pupil)
-    @test !applicable(measure!, bio, pupil)
-    @test !applicable(slopes, bio)
     @test !supports_valid_subaperture_mask(bio)
     @test !supports_reference_signal(bio)
     bio_front_end = BiOEdgeOpticalFrontEnd(bio, src)
@@ -126,18 +123,12 @@
     @test applicable(form_wfs_optical_products!, bio_rate, pupil,
         bio_optics)
     @test !applicable(update_valid_mask!, zwfs, pupil)
-    @test !applicable(measure!, zwfs, pupil)
-    @test !applicable(slopes, zwfs)
     @test !supports_valid_subaperture_mask(zwfs)
     @test !supports_reference_signal(zwfs)
     @test !applicable(update_valid_mask!, curv, pupil)
-    @test !applicable(measure!, curv, pupil)
-    @test !applicable(slopes, curv)
     @test !supports_valid_subaperture_mask(curv)
     @test !supports_reference_signal(curv)
     @test !applicable(update_valid_mask!, curv_count, pupil)
-    @test !applicable(measure!, curv_count, pupil)
-    @test !applicable(slopes, curv_count)
     @test !supports_valid_subaperture_mask(curv_count)
     @test !supports_reference_signal(curv_count)
     curvature_front_end = CurvatureOpticalFrontEnd(curv, src)
@@ -160,10 +151,10 @@
     # IF-DM
     assert_dm_interface(dm, tel)
     # IF-DET
-    assert_detector_interface(det, psf)
-    assert_detector_interface(linear_apd, vec(psf))
-    assert_detector_interface(spad, psf)
-    assert_detector_interface(mkid, psf)
+    assert_detector_interface(det, photon_arrival_rate)
+    assert_detector_interface(linear_apd, vec(photon_arrival_rate))
+    assert_detector_interface(spad, photon_arrival_rate)
+    assert_detector_interface(mkid, photon_arrival_rate)
     # IF-OPT
     assert_optical_element_interface(opd_map, tel)
     assert_optical_element_interface(ncpa, tel)
