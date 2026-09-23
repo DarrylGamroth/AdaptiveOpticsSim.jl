@@ -3,4 +3,3 @@ export InteractionMatrix, interaction_matrix
 export ControlMatrix
 export ModalBasis, KarhunenLoeveBasis
 export modal_basis, basis_from_m2c
-export GainSensingCamera, calibrate!, compute_optical_gains!

@@ -759,17 +759,6 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         return frame
     end
 
-    record_gpu_smoke!(failures, "gain_sensing_camera") do
-        mask = backend_fill(B, one(T), 8, 8)
-        basis = backend_rand(B, T, 8, 8, 3)
-        frame = abs.(backend_randn(B, T, 8, 8))
-        gsc = GainSensingCamera(mask, basis; T=T)
-        calibrate!(gsc, frame)
-        og = compute_optical_gains!(gsc, frame)
-        @assert og isa BackendArray
-        return og
-    end
-
     record_gpu_smoke!(failures, "lift") do
         lift_tel = Telescope(resolution=16, diameter=8.0f0, central_obstruction=0.0f0, T=T, backend=backend)
         lift_src = Source(band=:I, magnitude=8.0, T=T)

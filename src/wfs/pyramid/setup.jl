@@ -600,6 +600,15 @@ end
     pyramid_propagation_workspace(front_end)
 @inline pyramid_phase_mask(wfs::PyramidWFS) =
     wfs.front_end.phase_mask
+"""
+    pyramid_focal_mask(wfs::PyramidWFS)
+
+Borrow the prepared sampled complex focal-plane transmission used by this
+Pyramid sensor. The returned array is plant-owned storage; copy or prepare a
+calibration plan from it before changing the sensor's sampling geometry.
+"""
+@inline pyramid_focal_mask(wfs::PyramidWFS) =
+    pyramid_propagation_workspace(wfs).pyramid_mask
 @inline pyramid_operating_modulation(wfs::PyramidWFS) =
     wfs.front_end.modulation
 

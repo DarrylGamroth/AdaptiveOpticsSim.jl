@@ -3,15 +3,16 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
 import AdaptiveOpticsCalibration
-using Logging
 using Random
 using TOML
 
 const ProfilePhaseRetrieval = AdaptiveOpticsCalibration.PhaseRetrieval
+const ProfileOpticalGains = AdaptiveOpticsCalibration.OpticalGains
 
 const OUTDIR = joinpath(@__DIR__, "..", "benchmarks", "results", "workflows")
-const OUTFILE = joinpath(OUTDIR, "2026-04-01-phase1-pvp05.toml")
+const OUTFILE = joinpath(OUTDIR, "2026-09-23-lift-aoc-gsc-profile.toml")
 const MANIFEST = joinpath(OUTDIR, "manifest.toml")
+const ARTIFACT_ID = "WORKFLOW-VAL-2026-09-23-AOS-AOC-GSC"
 
 function combine_modes!(out::AbstractMatrix{T}, basis::AbstractArray{<:Real,3},
     coeffs::AbstractVector{<:Real}) where {T<:AbstractFloat}
@@ -46,6 +47,29 @@ function cartesian_basis(tel::Telescope, n_modes::Int)
             basis[i, j, 4] = pupil * (px * px - py * py)
         end
     end
+    return basis
+end
+
+function centered_focal_basis(pupil_basis::AbstractArray{T,3},
+    mask::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    side = size(mask, 1)
+    size(mask, 2) == side || throw(ArgumentError(
+        "Pyramid focal mask must be square for complete-image gain sensing",
+    ))
+    size(pupil_basis, 1) == size(pupil_basis, 2) || throw(ArgumentError(
+        "modal pupil basis must be square for complete-image gain sensing",
+    ))
+    side >= size(pupil_basis, 1) || throw(ArgumentError(
+        "Pyramid focal mask must not be smaller than the modal pupil basis",
+    ))
+    iseven(side - size(pupil_basis, 1)) || throw(ArgumentError(
+        "Pyramid focal mask and modal pupil basis must have aligned centers",
+    ))
+
+    basis = zeros(T, side, side, size(pupil_basis, 3))
+    offset = div(side - size(pupil_basis, 1), 2)
+    @views basis[offset+1:offset+size(pupil_basis, 1),
+        offset+1:offset+size(pupil_basis, 2), :] .= pupil_basis
     return basis
 end
 
@@ -109,44 +133,44 @@ function gsc_profile()
     src = Source(band=:R, magnitude=8.0)
     wfs = PyramidWFS(tel; pupil_samples=4, modulation=3.0,
         modulation_points=8, diffraction_padding=2, n_pix_separation=2, n_pix_edge=1)
-    basis = cartesian_basis(tel, 4)
-    t0 = time_ns()
-    gsc = GainSensingCamera(wfs, basis)
-    build_time_ns = Int(time_ns() - t0)
+    pupil_basis = cartesian_basis(tel, 4)
     pupil = PupilFunction(tel)
+    reference_frame_time_ns = time_ns()
     calibration_frame = pyramid_modulation_frame(wfs, pupil, src)
-    calib_time_ns = time_ns()
-    with_logger(NullLogger()) do
-        calibrate!(gsc, calibration_frame)
-    end
-    calib_build_ns = Int(time_ns() - calib_time_ns)
+    reference_frame_time_ns = Int(time_ns() - reference_frame_time_ns)
+    focal_mask = pyramid_focal_mask(wfs)
+    focal_basis = centered_focal_basis(pupil_basis, focal_mask)
+    plan_time_ns = time_ns()
+    specification = ProfileOpticalGains.GainSensingSpecification(
+        focal_mask, focal_basis, calibration_frame,
+    )
+    plan = AdaptiveOpticsCalibration.prepare(
+        ProfileOpticalGains.GainSensing(), specification,
+    )
+    product = AdaptiveOpticsCalibration.allocate_result(plan)
+    workspace = AdaptiveOpticsCalibration.allocate_workspace(plan)
+    plan_build_time_ns = Int(time_ns() - plan_time_ns)
 
     opd = zeros(Float64, size(pupil.opd))
-    combine_modes!(opd, basis, [20e-9, -12e-9, 8e-9, 0.0])
+    combine_modes!(opd, pupil_basis, [20e-9, -12e-9, 8e-9, 0.0])
     apply_opd!(pupil, opd)
     frame = similar(calibration_frame)
     pyramid_modulation_frame!(frame, wfs, pupil, src)
-    og = copy(compute_optical_gains!(gsc, frame))
+    estimate!() = AdaptiveOpticsCalibration.process!(product, workspace,
+        plan, ProfileOpticalGains.GainSensingInputs(frame))
+    estimate!()
+    og = copy(ProfileOpticalGains.optical_gains(product))
 
-    calib_timing = runtime_timing(() -> with_logger(NullLogger()) do
-            calibrate!(gsc, calibration_frame)
-        end;
-        warmup=2, samples=10, gc_before=false)
-    calib_alloc = _alloc_bytes(() -> with_logger(NullLogger()) do
-        calibrate!(gsc, calibration_frame)
-    end)
-
-    measure_timing = runtime_timing(() -> compute_optical_gains!(gsc, frame);
+    measure_timing = runtime_timing(estimate!;
         warmup=3, samples=20, gc_before=false)
-    measure_alloc = _alloc_bytes(() -> compute_optical_gains!(gsc, frame))
+    measure_alloc = _alloc_bytes(estimate!)
 
     return Dict(
-        "scenario" => "tutorial_like_pyramid_gain_sensing",
-        "build_time_ns" => build_time_ns,
-        "first_calibration_time_ns" => calib_build_ns,
-        "calibration_mean_ns" => calib_timing.mean_ns,
-        "calibration_p95_ns" => calib_timing.p95_ns,
-        "calibration_alloc_bytes" => calib_alloc,
+        "scenario" => "aos_pyramid_modulation_frame_plus_aoc_gain_sensing",
+        "measurement_scope" =>
+            "AOC process! on a preformed complete frame; excludes AOS frame formation",
+        "reference_frame_build_time_ns" => reference_frame_time_ns,
+        "aoc_plan_build_time_ns" => plan_build_time_ns,
         "measurement_mean_ns" => measure_timing.mean_ns,
         "measurement_p95_ns" => measure_timing.p95_ns,
         "measurement_alloc_bytes" => measure_alloc,
@@ -160,16 +184,18 @@ function build_report()
     lift = lift_profile()
     gsc = gsc_profile()
     return Dict(
-        "artifact_id" => "WORKFLOW-VAL-2026-04-01",
-        "generated_on" => "2026-04-01",
+        "artifact_id" => ARTIFACT_ID,
+        "generated_on" => "2026-09-23",
         "scope" => Dict(
             "backend" => "cpu",
             "artifact_kind" => "workflow_profile_validation",
-            "families" => ["lift", "gain_sensing_camera"],
+            "families" => ["lift", "aos_pyramid_aoc_gain_sensing"],
+            "gain_sensing_ownership" =>
+                "AOS forms the physical Pyramid modulation frame; AOC owns the prepared complete-image estimator",
         ),
         "cases" => Dict(
             "lift_reconstruct" => lift,
-            "gain_sensing_camera" => gsc,
+            "aos_pyramid_aoc_gain_sensing" => gsc,
         ),
     )
 end
@@ -178,10 +204,10 @@ function update_manifest!(artifact_path::AbstractString)
     mkpath(dirname(MANIFEST))
     manifest = isfile(MANIFEST) ? TOML.parsefile(MANIFEST) : Dict{String,Any}()
     artifacts = get!(manifest, "artifacts", Any[])
-    kept = Any[item for item in artifacts if get(item, "id", "") != "WORKFLOW-VAL-2026-04-01"]
+    kept = Any[item for item in artifacts if get(item, "id", "") != ARTIFACT_ID]
     push!(kept, Dict(
-        "purpose" => "LiFT and gain-sensing workflow profile artifact for PVP-05",
-        "id" => "WORKFLOW-VAL-2026-04-01",
+        "purpose" => "LiFT and AOS-Pyramid/AOC-gain-sensing workflow profile artifact",
+        "id" => ARTIFACT_ID,
         "path" => basename(artifact_path),
     ))
     manifest["artifacts"] = kept

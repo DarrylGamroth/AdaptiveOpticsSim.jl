@@ -12,9 +12,9 @@ import FilterGraphAlgorithms: process!
 export prepare_s4_zernike, produce_s4_zernike_frame!, process_s4_zernike!
 export transpose_aos_zernike_frame!, frozen_aos_zernike_frame
 
-const _FGA_VERSION_CLAIM = v"0.5.0"
+const _FGA_VERSION_CLAIM = v"0.5.2"
 const _JFG_VERSION_CLAIM = v"0.2.3"
-const _FGA_TREE_CLAIM = "0ce4ceae4904446fba170ee25324d65b435c06e6"
+const _FGA_TREE_CLAIM = "922a65f3ac9486abeb7baa3e29f08794133b5bc6"
 const _JFG_TREE_CLAIM = "1893cea2d29f0cd89303939308e23ce7546bc240"
 const _CALIBRATION_SIGNATURE = UInt64(781)
 

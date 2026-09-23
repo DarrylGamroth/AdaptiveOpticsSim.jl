@@ -162,13 +162,12 @@ using AdaptiveOpticsSim.Calibration
 
 `Calibration` owns simulated interaction-response acquisition, physical
 calibration observables, modal bases, fitting, plant-side runtime
-materialization, optical-gain calibration, and identification workflows.
+materialization, and identification workflows.
 Reusable inverse methods and compact-SVD products come from
-`AdaptiveOpticsCalibration.Reconstructors`. Common entry points include
-`interaction_matrix`, `ControlMatrix`, `modal_basis`, and
-`compute_optical_gains!`. Compose modal-basis construction, plant response
-acquisition, and inverse construction explicitly so the AOC numerical products
-remain separate from AOS plant behavior.
+`AdaptiveOpticsCalibration.Reconstructors`. Common AOS entry points include
+`interaction_matrix`, `ControlMatrix`, and `modal_basis`. Compose modal-basis
+construction, plant response acquisition, and inverse construction explicitly
+so the AOC numerical products remain separate from AOS plant behavior.
 
 `KarhunenLoeveBasis` is owned by
 `AdaptiveOpticsCalibration.ModalBases`. AOS supplies the sampled physical DM,
@@ -191,6 +190,17 @@ floating-point element types and caller-owned arrays for allocation-free
 execution. AOS and FGA qualify their accelerator paths independently; the
 fixture does not claim shared device storage or one captured graph across
 packages.
+
+For Pyramid complete-image modal optical gains, AOS supplies the physical
+modulation-cycle image with `pyramid_modulation_frame` or
+`pyramid_modulation_frame!` and exposes its matching sampled complex
+transmission through `pyramid_focal_mask`. The returned mask is borrowed; pass
+it, an explicitly aligned modal basis, and a reference image to
+`AdaptiveOpticsCalibration.OpticalGains.GainSensingSpecification`, then
+prepare `GainSensing()` and process each complete current frame through
+`GainSensingInputs`. AOC copies the calibration inputs during preparation. AOS
+does not provide a gain-sensing camera, calibration state, or optical-gain
+estimator.
 
 ## Tomography
 

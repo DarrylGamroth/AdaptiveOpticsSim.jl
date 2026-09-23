@@ -1,7 +1,33 @@
 using DelimitedFiles
+import AdaptiveOpticsCalibration
 using KernelAbstractions
 using LinearAlgebra
 using Random
+
+const AOCOpticalGains = AdaptiveOpticsCalibration.OpticalGains
+
+function centered_focal_basis(pupil_basis::AbstractArray{T,3},
+    mask::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    side = size(mask, 1)
+    size(mask, 2) == side || throw(InvalidConfiguration(
+        "Pyramid focal mask must be square for complete-image gain sensing",
+    ))
+    size(pupil_basis, 1) == size(pupil_basis, 2) || throw(InvalidConfiguration(
+        "modal pupil basis must be square for complete-image gain sensing",
+    ))
+    side >= size(pupil_basis, 1) || throw(InvalidConfiguration(
+        "Pyramid focal mask must not be smaller than the modal pupil basis",
+    ))
+    iseven(side - size(pupil_basis, 1)) || throw(InvalidConfiguration(
+        "Pyramid focal mask and modal pupil basis must have aligned centers",
+    ))
+
+    basis = zeros(T, side, side, size(pupil_basis, 3))
+    offset = div(side - size(pupil_basis, 1), 2)
+    @views basis[offset+1:offset+size(pupil_basis, 1),
+        offset+1:offset+size(pupil_basis, 2), :] .= pupil_basis
+    return basis
+end
 
 function prepare_reference_direct_imaging(pupil::PupilFunction,
     src::AbstractSource; zero_padding::Int=1)
@@ -1027,20 +1053,31 @@ function compute_reference_actual(case::ReferenceCase)
         pupil = PupilFunction(tel)
         src = build_reference_source(case.config["source"])
         wfs = build_reference_wfs(:pyramid_frame, case.config["wfs"], tel)
-        basis = build_reference_basis(case.config["basis"], tel)
-        gsc = GainSensingCamera(wfs, basis)
+        pupil_basis = build_reference_basis(case.config["basis"], tel)
         reset_opd!(pupil)
         calibration_frame = pyramid_modulation_frame(wfs, pupil, src)
-        calibrate!(gsc, calibration_frame)
+        focal_mask = pyramid_focal_mask(wfs)
+        focal_basis = centered_focal_basis(pupil_basis, focal_mask)
+        specification = AOCOpticalGains.GainSensingSpecification(
+            focal_mask, focal_basis, calibration_frame,
+        )
+        plan = AdaptiveOpticsCalibration.prepare(
+            AOCOpticalGains.GainSensing(), specification,
+        )
+        product = AdaptiveOpticsCalibration.allocate_result(plan)
+        workspace = AdaptiveOpticsCalibration.allocate_workspace(plan)
+
         residual = load_case_residual_opd(case)
         if residual !== nothing
             apply_opd!(pupil, residual)
         elseif haskey(case.config, "opd")
-            apply_reference_opd!(pupil, case.config["opd"], basis)
+            apply_reference_opd!(pupil, case.config["opd"], pupil_basis)
         end
         frame = similar(calibration_frame)
         pyramid_modulation_frame!(frame, wfs, pupil, src)
-        return copy(compute_optical_gains!(gsc, frame))
+        AdaptiveOpticsCalibration.process!(product, workspace, plan,
+            AOCOpticalGains.GainSensingInputs(frame))
+        return copy(AOCOpticalGains.optical_gains(product))
     elseif case.kind === :gsc_modulation_frame
         tel = build_reference_telescope(case.config["telescope"])
         pupil = PupilFunction(tel)

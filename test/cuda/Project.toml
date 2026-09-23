@@ -14,7 +14,7 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 AdaptiveOpticsSim = {path = "../.."}
 
 [compat]
-AdaptiveOpticsCalibration = "0.12"
+AdaptiveOpticsCalibration = "0.14"
 AdaptiveOpticsSim = "0.1"
 CUDA = "6"
 FixedSizeArrays = "1.3"

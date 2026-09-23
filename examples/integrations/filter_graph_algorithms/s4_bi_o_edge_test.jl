@@ -5,7 +5,7 @@ using JuliaFilterGraph
 
 @testset "AOS Bi-O-edge plant and FGA 0.5 image-estimator boundary" begin
     prepared = prepare_s4_bi_o_edge()
-    @test Base.pkgversion(FilterGraphAlgorithms) == v"0.5.0"
+    @test Base.pkgversion(FilterGraphAlgorithms) == v"0.5.2"
     @test Base.pkgversion(JuliaFilterGraph) == v"0.2.3"
 
     # The frozen fixture is deliberately asymmetric. It establishes the AOS

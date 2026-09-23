@@ -53,6 +53,7 @@ export IncidenceFluxNormalization
 export measure!
 export pyramid_modulation_frame
 export pyramid_modulation_frame!
+export pyramid_focal_mask
 export valid_subaperture_mask
 export wfs_detector_image
 export slopes

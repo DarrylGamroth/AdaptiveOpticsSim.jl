@@ -23,10 +23,10 @@ const S4_DETECTOR_FRAME_SCHEMA =
     "org.adaptiveopticssim.integration.pyramid-electron-counts-xy.f32/1"
 const _FRAME_PERIOD_NANOSECONDS = Int64(1_000_000)
 const _MODEL_TIMESTAMP_ORIGIN_NANOSECONDS = Int64(0)
-const _FGA_VERSION_CLAIM = v"0.5.0"
+const _FGA_VERSION_CLAIM = v"0.5.2"
 const _JFG_VERSION_CLAIM = v"0.2.3"
 const _FGA_TREE_CLAIM =
-    "0ce4ceae4904446fba170ee25324d65b435c06e6"
+    "922a65f3ac9486abeb7baa3e29f08794133b5bc6"
 const _SIGNATURE_OFFSET = UInt64(0xcbf29ce484222325)
 const _SIGNATURE_PRIME = UInt64(0x00000100000001b3)
 
