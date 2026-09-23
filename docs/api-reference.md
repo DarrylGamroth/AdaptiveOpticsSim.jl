@@ -35,6 +35,8 @@ The root exports:
   lockstep HIL vocabulary described below
 
 The root does not forward each dense domain API.
+`runtime_timing` is an internal benchmark helper, not a supported package
+entry point.
 
 ## Backends
 
@@ -69,6 +71,9 @@ Major families:
 Prepared paths use names such as `prepare_direct_imaging`,
 `form_direct_image!`, `prepare_pupil_field`, `fill_electric_field!`,
 `propagate_field!`, `set_command!`, `update_surface!`, and `apply_surface!`.
+Prepared owners and immutable plan accessors are supported advanced seams;
+replaceable propagation/direct-imaging scratch and batch compatibility
+signatures are implementation details.
 
 ## Atmospheres
 
@@ -88,6 +93,8 @@ render_atmosphere!(pupil, renderer, atmosphere, epoch)
 
 Direction batches are prepared with `prepare_atmosphere_direction_batch` and
 executed with `render_atmosphere_directions!`.
+The prepared batch and its count, capacity, metadata, and output accessors are
+supported; its built-in extraction capability and scratch owners are internal.
 
 ## Detectors
 
@@ -165,6 +172,9 @@ using AdaptiveOpticsSim.Calibration
 `Calibration` owns simulated interaction-response acquisition, physical
 calibration observables, modal bases, fitting, plant-side runtime
 materialization, and identification workflows.
+Its qualified-public `ModalOPDExpansionPlan` and `combine_basis!` form the
+advanced prepared plant-graph executor; routine users construct modal OPD
+products through the calibration workflow instead of importing these names.
 Reusable inverse methods and compact-SVD products come from
 `AdaptiveOpticsCalibration.Reconstructors`. Common AOS entry points include
 `interaction_matrix` and `modal_basis`. Compose modal-basis construction,
@@ -238,6 +248,8 @@ using AdaptiveOpticsSim.Ensembles
 independent model members. Policies include sequential, deterministic, threaded,
 backend-stream, AcceleratedKernels, and Dagger execution. This facility is for
 offline/coarse parallelism, not RTC deadline scheduling.
+Use `run_ensemble!` to execute and `ensemble_members` to inspect the retained
+members; scheduler hooks remain qualified-public extension seams.
 
 ## Algorithm Graphs
 
