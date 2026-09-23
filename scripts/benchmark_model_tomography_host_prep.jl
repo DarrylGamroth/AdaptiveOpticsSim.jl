@@ -4,7 +4,7 @@
 Opt-in Float32 cold-preparation comparison for lenslet counts 3 and 8. The
 CPU route uses the production AOC-backed model builder, then transfers the
 retained tomography product arrays through AOS's GPU build backend. The GPU
-route uses AOC v0.16 covariance preparation and the production GPU model
+route uses registered AOC covariance preparation and the production GPU model
 builder. Both timed routes synchronize before returning. Julia host
 allocation bytes do not measure device memory.
 

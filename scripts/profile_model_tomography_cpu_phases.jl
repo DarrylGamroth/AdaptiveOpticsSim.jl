@@ -131,13 +131,10 @@ function build_phases(case)
         tomo.tomography_noise_covariance(case.build_backend, case.noise_model,
             reference_diag)
     end
-    css = measured_phase!(rows, :css_sum) do
-        css_signal .+ cnz
-    end
     recstat = measured_phase!(rows, :aoc_covariance_solve) do
         tomo._tomographic_covariance_reconstructor(
-            tomo.execution_style(css), case.build_backend, gamma_native,
-            cxx_native, cox_native, cnz, css)
+            tomo.execution_style(cxx_native), case.build_backend, gamma_native,
+            cxx_native, cox_native, cnz)
     end
     d = tomo.lenslet_grid_support_diameter_m(case.wfs) / size(support, 1)
     wavefront_to_meter = case.asterism.wavelength_m / d / 2

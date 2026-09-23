@@ -1,0 +1,103 @@
+artifact_id = "S6-AOC-V017-MODEL-TOMOGRAPHY-PROFILE-2026-09-23"
+generated_on = "2026-09-23"
+purpose = "AOS physical tomography with registered AOC v0.17 numerical Cxx/Cox assembly and covariance reconstruction"
+aos_starting_revision = "1912b96"
+aoc_version = "0.17.0"
+aoc_registered_tree = "6d1fc92218133a4edfea1118cf35ce5dc1a48677"
+optimization_priority = "CUDA primary; AMDGPU secondary"
+claim_boundary = "Allocating, synchronized cold model preparation only; no RTC frame-step, captured CUDA/HIP Graph, or camera-to-DM latency claim"
+
+[contract]
+workload = "Float32, 2 laser guide stars, 2-by-2 fit sources, 2 atmospheric layers, 2 deformable mirrors; n_lenslets=3 or 8"
+completion = "Explicit backend synchronization before each timed build returns"
+repetitions = "One first-use and five warmed complete builds per GPU backend and lenslet count; three warmed phase-profile passes at n_lenslets=8"
+threads = 1
+blas_threads = 1
+correctness = "All retained products device-resident; K, Cxx, and Cox compared with the registered-AOC CPU route"
+transfer_policy = "Native preparation keeps full arrays on device and transfers only compact validation and norm scalars; CPU alternative uploads the seven retained products"
+failure_policy = "AOC invalid and singular cases leave caller matrix and diagnostics unchanged; GPU suites cover both precisions"
+allocation_note = "Reported bytes are Julia host allocations; device allocation is not measured. Cold preparation is outside the per-frame zero-allocation budget."
+
+[environment]
+host = "rtc-devel"
+julia = "1.12.7"
+cpu = "AMD Ryzen 7 6800H"
+
+[environment.cuda]
+device = "NVIDIA GeForce RTX 3080"
+cuda_jl = "6.4.0"
+runtime = "CUDA 13.4"
+driver = "615.71.9"
+
+[environment.amdgpu]
+device = "AMD Radeon 680M"
+amdgpu_jl = "2.8.0"
+runtime = "ROCm 7.2.1"
+hardware_architecture = "gfx1035"
+compiled_architecture = "gfx1030"
+hsa_override_gfx_version = "10.3.0"
+interpretation_limit = "HIP timings depend on the pre-existing architecture override and are not a native gfx1035 baseline."
+
+[cpu.n8]
+warmed_complete_build_ms = [565.071, 569.597, 566.952]
+warmed_auto_covariance_ms = [182.363, 182.687, 182.961]
+warmed_cross_covariance_ms = [373.779, 372.816, 380.387]
+warmed_aoc_covariance_solve_ms = [5.476, 6.356, 4.639]
+profile_repeats = 10
+profile_snapshots = 5746
+profile_interpretation = "Scalar von Karman Cxx/Cox evaluation through SpecialFunctions.besselk and libopenspecfun dominates; the AOC covariance solve is a small cold-build fraction."
+
+[cuda.n3]
+warmed_complete_build_ms = [4.524, 4.094, 4.153, 4.370, 3.976]
+warmed_cpu_plus_output_upload_ms = [16.865, 16.684, 16.751, 16.768, 16.722]
+command_matrix_relative_error = 4.535376e-6
+cxx_relative_error = 9.179462e-8
+cox_relative_error = 7.600035e-8
+
+[cuda.n8]
+warmed_complete_build_ms = [12.393, 12.478, 11.812, 11.612, 11.885]
+warmed_cpu_plus_output_upload_ms = [572.522, 571.319, 595.044, 566.467, 567.256]
+warmed_aoc_covariance_reconstructor_ms = [4.892, 4.768, 5.337]
+warmed_auto_covariance_ms = [0.902, 0.627, 0.626]
+warmed_cross_covariance_ms = [6.201, 5.606, 5.810]
+warmed_complete_build_host_allocated_bytes = 1462520
+command_matrix_relative_error = 3.438750e-5
+cxx_relative_error = 1.06604716e-7
+cox_relative_error = 1.0694073e-7
+
+[amdgpu.n3]
+warmed_complete_build_ms = [22.487, 20.750, 21.282, 21.398, 21.089]
+warmed_cpu_plus_output_upload_ms = [17.563, 17.968, 17.514, 17.371, 17.468]
+command_matrix_relative_error = 4.699856e-6
+cxx_relative_error = 9.4407525e-8
+cox_relative_error = 7.943129e-8
+
+[amdgpu.n8]
+warmed_complete_build_ms = [430.068, 431.708, 434.118, 432.834, 434.629]
+warmed_cpu_plus_output_upload_ms = [565.726, 572.263, 562.866, 567.854, 564.271]
+warmed_aoc_covariance_reconstructor_ms = [13.225, 13.530, 12.754]
+warmed_auto_covariance_ms = [18.264, 10.718, 12.692]
+warmed_cross_covariance_ms = [406.634, 401.838, 402.050]
+warmed_complete_build_host_allocated_bytes = 1742424
+command_matrix_relative_error = 3.3564276e-5
+cxx_relative_error = 1.13531755e-7
+cox_relative_error = 1.0436453e-7
+
+[qualification]
+cuda = "Native CUDA is faster than CPU preparation plus upload at both measured shapes and is the default GPU-optimized path."
+amdgpu = "Native HIP is faster at n=8 but about 3-5 ms slower at n=3; retain the explicit native device route for residency and the large-shape benefit without claiming universal speedup."
+numerical = "Native K relative Frobenius error is below 3.5e-5 at both shapes and backends; Cxx/Cox errors are below 1.2e-7."
+per_frame = "FGA accepted-matrix captured CUDA/HIP Graph replay has a separate zero-host-allocation gate; these allocating cold-build measurements do not establish it."
+
+[validation]
+aoc_cpu = "Full AOC Pkg.test() passed at v0.17.0 release commit"
+aoc_cuda = "Full AOC CUDA suite passed; covariance reconstructor 90/90, including inferred process and offset-view alias regressions"
+aoc_amdgpu = "Full AOC HIP suite passed; covariance reconstructor 90/90, including inferred process and offset-view alias regressions"
+aos_cpu = "Full AOS Pkg.test() passed against registered AOC v0.17.0; two pre-existing broken tutorial assertions remain"
+aos_cuda = "Full CUDA hardware target 750/750 passed against registered AOC v0.17.0"
+aos_amdgpu = "Full AMDGPU hardware target 754/754 passed against registered AOC v0.17.0 with architecture override"
+
+[commands]
+cpu = "AOS_TOMO_PROFILE_LENSLETS=8 AOS_CPU_PROFILE_REPEATS=10 julia --project=. scripts/profile_model_tomography_cpu_phases.jl --float32-only"
+cuda = "AOS_TOMO_PROFILE_LENSLETS=8 julia --project=test/cuda -e 'using CUDA; include(\"scripts/gpu_profile_model_tomography_phases_cuda.jl\"); include(\"scripts/benchmark_model_tomography_host_prep.jl\"); compare_host_prep(AdaptiveOpticsSim.Backends.CUDABackendTag)'"
+amdgpu = "HSA_OVERRIDE_GFX_VERSION=10.3.0 AOS_TOMO_PROFILE_LENSLETS=8 julia --project=test/amdgpu -e 'using AMDGPU; include(\"scripts/gpu_profile_model_tomography_phases_amdgpu.jl\"); include(\"scripts/benchmark_model_tomography_host_prep.jl\"); compare_host_prep(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)'"

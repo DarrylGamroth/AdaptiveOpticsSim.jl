@@ -65,6 +65,22 @@ function run_gpu_covariance_geometry_contract(::Type{B}) where
         grid_mask=empty_mask)
     @assert empty_cxx isa BackendArray && size(empty_cxx) == (0, 0)
     @assert empty_cox isa BackendArray && size(empty_cox) == (4, 0, 0)
+
+    projection_host = T[1 0; 0 1]
+    phase_host = T[2 0.25; 0.25 3]
+    fit_host = reshape(T[1, 2], 1, 2)
+    noise_host = T[0.1 0; 0 0.2]
+    projection = Calibration.materialize_build(build_backend, projection_host)
+    phase = Calibration.materialize_build(build_backend, phase_host)
+    fit = Calibration.materialize_build(build_backend, fit_host)
+    noise = Calibration.materialize_build(build_backend, noise_host)
+    recstat = @inferred AdaptiveOpticsSim.Tomography._tomographic_covariance_reconstructor(
+        AdaptiveOpticsSim.Backends.execution_style(phase), build_backend,
+        projection, phase, fit, noise)
+    expected = fit_host * transpose(projection_host) /
+        (projection_host * phase_host * transpose(projection_host) + noise_host)
+    @assert recstat isa BackendArray
+    @assert Array(recstat) ≈ expected rtol=3f-5 atol=3f-5
     return nothing
 end
 

@@ -101,12 +101,4 @@ AMDGPU.functional() ||
         left_host * right_host
     @test Array(Backends.backend_matmul_transpose_right(left, right)) ≈
         left_host * transpose(right_host)
-
-    gram_host = Float32[2 0; 0 4]
-    division = AdaptiveOpticsSim.Tomography.stable_hermitian_right_division(
-        build_backend,
-        AMDGPU.ROCArray(left_host),
-        AMDGPU.ROCArray(gram_host),
-    )
-    @test Array(division) ≈ left_host / gram_host rtol=1.0f-5 atol=1.0f-6
 end

@@ -126,9 +126,9 @@ The AOS Shack–Hartmann, Pyramid, Bi-O-edge, and Zernike surfaces implement
 stages 1 and 2 only.
 Their complete detector observations are package boundaries; maintained
 operational estimation is provided by FilterGraphAlgorithms. Registered
-FilterGraphAlgorithms v0.5.0 provides the Zernike complete-frame normalized
+FilterGraphAlgorithms provides the Zernike complete-frame normalized
 pupil-signal estimator and the Curvature paired-image and paired-channel
-estimators; JuliaFilterGraph v0.2.3 provides their graph runtime. AOS Curvature
+estimators; JuliaFilterGraph provides their graph runtime. AOS Curvature
 ends at complete detector acquisition. AOS LiFT provides physical forward
 prediction and an analytic Jacobian callback; registered
 `AdaptiveOpticsCalibration.PhaseRetrieval` owns inverse policies, solves,
