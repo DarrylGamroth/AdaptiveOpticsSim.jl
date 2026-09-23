@@ -2446,27 +2446,6 @@ function run_optional_pyramid_shifted_mask_checks(
     return nothing
 end
 
-function run_optional_lift_fallback_check(array_backend, ::Type{T}) where {T<:AbstractFloat}
-    H_host = T[1 0; 0 2; 1 1]
-    residual_host = T[2, -1, 0.5]
-    H = array_backend(H_host)
-    residual = array_backend(residual_host)
-    rhs = array_backend(zeros(T, 2))
-    damping = LiFTLevenbergMarquardt(lambda0=T(0.1),
-        growth=T(10), condition_rtol=T(1e-3))
-    normal = transpose(H_host) * H_host
-    λ = AdaptiveOpticsSim.WavefrontSensors.damping_lambda(damping, normal)
-    expected = (normal + λ * I) \ (transpose(H_host) * residual_host)
-    diag = AdaptiveOpticsSim.WavefrontSensors.LiFTDiagnosticsWorkspace(
-        T(NaN), T(NaN), T(NaN), T(NaN), zero(T), false, false)
-    AdaptiveOpticsSim.WavefrontSensors.solve_lift_fallback!(
-        diag, rhs, H, residual, damping)
-    @test Array(rhs) ≈ expected rtol=T(1e-4) atol=T(1e-5)
-    @test diag.regularization == λ
-    @test diag.used_fallback
-    return nothing
-end
-
 function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     ::Type{T}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag,T<:AbstractFloat}
     selector = backend_selector(B)
@@ -2526,37 +2505,86 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
 
     exposure = T(0.002)
     quantum_efficiency = T(0.8)
-    rate_domain = LiFTPhotonRate(
-        noise_equivalent_exposure_s=exposure,
-        quantum_efficiency=quantum_efficiency)
-    count_domain = LiFTExpectedCounts(exposure;
-        quantum_efficiency=quantum_efficiency)
     photon_rate_per_unit = T(sum(cpu_rate))
-    normalized_domain = LiFTNormalizedIntensity(photon_rate_per_unit;
-        noise_equivalent_exposure_s=exposure,
-        quantum_efficiency=quantum_efficiency)
+    cpu_count_values = similar(cpu_rate)
+    cpu_normalized_values = similar(cpu_rate)
     count_values = similar(lift_rate)
     normalized_values = similar(lift_rate)
+    @. cpu_count_values = cpu_rate * exposure * quantum_efficiency
+    @. cpu_normalized_values = cpu_rate / photon_rate_per_unit
     @. count_values = lift_rate * exposure * quantum_efficiency
     @. normalized_values = lift_rate / photon_rate_per_unit
-    rate_observation = LiFTObservation(lift_forward, lift_rate;
-        domain=rate_domain)
-    count_observation = LiFTObservation(lift_forward, count_values;
-        domain=count_domain)
-    normalized_observation = LiFTObservation(lift_forward,
-        normalized_values; domain=normalized_domain)
 
     aoc_cpu_model = LiFTForwardModel(cpu_forward)
     aoc_device_model = LiFTForwardModel(lift_forward)
     @test aoc_device_model.plan === WavefrontSensors.lift_forward_plan(lift_forward)
     @test aoc_device_model.plan.pupil_amplitude isa array_backend
-    aoc_cpu_specification = AOCPhaseRetrieval.LiFTSpecification(
-        aoc_cpu_model, AOCPhaseRetrieval.LiFTPhotonRate())
-    aoc_device_specification = AOCPhaseRetrieval.LiFTSpecification(
-        aoc_device_model, AOCPhaseRetrieval.LiFTPhotonRate())
+    @test AOCPhaseRetrieval.coefficient_count(aoc_device_model) == 3
+    @test AOCPhaseRetrieval.observation_axes(aoc_device_model) == axes(lift_rate)
     aoc_device_backend = KernelAbstractions.get_backend(lift_rate)
 
-    for jacobian_method in (
+    aoc_device_model_workspace = AOCPhaseRetrieval.allocate_model_workspace(
+        aoc_device_model)
+    aoc_device_prediction = AOCPhaseRetrieval.allocate_photon_rate(
+        aoc_device_model)
+    aoc_device_coefficients = array_backend(copy(truth_coefficients))
+    @test (@inferred AOCPhaseRetrieval.predict_photon_rate!(
+        aoc_device_prediction,
+        aoc_device_model,
+        aoc_device_model_workspace,
+        aoc_device_coefficients,
+    )) === aoc_device_prediction
+    @test aoc_device_prediction isa array_backend
+    @test aoc_device_model_workspace.opd isa array_backend
+    @test compute_device(aoc_device_prediction) == compute_device(lift_rate)
+    @test Array(aoc_device_prediction) ≈ Array(lift_rate) rtol=T(2e-4) atol=T(1e-3)
+
+    plan_output_snapshot = Array(aoc_device_model.plan.diversity_opd)
+    @test_throws InvalidConfiguration AOCPhaseRetrieval.predict_photon_rate!(
+        aoc_device_model.plan.diversity_opd,
+        aoc_device_model,
+        aoc_device_model_workspace,
+        aoc_device_coefficients,
+    )
+    @test Array(aoc_device_model.plan.diversity_opd) == plan_output_snapshot
+    aliased_coefficients = @view vec(aoc_device_model_workspace.opd)[1:3]
+    @test_throws InvalidConfiguration AOCPhaseRetrieval.predict_photon_rate!(
+        aoc_device_prediction,
+        aoc_device_model,
+        aoc_device_model_workspace,
+        aliased_coefficients,
+    )
+
+    aoc_domains = (
+        (
+            AOCPhaseRetrieval.LiFTPhotonRate(
+                noise_equivalent_exposure_s=exposure,
+                quantum_efficiency=quantum_efficiency,
+            ),
+            cpu_rate,
+            lift_rate,
+        ),
+        (
+            AOCPhaseRetrieval.LiFTExpectedCounts(exposure;
+                quantum_efficiency=quantum_efficiency),
+            cpu_count_values,
+            count_values,
+        ),
+        (
+            AOCPhaseRetrieval.LiFTNormalizedIntensity(photon_rate_per_unit;
+                noise_equivalent_exposure_s=exposure,
+                quantum_efficiency=quantum_efficiency),
+            cpu_normalized_values,
+            normalized_values,
+        ),
+    )
+    aoc_rate_domain = first(first(aoc_domains))
+    aoc_domain_reference_coefficients = Dict{DataType,Vector{T}}()
+
+    # AOC KernelExecution synchronizes and may allocate host-side solver state;
+    # it has no zero-Julia-allocation steady-state contract on accelerators.
+    for (domain, cpu_observation, device_observation) in aoc_domains,
+        jacobian_method in (
         AOCPhaseRetrieval.LiFTAnalyticJacobian(),
         AOCPhaseRetrieval.LiFTNumericalJacobian(T(1e-9)),
     )
@@ -2570,11 +2598,13 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
             check_convergence=false,
         )
         aoc_cpu_plan = AdaptiveOpticsCalibration.prepare(
-            aoc_method, aoc_cpu_specification)
+            aoc_method, AOCPhaseRetrieval.LiFTSpecification(
+                aoc_cpu_model, domain))
         aoc_device_plan = AdaptiveOpticsCalibration.prepare(
             aoc_method,
             AdaptiveOpticsCalibration.KernelExecution(
-                aoc_device_specification, aoc_device_backend;
+                AOCPhaseRetrieval.LiFTSpecification(aoc_device_model, domain),
+                aoc_device_backend;
                 workgroup_size=64))
         aoc_cpu_result = AdaptiveOpticsCalibration.allocate_result(
             aoc_cpu_plan)
@@ -2584,8 +2614,8 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
             aoc_cpu_plan)
         aoc_device_workspace = AdaptiveOpticsCalibration.allocate_workspace(
             aoc_device_plan)
-        aoc_cpu_inputs = AOCPhaseRetrieval.LiFTInputs(copy(cpu_rate))
-        aoc_device_observation = copy(lift_rate)
+        aoc_cpu_inputs = AOCPhaseRetrieval.LiFTInputs(copy(cpu_observation))
+        aoc_device_observation = copy(device_observation)
         aoc_device_observation_snapshot = Array(aoc_device_observation)
         aoc_device_inputs = AOCPhaseRetrieval.LiFTInputs(
             aoc_device_observation)
@@ -2601,13 +2631,34 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
         @test aoc_device_workspace.inverse.jacobian isa array_backend
         @test aoc_device_workspace.inverse.model_workspace.opd isa
             array_backend
+        @test compute_device(AOCPhaseRetrieval.lift_coefficients(
+            aoc_device_result)) == compute_device(lift_rate)
         @test all(isfinite,
             Array(AOCPhaseRetrieval.lift_coefficients(aoc_device_result)))
-        @test Array(AOCPhaseRetrieval.lift_coefficients(
-            aoc_device_result)) ≈ AOCPhaseRetrieval.lift_coefficients(
+        device_coefficients = Array(AOCPhaseRetrieval.lift_coefficients(
+            aoc_device_result))
+        @test device_coefficients ≈ AOCPhaseRetrieval.lift_coefficients(
             aoc_cpu_result) rtol=T(2e-3) atol=T(2e-11)
+        if haskey(aoc_domain_reference_coefficients, typeof(jacobian_method))
+            @test device_coefficients ≈
+                aoc_domain_reference_coefficients[typeof(jacobian_method)] rtol=T(5e-4) atol=T(1e-11)
+        else
+            aoc_domain_reference_coefficients[typeof(jacobian_method)] =
+                device_coefficients
+        end
         @test Array(aoc_device_inputs.observation) ==
             aoc_device_observation_snapshot
+
+        result_before_host_input_rejection = Array(AOCPhaseRetrieval.lift_coefficients(
+            aoc_device_result))
+        @test_throws ArgumentError AdaptiveOpticsCalibration.process!(
+            aoc_device_result,
+            aoc_device_workspace,
+            aoc_device_plan,
+            AOCPhaseRetrieval.LiFTInputs(copy(cpu_observation)),
+        )
+        @test Array(AOCPhaseRetrieval.lift_coefficients(aoc_device_result)) ==
+            result_before_host_input_rejection
     end
 
     mismatched_aoc_method = AOCPhaseRetrieval.LiFT(
@@ -2615,68 +2666,88 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     @test_throws ArgumentError AdaptiveOpticsCalibration.prepare(
         mismatched_aoc_method,
         AdaptiveOpticsCalibration.KernelExecution(
-            aoc_device_specification, KernelAbstractions.CPU()))
+            AOCPhaseRetrieval.LiFTSpecification(
+                aoc_device_model, aoc_rate_domain), KernelAbstractions.CPU()))
 
-    for numerical in (false, true)
-        definition = LiFT(iterations=2, mode_ids=(1, 2),
-            jacobian_method=numerical ? LiFTNumericalJacobian() :
-                LiFTAnalyticJacobian(),
-            solve_mode=LiFTSolveNormalEquations(),
-            model_scaling=LiFTPhysicalRatePreservation(),
-            check_convergence=false)
-        rate_product = similar(lift_rate, T, 2)
-        count_product = similar(lift_rate, T, 2)
-        normalized_product = similar(lift_rate, T, 2)
-        rate_estimator = prepare_lift_estimator(definition, lift_forward,
-            rate_observation, rate_product)
-        count_estimator = prepare_lift_estimator(definition, lift_forward,
-            count_observation, count_product)
-        normalized_estimator = prepare_lift_estimator(definition,
-            lift_forward, normalized_observation, normalized_product)
-        rate_coefficients = WavefrontSensors.reconstruct(rate_estimator)
-        count_coefficients = WavefrontSensors.reconstruct(count_estimator)
-        normalized_coefficients = WavefrontSensors.reconstruct(
-            normalized_estimator)
-        @test rate_coefficients isa array_backend
-        @test all(isfinite, Array(rate_coefficients))
-        @test isapprox(Array(count_coefficients), Array(rate_coefficients);
-            rtol=T(5e-4), atol=T(1e-11))
-        @test isapprox(Array(normalized_coefficients),
-            Array(rate_coefficients); rtol=T(5e-4), atol=T(1e-11))
-    end
+    ordered_method = AOCPhaseRetrieval.LiFT(
+        iterations=2,
+        jacobian_method=AOCPhaseRetrieval.LiFTAnalyticJacobian(),
+        solve_mode=AOCPhaseRetrieval.LiFTSolveNormalEquations(),
+        damping=AOCPhaseRetrieval.LiFTAdaptiveLevenbergMarquardt(),
+        mode_indices=(3, 1),
+        model_scaling=AOCPhaseRetrieval.LiFTPhysicalRatePreservation(),
+        check_convergence=false,
+    )
+    ordered_cpu_plan = AdaptiveOpticsCalibration.prepare(
+        ordered_method,
+        AOCPhaseRetrieval.LiFTSpecification(
+            aoc_cpu_model, aoc_rate_domain))
+    ordered_device_plan = AdaptiveOpticsCalibration.prepare(
+        ordered_method,
+        AdaptiveOpticsCalibration.KernelExecution(
+            AOCPhaseRetrieval.LiFTSpecification(
+                aoc_device_model, aoc_rate_domain),
+            aoc_device_backend;
+            workgroup_size=64))
+    @test ordered_device_plan.plan.mode_indices == [3, 1]
+    @test Array(ordered_device_plan.execution.mode_indices) == [3, 1]
+    ordered_cpu_result = AdaptiveOpticsCalibration.process(
+        ordered_cpu_plan,
+        AOCPhaseRetrieval.LiFTInputs(copy(cpu_rate);
+            initial_coefficients=T[zero(T), truth_coefficients[2], zero(T)]))
+    ordered_device_result = AdaptiveOpticsCalibration.process(
+        ordered_device_plan,
+        AOCPhaseRetrieval.LiFTInputs(copy(lift_rate);
+            initial_coefficients=array_backend(
+                T[zero(T), truth_coefficients[2], zero(T)])))
+    @test Array(AOCPhaseRetrieval.lift_coefficients(ordered_device_result)) ≈
+        AOCPhaseRetrieval.lift_coefficients(ordered_cpu_result) rtol=T(2e-3) atol=T(2e-11)
+    @test Array(AOCPhaseRetrieval.lift_coefficients(ordered_device_result)) ≈
+        truth_coefficients[[3, 1]] rtol=T(2e-3) atol=T(2e-11)
 
-    analytic_definition = LiFT(iterations=2, mode_ids=(1, 2),
-        solve_mode=LiFTSolveNormalEquations())
-    cpu_observation = LiFTObservation(cpu_forward, cpu_rate)
-    cpu_analytic = prepare_lift_estimator(analytic_definition, cpu_forward,
-        cpu_observation, zeros(T, 2))
-    gpu_analytic_product = similar(lift_rate, T, 2)
-    gpu_analytic = prepare_lift_estimator(analytic_definition, lift_forward,
-        rate_observation, gpu_analytic_product)
-    cpu_H = AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix(
-        cpu_analytic,
-        zeros(T, 3))
-    gpu_H = AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix(
-        gpu_analytic,
-        array_backend(zeros(T, 3)))
+    aoc_cpu_workspace = AOCPhaseRetrieval.allocate_model_workspace(aoc_cpu_model)
+    cpu_H = zeros(T, length(cpu_rate), 2)
+    gpu_H = similar(lift_rate, T, length(lift_rate), 2)
+    @test (@inferred AOCPhaseRetrieval.analytic_photon_rate_jacobian!(
+        cpu_H,
+        aoc_cpu_model,
+        aoc_cpu_workspace,
+        zeros(T, 3),
+        [1, 2],
+    )) === cpu_H
+    @test (@inferred AOCPhaseRetrieval.analytic_photon_rate_jacobian!(
+        gpu_H,
+        aoc_device_model,
+        aoc_device_model_workspace,
+        array_backend(zeros(T, 3)),
+        [1, 2],
+    )) === gpu_H
     @test Array(gpu_H) ≈ cpu_H rtol=T(5e-4) atol=T(1e3)
 
     variance = similar(lift_rate)
     fill!(variance, one(T))
-    variance_product = similar(lift_rate, T, 2)
-    variance_estimator = prepare_lift_estimator(
-        LiFT(mode_ids=(1, 2),
-            weighting=LiFTVarianceMapWeighting(variance)),
-        lift_forward, rate_observation, variance_product)
-    prepared_variance = WavefrontSensors.lift_estimation_plan(
-        variance_estimator).weighting.variance
+    variance_method = AOCPhaseRetrieval.LiFT(
+        iterations=1,
+        mode_indices=(1, 2),
+        weighting=AOCPhaseRetrieval.LiFTVarianceMapWeighting(variance),
+        check_convergence=false,
+    )
+    variance_plan = AdaptiveOpticsCalibration.prepare(
+        variance_method,
+        AdaptiveOpticsCalibration.KernelExecution(
+            AOCPhaseRetrieval.LiFTSpecification(
+                aoc_device_model, aoc_rate_domain),
+            aoc_device_backend;
+            workgroup_size=64))
+    prepared_variance = variance_plan.plan.weighting.variance
     @test prepared_variance !== variance
     @test prepared_variance isa array_backend
     fill!(variance, T(2))
     @test all(isone, Array(prepared_variance))
 
     predicted_counts = similar(lift_rate)
-    predict_lift_observation!(predicted_counts, lift_forward, count_domain)
+    predict_lift_observation!(predicted_counts, lift_forward,
+        LiFTExpectedCounts(exposure; quantum_efficiency=quantum_efficiency))
     @test isapprox(Array(predicted_counts), Array(count_values);
         rtol=T(2e-5), atol=T(1e-3))
     @test_throws InvalidConfiguration LiFTObservation(lift_forward,
@@ -2684,15 +2755,17 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     @test_throws InvalidConfiguration prepare_lift_forward_model(lift_tel,
         lift_src, basis_host, truth_opd; diversity_opd=lift_diversity,
         focal_resolution=8)
-    @test_throws InvalidConfiguration prepare_lift_estimator(
-        LiFT(mode_ids=(1, 2),
-            weighting=LiFTVarianceMapWeighting(ones(T, 8, 8))),
-        lift_forward, rate_observation, gpu_analytic_product)
-    host_lift_coefficients = zeros(T, 3)
-    @test_throws InvalidConfiguration prepare_lift_estimator(
-        LiFT(mode_ids=1:3), lift_forward, rate_observation,
-        host_lift_coefficients)
-    @test host_lift_coefficients == zeros(T, 3)
+    @test_throws ArgumentError AdaptiveOpticsCalibration.prepare(
+        AOCPhaseRetrieval.LiFT(
+            mode_indices=(1, 2),
+            weighting=AOCPhaseRetrieval.LiFTVarianceMapWeighting(
+                ones(T, 8, 8)),
+        ),
+        AdaptiveOpticsCalibration.KernelExecution(
+            AOCPhaseRetrieval.LiFTSpecification(
+                aoc_device_model, aoc_rate_domain),
+            aoc_device_backend;
+            workgroup_size=64))
 
     convolution_source_host = reshape(T.(1:64), 8, 8)
     convolution_source = array_backend(convolution_source_host)
@@ -2721,7 +2794,6 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
         row_kernel_host, col_kernel_host)
     @test isapprox(Array(separable_convolution), separable_expected;
         rtol=T(1e-5), atol=T(1e-5))
-    run_optional_lift_fallback_check(array_backend, T)
     return nothing
 end
 

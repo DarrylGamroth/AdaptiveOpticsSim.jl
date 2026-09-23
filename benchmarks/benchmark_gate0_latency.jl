@@ -4,6 +4,7 @@ using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.WavefrontSensors
+import AdaptiveOpticsCalibration
 using Base64
 using Dates
 using HdrHistogram
@@ -12,6 +13,8 @@ using Random
 using SHA
 using Statistics
 using TOML
+
+const Gate0PhaseRetrieval = AdaptiveOpticsCalibration.PhaseRetrieval
 
 const GATE0_CONTRACT_PATH = get(ENV, "AOS_GATE0_CONTRACT",
     joinpath(@__DIR__, "contracts", "pre_hil_gate0.toml"))
@@ -287,16 +290,21 @@ function make_gate0_card(raw::AbstractDict)
         counts = similar(rate)
         @. counts = rate * 0.002 * 0.8
         observation = LiFTObservation(forward, counts; domain=domain)
-        coefficients = zeros(n_modes)
-        estimator = prepare_lift_estimator(LiFT(
-                iterations=Int(raw["iterations"]), mode_ids=1:n_modes,
-                jacobian_method=LiFTAnalyticJacobian(),
-                solve_mode=LiFTSolveNormalEquations(),
-                model_scaling=LiFTPhysicalRatePreservation(),
-                check_convergence=false),
-            forward, observation, coefficients)
-        let estimator=estimator
-            () -> WavefrontSensors.reconstruct!(estimator)
+        specification = Gate0PhaseRetrieval.LiFTSpecification(
+            forward, observation)
+        method = Gate0PhaseRetrieval.LiFT(
+            iterations=Int(raw["iterations"]), mode_indices=1:n_modes,
+            jacobian_method=Gate0PhaseRetrieval.LiFTAnalyticJacobian(),
+            solve_mode=Gate0PhaseRetrieval.LiFTSolveNormalEquations(),
+            model_scaling=Gate0PhaseRetrieval.LiFTPhysicalRatePreservation(),
+            check_convergence=false)
+        plan = AdaptiveOpticsCalibration.prepare(method, specification)
+        result = AdaptiveOpticsCalibration.allocate_result(plan)
+        workspace = AdaptiveOpticsCalibration.allocate_workspace(plan)
+        inputs = Gate0PhaseRetrieval.LiFTInputs(observation.values)
+        let result=result, workspace=workspace, plan=plan, inputs=inputs
+            () -> AdaptiveOpticsCalibration.process!(result, workspace,
+                plan, inputs)
         end
     else
         throw(ArgumentError("unsupported Gate 0 latency-card kind '$kind'"))

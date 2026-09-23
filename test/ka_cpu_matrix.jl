@@ -174,25 +174,8 @@ end
         mark_ka_cpu_kernel!(:extract_diagonal_kernel!)
         @test diagonal_output == diag(diagonal_input)
 
-        lift_weights = [1.0, 4.0, 9.0, 16.0]
-        AdaptiveOpticsSim.WavefrontSensors.sqrt_weights!(
-            KA_CPU_STYLE, lift_weights)
-        mark_ka_cpu_kernel!(:lift_sqrt_weights_kernel!)
-        @test lift_weights == [1.0, 2.0, 3.0, 4.0]
-
         lift_basis = reshape(collect(1.0:12.0), 2, 2, 3)
         lift_base = reshape(collect(0.25:0.25:1.0), 2, 2)
-        scalar_lift_mode = similar(lift_base)
-        ka_lift_mode = similar(lift_base)
-        AdaptiveOpticsSim.WavefrontSensors.lift_affine_basis_mode!(
-            SCALAR_CPU_STYLE,
-            scalar_lift_mode, lift_base, lift_basis, 2, 0.5)
-        AdaptiveOpticsSim.WavefrontSensors.lift_affine_basis_mode!(
-            KA_CPU_STYLE,
-            ka_lift_mode, lift_base, lift_basis, 2, 0.5)
-        mark_ka_cpu_kernel!(:lift_affine_basis_mode_kernel!)
-        @test ka_lift_mode == scalar_lift_mode
-
         scalar_lift_scaled = similar(lift_base)
         ka_lift_scaled = similar(lift_base)
         AdaptiveOpticsSim.WavefrontSensors.lift_scaled_basis_mode!(
@@ -214,53 +197,6 @@ end
             ka_lift_jacobian, 2, ka_lift_scaled)
         mark_ka_cpu_kernel!(:lift_copy_column_kernel!)
         @test ka_lift_jacobian == scalar_lift_jacobian
-
-        lift_observation = reshape(collect(2.0:5.0), 2, 2)
-        lift_model = reshape(collect(0.5:0.5:2.0), 2, 2)
-        scalar_lift_residual = zeros(4)
-        ka_lift_residual = similar(scalar_lift_residual)
-        AdaptiveOpticsSim.WavefrontSensors.lift_residual!(
-            SCALAR_CPU_STYLE,
-            scalar_lift_residual, lift_observation, lift_model)
-        AdaptiveOpticsSim.WavefrontSensors.lift_residual!(
-            KA_CPU_STYLE,
-            ka_lift_residual, lift_observation, lift_model)
-        mark_ka_cpu_kernel!(:lift_residual_kernel!)
-        @test ka_lift_residual == scalar_lift_residual
-
-        lift_row_weights = [1.0, 2.0, 3.0, 4.0]
-        scalar_weighted_jacobian = reshape(collect(1.0:8.0), 4, 2)
-        ka_weighted_jacobian = copy(scalar_weighted_jacobian)
-        AdaptiveOpticsSim.WavefrontSensors.apply_row_weights!(
-            SCALAR_CPU_STYLE,
-            scalar_weighted_jacobian, lift_row_weights, 2)
-        AdaptiveOpticsSim.WavefrontSensors.apply_row_weights!(
-            KA_CPU_STYLE,
-            ka_weighted_jacobian, lift_row_weights, 2)
-        mark_ka_cpu_kernel!(:lift_row_weights_kernel!)
-        @test ka_weighted_jacobian == scalar_weighted_jacobian
-
-        scalar_inverse_variance = zeros(4)
-        ka_inverse_variance = similar(scalar_inverse_variance)
-        AdaptiveOpticsSim.WavefrontSensors.lift_inverse_variance!(
-            SCALAR_CPU_STYLE,
-            scalar_inverse_variance, lift_model, 2.0, 0.25)
-        AdaptiveOpticsSim.WavefrontSensors.lift_inverse_variance!(
-            KA_CPU_STYLE,
-            ka_inverse_variance, lift_model, 2.0, 0.25)
-        mark_ka_cpu_kernel!(:lift_inverse_variance_kernel!)
-        @test ka_inverse_variance == scalar_inverse_variance
-
-        scalar_lift_normal = reshape(collect(1.0:9.0), 3, 3)
-        ka_lift_normal = copy(scalar_lift_normal)
-        AdaptiveOpticsSim.WavefrontSensors.add_lift_diagonal!(
-            SCALAR_CPU_STYLE,
-            scalar_lift_normal, 0.5)
-        AdaptiveOpticsSim.WavefrontSensors.add_lift_diagonal!(
-            KA_CPU_STYLE,
-            ka_lift_normal, 0.5)
-        mark_ka_cpu_kernel!(:lift_add_diagonal_kernel!)
-        @test ka_lift_normal == scalar_lift_normal
 
         lift_convolution_source = reshape(collect(1.0:25.0), 5, 5)
         lift_dense_kernel = [0.0 1.0 0.0; 1.0 4.0 1.0; 0.0 1.0 0.0]
@@ -1312,8 +1248,6 @@ end
             :inject_column_positive_kernel!,
             :inject_row_negative_kernel!,
             :inject_row_positive_kernel!,
-            :lift_gather_kernel!,
-            :lift_scatter_update_kernel!,
             :masked_sum2d_kernel!,
             :moving_layer_replay_kernel!,
             :pyramid_electric_field_modulation_batch_kernel!,

@@ -194,8 +194,11 @@ ownership boundary requires:
 Zernike and Bi-O-edge implement the first two stages in AOS; registered
 FilterGraphAlgorithms owns their calibrated estimation and RTC processing.
 Shack–Hartmann, Pyramid, and Curvature likewise stop at complete detector
-observations and use FGA for operational estimation. LiFT uses its own forward and phase-retrieval
-products rather than a detector slope-estimation contract.
+observations and use FGA for operational estimation. LiFT uses AOS physical
+forward prediction and its analytic Jacobian callback with the registered
+`AdaptiveOpticsCalibration.PhaseRetrieval` direct API for inverse policies,
+solves, products, and diagnostics; this is not a detector slope-estimation
+contract.
 
 Reusable masks, microlens arrays, phase spots, and defocus optics belong in
 `Optics`. Detector physics belongs in `Detectors`. Do not hide a detector inside

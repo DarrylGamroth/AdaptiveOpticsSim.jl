@@ -1,51 +1,3 @@
-abstract type LiFTJacobianMethod end
-struct LiFTAnalyticJacobian <: LiFTJacobianMethod end
-struct LiFTNumericalJacobian <: LiFTJacobianMethod end
-
-abstract type LiFTSolveMode end
-struct LiFTSolveAuto <: LiFTSolveMode end
-struct LiFTSolveQR <: LiFTSolveMode end
-struct LiFTSolveNormalEquations <: LiFTSolveMode end
-
-abstract type LiFTDampingMode end
-struct LiFTDampingNone <: LiFTDampingMode end
-struct LiFTLevenbergMarquardt{T<:AbstractFloat} <: LiFTDampingMode
-    lambda0::T
-    growth::T
-    condition_rtol::T
-end
-
-struct LiFTAdaptiveLevenbergMarquardt{T<:AbstractFloat} <: LiFTDampingMode
-    lambda0::T
-    growth::T
-    shrink::T
-    min_lambda::T
-    condition_rtol::T
-end
-
-function LiFTLevenbergMarquardt(lambda0::Real, growth::Real, condition_rtol::Real)
-    lambda, promoted_growth, promoted_rtol = promote(
-        float(lambda0), float(growth), float(condition_rtol))
-    return LiFTLevenbergMarquardt{typeof(lambda)}(
-        lambda, promoted_growth, promoted_rtol)
-end
-
-function LiFTAdaptiveLevenbergMarquardt(lambda0::Real, growth::Real, shrink::Real,
-    min_lambda::Real, condition_rtol::Real)
-    lambda, promoted_growth, promoted_shrink, promoted_min_lambda, promoted_rtol = promote(
-        float(lambda0), float(growth), float(shrink), float(min_lambda), float(condition_rtol))
-    return LiFTAdaptiveLevenbergMarquardt{typeof(lambda)}(
-        lambda, promoted_growth, promoted_shrink, promoted_min_lambda, promoted_rtol)
-end
-
-LiFTLevenbergMarquardt(; lambda0::Real=1e-6, growth::Real=10.0, condition_rtol::Real=sqrt(eps(Float64))) =
-    LiFTLevenbergMarquardt(float(lambda0), float(growth), float(condition_rtol))
-
-LiFTAdaptiveLevenbergMarquardt(; lambda0::Real=1e-6, growth::Real=10.0, shrink::Real=2.0,
-    min_lambda::Real=1e-10, condition_rtol::Real=sqrt(eps(Float64))) =
-    LiFTAdaptiveLevenbergMarquardt(float(lambda0), float(growth), float(shrink), float(min_lambda),
-        float(condition_rtol))
-
 abstract type AbstractLiFTObservationMapping end
 
 """No deterministic spatial mapping between focal-plane rate and observation."""
@@ -79,8 +31,8 @@ end
 abstract type AbstractLiFTObservationDomain end
 
 """
-Photon-arrival-rate observations. The noise-equivalent exposure is used only
-when model-based Poisson weighting is requested; it does not scale the values.
+Photon-arrival-rate observations. The noise-equivalent exposure is acquisition
+metadata for calibration weighting; it does not scale the values.
 """
 struct LiFTPhotonRate{T<:AbstractFloat} <: AbstractLiFTObservationDomain
     noise_equivalent_exposure_s::T
@@ -110,7 +62,7 @@ end
 
 """
 Dimensionless relative intensity with an explicit photon-rate value per native
-unit. The noise-equivalent exposure is used only for model-based weighting.
+unit. The noise-equivalent exposure is acquisition metadata for calibration.
 """
 struct LiFTNormalizedIntensity{T<:AbstractFloat} <: AbstractLiFTObservationDomain
     photon_rate_per_unit::T
@@ -147,16 +99,6 @@ end
 @inline lift_observation_to_rate_scale(domain::LiFTNormalizedIntensity,
     ::Type{T}) where {T<:AbstractFloat} = T(domain.photon_rate_per_unit)
 
-@inline lift_shot_variance_rate_scale(domain::LiFTPhotonRate,
-    ::Type{T}) where {T<:AbstractFloat} =
-    inv(T(domain.noise_equivalent_exposure_s) * T(domain.quantum_efficiency))
-@inline lift_shot_variance_rate_scale(domain::LiFTExpectedCounts,
-    ::Type{T}) where {T<:AbstractFloat} =
-    inv(T(domain.exposure_duration_s) * T(domain.quantum_efficiency))
-@inline lift_shot_variance_rate_scale(domain::LiFTNormalizedIntensity,
-    ::Type{T}) where {T<:AbstractFloat} =
-    inv(T(domain.noise_equivalent_exposure_s) * T(domain.quantum_efficiency))
-
 struct LiFTObservationContract{M<:OpticalPlaneMetadata,S}
     rate_metadata::M
     preprocessing_signature::S
@@ -179,75 +121,6 @@ struct LiFTObservation{M<:LiFTObservationMetadata,A<:AbstractMatrix}
     values::A
 end
 
-abstract type LiFTWeightingMode end
-struct LiFTInitialModelWeighting <: LiFTWeightingMode end
-struct LiFTIterativeModelWeighting <: LiFTWeightingMode end
-struct LiFTReadNoiseWeighting <: LiFTWeightingMode end
-struct LiFTVarianceMapWeighting{M<:AbstractMatrix} <: LiFTWeightingMode
-    variance::M
-end
-
-abstract type LiFTModelScaling end
-struct LiFTTotalRateMatching <: LiFTModelScaling end
-struct LiFTPeakRateMatching <: LiFTModelScaling end
-struct LiFTPhysicalRatePreservation <: LiFTModelScaling end
-
-"""Cold configuration for one LiFT phase-retrieval estimator."""
-struct LiFT{J<:LiFTJacobianMethod,S<:LiFTSolveMode,D<:LiFTDampingMode,
-    I,W<:LiFTWeightingMode,N<:LiFTModelScaling}
-    iterations::Int
-    jacobian_method::J
-    solve_mode::S
-    damping::D
-    mode_ids::I
-    weighting::W
-    model_scaling::N
-    check_convergence::Bool
-end
-
-function LiFT(; iterations::Int=5,
-    jacobian_method::LiFTJacobianMethod=LiFTAnalyticJacobian(),
-    solve_mode::LiFTSolveMode=LiFTSolveAuto(),
-    damping::LiFTDampingMode=LiFTDampingNone(), mode_ids=nothing,
-    weighting::LiFTWeightingMode=LiFTReadNoiseWeighting(),
-    model_scaling::LiFTModelScaling=LiFTTotalRateMatching(),
-    check_convergence::Bool=true)
-    iterations >= 1 || throw(InvalidConfiguration(
-        "LiFT iterations must be >= 1"))
-    prepared_mode_ids = if mode_ids === nothing
-        nothing
-    else
-        values = FixedSizeVectorDefault{Int}(collect(Int, mode_ids))
-        isempty(values) && throw(InvalidConfiguration(
-            "LiFT mode_ids must not be empty"))
-        all(>(0), values) || throw(InvalidConfiguration(
-            "LiFT mode_ids must be positive"))
-        allunique(values) || throw(InvalidConfiguration(
-            "LiFT mode_ids must be unique"))
-        values
-    end
-    return LiFT{typeof(jacobian_method),typeof(solve_mode),typeof(damping),
-        typeof(prepared_mode_ids),typeof(weighting),typeof(model_scaling)}(
-        iterations, jacobian_method, solve_mode, damping, prepared_mode_ids,
-        weighting, model_scaling, check_convergence)
-end
-
-struct LiFTEstimationPlan{J<:LiFTJacobianMethod,S<:LiFTSolveMode,
-    D<:LiFTDampingMode,I<:FixedSizeVector,DI<:AbstractVector{Int},
-    W<:LiFTWeightingMode,
-    N<:LiFTModelScaling,C<:LiFTObservationContract}
-    iterations::Int
-    jacobian_method::J
-    solve_mode::S
-    damping::D
-    mode_ids::I
-    mode_ids_device::DI
-    weighting::W
-    model_scaling::N
-    check_convergence::Bool
-    observation_contract::C
-end
-
 struct LiFTDenseObjectKernel{T<:AbstractFloat,A<:AbstractMatrix{T}}
     kernel::A
     inv_norm::T
@@ -257,26 +130,6 @@ struct LiFTSeparableObjectKernel{T<:AbstractFloat,V<:AbstractVector{T}}
     row::V
     col::V
     inv_norm::T
-end
-
-struct LiFTDiagnostics{T<:AbstractFloat}
-    residual_norm::T
-    weighted_residual_norm::T
-    update_norm::T
-    condition_ratio::T
-    regularization::T
-    used_qr::Bool
-    used_fallback::Bool
-end
-
-mutable struct LiFTDiagnosticsWorkspace{T<:AbstractFloat}
-    residual_norm::T
-    weighted_residual_norm::T
-    update_norm::T
-    condition_ratio::T
-    regularization::T
-    used_qr::Bool
-    used_fallback::Bool
 end
 
 struct LiFTForwardPlan{T<:AbstractFloat,
@@ -310,10 +163,8 @@ struct LiFTForwardWorkspace{W<:Workspace,B<:AbstractMatrix,
     response_scratch::RB
     sampling_buffer::SB
     mapped_rate_buffer::OB
-    output_work_buffer::B
     convolution_buffer::CB
     convolution_scratch::CB
-    opd_work_buffer::B
 end
 
 """Exact single-writer owner for one LiFT forward-model input and output."""
@@ -323,33 +174,6 @@ struct PreparedLiFTForward{M<:LiFTForwardPlan,
     workspace::W
     input::I
     output::O
-    backend::B
-    device::D
-end
-
-struct LiFTEstimationWorkspace{T<:AbstractFloat,
-    B<:AbstractMatrix{T},
-    V<:AbstractVector{T}}
-    observation_rate_buffer::B
-    residual_buffer::V
-    weight_buffer::V
-    H_buffer::B
-    normal_buffer::B
-    factor_buffer::B
-    rhs_buffer::V
-    full_coefficients_buffer::V
-    diagnostics::LiFTDiagnosticsWorkspace{T}
-end
-
-struct PreparedLiFTEstimator{F<:PreparedLiFTForward,
-    P<:LiFTEstimationPlan,S<:LiFTEstimationWorkspace,
-    O<:LiFTObservation,C<:AbstractVector,I,B,D}
-    forward::F
-    plan::P
-    workspace::S
-    observation::O
-    coefficients::C
-    initial_coefficients::I
     backend::B
     device::D
 end
@@ -516,15 +340,12 @@ function _allocate_lift_forward_workspace(template::AbstractMatrix{T},
     conjugate_field = similar(focal)
     response, response_scratch, sampled, mapped =
         _allocate_lift_mapping_buffers(template, focal_resolution, mapping)
-    output_dimensions = _lift_output_dimensions(focal_resolution, mapping)
-    output_work = similar(template, T, output_dimensions...)
     convolution = object_kernel === nothing ? nothing : similar(optical_rate)
     convolution_scratch = object_kernel === nothing ? nothing : similar(optical_rate)
-    opd_work = similar(pupil_amplitude)
     return LiFTForwardWorkspace(propagation, optical_rate,
         pupil_amplitude, field_scratch, focal, mode, conjugate_field,
-        response, response_scratch, sampled, mapped, output_work, convolution,
-        convolution_scratch, opd_work)
+        response, response_scratch, sampled, mapped, convolution,
+        convolution_scratch)
 end
 
 function _require_lift_forward_input(plan::LiFTForwardPlan,
@@ -586,8 +407,7 @@ end
         workspace.mode_buffer, workspace.conjugate_field_buffer,
         workspace.response_buffer, workspace.response_scratch,
         workspace.sampling_buffer, workspace.mapped_rate_buffer,
-        workspace.output_work_buffer, workspace.convolution_buffer,
-        workspace.convolution_scratch, workspace.opd_work_buffer)
+        workspace.convolution_buffer, workspace.convolution_scratch)
 end
 
 function _require_lift_workspace_array(array::AbstractArray,
@@ -678,7 +498,6 @@ function _require_lift_forward_workspace(plan::LiFTForwardPlan,
     field_resolution = plan.focal_resolution *
         lift_oversampling(plan.zero_padding)
     field_dimensions = (field_resolution, field_resolution)
-    output_dimensions = plan.observation_contract.rate_metadata.dimensions
     propagation = workspace.propagation
     _require_lift_workspace_array(propagation.pupil_field, Complex{T},
         padded_dimensions, plan, "LiFT propagation pupil-field workspace")
@@ -699,10 +518,6 @@ function _require_lift_forward_workspace(plan::LiFTForwardPlan,
     _require_lift_workspace_array(workspace.conjugate_field_buffer,
         Complex{T}, field_dimensions, plan,
         "LiFT conjugate-field workspace")
-    _require_lift_workspace_array(workspace.output_work_buffer, T,
-        output_dimensions, plan, "LiFT output scratch")
-    _require_lift_workspace_array(workspace.opd_work_buffer, T,
-        pupil_dimensions, plan, "LiFT OPD workspace")
     _require_lift_mapping_workspace(plan.mapping, workspace, plan, T)
     _require_lift_convolution_workspace(plan.object_kernel, workspace,
         plan, T)
@@ -897,116 +712,6 @@ LiFTObservation(forward::PreparedLiFTForward,
     values::AbstractMatrix; kwargs...) =
     LiFTObservation(lift_observation_contract(forward), values; kwargs...)
 
-"""
-    prepare_lift_estimator(definition, forward, observation, coefficients;
-        initial_coefficients=nothing)
-
-Prepare an exact single-writer LiFT estimator. `coefficients` is the selected
-caller-owned result. When supplied, `initial_coefficients` contains one value
-for every mode in the forward plan and is copied into iteration scratch at the
-start of each reconstruction.
-"""
-function prepare_lift_estimator(definition::LiFT,
-    forward::PreparedLiFTForward, observation::LiFTObservation,
-    coefficients::AbstractVector; initial_coefficients=nothing)
-    _require_lift_forward_owner(forward)
-    plan = forward.plan
-    output = intensity_values(forward.output)
-    T = eltype(output)
-    prepared_mode_ids = definition.mode_ids === nothing ?
-        FixedSizeVectorDefault{Int}(axes(plan.basis, 3)) :
-        FixedSizeVectorDefault{Int}(definition.mode_ids)
-    all(mode_id -> 1 <= mode_id <= size(plan.basis, 3),
-        prepared_mode_ids) || throw(DimensionMismatchError(
-            "LiFT mode ids must index the prepared modal basis"))
-    observation.metadata.contract == plan.observation_contract || throw(
-        InvalidConfiguration(
-            "LiFT observation geometry, wavelength, or preprocessing does not match the prepared forward plan"))
-    mode_count = length(prepared_mode_ids)
-    length(coefficients) == mode_count || throw(DimensionMismatchError(
-        "LiFT coefficient product must match the prepared modal subset"))
-    eltype(coefficients) === T || throw(InvalidConfiguration(
-        "LiFT coefficient product must use the prepared numeric type"))
-    typeof(backend(coefficients)) === typeof(backend(output)) || throw(
-        InvalidConfiguration(
-            "LiFT coefficient product must use the prepared array backend"))
-    compute_device(coefficients) == compute_device(output) || throw(
-        InvalidConfiguration(
-            "LiFT coefficient product must occupy the prepared compute device"))
-    _wfs_storage_mightalias(observation.values, coefficients) && throw(
-        InvalidConfiguration(
-            "LiFT observation and coefficient product must not alias"))
-    _require_lift_initial_coefficients(initial_coefficients, output,
-        size(plan.basis, 3))
-    _require_lift_weighting(definition.weighting, observation.metadata, T)
-    prepared_weighting = _prepare_lift_weighting(definition.weighting, output)
-
-    estimator_forward = _prepare_lift_forward(plan)
-    observation_rate = similar(output)
-    residual = similar(output, T, length(output))
-    weights = similar(residual)
-    H = similar(output, T, length(output), mode_count)
-    normal = similar(output, T, mode_count, mode_count)
-    factor = similar(normal)
-    rhs = similar(residual, mode_count)
-    full_coefficients = similar(residual, T, size(plan.basis, 3))
-    mode_ids_device = similar(rhs, Int, mode_count)
-    copyto!(mode_ids_device, collect(prepared_mode_ids))
-    diagnostics_workspace = LiFTDiagnosticsWorkspace(
-        T(NaN), T(NaN), T(NaN), T(NaN), zero(T),
-        false, false)
-    workspace = LiFTEstimationWorkspace(observation_rate, residual, weights,
-        H, normal, factor, rhs, full_coefficients, diagnostics_workspace)
-    estimation_plan = LiFTEstimationPlan(definition.iterations,
-        definition.jacobian_method, definition.solve_mode, definition.damping,
-        prepared_mode_ids, mode_ids_device, prepared_weighting,
-        definition.model_scaling, definition.check_convergence,
-        plan.observation_contract)
-    estimator = PreparedLiFTEstimator(estimator_forward, estimation_plan,
-        workspace, observation, coefficients, initial_coefficients,
-        backend(output),
-        compute_device(output))
-    _require_lift_estimation_aliases(estimator)
-    return _require_lift_estimator(estimator)
-end
-
-@inline _prepare_lift_weighting(mode::LiFTWeightingMode,
-    ::AbstractMatrix) = mode
-
-function _prepare_lift_weighting(mode::LiFTVarianceMapWeighting,
-    output::AbstractMatrix{T}) where {T<:AbstractFloat}
-    return LiFTVarianceMapWeighting(_copy_lift_array(output, mode.variance, T))
-end
-
-@inline _require_lift_initial_coefficients(::Nothing,
-    ::AbstractMatrix, ::Int) = nothing
-
-function _require_lift_initial_coefficients(initial::AbstractVector,
-    output::AbstractMatrix{T}, mode_count::Int) where {T<:AbstractFloat}
-    length(initial) == mode_count || throw(DimensionMismatchError(
-        "LiFT initial coefficients must cover the complete prepared basis"))
-    eltype(initial) === T || throw(InvalidConfiguration(
-        "LiFT initial coefficients must use the prepared numeric type"))
-    typeof(backend(initial)) === typeof(backend(output)) || throw(
-        InvalidConfiguration(
-            "LiFT initial coefficients must use the prepared array backend"))
-    compute_device(initial) == compute_device(output) || throw(
-        InvalidConfiguration(
-            "LiFT initial coefficients must occupy the prepared compute device"))
-    return nothing
-end
-
-_require_lift_initial_coefficients(::Any, ::AbstractMatrix, ::Int) = throw(
-    InvalidConfiguration(
-        "LiFT initial coefficients must be an abstract vector or nothing"))
-
-@inline function _lift_estimation_workspace_arrays(
-    workspace::LiFTEstimationWorkspace)
-    return (workspace.observation_rate_buffer, workspace.residual_buffer,
-        workspace.weight_buffer, workspace.H_buffer,
-        workspace.normal_buffer, workspace.factor_buffer,
-        workspace.rhs_buffer, workspace.full_coefficients_buffer)
-end
 
 @inline _lift_object_plan_arrays(::Nothing) = ()
 @inline _lift_object_plan_arrays(kernel::LiFTDenseObjectKernel) =
@@ -1032,12 +737,6 @@ end
         _lift_mapping_plan_arrays(plan.mapping)...)
 end
 
-@inline _lift_estimation_plan_arrays(plan::LiFTEstimationPlan) =
-    (plan.mode_ids_device, _lift_weighting_plan_arrays(plan.weighting)...)
-@inline _lift_weighting_plan_arrays(::LiFTWeightingMode) = ()
-@inline _lift_weighting_plan_arrays(weighting::LiFTVarianceMapWeighting) =
-    (weighting.variance,)
-
 @inline _lift_any_alias(::Tuple{}) = false
 @inline function _lift_any_alias(values::Tuple)
     remaining = Base.tail(values)
@@ -1050,125 +749,3 @@ end
     return _lift_mightalias_any(first(values), other_values) ||
         _lift_any_cross_alias(Base.tail(values), other_values)
 end
-
-function _require_lift_estimation_array(array::AbstractArray,
-    ::Type{E}, dimensions::Tuple, lift::PreparedLiFTEstimator,
-    label::AbstractString) where {E<:Number}
-    size(array) == dimensions || throw(DimensionMismatchError(
-        "$label dimensions do not match the LiFT estimation plan"))
-    eltype(array) === E || throw(InvalidConfiguration(
-        "$label numeric type does not match the LiFT estimation plan"))
-    typeof(backend(array)) === typeof(lift.backend) || throw(
-        InvalidConfiguration(
-            "$label backend does not match the LiFT estimation plan"))
-    compute_device(array) == lift.device || throw(InvalidConfiguration(
-        "$label device does not match the LiFT estimation plan"))
-    return array
-end
-
-function _require_lift_estimation_workspace(lift::PreparedLiFTEstimator)
-    T = eltype(lift.forward.output.values)
-    output_dimensions =
-        lift.plan.observation_contract.rate_metadata.dimensions
-    sample_count = prod(output_dimensions)
-    mode_count = length(lift.plan.mode_ids)
-    basis_mode_count = size(lift.forward.plan.basis, 3)
-    workspace = lift.workspace
-    _require_lift_estimation_array(workspace.observation_rate_buffer, T,
-        output_dimensions, lift, "LiFT observation-rate workspace")
-    _require_lift_estimation_array(workspace.residual_buffer, T,
-        (sample_count,), lift, "LiFT residual workspace")
-    _require_lift_estimation_array(workspace.weight_buffer, T,
-        (sample_count,), lift, "LiFT weight workspace")
-    _require_lift_estimation_array(workspace.H_buffer, T,
-        (sample_count, mode_count), lift, "LiFT Jacobian workspace")
-    _require_lift_estimation_array(workspace.normal_buffer, T,
-        (mode_count, mode_count), lift, "LiFT normal-matrix workspace")
-    _require_lift_estimation_array(workspace.factor_buffer, T,
-        (mode_count, mode_count), lift, "LiFT factorization workspace")
-    _require_lift_estimation_array(workspace.rhs_buffer, T,
-        (mode_count,), lift, "LiFT right-hand-side workspace")
-    _require_lift_estimation_array(workspace.full_coefficients_buffer, T,
-        (basis_mode_count,), lift, "LiFT full-coefficient workspace")
-    _require_lift_estimation_array(lift.plan.mode_ids_device, Int,
-        (mode_count,), lift, "LiFT device mode-index plan storage")
-    return workspace
-end
-
-function _require_lift_estimation_aliases(lift::PreparedLiFTEstimator)
-    forward_plan_arrays = _lift_forward_plan_arrays(lift.forward.plan)
-    propagation_arrays =
-        _lift_propagation_workspace_arrays(lift.forward.workspace)
-    forward_arrays = _lift_forward_workspace_arrays(lift.forward.workspace)
-    estimation_plan_arrays = _lift_estimation_plan_arrays(lift.plan)
-    estimation_arrays = _lift_estimation_workspace_arrays(lift.workspace)
-    storages = (forward_plan_arrays..., lift.forward.input,
-        lift.forward.output.values, forward_arrays...,
-        estimation_plan_arrays..., estimation_arrays...,
-        lift.observation.values, lift.coefficients,
-        lift.initial_coefficients)
-    (_lift_any_alias(storages) ||
-        _lift_any_alias(propagation_arrays) ||
-        _lift_any_cross_alias(propagation_arrays, storages)) && throw(
-        InvalidConfiguration(
-            "LiFT plan, input, product, observation, and workspace storage must not alias"))
-    return lift
-end
-
-function _require_lift_estimator(lift::PreparedLiFTEstimator)
-    _require_lift_forward_owner(lift.forward)
-    lift.observation.metadata.contract == lift.plan.observation_contract ||
-        throw(InvalidConfiguration(
-            "LiFT observation contract changed after estimator preparation"))
-    lift.forward.plan.observation_contract == lift.plan.observation_contract ||
-        throw(InvalidConfiguration(
-            "LiFT forward plan changed after estimator preparation"))
-    typeof(lift.backend) === typeof(backend(lift.forward.output.values)) ||
-        throw(InvalidConfiguration(
-            "LiFT estimator backend binding changed"))
-    lift.device == compute_device(lift.forward.output.values) || throw(
-        InvalidConfiguration(
-            "LiFT estimator compute-device binding changed"))
-
-    metadata = lift.observation.metadata
-    values = lift.observation.values
-    output = lift.forward.output.values
-    T = eltype(output)
-    size(values) == metadata.contract.rate_metadata.dimensions || throw(
-        DimensionMismatchError(
-            "LiFT observation dimensions changed after estimator preparation"))
-    eltype(values) === metadata.numeric_type || throw(InvalidConfiguration(
-        "LiFT observation numeric type changed after estimator preparation"))
-    typeof(backend(values)) === typeof(metadata.backend) || throw(
-        InvalidConfiguration(
-            "LiFT observation backend changed after estimator preparation"))
-    compute_device(values) == metadata.device || throw(InvalidConfiguration(
-        "LiFT observation device changed after estimator preparation"))
-    _require_lift_estimation_array(lift.coefficients, T,
-        (length(lift.plan.mode_ids),), lift, "LiFT coefficient product")
-    _require_lift_initial_coefficients(lift.initial_coefficients, output,
-        size(lift.forward.plan.basis, 3))
-    _require_lift_weighting(lift.plan.weighting, metadata, T)
-    _require_lift_estimation_workspace(lift)
-    _require_lift_estimation_aliases(lift)
-    return lift
-end
-
-"""Return the diagnostics from the most recent LiFT reconstruction."""
-function diagnostics(lift::PreparedLiFTEstimator)
-    workspace = lift.workspace.diagnostics
-    return LiFTDiagnostics(workspace.residual_norm,
-        workspace.weighted_residual_norm, workspace.update_norm,
-        workspace.condition_ratio, workspace.regularization,
-        workspace.used_qr, workspace.used_fallback)
-end
-
-"""Return the run-immutable plan from a prepared LiFT estimator."""
-@inline lift_estimation_plan(lift::PreparedLiFTEstimator) = lift.plan
-
-"""Return the replaceable workspace from a prepared LiFT estimator."""
-@inline lift_estimation_workspace(lift::PreparedLiFTEstimator) =
-    lift.workspace
-
-@inline _lift_model(lift::PreparedLiFTEstimator) = lift.forward.plan
-@inline _lift_workspace(lift::PreparedLiFTEstimator) = lift.forward.workspace

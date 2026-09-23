@@ -74,9 +74,10 @@ The AOS Shack–Hartmann and Pyramid surfaces end at physical optical products
 and complete detector observations. FilterGraphAlgorithms owns their maintained
 operational estimation. Bi-O-edge, Zernike, and Curvature use AOS optical
 formation and acquisition, then registered FilterGraphAlgorithms for
-operational estimation. LiFT remains an AOS forward and phase-retrieval
-workflow until its approved AdaptiveOpticsCalibration inverse target is
-released and adopted.
+operational estimation. AOS supplies LiFT physical forward prediction and the
+analytic Jacobian callback. Use the registered
+`AdaptiveOpticsCalibration.PhaseRetrieval` direct API for inverse policies,
+solves, products, and diagnostics.
 
 ## Recipe 3: Detector-Backed Sensing
 

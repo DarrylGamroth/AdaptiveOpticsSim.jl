@@ -38,6 +38,59 @@ function LiFTForwardModel(forward::PreparedLiFTForward)
     return LiFTForwardModel{T,typeof(plan)}(plan)
 end
 
+@inline function _aoc_lift_domain(domain::LiFTPhotonRate)
+    return PhaseRetrieval.LiFTPhotonRate(
+        noise_equivalent_exposure_s=domain.noise_equivalent_exposure_s,
+        quantum_efficiency=domain.quantum_efficiency)
+end
+
+@inline function _aoc_lift_domain(domain::LiFTExpectedCounts)
+    return PhaseRetrieval.LiFTExpectedCounts(domain.exposure_duration_s;
+        quantum_efficiency=domain.quantum_efficiency)
+end
+
+@inline function _aoc_lift_domain(domain::LiFTNormalizedIntensity)
+    return PhaseRetrieval.LiFTNormalizedIntensity(
+        domain.photon_rate_per_unit;
+        noise_equivalent_exposure_s=domain.noise_equivalent_exposure_s,
+        quantum_efficiency=domain.quantum_efficiency)
+end
+
+function _aoc_lift_domain(::AbstractLiFTObservationDomain)
+    throw(UnsupportedAlgorithm(
+        "AdaptiveOpticsCalibration LiFT does not support this AOS observation domain"))
+end
+
+"""
+    PhaseRetrieval.LiFTSpecification(forward, observation)
+
+Check an AOS LiFT observation against its physical forward contract and form
+the corresponding AdaptiveOpticsCalibration specification. The caller still
+owns the AOC method, inputs, result, workspace, and inverse execution.
+"""
+function PhaseRetrieval.LiFTSpecification(forward::PreparedLiFTForward,
+    observation::LiFTObservation)
+    model = LiFTForwardModel(forward)
+    metadata = observation.metadata
+    metadata.contract == forward.plan.observation_contract || throw(
+        InvalidConfiguration(
+            "LiFT observation geometry, wavelength, or preprocessing does not match the physical forward model"))
+    values = observation.values
+    size(values) == metadata.contract.rate_metadata.dimensions || throw(
+        DimensionMismatchError(
+            "LiFT observation dimensions changed after acquisition"))
+    eltype(values) === eltype(model.plan.pupil_amplitude) || throw(
+        InvalidConfiguration(
+            "AdaptiveOpticsCalibration LiFT observation must use the physical model's floating numeric type"))
+    typeof(backend(values)) === typeof(forward.backend) || throw(
+        InvalidConfiguration("LiFT observation backend does not match the physical forward model"))
+    compute_device(values) == forward.device || throw(
+        InvalidConfiguration("LiFT observation device does not match the physical forward model"))
+    return PhaseRetrieval.LiFTSpecification(model,
+        _aoc_lift_domain(metadata.domain);
+        read_noise_std=metadata.readout_noise_std)
+end
+
 @inline PhaseRetrieval.coefficient_count(model::LiFTForwardModel) =
     size(model.plan.basis, 3)
 

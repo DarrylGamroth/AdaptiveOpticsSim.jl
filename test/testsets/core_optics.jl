@@ -191,7 +191,6 @@ end
     end
     for name in (
         :PreparedLiFTForward,
-        :PreparedLiFTEstimator,
         :LiFTObservation,
         :LiFTIdentityMapping,
         :LiFTFrameMapping,
@@ -199,12 +198,11 @@ end
         :LiFTExpectedCounts,
         :LiFTNormalizedIntensity,
         :prepare_lift_forward_model,
-        :prepare_lift_estimator,
         :evaluate_lift_forward!,
         :predict_lift_observation!,
         :lift_forward_output,
         :lift_observation_contract,
-        :diagnostics,
+        :LiFTForwardModel,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)

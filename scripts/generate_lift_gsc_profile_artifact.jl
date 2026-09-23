@@ -2,9 +2,12 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
+import AdaptiveOpticsCalibration
 using Logging
 using Random
 using TOML
+
+const ProfilePhaseRetrieval = AdaptiveOpticsCalibration.PhaseRetrieval
 
 const OUTDIR = joinpath(@__DIR__, "..", "benchmarks", "results", "workflows")
 const OUTFILE = joinpath(OUTDIR, "2026-04-01-phase1-pvp05.toml")
@@ -70,21 +73,24 @@ function lift_profile()
     forward = prepare_lift_forward_model(tel, src, basis, model_opd;
         diversity_opd=diversity, zero_padding=2)
     observation = LiFTObservation(forward, psf)
-    coeffs_fit = zeros(Float64, length(coeffs_true))
-    lift = prepare_lift_estimator(
-        LiFT(iterations=3, mode_ids=1:length(coeffs_true),
-            check_convergence=true),
-        forward,
-        observation,
-        coeffs_fit,
-    )
+    specification = ProfilePhaseRetrieval.LiFTSpecification(forward,
+        observation)
+    method = ProfilePhaseRetrieval.LiFT(iterations=3,
+        mode_indices=1:length(coeffs_true), check_convergence=true)
+    plan = AdaptiveOpticsCalibration.prepare(method, specification)
+    result = AdaptiveOpticsCalibration.allocate_result(plan)
+    workspace = AdaptiveOpticsCalibration.allocate_workspace(plan)
+    inputs = ProfilePhaseRetrieval.LiFTInputs(observation.values)
     build_time_ns = Int(time_ns() - t0)
 
-    WavefrontSensors.reconstruct!(lift)
-    timing = runtime_timing(() -> WavefrontSensors.reconstruct!(lift);
+    reconstruct!() = AdaptiveOpticsCalibration.process!(result, workspace,
+        plan, inputs)
+    reconstruct!()
+    timing = runtime_timing(reconstruct!;
         warmup=3, samples=20, gc_before=false)
-    alloc_bytes = _alloc_bytes(() -> WavefrontSensors.reconstruct!(lift))
-    coeff_error = maximum(abs.(coeffs_fit .- coeffs_true))
+    alloc_bytes = _alloc_bytes(reconstruct!)
+    coeff_error = maximum(abs.(
+        ProfilePhaseRetrieval.lift_coefficients(result) .- coeffs_true))
 
     return Dict(
         "scenario" => "tutorial_like_modal_psf_fit",
@@ -194,4 +200,6 @@ function main()
     println(OUTFILE)
 end
 
-main()
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
+end

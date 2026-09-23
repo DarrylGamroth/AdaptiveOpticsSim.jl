@@ -383,11 +383,17 @@ end
         diversity_opd=diversity, focal_resolution=8)
     psf_in = reference_direct_image(tel, src; zero_padding=1)
     lift_observation = LiFTObservation(lift_forward, copy(psf_in))
-    coeffs = zeros(eltype(psf_in), 2)
-    lift = prepare_lift_estimator(LiFT(iterations=2, mode_ids=1:2,
-            jacobian_method=LiFTNumericalJacobian(),
-            check_convergence=false), lift_forward, lift_observation, coeffs)
-    WavefrontSensors.reconstruct!(lift)
+    lift_specification = AOCPhaseRetrieval.LiFTSpecification(lift_forward,
+        lift_observation)
+    lift_plan = AdaptiveOpticsCalibration.prepare(
+        AOCPhaseRetrieval.LiFT(iterations=2, mode_indices=1:2,
+            jacobian_method=AOCPhaseRetrieval.LiFTNumericalJacobian(),
+            check_convergence=false), lift_specification)
+    lift_result = AdaptiveOpticsCalibration.allocate_result(lift_plan)
+    lift_workspace = AdaptiveOpticsCalibration.allocate_workspace(lift_plan)
+    AdaptiveOpticsCalibration.process!(lift_result, lift_workspace, lift_plan,
+        AOCPhaseRetrieval.LiFTInputs(lift_observation.values))
+    coeffs = AOCPhaseRetrieval.lift_coefficients(lift_result)
     @test length(coeffs) == 2
-    @test diagnostics(lift).residual_norm >= 0
+    @test lift_result.diagnostics.residual_norm >= 0
 end

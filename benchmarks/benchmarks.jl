@@ -2,8 +2,11 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.WavefrontSensors
+using AdaptiveOpticsCalibration
 using BenchmarkTools
 using Random
+
+const PR = AdaptiveOpticsCalibration.PhaseRetrieval
 
 function bench_direct_imaging()
     tel = Telescope(resolution=64, diameter=8.0, central_obstruction=0.2)
@@ -65,40 +68,32 @@ function prepare_lift_benchmark(numerical::Bool)
         diversity_opd=diversity, focal_resolution=16)
     rate = copy(intensity_values(evaluate_lift_forward!(forward)))
     observation = LiFTObservation(forward, rate)
-    product = zeros(3)
-    definition = LiFT(iterations=1, mode_ids=1:3,
-        jacobian_method=numerical ? LiFTNumericalJacobian() :
-            LiFTAnalyticJacobian())
-    lift = prepare_lift_estimator(definition, forward, observation, product)
-    return lift, zeros(6)
+    specification = PR.LiFTSpecification(forward, observation)
+    method = PR.LiFT(iterations=1, mode_indices=1:3,
+        jacobian_method=numerical ? PR.LiFTNumericalJacobian() :
+            PR.LiFTAnalyticJacobian())
+    plan = AdaptiveOpticsCalibration.prepare(method, specification)
+    result = AdaptiveOpticsCalibration.allocate_result(plan)
+    workspace = AdaptiveOpticsCalibration.allocate_workspace(plan)
+    inputs = PR.LiFTInputs(observation.values)
+    return result, workspace, plan, inputs
 end
 
 function bench_lift(numerical::Bool)
-    lift, coeffs = prepare_lift_benchmark(numerical)
-    return @benchmark AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix(
-        $lift, $coeffs)
-end
-
-function bench_lift_inplace(numerical::Bool)
-    lift, coeffs = prepare_lift_benchmark(numerical)
-    H = lift.workspace.H_buffer
-    return @benchmark AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
-        $H, $lift, $coeffs)
+    result, workspace, plan, inputs = prepare_lift_benchmark(numerical)
+    return @benchmark AdaptiveOpticsCalibration.process!(
+        $result, $workspace, $plan, $inputs)
 end
 
 function alloc_checks()
-    lift_a, coeffs = prepare_lift_benchmark(false)
-    lift_n, _ = prepare_lift_benchmark(true)
-    H_a = lift_a.workspace.H_buffer
-    H_n = lift_n.workspace.H_buffer
-    AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
-        H_a, lift_a, coeffs)
-    AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
-        H_n, lift_n, coeffs)
-    alloc_lift_a = @allocated AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
-        H_a, lift_a, coeffs)
-    alloc_lift_n = @allocated AdaptiveOpticsSim.WavefrontSensors.lift_interaction_matrix!(
-        H_n, lift_n, coeffs)
+    result_a, workspace_a, plan_a, inputs_a = prepare_lift_benchmark(false)
+    result_n, workspace_n, plan_n, inputs_n = prepare_lift_benchmark(true)
+    AdaptiveOpticsCalibration.process!(result_a, workspace_a, plan_a, inputs_a)
+    AdaptiveOpticsCalibration.process!(result_n, workspace_n, plan_n, inputs_n)
+    alloc_lift_a = @allocated AdaptiveOpticsCalibration.process!(
+        result_a, workspace_a, plan_a, inputs_a)
+    alloc_lift_n = @allocated AdaptiveOpticsCalibration.process!(
+        result_n, workspace_n, plan_n, inputs_n)
 
     println("Allocation checks:")
     println("  LiFT analytic (in-place): $(alloc_lift_a) bytes")
@@ -117,16 +112,10 @@ display(bench_wfs_lgs())
 println("Pyramid benchmark:")
 display(bench_pyramid())
 
-println("LiFT analytic benchmark:")
+println("AOC LiFT analytic complete-call benchmark:")
 display(bench_lift(false))
 
-println("LiFT numerical benchmark:")
+println("AOC LiFT numerical complete-call benchmark:")
 display(bench_lift(true))
-
-println("LiFT analytic in-place benchmark:")
-display(bench_lift_inplace(false))
-
-println("LiFT numerical in-place benchmark:")
-display(bench_lift_inplace(true))
 
 alloc_checks()

@@ -207,23 +207,4 @@ end
     return nothing
 end
 
-function WavefrontSensors.solve_lift_fallback!(
-    diag::WavefrontSensors.LiFTDiagnostics{T},
-    rhs::CUDA.AnyCuVector{T},
-    H::CUDA.AnyCuMatrix{T},
-    residual::CUDA.AnyCuVector{T},
-    damping::WavefrontSensors.LiFTDampingMode,
-) where {T<:AbstractFloat}
-    # CUSOLVER's SVD requires a dense CuMatrix rather than a wrapped view.
-    F = svd(CUDA.CuArray(H); full=false)
-    λ = WavefrontSensors.fallback_damping_lambda(damping, T, H)
-    work = CUDA.CuArray{T}(undef, length(F.S))
-    mul!(work, transpose(F.U), residual)
-    @. work = ifelse(iszero(F.S^2 + λ), zero(T), (F.S * work) / (F.S^2 + λ))
-    mul!(rhs, adjoint(F.Vt), work)
-    diag.regularization = λ
-    diag.used_fallback = true
-    return rhs
-end
-
 end
