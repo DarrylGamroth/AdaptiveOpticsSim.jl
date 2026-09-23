@@ -16,6 +16,7 @@ using FixedSizeArrays: FixedSizeVector
 using LinearAlgebra
 using Random
 using Statistics
+using TOML
 
 const AOCPhaseRetrieval = AdaptiveOpticsCalibration.PhaseRetrieval
 

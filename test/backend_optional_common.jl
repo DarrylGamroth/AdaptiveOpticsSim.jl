@@ -3049,15 +3049,54 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_read_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
     @test AdaptiveOpticsSim.Detectors.detector_read_offsets_s(gpu_windowed_det) == AdaptiveOpticsSim.Detectors.detector_read_offsets_s(cpu_windowed_det)
 
-    gsc_mask = array_backend(fill(one(T), 8, 8))
-    gsc_basis = array_backend(reshape(T.(1:192), 8, 8, 3) .* T(1e-3))
-    gsc_frame = array_backend(reshape(T.(1:64), 8, 8))
-    gsc = GainSensingCamera(gsc_mask, gsc_basis; T=T)
-    calibrate!(gsc, gsc_frame)
-    optical_gains = compute_optical_gains!(gsc, gsc_frame)
-    @test optical_gains isa array_backend
-    @test all(isfinite, Array(optical_gains))
+    return nothing
+end
 
+function run_optional_gain_sensing_camera_fixture_checks(array_backend,
+    ::Type{T}) where {T<:AbstractFloat}
+    # Use the frozen CPU source-characterization inputs rather than an
+    # identical calibration/current frame: the first two modes exercise
+    # non-unity signed gains and the third intentionally remains weak.
+    gsc_fixture = TOML.parsefile(joinpath(@__DIR__, "fixtures",
+        "aos_s6_gsc_cpu.toml"))
+    gsc_fixture_array(section) = reshape(T.(section["values"]),
+        Tuple(Int.(section["shape"])))
+    gsc_fixture_complex_array(section) = complex.(
+        gsc_fixture_array(section["real"]),
+        gsc_fixture_array(section["imag"]),
+    )
+    gsc_mask = array_backend(gsc_fixture_complex_array(gsc_fixture["mask"]))
+    gsc_basis = array_backend(gsc_fixture_array(gsc_fixture["basis"]))
+    gsc_reference_frame = array_backend(
+        gsc_fixture_array(gsc_fixture["frames"]["reference"]))
+    gsc_current_frame = array_backend(
+        gsc_fixture_array(gsc_fixture["frames"]["current"]))
+    gsc_expected_gains = T.(gsc_fixture["optical_gains"])
+    gsc_expected_weak_modes = Bool.(gsc_fixture["weak_mode_mask"])
+    gsc_expected_reference_sensitivities = complex.(
+        T.(gsc_fixture["sensitivities"]["reference"]["real"]),
+        T.(gsc_fixture["sensitivities"]["reference"]["imag"]),
+    )
+    gsc_expected_current_sensitivities = complex.(
+        T.(gsc_fixture["sensitivities"]["current"]["real"]),
+        T.(gsc_fixture["sensitivities"]["current"]["imag"]),
+    )
+    gsc = GainSensingCamera(gsc_mask, gsc_basis; T=T,
+        sensitivity_floor=T(gsc_fixture["sensitivity_floor"]))
+    calibrate!(gsc, gsc_reference_frame)
+    optical_gains = compute_optical_gains!(gsc, gsc_current_frame)
+    @test optical_gains isa array_backend
+    @test gsc.ir_calib isa array_backend
+    @test gsc.ir_buffer isa array_backend
+    @test gsc.sensi_calib isa array_backend
+    @test gsc.sensi_buffer isa array_backend
+    @test isapprox(Array(gsc.sensi_calib), gsc_expected_reference_sensitivities;
+        rtol=T(5e-4), atol=T(1e-8))
+    @test isapprox(Array(gsc.sensi_buffer), gsc_expected_current_sensitivities;
+        rtol=T(5e-4), atol=T(1e-8))
+    @test Array(Calibration.weak_mode_mask(gsc)) == gsc_expected_weak_modes
+    @test isapprox(Array(optical_gains), gsc_expected_gains;
+        rtol=T(2e-4), atol=T(3e-5))
     return nothing
 end
 
@@ -3561,6 +3600,8 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_cmos_family_checks(B, backend)
     run_optional_shared_detector_ipc_checks(B, backend)
     run_optional_cycle_averaged_modulation_checks(B, backend)
+    run_optional_gain_sensing_camera_fixture_checks(backend, Float32)
+    run_optional_gain_sensing_camera_fixture_checks(backend, Float64)
 
     if get(ENV, backend_full_smoke_env(B), "0") == "1"
         include(joinpath(dirname(@__DIR__), "scripts", "gpu_smoke_contract.jl"))
