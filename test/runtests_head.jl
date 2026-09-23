@@ -245,16 +245,6 @@ function assert_modal_basis_contract(basis::ModalBasis, n_commands::Int, n_modes
     end
 end
 
-function assert_ao_calibration_contract(calib::AOCalibration, n_commands::Int, n_modes::Int)
-    @test modal_to_command(calib) === calib.M2C
-    @test sampled_basis(calib) === calib.basis
-    @test modal_projector(calib) === calib.projector
-    @test control_matrix(calib) === calib.calibration
-    @test size(calib.M2C) == (n_commands, n_modes)
-    @test size(calib.basis, 2) == n_modes
-    @test calib.calibration isa ControlMatrix
-end
-
 function assert_meta_sensitivity_contract(meta::Calibration.MetaSensitivity,
     n_fields::Int)
     @test meta.calib0 isa ControlMatrix

@@ -925,9 +925,6 @@ end
     @test default_fidelity_profile() isa ScientificProfile
     @test default_subharmonic_mode(ScientificProfile()) isa FidelitySubharmonics
     @test default_subharmonic_mode(FastProfile()) isa FastSubharmonics
-    @test default_ncpa_basis(ScientificProfile()).method isa KarhunenLoeveBasis
-    @test default_ncpa_basis(FastProfile()).method isa
-        AOCModalBases.InfluenceFunctionEigenbasis
 
     mixed = ProfileBundle(ScientificProfile(); lift=FastProfile(), tomography=FastProfile())
     @test atmosphere_profile(mixed) isa ScientificProfile
@@ -936,11 +933,8 @@ end
     @test lift_profile(mixed) isa FastProfile
     @test tomography_profile(mixed) isa FastProfile
     @test default_subharmonic_mode(mixed) isa FidelitySubharmonics
-    @test default_ncpa_basis(mixed).method isa KarhunenLoeveBasis
-
     fast_cal = ProfileBundle(ScientificProfile(); calibration=FastProfile())
-    @test default_ncpa_basis(fast_cal).method isa
-        AOCModalBases.InfluenceFunctionEigenbasis
+    @test calibration_profile(fast_cal) isa FastProfile
 
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel;
@@ -952,12 +946,6 @@ end
     fast = ft_sh_phase_screen(atm, 16, 0.1; rng=MersenneTwister(3), profile=FastProfile())
     @test !all(scientific .== fast)
 
-    dm = DeformableMirror(tel; n_act=4, influence_width=0.3)
-    coeffs = zeros(4)
-    ncpa_fast = NCPA(tel, dm, atm; profile=FastProfile(), coefficients=coeffs)
-    ncpa_scientific = NCPA(tel, dm, atm; profile=ScientificProfile(), coefficients=coeffs)
-    @test size(ncpa_fast.opd) == size(pupil_reflectivity(tel))
-    @test size(ncpa_scientific.opd) == size(pupil_reflectivity(tel))
 end
 
 @testset "Multi-layer atmosphere" begin

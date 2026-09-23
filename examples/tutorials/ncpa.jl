@@ -1,12 +1,19 @@
 include(joinpath(@__DIR__, "common.jl"))
+import AdaptiveOpticsCalibration
 
 function main(; resolution::Int=24)
     tel = base_telescope(resolution=resolution, central_obstruction=0.0)
     src = base_source()
-    dm = DeformableMirror(tel; n_act=4, influence_width=0.35)
-    atm = KolmogorovAtmosphere(tel; r0=0.18,
-        reference_wavelength_m=500e-9, L0=25.0)
-    ncpa = NCPA(tel, dm, atm; basis=ZernikeModalBasis(), coefficients=[0.0, 30e-9, -20e-9, 10e-9])
+    coefficients = [0.0, 30e-9, -20e-9, 10e-9]
+    zernike = ZernikeBasis(tel, length(coefficients))
+    compute_zernike!(zernike, tel)
+    modal = AdaptiveOpticsCalibration.ModalBases
+    specification = modal.ModalOPDExpansionSpecification(
+        resolution, resolution, length(coefficients), pupil_mask(tel), Float64)
+    plan = AdaptiveOpticsCalibration.prepare(modal.ModalOPDExpansion(), specification)
+    product = AdaptiveOpticsCalibration.process(
+        plan, modal.ModalOPDExpansionInputs(zernike.modes, coefficients))
+    ncpa = NCPA(product.opd)
     pupil = PupilFunction(tel)
     apply_surface!(pupil, ncpa, DMReplace())
     imaging = prepare_direct_imaging(pupil, src; zero_padding=2)
