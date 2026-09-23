@@ -60,6 +60,96 @@ end
         Calibration.GSCDetectorMetadata
 end
 
+@testset "Frozen S6 gain-sensing camera CPU source characterization" begin
+    fixture = TOML.parsefile(joinpath(@__DIR__, "..", "fixtures",
+        "aos_s6_gsc_cpu.toml"))
+    @test fixture["schema"] == "test.adaptive-optics-sim/gain-sensing-camera-cpu/1"
+    @test fixture["source_repository"] == "AdaptiveOpticsSim.jl"
+    @test fixture["source_revision"] ==
+        "4dec9c2469cd6f6c3d0a6dfe275ca777901c51c5"
+    @test fixture["source_paths"] == ["src/calibration/gain_sensing_camera.jl"]
+    @test fixture["source_test_path"] == "test/testsets/optical_analysis.jl"
+    @test fixture["array_backend"] == "CPU"
+    @test fixture["float_type"] == "Float64"
+    @test fixture["storage_order"] == "column-major"
+    @test fixture["fft_centering"] == "fftshift(fft(fftshift(x))) / N"
+
+    fixture_array(section) = reshape(Float64.(section["values"]),
+        Tuple(Int.(section["shape"])))
+    fixture_complex_array(section) = complex.(
+        fixture_array(section["real"]), fixture_array(section["imag"]),
+    )
+    fixture_complex_vector(section) = complex.(Float64.(section["real"]),
+        Float64.(section["imag"]))
+
+    mask = fixture_complex_array(fixture["mask"])
+    basis = fixture_array(fixture["basis"])
+    reference_frame = fixture_array(fixture["frames"]["reference"])
+    current_frame = fixture_array(fixture["frames"]["current"])
+    reference_ir = fixture_array(fixture["impulse_responses"]["reference"])
+    current_ir = fixture_array(fixture["impulse_responses"]["current"])
+    reference_sensitivity = fixture_complex_vector(
+        fixture["sensitivities"]["reference"])
+    current_sensitivity = fixture_complex_vector(
+        fixture["sensitivities"]["current"])
+    expected_weak = Bool.(fixture["weak_mode_mask"])
+    expected_gains = Float64.(fixture["optical_gains"])
+
+    @test size(mask) == (8, 8)
+    @test size(basis) == (8, 8, 3)
+    @test iseven(size(mask, 1))
+    @test fixture["basis"]["alignment"] ==
+        "already aligned with the mask and detector-frame grid; no padding"
+    @test fixture["mask"]["unit"] ==
+        "dimensionless complex focal-plane transmission"
+    @test fixture["frames"]["unit"] ==
+        "detector intensity sample; normalized spatial distribution is used"
+    @test fixture["basis"]["unit"] == "caller-defined aligned modal phase basis"
+    @test fixture["sensitivities"]["unit"] == "basis-unit²"
+    @test fixture["optical_gains_unit"] == "dimensionless signed ratio"
+
+    gsc = GainSensingCamera(mask, basis;
+        sensitivity_floor=fixture["sensitivity_floor"])
+    @test gsc.mask == mask
+    @test gsc.basis == basis
+    @test_throws InvalidConfiguration compute_optical_gains!(gsc, current_frame)
+    @test_throws InvalidConfiguration calibrate!(gsc, zeros(size(reference_frame)))
+
+    calibrate!(gsc, reference_frame; n_jobs=1)
+    @test sum(reference_frame) ≈ fixture["frames"]["reference"]["total_flux"]
+    @test sum(gsc.frame_buffer) ≈ fixture["frames"]["reference"]["normalized_total"]
+    @test gsc.ir_calib ≈ reference_ir rtol=1e-12 atol=1e-14
+    @test gsc.sensi_calib ≈ reference_sensitivity rtol=1e-12 atol=1e-14
+    @test Calibration.weak_mode_mask(gsc) == expected_weak
+    @test any(.!Calibration.weak_mode_mask(gsc))
+    @test any(Calibration.weak_mode_mask(gsc))
+
+    gains = compute_optical_gains!(gsc, current_frame)
+    @test sum(current_frame) ≈ fixture["frames"]["current"]["total_flux"]
+    @test sum(gsc.frame_buffer) ≈ fixture["frames"]["current"]["normalized_total"]
+    @test gsc.ir_buffer ≈ current_ir rtol=1e-12 atol=1e-14
+    @test gsc.sensi_buffer ≈ current_sensitivity rtol=1e-12 atol=1e-14
+    @test gains ≈ expected_gains rtol=1e-12 atol=1e-14
+    @test gains[end] == 1.0
+    @test_throws InvalidConfiguration compute_optical_gains!(gsc,
+        zeros(size(current_frame)))
+
+    # The compact fixture characterizes the numerical estimator. Retain the
+    # full physical modulation-frame and signed-gain references separately so
+    # its transfer to a calibration package cannot silently alter the plant.
+    branch = load_reference_bundle(default_reference_root())
+    physical_frame = only(filter(case ->
+        case.id == fixture["physical_branch_reference"]["current_image_case"],
+        branch.cases))
+    signed_gains = only(filter(case ->
+        case.id == fixture["physical_branch_reference"]["signed_gain_case"],
+        branch.cases))
+    @test physical_frame.shape == (48, 48)
+    @test physical_frame.config["storage_order"] == "C"
+    @test size(load_reference_array(physical_frame)) == (48, 48)
+    @test all(<(0), load_reference_array(signed_gains))
+end
+
 @testset "Phase statistics" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel;
