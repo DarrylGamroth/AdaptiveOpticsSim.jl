@@ -290,6 +290,93 @@ end
     @test isapprox(meta_ad.calib0.D, meta_fd.calib0.D; rtol=1e-12, atol=1e-12)
     @test isapprox(meta_ad.meta.D, meta_fd.meta.D; rtol=2e-3, atol=1e-9)
 
+    @testset "Frozen S6 CPU source characterization" begin
+        fixture = TOML.parsefile(joinpath(@__DIR__, "..", "fixtures",
+            "aos_s6_misregistration_cpu.toml"))
+        @test fixture["schema"] == "test.adaptive-optics-sim/misregistration-cpu/1"
+        @test fixture["source_revision"] ==
+            "7071c4eb61bf691ef845721fec141a38d0906873"
+        @test fixture["source_paths"] == [
+            "src/calibration/misregistration_identification.jl",
+            "src/calibration/ad_sensitivities.jl",
+        ]
+        @test fixture["source_test_path"] ==
+            "test/testsets/calibration_workflows.jl"
+        @test fixture["float_type"] == "Float64"
+        @test fixture["storage_order"] == "column-major"
+        @test fixture["wfs_response_unit"] == "m OPD"
+
+        fixture_matrix(name) = begin
+            matrix = fixture["matrices"][name]
+            @test matrix["unit"] in ("m OPD", "m OPD per field unit")
+            reshape(Float64.(matrix["values"]), Tuple(Int.(matrix["shape"])))
+        end
+
+        @test Symbol.(fixture["field_order"]) == fields
+        @test fixture["field_units"] == Dict(
+            "shift_x" => "DM actuator-coordinate convention",
+            "shift_y" => "DM actuator-coordinate convention",
+            "rotation_deg" => "degree",
+            "radial_scaling" => "dimensionless",
+            "tangential_scaling" => "dimensionless",
+        )
+
+        d0 = fixture_matrix("D0")
+        j_ad = fixture_matrix("J_ad")
+        j_fd = fixture_matrix("J_finite_difference")
+        d_observed = fixture_matrix("D_observed")
+        @test meta_ad.calib0.D ≈ d0 rtol=1e-12 atol=1e-22
+        @test meta_fd.calib0.D ≈ d0 rtol=1e-12 atol=1e-22
+        @test meta_ad.meta.D ≈ j_ad rtol=1e-12 atol=1e-22
+        @test meta_fd.meta.D ≈ j_fd rtol=1e-12 atol=1e-22
+
+        observed = fixture["observed_misregistration"]
+        observed_misregistration = Misregistration(
+            shift_x=observed["shift_x"],
+            shift_y=observed["shift_y"],
+            rotation_deg=observed["rotation_deg"],
+            radial_scaling=observed["radial_scaling"],
+            tangential_scaling=observed["tangential_scaling"],
+        )
+        observed_dm = DeformableMirror(tel; topology=topology(dm),
+            influence_model=influence_model(dm),
+            misregistration=observed_misregistration)
+        observed_matrix = interaction_matrix(observed_dm, wfs,
+            PupilFunction(tel), basis.M2C[:, 1:2];
+            amplitude=fixture["calibration_amplitude"])
+        @test observed_matrix.matrix ≈ d_observed rtol=1e-12 atol=1e-22
+
+        for (name, source_meta) in (("ad", meta_ad),
+                ("finite_difference", meta_fd))
+            inverse = fixture["inverse"]
+            diagnostics = fixture["inverse_diagnostics"][name]
+            @test source_meta.meta.method isa AOCReconstructors.TSVDInverse
+            @test nameof(typeof(source_meta.meta.method)) ==
+                Symbol(inverse["method"])
+            @test source_meta.meta.method.rtol == inverse["rtol"]
+            @test source_meta.meta.method.atol == inverse["atol"]
+            @test source_meta.meta.n_trunc == inverse["n_trunc"]
+            @test source_meta.meta.effective_rank == diagnostics["effective_rank"]
+            @test source_meta.meta.cond ≈ diagnostics["condition_number"]
+            @test source_meta.meta.singular_values ≈
+                diagnostics["singular_values"] rtol=1e-12 atol=1e-22
+
+            delta = source_meta.meta.M * vec(observed_matrix.matrix .-
+                source_meta.calib0.D)
+            expected_delta = fixture["unrounded_delta"][name]["values"]
+            @test delta ≈ expected_delta rtol=1e-12 atol=1e-15
+
+            estimated = Calibration.estimate_misregistration(source_meta,
+                observed_matrix.matrix; misregistration_zero=Misregistration(),
+                precision=3)
+            expected = fixture["legacy_estimated_offsets"][name]
+            for field in fields
+                @test misregistration_component(estimated, field) ==
+                    expected[String(field)]
+            end
+        end
+    end
+
     mktempdir() do root
         cache_path = joinpath(root, "meta-sensitivity.bin")
         @test_throws MethodError Calibration.compute_meta_sensitivity_matrix(
