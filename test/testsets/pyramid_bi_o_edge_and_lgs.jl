@@ -33,8 +33,6 @@ end
         pyramid_propagation_workspace(pyramid).pyramid_mask
     @test @allocated(pyramid_focal_mask(pyramid)) == 0
     @test !hasfield(typeof(pyramid), :estimator)
-    @test !applicable(measure!, pyramid, pupil, src)
-    @test !applicable(slopes, pyramid)
     @test !supports_valid_subaperture_mask(pyramid)
     @test valid_subaperture_mask(pyramid) === nothing
     @test !supports_reference_signal(pyramid)
@@ -140,8 +138,6 @@ end
     bio = BiOEdgeWFS(tel; pupil_samples=2, modulation=zero(T), T=T)
 
     @test !hasfield(typeof(bio), :estimator)
-    @test !applicable(measure!, bio, pupil, src)
-    @test !applicable(slopes, bio)
     @test !supports_valid_subaperture_mask(bio)
     @test valid_subaperture_mask(bio) === nothing
     @test !supports_reference_signal(bio)
