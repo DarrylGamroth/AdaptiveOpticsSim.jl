@@ -368,3 +368,179 @@ end
     )
     @test dm_commands(im_recon, [0.1, -0.2]) ≈ reconstruct_wavefront(im_recon, [0.1, -0.2])
 end
+
+@testset "Frozen S6 tomography CPU source characterization" begin
+    fixture = TOML.parsefile(joinpath(@__DIR__, "fixtures",
+        "aos_s6_tomography_cpu.toml"))
+    @test fixture["schema"] == "test.adaptive-optics-sim/tomography-cpu/1"
+    @test fixture["source_repository"] == "AdaptiveOpticsSim.jl"
+    @test fixture["source_revision"] ==
+        "429bf423f2bd19a9e893dbc767a5e86908ed84ea"
+    @test fixture["source_paths"] == [
+        "src/tomography/fitting.jl",
+        "src/tomography/parameters.jl",
+        "src/tomography/reconstructors.jl",
+    ]
+    @test fixture["source_test_path"] == "test/tomography.jl"
+    @test fixture["array_backend"] == "CPU"
+    @test fixture["float_type"] == "Float64"
+    @test fixture["storage_order"] == "Julia column-major vec order"
+
+    fixture_array(section) = reshape(Float64.(section["values"]),
+        Tuple(Int.(section["shape"])))
+    fixture_bool_array(section) = reshape(Bool.(section["values"]),
+        Tuple(Int.(section["shape"])))
+    fixture_vector(section) = Float64.(section["values"])
+    tolerance(section) = (
+        rtol=Float64(fixture["tolerances"][section]["rtol"]),
+        atol=Float64(fixture["tolerances"][section]["atol"]),
+    )
+    fixture_matches(actual, expected, section; nans=false) =
+        isapprox(actual, expected; tolerance(section)..., nans=nans)
+
+    grid_mask = fixture_bool_array(fixture["grid_mask"])
+    gamma = fixture_array(fixture["gamma"])
+    cxx = fixture_array(fixture["cxx"])
+    cox = fixture_array(fixture["cox"])
+    cnz = fixture_array(fixture["cnz"])
+    recstat = fixture_array(fixture["recstat"])
+    r = fixture_array(fixture["r"])
+    h = fixture_array(fixture["h"])
+    f = fixture_array(fixture["f"])
+    ordered_r = fixture_array(fixture["ordered_r"])
+    k = fixture_array(fixture["k"])
+    s_native = fixture_vector(fixture["slopes"]["native"])
+    s_sim = fixture_vector(fixture["slopes"]["simulation"])
+    wavefront = fixture_vector(fixture["wavefront"])
+    wavefront_map = fixture_array(fixture["wavefront_map"])
+    command = fixture_vector(fixture["command"])
+
+    @test size(grid_mask) == (11, 11)
+    @test count(grid_mask) == 9
+    @test fixture["grid_mask"]["active_linear_indices"] == findall(vec(grid_mask))
+    @test fixture["grid_mask"]["unit"] ==
+        "dimensionless Boolean padded phase-sample support"
+    @test fixture["gamma"]["unit"] ==
+        "dimensionless finite-difference slope coefficient per phase-radian sample"
+    @test fixture["cxx"]["unit"] == "phase-radian² covariance"
+    @test fixture["cox"]["unit"] == "phase-radian² covariance"
+    @test fixture["cnz"]["unit"] == "phase-radian² covariance"
+    @test fixture["recstat"]["unit"] ==
+        "phase-radian sample per source slope coordinate"
+    @test fixture["r"]["unit"] ==
+        "metres OPD per source slope coordinate"
+    @test fixture["h"]["unit"] ==
+        "source sampled influence-function coefficient per actuator coordinate"
+    @test fixture["f"]["unit"] ==
+        "actuator coordinate per source sampled influence-function coefficient"
+    @test fixture["ordered_r"]["unit"] ==
+        "metres OPD per simulation slope coordinate"
+    @test fixture["k"]["unit"] ==
+        "scaled actuator coordinate per simulation slope coordinate"
+    @test fixture["wavefront"]["unit"] == "metres OPD"
+    @test fixture["wavefront_map"]["unit"] == "metres OPD; NaN outside grid mask"
+    @test fixture["command"]["unit"] == "scaled actuator coordinate"
+    @test fixture["fitting"]["pinv_rtol"] == 1e-15
+    @test fixture["command_assembly"]["scaling_factor"] == 2.0
+    @test fixture["scaling"]["reconstructor_scale_m"] == 589e-9 / 2
+    @test fixture["constructor"]["lgs"]["n_lgs"] == 1
+    @test fixture["constructor"]["wfs"]["n_lenslets"] == 1
+    @test fixture["constructor"]["dm"]["n_actuators"] == [2]
+    @test fixture["constructor"]["dm"]["valid_actuators"] ==
+        [true, true, true, true]
+    @test fixture["constructor"]["noise"] == Dict(
+        "model" => "RelativeSignalNoise",
+        "fraction" => 0.1,
+    )
+    @test s_native == [0.1, -0.2]
+    @test s_sim == [-0.2, 0.1]
+
+    atm = TomographyAtmosphereParams(
+        zenith_angle_deg=0.0,
+        layer_altitudes_m=[0.0],
+        L0=25.0,
+        r0_zenith=0.2,
+        fractional_cn2=[1.0],
+        reference_wavelength_m=500e-9,
+        wind_direction_deg=[0.0],
+        wind_speed=[10.0],
+    )
+    lgs = LGSAsterismParams(
+        radius_arcsec=7.6,
+        wavelength_m=589e-9,
+        base_height_m=90_000.0,
+        n_lgs=1,
+    )
+    wfs = LGSWFSParams(
+        pupil_diameter_m=8.0,
+        n_lenslets=1,
+        n_px=8,
+        field_stop_size_arcsec=2.0,
+        valid_lenslet_map=trues(1, 1),
+        lenslet_grid_rotations_rad=zeros(1),
+        lenslet_grid_offsets_fraction=zeros(2, 1),
+    )
+    tomo = TomographyParams(n_fit_src=1, fov_optimization_arcsec=0.0)
+    dm = TomographyDMParams(
+        heights_m=[0.0],
+        pitch_m=[0.5],
+        cross_coupling=0.2,
+        n_actuators=[2],
+        valid_actuators=trues(2, 2),
+    )
+    model = build_reconstructor(
+        ModelBasedTomography(),
+        atm,
+        lgs,
+        wfs,
+        tomo,
+        dm;
+        build_backend=Calibration.CPUBuildBackend(),
+    )
+    command_reconstructor = assemble_reconstructor_and_fitting(
+        model,
+        dm;
+        n_channels=1,
+        slope_order=SimulationSlopes(),
+        scaling_factor=fixture["command_assembly"]["scaling_factor"],
+        build_backend=Calibration.CPUBuildBackend(),
+    )
+
+    @test model.grid_mask == grid_mask
+    @test fixture_matches(Matrix(model.operators.gamma), gamma, "gamma")
+    @test fixture_matches(model.operators.cxx, cxx, "cxx")
+    @test fixture_matches(model.operators.cox, cox, "cox")
+    @test fixture_matches(Matrix(model.operators.cnz), cnz, "cnz")
+    @test fixture_matches(model.operators.recstat, recstat, "recstat")
+    @test fixture_matches(model.reconstructor, r, "r")
+    @test fixture_matches(model.reconstructor,
+        fixture["scaling"]["reconstructor_scale_m"] .* model.operators.recstat,
+        "r")
+
+    sampled_h = influence_functions(dm; resolution=size(model.grid_mask, 1))
+    @test fixture_matches(sampled_h, h, "h")
+    @test fixture_matches(command_reconstructor.fitting.fitting_matrix, f, "f")
+    @test fixture_matches(
+        prepare_slope_order(SimulationSlopes(), model.reconstructor, 1),
+        ordered_r,
+        "ordered_r",
+    )
+    @test fixture_matches(ordered_r, r[:, [2, 1]], "ordered_r")
+    @test fixture_matches(command_reconstructor.matrix, k, "k")
+    @test fixture_matches(command_reconstructor.matrix,
+        -(command_reconstructor.fitting.fitting_matrix * ordered_r) .* 2.0,
+        "k")
+
+    actual_wavefront = reconstruct_wavefront(model, s_native)
+    actual_wavefront_map = reconstruct_wavefront_map(model, s_native)
+    actual_command = dm_commands(command_reconstructor, s_sim)
+    @test fixture_matches(actual_wavefront, wavefront, "wavefront")
+    @test fixture_matches(actual_wavefront_map, wavefront_map, "wavefront_map";
+        nans=true)
+    @test fixture_matches(actual_command, command, "command")
+    @test fixture_matches(actual_wavefront, model.reconstructor * s_native,
+        "wavefront")
+    @test fixture_matches(actual_command, command_reconstructor.matrix * s_sim,
+        "command")
+    @test !isapprox(actual_command, command_reconstructor.matrix * s_native)
+end
