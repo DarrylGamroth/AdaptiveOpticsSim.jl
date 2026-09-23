@@ -99,3 +99,8 @@ path = "2026-09-22-curvature-plant-profile.toml"
 purpose = "S4 CPU, CUDA-primary, and AMDGPU-secondary profile of live AOS LiFT optics with registered AOC v0.10 inverse execution"
 id = "S4-LIFT-AOS-AOC-ADAPTER-PROFILE-2026-09-22"
 path = "2026-09-22-lift-aoc-adapter-profile.toml"
+
+[[artifacts]]
+purpose = "S6 AOS tomography cold-build CPU, CUDA-primary, and AMDGPU-secondary profile using registered AOC v0.16 covariance"
+id = "S6-AOC-V016-MODEL-TOMOGRAPHY-PROFILE-2026-09-23"
+path = "2026-09-23-aoc-v016-model-tomography-profile.toml"
