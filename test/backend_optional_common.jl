@@ -2332,14 +2332,12 @@ function run_optional_ingaas_checks(
     return nothing
 end
 
-function import_backend_package!(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag})
-    @eval import CUDA
-    return nothing
-end
+backend_module_name(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = :CUDA
+backend_module_name(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = :AMDGPU
 
-function import_backend_package!(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag})
-    @eval import AMDGPU
-    return nothing
+function backend_preloaded(::Type{B}) where {
+    B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    return isdefined(Main, backend_module_name(B))
 end
 
 function backend_functional(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag})
@@ -3531,7 +3529,11 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
         return nothing
     end
 
-    import_backend_package!(B)
+    if !backend_preloaded(B)
+        @info "Skipping $(backend_label(B)) smoke: preload $(pkg).jl before AdaptiveOpticsSim with the dedicated hardware test entry point"
+        @test true
+        return nothing
+    end
     if !backend_functional(B)
         @info "Skipping $(backend_label(B)) smoke: backend runtime/device is not functional on this host"
         @test true

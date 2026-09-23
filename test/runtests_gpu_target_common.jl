@@ -132,7 +132,7 @@ function require_backend_target!(::Type{B}) where {B<:Backends.GPUBackendTag}
     pkg = backend_package_name(B)
     pkg_path = Base.find_package(pkg)
     pkg_path === nothing && error("$(backend_label(B)) target requires $(pkg).jl in the active environment")
-    import_backend_package!(B)
+    backend_preloaded(B) || error("$(backend_label(B)) target requires $(pkg).jl to be imported before AdaptiveOpticsSim; use its dedicated test entry point")
     backend_functional(B) || error("$(backend_label(B)) target requires a functional backend/device on this host")
     Backends.disable_scalar_backend!(B)
     return nothing
