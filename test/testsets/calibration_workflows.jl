@@ -403,6 +403,63 @@ end
                     expected[String(field)]
             end
         end
+
+        @testset "explicit one-step zero-point reacquisition composition" begin
+            initial_specification =
+                AOCMisregistration.MetaSensitivityEstimateSpecification(
+                    meta_ad.D0,
+                    meta_ad.J,
+                    collect(meta_ad.field_order),
+                    collect(meta_ad.field_units),
+                )
+            initial_plan = AdaptiveOpticsCalibration.prepare(
+                AOCMisregistration.MetaSensitivityEstimate(), initial_specification)
+            initial_result = AdaptiveOpticsCalibration.process(initial_plan,
+                AOCMisregistration.MetaSensitivityEstimateInputs(
+                    observed_matrix.matrix))
+            initial_offsets = AOCMisregistration.parameter_offsets(initial_result)
+
+            updated_zero = Misregistration()
+            for (index, field) in enumerate(meta_ad.field_order)
+                legacy_offset = round(initial_offsets[index]; digits=3)
+                updated_zero = Calibration.update_misregistration(
+                    updated_zero,
+                    field,
+                    misregistration_component(updated_zero, field) + legacy_offset,
+                )
+            end
+
+            reacquired_meta = Calibration.compute_meta_sensitivity_matrix(
+                tel,
+                dm,
+                wfs,
+                basis.M2C[:, 1:2];
+                misregistration_zero=updated_zero,
+                n_mis_reg=length(fields),
+                field_order=fields,
+                sensitivity=:ad,
+            )
+            reacquired_specification =
+                AOCMisregistration.MetaSensitivityEstimateSpecification(
+                    reacquired_meta.D0,
+                    reacquired_meta.J,
+                    collect(reacquired_meta.field_order),
+                    collect(reacquired_meta.field_units),
+                )
+            reacquired_plan = AdaptiveOpticsCalibration.prepare(
+                AOCMisregistration.MetaSensitivityEstimate(), reacquired_specification)
+            reacquired_result = AdaptiveOpticsCalibration.process(reacquired_plan,
+                AOCMisregistration.MetaSensitivityEstimateInputs(
+                    observed_matrix.matrix))
+            reacquired_offsets =
+                AOCMisregistration.parameter_offsets(reacquired_result)
+
+            @test reacquired_meta.field_order == meta_ad.field_order
+            @test reacquired_meta.field_units == meta_ad.field_units
+            @test reacquired_meta.D0 != meta_ad.D0
+            @test all(isfinite, reacquired_offsets)
+            @test norm(reacquired_offsets) < norm(initial_offsets)
+        end
     end
 
     mktempdir() do root
