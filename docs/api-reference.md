@@ -165,7 +165,7 @@ calibration observables, modal bases, fitting, plant-side runtime
 materialization, optical-gain calibration, and identification workflows.
 Reusable inverse methods and compact-SVD products come from
 `AdaptiveOpticsCalibration.Reconstructors`. Common entry points include
-`interaction_matrix`, `control_matrix`, `modal_basis`, and
+`interaction_matrix`, `ControlMatrix`, `modal_basis`, and
 `compute_optical_gains!`. Compose modal-basis construction, plant response
 acquisition, and inverse construction explicitly so the AOC numerical products
 remain separate from AOS plant behavior.
