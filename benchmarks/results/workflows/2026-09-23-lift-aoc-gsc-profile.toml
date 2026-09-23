@@ -1,0 +1,30 @@
+artifact_id = "WORKFLOW-VAL-2026-09-23-AOS-AOC-GSC"
+generated_on = "2026-09-23"
+
+[scope]
+families = ["lift", "aos_pyramid_aoc_gain_sensing"]
+backend = "cpu"
+artifact_kind = "workflow_profile_validation"
+gain_sensing_ownership = "AOS forms the physical Pyramid modulation frame; AOC owns the prepared complete-image estimator"
+
+[cases.aos_pyramid_aoc_gain_sensing]
+scenario = "aos_pyramid_modulation_frame_plus_aoc_gain_sensing"
+measurement_scope = "AOC process! on a preformed complete frame; excludes AOS frame formation"
+n_modes = 4
+measurement_alloc_bytes = 0
+measurement_mean_ns = 154285.35
+mean_optical_gain = 0.9986264554732329
+reference_frame_build_time_ns = 287338
+measurement_p95_ns = 156703.0
+aoc_plan_build_time_ns = 843839
+frame_size = [72, 72]
+
+[cases.lift_reconstruct]
+scenario = "tutorial_like_modal_psf_fit"
+build_time_ns = 446307540
+n_modes = 4
+max_coeff_error = 2.5e-8
+img_resolution = 48
+reconstruct_p95_ns = 1.136978e6
+reconstruct_mean_ns = 1.12263105e6
+reconstruct_alloc_bytes = 1104

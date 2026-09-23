@@ -27,36 +27,7 @@
     @test length(closed_rows) == 2
     @test closed_rows[1].command_norm ≈ 4.0f0
 
-    gsc_closed_loop = AdaptiveOpticsSim.GSCClosedLoopTrace(Float32[
-        100 80 0.50 3 0.9 4
-        120 90 0.45 5 0.8 6
-    ]; dt=0.002f0, t0=0.1f0)
-    @test length(gsc_closed_loop) == 2
-    @test eltype(typeof(gsc_closed_loop)) == AdaptiveOpticsSim.GSCClosedLoopTraceRow{Float32}
-    @test gsc_closed_loop[2].mean_optical_gain ≈ 0.8f0
-    @test Tables.istable(typeof(gsc_closed_loop))
-    @test Tables.rowaccess(typeof(gsc_closed_loop))
-    gsc_closed_rows = collect(Tables.rows(gsc_closed_loop))
-    @test length(gsc_closed_rows) == 2
-    @test gsc_closed_rows[1].slope_norm ≈ 3.0f0
-
-    replay = AdaptiveOpticsSim.GSCAtmosphereReplayTrace(Float32[
-        140 100 110 0.50 0.45 3 0.9
-        150 105 115 0.48 0.42 5 0.8
-    ]; dt=0.002f0, t0=0.1f0)
-    @test length(replay) == 2
-    @test eltype(typeof(replay)) == AdaptiveOpticsSim.GSCAtmosphereReplayTraceRow{Float32}
-    @test replay[2].sci_strehl ≈ 0.42f0
-    @test replay[2].slope_norm ≈ 5.0f0
-    @test Tables.istable(typeof(replay))
-    @test Tables.rowaccess(typeof(replay))
-    replay_rows = collect(Tables.rows(replay))
-    @test length(replay_rows) == 2
-    @test replay_rows[1].ngs_forcing_rms_nm ≈ 140.0f0
-
     @test_throws DimensionMismatchError AdaptiveOpticsSim.ClosedLoopTrace(zeros(2, 4))
-    @test_throws DimensionMismatchError AdaptiveOpticsSim.GSCClosedLoopTrace(zeros(2, 5))
-    @test_throws DimensionMismatchError AdaptiveOpticsSim.GSCAtmosphereReplayTrace(zeros(2, 6))
 
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)

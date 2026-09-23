@@ -29,6 +29,9 @@ end
     src = Source(band=:custom, wavelength=T(0.75e-6), photon_irradiance=T(10), T=T)
 
     pyramid = PyramidWFS(tel; pupil_samples=4, modulation=T(1), T=T)
+    @test @inferred(pyramid_focal_mask(pyramid)) ===
+        pyramid_propagation_workspace(pyramid).pyramid_mask
+    @test @allocated(pyramid_focal_mask(pyramid)) == 0
     @test !hasfield(typeof(pyramid), :estimator)
     @test !applicable(measure!, pyramid, pupil, src)
     @test !applicable(slopes, pyramid)

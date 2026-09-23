@@ -1,5 +1,8 @@
 include(joinpath(@__DIR__, "common.jl"))
 using LinearAlgebra
+import AdaptiveOpticsCalibration
+
+const OpticalGains = AdaptiveOpticsCalibration.OpticalGains
 
 function cartesian_basis(tel::Telescope, n_modes::Int)
     n = tel.params.resolution
@@ -37,13 +40,45 @@ function combine_modes!(out::AbstractMatrix{T}, basis::AbstractArray{<:Real,3},
     return out
 end
 
+function centered_focal_basis(pupil_basis::AbstractArray{T,3},
+    mask::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    side = size(mask, 1)
+    size(mask, 2) == side || throw(ArgumentError(
+        "Pyramid focal mask must be square for complete-image gain sensing",
+    ))
+    size(pupil_basis, 1) == size(pupil_basis, 2) || throw(ArgumentError(
+        "modal pupil basis must be square for complete-image gain sensing",
+    ))
+    side >= size(pupil_basis, 1) || throw(ArgumentError(
+        "Pyramid focal mask must not be smaller than the modal pupil basis",
+    ))
+    iseven(side - size(pupil_basis, 1)) || throw(ArgumentError(
+        "Pyramid focal mask and modal pupil basis must have aligned centers",
+    ))
+
+    basis = zeros(T, side, side, size(pupil_basis, 3))
+    offset = div(side - size(pupil_basis, 1), 2)
+    @views basis[offset+1:offset+size(pupil_basis, 1),
+        offset+1:offset+size(pupil_basis, 2), :] .= pupil_basis
+    return basis
+end
+
+function estimate_optical_gains!(product, workspace, plan,
+    frame::AbstractMatrix{T}) where {T<:AbstractFloat}
+    AdaptiveOpticsCalibration.process!(product, workspace, plan,
+        OpticalGains.GainSensingInputs(frame))
+    return OpticalGains.optical_gains(product)
+end
+
 function atmosphere_gsc_trace(
     tel::Telescope,
     ngs::Source,
     sci::Source,
     wfs::PyramidWFS,
-    basis::AbstractArray{<:Real,3},
     atm::AbstractAtmosphere;
+    gain_sensing_plan,
+    gain_sensing_product,
+    gain_sensing_workspace,
     psf_zero_padding::Int=2,
     n_iter::Int=6,
     seed::Integer=7,
@@ -52,11 +87,8 @@ function atmosphere_gsc_trace(
     rng = tutorial_rng(seed)
     pupil = PupilFunction(tel)
 
-    gsc = GainSensingCamera(wfs, basis)
     reset_opd!(pupil)
-    calibration_frame = pyramid_modulation_frame(wfs, pupil, ngs)
-    calibrate!(gsc, calibration_frame)
-    frame = similar(calibration_frame)
+    frame = pyramid_modulation_frame(wfs, pupil, ngs)
 
     reset_opd!(pupil)
     ngs_imaging = prepare_direct_imaging(pupil, ngs;
@@ -79,7 +111,8 @@ function atmosphere_gsc_trace(
         ngs_image = intensity_values(form_direct_image!(ngs_imaging))
         trace[iter, 2] = maximum(ngs_image) / maximum(ngs_image_ref)
         pyramid_modulation_frame!(frame, wfs, pupil, ngs)
-        og = compute_optical_gains!(gsc, frame)
+        og = estimate_optical_gains!(gain_sensing_product,
+            gain_sensing_workspace, gain_sensing_plan, frame)
 
         sci_image = intensity_values(form_direct_image!(sci_imaging))
         trace[iter, 3] = maximum(sci_image) / maximum(sci_image_ref)
@@ -98,19 +131,28 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
     sci = base_source(band=:K, magnitude=8.0, coordinates=(0.5, 0.0))
     wfs = PyramidWFS(tel; pupil_samples=pupil_samples, modulation=3.0,
         modulation_points=8, diffraction_padding=2, n_pix_separation=2, n_pix_edge=1)
-    basis = cartesian_basis(tel, 4)
-    gsc = GainSensingCamera(wfs, basis)
+    pupil_basis = cartesian_basis(tel, 4)
     pupil = PupilFunction(tel)
 
     reset_opd!(pupil)
     calibration_frame = pyramid_modulation_frame(wfs, pupil, src)
-    calibrate!(gsc, calibration_frame)
+    focal_mask = pyramid_focal_mask(wfs)
+    focal_basis = centered_focal_basis(pupil_basis, focal_mask)
+    specification = OpticalGains.GainSensingSpecification(
+        focal_mask, focal_basis, calibration_frame,
+    )
+    gain_sensing_plan = AdaptiveOpticsCalibration.prepare(
+        OpticalGains.GainSensing(), specification,
+    )
+    gain_sensing_product = AdaptiveOpticsCalibration.allocate_result(gain_sensing_plan)
+    gain_sensing_workspace = AdaptiveOpticsCalibration.allocate_workspace(gain_sensing_plan)
 
     coeffs = [20e-9, -12e-9, 8e-9, 0.0]
-    apply_opd!(pupil, combine_modes(basis, coeffs))
+    apply_opd!(pupil, combine_modes(pupil_basis, coeffs))
     frame = similar(calibration_frame)
     pyramid_modulation_frame!(frame, wfs, pupil, src)
-    optical_gains = copy(compute_optical_gains!(gsc, frame))
+    optical_gains = copy(estimate_optical_gains!(gain_sensing_product,
+        gain_sensing_workspace, gain_sensing_plan, frame))
 
     forcing_coeffs = [
         2.0e-8 -1.0e-8 0.5e-8 -0.25e-8
@@ -123,13 +165,14 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
     image_ref = copy(intensity_values(form_direct_image!(imaging)))
 
     for iter in 1:size(forcing_coeffs, 1)
-        opd = combine_modes(basis, @view forcing_coeffs[iter, :])
+        opd = combine_modes(pupil_basis, @view forcing_coeffs[iter, :])
         apply_opd!(pupil, opd)
         trace[iter, 1] = pupil_rms(pupil.opd, pupil_support(pupil)) * 1e9
         image = intensity_values(form_direct_image!(imaging))
         trace[iter, 2] = maximum(image) / maximum(image_ref)
         pyramid_modulation_frame!(frame, wfs, pupil, src)
-        og = compute_optical_gains!(gsc, frame)
+        og = estimate_optical_gains!(gain_sensing_product,
+            gain_sensing_workspace, gain_sensing_plan, frame)
         trace[iter, 3] = sum(abs, og) / length(og)
     end
 
@@ -143,12 +186,18 @@ function main(; resolution::Int=24, pupil_samples::Int=4)
         wind_direction_deg=[0.0, 144.0],
         altitude=[0.0, 5000.0],
     )
-    atmosphere_trace = atmosphere_gsc_trace(tel, src, sci, wfs, basis, atm)
+    atmosphere_trace = atmosphere_gsc_trace(tel, src, sci, wfs, atm;
+        gain_sensing_plan=gain_sensing_plan,
+        gain_sensing_product=gain_sensing_product,
+        gain_sensing_workspace=gain_sensing_workspace,
+    )
 
-    @info "Gain sensing camera tutorial complete" n_modes=length(optical_gains) final_mean_og=trace[end, 3] final_atmosphere_mean_og=atmosphere_trace[end, 7]
+    @info "Gain-sensing tutorial complete" n_modes=length(optical_gains) final_mean_og=trace[end, 3] final_atmosphere_mean_og=atmosphere_trace[end, 7]
     return (
         coeffs=coeffs,
         calibration_frame=calibration_frame,
+        focal_mask=focal_mask,
+        focal_basis=focal_basis,
         frame=frame,
         optical_gains=optical_gains,
         trace=trace,

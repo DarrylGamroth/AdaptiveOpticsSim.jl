@@ -5,9 +5,9 @@ using JuliaFilterGraph
 
 @testset "AOS Zernike plant and FGA 0.5 pupil-signal boundary" begin
     prepared = prepare_s4_zernike()
-    @test Base.pkgversion(FilterGraphAlgorithms) == v"0.5.0"
+    @test Base.pkgversion(FilterGraphAlgorithms) == v"0.5.2"
     @test Base.pkgversion(JuliaFilterGraph) == v"0.2.3"
-    @test prepared.fga_tree_claim == "0ce4ceae4904446fba170ee25324d65b435c06e6"
+    @test prepared.fga_tree_claim == "922a65f3ac9486abeb7baa3e29f08794133b5bc6"
     @test prepared.jfg_tree_claim == "1893cea2d29f0cd89303939308e23ce7546bc240"
 
     # The asymmetric fixture freezes the AOS (x,y) to FGA

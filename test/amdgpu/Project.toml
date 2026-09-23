@@ -15,7 +15,7 @@ AdaptiveOpticsSim = {path = "../.."}
 
 [compat]
 AMDGPU = "2.7"
-AdaptiveOpticsCalibration = "0.12"
+AdaptiveOpticsCalibration = "0.14"
 AdaptiveOpticsSim = "0.1"
 FixedSizeArrays = "1.3"
 KernelAbstractions = "0.9.42"

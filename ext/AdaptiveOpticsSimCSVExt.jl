@@ -8,11 +8,7 @@ function AdaptiveOpticsSim.write_telemetry_csv(path::AbstractString, telemetry::
 end
 
 function AdaptiveOpticsSim.write_telemetry_csv(path::AbstractString,
-    telemetry::Union{
-        AdaptiveOpticsSim.ClosedLoopTrace,
-        AdaptiveOpticsSim.GSCClosedLoopTrace,
-        AdaptiveOpticsSim.GSCAtmosphereReplayTrace,
-    };
+    telemetry::AdaptiveOpticsSim.ClosedLoopTrace;
     kwargs...)
     return CSV.write(path, telemetry; kwargs...)
 end

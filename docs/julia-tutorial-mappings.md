@@ -35,7 +35,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 | `tutorials/AO_closed_loop_ShackHartmannWFS_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained Shack–Hartmann plant/RTC fixture; AOS owns the plant and FGA/JFG owns the RTC |
 | `tutorials/AO_closed_loop_Pyramid_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained complete-frame Pyramid plant/RTC fixture; AOS owns optical formation and detector acquisition, and FGA owns I4Q estimation and control |
 | `tutorials/AO_closed_loop_BioEdge_WFS.py` | Downstream package | AOS Bi-O-edge optics and complete detector acquisition compose with registered FilterGraphAlgorithms v0.3.0 / JuliaFilterGraph v0.2.1 for estimation and RTC processing; acceptance is owned by the downstream integration |
-| `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | `examples/tutorials/gain_sensing_camera.jl` | Pyramid modulation-frame and optical-gain estimation; no maintained AOS RTC composition |
+| `tutorials/AO_closed_loop_Pyramid_WFS_GSC.py` | `examples/tutorials/gain_sensing_camera.jl` | AOS Pyramid modulation-frame formation composed with `AdaptiveOpticsCalibration.OpticalGains` complete-image modal optical-gain estimation; no maintained AOS RTC composition |
 | `tutorials/how_to_tomography.py` | `examples/tutorials/tomography.jl` | Compact model-based tomography workflow plus committed pyTomoAO KAPA regression for wavefront and DM-command reconstruction |
 
 ## Julia patterns behind the mapping
@@ -53,6 +53,10 @@ Each script exposes a `main()` function and logs a short completion summary with
   the downstream integration. LiFT's
   maintained tutorial covers the AOS physical forward model; inverse recovery
   belongs to `AdaptiveOpticsCalibration.PhaseRetrieval`.
+- The gain-sensing tutorial forms the physical Pyramid modulation-cycle image
+  in AOS and passes complete images to
+  `AdaptiveOpticsCalibration.OpticalGains.GainSensing`; its modal-gain
+  calibration and estimation state do not belong to AOS.
 - Detector noise is encoded by the detector’s `noise` type, for example
   `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.
 - The maintained closed-loop fixtures keep the AOS plant and the FGA/JFG RTC
