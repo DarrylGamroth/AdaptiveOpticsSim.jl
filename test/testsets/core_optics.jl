@@ -1879,3 +1879,5 @@ end
         (zernike_2=[0.01], zernike_3=[-0.02]),
     )
 end
+
+include(joinpath(@__DIR__, "..", "reviewed_supported_api.jl"))
