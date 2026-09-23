@@ -6,8 +6,8 @@
 #
 # Core operators:
 # - `Gamma`: sparse gradient operator from pupil phase samples to x/y slopes
-# - `Cxx`: guide-star slope auto-covariance
-# - `Cox`: cross-covariance between fitted directions and measured slopes
+# - `Cxx`: guide-star phase auto-covariance
+# - `Cox`: fit-phase/guide-star-phase cross-covariance
 # - `Cnz`: measurement-noise covariance
 # - `RecStatSA`: statistical Wiener-like reconstructor `Cox / (Cxx + Cnz)`
 #
@@ -505,22 +505,103 @@ function _scaled_shifted_coords!(
     return out
 end
 
-function _add_covariance!(block::AbstractMatrix{T}, cov::AbstractMatrix{T}) where {T<:AbstractFloat}
-    axes(block) == axes(cov) ||
-        throw(DimensionMismatchError("covariance block size must match covariance workspace"))
-    @inbounds for j in axes(cov, 2), i in axes(cov, 1)
-        block[i, j] += cov[i, j]
+function _selected_transformed_coordinate_stack(
+    x::AbstractArray{T,3},
+    y::AbstractArray{T,3},
+    positions::AbstractVector{Int},
+    geometry::TomographySourceLayerGeometry{T},
+) where {T<:AbstractFloat}
+    size(x) == size(y) || throw(DimensionMismatchError(
+        "coordinate grids must have matching axes",
+    ))
+    sample_count = length(positions)
+    source_count = size(x, 3)
+    layer_count = size(geometry.scale, 2)
+    size(geometry.scale, 1) == source_count || throw(DimensionMismatchError(
+        "source-layer geometry must match coordinate-grid source count",
+    ))
+    coordinates = Array{Complex{T}}(undef, sample_count, source_count, layer_count)
+    @inbounds for layer in 1:layer_count, source in 1:source_count
+        _scaled_shifted_coords!(
+            @view(coordinates[:, source, layer]),
+            @view(x[:, :, source]),
+            @view(y[:, :, source]),
+            positions,
+            geometry.beta_x[source, layer],
+            geometry.beta_y[source, layer],
+            geometry.scale[source, layer],
+        )
     end
-    return block
+    return coordinates
 end
 
-function _add_transposed_covariance!(block::AbstractMatrix{T}, cov::AbstractMatrix{T}) where {T<:AbstractFloat}
-    size(block, 1) == size(cov, 2) && size(block, 2) == size(cov, 1) ||
-        throw(DimensionMismatchError("transposed covariance block size must match covariance workspace"))
-    @inbounds for j in axes(block, 2), i in axes(block, 1)
-        block[i, j] += cov[j, i]
+function _selected_transformed_coordinate_stack(
+    x::AbstractMatrix{T},
+    y::AbstractMatrix{T},
+    positions::AbstractVector{Int},
+    geometry::TomographySourceLayerGeometry{T},
+) where {T<:AbstractFloat}
+    size(x) == size(y) || throw(DimensionMismatchError(
+        "coordinate grids must have matching axes",
+    ))
+    sample_count = length(positions)
+    source_count, layer_count = size(geometry.scale)
+    coordinates = Array{Complex{T}}(undef, sample_count, source_count, layer_count)
+    @inbounds for layer in 1:layer_count, source in 1:source_count
+        _scaled_shifted_coords!(
+            @view(coordinates[:, source, layer]),
+            x,
+            y,
+            positions,
+            geometry.beta_x[source, layer],
+            geometry.beta_y[source, layer],
+            geometry.scale[source, layer],
+        )
     end
-    return block
+    return coordinates
+end
+
+function _require_aoc_von_karman_precision(::Type{T}) where {T<:AbstractFloat}
+    T <: Union{Float32,Float64} || throw(UnsupportedAlgorithm(
+        "CPU tomography von Kármán covariance requires Float32 or Float64 because AdaptiveOpticsCalibration supplies the numerical assembly",
+    ))
+    return nothing
+end
+
+function _aoc_auto_covariance(
+    guide_coordinates::AbstractArray{Complex{T},3},
+    atmosphere::TomographyAtmosphereParams{T},
+) where {T<:AbstractFloat}
+    _require_aoc_von_karman_precision(T)
+    tomography = AdaptiveOpticsCalibration.Tomography
+    specification = tomography.VonKarmanAutoCovarianceSpecification(
+        guide_coordinates,
+        _fried_parameter(atmosphere),
+        atmosphere.L0,
+        atmosphere.fractional_cn2,
+    )
+    plan = AdaptiveOpticsCalibration.prepare(
+        tomography.VonKarmanAutoCovariance(), specification)
+    return tomography.auto_covariance(AdaptiveOpticsCalibration.process(plan, nothing))
+end
+
+function _aoc_cross_covariance(
+    guide_coordinates::AbstractArray{Complex{T},3},
+    fit_coordinates::AbstractArray{Complex{T},3},
+    atmosphere::TomographyAtmosphereParams{T},
+) where {T<:AbstractFloat}
+    _require_aoc_von_karman_precision(T)
+    tomography = AdaptiveOpticsCalibration.Tomography
+    specification = tomography.VonKarmanCrossCovarianceSpecification(
+        guide_coordinates,
+        fit_coordinates,
+        _fried_parameter(atmosphere),
+        atmosphere.L0,
+        atmosphere.fractional_cn2,
+    )
+    plan = AdaptiveOpticsCalibration.prepare(
+        tomography.VonKarmanCrossCovariance(), specification)
+    return tomography.cross_covariance(AdaptiveOpticsCalibration.process(plan, nothing))
 end
 
 function _scaled_shifted_coords(
@@ -575,111 +656,6 @@ end
 @inline _covariance_input(::ScalarCPUStyle, backend::GPUArrayBuildBackend, rho::AbstractVector) = materialize_build(backend, rho)
 @inline _covariance_input(::AcceleratorStyle, ::GPUArrayBuildBackend, rho::AbstractVector) = rho
 
-function _covariance_matrix(
-    ::BuildBackend,
-    rho1::AbstractVector{Complex{T}},
-    rho2::AbstractVector{Complex{T}},
-    r0::T,
-    L0::T,
-    fractional_cn2::T,
-) where {T<:AbstractFloat}
-    cst, var_term, inv_L0 = _covariance_constants(r0, L0)
-    return _covariance_matrix(rho1, rho2, cst, var_term, inv_L0, fractional_cn2)
-end
-
-function _covariance_matrix(
-    backend::GPUArrayBuildBackend,
-    rho1::AbstractVector{Complex{T}},
-    rho2::AbstractVector{Complex{T}},
-    r0::T,
-    L0::T,
-    fractional_cn2::T,
-) where {T<:AbstractFloat}
-    cst, var_term, inv_L0 = _covariance_constants(r0, L0)
-    rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
-    rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
-    return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_cn2)
-end
-
-function _covariance_matrix(
-    rho1::AbstractVector{Complex{T}},
-    rho2::AbstractVector{Complex{T}},
-    r0::T,
-    L0::T,
-    fractional_cn2::T,
-) where {T<:AbstractFloat}
-    cst, var_term, inv_L0 = _covariance_constants(r0, L0)
-    return _covariance_matrix(rho1, rho2, cst, var_term, inv_L0, fractional_cn2)
-end
-
-function _covariance_matrix(
-    rho1::AbstractVector{Complex{T}},
-    rho2::AbstractVector{Complex{T}},
-    cst::T,
-    var_term::T,
-    inv_L0::T,
-    fractional_cn2::T,
-) where {T<:AbstractFloat}
-    n1 = length(rho1)
-    n2 = length(rho2)
-    out = Matrix{T}(undef, n1, n2)
-
-    @inbounds for j in 1:n2
-        for i in 1:n1
-            rho = abs(rho1[i] - rho2[j])
-            if iszero(rho)
-                out[i, j] = var_term * fractional_cn2
-            else
-                u = T(2π) * rho * inv_L0
-                out[i, j] = cst * _scaled_kv56_cpu(u) * fractional_cn2
-            end
-        end
-    end
-    return out
-end
-
-function _covariance_matrix!(
-    out::AbstractMatrix{T},
-    rho1::AbstractVector{Complex{T}},
-    rho2::AbstractVector{Complex{T}},
-    cst::T,
-    var_term::T,
-    inv_L0::T,
-    fractional_cn2::T,
-) where {T<:AbstractFloat}
-    size(out) == (length(rho1), length(rho2)) ||
-        throw(DimensionMismatchError("covariance output size must match rho vector lengths"))
-    @inbounds for j in 1:length(rho2)
-        for i in 1:length(rho1)
-            rho = abs(rho1[i] - rho2[j])
-            if iszero(rho)
-                out[i, j] = var_term * fractional_cn2
-            else
-                u = T(2π) * rho * inv_L0
-                out[i, j] = cst * _scaled_kv56_cpu(u) * fractional_cn2
-            end
-        end
-    end
-    return out
-end
-
-function _covariance_matrix(
-    ::AcceleratorStyle,
-    rho1::AbstractVector{Complex{T}},
-    rho2::AbstractVector{Complex{T}},
-    cst::T,
-    var_term::T,
-    inv_L0::T,
-    fractional_cn2::T,
-) where {T<:AbstractFloat}
-    out = similar(rho1, T, length(rho1), length(rho2))
-    style = execution_style(out)
-    launch_kernel_async!(style, covariance_matrix_kernel!, out, rho1, rho2, cst, var_term, inv_L0, fractional_cn2,
-        length(rho1), length(rho2);
-        ndrange=size(out))
-    return out
-end
-
 function _covariance_matrix!(
     ::AcceleratorStyle,
     out::AbstractMatrix{T},
@@ -697,20 +673,6 @@ function _covariance_matrix!(
         length(rho1), length(rho2);
         ndrange=size(out))
     return out
-end
-
-function _covariance_matrix(
-    backend::GPUArrayBuildBackend,
-    rho1::AbstractVector{Complex{T}},
-    rho2::AbstractVector{Complex{T}},
-    cst::T,
-    var_term::T,
-    inv_L0::T,
-    fractional_cn2::T,
-) where {T<:AbstractFloat}
-    rho1_native = _covariance_input(execution_style(rho1), backend, rho1)
-    rho2_native = _covariance_input(execution_style(rho2), backend, rho2)
-    return _covariance_matrix(execution_style(rho1_native), rho1_native, rho2_native, cst, var_term, inv_L0, fractional_cn2)
 end
 
 function _covariance_matrix!(
@@ -802,10 +764,12 @@ end
 """
     auto_correlation(..., grid_mask)
 
-Assemble the guide-star slope auto-covariance `Cxx` over the masked pupil grid.
+Assemble the guide-star phase auto-covariance `Cxx` over the masked pupil grid.
 
 Each block integrates the von Karman covariance across atmospheric layers after
-shifting each guide-star pupil footprint by the layer geometry.
+shifting each guide-star pupil footprint by the layer geometry. CPU assembly
+delegates its numerical covariance evaluation to AdaptiveOpticsCalibration and
+therefore supports Float32 and Float64. Accelerator assembly remains local.
 """
 function auto_correlation(
     backend::BuildBackend,
@@ -827,12 +791,11 @@ function auto_correlation(
     size(grid_mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
     mask_vec = vec(grid_mask)
     valid_positions = findall(mask_vec)
-    n_valid = count(mask_vec)
+    n_valid = length(valid_positions)
     n_gs = asterism.n_lgs
-    result = zeros(T, n_gs * n_valid, n_gs * n_valid)
+    (iszero(n_valid) || iszero(n_gs)) && return zeros(T, n_gs * n_valid, n_gs * n_valid)
 
     slant_ranges_m = layer_slant_ranges_m(atmosphere)
-    r0 = _fried_parameter(atmosphere)
     support_diameter_m = lenslet_grid_support_diameter_m(wfs)
     lgs_dir = lgs_directions(asterism)
     directions = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
@@ -852,55 +815,13 @@ function auto_correlation(
         offset_fractions_x,
         offset_fractions_y,
     )
-
-    iz = Vector{Complex{T}}(undef, n_valid)
-    jz = similar(iz)
-    cov = Matrix{T}(undef, n_valid, n_valid)
-    block = similar(cov)
-    cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
-
-    for jgs in 1:n_gs
-        for igs in 1:jgs
-            fill!(block, zero(T))
-            for layer in eachindex(slant_ranges_m)
-                _scaled_shifted_coords!(
-                    iz,
-                    @view(guide_x[:, :, igs]),
-                    @view(guide_y[:, :, igs]),
-                    valid_positions,
-                    geometry.beta_x[igs, layer],
-                    geometry.beta_y[igs, layer],
-                    geometry.scale[igs, layer],
-                )
-                _scaled_shifted_coords!(
-                    jz,
-                    @view(guide_x[:, :, jgs]),
-                    @view(guide_y[:, :, jgs]),
-                    valid_positions,
-                    geometry.beta_x[jgs, layer],
-                    geometry.beta_y[jgs, layer],
-                    geometry.scale[jgs, layer],
-                )
-                _covariance_matrix!(
-                    cov,
-                    iz,
-                    jz,
-                    cst,
-                    var_term,
-                    inv_L0,
-                    atmosphere.fractional_cn2[layer],
-                )
-                _add_covariance!(block, cov)
-            end
-            rows = (igs - 1) * n_valid + 1:igs * n_valid
-            cols = (jgs - 1) * n_valid + 1:jgs * n_valid
-            result[rows, cols] .= block
-            if igs != jgs
-                result[cols, rows] .= transpose(block)
-            end
-        end
-    end
-    return result
+    guide_coordinates = _selected_transformed_coordinate_stack(
+        guide_x,
+        guide_y,
+        valid_positions,
+        geometry,
+    )
+    return _aoc_auto_covariance(guide_coordinates, atmosphere)
 end
 
 function auto_correlation(
@@ -981,11 +902,13 @@ end
 """
     cross_correlation(...; grid_mask=nothing)
 
-Assemble the cross-covariance `Cox` between fit directions and guide-star slope
-measurements.
+Assemble the phase cross-covariance `Cox` between fit directions and guide-star
+pupil samples.
 
 The result is stacked over fit sources, then later averaged or extracted into
-the final statistical reconstructor.
+the final statistical reconstructor. CPU assembly delegates its numerical
+covariance evaluation to AdaptiveOpticsCalibration and therefore supports
+Float32 and Float64. Accelerator assembly remains local.
 """
 function cross_correlation(
     backend::BuildBackend,
@@ -1010,13 +933,12 @@ function cross_correlation(
     size(mask, 2) == sampling || throw(DimensionMismatchError("grid_mask must be square"))
     row_mask = vec(mask)
     row_positions = findall(row_mask)
-    n_row = count(row_mask)
+    n_row = length(row_positions)
     n_fit = tomography.n_fit_src^2
     n_gs = asterism.n_lgs
-    result = Array{T}(undef, n_fit, n_row, n_gs * n_row)
+    (iszero(n_row) || iszero(n_gs)) && return Array{T}(undef, n_fit, n_row, n_gs * n_row)
 
     slant_ranges_m = layer_slant_ranges_m(atmosphere)
-    r0 = _fried_parameter(atmosphere)
     support_diameter_m = lenslet_grid_support_diameter_m(wfs)
     lgs_dir = lgs_directions(asterism)
     lgs_directions_xyz = direction_vectors(view(lgs_dir, :, 1), view(lgs_dir, :, 2))
@@ -1042,51 +964,19 @@ function cross_correlation(
         offset_fractions_x,
         offset_fractions_y,
     )
-
-    iz = Vector{Complex{T}}(undef, n_row)
-    jz = similar(iz)
-    cov = Matrix{T}(undef, n_row, n_row)
-    block = similar(cov)
-    cst, var_term, inv_L0 = _covariance_constants(r0, atmosphere.L0)
-
-    for fit_idx in 1:n_fit
-        for gs in 1:n_gs
-            fill!(block, zero(T))
-            for layer in eachindex(slant_ranges_m)
-                _scaled_shifted_coords!(
-                    iz,
-                    @view(guide_x[:, :, gs]),
-                    @view(guide_y[:, :, gs]),
-                    row_positions,
-                    lgs_geometry.beta_x[gs, layer],
-                    lgs_geometry.beta_y[gs, layer],
-                    lgs_geometry.scale[gs, layer],
-                )
-                _scaled_shifted_coords!(
-                    jz,
-                    target_x,
-                    target_y,
-                    row_positions,
-                    fit_geometry.beta_x[fit_idx, layer],
-                    fit_geometry.beta_y[fit_idx, layer],
-                    fit_geometry.scale[fit_idx, layer],
-                )
-                _covariance_matrix!(
-                    cov,
-                    iz,
-                    jz,
-                    cst,
-                    var_term,
-                    inv_L0,
-                    atmosphere.fractional_cn2[layer],
-                )
-                _add_transposed_covariance!(block, cov)
-            end
-            cols = (gs - 1) * n_row + 1:gs * n_row
-            result[fit_idx, :, cols] .= block
-        end
-    end
-    return result
+    guide_coordinates = _selected_transformed_coordinate_stack(
+        guide_x,
+        guide_y,
+        row_positions,
+        lgs_geometry,
+    )
+    fit_coordinates = _selected_transformed_coordinate_stack(
+        target_x,
+        target_y,
+        row_positions,
+        fit_geometry,
+    )
+    return _aoc_cross_covariance(guide_coordinates, fit_coordinates, atmosphere)
 end
 
 function cross_correlation(

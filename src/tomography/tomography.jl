@@ -17,7 +17,6 @@ import ..AdaptiveOpticsSim:
     DimensionMismatchError,
     InvalidConfiguration,
     UnsupportedAlgorithm,
-    _scaled_kv56_cpu,
     _scaled_kv56_scalar
 
 import ..Backends:
