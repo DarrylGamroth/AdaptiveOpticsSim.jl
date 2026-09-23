@@ -12,7 +12,11 @@ function _time_phase(f)
     return value, dt
 end
 
-function run_gpu_model_tomography_phase_profile(::Type{B}; run_label::AbstractString="first-use") where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+function run_gpu_model_tomography_phase_profile(
+    ::Type{B};
+    run_label::AbstractString="first-use",
+    return_products::Bool=false,
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -21,7 +25,8 @@ function run_gpu_model_tomography_phase_profile(::Type{B}; run_label::AbstractSt
     TB = AdaptiveOpticsSim.Backends.gpu_build_type(policy)
     build_backend = AdaptiveOpticsSim.Calibration.GPUArrayBuildBackend(B)
 
-    n_lenslets = 3
+    n_lenslets = parse(Int, get(ENV, "AOS_TOMO_PROFILE_LENSLETS", "3"))
+    n_lenslets >= 1 || error("AOS_TOMO_PROFILE_LENSLETS must be positive")
     n_lgs = 2
     n_fit_src = 2
     n_dm = 2
@@ -165,7 +170,8 @@ function run_gpu_model_tomography_phase_profile(::Type{B}; run_label::AbstractSt
 
     println("GPU model tomography phase profile")
     println("  backend: ", string(something(AdaptiveOpticsSim.Backends.gpu_backend_name(B), B)))
-    println("  case: medium")
+    println("  case: ", n_lenslets == 3 ? "medium" : "lenslet-scaled")
+    println("  n_lenslets: ", n_lenslets)
     println("  run: ", run_label)
     println("  gamma_single_ns: ", t_gamma_single)
     println("  gamma_convert_ns: ", t_gamma_convert)
@@ -185,7 +191,10 @@ function run_gpu_model_tomography_phase_profile(::Type{B}; run_label::AbstractSt
     println("  recstat_ns: ", t_recstat)
     println("  recon_scale_ns: ", t_recon)
     println("  total_timed_ns: ", total_ns)
+    println("  shapes: reconstructor=", size(recon),
+        " grid_mask=", size(native_mask),
+        " Cxx=", size(cxx_native), " Cox=", size(cox_native))
     println("  reconstructor_type: ", typeof(recon))
     println("  native_mask_type: ", typeof(native_mask))
-    return nothing
+    return return_products ? (; cxx=cxx_native, cox=cox_native, recstat, recon) : nothing
 end
