@@ -138,6 +138,43 @@ end
     opd = [1.0, 2.0, 3.0]
     @test fit_commands(fitting, opd) ≈ opd
 
+    for T in (Float32, Float64)
+        sampled = T[1 0; 0 1e-8; 0 0]
+        for rtol in (zero(T), T(1e-6))
+            prepared = @inferred TomographyFitting(
+                sampled; regularization=rtol, resolution=3)
+            @test prepared.influence_functions == sampled
+            @test prepared.fitting_matrix ≈ pinv(sampled; rtol=rtol)
+        end
+        default_fitting = TomographyFitting(sampled; resolution=3)
+        @test default_fitting.fitting_matrix ≈ pinv(sampled; rtol=T(1e-15))
+
+        padded = zeros(T, 6, 4)
+        sampled_view = @view padded[1:2:5, 1:2:3]
+        copyto!(sampled_view, sampled)
+        view_fitting = @inferred TomographyFitting(
+            sampled_view; regularization=T(1e-6), resolution=3)
+        @test view_fitting.influence_functions == sampled
+        @test view_fitting.fitting_matrix ≈ pinv(sampled; rtol=T(1e-6))
+
+        rank_deficient = T[1 0; 0 0; 0 0]
+        rank_fitting = TomographyFitting(
+            rank_deficient; regularization=zero(T), resolution=3)
+        @test rank_fitting.fitting_matrix == pinv(rank_deficient; rtol=zero(T))
+
+        zero_fitting = TomographyFitting(
+            zeros(T, 3, 2); regularization=zero(T), resolution=3)
+        @test all(iszero, zero_fitting.fitting_matrix)
+
+        cutoff_matrix = T[1 0; 0 0.25; 0 0]
+        cutoff_fitting = TomographyFitting(
+            cutoff_matrix; regularization=T(0.25), resolution=3)
+        @test cutoff_fitting.fitting_matrix ==
+            pinv(cutoff_matrix; rtol=T(0.25))
+    end
+    @test_throws InvalidConfiguration TomographyFitting(
+        influence; regularization=Inf, resolution=3)
+
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=0.0,
         layer_altitudes_m=[0.0],

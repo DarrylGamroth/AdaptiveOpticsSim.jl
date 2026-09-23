@@ -214,8 +214,11 @@ interaction-matrix reconstruction, fitting, and DM command projection. Use
 `reconstruct_wavefront_map`, and `dm_commands`. CPU covariance reconstruction
 uses AdaptiveOpticsCalibration's explicit-array numerical solve; AOS retains
 the physical covariance construction, wavelength conversion, slope ordering,
-and fitting. The GPU build path retains its existing solve pending separate
-accelerator qualification.
+sampled DM influence construction, and command-matrix composition. The cold
+CPU fitting pseudoinverse also uses AdaptiveOpticsCalibration's compact-SVD
+inverse; AOS retains the physical `TomographyFitting` adapter and its legacy
+threshold convention. The GPU covariance build path retains its existing solve
+pending separate accelerator qualification.
 
 ## Ensembles
 
