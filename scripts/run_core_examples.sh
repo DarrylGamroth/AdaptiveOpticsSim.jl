@@ -13,7 +13,7 @@ examples=(
     "examples/tutorials/ncpa.jl"
     "examples/tutorials/shack_hartmann_subapertures.jl"
     "examples/tutorials/spatial_filter.jl"
-    "examples/tutorials/sprint.jl"
+    "examples/tutorials/misregistration.jl"
     "examples/tutorials/tomography.jl"
     "examples/tutorials/transfer_function.jl"
 )
