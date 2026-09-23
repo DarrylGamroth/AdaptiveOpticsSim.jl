@@ -165,9 +165,9 @@ calibration observables, modal bases, fitting, plant-side runtime
 materialization, and identification workflows.
 Reusable inverse methods and compact-SVD products come from
 `AdaptiveOpticsCalibration.Reconstructors`. Common AOS entry points include
-`interaction_matrix`, `ControlMatrix`, and `modal_basis`. Compose modal-basis
-construction, plant response acquisition, and inverse construction explicitly
-so the AOC numerical products remain separate from AOS plant behavior.
+`interaction_matrix` and `modal_basis`. Compose modal-basis construction,
+plant response acquisition, and inverse construction explicitly so the AOC
+numerical products remain separate from AOS plant behavior.
 
 `KarhunenLoeveBasis` is owned by
 `AdaptiveOpticsCalibration.ModalBases`. AOS supplies the sampled physical DM,
