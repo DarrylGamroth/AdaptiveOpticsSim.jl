@@ -1,5 +1,9 @@
 include(joinpath(@__DIR__, "common.jl"))
 
+using AdaptiveOpticsCalibration
+
+const PR = AdaptiveOpticsCalibration.PhaseRetrieval
+
 function main(; resolution::Int=24, zero_padding::Int=2)
     tel = base_telescope(resolution=resolution, central_obstruction=0.0)
     src = base_source()
@@ -16,11 +20,14 @@ function main(; resolution::Int=24, zero_padding::Int=2)
     forward = prepare_lift_forward_model(tel, src, basis, pupil.opd;
         diversity_opd=diversity, zero_padding=zero_padding)
     observation = LiFTObservation(forward, image)
-    coeffs_fit = zeros(eltype(image), 4)
-    lift = prepare_lift_estimator(LiFT(iterations=3,
-            jacobian_method=LiFTAnalyticJacobian()), forward, observation,
-        coeffs_fit)
-    WavefrontSensors.reconstruct!(lift)
+    specification = PR.LiFTSpecification(forward, observation)
+    plan = AdaptiveOpticsCalibration.prepare(PR.LiFT(iterations=3,
+            jacobian_method=PR.LiFTAnalyticJacobian()), specification)
+    result = AdaptiveOpticsCalibration.allocate_result(plan)
+    workspace = AdaptiveOpticsCalibration.allocate_workspace(plan)
+    inputs = PR.LiFTInputs(observation.values)
+    AdaptiveOpticsCalibration.process!(result, workspace, plan, inputs)
+    coeffs_fit = PR.lift_coefficients(result)
 
     @info "LiFT tutorial complete" n_modes=length(coeffs_true)
     return (

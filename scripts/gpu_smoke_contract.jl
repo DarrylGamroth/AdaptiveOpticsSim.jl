@@ -5,9 +5,13 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Backends
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
+using AdaptiveOpticsCalibration
+using KernelAbstractions
 using LinearAlgebra
 using Random
 using Statistics
+
+const PR = AdaptiveOpticsCalibration.PhaseRetrieval
 
 # This standalone audit intentionally exercises package-internal backend seams.
 # Keep those names local to the script without expanding the public API.
@@ -779,15 +783,21 @@ function run_gpu_smoke_matrix(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GP
         rate_map = gpu_direct_image(lift_tel, lift_src;
             zero_padding=2, T=T)
         observation = LiFTObservation(forward, rate_map.values)
-        coefficients = backend_zeros(B, T, 2)
-        lift = prepare_lift_estimator(
-            LiFT(iterations=2, mode_ids=(1, 2),
-                solve_mode=LiFTSolveAuto()),
-            forward,
-            observation,
-            coefficients,
-        )
-        coeffs = WavefrontSensors.reconstruct(lift)
+        specification = PR.LiFTSpecification(forward, observation)
+        method = PR.LiFT(iterations=2,
+            jacobian_method=PR.LiFTAnalyticJacobian(),
+            solve_mode=PR.LiFTSolveNormalEquations(),
+            mode_indices=(1, 2),
+            model_scaling=PR.LiFTPhysicalRatePreservation(),
+            check_convergence=false)
+        execution = AdaptiveOpticsCalibration.KernelExecution(specification,
+            KernelAbstractions.get_backend(rate_map.values); workgroup_size=64)
+        plan = AdaptiveOpticsCalibration.prepare(method, execution)
+        result = AdaptiveOpticsCalibration.allocate_result(plan)
+        workspace = AdaptiveOpticsCalibration.allocate_workspace(plan)
+        inputs = PR.LiFTInputs(observation.values)
+        AdaptiveOpticsCalibration.process!(result, workspace, plan, inputs)
+        coeffs = PR.lift_coefficients(result)
         @assert coeffs isa BackendArray
         return coeffs
     end

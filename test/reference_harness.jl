@@ -1170,18 +1170,31 @@ function compute_reference_actual(case::ReferenceCase)
         forward = prepare_lift_forward_model(tel, src, basis, diversity;
             diversity_opd=diversity, focal_resolution=img_resolution,
             zero_padding=det.params.psf_sampling)
-        rate = copy(intensity_values(evaluate_lift_forward!(forward)))
-        observation = LiFTObservation(forward, rate)
-        definition = LiFT(
-            iterations=Int(get(compute_cfg, "iterations", 3)),
-            mode_ids=mode_ids,
-            jacobian_method=numerical ? LiFTNumericalJacobian() :
-                LiFTAnalyticJacobian())
-        product = zeros(Float64, length(mode_ids))
-        lift = prepare_lift_estimator(definition, forward, observation,
-            product)
-        H = WavefrontSensors.lift_interaction_matrix(lift, coeffs;
-            rate_scale=rate_scale)
+        model = LiFTForwardModel(forward)
+        workspace = AOCPhaseRetrieval.allocate_model_workspace(model)
+        full_coefficients = zeros(Float64,
+            AOCPhaseRetrieval.coefficient_count(model))
+        full_coefficients[mode_ids] .= coeffs
+        H = Matrix{Float64}(undef, img_resolution^2, length(mode_ids))
+        if numerical
+            step = 1e-9
+            plus = AOCPhaseRetrieval.allocate_photon_rate(model)
+            minus = similar(plus)
+            for (column, mode_id) in pairs(mode_ids)
+                full_coefficients[mode_id] += step
+                AOCPhaseRetrieval.predict_photon_rate!(plus, model,
+                    workspace, full_coefficients)
+                full_coefficients[mode_id] -= 2 * step
+                AOCPhaseRetrieval.predict_photon_rate!(minus, model,
+                    workspace, full_coefficients)
+                full_coefficients[mode_id] += step
+                @views H[:, column] .= vec((plus .- minus) ./ (2 * step))
+            end
+        else
+            AOCPhaseRetrieval.analytic_photon_rate_jacobian!(H, model,
+                workspace, full_coefficients, mode_ids)
+        end
+        H .*= rate_scale
         stack = Array{Float64}(undef, img_resolution, img_resolution, length(mode_ids))
         for (idx, _) in pairs(mode_ids)
             @views stack[:, :, idx] .= reshape(H[:, idx], img_resolution, img_resolution)

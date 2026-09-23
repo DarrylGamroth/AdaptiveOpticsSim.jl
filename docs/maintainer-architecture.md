@@ -40,7 +40,7 @@ vocabulary plus the modules themselves:
 | `Optics` | telescope/source geometry, optical products and planes, propagation, direct imaging, NCPA, deformable mirrors and other physical optics |
 | `Atmospheres` | turbulence definitions/state, evolution, source-direction rendering and batches |
 | `Detectors` | detector response, sensor families, acquisition, readout, products |
-| `WavefrontSensors` | composed WFS optics, observations, Bi-O-edge, Zernike, and Curvature plant optics/acquisition, and LiFT |
+| `WavefrontSensors` | composed WFS optics, observations, Bi-O-edge, Zernike, and Curvature plant optics/acquisition, and LiFT physical prediction with analytic Jacobian callback |
 | `Calibration` | simulated response acquisition, physical calibration observables, bases, fitting and identification; reusable inverse methods and products come from AdaptiveOpticsCalibration |
 | `Tomography` | guide-star geometry, atmospheric reconstruction, fitting, DM projection |
 | `Ensembles` | coarse independent runs and optional offline scheduling |
@@ -83,9 +83,9 @@ implements every stage. AOS Shack–Hartmann and Pyramid execution stops at the
 complete detector observation; FGA owns their maintained operational
 estimators. Bi-O-edge, Zernike, and Curvature estimation is owned by registered
 FilterGraphAlgorithms; AOS owns their physical optics and complete detector
-acquisition. LiFT retains its physical
-forward and inverse workflow until its approved AdaptiveOpticsCalibration
-inverse target is released and adopted. `geometric_wavefront_slopes!` is an
+acquisition. LiFT physical prediction and its analytic Jacobian callback remain
+in AOS; registered `AdaptiveOpticsCalibration.PhaseRetrieval` owns inverse
+policies, solves, products, and diagnostics. `geometric_wavefront_slopes!` is an
 explicitly named plant truth/reference calculation.
 
 Direct Julia composition is the unrestricted modeling surface. It owns explicit

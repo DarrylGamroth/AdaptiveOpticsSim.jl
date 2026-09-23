@@ -17,9 +17,8 @@ The Julia 1.12 CPU baseline includes:
 - Kolmogorov, finite multilayer, and infinite multilayer atmosphere evolution
   plus direction rendering/batching
 - Shack-Hartmann, Pyramid, Bi-O-edge, Zernike, and Curvature physical formation
-  and complete acquisition, plus LiFT
-  forward/inverse
-  workflow within the limits recorded in
+  and complete acquisition, plus LiFT physical forward prediction and analytic
+  Jacobian callback within the limits recorded in
   [`model-validity-matrix.md`](model-validity-matrix.md); operational Curvature
   estimation belongs to registered FGA, and weighted-centroid estimation is not
   an AOS surface
@@ -96,11 +95,13 @@ HIL boundary explicitly copies complete products and commands through host
 `Array` buffers.
 
 The LiFT `LiFTForwardModel` adapter supplies AOS physical photon-rate prediction
-and analytic Jacobians to registered AdaptiveOpticsCalibration v0.10 on CPU,
-CUDA, and AMDGPU. Its accelerator inverse is a direct synchronized calibration
-operation with measured host and device allocations; it is outside the captured
-plant-graph replay claim. The [live integration profile](../benchmarks/results/platform/2026-09-22-lift-aoc-adapter-profile.toml)
-records its current performance boundary.
+and analytic Jacobians to the registered `AdaptiveOpticsCalibration.PhaseRetrieval`
+direct API on CPU, CUDA, and AMDGPU. AdaptiveOpticsCalibration owns all inverse
+policies, solves, products, and diagnostics. CPU explicit-workspace inverse
+execution remains zero allocated; direct GPU inverse execution allocates and
+synchronizes and is outside captured-graph replay. The [live integration
+profile](../benchmarks/results/platform/2026-09-22-lift-aoc-adapter-profile.toml)
+records these performance boundaries.
 
 `CapturedGraphExecution()` requires every adapter to prove the fixed-address
 device replay contract, then records the complete node and delayed-link sequence

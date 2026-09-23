@@ -48,11 +48,10 @@ the maintained package.
    maintained REVOLT Classic and Copper packages; instrument calibration and
    performance evidence remain with those packages.
 3. Maintain the target-first Curvature and Zernike estimator migrations through
-   registered FGA 0.5.0 and their AOS plant/FGA integration fixtures. Complete
-   [LiFT consumer adoption](https://github.com/DarrylGamroth/AdaptiveOpticsSim.jl/issues/323)
-   of registered AdaptiveOpticsCalibration v0.10 on CPU, CUDA, and AMDGPU,
-   then remove the retained AOS LiFT inverse after live parity and profile
-   review. Weighted-centroid estimation is not an AOS target.
+   registered FGA 0.5.0 and their AOS plant/FGA integration fixtures. LiFT
+   inverse ownership has moved to registered AdaptiveOpticsCalibration v0.10;
+   AOS retains physical forward prediction and the analytic Jacobian callback.
+   Weighted-centroid estimation is not an AOS target.
 4. Build a separate SPIDERS instrument package from the retired Subaru/AO188
    and AO3k composition, SpiderMan, service, and optical-engineering inputs.
    Mark estimated chopper, stage, filter-wheel, and prescription values as

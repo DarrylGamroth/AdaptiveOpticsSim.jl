@@ -36,9 +36,7 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     end
 
     for name in (
-        :LiFT,
         :PreparedLiFTForward,
-        :PreparedLiFTEstimator,
         :LiFTObservation,
         :LiFTIdentityMapping,
         :LiFTFrameMapping,
@@ -46,19 +44,11 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :LiFTExpectedCounts,
         :LiFTNormalizedIntensity,
         :prepare_lift_forward_model,
-        :prepare_lift_estimator,
         :evaluate_lift_forward!,
         :predict_lift_observation!,
         :lift_forward_output,
         :lift_observation_contract,
-        :diagnostics,
-        :LiFTAnalyticJacobian,
-        :LiFTNumericalJacobian,
-        :LiFTSolveAuto,
-        :LiFTSolveQR,
-        :LiFTSolveNormalEquations,
-        :LiFTLevenbergMarquardt,
-        :LiFTAdaptiveLevenbergMarquardt,
+        :LiFTForwardModel,
     )
         @test parentmodule(getfield(WavefrontSensors, name)) ===
             WavefrontSensors
@@ -67,10 +57,13 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         @test !Base.ispublic(AdaptiveOpticsSim, name)
         @test !isdefined(AdaptiveOpticsSim, name)
     end
-    @test isdefined(WavefrontSensors, :reconstruct!)
-    @test isdefined(WavefrontSensors, :reconstruct)
-    @test !Base.isexported(WavefrontSensors, :reconstruct!)
-    @test !Base.isexported(WavefrontSensors, :reconstruct)
+    for name in (:LiFT, :PreparedLiFTEstimator,
+        :prepare_lift_estimator, :LiFTAnalyticJacobian,
+        :LiFTNumericalJacobian, :LiFTSolveNormalEquations,
+        :LiFTLevenbergMarquardt, :LiFTVarianceMapWeighting,
+        :LiFTEstimationPlan, :reconstruct!, :reconstruct)
+        @test !isdefined(WavefrontSensors, name)
+    end
     for name in (
         :ShackHartmannWFS,
         :ShackHartmannOpticalFrontEnd,

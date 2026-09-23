@@ -129,13 +129,25 @@ operational estimation is provided by FilterGraphAlgorithms. Registered
 FilterGraphAlgorithms v0.5.0 provides the Zernike complete-frame normalized
 pupil-signal estimator and the Curvature paired-image and paired-channel
 estimators; JuliaFilterGraph v0.2.3 provides their graph runtime. AOS Curvature
-ends at complete detector acquisition. LiFT retains
-its AOS physical forward and inverse APIs until its approved
-AdaptiveOpticsCalibration inverse target is released and adopted; LiFT is a
-phase-retrieval workflow, not a slope or centroid estimator. AOS has no
+ends at complete detector acquisition. AOS LiFT provides physical forward
+prediction and an analytic Jacobian callback; registered
+`AdaptiveOpticsCalibration.PhaseRetrieval` owns inverse policies, solves,
+products, and diagnostics through its direct API. LiFT is a phase-retrieval
+workflow, not a slope or centroid estimator. AOS has no
 weighted-centroid estimator or graph surface. The explicitly named
 `geometric_wavefront_slopes!` operation remains available for plant truth and
 reference calculations, not as a detector-derived RTC measurement.
+
+The AOS `LiFTObservation` retains its AOS metadata and observation contract.
+`PhaseRetrieval.LiFTSpecification(forward, observation)` checks that the
+observation belongs to the physical forward contract and transfers its domain
+and read-noise metadata into the AOC specification. Callers provide
+`PhaseRetrieval.LiFTInputs(observation.values)` to AdaptiveOpticsCalibration.
+Direct construction from `LiFTForwardModel(forward)` remains available when
+the caller owns observation compatibility validation. See
+[`examples/tutorials/lift.jl`](../examples/tutorials/lift.jl) for the registered
+CPU direct API workflow. Accelerator execution requires an explicit
+`AdaptiveOpticsCalibration.KernelExecution` policy.
 
 A prepared four-pupil LGS optics plan owns the sodium-profile kernel derived
 during preparation. To change sodium-layer altitudes or relative weights,

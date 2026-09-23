@@ -29,7 +29,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 | `tutorials/how_to_asterism.py` | `examples/tutorials/asterism.jl` | Per-source photon-arrival-rate images and their compatible incoherent sum |
 | `tutorials/how_to_spatial_filter.py` | `examples/tutorials/spatial_filter.jl` | Spatial filtering without baking optics into the telescope type |
 | `tutorials/how_to_NCPA.py` | `examples/tutorials/ncpa.jl` | Basis-driven NCPA synthesis and application |
-| `tutorials/how_to_LIFT.ipynb` | `examples/tutorials/lift.jl` | AOS LiFT forward modeling and coefficient recovery, retained until the approved AdaptiveOpticsCalibration inverse target is released and adopted |
+| `tutorials/how_to_LIFT.ipynb` | `examples/tutorials/lift.jl` | AOS LiFT physical forward modeling and analytic Jacobian callback; inverse recovery uses `AdaptiveOpticsCalibration.PhaseRetrieval` directly |
 | `tutorials/how_to_SPRINT.py` | `examples/tutorials/sprint.jl` | Mis-registration sensitivity and estimation |
 | `tutorials/AO_transfer_function.py` | `examples/tutorials/transfer_function.jl` | Closed-loop rejection and closed-loop transfer functions |
 | `tutorials/AO_closed_loop_ShackHartmannWFS_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained Shack–Hartmann plant/RTC fixture; AOS owns the plant and FGA/JFG owns the RTC |
@@ -51,7 +51,8 @@ Each script exposes a `main()` function and logs a short completion summary with
 - Bi-O-edge, Zernike, and Curvature plant optics and acquisition remain covered
   by the focused WFS test suite; their registered FGA estimators are covered by
   the downstream integration. LiFT's
-  maintained tutorial covers the distinct forward and phase-retrieval workflow.
+  maintained tutorial covers the AOS physical forward model; inverse recovery
+  belongs to `AdaptiveOpticsCalibration.PhaseRetrieval`.
 - Detector noise is encoded by the detector’s `noise` type, for example
   `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.
 - The maintained closed-loop fixtures keep the AOS plant and the FGA/JFG RTC

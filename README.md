@@ -104,8 +104,9 @@ acquisition, while registered FilterGraphAlgorithms and JuliaFilterGraph own
 signal estimation and RTC processing. The same boundary applies to Curvature:
 AOS supplies the paired-defocus optical products and complete image or channel
 acquisition, while registered FilterGraphAlgorithms owns estimation. AOS
-retains the LiFT forward model and retains its inverse workflow
-until the AdaptiveOpticsCalibration target is released and adopted. The
+supplies LiFT physical forward prediction and its analytic Jacobian callback;
+registered `AdaptiveOpticsCalibration.PhaseRetrieval` owns inverse policies,
+solves, products, and diagnostics through its direct API. The
 combined Subaru AO188/AO3k model likewise moves to a downstream instrument
 package.
 
@@ -150,8 +151,8 @@ For the maintained Shack–Hartmann, Pyramid, Bi-O-edge, Zernike, and Curvature
 plant/RTC references,
 use `examples/integrations/filter_graph_algorithms/` with its documented
 cross-package environment. Their RTC composition is not an AOS tutorial
-surface. LiFT remains a distinct AOS forward and phase-retrieval
-tutorial while its calibration-package inverse target is pending.
+surface. LiFT remains a distinct AOS physical forward-model tutorial; inverse
+recovery uses `AdaptiveOpticsCalibration.PhaseRetrieval` directly.
 To verify the maintained core examples as a group, run:
 
 ```bash

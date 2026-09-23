@@ -90,9 +90,9 @@ downstream packages that also own their composition and acceptance evidence.
 Bi-O-edge, Zernike, and Curvature physical optics and complete acquisition are
 maintained in AOS, while registered FilterGraphAlgorithms and JuliaFilterGraph
 provide their calibrated estimation and RTC processing.
-LiFT remains an AOS forward and phase-retrieval workflow
-until its approved AdaptiveOpticsCalibration inverse target is released and
-adopted.
+AOS supplies LiFT physical forward prediction and its analytic Jacobian
+callback. Use the registered `AdaptiveOpticsCalibration.PhaseRetrieval` direct
+API for inverse policies, solves, products, and diagnostics.
 
 ## Detector Acquisition
 
@@ -140,8 +140,9 @@ external measurement estimation separate:
 For Shack–Hartmann and Pyramid operation, step 3 belongs to
 FilterGraphAlgorithms. AOS retains no detector-frame-to-slope convenience
 path for either family. For Bi-O-edge, Zernike, and Curvature, step 3 belongs to
-registered FilterGraphAlgorithms. LiFT uses its own
-forward and inverse products rather than this detector-slope convention.
+registered FilterGraphAlgorithms. LiFT uses its physical forward model and
+analytic Jacobian callback with the `AdaptiveOpticsCalibration.PhaseRetrieval`
+direct inverse API; it is not a detector-slope convention.
 
 ## Complete-Frame Algorithm Graphs
 

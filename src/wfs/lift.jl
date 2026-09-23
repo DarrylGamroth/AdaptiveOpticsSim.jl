@@ -1,12 +1,11 @@
 #
-# LiFT phase retrieval
+# LiFT physical forward model
 #
-# LiFT fits modal coefficients by matching a separately prepared focal-plane
-# forward model to a caller-owned observation. Detector acquisition remains a
-# separate concern.
+# AOS owns focal propagation and observation formation. The iterative inverse
+# estimator belongs to AdaptiveOpticsCalibration.
 
 include("lift/kernels.jl")
 include("lift/contracts.jl")
 include("lift/forward.jl")
+include("lift/modal_basis.jl")
 include("lift/aoc_adapter.jl")
-include("lift/estimation.jl")
