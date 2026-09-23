@@ -139,19 +139,10 @@ function run_gpu_model_tomography_phase_profile(
             build_backend, noise_model, reference_diag)
         _sync_backend!(value)
     end
-    css, t_css = _time_phase() do
-        value = css_signal .+ cnz
-        _sync_backend!(value)
-    end
-
-    rhs, t_rhs = _time_phase() do
-        value = cox_native * transpose(gamma_native)
-        _sync_backend!(value)
-    end
     recstat, t_recstat = _time_phase() do
-        value =
-            AdaptiveOpticsSim.Tomography.stable_hermitian_right_division(
-                build_backend, rhs, css)
+        value = AdaptiveOpticsSim.Tomography._tomographic_covariance_reconstructor(
+            AdaptiveOpticsSim.Backends.execution_style(cxx_native), build_backend,
+            gamma_native, cxx_native, cox_native, cnz)
         _sync_backend!(value)
     end
 
@@ -165,7 +156,7 @@ function run_gpu_model_tomography_phase_profile(
 
     total_ns = t_gamma_single + t_gamma_convert + t_blockdiag + t_cxx + t_cross +
                t_fit_average + t_gamma_native + t_cxx_native + t_cox_native +
-               t_mask_native + t_css_signal + t_reference_diag + t_cnz + t_css + t_rhs + t_recstat +
+               t_mask_native + t_css_signal + t_reference_diag + t_cnz + t_recstat +
                t_recon
 
     println("GPU model tomography phase profile")
@@ -186,9 +177,7 @@ function run_gpu_model_tomography_phase_profile(
     println("  css_signal_ns: ", t_css_signal)
     println("  reference_diag_ns: ", t_reference_diag)
     println("  cnz_ns: ", t_cnz)
-    println("  css_sum_ns: ", t_css)
-    println("  rhs_ns: ", t_rhs)
-    println("  recstat_ns: ", t_recstat)
+    println("  aoc_covariance_reconstructor_ns: ", t_recstat)
     println("  recon_scale_ns: ", t_recon)
     println("  total_timed_ns: ", total_ns)
     println("  shapes: reconstructor=", size(recon),

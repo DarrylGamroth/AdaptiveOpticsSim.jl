@@ -255,12 +255,10 @@ end
     @test recon_cpu.operators.recstat ≈ aoc_covariance_reconstructor(
         imat, recon_cpu.operators.cxx, recon_cpu.operators.cox,
         recon_cpu.operators.cnz)
-    cpu_system = imat * recon_cpu.operators.cxx * transpose(imat) .+
-        recon_cpu.operators.cnz
     @test (@inferred AdaptiveOpticsSim.Tomography._tomographic_covariance_reconstructor(
         ScalarCPUStyle(), Calibration.CPUBuildBackend(), imat,
         recon_cpu.operators.cxx, recon_cpu.operators.cox,
-        recon_cpu.operators.cnz, cpu_system)) ≈ recon_cpu.operators.recstat
+        recon_cpu.operators.cnz)) ≈ recon_cpu.operators.recstat
 
     # The measured interaction matrix may have a different precision from the
     # physical covariance model. The source builder promotes the cold solve.
@@ -277,6 +275,18 @@ end
         tomo, dm; build_backend=Calibration.CPUBuildBackend())
     @test eltype(recon_mixed_cpu.reconstructor) === Float64
     @test recon_mixed_cpu.operators.recstat ≈ recon_mixed.operators.recstat
+
+    # A higher-precision measured interaction matrix must also promote a
+    # lower-precision physical covariance model before the CPU solve.
+    cxx32 = Float32.(recon_cpu.operators.cxx)
+    cox32 = Float32.(recon_cpu.operators.cox)
+    cnz32 = Float32.(recon_cpu.operators.cnz)
+    recstat_reverse_mixed = @inferred AdaptiveOpticsSim.Tomography._tomographic_covariance_reconstructor(
+        ScalarCPUStyle(), Calibration.CPUBuildBackend(), imat,
+        cxx32, cox32, cnz32)
+    @test eltype(recstat_reverse_mixed) === Float64
+    @test recstat_reverse_mixed ≈ aoc_covariance_reconstructor(
+        imat, Float64.(cxx32), Float64.(cox32), Float64.(cnz32))
 
     det = Detector(noise=NoiseReadout(0.2), qe=0.8, binning=2)
     detector_noise = PhotonReadoutSlopeNoise(det; photons_per_subaperture=1000.0, excess_noise=1.2)

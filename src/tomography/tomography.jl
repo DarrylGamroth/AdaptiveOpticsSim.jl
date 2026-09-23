@@ -20,7 +20,6 @@ import ..AdaptiveOpticsSim:
 import ..Backends:
     AcceleratorStyle,
     ScalarCPUStyle,
-    backend_matmul_transpose_right,
     backend_symmetric_product,
     execution_style,
     launch_kernel_async!
@@ -43,8 +42,7 @@ import ..Calibration:
     NativeBuildBackend,
     _backend_array,
     default_build_backend,
-    materialize_build,
-    prepare_build_matrix
+    materialize_build
 
 include("parameters.jl")
 include("geometry.jl")

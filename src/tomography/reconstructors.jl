@@ -779,25 +779,6 @@ function _fit_source_average(cross::AbstractArray{T,3}, weights::AbstractVector{
     return out
 end
 
-function stable_hermitian_right_division(rhs::AbstractMatrix{T}, css::AbstractMatrix{T}) where {T<:AbstractFloat}
-    fact = cholesky(Hermitian(css), check=false)
-    if issuccess(fact)
-        return transpose(fact \ transpose(rhs))
-    end
-    return transpose(lu(css) \ transpose(rhs))
-end
-
-function stable_hermitian_right_division(
-    backend::BuildBackend,
-    rhs::AbstractMatrix{T},
-    css::AbstractMatrix{T},
-) where {T<:AbstractFloat}
-    return materialize_build(backend, rhs, stable_hermitian_right_division(
-        prepare_build_matrix(backend, rhs),
-        prepare_build_matrix(backend, css),
-    ))
-end
-
 _covariance_input_type(::Type{T}, matrix::AbstractMatrix{T}) where {T<:AbstractFloat} = matrix
 _covariance_input_type(::Type{T}, matrix::AbstractMatrix) where {T<:AbstractFloat} =
     Matrix{T}(matrix)
@@ -806,36 +787,46 @@ function _tomographic_covariance_reconstructor(
     ::ScalarCPUStyle,
     ::BuildBackend,
     projection::AbstractMatrix,
-    phase_covariance::AbstractMatrix,
+    phase_covariance::AbstractMatrix{T},
     fit_phase_covariance::AbstractMatrix,
     measurement_noise_covariance::AbstractMatrix,
-    ::AbstractMatrix{T},
 ) where {T<:AbstractFloat}
     aoc_tomography = AdaptiveOpticsCalibration.Tomography
+    S = promote_type(T, eltype(projection), eltype(fit_phase_covariance),
+        eltype(measurement_noise_covariance))
     specification = aoc_tomography.CovarianceReconstructorSpecification(
-        size(projection, 2), size(projection, 1), size(fit_phase_covariance, 1), T)
+        size(projection, 2), size(projection, 1), size(fit_phase_covariance, 1), S)
     plan = AdaptiveOpticsCalibration.prepare(
         aoc_tomography.CovarianceReconstructor(), specification)
     inputs = aoc_tomography.CovarianceReconstructorInputs(
-        _covariance_input_type(T, projection),
-        _covariance_input_type(T, phase_covariance),
-        _covariance_input_type(T, fit_phase_covariance),
-        _covariance_input_type(T, measurement_noise_covariance))
+        _covariance_input_type(S, projection),
+        _covariance_input_type(S, phase_covariance),
+        _covariance_input_type(S, fit_phase_covariance),
+        _covariance_input_type(S, measurement_noise_covariance))
     return aoc_tomography.reconstructor(
         AdaptiveOpticsCalibration.process(plan, inputs))
 end
 
 function _tomographic_covariance_reconstructor(
     ::AcceleratorStyle,
-    backend::BuildBackend,
+    ::BuildBackend,
     projection::AbstractMatrix,
-    ::AbstractMatrix,
+    phase_covariance::AbstractMatrix{T},
     fit_phase_covariance::AbstractMatrix,
-    ::AbstractMatrix,
-    system::AbstractMatrix,
-)
-    return stable_hermitian_right_division(backend,
-        backend_matmul_transpose_right(fit_phase_covariance, projection), system)
+    measurement_noise_covariance::AbstractMatrix,
+) where {T<:AbstractFloat}
+    aoc_tomography = AdaptiveOpticsCalibration.Tomography
+    specification = aoc_tomography.CovarianceReconstructorSpecification(
+        size(projection, 2), size(projection, 1), size(fit_phase_covariance, 1), T)
+    plan = AdaptiveOpticsCalibration.prepare(
+        aoc_tomography.CovarianceReconstructor(),
+        AdaptiveOpticsCalibration.KernelExecution(
+            specification, KernelAbstractions.get_backend(phase_covariance)))
+    inputs = aoc_tomography.CovarianceReconstructorInputs(
+        projection, phase_covariance, fit_phase_covariance,
+        measurement_noise_covariance)
+    return aoc_tomography.reconstructor(
+        AdaptiveOpticsCalibration.process(plan, inputs))
 end
 
 tomography_noise_covariance(model::TomographyNoiseModel, reference_diag::AbstractVector) =
@@ -978,9 +969,8 @@ function build_reconstructor(
     css_signal = backend_symmetric_product(interaction_native, cxx_native)
     reference_diag = tomography_reference_diagonal(build_backend, css_signal)
     cnz = tomography_noise_covariance(build_backend, noise_model, reference_diag)
-    css = css_signal .+ cnz
-    recstat = _tomographic_covariance_reconstructor(execution_style(css),
-        build_backend, interaction_native, cxx_native, cox_native, cnz, css)
+    recstat = _tomographic_covariance_reconstructor(execution_style(cxx_native),
+        build_backend, interaction_native, cxx_native, cox_native, cnz)
     native_mask = materialize_build(build_backend, interaction_native, grid_mask)
     operators = TomographyOperators(
         nothing,
@@ -1168,9 +1158,8 @@ Build the full covariance-model tomography reconstructor.
 
 This path constructs the phase-to-slope gradient operator `P`, forms the masked
 covariance matrices `Cxx`, `Cox`, and `Cnz`, then asks
-AdaptiveOpticsCalibration to evaluate the CPU covariance reconstructor
-`R = Cox * P' / (P * Cxx * P' + Cnz)`. The GPU backend retains its existing
-solve until a separately qualified accelerator implementation is available.
+AdaptiveOpticsCalibration to evaluate the covariance reconstructor
+`R = Cox * P' / (P * Cxx * P' + Cnz)` on the selected CPU or GPU backend.
 """
 function build_reconstructor(
     ::ModelBasedTomography,
@@ -1197,9 +1186,8 @@ function build_reconstructor(
     css_signal = backend_symmetric_product(gamma_native, cxx_native)
     reference_diag = tomography_reference_diagonal(build_backend, css_signal)
     cnz = tomography_noise_covariance(build_backend, noise_model, reference_diag)
-    css = css_signal .+ cnz
-    recstat = _tomographic_covariance_reconstructor(execution_style(css),
-        build_backend, gamma_native, cxx_native, cox_native, cnz, css)
+    recstat = _tomographic_covariance_reconstructor(execution_style(cxx_native),
+        build_backend, gamma_native, cxx_native, cox_native, cnz)
     d = lenslet_grid_support_diameter_m(wfs) / size(valid_lenslet_support(wfs), 1)
     wavefront_to_meter = asterism.wavelength_m / d / 2
     recon = d * wavefront_to_meter .* recstat

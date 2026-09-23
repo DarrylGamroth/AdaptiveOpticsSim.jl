@@ -47,9 +47,9 @@ the maintained package.
 2. Keep the generic graph, HIL, and pyRTC contracts stable for the separately
    maintained REVOLT Classic and Copper packages; instrument calibration and
    performance evidence remain with those packages.
-3. Maintain the target-first Curvature and Zernike estimator migrations through
-   registered FGA 0.5.0 and their AOS plant/FGA integration fixtures. LiFT
-   inverse ownership has moved to registered AdaptiveOpticsCalibration v0.10;
+3. Maintain the Curvature and Zernike estimator boundaries through registered
+   FilterGraphAlgorithms and the AOS plant/RTC integration fixtures. LiFT
+   inverse ownership is in registered AdaptiveOpticsCalibration;
    AOS retains physical forward prediction and the analytic Jacobian callback.
    Weighted-centroid estimation is not an AOS target.
 4. Build a separate SPIDERS instrument package from the retired Subaru/AO188
