@@ -200,7 +200,11 @@ end
         @test !isempty(bundle.cases)
         cases = maintained_reference_cases(bundle, :oopao)
         @test !isempty(cases)
-        @test all(!retired_sh_estimator_reference(case) for case in cases)
+        @test all(!retired_estimator_reference(case) for case in cases)
+        legacy_loops = filter(case -> case.kind === :closed_loop_trace,
+            reference_cases(bundle, :oopao))
+        @test all(retired_estimator_reference, legacy_loops)
+        @test all(case -> case ∉ cases, legacy_loops)
         for case in cases
             @testset "$(case.id)" begin
                 result = validate_reference_case(case)
@@ -220,7 +224,7 @@ end
         bundle = load_reference_bundle(root)
         cases = maintained_reference_cases(bundle, :specula)
         @test !isempty(cases)
-        @test all(!retired_sh_estimator_reference(case) for case in cases)
+        @test all(!retired_estimator_reference(case) for case in cases)
         for case in cases
             @testset "$(case.id)" begin
                 result = validate_reference_case(case)

@@ -68,7 +68,7 @@ function _misregistration_field_units(fields::Tuple{Vararg{Symbol}})
 end
 
 """
-    compute_meta_sensitivity_matrix(tel, dm, wfs, basis; ...)
+    compute_meta_sensitivity_matrix(tel, dm, measurement, basis, measure_callback; ...)
 
 Build the sensitivity of the interaction matrix to selected misregistration
 parameters.
@@ -79,23 +79,24 @@ The caller-owned `MetaSensitivity` retains physical D₀, J, finite-difference
 epsilon, and ordered parameter metadata. This operation performs no numerical
 inversion, cache lookup, serialization, or filesystem I/O.
 """
-function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
-    basis::AbstractMatrix; misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
+function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror,
+    measurement::WFSMeasurement, basis::AbstractMatrix, measure_callback;
+    misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
         tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
     n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
-    sensitivity::Symbol=:ad, source=nothing)
+    sensitivity::Symbol=:ad)
 
     if sensitivity === :ad
-        return _compute_meta_sensitivity_matrix_ad(tel, dm, wfs, basis;
-            source=source,
+        return _compute_meta_sensitivity_matrix_ad(tel, dm, measurement, basis,
+            measure_callback;
             misregistration_zero=misregistration_zero,
             epsilon=epsilon,
             n_mis_reg=n_mis_reg,
             field_order=field_order)
     elseif sensitivity === :finite_difference || sensitivity === :fd
-        return _compute_meta_sensitivity_matrix_fd(tel, dm, wfs, basis;
-            source=source,
+        return _compute_meta_sensitivity_matrix_fd(tel, dm, measurement, basis,
+            measure_callback;
             misregistration_zero=misregistration_zero,
             epsilon=epsilon,
             n_mis_reg=n_mis_reg,
@@ -104,8 +105,8 @@ function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, w
     throw(InvalidConfiguration("sensitivity must be :ad or :finite_difference"))
 end
 
-function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
-    basis::AbstractMatrix; source=nothing,
+function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirror,
+    measurement::WFSMeasurement, basis::AbstractMatrix, measure_callback;
     misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
     epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
         tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
@@ -122,8 +123,8 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
 
     dm0 = DeformableMirror(tel; topology=topology(dm), influence_model=dm_model,
         misregistration=misregistration_zero, T=T)
-    calib0 = _interaction_matrix_for_sensitivity(dm0, wfs, pupil, basis,
-        source, amplitude)
+    calib0 = interaction_matrix(dm0, measurement, pupil, basis,
+        measure_callback; amplitude=amplitude)
 
     n_elements = length(calib0.matrix)
     meta = zeros(T, n_elements, length(fields))
@@ -142,10 +143,10 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
             influence_model=dm_model, misregistration=mis_p, T=T)
         dm_n = DeformableMirror(tel; topology=topology(dm),
             influence_model=dm_model, misregistration=mis_n, T=T)
-        imat_p = _interaction_matrix_for_sensitivity(dm_p, wfs, pupil,
-            basis, source, amplitude)
-        imat_n = _interaction_matrix_for_sensitivity(dm_n, wfs, pupil,
-            basis, source, amplitude)
+        imat_p = interaction_matrix(dm_p, measurement, pupil, basis,
+            measure_callback; amplitude=amplitude)
+        imat_n = interaction_matrix(dm_n, measurement, pupil, basis,
+            measure_callback; amplitude=amplitude)
         meta[:, idx] .= vec((imat_p.matrix .- imat_n.matrix) ./ (2 * eps_val))
     end
 

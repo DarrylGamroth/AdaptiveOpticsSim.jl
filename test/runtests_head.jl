@@ -177,8 +177,8 @@ end
 function assert_wfs_interface(wfs, tel)
     pupil = PupilFunction(tel)
     @test applicable(update_valid_mask!, wfs, pupil)
-    @test applicable(measure!, wfs, pupil)
-    @test slopes(wfs) isa AbstractVector
+    @test !isdefined(WavefrontSensors, :measure!)
+    @test !isdefined(WavefrontSensors, :slopes)
     @test supports_valid_subaperture_mask(wfs) == !isnothing(valid_subaperture_mask(wfs))
     @test supports_reference_signal(wfs) == !isnothing(reference_signal(wfs))
 end

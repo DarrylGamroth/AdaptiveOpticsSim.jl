@@ -156,13 +156,20 @@ function _profile_field_path(mode::Symbol, atmo_kind::Symbol, backend_name::Abst
         zero_padding=2,
         T=T)
     wfs = CurvatureWFS(tel; pupil_samples=8, T=T, backend=backend)
+    renderer = prepare_atmosphere_renderer(atm, tel, src)
+    curvature_front_end = CurvatureOpticalFrontEnd(wfs, src)
+    curvature_rates = curvature_rate_maps(curvature_front_end, pupil)
+    curvature_optics = prepare_wfs_optics(curvature_front_end, pupil,
+        curvature_rates)
 
     step! = if mode === :curvature
         () -> begin
-            advance_by!(atm, atmosphere_step; rng=rng)
-            measure!(wfs, pupil, src, atm)
-            _sync_array!(backend_tag, slopes(wfs))
-            return slopes(wfs)
+            epoch = advance_by!(atm, atmosphere_step; rng=rng)
+            render_atmosphere!(pupil, renderer, atm, epoch)
+            form_wfs_optical_products!(curvature_rates, pupil,
+                curvature_optics)
+            _sync_array!(backend_tag, curvature_rates[1].values)
+            return curvature_rates[1].values
         end
     else
         () -> begin

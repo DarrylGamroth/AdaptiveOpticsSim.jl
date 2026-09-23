@@ -1361,7 +1361,12 @@ end
         GeometryValidSubapertures(T=T))
     @test_throws DimensionMismatchError WavefrontSensors.update_subaperture_layout_from_amplitude!(
         independent_layout, ones(T, 16, 15),
-        FluxThresholdValidSubapertures(T=T))
+        RelativeIlluminationValidSubapertures(T=T))
+    @test RelativeIlluminationValidSubapertures(T=T).peak_fraction == T(0.5)
+    @test_throws InvalidConfiguration RelativeIlluminationValidSubapertures(
+        peak_fraction=T(-0.1), T=T)
+    @test_throws InvalidConfiguration RelativeIlluminationValidSubapertures(
+        peak_fraction=T(1.1), T=T)
     flux_amplitude = zeros(T, 16, 16)
     flux_amplitude[1:4, 1:4] .= one(T)
     flux_amplitude[5:8, 1:4] .= T(0.5)
@@ -1369,7 +1374,7 @@ end
         independent_layout)
     @test WavefrontSensors.update_subaperture_layout_from_amplitude!(
         independent_layout, flux_amplitude,
-        FluxThresholdValidSubapertures(light_ratio=T(0.5), T=T)) ===
+        RelativeIlluminationValidSubapertures(peak_fraction=T(0.5), T=T)) ===
         independent_layout
     expected_flux_mask = fill(false, 4, 4)
     expected_flux_mask[1, 1] = true
@@ -1379,6 +1384,22 @@ end
         CartesianIndex{2}[CartesianIndex(1, 1)]
     @test WavefrontSensors.subaperture_layout_revision(independent_layout) ==
         flux_revision + UInt(1)
+    support_map = zeros(T, 16, 16)
+    support_map[1:4, 1:4] .= one(T)
+    support_map[5:8, 1:4] .= T(0.5)
+    support_revision = WavefrontSensors.subaperture_layout_revision(
+        independent_layout)
+    WavefrontSensors.update_subaperture_layout!(independent_layout,
+        support_map, RelativeIlluminationValidSubapertures(
+            peak_fraction=T(0.5), T=T))
+    @test independent_layout.valid_mask == Bool[
+        true false false false
+        true false false false
+        false false false false
+        false false false false
+    ]
+    @test WavefrontSensors.subaperture_layout_revision(independent_layout) ==
+        support_revision + UInt(1)
     WavefrontSensors.update_subaperture_layout!(independent_layout,
         pupil.amplitude .> zero(T), GeometryValidSubapertures(
             threshold=T(0.1), T=T))

@@ -7,26 +7,6 @@
 #
 
 """
-    slopes(wfs::AbstractWFS)
-
-Return the current exported 1-D signal vector for a wavefront sensor.
-
-For geometric and centroid-based sensors this is the slope vector. Other
-families may use the maintained `slopes` contract for normalized signal
-samples that are not geometric slopes.
-"""
-function slopes end
-
-"""
-    measure!(wfs, pupil[, source][, detector]; rng)
-
-Update `wfs` from a pupil-plane input and return its maintained measurement
-product. Concrete wavefront-sensor families define the supported source and
-detector combinations.
-"""
-function measure! end
-
-"""
     valid_subaperture_mask(wfs::AbstractWFS)
 
 Return the maintained valid-subaperture/support mask when the WFS exposes one.

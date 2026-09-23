@@ -4,7 +4,7 @@
     flux = ShackHartmannWFS(telescope;
         n_lenslets=16,
         valid_subaperture_policy=
-            FluxThresholdValidSubapertures(light_ratio=0.5f0, T=Float32),
+            RelativeIlluminationValidSubapertures(peak_fraction=0.5f0, T=Float32),
         T=Float32)
 
     geometric_mask = copy(geometric.front_end.layout.valid_mask_host)
@@ -159,7 +159,6 @@ end
         @test @allocated(geometric_wavefront_slopes!(truth, pupil.opd,
             layout.valid_mask, pupil.metadata.sampling)) == 0
     end
-    @test !applicable(measure!, layout_sensor, pupil, Source(band=:I,
-        magnitude=0.0))
-    @test !applicable(slopes, layout_sensor)
+    @test !isdefined(WavefrontSensors, :measure!)
+    @test !isdefined(WavefrontSensors, :slopes)
 end

@@ -57,7 +57,7 @@ function subaperture_layout_probes()
     wfs = ShackHartmannWFS(tel; n_lenslets=4)
     layout = subaperture_layout(wfs.front_end)
     geometry_policy = WavefrontSensors.GeometryValidSubapertures(threshold=0.1)
-    flux_policy = FluxThresholdValidSubapertures(light_ratio=0.5)
+    flux_policy = RelativeIlluminationValidSubapertures(peak_fraction=0.5)
     support = Float64.(pupil_mask(tel))
     geometry_probe = () -> WavefrontSensors.update_subaperture_layout!(
         layout, pupil_mask(tel), geometry_policy)

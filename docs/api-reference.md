@@ -121,6 +121,8 @@ Curvature, and LiFT paths. The general staged contract is:
 
 `WFSObservation` and `WFSMeasurement` are typed products with explicit
 metadata and units.
+`RelativeIlluminationValidSubapertures(peak_fraction=0.5)` selects
+Shack–Hartmann layout cells relative to peak illumination.
 
 The AOS Shack–Hartmann, Pyramid, Bi-O-edge, and Zernike surfaces implement
 stages 1 and 2 only.
@@ -168,6 +170,10 @@ Reusable inverse methods and compact-SVD products come from
 `interaction_matrix` and `modal_basis`. Compose modal-basis construction,
 plant response acquisition, and inverse construction explicitly so the AOC
 numerical products remain separate from AOS plant behavior.
+For `interaction_matrix` and `compute_meta_sensitivity_matrix`, pass a typed
+caller-owned `WFSMeasurement` vector and a callable
+`(measurement, pupil)` that writes its exact storage. The callable owns the
+chosen optical, detector, source, and estimator composition.
 
 `KarhunenLoeveBasis` is owned by
 `AdaptiveOpticsCalibration.ModalBases`. AOS supplies the sampled physical DM,

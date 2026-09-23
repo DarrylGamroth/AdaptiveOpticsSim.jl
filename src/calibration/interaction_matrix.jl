@@ -1,13 +1,13 @@
 #
 # Interaction-matrix calibration
 #
-# The interaction matrix records the local linear response of the WFS slopes to
-# DM command perturbations.
+# The interaction matrix records the local linear response of a declared WFS
+# measurement to DM command perturbations.
 #
 # Each column is built by:
 # 1. applying one actuator or command-basis perturbation to the DM
-# 2. propagating the modified pupil path through the WFS
-# 3. recording the measured slope vector
+# 2. invoking the composed optical, detector, and estimator callback
+# 3. recording the declared measurement vector
 #
 # This provides the linear operator used by control matrices, modal
 # reconstructors, and interaction-matrix tomography.
@@ -20,20 +20,25 @@ end
 @inline forward_operator(imat::InteractionMatrix) = imat.matrix
 @inline calibration_amplitude(imat::InteractionMatrix) = imat.amplitude
 
-@inline function _measure_for_calibration!(wfs::AbstractWFS,
-    pupil::PupilFunction, src::Union{Nothing,AbstractSource})
-    if src === nothing
-        return measure!(wfs, pupil)
-    end
-    return measure!(wfs, pupil, src)
+@inline function _calibration_measurement_storage(measurement::WFSMeasurement,
+    pupil::PupilFunction)
+    WavefrontSensors.validate_wfs_measurement(measurement)
+    values = measurement_storage(measurement)
+    values isa AbstractVector || throw(InvalidConfiguration(
+        "interaction matrix requires an explicitly ordered vector WFS measurement"))
+    typeof(backend(values)) === typeof(backend(pupil.opd)) &&
+        compute_device(values) == compute_device(pupil.opd) ||
+        throw(InvalidConfiguration(
+            "WFS measurement and calibration pupil must share a backend and device"))
+    return values
 end
 
-@inline function _prepare_interaction_matrix_wfs!(wfs::AbstractWFS,
-    pupil::PupilFunction, src::Union{Nothing,AbstractSource})
-    _measure_for_calibration!(wfs, pupil, src)
-    n_rows = length(slopes(wfs))
+@inline function _interaction_measurement_length(measurement::WFSMeasurement,
+    pupil::PupilFunction)
+    values = _calibration_measurement_storage(measurement, pupil)
+    n_rows = length(values)
     n_rows > 0 || throw(InvalidConfiguration(
-        "interaction matrix requires a non-empty calibrated WFS signal"))
+        "interaction matrix requires a non-empty WFS measurement"))
     return n_rows
 end
 
@@ -49,7 +54,7 @@ Implementations define `calibration_command_count` and
 `stage_calibration_command!`. Staging overwrites and returns caller-owned
 coefficient storage; it must not retain that destination. A plan may be reused
 concurrently only when its command data are not mutated and every invocation
-has distinct DM, WFS, pupil, and destination owners. Validation rejects shape,
+has distinct DM, measurement, pupil, and destination owners. Validation rejects shape,
 command-count, and output numeric-type incompatibilities before calibration
 mutation. Command storage must not alias the destination coefficients, and the
 two storage backends must support the staged copy and scaling operations.
@@ -67,6 +72,9 @@ end
 @inline calibration_command_count(plan::ActuatorCalibrationCommands) = plan.count
 @inline calibration_command_count(plan::MatrixCalibrationCommands) =
     size(plan.commands, 2)
+@inline calibration_command_storage(::ActuatorCalibrationCommands) = nothing
+@inline calibration_command_storage(plan::MatrixCalibrationCommands) =
+    plan.commands
 
 @inline function stage_calibration_command!(coefs::AbstractVector{T},
     ::ActuatorCalibrationCommands, k::Int, amplitude::T) where {T}
@@ -83,14 +91,33 @@ end
 end
 
 function validate_interaction_matrix_output(out::AbstractMatrix,
-    dm::DeformableMirror, wfs::AbstractWFS,
-    plan::AbstractCalibrationCommandPlan)
-    size(out, 1) == length(slopes(wfs)) ||
-        throw(DimensionMismatchError("interaction-matrix output row count must match WFS slopes"))
+    dm::DeformableMirror, measurement::WFSMeasurement,
+    pupil::PupilFunction, plan::AbstractCalibrationCommandPlan)
+    values = measurement_storage(measurement)
+    size(out, 1) == length(values) ||
+        throw(DimensionMismatchError("interaction-matrix output row count must match WFS measurement"))
     size(out, 2) == calibration_command_count(plan) ||
         throw(DimensionMismatchError("interaction-matrix output column count must match calibration commands"))
     eltype(out) == eltype(dm.state.coefs) ||
         throw(InvalidConfiguration("interaction-matrix output element type must match DM coefficients"))
+    typeof(backend(dm.state.coefs)) === typeof(backend(values)) &&
+        compute_device(dm.state.coefs) == compute_device(values) ||
+        throw(InvalidConfiguration(
+            "DM coefficients and WFS measurement must share a backend and device"))
+    Base.mightalias(out, values) && throw(InvalidConfiguration(
+        "interaction-matrix output must not alias WFS measurement storage"))
+    commands = calibration_command_storage(plan)
+    if commands !== nothing
+        (Base.mightalias(out, commands) ||
+         Base.mightalias(values, commands)) && throw(InvalidConfiguration(
+            "interaction-matrix output or WFS measurement must not alias calibration commands"))
+    end
+    for storage in (dm.state.coefs, dm.state.actuator_coefs,
+                    dm.state.opd, pupil.opd)
+        (Base.mightalias(out, storage) ||
+         Base.mightalias(values, storage)) && throw(InvalidConfiguration(
+            "interaction-matrix output or WFS measurement must not alias DM or pupil storage"))
+    end
     return out
 end
 
@@ -106,144 +133,109 @@ function validate_calibration_commands(dm::DeformableMirror,
     return MatrixCalibrationCommands(commands)
 end
 
-@inline _interaction_source(::Nothing) = nothing
-@inline _interaction_source(src::AbstractSource) = src
-
 function _fill_prepared_interaction_matrix!(out::AbstractMatrix{T},
-    dm::DeformableMirror, wfs::AbstractWFS, pupil::PupilFunction,
-    plan::AbstractCalibrationCommandPlan, src, amplitude::T) where {T<:AbstractFloat}
-    validate_interaction_matrix_output(out, dm, wfs, plan)
+    dm::DeformableMirror, measurement::WFSMeasurement,
+    pupil::PupilFunction, plan::AbstractCalibrationCommandPlan,
+    measure_callback, amplitude::T) where {T<:AbstractFloat}
+    values = _calibration_measurement_storage(measurement, pupil)
+    validate_interaction_matrix_output(out, dm, measurement, pupil, plan)
     coefs = dm.state.coefs
     opd_base = copy(pupil.opd)
     coefs_base = copy(coefs)
+    surface_base = copy(dm.state.opd)
+    actuator_coefs_base = copy(dm.state.actuator_coefs)
     try
         @inbounds for k in axes(out, 2)
             stage_calibration_command!(coefs, plan, k, amplitude)
             update_surface!(dm)
             apply_surface!(pupil, dm, DMReplace())
-            _measure_for_calibration!(wfs, pupil, _interaction_source(src))
-            copyto!(@view(out[:, k]), slopes(wfs))
+            measure_callback(measurement, pupil)
+            WavefrontSensors.validate_wfs_measurement(measurement)
+            copyto!(@view(out[:, k]), values)
         end
     finally
         copyto!(coefs, coefs_base)
+        copyto!(dm.state.actuator_coefs, actuator_coefs_base)
+        copyto!(dm.state.opd, surface_base)
         copyto!(pupil.opd, opd_base)
     end
     return out
 end
 
 function _fill_interaction_matrix!(out::AbstractMatrix{T},
-    dm::DeformableMirror, wfs::AbstractWFS, pupil::PupilFunction,
-    plan::AbstractCalibrationCommandPlan, src, amplitude::T) where {T<:AbstractFloat}
-    _prepare_interaction_matrix_wfs!(wfs, pupil, src)
-    return _fill_prepared_interaction_matrix!(out, dm, wfs, pupil,
-        plan, src, amplitude)
+    dm::DeformableMirror, measurement::WFSMeasurement,
+    pupil::PupilFunction, plan::AbstractCalibrationCommandPlan,
+    measure_callback, amplitude::T) where {T<:AbstractFloat}
+    _interaction_measurement_length(measurement, pupil)
+    return _fill_prepared_interaction_matrix!(out, dm, measurement, pupil,
+        plan, measure_callback, amplitude)
 end
 
 """
-    interaction_matrix!(out, dm, wfs, pupil; amplitude=1)
-    interaction_matrix!(out, dm, wfs, pupil, src; amplitude=1)
-    interaction_matrix!(out, dm, wfs, pupil, commands; amplitude=1)
-    interaction_matrix!(out, dm, wfs, pupil, commands, src; amplitude=1)
+    interaction_matrix!(out, dm, measurement, pupil, measure_callback; amplitude=1)
+    interaction_matrix!(out, dm, measurement, pupil, commands, measure_callback; amplitude=1)
 
 Fill caller-owned interaction-matrix storage and return an `InteractionMatrix`
-view of that storage. `out` may be a normal array, backend-native array, or a
-disk-backed `AbstractMatrix` supplied by an integration package.
+view of that storage. The `WFSMeasurement` storage must be an explicitly
+ordered vector; a caller using an image or scalar product must define its
+vector ordering and units before calibration. `measure_callback(measurement,
+pupil)` writes that exact caller-owned vector; its callable owns any source,
+detector, or estimator context. `out` may be a normal array, backend-native
+array, or a disk-backed `AbstractMatrix` supplied by an integration package.
+Output, measurement, commands, DM storage, and pupil OPD must not alias.
 """
 function interaction_matrix!(out::AbstractMatrix{T}, dm::DeformableMirror,
-    wfs::AbstractWFS, pupil::PupilFunction;
+    measurement::WFSMeasurement, pupil::PupilFunction, measure_callback;
     amplitude::Real=1.0) where {T<:AbstractFloat}
     plan = ActuatorCalibrationCommands(length(dm.state.coefs))
-    _fill_interaction_matrix!(out, dm, wfs, pupil, plan, nothing,
+    _fill_interaction_matrix!(out, dm, measurement, pupil, plan, measure_callback,
         T(amplitude))
     return InteractionMatrix(out, T(amplitude))
 end
 
 function interaction_matrix!(out::AbstractMatrix{T}, dm::DeformableMirror,
-    wfs::AbstractWFS, pupil::PupilFunction, src::AbstractSource;
-    amplitude::Real=1.0) where {T<:AbstractFloat}
-    plan = ActuatorCalibrationCommands(length(dm.state.coefs))
-    _fill_interaction_matrix!(out, dm, wfs, pupil, plan, src, T(amplitude))
-    return InteractionMatrix(out, T(amplitude))
-end
-
-function interaction_matrix!(out::AbstractMatrix{T}, dm::DeformableMirror,
-    wfs::AbstractWFS, pupil::PupilFunction, commands::AbstractMatrix;
+    measurement::WFSMeasurement, pupil::PupilFunction,
+    commands::AbstractMatrix, measure_callback;
     amplitude::Real=1.0) where {T<:AbstractFloat}
     plan = validate_calibration_commands(dm, commands)
-    _fill_interaction_matrix!(out, dm, wfs, pupil, plan, nothing,
-        T(amplitude))
-    return InteractionMatrix(out, T(amplitude))
-end
-
-function interaction_matrix!(out::AbstractMatrix{T}, dm::DeformableMirror,
-    wfs::AbstractWFS, pupil::PupilFunction, commands::AbstractMatrix,
-    src::AbstractSource; amplitude::Real=1.0) where {T<:AbstractFloat}
-    plan = validate_calibration_commands(dm, commands)
-    _fill_interaction_matrix!(out, dm, wfs, pupil, plan, src, T(amplitude))
+    _fill_interaction_matrix!(out, dm, measurement, pupil, plan,
+        measure_callback, T(amplitude))
     return InteractionMatrix(out, T(amplitude))
 end
 
 """
-    interaction_matrix(dm, wfs, pupil; amplitude=1)
-    interaction_matrix(dm, wfs, pupil, src; amplitude=1)
-    interaction_matrix(dm, wfs, pupil, commands; amplitude=1)
-    interaction_matrix(dm, wfs, pupil, commands, src; amplitude=1)
+    interaction_matrix(dm, measurement, pupil, measure_callback; amplitude=1)
+    interaction_matrix(dm, measurement, pupil, commands, measure_callback; amplitude=1)
 
-Build the WFS interaction matrix for either actuator-space pushes or an
-explicit command basis.
+Build the declared WFS measurement's interaction matrix for either
+actuator-space pushes or an explicit command basis.
 
-The returned matrix stores one measured slope vector per commanded
+The returned matrix stores one measured signal vector per commanded
 perturbation, scaled by the requested calibration amplitude.
 """
-function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS,
-    pupil::PupilFunction; amplitude::Real=1.0)
+function interaction_matrix(dm::DeformableMirror,
+    measurement::WFSMeasurement, pupil::PupilFunction, measure_callback;
+    amplitude::Real=1.0)
     n_act = length(dm.state.coefs)
     T = eltype(dm.state.coefs)
     n_act > 0 || throw(InvalidConfiguration("interaction matrix requires at least one actuator"))
     plan = ActuatorCalibrationCommands(n_act)
-    n_rows = _prepare_interaction_matrix_wfs!(wfs, pupil, nothing)
+    n_rows = _interaction_measurement_length(measurement, pupil)
     out = _interaction_matrix_buffer(pupil.opd, n_rows, n_act)
-    _fill_prepared_interaction_matrix!(out, dm, wfs, pupil, plan,
-        nothing, T(amplitude))
+    _fill_prepared_interaction_matrix!(out, dm, measurement, pupil, plan,
+        measure_callback, T(amplitude))
     return InteractionMatrix(out, T(amplitude))
 end
 
-function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS,
-    pupil::PupilFunction,
-    src::AbstractSource; amplitude::Real=1.0)
-    n_act = length(dm.state.coefs)
-    T = eltype(dm.state.coefs)
-    n_act > 0 || throw(InvalidConfiguration("interaction matrix requires at least one actuator"))
-    plan = ActuatorCalibrationCommands(n_act)
-    n_rows = _prepare_interaction_matrix_wfs!(wfs, pupil, src)
-    out = _interaction_matrix_buffer(pupil.opd, n_rows, n_act)
-    _fill_prepared_interaction_matrix!(out, dm, wfs, pupil, plan,
-        src, T(amplitude))
-    return InteractionMatrix(out, T(amplitude))
-end
-
-function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS,
-    pupil::PupilFunction,
-    commands::AbstractMatrix; amplitude::Real=1.0)
+function interaction_matrix(dm::DeformableMirror,
+    measurement::WFSMeasurement, pupil::PupilFunction,
+    commands::AbstractMatrix, measure_callback; amplitude::Real=1.0)
     plan = validate_calibration_commands(dm, commands)
     T = eltype(dm.state.coefs)
-    n_rows = _prepare_interaction_matrix_wfs!(wfs, pupil, nothing)
+    n_rows = _interaction_measurement_length(measurement, pupil)
     out = _interaction_matrix_buffer(pupil.opd, n_rows,
         calibration_command_count(plan))
-    _fill_prepared_interaction_matrix!(out, dm, wfs, pupil, plan,
-        nothing, T(amplitude))
-    return InteractionMatrix(out, T(amplitude))
-end
-
-function interaction_matrix(dm::DeformableMirror, wfs::AbstractWFS,
-    pupil::PupilFunction,
-    commands::AbstractMatrix, src::AbstractSource; amplitude::Real=1.0)
-    plan = validate_calibration_commands(dm, commands)
-    T = eltype(dm.state.coefs)
-    n_rows = _prepare_interaction_matrix_wfs!(wfs, pupil, src)
-    out = _interaction_matrix_buffer(pupil.opd, n_rows,
-        calibration_command_count(plan))
-    _fill_prepared_interaction_matrix!(out, dm, wfs, pupil, plan,
-        src, T(amplitude))
+    _fill_prepared_interaction_matrix!(out, dm, measurement, pupil, plan,
+        measure_callback, T(amplitude))
     return InteractionMatrix(out, T(amplitude))
 end

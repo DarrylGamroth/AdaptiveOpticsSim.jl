@@ -187,21 +187,19 @@ end
 
 reference_cases(bundle::ReferenceBundle, baseline::Symbol) = [case for case in bundle.cases if case.baseline === baseline]
 
-function retired_sh_estimator_reference(case::ReferenceCase)
+function retired_estimator_reference(case::ReferenceCase)
     case.kind === :shack_hartmann_slopes && return true
-    if case.kind === :closed_loop_trace
-        wfs = get(case.config, "wfs", nothing)
-        wfs isa AbstractDict &&
-            Symbol(get(wfs, "kind", "")) === :shack_hartmann_slopes &&
-            return true
-    end
+    # The historical closed-loop oracle includes an AOS-owned estimator/RTC
+    # path. Retain its fixture data for external comparisons, but do not claim
+    # it as a maintained plant reference after the plant/RTC split.
+    case.kind === :closed_loop_trace && return true
     return case.baseline === :specula &&
         case.id == "shack_hartmann_polychromatic_frame"
 end
 
 maintained_reference_cases(bundle::ReferenceBundle, baseline::Symbol) =
     [case for case in reference_cases(bundle, baseline)
-     if !retired_sh_estimator_reference(case)]
+     if !retired_estimator_reference(case)]
 
 function load_reference_array(case::ReferenceCase)
     flat = vec(readdlm(case.data_path, Float64))
@@ -254,16 +252,6 @@ function parse_sensing_mode(name)
         return Diffractive()
     end
     throw(InvalidConfiguration("unknown sensing mode '$name'"))
-end
-
-function parse_wfs_normalization(name)
-    lname = lowercase(String(name))
-    if lname in ("mean_valid_flux", "mean_flux", "slopesmaps")
-        return MeanValidFluxNormalization()
-    elseif lname in ("incidence_flux", "slopesmaps_incidence_flux")
-        return IncidenceFluxNormalization()
-    end
-    throw(InvalidConfiguration("unknown WFS normalization '$name'"))
 end
 
 function parse_slope_order(name)
@@ -827,71 +815,6 @@ function strehl_ratio(psf::AbstractMatrix{T}, psf_ref::AbstractMatrix{T}) where 
     return 100.0 * sum(shifted) / sum(shifted_ref)
 end
 
-function reference_interaction_matrix(wfs::AbstractWFS,
-    pupil::PupilFunction, src::AbstractSource,
-    basis::AbstractArray{<:Real,3}; amplitude::Real)
-    n_modes = size(basis, 3)
-    mat = nothing
-    opd_base = copy(pupil.opd)
-    @inbounds for k in 1:n_modes
-        @views @. pupil.opd = Float64(amplitude) * basis[:, :, k]
-        measure!(wfs, pupil, src)
-        if mat === nothing
-            mat = Matrix{Float64}(undef, length(slopes(wfs)), n_modes)
-        end
-        mat[:, k] .= slopes(wfs)
-    end
-    pupil.opd .= opd_base
-    mat === nothing && throw(InvalidConfiguration("reference interaction matrix requires at least one mode"))
-    return mat
-end
-
-function closed_loop_trace(wfs::AbstractWFS, tel::Telescope, src::AbstractSource,
-    control_basis::AbstractArray{<:Real,3}, forcing_coeffs::AbstractMatrix{<:Real};
-    gain::Real, frame_delay::Int, calibration_amplitude::Real, psf_zero_padding::Int)
-    n_iter, n_modes = size(forcing_coeffs)
-    pupil = PupilFunction(tel)
-    H = reference_interaction_matrix(wfs, pupil, src, control_basis;
-        amplitude=calibration_amplitude)
-    recon = pinv(H)
-    control_coeffs = zeros(Float64, n_modes)
-    delayed_slopes = zeros(Float64, size(H, 1))
-    forcing_opd = zeros(Float64, size(pupil.opd))
-    correction_opd = similar(forcing_opd)
-    residual_opd = similar(forcing_opd)
-    reset_opd!(pupil)
-    science = prepare_reference_direct_imaging(pupil, src;
-        zero_padding=psf_zero_padding)
-    psf_ref = copy(intensity_values(
-        execute_reference_direct_imaging!(science, pupil)))
-    trace = Matrix{Float64}(undef, n_iter, 5)
-
-    for iter in 1:n_iter
-        @views combine_reference_modes!(forcing_opd, control_basis, forcing_coeffs[iter, :])
-        combine_reference_modes!(correction_opd, control_basis, control_coeffs)
-        @. residual_opd = forcing_opd - correction_opd
-        pupil.opd .= residual_opd
-        trace[iter, 1] = pupil_rms_nm(forcing_opd, pupil_mask(tel))
-        trace[iter, 2] = pupil_rms_nm(residual_opd, pupil_mask(tel))
-        psf = intensity_values(execute_reference_direct_imaging!(science,
-            pupil))
-        trace[iter, 3] = strehl_ratio(psf, psf_ref)
-        slopes = measure!(wfs, pupil, src)
-        trace[iter, 4] = norm(slopes)
-        if frame_delay == 1
-            delayed_slopes .= slopes
-        end
-        control_coeffs .+= gain .* (recon * delayed_slopes)
-        trace[iter, 5] = norm(control_coeffs)
-        if frame_delay == 2
-            delayed_slopes .= slopes
-        elseif frame_delay != 1
-            throw(InvalidConfiguration("unsupported frame delay $(frame_delay)"))
-        end
-    end
-    return trace
-end
-
 function transfer_functions(freq::AbstractVector{T}, loop_gain::T, Ti::T, Tau::T, Tdm::T) where {T<:AbstractFloat}
     S = complex.(zero(T), T(2π)) .* freq
     H_wfs = exp.(-Ti * S / 2)
@@ -1246,18 +1169,6 @@ function compute_reference_actual(case::ReferenceCase)
             @views stack[:, :, idx] .= reshape(H[:, idx], img_resolution, img_resolution)
         end
         return stack
-    elseif case.kind === :closed_loop_trace
-        tel = build_reference_telescope(case.config["telescope"])
-        src = build_reference_source(case.config["source"])
-        basis = build_reference_basis(case.config["basis"], tel)
-        wfs = build_reference_wfs(Symbol(case.config["wfs"]["kind"]), case.config["wfs"], tel)
-        compute_cfg = case.config["compute"]
-        forcing_coeffs = matrix_from_rows(get(compute_cfg, "forcing_coefficients", Any[]))
-        return closed_loop_trace(wfs, tel, src, basis, forcing_coeffs;
-            gain=Float64(get(compute_cfg, "gain", 0.4)),
-            frame_delay=Int(get(compute_cfg, "frame_delay", 2)),
-            calibration_amplitude=Float64(get(compute_cfg, "calibration_amplitude", 1e-9)),
-            psf_zero_padding=Int(get(compute_cfg, "psf_zero_padding", 2)))
     end
     throw(InvalidConfiguration("unsupported reference case kind '$(case.kind)'"))
 end

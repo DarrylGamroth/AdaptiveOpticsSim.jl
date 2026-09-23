@@ -25,7 +25,9 @@ The Julia 1.12 CPU baseline includes:
 - conventional frame and counting/channel detector families covered by their
   registered suites
 - plant-side calibration observables, reusable AOC inverse products, and
-  tomography; maintained RTC reconstruction and controller execution is in
+  tomography; interaction-matrix and misregistration acquisition require a
+  caller-owned typed `WFSMeasurement` and an explicitly composed measurement
+  callback; maintained RTC reconstruction and controller execution is in
   FilterGraphAlgorithms/JuliaFilterGraph
 - deterministic and ordinary coarse-grained ensemble execution
 - static `AlgorithmGraphs` definitions in Julia and TOML

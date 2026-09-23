@@ -1,5 +1,4 @@
-mutable struct CalibrationContractWFS{M<:AbstractMatrix,V<:AbstractVector} <:
-        WavefrontSensors.AbstractWFS
+mutable struct CalibrationContractWFS{M<:AbstractMatrix,V<:AbstractVector}
     projection::M
     measurement::V
 end
@@ -20,14 +19,12 @@ function calibration_contract_wfs(tel::Telescope; rows::Int=8)
     return CalibrationContractWFS(projection, zeros(T, rows))
 end
 
-@inline WavefrontSensors.slopes(wfs::CalibrationContractWFS) =
-    wfs.measurement
+calibration_contract_measurement(wfs::CalibrationContractWFS; kind=:phase) =
+    WFSMeasurement(wfs.measurement; units=:metre, kind=kind)
 
-function WavefrontSensors.measure!(wfs::CalibrationContractWFS,
-    pupil::PupilFunction)
-    mul!(wfs.measurement, wfs.projection, vec(pupil.opd))
-    return wfs.measurement
-end
+calibration_contract_callback(wfs::CalibrationContractWFS) =
+    (measurement, pupil) -> mul!(measurement_storage(measurement),
+        wfs.projection, vec(pupil.opd))
 
 @testset "Modal bases and fitting" begin
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
@@ -263,19 +260,22 @@ end
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = calibration_contract_wfs(tel)
+    measurement = calibration_contract_measurement(wfs)
+    measure_callback = calibration_contract_callback(wfs)
     basis = modal_basis(dm, tel; n_modes=2)
     fields = collect(Calibration.MISREG_FIELDS)
     meta, meta_fd, meta_ad = mktempdir() do root
         cd(root) do
             @test isempty(readdir())
             local_meta = Calibration.compute_meta_sensitivity_matrix(
-                tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+                tel, dm, measurement, basis.M2C[:, 1:2], measure_callback;
+                n_mis_reg=2)
             local_fd = Calibration.compute_meta_sensitivity_matrix(
-                tel, dm, wfs, basis.M2C[:, 1:2];
+                tel, dm, measurement, basis.M2C[:, 1:2], measure_callback;
                 n_mis_reg=length(fields), field_order=fields,
                 sensitivity=:finite_difference)
             local_ad = Calibration.compute_meta_sensitivity_matrix(
-                tel, dm, wfs, basis.M2C[:, 1:2];
+                tel, dm, measurement, basis.M2C[:, 1:2], measure_callback;
                 n_mis_reg=length(fields), field_order=fields)
             @test isempty(readdir())
             return local_meta, local_fd, local_ad
@@ -351,8 +351,8 @@ end
         observed_dm = DeformableMirror(tel; topology=topology(dm),
             influence_model=influence_model(dm),
             misregistration=observed_misregistration)
-        observed_matrix = interaction_matrix(observed_dm, wfs,
-            PupilFunction(tel), basis.M2C[:, 1:2];
+        observed_matrix = interaction_matrix(observed_dm, measurement,
+            PupilFunction(tel), basis.M2C[:, 1:2], measure_callback;
             amplitude=fixture["calibration_amplitude"])
         @test observed_matrix.matrix ≈ d_observed rtol=1e-12 atol=1e-22
 
@@ -432,8 +432,8 @@ end
             reacquired_meta = Calibration.compute_meta_sensitivity_matrix(
                 tel,
                 dm,
-                wfs,
-                basis.M2C[:, 1:2];
+                measurement,
+                basis.M2C[:, 1:2], measure_callback;
                 misregistration_zero=updated_zero,
                 n_mis_reg=length(fields),
                 field_order=fields,
@@ -466,7 +466,8 @@ end
     mktempdir() do root
         cache_path = joinpath(root, "meta-sensitivity.bin")
         @test_throws MethodError Calibration.compute_meta_sensitivity_matrix(
-            tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2,
+            tel, dm, measurement, basis.M2C[:, 1:2], measure_callback;
+            n_mis_reg=2,
             cache_path=cache_path)
         @test !isdefined(Calibration, :SPRINT)
         @test !isdefined(Calibration, :estimate_misregistration)
@@ -480,7 +481,8 @@ end
     measured_dm = DeformableMirror(tel; topology=sampled_topology,
         influence_model=MeasuredInfluenceFunctions(Array(dm.state.modes[:, 1:2])))
     @test_throws UnsupportedAlgorithm Calibration.compute_meta_sensitivity_matrix(
-        tel, measured_dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+        tel, measured_dm, measurement, basis.M2C[:, 1:2],
+        measure_callback; n_mis_reg=2)
 end
 
 @testset "Calibration workflow contracts" begin
@@ -492,22 +494,29 @@ end
         L0=25.0)
     dm = DeformableMirror(tel; n_act=2, influence_width=0.4)
     wfs = calibration_contract_wfs(tel)
+    measurement = calibration_contract_measurement(wfs)
+    measure_callback = calibration_contract_callback(wfs)
     det = Detector(noise=NoiseNone(), exposure_duration=1.0, qe=1.0, binning=1)
 
     basis = modal_basis(dm, tel; n_modes=2)
     assert_modal_basis_contract(basis, length(dm.state.coefs), 2)
 
-    imat = interaction_matrix(dm, wfs, pupil; amplitude=0.1)
-    assert_interaction_matrix_contract(imat, length(slopes(wfs)), length(dm.state.coefs), 0.1)
-
-    imat_basis = interaction_matrix(dm, wfs, pupil, basis.M2C;
+    imat = interaction_matrix(dm, measurement, pupil, measure_callback;
         amplitude=0.1)
-    assert_interaction_matrix_contract(imat_basis, length(slopes(wfs)), size(basis.M2C, 2), 0.1)
+    assert_interaction_matrix_contract(imat, length(measurement_storage(measurement)),
+        length(dm.state.coefs), 0.1)
+
+    imat_basis = interaction_matrix(dm, measurement, pupil, basis.M2C,
+        measure_callback;
+        amplitude=0.1)
+    assert_interaction_matrix_contract(imat_basis,
+        length(measurement_storage(measurement)), size(basis.M2C, 2), 0.1)
 
     aliased_commands = reshape(dm.state.coefs, :, 1)
     coefficients_before_alias_rejection = copy(dm.state.coefs)
     @test_throws InvalidConfiguration interaction_matrix(
-        dm, wfs, pupil, aliased_commands; amplitude=0.1)
+        dm, measurement, pupil, aliased_commands, measure_callback;
+        amplitude=0.1)
     @test dm.state.coefs == coefficients_before_alias_rejection
 
     specification = AOCReconstructors.ReconstructorSpecification(
@@ -532,17 +541,110 @@ end
     @test AOCReconstructors.truncation_count(truncated_product) == 1
     default_basis = modal_basis(dm, tel; n_modes=2)
     assert_modal_basis_contract(default_basis, length(dm.state.coefs), 2)
-    default_imat = interaction_matrix(dm, wfs, pupil, default_basis.M2C;
+    default_imat = interaction_matrix(dm, measurement, pupil,
+        default_basis.M2C, measure_callback;
         amplitude=0.1)
     assert_interaction_matrix_contract(
-        default_imat, length(slopes(wfs)), size(default_basis.M2C, 2), 0.1)
-    basis_imat = interaction_matrix(dm, wfs, pupil, basis.M2C; amplitude=0.1)
+        default_imat, length(measurement_storage(measurement)),
+        size(default_basis.M2C, 2), 0.1)
+    basis_imat = interaction_matrix(dm, measurement, pupil, basis.M2C,
+        measure_callback; amplitude=0.1)
     assert_interaction_matrix_contract(
-        basis_imat, length(slopes(wfs)), size(basis.M2C, 2), 0.1)
+        basis_imat, length(measurement_storage(measurement)),
+        size(basis.M2C, 2), 0.1)
     @test basis_imat.matrix == imat_basis.matrix
 
+    @test measurement_metadata(measurement).kind === :phase
+    @test measurement_units(measurement) === :metre
+    slope_measurement = WFSMeasurement(similar(wfs.measurement);
+        units=:radian, kind=:shack_hartmann_slopes)
+    slope_callback = (product, input) -> begin
+        mul!(measurement_storage(product), wfs.projection, vec(input.opd))
+        measurement_storage(product) ./= input.metadata.sampling[1]
+        return product
+    end
+    slope_imat = interaction_matrix(dm, slope_measurement, pupil,
+        basis.M2C, slope_callback; amplitude=0.1)
+    @test measurement_metadata(slope_measurement).kind ===
+        :shack_hartmann_slopes
+    @test measurement_units(slope_measurement) === :radian
+    @test slope_imat.matrix ≈
+        imat_basis.matrix ./ pupil.metadata.sampling[1]
+
+    out = similar(imat_basis.matrix)
+    @test interaction_matrix!(out, dm, measurement, pupil, basis.M2C,
+        measure_callback; amplitude=0.1).matrix === out
+    @test out == imat_basis.matrix
+    @test_throws DimensionMismatchError interaction_matrix!(
+        zeros(size(out, 1) - 1, size(out, 2)), dm, measurement, pupil,
+        basis.M2C, measure_callback; amplitude=0.1)
+    @test_throws InvalidConfiguration interaction_matrix!(
+        zeros(Float32, size(out)), dm, measurement, pupil,
+        basis.M2C, measure_callback; amplitude=0.1)
+    image_measurement = WFSMeasurement(zeros(2, 2);
+        units=:electron_count, kind=:detector_image)
+    @test_throws InvalidConfiguration interaction_matrix(dm,
+        image_measurement, pupil, measure_callback; amplitude=0.1)
+    scalar_measurement = WFSMeasurement(Ref(0.0);
+        units=:electron_count, kind=:total_signal)
+    @test_throws InvalidConfiguration interaction_matrix(dm,
+        scalar_measurement, pupil, measure_callback; amplitude=0.1)
+
+    saved_coefs = copy(dm.state.coefs)
+    saved_surface = copy(dm.state.opd)
+    saved_actuator_coefs = copy(dm.state.actuator_coefs)
+    saved_opd = copy(pupil.opd)
+    aliased_out = fill(-1.0, size(out))
+    aliased_measurement = WFSMeasurement(@view(aliased_out[:, 1]);
+        units=:metre, kind=:phase)
+    alias_calls = Ref(0)
+    alias_callback = (product, input) -> begin
+        alias_calls[] += 1
+        mul!(measurement_storage(product), wfs.projection, vec(input.opd))
+    end
+    @test_throws InvalidConfiguration interaction_matrix!(aliased_out, dm,
+        aliased_measurement, pupil, basis.M2C, alias_callback;
+        amplitude=0.1)
+    @test alias_calls[] == 0
+    @test all(==(-1.0), aliased_out)
+    @test dm.state.coefs == saved_coefs
+    @test dm.state.opd == saved_surface
+    @test dm.state.actuator_coefs == saved_actuator_coefs
+    @test pupil.opd == saved_opd
+
+    pupil_backed_measurement = WFSMeasurement(vec(pupil.opd);
+        units=:metre, kind=:phase)
+    @test_throws InvalidConfiguration interaction_matrix(dm,
+        pupil_backed_measurement, pupil, alias_callback; amplitude=0.1)
+    @test alias_calls[] == 0
+    @test dm.state.coefs == saved_coefs
+    @test dm.state.opd == saved_surface
+    @test dm.state.actuator_coefs == saved_actuator_coefs
+    @test pupil.opd == saved_opd
+
+    aliased_commands = @view aliased_out[1:length(dm.state.coefs),
+        1:size(basis.M2C, 2)]
+    @test_throws InvalidConfiguration interaction_matrix!(aliased_out, dm,
+        measurement, pupil, aliased_commands, alias_callback; amplitude=0.1)
+    @test alias_calls[] == 0
+    @test all(==(-1.0), aliased_out)
+    @test dm.state.coefs == saved_coefs
+    @test pupil.opd == saved_opd
+    failing_callback = (product, input) -> begin
+        fill!(measurement_storage(product), 1.0)
+        fill!(input.opd, 2.0)
+        error("intentional measurement failure")
+    end
+    @test_throws ErrorException interaction_matrix!(out, dm, measurement,
+        pupil, basis.M2C, failing_callback; amplitude=0.1)
+    @test dm.state.coefs == saved_coefs
+    @test dm.state.opd == saved_surface
+    @test dm.state.actuator_coefs == saved_actuator_coefs
+    @test pupil.opd == saved_opd
+
     meta = Calibration.compute_meta_sensitivity_matrix(
-        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
+        tel, dm, measurement, basis.M2C[:, 1:2], measure_callback;
+        n_mis_reg=2)
     assert_meta_sensitivity_contract(meta, 2)
 
     meta_specification = AOCMisregistration.MetaSensitivityEstimateSpecification(

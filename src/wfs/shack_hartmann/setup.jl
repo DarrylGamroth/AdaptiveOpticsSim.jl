@@ -223,8 +223,8 @@ end
 convert_valid_subaperture_policy(policy::GeometryValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
     GeometryValidSubapertures(threshold=T(policy.threshold), T=T)
 
-convert_valid_subaperture_policy(policy::FluxThresholdValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
-    FluxThresholdValidSubapertures(light_ratio=T(policy.light_ratio), T=T)
+convert_valid_subaperture_policy(policy::RelativeIlluminationValidSubapertures, ::Type{T}) where {T<:AbstractFloat} =
+    RelativeIlluminationValidSubapertures(peak_fraction=T(policy.peak_fraction), T=T)
 
 function initialize_valid_mask!(wfs::ShackHartmannWFS,
     tel::Telescope, policy::GeometryValidSubapertures)
@@ -234,7 +234,7 @@ function initialize_valid_mask!(wfs::ShackHartmannWFS,
 end
 
 function initialize_valid_mask!(wfs::ShackHartmannWFS,
-    tel::Telescope, policy::FluxThresholdValidSubapertures)
+    tel::Telescope, policy::RelativeIlluminationValidSubapertures)
     update_subaperture_layout!(wfs.front_end.layout,
         pupil_reflectivity(tel), policy)
     return wfs
@@ -254,7 +254,7 @@ function update_valid_mask!(wfs::ShackHartmannWFS,
 end
 
 function update_valid_mask!(wfs::ShackHartmannWFS,
-    pupil::PupilFunction, policy::FluxThresholdValidSubapertures)
+    pupil::PupilFunction, policy::RelativeIlluminationValidSubapertures)
     update_subaperture_layout_from_amplitude!(wfs.front_end.layout,
         pupil.amplitude, policy)
     return wfs

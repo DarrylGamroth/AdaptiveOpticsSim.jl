@@ -13,8 +13,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         :acquire_wfs_observation!,
         :prepare_wfs_estimation,
         :estimate_wfs_measurement!,
-        :measure!,
-        :slopes,
     )
         @test parentmodule(getfield(WavefrontSensors, name)) ===
             WavefrontSensors
@@ -22,6 +20,13 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
         @test !Base.ispublic(AdaptiveOpticsSim, name)
         @test !isdefined(AdaptiveOpticsSim, name)
     end
+
+    @test !isdefined(WavefrontSensors, :measure!)
+    @test !isdefined(WavefrontSensors, :slopes)
+    @test !isdefined(WavefrontSensors, :WFSNormalization)
+    @test !isdefined(WavefrontSensors, :MeanValidFluxNormalization)
+    @test !isdefined(WavefrontSensors, :IncidenceFluxNormalization)
+    @test !isdefined(WavefrontSensors, :FluxThresholdValidSubapertures)
 
 
     for name in (

@@ -144,18 +144,14 @@ counting_wfs = CurvatureWFS(
     pupil_samples=8,
     readout_model=CurvatureChannelReadout(),
 )
-spad = SPADArrayDetector((2, 64);
-    exposure_duration=1.0,
-    noise=NoiseNone(),
-    sensor=SPADArraySensor(
-        active_area_detection_efficiency=0.5,
-        fill_factor=0.8,
-        dark_count_rate=0.0,
-    ),
-)
-signal = measure!(counting_wfs, pupil, src, spad; rng)
-counts = output_frame(spad)
+front_end = CurvatureOpticalFrontEnd(counting_wfs, src)
+rates = curvature_rate_maps(front_end, pupil)
+optics = prepare_wfs_optics(front_end, pupil, rates)
+form_wfs_optical_products!(rates, pupil, optics)
 ```
+
+Prepare a paired-channel acquisition with an explicit observation product.
+The resulting complete observation is the AOS/FGA estimation boundary.
 
 Use `LinearAPDDetector` for analog single-element or fixed-bank APD channels,
 `SPADArrayDetector` for Geiger-mode accumulated-count images, and
