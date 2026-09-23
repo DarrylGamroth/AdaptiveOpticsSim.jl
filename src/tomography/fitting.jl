@@ -138,21 +138,3 @@ function TomographyFitting(
     )
     return TomographyFitting(modes; regularization=regularization, resolution=resolution)
 end
-
-function fit_commands!(
-    out::AbstractVector{T},
-    fitting::TomographyFitting{T},
-    opd::AbstractVector{T},
-) where {T<:AbstractFloat}
-    size(fitting.fitting_matrix, 1) == length(out) ||
-        throw(DimensionMismatchError("output length must match fitting matrix row count"))
-    size(fitting.fitting_matrix, 2) == length(opd) ||
-        throw(DimensionMismatchError("opd length must match fitting matrix column count"))
-    mul!(out, fitting.fitting_matrix, opd)
-    return out
-end
-
-function fit_commands(fitting::TomographyFitting{T}, opd::AbstractVector{T}) where {T<:AbstractFloat}
-    out = Vector{T}(undef, size(fitting.fitting_matrix, 1))
-    return fit_commands!(out, fitting, opd)
-end

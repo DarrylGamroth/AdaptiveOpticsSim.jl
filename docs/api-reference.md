@@ -209,9 +209,11 @@ using AdaptiveOpticsSim.Tomography
 ~~~
 
 Tomography owns guide-star and layer geometry, model-based or
-interaction-matrix reconstruction, fitting, and DM command projection. Use
-`build_reconstructor`, `assemble_reconstructor_and_fitting`,
-`reconstruct_wavefront_map`, and `dm_commands`. CPU covariance reconstruction
+interaction-matrix reconstruction, fitting, and cold DM command-matrix
+projection. Use `build_reconstructor` and
+`assemble_reconstructor_and_fitting` to prepare matrices for an external RTC.
+FilterGraphAlgorithms/JuliaFilterGraph applies these matrices to incoming
+measurements and produces per-frame commands. CPU covariance reconstruction
 uses AdaptiveOpticsCalibration's explicit-array numerical solve; AOS retains
 the physical covariance construction, wavelength conversion, slope ordering,
 sampled DM influence construction, and command-matrix composition. The cold
