@@ -79,6 +79,13 @@ function profile_lift_adapter(label, array_backend, selector, synchronize,
     cpu_inputs = PR.LiFTInputs(copy(observation))
     complete_lift!(cpu_result, cpu_workspace, cpu_plan, cpu_inputs, () -> nothing)
     cpu_coefficients = copy(Array(PR.lift_coefficients(cpu_result)))
+    default_fixture = resolution == 16 && iterations == 2
+    truth_tolerance = 2f-10
+    if default_fixture
+        cpu_truth_error = maximum(abs, cpu_coefficients - truth[1:2])
+        cpu_truth_error < truth_tolerance || error(
+            "AOS/AOC LiFT CPU truth check failed: $(cpu_truth_error)")
+    end
 
     device_observation = array_backend(observation)
     device_observation_snapshot = Array(device_observation)
@@ -96,6 +103,10 @@ function profile_lift_adapter(label, array_backend, selector, synchronize,
     maximum_cpu_difference < 2f-10 || error(
         "AOS/AOC LiFT CPU parity failed: $(maximum_cpu_difference)")
     maximum_truth_error = maximum(abs, coefficients - truth[1:2])
+    if default_fixture
+        maximum_truth_error < truth_tolerance || error(
+            "AOS/AOC LiFT truth check failed: $(maximum_truth_error)")
+    end
     Array(inputs.observation) == device_observation_snapshot || error(
         "AOS/AOC LiFT changed its caller-owned observation")
 
@@ -125,6 +136,12 @@ function profile_lift_adapter(label, array_backend, selector, synchronize,
         Array(PR.lift_coefficients(result)) - cpu_coefficients)
     post_profile_difference < 2f-10 || error(
         "AOS/AOC LiFT post-profile CPU parity failed: $(post_profile_difference)")
+    post_profile_truth_error = maximum(abs,
+        Array(PR.lift_coefficients(result)) - truth[1:2])
+    if default_fixture
+        post_profile_truth_error < truth_tolerance || error(
+            "AOS/AOC LiFT post-profile truth check failed: $(post_profile_truth_error)")
+    end
     Array(inputs.observation) == device_observation_snapshot || error(
         "AOS/AOC LiFT changed its observation after profiling")
 
@@ -138,6 +155,7 @@ function profile_lift_adapter(label, array_backend, selector, synchronize,
     println("maximum_cpu_difference = ", maximum_cpu_difference)
     println("maximum_truth_error = ", maximum_truth_error)
     println("post_profile_difference = ", post_profile_difference)
+    println("post_profile_truth_error = ", post_profile_truth_error)
     println("host_allocated_bytes = ", host_bytes)
     println("device_allocated_bytes = ", accelerator_bytes)
     println("used_device_memory_before = ", device_memory_before)
