@@ -89,6 +89,39 @@ amdgpu = "Native HIP is faster at n=8 but about 3-5 ms slower at n=3; retain the
 numerical = "Native K relative Frobenius error is below 3.5e-5 at both shapes and backends; Cxx/Cox errors are below 1.2e-7."
 per_frame = "FGA accepted-matrix captured CUDA/HIP Graph replay has a separate zero-host-allocation gate; these allocating cold-build measurements do not establish it."
 
+[cpu_counters.n8]
+source_revision = "da44d5c"
+tool = "Linux perf stat 6.12.107, three separate process runs pinned to logical CPU 4"
+scope = "Whole Julia process, including load, compilation, and warmup; ten warmed physical tomography builds per process dominate the sampled computation but are not isolated by the counter collection."
+task_clock_ms_mean = 24482.85
+cycles_mean = 107329742725
+instructions_mean = 211300560257
+instructions_per_cycle = 1.97
+branch_miss_rate_percent = 1.95
+cache_miss_rate_percent = 23.47
+counter_running_percent_approx = 83.3
+elapsed_seconds_mean = 24.52
+elapsed_seconds_variation = 2.84
+interpretation = "Counters are process-wide and multiplexed, so they are diagnostic context, not a per-build or per-kernel baseline. The Julia CPU profile independently locates most warmed work in SpecialFunctions.besselk/libopenspecfun during AOC Cxx/Cox assembly."
+
+[cuda_profiler.n8]
+source_revision = "da44d5c"
+tools = "Nsight Systems 2026.3.2 capture-range=cudaProfilerApi; Nsight Compute 2026.3.1, ten counter-replay passes on one warmed cross-von-Karman kernel"
+timeline_scope = "One warmed physical tomography build on RTX 3080; first-use build excluded from the captured range"
+timeline_gpu_kernel_time_us = 6308
+cross_covariance_kernel_time_us = 5071.722
+cross_covariance_gpu_kernel_time_percent = 80.4
+auto_covariance_kernel_time_us = 236.769
+cuda_api_stream_synchronizations = 491
+cuda_api_kernel_launches = 450
+counter_cross_kernel_duration_ms = 4.41
+counter_cross_kernel_sm_throughput_percent = 57.24
+counter_cross_kernel_dram_throughput_percent = 0.16
+counter_cross_kernel_memory_throughput_gbyte_s = 1.21
+counter_cross_kernel_achieved_occupancy_percent = 20.30
+counter_cross_kernel_local_spilling_requests = 0
+counter_interpretation = "This Float32 assembly kernel spends much of its issue capacity in FP64 operations from the covariance evaluation; its low DRAM utilization rules out a bandwidth-bound diagnosis for this sampled kernel. Counter replay, uncontrolled clocks/caches, and profiler overhead make the counter duration unsuitable as an unprofiled latency baseline. Low achieved occupancy is an observation, not proof that raising occupancy will improve this algorithm."
+
 [validation]
 aoc_cpu = "Full AOC Pkg.test() passed at v0.17.0 release commit"
 aoc_cuda = "Full AOC CUDA suite passed; covariance reconstructor 90/90, including inferred process and offset-view alias regressions"
@@ -101,3 +134,6 @@ aos_amdgpu = "Full AMDGPU hardware target 754/754 passed against registered AOC 
 cpu = "AOS_TOMO_PROFILE_LENSLETS=8 AOS_CPU_PROFILE_REPEATS=10 julia --project=. scripts/profile_model_tomography_cpu_phases.jl --float32-only"
 cuda = "AOS_TOMO_PROFILE_LENSLETS=8 julia --project=test/cuda -e 'using CUDA; include(\"scripts/gpu_profile_model_tomography_phases_cuda.jl\"); include(\"scripts/benchmark_model_tomography_host_prep.jl\"); compare_host_prep(AdaptiveOpticsSim.Backends.CUDABackendTag)'"
 amdgpu = "HSA_OVERRIDE_GFX_VERSION=10.3.0 AOS_TOMO_PROFILE_LENSLETS=8 julia --project=test/amdgpu -e 'using AMDGPU; include(\"scripts/gpu_profile_model_tomography_phases_amdgpu.jl\"); include(\"scripts/benchmark_model_tomography_host_prep.jl\"); compare_host_prep(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)'"
+cpu_counters = "taskset -c 4 perf stat -r 3 -e task-clock,cycles,instructions,branches,branch-misses,cache-references,cache-misses,page-faults,context-switches,cpu-migrations -- env AOS_TOMO_PROFILE_LENSLETS=8 AOS_CPU_PROFILE_REPEATS=10 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_NUM_PRECOMPILE_TASKS=1 julia --heap-size-hint=3G --startup-file=no --project=. scripts/profile_model_tomography_cpu_phases.jl --float32-only"
+cuda_timeline = "nsys profile --trace=cuda,nvtx --sample=none --capture-range=cudaProfilerApi --capture-range-end=stop --output=/tmp/aos-s7-n8-cuda-timeline julia --heap-size-hint=3G --startup-file=no --project=test/cuda -e 'using AdaptiveOpticsSim, CUDA, LinearAlgebra, SparseArrays; include(\"scripts/gpu_profile_model_tomography_phases_contract.jl\"); run_gpu_model_tomography_phase_profile(AdaptiveOpticsSim.Backends.CUDABackendTag; run_label=\"warmup\"); CUDA.@profile external=true run_gpu_model_tomography_phase_profile(AdaptiveOpticsSim.Backends.CUDABackendTag; run_label=\"timeline\")'"
+cuda_counters = "/opt/nvidia/nsight-compute/2026.3.1/ncu --profile-from-start off --kernel-name regex:gpu__cross_von_karman_kernel_ --launch-count 1 --clock-control none --cache-control none --section SpeedOfLight --section MemoryWorkloadAnalysis --section Occupancy --section ComputeWorkloadAnalysis julia --heap-size-hint=3G --startup-file=no --project=test/cuda -e 'using AdaptiveOpticsSim, CUDA, LinearAlgebra, SparseArrays; include(\"scripts/gpu_profile_model_tomography_phases_contract.jl\"); run_gpu_model_tomography_phase_profile(AdaptiveOpticsSim.Backends.CUDABackendTag; run_label=\"warmup\"); CUDA.@profile external=true run_gpu_model_tomography_phase_profile(AdaptiveOpticsSim.Backends.CUDABackendTag; run_label=\"counter-sample\")'"
