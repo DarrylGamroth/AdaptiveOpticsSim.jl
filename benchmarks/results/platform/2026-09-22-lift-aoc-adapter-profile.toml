@@ -1,0 +1,112 @@
+artifact_id = "S4-LIFT-AOS-AOC-ADAPTER-PROFILE-2026-09-22"
+generated_on = "2026-09-22"
+purpose = "Live AOS LiFT physical forward model with registered AOC v0.10 inverse on CPU, CUDA, and AMDGPU"
+implementation_revision = "6e24d621ca7bc0b112126b0dd3b01925627fca78"
+aoc_version = "0.10.0"
+aoc_registered_tree = "d72b3b974c1e3dff9912f1c63fd6f3ae4b707855"
+optimization_priority = "CUDA primary; AMDGPU secondary portability and qualification"
+claim_boundary = "Direct complete calibration operation using AOS physical prediction and analytic Jacobian callbacks; no RTC or captured CUDA/HIP Graph claim"
+
+[contract]
+workload = "16-by-16 Float32 pupil, three Zernike basis modes, two selected inverse coefficients, AOS diffractive focal rate, AOC analytic Jacobian and adaptive-damped normal solve"
+observation_shape = [16, 16]
+selected_modes = [1, 2]
+iterations = 2
+warmup_calls = 10
+unprofiled_samples = 50
+completion_boundary = "AOC process! plus explicit vendor synchronization before each elapsed-time reading"
+correctness_oracle = "Independent AOS/AOC CPU execution, known 8e-9 and -4e-9 metre-OPD coefficients, and unchanged caller-owned observation before and after timing/profile"
+threads = 1
+blas_threads = 1
+cpu_heap_allocation_budget_bytes = 0
+captured_graph_contract = "Not admitted. AOC v0.10 direct accelerator execution allocates host/device storage and synchronizes for diagnostics."
+
+[environment]
+host = "rtc-devel"
+os = "Linux 6.12.107+deb13-amd64 x86_64"
+cpu = "AMD Ryzen 7 6800H"
+julia = "1.12.7"
+nsight_systems = "2026.3.2"
+rocprofiler = "rocprofv3 1.1.0"
+profiling_note = "Nsight and ROCm traces were collected after the implementation commit; documentation changes were pending in the worktree. First-use compilation and preparation are outside sampled calls."
+
+[environment.cuda]
+device = "NVIDIA GeForce RTX 3080"
+driver = "615.71.09"
+runtime = "CUDA 13.4"
+cuda_jl = "6.4.0"
+
+[environment.amdgpu]
+device = "AMD Radeon 680M"
+hardware_architecture = "gfx1035"
+compiled_architecture = "gfx1030"
+hsa_override_gfx_version = "10.3.0"
+runtime = "ROCm 7.2.1"
+amdgpu_jl = "2.8.0"
+
+[cpu]
+p50_ns = 91692
+p99_ns = 102813
+warmed_host_allocated_bytes_per_call = 0
+maximum_truth_error_m = 6.217249e-15
+profile_calls = 5000
+profile_snapshots = 461
+profile_interpretation = "AOS optical formation and analytic Jacobian work, together with AOC validation and solve, appear in the sampled call. The 16-by-16 workload is a boundary check, not a production-sized AO performance claim."
+
+[cuda]
+p50_ns = 4769057
+p99_ns = 4958833
+warmed_host_allocated_bytes_per_call = 552800
+device_allocated_bytes_per_call = 64
+used_device_memory_change_bytes = 64
+maximum_cpu_difference_m = 1.9539925e-14
+maximum_truth_error_m = 1.5987212e-14
+profiled_calls = 20
+kernel_dispatches = 8560
+kernel_time_total_ns = 12318017
+stream_synchronizations = 9560
+device_to_host_copies = 1040
+host_to_device_copies = 160
+device_to_device_copies = 440
+kernel_stream_count = 1
+kernel_stream_id = 13
+largest_kernel_family = "AOC invalid-pair reduction, 2920 dispatches at about 1.28 microseconds each"
+trace = "/tmp/aos-lift-aoc-cuda-6e24d62.nsys-rep"
+
+[amdgpu]
+p50_ns = 7366053
+p99_ns = 7900614
+warmed_host_allocated_bytes_per_call = 836768
+device_allocated_bytes_per_call = 40
+used_device_memory_change_bytes = 32
+maximum_cpu_difference_m = 5.3290705e-15
+maximum_truth_error_m = 1.15463195e-14
+profiled_calls = 5
+kernel_dispatches = 2440
+kernel_time_total_ns = 3962837
+stream_synchronizations = 2161
+hip_memcpy_with_stream_calls = 360
+kernel_stream_count = 1
+kernel_stream_id = 1
+largest_kernel_family = "AOC invalid-pair reduction, 730 dispatches"
+trace = "/tmp/aos-lift-aoc-amdgpu-6e24d62/lift_kernel_trace.csv"
+
+[interpretation]
+observed = "Both complete device calls use one kernel stream in their selected trace. The current limit is many small launches, validation reductions, host mirrors, and synchronization rather than one long kernel."
+derived = "A dedicated stream alone cannot remove the measured internal synchronization or AOC allocations. Stream pipelining would require independent work, explicit cross-stream dependencies, and per-frame storage ownership."
+unmeasured = "No Nsight Compute or AMD hardware-counter pass was taken because the timeline did not identify an isolated kernel-level optimization question. No end-to-end RTC latency or multi-frame overlap was measured."
+follow_up = "Investigate latency-oriented stream/graph pipelining in JuliaFilterGraph issue #31; optimize AOC reductions and AOS synchronous kernel phases only with focused evidence."
+
+[validation]
+cpu_lift_suite = "158/158 passed with registered AOC v0.10"
+cuda_hardware_target = "693/693 passed"
+amdgpu_hardware_target = "699/699 passed"
+gpu_adapter_checks = "AOC analytic and numerical live-model CPU/device parity, inferred process!, device-resident result/workspace, input immutability, and backend mismatch rejection passed on each vendor"
+
+[commands]
+cpu = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --project=. --startup-file=no benchmarks/profile_lift_aoc_cpu.jl"
+cpu_sampling = "AOS_LIFT_PROFILE=1 AOS_LIFT_PROFILE_CALLS=5000 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --project=. --startup-file=no benchmarks/profile_lift_aoc_cpu.jl"
+cuda = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --project=benchmarks/cuda --startup-file=no benchmarks/profile_lift_aoc_cuda.jl"
+cuda_timeline = "AOS_LIFT_PROFILE=1 AOS_LIFT_PROFILE_CALLS=20 nsys profile --trace=cuda,nvtx --capture-range=cudaProfilerApi --capture-range-end=stop --sample=none --cpuctxsw=none -- julia --project=benchmarks/cuda --startup-file=no benchmarks/profile_lift_aoc_cuda.jl"
+amdgpu = "HSA_OVERRIDE_GFX_VERSION=10.3.0 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --project=benchmarks/amdgpu --startup-file=no benchmarks/profile_lift_aoc_amdgpu.jl"
+amdgpu_timeline = "HSA_OVERRIDE_GFX_VERSION=10.3.0 AOS_LIFT_PROFILE=1 AOS_LIFT_PROFILE_CALLS=5 rocprofv3 --runtime-trace --marker-trace --selected-regions --output-format csv -- julia --project=benchmarks/amdgpu --startup-file=no benchmarks/profile_lift_aoc_amdgpu.jl"

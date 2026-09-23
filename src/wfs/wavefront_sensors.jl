@@ -32,10 +32,12 @@ import ..AdaptiveOpticsSim:
     runtime_rng
 
 import ..Backends:
+    AMDGPUBackend,
     AbstractArrayBackend,
     AbstractComputeDevice,
     AcceleratorStyle,
     CPUBackend,
+    CUDABackend,
     DirectReductionStrategy,
     ExecutionStyle,
     HostComputeDevice,

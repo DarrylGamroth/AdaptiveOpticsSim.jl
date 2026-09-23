@@ -2546,6 +2546,77 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     normalized_observation = LiFTObservation(lift_forward,
         normalized_values; domain=normalized_domain)
 
+    aoc_cpu_model = LiFTForwardModel(cpu_forward)
+    aoc_device_model = LiFTForwardModel(lift_forward)
+    @test aoc_device_model.plan === WavefrontSensors.lift_forward_plan(lift_forward)
+    @test aoc_device_model.plan.pupil_amplitude isa array_backend
+    aoc_cpu_specification = AOCPhaseRetrieval.LiFTSpecification(
+        aoc_cpu_model, AOCPhaseRetrieval.LiFTPhotonRate())
+    aoc_device_specification = AOCPhaseRetrieval.LiFTSpecification(
+        aoc_device_model, AOCPhaseRetrieval.LiFTPhotonRate())
+    aoc_device_backend = KernelAbstractions.get_backend(lift_rate)
+
+    for jacobian_method in (
+        AOCPhaseRetrieval.LiFTAnalyticJacobian(),
+        AOCPhaseRetrieval.LiFTNumericalJacobian(T(1e-9)),
+    )
+        aoc_method = AOCPhaseRetrieval.LiFT(
+            iterations=2,
+            jacobian_method=jacobian_method,
+            solve_mode=AOCPhaseRetrieval.LiFTSolveNormalEquations(),
+            damping=AOCPhaseRetrieval.LiFTAdaptiveLevenbergMarquardt(),
+            mode_indices=(1, 2),
+            model_scaling=AOCPhaseRetrieval.LiFTPhysicalRatePreservation(),
+            check_convergence=false,
+        )
+        aoc_cpu_plan = AdaptiveOpticsCalibration.prepare(
+            aoc_method, aoc_cpu_specification)
+        aoc_device_plan = AdaptiveOpticsCalibration.prepare(
+            aoc_method,
+            AdaptiveOpticsCalibration.KernelExecution(
+                aoc_device_specification, aoc_device_backend;
+                workgroup_size=64))
+        aoc_cpu_result = AdaptiveOpticsCalibration.allocate_result(
+            aoc_cpu_plan)
+        aoc_device_result = AdaptiveOpticsCalibration.allocate_result(
+            aoc_device_plan)
+        aoc_cpu_workspace = AdaptiveOpticsCalibration.allocate_workspace(
+            aoc_cpu_plan)
+        aoc_device_workspace = AdaptiveOpticsCalibration.allocate_workspace(
+            aoc_device_plan)
+        aoc_cpu_inputs = AOCPhaseRetrieval.LiFTInputs(copy(cpu_rate))
+        aoc_device_observation = copy(lift_rate)
+        aoc_device_observation_snapshot = Array(aoc_device_observation)
+        aoc_device_inputs = AOCPhaseRetrieval.LiFTInputs(
+            aoc_device_observation)
+
+        @test (@inferred AdaptiveOpticsCalibration.process!(
+            aoc_cpu_result, aoc_cpu_workspace, aoc_cpu_plan,
+            aoc_cpu_inputs)) === aoc_cpu_result
+        @test (@inferred AdaptiveOpticsCalibration.process!(
+            aoc_device_result, aoc_device_workspace, aoc_device_plan,
+            aoc_device_inputs)) === aoc_device_result
+        @test AOCPhaseRetrieval.lift_coefficients(aoc_device_result) isa
+            array_backend
+        @test aoc_device_workspace.inverse.jacobian isa array_backend
+        @test aoc_device_workspace.inverse.model_workspace.opd isa
+            array_backend
+        @test all(isfinite,
+            Array(AOCPhaseRetrieval.lift_coefficients(aoc_device_result)))
+        @test Array(AOCPhaseRetrieval.lift_coefficients(
+            aoc_device_result)) ≈ AOCPhaseRetrieval.lift_coefficients(
+            aoc_cpu_result) rtol=T(2e-3) atol=T(2e-11)
+        @test Array(aoc_device_inputs.observation) ==
+            aoc_device_observation_snapshot
+    end
+
+    mismatched_aoc_method = AOCPhaseRetrieval.LiFT(
+        iterations=1, mode_indices=(1, 2), check_convergence=false)
+    @test_throws ArgumentError AdaptiveOpticsCalibration.prepare(
+        mismatched_aoc_method,
+        AdaptiveOpticsCalibration.KernelExecution(
+            aoc_device_specification, KernelAbstractions.CPU()))
+
     for numerical in (false, true)
         definition = LiFT(iterations=2, mode_ids=(1, 2),
             jacobian_method=numerical ? LiFTNumericalJacobian() :
