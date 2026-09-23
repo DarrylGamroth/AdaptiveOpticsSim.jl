@@ -23,6 +23,7 @@ BLAS.set_num_threads(1)
 Backends.set_fft_provider_threads!(1)
 
 const AOCReconstructors = AdaptiveOpticsCalibration.Reconstructors
+const AOCMisregistration = AdaptiveOpticsCalibration.Misregistration
 const AOCModalBases = AdaptiveOpticsCalibration.ModalBases
 const AOCPhaseRetrieval = AdaptiveOpticsCalibration.PhaseRetrieval
 
@@ -247,11 +248,14 @@ end
 
 function assert_meta_sensitivity_contract(meta::Calibration.MetaSensitivity,
     n_fields::Int)
-    @test meta.calib0 isa ControlMatrix
-    @test meta.meta isa ControlMatrix
+    @test meta.D0 isa AbstractMatrix
+    @test meta.J isa AbstractMatrix
+    @test meta.field_order isa Tuple
+    @test meta.field_units isa Tuple
     @test length(meta.field_order) == n_fields
-    @test size(meta.meta.D, 2) == n_fields
-    @test meta.meta.M !== nothing
+    @test length(meta.field_units) == n_fields
+    @test size(meta.J, 1) == length(meta.D0)
+    @test size(meta.J, 2) == n_fields
 end
 
 function subharmonic_tiptilt_power(phs::AbstractMatrix)

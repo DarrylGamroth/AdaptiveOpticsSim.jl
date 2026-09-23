@@ -199,7 +199,7 @@ function run_cpu_hotpath_card_benchmarks()
     )
     results = map(probe -> run_probe(probe...), probes)
     println("recommendation")
-    println("  Keep the benchmarked CPU SPRINT AD path as default.")
+    println("  Keep the benchmarked CPU meta-sensitivity AD path as default.")
     println("  The standalone Gaussian influence AD probe was removed because it allocated without a demonstrated benefit.")
     return results
 end

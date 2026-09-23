@@ -281,14 +281,21 @@ end
             return local_meta, local_fd, local_ad
         end
     end
-    est = Calibration.estimate_misregistration(
-        meta, meta.calib0.D; misregistration_zero=Misregistration())
-    @test est.shift_x ≈ 0.0
-    @test est.shift_y ≈ 0.0
+    meta_specification = AOCMisregistration.MetaSensitivityEstimateSpecification(
+        meta.D0,
+        meta.J,
+        collect(meta.field_order),
+        collect(meta.field_units),
+    )
+    meta_plan = AdaptiveOpticsCalibration.prepare(
+        AOCMisregistration.MetaSensitivityEstimate(), meta_specification)
+    meta_result = AdaptiveOpticsCalibration.process(meta_plan,
+        AOCMisregistration.MetaSensitivityEstimateInputs(meta.D0))
+    @test AOCMisregistration.parameter_offsets(meta_result) ≈ zeros(2)
 
-    @test meta_ad.field_order == fields
-    @test isapprox(meta_ad.calib0.D, meta_fd.calib0.D; rtol=1e-12, atol=1e-12)
-    @test isapprox(meta_ad.meta.D, meta_fd.meta.D; rtol=2e-3, atol=1e-9)
+    @test meta_ad.field_order == Tuple(fields)
+    @test isapprox(meta_ad.D0, meta_fd.D0; rtol=1e-12, atol=1e-12)
+    @test isapprox(meta_ad.J, meta_fd.J; rtol=2e-3, atol=1e-9)
 
     @testset "Frozen S6 CPU source characterization" begin
         fixture = TOML.parsefile(joinpath(@__DIR__, "..", "fixtures",
@@ -325,10 +332,13 @@ end
         j_ad = fixture_matrix("J_ad")
         j_fd = fixture_matrix("J_finite_difference")
         d_observed = fixture_matrix("D_observed")
-        @test meta_ad.calib0.D ≈ d0 rtol=1e-12 atol=1e-22
-        @test meta_fd.calib0.D ≈ d0 rtol=1e-12 atol=1e-22
-        @test meta_ad.meta.D ≈ j_ad rtol=1e-12 atol=1e-22
-        @test meta_fd.meta.D ≈ j_fd rtol=1e-12 atol=1e-22
+        @test meta_ad.D0 ≈ d0 rtol=1e-12 atol=1e-22
+        @test meta_fd.D0 ≈ d0 rtol=1e-12 atol=1e-22
+        @test meta_ad.J ≈ j_ad rtol=1e-12 atol=1e-22
+        @test meta_fd.J ≈ j_fd rtol=1e-12 atol=1e-22
+        @test meta_ad.field_units == Tuple([
+            fixture["field_units"][field] for field in fixture["field_order"]
+        ])
 
         observed = fixture["observed_misregistration"]
         observed_misregistration = Misregistration(
@@ -350,30 +360,106 @@ end
                 ("finite_difference", meta_fd))
             inverse = fixture["inverse"]
             diagnostics = fixture["inverse_diagnostics"][name]
-            @test source_meta.meta.method isa AOCReconstructors.TSVDInverse
-            @test nameof(typeof(source_meta.meta.method)) ==
+            singular_values = svdvals(source_meta.J)
+            @test singular_values ≈ diagnostics["singular_values"] rtol=1e-12 atol=1e-22
+            specification = AOCMisregistration.MetaSensitivityEstimateSpecification(
+                source_meta.D0,
+                source_meta.J,
+                collect(source_meta.field_order),
+                collect(source_meta.field_units),
+            )
+            plan = AdaptiveOpticsCalibration.prepare(
+                AOCMisregistration.MetaSensitivityEstimate(), specification)
+            result = AdaptiveOpticsCalibration.process(plan,
+                AOCMisregistration.MetaSensitivityEstimateInputs(
+                    observed_matrix.matrix))
+            @test plan.inverse_method isa AOCReconstructors.TSVDInverse
+            @test nameof(typeof(plan.inverse_method)) ==
                 Symbol(inverse["method"])
-            @test source_meta.meta.method.rtol == inverse["rtol"]
-            @test source_meta.meta.method.atol == inverse["atol"]
-            @test source_meta.meta.n_trunc == inverse["n_trunc"]
-            @test source_meta.meta.effective_rank == diagnostics["effective_rank"]
-            @test source_meta.meta.cond ≈ diagnostics["condition_number"]
-            @test source_meta.meta.singular_values ≈
-                diagnostics["singular_values"] rtol=1e-12 atol=1e-22
+            @test plan.inverse_method.rtol == inverse["rtol"]
+            @test plan.inverse_method.atol == inverse["atol"]
+            @test plan.inverse_method.n_trunc == inverse["n_trunc"]
+            @test AOCMisregistration.effective_rank(result) ==
+                diagnostics["effective_rank"]
+            @test AOCMisregistration.condition_number(result) ≈
+                diagnostics["condition_number"]
 
-            delta = source_meta.meta.M * vec(observed_matrix.matrix .-
-                source_meta.calib0.D)
+            delta = AOCMisregistration.parameter_offsets(result)
             expected_delta = fixture["unrounded_delta"][name]["values"]
             @test delta ≈ expected_delta rtol=1e-12 atol=1e-15
 
-            estimated = Calibration.estimate_misregistration(source_meta,
-                observed_matrix.matrix; misregistration_zero=Misregistration(),
-                precision=3)
+            estimated = Misregistration()
+            for (index, field) in enumerate(source_meta.field_order)
+                legacy_delta = round(delta[index]; digits=3)
+                estimated = Calibration.update_misregistration(
+                    estimated,
+                    field,
+                    misregistration_component(estimated, field) + legacy_delta,
+                )
+            end
             expected = fixture["legacy_estimated_offsets"][name]
             for field in fields
                 @test misregistration_component(estimated, field) ==
                     expected[String(field)]
             end
+        end
+
+        @testset "explicit one-step zero-point reacquisition composition" begin
+            initial_specification =
+                AOCMisregistration.MetaSensitivityEstimateSpecification(
+                    meta_ad.D0,
+                    meta_ad.J,
+                    collect(meta_ad.field_order),
+                    collect(meta_ad.field_units),
+                )
+            initial_plan = AdaptiveOpticsCalibration.prepare(
+                AOCMisregistration.MetaSensitivityEstimate(), initial_specification)
+            initial_result = AdaptiveOpticsCalibration.process(initial_plan,
+                AOCMisregistration.MetaSensitivityEstimateInputs(
+                    observed_matrix.matrix))
+            initial_offsets = AOCMisregistration.parameter_offsets(initial_result)
+
+            updated_zero = Misregistration()
+            for (index, field) in enumerate(meta_ad.field_order)
+                legacy_offset = round(initial_offsets[index]; digits=3)
+                updated_zero = Calibration.update_misregistration(
+                    updated_zero,
+                    field,
+                    misregistration_component(updated_zero, field) + legacy_offset,
+                )
+            end
+
+            reacquired_meta = Calibration.compute_meta_sensitivity_matrix(
+                tel,
+                dm,
+                wfs,
+                basis.M2C[:, 1:2];
+                misregistration_zero=updated_zero,
+                n_mis_reg=length(fields),
+                field_order=fields,
+                sensitivity=:ad,
+            )
+            reacquired_specification =
+                AOCMisregistration.MetaSensitivityEstimateSpecification(
+                    reacquired_meta.D0,
+                    reacquired_meta.J,
+                    collect(reacquired_meta.field_order),
+                    collect(reacquired_meta.field_units),
+                )
+            reacquired_plan = AdaptiveOpticsCalibration.prepare(
+                AOCMisregistration.MetaSensitivityEstimate(), reacquired_specification)
+            reacquired_result = AdaptiveOpticsCalibration.process(reacquired_plan,
+                AOCMisregistration.MetaSensitivityEstimateInputs(
+                    observed_matrix.matrix))
+            reacquired_offsets =
+                AOCMisregistration.parameter_offsets(reacquired_result)
+
+            @test reacquired_meta.field_order == meta_ad.field_order
+            @test reacquired_meta.field_units == meta_ad.field_units
+            @test reacquired_meta.D0 != meta_ad.D0
+            @test all(isfinite, reacquired_offsets)
+            @test norm(observed_matrix.matrix - reacquired_meta.D0) <
+                  norm(observed_matrix.matrix - meta_ad.D0)
         end
     end
 
@@ -382,12 +468,10 @@ end
         @test_throws MethodError Calibration.compute_meta_sensitivity_matrix(
             tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2,
             cache_path=cache_path)
-        @test_throws MethodError Calibration.SPRINT(
-            tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2,
-            save_sensitivity=false)
-        @test_throws MethodError Calibration.SPRINT(
-            tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2,
-            recompute_sensitivity=true)
+        @test !isdefined(Calibration, :SPRINT)
+        @test !isdefined(Calibration, :estimate_misregistration)
+        @test !isdefined(Calibration, :estimate!)
+        @test !isdefined(Calibration, :compute_meta_sensitivity_matrix_ad_probe)
         @test !ispath(cache_path)
         @test isempty(readdir(root))
     end
@@ -453,24 +537,13 @@ end
         tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
     assert_meta_sensitivity_contract(meta, 2)
 
-    sprint = Calibration.SPRINT(
-        tel, dm, wfs, basis.M2C[:, 1:2]; n_mis_reg=2)
-    @test sprint.meta isa Calibration.MetaSensitivity
-    @test !hasfield(typeof(sprint), :cache_path)
-    @test !hasfield(typeof(sprint), :save_sensitivity)
-    @test !hasfield(typeof(sprint), :recompute_sensitivity)
-    est = Calibration.estimate!(sprint, meta.calib0.D)
-    @test est isa Misregistration
-    mktempdir() do root
-        cd(root) do
-            refreshed = Calibration.estimate!(sprint, meta.calib0.D;
-                n_update_zero_point=1, tel=tel, dm=dm, wfs=wfs,
-                basis=basis.M2C[:, 1:2])
-            @test refreshed isa Misregistration
-            @test sprint.meta isa Calibration.MetaSensitivity
-            @test isempty(readdir())
-        end
-    end
+    meta_specification = AOCMisregistration.MetaSensitivityEstimateSpecification(
+        meta.D0, meta.J, collect(meta.field_order), collect(meta.field_units))
+    meta_plan = AdaptiveOpticsCalibration.prepare(
+        AOCMisregistration.MetaSensitivityEstimate(), meta_specification)
+    meta_result = AdaptiveOpticsCalibration.process(meta_plan,
+        AOCMisregistration.MetaSensitivityEstimateInputs(meta.D0))
+    @test AOCMisregistration.parameter_offsets(meta_result) ≈ zeros(2)
 
     diversity = fill(eltype(pupil.opd)(1e-9), size(pupil.opd))
     lift_basis = basis_from_m2c(dm, tel, basis.M2C)

@@ -36,7 +36,6 @@ function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirro
         misregistration=misregistration_zero, T=T)
     calib0 = _interaction_matrix_for_sensitivity(dm0, wfs, pupil, basis,
         source, amplitude)
-    calib0_control_matrix = ControlMatrix(calib0.matrix)
 
     d_modes = _gaussian_dm_mode_parameter_jacobians(tel, dm0, fields)
     base_modes = sampled_influence_matrix(dm0)
@@ -44,13 +43,7 @@ function _compute_meta_sensitivity_matrix_ad(tel::Telescope, dm::DeformableMirro
         calib0.matrix,
         base_modes, d_modes, T(amplitude), T(direction_epsilon))
 
-    meta_control_matrix = ControlMatrix(meta)
-    return MetaSensitivity(meta_control_matrix, calib0_control_matrix,
-        epsilon, collect(fields))
-end
-
-function compute_meta_sensitivity_matrix_ad_probe(args...; kwargs...)
-    return compute_meta_sensitivity_matrix(args...; sensitivity=:ad, kwargs...)
+    return MetaSensitivity(calib0.matrix, meta, epsilon, fields)
 end
 
 function _require_cpu_ad_probe(tel, dm, wfs=nothing)

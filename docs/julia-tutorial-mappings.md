@@ -30,7 +30,7 @@ Each script exposes a `main()` function and logs a short completion summary with
 | `tutorials/how_to_spatial_filter.py` | `examples/tutorials/spatial_filter.jl` | Spatial filtering without baking optics into the telescope type |
 | `tutorials/how_to_NCPA.py` | `examples/tutorials/ncpa.jl` | Basis-driven NCPA synthesis and application |
 | `tutorials/how_to_LIFT.ipynb` | `examples/tutorials/lift.jl` | AOS LiFT physical forward modeling and analytic Jacobian callback; inverse recovery uses `AdaptiveOpticsCalibration.PhaseRetrieval` directly |
-| `tutorials/how_to_SPRINT.py` | `examples/tutorials/sprint.jl` | Mis-registration sensitivity and estimation |
+| `tutorials/how_to_SPRINT.py` | `examples/tutorials/misregistration.jl` | AOS physical misregistration sensitivity with direct `AdaptiveOpticsCalibration.Misregistration` estimation |
 | `tutorials/AO_transfer_function.py` | `examples/tutorials/transfer_function.jl` | Closed-loop rejection and closed-loop transfer functions |
 | `tutorials/AO_closed_loop_ShackHartmannWFS_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained Shack–Hartmann plant/RTC fixture; AOS owns the plant and FGA/JFG owns the RTC |
 | `tutorials/AO_closed_loop_Pyramid_WFS.py` | [`examples/integrations/filter_graph_algorithms/`](../examples/integrations/filter_graph_algorithms/) | Maintained complete-frame Pyramid plant/RTC fixture; AOS owns optical formation and detector acquisition, and FGA owns I4Q estimation and control |
