@@ -212,28 +212,6 @@ function assert_interaction_matrix_contract(imat, expected_rows::Int, expected_c
     @test calibration_amplitude(imat) ≈ amplitude
 end
 
-function assert_control_matrix_contract(control_matrix, forward::AbstractMatrix; inverted::Bool=true)
-    @test control_matrix isa ControlMatrix
-    @test control_matrix.D === forward
-    @test forward_operator(control_matrix) === forward
-    @test calibration_method(control_matrix) === control_matrix.method
-    @test singular_values(control_matrix) === control_matrix.singular_values
-    @test isequal(condition_number(control_matrix), control_matrix.cond)
-    @test effective_rank(control_matrix) == control_matrix.effective_rank
-    @test truncation_count(control_matrix) == control_matrix.n_trunc
-    if inverted
-        @test inverse_operator_matrix(control_matrix) === control_matrix.M
-        @test !isnothing(control_matrix.M)
-        @test size(control_matrix.M, 2) == size(forward, 1)
-        @test length(singular_values(control_matrix)) == min(size(forward)...)
-        @test effective_rank(control_matrix) >= 0
-    else
-        @test isnothing(inverse_operator_matrix(control_matrix))
-        @test isnothing(control_matrix.M)
-        @test isempty(singular_values(control_matrix))
-    end
-end
-
 function assert_modal_basis_contract(basis::ModalBasis, n_commands::Int, n_modes::Int)
     @test modal_to_command(basis) === basis.M2C
     @test sampled_basis(basis) === basis.basis

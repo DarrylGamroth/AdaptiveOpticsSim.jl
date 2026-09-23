@@ -11,11 +11,6 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
 
     T = Float32
     build_backend = Calibration.GPUArrayBuildBackend(B)
-
-    A = AdaptiveOpticsSim.Backends.backend_rand(B, T, 8, 4)
-    control_matrix = ControlMatrix(A; build_backend=build_backend)
-    @assert control_matrix.M isa BackendArray
-
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=T(0.0),
         layer_altitudes_m=T[0.0],

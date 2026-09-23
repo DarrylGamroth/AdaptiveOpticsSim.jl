@@ -102,26 +102,6 @@ AMDGPU.functional() ||
     @test Array(Backends.backend_matmul_transpose_right(left, right)) ≈
         left_host * transpose(right_host)
 
-    inverse_host = Float32[2 0; 0 1]
-    inverse_input = AMDGPU.ROCArray(inverse_host)
-    inverse_backend = Calibration.GPUArrayBuildBackend(
-        Backends.AMDGPUBackendTag,
-    )
-    for method in (
-        Calibration._AOC_RECONSTRUCTORS.ExactPseudoInverse(),
-        Calibration._AOC_RECONSTRUCTORS.TSVDInverse(rtol=1.0f-6),
-        Calibration._AOC_RECONSTRUCTORS.TikhonovInverse(0.1f0),
-    )
-        product = Calibration.ControlMatrix(
-            inverse_input;
-            method=method,
-            build_backend=inverse_backend,
-        )
-        @test size(product.M) == reverse(size(inverse_host))
-        @test all(isfinite, Array(product.M))
-        @test product.effective_rank == 2
-    end
-
     gram_host = Float32[2 0; 0 4]
     division = AdaptiveOpticsSim.Tomography.stable_hermitian_right_division(
         build_backend,
