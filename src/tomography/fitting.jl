@@ -4,6 +4,13 @@ struct TomographyFitting{T<:AbstractFloat, M<:AbstractMatrix{T}}
     resolution::Int
 end
 
+"""
+    TomographyFitting(influence_functions; regularization=sqrt(eps(T)), resolution=...)
+
+Prepare sampled-DM fitting with the AOC compact-SVD pseudoinverse. The legacy
+`regularization` keyword is a relative singular-value cutoff, not Tikhonov
+regularization; its default maps to `1e-15` for source parity.
+"""
 function TomographyFitting(
     influence_functions::AbstractMatrix{T};
     regularization::Real=sqrt(eps(T)),
@@ -13,14 +20,24 @@ function TomographyFitting(
         throw(InvalidConfiguration("influence_functions must have at least one row"))
     size(influence_functions, 2) > 0 ||
         throw(InvalidConfiguration("influence_functions must have at least one column"))
-    regularization >= 0 || throw(InvalidConfiguration("regularization must be non-negative"))
+    isfinite(regularization) && regularization >= 0 ||
+        throw(InvalidConfiguration("regularization must be finite and non-negative"))
 
-    # Use a pseudoinverse rather than a regularized normal-equations solve so
-    # rank-deficient sampled bases retain least-squares semantics.
+    # Preserve the source pseudoinverse threshold while delegating the cold
+    # compact-SVD inverse to Calibration. The default is a source convention,
+    # not Tikhonov regularization.
     pinv_rtol = regularization == sqrt(eps(T)) ? T(1e-15) : T(regularization)
-    fitting_matrix = pinv(Matrix(influence_functions); rtol=pinv_rtol)
+    sampled_influences = Matrix(influence_functions)
+    reconstructors = AdaptiveOpticsCalibration.Reconstructors
+    specification = reconstructors.ReconstructorSpecification(
+        size(sampled_influences, 1), size(sampled_influences, 2), T)
+    plan = AdaptiveOpticsCalibration.prepare(
+        reconstructors.TSVDInverse(rtol=pinv_rtol), specification)
+    product = AdaptiveOpticsCalibration.process(
+        plan, reconstructors.SVDReconstructorInputs(sampled_influences))
+    fitting_matrix = reconstructors.reconstructor(product)
     return TomographyFitting{T, typeof(fitting_matrix)}(
-        Matrix(influence_functions),
+        sampled_influences,
         fitting_matrix,
         Int(resolution),
     )
