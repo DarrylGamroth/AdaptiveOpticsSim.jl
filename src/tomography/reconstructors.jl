@@ -206,13 +206,6 @@ end
     end
 end
 
-@kernel function submatrix_extract_kernel!(out, src, rows, cols, n_rows::Int, n_cols::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n_rows && j <= n_cols
-        @inbounds out[i, j] = src[rows[i], cols[j]]
-    end
-end
-
 @kernel function accumulate_selected_block_kernel!(block, cov, positions, n_valid::Int)
     i, j = @index(Global, NTuple)
     if i <= n_valid && j <= n_valid
@@ -905,8 +898,9 @@ end
 Assemble the phase cross-covariance `Cox` between fit directions and guide-star
 pupil samples.
 
-The result is stacked over fit sources, then later averaged or extracted into
-the final statistical reconstructor. CPU assembly delegates its numerical
+The result is stacked over fit sources. The model builder supplies its phase
+grid mask and averages the selected fit sources for the statistical
+reconstructor. CPU assembly delegates its numerical
 covariance evaluation to AdaptiveOpticsCalibration and therefore supports
 Float32 and Float64. Accelerator assembly remains local.
 """
@@ -1086,28 +1080,6 @@ function _fit_source_average(cross::AbstractArray{T,3}, weights::AbstractVector{
     launch_kernel_async!(style, fit_source_average_kernel!, out, cross, weights_native, size(cross, 1), size(cross, 2), size(cross, 3);
         ndrange=size(out))
     return out
-end
-
-function _extract_submatrix(src::AbstractMatrix{T}, rows::AbstractVector{Int}, cols::AbstractVector{Int}) where {T}
-    return src[rows, cols]
-end
-
-function _extract_submatrix(src::AbstractMatrix{T}, rows::AbstractVector{Int}, cols::AbstractVector{Int}, ::ScalarCPUStyle) where {T}
-    return src[rows, cols]
-end
-
-function _extract_submatrix(src::AbstractMatrix{T}, rows::AbstractVector{Int}, cols::AbstractVector{Int}, style::AcceleratorStyle) where {T}
-    out = similar(src, T, length(rows), length(cols))
-    rows_native = similar(src, Int, length(rows))
-    cols_native = similar(src, Int, length(cols))
-    copyto!(rows_native, rows)
-    copyto!(cols_native, cols)
-    launch_kernel_async!(style, submatrix_extract_kernel!, out, src, rows_native, cols_native, length(rows), length(cols); ndrange=size(out))
-    return out
-end
-
-function _extract_submatrix(src::AbstractMatrix{T}, rows::AbstractVector{Int}, cols::AbstractVector{Int}, backend::BuildBackend) where {T}
-    return _extract_submatrix(src, rows, cols, execution_style(src))
 end
 
 function stable_hermitian_right_division(rhs::AbstractMatrix{T}, css::AbstractMatrix{T}) where {T<:AbstractFloat}
@@ -1560,11 +1532,9 @@ function build_reconstructor(
     gamma_t = SparseMatrixCSC{T, Int}(gamma_single)
     gamma = blockdiag(ntuple(_ -> gamma_t, asterism.n_lgs)...)
     cxx = auto_correlation(build_backend, atmosphere, asterism, wfs, grid_mask)
-    cross = cross_correlation(build_backend, atmosphere, asterism, wfs, tomography)
-    cox_full = _fit_source_average(cross, _equal_fit_source_weights(tomography))
-    row_positions = findall(vec(grid_mask))
-    col_positions = findall(repeat(vec(grid_mask), asterism.n_lgs))
-    cox = _extract_submatrix(cox_full, row_positions, col_positions, build_backend)
+    cross = cross_correlation(build_backend, atmosphere, asterism, wfs, tomography;
+        grid_mask=grid_mask)
+    cox = _fit_source_average(cross, _equal_fit_source_weights(tomography))
     gamma_native = materialize_build(build_backend, gamma, gamma)
     cxx_native = materialize_build(build_backend, gamma_native, cxx)
     cox_native = materialize_build(build_backend, gamma_native, cox)

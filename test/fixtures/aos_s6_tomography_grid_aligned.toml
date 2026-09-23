@@ -1,0 +1,47 @@
+schema = "test.adaptive-optics-sim/tomography-grid-aligned/1"
+source_repository = "AdaptiveOpticsSim.jl"
+source_path = "src/tomography/reconstructors.jl"
+source_function = "build_reconstructor(ModelBasedTomography(), ...)"
+source_fixture = "aos_s6_tomography_cpu.toml"
+array_backend = "CPU"
+float_type = "Float64"
+storage_order = "Julia column-major vec order"
+grid_mask_shape = [11, 11]
+active_linear_indices = [49, 50, 51, 60, 61, 62, 71, 72, 73]
+guide_stars = 1
+fit_sources = 1
+simulation_slopes = [-0.2, 0.1]
+rtol = 1e-10
+atol = 1e-18
+
+[provenance]
+issue = "AdaptiveOpticsSim.jl#341"
+source_base_revision = "7e54f1a0a3389d311a9ae870b4848ad42e861fc0"
+method = "CPU Float64 ModelBasedTomography with the gradient and cross-covariance on the same 11-by-11 masked pupil grid; AdaptiveOpticsCalibration v0.15.1 numerical covariance and solve"
+legacy_difference = "The source fixture records a default 49-by-49 cross-covariance grid whose extracted indices are not the gradient grid coordinates for this one-lenslet case."
+generation_command = '''
+JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_PKG_OFFLINE=true julia --startup-file=no --project=. -e '
+using AdaptiveOpticsSim
+using AdaptiveOpticsSim.Tomography
+atm = TomographyAtmosphereParams(zenith_angle_deg=0.0, layer_altitudes_m=[0.0], L0=25.0, r0_zenith=0.2, fractional_cn2=[1.0], reference_wavelength_m=500e-9, wind_direction_deg=[0.0], wind_speed=[10.0])
+lgs = LGSAsterismParams(radius_arcsec=7.6, wavelength_m=589e-9, base_height_m=90_000.0, n_lgs=1)
+wfs = LGSWFSParams(pupil_diameter_m=8.0, n_lenslets=1, n_px=8, field_stop_size_arcsec=2.0, valid_lenslet_map=trues(1,1), lenslet_grid_rotations_rad=zeros(1), lenslet_grid_offsets_fraction=zeros(2,1))
+tomo = TomographyParams(n_fit_src=1, fov_optimization_arcsec=0.0)
+dm = TomographyDMParams(heights_m=[0.0], pitch_m=[0.5], cross_coupling=0.2, n_actuators=[2], valid_actuators=trues(2,2))
+model = build_reconstructor(ModelBasedTomography(), atm, lgs, wfs, tomo, dm; build_backend=AdaptiveOpticsSim.Calibration.CPUBuildBackend())
+command_reconstructor = assemble_reconstructor_and_fitting(model, dm; n_channels=1, slope_order=SimulationSlopes(), scaling_factor=2.0, build_backend=AdaptiveOpticsSim.Calibration.CPUBuildBackend())
+println("K_shape=", size(command_reconstructor.matrix))
+println("K_values=", repr(vec(command_reconstructor.matrix)))
+println("command=", repr(dm_commands(command_reconstructor, [-0.2,0.1])))
+println("Cxx_Cox_max_abs=", maximum(abs.(model.operators.cxx .- model.operators.cox)))
+'
+'''
+
+[command_matrix]
+shape = [4, 2]
+values = [9.239727286470794e-7, 9.239727286470791e-7, -9.239727286470787e-7, -9.239727286470795e-7, 9.239727286470794e-7, -9.239727286470784e-7, 9.23972728647079e-7, -9.239727286470791e-7]
+unit = "scaled actuator coordinate per simulation slope coordinate"
+
+[command]
+values = [-9.239727286470794e-8, -2.7719181859412367e-7, 2.7719181859412367e-7, 9.2397272864708e-8]
+unit = "scaled actuator coordinate"
