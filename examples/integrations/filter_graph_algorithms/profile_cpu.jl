@@ -1,5 +1,7 @@
 using Profile
 
+const AOS_FGA_SOURCE_DIRECTION_STYLE = Val(:frozen)
+include("source_direction_keywords.jl")
 include("s1_lockstep.jl")
 include("s4_pyramid.jl")
 using .AOSFGALockstep

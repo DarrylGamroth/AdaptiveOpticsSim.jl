@@ -469,11 +469,11 @@ function _prepare_plant()
         T=T,
     )
     pupil = PupilFunction(telescope; T=T)
-    source = Source(
+    source = Source(;
         band=_SOURCE_BAND,
         magnitude=_SOURCE_MAGNITUDE,
-        separation_arcsec=_SOURCE_SEPARATION_ARCSEC,
-        position_angle_deg=_SOURCE_POSITION_ANGLE_DEG,
+        Main.source_direction_keywords(Main.AOS_FGA_SOURCE_DIRECTION_STYLE,
+            _SOURCE_SEPARATION_ARCSEC, _SOURCE_POSITION_ANGLE_DEG)...,
         wavelength=_SOURCE_WAVELENGTH_M,
         photon_irradiance=_SOURCE_PHOTON_IRRADIANCE_M2_S,
         radiometry=_SOURCE_RADIOMETRY,

@@ -37,7 +37,9 @@ AOC interfaces only; AOS remains the plant owner.
 The `current/` environment separately checks the same deterministic S1
 trajectory and warmed zero-allocation CPU step against registered AOC 0.17.0,
 FGA 0.5.5, and JFG 0.2.3. The original environment below remains pinned to
-its frozen S1/S4 release identities. Run the current gate with:
+its frozen S1/S4 release identities. The fixture entry points select the source
+direction constructor keywords for their pinned AOS revision; this does not
+restore the retired keyword in AOS itself. Run the current gate with:
 
 ```sh
 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --startup-file=no \
