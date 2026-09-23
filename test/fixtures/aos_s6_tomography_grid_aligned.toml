@@ -19,6 +19,8 @@ issue = "AdaptiveOpticsSim.jl#341"
 source_base_revision = "7e54f1a0a3389d311a9ae870b4848ad42e861fc0"
 method = "CPU Float64 ModelBasedTomography with the gradient and cross-covariance on the same 11-by-11 masked pupil grid; AdaptiveOpticsCalibration v0.15.1 numerical covariance and solve"
 legacy_difference = "The source fixture records a default 49-by-49 cross-covariance grid whose extracted indices are not the gradient grid coordinates for this one-lenslet case."
+generation_revision = "9151f87c1e4b997ffdba49a909f02ce5d91a2be5"
+current_reproduction = "command_reconstructor.matrix * [-0.2, 0.1]"
 generation_command = '''
 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_PKG_OFFLINE=true julia --startup-file=no --project=. -e '
 using AdaptiveOpticsSim

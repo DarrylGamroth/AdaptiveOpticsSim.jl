@@ -300,8 +300,11 @@ end
     @test all(isfinite, transfer.closed_loop_db)
 
     tomography = run_tutorial_example("tomography.jl")
-    @test all(isfinite, tomography.wavefront[.!isnan.(tomography.wavefront)])
-    @test length(tomography.commands) == 4
-    @test all(isfinite, tomography.commands)
+    @test size(tomography.phase_reconstructor.reconstructor, 1) ==
+        count(tomography.phase_reconstructor.grid_mask)
+    @test size(tomography.command_reconstructor.matrix, 1) == 4
+    @test size(tomography.command_reconstructor.matrix, 2) ==
+        size(tomography.phase_reconstructor.reconstructor, 2)
+    @test all(isfinite, tomography.command_reconstructor.matrix)
 
 end

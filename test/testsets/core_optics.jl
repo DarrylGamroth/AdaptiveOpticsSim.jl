@@ -407,8 +407,6 @@ end
         :assemble_reconstructor_and_fitting,
         :zenith_angle_deg,
         :wind_direction_deg,
-        :reconstruct_wavefront_map,
-        :dm_commands,
     )
         @test !Base.isexported(AdaptiveOpticsSim, name)
         @test !Base.ispublic(AdaptiveOpticsSim, name)

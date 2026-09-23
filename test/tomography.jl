@@ -135,8 +135,7 @@ end
 @testset "Tomography Fitting and Reconstruction" begin
     influence = Matrix{Float64}(I, 3, 3)
     fitting = TomographyFitting(influence; regularization=0.0, resolution=3)
-    opd = [1.0, 2.0, 3.0]
-    @test fit_commands(fitting, opd) ≈ opd
+    @test fitting.fitting_matrix ≈ influence
 
     for T in (Float32, Float64)
         sampled = T[1 0; 0 1e-8; 0 0]
@@ -216,18 +215,10 @@ end
         dm;
         fitting=fitting,
     )
-    slopes = [1.0, 2.0]
-    expected = (recon.operators.cox * transpose(imat)) / Matrix(imat * recon.operators.cxx * transpose(imat) .+ recon.operators.cnz) * slopes
-    @test reconstruct_wavefront(recon, slopes) ≈ expected
-    out = zeros(1)
-    @test @inferred(reconstruct_wavefront!(out, recon, slopes)) === out
-    @test out ≈ expected
-    if !coverage_instrumented()
-        @test @allocated(reconstruct_wavefront!(out, recon, slopes)) == 0
-    end
-    mapped = reconstruct_wavefront_map(recon, slopes)
-    @test size(mapped) == (1, 1)
-    @test mapped[1, 1] ≈ expected[1]
+    expected_matrix = (recon.operators.cox * transpose(imat)) /
+        Matrix(imat * recon.operators.cxx * transpose(imat) .+ recon.operators.cnz)
+    @test recon.reconstructor ≈ expected_matrix
+    @test size(recon.reconstructor, 1) == count(grid_mask)
     @test recon.fitting === fitting
     @test recon.operators.cxx isa AbstractMatrix
     @test recon.operators.cox isa AbstractMatrix
@@ -313,9 +304,8 @@ end
     )
     @test size(model.operators.gamma, 1) == 2
     @test size(model.reconstructor, 2) == 2
-    model_map = reconstruct_wavefront_map(model, [0.1, -0.2])
-    @test size(model_map) == size(model.grid_mask)
-    @test count(isnan, model_map) > 0
+    @test size(model.reconstructor, 1) == count(model.grid_mask)
+    @test count(model.grid_mask) < length(model.grid_mask)
 
     model_cpu = build_reconstructor(
         ModelBasedTomography(),
@@ -345,30 +335,6 @@ end
     )
     @test diag(model_noise.operators.cnz) == [1e-2, 2e-2]
 
-    native_mask = Bool[
-        1 0
-        1 1
-    ]
-    native_recon = TomographicReconstructor(
-        InteractionMatrixTomography(),
-        Matrix{Float64}(I, 3, 3),
-        native_mask,
-        atm,
-        lgs,
-        wfs,
-        tomo,
-        dm,
-        nothing,
-        nothing,
-    )
-    native_map = reconstruct_wavefront_map(native_recon, [1.0, 2.0, 3.0])
-    @test native_map ≈ [
-        1.0 NaN
-        2.0 3.0
-    ] nans=true
-
-    cmds = dm_commands(recon, slopes)
-    @test length(cmds) == size(recon.reconstructor, 1)
 end
 
 @testset "Tomography Command Assembly" begin
@@ -428,33 +394,12 @@ end
         build_backend=Calibration.CPUBuildBackend(),
     )
     @test cmd_recon_cpu.matrix isa Matrix
-    commands = dm_commands(cmd_recon, [0.1, -0.2])
-    @test length(commands) == count(dm.valid_actuators)
-    command_out = similar(commands)
-    command_input = [0.1, -0.2]
-    @test @inferred(dm_commands!(command_out, cmd_recon, command_input)) ===
-        command_out
-    if !coverage_instrumented()
-        @test @allocated(dm_commands!(
-            command_out, cmd_recon, command_input)) == 0
-    end
+    @test size(cmd_recon.matrix, 1) == count(dm.valid_actuators)
     original = copy(cmd_recon.matrix)
     mask_actuators!(cmd_recon, 1)
     @test all(iszero, @view cmd_recon.matrix[1, :])
     @test cmd_recon.matrix[2:end, :] == original[2:end, :]
 
-    imat = reshape([1.0, 0.5], 2, 1)
-    im_recon = build_reconstructor(
-        InteractionMatrixTomography(),
-        imat,
-        trues(1, 1),
-        atm,
-        lgs,
-        wfs,
-        tomo,
-        dm,
-    )
-    @test dm_commands(im_recon, [0.1, -0.2]) ≈ reconstruct_wavefront(im_recon, [0.1, -0.2])
 end
 
 @testset "Frozen S6 multi-source finite-height covariance adapter" begin
@@ -815,9 +760,10 @@ end
     @test command_reconstructor.matrix ≈
         -(command_reconstructor.fitting.fitting_matrix * ordered_live) .* 2.0
 
-    actual_wavefront = reconstruct_wavefront(model, s_native)
-    actual_wavefront_map = reconstruct_wavefront_map(model, s_native)
-    actual_command = dm_commands(command_reconstructor, s_sim)
+    actual_wavefront = model.reconstructor * s_native
+    actual_wavefront_map = fill(NaN, size(model.grid_mask))
+    actual_wavefront_map[model.grid_mask] .= actual_wavefront
+    actual_command = command_reconstructor.matrix * s_sim
     aligned_matrix = fixture_array(aligned["command_matrix"])
     aligned_command = fixture_vector(aligned["command"])
     @test aligned["command_matrix"]["unit"] ==

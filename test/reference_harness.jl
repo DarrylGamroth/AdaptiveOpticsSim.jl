@@ -739,6 +739,12 @@ function build_reference_tomography_slopes(
     throw(InvalidConfiguration("reference tomography slopes are missing and no supported generator was provided"))
 end
 
+function reference_tomography_map(reconstructor, slopes)
+    map = fill(NaN, size(reconstructor.grid_mask))
+    map[reconstructor.grid_mask] .= reconstructor.reconstructor * slopes
+    return map
+end
+
 function adapt_phase_matrix_to_pytomoao(actual::AbstractMatrix, mask::AbstractMatrix{Bool})
     perm = pytomoao_phase_permutation(mask)
     return actual[perm, perm]
@@ -1164,10 +1170,10 @@ function compute_reference_actual(case::ReferenceCase)
                     return Matrix(command_recon.matrix)
                 end
                 slopes = build_reference_tomography_slopes(compute_cfg, wfs, asterism)
-                return dm_commands(command_recon, slopes)
+                return command_recon.matrix * slopes
             end
             slopes = build_reference_tomography_slopes(compute_cfg, wfs, asterism)
-            return reconstruct_wavefront_map(recon, slopes)
+            return reference_tomography_map(recon, slopes)
         else
             imat = matrix_from_rows(compute_cfg["interaction_matrix"])
             recon = build_reconstructor(
@@ -1184,7 +1190,7 @@ function compute_reference_actual(case::ReferenceCase)
                 return Matrix(recon.reconstructor)
             end
             slopes = Float64.(compute_cfg["slopes"])
-            return reconstruct_wavefront_map(recon, slopes)
+            return reference_tomography_map(recon, slopes)
         end
     elseif case.kind === :lift_interaction_matrix
         tel = build_reference_telescope(case.config["telescope"])

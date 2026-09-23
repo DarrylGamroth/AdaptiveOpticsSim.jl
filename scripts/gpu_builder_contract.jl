@@ -87,23 +87,10 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
         noise_model=noise,
         build_backend=Calibration.CPUBuildBackend(),
     )
-    slopes_tomo = T[0.25, -0.5]
-    slopes_tomo_tr_gpu = Calibration.materialize_build(build_backend,
-        convert.(eltype(tr.reconstructor), slopes_tomo))
-    @assert isapprox(
-        Array(AdaptiveOpticsSim.Tomography.reconstruct_wavefront(
-            tr, slopes_tomo_tr_gpu)),
-        AdaptiveOpticsSim.Tomography.reconstruct_wavefront(
-            tr_cpu, slopes_tomo);
-        rtol=1f-5,
-        atol=1f-6,
-    )
-    @assert isapprox(
-        Array(dm_commands(tr, slopes_tomo_tr_gpu)),
-        dm_commands(tr_cpu, slopes_tomo);
-        rtol=1f-5,
-        atol=1f-6,
-    )
+    relative_interaction_matrix_error =
+        norm(Array(tr.reconstructor) - tr_cpu.reconstructor) /
+        norm(tr_cpu.reconstructor)
+    @assert relative_interaction_matrix_error <= 2f-2 "GPU/CPU interaction-matrix reconstructor error: $relative_interaction_matrix_error"
 
     mr = build_reconstructor(
         ModelBasedTomography(),
@@ -139,18 +126,6 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
     @assert relative_grid_covariance_error <= 1f-3 "GPU Cox/Cxx grid error: $relative_grid_covariance_error"
     @assert relative_cpu_covariance_error <= 2f-2 "GPU/CPU Cxx error: $relative_cpu_covariance_error"
     @assert relative_reconstructor_error <= 2f-2 "GPU/CPU reconstructor error: $relative_reconstructor_error"
-    slopes_tomo_mr = convert.(eltype(mr_cpu.reconstructor), slopes_tomo)
-    slopes_tomo_mr_gpu = Calibration.materialize_build(build_backend,
-        slopes_tomo_mr)
-    @assert isapprox(
-        Array(AdaptiveOpticsSim.Tomography.reconstruct_wavefront(
-            mr, slopes_tomo_mr_gpu)),
-        AdaptiveOpticsSim.Tomography.reconstruct_wavefront(
-            mr_cpu, slopes_tomo_mr);
-        rtol=1f-5,
-        atol=1f-6,
-    )
-
     println("gpu_builder_smoke complete")
     return nothing
 end

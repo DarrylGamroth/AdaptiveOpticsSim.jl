@@ -44,10 +44,6 @@ end
 function main()
     atmosphere, asterism, wfs, tomography, dm = compact_tomography_setup()
     recon = build_reconstructor(ModelBasedTomography(), atmosphere, asterism, wfs, tomography, dm)
-
-    slopes = Float64[0.1, -0.2, 0.05, 0.15, -0.1, 0.25, -0.05, 0.2]
-    wavefront = reconstruct_wavefront_map(recon, slopes)
-
     command_recon = assemble_reconstructor_and_fitting(
         recon,
         dm;
@@ -55,13 +51,10 @@ function main()
         slope_order=SimulationSlopes(),
         scaling_factor=1.5e7,
     )
-    commands = dm_commands(command_recon, slopes)
-
-    @info "Tomography tutorial complete" n_phase=size(recon.reconstructor, 1) n_commands=length(commands)
+    @info "Tomography matrices prepared for an external RTC" n_phase_samples=size(recon.reconstructor, 1) n_actuators=size(command_recon.matrix, 1)
     return (
-        reconstructor=recon,
-        wavefront=wavefront,
-        commands=commands,
+        phase_reconstructor=recon,
+        command_reconstructor=command_recon,
     )
 end
 

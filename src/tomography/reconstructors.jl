@@ -1434,48 +1434,6 @@ function mask_actuators!(
     return reconstructor
 end
 
-function dm_commands!(
-    out::AbstractVector{T},
-    reconstructor::TomographyCommandReconstructor{T},
-    slopes::AbstractVector{T},
-) where {T<:AbstractFloat}
-    size(reconstructor.matrix, 1) == length(out) ||
-        throw(DimensionMismatchError("output length must match command matrix row count"))
-    size(reconstructor.matrix, 2) == length(slopes) ||
-        throw(DimensionMismatchError("slopes length must match command matrix column count"))
-    mul!(out, reconstructor.matrix, slopes)
-    return out
-end
-
-function dm_commands(
-    reconstructor::TomographyCommandReconstructor{T},
-    slopes::AbstractVector{T},
-) where {T<:AbstractFloat}
-    out = similar(slopes, T, size(reconstructor.matrix, 1))
-    return dm_commands!(out, reconstructor, slopes)
-end
-
-function dm_commands!(
-    out::AbstractVector{T},
-    reconstructor::TomographicReconstructor{InteractionMatrixTomography,T},
-    slopes::AbstractVector{T},
-) where {T<:AbstractFloat}
-    size(reconstructor.reconstructor, 1) == length(out) ||
-        throw(DimensionMismatchError("output length must match reconstructor row count"))
-    size(reconstructor.reconstructor, 2) == length(slopes) ||
-        throw(DimensionMismatchError("slopes length must match reconstructor column count"))
-    mul!(out, reconstructor.reconstructor, slopes)
-    return out
-end
-
-function dm_commands(
-    reconstructor::TomographicReconstructor{InteractionMatrixTomography,T},
-    slopes::AbstractVector{T},
-) where {T<:AbstractFloat}
-    out = similar(slopes, T, size(reconstructor.reconstructor, 1))
-    return dm_commands!(out, reconstructor, slopes)
-end
-
 function build_reconstructor(
     ::InteractionMatrixTomography,
     imat::InteractionMatrix,
@@ -1569,48 +1527,4 @@ function build_reconstructor(
         fitting,
         operators,
     )
-end
-
-function reconstruct_wavefront!(
-    out::AbstractVector{T},
-    reconstructor::TomographicReconstructor{<:AbstractTomographyMethod,T},
-    slopes::AbstractVector{T},
-) where {T<:AbstractFloat}
-    size(reconstructor.reconstructor, 1) == length(out) ||
-        throw(DimensionMismatchError("output length must match reconstructor row count"))
-    size(reconstructor.reconstructor, 2) == length(slopes) ||
-        throw(DimensionMismatchError("slopes length must match reconstructor column count"))
-    mul!(out, reconstructor.reconstructor, slopes)
-    return out
-end
-
-function reconstruct_wavefront(
-    reconstructor::TomographicReconstructor{<:AbstractTomographyMethod,T},
-    slopes::AbstractVector{T},
-) where {T<:AbstractFloat}
-    out = similar(slopes, T, size(reconstructor.reconstructor, 1))
-    return reconstruct_wavefront!(out, reconstructor, slopes)
-end
-
-function reconstruct_wavefront_map!(
-    out::AbstractMatrix{T},
-    reconstructor::TomographicReconstructor{<:AbstractTomographyMethod,T},
-    slopes::AbstractVector{T};
-    masked_value::T=T(NaN),
-) where {T<:AbstractFloat}
-    size(out) == size(reconstructor.grid_mask) ||
-        throw(DimensionMismatchError("output map size must match reconstructor grid mask"))
-    wavefront = reconstruct_wavefront(reconstructor, slopes)
-    fill!(out, masked_value)
-    out[reconstructor.grid_mask] .= wavefront
-    return out
-end
-
-function reconstruct_wavefront_map(
-    reconstructor::TomographicReconstructor{<:AbstractTomographyMethod,T},
-    slopes::AbstractVector{T};
-    masked_value::T=T(NaN),
-) where {T<:AbstractFloat}
-    out = similar(reconstructor.reconstructor, T, size(reconstructor.grid_mask)...)
-    return reconstruct_wavefront_map!(out, reconstructor, slopes; masked_value=masked_value)
 end
