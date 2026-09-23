@@ -1,0 +1,35 @@
+schema = "test.adaptive-optics-sim/von-karman-covariance/1"
+source_repository = "AdaptiveOpticsSim.jl"
+source_revision = "21ebf111d9b9b3ff37531cf67a7c8deaf19d62a5"
+source_paths = ["src/tomography/parameters.jl", "src/tomography/reconstructors.jl"]
+source_functions = ["auto_correlation", "cross_correlation"]
+storage_order = "Julia column-major vec order"
+coordinate_unit = "m in each atmospheric layer after source-direction and finite-height transforms"
+covariance_unit = "phase-radian² at the wavelength defining r0_m"
+
+[physical_source]
+zenith_angle_deg = 10.0
+layer_altitudes_m = [0.0, 1200.0]
+r0_zenith_m = 0.2
+L0_m = 25.0
+fractional_cn2 = [0.4, 0.6]
+lgs_radius_arcsec = 5.0
+lgs_base_height_m = 90000.0
+n_lgs = 2
+pupil_diameter_m = 8.0
+n_lenslets = 2
+lenslet_grid_rotations_rad = [0.0, 0.03]
+lenslet_grid_offsets_fraction = [0.0, 0.0, 0.02, -0.01]
+n_fit_src = 2
+fov_optimization_arcsec = 2.0
+fit_src_height_m = 120000.0
+grid_mask = [true, false, false, true]
+grid_mask_shape = [2, 2]
+
+[cxx]
+shape = [4, 4]
+values = [273.8933361861332, 0.1509153205504548, 271.63861666754326, 0.1578668675473514, 0.1509153205504548, 273.8933361861332, 0.1442398495466002, 246.60629850069634, 271.63861666754326, 0.1442398495466002, 273.8933361861332, 0.1509153205504548, 0.1578668675473514, 246.60629850069634, 0.1509153205504548, 273.8933361861332]
+
+[cox]
+shape = [4, 2, 4]
+values = [273.4964107260349, 273.56601518258924, 273.53516423471535, 273.6071420726927, 0.1503517444225625, 0.15016210017313852, 0.15016186397149825, 0.14997264865087126, 0.1490315620978131, 0.14921911553843326, 0.14921888199412497, 0.14940686002897663, 273.808916162674, 273.7960152615299, 273.7546536402972, 273.7432341322221, 272.5073262796873, 272.4196502332345, 272.44418715997017, 272.35873574015454, 0.1437035830249484, 0.14352271363789945, 0.14352293809191258, 0.14334247710565248, 0.1559063156208452, 0.15609690871847215, 0.15610901688050566, 0.15630005499473149, 246.9186885904191, 246.70994704613548, 247.04644284658826, 246.8367164296109]

@@ -453,6 +453,165 @@ end
     @test dm_commands(im_recon, [0.1, -0.2]) ≈ reconstruct_wavefront(im_recon, [0.1, -0.2])
 end
 
+@testset "Frozen S6 multi-source finite-height covariance adapter" begin
+    fixture = TOML.parsefile(joinpath(@__DIR__, "fixtures",
+        "aos_s6_von_karman_multisource.toml"))
+    source = fixture["physical_source"]
+    @test fixture["schema"] == "test.adaptive-optics-sim/von-karman-covariance/1"
+    @test source["n_lgs"] == 2
+    @test source["fit_src_height_m"] < Inf
+    @test source["fractional_cn2"] == [0.4, 0.6]
+
+    atmosphere = TomographyAtmosphereParams(
+        zenith_angle_deg=source["zenith_angle_deg"],
+        layer_altitudes_m=source["layer_altitudes_m"],
+        L0=source["L0_m"],
+        r0_zenith=source["r0_zenith_m"],
+        fractional_cn2=source["fractional_cn2"],
+        reference_wavelength_m=500e-9,
+        wind_direction_deg=[0.0, 90.0],
+        wind_speed=[5.0, 10.0],
+    )
+    asterism = LGSAsterismParams(
+        radius_arcsec=source["lgs_radius_arcsec"],
+        wavelength_m=589e-9,
+        base_height_m=source["lgs_base_height_m"],
+        n_lgs=source["n_lgs"],
+    )
+    wfs = LGSWFSParams(
+        pupil_diameter_m=source["pupil_diameter_m"],
+        n_lenslets=source["n_lenslets"],
+        n_px=4,
+        field_stop_size_arcsec=2.0,
+        valid_lenslet_map=trues(2, 2),
+        lenslet_grid_rotations_rad=source["lenslet_grid_rotations_rad"],
+        lenslet_grid_offsets_fraction=reshape(
+            source["lenslet_grid_offsets_fraction"], 2, source["n_lgs"]),
+    )
+    tomography = TomographyParams(
+        n_fit_src=source["n_fit_src"],
+        fov_optimization_arcsec=source["fov_optimization_arcsec"],
+        fit_src_height_m=source["fit_src_height_m"],
+    )
+    grid_mask = reshape(Bool.(source["grid_mask"]),
+        Tuple(Int.(source["grid_mask_shape"])))
+    expected_cxx = reshape(fixture["cxx"]["values"],
+        Tuple(Int.(fixture["cxx"]["shape"])))
+    expected_cox = reshape(fixture["cox"]["values"],
+        Tuple(Int.(fixture["cox"]["shape"])))
+
+    cxx = @inferred auto_correlation(atmosphere, asterism, wfs, grid_mask)
+    cox = @inferred cross_correlation(atmosphere, asterism, wfs, tomography;
+        grid_mask=grid_mask)
+    @test cxx ≈ expected_cxx rtol=2e-12 atol=2e-12
+    @test cox ≈ expected_cox rtol=2e-12 atol=2e-12
+    @test size(cox) == (4, 2, 4)
+
+    # AOS accepts this nearly normalized profile and forwards its raw layer
+    # strengths; AOC must not impose a narrower Float64 preparation boundary.
+    near_atmosphere = TomographyAtmosphereParams(
+        zenith_angle_deg=source["zenith_angle_deg"],
+        layer_altitudes_m=source["layer_altitudes_m"],
+        L0=source["L0_m"],
+        r0_zenith=source["r0_zenith_m"],
+        fractional_cn2=[0.4, 0.6000001],
+        reference_wavelength_m=500e-9,
+        wind_direction_deg=[0.0, 90.0],
+        wind_speed=[5.0, 10.0],
+    )
+    @test auto_correlation(near_atmosphere, asterism, wfs, grid_mask)[1, 1] >
+        cxx[1, 1]
+    @test cross_correlation(near_atmosphere, asterism, wfs, tomography;
+        grid_mask=grid_mask)[1, 1, 1] > cox[1, 1, 1]
+
+    big_atmosphere = TomographyAtmosphereParams(
+        zenith_angle_deg=big"0.0",
+        layer_altitudes_m=BigFloat[0],
+        L0=big"25.0",
+        r0_zenith=big"0.2",
+        fractional_cn2=BigFloat[1],
+        reference_wavelength_m=big"5e-7",
+        wind_direction_deg=BigFloat[0],
+        wind_speed=BigFloat[10],
+    )
+    big_asterism = LGSAsterismParams(
+        radius_arcsec=big"0.0",
+        wavelength_m=big"5.89e-7",
+        base_height_m=big"90000.0",
+        n_lgs=1,
+    )
+    big_wfs = LGSWFSParams(
+        pupil_diameter_m=big"8.0",
+        n_lenslets=1,
+        n_px=4,
+        field_stop_size_arcsec=big"2.0",
+        valid_lenslet_map=trues(1, 1),
+        lenslet_grid_rotations_rad=BigFloat[0],
+        lenslet_grid_offsets_fraction=zeros(BigFloat, 2, 1),
+    )
+    @test_throws UnsupportedAlgorithm auto_correlation(
+        big_atmosphere, big_asterism, big_wfs, trues(1, 1))
+
+    false_mask = falses(size(grid_mask))
+    @test size(auto_correlation(atmosphere, asterism, wfs, false_mask)) == (0, 0)
+    @test size(cross_correlation(atmosphere, asterism, wfs, tomography;
+        grid_mask=false_mask)) == (4, 0, 0)
+
+    zero_asterism = LGSAsterismParams(
+        radius_arcsec=source["lgs_radius_arcsec"],
+        wavelength_m=589e-9,
+        base_height_m=source["lgs_base_height_m"],
+        n_lgs=0,
+    )
+    zero_wfs = LGSWFSParams(
+        pupil_diameter_m=source["pupil_diameter_m"],
+        n_lenslets=source["n_lenslets"],
+        n_px=4,
+        field_stop_size_arcsec=2.0,
+        valid_lenslet_map=trues(2, 2),
+    )
+    @test size(auto_correlation(atmosphere, zero_asterism, zero_wfs, grid_mask)) ==
+        (0, 0)
+    @test size(cross_correlation(atmosphere, zero_asterism, zero_wfs, tomography;
+        grid_mask=grid_mask)) == (4, 2, 0)
+
+    atmosphere32 = TomographyAtmosphereParams(
+        zenith_angle_deg=0f0,
+        layer_altitudes_m=Float32[0],
+        L0=25f0,
+        r0_zenith=0.2f0,
+        fractional_cn2=Float32[1],
+        reference_wavelength_m=5f-7,
+        wind_direction_deg=Float32[0],
+        wind_speed=Float32[10],
+    )
+    asterism32 = LGSAsterismParams(
+        radius_arcsec=0f0,
+        wavelength_m=5.89f-7,
+        base_height_m=90_000f0,
+        n_lgs=1,
+    )
+    wfs32 = LGSWFSParams(
+        pupil_diameter_m=8f0,
+        n_lenslets=1,
+        n_px=4,
+        field_stop_size_arcsec=2f0,
+        valid_lenslet_map=trues(1, 1),
+        lenslet_grid_rotations_rad=Float32[0],
+        lenslet_grid_offsets_fraction=zeros(Float32, 2, 1),
+    )
+    tomography32 = TomographyParams(
+        n_fit_src=1,
+        fov_optimization_arcsec=0f0,
+        fit_src_height_m=Inf32,
+    )
+    @test eltype(@inferred auto_correlation(
+        atmosphere32, asterism32, wfs32, trues(1, 1))) === Float32
+    @test eltype(@inferred cross_correlation(
+        atmosphere32, asterism32, wfs32, tomography32;
+        grid_mask=trues(1, 1))) === Float32
+end
+
 @testset "Frozen S6 tomography CPU source characterization" begin
     fixture = TOML.parsefile(joinpath(@__DIR__, "fixtures",
         "aos_s6_tomography_cpu.toml"))
