@@ -12,7 +12,7 @@ function _time_phase(f)
     return value, dt
 end
 
-function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+function run_gpu_model_tomography_phase_profile(::Type{B}; run_label::AbstractString="first-use") where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
     BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     BackendArray === nothing && error("GPU backend $(B) is not available")
@@ -72,8 +72,11 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
             over_sampling=2)
     end
     gamma_base, grid_mask = gamma_single
+    gamma_t, t_gamma_convert = _time_phase() do
+        SparseMatrixCSC{TB, Int}(gamma_base)
+    end
     gamma, t_blockdiag = _time_phase() do
-        blockdiag(ntuple(_ -> gamma_base, asterism.n_lgs)...)
+        blockdiag(ntuple(_ -> gamma_t, asterism.n_lgs)...)
     end
 
     cxx, t_cxx = _time_phase() do
@@ -83,23 +86,16 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
     end
     cross, t_cross = _time_phase() do
         value = AdaptiveOpticsSim.Tomography.cross_correlation(
-            build_backend, atmosphere, asterism, wfs, tomography)
+            build_backend, atmosphere, asterism, wfs, tomography;
+            grid_mask=grid_mask)
         _sync_backend!(value)
     end
 
     weights = AdaptiveOpticsSim.Tomography._equal_fit_source_weights(
         tomography)
-    cox_full, t_fit_average = _time_phase() do
+    cox, t_fit_average = _time_phase() do
         value = AdaptiveOpticsSim.Tomography._fit_source_average(
             cross, weights)
-        _sync_backend!(value)
-    end
-
-    row_positions = findall(vec(grid_mask))
-    col_positions = findall(repeat(vec(grid_mask), asterism.n_lgs))
-    cox, t_extract = _time_phase() do
-        value = AdaptiveOpticsSim.Tomography._extract_submatrix(
-            cox_full, row_positions, col_positions, build_backend)
         _sync_backend!(value)
     end
 
@@ -128,9 +124,14 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
         value = gamma_native * cxx_native * transpose(gamma_native)
         _sync_backend!(value)
     end
+    reference_diag, t_reference_diag = _time_phase() do
+        value = AdaptiveOpticsSim.Tomography.tomography_reference_diagonal(
+            build_backend, css_signal)
+        _sync_backend!(value)
+    end
     cnz, t_cnz = _time_phase() do
         value = AdaptiveOpticsSim.Tomography.tomography_noise_covariance(
-            build_backend, noise_model, diag(css_signal))
+            build_backend, noise_model, reference_diag)
         _sync_backend!(value)
     end
     css, t_css = _time_phase() do
@@ -157,24 +158,27 @@ function run_gpu_model_tomography_phase_profile(::Type{B}) where {B<:AdaptiveOpt
         _sync_backend!(value)
     end
 
-    total_ns = t_gamma_single + t_blockdiag + t_cxx + t_cross + t_fit_average + t_extract +
-               t_gamma_native + t_cxx_native + t_cox_native + t_mask_native + t_css_signal +
-               t_cnz + t_css + t_rhs + t_recstat + t_recon
+    total_ns = t_gamma_single + t_gamma_convert + t_blockdiag + t_cxx + t_cross +
+               t_fit_average + t_gamma_native + t_cxx_native + t_cox_native +
+               t_mask_native + t_css_signal + t_reference_diag + t_cnz + t_css + t_rhs + t_recstat +
+               t_recon
 
     println("GPU model tomography phase profile")
     println("  backend: ", string(something(AdaptiveOpticsSim.Backends.gpu_backend_name(B), B)))
     println("  case: medium")
+    println("  run: ", run_label)
     println("  gamma_single_ns: ", t_gamma_single)
+    println("  gamma_convert_ns: ", t_gamma_convert)
     println("  gamma_blockdiag_ns: ", t_blockdiag)
     println("  auto_correlation_ns: ", t_cxx)
     println("  cross_correlation_ns: ", t_cross)
     println("  fit_source_average_ns: ", t_fit_average)
-    println("  extract_submatrix_ns: ", t_extract)
     println("  materialize_gamma_ns: ", t_gamma_native)
     println("  materialize_cxx_ns: ", t_cxx_native)
     println("  materialize_cox_ns: ", t_cox_native)
     println("  materialize_mask_ns: ", t_mask_native)
     println("  css_signal_ns: ", t_css_signal)
+    println("  reference_diag_ns: ", t_reference_diag)
     println("  cnz_ns: ", t_cnz)
     println("  css_sum_ns: ", t_css)
     println("  rhs_ns: ", t_rhs)

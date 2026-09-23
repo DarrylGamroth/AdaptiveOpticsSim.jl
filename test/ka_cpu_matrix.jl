@@ -1262,7 +1262,6 @@ end
             :pyramid_unmodulated_pupil_field_kernel!,
             :scaled_shifted_coord_stack_kernel!,
             :selected_covariance_block_kernel!,
-            :submatrix_extract_kernel!,
             :zernike_phasor_kernel!,
         ])
         all_kernels = source_kernel_names()

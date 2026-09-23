@@ -10,3 +10,5 @@ end
 
 include(joinpath(@__DIR__, "gpu_profile_model_tomography_phases_contract.jl"))
 run_gpu_model_tomography_phase_profile(AdaptiveOpticsSim.Backends.CUDABackendTag)
+run_gpu_model_tomography_phase_profile(AdaptiveOpticsSim.Backends.CUDABackendTag;
+    run_label="warmed")

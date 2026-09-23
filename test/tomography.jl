@@ -410,6 +410,10 @@ end
     )
     tomo = TomographyParams(n_fit_src=1, fov_optimization_arcsec=0.0)
     model_recon = build_reconstructor(ModelBasedTomography(), atm, lgs, wfs, tomo, dm)
+    masked_cross = cross_correlation(atm, lgs, wfs, tomo;
+        grid_mask=model_recon.grid_mask)
+    @test dropdims(masked_cross; dims=1) ≈ model_recon.operators.cxx
+    @test model_recon.operators.cox ≈ model_recon.operators.cxx
     cmd_recon = assemble_reconstructor_and_fitting(
         model_recon,
         dm;
@@ -506,6 +510,23 @@ end
     @test cxx ≈ expected_cxx rtol=2e-12 atol=2e-12
     @test cox ≈ expected_cox rtol=2e-12 atol=2e-12
     @test size(cox) == (4, 2, 4)
+
+    dm = TomographyDMParams(
+        heights_m=[0.0],
+        pitch_m=[0.5],
+        cross_coupling=0.2,
+        n_actuators=[2],
+        valid_actuators=trues(2, 2),
+    )
+    model = build_reconstructor(ModelBasedTomography(), atmosphere, asterism,
+        wfs, tomography, dm; build_backend=Calibration.CPUBuildBackend())
+    model_cross = cross_correlation(atmosphere, asterism, wfs, tomography;
+        grid_mask=model.grid_mask)
+    @test model.operators.cxx ≈
+        auto_correlation(atmosphere, asterism, wfs, model.grid_mask)
+    @test model.operators.cox ≈
+        dropdims(sum(model_cross; dims=1) ./ size(model_cross, 1); dims=1)
+    @test size(model.operators.cox, 2) == size(model.operators.cxx, 1)
 
     # AOS accepts this nearly normalized profile and forwards its raw layer
     # strengths; AOC must not impose a narrower Float64 preparation boundary.
@@ -628,6 +649,7 @@ end
     @test fixture["array_backend"] == "CPU"
     @test fixture["float_type"] == "Float64"
     @test fixture["storage_order"] == "Julia column-major vec order"
+    @test occursin("pre-adoption", fixture["provenance"]["characterization"])
 
     fixture_array(section) = reshape(Float64.(section["values"]),
         Tuple(Int.(section["shape"])))
@@ -697,6 +719,19 @@ end
     )
     @test s_native == [0.1, -0.2]
     @test s_sim == [-0.2, 0.1]
+    @test !isapprox(cox, cxx)
+    @test fixture_matches(recstat,
+        aoc_covariance_reconstructor(gamma, cxx, cox, cnz), "recstat")
+    @test fixture_matches(r,
+        fixture["scaling"]["reconstructor_scale_m"] .* recstat, "r")
+    @test fixture_matches(ordered_r, r[:, [2, 1]], "ordered_r")
+    @test fixture_matches(k, -(f * ordered_r) .* 2.0, "k")
+    @test fixture_matches(wavefront, r * s_native, "wavefront")
+    historical_map = fill(NaN, size(grid_mask))
+    historical_map[grid_mask] .= wavefront
+    @test fixture_matches(historical_map, wavefront_map, "wavefront_map";
+        nans=true)
+    @test fixture_matches(command, k * s_sim, "command")
 
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=0.0,
@@ -748,42 +783,53 @@ end
         scaling_factor=fixture["command_assembly"]["scaling_factor"],
         build_backend=Calibration.CPUBuildBackend(),
     )
+    aligned = TOML.parsefile(joinpath(@__DIR__, "fixtures",
+        "aos_s6_tomography_grid_aligned.toml"))
+    @test aligned["schema"] == "test.adaptive-optics-sim/tomography-grid-aligned/1"
+    @test aligned["source_fixture"] == "aos_s6_tomography_cpu.toml"
+    @test aligned["array_backend"] == "CPU"
+    @test aligned["float_type"] == "Float64"
+    @test aligned["storage_order"] == "Julia column-major vec order"
+    @test Tuple(aligned["grid_mask_shape"]) == size(model.grid_mask)
+    @test aligned["active_linear_indices"] == findall(vec(model.grid_mask))
+    @test aligned["guide_stars"] == lgs.n_lgs
+    @test aligned["fit_sources"] == tomo.n_fit_src^2
+    @test aligned["simulation_slopes"] == s_sim
 
     @test model.grid_mask == grid_mask
     @test fixture_matches(Matrix(model.operators.gamma), gamma, "gamma")
     @test fixture_matches(model.operators.cxx, cxx, "cxx")
-    @test fixture_matches(model.operators.cox, cox, "cox")
     @test fixture_matches(Matrix(model.operators.cnz), cnz, "cnz")
-    @test fixture_matches(model.operators.recstat, recstat, "recstat")
-    @test fixture_matches(model.reconstructor, r, "r")
-    @test fixture_matches(model.reconstructor,
-        fixture["scaling"]["reconstructor_scale_m"] .* model.operators.recstat,
-        "r")
+    @test model.operators.cox ≈ model.operators.cxx
+    @test model.operators.recstat ≈ aoc_covariance_reconstructor(
+        model.operators.gamma, model.operators.cxx,
+        model.operators.cox, model.operators.cnz)
+    @test model.reconstructor ≈
+        fixture["scaling"]["reconstructor_scale_m"] .* model.operators.recstat
 
     sampled_h = influence_functions(dm; resolution=size(model.grid_mask, 1))
     @test fixture_matches(sampled_h, h, "h")
     @test fixture_matches(command_reconstructor.fitting.fitting_matrix, f, "f")
-    @test fixture_matches(
-        prepare_slope_order(SimulationSlopes(), model.reconstructor, 1),
-        ordered_r,
-        "ordered_r",
-    )
-    @test fixture_matches(ordered_r, r[:, [2, 1]], "ordered_r")
-    @test fixture_matches(command_reconstructor.matrix, k, "k")
-    @test fixture_matches(command_reconstructor.matrix,
-        -(command_reconstructor.fitting.fitting_matrix * ordered_r) .* 2.0,
-        "k")
+    ordered_live = prepare_slope_order(SimulationSlopes(), model.reconstructor, 1)
+    @test ordered_live ≈ model.reconstructor[:, [2, 1]]
+    @test command_reconstructor.matrix ≈
+        -(command_reconstructor.fitting.fitting_matrix * ordered_live) .* 2.0
 
     actual_wavefront = reconstruct_wavefront(model, s_native)
     actual_wavefront_map = reconstruct_wavefront_map(model, s_native)
     actual_command = dm_commands(command_reconstructor, s_sim)
-    @test fixture_matches(actual_wavefront, wavefront, "wavefront")
-    @test fixture_matches(actual_wavefront_map, wavefront_map, "wavefront_map";
-        nans=true)
-    @test fixture_matches(actual_command, command, "command")
-    @test fixture_matches(actual_wavefront, model.reconstructor * s_native,
-        "wavefront")
-    @test fixture_matches(actual_command, command_reconstructor.matrix * s_sim,
-        "command")
+    aligned_matrix = fixture_array(aligned["command_matrix"])
+    aligned_command = fixture_vector(aligned["command"])
+    @test aligned["command_matrix"]["unit"] ==
+        "scaled actuator coordinate per simulation slope coordinate"
+    @test aligned["command"]["unit"] == "scaled actuator coordinate"
+    @test isapprox(command_reconstructor.matrix, aligned_matrix;
+        rtol=aligned["rtol"], atol=aligned["atol"])
+    @test isapprox(actual_command, aligned_command;
+        rtol=aligned["rtol"], atol=aligned["atol"])
+    @test actual_wavefront ≈ model.reconstructor * s_native
+    @test actual_wavefront_map[grid_mask] ≈ actual_wavefront
+    @test all(isnan, actual_wavefront_map[.!grid_mask])
+    @test actual_command ≈ command_reconstructor.matrix * s_sim
     @test !isapprox(actual_command, command_reconstructor.matrix * s_native)
 end

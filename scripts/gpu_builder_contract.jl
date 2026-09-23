@@ -2,6 +2,7 @@ using AdaptiveOpticsSim
 using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Tomography
+using LinearAlgebra
 
 function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
@@ -128,6 +129,16 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
         noise_model=noise,
         build_backend=Calibration.CPUBuildBackend(),
     )
+    cxx_gpu = Array(mr.operators.cxx)
+    cox_gpu = Array(mr.operators.cox)
+    relative_grid_covariance_error = norm(cox_gpu - cxx_gpu) / norm(cxx_gpu)
+    relative_cpu_covariance_error = norm(cxx_gpu - mr_cpu.operators.cxx) /
+        norm(mr_cpu.operators.cxx)
+    relative_reconstructor_error = norm(Array(mr.reconstructor) - mr_cpu.reconstructor) /
+        norm(mr_cpu.reconstructor)
+    @assert relative_grid_covariance_error <= 1f-3 "GPU Cox/Cxx grid error: $relative_grid_covariance_error"
+    @assert relative_cpu_covariance_error <= 2f-2 "GPU/CPU Cxx error: $relative_cpu_covariance_error"
+    @assert relative_reconstructor_error <= 2f-2 "GPU/CPU reconstructor error: $relative_reconstructor_error"
     slopes_tomo_mr = convert.(eltype(mr_cpu.reconstructor), slopes_tomo)
     slopes_tomo_mr_gpu = Calibration.materialize_build(build_backend,
         slopes_tomo_mr)
