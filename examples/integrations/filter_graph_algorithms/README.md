@@ -34,6 +34,20 @@ constraint-feedback, fixed-frame-delay, and deterministic S1 boundary
 trajectory as numerical migration oracles. They run the public FGA/JFG and
 AOC interfaces only; AOS remains the plant owner.
 
+The `current/` environment separately checks the same deterministic S1
+trajectory and warmed zero-allocation CPU step against registered AOC 0.17.0,
+FGA 0.5.5, and JFG 0.2.3. The original environment below remains pinned to
+its frozen S1/S4 release identities. Run the current gate with:
+
+```sh
+JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --startup-file=no \
+  --project=examples/integrations/filter_graph_algorithms/current \
+  -e 'using Pkg; Pkg.instantiate()'
+JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --startup-file=no \
+  --project=examples/integrations/filter_graph_algorithms/current \
+  examples/integrations/filter_graph_algorithms/current/runtests.jl
+```
+
 S4 is a separate complete-frame Pyramid fixture. AOS forms a diffractive
 four-pupil photon-rate frame and performs one explicit noiseless detector
 acquisition. The composing layer transposes the acquired `(x, y)` detector
@@ -96,9 +110,11 @@ before the retained signal or published association changes. Actual AOS
 acquisitions prove the package composition without restoring an estimator to
 AOS core.
 
-The nested environment resolves AdaptiveOpticsCalibration,
+The frozen nested environment resolves AdaptiveOpticsCalibration,
 FilterGraphAlgorithms, and JuliaFilterGraph from the configured registry and
-uses this AOS checkout as its path source. Run:
+pins AOS to source revision `21ebf111d9b9b3ff37531cf67a7c8deaf19d62a5`,
+whose AOC 0.14 compatibility matches this fixture. The separate `current/`
+environment uses this AOS checkout. Run the frozen gate with:
 
 ```sh
 JULIA_NUM_THREADS=1 julia --startup-file=no \
