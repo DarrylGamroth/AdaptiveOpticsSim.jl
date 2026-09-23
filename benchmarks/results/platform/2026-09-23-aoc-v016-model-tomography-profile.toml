@@ -1,0 +1,92 @@
+artifact_id = "S6-AOC-V016-MODEL-TOMOGRAPHY-PROFILE-2026-09-23"
+generated_on = "2026-09-23"
+purpose = "AOS physical tomography geometry with registered AOC v0.16 numerical Cxx/Cox assembly on CPU, CUDA, and AMDGPU"
+aos_starting_revision = "2fb6c944abe20035baa55a6106663f2cece901c7"
+aoc_version = "0.16.0"
+aoc_registered_tree = "da532d98f1b8eba91ddea2c3885fd3468ba24c0b"
+optimization_priority = "CUDA primary; AMDGPU secondary"
+claim_boundary = "Allocating, synchronized cold model preparation only; no RTC frame-step, captured CUDA/HIP Graph, or camera-to-DM latency claim"
+
+[contract]
+workload = "Float32, 2 laser guide stars, 2-by-2 fit sources, 2 atmospheric layers, 2 deformable mirrors; n_lenslets=3 or 8"
+completion = "Explicit backend synchronization before each timed build returns"
+repetitions = "One first-use and five warmed complete builds per backend and lenslet count; three warmed phase-profile passes at n_lenslets=8"
+threads = 1
+blas_threads = 1
+correctness = "All retained products device-resident; full model command matrix and Cxx/Cox compared with production AOC CPU route"
+allocation_note = "Reported bytes are Julia host allocations; device allocation is not measured here. Cold preparation is not subject to the per-frame zero-allocation budget."
+
+[environment]
+host = "rtc-devel"
+julia = "1.12.7"
+cpu = "AMD Ryzen 7 6800H"
+
+[environment.cuda]
+device = "NVIDIA GeForce RTX 3080"
+cuda_jl = "6.4.0"
+runtime = "CUDA 13.4"
+driver = "615.71.09"
+
+[environment.amdgpu]
+device = "AMD Radeon 680M"
+amdgpu_jl = "2.8.0"
+runtime = "ROCm 7.2.1"
+hardware_architecture = "gfx1035"
+compiled_architecture = "gfx1030"
+hsa_override_gfx_version = "10.3.0"
+interpretation_limit = "HIP timings are specific to the pre-existing architecture override and are not a native gfx1035 baseline."
+
+[cpu.n8]
+warmed_complete_build_ms = [566.732, 566.390, 566.849]
+warmed_auto_covariance_ms = [181.915, 182.578, 182.984]
+warmed_cross_covariance_ms = [372.166, 372.607, 381.198]
+profile_repeats = 10
+profile_snapshots = 5708
+profile_interpretation = "AOC scalar von Kármán evaluation through SpecialFunctions.besselk and libopenspecfun dominates the sampled CPU build."
+
+[cuda.n3]
+warmed_complete_build_ms = [1.602, 1.247, 1.325, 1.250, 1.307]
+warmed_cpu_plus_output_upload_ms = [16.845, 16.643, 16.895, 16.726, 16.590]
+command_matrix_relative_error = 4.590717e-6
+cxx_relative_error = 9.179462e-8
+cox_relative_error = 7.600035e-8
+
+[cuda.n8]
+warmed_complete_build_ms = [7.880, 7.564, 7.007, 6.980, 7.011]
+warmed_cpu_plus_output_upload_ms = [567.710, 568.291, 820.443, 561.638, 563.418]
+warmed_auto_covariance_ms = [0.731, 0.618, 0.598]
+warmed_cross_covariance_ms = [5.741, 5.800, 5.794]
+warmed_phase_profile_host_allocated_bytes = 1333608
+command_matrix_relative_error = 3.469248e-5
+cxx_relative_error = 1.06604716e-7
+cox_relative_error = 1.0694073e-7
+
+[amdgpu.n3]
+warmed_complete_build_ms = [16.898, 16.119, 16.987, 15.891, 15.497]
+warmed_cpu_plus_output_upload_ms = [17.534, 18.929, 18.176, 17.991, 17.484]
+command_matrix_relative_error = 4.810402e-6
+cxx_relative_error = 9.4407525e-8
+cox_relative_error = 7.943129e-8
+
+[amdgpu.n8]
+warmed_complete_build_ms = [428.981, 425.392, 425.972, 419.878, 422.068]
+warmed_cpu_plus_output_upload_ms = [561.896, 570.839, 561.518, 569.369, 563.256]
+warmed_auto_covariance_ms = [18.840, 13.707, 11.121]
+warmed_cross_covariance_ms = [402.803, 402.928, 406.846]
+warmed_phase_profile_host_allocated_bytes = 1299752
+command_matrix_relative_error = 3.397515e-5
+cxx_relative_error = 1.13531755e-7
+cox_relative_error = 1.0436453e-7
+
+[validation]
+cpu = "Full AOS Pkg.test() passed against registered AOC v0.16.0; focused ka-cpu and tomography suites also passed"
+cuda = "Full CUDA hardware target 750/750 passed on RTX 3080, including captured-graph zero-allocation gates, inferred direct Cxx/Cox calls, asymmetric finite-height parity, empty-mask results, and device residency"
+amdgpu = "Full AMDGPU hardware target 754/754 passed on Radeon 680M, including captured-graph zero-allocation gates, inferred direct Cxx/Cox calls, asymmetric finite-height parity, empty-mask results, and device residency"
+benchmark = "benchmark_model_tomography_host_prep.jl verified all seven retained model products and K/Cxx/Cox relative error for both device backends at n=3 and n=8"
+
+[commands]
+cpu = "AOS_TOMO_PROFILE_LENSLETS=8 AOS_CPU_PROFILE_REPEATS=10 julia --project=. scripts/profile_model_tomography_cpu_phases.jl --float32-only"
+cuda = "julia --project=test/cuda -e 'using CUDA; include(\"scripts/benchmark_model_tomography_host_prep.jl\"); compare_host_prep(AdaptiveOpticsSim.Backends.CUDABackendTag)'"
+cuda_phases = "AOS_TOMO_PROFILE_LENSLETS=8 julia --project=test/cuda scripts/gpu_profile_model_tomography_phases_cuda.jl"
+amdgpu = "julia --project=test/amdgpu -e 'using AMDGPU; include(\"scripts/benchmark_model_tomography_host_prep.jl\"); compare_host_prep(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)'"
+amdgpu_phases = "AOS_TOMO_PROFILE_LENSLETS=8 julia --project=test/amdgpu scripts/gpu_profile_model_tomography_phases_amdgpu.jl"

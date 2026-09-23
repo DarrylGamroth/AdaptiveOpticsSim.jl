@@ -3,6 +3,70 @@ using AdaptiveOpticsSim.Optics
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Tomography
 using LinearAlgebra
+using Test: @inferred
+
+function run_gpu_covariance_geometry_contract(::Type{B}) where
+    {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    build_backend = Calibration.GPUArrayBuildBackend(B)
+    BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
+    atmosphere = TomographyAtmosphereParams(
+        zenith_angle_deg=T(7),
+        layer_altitudes_m=T[0, 10_000],
+        L0=T(25),
+        r0_zenith=T(0.2),
+        fractional_cn2=T[0.6, 0.4],
+        reference_wavelength_m=T(500e-9),
+        wind_direction_deg=T[0, 90],
+        wind_speed=T[5, 10],
+    )
+    asterism = LGSAsterismParams(
+        radius_arcsec=T(7.6),
+        wavelength_m=T(589e-9),
+        base_height_m=T(90_000),
+        n_lgs=2,
+    )
+    wfs = LGSWFSParams(
+        pupil_diameter_m=T(8),
+        n_lenslets=2,
+        n_px=8,
+        field_stop_size_arcsec=T(2),
+        valid_lenslet_map=trues(2, 2),
+        lenslet_grid_rotations_rad=T[0.06, -0.04],
+        lenslet_grid_offsets_fraction=T[0.03 -0.02; -0.01 0.04],
+    )
+    tomography = TomographyParams(
+        n_fit_src=2,
+        fov_optimization_arcsec=T(15),
+        fit_src_height_m=T(120_000),
+    )
+    grid_mask = Bool[true false true; false true false; true false true]
+    cxx_gpu = @inferred AdaptiveOpticsSim.Tomography.auto_correlation(
+        build_backend, atmosphere, asterism, wfs, grid_mask)
+    cox_gpu = @inferred AdaptiveOpticsSim.Tomography.cross_correlation(
+        build_backend, atmosphere, asterism, wfs, tomography;
+        grid_mask=grid_mask)
+    cxx_cpu = AdaptiveOpticsSim.Tomography.auto_correlation(
+        atmosphere, asterism, wfs, grid_mask)
+    cox_cpu = AdaptiveOpticsSim.Tomography.cross_correlation(
+        atmosphere, asterism, wfs, tomography; grid_mask=grid_mask)
+    @assert cxx_gpu isa BackendArray
+    @assert cox_gpu isa BackendArray
+    @assert size(cxx_gpu) == (10, 10)
+    @assert size(cox_gpu) == (4, 5, 10)
+    @assert norm(Array(cxx_gpu) - cxx_cpu) / norm(cxx_cpu) <= 2f-4
+    @assert norm(Array(cox_gpu) - cox_cpu) / norm(cox_cpu) <= 2f-4
+
+    empty_mask = falses(size(grid_mask))
+    empty_cxx = @inferred AdaptiveOpticsSim.Tomography.auto_correlation(
+        build_backend, atmosphere, asterism, wfs, empty_mask)
+    empty_cox = @inferred AdaptiveOpticsSim.Tomography.cross_correlation(
+        build_backend, atmosphere, asterism, wfs, tomography;
+        grid_mask=empty_mask)
+    @assert empty_cxx isa BackendArray && size(empty_cxx) == (0, 0)
+    @assert empty_cox isa BackendArray && size(empty_cox) == (4, 0, 0)
+    return nothing
+end
 
 function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
     AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
@@ -111,6 +175,18 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
         noise_model=noise,
         build_backend=Calibration.CPUBuildBackend(),
     )
+    cxx_direct = @inferred AdaptiveOpticsSim.Tomography.auto_correlation(
+        build_backend, atm, lgs, wfs, grid_mask)
+    cox_direct = @inferred AdaptiveOpticsSim.Tomography.cross_correlation(
+        build_backend, atm, lgs, wfs, tomo; grid_mask=grid_mask)
+    @assert cxx_direct isa BackendArray
+    @assert cox_direct isa BackendArray
+    cxx_direct_cpu = AdaptiveOpticsSim.Tomography.auto_correlation(
+        atm, lgs, wfs, grid_mask)
+    cox_direct_cpu = AdaptiveOpticsSim.Tomography.cross_correlation(
+        atm, lgs, wfs, tomo; grid_mask=grid_mask)
+    @assert Array(cxx_direct) ≈ cxx_direct_cpu rtol=2f-2
+    @assert Array(cox_direct) ≈ cox_direct_cpu rtol=2f-2
     cxx_gpu = Array(mr.operators.cxx)
     cox_gpu = Array(mr.operators.cox)
     relative_grid_covariance_error = norm(cox_gpu - cxx_gpu) / norm(cxx_gpu)
@@ -121,6 +197,7 @@ function run_gpu_builder_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backends.G
     @assert relative_grid_covariance_error <= 1f-3 "GPU Cox/Cxx grid error: $relative_grid_covariance_error"
     @assert relative_cpu_covariance_error <= 2f-2 "GPU/CPU Cxx error: $relative_cpu_covariance_error"
     @assert relative_reconstructor_error <= 2f-2 "GPU/CPU reconstructor error: $relative_reconstructor_error"
+    run_gpu_covariance_geometry_contract(B)
     println("gpu_builder_smoke complete")
     return nothing
 end

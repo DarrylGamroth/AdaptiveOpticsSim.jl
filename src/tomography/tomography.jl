@@ -11,13 +11,11 @@ import AdaptiveOpticsCalibration
 using KernelAbstractions
 using LinearAlgebra
 using SparseArrays
-using SpecialFunctions
 
 import ..AdaptiveOpticsSim:
     DimensionMismatchError,
     InvalidConfiguration,
-    UnsupportedAlgorithm,
-    _scaled_kv56_scalar
+    UnsupportedAlgorithm
 
 import ..Backends:
     AcceleratorStyle,

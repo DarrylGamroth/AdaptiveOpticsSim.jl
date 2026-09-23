@@ -4,8 +4,9 @@
 Opt-in Float32 cold-preparation comparison for lenslet counts 3 and 8. The
 CPU route uses the production AOC-backed model builder, then transfers the
 retained tomography product arrays through AOS's GPU build backend. The GPU
-route uses the production GPU model builder. Both timed routes synchronize
-before returning. Julia host allocation bytes do not measure device memory.
+route uses AOC v0.16 covariance preparation and the production GPU model
+builder. Both timed routes synchronize before returning. Julia host
+allocation bytes do not measure device memory.
 
 Only retained products (K, gamma, mask, Cxx, Cox, Cnz, recstat) are copied;
 temporary GPU covariance/solve intermediates are not part of the CPU route.
@@ -119,12 +120,20 @@ function verify_products(::Type{B}, measured) where {B<:AOS.Backends.GPUBackendT
     native_K = Array(native.K)
     transfer_error = norm(transferred_K - cpu_K) / norm(cpu_K)
     native_error = norm(native_K - cpu_K) / norm(cpu_K)
+    native_cxx_error = norm(Array(native.cxx) - cpu.cxx) / norm(cpu.cxx)
+    native_cox_error = norm(Array(native.cox) - cpu.cox) / norm(cpu.cox)
     println("    K_transfer_relative_Frobenius_error=", transfer_error)
     println("    K_native_relative_Frobenius_error=", native_error)
+    println("    Cxx_native_relative_Frobenius_error=", native_cxx_error)
+    println("    Cox_native_relative_Frobenius_error=", native_cox_error)
     isfinite(transfer_error) && transfer_error <= 1e-6 ||
         error("CPU K changed unexpectedly during H2D materialization")
     isfinite(native_error) && native_error <= 1e-3 ||
         error("native GPU K disagrees with CPU K beyond 1e-3")
+    isfinite(native_cxx_error) && native_cxx_error <= 1e-3 ||
+        error("native GPU Cxx disagrees with CPU Cxx beyond 1e-3")
+    isfinite(native_cox_error) && native_cox_error <= 1e-3 ||
+        error("native GPU Cox disagrees with CPU Cox beyond 1e-3")
     return nothing
 end
 
