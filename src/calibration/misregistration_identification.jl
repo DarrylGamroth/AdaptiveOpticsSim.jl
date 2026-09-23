@@ -1,58 +1,70 @@
 #
-# Misregistration identification and SPRINT
+# Misregistration identification
 #
-# This file implements meta-sensitivity approaches for estimating DM or WFS
-# misregistration parameters from interaction matrices.
+# This file acquires the physical meta-sensitivity of interaction matrices to
+# deformable-mirror misregistration parameters.
 #
 # The workflow is:
 # 1. build a reference interaction matrix at a chosen zero-point misregistration
 # 2. form the derivative of the interaction matrix with respect to each
 #    selected parameter
-# 4. invert that meta-sensitivity matrix
-# 5. estimate parameter offsets from the difference between a measured
-#    interaction matrix and the stored reference
-#
-# `SPRINT` wraps that linearized estimator and optionally refreshes the
-# zero-point so the linearized model can be iterated around a new operating
-# point.
+# 3. pass the explicit response matrices to
+#    AdaptiveOpticsCalibration.Misregistration for numerical estimation
 #
 const MISREG_FIELDS = (:shift_x, :shift_y, :rotation_deg, :radial_scaling, :tangential_scaling)
+const MISREG_FIELD_UNITS = (
+    shift_x = "DM actuator-coordinate convention",
+    shift_y = "DM actuator-coordinate convention",
+    rotation_deg = "degree",
+    anamorphosis_angle_deg = "degree",
+    radial_scaling = "dimensionless",
+    tangential_scaling = "dimensionless",
+)
 
 """
     MetaSensitivity
 
-Store the linearized sensitivity of an interaction matrix to misregistration
-parameters.
+Store physical interaction-matrix data for complete-data misregistration
+estimation.
 
-`meta` is the inverted meta-sensitivity operator, `calib0` is the reference
-interaction matrix at the zero-point, `epsilon` stores finite-difference step
-sizes for validation/fallback paths, and `field_order` defines which
-misregistration parameters were included and in what order.
+`D0` is the reference interaction matrix at the physical zero point. `J` has
+column-major `vec(D0)` row order and one column for each name in
+`field_order`. `epsilon` stores finite-difference step sizes for validation or
+fallback acquisition. `field_units` describes the ordered parameter values;
+this physical product does not construct an inverse or estimate offsets.
 """
 struct MetaSensitivity{T<:AbstractFloat,
-    M<:ControlMatrix{T},
-    C<:ControlMatrix{T},
-    V<:AbstractVector{Symbol}}
-    meta::M
-    calib0::C
+    D<:AbstractMatrix{T},
+    J<:AbstractMatrix{T},
+    O<:Tuple{Vararg{Symbol}},
+    U<:Tuple{Vararg{String}}}
+    D0::D
+    J::J
     epsilon::Misregistration{T}
-    field_order::V
+    field_order::O
+    field_units::U
 end
 
-"""
-    SPRINT
+function MetaSensitivity(D0::D, J::M, epsilon::Misregistration{T},
+    field_order) where {T<:AbstractFloat,D<:AbstractMatrix{T},M<:AbstractMatrix{T}}
+    fields = Tuple(field_order)
+    size(J, 1) == length(D0) || throw(DimensionMismatchError(
+        "meta-sensitivity row count must equal length(D0)",
+    ))
+    size(J, 2) == length(fields) || throw(DimensionMismatchError(
+        "meta-sensitivity column count must equal field_order length",
+    ))
+    return MetaSensitivity(D0, J, epsilon, fields,
+        _misregistration_field_units(fields))
+end
 
-Stateful wrapper around the meta-sensitivity misregistration estimator.
-
-It stores both the linearized sensitivity model and the currently assumed
-zero-point / output misregistration so the estimate can be iterated if the
-user requests zero-point updates.
-"""
-mutable struct SPRINT{T<:AbstractFloat}
-    meta::MetaSensitivity{T}
-    misregistration_zero::Misregistration{T}
-    misregistration_out::Misregistration{T}
-    sensitivity::Symbol
+function _misregistration_field_units(fields::Tuple{Vararg{Symbol}})
+    return map(fields) do field
+        hasproperty(MISREG_FIELD_UNITS, field) || throw(InvalidConfiguration(
+            "unsupported misregistration field $(field)",
+        ))
+        return getproperty(MISREG_FIELD_UNITS, field)
+    end
 end
 
 """
@@ -63,8 +75,9 @@ parameters.
 
 CPU grid-backed Gaussian DM misregistration uses ForwardDiff by default. Use
 `sensitivity=:finite_difference` for validation or accelerator-backed arrays.
-The result is a caller-owned `MetaSensitivity`; this operation performs no
-cache lookup, serialization, or filesystem I/O.
+The caller-owned `MetaSensitivity` retains physical D₀, J, finite-difference
+epsilon, and ordered parameter metadata. This operation performs no numerical
+inversion, cache lookup, serialization, or filesystem I/O.
 """
 function compute_meta_sensitivity_matrix(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS,
     basis::AbstractMatrix; misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
@@ -111,7 +124,6 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
         misregistration=misregistration_zero, T=T)
     calib0 = _interaction_matrix_for_sensitivity(dm0, wfs, pupil, basis,
         source, amplitude)
-    calib0_control_matrix = ControlMatrix(calib0.matrix)
 
     n_elements = length(calib0.matrix)
     meta = zeros(T, n_elements, length(fields))
@@ -137,102 +149,7 @@ function _compute_meta_sensitivity_matrix_fd(tel::Telescope, dm::DeformableMirro
         meta[:, idx] .= vec((imat_p.matrix .- imat_n.matrix) ./ (2 * eps_val))
     end
 
-    meta_control_matrix = ControlMatrix(meta)
-    return MetaSensitivity(meta_control_matrix, calib0_control_matrix,
-        epsilon, fields)
-end
-
-"""
-    estimate_misregistration(meta, calib_in; misregistration_zero, precision=3, gain_estimation=1)
-
-Estimate misregistration offsets from an input interaction matrix.
-
-This compares `calib_in` to the stored zero-point interaction matrix, projects
-that difference through the inverted meta-sensitivity operator, and applies the
-resulting parameter offsets to `misregistration_zero`.
-"""
-function estimate_misregistration(meta::MetaSensitivity, calib_in::AbstractMatrix;
-    misregistration_zero::Misregistration, precision::Int=3, gain_estimation::Real=1.0)
-
-    calib_in_control_matrix = ControlMatrix(calib_in)
-    diff = vec(calib_in_control_matrix.D .- meta.calib0.D)
-    if meta.meta.M === nothing
-        throw(InvalidConfiguration("meta sensitivity matrix is not inverted"))
-    end
-    delta = meta.meta.M * diff
-    delta .*= gain_estimation
-    delta = round.(delta; digits=precision)
-
-    out = misregistration_zero
-    for (i, field) in enumerate(meta.field_order)
-        out = update_misregistration(out, field, misregistration_component(out, field) + delta[i])
-    end
-    return out
-end
-
-"""
-    SPRINT(tel, dm, wfs, basis; ...)
-
-Construct the iterative misregistration estimator around a chosen zero point.
-
-This first computes the meta-sensitivity matrix and then packages it together
-with the zero-point and model choices used by later `estimate!` calls.
-"""
-function SPRINT(tel::Telescope, dm::DeformableMirror, wfs::AbstractWFS, basis::AbstractMatrix;
-    misregistration_zero::Misregistration=Misregistration(T=eltype(pupil_reflectivity(tel))),
-    epsilon::Misregistration=Misregistration(shift_x=1e-3, shift_y=1e-3, rotation_deg=1e-3, radial_scaling=1e-3,
-        tangential_scaling=1e-3, T=eltype(pupil_reflectivity(tel))),
-    n_mis_reg::Int=3, field_order=collect(MISREG_FIELDS),
-    sensitivity::Symbol=:ad)
-
-    meta = compute_meta_sensitivity_matrix(tel, dm, wfs, basis;
-        misregistration_zero=misregistration_zero,
-        epsilon=epsilon,
-        n_mis_reg=n_mis_reg,
-        field_order=field_order,
-        sensitivity=sensitivity)
-    return SPRINT(meta, misregistration_zero, misregistration_zero,
-        sensitivity)
-end
-
-"""
-    estimate!(sprint, calib_in; ...)
-
-Run the SPRINT estimator in-place.
-
-With `n_update_zero_point == 0`, this applies one linearized estimate around
-the stored zero point. With a positive zero-point update count, the estimator
-rebuilds the meta-sensitivity matrix around each newly estimated operating
-point before the next update.
-"""
-function estimate!(sprint::SPRINT, calib_in::AbstractMatrix; precision::Int=3, gain_estimation::Real=1.0,
-    n_update_zero_point::Int=0, tel::Union{Nothing,Telescope}=nothing,
-    dm::Union{Nothing,DeformableMirror}=nothing, wfs::Union{Nothing,AbstractWFS}=nothing,
-    basis::Union{Nothing,AbstractMatrix}=nothing)
-    if n_update_zero_point > 0
-        if tel === nothing || dm === nothing || wfs === nothing || basis === nothing
-            throw(InvalidConfiguration("tel, dm, wfs, and basis are required for zero-point updates"))
-        end
-        sprint.misregistration_out = sprint.misregistration_zero
-        for _ in 1:n_update_zero_point
-            sprint.misregistration_out = estimate_misregistration(sprint.meta, calib_in;
-                misregistration_zero=sprint.misregistration_out,
-                precision=precision,
-                gain_estimation=gain_estimation)
-            sprint.meta = compute_meta_sensitivity_matrix(tel, dm, wfs, basis;
-                misregistration_zero=sprint.misregistration_out,
-                epsilon=sprint.meta.epsilon,
-                n_mis_reg=length(sprint.meta.field_order),
-                field_order=sprint.meta.field_order,
-                sensitivity=sprint.sensitivity)
-        end
-    else
-        sprint.misregistration_out = estimate_misregistration(sprint.meta, calib_in;
-            misregistration_zero=sprint.misregistration_zero,
-            precision=precision,
-            gain_estimation=gain_estimation)
-    end
-    return sprint.misregistration_out
+    return MetaSensitivity(calib0.matrix, meta, epsilon, fields)
 end
 
 """

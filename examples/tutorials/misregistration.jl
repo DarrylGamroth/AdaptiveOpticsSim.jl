@@ -1,5 +1,9 @@
 include(joinpath(@__DIR__, "common.jl"))
 
+import AdaptiveOpticsCalibration
+
+const AOCMisregistration = AdaptiveOpticsCalibration.Misregistration
+
 """Form a geometric-wavefront reference response; this is not an RTC calibration."""
 function geometric_wavefront_response_matrix(tel::Telescope, dm::DeformableMirror,
     sensor::ShackHartmannWFS, commands::AbstractMatrix{<:Real})
@@ -49,24 +53,41 @@ function main(; resolution::Int=16)
         sensitivity_columns[:, index] .= vec((plus .- minus) ./ (2δ))
     end
 
-    meta = Calibration.MetaSensitivity(
-        Calibration.ControlMatrix(sensitivity_columns),
-        Calibration.ControlMatrix(reference; invert=false),
-        epsilon,
-        collect(fields),
-    )
-    sprint = Calibration.SPRINT(meta, Misregistration(T=Float64),
-        Misregistration(T=Float64), :finite_difference)
+    meta = Calibration.MetaSensitivity(reference, sensitivity_columns, epsilon, fields)
     injected = Misregistration(shift_x=5e-4, shift_y=-5e-4, T=Float64)
     dm_in = DeformableMirror(tel; n_act=dm.params.n_act,
         influence_model=influence_model(dm), misregistration=injected)
     response_in = geometric_wavefront_response_matrix(tel, dm_in, sensor, commands)
-    estimate = Calibration.estimate!(sprint, response_in; precision=4)
+    specification = AOCMisregistration.MetaSensitivityEstimateSpecification(
+        meta.D0,
+        meta.J,
+        collect(meta.field_order),
+        collect(meta.field_units),
+    )
+    plan = AdaptiveOpticsCalibration.prepare(
+        AOCMisregistration.MetaSensitivityEstimate(), specification)
+    result = AdaptiveOpticsCalibration.process(plan,
+        AOCMisregistration.MetaSensitivityEstimateInputs(response_in))
+    raw_offsets = AOCMisregistration.parameter_offsets(result)
 
-    @info "SPRINT geometric-reference tutorial complete" shift_x=estimate.shift_x shift_y=estimate.shift_y
+    legacy_gain = 1.0
+    legacy_precision = 4
+    estimate = Misregistration(T=Float64)
+    for (index, field) in enumerate(meta.field_order)
+        legacy_offset = round(legacy_gain * raw_offsets[index];
+            digits=legacy_precision)
+        estimate = Calibration.update_misregistration(
+            estimate,
+            field,
+            Calibration.misregistration_component(estimate, field) + legacy_offset,
+        )
+    end
+
+    @info "Meta-sensitivity geometric-reference tutorial complete" shift_x=estimate.shift_x shift_y=estimate.shift_y
     return (
         injected=injected,
         estimate=estimate,
+        raw_offsets=raw_offsets,
         response=reference,
     )
 end

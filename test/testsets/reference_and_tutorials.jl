@@ -306,9 +306,10 @@ end
     @test length(lift.coeffs_true) == length(lift.coeffs_fit)
     @test all(isfinite, lift.coeffs_fit)
 
-    sprint = run_tutorial_example("sprint.jl")
-    @test isfinite(sprint.estimate.shift_x)
-    @test isfinite(sprint.estimate.shift_y)
+    misregistration = run_tutorial_example("misregistration.jl")
+    @test isfinite(misregistration.estimate.shift_x)
+    @test isfinite(misregistration.estimate.shift_y)
+    @test all(isfinite, misregistration.raw_offsets)
 
     gsc = run_tutorial_example("gain_sensing_camera.jl")
     @test length(gsc.optical_gains) == 4
