@@ -17,9 +17,22 @@ abstract type CountingDeadTimeModel end
 abstract type AbstractCountingGateModel end
 abstract type CountingMeanResponseModel end
 abstract type AbstractDetectorResponse end
+
+"""
+    AbstractFrameResponse
+
+Canonical extension protocol for a presampling spatial detector response. Each
+sample represents an already cell-integrated photon-arrival rate; the response
+acts before detector sampling or binning. It does not model collected-charge
+coupling, QE, noise, or readout.
+
+A usable subtype defines compatible `convert_frame_response_model`,
+`validate_frame_response_model`, and `response_family` methods, plus
+`apply_response!(style, response, frame, scratch)` for every supported
+`ExecutionStyle`. That method overwrites and returns `frame` using `scratch`.
+"""
 abstract type AbstractFrameResponse <: AbstractDetectorResponse end
 abstract type AbstractChargeCouplingModel end
-const FrameResponseModel = AbstractFrameResponse
 abstract type BackgroundModel end
 abstract type AbstractDetectorDefectModel end
 abstract type FrameSamplingMode end
@@ -1030,8 +1043,6 @@ function MultiReadFrameReadoutProducts(reference_frame::Union{Nothing,A},
         read_offsets_s)
 end
 
-const HgCdTeReadoutProducts = MultiReadFrameReadoutProducts
-
 function SampledFrameReadoutProducts(reference_frame::Union{Nothing,A}, signal_frame::A,
     read_cube::Nothing) where {A<:AbstractMatrix}
     return SampledFrameReadoutProducts{A,Nothing}(reference_frame, signal_frame, read_cube)
@@ -1119,7 +1130,7 @@ struct NullChargeCoupling <: AbstractChargeCouplingModel end
     InterpixelCapacitance(kernel; normalize=true, T=Float64, backend=CPUBackend())
 
 Post-collection capacitive coupling between neighboring detector nodes. Unlike a
-`FrameResponseModel`, this stage is applied after photon and generated-charge
+presampling detector response, this stage is applied after photon and generated-charge
 statistics, so it correlates the collected charge without smoothing the
 Poisson expectation before sampling.
 """
@@ -1177,8 +1188,6 @@ struct RectangularPixelAperture{T<:AbstractFloat,VX<:AbstractVector{T},VY<:Abstr
             fill_factor_x, fill_factor_y, owned_x, owned_y)
     end
 end
-
-const SeparableGaussianPixelResponse = GaussianPixelResponse
 
 @inline _frame_response_kernel_sum(kernel) = _frame_response_kernel_sum(execution_style(kernel), kernel)
 @inline _frame_response_kernel_sum(::ScalarCPUStyle, kernel) = sum(kernel)

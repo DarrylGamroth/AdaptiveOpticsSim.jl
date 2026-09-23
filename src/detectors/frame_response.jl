@@ -108,8 +108,6 @@ function apply_response!(style::ExecutionStyle, model::RectangularPixelAperture,
     return _apply_separable_response!(style, frame, scratch, model.kernel_y, model.kernel_x)
 end
 
-const apply_frame_response! = apply_response!
-
 apply_charge_coupling!(::NullChargeCoupling, det::Detector) = det.products.frame
 
 function apply_charge_coupling!(model::InterpixelCapacitance, det::Detector)
@@ -203,19 +201,20 @@ function detector_output_shape(det::Detector, input_shape::Tuple{Int,Int})
     return window === nothing ? (n_out, m_out) : (length(window.rows), length(window.cols))
 end
 
-function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_duration::Real,
-    qe, rate_scale) where {T}
-    n_in, m_in = size(psf)
+function fill_frame!(det::Detector,
+    photon_arrival_rate::AbstractMatrix{T}, exposure_duration::Real, qe,
+    rate_scale) where {T}
+    n_in, m_in = size(photon_arrival_rate)
     sampling = det.params.psf_sampling
     binning = det.params.binning
     prepare_detector_buffers!(det, (n_in, m_in))
 
-    optical_rate = presampling_response_input!(det.params.response_model, det,
-        psf)
+    photon_arrival_rate = presampling_response_input!(det.params.response_model,
+        det, photon_arrival_rate)
     if sampling > 1
-        bin2d!(det.workspace.bin_buffer, optical_rate, sampling)
+        bin2d!(det.workspace.bin_buffer, photon_arrival_rate, sampling)
     else
-        copyto!(det.workspace.bin_buffer, optical_rate)
+        copyto!(det.workspace.bin_buffer, photon_arrival_rate)
     end
     @. det.workspace.bin_buffer *= qe * exposure_duration * rate_scale
     if binning > 1
@@ -226,9 +225,12 @@ function fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_duration::R
     return det.products.frame
 end
 
-fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_duration::Real,
-    qe) where {T} = fill_frame!(det, psf, exposure_duration, qe,
+fill_frame!(det::Detector, photon_arrival_rate::AbstractMatrix{T},
+    exposure_duration::Real, qe) where {T} =
+    fill_frame!(det, photon_arrival_rate, exposure_duration, qe,
         one(eltype(det.products.frame)))
-fill_frame!(det::Detector, psf::AbstractMatrix{T}, exposure_duration::Real) where {T} =
-    fill_frame!(det, psf, exposure_duration, det.params.qe)
-fill_frame!(det::Detector, psf::AbstractMatrix{T}) where {T} = fill_frame!(det, psf, det.params.exposure_duration)
+fill_frame!(det::Detector, photon_arrival_rate::AbstractMatrix{T},
+    exposure_duration::Real) where {T} =
+    fill_frame!(det, photon_arrival_rate, exposure_duration, det.params.qe)
+fill_frame!(det::Detector, photon_arrival_rate::AbstractMatrix{T}) where {T} =
+    fill_frame!(det, photon_arrival_rate, det.params.exposure_duration)

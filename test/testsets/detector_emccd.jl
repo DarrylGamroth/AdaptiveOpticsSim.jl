@@ -41,15 +41,15 @@ struct TestUnsupportedEMCCDAcquisitionMode <:
     AbstractEMCCDAcquisitionMode end
 
 @testset "EMCCD detector" begin
-    zero_psf = zeros(4, 4)
+    zero_photon_arrival_rate = zeros(4, 4)
     rng_ccd = MersenneTwister(7)
     rng_emccd = MersenneTwister(7)
     det_ccd = Detector(exposure_duration=1.0, noise=NoiseReadout(1.0), qe=1.0, binning=1,
         gain=10.0, sensor=CCDSensor())
     det_emccd = Detector(exposure_duration=1.0, noise=NoiseReadout(1.0), qe=1.0, binning=1,
         gain=10.0, sensor=EMCCDSensor())
-    frame_ccd = copy(capture!(det_ccd, zero_psf; rng=rng_ccd))
-    frame_emccd = copy(capture!(det_emccd, zero_psf; rng=rng_emccd))
+    frame_ccd = copy(capture!(det_ccd, zero_photon_arrival_rate; rng=rng_ccd))
+    frame_emccd = copy(capture!(det_emccd, zero_photon_arrival_rate; rng=rng_emccd))
     @test frame_ccd ≈ 10 .* frame_emccd
     @test_throws InvalidConfiguration EMCCDSensor(excess_noise_factor=0.5)
 
@@ -73,12 +73,12 @@ struct TestUnsupportedEMCCDAcquisitionMode <:
 
     det_emccd_cic = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
-    frame_emccd_cic = copy(capture!(det_emccd_cic, zero_psf;
+    frame_emccd_cic = copy(capture!(det_emccd_cic, zero_photon_arrival_rate;
         rng=MersenneTwister(125)))
     @test sum(frame_emccd_cic) > 0
     det_emccd_cic_long = Detector(exposure_duration=10.0, noise=NoiseNone(),
         qe=1.0, sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
-    @test capture!(det_emccd_cic_long, zero_psf;
+    @test capture!(det_emccd_cic_long, zero_photon_arrival_rate;
         rng=MersenneTwister(125)) == frame_emccd_cic
     emccd_cic_whole = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, gain=5.0, response_model=NullFrameResponse(),
@@ -86,11 +86,11 @@ struct TestUnsupportedEMCCDAcquisitionMode <:
     emccd_cic_split = Detector(exposure_duration=1.0, noise=NoiseNone(),
         qe=1.0, gain=5.0, response_model=NullFrameResponse(),
         sensor=EMCCDSensor(clock_induced_charge_per_frame=3.0))
-    emccd_cic_whole_frame = copy(capture!(emccd_cic_whole, zero_psf;
+    emccd_cic_whole_frame = copy(capture!(emccd_cic_whole, zero_photon_arrival_rate;
         rng=MersenneTwister(130)))
-    capture!(emccd_cic_split, zero_psf; rng=MersenneTwister(130),
+    capture!(emccd_cic_split, zero_photon_arrival_rate; rng=MersenneTwister(130),
         integration_duration=0.5)
-    emccd_cic_split_frame = copy(capture!(emccd_cic_split, zero_psf;
+    emccd_cic_split_frame = copy(capture!(emccd_cic_split, zero_photon_arrival_rate;
         rng=MersenneTwister(130), integration_duration=0.5))
     @test emccd_cic_split_frame == emccd_cic_whole_frame
     det_emccd_sat = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,

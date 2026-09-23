@@ -2846,9 +2846,10 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     @test sh_rate.values isa array_backend
     @test all(isfinite, Array(sh_rate.values))
     @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy
-    capture_psf = array_backend{T}(undef, 4, 4)
-    fill!(capture_psf, T(10))
-    captured = capture!(det_capture, capture_psf; rng=MersenneTwister(2))
+    capture_photon_arrival_rate = array_backend{T}(undef, 4, 4)
+    fill!(capture_photon_arrival_rate, T(10))
+    captured = capture!(det_capture, capture_photon_arrival_rate;
+        rng=MersenneTwister(2))
     @test captured isa array_backend
     @test maximum(Array(captured)) <= Float64(exp2(T(12)) - one(T))
     cpu_poisson_det = Detector(noise=NoisePhoton(), exposure_duration=T(1.0), qe=T(1.0),
@@ -2873,7 +2874,8 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     )
     @test occursin("AdaptiveOpticsSimAMDGPUExt", String(poisson_method.file))
     @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr_propagation.intensity) isa AdaptiveOpticsSim.Backends.HostMirrorReductionStrategy
-    @test AdaptiveOpticsSim.Backends.backend_sum_value(capture_psf) == T(160)
+    @test AdaptiveOpticsSim.Backends.backend_sum_value(
+        capture_photon_arrival_rate) == T(160)
 
     phase_freqs = T[-0.2, -0.1, 0.1, 0.2]
     cpu_phase_psd = zeros(T, 4, 4)

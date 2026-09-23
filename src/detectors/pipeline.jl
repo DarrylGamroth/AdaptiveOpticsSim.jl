@@ -38,10 +38,11 @@ end
 @inline photon_noise_enabled(::Detector{<:NoiseReadout}) = false
 @inline photon_noise_enabled(::Detector{<:NoisePhotonReadout}) = true
 
-@inline function prepare_signal_frame!(det::Detector, psf::AbstractMatrix,
+@inline function prepare_signal_frame!(det::Detector,
+    photon_arrival_rate::AbstractMatrix,
     exposure_duration::Real, qe, apply_persistence::Bool,
     persistence_exposure_duration::Real)
-    fill_frame!(det, psf, exposure_duration, qe)
+    fill_frame!(det, photon_arrival_rate, exposure_duration, qe)
     apply_signal_defects!(det.params.defect_model, det, exposure_duration)
     apply_persistence &&
         apply_sensor_persistence!(det.params.sensor, det,
@@ -49,9 +50,11 @@ end
     return det.products.frame
 end
 
-@inline prepare_signal_frame!(det::Detector, psf::AbstractMatrix,
+@inline prepare_signal_frame!(det::Detector,
+    photon_arrival_rate::AbstractMatrix,
     exposure_duration::Real, qe=det.params.qe) =
-    prepare_signal_frame!(det, psf, exposure_duration, qe, true, exposure_duration)
+    prepare_signal_frame!(det, photon_arrival_rate, exposure_duration, qe,
+        true, exposure_duration)
 
 function add_poisson_rate!(dest::AbstractMatrix{T}, det::Detector, rng::AbstractRNG, rate) where {T<:AbstractFloat}
     rate_t = T(rate)
@@ -70,19 +73,21 @@ function add_gaussian_noise!(dest::AbstractMatrix{T}, det::Detector, rng::Abstra
     return dest
 end
 
-function capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
+function capture_signal_pipeline!(det::Detector,
+    photon_arrival_rate::AbstractMatrix,
     rng::AbstractRNG, exposure_duration::Real, qe, apply_persistence::Bool,
     persistence_exposure_duration::Real)
-    prepare_signal_frame!(det, psf, exposure_duration, qe, apply_persistence,
-        persistence_exposure_duration)
+    prepare_signal_frame!(det, photon_arrival_rate, exposure_duration, qe,
+        apply_persistence, persistence_exposure_duration)
     photon_noise_enabled(det) && poisson_noise_frame!(det, rng, det.products.frame)
     apply_background_flux!(det.background_flux, det, rng, exposure_duration)
     return det.products.frame
 end
 
-capture_signal_pipeline!(det::Detector, psf::AbstractMatrix,
+capture_signal_pipeline!(det::Detector, photon_arrival_rate::AbstractMatrix,
     rng::AbstractRNG, exposure_duration::Real, qe=det.params.qe) =
-    capture_signal_pipeline!(det, psf, rng, exposure_duration, qe, true,
+    capture_signal_pipeline!(det, photon_arrival_rate, rng, exposure_duration,
+        qe, true,
         exposure_duration)
 
 @inline function apply_incremental_dark_current!(det::Detector,

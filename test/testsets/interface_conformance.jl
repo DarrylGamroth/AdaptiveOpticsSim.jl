@@ -11,9 +11,10 @@
     det = Detector(noise=NoiseNone())
     spad = SPADArrayDetector((8, 8); noise=NoisePhoton())
     mkid = MKIDArrayDetector(noise=NoisePhoton())
-    psf = fill(1.0, 8, 8)
+    photon_arrival_rate = fill(1.0, 8, 8)
     linear_apd = LinearAPDDetector(
-        topology=LinearAPDChannelBank(length(psf)), noise=NoisePhoton())
+        topology=LinearAPDChannelBank(length(photon_arrival_rate)),
+        noise=NoisePhoton())
     opd_map = OPDMap(fill(0.1, size(pupil.opd)))
     ncpa = NCPA(fill(0.01, size(pupil.opd)))
     poly = with_spectrum(src, SpectralBundle([wavelength(src), 1.1 * wavelength(src)], [0.7, 0.3]))
@@ -160,10 +161,10 @@
     # IF-DM
     assert_dm_interface(dm, tel)
     # IF-DET
-    assert_detector_interface(det, psf)
-    assert_detector_interface(linear_apd, vec(psf))
-    assert_detector_interface(spad, psf)
-    assert_detector_interface(mkid, psf)
+    assert_detector_interface(det, photon_arrival_rate)
+    assert_detector_interface(linear_apd, vec(photon_arrival_rate))
+    assert_detector_interface(spad, photon_arrival_rate)
+    assert_detector_interface(mkid, photon_arrival_rate)
     # IF-OPT
     assert_optical_element_interface(opd_map, tel)
     assert_optical_element_interface(ncpa, tel)

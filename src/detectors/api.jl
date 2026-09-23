@@ -9,7 +9,7 @@ export SequentialAcquisition, FrameTransferAcquisition
 export HgCdTeAvalancheArraySensor
 export SPADArraySensor, MKIDArraySensor, MKIDArrayCharacteristics
 export SingleElementLinearAPD, LinearAPDChannelBank
-export FrameResponseModel, NullFrameResponse, GaussianPixelResponse
+export AbstractFrameResponse, NullFrameResponse, GaussianPixelResponse
 export SampledFrameResponse, RectangularPixelAperture
 export CMOSReadNoiseMap, InterpixelCapacitance, detector_mtf
 export PixelResponseNonuniformity, DarkSignalNonuniformity, BadPixelMask
@@ -25,7 +25,7 @@ export ReferenceColumnCommonModeCorrection, ReferenceOutputCommonModeCorrection
 export CompositeFrameReadoutCorrection
 export FrameReadoutProducts, NoFrameReadoutProducts
 export MultiReadFrameReadoutProducts, UpTheRampReadoutProducts
-export SkipperReadoutProducts, HgCdTeReadoutProducts
+export SkipperReadoutProducts
 export SaturatingFrameNonlinearity, ExponentialPersistence
 export AbstractDetectorThermalModel, NullDetectorThermalModel
 export FixedTemperature, FirstOrderThermalModel

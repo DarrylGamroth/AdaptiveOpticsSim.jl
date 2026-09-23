@@ -183,8 +183,8 @@ function assert_wfs_interface(wfs, tel)
     @test supports_reference_signal(wfs) == !isnothing(reference_signal(wfs))
 end
 
-function assert_detector_interface(det, psf)
-    @test applicable(capture!, det, psf)
+function assert_detector_interface(det, photon_arrival_rate)
+    @test applicable(capture!, det, photon_arrival_rate)
 end
 
 function assert_dm_interface(dm, tel)

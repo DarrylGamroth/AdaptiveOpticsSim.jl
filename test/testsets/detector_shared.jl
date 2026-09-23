@@ -3,16 +3,17 @@
         central_obstruction=0.0)
     @test !hasfield(typeof(cadence_free_tel.params), :sampling_time)
 
-    psf = fill(1.0, 8, 8)
+    photon_arrival_rate = fill(1.0, 8, 8)
     det = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=2)
-    frame = capture!(det, psf; rng=MersenneTwister(2))
+    frame = capture!(det, photon_arrival_rate; rng=MersenneTwister(2))
     @test size(frame) == (4, 4)
-    @test sum(frame) == sum(psf)
+    @test sum(frame) == sum(photon_arrival_rate)
 
     det_sampling = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
-    frame_sampling = capture!(det_sampling, psf; rng=MersenneTwister(2))
+    frame_sampling = capture!(det_sampling, photon_arrival_rate;
+        rng=MersenneTwister(2))
     @test size(frame_sampling) == (2, 2)
-    @test sum(frame_sampling) == sum(psf)
+    @test sum(frame_sampling) == sum(photon_arrival_rate)
 
     rate_values = reshape(Float64.(1:16), 4, 4)
     shared_rate = detector_test_intensity_map(rate_values)

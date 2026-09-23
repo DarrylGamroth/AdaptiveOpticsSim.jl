@@ -220,16 +220,18 @@
 
     det_window = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         readout_window=FrameWindow(2:3, 2:4))
-    psf_window = reshape(collect(1.0:16.0), 4, 4)
-    frame_window = copy(capture!(det_window, psf_window; rng=MersenneTwister(2)))
+    photon_arrival_rate_window = reshape(collect(1.0:16.0), 4, 4)
+    frame_window = copy(capture!(det_window, photon_arrival_rate_window;
+        rng=MersenneTwister(2)))
     @test size(frame_window) == (2, 3)
-    @test frame_window == psf_window[2:3, 2:4]
+    @test frame_window == photon_arrival_rate_window[2:3, 2:4]
     meta_window = detector_export_metadata(det_window)
     @test meta_window.window_rows == (2, 3)
     @test meta_window.window_cols == (2, 4)
     det_window_oob = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1,
         readout_window=FrameWindow(2:5, 1:2))
-    @test_throws DimensionMismatchError capture!(det_window_oob, psf_window; rng=MersenneTwister(2))
+    @test_throws DimensionMismatchError capture!(det_window_oob,
+        photon_arrival_rate_window; rng=MersenneTwister(2))
     @test_throws InvalidConfiguration FrameWindow(0:1, 1:2)
 
     det_dark = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, binning=1, dark_current=100.0)
@@ -278,12 +280,13 @@
         allocation_stack_detector,
         allocation_stack_cube, allocation_stack_scratch, Xoshiro(10)) == 0
 
-    psf = reshape(Float64.(1:256), 16, 16)
+    photon_arrival_rate = reshape(Float64.(1:256), 16, 16)
     det_fused = Detector(exposure_duration=1.0, noise=NoiseNone(), qe=1.0, psf_sampling=2, binning=2)
-    frame_fused = copy(AdaptiveOpticsSim.Detectors.fill_frame!(det_fused, psf, 1.0))
+    frame_fused = copy(AdaptiveOpticsSim.Detectors.fill_frame!(det_fused,
+        photon_arrival_rate, 1.0))
     manual_mid = zeros(Float64, 8, 8)
     manual_out = zeros(Float64, 4, 4)
-    AdaptiveOpticsSim.bin2d!(manual_mid, psf, 2)
+    AdaptiveOpticsSim.bin2d!(manual_mid, photon_arrival_rate, 2)
     AdaptiveOpticsSim.bin2d!(manual_out, manual_mid, 2)
     @test frame_fused == manual_out
 end
