@@ -310,6 +310,10 @@ end
     @test isfinite(misregistration.estimate.shift_x)
     @test isfinite(misregistration.estimate.shift_y)
     @test all(isfinite, misregistration.raw_offsets)
+    @test isapprox(misregistration.estimate.shift_x,
+        misregistration.injected.shift_x; atol=1e-4, rtol=0)
+    @test isapprox(misregistration.estimate.shift_y,
+        misregistration.injected.shift_y; atol=1e-4, rtol=0)
 
     gsc = run_tutorial_example("gain_sensing_camera.jl")
     @test length(gsc.optical_gains) == 4

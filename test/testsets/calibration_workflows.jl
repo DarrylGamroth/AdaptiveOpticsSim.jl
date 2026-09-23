@@ -458,7 +458,8 @@ end
             @test reacquired_meta.field_units == meta_ad.field_units
             @test reacquired_meta.D0 != meta_ad.D0
             @test all(isfinite, reacquired_offsets)
-            @test norm(reacquired_offsets) < norm(initial_offsets)
+            @test norm(observed_matrix.matrix - reacquired_meta.D0) <
+                  norm(observed_matrix.matrix - meta_ad.D0)
         end
     end
 
