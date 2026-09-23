@@ -80,11 +80,13 @@ end
 Cache the intermediate linear operators used to assemble a tomography
 reconstructor.
 
-- `gamma`: sparse gradient operator from sampled phase to slopes
-- `cxx`: slope auto-covariance
-- `cox`: cross-covariance between fit directions and guide-star slopes
-- `cnz`: measurement-noise covariance
-- `recstat`: statistical reconstructor before any DM fitting step
+- `gamma`: phase-to-slope projection for model-based tomography (`nothing`
+  for a measured interaction-matrix projection)
+- `cxx`: guide-star phase covariance
+- `cox`: fit-phase/guide-star-phase cross-covariance
+- `cnz`: slope measurement-noise covariance
+- `recstat`: unscaled covariance reconstructor before physical conversion or
+  DM fitting
 """
 struct TomographyOperators{G,M,CX,CO,CN,RS,T}
     gamma::G
@@ -1237,6 +1239,40 @@ function stable_hermitian_right_division(
     ))
 end
 
+function _tomographic_covariance_reconstructor(
+    ::ScalarCPUStyle,
+    ::BuildBackend,
+    projection::AbstractMatrix{T},
+    phase_covariance::AbstractMatrix{T},
+    fit_phase_covariance::AbstractMatrix{T},
+    measurement_noise_covariance::AbstractMatrix{T},
+    ::AbstractMatrix{T},
+) where {T<:AbstractFloat}
+    aoc_tomography = AdaptiveOpticsCalibration.Tomography
+    specification = aoc_tomography.CovarianceReconstructorSpecification(
+        size(projection, 2), size(projection, 1), size(fit_phase_covariance, 1), T)
+    plan = AdaptiveOpticsCalibration.prepare(
+        aoc_tomography.CovarianceReconstructor(), specification)
+    inputs = aoc_tomography.CovarianceReconstructorInputs(
+        projection, phase_covariance, fit_phase_covariance,
+        measurement_noise_covariance)
+    return aoc_tomography.reconstructor(
+        AdaptiveOpticsCalibration.process(plan, inputs))
+end
+
+function _tomographic_covariance_reconstructor(
+    ::AcceleratorStyle,
+    backend::BuildBackend,
+    projection::AbstractMatrix{T},
+    ::AbstractMatrix{T},
+    fit_phase_covariance::AbstractMatrix{T},
+    ::AbstractMatrix{T},
+    system::AbstractMatrix{T},
+) where {T<:AbstractFloat}
+    return stable_hermitian_right_division(backend,
+        backend_matmul_transpose_right(fit_phase_covariance, projection), system)
+end
+
 tomography_noise_covariance(model::TomographyNoiseModel, reference_diag::AbstractVector) =
     tomography_noise_covariance(NativeBuildBackend(), model, reference_diag)
 
@@ -1378,8 +1414,8 @@ function build_reconstructor(
     reference_diag = tomography_reference_diagonal(build_backend, css_signal)
     cnz = tomography_noise_covariance(build_backend, noise_model, reference_diag)
     css = css_signal .+ cnz
-    recstat = stable_hermitian_right_division(build_backend,
-        backend_matmul_transpose_right(cox_native, interaction_native), css)
+    recstat = _tomographic_covariance_reconstructor(execution_style(css),
+        build_backend, interaction_native, cxx_native, cox_native, cnz, css)
     native_mask = materialize_build(build_backend, interaction_native, grid_mask)
     operators = TomographyOperators(
         nothing,
@@ -1607,9 +1643,11 @@ end
 
 Build the full covariance-model tomography reconstructor.
 
-This path constructs the sparse gradient operator `Gamma`, forms the masked
-covariance matrices `Cxx`, `Cox`, and `Cnz`, then evaluates the statistical
-reconstructor `RecStatSA = Cox * Gamma' / (Gamma * Cxx * Gamma' + Cnz)`.
+This path constructs the phase-to-slope gradient operator `P`, forms the masked
+covariance matrices `Cxx`, `Cox`, and `Cnz`, then asks
+AdaptiveOpticsCalibration to evaluate the CPU covariance reconstructor
+`R = Cox * P' / (P * Cxx * P' + Cnz)`. The GPU backend retains its existing
+solve until a separately qualified accelerator implementation is available.
 """
 function build_reconstructor(
     ::ModelBasedTomography,
@@ -1639,8 +1677,8 @@ function build_reconstructor(
     reference_diag = tomography_reference_diagonal(build_backend, css_signal)
     cnz = tomography_noise_covariance(build_backend, noise_model, reference_diag)
     css = css_signal .+ cnz
-    recstat = stable_hermitian_right_division(build_backend,
-        backend_matmul_transpose_right(cox_native, gamma_native), css)
+    recstat = _tomographic_covariance_reconstructor(execution_style(css),
+        build_backend, gamma_native, cxx_native, cox_native, cnz, css)
     d = lenslet_grid_support_diameter_m(wfs) / size(valid_lenslet_support(wfs), 1)
     wavefront_to_meter = asterism.wavelength_m / d / 2
     recon = d * wavefront_to_meter .* recstat

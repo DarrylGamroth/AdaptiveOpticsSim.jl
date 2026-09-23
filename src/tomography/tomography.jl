@@ -6,6 +6,8 @@ tomographic reconstruction, fitting, and DM-command projection.
 """
 module Tomography
 
+import AdaptiveOpticsCalibration
+
 using KernelAbstractions
 using LinearAlgebra
 using SparseArrays

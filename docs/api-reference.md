@@ -201,7 +201,11 @@ using AdaptiveOpticsSim.Tomography
 Tomography owns guide-star and layer geometry, model-based or
 interaction-matrix reconstruction, fitting, and DM command projection. Use
 `build_reconstructor`, `assemble_reconstructor_and_fitting`,
-`reconstruct_wavefront_map`, and `dm_commands`.
+`reconstruct_wavefront_map`, and `dm_commands`. CPU covariance reconstruction
+uses AdaptiveOpticsCalibration's explicit-array numerical solve; AOS retains
+the physical covariance construction, wavelength conversion, slope ordering,
+and fitting. The GPU build path retains its existing solve pending separate
+accelerator qualification.
 
 ## Ensembles
 

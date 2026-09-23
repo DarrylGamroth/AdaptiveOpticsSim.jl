@@ -1,3 +1,20 @@
+function aoc_covariance_reconstructor(
+    projection::AbstractMatrix{T},
+    phase_covariance::AbstractMatrix{T},
+    fit_phase_covariance::AbstractMatrix{T},
+    measurement_noise_covariance::AbstractMatrix{T},
+) where {T<:AbstractFloat}
+    tomography = AdaptiveOpticsCalibration.Tomography
+    specification = tomography.CovarianceReconstructorSpecification(
+        size(projection, 2), size(projection, 1), size(fit_phase_covariance, 1), T)
+    plan = AdaptiveOpticsCalibration.prepare(
+        tomography.CovarianceReconstructor(), specification)
+    inputs = tomography.CovarianceReconstructorInputs(
+        projection, phase_covariance, fit_phase_covariance,
+        measurement_noise_covariance)
+    return tomography.reconstructor(AdaptiveOpticsCalibration.process(plan, inputs))
+end
+
 @testset "Tomography Parameters and Geometry" begin
     atm = TomographyAtmosphereParams(
         zenith_angle_deg=30.0,
@@ -207,6 +224,15 @@ end
     )
     @test recon_cpu.reconstructor isa Matrix
     @test recon_cpu.grid_mask isa Matrix{Bool}
+    @test recon_cpu.operators.recstat ≈ aoc_covariance_reconstructor(
+        imat, recon_cpu.operators.cxx, recon_cpu.operators.cox,
+        recon_cpu.operators.cnz)
+    cpu_system = imat * recon_cpu.operators.cxx * transpose(imat) .+
+        recon_cpu.operators.cnz
+    @test (@inferred AdaptiveOpticsSim.Tomography._tomographic_covariance_reconstructor(
+        ScalarCPUStyle(), Calibration.CPUBuildBackend(), imat,
+        recon_cpu.operators.cxx, recon_cpu.operators.cox,
+        recon_cpu.operators.cnz, cpu_system)) ≈ recon_cpu.operators.recstat
 
     det = Detector(noise=NoiseReadout(0.2), qe=0.8, binning=2)
     detector_noise = PhotonReadoutSlopeNoise(det; photons_per_subaperture=1000.0, excess_noise=1.2)
@@ -249,6 +275,11 @@ end
     )
     @test model_cpu.reconstructor isa Matrix
     @test model_cpu.grid_mask isa Matrix{Bool}
+    @test model_cpu.operators.recstat ≈ aoc_covariance_reconstructor(
+        model_cpu.operators.gamma, model_cpu.operators.cxx,
+        model_cpu.operators.cox, model_cpu.operators.cnz)
+    @test model_cpu.reconstructor ≈
+        (lgs.wavelength_m / 2) .* model_cpu.operators.recstat
 
     model_noise = build_reconstructor(
         ModelBasedTomography(),
