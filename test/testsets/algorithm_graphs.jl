@@ -826,6 +826,257 @@ end
     @test_throws AlgorithmGraphError step_hil_frame!(failing_boundary)
 end
 
+# Fault injection wraps the exact command backing array; a copy changes one
+# target element and then fails. The graph keeps its original exact binding.
+struct CalibrationTestFailingCommand{A<:AbstractVector{Float32}} <: AbstractVector{Float32}
+    values::A
+    fail::Base.RefValue{Bool}
+end
+Base.size(values::CalibrationTestFailingCommand) = size(values.values)
+Base.IndexStyle(::Type{<:CalibrationTestFailingCommand}) = IndexLinear()
+Base.getindex(values::CalibrationTestFailingCommand, index::Int) = values.values[index]
+function Base.copyto!(destination::CalibrationTestFailingCommand, source::Array{Float32})
+    if destination.fail[]
+        destination.values[1] = source[1]
+        throw(ErrorException("injected partial target copy"))
+    end
+    copyto!(destination.values, source)
+    return destination
+end
+
+function calibration_test_graph(
+    command=Float32[1, 2]; declaration=GraphTestExactBindingDeclaration,
+)
+    return prepare_algorithm_graph(algorithm_graph(
+        (algorithm_node(:plant, declaration, 2),);
+        inputs=(graph_input(:command, :plant => :input, command),),
+        outputs=(graph_output(:frame, :plant => :output),),
+    ))
+end
+
+function calibration_test_boundary(graph=calibration_test_graph(); kwargs...)
+    return prepare_graph_calibration_boundary(
+        graph; command_input=:command, frame_output=:frame, kwargs...,
+    )
+end
+
+@testset "graph calibration held-probe boundary" begin
+    graph = calibration_test_graph()
+    command_buffer = zeros(Float32, 2)
+    frame_buffer = zeros(Float32, 2)
+    boundary = calibration_test_boundary(graph; command_buffer, frame_buffer)
+    @test boundary isa PreparedGraphCalibrationBoundary
+    @test hil_command_buffer(boundary) === command_buffer
+    @test hil_frame_buffer(boundary) === frame_buffer
+    @test boundary.command_input === graph_input(graph, Val(:command))
+    @test boundary.frame_output === graph_output(graph, Val(:frame))
+    @test @inferred(hil_boundary_status(boundary)) == (
+        frame_sequence=UInt64(0), active_probe_sequence=UInt64(0), failed=false,
+    )
+    @test command_buffer == Float32[1, 2]
+    @test all(iszero, frame_buffer)
+    @test_throws AlgorithmGraphError step_hil_exposure!(boundary)
+    @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, UInt64(0))
+    @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, 1)
+    @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, true)
+    @test graph_step_sequence(graph) == UInt64(0)
+
+    command_buffer .= Float32[3, 4]
+    @test @inferred(adopt_hil_probe!(boundary, UInt64(7))) == UInt64(7)
+    @test graph_input(graph, Val(:command)) == Float32[3, 4]
+    @test graph_step_sequence(graph) == UInt64(0) # Adoption is not an exposure.
+    @test @inferred(step_hil_exposure!(boundary)) == UInt64(1)
+    @test frame_buffer == Float32[3, 4]
+    command_buffer .= Float32[20, 30] # Mailbox mutation cannot alter the held probe.
+    @test @inferred(step_hil_exposure!(boundary)) == UInt64(2)
+    @test frame_buffer == Float32[3, 4]
+    @test hil_boundary_status(boundary).active_probe_sequence == UInt64(7)
+    saved_status = hil_boundary_status(boundary)
+    for sequence in (UInt64(0), UInt64(6), UInt64(7))
+        @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, sequence)
+        @test hil_boundary_status(boundary) == saved_status
+        @test graph_input(graph, Val(:command)) == Float32[3, 4]
+    end
+    for invalid in (NaN32, Inf32, -Inf32)
+        command_buffer .= Float32[99, invalid] # The finite prefix is never copied.
+        @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, UInt64(8))
+        @test graph_input(graph, Val(:command)) == Float32[3, 4]
+        @test hil_boundary_status(boundary) == saved_status
+    end
+    command_buffer .= Float32[5, 6]
+    @test @allocated(adopt_hil_probe!(boundary, UInt64(8))) == 0
+    @test @allocated(step_hil_exposure!(boundary)) == 0
+    @test frame_buffer == Float32[5, 6]
+    @test @allocated(step_hil_exposure!(boundary)) == 0
+    @test hil_boundary_status(boundary).frame_sequence == UInt64(4)
+    @test @inferred(reset_hil_boundary!(boundary)) === boundary
+    @test graph_input(graph, Val(:command)) == Float32[1, 2]
+    @test command_buffer == Float32[1, 2]
+    @test all(iszero, frame_buffer)
+    @test hil_boundary_status(boundary) == (
+        frame_sequence=UInt64(0), active_probe_sequence=UInt64(0), failed=false,
+    )
+    @test_throws AlgorithmGraphError step_hil_exposure!(boundary)
+    @test adopt_hil_probe!(boundary, UInt64(1)) == UInt64(1)
+    @test step_hil_exposure!(boundary) == UInt64(1)
+    @test adopt_hil_probe!(boundary, typemax(UInt64)) == typemax(UInt64)
+    @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, typemax(UInt64))
+    @test step_hil_exposure!(boundary) == UInt64(2)
+end
+
+@testset "graph calibration model-time exposures" begin
+    boundary = calibration_test_boundary()
+    driver = FixedStepModelTimeDriver(
+        AlgorithmGraphs.PeriodicSchedule(ModelDuration(50)); origin=ModelTimestamp(100),
+    )
+    @test_throws AlgorithmGraphError step_hil_exposure_at!(boundary, driver)
+    @test model_time_sequence(driver) == UInt64(0)
+    adopt_hil_probe!(boundary, UInt64(9))
+    @test @inferred(step_hil_exposure_at!(boundary, driver)) == (
+        sequence=UInt64(1), timestamp=ModelTimestamp(100),
+    )
+    @test @inferred(step_hil_exposure_at!(boundary, driver)) == (
+        sequence=UInt64(2), timestamp=ModelTimestamp(150),
+    )
+    @test @allocated(step_hil_exposure_at!(boundary, driver)) == 0
+    @test model_time_sequence(driver) == UInt64(3)
+    @test next_model_timestamp(driver) == ModelTimestamp(250)
+    @test hil_boundary_status(boundary).active_probe_sequence == UInt64(9)
+    @test @inferred(reset_hil_boundary!(boundary, driver)) === boundary
+    @test model_time_sequence(driver) == UInt64(0)
+    @test hil_boundary_status(boundary).active_probe_sequence == UInt64(0)
+    @test_throws AlgorithmGraphError step_hil_exposure_at!(boundary, driver)
+    adopt_hil_probe!(boundary, UInt64(2))
+    advance_model_time!(driver)
+    @test_throws AlgorithmGraphError step_hil_exposure_at!(boundary, driver)
+    @test graph_step_sequence(boundary.graph) == UInt64(0)
+    @test !hil_boundary_status(boundary).failed
+    reset_hil_boundary!(boundary, driver)
+    adopt_hil_probe!(boundary, UInt64(3))
+    @test step_hil_exposure_at!(boundary, driver).timestamp == ModelTimestamp(100)
+
+    finite_boundary = calibration_test_boundary()
+    finite_driver = prepare_boundary_model_time_driver((ModelTimestamp(5), ModelTimestamp(20)))
+    adopt_hil_probe!(finite_boundary, UInt64(100))
+    @test step_hil_exposure_at!(finite_boundary, finite_driver).timestamp == ModelTimestamp(5)
+    @test step_hil_exposure_at!(finite_boundary, finite_driver).timestamp == ModelTimestamp(20)
+    @test model_time_exhausted(finite_driver)
+    @test_throws AlgorithmGraphError step_hil_exposure_at!(finite_boundary, finite_driver)
+    @test hil_boundary_status(finite_boundary).failed
+    @test graph_step_sequence(finite_boundary.graph) == UInt64(2)
+    reset_hil_boundary!(finite_boundary, finite_driver)
+    @test !model_time_exhausted(finite_driver)
+    @test_throws AlgorithmGraphError step_hil_exposure_at!(finite_boundary, finite_driver)
+end
+
+@testset "HIL boundary rejects shared Array storage before initialization" begin
+    # Reshaping via a matrix makes distinct Array objects with shared storage.
+    alias_vector(values) = reshape(reshape(values, 1, length(values)), length(values))
+    for prepare in (prepare_graph_hil_boundary, prepare_graph_calibration_boundary)
+        for role in (:command_command, :frame_frame, :command_frame, :frame_command, :exchange)
+            graph = calibration_test_graph()
+            graph_command = graph_input(graph, Val(:command))
+            graph_frame = graph_output(graph, Val(:frame))
+            fill!(graph_frame, 42.0f0)
+            command_buffer = Float32[8, 9]
+            frame_buffer = Float32[10, 11]
+            if role === :command_command
+                command_buffer = alias_vector(graph_command)
+                @test command_buffer !== graph_command
+            elseif role === :frame_frame
+                frame_buffer = alias_vector(graph_frame)
+                @test frame_buffer !== graph_frame
+            elseif role === :command_frame
+                command_buffer = alias_vector(graph_frame)
+            elseif role === :frame_command
+                frame_buffer = alias_vector(graph_command)
+            else
+                frame_buffer = alias_vector(command_buffer)
+                @test command_buffer !== frame_buffer
+            end
+            saved_command = copy(command_buffer)
+            saved_frame = copy(frame_buffer)
+            @test_throws AlgorithmGraphError prepare(
+                graph; command_input=:command, frame_output=:frame,
+                command_buffer, frame_buffer,
+            )
+            @test graph_command == Float32[1, 2]
+            @test graph_frame == Float32[42, 42]
+            @test command_buffer == saved_command
+            @test frame_buffer == saved_frame
+        end
+    end
+end
+
+@testset "graph calibration ownership and fail-stop" begin
+    graph = calibration_test_graph()
+    @test_throws AlgorithmGraphError calibration_test_boundary(
+        graph; command_buffer=graph_input(graph, Val(:command)),
+    )
+    @test_throws AlgorithmGraphError calibration_test_boundary(
+        graph; frame_buffer=graph_output(graph, Val(:frame)),
+    )
+    shared = zeros(Float32, 2)
+    @test_throws AlgorithmGraphError calibration_test_boundary(
+        graph; command_buffer=shared, frame_buffer=shared,
+    )
+    @test_throws AlgorithmGraphError calibration_test_boundary(graph; frame_buffer=zeros(Float32, 3))
+    @test_throws AlgorithmGraphError calibration_test_boundary(graph; command_buffer=zeros(Float64, 2))
+    @test_throws AlgorithmGraphError calibration_test_boundary(calibration_test_graph(Float32[NaN, 0]))
+    ticket = step_graph_async!(graph)
+    @test_throws AlgorithmGraphError calibration_test_boundary(graph)
+    wait_graph_step!(ticket)
+    @test_throws AlgorithmGraphError calibration_test_boundary(graph)
+
+    pending = calibration_test_boundary()
+    adopt_hil_probe!(pending, UInt64(1))
+    ticket = step_graph_async!(pending.graph) # Deliberate caller ownership violation.
+    @test_throws AlgorithmGraphError adopt_hil_probe!(pending, UInt64(2))
+    @test_throws AlgorithmGraphError step_hil_exposure!(pending)
+    @test graph_step_pending(pending.graph)
+    wait_graph_step!(ticket)
+    @test_throws AlgorithmGraphError step_hil_exposure!(pending)
+    @test_throws AlgorithmGraphError adopt_hil_probe!(pending, UInt64(2))
+    reset_hil_boundary!(pending)
+    @test_throws AlgorithmGraphError step_hil_exposure!(pending)
+
+    failing = calibration_test_boundary(calibration_test_graph(; declaration=GraphTestFailureDeclaration))
+    hil_command_buffer(failing) .= Float32[1, -1]
+    adopt_hil_probe!(failing, UInt64(4))
+    @test_throws DomainError step_hil_exposure!(failing)
+    @test hil_boundary_status(failing).failed
+    @test hil_boundary_status(failing).frame_sequence == UInt64(0)
+    @test all(iszero, hil_frame_buffer(failing))
+    @test_throws AlgorithmGraphError adopt_hil_probe!(failing, UInt64(5))
+    @test_throws AlgorithmGraphError step_hil_exposure!(failing)
+    @test_throws AlgorithmGraphError calibration_test_boundary(failing.graph)
+    reset_hil_boundary!(failing)
+    @test_throws AlgorithmGraphError step_hil_exposure!(failing)
+    adopt_hil_probe!(failing, UInt64(1))
+    @test step_hil_exposure!(failing) == UInt64(1)
+
+    prepared = calibration_test_boundary()
+    fault = CalibrationTestFailingCommand(prepared.command_input, Ref(true))
+    copy_failure = PreparedGraphCalibrationBoundary(
+        prepared.graph, fault, prepared.frame_output, prepared.command_buffer,
+        prepared.frame_buffer, prepared.initial_command, prepared.state,
+    )
+    hil_command_buffer(copy_failure) .= Float32[8, 9]
+    @test_throws ErrorException adopt_hil_probe!(copy_failure, UInt64(2))
+    @test fault.values == Float32[8, 2]
+    @test hil_boundary_status(copy_failure).active_probe_sequence == UInt64(0)
+    @test hil_boundary_status(copy_failure).failed
+    @test_throws AlgorithmGraphError adopt_hil_probe!(copy_failure, UInt64(3))
+    @test_throws AlgorithmGraphError step_hil_exposure!(copy_failure)
+    @test_throws ErrorException reset_hil_boundary!(copy_failure)
+    @test hil_boundary_status(copy_failure).failed
+    fault.fail[] = false
+    reset_hil_boundary!(copy_failure)
+    @test fault.values == Float32[1, 2]
+    @test !hil_boundary_status(copy_failure).failed
+    @test_throws AlgorithmGraphError step_hil_exposure!(copy_failure)
+end
+
 @testset "portable algorithm graph failure is fail-stop" begin
     input = Float32[1, -1]
     graph = prepare_algorithm_graph(algorithm_graph(

@@ -73,24 +73,12 @@ function _copy_hil_buffer!(graph::PreparedAlgorithmGraph, destination, source)
     return destination
 end
 
-"""
-    prepare_graph_hil_boundary(graph; command_input, frame_output,
-                               command_buffer=nothing, frame_buffer=nothing)
-
-Prepare a lockstep external-RTC boundary around an unstepped graph. The named
-command input and frame output remain the graph's exact-target arrays. The
-exchange buffers are ordinary host `Array`s, allocated during preparation
-unless supplied by the caller. Preparation snapshots the initial graph command
-for deterministic reset. After preparation, the boundary must be the only
-owner that steps the graph or mutates its exact command input; transport code
-writes only [`hil_command_buffer`](@ref).
-"""
-function prepare_graph_hil_boundary(
-    graph::PreparedAlgorithmGraph;
+function _prepare_hil_boundary_buffers(
+    graph::PreparedAlgorithmGraph,
     command_input::Symbol,
     frame_output::Symbol,
-    command_buffer=nothing,
-    frame_buffer=nothing,
+    command_buffer,
+    frame_buffer,
 )
     graph_failed(graph) && throw(AlgorithmGraphError(
         "a failed graph cannot be bound to a HIL boundary",
@@ -116,29 +104,54 @@ function prepare_graph_hil_boundary(
         frame_buffer,
         "HIL frame",
     )
-    prepared_command === graph_command && throw(AlgorithmGraphError(
-        "the HIL command exchange buffer must not alias the active graph command",
+    (Base.mightalias(prepared_command, graph_command) ||
+     Base.mightalias(prepared_command, graph_frame)) && throw(AlgorithmGraphError(
+        "the HIL command exchange buffer must not alias a graph command or frame buffer",
     ))
-    prepared_frame === graph_frame && throw(AlgorithmGraphError(
-        "the HIL frame exchange buffer must not alias the graph output",
+    (Base.mightalias(prepared_frame, graph_command) ||
+     Base.mightalias(prepared_frame, graph_frame)) && throw(AlgorithmGraphError(
+        "the HIL frame exchange buffer must not alias a graph command or frame buffer",
     ))
-    prepared_command === prepared_frame && throw(AlgorithmGraphError(
-        "HIL command and frame buffers must be distinct",
+    Base.mightalias(prepared_command, prepared_frame) && throw(AlgorithmGraphError(
+        "HIL command and frame buffers must not share storage",
     ))
     initial_command = similar(prepared_command)
     _copy_hil_buffer!(graph, initial_command, graph_command)
     _validate_hil_command(initial_command)
     copyto!(prepared_command, initial_command)
     fill!(prepared_frame, zero(eltype(prepared_frame)))
-    return PreparedGraphHILBoundary(
-        graph,
+    return (
         graph_command,
         graph_frame,
         prepared_command,
         prepared_frame,
         initial_command,
-        GraphHILBoundaryState(),
     )
+end
+
+"""
+    prepare_graph_hil_boundary(graph; command_input, frame_output,
+                               command_buffer=nothing, frame_buffer=nothing)
+
+Prepare a lockstep external-RTC boundary around an unstepped graph. The named
+command input and frame output remain the graph's exact-target arrays. The
+exchange buffers are ordinary host `Array`s, allocated during preparation
+unless supplied by the caller. Preparation snapshots the initial graph command
+for deterministic reset. After preparation, the boundary must be the only
+owner that steps the graph or mutates its exact command input; transport code
+writes only [`hil_command_buffer`](@ref).
+"""
+function prepare_graph_hil_boundary(
+    graph::PreparedAlgorithmGraph;
+    command_input::Symbol,
+    frame_output::Symbol,
+    command_buffer=nothing,
+    frame_buffer=nothing,
+)
+    buffers = _prepare_hil_boundary_buffers(
+        graph, command_input, frame_output, command_buffer, frame_buffer,
+    )
+    return PreparedGraphHILBoundary(graph, buffers..., GraphHILBoundaryState())
 end
 
 """Return the caller-writable host command exchange buffer."""

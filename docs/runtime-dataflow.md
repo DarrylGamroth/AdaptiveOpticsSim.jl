@@ -215,6 +215,42 @@ snapshotted initial command and graph sequence. When a model-time driver is
 used through `step_hil_frame_at!`, reset both owners with
 `reset_hil_boundary!(boundary, driver)`.
 
+### Exposures under a held calibration probe
+
+`PreparedGraphCalibrationBoundary` uses the same exact graph bindings and host
+exchange buffers with a separate probe-adoption contract. Prepare it instead of
+a lockstep boundary when the caller needs several exposures under one command:
+
+```julia
+boundary = prepare_graph_calibration_boundary(
+    graph;
+    command_input=:dm_command,
+    frame_output=:wfs_frame,
+)
+receive_probe!(transport, hil_command_buffer(boundary))
+adopt_hil_probe!(boundary, UInt64(7))
+
+first = step_hil_exposure_at!(boundary, driver)
+publish_exposure!(transport, first, hil_frame_buffer(boundary))
+# Finish consuming the first host frame before requesting another exposure.
+second = step_hil_exposure_at!(boundary, driver)
+publish_exposure!(transport, second, hil_frame_buffer(boundary))
+```
+
+Probe identifiers are positive, strictly advancing `UInt64` values independent
+of the graph's exposure sequences. Adoption validates the complete command and
+finishes its host-to-target copy before returning. Every exposure advances the
+graph and, when supplied, the model-time driver exactly once. Writing the host
+command mailbox alone does not change the held probe. The caller owns transport
+completion, settling rules, exposure duration, and response aggregation.
+
+`reset_hil_boundary!(boundary, driver)` restores the initial command, clears
+both sequences, and requires another explicit probe adoption before an exposure.
+It does not acknowledge restoration by an external device. Execution or target
+copy failures stop the boundary until reset. As with lockstep, the boundary is
+the sole execution owner; application code must not step its graph or mutate
+the graph's exact command input directly.
+
 ### Fully declared HIL reference systems
 
 The maintained SHWFS and Pyramid HIL reference systems validate external-RTC
