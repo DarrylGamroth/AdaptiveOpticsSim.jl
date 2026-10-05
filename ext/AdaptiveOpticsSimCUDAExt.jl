@@ -157,14 +157,21 @@ end
     return nothing
 end
 
-# CUDA.jl's ordinary nonblocking wait coordinates through a helper thread and
-# Julia conditions. Native captured execution excludes host callbacks, so a
-# direct blocking stream wait is safe here and avoids repeated scheduler
-# latency and task bookkeeping at every graph and HIL transfer boundary.
+# The prepared captured stream has one submission owner and no host callbacks.
+# Observe completion cooperatively before the public synchronization call. An
+# already-complete stream takes CUDA.jl's fast path under the qualified default
+# nonblocking synchronization policy, retaining driver and Julia kernel error
+# checks without its blocking-wait memory-pressure heuristic. Other CUDA
+# policies retain synchronization semantics but need allocation qualification.
+# Keep safepoints while waiting; ordinary Julia GC remains enabled.
 @inline function Backends._synchronize_prepared_device_execution_context_blocking!(
     context::CUDAPreparedDeviceExecutionContext,
 )
-    CUDA.synchronize(context.stream; blocking=true)
+    while !CUDA.isdone(context.stream)
+        GC.safepoint()
+        yield()
+    end
+    CUDA.synchronize(context.stream)
     return nothing
 end
 
