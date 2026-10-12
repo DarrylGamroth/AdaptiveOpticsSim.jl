@@ -96,6 +96,25 @@ only when every node and bound array supports that exact target. The lockstep
 HIL boundary explicitly copies complete products and commands through host
 `Array` buffers.
 
+Optional `AlgorithmGraphs.prepare_graph_output_snapshot` binds one graph output
+to a capacity-one host snapshot. The graph owner calls
+`try_snapshot_graph_output!` after completion and before the next step. One
+consumer calls `poll_graph_output_snapshot!`, reads `snapshot_values` and
+`snapshot_metadata`, then calls `release_graph_output_snapshot!`. Metadata is
+published with the sample; occupied slots drop observations. CPU copying is
+synchronous bounded work. CUDA uses two prepared captured array copies and
+reusable events, with mapped host storage retained behind a host array view.
+The source never waits for host transfer or consumer completion. Other
+accelerators are rejected. Stop both participants before reset or close, which
+drain outstanding transfers. Sequence-zero samples permit cold warmup without
+claiming an admitted frame. This seam supplies no task, cadence, transport, or
+imaging model; timing and allocation claims require qualification with the
+actual producer and consumer tasks.
+Host snapshots using `FixedSizeArrayDefault` or explicit `Vector` backing can
+bind directly to `Optics.PupilFunction` and prepared direct imaging. This host
+storage support does not classify accelerator-backed fixed-size arrays as CPU
+arrays.
+
 The LiFT `LiFTForwardModel` adapter supplies AOS physical photon-rate prediction
 and analytic Jacobians to the registered `AdaptiveOpticsCalibration.PhaseRetrieval`
 direct API on CPU, CUDA, and AMDGPU. AdaptiveOpticsCalibration owns all inverse

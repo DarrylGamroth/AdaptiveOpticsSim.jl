@@ -11,6 +11,7 @@ module AlgorithmGraphs
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
 using TOML
+import ..Backends
 
 import ..AdaptiveOpticsSim: AdaptiveOpticsSimError
 import ..Backends:
@@ -131,6 +132,7 @@ include("graph_files.jl")
 include("execution.jl")
 include("model_time.jl")
 include("hil_boundary.jl")
+include("output_snapshot.jl")
 include("api.jl")
 
 end # module AlgorithmGraphs

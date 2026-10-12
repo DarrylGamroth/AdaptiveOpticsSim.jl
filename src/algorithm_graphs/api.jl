@@ -40,6 +40,10 @@ export next_model_timestamp, advance_model_time!, reset_model_time!
 export step_graph_at!, model_time_sequence, model_time_exhausted
 
 public prepared_graph_node
+public PreparedGraphOutputSnapshot, prepare_graph_output_snapshot
+public try_snapshot_graph_output!, poll_graph_output_snapshot!
+public snapshot_values, snapshot_metadata, release_graph_output_snapshot!
+public reset_graph_output_snapshot!
 public graph_port_contract
 public graph_node_ports, prepare_graph_node
 public step_graph_node!, enqueue_graph_node!, reset_graph_node!

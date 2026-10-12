@@ -48,9 +48,16 @@ ownership is not promised. Unsupported devices fail with a structured
 """
 abstract type _AbstractPreparedDeviceExecutionContext end
 
+# The public default-storage alias selects host storage across Julia versions.
+# DenseVector alone is insufficient: it also admits accelerator arrays.
+const _HostFixedSizeArray = Union{
+    FixedSizeArrayDefault,
+    FixedSizeArray{T,N,Vector{T}} where {T,N},
+}
+
 execution_style(::BitArray) = ScalarCPUStyle()
 execution_style(A::AbstractArray) = execution_style(KernelAbstractions.get_backend(A))
-execution_style(::FixedSizeVector) = ScalarCPUStyle()
+execution_style(::_HostFixedSizeArray) = ScalarCPUStyle()
 execution_style(::KernelAbstractions.CPU) = ScalarCPUStyle()
 execution_style(backend::KernelAbstractions.Backend) = AcceleratorStyle(backend)
 @inline use_host_build_algebra(::ScalarCPUStyle) = true
@@ -80,7 +87,7 @@ resolve_array_backend(backend::AbstractArrayBackend) = array_backend_type(backen
 
 array_backend_selector(::Type{<:Array}) = CPUBackend()
 array_backend_selector(::Type{<:BitArray}) = CPUBackend()
-array_backend_selector(::Type{<:FixedSizeVector}) = CPUBackend()
+array_backend_selector(::Type{<:_HostFixedSizeArray}) = CPUBackend()
 @inline array_backend_selector(
     ::Type{<:SubArray{T,N,P}}) where {T,N,P<:AbstractArray} =
     array_backend_selector(P)
@@ -115,7 +122,7 @@ _resolve_array_backend(backend::Type{<:AbstractArray}) = backend
 
 backend(backend::AbstractArrayBackend) = backend
 backend(A::AbstractArray) = array_backend_selector(typeof(A))
-backend(::FixedSizeVector) = CPUBackend()
+backend(::_HostFixedSizeArray) = CPUBackend()
 @inline backend(A::SubArray) = backend(parent(A))
 @inline backend(A::Base.ReshapedArray) = backend(parent(A))
 @inline backend(A::Base.ReinterpretArray) = backend(parent(A))
@@ -194,7 +201,7 @@ end
 
 @inline compute_device(storage::AbstractArray) =
     compute_device(execution_style(storage), storage)
-@inline compute_device(::FixedSizeVector) = HostComputeDevice()
+@inline compute_device(::_HostFixedSizeArray) = HostComputeDevice()
 @inline compute_device(storage::SubArray) =
     compute_device(parent(storage))
 @inline compute_device(storage::Base.ReshapedArray) =
@@ -208,7 +215,7 @@ end
 @inline compute_device(storage::Adjoint) =
     compute_device(parent(storage))
 @inline compute_device_identifier(::AbstractArray) = nothing
-@inline compute_device_identifier(::FixedSizeVector) = nothing
+@inline compute_device_identifier(::_HostFixedSizeArray) = nothing
 @inline compute_device_identifier(storage::SubArray) =
     compute_device_identifier(parent(storage))
 @inline compute_device_identifier(storage::Base.ReshapedArray) =

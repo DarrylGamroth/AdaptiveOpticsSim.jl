@@ -53,6 +53,7 @@ const TEST_SUITE_SPECS = (
         "testsets/execution_strategies.jl",
     ),
     TestSuiteSpec("algorithm-graphs", "testsets/algorithm_graphs.jl"),
+    TestSuiteSpec("output-snapshot", "testsets/output_snapshot.jl"),
     TestSuiteSpec("prepared-optics-ownership",
         "testsets/prepared_optics_ownership.jl"),
     TestSuiteSpec("core-optics", "testsets/core_optics.jl"),

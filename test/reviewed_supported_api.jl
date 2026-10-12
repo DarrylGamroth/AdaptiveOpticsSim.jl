@@ -349,6 +349,10 @@ const REVIEWED_SUPPORTED_API = (
             :MultiLayerAtmosphereOPDNodeConfig, :PupilOPDCompositionNode,
             :PupilOPDCompositionNodeConfig, :PyramidRateNode, :PyramidRateNodeConfig,
             :ShackHartmannRateNode, :ShackHartmannRateNodeConfig, :prepared_graph_node,
+            :PreparedGraphOutputSnapshot, :prepare_graph_output_snapshot,
+            :try_snapshot_graph_output!, :poll_graph_output_snapshot!,
+            :snapshot_values, :snapshot_metadata, :release_graph_output_snapshot!,
+            :reset_graph_output_snapshot!,
         ),
         public_extension =
         (

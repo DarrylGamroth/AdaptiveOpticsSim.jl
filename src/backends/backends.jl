@@ -9,7 +9,7 @@ module Backends
 
 using AbstractFFTs
 import FFTW
-using FixedSizeArrays: FixedSizeVector
+using FixedSizeArrays: FixedSizeArray, FixedSizeArrayDefault, FixedSizeVector
 using KernelAbstractions
 using LinearAlgebra
 using Random
@@ -24,6 +24,7 @@ import ..AdaptiveOpticsSim:
     uniform01
 
 include("arrays.jl")
+include("output_snapshot.jl")
 include("reductions.jl")
 include("random.jl")
 include("api.jl")

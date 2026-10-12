@@ -214,4 +214,90 @@ end
     return nothing
 end
 
+struct CUDAOutputSnapshot{D,H,V,C,S,T}
+    device_values::D
+    host_owner::H
+    values::V
+    source_context::C
+    transfer_context::C
+    snapshot_graph::S
+    transfer_graph::T
+    ready::CUDA.CuEvent
+    complete::CUDA.CuEvent
+end
+
+function _capture_output_copy(destination, source, context)
+    return Backends._with_prepared_device_execution_context(context) do
+        # Array APIs establish and compile their exact storage bindings cold.
+        # Replay only launches retained commands, so CuArray cross-stream
+        # bookkeeping cannot introduce a source-side wait on the consumer.
+        copyto!(destination, source)
+        Backends._synchronize_prepared_device_execution_context!(context)
+        Backends._capture_prepared_device_graph(context) do
+            copyto!(destination, source)
+            nothing
+        end
+    end
+end
+
+function Backends._prepare_output_snapshot(source::CUDA.CuArray{T,N},
+    source_context::CUDAPreparedDeviceExecutionContext) where {T,N}
+    return Backends._with_prepared_device_execution_context(source_context) do
+        device_values = similar(source)
+        host_owner = CUDA.CuArray{T,N,CUDA.HostMemory}(undef, size(source))
+        # This public array-to-array wrap creates a host view without exposing
+        # addresses. The retained host_owner must outlive every view reader.
+        values = Base.unsafe_wrap(Array, host_owner)
+        fill!(values, zero(T))
+        transfer_context = Backends._prepare_device_execution_context(
+            source_context.compute_device)
+        ready = CUDA.CuEvent(CUDA.EVENT_DISABLE_TIMING)
+        complete = CUDA.CuEvent(CUDA.EVENT_DISABLE_TIMING)
+        snapshot_graph = _capture_output_copy(device_values, source, source_context)
+        transfer_graph = _capture_output_copy(host_owner, device_values, transfer_context)
+        CUDAOutputSnapshot(device_values, host_owner, values, source_context,
+            transfer_context, snapshot_graph, transfer_graph, ready, complete)
+    end
+end
+
+@inline function Backends._submit_output_snapshot!(transfer::CUDAOutputSnapshot, source)
+    Backends._with_prepared_device_execution_context(transfer.source_context) do
+        Backends._launch_prepared_device_graph!(transfer.snapshot_graph, transfer.source_context)
+        CUDA.record(transfer.ready, transfer.source_context.stream)
+    end
+    return nothing
+end
+
+@inline function Backends._start_output_snapshot_transfer!(transfer::CUDAOutputSnapshot)
+    Backends._with_prepared_device_execution_context(transfer.transfer_context) do
+        CUDA.wait(transfer.ready, transfer.transfer_context.stream)
+        Backends._launch_prepared_device_graph!(transfer.transfer_graph, transfer.transfer_context)
+        CUDA.record(transfer.complete, transfer.transfer_context.stream)
+    end
+    return nothing
+end
+
+@inline function Backends._poll_output_snapshot_transfer!(transfer::CUDAOutputSnapshot)
+    return Backends._with_prepared_device_execution_context(transfer.transfer_context) do
+        CUDA.isdone(transfer.complete)
+    end
+end
+
+function Backends._drain_output_snapshot!(transfer::CUDAOutputSnapshot)
+    # Cold shutdown/reset only, after joining the consumer. Drain both streams
+    # even when submission failed before recording either completion event.
+    try
+        Backends._with_prepared_device_execution_context(transfer.source_context) do
+            Backends._synchronize_prepared_device_execution_context_blocking!(
+                transfer.source_context)
+        end
+    finally
+        Backends._with_prepared_device_execution_context(transfer.transfer_context) do
+            Backends._synchronize_prepared_device_execution_context_blocking!(
+                transfer.transfer_context)
+        end
+    end
+    return nothing
+end
+
 end
