@@ -104,6 +104,10 @@ end
 @inline _supports_enqueued_detector_sensor(::AbstractFrameSensor) = false
 
 @inline _supports_enqueued_detector_sensor(
+    ::InGaAsSensor{T,NullPersistence},
+) where {T<:AbstractFloat} = true
+
+@inline _supports_enqueued_detector_sensor(
     ::CCDSensor{T,SingleRead},
 ) where {T<:AbstractFloat} = true
 
@@ -288,6 +292,17 @@ end
 
 @inline function _enqueue_detector_sensor_statistics!(
     style::AcceleratorStyle,
+    sensor::InGaAsSensor,
+    detector::Detector,
+    rng::_PreparedCounterRNG,
+)
+    return _enqueue_detector_poisson_rate!(style, detector, rng,
+        effective_glow_rate(detector) * effective_sensor_glow_duration(
+            sensor, detector.params.exposure_duration))
+end
+
+@inline function _enqueue_detector_sensor_statistics!(
+    style::AcceleratorStyle,
     sensor::CCDSensor,
     detector::Detector,
     rng::_PreparedCounterRNG,
@@ -361,7 +376,7 @@ end
 
 @inline _enqueue_detector_pre_readout_gain!(
     style::AcceleratorStyle,
-    sensor::Union{CCDSensor,CMOSSensor},
+    sensor::Union{CCDSensor,CMOSSensor,InGaAsSensor},
     detector::Detector,
     rng::_PreparedCounterRNG,
 ) = detector.products.frame
@@ -475,7 +490,7 @@ end
 
 @inline _enqueue_detector_sensor_readout_noise!(
     style::AcceleratorStyle,
-    sensor::Union{CCDSensor,EMCCDSensor},
+    sensor::Union{CCDSensor,EMCCDSensor,InGaAsSensor},
     detector::Detector,
     rng::_PreparedCounterRNG,
 ) = detector.products.frame
@@ -520,7 +535,7 @@ end
 
 @inline function _enqueue_detector_post_readout_gain!(
     style::AcceleratorStyle,
-    sensor::Union{CCDSensor,CMOSSensor},
+    sensor::Union{CCDSensor,CMOSSensor,InGaAsSensor},
     detector::Detector,
 )
     return _enqueue_detector_scale!(style, detector, detector.params.gain)

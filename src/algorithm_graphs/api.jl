@@ -5,7 +5,7 @@ export GraphInputDefinition, GraphOutputDefinition
 export PreparedAlgorithmGraph, GraphStepTicket
 export StreamGraphExecution, GroupedStreamGraphExecution
 export CapturedGraphExecution
-export PreparedGraphHILBoundary
+export PreparedGraphHILBoundary, PreparedGraphCalibrationBoundary
 export ModelTimestamp, ModelDuration, PeriodicSchedule
 export model_nanoseconds, model_time_seconds, model_duration_seconds
 export schedule_period, schedule_phase, schedule_timestamp
@@ -24,11 +24,14 @@ export pyramid_rate_node
 export ccd_detector_acquisition_node
 export cmos_detector_acquisition_node
 export emccd_detector_acquisition_node
+export ingaas_detector_acquisition_node, pixel_mtf_node
 export load_algorithm_graph, builtin_graph_node_types
 export prepare_algorithm_graph, step_graph_async!, wait_graph_step!
 export step_graph!, reset_graph!
 export prepare_graph_hil_boundary, step_hil_frame!, step_hil_frame_at!
 export adopt_hil_command!, reset_hil_boundary!
+export prepare_graph_calibration_boundary, adopt_hil_probe!
+export step_hil_exposure!, step_hil_exposure_at!
 export hil_command_buffer, hil_frame_buffer, hil_boundary_status
 export graph_name, graph_step_sequence, graph_step_pending, graph_failed
 export graph_execution_policy, captured_graph_node_count
@@ -62,3 +65,5 @@ public PyramidRateNode, PyramidRateNodeConfig
 public CCDDetectorAcquisitionNode, CCDDetectorAcquisitionNodeConfig
 public CMOSDetectorAcquisitionNode, CMOSDetectorAcquisitionNodeConfig
 public EMCCDDetectorAcquisitionNode, EMCCDDetectorAcquisitionNodeConfig
+public InGaAsDetectorAcquisitionNode, InGaAsDetectorAcquisitionNodeConfig
+public PixelMTFNode, PixelMTFNodeConfig

@@ -689,6 +689,27 @@ synchronization. Backend extensions may specialize this seam when their
 in-place plan API differs from `mul!`.
 """
 enqueue_fft_plan!(buffer, plan) = (mul!(buffer, plan, buffer); buffer)
+
+"""
+Prepare owned multiplication coefficients `alpha=1`, `beta=0` for one output.
+Accelerator extensions may retain device references to these constants so
+repeated submission, including graph capture, creates no transient device
+storage. The caller retains this concrete owner for the execution lifetime.
+"""
+function _prepare_mul_coefficients(output::AbstractVecOrMat{T}) where {T<:Number}
+    return (; alpha=one(T), beta=zero(T))
+end
+
+"""
+Enqueue `C = A * B` using prepared coefficients on the caller's current device
+and stream. The owning caller validates shapes, element types, devices, and
+aliases during preparation and retains the coefficients until completion.
+This private seam adds no completion boundary or device-context selection.
+"""
+@inline function _enqueue_mul!(C, A, B, coefficients)
+    return mul!(C, A, B, coefficients.alpha, coefficients.beta)
+end
+
 backend_matmul(A::AbstractMatrix, B::AbstractMatrix) = A * B
 backend_matmul_transpose_right(A::AbstractMatrix, B::AbstractMatrix) = A * transpose(B)
 

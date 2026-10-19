@@ -75,6 +75,26 @@ Prepared owners and immutable plan accessors are supported advanced seams;
 replaceable propagation/direct-imaging scratch and batch compatibility
 signatures are implementation details.
 
+### Spectral synthesis
+
+`prepare_spectral_synthesis(envelopes, basis, coefficients, visibility,
+channels; response, output, summation)` prepares channel synthesis from
+calibrated path-envelope matrices already sampled on one common physical
+detector grid. Envelopes are ordered path-major, then anchor-minor. The real
+interpolation basis, complex path coefficients, and one unit-diagonal Hermitian
+positive-semidefinite coherence matrix per channel are explicit inputs;
+`channels` supplies normalized photon-number weights. Optional `response`
+multiplies those weights without renormalization. `:coherent_modes` is the
+default nonnegative summation; `:path_pairs` is the reference arithmetic and
+can produce small negative values from finite-precision cancellation. This
+operation performs no propagation, resampling, or inferred photometry.
+
+The qualified advanced API includes `SpectralSynthesisPlan`,
+`SpectralSynthesisWorkspace`, `SpectralSynthesisProducts`, and
+`PreparedSpectralSynthesis`. `synthesize_spectrum!` executes on the caller's
+current stream; the caller owns completion before reading output or changing
+bound inputs.
+
 ## Atmospheres
 
 ~~~julia
@@ -111,6 +131,15 @@ Use `Detector` for the configured acquisition owner, `capture!` for direct
 capture, and `prepare_detector_acquisition` for a prepared acquisition path.
 Shutter, sampling, response, defects, persistence, thermal, and readout models
 are explicit values.
+
+`pixel_mtf_transfer(shape; box_width_pixels, diffusion_variance_pixels2,
+ipc_per_neighbor, T)` builds an explicit corner-origin, unit-DC frequency
+response. `prepare_pixel_mtf(input, transfer; padding, output)` binds that
+calibration and exact input/output storage; `apply_pixel_mtf!` applies it with
+prepared FFT workspace. Apply the deterministic response before acquisition and
+avoid repeating response effects already represented by the calibration. It
+does not change any sensor default or define detector noise covariance. The
+qualified advanced owner types are `PixelMTFPlan` and `PreparedPixelMTF`.
 
 ## Wavefront Sensors
 
@@ -281,7 +310,20 @@ Factory functions include:
 - `shack_hartmann_rate_node` and `pyramid_rate_node`
 - `ccd_detector_acquisition_node`, `cmos_detector_acquisition_node`, and
   `emccd_detector_acquisition_node`
+- `ingaas_detector_acquisition_node` for complete-frame acquisition on an
+  explicit metric pixel grid and integrated spectral channel
+- `pixel_mtf_node` for a caller-calibrated response on exact image buffers
 - `modal_opd_expansion_node`
+
+`ingaas_detector_acquisition_node` declares one complete-frame, global-shutter
+InGaAs acquisition. The photon-rate input is cell-integrated photons per
+second on a metric detector grid, and `spectral_channel` explicitly identifies
+the already integrated passband. The node uses scalar effective-band QE; if an
+upstream spectral response already includes QE, set detector QE to one. It
+preserves the frame axes and applies its declared exposure, noise, gain, dark
+current, glow, saturation, and optional quantization. Pixel MTF remains a
+separate upstream operation. Captured execution is restricted to the admitted
+full-frame null-persistence and null-nonlinearity path.
 
 The built-in graph catalog stops at complete detector frames. For a maintained
 Shack–Hartmann estimator and RTC composition, use the
@@ -346,6 +388,11 @@ rejects richer or unsupported detector and actuator models instead of mixing
 stream execution into the captured graph. A downstream package must qualify its
 complete instrument graph separately.
 
+Dense and measured influence-matrix deformable-mirror nodes also admit capture
+with the built-in linear-static, clipping, and actuator-health stages or their
+static compositions. Preparation retains the multiplication coefficients for
+replay. Stateful or custom actuator stages need separate qualification.
+
 `step_graph!` completes the frame before returning. Advanced GPU applications
 may use the bounded capacity-one split boundary:
 
@@ -392,6 +439,15 @@ frame = hil_frame_buffer(boundary)
 
 The boundary exchanges complete host arrays and enforces one command response
 per completed frame. It does not implement transport or wall-clock pacing.
+
+For calibration runs that hold one probe over several exposures, use
+`prepare_graph_calibration_boundary`, `adopt_hil_probe!`,
+`step_hil_exposure!`, and `step_hil_exposure_at!`. The probe sequence is a
+positive, strictly advancing `UInt64`, separate from graph exposure sequence.
+Each accepted exposure advances the graph and optional model-time driver once;
+writing the host command buffer does not adopt a new probe. The caller owns
+transport completion, settling, exposure duration, and response aggregation.
+`PreparedGraphCalibrationBoundary` is the supported advanced owner type.
 
 ## Optional Integrations
 

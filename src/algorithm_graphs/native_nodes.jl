@@ -629,11 +629,16 @@ function graph_node_ports(
     )
 end
 
-struct _DeformableMirrorSurfaceOwner{DM,Command,Output}
+struct _DeformableMirrorSurfaceOwner{DM,Command,Output,Multiplication}
     deformable_mirror::DM
     pdm_command::Command
     output::Output
+    multiplication::Multiplication
 end
+
+@inline _prepare_dm_surface_multiply(dm, ::GaussianInfluenceOperator) = nothing
+@inline _prepare_dm_surface_multiply(dm, modes) =
+    _prepare_mul_coefficients(dm.state.opd_vec)
 
 @kernel function _count_nonfinite_graph_values_kernel!(count, values, n::Int)
     index = @index(Global, Linear)
@@ -721,6 +726,7 @@ function prepare_graph_node(
         deformable_mirror,
         inputs.pdm_command,
         outputs.surface_opd,
+        _prepare_dm_surface_multiply(deformable_mirror, deformable_mirror.state.modes),
     )
 end
 
@@ -736,7 +742,7 @@ end
         command_storage(owner.deformable_mirror),
         owner.pdm_command,
     )
-    _update_dm_surface_async!(owner.deformable_mirror)
+    _update_dm_surface_async!(owner.deformable_mirror, owner.multiplication)
     copyto_backend_async!(
         owner.output,
         surface_opd(owner.deformable_mirror),
@@ -760,11 +766,41 @@ end
     return GraphNodeCaptureUnsupported()
 end
 
+# These static actuator stages enqueue only fixed-buffer device broadcasts.
+# Stateful or custom stages require a separate capture qualification.
+@inline _static_dm_actuators_capture_safe(::AbstractDMActuatorModel) = false
+@inline _static_dm_actuators_capture_safe(::LinearStaticActuators) = true
+@inline _static_dm_actuators_capture_safe(::ClippedActuators) = true
+@inline _static_dm_actuators_capture_safe(::ActuatorHealthMap) = true
+@inline _static_dm_stages_capture_safe(::Tuple{}) = true
+@inline function _static_dm_stages_capture_safe(stages::Tuple)
+    return _static_dm_actuators_capture_safe(first(stages)) &&
+        _static_dm_stages_capture_safe(Base.tail(stages))
+end
+@inline _static_dm_actuators_capture_safe(model::CompositeDMActuatorModel) =
+    _static_dm_stages_capture_safe(model.stages)
+
+@inline function _dm_surface_capture_capability(
+    ::Union{DenseInfluenceMatrix,MeasuredInfluenceFunctions},
+    modes,
+    actuator_response,
+    ::AcceleratorStyle,
+)
+    # Preparation snapshots these two influence families into a dense matrix
+    # on the selected device. Their hot path is a fixed-buffer device mul!.
+    return _static_dm_actuators_capture_safe(actuator_response) ?
+        GraphNodeCaptureSafe() : GraphNodeCaptureUnsupported()
+end
+
+@inline _dm_surface_capture_capability(model, modes, actuator_response, style) =
+    _coordinate_gaussian_capture_capability(modes, actuator_response, style)
+
 @inline function graph_node_capture_capability(
     owner::_DeformableMirrorSurfaceOwner,
 )
     deformable_mirror = owner.deformable_mirror
-    return _coordinate_gaussian_capture_capability(
+    return _dm_surface_capture_capability(
+        influence_model(deformable_mirror),
         deformable_mirror.state.modes,
         actuator_model(deformable_mirror),
         execution_style(owner.output),
@@ -971,6 +1007,7 @@ function prepare_graph_node(
         deformable_mirror,
         inputs.pdm_command,
         outputs.surface_opd,
+        _prepare_dm_surface_multiply(deformable_mirror, deformable_mirror.state.modes),
     )
 end
 

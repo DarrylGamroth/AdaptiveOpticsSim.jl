@@ -17,6 +17,7 @@ const DETECTOR_TEST_SUITE_NAMES = (
     "detector-shared",
     "detector-lifecycle",
     "detector-response",
+    "detector-pixel-mtf",
     "detector-shared-qualification",
     "detector-ccd",
     "detector-skipper",
@@ -53,6 +54,10 @@ const TEST_SUITE_SPECS = (
         "testsets/execution_strategies.jl",
     ),
     TestSuiteSpec("algorithm-graphs", "testsets/algorithm_graphs.jl"),
+    TestSuiteSpec("backend-prepared-multiplication", "testsets/backend_prepared_multiplication.jl"),
+    TestSuiteSpec("dm-capture-admission", "testsets/dm_capture_admission.jl"),
+    TestSuiteSpec("ingaas-detector-node", "testsets/ingaas_detector_node.jl"),
+    TestSuiteSpec("spectral-synthesis", "testsets/spectral_synthesis.jl"),
     TestSuiteSpec("output-snapshot", "testsets/output_snapshot.jl"),
     TestSuiteSpec("prepared-optics-ownership",
         "testsets/prepared_optics_ownership.jl"),
@@ -94,6 +99,8 @@ const TEST_SUITE_SPECS = (
         "testsets/detector_response.jl";
         fixtures=("detector_test_fixtures.jl",),
     ),
+    TestSuiteSpec("detector-pixel-mtf", "testsets/detector_pixel_mtf.jl";
+        fixtures=("detector_test_fixtures.jl",)),
     TestSuiteSpec(
         "detector-shared-qualification",
         "testsets/detector_shared_qualification.jl";
@@ -213,6 +220,7 @@ const TEST_GROUP_SPECS = (
     "detectors" => DETECTOR_TEST_SUITE_NAMES,
     "core" => (
         "core-optics",
+        "spectral-synthesis",
         "direct-science",
         "direct-imaging-batch",
         "atmosphere",
@@ -240,6 +248,11 @@ const TEST_CI_SHARD_SPECS = (
         "prepared-execution-interfaces",
         "execution-strategies",
         "algorithm-graphs",
+        "output-snapshot",
+        "backend-prepared-multiplication",
+        "dm-capture-admission",
+        "ingaas-detector-node",
+        "spectral-synthesis",
         "prepared-optics-ownership",
         "core-optics",
         "direct-science",

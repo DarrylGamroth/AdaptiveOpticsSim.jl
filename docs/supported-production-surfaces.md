@@ -33,7 +33,13 @@ The Julia 1.12 CPU baseline includes:
 - static `AlgorithmGraphs` definitions in Julia and TOML
 - direct and explicit one-frame delayed graph links
 - exact model-time values and deterministic drivers
-- the transport-neutral lockstep `PreparedGraphHILBoundary`
+- prepared coherent wavelength synthesis with explicit photon weights,
+  per-channel path coherence, and response
+- explicitly calibrated pixel MTF filtering before detector acquisition
+- complete-frame InGaAs graph acquisition on an explicit metric pixel grid and
+  integrated spectral channel
+- the transport-neutral lockstep `PreparedGraphHILBoundary` and held-probe
+  `PreparedGraphCalibrationBoundary`
 - the built-in graph-node catalog exercised by `algorithm-graphs` tests
 
 Warmed allocation claims apply only to the concrete paths with allocation tests.
@@ -74,6 +80,16 @@ Gaussian DM, pupil-OPD composition, diffractive Shack-Hartmann optics, both
 maintained Pyramid modulation strategies, and the built-in CCD, CMOS, and
 EMCCD complete-frame detector nodes. Captured execution does not interleave
 unqualified stream nodes.
+
+Dense and measured influence-matrix DM nodes also admit captured execution
+with built-in linear-static, clipping, and actuator-health stages or their
+static compositions. Preparation retains multiplication coefficients for
+replay; stateful and custom actuator stages require separate qualification.
+The explicit pixel-MTF operation and graph node enqueue on the prepared device
+and stream, with CUDA and AMDGPU capture supported. InGaAs graph capture is
+limited to full-frame unit sampling/binning, null persistence and nonlinearity,
+and the device counter RNG. These node qualifications do not establish
+instrument-specific calibration or complete downstream graph capture.
 
 Prepared graphs provide a bounded capacity-one asynchronous submission
 boundary. The graph sequence and caller-visible output readiness publish only

@@ -157,6 +157,12 @@ during preparation rather than silently changing policy. Downstream instrument
 packages qualify their complete graphs independently from these node-family
 claims.
 
+Dense and measured influence-matrix DM nodes also qualify for capture with the
+built-in linear-static, clipping, and actuator-health stages or their static
+compositions. Preparation retains the multiplication coefficients for replay.
+Stateful or custom actuator stages need separate qualification. Complete
+instrument capture still requires a downstream whole-graph check.
+
 One graph may still connect port formats with different element types where a
 node explicitly declares that conversion. Exact target ownership does not
 impose one graph-wide numeric type. Host/device movement remains an explicit
@@ -217,6 +223,44 @@ active command may then be partial. `reset_hil_boundary!` restores the
 snapshotted initial command and graph sequence. When a model-time driver is
 used through `step_hil_frame_at!`, reset both owners with
 `reset_hil_boundary!(boundary, driver)`.
+
+### Exposures under a held calibration probe
+
+Use `PreparedGraphCalibrationBoundary` when several complete exposures must use
+one adopted command:
+
+```julia
+boundary = prepare_graph_calibration_boundary(
+    graph;
+    command_input=:dm_command,
+    frame_output=:wfs_frame,
+)
+receive_probe!(transport, hil_command_buffer(boundary))
+adopt_hil_probe!(boundary, UInt64(7))
+
+first = step_hil_exposure_at!(boundary, driver)
+publish_exposure!(transport, first, hil_frame_buffer(boundary))
+# Finish consuming the first frame before requesting another exposure.
+second = step_hil_exposure_at!(boundary, driver)
+publish_exposure!(transport, second, hil_frame_buffer(boundary))
+```
+
+Probe identifiers are positive, strictly advancing `UInt64` values independent
+of graph exposure sequences. Adoption validates the complete command and
+finishes its host-to-target copy before returning. Each exposure advances the
+graph and optional model-time driver exactly once. Writing the host command
+buffer alone does not change the held probe; transport completion, settling,
+exposure duration, and response aggregation belong to the caller. Reset restores
+the initial command and both sequences, and requires another explicit probe
+adoption. Execution or copy failure stops the boundary until reset.
+
+The complete-frame InGaAs graph node consumes a cell-integrated photon-rate
+frame on an explicit metric pixel grid and declares an integrated spectral
+channel. Its acquisition model is separate from the optional upstream pixel-MTF
+node. A calibrated frequency response must use the same pixel-coordinate
+convention as the image sampling. Non-null persistence or nonlinearity remains
+on stream execution; InGaAs capture is limited to its admitted full-frame
+null-model path. Neither node supplies camera calibration.
 
 ### Fully declared HIL reference systems
 

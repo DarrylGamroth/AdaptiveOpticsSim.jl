@@ -77,6 +77,8 @@ export PyramidPhaseMask, BiOEdgeAmplitudeMask
 export ZernikePhaseSpot, CurvatureDefocusPair
 
 public AbstractSource, AbstractTelescope
+public SpectralSynthesisPlan, SpectralSynthesisWorkspace, SpectralSynthesisProducts
+public PreparedSpectralSynthesis, prepare_spectral_synthesis, synthesize_spectrum!
 public AbstractTelescopeDefinition, TelescopeDefinition, prepare_telescope
 public validate_telescope_target
 public AbstractPropagationModel, AbstractPropagationPlan

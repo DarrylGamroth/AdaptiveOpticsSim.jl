@@ -23,6 +23,7 @@ import ..Backends:
     _prepare_device_execution_context,
     _prepare_device_execution_event,
     _prepare_graph_rng,
+    _prepare_mul_coefficients,
     _capture_prepared_device_graph,
     _launch_prepared_device_graph!,
     _record_prepared_device_execution_event!,
@@ -56,6 +57,14 @@ import ..Atmospheres:
     render_atmosphere!
 import ..Optics:
     ActuatorGridTopology,
+    influence_model,
+    MetricCoordinates,
+    IntegratedSpectralChannel,
+    DenseInfluenceMatrix,
+    CompositeDMActuatorModel,
+    ClippedActuators,
+    ActuatorHealthMap,
+    AbstractDMActuatorModel,
     AngularCoordinates,
     CellIntegratedMeasure,
     DeformableMirror,
@@ -94,6 +103,11 @@ import ..Detectors:
     NoisePhotonReadout,
     NoiseReadout,
     NullFrameResponse,
+    SaturatingFrameNonlinearity,
+    NullPersistence,
+    NullFrameNonlinearity,
+    InGaAsSensor,
+    ExponentialPersistence,
     _complete_enqueued_detector_acquisition!,
     _enqueue_detector_acquisition!,
     _preflight_enqueued_detector_acquisition!,
@@ -127,11 +141,14 @@ include("definitions.jl")
 include("model_time_values.jl")
 include("preparation.jl")
 include("native_nodes.jl")
+include("ingaas_detector_node.jl")
+include("pixel_mtf_node.jl")
 include("captured_execution.jl")
 include("graph_files.jl")
 include("execution.jl")
 include("model_time.jl")
 include("hil_boundary.jl")
+include("calibration_boundary.jl")
 include("output_snapshot.jl")
 include("api.jl")
 

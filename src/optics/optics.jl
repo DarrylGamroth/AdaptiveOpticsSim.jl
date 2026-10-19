@@ -7,7 +7,7 @@ sampled NCPA, controllable optics, and reusable physical WFS components.
 """
 module Optics
 
-using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
+using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault, FixedSizeMatrixDefault
 using KernelAbstractions
 using LinearAlgebra
 using Statistics
@@ -30,6 +30,7 @@ import ..Backends:
     CPUBackend,
     ExecutionStyle,
     ScalarCPUStyle,
+    _enqueue_mul!,
     _throw_compute_device_error,
     _with_compute_device,
     _resolve_array_backend,
@@ -58,6 +59,7 @@ include("aperture_masks.jl")
 include("telescope.jl")
 include("source.jl")
 include("spectrum.jl")
+include("spectral_synthesis.jl")
 include("planes.jl")
 include("electric_field.jl")
 include("propagation.jl")

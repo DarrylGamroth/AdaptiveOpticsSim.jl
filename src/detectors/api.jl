@@ -35,6 +35,7 @@ export ParalyzableDeadTime, DutyCycleGate, FirstOrderAfterpulseMeanResponse
 export NearestNeighborCountRedistribution, CompositeCountingMeanResponse
 export capture!, output_frame, channel_output, detector_export_metadata
 export prepare_detector_acquisition
+export pixel_mtf_transfer, prepare_pixel_mtf, apply_pixel_mtf!
 export detector_ramp_slope, detector_ramp_intercept
 export detector_ramp_cube, detector_ramp_read_offsets_s
 export readout_ready, reset_integration!, thermal_model
@@ -51,6 +52,7 @@ public HgCdTeReadout
 public MKIDArrayExportMetadata
 public detector_ramp_acquisition
 public DetectorAcquisitionPlan, PreparedDetectorAcquisition
+public PixelMTFPlan, PreparedPixelMTF
 public detector_acquisition_detector, detector_acquisition_input
 public detector_acquisition_plan, detector_acquisition_state
 public detector_acquisition_workspace, detector_acquisition_products

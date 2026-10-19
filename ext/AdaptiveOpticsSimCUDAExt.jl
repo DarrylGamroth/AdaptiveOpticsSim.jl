@@ -18,6 +18,51 @@ Backends.backend_fill(::Type{Backends.CUDABackendTag}, value, dims::Vararg{Int})
 Backends.compute_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
 
+function Backends._prepare_mul_coefficients(
+    output::CUDA.StridedCuVecOrMat{T},
+) where {T<:Union{Float32,Float64,ComplexF32,ComplexF64}}
+    return Backends._with_compute_device(Backends.compute_device(output)) do
+        values = CUDA.CuArray(T[one(T), zero(T)])
+        return (alpha=CUDA.CUDACore.CuRefArray(values, 1),
+            beta=CUDA.CUDACore.CuRefArray(values, 2))
+    end
+end
+
+# Passing retained CuRefArray values directly to the typed BLAS wrappers avoids
+# constructing transient device scalar allocations during graph capture.
+@inline function Backends._enqueue_mul!(
+    C::CUDA.StridedCuMatrix{T},
+    A::CUDA.StridedCuMatrix{T},
+    B::CUDA.StridedCuMatrix{T},
+    coefficients::NamedTuple{(:alpha,:beta),Tuple{R,R}},
+) where {T<:Union{Float32,Float64,ComplexF32,ComplexF64},
+        R<:CUDA.CUDACore.CuRefArray{T}}
+    return CUDA.CUBLAS.gemm!('N', 'N', coefficients.alpha, A, B,
+        coefficients.beta, C)
+end
+
+@inline function Backends._enqueue_mul!(
+    C::CUDA.StridedCuMatrix{T},
+    A::CUDA.StridedCuMatrix{T},
+    B::Transpose{T,<:CUDA.StridedCuMatrix{T}},
+    coefficients::NamedTuple{(:alpha,:beta),Tuple{R,R}},
+) where {T<:Union{Float32,Float64,ComplexF32,ComplexF64},
+        R<:CUDA.CUDACore.CuRefArray{T}}
+    return CUDA.CUBLAS.gemm!('N', 'T', coefficients.alpha, A, parent(B),
+        coefficients.beta, C)
+end
+
+@inline function Backends._enqueue_mul!(
+    C::CUDA.StridedCuVector{T},
+    A::CUDA.StridedCuMatrix{T},
+    B::CUDA.StridedCuVector{T},
+    coefficients::NamedTuple{(:alpha,:beta),Tuple{R,R}},
+) where {T<:Union{Float32,Float64,ComplexF32,ComplexF64},
+        R<:CUDA.CUDACore.CuRefArray{T}}
+    return CUDA.CUBLAS.gemv!('N', coefficients.alpha, A, B,
+        coefficients.beta, C)
+end
+
 function Backends._prepare_graph_rng(
     device::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
     seed::UInt64,

@@ -30,6 +30,31 @@ workspace owned by the path that writes them.
 Update the path-owned pupil with `apply_opd!`, `render_atmosphere!`, or
 `apply_surface!` before the next `form_direct_image!`.
 
+### Synthesize calibrated spectral channels
+
+When calibrated path fields are already available at wavelength anchors on the
+same physical detector grid, prepare spectral synthesis directly:
+
+```julia
+using AdaptiveOpticsSim.Optics
+
+synthesis = prepare_spectral_synthesis(
+    envelopes,
+    interpolation_basis,
+    path_coefficients,
+    channel_coherence,
+    channels;
+    response=channel_response,
+)
+synthesize_spectrum!(synthesis)
+intensity = synthesis.products.output
+```
+
+Envelopes are ordered by path, then anchor. The caller supplies the interpolation
+basis, complex path coefficients, per-channel coherence, and normalized
+photon-number weights. This combines calibrated fields and intensities; it does
+not propagate, resample, or infer photometry.
+
 ## Recipe 2: Atmosphere Plus Shack–Hartmann Sensing
 
 ```julia
@@ -135,6 +160,21 @@ ownership accessors are qualified-public under `Detectors`, not root exports.
 
 This path still applies declared radiometry and exposure. It is not a
 camera-specific profile and does not imply reduced optical fidelity upstream.
+
+An explicitly calibrated spatial-frequency response can be applied before the
+detector acquisition:
+
+```julia
+mtf = prepare_pixel_mtf(irradiance, calibrated_transfer; padding=16)
+apply_pixel_mtf!(mtf)
+filtered_irradiance = mtf.products.output
+```
+
+The supplied transfer must match the padded grid and pixel-coordinate
+convention. Reuse the owner while the input values change in place. Accelerator
+execution enqueues on the prepared device and stream; the caller owns completion
+before reading output. This operation applies to any area sensor, including
+InGaAs, and does not supply sensor defaults or detector-noise covariance.
 
 Counting and channel detectors remain explicit:
 

@@ -1087,25 +1087,36 @@ end
     return dm.state.opd
 end
 
-@inline function _mul_dm_surface_async!(output, modes, coefficients)
+@inline function _mul_dense_dm_surface_async!(output, modes, coefficients, ::Nothing)
     mul!(output, modes, coefficients)
     return output
 end
 
+@inline function _mul_dense_dm_surface_async!(output, modes, coefficients, multiplication)
+    _enqueue_mul!(output, modes, coefficients, multiplication)
+    return output
+end
+
+@inline _mul_dm_surface_async!(output, modes, coefficients, multiplication) =
+    _mul_dense_dm_surface_async!(output, modes, coefficients, multiplication)
+
 @inline function _mul_dm_surface_async!(output,
-    modes::GaussianInfluenceOperator{T}, coefficients) where {T}
+    modes::GaussianInfluenceOperator{T}, coefficients, multiplication) where {T}
     _check_gaussian_mul_dimensions(output, modes, coefficients)
     return _mul_gaussian_influence_async!(execution_style(output), output,
         modes, coefficients, one(T), zero(T))
 end
 
-@inline function _update_dm_surface_async!(dm::DeformableMirror)
+@inline _update_dm_surface_async!(dm::DeformableMirror) =
+    _update_dm_surface_async!(dm, nothing)
+
+@inline function _update_dm_surface_async!(dm::DeformableMirror, multiplication)
     _prepare_actuator_commands_async!(dm)
     if !isnothing(dm.state.separable_x)
         return _apply_opd_separable_async!(execution_style(dm.state.opd), dm)
     end
     _mul_dm_surface_async!(dm.state.opd_vec, dm.state.modes,
-        dm.state.actuator_coefs)
+        dm.state.actuator_coefs, multiplication)
     return dm.state.opd
 end
 
