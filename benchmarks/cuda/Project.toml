@@ -12,7 +12,7 @@ HdrHistogram = {url = "https://github.com/DarrylGamroth/HdrHistogram.jl.git", re
 
 [compat]
 AdaptiveOpticsCalibration = "0.17"
-AdaptiveOpticsSim = "0.1"
+AdaptiveOpticsSim = "0.2"
 BenchmarkTools = "1"
 CUDA = "6.4.2"
 HdrHistogram = "0.4"
