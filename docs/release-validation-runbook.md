@@ -89,7 +89,8 @@ suite:
 
 ~~~bash
 julia --project=. test/ci/run_selected_tests.jl algorithm-graphs
-julia --project=. benchmarks/benchmark_pre_hil_backend_latency.jl
+julia --project=benchmarks --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+julia --project=benchmarks --startup-file=no benchmarks/benchmark_pre_hil_backend_latency.jl
 ~~~
 
 Record warmed service-time distributions and graph configuration. The result

@@ -203,11 +203,12 @@ end
 end
 
 # The prepared captured stream has one submission owner and no host callbacks.
-# Observe completion cooperatively before the public synchronization call. An
-# already-complete stream takes CUDA.jl's fast path under the qualified default
-# nonblocking synchronization policy, retaining driver and Julia kernel error
-# checks without its blocking-wait memory-pressure heuristic. Other CUDA
-# policies retain synchronization semantics but need allocation qualification.
+# Observe completion cooperatively before the public synchronization call.
+# CUDA 6.4.2's cooperative wait allocates even for an already-complete stream;
+# its public blocking path skips that setup and retains driver and Julia kernel
+# error checks. Earlier versions instead need the default completed-stream fast
+# path to avoid their unconditional blocking-wait memory-pressure heuristic.
+# Other CUDA policies retain semantics but need allocation qualification.
 # Keep safepoints while waiting; ordinary Julia GC remains enabled.
 @inline function Backends._synchronize_prepared_device_execution_context_blocking!(
     context::CUDAPreparedDeviceExecutionContext,
@@ -216,7 +217,11 @@ end
         GC.safepoint()
         yield()
     end
-    CUDA.synchronize(context.stream)
+    @static if pkgversion(CUDA) >= v"6.4.2"
+        CUDA.synchronize(context.stream; blocking=true)
+    else
+        CUDA.synchronize(context.stream)
+    end
     return nothing
 end
 
