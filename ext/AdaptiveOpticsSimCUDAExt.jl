@@ -206,8 +206,7 @@ end
 # Observe completion cooperatively before the public synchronization call.
 # CUDA 6.4.2's cooperative wait allocates even for an already-complete stream;
 # its public blocking path skips that setup and retains driver and Julia kernel
-# error checks. Earlier versions instead need the default completed-stream fast
-# path to avoid their unconditional blocking-wait memory-pressure heuristic.
+# error checks.
 # Other CUDA policies retain semantics but need allocation qualification.
 # Keep safepoints while waiting; ordinary Julia GC remains enabled.
 @inline function Backends._synchronize_prepared_device_execution_context_blocking!(
@@ -217,11 +216,7 @@ end
         GC.safepoint()
         yield()
     end
-    @static if pkgversion(CUDA) >= v"6.4.2"
-        CUDA.synchronize(context.stream; blocking=true)
-    else
-        CUDA.synchronize(context.stream)
-    end
+    CUDA.synchronize(context.stream; blocking=true)
     return nothing
 end
 

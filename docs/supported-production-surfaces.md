@@ -60,7 +60,7 @@ support status is governed by their own tests and documented assumptions.
 
 ## Accelerator Surfaces
 
-CUDA is the primary GPU performance-optimization target. AMDGPU is the
+CUDA.jl 6.4.2 or newer is required. CUDA is the primary GPU performance-optimization target. AMDGPU is the
 secondary portability and qualification target and remains the automated
 release-gated accelerator because the maintained local ROCm target is
 continuously available. CUDA is manually validated on the WSL RTX host. Both

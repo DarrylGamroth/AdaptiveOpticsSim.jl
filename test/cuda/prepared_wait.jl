@@ -20,8 +20,8 @@ function _prepared_wait_regression_launch!(output, rounds)
 end
 
 @testset "CUDA prepared blocking wait allocation" begin
-    # Qualified on CUDA 6.3.1's default completed-stream path and CUDA 6.4.2's
-    # public blocking path after polling, including the quiet-window check below.
+    # Qualified on CUDA 6.4.2's public blocking path after polling,
+    # including the quiet-window check below.
     # Other CUDA.jl synchronization policies need separate allocation qualification.
     rounds = 20_000_000
     output = CUDA.zeros(Float32, 4)
