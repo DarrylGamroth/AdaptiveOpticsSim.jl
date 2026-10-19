@@ -28,11 +28,7 @@ end
 
 @inline function _build_pyramid_mask!(::ScalarCPUStyle, mask,
     wfs::PyramidWFS, pupil::PupilFunction)
-    if wfs.front_end.phase_mask.old_mask
-        build_pyramid_mask_old_host!(mask, wfs, pupil)
-    else
-        build_pyramid_mask_new_host!(mask, wfs, pupil)
-    end
+    build_pyramid_mask_host!(mask, wfs, pupil)
     return mask
 end
 
@@ -247,15 +243,11 @@ function host_pyramid_mask(wfs::PyramidWFS, pupil::PupilFunction)
     n = size(pyramid_propagation_workspace(wfs).pyramid_mask, 1)
     T = real(eltype(pyramid_propagation_workspace(wfs).pyramid_mask))
     host = Matrix{Complex{T}}(undef, n, n)
-    if wfs.front_end.phase_mask.old_mask
-        build_pyramid_mask_old_host!(host, wfs, pupil)
-    else
-        build_pyramid_mask_new_host!(host, wfs, pupil)
-    end
+    build_pyramid_mask_host!(host, wfs, pupil)
     return host
 end
 
-function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, pupil::PupilFunction) where {T<:AbstractFloat}
+function build_pyramid_mask_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, pupil::PupilFunction) where {T<:AbstractFloat}
     n = size(mask, 1)
     n_sub = wfs.front_end.pupil_samples
     sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
@@ -286,69 +278,6 @@ function build_pyramid_mask_new_host!(mask::AbstractMatrix{Complex{T}}, wfs::Pyr
         mask[i, j] = cis(phase)
     end
     return mask
-end
-
-function build_pyramid_mask_old_host!(mask::AbstractMatrix{Complex{T}}, wfs::PyramidWFS, pupil::PupilFunction) where {T<:AbstractFloat}
-    n_tot = size(mask, 1)
-    n_sub = wfs.front_end.pupil_samples
-    sep = wfs.front_end.phase_mask.n_pix_separation === nothing ? 0 : wfs.front_end.phase_mask.n_pix_separation
-    sx = wfs.front_end.phase_mask.pupil_shift_x_pixels
-    sy = wfs.front_end.phase_mask.pupil_shift_y_pixels
-    norma = (T(_pupil_resolution(pupil)) / T(n_sub)) / 4
-    fill!(mask, complex(zero(T), zero(T)))
-    if wfs.front_end.phase_mask.psf_centering
-        tip = centered_grid(T, n_tot ÷ 2, true)
-        tilt = centered_grid(T, n_tot ÷ 2, true)
-        Tip = repeat(tip', n_tot ÷ 2, 1)
-        Tilt = repeat(tilt, 1, n_tot ÷ 2)
-        Tip .-= mean(Tip)
-        Tilt .-= mean(Tilt)
-        q = T(n_sub + sep) * wfs.front_end.phase_mask.mask_scale
-        @views begin
-            mask[1:n_tot÷2, 1:n_tot÷2] .= cis.((Tip .* (q + sx[1]) .+ Tilt .* (q - sy[1])) .* norma)
-            mask[1:n_tot÷2, n_tot÷2+1:end] .= cis.((-Tip .* (q - sx[2]) .+ Tilt .* (q - sy[2])) .* norma)
-            mask[n_tot÷2+1:end, n_tot÷2+1:end] .= cis.((-Tip .* (q - sx[3]) .- Tilt .* (q + sy[3])) .* norma)
-            mask[n_tot÷2+1:end, 1:n_tot÷2] .= cis.((Tip .* (q + sx[4]) .- Tilt .* (q + sy[4])) .* norma)
-        end
-    else
-        d_pix = T(π) / T(n_tot)
-        lim_p = T(π)
-        lim_m = T(π) - 2 * d_pix
-        tip1 = axis_values(T, n_tot ÷ 2 + 1, -lim_p, lim_p; endpoint=true)
-        tip2 = axis_values(T, n_tot ÷ 2 + 1, -lim_p, lim_p; endpoint=true)
-        tip3 = axis_values(T, n_tot ÷ 2 - 1, -lim_m, lim_m; endpoint=false)
-        tip4 = axis_values(T, n_tot ÷ 2 - 1, -lim_m, lim_m; endpoint=false)
-        tilt1 = axis_values(T, n_tot ÷ 2 + 1, -lim_p, lim_p; endpoint=true)
-        tilt2 = axis_values(T, n_tot ÷ 2 - 1, -lim_m, lim_m; endpoint=false)
-        tilt3 = axis_values(T, n_tot ÷ 2 - 1, -lim_m, lim_m; endpoint=false)
-        tilt4 = axis_values(T, n_tot ÷ 2 + 1, -lim_p, lim_p; endpoint=true)
-        Tip1 = repeat(tip1', length(tilt1), 1); Tilt1 = repeat(tilt1, 1, length(tip1))
-        Tip2 = repeat(tip2', length(tilt2), 1); Tilt2 = repeat(tilt2, 1, length(tip2))
-        Tip3 = repeat(tip3', length(tilt3), 1); Tilt3 = repeat(tilt3, 1, length(tip3))
-        Tip4 = repeat(tip4', length(tilt4), 1); Tilt4 = repeat(tilt4, 1, length(tip4))
-        Tip1 .-= mean(Tip1); Tilt1 .-= mean(Tilt1)
-        Tip2 .-= mean(Tip2); Tilt2 .-= mean(Tilt2)
-        Tip3 .-= mean(Tip3); Tilt3 .-= mean(Tilt3)
-        Tip4 .-= mean(Tip4); Tilt4 .-= mean(Tilt4)
-        q = T(n_sub + sep) * wfs.front_end.phase_mask.mask_scale
-        @views begin
-            mask[1:n_tot÷2+1, 1:n_tot÷2+1] .= cis.((Tip1 .* (q + sx[1]) .+ Tilt1 .* (q - sy[1])) .* norma)
-            mask[1:n_tot÷2+1, n_tot÷2:end] .= cis.((-Tip4 .* (q - sx[2]) .+ Tilt4 .* (q - sy[2])) .* norma)
-            mask[n_tot÷2:end, n_tot÷2:end] .= cis.((-Tip3 .* (q - sx[3]) .- Tilt3 .* (q + sy[3])) .* norma)
-            mask[n_tot÷2:end, 1:n_tot÷2+1] .= cis.((Tip2 .* (q + sx[4]) .- Tilt2 .* (q + sy[4])) .* norma)
-        end
-    end
-    return mask
-end
-
-centered_grid(::Type{T}, n::Int, endpoint::Bool) where {T<:AbstractFloat} =
-    axis_values(T, n, -T(π), T(π); endpoint=endpoint)
-
-function axis_values(::Type{T}, n::Int, lo::T, hi::T; endpoint::Bool) where {T<:AbstractFloat}
-    if endpoint
-        return reshape(range(lo, hi; length=n), n, 1)
-    end
-    return reshape(range(lo; step=(hi - lo) / n, length=n), n, 1)
 end
 
 function accumulate_pyramid_focal_intensity!(out::AbstractMatrix,

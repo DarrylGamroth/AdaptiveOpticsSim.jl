@@ -397,9 +397,6 @@ function _prepare_pyramid_modulation_batch(
     phase_mask.psf_centering || throw(InvalidConfiguration(
         "Pyramid shifted-mask modulation requires psf_centering=true",
     ))
-    phase_mask.old_mask && throw(InvalidConfiguration(
-        "Pyramid shifted-mask modulation does not support old_mask=true",
-    ))
     resolution = size(modulation.phases, 1)
     resolution > 1 || throw(InvalidConfiguration(
         "Pyramid shifted-mask modulation requires a pupil resolution greater than one",
@@ -689,14 +686,13 @@ origin. Both values are in radians. `modulation_propagation_strategy` selects
 the exact pupil-tilt reference formulation or the approximate shifted-mask
 formulation for fixed prepared modulation. `pupil_shift_x_pixels` and
 `pupil_shift_y_pixels` specify immutable real-valued per-face q1–q4 shifts; a
-scalar value applies to all four faces. With `old_mask=false`, shifts use native,
-unbinned detector pixels (the `pupil_samples` scale), and final binning divides
-the displacement by `binning`. `old_mask=true` retains the historical quadrant
-phase normalization and does not calibrate shifts to the same pixel units.
+scalar value applies to all four faces. Shifts use native, unbinned detector
+pixels (the `pupil_samples` scale), and final binning divides the displacement
+by `binning`.
 """
 function PyramidWFS(tel::Telescope; pupil_samples::Int, modulation::Real=2.0,
     modulation_points::Union{Int,Nothing}=nothing, extra_modulation_factor::Int=0,
-    old_mask::Bool=false, rooftop::Real=0.0,
+    rooftop::Real=0.0,
     phase_mask_rotation_rad::Real=0.0,
     modulation_phase_offset_rad::Real=0.0,
     pupil_shift_x_pixels=0,
@@ -737,7 +733,6 @@ function PyramidWFS(tel::Telescope; pupil_samples::Int, modulation::Real=2.0,
     shift_x = _pyramid_face_shifts_pixels(T, pupil_shift_x_pixels)
     shift_y = _pyramid_face_shifts_pixels(T, pupil_shift_y_pixels)
     phase_mask = PyramidPhaseMask{T}(
-        old_mask,
         T(rooftop),
         typed_phase_mask_rotation_rad,
         typed_mask_scale,

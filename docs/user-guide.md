@@ -158,10 +158,8 @@ sensor = PyramidWFS(telescope; pupil_samples=30,
 ```
 
 The four entries follow the existing q1–q4 face order. A scalar applies to all
-four faces. For the default `old_mask=false`, values are in native detector pixels before
-binning and change the focal-plane phase mask before diffraction and detector
-integration. The optional `old_mask=true` retains its legacy quadrant phase
-normalization, so its shift coefficients do not follow this pixel-unit convention. The
+four faces. Values are in native detector pixels before binning and change the
+focal-plane phase mask before diffraction and detector integration. The
 `pyramid_rate_node` constructor and `pyramid_rate_f32` TOML configuration accept
 the same two parameters; TOML accepts scalars or four-element arrays. Zero is
 the default. These are fixed construction values: prepare a new sensor or graph

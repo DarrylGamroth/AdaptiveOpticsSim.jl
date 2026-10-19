@@ -900,7 +900,6 @@ function build_reference_wfs(kind::Symbol, cfg::AbstractDict{<:AbstractString,<:
             modulation=Float64(get(cfg, "modulation", 0.0)),
             modulation_points=get(cfg, "modulation_points", nothing),
             extra_modulation_factor=Int(get(cfg, "extra_modulation_factor", 0)),
-            old_mask=Bool(get(cfg, "old_mask", false)),
             rooftop=Float64(get(cfg, "rooftop", 0.0)),
             phase_mask_rotation_rad=Float64(get(cfg,
                 "theta_rotation", 0.0)),

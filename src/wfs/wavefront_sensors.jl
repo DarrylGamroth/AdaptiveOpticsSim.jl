@@ -29,6 +29,7 @@ import ..AdaptiveOpticsSim:
     bin2d_abs2_kernel!,
     center_resize2d!,
     ensure_psf_buffers!,
+    fftshift2d!,
     runtime_rng
 
 import ..Backends:

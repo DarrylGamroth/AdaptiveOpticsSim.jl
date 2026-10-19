@@ -82,10 +82,6 @@ end
           (1, 1, 1, 1)
     @test uniformly_shifted_mask.front_end.phase_mask.pupil_shift_y_pixels ==
           (-1, -1, -1, -1)
-    old_unit_mask = PyramidWFS(tel; pupil_samples=4, modulation=zero(T), T=T, old_mask=true, mask_scale=one(T))
-    old_scaled_mask = PyramidWFS(tel; pupil_samples=4, modulation=zero(T), T=T, old_mask=true, mask_scale=T(1.5))
-    @test pyramid_propagation_workspace(old_unit_mask).pyramid_mask !=
-          pyramid_propagation_workspace(old_scaled_mask).pyramid_mask
     for invalid_scale in (0.0, -1.0, NaN, Inf)
         @test_throws InvalidConfiguration PyramidWFS(tel; pupil_samples=4, mask_scale=invalid_scale)
     end
@@ -152,15 +148,13 @@ end
             @test baseline.front_end.phase_mask.pupil_shift_y_pixels ===
                 ntuple(_ -> zero(T), 4)
             @test pyramid_focal_mask(baseline) == pyramid_focal_mask(zero_shift)
-            for old_mask in (false, true)
-                integer = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
-                    old_mask=old_mask, pupil_shift_x_pixels=(1, -1, -1, 1),
-                    pupil_shift_y_pixels=(1, 1, -1, -1))
-                real_integer = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
-                    old_mask=old_mask, pupil_shift_x_pixels=T.((1, -1, -1, 1)),
-                    pupil_shift_y_pixels=T.((1, 1, -1, -1)))
-                @test pyramid_focal_mask(integer) == pyramid_focal_mask(real_integer)
-            end
+            integer = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+                pupil_shift_x_pixels=(1, -1, -1, 1),
+                pupil_shift_y_pixels=(1, 1, -1, -1))
+            real_integer = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+                pupil_shift_x_pixels=T.((1, -1, -1, 1)),
+                pupil_shift_y_pixels=T.((1, 1, -1, -1)))
+            @test pyramid_focal_mask(integer) == pyramid_focal_mask(real_integer)
             for invalid in (NaN, Inf, -Inf, (0, 0, NaN, 0),
                     (0, 0, 0, Inf), "quarter")
                 @test_throws InvalidConfiguration PyramidWFS(tel;
@@ -284,6 +278,44 @@ end
                 @test @allocated(form_wfs_optical_products!(rate, pupil, plan)) == 0
             end
         end
+    end
+end
+
+@testset "Uncentered Pyramid diffraction and modulation camera" begin
+    for T in (Float32, Float64)
+        tol = T === Float32 ? 3e-5 : 2e-12
+        tel = Telescope(resolution=16, diameter=T(8),
+            central_obstruction=zero(T), T=T)
+        pupil = PupilFunction(tel; T=T)
+        pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
+        src = Source(band=:custom, wavelength=T(0.75e-6),
+            photon_irradiance=T(10), T=T)
+        baseline = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+            psf_centering=false)
+        dx, dy = T(0.25), T(-0.375)
+        sensor = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+            psf_centering=false, pupil_shift_x_pixels=dx, pupil_shift_y_pixels=dy)
+        side = size(pyramid_focal_mask(sensor), 1)
+        coords = [T(2pi) * (T(i-1) / side - T(0.5)) for i in 1:side]
+        ramp = [cis(-T(4) * (x * dx - y * dy)) for x in coords, y in coords]
+        mask = pyramid_focal_mask(baseline) .* ramp
+        @test pyramid_focal_mask(sensor) ≈ mask rtol=tol atol=tol
+        field = zeros(Complex{T}, side, side)
+        offset = div(side - 16, 2)
+        field[offset+1:offset+16, offset+1:offset+16] .=
+            sqrt(T(10) * T(0.5)^2) .* pupil.amplitude .*
+            cispi.(T(2) .* pupil.opd ./ wavelength(src))
+        focal_field = AdaptiveOpticsSim.FFTW.fftshift(AdaptiveOpticsSim.FFTW.fft(field))
+        expected = abs2.(AdaptiveOpticsSim.FFTW.ifft(focal_field .* mask))
+        intensity = pyramid_propagation_workspace(sensor).intensity
+        @test pyramid_intensity!(intensity, sensor, pupil, src) === intensity
+        @test all(isfinite, intensity)
+        @test sum(intensity) > zero(T)
+        @test intensity ≈ expected rtol=tol atol=tol
+        frame = WavefrontSensors.sample_pyramid_intensity!(sensor, pupil, intensity)
+        @test frame ≈ pyramid_shift_reference_sampling(expected, 4) rtol=tol atol=tol
+        @test pyramid_modulation_frame(sensor, pupil, src) ≈
+            abs2.(focal_field) ./ T(side)^2 rtol=tol atol=tol
     end
 end
 

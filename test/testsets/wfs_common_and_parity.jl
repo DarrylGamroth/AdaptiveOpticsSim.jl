@@ -157,11 +157,8 @@ end
     pyr_default = PyramidWFS(tel; pupil_samples=4, modulation=1.0)
     pyr_rooftop = PyramidWFS(tel; pupil_samples=4, modulation=1.0,
         rooftop=0.5, phase_mask_rotation_rad=0.2)
-    pyr_old = PyramidWFS(tel; pupil_samples=4, modulation=1.0, old_mask=true)
     @test pyramid_propagation_workspace(pyr_default).pyramid_mask !=
         pyramid_propagation_workspace(pyr_rooftop).pyramid_mask
-    @test pyramid_propagation_workspace(pyr_default).pyramid_mask !=
-        pyramid_propagation_workspace(pyr_old).pyramid_mask
     @test pyr_rooftop.front_end.phase_mask.rotation_rad == 0.2
     @test WavefrontSensors.pyramid_propagation_plan(
         pyr_default).modulation_propagation_strategy isa
@@ -304,13 +301,6 @@ end
         pupil_samples=4, phase_mask_rotation_rad=NaN)
     @test_throws InvalidConfiguration PyramidWFS(tel;
         pupil_samples=4, modulation_phase_offset_rad=NaN)
-    @test_throws InvalidConfiguration PyramidWFS(
-        tel;
-        pupil_samples=4,
-        old_mask=true,
-        modulation_propagation_strategy=
-            WavefrontSensors.PyramidShiftedMaskStrategy(),
-    )
     @test_throws InvalidConfiguration PyramidWFS(
         tel;
         pupil_samples=4,
