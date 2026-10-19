@@ -2444,6 +2444,55 @@ function run_optional_pyramid_shifted_mask_checks(
     return nothing
 end
 
+function run_optional_pyramid_fractional_shift_checks(
+    ::Type{B}, BackendArray,
+) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag}
+    T = Float32
+    selector = backend_selector(B)
+    cpu_tel = Telescope(resolution=16, diameter=T(8), T=T, backend=CPUBackend())
+    device_tel = Telescope(resolution=16, diameter=T(8), T=T, backend=selector)
+    cpu_pupil = PupilFunction(cpu_tel; T=T)
+    device_pupil = PupilFunction(device_tel; T=T, backend=selector)
+    cpu_pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
+    copyto!(device_pupil.opd, cpu_pupil.opd)
+    source = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=one(T), T=T)
+    shifts = (
+        ((0.25, -0.125, -0.125, 0.25), (0.125, 0.125, -0.25, -0.25), true),
+        ((0.25, -0.125, 0.375, -0.25), (0.125, -0.375, 0.25, -0.125), false),
+    )
+    @testset "fractional Pyramid shifts: $(backend_label(B))" begin
+        for strategy in (PyramidPupilTiltStrategy(), PyramidShiftedMaskStrategy()),
+                (sx, sy, paired) in shifts
+            options = (pupil_samples=4, modulation=T(0.7), modulation_points=4,
+                diffraction_padding=4, n_pix_separation=2, n_pix_edge=1,
+                pupil_shift_x_pixels=sx, pupil_shift_y_pixels=sy,
+                modulation_propagation_strategy=strategy, T=T)
+            cpu_sensor = PyramidWFS(cpu_tel; options...)
+            device_sensor = PyramidWFS(device_tel; options..., backend=selector)
+            cpu_front = PyramidOpticalFrontEnd(cpu_sensor, source)
+            device_front = PyramidOpticalFrontEnd(device_sensor, source)
+            cpu_rate = pyramid_rate_map(cpu_front, cpu_pupil)
+            device_rate = pyramid_rate_map(device_front, device_pupil)
+            cpu_plan = prepare_wfs_optics(cpu_front, cpu_pupil, cpu_rate)
+            device_plan = prepare_wfs_optics(device_front, device_pupil, device_rate)
+            form_wfs_optical_products!(cpu_rate, cpu_pupil, cpu_plan)
+            form_wfs_optical_products!(device_rate, device_pupil, device_plan)
+            synchronize_backend!(execution_style(device_rate.values))
+            @test device_rate.values isa BackendArray
+            @test Array(pyramid_focal_mask(device_sensor)) ≈
+                pyramid_focal_mask(cpu_sensor) rtol=3f-5 atol=1f-6
+            @test Array(device_rate.values) ≈ cpu_rate.values rtol=3f-4 atol=1f-6
+            @test sum(Array(device_rate.values)) ≈ sum(cpu_rate.values) rtol=3f-5
+            if strategy isa PyramidShiftedMaskStrategy
+                batch = pyramid_propagation_workspace(device_sensor).modulation_batch
+                @test (batch isa PyramidSeparableShiftedMaskModulationWorkspace) == paired
+            end
+        end
+    end
+    return nothing
+end
+
 function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     ::Type{T}) where {B<:AdaptiveOpticsSim.Backends.GPUBackendTag,T<:AbstractFloat}
     selector = backend_selector(B)
@@ -3552,6 +3601,7 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     run_optional_generic_wfs_acquisition_checks(B, backend)
     run_optional_wfs_stage_contracts(B, backend)
     run_optional_pyramid_shifted_mask_checks(B, backend)
+    run_optional_pyramid_fractional_shift_checks(B, backend)
     run_optional_spad_qualification_checks(B, backend)
     run_optional_cmos_family_checks(B, backend)
     run_optional_shared_detector_ipc_checks(B, backend)

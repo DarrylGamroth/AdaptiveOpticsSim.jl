@@ -127,6 +127,193 @@ end
     @test sum(path_rates[1].values) / sum(path_rates[2].values) ≈ T(10 / 3)
 end
 
+# Independent block integration oracle for the detector's native pixel scale.
+function pyramid_shift_reference_sampling(intensity, factor)
+    side = div(size(intensity, 1), factor)
+    return [sum(@view intensity[(i-1)*factor+1:i*factor,
+        (j-1)*factor+1:j*factor]) for i in 1:side, j in 1:side]
+end
+
+@testset "Pyramid fractional pupil shifts" begin
+    for T in (Float32, Float64)
+        @testset "$T" begin
+            tol = T === Float32 ? 3e-5 : 2e-12
+            tel = Telescope(resolution=16, diameter=T(8),
+                central_obstruction=zero(T), T=T)
+            pupil = PupilFunction(tel; T=T)
+            pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
+            src = Source(band=:custom, wavelength=T(0.75e-6),
+                photon_irradiance=T(10), T=T)
+            baseline = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T)
+            zero_shift = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+                pupil_shift_x_pixels=(0, 0, 0, 0), pupil_shift_y_pixels=0.0)
+            @test baseline.front_end.phase_mask.pupil_shift_x_pixels ===
+                ntuple(_ -> zero(T), 4)
+            @test baseline.front_end.phase_mask.pupil_shift_y_pixels ===
+                ntuple(_ -> zero(T), 4)
+            @test pyramid_focal_mask(baseline) == pyramid_focal_mask(zero_shift)
+            for old_mask in (false, true)
+                integer = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+                    old_mask=old_mask, pupil_shift_x_pixels=(1, -1, -1, 1),
+                    pupil_shift_y_pixels=(1, 1, -1, -1))
+                real_integer = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+                    old_mask=old_mask, pupil_shift_x_pixels=T.((1, -1, -1, 1)),
+                    pupil_shift_y_pixels=T.((1, 1, -1, -1)))
+                @test pyramid_focal_mask(integer) == pyramid_focal_mask(real_integer)
+            end
+            for invalid in (NaN, Inf, -Inf, (0, 0, NaN, 0),
+                    (0, 0, 0, Inf), "quarter")
+                @test_throws InvalidConfiguration PyramidWFS(tel;
+                    pupil_samples=4, T=T, pupil_shift_x_pixels=invalid)
+                @test_throws InvalidConfiguration PyramidWFS(tel;
+                    pupil_samples=4, T=T, pupil_shift_y_pixels=invalid)
+            end
+            if T === Float32
+                @test_throws InvalidConfiguration PyramidWFS(tel;
+                    pupil_samples=4, T=T, pupil_shift_x_pixels=floatmax(Float64))
+                @test_throws InvalidConfiguration PyramidWFS(tel;
+                    pupil_samples=4, T=T,
+                    pupil_shift_y_pixels=(0, 0, floatmax(Float64), 0))
+            end
+
+            for (dx, dy) in ((T(0.25), T(-0.375)), (T(-0.25), T(0.375)))
+                shifted = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+                    pupil_shift_x_pixels=dx, pupil_shift_y_pixels=dy)
+                @test shifted.front_end.phase_mask.pupil_shift_x_pixels ===
+                    ntuple(_ -> dx, 4)
+                @test shifted.front_end.phase_mask.pupil_shift_y_pixels ===
+                    ntuple(_ -> dy, 4)
+                # Uniform face shifts add a common linear phase to every plane.
+                # The Fourier shift theorem gives displacement (4dx, -4dy)
+                # in propagated array samples, or (dx, -dy) native pixels.
+                mask = pyramid_focal_mask(baseline)
+                side = size(mask, 1)
+                coords = [T(2pi) * (T(i-1) / side - T(0.5) + inv(T(2side)))
+                    for i in 1:side]
+                ramp = [cis(-T(4) * (x * dx - y * dy))
+                    for x in coords, y in coords]
+                @test pyramid_focal_mask(shifted) ≈ mask .* ramp rtol=tol atol=tol
+                field = zeros(Complex{T}, side, side)
+                offset = div(side - 16, 2)
+                field[offset+1:offset+16, offset+1:offset+16] .=
+                    sqrt(T(10) * T(0.5)^2) .* pupil.amplitude .*
+                    cispi.(T(2) .* pupil.opd ./ wavelength(src))
+                # Independent FFT propagation of the analytic phase ramp.
+                phasor = [cis(-T(pi) * T(side+1) / T(side) * (i+j-2))
+                    for i in 1:side, j in 1:side]
+                expected = abs2.(AdaptiveOpticsSim.FFTW.ifft(
+                    AdaptiveOpticsSim.FFTW.fft(field .* phasor) .* mask .* ramp))
+                intensity = pyramid_propagation_workspace(shifted).intensity
+                pyramid_intensity!(intensity, shifted, pupil, src)
+                @test intensity ≈ expected rtol=tol atol=tol
+                frame = WavefrontSensors.sample_pyramid_intensity!(shifted, pupil,
+                    intensity)
+                @test frame ≈ pyramid_shift_reference_sampling(expected, 4) rtol=tol atol=tol
+                base_intensity = pyramid_propagation_workspace(baseline).intensity
+                pyramid_intensity!(base_intensity, baseline, pupil, src)
+                base_frame = WavefrontSensors.sample_pyramid_intensity!(baseline,
+                    pupil, base_intensity)
+                @test norm(frame - base_frame) > T(0.01) * norm(base_frame)
+                @test sum(intensity) ≈ sum(base_intensity) rtol=tol
+                # Final binning integrates the same displaced diffraction field.
+                binned = PyramidWFS(tel; pupil_samples=4, modulation=0, T=T,
+                    binning=2, pupil_shift_x_pixels=dx, pupil_shift_y_pixels=dy)
+                front_end = PyramidOpticalFrontEnd(binned, src)
+                rate = pyramid_rate_map(front_end, pupil)
+                plan = prepare_wfs_optics(front_end, pupil, rate)
+                form_wfs_optical_products!(rate, pupil, plan)
+                @test rate.values ≈ pyramid_shift_reference_sampling(expected, 8) rtol=tol atol=tol
+                @test rate.values ≈ pyramid_shift_reference_sampling(frame, 2) rtol=tol atol=tol
+                @test WavefrontSensors.sample_pyramid_intensity!(binned, pupil,
+                    pyramid_propagation_workspace(binned).intensity) ≈ rate.values
+                detector = Detector(noise=NoiseNone(), exposure_duration=T(0.25),
+                    qe=T(0.5), T=T)
+                @test capture!(detector, rate.values, src) ≈ rate.values .* T(0.125)
+                @test @allocated(form_wfs_optical_products!(rate, pupil, plan)) == 0
+            end
+
+            paired_x = T.((0.25, -0.375, -0.375, 0.25))
+            paired_y = T.((-0.125, -0.125, 0.375, 0.375))
+            for (sx, sy, paired) in ((paired_x, paired_y, true),
+                    (T.((0.25, -0.375, 0.125, -0.25)),
+                        T.((-0.125, 0.25, 0.375, -0.25)), false))
+                shifted = PyramidWFS(tel; pupil_samples=4, modulation=T(1), T=T,
+                    modulation_propagation_strategy=PyramidShiftedMaskStrategy(),
+                    pupil_shift_x_pixels=sx, pupil_shift_y_pixels=sy)
+                front_end = PyramidOpticalFrontEnd(shifted, src)
+                rate = pyramid_rate_map(front_end, pupil)
+                plan = prepare_wfs_optics(front_end, pupil, rate)
+                form_wfs_optical_products!(rate, pupil, plan)
+                workspace = pyramid_propagation_workspace(shifted)
+                batch = workspace.modulation_batch
+                @test (batch isa PyramidSeparableShiftedMaskModulationWorkspace) == paired
+                side = size(workspace.intensity, 1)
+                points = length(batch.operating_weights)
+                # Build the four physical planes independently at each shifted
+                # focal coordinate, then take their upper envelope.
+                masks = Array{Complex{T}}(undef, side, side, points)
+                for point in 1:points, j in 1:side, i in 1:side
+                    x = T(2pi) * (T(i-1) / side - T(0.5) + inv(T(2side))) +
+                        batch.axis_1_shifts_rad[point]
+                    y = T(2pi) * (T(j-1) / side - T(0.5) + inv(T(2side))) +
+                        batch.axis_2_shifts_rad[point]
+                    planes = ((2+sx[1])*x + (2-sy[1])*y,
+                        (-2+sx[2])*x + (2-sy[2])*y,
+                        (-2+sx[3])*x + (-2-sy[3])*y,
+                        (2+sx[4])*x + (-2-sy[4])*y)
+                    masks[i, j, point] = cis(-T(4) * maximum(planes))
+                end
+                if paired
+                    for point in 1:points
+                        @test batch.axis_1_factors[:, point] *
+                            transpose(batch.axis_2_factors[:, point]) ≈
+                            masks[:, :, point] rtol=tol atol=tol
+                    end
+                else
+                    @test batch.shifted_masks ≈ masks rtol=tol atol=tol
+                end
+                full_batch = PyramidShiftedMaskModulationWorkspace(
+                    similar(batch.field_stack), masks, batch.operating_weights,
+                    batch.axis_1_shifts_rad, batch.axis_2_shifts_rad,
+                    batch.bfft_plan, batch.batch_size)
+                expected = zero(workspace.intensity)
+                WavefrontSensors._propagate_pyramid_shifted_masks!(ScalarCPUStyle(),
+                    expected, front_end, full_batch)
+                @test workspace.intensity ≈ expected rtol=tol atol=tol
+                @test rate.values ≈ pyramid_shift_reference_sampling(expected, 4) rtol=tol atol=tol
+                @test @allocated(form_wfs_optical_products!(rate, pupil, plan)) == 0
+            end
+        end
+    end
+end
+
+@testset "Fractional Pyramid mask in AOC gain sensing" begin
+    tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
+    pupil = PupilFunction(tel)
+    src = Source(band=:custom, wavelength=0.75e-6, photon_irradiance=10.0)
+    sensor = PyramidWFS(tel; pupil_samples=4, modulation=1.0,
+        pupil_shift_x_pixels=(0.25, -0.375, 0.125, -0.25),
+        pupil_shift_y_pixels=(-0.125, 0.25, 0.375, -0.25))
+    mask = pyramid_focal_mask(sensor)
+    frame = pyramid_modulation_frame(sensor, pupil, src)
+    side = size(mask, 1)
+    coords = collect(range(-1.0, 1.0; length=side))
+    basis = cat([x for x in coords, y in coords],
+        [x^2 + y^2 for x in coords, y in coords]; dims=3)
+    optical_gains = AdaptiveOpticsCalibration.OpticalGains
+    specification = optical_gains.GainSensingSpecification(mask, basis, frame)
+    plan = AdaptiveOpticsCalibration.prepare(optical_gains.GainSensing(), specification)
+    @test plan.mask == mask
+    @test plan.mask !== mask
+    product = AdaptiveOpticsCalibration.allocate_result(plan)
+    workspace = AdaptiveOpticsCalibration.allocate_workspace(plan)
+    AdaptiveOpticsCalibration.process!(product, workspace, plan,
+        optical_gains.GainSensingInputs(frame))
+    @test !any(optical_gains.weak_mode_mask(product))
+    @test all(isfinite, optical_gains.current_sensitivities(product))
+    @test optical_gains.optical_gains(product) ≈ ones(2) rtol=1e-12 atol=1e-12
+end
+
 @testset "Bi-O-edge physical four-pupil propagation" begin
     T = Float64
     tel = Telescope(resolution=16, diameter=T(8),

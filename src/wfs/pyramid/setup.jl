@@ -257,7 +257,8 @@ end
 Prepared separable factors for an ideal shifted focal-plane Pyramid mask.
 
 This representation is exact for the shifted-mask formulation when physical
-mask rotation and rooftop terms are both zero. It replaces each `pad × pad`
+mask rotation and rooftop terms are both zero and face shifts are paired
+across each coordinate axis. It replaces each `pad × pad`
 mask with two `pad`-element factors while retaining the same bounded inverse
 propagation tile.
 """
@@ -357,7 +358,9 @@ end
     _pyramid_modulation_batch_size(field, point_count)
 
 @inline _pyramid_shifted_mask_is_separable(phase_mask) =
-    iszero(phase_mask.rotation_rad) && iszero(phase_mask.rooftop)
+    iszero(phase_mask.rotation_rad) && iszero(phase_mask.rooftop) &&
+    _pyramid_face_shifts_are_paired(phase_mask.pupil_shift_x_pixels,
+        phase_mask.pupil_shift_y_pixels)
 
 @inline function _prepare_pyramid_modulation_batch(
     ::ScalarCPUStyle, field, phase_mask, modulation,
@@ -644,28 +647,31 @@ end
     return 2 * pupil_samples + n_pix_separation + 2 * edge
 end
 
-@inline function _pyramid_shift_pixels(value)
+@inline function _pyramid_shift_pixels(::Type{T}, value) where {T<:AbstractFloat}
     value isa Real && isfinite(value) || throw(InvalidConfiguration(
         "pyramid pupil shifts must be finite real values"))
-    try
-        return round(Int, value)
+    typed_value = try
+        T(value)
     catch error
-        error isa InexactError || rethrow()
+        error isa InexactError || error isa OverflowError || rethrow()
         throw(InvalidConfiguration(
-            "pyramid pupil shifts must round to Int"))
+            "pyramid pupil shifts must be representable in $(T)"))
     end
+    isfinite(typed_value) || throw(InvalidConfiguration(
+        "pyramid pupil shifts must be finite in $(T)"))
+    return typed_value
 end
 
-@inline _pyramid_face_shifts_pixels(value::Real) =
-    ntuple(_ -> _pyramid_shift_pixels(value), 4)
+@inline _pyramid_face_shifts_pixels(::Type{T}, value::Real) where {T<:AbstractFloat} =
+    ntuple(_ -> _pyramid_shift_pixels(T, value), 4)
 
-function _pyramid_face_shifts_pixels(values)
+function _pyramid_face_shifts_pixels(::Type{T}, values) where {T<:AbstractFloat}
     (values isa Tuple || values isa AbstractVector) || throw(
         InvalidConfiguration(
             "pyramid per-face pupil shifts must be a scalar or four-element tuple/vector"))
     length(values) == 4 || throw(InvalidConfiguration(
         "pyramid per-face pupil shifts must have four elements"))
-    return ntuple(index -> _pyramid_shift_pixels(values[index]), 4)
+    return ntuple(index -> _pyramid_shift_pixels(T, values[index]), 4)
 end
 
 """
@@ -682,8 +688,11 @@ mask-coordinate transform, while
 origin. Both values are in radians. `modulation_propagation_strategy` selects
 the exact pupil-tilt reference formulation or the approximate shifted-mask
 formulation for fixed prepared modulation. `pupil_shift_x_pixels` and
-`pupil_shift_y_pixels` specify immutable per-face q1–q4 detector-pixel shifts;
-a scalar value applies to all four faces.
+`pupil_shift_y_pixels` specify immutable real-valued per-face q1–q4 shifts; a
+scalar value applies to all four faces. With `old_mask=false`, shifts use native,
+unbinned detector pixels (the `pupil_samples` scale), and final binning divides
+the displacement by `binning`. `old_mask=true` retains the historical quadrant
+phase normalization and does not calibrate shifts to the same pixel units.
 """
 function PyramidWFS(tel::Telescope; pupil_samples::Int, modulation::Real=2.0,
     modulation_points::Union{Int,Nothing}=nothing, extra_modulation_factor::Int=0,
@@ -725,8 +734,8 @@ function PyramidWFS(tel::Telescope; pupil_samples::Int, modulation::Real=2.0,
             "pyramid modulation_phase_offset_rad must be finite"))
     pyramid_sampled_geometry(pupil_samples, n_pix_separation, n_pix_edge,
         binning)
-    shift_x = _pyramid_face_shifts_pixels(pupil_shift_x_pixels)
-    shift_y = _pyramid_face_shifts_pixels(pupil_shift_y_pixels)
+    shift_x = _pyramid_face_shifts_pixels(T, pupil_shift_x_pixels)
+    shift_y = _pyramid_face_shifts_pixels(T, pupil_shift_y_pixels)
     phase_mask = PyramidPhaseMask{T}(
         old_mask,
         T(rooftop),

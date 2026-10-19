@@ -147,6 +147,38 @@ registered FilterGraphAlgorithms. LiFT uses its physical forward model and
 analytic Jacobian callback with the `AdaptiveOpticsCalibration.PhaseRetrieval`
 direct inverse API; it is not a detector-slope convention.
 
+Pyramid pupil-image registration can include fractional optical displacements:
+
+```julia
+using AdaptiveOpticsSim.Optics, AdaptiveOpticsSim.WavefrontSensors
+telescope = Telescope(resolution=480, diameter=1.22)
+sensor = PyramidWFS(telescope; pupil_samples=30,
+    pupil_shift_x_pixels=(0.25, -0.15, 0.10, -0.20),
+    pupil_shift_y_pixels=(0.10, 0.20, -0.25, -0.05))
+```
+
+The four entries follow the existing q1–q4 face order. A scalar applies to all
+four faces. For the default `old_mask=false`, values are in native detector pixels before
+binning and change the focal-plane phase mask before diffraction and detector
+integration. The optional `old_mask=true` retains its legacy quadrant phase
+normalization, so its shift coefficients do not follow this pixel-unit convention. The
+`pyramid_rate_node` constructor and `pyramid_rate_f32` TOML configuration accept
+the same two parameters; TOML accepts scalars or four-element arrays. Zero is
+the default. These are fixed construction values: prepare a new sensor or graph
+when changing them, and acquire calibration responses with that optical model.
+
+For an arbitrary four-face error, the shifted-mask strategy uses its full mask
+stack; paired shifts can retain its separable storage optimization. AOC accepts
+the resulting complex mask, complete camera images and measured responses
+through its existing interfaces.
+
+Lardière et al., *Specifications, Procurement and Testing of the TMT-NFIRAOS
+Double-Pyramid Prisms*, §§5.3–5.4, motivates subpixel pupil-placement tolerance
+studies. Its Zemax sensitivities and prism prescription apply to NFIRAOS;
+instrument-specific measured displacements should set the values for Copper.
+These effective phase-mask offsets do not specify glass dispersion or finite
+prism-tip geometry.
+
 ## Complete-Frame Algorithm Graphs
 
 A graph definition contains a concrete tuple of nodes, graph inputs/outputs,

@@ -61,9 +61,12 @@ end
     ::PyramidModulationBatchWorkspace, ::PyramidWFS,
     ::PupilFunction) = nothing
 
-@inline function _pyramid_separable_shift_components(shift_x, shift_y)
+@inline _pyramid_face_shifts_are_paired(shift_x, shift_y) =
     shift_x[1] == shift_x[4] && shift_x[2] == shift_x[3] &&
-        shift_y[1] == shift_y[2] && shift_y[3] == shift_y[4] || throw(
+    shift_y[1] == shift_y[2] && shift_y[3] == shift_y[4]
+
+@inline function _pyramid_separable_shift_components(shift_x, shift_y)
+    _pyramid_face_shifts_are_paired(shift_x, shift_y) || throw(
         InvalidConfiguration(
             "separable Pyramid shifted masks require paired face shifts",
         ),

@@ -774,6 +774,8 @@ function _pyramid_rate_f32_node(
         :psf_centering,
         :pupil_reflectivity,
         :pupil_samples,
+        :pupil_shift_x_pixels,
+        :pupil_shift_y_pixels,
         :resolution,
         :source_band,
         :source_magnitude,
@@ -852,6 +854,13 @@ function _pyramid_rate_f32_node(
         _file_integer(config.n_pix_edge, "$context.n_pix_edge") : nothing
     binning = hasproperty(config, :binning) ?
         _file_integer(config.binning, "$context.binning") : 1
+    pupil_shifts = map((:pupil_shift_x_pixels, :pupil_shift_y_pixels)) do field
+        hasproperty(config, field) || return 0
+        value = getproperty(config, field)
+        field_context = "$context.$field"
+        return value isa Real ? _file_real(value, field_context) :
+            _file_real_tuple(value, field_context)
+    end
     source_band = hasproperty(config, :source_band) ? _file_identifier(
         config.source_band,
         "$context.source_band",
@@ -904,6 +913,8 @@ function _pyramid_rate_f32_node(
         n_pix_separation,
         n_pix_edge,
         binning,
+        pupil_shift_x_pixels=pupil_shifts[1],
+        pupil_shift_y_pixels=pupil_shifts[2],
         source_band,
         source_magnitude,
         source_wavelength_m=_file_real(

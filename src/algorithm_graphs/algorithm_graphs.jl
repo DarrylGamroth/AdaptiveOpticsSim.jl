@@ -119,6 +119,7 @@ import ..Detectors:
     prepare_detector_acquisition,
     reset_integration!
 import ..WavefrontSensors:
+    _pyramid_face_shifts_pixels,
     Diffractive,
     AbstractPyramidModulationPropagationStrategy,
     NoPreparedFourPupilLGS,

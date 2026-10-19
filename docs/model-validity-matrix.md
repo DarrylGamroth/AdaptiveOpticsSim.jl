@@ -40,6 +40,12 @@ real remaining qualification gap.
 
 ## Known Scope Limits
 
+- Pyramid per-face pupil shifts preserve fractional values in the sensor
+  numeric type. For the default mask, signed shifts and detector binning are
+  checked against an independent Fourier-ramp propagation and block-integration
+  reference; AOC gain sensing accepts the resulting mask and camera frame.
+  These effective phase-mask offsets do not validate a particular refractive
+  double-pyramid prescription, manufacturing tolerance, or chromatic model.
 - OOPAO appears only as cited external-reference evidence or tutorial
   provenance; it does not constrain AOS APIs or class layout.
 - Explicit geometric truth calculations and diffractive sensor models answer

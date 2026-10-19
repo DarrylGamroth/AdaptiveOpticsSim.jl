@@ -2,7 +2,10 @@
 Immutable physical definition of a pyramid focal-plane phase mask.
 `rotation_rad` is the rotation angle in radians applied by the mask-coordinate
 transform. `pupil_shift_x_pixels` and `pupil_shift_y_pixels` are the
-per-face displacement terms, in detector pixels, ordered q1 through q4.
+per-face displacement terms, ordered q1 through q4. With `old_mask=false`,
+they use native, unbinned detector pixels; final binning divides the displacement
+by `binning`. `old_mask=true` retains the historical quadrant phase normalization
+and does not calibrate these terms to the same pixel units.
 """
 struct PyramidPhaseMask{T<:AbstractFloat}
     old_mask::Bool
@@ -13,8 +16,8 @@ struct PyramidPhaseMask{T<:AbstractFloat}
     psf_centering::Bool
     n_pix_separation::Union{Int,Nothing}
     n_pix_edge::Union{Int,Nothing}
-    pupil_shift_x_pixels::NTuple{4,Int}
-    pupil_shift_y_pixels::NTuple{4,Int}
+    pupil_shift_x_pixels::NTuple{4,T}
+    pupil_shift_y_pixels::NTuple{4,T}
 end
 
 """Immutable physical definition of the four Bi-O-edge amplitude masks."""

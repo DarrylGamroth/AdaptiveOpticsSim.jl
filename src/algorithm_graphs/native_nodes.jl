@@ -1858,6 +1858,8 @@ struct PyramidRateNodeConfig{T<:AbstractFloat,TD,S,MS}
     n_pix_separation::Union{Nothing,Int}
     n_pix_edge::Union{Nothing,Int}
     binning::Int
+    pupil_shift_x_pixels::NTuple{4,T}
+    pupil_shift_y_pixels::NTuple{4,T}
     opd_schema::String
     photon_rate_schema::String
 end
@@ -1879,6 +1881,8 @@ function _pyramid_rate_config(
     n_pix_separation::Union{Nothing,Integer},
     n_pix_edge::Union{Nothing,Integer},
     binning::Integer,
+    pupil_shift_x_pixels,
+    pupil_shift_y_pixels,
     source_band::Symbol,
     source_magnitude::Real,
     source_wavelength_m::Real,
@@ -1948,7 +1952,7 @@ function _pyramid_rate_config(
         "Pyramid photon_rate_schema must not be empty",
     ))
 
-    telescope, source = try
+    telescope, source, shift_x, shift_y = try
         definition = TelescopeDefinition(
             resolution=pupil_resolution,
             diameter=telescope_diameter_m,
@@ -1967,7 +1971,9 @@ function _pyramid_rate_config(
             T=T,
         )
         photon_irradiance(guide_source)
-        (definition, guide_source)
+        (definition, guide_source,
+            _pyramid_face_shifts_pixels(T, pupil_shift_x_pixels),
+            _pyramid_face_shifts_pixels(T, pupil_shift_y_pixels))
     catch error
         error isa AdaptiveOpticsSimError || rethrow()
         throw(AlgorithmGraphError(sprint(showerror, error)))
@@ -1985,6 +1991,8 @@ function _pyramid_rate_config(
         separation,
         edge,
         bin,
+        shift_x,
+        shift_y,
         String(opd_schema),
         String(photon_rate_schema),
     )
@@ -1997,6 +2005,9 @@ Declare one complete-frame diffractive Pyramid optics node. The node consumes
 a pupil-plane OPD map and writes the four re-imaged pupils as one
 cell-integrated detector-plane photon-rate frame. Detector acquisition and
 external RTC processing remain separate graph operations.
+`pupil_shift_x_pixels` and `pupil_shift_y_pixels` accept a finite scalar or
+four per-face real displacements in native detector pixels, before `binning`.
+Fractional displacements change optical propagation without resampling a frame.
 """
 function pyramid_rate_node(
     name::Symbol;
@@ -2019,6 +2030,8 @@ function pyramid_rate_node(
     n_pix_separation::Union{Nothing,Integer}=nothing,
     n_pix_edge::Union{Nothing,Integer}=nothing,
     binning::Integer=1,
+    pupil_shift_x_pixels=0,
+    pupil_shift_y_pixels=0,
     source_band::Symbol=:custom,
     source_magnitude::Real=0,
     source_photon_irradiance_m2_s::Union{Nothing,Real}=nothing,
@@ -2042,6 +2055,8 @@ function pyramid_rate_node(
         n_pix_separation,
         n_pix_edge,
         binning,
+        pupil_shift_x_pixels,
+        pupil_shift_y_pixels,
         source_band,
         source_magnitude,
         source_wavelength_m,
@@ -2130,6 +2145,8 @@ function prepare_graph_node(
         n_pix_separation=config.n_pix_separation,
         n_pix_edge=config.n_pix_edge,
         binning=config.binning,
+        pupil_shift_x_pixels=config.pupil_shift_x_pixels,
+        pupil_shift_y_pixels=config.pupil_shift_y_pixels,
         T=T,
         backend=compute_device_backend(target),
     )
