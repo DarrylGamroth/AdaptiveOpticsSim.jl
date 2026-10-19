@@ -36,7 +36,7 @@ When calibrated path fields are already available at wavelength anchors on the
 same physical detector grid, prepare spectral synthesis directly:
 
 ```julia
-using AdaptiveOpticsSim.Optics
+using AdaptiveOpticsSim.Optics: prepare_spectral_synthesis, synthesize_spectrum!
 
 synthesis = prepare_spectral_synthesis(
     envelopes,

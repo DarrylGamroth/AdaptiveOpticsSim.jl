@@ -6,6 +6,9 @@ AdaptiveOpticsSim.jl provides adaptive-optics physics, prepared numerical
 operations, and a small complete-frame graph runtime. It supports direct Julia
 workflows on CPU and covered CUDA/AMDGPU paths.
 
+Follow the [installation instructions](../README.md#installation) to add General
+and the project registry before resolving a released package or checkout.
+
 ## Choose A Composition Surface
 
 Use direct Julia when the model has generated topology, multiple rates,

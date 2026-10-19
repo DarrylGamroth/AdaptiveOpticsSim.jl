@@ -19,6 +19,9 @@ run_step() {
 
 cd "${ROOT_DIR}"
 
+run_step "Package registries" \
+    julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git"))'
+
 if [[ "${ADAPTIVEOPTICS_SKIP_CPU_FULL_TESTS:-0}" != "1" ]]; then
     run_step "CPU full test suite" \
         julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
@@ -31,6 +34,10 @@ if [[ "${ADAPTIVEOPTICS_VALIDATE_CUDA:-0}" == "1" ]]; then
         julia --project=test/cuda --startup-file=no -e 'using Pkg; Pkg.instantiate()'
     run_step "CUDA hardware target" \
         julia --project=test/cuda --startup-file=no test/runtests_cuda.jl
+    run_step "CUDA prepared multiplication capture" \
+        julia --project=test/cuda --startup-file=no test/cuda_prepared_multiplication_capture.jl
+    run_step "CUDA InGaAs graph capture" \
+        julia --project=test/cuda --startup-file=no test/cuda_ingaas_graph_capture.jl
 fi
 
 if [[ "${ADAPTIVEOPTICS_VALIDATE_AMDGPU:-0}" == "1" ]]; then

@@ -1216,6 +1216,10 @@ end
         # backend suites; atomic kernels are not portable to the KA CPU Array
         # backend on Julia 1.12.
         deferred = Set([
+            # Scalar/KA-CPU parity is exercised by detector-pixel-mtf.
+            :_pixel_mtf_pad_kernel!,
+            :_pixel_mtf_multiply_kernel!,
+            :_pixel_mtf_crop_kernel!,
             :_add_enqueued_detector_scratch_kernel!,
             :_clamp_enqueued_detector_frame_kernel!,
             :_count_nonfinite_graph_values_kernel!,

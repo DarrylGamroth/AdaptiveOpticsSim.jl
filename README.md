@@ -12,6 +12,25 @@ algorithms.
 Requires Julia 1.12 or newer. The package relies on current Julia atomics and
 backend behavior for maintained CPU/GPU execution paths.
 
+## Installation
+
+Add General and the project registry, which supplies AdaptiveOpticsCalibration,
+before installing the released package:
+
+```julia
+using Pkg
+Pkg.Registry.add("General")
+Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git"))
+Pkg.add(name="AdaptiveOpticsSim", version="0.1.0")
+```
+
+For development from a checkout, add the same registries once, then instantiate
+the checkout environment:
+
+```bash
+julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+```
+
 ## Start Here
 
 If you are a normal user, read these in order:

@@ -29,7 +29,7 @@ jobs:
         uses: julia-actions/cache@v3
 
       - name: Instantiate AMDGPU test project
-        run: julia --project=test/amdgpu --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=test/amdgpu --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
 
       - name: Run maintained AMDGPU hardware target
         run: julia --project=test/amdgpu --startup-file=no test/runtests_amdgpu.jl

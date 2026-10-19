@@ -20,6 +20,17 @@ change.
 5. Confirm that optional hardware is healthy before starting a billed or remote
    run.
 
+Bootstrap General and the project registry before resolving any candidate
+environment. The project registry supplies AdaptiveOpticsCalibration 0.17:
+
+~~~bash
+julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git"))'
+~~~
+
+Run this once per Julia depot, including a fresh CI or remote depot. The unified
+release script and manual validation workflows perform this bootstrap before
+package resolution.
+
 ## CPU Gate
 
 ~~~bash
@@ -50,13 +61,17 @@ disabled.
 
 ## CUDA Gate
 
-Run on the WSL CUDA host for the same accelerator-relevant scope:
+Run on the local CUDA host for the same accelerator-relevant scope:
 
 ~~~bash
-ssh wsl 'cd /home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl &&
-  julia --project=test/cuda --startup-file=no -e "using Pkg; Pkg.instantiate()" &&
-  julia --project=test/cuda --startup-file=no test/runtests_cuda.jl'
+julia --project=test/cuda --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+julia --project=test/cuda --startup-file=no test/runtests_cuda.jl
+julia --project=test/cuda --startup-file=no test/cuda_prepared_multiplication_capture.jl
+julia --project=test/cuda --startup-file=no test/cuda_ingaas_graph_capture.jl
 ~~~
+
+Run the standalone capture checks in separate Julia processes; their top-level
+namespaces are independent.
 
 Record CUDA.jl, toolkit, driver, and device versions. CUDA remains a manual
 validation target rather than a continuously available release gate.

@@ -29,7 +29,7 @@ jobs:
           version: "1.12"
       - uses: julia-actions/cache@v3
       - name: Instantiate
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run full composition with coverage
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test(coverage=true)'
       - name: Process Julia coverage

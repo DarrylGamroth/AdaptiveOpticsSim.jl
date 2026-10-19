@@ -29,10 +29,16 @@ jobs:
         uses: julia-actions/cache@v3
 
       - name: Instantiate CUDA test project
-        run: julia --project=test/cuda --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=test/cuda --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
 
       - name: Run retained CUDA hardware target
         run: julia --project=test/cuda --startup-file=no test/runtests_cuda.jl
+
+      - name: Run CUDA prepared multiplication capture
+        run: julia --project=test/cuda --startup-file=no test/cuda_prepared_multiplication_capture.jl
+
+      - name: Run CUDA InGaAs graph capture
+        run: julia --project=test/cuda --startup-file=no test/cuda_ingaas_graph_capture.jl
 
       - name: Run focused CUDA extension coverage
         env:

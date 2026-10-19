@@ -52,7 +52,7 @@ jobs:
           version: "1.12"
       - uses: julia-actions/cache@v3
       - name: Instantiate
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run selected tests
         run: julia --project=. --startup-file=no test/ci/run_selected_tests.jl
 
@@ -68,7 +68,7 @@ jobs:
           version: "1.12"
       - uses: julia-actions/cache@v3
       - name: Instantiate
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run full test suite
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
 
@@ -86,7 +86,7 @@ jobs:
           version: "1.12"
       - uses: julia-actions/cache@v3
       - name: Instantiate
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run selected tests
         run: julia --project=. --startup-file=no test/ci/run_selected_tests.jl
 
@@ -104,7 +104,7 @@ jobs:
           version: "1.12"
       - uses: julia-actions/cache@v3
       - name: Instantiate
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run selected tests
         run: julia --project=. --startup-file=no test/ci/run_selected_tests.jl
 
@@ -128,7 +128,7 @@ jobs:
           Sys.islinux() && Sys.ARCH === :aarch64 || error("expected Linux aarch64");
           versioninfo()'
       - name: Instantiate
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run selected tests
         run: julia --project=. --startup-file=no test/ci/run_selected_tests.jl
 
@@ -146,7 +146,7 @@ jobs:
           version: "1.12"
       - uses: julia-actions/cache@v3
       - name: Instantiate
-        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run grouped CPU tests
         run: julia --threads=4 --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=["gate6"])'
 
@@ -164,7 +164,7 @@ jobs:
           version: "1.12"
       - uses: julia-actions/cache@v3
       - name: Instantiate scheduler environment
-        run: julia --project=test/schedulers --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+        run: julia --project=test/schedulers --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run scheduler extension tests
         run: julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl
 
@@ -189,7 +189,7 @@ jobs:
           Sys.isapple() && Sys.ARCH === :aarch64 || error("expected Apple Silicon");
           versioninfo()'
       - name: Instantiate AppleAccelerate environment
-        run: julia --project=test/appleaccelerate --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
+        run: julia --project=test/appleaccelerate --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate(); Pkg.status()'
       - name: Verify backend-neutral package load
         run: julia --project=test/appleaccelerate --startup-file=no test/appleaccelerate/backend_neutral.jl
       - name: Run focused AppleAccelerate validation
@@ -207,6 +207,6 @@ jobs:
           version: "1.12"
       - uses: julia-actions/cache@v3
       - name: Instantiate Metal environment
-        run: julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
+        run: julia --project=test/metal --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate(); Pkg.status()'
       - name: Run Metal extension validation
         run: julia --project=test/metal --startup-file=no test/metal/runtests.jl
