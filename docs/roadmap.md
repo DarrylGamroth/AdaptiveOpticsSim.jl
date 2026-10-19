@@ -66,8 +66,8 @@ the maintained package.
    references when they provide the relevant validation provenance.
 8. Improve rolling-shutter models by evaluating the optical path at row or
    row-group times while publishing one atomic completed frame.
-9. Close remaining production-surface gaps with local CPU, AMDGPU, WSL CUDA,
-   and aarch64 evidence as applicable.
+9. Close remaining production-surface gaps with local CPU, AMDGPU, CUDA, and
+   aarch64 evidence as applicable.
 
 ## Graph Scope
 

@@ -183,8 +183,8 @@ reaches a CPU RTC or external transport client only through an explicit
 application-owned device-to-host copy or prepared handoff after successful
 graph publication.
 
-Focused companion tests exercise square and rectangular outputs on CPU, local
-AMDGPU, and WSL CUDA hardware with GPU scalar indexing disabled. They establish
+Focused companion tests exercise square and rectangular outputs on CPU and
+AMDGPU/CUDA hardware with GPU scalar indexing disabled. They establish
 CPU/GPU numerical agreement, exact residency, graph buffer identity, explicit
 host publication, and zero warmed Julia heap allocation on the CPU path. The
 SPIDERS files are also loaded and stepped independently with test

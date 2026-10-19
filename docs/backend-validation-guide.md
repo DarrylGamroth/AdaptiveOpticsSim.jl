@@ -90,14 +90,13 @@ must retain distinct streams, honor the device-event barrier before both
 dependent modal expansions, match the single-stream numerical result after
 changed inputs, and remain reproducible after reset.
 
-## CUDA On WSL
+## Local CUDA
 
-Run the CUDA target on the WSL host:
+Run the CUDA target on the local CUDA host:
 
 ~~~bash
-ssh wsl 'cd /home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl &&
-  julia --project=test/cuda --startup-file=no -e "using Pkg; Pkg.instantiate()" &&
-  julia --project=test/cuda --startup-file=no test/runtests_cuda.jl'
+julia --project=test/cuda --startup-file=no -e "using Pkg; Pkg.instantiate()"
+julia --project=test/cuda --startup-file=no test/runtests_cuda.jl
 ~~~
 
 For detector-only changes, use `test/runtests_cuda_detectors.jl`. Record Julia,

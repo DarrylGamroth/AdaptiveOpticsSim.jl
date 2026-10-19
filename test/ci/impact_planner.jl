@@ -301,8 +301,8 @@ function local_commands(plan::ValidationPlan)
         "julia --project=test/amdgpu --startup-file=no test/$accelerator_target")
     cuda_target = plan.accelerator_scope == DetectorAccelerator ?
         "runtests_cuda_detectors.jl" : "runtests_cuda.jl"
-    plan.run_cuda && push!(commands, "WSL CUDA" =>
-        "ssh wsl 'cd \"\${AOS_WSL_ROOT:-\$HOME/workspaces/codex/AdaptiveOpticsSim.jl}\" && julia --project=test/cuda --startup-file=no test/$cuda_target'")
+    plan.run_cuda && push!(commands, "local CUDA" =>
+        "julia --project=test/cuda --startup-file=no test/$cuda_target")
     plan.run_aarch64 && push!(commands, "Raspberry Pi aarch64" =>
         "ssh raspberrypi 'cd \"\${AOS_RASPBERRYPI_ROOT:-\$HOME/workspaces/codex/AdaptiveOpticsSim.jl}\" && julia --project=. --startup-file=no test/ci/run_selected_tests.jl $selectors'")
     return commands

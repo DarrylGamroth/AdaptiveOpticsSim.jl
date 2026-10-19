@@ -88,13 +88,13 @@ include(joinpath(@__DIR__, "impact_planner.jl"))
     @test occursin("detector-cmos", cmos_commands["local CPU"])
     @test occursin("runtests_amdgpu_detectors.jl",
         cmos_commands["local AMDGPU"])
-    @test occursin("ssh wsl", cmos_commands["WSL CUDA"])
+    @test occursin("julia --project=test/cuda", cmos_commands["local CUDA"])
     @test !haskey(cmos_commands, "Raspberry Pi aarch64")
 
     project_commands = Dict(local_commands(project))
     @test occursin("ssh raspberrypi",
         project_commands["Raspberry Pi aarch64"])
-    @test occursin("runtests_cuda.jl", project_commands["WSL CUDA"])
+    @test occursin("runtests_cuda.jl", project_commands["local CUDA"])
     @test length(manual_commands(project)) == 5
     @test occursin("-f gate=macos-selector",
         Dict(manual_commands(project))["macos-selector"])

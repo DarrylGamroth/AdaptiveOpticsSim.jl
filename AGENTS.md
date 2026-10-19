@@ -74,9 +74,9 @@
 #   datasets when used, within tolerance.
 #
 # Validation and GitHub Actions cost:
-# - Validate locally first. Use the local CPU/AMDGPU host, `ssh wsl` for CUDA
-#   validation, and `ssh raspberrypi` for Linux aarch64 validation when those
-#   targets are relevant and available.
+# - Validate locally first. Use the local CPU, AMDGPU, and CUDA host, and
+#   `ssh raspberrypi` for Linux aarch64 validation when those targets are
+#   relevant and available.
 # - Run the smallest selector that covers the changed ownership and dependency
 #   surface. Run the complete suite locally only for cross-cutting changes or a
 #   final release/milestone gate.

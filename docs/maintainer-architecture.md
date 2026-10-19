@@ -159,7 +159,7 @@ julia --project=. test/ci/run_selected_tests.jl sensors
 ~~~
 
 Use bare `Pkg.test()` for a cross-cutting or release gate. Validate optional
-AMDGPU locally, CUDA on the WSL host, and Linux aarch64 on the Raspberry Pi only
+AMDGPU and CUDA locally, and Linux aarch64 on the Raspberry Pi only
 when the changed surface requires those targets. Record exact commands and
 versions with release evidence.
 

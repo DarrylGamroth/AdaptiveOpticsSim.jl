@@ -516,7 +516,7 @@ julia --project=. test/ci/run_selected_tests.jl core
 ~~~
 
 Run the complete local suite for cross-cutting changes or a release gate. GPU
-validation uses the dedicated AMDGPU host and the WSL CUDA host described in
+validation uses the dedicated AMDGPU host and the local CUDA host described in
 [`backend-validation-guide.md`](backend-validation-guide.md).
 
 The graph contract is bounded and allocation-free after preparation for the
