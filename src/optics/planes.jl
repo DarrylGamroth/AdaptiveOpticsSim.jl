@@ -330,6 +330,47 @@ end
 @inline pupil_amplitude(pupil::PupilFunction) = pupil.amplitude
 @inline opd_map(pupil::PupilFunction) = pupil.opd
 @inline aperture_revision(pupil::PupilFunction) = pupil.aperture_revision
+
+"""
+    on_axis_strehl(pupil::PupilFunction, wavelength_m::Real)
+
+Return the coherent phase-only nominal-axis intensity ratio
+`abs2(Σ a cis(2π OPD / λ)) / abs2(Σ a)` for the pupil's current amplitude and
+OPD in metres. The reference has the same transmitting amplitude and zero OPD.
+Piston leaves the ratio unchanged; residual tip and tilt reduce it without
+recentering. This quantity does not use a sampled focal-plane pixel.
+
+The wavelength must remain finite and positive in the pupil's OPD numeric type;
+a zero transmitting amplitude has no defined Strehl ratio. Neither the pupil
+nor any prepared optical state is changed. GPU reductions return a host scalar
+and can synchronize and allocate reduction storage; use this analysis quantity
+at an explicitly selected cadence outside allocation-bounded transport steps.
+"""
+function on_axis_strehl(pupil::PupilFunction, wavelength_m::Real)
+    T = eltype(pupil.opd)
+    λ = _converted_positive_finite(wavelength_m, T, "Strehl wavelength")
+    axes(pupil.amplitude) == axes(pupil.opd) || throw(DimensionMismatchError(
+        "on-axis Strehl requires matching amplitude and OPD axes"))
+    reference = abs2(sum(pupil.amplitude))
+    isfinite(reference) && reference > zero(reference) || throw(InvalidConfiguration(
+        "on-axis Strehl requires a finite non-zero transmitting amplitude"))
+    phase_scale = T(2π)
+    field = _on_axis_field_sum(execution_style(pupil.amplitude),
+        pupil.amplitude, pupil.opd, phase_scale, λ)
+    return abs2(field) / reference
+end
+
+# Base's multi-array mapreduce materializes a mapped array on the CPU. A zipped
+# iterator fuses the same paired reduction without intermediate storage.
+function _on_axis_field_sum(::ScalarCPUStyle, amplitude, opd, phase_scale, λ)
+    return mapreduce(pair -> pair[1] * cis(phase_scale * (pair[2] / λ)), +,
+        zip(amplitude, opd))
+end
+
+function _on_axis_field_sum(::AcceleratorStyle, amplitude, opd, phase_scale, λ)
+    return mapreduce((a, d) -> a * cis(phase_scale * (d / λ)), +, amplitude, opd)
+end
+
 @inline _pupil_resolution(pupil::PupilFunction) =
     pupil.metadata.dimensions[1]
 @inline _pupil_cell_area(pupil::PupilFunction) =

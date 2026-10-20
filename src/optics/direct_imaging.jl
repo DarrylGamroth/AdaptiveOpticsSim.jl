@@ -107,6 +107,30 @@ struct PreparedDirectImaging{
     end
 end
 
+"""
+    diffraction_limited_peak(prepared::PreparedDirectImaging{<:PupilFunction})
+
+Return the exact zero-OPD nominal-axis photon-arrival rate for the prepared
+single-monochromatic pupil-backed direct image. The same pupil amplitude,
+source flux and padded sampling define the reference. Unitary Fraunhofer
+propagation gives `amplitude_scale² * abs2(Σ a) / length(field.values)`.
+The even-grid centering phase is excluded; the nominal axis need not coincide
+with an output pixel. The current OPD and any source image shift do not change
+this reference.
+
+The physical `IntensityMap` remains a photon-rate product. Allocate a separate
+normalized PSF and divide its values by this peak when needed. This analysis
+reduction does not change any optical state. On a GPU its scalar return can
+synchronize and allocate reduction storage; it is not an allocation-bounded
+transport operation. Preformed fields, coronagraphs and compound optical
+products have different reference contracts and are not accepted.
+"""
+function diffraction_limited_peak(prepared::PreparedDirectImaging{<:PupilFunction})
+    scale = prepared.plan.input_plan.formation.amplitude_scale
+    return abs2(scale) * abs2(sum(prepared.input.amplitude)) /
+        length(prepared.field.values)
+end
+
 struct PreparedDirectImagingCompositionBindings{
     C<:FixedSizeVector,
     P<:FixedSizeVector,

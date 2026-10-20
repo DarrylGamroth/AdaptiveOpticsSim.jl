@@ -33,6 +33,7 @@ export UnspecifiedNormalization, UnspecifiedSpatialMeasure
 export UnspecifiedCoherence
 export OpticalPlaneMetadata, plane_metadata
 export PupilFunction, pupil_support, pupil_amplitude, opd_map
+export on_axis_strehl, diffraction_limited_peak
 export surface_opd, update_surface!, apply_surface!
 export ElectricField, field_values, IntensityMap, intensity_values
 export OpticalProductBundle, PreparedIncoherentSum

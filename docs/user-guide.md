@@ -76,6 +76,28 @@ direction mapping and writes the caller's pupil product. Rendering does not
 advance time or consume RNG. `r0` is defined at `reference_wavelength_m`;
 rendering converts the generated phase to wavelength-independent OPD in metres.
 
+The Optics analysis quantities also work directly from the physical pupil and
+its prepared single-monochromatic direct image:
+
+~~~julia
+science = prepare_direct_imaging(pupil, source; zero_padding=2)
+science_rate = form_direct_image!(science) # physical photon-arrival rate
+strehl = on_axis_strehl(pupil, wavelength(source))
+reference_peak = diffraction_limited_peak(science)
+science_values = intensity_values(science_rate)
+normalized_psf = similar(science_values)
+@. normalized_psf = science_values / reference_peak
+~~~
+
+The exact nominal-axis Strehl includes residual tip and tilt and uses the same
+pupil amplitude as its zero-OPD reference. The diffraction-limited reference
+peak is unsampled; an even-grid focal-plane pixel can miss the optical axis.
+The separate dimensionless PSF does not change the physical photon-rate map.
+These pure reductions do not advance the model. Select their analysis cadence
+explicitly: GPU scalar-return reductions can synchronize and allocate scratch
+storage and are outside allocation-bounded transport steps. Warmed dense CPU
+calls require no heap allocation; this is not a GPU allocation claim.
+
 ## Closed-Loop AO And RTC Composition
 
 AOS is the plant owner, not the in-process RTC owner. For the maintained

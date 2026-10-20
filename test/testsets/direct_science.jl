@@ -394,3 +394,98 @@ end
     @test capture!(converted;
         rng=MersenneTwister(3)) == fill(10.0, 2, 2)
 end
+
+function optical_quantity_allocations(pupil, λ, prepared)
+    on_axis_strehl(pupil, λ)
+    diffraction_limited_peak(prepared)
+    return (@allocated(on_axis_strehl(pupil, λ)),
+        @allocated(diffraction_limited_peak(prepared)))
+end
+
+@testset "Exact nominal-axis optical quantities" begin
+    for T in (Float32, Float64), n in (7, 8), obstruction in (0, 0.4),
+        apodized in (false, true)
+        tel = Telescope(resolution=n, diameter=2, central_obstruction=obstruction, T=T)
+        if apodized
+            reflectivity = T[0.2 + 0.7 * (i + j) / (2n) for i in 1:n, j in 1:n]
+            set_pupil_reflectivity!(tel, reflectivity)
+        end
+        pupil = PupilFunction(tel)
+        λ = T(750e-9)
+        source = Source(band=:custom, wavelength=λ, photon_irradiance=T(3), T=T)
+        prepared = prepare_direct_imaging(pupil, source; zero_padding=1)
+        image = form_direct_image!(prepared)
+        original_image = copy(image.values)
+        @test @inferred(on_axis_strehl(pupil, λ)) ≈ one(T)
+        peak = @inferred diffraction_limited_peak(prepared)
+        # Independent energy balance: irradiance × transmitting physical area.
+        energy = T(3) * (T(2) / n)^2 * sum(abs2, pupil.amplitude)
+        @test sum(image.values) ≈ energy rtol=5e-6
+        @test peak ≈ energy * abs2(sum(pupil.amplitude)) /
+            (length(image.values) * sum(abs2, pupil.amplitude)) rtol=5e-6
+        if isodd(n)
+            @test maximum(image.values) ≈ peak rtol=5e-6
+        else
+            # The optical axis lies between pixels under the even-grid ramp.
+            @test maximum(image.values) < peak
+        end
+        @test on_axis_strehl(pupil, nextfloat(zero(T))) ≈ one(T)
+        fill!(pupil.opd, λ / 3)
+        @test on_axis_strehl(pupil, λ) ≈ one(T) rtol=5e-6
+        # Two half-pupils at ±π/2 interfere with residual intensity set by
+        # their amplitude imbalance, including asymmetric apodization.
+        split = n ÷ 2
+        left = sum(view(pupil.amplitude, 1:split, :))
+        right = sum(view(pupil.amplitude, (split + 1):n, :))
+        fill!(pupil.opd, λ / 4)
+        view(pupil.opd, 1:split, :) .= -λ / 4
+        @test on_axis_strehl(pupil, λ) ≈ ((left - right) / (left + right))^2 atol=1e-6
+        @test diffraction_limited_peak(prepared) == peak
+        @test image.values == original_image
+        normalized_psf = similar(image.values)
+        @. normalized_psf = image.values / peak
+        @test image.values == original_image
+        @test image.metadata.normalization isa PhotonRateNormalization
+        @test optical_quantity_allocations(pupil, λ, prepared) == (0, 0)
+        for invalid in (-λ, zero(T), T(Inf), T(NaN), big"1e1000", big"1e-1000")
+            @test_throws InvalidConfiguration on_axis_strehl(pupil, invalid)
+        end
+        preformed = prepare_direct_imaging(source, prepared.field, image)
+        @test !applicable(diffraction_limited_peak, preformed)
+        fill!(pupil.amplitude, zero(T))
+        @test_throws InvalidConfiguration on_axis_strehl(pupil, λ)
+    end
+
+    # A rectangular pupil's linear tilt has a geometric-series response. This
+    # analytic Dirichlet ratio is independent of the implementation's phase sum.
+    for n in (7, 8)
+        tel = Telescope(resolution=n, diameter=2)
+        set_pupil!(tel, trues(n, n))
+        pupil = PupilFunction(tel)
+        λ = 750e-9
+        phase_step = 0.3
+        pupil.opd .= [λ * phase_step * (i - (n + 1) / 2) / (2π)
+            for i in 1:n, j in 1:n]
+        expected = (sin(n * phase_step / 2) / (n * sin(phase_step / 2)))^2
+        @test on_axis_strehl(pupil, λ) ≈ expected rtol=1e-12
+        @test on_axis_strehl(pupil, λ) < 1
+        pupil.opd .+= λ / 4
+        @test on_axis_strehl(pupil, λ) ≈ expected rtol=1e-12
+    end
+
+    # Preserve the former REVOLT reference normalization for its binary pupil,
+    # monochromatic physical flux and two-times-padded science grid.
+    tel = Telescope(resolution=240, diameter=1.22,
+        central_obstruction=0.20491803278688525, T=Float32)
+    pupil = PupilFunction(tel)
+    source = Source(band=:custom, wavelength=750e-9, photon_irradiance=1.0, T=Float32)
+    prepared = prepare_direct_imaging(pupil, source; zero_padding=2)
+    image = form_direct_image!(prepared)
+    old_peak = sum(image.values) * abs2(sum(pupil.amplitude)) /
+        (length(image.values) * sum(abs2, pupil.amplitude))
+    @test diffraction_limited_peak(prepared) ≈ old_peak rtol=5e-6
+    field_before = copy(prepared.field.values)
+    pupil.opd .= [1f-8 * sin(Float32(i + 2j)) for i in 1:240, j in 1:240]
+    @test diffraction_limited_peak(prepared) ≈ old_peak rtol=5e-6
+    @test prepared.field.values == field_before
+end
