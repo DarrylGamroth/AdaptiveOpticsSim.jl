@@ -9,7 +9,8 @@ offline CPU/GPU studies. The maintained design uses idiomatic Julia dispatch,
 explicit optical products, prepared workspaces, and backend-portable
 algorithms.
 
-Requires Julia 1.12 or newer. The package relies on current Julia atomics and
+Use Julia 1.13 for development and validation; the package minimum is Julia 1.12.
+The package relies on current Julia atomics and
 backend behavior for maintained CPU/GPU execution paths.
 
 ## Installation
