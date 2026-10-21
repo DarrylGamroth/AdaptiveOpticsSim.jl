@@ -155,4 +155,6 @@ function main(args)
     end
 end
 
-abspath(PROGRAM_FILE) == @__FILE__ && main(ARGS)
+if abspath(PROGRAM_FILE) == @__FILE__
+    main(ARGS)
+end
