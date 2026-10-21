@@ -1,0 +1,1419 @@
+artifact_id = "INSTRUMENT-EXECUTION-SCIENCE-REVIEW-2026-10-21"
+scope = "Review of unchanged current application environments and local instrument checkouts, not a production implementation change."
+
+[revisions]
+workspace = "0bafe015bca295abad810db512fe1b1aa324e4bc"
+aos_development = "4bb78685311cafacab5bc7ca91f718dc947abbcc"
+classic = "603e58ba8ab278369d3b1ac138952a8fc6234db8"
+copper = "1ae815314582f666a4c9de3d87a931c591e7a422"
+gpi2 = "1d9b170a5fe1cae4cbdbb2ac0cd9cd0fc8270929"
+juliafiltergraph = "02a8ad1bc23f478e6637047c9862adf7c6b36775"
+specula = "e52b12cd6751568e6daad559c85c28f981ee58c2"
+
+[environment]
+gpu = "NVIDIA GeForce RTX 3080; sm_86; 68 SMs; 10 GiB"
+driver = "615.71.09"
+julia = "1.13.2"
+cuda = "6.4.2"
+cuda_runtime = "13.4.0"
+cuda_driver_api = "13.4.0"
+manifest_generated_julia = "1.12.7"
+kernel_abstractions = "0.9.45"
+nsys = "2026.3.2"
+ncu = "2026.3.1"
+cpu = "AMD Ryzen 7 6800H"
+threads = "1 compute, 0 interactive, 1 GC; BLAS/FFT 1"
+affinity = "Julia/profilers CPU 2; campaign passive monitor CPU 6"
+clocks = "Uncontrolled defaults; shared host; no policy or permissions changed."
+registered_aos_version = "0.2.1"
+registered_aos_tree = "1a809e78c898ce01a58915b7f4fb71dc92d4711e"
+
+[protocol]
+workload = "Default instrument atmosphere/noisy detector production graph, zero commands; no transport/RTC. Full-resolution noiseless calibration self-parity uses one deterministic OPD and sparse nonzero command probe."
+timing = "One fresh process per instrument; stream then captured when admitted; 32 warmups and 32 closed-loop time_ns samples per endpoint. Completed GPU graph outputs and completed host-frame/same-sequence zero-command adoption measured separately. No production tail/deadline or causal small-effect claim."
+allocations = "One warmed @allocated sample per timed endpoint. Classic/Copper captured HIL allocation confirmed by 16 additional samples in independent processes. Native graph node recursion checked for allocation/free nodes. Stable CUDA.used_memory alone is retained-memory evidence, not a device allocation measurement."
+numerical = "CPU/GPU full-resolution noiseless stream parity. Classic/Copper GPU stream versus captured deterministic frame and photon rate exactly matched for the probe. No noisy CPU/GPU equivalence or independent instrument scientific accuracy claim. Seeded reset tested separately in each production execution policy."
+timeline = "Separate fresh profiled process; two cudaProfilerApi ranges where capture admitted, otherwise one. Each includes 64 completed GPU graph frames and 64 complete HIL cycles, separated by NVTX ranges. Percentages are interval unions of kernel activities, or kernel+copy+memset activities, divided by enclosing NVTX range duration. Reset outside selected NVTX intervals. Not SM occupancy or unprofiled wall-time utilization."
+counters = "One occurrence per selected kernel in actual instrument stream execution: Classic photon Poisson first match, Copper dominant batched FFT second regular_fft match (first single forward FFT skipped). Nsight Compute replay, basic + Occupancy + SchedulerStats + MemoryWorkloadAnalysis; no clock/cache control. Diagnostic one-kernel metrics; replay durations are not service latency. No counter coverage of every GPU algorithm."
+limitations = "One shared GPU/software stack; uncontrolled clocks and fixed case order. Self-paced workload excludes RTC, PipeWire, queueing and external command arrival. Profile instrumentation perturbs waits/timings; use unprofiled samples for service times. Model cadence is not an achieved hardware execution rate. No physical bench or on-sky validation."
+telemetry = "Nominal 250 ms plus nvidia-smi query time; whole baseline/timeline campaign including compilation/warmup. Follow-up native inspections/counters are outside this telemetry window. No stable-clock claim."
+
+[conclusions]
+application = "All scenario launchers default to stream execution; the workspace does not expose a captured-execution selector. Registered AOS dependency use preserved; recent development changes are not automatically deployed."
+capture = "Classic/Copper explicit capture admits five graph nodes and measured zero Julia bytes for GPU graph replay; native graph inspection finds kernels/memsets only. Complete captured HIL cycles allocate 160 Julia bytes repeatedly on this stack. GPI2 capture rejects at its custom command-routing owner; frame-layout owner also lacks qualification."
+science = "Declared mathematical conventions are consistent within reviewed scope. GPI2 normalized detector sampling is twice producer metadata; no present pixel-value effect. Known EM clipped-Gaussian approximation has +8.3315% conditional single-electron mean bias before read noise, not a measured frame-wide bias. Photon noise uses a rounded Gaussian approximation at means >=30. One atmosphere sample/exposure and fast Pyramid/quadrature settings require application convergence studies."
+oracles = "AOS has genuine pinned OOPAO component exports; SPECULA-targeted fixtures are regenerated through AOS, without independent SPECULA producer provenance. No complete-instrument independent SPECULA or measured-frame qualification was found. CPU/GPU self-parity is not an independent scientific oracle."
+api = "Prioritize GPI2 capture conformance, public immutable boundary metadata/needed semantic accessors, and retained first-failure diagnostics. Investigate failed-drain storage lifetime before implementing retention. Defer declaration macros and streaming/rejection semantics absent an instrument requirement."
+
+[source_sha256]
+"benchmarks/profile_instrument_workspace_cuda.jl" = "d64c1c340c1c89e6794bd3ba2f6b15d1005462c8025528b2f2ebd7a6695de253"
+
+[references]
+specula = "https://github.com/ArcetriAdaptiveOptics/SPECULA"
+gpi_emccd = "https://arxiv.org/abs/2410.01960"
+
+[independent_verification]
+result = "No implementation or evidence blocker in this bounded review."
+scope = "Independent source/science review and final artifact/profiling verification; reviewers performed no additional GPU runs."
+checks = "64 raw archive hashes/lengths; harness and manifest hashes; numerical records; endpoint medians/allocations; repeated HIL allocation and native nodes; ten timeline interval unions; selected NCU occurrence, launch geometry and metrics; interpretation qualifiers."
+
+[[instrument]]
+name = "classic"
+model_period_us = 2000
+manifest_sha256 = "e3ac4f7d7094c402f4ad4eaa43d31151890d3f4d1f695482a10ae31d457a7e3a"
+
+[instrument.numerical]
+frame_relative_l2_error = 0.0
+rate_relative_l2_error = 2.7141372377475634e-07
+pupil_resolution = 240
+frame_shape = [352, 352]
+captured_calibration_admitted = true
+captured_frame_relative_l2_error = 0.0
+captured_rate_relative_l2_error = 0.0
+capture_preparation_error = ""
+
+[[instrument.execution]]
+policy = "stream"
+actual_policy = "StreamGraphExecution"
+captured_node_count = 0
+
+[instrument.execution.graph]
+samples_ns = [277570, 272440, 269055, 269735, 275006, 270577, 277811, 268823, 272230, 267391, 267532, 278552, 273182, 302296, 286577, 270807, 273092, 267761, 267692, 268844, 290625, 271789, 267491, 267100, 279203, 272040, 270587, 269475, 281077, 273993, 268723, 273923]
+p50_ns = 271914.5
+host_bytes = 14928
+timed_gc_collections = 0
+device_used_bytes_before = 128520144
+device_used_bytes_after = 128520144
+
+[instrument.execution.hil_cycle]
+samples_ns = [475531, 501480, 485941, 479839, 479097, 475741, 492453, 473107, 478236, 476964, 496360, 477284, 486692, 503243, 488124, 503744, 498944, 512610, 487102, 489027, 481462, 481122, 478226, 484938, 476052, 474419, 496570, 479960, 478907, 479839, 477805, 477054]
+p50_ns = 480541.0
+host_bytes = 15248
+timed_gc_collections = 0
+device_used_bytes_before = 115902060
+device_used_bytes_after = 115902060
+seeded_reset_reproducible = true
+final_frame_sum = 711803.0
+
+[[instrument.execution]]
+policy = "captured"
+actual_policy = "CapturedGraphExecution"
+captured_node_count = 5
+
+[instrument.execution.graph]
+samples_ns = [179937, 180418, 179597, 177092, 172904, 178184, 172192, 177052, 178715, 172704, 177362, 177232, 171872, 176301, 176541, 176150, 176190, 175689, 176501, 177052, 180648, 176291, 172383, 171682, 176320, 175760, 176741, 172243, 173465, 175098, 174998, 178054]
+p50_ns = 176310.5
+host_bytes = 0
+timed_gc_collections = 0
+device_used_bytes_before = 104474008
+device_used_bytes_after = 104474008
+
+[instrument.execution.hil_cycle]
+samples_ns = [384150, 386814, 384390, 384961, 407944, 406402, 395491, 387967, 383178, 383939, 382066, 384420, 382867, 387476, 381305, 380933, 381855, 382978, 385292, 385152, 383438, 382337, 398496, 385402, 382176, 382547, 383619, 382406, 382687, 383829, 382476, 384280]
+p50_ns = 383884.0
+host_bytes = 160
+timed_gc_collections = 0
+device_used_bytes_before = 104474008
+device_used_bytes_after = 104474008
+seeded_reset_reproducible = true
+final_frame_sum = 711803.0
+
+[instrument.native_inspection]
+instrument = "classic"
+hil_cycle_host_bytes = [160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160]
+
+[instrument.native_inspection.node_counts]
+CU_GRAPH_NODE_TYPE_MEMSET = 1
+CU_GRAPH_NODE_TYPE_KERNEL = 34
+
+[[instrument]]
+name = "copper"
+model_period_us = 2000
+manifest_sha256 = "9f0380ffcc3f68eed4317f9b2eae353d77c57cfa6ae7c1a2eee7b44af1d4710f"
+
+[instrument.numerical]
+frame_relative_l2_error = 1.0205963735129496e-05
+rate_relative_l2_error = 1.0203374438905467e-05
+pupil_resolution = 480
+frame_shape = [64, 64]
+captured_calibration_admitted = true
+captured_frame_relative_l2_error = 0.0
+captured_rate_relative_l2_error = 0.0
+capture_preparation_error = ""
+
+[[instrument.execution]]
+policy = "stream"
+actual_policy = "StreamGraphExecution"
+captured_node_count = 0
+
+[instrument.execution.graph]
+samples_ns = [8004343, 7993303, 8065897, 7944031, 7988644, 12076354, 7929624, 8007889, 7982112, 8034940, 7982523, 8025983, 7267708, 8712155, 7974999, 8048105, 7957125, 12065915, 7936957, 8012840, 7974017, 8037535, 8009673, 7991970, 8014833, 11958485, 8004032, 7977553, 8025002, 7983644, 8061780, 7930515]
+p50_ns = 8004187.5
+host_bytes = 13024
+timed_gc_collections = 0
+device_used_bytes_before = 698491420
+device_used_bytes_after = 698491420
+
+[instrument.execution.hil_cycle]
+samples_ns = [7939472, 8019872, 16017754, 11989242, 8020924, 7958357, 8002260, 7976711, 8064335, 7972464, 4013913, 8019081, 7967424, 7993102, 7984876, 8092628, 7939623, 12021602, 7956433, 7998252, 7974578, 8022177, 8064725, 7929183, 8046892, 11954518, 7987301, 7994133, 8067491, 7930816, 6071626, 13934544]
+p50_ns = 7996192.5
+host_bytes = 13344
+timed_gc_collections = 0
+device_used_bytes_before = 698491420
+device_used_bytes_after = 698491420
+seeded_reset_reproducible = true
+final_frame_sum = 102396.7578125
+
+[[instrument.execution]]
+policy = "captured"
+actual_policy = "CapturedGraphExecution"
+captured_node_count = 5
+
+[instrument.execution.graph]
+samples_ns = [2652912, 2652501, 2645979, 2653414, 2655087, 2646121, 2649587, 2652402, 2645298, 2653794, 2651210, 2644387, 2658834, 2651310, 2657291, 2647213, 2645538, 2652181, 2646441, 2648685, 2653945, 2653313, 2647703, 2650569, 2651360, 2650779, 2641922, 2650158, 2664524, 2661579, 2651000, 2649827]
+p50_ns = 2651105.0
+host_bytes = 0
+timed_gc_collections = 0
+device_used_bytes_before = 698491420
+device_used_bytes_after = 698491420
+
+[instrument.execution.hil_cycle]
+samples_ns = [2654937, 2662761, 2659134, 2656960, 2656449, 2660036, 2658644, 2660497, 2671868, 2663933, 2652653, 2655648, 2649217, 2647192, 2644306, 2651980, 2657200, 2650438, 2650849, 2658013, 2660157, 2657131, 2651751, 2657621, 2652091, 2650458, 2653623, 2659635, 2674162, 2657131, 2653975, 2660477]
+p50_ns = 2657045.5
+host_bytes = 160
+timed_gc_collections = 0
+device_used_bytes_before = 698491420
+device_used_bytes_after = 698491420
+seeded_reset_reproducible = true
+final_frame_sum = 102396.7578125
+
+[instrument.native_inspection]
+instrument = "copper"
+hil_cycle_host_bytes = [160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160]
+
+[instrument.native_inspection.node_counts]
+CU_GRAPH_NODE_TYPE_MEMSET = 2
+CU_GRAPH_NODE_TYPE_KERNEL = 34
+
+[[instrument]]
+name = "gpi2"
+model_period_us = 500
+manifest_sha256 = "1082e1f6c5aef96a5c57773f705dfd5c396b9ba508c925dd8393a81db9cd70d9"
+
+[instrument.numerical]
+frame_relative_l2_error = 3.331766601488577e-06
+rate_relative_l2_error = 3.3317037369379643e-06
+pupil_resolution = 240
+frame_shape = [242, 240]
+captured_calibration_admitted = false
+captured_frame_relative_l2_error = -1.0
+captured_rate_relative_l2_error = -1.0
+capture_preparation_error = "captured graph execution requires every node to be capture-safe; node command_routing with owner GPI2Sim.CommandRoutingOwner{CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, @NamedTuple{woofer::CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, tweeter::CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, tiptilt::CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}}} is unsupported"
+
+[[instrument.execution]]
+policy = "stream"
+actual_policy = "StreamGraphExecution"
+captured_node_count = 0
+
+[instrument.execution.graph]
+samples_ns = [8070161, 7936651, 8009246, 8061144, 7968741, 11976696, 8087292, 7930480, 7967460, 8080049, 7947942, 7966527, 7992786, 12045405, 7988899, 8033653, 7970295, 7964774, 8016430, 8087293, 7906324, 12053360, 7978339, 11956068, 7992796, 8041848, 7986425, 8051395, 7932414, 7988749, 8006451, 12032039]
+p50_ns = 7999623.5
+host_bytes = 16512
+timed_gc_collections = 0
+device_used_bytes_before = 508234156
+device_used_bytes_after = 508234156
+
+[instrument.execution.hil_cycle]
+samples_ns = [7994710, 8057396, 7969143, 8035727, 7951310, 8022592, 8002163, 8028954, 11993949, 8053689, 7896387, 8082895, 7912386, 8058058, 11966868, 8050113, 7934769, 7992436, 8000510, 7992585, 8014818, 12100788, 7889854, 7995892, 7989120, 8012934, 8033241, 7967919, 12067766, 7962239, 7969594, 8004088]
+p50_ns = 8003125.5
+host_bytes = 16832
+timed_gc_collections = 0
+device_used_bytes_before = 508234156
+device_used_bytes_after = 508234156
+seeded_reset_reproducible = true
+final_frame_sum = 46631.13671875
+
+[instrument.capture_failure]
+stage = "preparation"
+type = "AlgorithmGraphError"
+message = "captured graph execution requires every node to be capture-safe; node command_routing with owner GPI2Sim.CommandRoutingOwner{CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, @NamedTuple{woofer::CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, tweeter::CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, tiptilt::CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}}} is unsupported"
+
+[[timeline]]
+region = "classic_stream_graph"
+report = "classic-timeline.1.nsys-rep"
+frames = 64
+interval_ns = 23344103
+kernel_active_percent = 48.500599915961644
+device_activity_percent = 50.11594577011591
+kernel_count = 2112
+
+[timeline.api_counts]
+cuCtxGetId = 128
+cuStreamIsCapturing = 3904
+cuLaunchKernelEx = 1984
+cuMemsetD32Async = 128
+cuLaunchKernel = 128
+cuMemcpyDtoDAsync_v2 = 128
+
+[timeline.copy_bytes_by_kind]
+8 = 63438848
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 2838722
+percent_summed_kernel_time = 25.07255324354378
+
+[[timeline.top_kernels]]
+name = "gpu_broadcast_kernel_cartesian"
+total_ns = 1320801
+percent_summed_kernel_time = 11.665761351983699
+
+[[timeline.top_kernels]]
+name = "gpu_sh_explicit_pupil_stack_kernel_"
+total_ns = 1125316
+percent_summed_kernel_time = 9.939171685642945
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 1100354
+percent_summed_kernel_time = 9.718698855240623
+
+[[timeline.top_kernels]]
+name = "gpu_moving_layer_accumulate_kernel_"
+total_ns = 985952
+percent_summed_kernel_time = 8.708261680988304
+
+[[timeline.top_kernels]]
+name = "gpu_complex_abs2_stack_kernel_"
+total_ns = 828993
+percent_summed_kernel_time = 7.321946682706193
+
+[[timeline.top_kernels]]
+name = "gpu__shack_hartmann_rate_map_copy_kernel_"
+total_ns = 474112
+percent_summed_kernel_time = 4.187517609474626
+
+[[timeline.top_kernels]]
+name = "gpu_sh_sample_spot_stack_kernel_"
+total_ns = 417474
+percent_summed_kernel_time = 3.68727162885101
+
+[[timeline.top_kernels]]
+name = "gpu__counter_randn_fill_kernel_"
+total_ns = 311456
+percent_summed_kernel_time = 2.7508847794962565
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 281761
+percent_summed_kernel_time = 2.488608491586756
+
+[[timeline]]
+region = "classic_stream_hil_cycle"
+report = "classic-timeline.1.nsys-rep"
+frames = 64
+interval_ns = 36553266
+kernel_active_percent = 30.98945248832211
+device_activity_percent = 57.89045772271074
+kernel_count = 2112
+
+[timeline.api_counts]
+cuCtxGetId = 256
+cuStreamIsCapturing = 4032
+cuLaunchKernelEx = 1984
+cuMemsetD32Async = 128
+cuLaunchKernel = 128
+cuMemcpyDtoDAsync_v2 = 128
+cuMemcpyDtoHAsync_v2 = 64
+cuMemcpyHtoDAsync_v2 = 64
+
+[timeline.copy_bytes_by_kind]
+8 = 63438848
+1 = 70912
+2 = 31719424
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 2846177
+percent_summed_kernel_time = 25.12591085694067
+
+[[timeline.top_kernels]]
+name = "gpu_broadcast_kernel_cartesian"
+total_ns = 1321282
+percent_summed_kernel_time = 11.664212643444271
+
+[[timeline.top_kernels]]
+name = "gpu_sh_explicit_pupil_stack_kernel_"
+total_ns = 1125057
+percent_summed_kernel_time = 9.931947974766539
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 1100768
+percent_summed_kernel_time = 9.717525874944837
+
+[[timeline.top_kernels]]
+name = "gpu_moving_layer_accumulate_kernel_"
+total_ns = 987648
+percent_summed_kernel_time = 8.718908067219903
+
+[[timeline.top_kernels]]
+name = "gpu_complex_abs2_stack_kernel_"
+total_ns = 827873
+percent_summed_kernel_time = 7.308422209464852
+
+[[timeline.top_kernels]]
+name = "gpu__shack_hartmann_rate_map_copy_kernel_"
+total_ns = 472001
+percent_summed_kernel_time = 4.166801660749439
+
+[[timeline.top_kernels]]
+name = "gpu_sh_sample_spot_stack_kernel_"
+total_ns = 418656
+percent_summed_kernel_time = 3.695874619084953
+
+[[timeline.top_kernels]]
+name = "gpu__counter_randn_fill_kernel_"
+total_ns = 311105
+percent_summed_kernel_time = 2.7464196700164916
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 281569
+percent_summed_kernel_time = 2.485677311733574
+
+[[timeline]]
+region = "classic_captured_graph"
+report = "classic-timeline.2.nsys-rep"
+frames = 64
+interval_ns = 12871032
+kernel_active_percent = 82.34635730841163
+device_activity_percent = 82.81724418057541
+kernel_count = 2176
+
+[timeline.api_counts]
+cuCtxGetId = 128
+cuGraphLaunch = 64
+cuStreamSynchronize = 64
+
+[timeline.copy_bytes_by_kind]
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 2779233
+percent_summed_kernel_time = 26.20562648637752
+
+[[timeline.top_kernels]]
+name = "gpu_moving_layer_replay_kernel_"
+total_ns = 1205154
+percent_summed_kernel_time = 11.363500499081512
+
+[[timeline.top_kernels]]
+name = "gpu_sh_explicit_pupil_stack_kernel_"
+total_ns = 1111330
+percent_summed_kernel_time = 10.478825950579143
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 1061889
+percent_summed_kernel_time = 10.012642518274983
+
+[[timeline.top_kernels]]
+name = "gpu_complex_abs2_stack_kernel_"
+total_ns = 822913
+percent_summed_kernel_time = 7.759317304013151
+
+[[timeline.top_kernels]]
+name = "gpu__shack_hartmann_rate_map_copy_kernel_"
+total_ns = 450816
+percent_summed_kernel_time = 4.250782755559813
+
+[[timeline.top_kernels]]
+name = "gpu_sh_sample_spot_stack_kernel_"
+total_ns = 389793
+percent_summed_kernel_time = 3.6753916512233955
+
+[[timeline.top_kernels]]
+name = "gpu__copy_packed_array_kernel_"
+total_ns = 302305
+percent_summed_kernel_time = 2.8504597905121143
+
+[[timeline.top_kernels]]
+name = "gpu__counter_randn_fill_kernel_"
+total_ns = 291904
+percent_summed_kernel_time = 2.7523878688399077
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 272672
+percent_summed_kernel_time = 2.571047690241707
+
+[[timeline]]
+region = "classic_captured_hil_cycle"
+report = "classic-timeline.2.nsys-rep"
+frames = 64
+interval_ns = 27228360
+kernel_active_percent = 38.94918753828728
+device_activity_percent = 74.04968202271455
+kernel_count = 2176
+
+[timeline.api_counts]
+cuCtxGetId = 256
+cuGraphLaunch = 64
+cuStreamSynchronize = 192
+cuStreamIsCapturing = 128
+cuMemcpyDtoHAsync_v2 = 64
+cuMemcpyHtoDAsync_v2 = 64
+
+[timeline.copy_bytes_by_kind]
+1 = 70912
+2 = 31719424
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 2785056
+percent_summed_kernel_time = 26.246042322470768
+
+[[timeline.top_kernels]]
+name = "gpu_moving_layer_replay_kernel_"
+total_ns = 1206816
+percent_summed_kernel_time = 11.372892972864777
+
+[[timeline.top_kernels]]
+name = "gpu_sh_explicit_pupil_stack_kernel_"
+total_ns = 1113410
+percent_summed_kernel_time = 10.49264574294455
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 1061475
+percent_summed_kernel_time = 10.003216371320597
+
+[[timeline.top_kernels]]
+name = "gpu_complex_abs2_stack_kernel_"
+total_ns = 821956
+percent_summed_kernel_time = 7.746017302060994
+
+[[timeline.top_kernels]]
+name = "gpu__shack_hartmann_rate_map_copy_kernel_"
+total_ns = 450816
+percent_summed_kernel_time = 4.248437308135629
+
+[[timeline.top_kernels]]
+name = "gpu_sh_sample_spot_stack_kernel_"
+total_ns = 388640
+percent_summed_kernel_time = 3.6624979491274283
+
+[[timeline.top_kernels]]
+name = "gpu__copy_packed_array_kernel_"
+total_ns = 302432
+percent_summed_kernel_time = 2.8500838301526
+
+[[timeline.top_kernels]]
+name = "gpu__counter_randn_fill_kernel_"
+total_ns = 291648
+percent_summed_kernel_time = 2.748456674215511
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 272320
+percent_summed_kernel_time = 2.5663118606071977
+
+[[timeline]]
+region = "copper_stream_graph"
+report = "copper-timeline.1.nsys-rep"
+frames = 64
+interval_ns = 594453148
+kernel_active_percent = 28.429250912134123
+device_activity_percent = 28.565152959708104
+kernel_count = 2112
+
+[timeline.api_counts]
+cuCtxGetId = 128
+cuStreamIsCapturing = 4224
+cuLaunchKernelEx = 1856
+cuMemsetD32Async = 192
+cuLaunchKernel = 256
+cuMemcpyDtoDAsync_v2 = 192
+cuStreamSynchronize = 64
+
+[timeline.copy_bytes_by_kind]
+8 = 3145728
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 53712024
+percent_summed_kernel_time = 31.782530334560153
+
+[[timeline.top_kernels]]
+name = "vector_fft"
+total_ns = 51520120
+percent_summed_kernel_time = 30.485534798319634
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_separable_shifted_mask_batch_kernel_"
+total_ns = 27379946
+percent_summed_kernel_time = 16.201287896051337
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_modulation_batch_intensity_kernel_"
+total_ns = 25374949
+percent_summed_kernel_time = 15.014889149037035
+
+[[timeline.top_kernels]]
+name = "gpu_bin2d_kernel_"
+total_ns = 2706565
+percent_summed_kernel_time = 1.6015312365618322
+
+[[timeline.top_kernels]]
+name = "gpu_moving_layer_accumulate_kernel_"
+total_ns = 2219043
+percent_summed_kernel_time = 1.3130542513384595
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 1298274
+percent_summed_kernel_time = 0.7682159359247149
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_unmodulated_pupil_field_kernel_"
+total_ns = 1220065
+percent_summed_kernel_time = 0.7219380314663832
+
+[[timeline.top_kernels]]
+name = "gpu_broadcast_kernel_cartesian"
+total_ns = 1210818
+percent_summed_kernel_time = 0.7164663877613596
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 627521
+percent_summed_kernel_time = 0.3713173277192742
+
+[[timeline]]
+region = "copper_stream_hil_cycle"
+report = "copper-timeline.1.nsys-rep"
+frames = 64
+interval_ns = 579536239
+kernel_active_percent = 29.152157471898835
+device_activity_percent = 29.354007661978148
+kernel_count = 2112
+
+[timeline.api_counts]
+cuCtxGetId = 256
+cuStreamIsCapturing = 4352
+cuLaunchKernelEx = 1856
+cuMemsetD32Async = 192
+cuLaunchKernel = 256
+cuMemcpyDtoDAsync_v2 = 192
+cuMemcpyDtoHAsync_v2 = 64
+cuMemcpyHtoDAsync_v2 = 64
+cuStreamSynchronize = 64
+
+[timeline.copy_bytes_by_kind]
+8 = 3145728
+1 = 70912
+2 = 1048576
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 53697309
+percent_summed_kernel_time = 31.78346359889219
+
+[[timeline.top_kernels]]
+name = "vector_fft"
+total_ns = 51515248
+percent_summed_kernel_time = 30.491900620120532
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_separable_shifted_mask_batch_kernel_"
+total_ns = 27360198
+percent_summed_kernel_time = 16.194514648610845
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_modulation_batch_intensity_kernel_"
+total_ns = 25365740
+percent_summed_kernel_time = 15.013993977779476
+
+[[timeline.top_kernels]]
+name = "gpu_bin2d_kernel_"
+total_ns = 2705764
+percent_summed_kernel_time = 1.6015430419649694
+
+[[timeline.top_kernels]]
+name = "gpu_moving_layer_accumulate_kernel_"
+total_ns = 2217864
+percent_summed_kernel_time = 1.3127547920752125
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 1295363
+percent_summed_kernel_time = 0.7667259966016506
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_unmodulated_pupil_field_kernel_"
+total_ns = 1219905
+percent_summed_kernel_time = 0.7220623693006027
+
+[[timeline.top_kernels]]
+name = "gpu_broadcast_kernel_cartesian"
+total_ns = 1213410
+percent_summed_kernel_time = 0.7182179756071533
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 629250
+percent_summed_kernel_time = 0.37245338438846
+
+[[timeline]]
+region = "copper_captured_graph"
+report = "copper-timeline.2.nsys-rep"
+frames = 64
+interval_ns = 171096410
+kernel_active_percent = 97.55669625096166
+device_activity_percent = 97.82308173502881
+kernel_count = 2176
+
+[timeline.api_counts]
+cuCtxGetId = 128
+cuGraphLaunch = 64
+cuStreamSynchronize = 64
+
+[timeline.copy_bytes_by_kind]
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 53404574
+percent_summed_kernel_time = 31.986680257964736
+
+[[timeline.top_kernels]]
+name = "vector_fft"
+total_ns = 51465018
+percent_summed_kernel_time = 30.82498280458898
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_separable_shifted_mask_batch_kernel_"
+total_ns = 27380654
+percent_summed_kernel_time = 16.399648179048544
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_modulation_batch_intensity_kernel_"
+total_ns = 25284655
+percent_summed_kernel_time = 15.144249159593508
+
+[[timeline.top_kernels]]
+name = "gpu_moving_layer_replay_kernel_"
+total_ns = 2415394
+percent_summed_kernel_time = 1.4467007184629257
+
+[[timeline.top_kernels]]
+name = "gpu_bin2d_kernel_"
+total_ns = 2347012
+percent_summed_kernel_time = 1.4057433059124549
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_unmodulated_pupil_field_kernel_"
+total_ns = 1185922
+percent_summed_kernel_time = 0.7103082186347195
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 1116736
+percent_summed_kernel_time = 0.6688692501237536
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 533794
+percent_summed_kernel_time = 0.31971602285639483
+
+[[timeline.top_kernels]]
+name = "gpu__copy_packed_array_kernel_"
+total_ns = 277089
+percent_summed_kernel_time = 0.16596251186273278
+
+[[timeline]]
+region = "copper_captured_hil_cycle"
+report = "copper-timeline.2.nsys-rep"
+frames = 64
+interval_ns = 234619284
+kernel_active_percent = 71.11508404398677
+device_activity_percent = 71.46119071780988
+kernel_count = 2176
+
+[timeline.api_counts]
+cuCtxGetId = 256
+cuGraphLaunch = 64
+cuStreamSynchronize = 192
+cuStreamIsCapturing = 128
+cuMemcpyDtoHAsync_v2 = 64
+cuMemcpyHtoDAsync_v2 = 64
+
+[timeline.copy_bytes_by_kind]
+1 = 70912
+2 = 1048576
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 53386332
+percent_summed_kernel_time = 31.988249182010144
+
+[[timeline.top_kernels]]
+name = "vector_fft"
+total_ns = 51482397
+percent_summed_kernel_time = 30.847441321182572
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_separable_shifted_mask_batch_kernel_"
+total_ns = 27354993
+percent_summed_kernel_time = 16.390680904171187
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_modulation_batch_intensity_kernel_"
+total_ns = 25283274
+percent_summed_kernel_time = 15.149339513511404
+
+[[timeline.top_kernels]]
+name = "gpu_moving_layer_replay_kernel_"
+total_ns = 2402340
+percent_summed_kernel_time = 1.4394442858503604
+
+[[timeline.top_kernels]]
+name = "gpu_bin2d_kernel_"
+total_ns = 2338246
+percent_summed_kernel_time = 1.4010401706721205
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_unmodulated_pupil_field_kernel_"
+total_ns = 1186050
+percent_summed_kernel_time = 0.7106624770985039
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 1109889
+percent_summed_kernel_time = 0.6650280056021091
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 532064
+percent_summed_kernel_time = 0.31880436761935704
+
+[[timeline.top_kernels]]
+name = "gpu__copy_packed_array_kernel_"
+total_ns = 275936
+percent_summed_kernel_time = 0.16533650459985058
+
+[[timeline]]
+region = "gpi2_stream_graph"
+report = "gpi2-timeline.1.nsys-rep"
+frames = 64
+interval_ns = 667993569
+kernel_active_percent = 17.99561860751986
+device_activity_percent = 18.16285899003917
+kernel_count = 2432
+
+[timeline.api_counts]
+cuCtxGetId = 128
+cuStreamIsCapturing = 6272
+cuMemcpyDtoDAsync_v2 = 384
+cuLaunchKernelEx = 2176
+cuMemsetD32Async = 256
+cuLaunchKernel = 256
+cuStreamSynchronize = 64
+
+[timeline.copy_bytes_by_kind]
+8 = 44851968
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 77278109
+percent_summed_kernel_time = 64.2861510823909
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_separable_shifted_mask_batch_kernel_"
+total_ns = 18235630
+percent_summed_kernel_time = 15.16986479654387
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_modulation_batch_intensity_kernel_"
+total_ns = 17015502
+percent_summed_kernel_time = 14.154864119601122
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 1585188
+percent_summed_kernel_time = 1.318686968155407
+
+[[timeline.top_kernels]]
+name = "gpu_broadcast_kernel_cartesian"
+total_ns = 1461057
+percent_summed_kernel_time = 1.2154248112099224
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_unmodulated_pupil_field_kernel_"
+total_ns = 864096
+percent_summed_kernel_time = 0.7188246027822659
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 683266
+percent_summed_kernel_time = 0.5683956540067627
+
+[[timeline.top_kernels]]
+name = "gpu_bin2d_kernel_"
+total_ns = 589218
+percent_summed_kernel_time = 0.4901589578034861
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_left_kernel_"
+total_ns = 570979
+percent_summed_kernel_time = 0.47498628956969524
+
+[[timeline.top_kernels]]
+name = "gpu__counter_randn_fill_kernel_"
+total_ns = 415393
+percent_summed_kernel_time = 0.3455573318514769
+
+[[timeline]]
+region = "gpi2_stream_hil_cycle"
+report = "gpi2-timeline.1.nsys-rep"
+frames = 64
+interval_ns = 735972011
+kernel_active_percent = 16.33988782217426
+device_activity_percent = 17.09825701510271
+kernel_count = 2432
+
+[timeline.api_counts]
+cuCtxGetId = 256
+cuStreamIsCapturing = 6400
+cuMemcpyDtoDAsync_v2 = 384
+cuLaunchKernelEx = 2176
+cuMemsetD32Async = 256
+cuLaunchKernel = 256
+cuMemcpyDtoHAsync_v2 = 64
+cuMemcpyHtoDAsync_v2 = 64
+cuStreamSynchronize = 64
+
+[timeline.copy_bytes_by_kind]
+8 = 44851968
+1 = 615168
+2 = 14868480
+
+[[timeline.top_kernels]]
+name = "regular_fft"
+total_ns = 77350247
+percent_summed_kernel_time = 64.32078494955982
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_separable_shifted_mask_batch_kernel_"
+total_ns = 18228837
+percent_summed_kernel_time = 15.158233490289684
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_modulation_batch_intensity_kernel_"
+total_ns = 17013508
+percent_summed_kernel_time = 14.147623721300018
+
+[[timeline.top_kernels]]
+name = "gpu__counter_poisson_noise_kernel_"
+total_ns = 1571747
+percent_summed_kernel_time = 1.3069900188181143
+
+[[timeline.top_kernels]]
+name = "gpu_broadcast_kernel_cartesian"
+total_ns = 1461028
+percent_summed_kernel_time = 1.2149213666154872
+
+[[timeline.top_kernels]]
+name = "gpu_pyramid_unmodulated_pupil_field_kernel_"
+total_ns = 864902
+percent_summed_kernel_time = 0.7192113496992995
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_right_pupil_kernel_"
+total_ns = 680036
+percent_summed_kernel_time = 0.5654855803363997
+
+[[timeline.top_kernels]]
+name = "gpu_bin2d_kernel_"
+total_ns = 589154
+percent_summed_kernel_time = 0.4899124334557453
+
+[[timeline.top_kernels]]
+name = "gpu_dm_separable_left_kernel_"
+total_ns = 571650
+percent_summed_kernel_time = 0.4753569399256847
+
+[[timeline.top_kernels]]
+name = "gpu__counter_randn_fill_kernel_"
+total_ns = 415233
+percent_summed_kernel_time = 0.34528800531122505
+
+[[counter]]
+instrument = "classic"
+kernel = "gpu__counter_poisson_noise_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<1, Tuple<OneTo<Int64>>>, NDRange<1, DynamicSize, DynamicSize, CartesianIndices<1, Tuple<OneTo<Int64>>>, CartesianIndices<1, Tuple<OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<UInt64, 1, 1>, UInt64, Int64)"
+matching_occurrence = 1
+
+[counter.metrics]
+
+[counter.metrics.Duration]
+value = "28.74"
+unit = "us"
+
+[counter.metrics."Compute (SM) Throughput"]
+value = "48.69"
+unit = "%"
+
+[counter.metrics."DRAM Throughput"]
+value = "0.16"
+unit = "%"
+
+[counter.metrics."Theoretical Occupancy"]
+value = "100"
+unit = "%"
+
+[counter.metrics."Achieved Occupancy"]
+value = "61.47"
+unit = "%"
+
+[counter.metrics."Registers Per Thread"]
+value = "36"
+unit = "register/thread"
+
+[counter.metrics."Grid Size"]
+value = "484"
+unit = ""
+
+[counter.metrics."Block Size"]
+value = "256"
+unit = ""
+
+[counter.metrics."Eligible Warps Per Scheduler"]
+value = "2.11"
+unit = "warp"
+
+[[counter]]
+instrument = "copper"
+kernel = "void regular_fft<1024, EPT<16>, 8, 2, 14, 0, 2, 1, unsigned int, float, HostConfigPlaceholder>(kernel_arguments_t<T9>)"
+matching_occurrence = 2
+
+[counter.metrics]
+
+[counter.metrics.Duration]
+value = "808.19"
+unit = "us"
+
+[counter.metrics."Compute (SM) Throughput"]
+value = "15.93"
+unit = "%"
+
+[counter.metrics."DRAM Throughput"]
+value = "89.73"
+unit = "%"
+
+[counter.metrics."Theoretical Occupancy"]
+value = "33.33"
+unit = "%"
+
+[counter.metrics."Achieved Occupancy"]
+value = "32.65"
+unit = "%"
+
+[counter.metrics."Registers Per Thread"]
+value = "56"
+unit = "register/thread"
+
+[counter.metrics."Grid Size"]
+value = "4096"
+unit = ""
+
+[counter.metrics."Block Size"]
+value = "512"
+unit = ""
+
+[counter.metrics."Eligible Warps Per Scheduler"]
+value = "0.39"
+unit = "warp"
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic.toml.gz"
+sha256 = "66fc84985697cecc42c8ffbcfaa38180eff05e80adcc615d3802107d31f45ac0"
+uncompressed_sha256 = "d39fd5dfe0094dc05c4a12f85c8bd5eaad0fadbc22122cf7ec14cd7343cdd98e"
+uncompressed_bytes = 3092
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic.log.gz"
+sha256 = "a324567be1a4d6285d72cbfa602cda37f4c1de300da7f67a2c54bbde58567729"
+uncompressed_sha256 = "791b65775bbf483047a389a8c7ed17f24eecd966013ab5baefc22b409b8088a9"
+uncompressed_bytes = 100
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-profiled.toml.gz"
+sha256 = "097e6c830ab99c9783c50916cea206ee722d82d60dba7a05b2f440798355ce8a"
+uncompressed_sha256 = "8291a1372ab82108e9c82fb010e0566f9b0098408e50b857c935321e3426cd4c"
+uncompressed_bytes = 734
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-profiled.log.gz"
+sha256 = "29794e88b63810f70f02867d39b4aad2fbc16230227c8497298e94d5dc09b60f"
+uncompressed_sha256 = "962b8368f85b6a2dce0c80a38f96255ef6e96961a7369d2ea1946e5e020e6432"
+uncompressed_bytes = 4190
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper.toml.gz"
+sha256 = "1da21198ed2567213a047c6c4a112a8b9876ef9b3fbc74253ef4d0ea9eb68f03"
+uncompressed_sha256 = "a465314c56076deeebd633bdacc32997f0346f291f0973b0332d23aa9c96760f"
+uncompressed_bytes = 3129
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper.log.gz"
+sha256 = "60009842894362a11b23db4c080b7ea99dfc09f577dae190679747dd6653d436"
+uncompressed_sha256 = "9186fb81d6e3eb35917c83682ef7b6dacfca25d26b16a5c6b151d6f294431c61"
+uncompressed_bytes = 97
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-profiled.toml.gz"
+sha256 = "c8878c7adc4f3180d488526c3b26f52dd532c6cf10cdf4b52c0a2f4d45d6f000"
+uncompressed_sha256 = "66d8f36eb4bf5d62b120e1dc8ffd8639f10a47567d68b37b67f1333fac31e63d"
+uncompressed_bytes = 732
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-profiled.log.gz"
+sha256 = "b762a3648a152cce2d12a4a2a7c85db347290f2f3c88500842492197409d688c"
+uncompressed_sha256 = "8914af62a82fc92b3ae758afd12db09894579537751a16671cd17d6cbb85bb78"
+uncompressed_bytes = 4796
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/gpi2.toml.gz"
+sha256 = "2f67da1b712303d92252f1e6bba1a4d58db7fd2297b8ef84c8e1bf855449ea40"
+uncompressed_sha256 = "13f8ae35c38042e1c2d4a828eb6385db6ac7887507f0e37a5bb40e812cadc0cd"
+uncompressed_bytes = 3053
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/gpi2.log.gz"
+sha256 = "fa3cc3fc4e98fcbcd25c9921bc498c73a0384d1aa1400e822b37e3b8888bfe80"
+uncompressed_sha256 = "16a98679d14d73889701ce3c395d326178b88fb00cae2e8d75c7c0cf6b6decf2"
+uncompressed_bytes = 597
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/gpi2-profiled.toml.gz"
+sha256 = "e473eff4837002bc64829af8510eb5b131fde0ee2d26f8150315f431a11f913b"
+uncompressed_sha256 = "274ea8db99de8afc4939b26f5b05bf953842237f1b7cc74ee3cb7107a1b28f56"
+uncompressed_bytes = 1201
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/gpi2-profiled.log.gz"
+sha256 = "07c71b19e4019cebebe0ad0b15f7e140df197b40c5c35fdc64ee0a450ec43a19"
+uncompressed_sha256 = "76022071237eef3a1e4ef77b4c17599965f1b4d96ccd0af6effbb85ed05dd438"
+uncompressed_bytes = 3463
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-timeline.1.nsys-rep.gz"
+sha256 = "db1101d2975c43f0a302091e5ace3fd5efb177c46fdeff4fe61b8d17decf79ab"
+uncompressed_sha256 = "81cbded4b4aeb7dbba8dca217da4d5e2a843ceae15c26fb5d643a358a408dc81"
+uncompressed_bytes = 759958
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-timeline.2.nsys-rep.gz"
+sha256 = "c9c78a20dd9f4fd59228b2d618ff7ad1929d8478eccbb819814039da8edab162"
+uncompressed_sha256 = "a355b2fc274b4b70a52da95e79b33e63347c053a2f3ff83a135308b05f5c4ff2"
+uncompressed_bytes = 504181
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-timeline.1.nsys-rep.gz"
+sha256 = "fe03b113632b5519fa2d34fb3159fd2b4eb875837b96550ed4a494ef7684434a"
+uncompressed_sha256 = "070500c38dd0fe98be93f3071dece30f4f4a7c6d48318db12040c18066a51646"
+uncompressed_bytes = 1186185
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-timeline.2.nsys-rep.gz"
+sha256 = "b939f42ace87c4ce8bbd49e26392531e45247fe34543235902cfbf2a2619e6e4"
+uncompressed_sha256 = "d298aa78282008a8981c032739bd466c2639ae696e9bc2fd076f992b88858af3"
+uncompressed_bytes = 4686442
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/gpi2-timeline.1.nsys-rep.gz"
+sha256 = "e1c5c1654bb42fa4a76ee41f797f5924fbe4bc1a8cf94c20343a563f0208db78"
+uncompressed_sha256 = "33f19e24e7322d09bb7a978bc1b69997c0035ecc84885f012d8541bd17d3902b"
+uncompressed_bytes = 1319373
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic_captured_graph-kernels.csv.gz"
+sha256 = "fa4c11bb628bf2d003d57744d0eb2b807217e3aac0aed7c1e56324031633d57b"
+uncompressed_sha256 = "5f59aef304daf0672158a357d5e108e46466b744dee057087a577cf623d8828c"
+uncompressed_bytes = 157450
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic_captured_hil_cycle-kernels.csv.gz"
+sha256 = "3562948928b53077c074b51d07086ee246242a5959cdb1310b16c6b1db8a85e4"
+uncompressed_sha256 = "669346edbbe5c6393c034d356cc784f9b55bbe0cbe12b262341ca84bc3d6aa68"
+uncompressed_bytes = 157450
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic_stream_graph-kernels.csv.gz"
+sha256 = "2e6e4c6161c5803afd07197fe6bbc59e4433479b477ad7af3b7d8bf4dde24ada"
+uncompressed_sha256 = "40fef8110f7f8d7cb55d198503d1d4b97b931e98bb70337afa55046b3811418e"
+uncompressed_bytes = 144714
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic_stream_hil_cycle-kernels.csv.gz"
+sha256 = "93d68c9165c6c84e9a5a1c8c5dbdc23eb873b6c1621e53066e2770a4e3e1e127"
+uncompressed_sha256 = "60fb55cc25404b3c6eb9a51c3d02511c4c7c66692fcd93a9834303a9cc380e12"
+uncompressed_bytes = 145659
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper_captured_graph-kernels.csv.gz"
+sha256 = "36cfd86ec53c4dd309e120eeb40d7f60c463308574daeead1cc8c14c818a8e0c"
+uncompressed_sha256 = "868f5eb8f34ca2babf355d9c4add14863442962a23545c5786c4fc752366e03f"
+uncompressed_bytes = 156237
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper_captured_hil_cycle-kernels.csv.gz"
+sha256 = "55a86bc355ef95df57c813503b3b633c066f6ba277ed5a052a872ecaf3817a1c"
+uncompressed_sha256 = "5ba1a108166e702c362e7df6bd633172d80fa81483599f3a9f250654e36b08bc"
+uncompressed_bytes = 157770
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper_stream_graph-kernels.csv.gz"
+sha256 = "db1ec3e11dd1759fca0e31eabc1ba3d428538a02fd3f1f25d5a08a3d1159026c"
+uncompressed_sha256 = "92e8498bafb1fa8db804dfa732077508e1ec4b9134b79f1a5c464aa5754bae17"
+uncompressed_bytes = 147101
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper_stream_hil_cycle-kernels.csv.gz"
+sha256 = "ae1a5048dbf74ec128d825e21b616ad02b051666c71a3a1e649433f8b11222a9"
+uncompressed_sha256 = "ca0af7b6f8e8fa75eb4bab862afd564183499f563f4f03d7dce0dd6cf0089eca"
+uncompressed_bytes = 149409
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/gpi2_stream_graph-kernels.csv.gz"
+sha256 = "2d9908aa4127c69da2410c0d55f6bb1db6ec7d3bcef8e173f5a8477f49473a48"
+uncompressed_sha256 = "6beea322451190babff6eb29e219360c3d495fe576b6097273056b8e1cdff6db"
+uncompressed_bytes = 169211
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/gpi2_stream_hil_cycle-kernels.csv.gz"
+sha256 = "ec4b4eb1678fec5d7ce09d820c88c69c821bbcae7c86526a4d9ae998844b566c"
+uncompressed_sha256 = "bd0c9026cd163e2fab6334fccd4330746f6f7ffef26dc715dac403b822edbe54"
+uncompressed_bytes = 172555
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-native.toml.gz"
+sha256 = "d39c7659e38b989c45753a915c6264812ec6fc61dd92c4ca000e2815012a9bed"
+uncompressed_sha256 = "91bf7457fd8ece4351b6cbc063490b8f2adedd802b857c5e93f22b95f86da82f"
+uncompressed_bytes = 203
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-native.log.gz"
+sha256 = "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+uncompressed_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+uncompressed_bytes = 0
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-counters.log.gz"
+sha256 = "e983c27a399730ed47d7ed64c19bb64fb7b0fd898587c0d43dd03cf9108499d2"
+uncompressed_sha256 = "9b37a0d54c11b9a77069e6928e3ed3a66057c031994d7d888b5acf0091b0bb26"
+uncompressed_bytes = 1522
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-counters.toml.gz"
+sha256 = "097e6c830ab99c9783c50916cea206ee722d82d60dba7a05b2f440798355ce8a"
+uncompressed_sha256 = "8291a1372ab82108e9c82fb010e0566f9b0098408e50b857c935321e3426cd4c"
+uncompressed_bytes = 734
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-counter-details.csv.gz"
+sha256 = "560f1c93f32f668b0c56800970164dfa13f0d4d2a6f723780650d292b0514c71"
+uncompressed_sha256 = "b535b94a378a2b0df245730814ace0423eb1ea40d6dbc5ea3d372c108dd9bae1"
+uncompressed_bytes = 34956
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-counter-raw.csv.gz"
+sha256 = "6813840ac51e88135a598be6351971a14c334a04070c9f6098b6ac5b1c8951bb"
+uncompressed_sha256 = "29350cc87ff76885e60936df010c3e379a6a7b0a006fb0b7205185dfa23dd188"
+uncompressed_bytes = 36968
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-kernel.ncu-repz.gz"
+sha256 = "c693b0912681497628c7e44da34f6568c3382d0e6e2eb0045571476c12a33c03"
+uncompressed_sha256 = "742717886316d59ed87dbc131d6325aaed9f975f760085b6411e8105fbd6ae43"
+uncompressed_bytes = 45602
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-native.toml.gz"
+sha256 = "c3642c6507405cd0a09036d130ddb25eac7ad30d01c59db2120e0493c6d9eeb3"
+uncompressed_sha256 = "ab947230460f35dceaa41ad0f0e727238685b3840e28417cee613403420fe731"
+uncompressed_bytes = 202
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-native.log.gz"
+sha256 = "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+uncompressed_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+uncompressed_bytes = 0
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-counters.log.gz"
+sha256 = "79eb4397852986a1cdc8c6c0857ac93c6bcde8caa6fd17fe4302b5b132e2bac9"
+uncompressed_sha256 = "6628bd2105ad96ca19e5840ab94b535162293161e3eabc91a5b5386cc32370f7"
+uncompressed_bytes = 1384
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-counters.toml.gz"
+sha256 = "c8878c7adc4f3180d488526c3b26f52dd532c6cf10cdf4b52c0a2f4d45d6f000"
+uncompressed_sha256 = "66d8f36eb4bf5d62b120e1dc8ffd8639f10a47567d68b37b67f1333fac31e63d"
+uncompressed_bytes = 732
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-counter-details.csv.gz"
+sha256 = "378f0c8de6bdda456a90545d5c4aa5663066fec9caf8b6d671d546b3cd11e632"
+uncompressed_sha256 = "26817cab5f154b1062edb00f78481c7dad0b5002c76e16fa31075fb818192d1d"
+uncompressed_bytes = 19179
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-counter-raw.csv.gz"
+sha256 = "0f524821272970c25be209691795e99900c14d02ee4c83b59ab6ea4e40ac0a1e"
+uncompressed_sha256 = "d211537a39e0448b0fc78290d251fcc672990ae708d10341fbb537c87c3421a7"
+uncompressed_bytes = 36949
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-kernel.ncu-repz.gz"
+sha256 = "0c90532e7aec34958c47da7d71b9d0ec438c95c76a7a8e8a1182660613d0e977"
+uncompressed_sha256 = "516f4c003206eef80159846f7336f5315de4991616c2287709c85d7cb307fc9f"
+uncompressed_bytes = 30603
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-forward-counter-details.csv.gz"
+sha256 = "56ade12bc2bba8472a263dbe4215d86f8c2b7da9b2191d3855e034cdadcd6b62"
+uncompressed_sha256 = "84a021ae93d73d0c318d0d123213eb57b9bc7da3fcb3097fc52792f4183c3cd2"
+uncompressed_bytes = 22234
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-forward-counter-raw.csv.gz"
+sha256 = "de11a54f25d4d8078d796a380e68478ca028ff021206af2089d620259be95263"
+uncompressed_sha256 = "f4fae142a3a8e206f452abefe78853af43557962b7ee22de00bb9a2e71021e75"
+uncompressed_bytes = 36840
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-forward-kernel.ncu-repz.gz"
+sha256 = "661173963ca2bb998627ed57b9e3b16d9dc699494ce9ea8ae0dab619ee800b1e"
+uncompressed_sha256 = "b76c74c71e902c9e0d516e6882b7955e7ea5f9c8ee73990b09569925be0ed1af"
+uncompressed_bytes = 32024
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-forward-counters.log.gz"
+sha256 = "1ba5e5cfb2d942f07498b1672cfb1d06b0155aaf7e2441b8187d43a7acca2da1"
+uncompressed_sha256 = "c4422d6387ff0d671a5527b4d6a04cc2f077640fd78ba94587d4a1ffb5c34238"
+uncompressed_bytes = 1384
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-forward-counters.toml.gz"
+sha256 = "c8878c7adc4f3180d488526c3b26f52dd532c6cf10cdf4b52c0a2f4d45d6f000"
+uncompressed_sha256 = "66d8f36eb4bf5d62b120e1dc8ffd8639f10a47567d68b37b67f1333fac31e63d"
+uncompressed_bytes = 732
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/run_copper_batched_counters.py.gz"
+sha256 = "82cc496d40ed0d0ef72cc04c01a25361e719b507d8987e788727fa5182df58c6"
+uncompressed_sha256 = "59602b7814d09c08d03e8da38ade7ee0caf237a4b3759f66d3c90f0a8f042e90"
+uncompressed_bytes = 1392
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-batched-campaign.log.gz"
+sha256 = "740825bbbf2a2ba6350e1d423b48732a8f33b9d6a57ac3ec833feda34226bd1d"
+uncompressed_sha256 = "da6cb750c24762bd06f60acca6cb444c47ea3ea107748656404bfd3de74b4efe"
+uncompressed_bytes = 53
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/run_review.py.gz"
+sha256 = "a2d6a626b9df5073451c2a9367a44781593f2d0f827e1bc9365d0a40ee526924"
+uncompressed_sha256 = "13b47576e315c45a960acfbc944d5e5ed69f468f0c9ae30d5e009af56b2149cd"
+uncompressed_bytes = 2222
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/run_followup.py.gz"
+sha256 = "aaefabcd459c2cd6d64f32b54d22cef87b804d3c0fcc631281ee96c4421376ac"
+uncompressed_sha256 = "7c9bbd0dbf88bb3da70f0cafa3676b3ebe95dd42db94f9a72257508f27c580cb"
+uncompressed_bytes = 2137
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/summarize_timeline.py.gz"
+sha256 = "060bd46d2429df72302342198562fc08ba3130f34502efbeba93d6a430566ae8"
+uncompressed_sha256 = "3c7bb8decdd9d3a4a848d1831324c9819580f911a619dcf5723704dc9d51a743"
+uncompressed_bytes = 3434
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/inspect_native_graph.jl.gz"
+sha256 = "6b307a2c56114c96b87e10c996fa6ce42fb036d5c74603797cb1bdc156e01651"
+uncompressed_sha256 = "204bd8ecac63749194bc469e2c1047d72794a11471baa4e8a4510ecfbef03b34"
+uncompressed_bytes = 1988
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/persist_review.py.gz"
+sha256 = "dd2b92ca5e3c67b22cc3e1d6669a236ba5d051bbe783abf09fbc56a078b5f193"
+uncompressed_sha256 = "aaeefeda3b9b30321bb68c590a2d554b57a1c148683bd72f6c440bacfab6ccb3"
+uncompressed_bytes = 12556
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/harness.sha256.gz"
+sha256 = "241e2391f09b3f86b6df772eec60cf9786e37901a0a8f1c38669c87bcd42fd80"
+uncompressed_sha256 = "582edf43032bd4f0be536893b971b18e8e58efa154cc78b8bfa710b5915bcc0f"
+uncompressed_bytes = 65
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/runtime.log.gz"
+sha256 = "017931ecfa3b7245424abd90bd365e341bfb136a500e34ad8a1c23d3a325ea7a"
+uncompressed_sha256 = "6e41bb2f812ab2fe7f8655fd8f27959ad298e1e264624054eb12bc118c8b75d7"
+uncompressed_bytes = 190
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/telemetry.csv.gz"
+sha256 = "a0e9da94a3b79d78646811f6b7285178bc130cffd301e68ec990986e103ff08d"
+uncompressed_sha256 = "74438b0fdd999d0966e0c125b56f084eb10d6f9f71d0e22d88dfaaab84528a23"
+uncompressed_bytes = 60021
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/campaign.log.gz"
+sha256 = "318c92888ab7149e96703c594fb9a15a4bf1e8246563949d85587af584a27679"
+uncompressed_sha256 = "e057a4ed2f4959ec7b832dd11bc6c98c65bbbacf289deeae44d7b1cac2a5909e"
+uncompressed_bytes = 260
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/followup.log.gz"
+sha256 = "c98b826c143ddebb22afcedf36e1159289e8145269a5a8a2e17029ebba1ced50"
+uncompressed_sha256 = "dc6ae562878940f8fffbeee567e07171fdeba811a76e83b8dbadfc39d9175b61"
+uncompressed_bytes = 208
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/science-review.md.gz"
+sha256 = "6cc2c46440f3a6db7e0e52d728092f6a8cc0ba5f1055bf601e95050557e11257"
+uncompressed_sha256 = "fc01b1a455f9909511897b77e3fa597741900e1a865223d8529b88be6e45a32f"
+uncompressed_bytes = 17269
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/executor-review.md.gz"
+sha256 = "6d1119dcb2b94230f9050e6f141cfea3ec583c17d321162afb9d22a884a4f6a7"
+uncompressed_sha256 = "80aeb87e0ad8d35078d3f9cd0f18f4a865f34c23e1e5f5682a82cc2e8b255dce"
+uncompressed_bytes = 11640
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/evidence-inventory.md.gz"
+sha256 = "3cf8bb207fd1e30a7c75bf39ad6bd6790916c9752b35fb0c96559f8100675ee2"
+uncompressed_sha256 = "614e04c5f42e92b3d649efe3feed2d21cbfdce117c29390e5dc0b628666a2bb4"
+uncompressed_bytes = 19352
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/classic-Manifest.toml.gz"
+sha256 = "c14d0f92e1322af3860875ce0255636505e673f1e0cbae756d3905807f9455cd"
+uncompressed_sha256 = "e3ac4f7d7094c402f4ad4eaa43d31151890d3f4d1f695482a10ae31d457a7e3a"
+uncompressed_bytes = 31164
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/copper-Manifest.toml.gz"
+sha256 = "d5b286137faa34264894b17f9dce54690a6cc791217fba6262fc7ae78177860f"
+uncompressed_sha256 = "9f0380ffcc3f68eed4317f9b2eae353d77c57cfa6ae7c1a2eee7b44af1d4710f"
+uncompressed_bytes = 31160
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-instrument-execution-review/gpi2-Manifest.toml.gz"
+sha256 = "e95e6def0b6b592d66fb63d2170a3d27044a3ddbc18212185c85091bd1c7f8be"
+uncompressed_sha256 = "1082e1f6c5aef96a5c57773f705dfd5c396b9ba508c925dd8393a81db9cd70d9"
+uncompressed_bytes = 31128
