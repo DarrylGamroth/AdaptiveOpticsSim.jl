@@ -169,13 +169,42 @@ CPU execution of the same kernels checks backend parity. Set
 `AOS_GPU_PATTERN_PROFILE=1` for warmed counter collection without latency timing.
 
 `benchmarks/profile_pyramid_efficiency_cuda.jl` compares complete stream steps
-for both propagation strategies. Its optional `AOS_PYRAMID_BLOCKING_SYNC=1`
-changes the benchmark process's AOS stream waits to blocking waits, preserving
-completion boundaries. This is a diagnostic comparison, not a package policy.
+for both propagation strategies. `AOS_PYRAMID_COMPLETION=cooperative` or
+`blocking` overrides the benchmark process's AOS stream waits while preserving
+completion boundaries. Without an override it measures the package policy.
 The [RTX 3080 assessment](../benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency.toml)
 records kernel counters, numerical checks, raw traces, and a benchmark-only
 geometric-slopes reassociation experiment. It distinguishes measured cases from
 unprofiled algorithms and does not claim general numerical qualification.
+
+Synchronous CUDA kernel phases use a blocking wait on the current stream. This
+preserves completion and device-error checking while avoiding cooperative-wait
+bookkeeping. The calling Julia thread blocks during that wait; low-level CUDA
+callers can explicitly select `blocking=false` on `synchronize_backend!` when
+task cooperation is required. Prepared graph submission/completion and the
+captured replay allocation contract remain separate from dynamic KA launches.
+
+The production geometric-slopes kernel still averages every original adjacent
+OPD difference. For same-precision Float32/Float64 subapertures of at least five
+pixels on grids of at most 32 × 32 subapertures, one 32-lane group computes
+each result. Denser grids retain the original kernel because one group per
+output can reduce throughput. Nonfinite or overflow-sensitive
+data use the original serial summation order. Smaller subapertures, mixed
+representations, and edge-masked slopes retain their serial implementation.
+The CPU implementation is unchanged; parallel additions may round differently.
+
+Run `benchmarks/benchmark_geometric_slopes_workflow_cuda.jl cuda` with
+`AOS_GEOMETRIC_RESULTS=/tmp/geometric.toml` to measure the complete captured
+DM/pupil workflow followed by public geometric slopes. The timed endpoint is
+completed GPU slope storage; numerical-oracle host copies are outside timing.
+The same driver also compares original and selected kernels with paired CUDA
+event batches. `test/cuda/geometric_slopes.jl` covers numerical edge cases and
+fixed-storage replay; `test/cuda/kernel_completion.jl` checks both wait modes.
+`benchmarks/benchmark_geometric_slopes_scaling_cuda.jl cuda` sweeps output-grid
+density independently, including cases that retain the original kernel. The
+[completion and slopes results](../benchmarks/results/platform/2026-10-21-cuda-completion-slopes.toml)
+record the final selection, repeated workflow measurements, numerical checks,
+and separate unrestricted-pilot and final density sweeps.
 
 Qualify a KA upgrade separately from workgroup changes. Registered CUDA 6.4.2
 constrains KA to 0.9; a development CUDA tree with the same version string can

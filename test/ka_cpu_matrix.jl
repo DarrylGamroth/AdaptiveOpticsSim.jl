@@ -1,3 +1,5 @@
+include("geometric_slopes_numerics.jl")
+
 const SCALAR_CPU_STYLE = AdaptiveOpticsSim.Backends.ScalarCPUStyle()
 const KA_CPU_EXERCISED_KERNELS = Set{Symbol}()
 
@@ -374,6 +376,8 @@ end
             SCALAR_CPU_STYLE, scalar_slopes, opd, scalar_valid, 4, 2, 4)
         AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!(
             KA_CPU_STYLE, ka_slopes, opd, ka_valid, 4, 2, 4)
+        mark_ka_cpu_kernel!(:cooperative_geometric_slopes_kernel!)
+        test_geometric_slopes_numerics(identity, KA_CPU_STYLE)
         mark_ka_cpu_kernel!(:geometric_slopes_kernel!)
         @test ka_slopes == scalar_slopes
 

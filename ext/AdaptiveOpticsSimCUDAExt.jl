@@ -18,6 +18,18 @@ Backends.backend_fill(::Type{Backends.CUDABackendTag}, value, dims::Vararg{Int})
 Backends.compute_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
 
+# Synchronous kernel phases retain their current-stream completion boundary.
+# CUDA's cooperative wait can enter worker/task bookkeeping for longer kernels;
+# the blocking wait avoids that latency and still checks device exceptions.
+# Low-level callers that need task cooperation can select blocking=false.
+@inline function Backends.synchronize_backend!(
+    ::Backends.AcceleratorStyle{CUDA.CUDABackend};
+    blocking::Bool=true,
+)
+    CUDA.synchronize(; blocking)
+    return nothing
+end
+
 function Backends._prepare_mul_coefficients(
     output::CUDA.StridedCuVecOrMat{T},
 ) where {T<:Union{Float32,Float64,ComplexF32,ComplexF64}}

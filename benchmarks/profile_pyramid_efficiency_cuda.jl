@@ -1,15 +1,20 @@
 # CPU parity and architecture timelines for two Pyramid propagation strategies.
 # AOS_PYRAMID_PROFILE=1 enables one profiler range per warmed case.
+# AOS_PYRAMID_COMPLETION=cooperative|blocking overrides the default for diagnosis.
 import CUDA
 using LinearAlgebra, Statistics, TOML
 include(joinpath(@__DIR__, "..", "scripts", "profile_pyramid_plant_runtime.jl"))
 
 # Diagnostic process-local dispatch: preserve completion boundaries while
 # comparing CUDA's cooperative wait with a direct blocking stream wait.
-if get(ENV, "AOS_PYRAMID_BLOCKING_SYNC", "0") == "1"
-    function Backends.synchronize_backend!(
-        ::Backends.AcceleratorStyle{CUDA.CUDABackend})
-        CUDA.synchronize(; blocking=true)
+const _PYRAMID_COMPLETION = get(ENV, "AOS_PYRAMID_COMPLETION", "default")
+_PYRAMID_COMPLETION in ("default", "cooperative", "blocking") ||
+    error("unknown AOS_PYRAMID_COMPLETION policy")
+if _PYRAMID_COMPLETION != "default"
+    @eval function Backends.synchronize_backend!(
+        ::Backends.AcceleratorStyle{CUDA.CUDABackend};
+        blocking::Bool=$(_PYRAMID_COMPLETION == "blocking"))
+        CUDA.synchronize(; blocking)
         return nothing
     end
 end
@@ -66,7 +71,7 @@ function profile_pyramid_efficiency()
     open(output, "w") do io
         TOML.print(io, Dict("source_revision"=>readchomp(`git rev-parse HEAD`),
             "device"=>CUDA.name(CUDA.device()), "julia"=>string(VERSION),
-            "synchronization"=>(get(ENV, "AOS_PYRAMID_BLOCKING_SYNC", "0") == "1" ? "blocking" : "production_default"),
+            "synchronization"=>_PYRAMID_COMPLETION,
             "boundary"=>"Host time_ns around complete synchronized stream optics+noiseless acquisition;128 samples,32 warmups; timings from profiler invocation are diagnostic only"))
         for n in (64, 256)
             for (label, strategy) in (("pupil_tilt", WavefrontSensors.PyramidPupilTiltStrategy()),

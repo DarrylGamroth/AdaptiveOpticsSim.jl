@@ -1,3 +1,87 @@
+# Preserve the serial summation order for exceptional values and representations
+# that cannot use the floating-point cooperative reduction.
+@inline function _geometric_slope_sums(opd, xs, ys, sub, ::Type{T}) where {T}
+    sx = zero(T)
+    sy = zero(T)
+    @inbounds for y in ys:(ys + sub - 1), x in xs:(xs + sub - 2)
+        sx += opd[x + 1, y] - opd[x, y]
+    end
+    @inbounds for y in ys:(ys + sub - 2), x in xs:(xs + sub - 1)
+        sy += opd[x, y + 1] - opd[x, y]
+    end
+    return sx, sy
+end
+
+# One workgroup owns one subaperture. Every adjacent difference still
+# contributes; the reduction only changes the order of floating-point additions.
+@kernel function cooperative_geometric_slopes_kernel!(slopes, opd, valid_mask,
+    sub::Int, n_sub::Int, offset::Int, scale_x, scale_y)
+    lane = @index(Local, Linear)
+    idx = @index(Group, Linear)
+    i = (idx - 1) % n_sub + 1
+    j = (idx - 1) ÷ n_sub + 1
+    xs = (i - 1) * sub + 1
+    ys = (j - 1) * sub + 1
+    sums_x = @localmem eltype(slopes) (32,)
+    sums_y = @localmem eltype(slopes) (32,)
+    serial = @localmem Bool (32,)
+    sx = zero(eltype(slopes))
+    sy = zero(eltype(slopes))
+    count = sub * (sub - 1)
+    # The factor two leaves headroom for rounding in either summation order.
+    limit = floatmax(eltype(slopes)) / (2 * count) /
+        max(one(eltype(slopes)), abs(scale_x), abs(scale_y))
+    exceptional = false
+    valid = @inbounds valid_mask[i, j]
+    if valid
+        @inbounds for k in (lane - 1):32:(count - 1)
+            x = xs + k % (sub - 1)
+            y = ys + k ÷ (sub - 1)
+            dx = opd[x + 1, y] - opd[x, y]
+            x = xs + k % sub
+            y = ys + k ÷ sub
+            dy = opd[x, y + 1] - opd[x, y]
+            exceptional |= !isfinite(dx) || !isfinite(dy) ||
+                abs(dx) > limit || abs(dy) > limit
+            sx += dx
+            sy += dy
+        end
+    end
+    @inbounds sums_x[lane] = sx
+    @inbounds sums_y[lane] = sy
+    @inbounds serial[lane] = exceptional
+    @synchronize
+    for reduction_stride in (16, 8, 4, 2, 1)
+        if lane <= reduction_stride
+            @inbounds sums_x[lane] += sums_x[lane + reduction_stride]
+            @inbounds sums_y[lane] += sums_y[lane + reduction_stride]
+            @inbounds serial[lane] |= serial[lane + reduction_stride]
+        end
+        @synchronize
+    end
+    idx = @index(Group, Linear)
+    i = (idx - 1) % n_sub + 1
+    j = (idx - 1) ÷ n_sub + 1
+    xs = (i - 1) * sub + 1
+    ys = (j - 1) * sub + 1
+    count = sub * (sub - 1)
+    if lane == 1
+        if @inbounds valid_mask[i, j]
+            if @inbounds serial[1]
+                sx, sy = _geometric_slope_sums(opd, xs, ys, sub, eltype(slopes))
+            else
+                sx = @inbounds sums_x[1]
+                sy = @inbounds sums_y[1]
+            end
+            @inbounds slopes[idx] = scale_x * sx / count
+            @inbounds slopes[idx + offset] = scale_y * sy / count
+        else
+            @inbounds slopes[idx] = zero(eltype(slopes))
+            @inbounds slopes[idx + offset] = zero(eltype(slopes))
+        end
+    end
+end
+
 @kernel function geometric_slopes_kernel!(slopes, opd, valid_mask,
     sub::Int, n_sub::Int, offset::Int, scale_x, scale_y)
     i, j = @index(Global, NTuple)
@@ -5,23 +89,11 @@
         idx = i + (j - 1) * n_sub
         xs = (i - 1) * sub + 1
         ys = (j - 1) * sub + 1
-        xe = xs + sub - 1
-        ye = ys + sub - 1
-        sx = zero(eltype(slopes))
-        sy = zero(eltype(slopes))
-        count_x = 0
-        count_y = 0
         if @inbounds valid_mask[i, j]
-            @inbounds for y in ys:ye, x in xs:(xe - 1)
-                sx += opd[x + 1, y] - opd[x, y]
-                count_x += 1
-            end
-            @inbounds for y in ys:(ye - 1), x in xs:xe
-                sy += opd[x, y + 1] - opd[x, y]
-                count_y += 1
-            end
-            @inbounds slopes[idx] = scale_x * sx / max(count_x, 1)
-            @inbounds slopes[idx + offset] = scale_y * sy / max(count_y, 1)
+            sx, sy = _geometric_slope_sums(opd, xs, ys, sub, eltype(slopes))
+            count = max(sub * (sub - 1), 1)
+            @inbounds slopes[idx] = scale_x * sx / count
+            @inbounds slopes[idx + offset] = scale_y * sy / count
         else
             @inbounds slopes[idx] = zero(eltype(slopes))
             @inbounds slopes[idx + offset] = zero(eltype(slopes))
@@ -234,6 +306,14 @@ function _geometric_slopes!(
         sub, n_sub, offset, unit_scale, unit_scale)
 end
 
+@inline _cooperative_geometric_slopes(slopes, opd, scale_x, scale_y) = false
+
+@inline function _cooperative_geometric_slopes(
+    ::AbstractVector{T}, ::AbstractMatrix{T}, scale_x::T, scale_y::T,
+) where {T<:Union{Float32,Float64}}
+    return isfinite(scale_x) && isfinite(scale_y)
+end
+
 function _geometric_slopes!(
     style::AcceleratorStyle,
     slopes::AbstractVector,
@@ -245,9 +325,29 @@ function _geometric_slopes!(
     scale_x,
     scale_y,
 )
-    launch_kernel!(
-        style, geometric_slopes_kernel!, slopes, opd, valid_mask,
-        sub, n_sub, offset, scale_x, scale_y; ndrange=(n_sub, n_sub))
+    _enqueue_geometric_slopes!(style, slopes, opd, valid_mask,
+        sub, n_sub, offset, scale_x, scale_y)
+    synchronize_backend!(style)
+    return slopes
+end
+
+function _enqueue_geometric_slopes!(
+    style::AcceleratorStyle, slopes, opd, valid_mask,
+    sub::Int, n_sub::Int, offset::Int, scale_x, scale_y,
+)
+    # Small subapertures do too little work to amortize one group per output.
+    # Dense output grids already expose enough serial-kernel parallelism; keep
+    # this reduction within the measured low-concurrency range.
+    if sub >= 5 && n_sub <= 32 && _cooperative_geometric_slopes(slopes, opd, scale_x, scale_y)
+        # The fixed workgroup size is part of this reduction's storage contract.
+        cooperative_geometric_slopes_kernel!(style.backend, 32)(
+            slopes, opd, valid_mask, sub, n_sub, offset, scale_x, scale_y;
+            ndrange=32 * offset)
+    else
+        launch_kernel_async!(
+            style, geometric_slopes_kernel!, slopes, opd, valid_mask,
+            sub, n_sub, offset, scale_x, scale_y; ndrange=(n_sub, n_sub))
+    end
     return slopes
 end
 

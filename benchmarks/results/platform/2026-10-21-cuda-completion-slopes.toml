@@ -1,0 +1,598 @@
+artifact_id = "CUDA-COMPLETION-GEOMETRIC-SLOPES-2026-10-21"
+baseline_revision = "325cdde781083cc756d6b2f88caaea2682ebc65f"
+implementation_state = "Baseline plus production/test/benchmark changes identified by source hashes; scientific formulas, CPU implementation, and edge-masked slopes unchanged."
+decision = "Use blocking current-stream completion for synchronous CUDA kernel phases. Use cooperative summation for same-precision Float32/Float64 subapertures with at least five pixels per side on grids no larger than 32 × 32. Retain original serial execution elsewhere."
+
+[environment]
+gpu = "NVIDIA GeForce RTX 3080; sm_86; 68 SMs; 10 GiB"
+cpu = "AMD Ryzen 7 6800H"
+julia = "1.13.2"
+cuda_jl = "6.4.2"
+kernel_abstractions = "0.9.45"
+cuda_runtime = "13.4.0"
+driver = "615.71.09"
+threads = "1 compute, 0 interactive, 1 GC; BLAS/FFT 1"
+affinity = "Julia CPU 2; passive monitor CPU 6"
+clocks = "Uncontrolled system defaults; shared host"
+manifest_sha256 = "30a87806f0b9cbbe27d951f019f9f801d46236fe3e1792aab716c5ea8014ef73"
+
+[implementation]
+slopes = "Every horizontal and vertical adjacent difference contributes once, averaged by sub(sub-1) and scaled in the original order. One 32-lane group per eligible subaperture; parallel addition order changes rounding."
+exceptions = "Nonfinite differences or differences above floatmax/(2count)/max(1,abs(scales)) select the original serial sum. Subapertures smaller than five pixels, grids larger than 32 × 32, mixed/unusual types and nonfinite scales use original serial dispatch. Invalid subapertures suppress OPD reads; sub=1 is unchanged."
+completion = "CUDA synchronous kernel phases now use CUDA.synchronize(current_stream;blocking=true), retaining device-exception checks. Low-level callers may select blocking=false. Calling-thread task cooperation changes; no global callback/concurrency guarantee is inferred."
+capture = "Prepared graph completion code and fixed-storage guard are unchanged. Private asynchronous slope enqueue permits fixed-storage capture. Float32/64 slope replay passes zero warmed host-byte assertions; public dynamic KA launch allocations are measured separately."
+crossover = "Small subapertures (three/four pixels) regressed in pilots. A separate output-density pilot found regressions with one group per output on dense grids. The final policy restricts cooperative execution to a conservative measured region; it is not an optimal crossover model. Pilot and final density samples are archived separately."
+
+[protocol]
+fresh_processes_per_revision = 3
+process_order = "before1, after1, before2, after2, before3, after3; each process runs geometric cases then Pyramid cases in fixed order."
+workflow = "Captured Gaussian DM → pupil OPD graph followed by public geometric_wavefront_slopes!; completed GPU slopes. CPU-oracle host copies are outside timing. 128 closed-loop time_ns samples after 32 warmups per case. Combined kernel and completion-policy effect."
+oracles = "Command scales 0, -0.7, 1.3 and 1: complete CPU workflow compared to GPU before timing; post-timing parity and CUDA.used_memory stability. Each Pyramid strategy compared to CPU before and after. All passed."
+kernel = "Within each after process, original serial versus actual production-selected asynchronous enqueue. Four ABBA groups, 32 CUDA events per block, 32 repeated kernels per event. Every output is overwritten. Event time includes amortized native graph scheduling; no public wait or input transfer."
+paired_formula = "For each ABBA group: mean(log(serial block p50)) − mean(log(selected block p50)); exponentiate the mean of four groups per process. Report three process values separately. Ratio > 1 means selected is faster."
+total_workflow_samples = 3840
+total_pyramid_samples = 3072
+total_kernel_event_samples = 15360
+timed_gc_collections = 0
+limitations = "One RTX 3080 and software stack; shared host and uncontrolled clocks. Always-before-first process order and fixed case order can bias small effects. The 128 closed-loop samples support descriptive medians, not fixed-rate, tail-latency or WCET claims. Host output copies, RTC and transport are outside the timed boundary. Density sweep uses Float32 and a deterministic mask with about 20% invalid subapertures. No throughput claim for other backends or mask distributions."
+
+[validation]
+ka_cpu_numerical_checks = 824
+cuda_numerical_checks = 824
+cuda_public_api_checks = 4
+cuda_fixed_storage_slope_checks = 6
+cuda_capture_graph_regression_checks = 91
+cuda_completion_storage_wait_multiplication_checks = 333
+coverage = "Float32/64; subapertures 1/2/3/4/5/16/32; constant, plane, spike, checkerboard, large offset, subnormal and non-dyadic cancellation inputs; BigFloat exact-input reference with absolute error bounds; anisotropic scales; NaN/Inf/overflow; invalid masks; mixed precision; edge-mask parity; 32/33 output-grid boundary; current-stream/context restoration; default blocking and explicit cooperative completion; captured replay with zero warmed host bytes."
+commands = ["julia --project=test/cuda -e 'include(\"test/cuda/geometric_slopes.jl\"); include(\"test/runtests_gpu_target_common.jl\"); B=Backends.CUDABackendTag; @testset \"capture\" begin; run_captured_coordinate_gaussian_graph_execution_smoke(B); run_captured_graph_execution_smoke(B); run_captured_atmosphere_replay_smoke(B); run_captured_wfs_replay_smoke(B); run_captured_detector_replay_smoke(B); run_grouped_graph_execution_smoke(B); run_graph_rng_capture_replay(B); end'", "julia --project=test/cuda -e 'include(\"test/cuda/kernel_completion.jl\"); include(\"test/cuda/captured_storage.jl\"); include(\"test/cuda/prepared_wait.jl\"); include(\"test/cuda_prepared_multiplication_capture.jl\")'"]
+
+[executor_comparison]
+aos_revision = "325cdde781083cc756d6b2f88caaea2682ebc65f"
+juliafiltergraph_revision = "02a8ad1bc23f478e6637047c9862adf7c6b36775"
+scope = "Read-only source and existing-test review; no direct executor performance comparison."
+juliafiltergraph_strengths = "Generic streaming declaration API, conditional/rejected/deferred samples, joins and pipelines, per-node commitment and a richer retained fault/lifetime protocol."
+aos_fit = "Resident physical plant arrays, explicit plan/state/workspace/binding owners, model time, capacity-one asynchronous tickets and selective observation. Ordinary JFG captured process stages host outputs and waits every frame; publication and lifecycle contracts differ."
+recommendation = "Keep the package boundary and AOS executor. Consider borrowing documented stateful capture hooks, retained failure diagnostics, a failed-drain storage lifetime protocol, and an optional declaration helper. No executor API redesign is included here."
+
+[commands]
+common = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1; taskset -c 2; julia --startup-file=no --threads=1,0 --gcthreads=1 --project=<checkout>/test/cuda"
+geometric = "AOS_BENCHMARK_ROOT=<checkout> AOS_GEOMETRIC_RESULTS=/tmp/geometric.toml julia --project=<checkout>/test/cuda <driver>/benchmarks/benchmark_geometric_slopes_workflow_cuda.jl cuda"
+campaign = "See archived run_campaign.py; same driver files executed in fresh checkout-specific projects; default Pyramid mode asserted."
+telemetry = "nvidia-smi SM/memory clocks, pstate, temperature, power and clock event reasons every nominal 100 ms plus query latency. Begin/end CLOCK_MONOTONIC retained. Includes cold phases; no timing-interval attribution or stability claim."
+
+[source_files_sha256]
+"src/wfs/geometric_slopes.jl" = "2dfa0bbc003be4040b6812fe783582a0413e436e7a5f4cc23360bd2361aa8dd7"
+"ext/AdaptiveOpticsSimCUDAExt.jl" = "678eec959095cf111676d513b56e7342274b78ba000ee7a3d08a893a4624f33f"
+"benchmarks/benchmark_geometric_slopes_workflow_cuda.jl" = "66527ef173a302062487b46683128efc7000fc626a1fa0ec9a64289b0184c865"
+"benchmarks/profile_pyramid_efficiency_cuda.jl" = "46bb00a53dddfbbbb544b18507e251681716ab4fc71f230cd61c9913188d659c"
+"test/geometric_slopes_numerics.jl" = "656c8aa4968f41fb6cf989e64a631e0aed0b0d4cbf3600930575e6a174d3638f"
+"test/cuda/geometric_slopes.jl" = "03665dc002afd7931f47651576d5dab67e5f950518803c610befbdc7e3bfcde6"
+"test/cuda/kernel_completion.jl" = "455c65b78b9e8cd111bd3b7851feb4512d8e87f16d56a8f209d0c48edb231251"
+"test/ka_cpu_matrix.jl" = "bd61bd339084d150c6dff5e55b30eea02bc80db25a3753bc786b5e8ebbaf30f1"
+"test/runtests_cuda.jl" = "dda3941b9c934a025749862f7e59fe2f9c059775538460e82837e66f2112984f"
+"benchmarks/benchmark_geometric_slopes_scaling_cuda.jl" = "c291a9547a3564cc567709f6c585341ac0b02dabade8516422f80249a5fe096a"
+
+[full_plant_control]
+before_stream_mean_us = 140.759834
+before_stream_host_bytes = 7120
+before_captured_mean_us = 117.769698
+before_captured_host_bytes = 0
+after_stream_mean_us = 139.644562
+after_stream_host_bytes = 7120
+after_captured_mean_us = 117.67894
+after_captured_host_bytes = 0
+boundary = "Complete Gaussian DM → pupil OPD → Shack–Hartmann rate → CCD frame plant, 1000 completed frames in one fresh process per revision. CPU oracle before and after. Descriptive control; no small-effect significance claim."
+
+[density_protocol]
+boundary = "CUDA events around eight repeated kernels per graph; two rounds of ABBA/BAAB, eight events per block. CPU oracle before/after. One process each for unrestricted pilot and final selection."
+pilot_source_sha256 = "ff6114741efa3c6317488f6527d96baa2c7b52194a88d9de6aa672ccbcaf9802"
+final_source_sha256 = "2dfa0bbc003be4040b6812fe783582a0413e436e7a5f4cc23360bd2361aa8dd7"
+
+[independent_review]
+scope = "Read-only independent source, benchmark, arithmetic and provenance review; no additional GPU runs."
+result = "No implementation blocker. Recomputed raw archive/source/manifest hashes, medians, paired speedups, density results, sample counts and validation totals. Corrected full plant boundary to include Shack–Hartmann rate and CCD frame. The density policy is a conservative measured region, not an optimal crossover."
+
+[baseline_source_sha256]
+"src/wfs/geometric_slopes.jl" = "c4d6279acc797ce0ea139a9f8209cdde7b6e82f167a3bdc2958972ae402d8f58"
+"ext/AdaptiveOpticsSimCUDAExt.jl" = "c2c87ad03082021c758c6568d17bac2a393013f23a6d9e924c29bc2536852a93"
+
+[telemetry]
+samples = 2653
+sm_mhz_range_campaign = [210, 1995]
+pstates_campaign = ["P0", "P2", "P3", "P5", "P8"]
+limitation = "Wholecampaign includes compilation/warmup/oracles; no conclusion ofstable clocksduringtiming."
+
+[[geometric]]
+pupil_resolution = 96
+lenslets_per_axis = 32
+pixels_per_subaperture = 3
+before_public_p50_us = [26.775, 27.1405, 26.82]
+after_public_p50_us = [26.4045, 26.585, 26.565]
+before_host_bytes = [544, 544, 544]
+after_host_bytes = [464, 464, 464]
+maximum_cpu_difference = 4.263256414560601e-14
+kernel_paired_geometric_speedup = [1.0107533266481035, 0.9964655631858449, 1.0011744025428937]
+serial_kernel_p50_us = [3.423999942242517, 3.392000053281663, 3.423999942242517]
+selected_kernel_p50_us = [3.392000053281663, 3.40799999776209, 3.423999942242517]
+
+[[geometric]]
+pupil_resolution = 128
+lenslets_per_axis = 32
+pixels_per_subaperture = 4
+before_public_p50_us = [27.872, 27.9225, 27.6615]
+after_public_p50_us = [27.467, 27.4465, 27.291]
+before_host_bytes = [544, 544, 544]
+after_host_bytes = [464, 464, 464]
+maximum_cpu_difference = 3.2862601528904634e-14
+kernel_paired_geometric_speedup = [1.0038243989851858, 1.0023675732427835, 0.999071069232179]
+serial_kernel_p50_us = [4.256000011082506, 4.288000127417035, 4.288000127417035]
+selected_kernel_p50_us = [4.256000011082506, 4.288000127417035, 4.288000127417035]
+
+[[geometric]]
+pupil_resolution = 160
+lenslets_per_axis = 32
+pixels_per_subaperture = 5
+before_public_p50_us = [29.511, 29.6155, 31.4135]
+after_public_p50_us = [30.196, 30.362, 29.6305]
+before_host_bytes = [544, 544, 544]
+after_host_bytes = [704, 704, 704]
+maximum_cpu_difference = 2.842170943040401e-14
+kernel_paired_geometric_speedup = [1.151742550605642, 1.1493506469538117, 1.1447302835149604]
+serial_kernel_p50_us = [5.760000021837186, 5.663999672833597, 5.663999672833597]
+selected_kernel_p50_us = [4.991999958292581, 4.927999725623522, 4.9599998419580515]
+
+[[geometric]]
+pupil_resolution = 512
+lenslets_per_axis = 32
+pixels_per_subaperture = 16
+before_public_p50_us = [101.36, 101.365, 102.151]
+after_public_p50_us = [49.773, 50.916, 49.974]
+before_host_bytes = [544, 544, 544]
+after_host_bytes = [704, 704, 704]
+maximum_cpu_difference = 4.973799150320701e-14
+kernel_paired_geometric_speedup = [6.688892429863015, 6.2678251746358224, 6.276040501826583]
+serial_kernel_p50_us = [66.81599916191772, 62.62399983825162, 62.6559994998388]
+selected_kernel_p50_us = [9.983999916585162, 9.983999916585162, 9.983999916585162]
+
+[[geometric]]
+pupil_resolution = 1024
+lenslets_per_axis = 32
+pixels_per_subaperture = 32
+before_public_p50_us = [7999.8855, 7999.7835, 8000.3385]
+after_public_p50_us = [141.921, 137.969, 142.3765]
+before_host_bytes = [848, 848, 848]
+after_host_bytes = [704, 704, 704]
+maximum_cpu_difference = 9.237055564881302e-14
+kernel_paired_geometric_speedup = [17.403632900543865, 17.502958229690634, 17.507539659907533]
+serial_kernel_p50_us = [421.72797839157283, 420.19199463538826, 420.19199463538826]
+selected_kernel_p50_us = [24.22400029900018, 24.000000848900527, 24.000000848900527]
+
+[[pyramid]]
+resolution = 64
+strategy = "pupil_tilt"
+before_p50_us = [89.968, 89.8335, 90.785]
+after_p50_us = [88.651, 88.952, 88.8315]
+maximum_relative_cpu_error = 2.798161631289986e-07
+timed_gc_collections = 0
+
+[[pyramid]]
+resolution = 64
+strategy = "shifted_mask"
+before_p50_us = [85.075, 85.5855, 84.5935]
+after_p50_us = [84.989, 85.08, 83.862]
+maximum_relative_cpu_error = 1.892790237434383e-06
+timed_gc_collections = 0
+
+[[pyramid]]
+resolution = 256
+strategy = "pupil_tilt"
+before_p50_us = [7996.739, 8000.084, 7997.8385]
+after_p50_us = [406.6925, 406.326, 405.3]
+maximum_relative_cpu_error = 2.5834336270236236e-07
+timed_gc_collections = 0
+
+[[pyramid]]
+resolution = 256
+strategy = "shifted_mask"
+before_p50_us = [245.5, 247.1485, 246.7825]
+after_p50_us = [245.986, 244.854, 243.571]
+maximum_relative_cpu_error = 6.211183062987402e-06
+timed_gc_collections = 0
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 8
+pixels_per_subaperture = 5
+serial_p50_us = 5.247999979474116
+selected_p50_us = 4.351999905338744
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 8
+pixels_per_subaperture = 16
+serial_p50_us = 39.67999873566441
+selected_p50_us = 8.320000233652536
+maximum_cpu_difference = 1.4432899320127035e-15
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 16
+pixels_per_subaperture = 5
+serial_p50_us = 5.375999990064884
+selected_p50_us = 4.4159999106341274
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 16
+pixels_per_subaperture = 16
+serial_p50_us = 62.9760033916682
+selected_p50_us = 8.447999789495952
+maximum_cpu_difference = 2.55351295663786e-15
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 32
+pixels_per_subaperture = 5
+serial_p50_us = 5.632000011246419
+selected_p50_us = 4.991999958292581
+maximum_cpu_difference = 3.3306690738754696e-16
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 32
+pixels_per_subaperture = 16
+serial_p50_us = 64.12799848476425
+selected_p50_us = 10.495999958948232
+maximum_cpu_difference = 2.55351295663786e-15
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 64
+pixels_per_subaperture = 5
+serial_p50_us = 5.632000011246419
+selected_p50_us = 14.207999811333138
+maximum_cpu_difference = 3.3306690738754696e-16
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 64
+pixels_per_subaperture = 16
+serial_p50_us = 65.05400233436376
+selected_p50_us = 32.12799856555648
+maximum_cpu_difference = 2.55351295663786e-15
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 128
+pixels_per_subaperture = 5
+serial_p50_us = 5.888000032427954
+selected_p50_us = 45.69600059767254
+maximum_cpu_difference = 4.440892098500626e-16
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 128
+pixels_per_subaperture = 16
+serial_p50_us = 67.4559996696189
+selected_p50_us = 113.27999527566135
+maximum_cpu_difference = 2.55351295663786e-15
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 256
+pixels_per_subaperture = 5
+serial_p50_us = 15.231999896059278
+selected_p50_us = 177.98399494495243
+maximum_cpu_difference = 4.440892098500626e-16
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 256
+pixels_per_subaperture = 16
+serial_p50_us = 605.695997364819
+selected_p50_us = 383.3599912468344
+maximum_cpu_difference = 3.885780586188048e-15
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 32
+pixels_per_subaperture = 32
+serial_p50_us = 415.42400140315294
+selected_p50_us = 24.704000679776073
+maximum_cpu_difference = 8.43769498715119e-15
+
+[[density]]
+policy = "pilot"
+lenslets_per_axis = 128
+pixels_per_subaperture = 32
+serial_p50_us = 426.3680020812899
+selected_p50_us = 323.4559844713658
+maximum_cpu_difference = 8.43769498715119e-15
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 8
+pixels_per_subaperture = 5
+serial_p50_us = 5.247999979474116
+selected_p50_us = 4.351999905338744
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 8
+pixels_per_subaperture = 16
+serial_p50_us = 39.808001019991934
+selected_p50_us = 8.320000233652536
+maximum_cpu_difference = 1.4432899320127035e-15
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 16
+pixels_per_subaperture = 5
+serial_p50_us = 5.375999990064884
+selected_p50_us = 4.351999905338744
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 16
+pixels_per_subaperture = 16
+serial_p50_us = 63.104002038016915
+selected_p50_us = 8.447999789495952
+maximum_cpu_difference = 2.55351295663786e-15
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 32
+pixels_per_subaperture = 5
+serial_p50_us = 5.632000011246419
+selected_p50_us = 4.991999958292581
+maximum_cpu_difference = 3.3306690738754696e-16
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 32
+pixels_per_subaperture = 16
+serial_p50_us = 64.25599713111296
+selected_p50_us = 10.495999958948232
+maximum_cpu_difference = 2.55351295663786e-15
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 64
+pixels_per_subaperture = 5
+serial_p50_us = 5.632000011246419
+selected_p50_us = 5.632000011246419
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 64
+pixels_per_subaperture = 16
+serial_p50_us = 64.25599713111296
+selected_p50_us = 64.38399577746168
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 128
+pixels_per_subaperture = 5
+serial_p50_us = 5.760000021837186
+selected_p50_us = 5.760000021837186
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 128
+pixels_per_subaperture = 16
+serial_p50_us = 67.4559996696189
+selected_p50_us = 67.4559996696189
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 256
+pixels_per_subaperture = 5
+serial_p50_us = 15.040000562294153
+selected_p50_us = 14.976000784372445
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 256
+pixels_per_subaperture = 16
+serial_p50_us = 592.8959872107953
+selected_p50_us = 590.9760075155646
+maximum_cpu_difference = 0.0
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 32
+pixels_per_subaperture = 32
+serial_p50_us = 423.2960054650903
+selected_p50_us = 24.704000679776073
+maximum_cpu_difference = 8.43769498715119e-15
+
+[[density]]
+policy = "final"
+lenslets_per_axis = 128
+pixels_per_subaperture = 32
+serial_p50_us = 423.1040074955672
+selected_p50_us = 423.1040074955672
+maximum_cpu_difference = 0.0
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-before1.toml.gz"
+sha256 = "3daa57de9c9ae31414abb70b32368276319bb7e13ffc1dd90e7cf83dadf3959c"
+uncompressed_sha256 = "00dc680c42487a6089d1bcf8858dba7cef5ca4fd48f3f6345c89937a98728861"
+uncompressed_bytes = 76879
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/pyramid-before1.toml.gz"
+sha256 = "10df59e1895db4e3f7322e67599842606820a8214b1529e7933db86d3cc31196"
+uncompressed_sha256 = "b2a64207dc21ee4b3b20cb085e9f56f4df1f488fa631a41f6573527e73934ccd"
+uncompressed_bytes = 11123
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-before2.toml.gz"
+sha256 = "ce7734a05095dc6050774e9e0f3871624cb518d55fb9b6a55a6efd189fde0e2a"
+uncompressed_sha256 = "c2a86ed530f7ac75a7cd8258ec2aacb3618ea9f227a0b46c190d126302d5f602"
+uncompressed_bytes = 76950
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/pyramid-before2.toml.gz"
+sha256 = "8db62acbd5579caad28abe8e512366454acec52cd7a21e212da747bcf285e4cf"
+uncompressed_sha256 = "e6c64f5ec3435b5a82674ff5ea8ea933bcf6c77c0692edb1bef3b68aef9ebf94"
+uncompressed_bytes = 11125
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-before3.toml.gz"
+sha256 = "fe0070ec2d8c76b395a585e72eb5b887310decb5954da1b7768e620641b95313"
+uncompressed_sha256 = "d97dbd4a3a3da8fbc3f3d0b1b2289438249f3568bc48656ed78c7e2a637357bf"
+uncompressed_bytes = 76878
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/pyramid-before3.toml.gz"
+sha256 = "e9766c56283c736b2a08bbdbf0e3961ab6025e7bcb93e7bbc00009163770c53c"
+uncompressed_sha256 = "04255db5b742119f70a778177274a3e721c14b0efd48999bad64b670cdacd6fc"
+uncompressed_bytes = 11127
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-after1.toml.gz"
+sha256 = "30780432c85fbeb040b8b81c830abdd738ea347208f7655949aded262de98a8f"
+uncompressed_sha256 = "445bd6411d8f102ed1d064bb665a6b5e5cf5def1cf08cc4d84f5abf110be516a"
+uncompressed_bytes = 76869
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/pyramid-after1.toml.gz"
+sha256 = "9ee2665b69a7f1ef67b06a23404eaae299fe772efda88a94b0a1a3f84c7b8e87"
+uncompressed_sha256 = "ed9cb2c2ffb19a71d72064fc74fb195f3c9a443f46d813d24e6827306b274ac6"
+uncompressed_bytes = 11120
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-after2.toml.gz"
+sha256 = "003c7d2f77a0c0ee786acc56bc139faef8bc0626b7f024ea231f018889ee9b52"
+uncompressed_sha256 = "17e26ef05d21be85c5a07984d3d847f2d34a0e109b8e360e90737d11e14548bb"
+uncompressed_bytes = 76756
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/pyramid-after2.toml.gz"
+sha256 = "ac8789fbdb68ccf16acf3e846b0904f192c1878ee6bd6caa07238a4ea1ff9770"
+uncompressed_sha256 = "a044c89c6e286452d975e8e456fda7fec215c9a18afec2022e0ef0dbad835380"
+uncompressed_bytes = 11120
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-after3.toml.gz"
+sha256 = "5776e8bd958fff171e1c5b244b93c03182dcafa20a37f635571db83eb7b00159"
+uncompressed_sha256 = "086f8ca6bbdb3d3da66b9f0e40f5a9e4dc275725d659d58171165b8a3e06c4d4"
+uncompressed_bytes = 76719
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/pyramid-after3.toml.gz"
+sha256 = "2cea00a95ee9bc0065acf78136395bb98fcfa72f0ed32b352596fd092aae682a"
+uncompressed_sha256 = "734f9df4674d441aa4ac97322720f3bd5dc53dbc1db7c3a042df2dc0610b55f4"
+uncompressed_bytes = 11125
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/telemetry.csv.gz"
+sha256 = "7aa0a0c761ff727857b349633f96e92d36a477e7c6f134349532da285edf17f2"
+uncompressed_sha256 = "02698e4cac21c31854783ee36ec14947e8174399805f5b2a0aae864f5a92af2d"
+uncompressed_bytes = 201754
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/run_campaign.py.gz"
+sha256 = "d01638fd030bebe451d5b6cd33a97b5640f01962ced68ea03440a83b19a0fa33"
+uncompressed_sha256 = "327f1a578b2d634618195b9c222f5e7ac56f07847e695ccf7b837900f5d9039b"
+uncompressed_bytes = 2278
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/persist.py.gz"
+sha256 = "9099d315dfbf9e34e5644a5bd491ef311111a36f340e18b73926f4d38fd05777"
+uncompressed_sha256 = "f6d2e8d2dbf8d96e45721426aaae6f2256e3eb1b2f4455295df6d9059f788a47"
+uncompressed_bytes = 20114
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/campaign-source-hashes.json.gz"
+sha256 = "144928f58383d9c0cb6ae3b7a46dcb05dd5b4daba5446884c2712ea8a9bb8d7f"
+uncompressed_sha256 = "a18d25c92ffc162950094583ba83d26aac73e5edfadeb47ba76fc4ad7d702b16"
+uncompressed_bytes = 456
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/executor-comparison.md.gz"
+sha256 = "a0a03b90d418d775c999713b8110f43a671b473ca8ab246c94a5a0a53cedef61"
+uncompressed_sha256 = "18f7b854c18c0e4a0b74fd75a6c0b52a3f1439796b431a38224890fbd31874f5"
+uncompressed_bytes = 9836
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/cuda-final-focused.log.gz"
+sha256 = "1b0be0ffdea9f9225f4b2a1c9dc008f9655fdd733f80340c50a2d18bc61c19a1"
+uncompressed_sha256 = "bfd715886974b19fc99736c3ff0d9c5c8558d96eee74c88f9bef3264f98e2527"
+uncompressed_bytes = 452
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/ka-cpu-final.log.gz"
+sha256 = "afbcede1fbd12f8189087a3bc03c28de4666e8ce77854f70b3a944b992798fff"
+uncompressed_sha256 = "1727ccf0c59b5da1294dea15601ff0bc6177fca0e565cea3eb4c6c5846f31eb8"
+uncompressed_bytes = 106
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/cuda-completion-capture.log.gz"
+sha256 = "7fbd43709c7ac3557c80cc68e32241f9079621e806ce0c971f63ae57d76f36f7"
+uncompressed_sha256 = "9f9d9ea88f35e362ebda2fcebee74dfaac5428bf90e8cf96c42c5af27591787b"
+uncompressed_bytes = 2600
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/plant-before.log.gz"
+sha256 = "b7350f5c4da8a10a984e4ef40d7bccda5d703271213c97475b1f4d0c76f9683a"
+uncompressed_sha256 = "46e27ef40181ff8e4a43dde8f98c44195202ac3d36e91b9a0b483888d0f765f5"
+uncompressed_bytes = 941
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/plant-after.log.gz"
+sha256 = "0c3ad51589443e6ccddc82bcf64f454126e261d0e0d904619cd6721c6f41e69d"
+uncompressed_sha256 = "517232ec0e9eaed70b562469858dfc91cdd2589820384b92d360a0001bd111b7"
+uncompressed_bytes = 940
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-scaling-pilot.toml.gz"
+sha256 = "6f8cb968d863dad3ff7ed4079a8dc9b36a9d47695dcc693612421fc9895687b1"
+uncompressed_sha256 = "446f1ab9ae6255df9d4559c20f3f8f0a8402240943e34ac718d28f899ba7335e"
+uncompressed_bytes = 32048
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-scaling-final.toml.gz"
+sha256 = "0876bc29d45c0af0acc77e7833909361ad908a96104873199cf2b3d99f511bd9"
+uncompressed_sha256 = "1c460dbc7e103f13572c58fcbde3032c46f1599016a4238d7a1f5798e1f38d5a"
+uncompressed_bytes = 31744
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-scaling-pilot-source.jl.gz"
+sha256 = "04125f7a6cdfc4614056923d401f0e644da67edd01706ba45430c7f67a1d2aeb"
+uncompressed_sha256 = "ff6114741efa3c6317488f6527d96baa2c7b52194a88d9de6aa672ccbcaf9802"
+uncompressed_bytes = 13652
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/geometric-scaling-pilot-source-hashes.json.gz"
+sha256 = "4ed58527f061dbba07a75c1d7a190adcfa9d19ddf455581cbddfb02ce449d4cf"
+uncompressed_sha256 = "0499bc0f0168cbacc4224715d0b27c110d70de74006966fb1cdf70caee542b65"
+uncompressed_bytes = 456
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/finish_validation.py.gz"
+sha256 = "bb03459afd0ef6fd2f9f5e36c7bf1429eb8f5f6177849da4d622242fc1b4c597"
+uncompressed_sha256 = "9f5c43d741ec56c36df7df9d42128384fe3fec5d541c97a964706cde6aa62ac6"
+uncompressed_bytes = 1521
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/campaign-final.log.gz"
+sha256 = "a937690be6c7a5c0e1045e3a8c95456f992f7a123f0a36e57fac4449d057ee2a"
+uncompressed_sha256 = "1988d2802170d34347063b8dc6520b1785cfce9e2019c446fc494dd57e81557c"
+uncompressed_bytes = 258
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-cuda-completion-slopes/finish-validation.log.gz"
+sha256 = "7e851fd3d5eec4efe6aa330c398cd891e9705730bc53467edb298dbfc0152c25"
+uncompressed_sha256 = "f208141d93b87b4a70d06f0014ce6493a018ba17b9ae844896dadec4f2432229"
+uncompressed_bytes = 120
