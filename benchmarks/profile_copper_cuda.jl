@@ -64,7 +64,7 @@ function node_samples!(graph, repeats, warmups, captured::Bool)
             end
         end
         for (index, name) in enumerate(names)
-            owner = prepared_graph_node(graph, name)
+            owner = AG.prepared_graph_node(graph, name)
             started = time_ns()
             BACKENDS._with_prepared_device_execution_context(graph.context) do
                 CUDA.record(start_event)
