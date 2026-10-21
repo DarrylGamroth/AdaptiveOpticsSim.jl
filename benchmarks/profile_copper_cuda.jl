@@ -126,11 +126,13 @@ function main(args)
         result[label] = complete_samples!(system.graph, repeats, warmups)
         if get(ENV, "AOS_COPPER_PROFILE", "0") == "1"
             println("Untimed CUDA profile: ", label)
-            CUDA.@profile begin
+            profile = CUDA.@profile begin
                 for _ in 1:4
                     step_graph!(system.graph)
                 end
             end
+            show(stdout, profile)
+            println()
         end
         system = nothing
         GC.gc(true)
