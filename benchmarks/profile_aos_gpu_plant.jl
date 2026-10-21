@@ -99,7 +99,11 @@ function _pdm_command()
     return command
 end
 
-function _plant_definition(command, uncompensated_opd, coordinates; name::Symbol)
+function _plant_definition(command, uncompensated_opd, coordinates;
+    name::Symbol,
+    pupil_resolution::Int=_PUPIL_RESOLUTION,
+    lenslets_per_axis::Int=_LENSLETS_PER_AXIS,
+    pixels_per_lenslet::Int=_PIXELS_PER_LENSLET)
     command_schema = "org.adaptiveopticssim.profile.pdm-command.f32/1"
     surface_schema = "org.adaptiveopticssim.profile.dm-surface-opd.f32/1"
     pupil_schema = "org.adaptiveopticssim.profile.pupil-opd.f32/1"
@@ -109,7 +113,7 @@ function _plant_definition(command, uncompensated_opd, coordinates; name::Symbol
         (
             gaussian_deformable_mirror_surface_node(
                 :dm;
-                resolution=_PUPIL_RESOLUTION,
+                resolution=pupil_resolution,
                 telescope_diameter_m=8.0f0,
                 actuator_count=_ACTUATOR_COUNT,
                 influence_width=0.18f0,
@@ -120,17 +124,17 @@ function _plant_definition(command, uncompensated_opd, coordinates; name::Symbol
             ),
             pupil_opd_composition_node(
                 :pupil;
-                resolution=_PUPIL_RESOLUTION,
+                resolution=pupil_resolution,
                 uncompensated_opd_schema=pupil_schema,
                 surface_opd_schema=surface_schema,
                 pupil_opd_schema=pupil_schema,
             ),
             shack_hartmann_rate_node(
                 :shwfs;
-                resolution=_PUPIL_RESOLUTION,
+                resolution=pupil_resolution,
                 telescope_diameter_m=8.0f0,
-                n_lenslets=_LENSLETS_PER_AXIS,
-                n_pix_subap=_PIXELS_PER_LENSLET,
+                n_lenslets=lenslets_per_axis,
+                n_pix_subap=pixels_per_lenslet,
                 pixel_scale_arcsec=0.2f0,
                 source_wavelength_m=750.0f-9,
                 source_photon_irradiance_m2_s=2.0f6,
@@ -139,8 +143,8 @@ function _plant_definition(command, uncompensated_opd, coordinates; name::Symbol
             ),
             ccd_detector_acquisition_node(
                 :detector;
-                rows=_PUPIL_RESOLUTION,
-                columns=_PUPIL_RESOLUTION,
+                rows=lenslets_per_axis * pixels_per_lenslet,
+                columns=lenslets_per_axis * pixels_per_lenslet,
                 pixel_scale_arcsec=0.2f0,
                 wavelength_m=750.0f-9,
                 exposure_duration_s=1.0f-3,

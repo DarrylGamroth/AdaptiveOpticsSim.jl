@@ -123,6 +123,43 @@ in fresh processes and inspect the complete plant as well as kernel timing.
 The [local comparison](../benchmarks/results/platform/2026-10-21-sh-pupil-workgroups.toml)
 records source hashes, raw samples, launch geometry, and dependency constraints.
 
+Set `AOS_SH_MATRIX=1` to compare `(44,8,1,1)` and the unchanged control across
+pupil resolutions and lenslet counts. `AOS_SH_RESULTS` becomes a filename prefix;
+each case appends `-N<resolution>-L<lenslets>.toml`. Repeat in fresh processes.
+The maintained 64-square, 8-lenslet example can also be selected directly:
+
+~~~bash
+julia --startup-file=no --project=test/cuda -e \
+  'include("benchmarks/benchmark_sh_pupil_workgroups_cuda.jl"); benchmark_sh_workgroups(; pupil_resolution=64, lenslets_per_axis=8, groups=_SH_MATRIX_GROUPS)' cuda
+~~~
+
+For pupil occupancy counters, profile one warmed node in a captured plant:
+
+~~~bash
+AOS_SH_OCCUPANCY_GROUP=default ncu --clock-control none --cache-control none \
+  --profile-from-start off --graph-profiling node --kernel-name-base demangled \
+  --kernel-name 'regex:gpu_sh_explicit_pupil_stack_kernel_' --launch-count 1 \
+  --set basic --section Occupancy \
+  julia --startup-file=no --project=test/cuda \
+  benchmarks/profile_sh_pupil_occupancy_cuda.jl cuda
+~~~
+
+Repeat with `AOS_SH_OCCUPANCY_GROUP=44x8`. Achieved occupancy measures active
+warps during this kernel; it does not measure whole-plant GPU utilization.
+Keep profiler durations separate from unprofiled timing results. The
+[size matrix and occupancy results](../benchmarks/results/platform/2026-10-21-sh-pupil-matrix.toml)
+retain the default: the candidate regresses several geometries despite its
+pad-44 kernel improvement.
+
+For execution architecture, use `profile_aos_gpu_plant.jl cuda both` with Nsight
+Systems, `--capture-range=cudaProfilerApi`, `--capture-range-end=repeat:2:defer`,
+and `--cuda-graph-trace=node`. Compare host submissions, kernel activity,
+transfers, and gaps between checked-stream and captured execution. Node tracing
+perturbs timing; profiler start/stop and report generation can dominate the
+driver's printed elapsed time. Use the captured activity intervals for timeline
+analysis and separate unprofiled runs for latency claims. The size-matrix report
+also records this architecture comparison and its raw traces.
+
 Qualify a KA upgrade separately from workgroup changes. Registered CUDA 6.4.2
 constrains KA to 0.9; a development CUDA tree with the same version string can
 have different compatibility and allocation behavior. Record exact source

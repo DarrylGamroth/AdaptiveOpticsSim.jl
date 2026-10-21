@@ -6,6 +6,9 @@ Compare CUDA workgroups for the existing 352-square Shack--Hartmann plant.
 
 Set AOS_SH_RESULTS to a TOML output path. AOS_SH_SAMPLES (default 256) and
 AOS_SH_ROUNDS (default 4) control each half of an ABBA/BAAB comparison.
+Set AOS_SH_MATRIX=1 to compare the default launch, an unchanged control, and
+(44, 8, 1, 1) across representative pupil and lenslet dimensions. In matrix
+mode AOS_SH_RESULTS is a filename prefix; each case adds -N<resolution>-L<lenslets>.toml.
 Preparation, compilation, input changes, oracles, event allocation and result
 serialization stay outside timing. This is concurrency-one closed-loop service
 measurement, not a fixed-rate deadline or rare-tail qualification.
@@ -18,6 +21,7 @@ import CUDA
 using TOML
 using LinearAlgebra
 using Statistics
+using FixedSizeArrays: FixedSizeVectorDefault
 using Test: @test, @inferred
 
 include("profile_aos_gpu_plant.jl")
@@ -28,6 +32,12 @@ const _SH_WORKGROUP = Ref{Union{Nothing,NTuple{4,Int}}}(nothing)
 const _SH_SAMPLES = parse(Int, get(ENV, "AOS_SH_SAMPLES", "256"))
 const _SH_ROUNDS = parse(Int, get(ENV, "AOS_SH_ROUNDS", "4"))
 const _SH_KERNEL_REPLAYS = 64
+const _SH_DEFAULT_GROUPS = (nothing, nothing, (32, 2, 1, 1), (32, 4, 1, 1),
+    (32, 8, 1, 1), (16, 8, 1, 1), (16, 16, 1, 1), (32, 16, 1, 1),
+    (44, 8, 1, 1), (44, 16, 1, 1), (8, 8, 2, 2))
+const _SH_MATRIX_GROUPS = (nothing, nothing, (44, 8, 1, 1))
+const _SH_MATRIX_CASES = ((128, 8), (256, 8), (256, 16), (352, 16), (384, 16),
+    (512, 16), (512, 32), (704, 32), (768, 32))
 
 struct SHWorkgroupBlock
     candidate::Int
@@ -180,7 +190,12 @@ function sh_pair!(records, fixtures, candidate, round, mode)
     end
 end
 
-function benchmark_sh_workgroups()
+function benchmark_sh_workgroups(;
+    pupil_resolution::Int=_PUPIL_RESOLUTION,
+    lenslets_per_axis::Int=_LENSLETS_PER_AXIS,
+    pixels_per_lenslet::Int=div(pupil_resolution, lenslets_per_axis),
+    groups=_SH_DEFAULT_GROUPS,
+    output::AbstractString=get(ENV, "AOS_SH_RESULTS", "/tmp/aos-sh-workgroups.toml"))
     _SH_SAMPLES >= 100 || error("AOS_SH_SAMPLES must be at least 100")
     _SH_ROUNDS > 0 || error("AOS_SH_ROUNDS must be positive")
     CUDA.functional() || error("CUDA is not functional")
@@ -188,27 +203,27 @@ function benchmark_sh_workgroups()
     BLAS.set_num_threads(1)
     Backends.set_fft_provider_threads!(1)
     command, coordinates = _pdm_command(), _actuator_coordinates()
-    uncompensated = zeros(Float32, _PUPIL_RESOLUTION, _PUPIL_RESOLUTION)
+    uncompensated = zeros(Float32, pupil_resolution, pupil_resolution)
     cpu = prepare_algorithm_graph(_plant_definition(command, uncompensated,
-        coordinates; name=:sh_workgroup_cpu))
+        coordinates; name=:sh_workgroup_cpu, pupil_resolution, lenslets_per_axis,
+        pixels_per_lenslet))
     _complete_step!(cpu)
     reference = copy(graph_output(cpu, Val(:frame)))
     gpu_command, gpu_coordinates = CUDA.CuArray(command), CUDA.CuArray(coordinates)
     gpu_opd = CUDA.CuArray(uncompensated)
     target = Backends.compute_device(gpu_command)
     definition = _plant_definition(gpu_command, gpu_opd, gpu_coordinates;
-        name=:sh_workgroup_cuda)
-    groups = [nothing, nothing, (32, 2, 1, 1), (32, 4, 1, 1), (32, 8, 1, 1),
-        (16, 8, 1, 1), (16, 16, 1, 1), (32, 16, 1, 1),
-        (44, 8, 1, 1), (44, 16, 1, 1), (8, 8, 2, 2)]
+        name=:sh_workgroup_cuda, pupil_resolution, lenslets_per_axis,
+        pixels_per_lenslet)
     first_fixture = sh_fixture(definition, target, first(groups), reference)
-    fixtures = Vector{typeof(first_fixture)}(undef, length(groups))
-    fixtures[1] = first_fixture
+    builder = Vector{typeof(first_fixture)}(undef, length(groups))
+    builder[1] = first_fixture
     for index in 2:length(groups)
         println("prepare_workgroup=$(groups[index])")
         flush(stdout)
-        fixtures[index] = sh_fixture(definition, target, groups[index], reference)
+        builder[index] = sh_fixture(definition, target, groups[index], reference)
     end
+    fixtures = FixedSizeVectorDefault(builder)
     # Compile the exact measurement loops before any recorded block.
     for fixture in fixtures
         sh_plant_times!(zeros(2), fixture.graph)
@@ -272,6 +287,8 @@ function benchmark_sh_workgroups()
         "julia" => string(VERSION), "cuda_jl" => string(Base.pkgversion(CUDA)),
         "kernel_abstractions" => string(Base.pkgversion(KA)),
         "device" => CUDA.name(CUDA.device()), "runtime" => string(CUDA.runtime_version()),
+        "pupil_resolution" => pupil_resolution, "lenslets_per_axis" => lenslets_per_axis,
+        "pixels_per_lenslet" => pixels_per_lenslet,
         "samples_per_plant_block" => _SH_SAMPLES, "rounds" => _SH_ROUNDS,
         "compute_threads" => Threads.nthreads(:default),
         "interactive_threads" => Threads.nthreads(:interactive),
@@ -284,7 +301,6 @@ function benchmark_sh_workgroups()
         "kernel_boundary" => "CUDA events around one graph of 64 repeated pupil kernels; graph scheduling overhead amortized per kernel",
         "plant_boundary" => "host time_ns around complete captured plant step including wait; concurrency one",
         "oracles" => "CPU complete frames before/after and three changed commands; raw pupil stack bitwise equal to default")
-    output = get(ENV, "AOS_SH_RESULTS", "/tmp/aos-sh-workgroups.toml")
     open(output, "w") do io
         TOML.print(io, metadata)
         for (index, group) in enumerate(groups)
@@ -318,4 +334,36 @@ function benchmark_sh_workgroups()
     return nothing
 end
 
-benchmark_sh_workgroups()
+function sh_matrix_output(prefix::AbstractString, pupil_resolution::Int,
+    lenslets_per_axis::Int)
+    stem, extension = splitext(prefix)
+    base = extension == ".toml" ? stem : prefix
+    return "$base-N$pupil_resolution-L$lenslets_per_axis.toml"
+end
+
+function benchmark_sh_workgroup_matrix(;
+    output_prefix::AbstractString=get(ENV, "AOS_SH_RESULTS", "/tmp/aos-sh-workgroups.toml"))
+    CUDA.synchronize()
+    GC.gc(true)
+    for (pupil_resolution, lenslets_per_axis) in _SH_MATRIX_CASES
+        println("case_pupil_resolution=$pupil_resolution lenslets_per_axis=$lenslets_per_axis")
+        flush(stdout)
+        benchmark_sh_workgroups(; pupil_resolution, lenslets_per_axis,
+            groups=_SH_MATRIX_GROUPS,
+            output=sh_matrix_output(output_prefix, pupil_resolution, lenslets_per_axis))
+        # The completed case has returned without retaining its graph owners.
+        # Collection and pool reclamation precede preparation of the next case.
+        CUDA.synchronize()
+        GC.gc(true)
+        CUDA.reclaim()
+    end
+    return nothing
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    if get(ENV, "AOS_SH_MATRIX", "0") == "1"
+        benchmark_sh_workgroup_matrix()
+    else
+        benchmark_sh_workgroups()
+    end
+end

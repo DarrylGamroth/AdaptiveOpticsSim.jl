@@ -79,7 +79,7 @@ environments_modified = false
 
 [commands]
 environment = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 AOS_SH_SAMPLES=256 AOS_SH_ROUNDS=4 AOS_SH_AFFINITY=\"CPU2; monitor CPU6\""
-benchmark = "AOS_SH_RESULTS=/tmp/run1.toml taskset -c2 julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/benchmark_sh_pupil_workgroups_cuda.jl cuda"
+benchmark = "AOS_SH_RESULTS=/tmp/run1.toml taskset -c 2 julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/benchmark_sh_pupil_workgroups_cuda.jl cuda"
 resolver = "JULIA_PKG_PRECOMPILE_AUTO=0 julia --startup-file=no --project=/tmp/aos-ka-resolver-0tfn_l3c -e 'using Pkg; Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true; Pkg.resolve()'"
 telemetry = "nvidia-smi --query-gpu=clocks.current.sm,clocks.current.memory,pstate,temperature.gpu,power.draw,clocks_event_reasons.active --format=csv,noheader,nounits"
 raw_logs = "/tmp/aos-sh-workgroups-20261021"
