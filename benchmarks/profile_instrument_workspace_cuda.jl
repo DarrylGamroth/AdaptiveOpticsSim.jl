@@ -1,4 +1,5 @@
-# Run with one unchanged application environment from adaptive-optics-simulations.
+# Run with one instrument application environment; use an isolated environment
+# for unreleased source validation, preserving the registered application pins.
 # This is a review harness: no transport, RTC service, or dependency mutation.
 using AdaptiveOpticsSim
 using AdaptiveOpticsSim.AlgorithmGraphs
@@ -102,7 +103,8 @@ function measure(f, value)
     for _ in 1:32
         f(value)
     end
-    bytes = @allocated f(value)
+    allocation_samples = [@allocated(f(value)) for _ in 1:16]
+    bytes = maximum(allocation_samples)
     memory_before = CUDA.used_memory()
     times = zeros(UInt64, SAMPLES)
     gc_count = 0
@@ -114,7 +116,9 @@ function measure(f, value)
         gc_count += Base.GC_Diff(Base.gc_num(), gc_before).pause
     end
     memory_after = CUDA.used_memory()
-    return (; samples_ns=times, p50_ns=median(times), host_bytes=bytes,
+    return (; samples_ns=times, p50_ns=median(times), p90_ns=quantile(times, 0.9),
+        minimum_ns=minimum(times), maximum_ns=maximum(times),
+        host_bytes=bytes, allocation_samples,
         timed_gc_collections=gc_count, device_used_bytes_before=memory_before,
         device_used_bytes_after=memory_after)
 end

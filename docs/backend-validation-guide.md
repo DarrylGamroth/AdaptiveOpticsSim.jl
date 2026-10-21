@@ -284,6 +284,9 @@ Float32 and Float64.
 julia --startup-file=no --project=test/cuda test/cuda/hil_boundary.jl
 ~~~
 
+See the [full-instrument CUDA capture validation](../benchmarks/results/platform/2026-10-21-instrument-capture-validation.md)
+for measured Classic, Copper and GPI parity, staging allocations and service times.
+
 Use `algorithm-graphs` for functional graph coverage and the generic backend
 workload for measured frame service time:
 

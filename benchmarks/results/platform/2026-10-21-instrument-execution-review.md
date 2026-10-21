@@ -2,6 +2,8 @@
 
 2026-10-21. Review of the unchanged `adaptive-optics-simulations` application environments and their local REVOLT Classic, REVOLT Copper and GPI2 instrument checkouts. No production implementation, dependency, calibration, transport or RTC-service changes were made. The new review harness runs against each existing application environment.
 
+Follow-up: [CUDA capture and HIL validation](2026-10-21-instrument-capture-validation.md) records the subsequent implementation changes, full-size parity checks, allocation removal and repeated benchmarks.
+
 ## Findings
 
 1. **The scenario launchers select stream execution, not CUDA Graph replay.** All three constructors default to `StreamGraphExecution`; `scripts/scenario.jl` forwards no execution policy. Classic/Copper explicit capture works. GPI2 explicit capture rejects its custom command-routing owner; frame-layout also lacks capture qualification. An explicit application execution setting plus instrument qualification is the most direct implementation improvement.
