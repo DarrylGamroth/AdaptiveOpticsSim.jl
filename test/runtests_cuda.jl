@@ -8,3 +8,5 @@ include("cuda/prepared_wait.jl")
 include("cuda/optical_quantities.jl")
 include("cuda/geometric_slopes.jl")
 include("cuda/kernel_completion.jl")
+
+include("cuda/hil_boundary.jl")

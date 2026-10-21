@@ -216,6 +216,24 @@ end
     return nothing
 end
 
+function Backends._copy_prepared_device_buffer!(
+    context::CUDAPreparedDeviceExecutionContext,
+    destination::Array{T,N}, source::CUDA.CuArray{T,N,CUDA.DeviceMemory},
+) where {T,N}
+    isbitstype(T) || return copyto!(destination, source)
+    size(destination) == size(source) || throw(AdaptiveOpticsSim.DimensionMismatchError(
+        "prepared CUDA host copies require equal array shapes",
+    ))
+    # The HIL owner has completed graph work and retains both exact buffers
+    # through its final prepared-stream wait. Avoid copyto!'s two extra
+    # cooperative waits; pointer conversion still tracks CUDA array use.
+    GC.@preserve destination source begin
+        unsafe_copyto!(pointer(destination), pointer(source), length(source);
+            stream=context.stream, async=true)
+    end
+    return destination
+end
+
 # The prepared captured stream has one submission owner and no host callbacks.
 # Observe completion cooperatively before the public synchronization call.
 # CUDA 6.4.2's cooperative wait allocates even for an already-complete stream;

@@ -333,6 +333,14 @@ end
     ::_HostPreparedDeviceExecutionContext,
 ) = nothing
 
+# The caller enters the prepared context and owns completion and buffer lifetime.
+# Backends may enqueue a copy without the array API's additional host waits.
+@inline function _copy_prepared_device_buffer!(
+    ::_AbstractPreparedDeviceExecutionContext, destination, source,
+)
+    return copyto!(destination, source)
+end
+
 # Captured execution may select a backend completion path that avoids host-side
 # event/task bookkeeping. The default preserves ordinary stream semantics;
 # accelerator extensions may specialize this only for capture-qualified work,

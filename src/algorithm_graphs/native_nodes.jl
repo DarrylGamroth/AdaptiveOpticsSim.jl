@@ -1,3 +1,5 @@
+import ..Calibration: _combine_basis_async!
+
 struct ModalOPDExpansionNode{T<:AbstractFloat} end
 
 """Construction and graph-rebuild values for one modal OPD expansion node."""
@@ -151,6 +153,36 @@ end
 
 @inline function step_graph_node!(owner::_ModalOPDExpansionOwner)
     combine_basis!(owner.opd, owner.plan, owner.coefficients)
+    return nothing
+end
+
+@inline _modal_opd_expansion_capture_capability(style) = GraphNodeCaptureUnsupported()
+@inline _modal_opd_expansion_capture_capability(
+    ::AcceleratorStyle{<:KernelAbstractions.GPU},
+) = GraphNodeCaptureSafe()
+
+@inline graph_node_capture_capability(owner::_ModalOPDExpansionOwner) =
+    _modal_opd_expansion_capture_capability(execution_style(owner.opd))
+
+@inline function _enqueue_modal_opd_expansion!(
+    ::GraphNodeCaptureSafe,
+    owner::_ModalOPDExpansionOwner,
+)
+    _combine_basis_async!(execution_style(owner.opd), owner.opd, owner.plan.basis,
+        owner.coefficients, owner.plan.pupil_support)
+    return nothing
+end
+
+@inline function _enqueue_modal_opd_expansion!(
+    ::GraphNodeCaptureUnsupported,
+    owner::_ModalOPDExpansionOwner,
+)
+    step_graph_node!(owner)
+    return nothing
+end
+
+@inline function enqueue_graph_node!(owner::_ModalOPDExpansionOwner)
+    _enqueue_modal_opd_expansion!(graph_node_capture_capability(owner), owner)
     return nothing
 end
 

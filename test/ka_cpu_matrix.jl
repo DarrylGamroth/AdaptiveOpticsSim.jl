@@ -843,6 +843,7 @@ end
         @test ka_cpu_close(ka_transfer, scalar_transfer)
 
         pupil = trues(4, 4)
+        pupil[1, 2] = false
         basis = reshape(collect(range(0.0, 1.0; length=32)), 4, 4, 2)
         coeffs = [0.25, -0.5]
         scalar_opd = Matrix{Float64}(undef, 4, 4)
@@ -854,10 +855,34 @@ end
         mark_ka_cpu_kernel!(:combine_basis_kernel!)
         @test ka_cpu_close(ka_opd, scalar_opd)
 
+        AdaptiveOpticsSim.Calibration._combine_basis_async!(
+            KA_CPU_STYLE, ka_opd, basis, coeffs, pupil)
+        Backends.synchronize_backend!(KA_CPU_STYLE)
+        @test ka_cpu_close(ka_opd, scalar_opd)
+        @test AlgorithmGraphs._modal_opd_expansion_capture_capability(KA_CPU_STYLE) isa
+            AlgorithmGraphs.GraphNodeCaptureUnsupported
+        cancelling_basis = ones(Float64, 4, 4, 2)
+        for coefficients in ([1.0, -1.0], [NaN, 0.0], [Inf, 0.0])
+            AdaptiveOpticsSim.Calibration._combine_basis_async!(
+                KA_CPU_STYLE, ka_opd, cancelling_basis, coefficients, pupil)
+            Backends.synchronize_backend!(KA_CPU_STYLE)
+            @test all(iszero, ka_opd[.!pupil])
+            if all(isfinite, coefficients)
+                @test all(iszero, ka_opd)
+            else
+                @test all(!isfinite, ka_opd[pupil])
+            end
+        end
+
         fill!(ka_opd, 1.0)
         empty_basis = Array{Float64}(undef, 4, 4, 0)
         AdaptiveOpticsSim.Calibration._combine_basis!(
             KA_CPU_STYLE, ka_opd, empty_basis, Float64[], pupil)
+        @test all(iszero, ka_opd)
+        fill!(ka_opd, 1.0)
+        AdaptiveOpticsSim.Calibration._combine_basis_async!(
+            KA_CPU_STYLE, ka_opd, empty_basis, Float64[], pupil)
+        Backends.synchronize_backend!(KA_CPU_STYLE)
         @test all(iszero, ka_opd)
 
         WavefrontSensors.lift_basis_expansion!(

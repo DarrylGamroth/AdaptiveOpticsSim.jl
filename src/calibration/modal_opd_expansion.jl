@@ -4,6 +4,8 @@
 # retired. Cold scientific OPD-product construction belongs to
 # AdaptiveOpticsCalibration.ModalBases.ModalOPDExpansion.
 
+import ..Backends: launch_kernel_async!
+
 @kernel function combine_basis_kernel!(opd, basis, coeffs, pupil, n_modes::Int)
     I = @index(Global, Cartesian)
     i, j = Tuple(I)
@@ -40,6 +42,21 @@ function _combine_basis!(style::AcceleratorStyle, opd::AbstractMatrix{T}, basis:
         return opd
     end
     launch_kernel!(style, combine_basis_kernel!, opd, basis, coeffs, pupil, n_modes; ndrange=size(opd))
+    return opd
+end
+
+# The graph has already admitted the exact shapes, element types and device
+# bindings. Completion belongs to the graph's retained execution context.
+function _combine_basis_async!(style::AcceleratorStyle, opd::AbstractMatrix{T},
+    basis::AbstractArray{T,3}, coeffs::AbstractVector{T},
+    pupil::AbstractMatrix{Bool}) where {T<:AbstractFloat}
+    n_modes = min(size(basis, 3), length(coeffs))
+    if n_modes == 0
+        fill!(opd, zero(T))
+        return opd
+    end
+    launch_kernel_async!(style, combine_basis_kernel!, opd, basis, coeffs, pupil,
+        n_modes; ndrange=size(opd))
     return opd
 end
 

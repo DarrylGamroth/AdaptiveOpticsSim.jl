@@ -267,7 +267,22 @@ For native CUDA Graph or HIP Graph execution, additionally require:
 The lockstep HIL boundary intentionally owns host `Array` exchange buffers. A
 completed GPU detector frame is copied to that host buffer only after successful
 graph execution, and a complete validated command is copied back before the next
-frame.
+frame. For ordinary CUDA device arrays, host staging enqueues the copy on the
+retained stream and completes it before publication. The boundary retains both
+buffers through completion. Captured steady-state graph replay, complete HIL
+frame/command cycles, and calibration exposures have separate zero-host-allocation
+checks; this does not cover transport or an external controller. Other storage
+kinds retain their ordinary backend copy behavior.
+
+The modal OPD graph node uses the same numerical kernel as `combine_basis!`,
+with completion owned by the prepared graph. Direct `combine_basis!` calls retain
+their synchronous contract. CUDA regression tests cover signed cancellation,
+pupil masking, nonfinite coefficients, changed commands, reset, and both
+Float32 and Float64.
+
+~~~bash
+julia --startup-file=no --project=test/cuda test/cuda/hil_boundary.jl
+~~~
 
 Use `algorithm-graphs` for functional graph coverage and the generic backend
 workload for measured frame service time:

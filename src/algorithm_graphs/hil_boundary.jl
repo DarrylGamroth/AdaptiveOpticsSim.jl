@@ -60,14 +60,16 @@ function _prepare_hil_host_buffer(
 end
 
 function _copy_hil_buffer!(graph::PreparedAlgorithmGraph, destination, source)
-    _with_prepared_device_execution_context(graph.context) do
-        try
-            copyto!(destination, source)
-        finally
-            _synchronize_prepared_graph_execution_context!(
-                graph.execution,
-                graph.context,
-            )
+    GC.@preserve destination source begin
+        _with_prepared_device_execution_context(graph.context) do
+            try
+                Backends._copy_prepared_device_buffer!(graph.context, destination, source)
+            finally
+                _synchronize_prepared_graph_execution_context!(
+                    graph.execution,
+                    graph.context,
+                )
+            end
         end
     end
     return destination
