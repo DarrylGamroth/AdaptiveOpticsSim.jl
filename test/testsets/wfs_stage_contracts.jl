@@ -1617,6 +1617,27 @@ end
     @test all(isfinite, resampled_spectral_rates[1].values)
     @test all(isfinite, resampled_spectral_rates[2].values)
 
+    spectral_expected = map(rate -> copy(rate.values), resampled_spectral_rates)
+    for (index, sample) in enumerate(spectral_bundle(spectral).samples)
+        component = resampled_spectral_plan.components[index]
+        @test resampled_spectral_rates[index].metadata.sampling ==
+            (T(0.04 / ARCSEC_PER_RAD), T(0.04 / ARCSEC_PER_RAD))
+        mono_source = Source(band=:custom, wavelength=sample.wavelength,
+            photon_irradiance=photon_irradiance(src) * sample.weight, T=T)
+        mono_sensor = ShackHartmannWFS(tel; n_lenslets=4,
+            n_pix_subap=4, pixel_scale_arcsec=T(0.04), T=T)
+        mono_optics = shack_hartmann_optics(mono_sensor, mono_source)
+        mono_rate = shack_hartmann_rate_map(mono_optics, pupil)
+        mono_plan = prepare_wfs_optics(mono_optics, pupil, mono_rate)
+        form_wfs_optical_products!(mono_rate, pupil, mono_plan)
+        @test resampled_spectral_rates[index].values ≈ mono_rate.values rtol=2e-13
+        @test component.workspace.sampling_ratio == mono_plan.workspace.sampling_ratio
+    end
+    form_wfs_optical_products!(resampled_spectral_rates, pupil,
+        resampled_spectral_plan)
+    @test all(index -> resampled_spectral_rates[index].values ==
+        spectral_expected[index], eachindex(spectral_expected))
+
     lgs = LGSSource(wavelength=wavelength(src),
         photon_irradiance=T(6), elongation_factor=T(1.8), T=T)
     staged_lgs = ShackHartmannWFS(tel; n_lenslets=4, n_pix_subap=4, T=T)

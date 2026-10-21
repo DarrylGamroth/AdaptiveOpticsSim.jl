@@ -5,7 +5,12 @@ microlens array.
 `n_lenslets` is the number of lenslets along each pupil axis, and
 `pixel_scale_arcsec` is the requested detector-plane angular sampling in
 arcseconds per pixel. A composed Shack–Hartmann front end supplies the physical
-subaperture pitch. This model does not currently describe focal length, fill
+subaperture pitch. The prepared optics honor the requested angular sampling
+with flux-conserving overlap of native FFT intensity cells. Without a requested
+scale, `shannon_sampling` selects one or two native cells per detector pixel.
+The detector grid and the zero-tilt spot share the geometric center for either
+FFT parity. `half_pixel_shift=true` moves the spot by negative half a detector
+pixel along each axis. This model does not currently describe focal length, fill
 factor, per-lenslet prescriptions, or manufacturing errors.
 """
 struct MicrolensArrayParams{T<:AbstractFloat}
@@ -111,7 +116,7 @@ mutable struct MicrolensPropagationWorkspace{T<:AbstractFloat,
     lgs_kernel_fft::KF
     lgs_kernel_tag::UInt
     effective_padding::Int
-    binning_pixel_scale::Int
+    sampling_ratio::T
     sampled_n_pix_subap::Int
     phasor_ratio::T
     fft_asterism_stack::CC
@@ -222,7 +227,7 @@ function _build_microlens_propagation(array_source, ::Type{T},
         fft_stack, intensity, intensity_stack, intensity_tmp_stack, temp,
         bin_buffer, spot, sampled_spot_cube, spot_cube_accum, fft_plan,
         fft_stack_plan, ifft_plan, ifft_stack_plan, elongation_kernel,
-        lgs_kernel_fft, UInt(0), mla.params.diffraction_padding, 1, sub,
+        lgs_kernel_fft, UInt(0), mla.params.diffraction_padding, one(T), sub,
         T(NaN), fft_asterism_stack, fft_asterism_plan, 1, amp_scales,
         amp_scales_host, opd_to_cycles, opd_to_cycles_host)
     return PreparedMicrolensPropagation(plan, workspace)
@@ -270,7 +275,7 @@ function _replace_microlens_propagation_workspace!(
     destination.lgs_kernel_fft = source.lgs_kernel_fft
     destination.lgs_kernel_tag = source.lgs_kernel_tag
     destination.effective_padding = source.effective_padding
-    destination.binning_pixel_scale = source.binning_pixel_scale
+    destination.sampling_ratio = source.sampling_ratio
     destination.sampled_n_pix_subap = source.sampled_n_pix_subap
     destination.phasor_ratio = source.phasor_ratio
     destination.fft_asterism_stack = source.fft_asterism_stack

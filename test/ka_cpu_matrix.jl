@@ -567,7 +567,7 @@ end
         sample_input = reshape(collect(1.0:64.0), 4, 4, n_spots)
         sampled = fill(-1.0, n_spots, 2, 2)
         AdaptiveOpticsSim.Backends.launch_kernel!(KA_CPU_STYLE, WavefrontSensors.sh_sample_spot_stack_kernel!,
-            sampled, sample_input, valid_mask, 2, n_sub, 2, 2, 0, 0;
+            sampled, sample_input, valid_mask, 2.0, n_sub, 4, 2;
             ndrange=(n_sub, n_sub, 2, 2))
         mark_ka_cpu_kernel!(:sh_sample_spot_stack_kernel!)
         @test sampled[1, 1, 1] == sum(sample_input[1:2, 1:2, 1])

@@ -365,6 +365,8 @@ function build_sh_phasor!(optics::ShackHartmannOptics,
     end
     n = size(propagation.phasor, 1)
     scale = -T(π) * (T(n) + one(T) + ratio) / T(n)
+    isfinite(scale * T(2n - 2)) || throw(InvalidConfiguration(
+        "detector-to-FFT sampling ratio exceeds the representable phasor range"))
     host = Matrix{Complex{T}}(undef, n, n)
     @inbounds for j in 1:n, i in 1:n
         host[i, j] = cis(scale * (i + j - 2))
@@ -389,7 +391,7 @@ function _prepare_microlens_sampling_wavelength!(
     propagation = microlens_propagation_workspace(optics.propagation)
     padding = sampling.padding
     pad = sampling.padded_subaperture_samples
-    binning_pixel_scale = sampling.binning_pixel_scale
+    sampling_ratio = sampling.sampling_ratio
     n_pix_subap = sampling.spot_samples_per_axis
 
     if padding != propagation.effective_padding ||
@@ -414,19 +416,10 @@ function _prepare_microlens_sampling_wavelength!(
         propagation.sampled_n_pix_subap = n_pix_subap
     end
 
-    n_binned = div(pad, binning_pixel_scale)
-    if size(propagation.bin_buffer) != (n_binned, n_binned)
-        propagation.bin_buffer = similar(
-            propagation.bin_buffer,
-            n_binned,
-            n_binned,
-        )
-    end
-
-    propagation.binning_pixel_scale = binning_pixel_scale
+    propagation.sampling_ratio = sampling_ratio
     T = eltype(propagation.intensity)
     half_shift_ratio = microlens_array(optics).params.half_pixel_shift ?
-        T(binning_pixel_scale) : zero(T)
+        T(sampling_ratio) : zero(T)
     build_sh_phasor!(optics, half_shift_ratio)
     return optics
 end
@@ -445,36 +438,26 @@ function _sh_microlens_sampling_configuration(
     d_subap = pupil_diameter_m / n_lenslets(optics)
     pixel_scale_init = sh_pixel_scale_init(d_subap, padding, wavelength_m)
 
+    T = microlens_numeric_type(microlens)
+    # The FFT is at least as fine as the detector grid. Requested detector
+    # sampling is represented by pixel-cell overlap, never integer rounding.
     if pixel_scale_req !== nothing
-        while pixel_scale_req / pixel_scale_init < 0.95
+        while pixel_scale_req < pixel_scale_init
             padding += 1
             pixel_scale_init = sh_pixel_scale_init(d_subap, padding,
                 wavelength_m)
         end
-    end
-
-    binning_pixel_scale = if pixel_scale_req === nothing
-        microlens.params.shannon_sampling ? 1 : 2
-    else
-        factor = pixel_scale_req / pixel_scale_init
-        lower = max(1, floor(Int, factor))
-        upper = max(1, ceil(Int, factor))
-        abs(lower * pixel_scale_init - pixel_scale_req) <= abs(upper * pixel_scale_init - pixel_scale_req) ? lower : upper
-    end
-
-    pad = sub * padding
-    while pad % binning_pixel_scale != 0
+    elseif !microlens.params.shannon_sampling && isodd(sub * padding)
         padding += 1
-        pad = sub * padding
-        pixel_scale_init = sh_pixel_scale_init(d_subap, padding,
-            wavelength_m)
-        if pixel_scale_req !== nothing
-            factor = pixel_scale_req / pixel_scale_init
-            lower = max(1, floor(Int, factor))
-            upper = max(1, ceil(Int, factor))
-            binning_pixel_scale = abs(lower * pixel_scale_init - pixel_scale_req) <= abs(upper * pixel_scale_init - pixel_scale_req) ? lower : upper
-        end
+        pixel_scale_init = sh_pixel_scale_init(d_subap, padding, wavelength_m)
     end
+    sampling_ratio = pixel_scale_req === nothing ?
+        (microlens.params.shannon_sampling ? one(T) : T(2)) :
+        T(pixel_scale_req / pixel_scale_init)
+    isfinite(sampling_ratio) && sampling_ratio > zero(T) ||
+        throw(InvalidConfiguration(
+            "detector-to-FFT sampling ratio must be finite and positive"))
+    pad = sub * padding
 
     n_pix_subap = microlens.params.n_pix_subap === nothing ?
         sub : microlens.params.n_pix_subap
@@ -485,8 +468,9 @@ function _sh_microlens_sampling_configuration(
     return (
         padding=padding,
         padded_subaperture_samples=pad,
-        binning_pixel_scale=binning_pixel_scale,
+        sampling_ratio=sampling_ratio,
         spot_samples_per_axis=n_pix_subap,
-        pixel_scale_arcsec=pixel_scale_init * binning_pixel_scale,
+        pixel_scale_arcsec=pixel_scale_req === nothing ?
+            pixel_scale_init * sampling_ratio : pixel_scale_req,
     )
 end

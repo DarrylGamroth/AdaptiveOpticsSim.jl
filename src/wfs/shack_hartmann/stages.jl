@@ -17,33 +17,46 @@
     end
 end
 
+# Native FFT intensities are cell-integrated rates. Each output pixel sums
+# the fractions of native cells inside its centered angular footprint. Source
+# cells outside the finite FFT grid contribute zero; no ROI renormalization.
+@inline function _sh_sample_detector_cell(intensity_stack, index::Int,
+    u::Int, v::Int, pad::Int, n_out::Int, ratio::T) where {T}
+    center = T(pad) / T(2)
+    output_center = T(n_out) / T(2)
+    # Form centered edges before scaling to retain the exact central boundary
+    # even for very coarse sampling. Clamp before integer conversion so wholly
+    # out-of-grid footprints never overflow a device index.
+    left_x = clamp(center + (T(u - 1) - output_center) * ratio,
+        zero(T), T(pad))
+    left_y = clamp(center + (T(v - 1) - output_center) * ratio,
+        zero(T), T(pad))
+    right_x = clamp(center + (T(u) - output_center) * ratio,
+        zero(T), T(pad))
+    right_y = clamp(center + (T(v) - output_center) * ratio,
+        zero(T), T(pad))
+    first_x = max(1, floor(Int, left_x) + 1)
+    first_y = max(1, floor(Int, left_y) + 1)
+    last_x = min(pad, ceil(Int, right_x))
+    last_y = min(pad, ceil(Int, right_y))
+    value = zero(T)
+    @inbounds for y in first_y:last_y, x in first_x:last_x
+        weight_x = min(right_x, T(x)) - max(left_x, T(x - 1))
+        weight_y = min(right_y, T(y)) - max(left_y, T(y - 1))
+        value += weight_x * weight_y * intensity_stack[x, y, index]
+    end
+    return value
+end
+
 @kernel function sh_sample_spot_stack_kernel!(spot_cube, intensity_stack,
-    valid_mask, binning::Int, n_sub::Int, n_binned::Int, n_out::Int,
-    offset_axis_1::Int, offset_axis_2::Int)
+    valid_mask, ratio, n_sub::Int, pad::Int, n_out::Int)
     i, j, u, v = @index(Global, NTuple)
     if i <= n_sub && j <= n_sub && u <= n_out && v <= n_out
         index = sh_lenslet_index(i, j, n_sub)
-        T = eltype(spot_cube)
-        value = zero(T)
+        value = zero(eltype(spot_cube))
         if @inbounds valid_mask[i, j]
-            binned_axis_1 = u - offset_axis_1
-            binned_axis_2 = v - offset_axis_2
-            if 1 <= binned_axis_1 <= n_binned &&
-                    1 <= binned_axis_2 <= n_binned
-                if binning == 1
-                    @inbounds value = intensity_stack[
-                        binned_axis_1, binned_axis_2, index]
-                else
-                    @inbounds for axis_2 in 1:binning,
-                            axis_1 in 1:binning
-                        value += intensity_stack[
-                            (binned_axis_1 - 1) * binning + axis_1,
-                            (binned_axis_2 - 1) * binning + axis_2,
-                            index,
-                        ]
-                    end
-                end
-            end
+            value = _sh_sample_detector_cell(intensity_stack, index,
+                u, v, pad, n_out, ratio)
         end
         @inbounds spot_cube[index, u, v] = value
     end
@@ -54,45 +67,14 @@ function sample_spot_stack!(::ScalarCPUStyle,
     propagation = microlens_propagation_workspace(optics.propagation)
     intensity_stack = propagation.intensity_stack
     sampled_spot_cube = propagation.sampled_spot_cube
-    pad_axis_1 = size(intensity_stack, 1)
-    pad_axis_2 = size(intensity_stack, 2)
-    binning = propagation.binning_pixel_scale
-    pad_axis_1 % binning == 0 && pad_axis_2 % binning == 0 || throw(
-        InvalidConfiguration(
-            "lenslet sampling is not divisible by binning_pixel_scale",
-        ),
-    )
-    n_binned_axis_1 = div(pad_axis_1, binning)
-    n_binned_axis_2 = div(pad_axis_2, binning)
-    n_out_axis_1 = size(sampled_spot_cube, 2)
-    n_out_axis_2 = size(sampled_spot_cube, 3)
-    offset_axis_1 = div(n_out_axis_1 - n_binned_axis_1, 2)
-    offset_axis_2 = div(n_out_axis_2 - n_binned_axis_2, 2)
-    T = eltype(sampled_spot_cube)
-
-    @inbounds for axis_2 in axes(sampled_spot_cube, 3),
-            axis_1 in axes(sampled_spot_cube, 2),
+    pad = size(intensity_stack, 1)
+    n_out = size(sampled_spot_cube, 2)
+    ratio = propagation.sampling_ratio
+    @inbounds for v in axes(sampled_spot_cube, 3),
+            u in axes(sampled_spot_cube, 2),
             index in axes(sampled_spot_cube, 1)
-        binned_axis_1 = axis_1 - offset_axis_1
-        binned_axis_2 = axis_2 - offset_axis_2
-        value = zero(T)
-        if 1 <= binned_axis_1 <= n_binned_axis_1 &&
-                1 <= binned_axis_2 <= n_binned_axis_2
-            if binning == 1
-                value = intensity_stack[
-                    binned_axis_1, binned_axis_2, index]
-            else
-                for bin_axis_2 in 1:binning,
-                        bin_axis_1 in 1:binning
-                    value += intensity_stack[
-                        (binned_axis_1 - 1) * binning + bin_axis_1,
-                        (binned_axis_2 - 1) * binning + bin_axis_2,
-                        index,
-                    ]
-                end
-            end
-        end
-        sampled_spot_cube[index, axis_1, axis_2] = value
+        sampled_spot_cube[index, u, v] = _sh_sample_detector_cell(
+            intensity_stack, index, u, v, pad, n_out, ratio)
     end
     return sampled_spot_cube
 end
@@ -101,20 +83,12 @@ function sample_spot_stack!(style::AcceleratorStyle,
     optics::ShackHartmannOptics)
     propagation = microlens_propagation_workspace(optics.propagation)
     pad = size(propagation.intensity_stack, 1)
-    binning = propagation.binning_pixel_scale
-    pad % binning == 0 || throw(InvalidConfiguration(
-        "lenslet sampling is not divisible by binning_pixel_scale",
-    ))
-    n_binned = div(pad, binning)
     n_out = size(propagation.sampled_spot_cube, 2)
-    offset_axis_1 = div(n_out - n_binned, 2)
-    offset_axis_2 = div(n_out - n_binned, 2)
     n_sub = n_lenslets(optics)
     launch_kernel!(style, sh_sample_spot_stack_kernel!,
         propagation.sampled_spot_cube, propagation.intensity_stack,
-        optics.front_end.layout.valid_mask, binning, n_sub, n_binned, n_out,
-        offset_axis_1, offset_axis_2;
-        ndrange=(n_sub, n_sub, n_out, n_out))
+        optics.front_end.layout.valid_mask, propagation.sampling_ratio,
+        n_sub, pad, n_out; ndrange=(n_sub, n_sub, n_out, n_out))
     return propagation.sampled_spot_cube
 end
 
@@ -243,7 +217,7 @@ end
     optics::ShackHartmannOptics)
     workspace = microlens_propagation_workspace(optics.propagation)
     return (size(workspace.fft_stack), workspace.effective_padding,
-        workspace.binning_pixel_scale, workspace.sampled_n_pix_subap,
+        workspace.sampling_ratio, workspace.sampled_n_pix_subap,
         workspace.phasor_ratio,
         subaperture_layout_revision(optics.front_end.layout))
 end
@@ -486,10 +460,11 @@ function _require_sh_rate_mosaic(optics::ShackHartmannOptics,
     _require_sh_centered_geometry(output.metadata, "rate output",
         :wfs_optics)
     T = eltype(workspace.intensity)
-    expected_scale_arcsec = sh_pixel_scale_init(
+    requested_scale = microlens_array(optics).params.pixel_scale_arcsec
+    expected_scale_arcsec = requested_scale === nothing ? sh_pixel_scale_init(
         pupil_diameter_m / n_sub,
         workspace.effective_padding, wavelength_m) *
-        workspace.binning_pixel_scale
+        workspace.sampling_ratio : requested_scale
     expected_scale_rad = T(expected_scale_arcsec / ARCSEC_PER_RAD)
     output.metadata.sampling == (expected_scale_rad, expected_scale_rad) ||
         throw(WFSPreparationError(:wfs_optics, :plane_metadata,
@@ -1113,16 +1088,11 @@ end
         workspace.intensity_stack, workspace.fft_stack, intensity_scale,
         pad, n_sub * n_sub; ndrange=size(workspace.intensity_stack))
 
-    binning = workspace.binning_pixel_scale
-    n_binned = div(pad, binning)
     n_out = size(workspace.sampled_spot_cube, 2)
-    sample_offset_axis_1 = div(n_out - n_binned, 2)
-    sample_offset_axis_2 = div(n_out - n_binned, 2)
     launch_kernel_async!(style, sh_sample_spot_stack_kernel!,
         workspace.sampled_spot_cube, workspace.intensity_stack,
-        optics.front_end.layout.valid_mask, binning, n_sub, n_binned, n_out,
-        sample_offset_axis_1, sample_offset_axis_2;
-        ndrange=(n_sub, n_sub, n_out, n_out))
+        optics.front_end.layout.valid_mask, workspace.sampling_ratio,
+        n_sub, pad, n_out; ndrange=(n_sub, n_sub, n_out, n_out))
 
     rate_map = output.values
     launch_kernel_async!(style, _shack_hartmann_rate_map_copy_kernel!,

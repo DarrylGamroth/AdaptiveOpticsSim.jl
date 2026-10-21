@@ -145,6 +145,7 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
         run_captured_graph_execution_smoke(B)
         run_captured_atmosphere_replay_smoke(B)
         run_captured_wfs_replay_smoke(B)
+        run_shack_hartmann_sampling_parity(B)
         run_captured_detector_replay_smoke(B)
         run_algorithm_graph_backend_smoke(B)
         run_grouped_graph_execution_smoke(B)
@@ -554,6 +555,65 @@ function _compare_captured_wfs_frame!(
     captured_frame = Array(graph_output(captured_graph, output_name))
     @test captured_frame ≈ stream_frame rtol = 3.0f-4 atol = 1.0f-8
     return captured_frame
+end
+
+# Bounded parity qualification for the centered fractional detector sampler.
+function run_shack_hartmann_sampling_parity(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    for resolution in (15, 16), scale in (0.937, 0.697, 1e25),
+            half_pixel_shift in (false, true)
+        scale > 1 && half_pixel_shift && continue
+        cpu_opd = zeros(Float32, resolution, resolution)
+        gpu_opd = BackendArray(cpu_opd)
+        target = compute_device(gpu_opd)
+        node = shack_hartmann_rate_node(:shwfs;
+            resolution, telescope_diameter_m=1.22 / 16,
+            n_lenslets=1, n_pix_subap=22, diffraction_padding=3,
+            pixel_scale_arcsec=scale, half_pixel_shift,
+            source_wavelength_m=0.8e-6,
+            source_photon_irradiance_m2_s=10.0,
+            opd_schema="test.sh-sampling.opd.f32/1",
+            photon_rate_schema="test.sh-sampling.rate.f32/1")
+        definition(opd) = algorithm_graph((node,);
+            name=:sh_sampling,
+            inputs=(graph_input(:opd, :shwfs => :opd, opd),),
+            outputs=(graph_output(:rate, :shwfs => :photon_rate),))
+        cpu = prepare_algorithm_graph(definition(cpu_opd))
+        stream = prepare_algorithm_graph(definition(gpu_opd);
+            target, execution=StreamGraphExecution())
+        captured = prepare_algorithm_graph(definition(gpu_opd);
+            target, execution=CapturedGraphExecution())
+        @test captured_graph_node_count(captured) == 1
+        owner = AlgorithmGraphs.prepared_graph_node(cpu, Val(:shwfs))
+        @test owner.prepared.output.metadata.sampling[1] ≈
+            Float32(scale / (180 * 3600 / π)) rtol=2eps(Float32)
+        for tilt in (0.0f0, 0.007f0, -0.011f0)
+            cpu_opd .= Float32[0.8f-6 * tilt * (i - 2j)
+                for i in 1:resolution, j in 1:resolution]
+            _set_captured_wfs_opd!(gpu_opd, cpu_opd)
+            step_graph!(cpu)
+            step_graph!(stream)
+            step_graph!(captured)
+            expected = Array(graph_output(cpu, Val(:rate)))
+            streamed = Array(graph_output(stream, Val(:rate)))
+            replayed = Array(graph_output(captured, Val(:rate)))
+            @test streamed ≈ expected rtol=8.0f-5 atol=2.0f-9
+            @test replayed ≈ expected rtol=8.0f-5 atol=2.0f-9
+            @test replayed ≈ streamed rtol=3.0f-5 atol=2.0f-9
+            @test sum(replayed) ≈ sum(expected) rtol=3.0f-6
+            if iszero(tilt) && !half_pixel_shift
+                coordinates = Float32.(1:22) .- 11.5f0
+                centroid = dot(vec(sum(replayed; dims=2)), coordinates) / sum(replayed)
+                @test abs(centroid) < 1.0f-4
+            end
+        end
+        step_graph!(captured)
+        @test @allocated(step_graph!(captured)) <=
+            captured_graph_step_allocation_budget(B)
+    end
+    return nothing
 end
 
 function run_captured_wfs_replay_smoke(
