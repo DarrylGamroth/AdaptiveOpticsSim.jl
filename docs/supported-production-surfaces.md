@@ -85,6 +85,17 @@ Dense and measured influence-matrix DM nodes also admit captured execution
 with built-in linear-static, clipping, and actuator-health stages or their
 static compositions. Preparation retains multiplication coefficients for
 replay; stateful and custom actuator stages require separate qualification.
+
+Each prepared CUDA executable retains an independent cuBLAS workspace (4 MiB
+before compute capability 9.0, 32 MiB from 9.0 onward). Capture temporarily binds
+that workspace to the prepared stream's cuBLAS handle and restores the default
+workspace afterward. Preparation rejects allocation and free nodes in the native
+CUDA graph, including child graphs, before instantiation. Retained scalar
+coefficients alone do not establish fixed device storage. Ordinary stream
+execution does not allocate this capture workspace.
+The [local CUDA qualification](../benchmarks/results/platform/2026-10-21-cuda-capture-storage.toml)
+records capture-node inspection, replay correctness, and plant measurements.
+
 The explicit pixel-MTF operation and graph node enqueue on the prepared device
 and stream, with CUDA and AMDGPU capture supported. InGaAs graph capture is
 limited to full-frame unit sampling/binning, null persistence and nonlinearity,

@@ -137,6 +137,8 @@ end
 struct CUDAPreparedDeviceGraph{Graph,Executable}
     graph::Graph
     executable::Executable
+    # cuBLAS kernels recorded into the graph can retain this scratch address.
+    workspace::CUDA.CuArray{UInt8,1,CUDA.DeviceMemory}
 end
 
 function Backends._prepare_device_execution_context(
@@ -242,13 +244,71 @@ end
     return nothing
 end
 
+function _with_prepared_cublas_workspace(
+    f::F,
+    context::CUDAPreparedDeviceExecutionContext,
+    workspace::CUDA.CuArray{UInt8,1,CUDA.DeviceMemory},
+) where {F}
+    # The caller has activated the prepared stream. Obtain its task-local
+    # handle first: CUDA resets the workspace when updating a handle's stream.
+    handle = CUDA.CUBLAS.handle()
+    UInt(pointer(workspace)) % 256 == 0 || throw(
+        AdaptiveOpticsSim.InvalidConfiguration(
+            "captured cuBLAS workspace must be 256-byte aligned",
+        ),
+    )
+    GC.@preserve workspace begin
+        CUDA.CUBLAS.cublasSetWorkspace_v2(handle, pointer(workspace), sizeof(workspace))
+        try
+            return f()
+        finally
+            # Setting the stream restores cuBLAS's default workspace, even for
+            # the same stream, without disturbing CUDA's task-local handle cache.
+            CUDA.CUBLAS.cublasSetStream_v2(handle, context.stream)
+        end
+    end
+end
+
+function _require_cuda_graph_fixed_storage(graph)
+    driver = CUDA.CUDACore
+    count = Ref{Csize_t}(0)
+    driver.cuGraphGetNodes(graph, C_NULL, count)
+    iszero(count[]) && return graph
+    nodes = Vector{driver.CUgraphNode}(undef, count[])
+    driver.cuGraphGetNodes(graph, nodes, count)
+    for node in nodes
+        kind = Ref{driver.CUgraphNodeType}()
+        driver.cuGraphNodeGetType(node, kind)
+        if kind[] == driver.CU_GRAPH_NODE_TYPE_MEM_ALLOC ||
+                kind[] == driver.CU_GRAPH_NODE_TYPE_MEM_FREE
+            throw(AdaptiveOpticsSim.InvalidConfiguration(
+                "captured CUDA graph contains a device allocation or free node",
+            ))
+        elseif kind[] == driver.CU_GRAPH_NODE_TYPE_GRAPH
+            child = Ref{driver.CUgraph}(C_NULL)
+            driver.cuGraphChildGraphNodeGetGraph(node, child)
+            _require_cuda_graph_fixed_storage(child[])
+        end
+    end
+    return graph
+end
+
 function Backends._capture_prepared_device_graph(
     f::F,
     context::CUDAPreparedDeviceExecutionContext,
 ) where {F}
-    graph = CUDA.capture(f)
+    # Keep capture-only scratch with the executable, so ordinary stream owners
+    # do not pay this cold storage cost. Each executable has independent storage.
+    # Size follows cuBLAS guidance: 4 MiB before sm90, 32 MiB from sm90 onward.
+    workspace = CUDA.CuArray{UInt8,1,CUDA.DeviceMemory}(
+        undef, CUDA.capability(context.device) >= v"9.0" ? 32 << 20 : 4 << 20,
+    )
+    graph = _with_prepared_cublas_workspace(context, workspace) do
+        CUDA.capture(f)
+    end
+    _require_cuda_graph_fixed_storage(graph)
     executable = CUDA.instantiate(graph)
-    return CUDAPreparedDeviceGraph(graph, executable)
+    return CUDAPreparedDeviceGraph(graph, executable, workspace)
 end
 
 @inline function Backends._launch_prepared_device_graph!(

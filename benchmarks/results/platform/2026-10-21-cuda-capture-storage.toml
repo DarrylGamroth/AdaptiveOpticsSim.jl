@@ -1,0 +1,162 @@
+artifact_id = "CUDA-CAPTURE-STORAGE-2026-10-21"
+generated_on = "2026-10-21"
+purpose = "Retained cuBLAS scratch and recursive native allocation/free-node rejection before CUDA graph instantiation"
+source_revision = "b91e9bba99b7d1a5a75a51164e5b67ea7ad49f0b"
+source_was_clean_at_start = true
+validated_source = "Base revision plus the file contents identified below; uncommitted changes during validation"
+worktree = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim-cuda-storage"
+branch = "perf/cuda-capture-storage"
+claim_boundary = "Local CUDA graph storage ownership, rejection, numerical replay and warmed allocation qualification; no general latency speedup or tail-latency claim"
+
+[environment]
+host = "rtc-devel"
+kernel = "6.12.111+deb13-amd64"
+cpu = "AMD Ryzen 7 6800H"
+julia = "1.13.2"
+cuda_jl = "6.4.2"
+kernel_abstractions = "0.9.45"
+adaptive_optics_calibration = "0.17.0"
+gpu = "NVIDIA GeForce RTX 3080"
+compute_capability = "8.6"
+driver = "615.71.09"
+cuda_runtime = "13.4.0"
+cublas = "13.8.0"
+julia_threads = 1
+blas_threads = 1
+manifest_note = "Existing ignored CUDA manifest copied without resolution; Pkg.instantiate installed its missing DocStringExtensions dependency. Manifest was generated with Julia 1.12.7; same dependency stack used before and after."
+clock_policy = "Unchanged default clocks and power policy; no continuous clock or host interference trace"
+
+[contract]
+workspace_bytes_on_test_device = 4194304
+workspace_bytes_sm90_and_newer = 33554432
+workspace_owner = "One independent concrete device array retained by each CUDAPreparedDeviceGraph; ordinary stream contexts allocate no capture scratch"
+capture = "Bind task-local cuBLAS handle after prepared stream activation; restore default workspace via SetStream in finally; inspect top-level and child native graphs before instantiate"
+replay = "No new per-replay workspace configuration, graph inspection or allocation"
+
+[multiplication]
+before_cases = 12
+before_cases_with_allocation_free_nodes = 4
+before_allocating_cases = ["Float32 transpose_right", "ComplexF32 matrix", "ComplexF32 transpose_right", "ComplexF32 vector"]
+after_cases = 16
+after_cases_with_allocation_free_nodes = 0
+after_permitted_nodes = ["KERNEL", "MEMSET"]
+large_gemv_shape = [253, 277]
+numeric_types = ["Float32", "Float64", "ComplexF32", "ComplexF64"]
+replay_host_allocation_bytes = 0
+correctness = "Changing both operands across three replays after GC; CPU result oracle passed for all cases"
+
+[validation]
+multiplication_checks_passed = 272
+storage_admission_and_restoration_checks_passed = 33
+selected_capture_checks_passed = 81
+ingaas_checks_passed = 48
+cuda_snapshot_checks_passed = 28
+host_snapshot_checks_passed = 39
+storage_tests = "Empty and two-level fixed child graphs accepted; direct allocation/free graphs rejected without instantiation or launch; unsafe capture callback rejected; throwing capture restores handle; independent workspaces survive GC"
+nested_unsafe_limit = "Driver rejects allocation/free nodes in cloned child graphs with CUDA_ERROR_NOT_SUPPORTED. Nested valid graphs exercised and recursive source inspected; no nested unsafe graph was executable or constructible on this driver."
+independent_source_review = "No confirmed production defect or remaining material concern; test-only measurement correction also reviewed"
+diff_check = "git diff --check passed"
+
+[atmosphere_allocation_test]
+baseline_inline_measurement_bytes = 192
+initial_patched_inline_measurement_bytes = 192
+concrete_callback_measurement_bytes = [0, 0, 0]
+observed = "Caller inferred allocation_owner as Any; concrete callback inferred Nothing. Profile.Allocs attributed allocations to boxed field values and an escaping epoch in the inlined dynamic caller."
+correction = "Test-only warmed noinline measurement barrier; same callback and strict zero-byte assertion; no production atmosphere changes"
+
+[plant]
+workload = "352x352 Float32 physical plant, 16x16 lenslets, 22 detector pixels/lenslet, 25-element DM command, noiseless CCD"
+warmup_steps = 32
+completion_boundary = "wait_graph_step! after every step"
+correctness = "Independent CPU oracle before and after each policy; CPU reference unchanged; passed all runs"
+allocation = "Captured complete synchronized replay requires zero warmed Julia bytes; CUDA.used_memory unchanged within every replay region"
+memory_note = "Reported device_used_bytes are process-local totals including other retained/transient owners; cross-process totals do not measure the isolated scratch footprint."
+
+[plant.initial_both_policy_before.stream]
+captured_nodes = 0
+replays = 200
+total_ns = 39782317
+mean_ns = 198911.585
+warmed_host_allocation_bytes = 7120
+device_used_bytes = 21378292
+
+[plant.initial_both_policy_before.captured]
+captured_nodes = 4
+replays = 200
+total_ns = 33341992
+mean_ns = 166709.96
+warmed_host_allocation_bytes = 0
+device_used_bytes = 55708204
+
+[plant.initial_both_policy_after.stream]
+captured_nodes = 0
+replays = 200
+total_ns = 39609701
+mean_ns = 198048.505
+warmed_host_allocation_bytes = 7120
+device_used_bytes = 21378292
+
+[plant.initial_both_policy_after.captured]
+captured_nodes = 4
+replays = 200
+total_ns = 35781735
+mean_ns = 178908.675
+warmed_host_allocation_bytes = 0
+device_used_bytes = 45711548
+
+[plant.alternating_captured_only]
+order = ["A1 baseline", "B1 patched", "B2 patched", "A2 baseline"]
+replays_per_run = 2000
+interpretation = "Small sequential fresh-process diagnostic with no controlled-clock or interference trace; retain all values without promoting a causal speedup or latency bound."
+
+[plant.alternating_captured_only.results.A1]
+captured_nodes = 4
+replays = 2000
+total_ns = 220232404
+mean_ns = 110116.202
+warmed_host_allocation_bytes = 0
+device_used_bytes = 21254388
+
+[plant.alternating_captured_only.results.B1]
+captured_nodes = 4
+replays = 2000
+total_ns = 223857061
+mean_ns = 111928.5305
+warmed_host_allocation_bytes = 0
+device_used_bytes = 25448692
+
+[plant.alternating_captured_only.results.B2]
+captured_nodes = 4
+replays = 2000
+total_ns = 221558375
+mean_ns = 110779.1875
+warmed_host_allocation_bytes = 0
+device_used_bytes = 24953076
+
+[plant.alternating_captured_only.results.A2]
+captured_nodes = 4
+replays = 2000
+total_ns = 223889538
+mean_ns = 111944.769
+warmed_host_allocation_bytes = 0
+device_used_bytes = 21378292
+
+[commands]
+environment = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1"
+instantiate = "julia --startup-file=no --project=test/cuda -e 'using Pkg; Pkg.instantiate(; allow_autoprecomp=false)'"
+multiplication = "julia --startup-file=no --project=test/cuda test/cuda_prepared_multiplication_capture.jl"
+storage = "julia --startup-file=no --project=test/cuda test/cuda/captured_storage.jl"
+selected_capture = "julia --startup-file=no --project=test/cuda -e 'import CUDA; include(\"test/runtests_gpu_target_common.jl\"); const B = Backends.CUDABackendTag; require_backend_target!(B); @testset \"CUDA captured execution target\" begin run_captured_coordinate_gaussian_graph_execution_smoke(B); run_captured_graph_execution_smoke(B); run_captured_atmosphere_replay_smoke(B); run_captured_wfs_replay_smoke(B); run_captured_detector_replay_smoke(B); run_graph_rng_capture_replay(B); end'"
+ingaas = "julia --startup-file=no --project=test/cuda test/cuda_ingaas_graph_capture.jl"
+snapshots = "ADAPTIVEOPTICS_TEST_SNAPSHOT_CUDA=true julia --startup-file=no --project=test/cuda -e 'import CUDA; include(\"test/testsets/output_snapshot.jl\")'"
+plant_initial = "AOS_PROFILE_REPLAYS=200 julia --startup-file=no --project=test/cuda benchmarks/profile_aos_gpu_plant.jl cuda both"
+plant_alternating = "AOS_PROFILE_REPLAYS=2000 julia --startup-file=no --project=test/cuda benchmarks/profile_aos_gpu_plant.jl cuda captured"
+raw_logs = "/tmp/aos-cuda-storage-20261021"
+
+[source_files_sha256]
+"ext/AdaptiveOpticsSimCUDAExt.jl" = "c2c87ad03082021c758c6568d17bac2a393013f23a6d9e924c29bc2536852a93"
+"test/cuda_prepared_multiplication_capture.jl" = "3fc10ab2453195f9ebab4b4bf009d1d0863f783bd16675359cfbde1182581cab"
+"test/cuda/captured_storage.jl" = "ef72d3c4d641c24b6ed4b9a811dbae44657bd09d4f36a1e26ba245df1c452f36"
+"test/runtests_cuda.jl" = "a33a8c3696e9518726165fb0eaa34639bba9d38274b3648073dcbf421bdc42d6"
+"test/runtests_gpu_target_common.jl" = "bea2e039a024261e6b1bc978a5a298681d1d84974202edfbc0ea6120c9d961c0"
+"docs/supported-production-surfaces.md" = "444501f529ff166e5cce734b0001f298a38deb191202eb894de752fb41fb436d"

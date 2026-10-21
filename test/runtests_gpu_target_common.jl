@@ -751,6 +751,11 @@ function run_captured_wfs_replay_smoke(
     return nothing
 end
 
+# Cross the dynamic fixture setup boundary before measuring the concrete owner.
+@noinline function _captured_atmosphere_completion_allocations(owner)
+    return @allocated AlgorithmGraphs._complete_captured_graph_node!(owner)
+end
+
 function run_captured_atmosphere_replay_smoke(
     ::Type{B},
 ) where {B<:Backends.GPUBackendTag}
@@ -824,11 +829,9 @@ function run_captured_atmosphere_replay_smoke(
         Val(:atmosphere),
     )
     AlgorithmGraphs._preflight_captured_graph_node!(allocation_owner)
-    AlgorithmGraphs._complete_captured_graph_node!(allocation_owner)
+    _captured_atmosphere_completion_allocations(allocation_owner)
     AlgorithmGraphs._preflight_captured_graph_node!(allocation_owner)
-    @test (@allocated begin
-        AlgorithmGraphs._complete_captured_graph_node!(allocation_owner)
-    end) == 0
+    @test _captured_atmosphere_completion_allocations(allocation_owner) == 0
 
     reset_graph!(stream_graph)
     reset_graph!(captured_graph)

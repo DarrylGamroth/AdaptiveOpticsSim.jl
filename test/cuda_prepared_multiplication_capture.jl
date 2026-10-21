@@ -34,54 +34,58 @@ captured_mul_allocations(C, A, B, coeffs) =
 captured_mul_replay_allocations(executable) = @allocated CUDA.launch(executable)
 
 @testset "CUDA prepared multiplication capture and replay" begin
-    stream = CUDA.CuStream()
-    CUDA.stream!(stream) do
-        for T in (Float32, Float64, ComplexF32, ComplexF64), kind in (:matrix, :transpose_right, :vector)
-            host_a = captured_mul_fixture(T, (13, 11))
-            host_b = captured_mul_fixture(T, kind === :matrix ? (11, 9) :
-                kind === :transpose_right ? (9, 11) : (11,))
-            A, raw_b = CuArray(host_a), CuArray(host_b)
-            B = kind === :transpose_right ? transpose(raw_b) : raw_b
-            expected_b = kind === :transpose_right ? transpose(host_b) : host_b
-            C = CuArray(host_a * expected_b)
-            coefficients = Backends._prepare_mul_coefficients(C)
+    for T in (Float32, Float64, ComplexF32, ComplexF64),
+            kind in (:matrix, :transpose_right, :vector, :large_vector)
+        rows, columns = kind === :large_vector ? (253, 277) : (13, 11)
+        host_a = captured_mul_fixture(T, (rows, columns))
+        host_b = captured_mul_fixture(T, kind === :matrix ? (columns, 9) :
+            kind === :transpose_right ? (9, columns) : (columns,))
+        A, raw_b = CuArray(host_a), CuArray(host_b)
+        B = kind === :transpose_right ? transpose(raw_b) : raw_b
+        expected_b = kind === :transpose_right ? transpose(host_b) : host_b
+        C = CuArray(host_a * expected_b)
+        coefficients = Backends._prepare_mul_coefficients(C)
+        context = Backends._prepare_device_execution_context(C)
+        Backends._with_prepared_device_execution_context(context) do
             @test coefficients.alpha.x === coefficients.beta.x
             @test Array(coefficients.alpha.x) == T[one(T), zero(T)]
             @test Backends.compute_device(coefficients.alpha.x) == Backends.compute_device(C)
             for _ in 1:20
                 Backends._enqueue_mul!(C, A, B, coefficients)
             end
-            CUDA.synchronize(stream)
+            CUDA.synchronize(context.stream)
             captured_mul_allocations(C, A, B, coefficients)
             bytes = captured_mul_allocations(C, A, B, coefficients)
             # Installed typed cuBLAS wrappers query the library version on each
             # submission (48 host bytes); this occurs outside captured replay.
-            graph = CUDA.capture() do
+            captured = Backends._capture_prepared_device_graph(context) do
                 Backends._enqueue_mul!(C, A, B, coefficients)
                 return nothing
             end
-            types = captured_mul_node_types(graph)
+            types = captured_mul_node_types(captured.graph)
             @test !isempty(types)
             permitted = (CUDA.CUDACore.CU_GRAPH_NODE_TYPE_KERNEL,
-                CUDA.CUDACore.CU_GRAPH_NODE_TYPE_MEM_ALLOC,
-                CUDA.CUDACore.CU_GRAPH_NODE_TYPE_MEMSET,
-                CUDA.CUDACore.CU_GRAPH_NODE_TYPE_MEM_FREE)
+                CUDA.CUDACore.CU_GRAPH_NODE_TYPE_MEMSET)
             @test all(in(permitted), types)
-            @test count(==(CUDA.CUDACore.CU_GRAPH_NODE_TYPE_MEM_ALLOC), types) ==
-                count(==(CUDA.CUDACore.CU_GRAPH_NODE_TYPE_MEM_FREE), types)
-            executable = CUDA.instantiate(graph)
+            @test captured.workspace isa CuArray{UInt8,1,CUDA.DeviceMemory}
+            @test !isempty(captured.workspace)
+            @test Backends.compute_device(captured.workspace) == Backends.compute_device(C)
+            executable = captured.executable
             CUDA.launch(executable)
             captured_mul_replay_allocations(executable)
             @test captured_mul_replay_allocations(executable) == 0
-            CUDA.synchronize(stream)
-            # Retained coefficient ownership must survive collection and reuse.
+            CUDA.synchronize(context.stream)
+            # Retained scratch and coefficients survive collection and reuse.
+            workspace_address = pointer(captured.workspace)
             GC.gc(true)
+            @test pointer(captured.workspace) == workspace_address
             for replay in 1:3
                 scale = real(T)(replay)
                 copyto!(A, scale .* host_a)
+                copyto!(raw_b, (scale + one(scale)) .* host_b)
                 CUDA.launch(executable)
-                CUDA.synchronize(stream)
-                expected = (scale .* host_a) * expected_b
+                CUDA.synchronize(context.stream)
+                expected = (scale .* host_a) * ((scale + one(scale)) .* expected_b)
                 actual = Array(C)
                 @test all(isfinite, actual)
                 @test actual ≈ expected rtol=64eps(real(T)) atol=64eps(real(T))
