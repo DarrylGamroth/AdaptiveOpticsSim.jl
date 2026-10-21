@@ -31,9 +31,9 @@ function profile_backend(name::AbstractString)
     error("ADAPTIVEOPTICS_PROFILE_BACKEND must be cuda or amdgpu")
 end
 
-function prepare_pyramid_profile(backend::AbstractArrayBackend, strategy)
+function prepare_pyramid_profile(backend::AbstractArrayBackend, strategy;
+    resolution::Int=64, pupil_samples::Int=16, modulation_points::Int=8)
     T = Float32
-    resolution = 64
     telescope = Telescope(
         resolution=resolution,
         diameter=T(8),
@@ -57,9 +57,9 @@ function prepare_pyramid_profile(backend::AbstractArrayBackend, strategy)
     copyto!(pupil.opd, host_opd)
     sensor = PyramidWFS(
         telescope;
-        pupil_samples=16,
+        pupil_samples=pupil_samples,
         modulation=T(3),
-        modulation_points=8,
+        modulation_points=modulation_points,
         modulation_propagation_strategy=strategy,
         T=T,
         backend=backend,
@@ -131,8 +131,10 @@ function run_pyramid_profile(name::AbstractString, backend, strategy)
     return nothing
 end
 
-backend = profile_backend(PROFILE_BACKEND)
-run_pyramid_profile("pupil_tilt", backend,
-    WavefrontSensors.PyramidPupilTiltStrategy())
-run_pyramid_profile("shifted_mask", backend,
-    WavefrontSensors.PyramidShiftedMaskStrategy())
+if abspath(PROGRAM_FILE) == @__FILE__
+    backend = profile_backend(PROFILE_BACKEND)
+    run_pyramid_profile("pupil_tilt", backend,
+        WavefrontSensors.PyramidPupilTiltStrategy())
+    run_pyramid_profile("shifted_mask", backend,
+        WavefrontSensors.PyramidShiftedMaskStrategy())
+end

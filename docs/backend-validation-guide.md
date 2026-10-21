@@ -160,6 +160,23 @@ driver's printed elapsed time. Use the captured activity intervals for timeline
 analysis and separate unprofiled runs for latency claims. The size-matrix report
 also records this architecture comparison and its raw traces.
 
+For a broader CUDA kernel assessment, run
+`benchmarks/profile_gpu_kernel_patterns_cuda.jl /tmp/patterns.toml` in the CUDA
+test environment. It samples atmosphere interpolation, separable DM passes,
+geometric slopes, detector stencils, and Pyramid intensity reduction with the
+production workgroup policy. Timings include an output reset and one kernel;
+CPU execution of the same kernels checks backend parity. Set
+`AOS_GPU_PATTERN_PROFILE=1` for warmed counter collection without latency timing.
+
+`benchmarks/profile_pyramid_efficiency_cuda.jl` compares complete stream steps
+for both propagation strategies. Its optional `AOS_PYRAMID_BLOCKING_SYNC=1`
+changes the benchmark process's AOS stream waits to blocking waits, preserving
+completion boundaries. This is a diagnostic comparison, not a package policy.
+The [RTX 3080 assessment](../benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency.toml)
+records kernel counters, numerical checks, raw traces, and a benchmark-only
+geometric-slopes reassociation experiment. It distinguishes measured cases from
+unprofiled algorithms and does not claim general numerical qualification.
+
 Qualify a KA upgrade separately from workgroup changes. Registered CUDA 6.4.2
 constrains KA to 0.9; a development CUDA tree with the same version string can
 have different compatibility and allocation behavior. Record exact source

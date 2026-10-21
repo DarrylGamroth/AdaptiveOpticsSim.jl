@@ -1,0 +1,998 @@
+artifact_id = "GPU-KERNEL-EFFICIENCY-RTX3080-2026-10-21"
+base_revision = "50741bc95f5b8af2ee2947ef9504f11fbffe3aa3"
+objective = "Assess execution architecture and representative GPU kernel patterns on RTX3080; no instrument-specific optimization or claim that all algorithms are optimal."
+decision = "Prioritize synchronization/completion policy and geometric-slopes work decomposition; retain production implementations pending scoped remediation and numerical qualification."
+
+[scope]
+source_kernel_definitions = 138
+source_families = "44 WFS,32 detector,23 optics,16 atmosphere,12 backend,5 core,3 tomography,2 algorithm-graph,1 calibration"
+measured = "13 nodes from captured DM/SH/detector plant;14 synthetic production-launch kernel patterns;4 Pyramid strategy/size fixtures,3 fresh processes per wait policy;6 experimental slopes fixtures."
+unmeasured = "Not an exhaustive audit of every kernel/configuration. Stochastic RNG/Poisson, infinite-screen evolution, direction batching, cold covariance/tomography builds, full LiFT inverse, and complete Bi-O-edge/curvature/Zernike workflows lack new focused measurements. Shared pointwise/FFT patterns are not proof of their performance."
+production_changes = false
+
+[environment]
+gpu = "NVIDIA GeForce RTX3080 sm86;68 SMs"
+driver = "615.71.09"
+cuda_runtime = "13.4.0"
+cuda_jl = "6.4.2"
+kernel_abstractions = "0.9.45"
+julia = "1.13.2"
+cpu = "AMD Ryzen7 6800H"
+affinity = "Julia CPU2, one compute thread, zero interactive, one GC, OPENBLAS_NUM_THREADS=1"
+clocks = "Uncontrolled system defaults; no changes to power,clock,driver or profiler access policy"
+manifest_sha256 = "30a87806f0b9cbbe27d951f019f9f801d46236fe3e1792aab716c5ea8014ef73"
+
+[method]
+patterns = "Production Backends.preferred_workgroupsize selected before execution:16x16 in all14 cases.64 CUDA event samples, each graph32 reset+kernel operations; per-operation times include reset and graph scheduling. One fresh process; diagnostic baseline, not regression gate."
+pattern_oracle = "CPU execution of same KA kernels; backend parity, input immutability and post-replay stability. Utility reduction also exact Float64 oracle. Not independent physical validation. All passed."
+counters = "NsightCompute2026.3.1; single warmed kernel occurrences; basic+Occupancy+SchedulerStats, plant MemoryWorkloadAnalysis, patterns MemoryWorkloadAnalysis_Tables. Replay/cache/clock perturbation: durations diagnostic, not production latency. Raw metric names and units retained; do not confuse Memory Throughput percent with Gbyte/s."
+pyramid = "Complete synchronized stream optics+noiseless acquisition,128 host time_ns samples after32 warmups perfixture; default vs process-local blocking synchronize_backend! specialization.3 fresh processes per policy, fixed default-then-blocking campaign and fixedcase order. No paired randomized causal estimate."
+pyramid_oracle = "Complete GPU frames compared to CPU for each strategy/size before and after. Stable CUDA.used_memory.0 timed GC collections. Caller OPD and physical algorithms unchanged."
+blocking_scope = "Benchmark-only more-specific Backends.synchronize_backend!(AcceleratorStyle{CUDA.CUDABackend}) invokes CUDA.synchronize(blocking=true). Changes every AOS synchronization call in that process while retaining boundaries/current-stream scope. Implicates synchronization policy and bookkeeping collectively, not scheduler-only causality. It changes Julia task cooperation and requires latency/concurrency qualification before adoption."
+source_provenance = "Pyramid trace preceded addition of outside-timer GC counters and opt-in blocking dispatch; default step helper and package kernels unchanged. Current retained driver hashes do not claim byte-identical driver source for the earlier trace."
+timeline = "NsightSystems2026.3.2, four cudaProfilerApi regions32 steps each. Kernel interval union divided by first host launch to final kernel/synchronization end. Profiler changed the slow unprofiled wait behavior; use only for GPU-work mix, not unprofiled latency. Printed profile wall time can include collection/flush."
+boundary = "Benchmark-only exact-real telescoping of ordinary unmasked-pixel finite differences, not edge-masked slopes.6 fixtures:3 shapes including sub1, each smooth/nonsmooth field and mixed validity masks;4 ABBA groups64 event samples/block,32 reset+kernel operations. Same production16x16 group. Numerical reassociation explicitly unqualified outside fixtures."
+limitations = "Synthetic bounded Float32 inputs; one hardware/software stack and shared host. No WCET/tail/deadline guarantees, no clock locking, no whole-application or cross-backend optimality claim. Blocking-policy campaign fixed order and CPU2 affinity can affect magnitude."
+
+[commands]
+common_environment = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1; taskset -c 2; --threads=1,0 --gcthreads=1; apply to profiler commands too"
+pattern_baseline = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 taskset -c 2 julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/profile_gpu_kernel_patterns_cuda.jl /tmp/patterns.toml"
+pattern_counters = "AOS_GPU_PATTERN_PROFILE=1 ncu --clock-control none --cache-control none --profile-from-start off --launch-count 40 --set basic --section Occupancy --section MemoryWorkloadAnalysis_Tables --section SchedulerStats --export /tmp/patterns julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/profile_gpu_kernel_patterns_cuda.jl /tmp/patterns-profiled.toml"
+plant_counters = "AOS_SH_OCCUPANCY_GROUP=default ncu --clock-control none --cache-control none --profile-from-start off --graph-profiling node --launch-count 13 --set basic --section Occupancy --section MemoryWorkloadAnalysis --section SchedulerStats --export /tmp/plant julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/profile_sh_pupil_occupancy_cuda.jl cuda"
+pyramid_baseline = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 AOS_PYRAMID_RESULTS=/tmp/pyramid.toml taskset -c 2 julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/profile_pyramid_efficiency_cuda.jl"
+pyramid_blocking = "Same command with AOS_PYRAMID_BLOCKING_SYNC=1, in a separate fresh process; repeat each policy3 times."
+pyramid_timeline = "AOS_PYRAMID_PROFILE=1 AOS_PYRAMID_RESULTS=/tmp/pyramid-traced.toml nsys profile --sample=none --cpuctxsw=none --trace=cuda,nvtx --cuda-graph-trace=node --capture-range=cudaProfilerApi --capture-range-end=repeat:4:defer --output=/tmp/pyramid julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/profile_pyramid_efficiency_cuda.jl"
+boundary = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 taskset -c 2 julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/benchmark_geometric_slopes_boundary_cuda.jl /tmp/boundary.toml"
+counter_text = "ncu --import <report>.ncu-repz --page details --csv; also --page raw --csv for metric identities/units"
+timeline_export = "nsys export --type sqlite --output <report>.sqlite <report>.nsys-rep"
+
+[source_files_sha256]
+"benchmarks/profile_gpu_kernel_patterns_cuda.jl" = "fba5767c3ee2bd92bbe9d3518c545df3628cb79bf75aae87d462479434cbc93a"
+"benchmarks/profile_pyramid_efficiency_cuda.jl" = "ad5011b0cf7aeb2ac9ded0365b5b6fe242933fb9b053705187e30aa17c1fd16c"
+"benchmarks/benchmark_geometric_slopes_boundary_cuda.jl" = "39ca20867d6f59078115372ba095204779dade03d7407ae6052391530ae1cf5e"
+"scripts/profile_pyramid_plant_runtime.jl" = "5fa8be367178f28620991d48cbd0943647d305a2e2424f8da479f328b408b767"
+"src/backends/arrays.jl" = "d33cd2c2252ceda5f6d515ae6fc58ad042d7f459efddc8cd4474a7da717ce74d"
+"src/wfs/geometric_slopes.jl" = "c4d6279acc797ce0ea139a9f8209cdde7b6e82f167a3bdc2958972ae402d8f58"
+"src/optics/deformable_mirror.jl" = "47231f3a287cf53166b4ee415fe489cc8219e276f00772cc7f2decd9631706eb"
+"src/wfs/pyramid/optics.jl" = "be46e8a9aa9aae01a1660bfbe1c0427e711e815cab69658ec1d1a5d6cdc9071d"
+"src/wfs/pyramid/setup.jl" = "cfbb9f70aa48841ed305ab3bad6d4dbfeec6a7b5c4653b23123a60403eef8f7c"
+"src/atmosphere/multilayer.jl" = "51d8f290d48a5f9fe50e7edbdec9cdfd6791ef181388558029fd492da8ced4cc"
+"src/detectors/interface.jl" = "f39f4443d781d91ba03369a4d2c614097ba18e4a7c641f4ac7765eb30a009610"
+
+[references]
+ampere = "https://docs.nvidia.com/cuda/archive/12.6.0/ampere-tuning-guide/index.html"
+cuda_julia = "https://cuda.juliagpu.org/stable/tutorials/performance/"
+
+[[priority]]
+id = "GPU-EFF-1"
+status = "Observed synchronization-policy sensitivity"
+priority = 1
+evidence = "N256 pupil-tilt default median about8ms vs blocking about405us in3 fresh processes/policy, CPU-parity frames,0GC. Trace has about350us device-kernel activity/step. Wait policy/bookkeeping dominates this baseline."
+action = "Preserve asynchronous composition and choose explicit completion policy for latency-sensitive prepared execution. Profile task cooperation/multithread affinity before changing defaults; do not select physical propagation strategy solely to avoid a wait artifact."
+source = "src/backends/arrays.jl:799; benchmarks/profile_pyramid_efficiency_cuda.jl"
+
+[[priority]]
+id = "GPU-EFF-2"
+status = "Observed sparse grid and expensive finite-difference loop"
+priority = 2
+evidence = "Geometric slopes has4blocks for1024 outputs,39registers,under1% aggregate SM throughput; global loads about32sectors/request.16-to32pixels per subaperture increases measured kernel time75to527us."
+action = "Evaluate boundary-difference formulation for ordinary slopes and/or cooperative work per subaperture. Validate reassociation over adversarial/scientific OPDs and scales; edge-masked slopes require a different algorithm."
+source = "src/wfs/geometric_slopes.jl:1"
+
+[[priority]]
+id = "GPU-EFF-3"
+status = "Observed useful throughput; library comparison unmeasured"
+priority = 3
+evidence = "Larger custom separable-DM right pass reaches79% SM throughput with64-term dot products. Grid capture uses custom dots; dense/measured native DMs already use retained-coefficient cuBLAS GEMV."
+action = "Compare captured custom separable passes against capture-safe prepared GEMM across shapes, including pupil-mask pass and workspace cost. Do not assume tensor cores/TF32 meet numerical policy."
+source = "src/optics/deformable_mirror.jl:66; src/optics/deformable_mirror.jl:1062"
+
+[[priority]]
+id = "GPU-EFF-4"
+status = "Observed bandwidth use and workload-size sensitivity"
+priority = 4
+evidence = "cuFFT stages and abs2 achieve about70% DRAM throughput in plant sample;32-point Pyramid intensity reduction reaches86.8%. Moving-layer interpolation reaches67.7% SM throughput. Detector31tap rows/cols differ24.7vs15.1us in counters."
+action = "Prioritize bytes/work removed, batching, and stencil reuse over occupancy increases. Tiling/fusion alternatives remain hypotheses until benchmarked at the same output semantics."
+source = "src/wfs/pyramid/setup.jl:74; src/atmosphere/multilayer.jl:59; src/detectors/interface.jl:1644"
+
+[[priority]]
+id = "GPU-EFF-5"
+status = "Source observation and low-priority utility measurement"
+priority = 5
+evidence = "Small copy/scale kernels have low compute utilization despite high occupancy. Scalar atomic masked_sum is slow in a utility fixture but has no production caller in this checkout. No local-memory load traffic observed in14 pattern samples."
+action = "Remove/fuse redundant data movement where bindings permit; do not optimize dormant utilities or rewrite every Int toInt32 on source appearance alone. Inspect generated code for measured targets."
+source = "src/backends/arrays.jl:744; src/backends/reductions.jl:2"
+
+[[kernel_pattern]]
+profile_id = 0
+kernel = "gpu_moving_layer_replay_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 1, 1>, CuDeviceArray<Float32, 1, 1>, Int64, Float32, Float32, Bool, Int64, Int64)"
+duration_us = 10.43
+sm_throughput_percent = 67.74
+dram_throughput_percent = 23.56
+achieved_occupancy_percent = 80.74
+registers_per_thread = 28.0
+block_size = 256.0
+grid_size = 1024.0
+label = "atmosphere_n512"
+kernel_name = "moving_layer_replay_kernel!"
+source_file = "src/atmosphere/multilayer.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 0.0
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 1.0944000678136945e-05
+min_seconds = 1.0719999409047887e-05
+max_seconds = 1.2927999705425464e-05
+global_load_sectors_per_request = 4.267130533854167
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 512
+screen_n = 1024
+
+[[kernel_pattern]]
+profile_id = 1
+kernel = "gpu_dm_separable_left_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>)"
+duration_us = 5.18
+sm_throughput_percent = 6.35
+dram_throughput_percent = 2.14
+achieved_occupancy_percent = 16.6
+registers_per_thread = 40.0
+block_size = 256.0
+grid_size = 32.0
+label = "dm_left_n256_k32"
+kernel_name = "dm_separable_left_kernel!"
+source_file = "src/optics/deformable_mirror.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 0.0
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 4.351999905338744e-06
+min_seconds = 4.191999778413447e-06
+max_seconds = 5.024000074627111e-06
+global_load_sectors_per_request = 2.0
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 256
+actuators = 32
+
+[[kernel_pattern]]
+profile_id = 2
+kernel = "gpu_dm_separable_right_pupil_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Bool, 2, 1>)"
+duration_us = 5.95
+sm_throughput_percent = 40.96
+dram_throughput_percent = 6.89
+achieved_occupancy_percent = 50.13
+registers_per_thread = 40.0
+block_size = 256.0
+grid_size = 256.0
+label = "dm_right_n256_k32"
+kernel_name = "dm_separable_right_pupil_kernel!"
+source_file = "src/optics/deformable_mirror.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 0.0
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 6.399999620043673e-06
+min_seconds = 6.271999609452905e-06
+max_seconds = 6.591999863303499e-06
+global_load_sectors_per_request = 2.0
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 256
+actuators = 32
+
+[[kernel_pattern]]
+profile_id = 3
+kernel = "gpu_dm_separable_left_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>)"
+duration_us = 7.71
+sm_throughput_percent = 39.55
+dram_throughput_percent = 5.3
+achieved_occupancy_percent = 30.84
+registers_per_thread = 40.0
+block_size = 256.0
+grid_size = 128.0
+label = "dm_left_n512_k64"
+kernel_name = "dm_separable_left_kernel!"
+source_file = "src/optics/deformable_mirror.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 0.0
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 6.367999958456494e-06
+min_seconds = 6.207999831531197e-06
+max_seconds = 6.6560000959725585e-06
+global_load_sectors_per_request = 2.0
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 512
+actuators = 64
+
+[[kernel_pattern]]
+profile_id = 4
+kernel = "gpu_dm_separable_right_pupil_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Bool, 2, 1>)"
+duration_us = 21.73
+sm_throughput_percent = 79.08
+dram_throughput_percent = 6.3
+achieved_occupancy_percent = 85.04
+registers_per_thread = 40.0
+block_size = 256.0
+grid_size = 1024.0
+label = "dm_right_n512_k64"
+kernel_name = "dm_separable_right_pupil_kernel!"
+source_file = "src/optics/deformable_mirror.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 0.0
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 2.476800000295043e-05
+min_seconds = 2.4576000214437954e-05
+max_seconds = 2.5024000933626667e-05
+global_load_sectors_per_request = 2.000099359556686
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 512
+actuators = 64
+
+[[kernel_pattern]]
+profile_id = 5
+kernel = "gpu_geometric_slopes_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 1, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Bool, 2, 1>, Int64, Int64, Int64, Float32, Float32)"
+duration_us = 75.26
+sm_throughput_percent = 0.73
+dram_throughput_percent = 0.51
+achieved_occupancy_percent = 16.33
+registers_per_thread = 39.0
+block_size = 256.0
+grid_size = 4.0
+label = "slopes_n512_sub32"
+kernel_name = "geometric_slopes_kernel!"
+source_file = "src/wfs/geometric_slopes.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 0.0
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 7.478400220861658e-05
+min_seconds = 7.456000457750633e-05
+max_seconds = 7.599999662488699e-05
+global_load_sectors_per_request = 31.9815296566077
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 512
+n_sub = 32
+pixels_per_subaperture = 16
+
+[[kernel_pattern]]
+profile_id = 6
+kernel = "gpu_geometric_slopes_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 1, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Bool, 2, 1>, Int64, Int64, Int64, Float32, Float32)"
+duration_us = 527.1
+sm_throughput_percent = 0.36
+dram_throughput_percent = 0.82
+achieved_occupancy_percent = 16.47
+registers_per_thread = 39.0
+block_size = 256.0
+grid_size = 4.0
+label = "slopes_n1024_sub32"
+kernel_name = "geometric_slopes_kernel!"
+source_file = "src/wfs/geometric_slopes.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 0.0
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 0.0005190079682506621
+min_seconds = 0.0005187839851714671
+max_seconds = 0.0005952960345894098
+global_load_sectors_per_request = 32.067050894431844
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 1024
+n_sub = 32
+pixels_per_subaperture = 32
+
+[[kernel_pattern]]
+profile_id = 7
+kernel = "gpu_separable_response_rows_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 1, 1>, Int64, Int64, Int64, Int64)"
+duration_us = 10.43
+sm_throughput_percent = 57.06
+dram_throughput_percent = 26.93
+achieved_occupancy_percent = 69.22
+registers_per_thread = 19.0
+block_size = 256.0
+grid_size = 1024.0
+label = "detector_rows_n512_taps7"
+kernel_name = "separable_response_rows_kernel!"
+source_file = "src/detectors/interface.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 3.5762786865234375e-07
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 9.407999641553033e-06
+min_seconds = 9.247999514627736e-06
+max_seconds = 1.0463999387866352e-05
+global_load_sectors_per_request = 2.4979725950783
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 512
+taps = 7
+
+[[kernel_pattern]]
+profile_id = 8
+kernel = "gpu_separable_response_cols_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 1, 1>, Int64, Int64, Int64, Int64)"
+duration_us = 8.13
+sm_throughput_percent = 58.18
+dram_throughput_percent = 14.2
+achieved_occupancy_percent = 79.58
+registers_per_thread = 25.0
+block_size = 256.0
+grid_size = 1024.0
+label = "detector_cols_n512_taps7"
+kernel_name = "separable_response_cols_kernel!"
+source_file = "src/detectors/interface.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 4.76837158203125e-07
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 8.703999810677487e-06
+min_seconds = 8.57600025483407e-06
+max_seconds = 9.56799976847833e-06
+global_load_sectors_per_request = 3.310520717075893
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 512
+taps = 7
+
+[[kernel_pattern]]
+profile_id = 9
+kernel = "gpu_separable_response_rows_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 1, 1>, Int64, Int64, Int64, Int64)"
+duration_us = 24.67
+sm_throughput_percent = 63.68
+dram_throughput_percent = 10.72
+achieved_occupancy_percent = 73.7
+registers_per_thread = 19.0
+block_size = 256.0
+grid_size = 1024.0
+label = "detector_rows_n512_taps31"
+kernel_name = "separable_response_rows_kernel!"
+source_file = "src/detectors/interface.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 4.76837158203125e-07
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 2.844800110324286e-05
+min_seconds = 2.828799915732816e-05
+max_seconds = 2.9568000172730535e-05
+global_load_sectors_per_request = 2.497591545245399
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 512
+taps = 31
+
+[[kernel_pattern]]
+profile_id = 10
+kernel = "gpu_separable_response_cols_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 1, 1>, Int64, Int64, Int64, Int64)"
+duration_us = 15.07
+sm_throughput_percent = 68.78
+dram_throughput_percent = 6.36
+achieved_occupancy_percent = 82.53
+registers_per_thread = 25.0
+block_size = 256.0
+grid_size = 1024.0
+label = "detector_cols_n512_taps31"
+kernel_name = "separable_response_cols_kernel!"
+source_file = "src/detectors/interface.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 4.76837158203125e-07
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 1.7728001694194973e-05
+min_seconds = 1.7567999748280272e-05
+max_seconds = 1.8048000129056163e-05
+global_load_sectors_per_request = 3.3588709677419355
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 512
+taps = 31
+
+[[kernel_pattern]]
+profile_id = 11
+kernel = "gpu_pyramid_modulation_batch_intensity_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Complex<Float32>, 3, 1>, Float32, Int64, Int64)"
+duration_us = 8.06
+sm_throughput_percent = 24.59
+dram_throughput_percent = 63.82
+achieved_occupancy_percent = 56.8
+registers_per_thread = 40.0
+block_size = 256.0
+grid_size = 256.0
+label = "pyramid_n256_batches8"
+kernel_name = "pyramid_modulation_batch_intensity_kernel!"
+source_file = "src/wfs/pyramid/setup.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 4.76837158203125e-07
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 5.344000328477705e-06
+min_seconds = 5.183999746805057e-06
+max_seconds = 5.632000011246419e-06
+global_load_sectors_per_request = 7.764590992647059
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 256
+batches = 8
+
+[[kernel_pattern]]
+profile_id = 12
+kernel = "gpu_pyramid_modulation_batch_intensity_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Complex<Float32>, 3, 1>, Float32, Int64, Int64)"
+duration_us = 26.94
+sm_throughput_percent = 8.46
+dram_throughput_percent = 86.81
+achieved_occupancy_percent = 59.87
+registers_per_thread = 40.0
+block_size = 256.0
+grid_size = 256.0
+label = "pyramid_n256_batches32"
+kernel_name = "pyramid_modulation_batch_intensity_kernel!"
+source_file = "src/wfs/pyramid/setup.jl"
+production_caller = true
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 4.76837158203125e-07
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 2.6911999157164246e-05
+min_seconds = 2.6879999495577067e-05
+max_seconds = 2.7295998734189197e-05
+global_load_sectors_per_request = 7.938461538461539
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 256
+batches = 32
+
+[[kernel_pattern]]
+profile_id = 13
+kernel = "gpu_masked_sum2d_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 1, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Bool, 2, 1>, Int64, Int64, Int64, Int64)"
+duration_us = 21.92
+sm_throughput_percent = 0.68
+dram_throughput_percent = 0.49
+achieved_occupancy_percent = 11.42
+registers_per_thread = 36.0
+block_size = 256.0
+grid_size = 64.0
+label = "utility_masked_sum_n128"
+kernel_name = "masked_sum2d_kernel!"
+source_file = "src/backends/reductions.jl"
+production_caller = false
+operation = "fill_zero_then_one_kernel"
+workgroupsize = [16, 16]
+parity_max_abs = 0.0
+parity_atol = 1.9999999494757503e-05
+parity_rtol = 0.0003000000142492354
+median_seconds = 2.3040000087348744e-05
+min_seconds = 2.2943999283597805e-05
+max_seconds = 2.329600101802498e-05
+global_load_sectors_per_request = 2.7066666666666666
+local_load_requests = 0.0
+
+[kernel_pattern.case_dimensions]
+n = 128
+
+[[plant_kernel]]
+profile_id = 0
+kernel = "gpu__copy_packed_array_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<1, Tuple<OneTo<Int64>>>, NDRange<1, DynamicSize, DynamicSize, CartesianIndices<1, Tuple<OneTo<Int64>>>, CartesianIndices<1, Tuple<OneTo<Int64>>>>>, CuDeviceArray<Float32, 1, 1>, CuDeviceArray<Float32, 1, 1>, Int64)"
+duration_us = 2.02
+sm_throughput_percent = 0.0
+dram_throughput_percent = 0.01
+achieved_occupancy_percent = 2.88
+registers_per_thread = 16.0
+block_size = 25.0
+grid_size = 1.0
+
+[[plant_kernel]]
+profile_id = 1
+kernel = "gpu__copy_packed_array_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<1, Tuple<OneTo<Int64>>>, NDRange<1, DynamicSize, DynamicSize, CartesianIndices<1, Tuple<OneTo<Int64>>>, CartesianIndices<1, Tuple<OneTo<Int64>>>>>, CuDeviceArray<Float32, 1, 1>, CuDeviceArray<Float32, 1, 1>, Int64)"
+duration_us = 2.46
+sm_throughput_percent = 0.0
+dram_throughput_percent = 0.0
+achieved_occupancy_percent = 2.81
+registers_per_thread = 16.0
+block_size = 25.0
+grid_size = 1.0
+
+[[plant_kernel]]
+profile_id = 2
+kernel = "gpu_dm_apply_gaussian_operator_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 1, 1>, CuDeviceArray<Bool, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 1, 1>, Float32, Float32, Float32, Float32, Float32, Int64, Int64)"
+duration_us = 9.25
+sm_throughput_percent = 54.53
+dram_throughput_percent = 4.64
+achieved_occupancy_percent = 74.33
+registers_per_thread = 36.0
+block_size = 256.0
+grid_size = 484.0
+
+[[plant_kernel]]
+profile_id = 3
+kernel = "gpu__copy_packed_array_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<1, Tuple<OneTo<Int64>>>, NDRange<1, DynamicSize, DynamicSize, CartesianIndices<1, Tuple<OneTo<Int64>>>, CartesianIndices<1, Tuple<OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, Int64)"
+duration_us = 4.74
+sm_throughput_percent = 6.6
+dram_throughput_percent = 2.87
+achieved_occupancy_percent = 88.35
+registers_per_thread = 16.0
+block_size = 256.0
+grid_size = 484.0
+
+[[plant_kernel]]
+profile_id = 4
+kernel = "gpu_broadcast_kernel_cartesian(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, NDRange<2, DynamicSize, DynamicSize, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<2, Tuple<OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, Broadcasted<CuArrayStyle<2, DeviceMemory>, Tuple<OneTo<Int64>, OneTo<Int64>>, _, Tuple<Extruded<CuDeviceArray<Float32, 2, 1>, Tuple<Bool, Bool>, Tuple<Int64, Int64>>, Extruded<CuDeviceArray<Float32, 2, 1>, Tuple<Bool, Bool>, Tuple<Int64, Int64>>>>)"
+duration_us = 3.97
+sm_throughput_percent = 30.03
+dram_throughput_percent = 17.94
+achieved_occupancy_percent = 86.47
+registers_per_thread = 24.0
+block_size = 704.0
+grid_size = 176.0
+
+[[plant_kernel]]
+profile_id = 5
+kernel = "gpu_sh_explicit_pupil_stack_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>, NDRange<4, DynamicSize, DynamicSize, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Complex<Float32>, 3, 1>, CuDeviceArray<Bool, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Complex<Float32>, 2, 1>, Float32, Float32, Int64, Int64, Int64, Int64, Int64, Int64)"
+duration_us = 16.1
+sm_throughput_percent = 60.96
+dram_throughput_percent = 38.71
+achieved_occupancy_percent = 83.11
+registers_per_thread = 30.0
+block_size = 748.0
+grid_size = 768.0
+
+[[plant_kernel]]
+profile_id = 6
+kernel = "void regular_fft<44, EPT<4, 11>, 8, 14, 6, 0, 2, 1, unsigned int, float, HostConfigPlaceholder>(kernel_arguments_t<T9>)"
+duration_us = 14.98
+sm_throughput_percent = 18.7
+dram_throughput_percent = 70.49
+achieved_occupancy_percent = 74.06
+registers_per_thread = 40.0
+block_size = 88.0
+grid_size = 1408.0
+
+[[plant_kernel]]
+profile_id = 7
+kernel = "void regular_fft<44, EPT<4, 11>, 8, 14, 6, 0, 2, 0, unsigned int, float, HostConfigPlaceholder>(kernel_arguments_t<T9>)"
+duration_us = 14.18
+sm_throughput_percent = 30.99
+dram_throughput_percent = 71.48
+achieved_occupancy_percent = 72.95
+registers_per_thread = 40.0
+block_size = 88.0
+grid_size = 1408.0
+
+[[plant_kernel]]
+profile_id = 8
+kernel = "gpu_complex_abs2_stack_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<3, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>, NDRange<3, DynamicSize, DynamicSize, CartesianIndices<3, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<3, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 3, 1>, CuDeviceArray<Complex<Float32>, 3, 1>, Float32, Int64, Int64)"
+duration_us = 12.48
+sm_throughput_percent = 59.99
+dram_throughput_percent = 69.87
+achieved_occupancy_percent = 81.7
+registers_per_thread = 22.0
+block_size = 256.0
+grid_size = 2304.0
+
+[[plant_kernel]]
+profile_id = 9
+kernel = "gpu_sh_sample_spot_stack_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>, NDRange<4, DynamicSize, DynamicSize, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 3, 1>, CuDeviceArray<Float32, 3, 1>, CuDeviceArray<Bool, 2, 1>, Float32, Int64, Int64, Int64)"
+duration_us = 18.5
+sm_throughput_percent = 59.83
+dram_throughput_percent = 5.54
+achieved_occupancy_percent = 76.12
+registers_per_thread = 40.0
+block_size = 768.0
+grid_size = 176.0
+
+[[plant_kernel]]
+profile_id = 10
+kernel = "gpu__shack_hartmann_rate_map_copy_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>, NDRange<4, DynamicSize, DynamicSize, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>, CartesianIndices<4, Tuple<OneTo<Int64>, OneTo<Int64>, OneTo<Int64>, OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 3, 1>, Int64, Int64, Int64, Int64)"
+duration_us = 6.98
+sm_throughput_percent = 30.42
+dram_throughput_percent = 6.6
+achieved_occupancy_percent = 70.69
+registers_per_thread = 30.0
+block_size = 768.0
+grid_size = 176.0
+
+[[plant_kernel]]
+profile_id = 11
+kernel = "gpu__prepare_enqueued_detector_frame_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<1, Tuple<OneTo<Int64>>>, NDRange<1, DynamicSize, DynamicSize, CartesianIndices<1, Tuple<OneTo<Int64>>>, CartesianIndices<1, Tuple<OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, Float32, Int64)"
+duration_us = 2.43
+sm_throughput_percent = 9.72
+dram_throughput_percent = 6.4
+achieved_occupancy_percent = 97.83
+registers_per_thread = 16.0
+block_size = 256.0
+grid_size = 484.0
+
+[[plant_kernel]]
+profile_id = 12
+kernel = "gpu__copy_packed_array_kernel_(CompilerMetadata<DynamicSize, DynamicCheck, void, CartesianIndices<1, Tuple<OneTo<Int64>>>, NDRange<1, DynamicSize, DynamicSize, CartesianIndices<1, Tuple<OneTo<Int64>>>, CartesianIndices<1, Tuple<OneTo<Int64>>>>>, CuDeviceArray<Float32, 2, 1>, CuDeviceArray<Float32, 2, 1>, Int64)"
+duration_us = 2.4
+sm_throughput_percent = 9.24
+dram_throughput_percent = 4.73
+achieved_occupancy_percent = 94.04
+registers_per_thread = 16.0
+block_size = 256.0
+grid_size = 484.0
+
+[[pyramid_wait_comparison]]
+resolution = 64
+strategy = "pupil_tilt"
+default_p50_us = [90.0235, 89.568, 90.199]
+blocking_p50_us = [88.881, 89.0415, 88.06]
+default_gc_bytes_range = [3760, 3760]
+blocking_gc_bytes_range = [3360, 3360]
+maximum_relative_cpu_error = 2.798161631289986e-07
+timed_gc_collections = 0
+
+[[pyramid_wait_comparison]]
+resolution = 64
+strategy = "shifted_mask"
+default_p50_us = [85.395, 85.2495, 85.7805]
+blocking_p50_us = [83.506, 84.027, 84.068]
+default_gc_bytes_range = [3776, 3776]
+blocking_gc_bytes_range = [3376, 3376]
+maximum_relative_cpu_error = 1.892790237434383e-06
+timed_gc_collections = 0
+
+[[pyramid_wait_comparison]]
+resolution = 256
+strategy = "pupil_tilt"
+default_p50_us = [7995.82, 8019.9815, 7996.959]
+blocking_p50_us = [404.833, 404.8825, 405.243]
+default_gc_bytes_range = [3760, 4368]
+blocking_gc_bytes_range = [3360, 3360]
+maximum_relative_cpu_error = 2.475640314969496e-07
+timed_gc_collections = 0
+
+[[pyramid_wait_comparison]]
+resolution = 256
+strategy = "shifted_mask"
+default_p50_us = [245.4395, 245.945, 246.01]
+blocking_p50_us = [244.6875, 244.793, 244.4825]
+default_gc_bytes_range = [3776, 4080]
+blocking_gc_bytes_range = [3376, 3376]
+maximum_relative_cpu_error = 6.211183062987402e-06
+timed_gc_collections = 0
+
+[[pyramid_timeline]]
+resolution = 64
+strategy = "pupil_tilt"
+steps = 32
+kernel_activities = 320
+kernel_active_union_ns = 1020129
+traced_interval_ns = 4194974
+kernel_active_percent = 24.31788611800693
+kernel_active_us_per_step = 31.87903125
+
+[[pyramid_timeline]]
+resolution = 64
+strategy = "shifted_mask"
+steps = 32
+kernel_activities = 320
+kernel_active_union_ns = 904388
+traced_interval_ns = 4005100
+kernel_active_percent = 22.580909340590747
+kernel_active_us_per_step = 28.262125
+
+[[pyramid_timeline]]
+resolution = 256
+strategy = "pupil_tilt"
+steps = 32
+kernel_activities = 320
+kernel_active_union_ns = 11189143
+traced_interval_ns = 14505737
+kernel_active_percent = 77.13598419714903
+kernel_active_us_per_step = 349.66071875
+
+[[pyramid_timeline]]
+resolution = 256
+strategy = "shifted_mask"
+steps = 32
+kernel_activities = 320
+kernel_active_union_ns = 6023052
+traced_interval_ns = 9345617
+kernel_active_percent = 64.4478796852043
+kernel_active_us_per_step = 188.220375
+
+[[boundary_experiment]]
+label = "smooth_n64_l64"
+dataset = "smooth"
+original_kernel = "geometric_slopes_kernel!"
+original_source = "src/wfs/geometric_slopes.jl"
+boundary_kernel = "boundary_geometric_slopes_kernel!"
+boundary_source = "benchmarks/benchmark_geometric_slopes_boundary_cuda.jl"
+original_vs_cpu_max_abs = 0.0
+boundary_vs_cpu_max_abs = 0.0
+boundary_vs_original_max_abs = 0.0
+comparison_atol = 1.9999999494757503e-05
+comparison_rtol = 0.0003000000142492354
+original_median_seconds = 3.3599999369471334e-06
+boundary_median_seconds = 3.5200000638724305e-06
+median_ratio_original_over_boundary = 0.954545419311931
+workgroupsize = [16, 16]
+paired_geometric_speedup = 0.9522645377492511
+
+[boundary_experiment.dimensions]
+n = 64
+n_sub = 64
+pixels_per_subaperture = 1
+
+[[boundary_experiment]]
+label = "nonsmooth_n64_l64"
+dataset = "nonsmooth"
+original_kernel = "geometric_slopes_kernel!"
+original_source = "src/wfs/geometric_slopes.jl"
+boundary_kernel = "boundary_geometric_slopes_kernel!"
+boundary_source = "benchmarks/benchmark_geometric_slopes_boundary_cuda.jl"
+original_vs_cpu_max_abs = 0.0
+boundary_vs_cpu_max_abs = 0.0
+boundary_vs_original_max_abs = 0.0
+comparison_atol = 1.9999999494757503e-05
+comparison_rtol = 0.0003000000142492354
+original_median_seconds = 3.3599999369471334e-06
+boundary_median_seconds = 3.5200000638724305e-06
+median_ratio_original_over_boundary = 0.954545419311931
+workgroupsize = [16, 16]
+paired_geometric_speedup = 0.9727746455321599
+
+[boundary_experiment.dimensions]
+n = 64
+n_sub = 64
+pixels_per_subaperture = 1
+
+[[boundary_experiment]]
+label = "smooth_n512_l32"
+dataset = "smooth"
+original_kernel = "geometric_slopes_kernel!"
+original_source = "src/wfs/geometric_slopes.jl"
+boundary_kernel = "boundary_geometric_slopes_kernel!"
+boundary_source = "benchmarks/benchmark_geometric_slopes_boundary_cuda.jl"
+original_vs_cpu_max_abs = 0.0
+boundary_vs_cpu_max_abs = 1.4901161193847656e-08
+boundary_vs_original_max_abs = 1.4901161193847656e-08
+comparison_atol = 1.9999999494757503e-05
+comparison_rtol = 0.0003000000142492354
+original_median_seconds = 6.60479927319102e-05
+boundary_median_seconds = 9.11999995878432e-06
+median_ratio_original_over_boundary = 7.2421044989472
+workgroupsize = [16, 16]
+paired_geometric_speedup = 7.351887921350476
+
+[boundary_experiment.dimensions]
+n = 512
+n_sub = 32
+pixels_per_subaperture = 16
+
+[[boundary_experiment]]
+label = "nonsmooth_n512_l32"
+dataset = "nonsmooth"
+original_kernel = "geometric_slopes_kernel!"
+original_source = "src/wfs/geometric_slopes.jl"
+boundary_kernel = "boundary_geometric_slopes_kernel!"
+boundary_source = "benchmarks/benchmark_geometric_slopes_boundary_cuda.jl"
+original_vs_cpu_max_abs = 0.0
+boundary_vs_cpu_max_abs = 0.0
+boundary_vs_original_max_abs = 0.0
+comparison_atol = 1.9999999494757503e-05
+comparison_rtol = 0.0003000000142492354
+original_median_seconds = 6.438399577746168e-05
+boundary_median_seconds = 9.08800029719714e-06
+median_ratio_original_over_boundary = 7.084506345947035
+workgroupsize = [16, 16]
+paired_geometric_speedup = 7.080513097101642
+
+[boundary_experiment.dimensions]
+n = 512
+n_sub = 32
+pixels_per_subaperture = 16
+
+[[boundary_experiment]]
+label = "smooth_n1024_l32"
+dataset = "smooth"
+original_kernel = "geometric_slopes_kernel!"
+original_source = "src/wfs/geometric_slopes.jl"
+boundary_kernel = "boundary_geometric_slopes_kernel!"
+boundary_source = "benchmarks/benchmark_geometric_slopes_boundary_cuda.jl"
+original_vs_cpu_max_abs = 0.0
+boundary_vs_cpu_max_abs = 4.516914486885071e-08
+boundary_vs_original_max_abs = 4.516914486885071e-08
+comparison_atol = 1.9999999494757503e-05
+comparison_rtol = 0.0003000000142492354
+original_median_seconds = 0.0004222719871904701
+boundary_median_seconds = 1.7648000721237622e-05
+median_ratio_original_over_boundary = 23.9274688312035
+workgroupsize = [16, 16]
+paired_geometric_speedup = 23.93507284285796
+
+[boundary_experiment.dimensions]
+n = 1024
+n_sub = 32
+pixels_per_subaperture = 32
+
+[[boundary_experiment]]
+label = "nonsmooth_n1024_l32"
+dataset = "nonsmooth"
+original_kernel = "geometric_slopes_kernel!"
+original_source = "src/wfs/geometric_slopes.jl"
+boundary_kernel = "boundary_geometric_slopes_kernel!"
+boundary_source = "benchmarks/benchmark_geometric_slopes_boundary_cuda.jl"
+original_vs_cpu_max_abs = 0.0
+boundary_vs_cpu_max_abs = 0.0
+boundary_vs_original_max_abs = 0.0
+comparison_atol = 1.9999999494757503e-05
+comparison_rtol = 0.0003000000142492354
+original_median_seconds = 0.0004211519844830036
+boundary_median_seconds = 1.759999940986745e-05
+median_ratio_original_over_boundary = 23.92909082979199
+workgroupsize = [16, 16]
+paired_geometric_speedup = 23.918586392070576
+
+[boundary_experiment.dimensions]
+n = 1024
+n_sub = 32
+pixels_per_subaperture = 32
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/patterns-baseline.toml.gz"
+sha256 = "70d316def78a357cc3250ad3a28e51d04d9b7aa200337cc266deb3dd66b5d130"
+uncompressed_sha256 = "c0cd192a85505466bd9796b59459518dd984f52454ba414629aa686e8f6e9529"
+uncompressed_bytes = 27703
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/patterns-profiled.toml.gz"
+sha256 = "7d9b41911791cda749bac7175e21d0d5835e3c7479fc8d1a935c71133201cea5"
+uncompressed_sha256 = "23a30d2f4ac5ade56a332fd3b9497e310c56006e1c3b3e397d2415c7f0a61d74"
+uncompressed_bytes = 6171
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/patterns.ncu-repz.gz"
+sha256 = "a55907d1f99c3727e035858df7a1cbcc7fbd4431a86df85ec12e43d58bb79e16"
+uncompressed_sha256 = "0fee42ef6884d259fefed6bc88c80d2f64bb528dfea22ba295d698e17829c018"
+uncompressed_bytes = 295844
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/patterns-details.csv.gz"
+sha256 = "da0372473ac400d1124626b98d07c60ca4281fc140491aea915115a66e7c6880"
+uncompressed_sha256 = "e875c16c4706d4a3db51af4aa7f8a34e8852e0076d1557a4496a37f19d6ba7c7"
+uncompressed_bytes = 469738
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/patterns-raw-metrics.csv.gz"
+sha256 = "08110fa7e865026587a457d92a56c24954eaf2d424ee4424f5edbcaf305f9d8f"
+uncompressed_sha256 = "4ae85378503b6e874ed45c3e344de754616bbd909ad53b7feb8ce93e2c405409"
+uncompressed_bytes = 159209
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/plant.ncu-repz.gz"
+sha256 = "b3d229f74e752734b71019a81789a8dc48158ac1a44c1bc00441b98c7dc7b5e8"
+uncompressed_sha256 = "1105d1a313c4e5d796a28aac4ddca0b6a146f4243b64441e05fc5f5a194a44a6"
+uncompressed_bytes = 272475
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/plant-details.csv.gz"
+sha256 = "e83c8d5718ad1fea44cec41f5f1d7b245a6ef4c03c261e8835b1060af6c5206c"
+uncompressed_sha256 = "65901b030a21dd950c9d17e80975abb23f7c1430e12f573fd4319f9e6fe12498"
+uncompressed_bytes = 501663
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/plant-raw-metrics.csv.gz"
+sha256 = "68c884883ca71fca4be26a01d1a1243d97deb35df51735f81ce2072ef49769e2"
+uncompressed_sha256 = "16187e09eea535bf61a55552c64e0d7f89f0f73c43c58d31949bc575578ec199"
+uncompressed_bytes = 104789
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/boundary.toml.gz"
+sha256 = "4d2153f3c0e0161ebc401e74860d91b600f16fc077706443dd8298e34b9fc095"
+uncompressed_sha256 = "fbc874ef858b92be585ebb318d3390007c9bcfc82bd41482ab588c5ea48d0cf2"
+uncompressed_bytes = 151764
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid-traced.toml.gz"
+sha256 = "46fa69bd9db45027b0880842d959d516c915bb959d3d3100c0b6be4a13fd32bd"
+uncompressed_sha256 = "1f8c8c424eeacb930fa0fd6ec00fa4569764580f847479412e79e6bdf2415c70"
+uncompressed_bytes = 6371
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid-final1.toml.gz"
+sha256 = "597e90d5d442cd5ff65cedd7fa18d137e875aa5cfd2d348246896a1f283dd58a"
+uncompressed_sha256 = "b0a1087152a0ab4afe4dad5e99f85f27c9618e5a2c513bcb0ac8c8f8a1ae399d"
+uncompressed_bytes = 11099
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid-final2.toml.gz"
+sha256 = "23451e321b8276829c20eeeb4843db776aca888daf123b75714feb164169ab54"
+uncompressed_sha256 = "ccaa59c19b369ade874d56ffa0ee2ce42f7411a306db3354201058279fa02bf1"
+uncompressed_bytes = 11110
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid-final3.toml.gz"
+sha256 = "581eadc27470e176ac38a7ecd5bbf588cc896f56a3d1c518d00d69ebe0c348c8"
+uncompressed_sha256 = "6d443ae053f02b29c07b6ef763d1ffad1cc4edbe83540e11300ed6704865aee0"
+uncompressed_bytes = 11094
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid-blocking1.toml.gz"
+sha256 = "4af5e7162dc2b3c1ad6b226063dab8da75814dc7681d2e0144bf8ecbfbe401c7"
+uncompressed_sha256 = "08f36d11deea0a715652951f4949f13f4058923ca6aa08aa78edcad03ea2c0d0"
+uncompressed_bytes = 11122
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid-blocking2.toml.gz"
+sha256 = "f5ace2f727bbaae5f677f9e59d203204902a1b0890d714950d4239e1515472e1"
+uncompressed_sha256 = "789c03aa6f82235c360b24adc63af0025ddd877a749f8542953aeed3e3cd69fe"
+uncompressed_bytes = 11125
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid-blocking3.toml.gz"
+sha256 = "15f50f76d5ead21c67d376f45d27f62113cdf9e71be45b2f605619c6d66c449d"
+uncompressed_sha256 = "f004096d3ca39e9fc3d9d7f02082da58630a35463f4d2d2f08f9cb31f380c117"
+uncompressed_bytes = 11122
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid.1.nsys-rep.gz"
+sha256 = "14c65611145e1829360359a5120c6305fa8ba86b26cc7d1012244c3bce3b5e45"
+uncompressed_sha256 = "ad14234b95c2107fe429f8179fad377629c1dfddc642f616900528036ce4f8ff"
+uncompressed_bytes = 168160
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid.2.nsys-rep.gz"
+sha256 = "4a47c3e2aa553c2f3f8c71a9e5f933805443eac3bdfec1f2cd0dfdca1d7390ff"
+uncompressed_sha256 = "740b60fd510b612b6a752a51b7501b449d91cbb93e121664376cde9f034fd25b"
+uncompressed_bytes = 157202
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid.3.nsys-rep.gz"
+sha256 = "89ef1086c5f756930e35738c9740a4e299eafbbacc0074b8b8d9f3610e390074"
+uncompressed_sha256 = "cdb4b01260ccbc3b2d4b1aa62eac3b4bf35d3f363734a64117f126af5c317dbf"
+uncompressed_bytes = 312173
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/pyramid.4.nsys-rep.gz"
+sha256 = "cd48f67f44b61723a6a7ce0e92ac76c0537663e31e4e96d8008b4ac8903b3e2f"
+uncompressed_sha256 = "bf769cde61abb5711b08d930b4ee55df6d589bd00f98c51ed358423ab3aff7a1"
+uncompressed_bytes = 240201
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-gpu-kernel-efficiency/summarize.py.gz"
+sha256 = "2ef98ef0d90f5c66d0d6a53800acee066329880d17ea403ccb7d8032a82215b6"
+uncompressed_sha256 = "42f8565cdf4c6cf45de8b93df1fd39d41ddd38d5b61a829bb840ba2c6f7a2ea6"
+uncompressed_bytes = 17926
