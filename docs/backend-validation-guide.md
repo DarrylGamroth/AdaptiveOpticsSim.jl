@@ -106,6 +106,29 @@ not a continuously available release gate.
 The full CUDA target applies the same grouped two-branch parity, stream-identity,
 changed-input, and reset checks as the AMDGPU target.
 
+For the 352-square Shack-Hartmann pupil workgroup comparison:
+
+~~~bash
+JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 AOS_SH_RESULTS=/tmp/sh-workgroups.toml \
+  julia --startup-file=no --project=test/cuda \
+  benchmarks/benchmark_sh_pupil_workgroups_cuda.jl cuda
+~~~
+
+The benchmark specializes only its process's pupil launcher. It compares CUDA
+event batches of 64 pupil kernels and complete captured plant steps, with
+alternating ABBA/BAAB groups and a duplicate default control. Input staging,
+changed-command CPU oracles, bitwise pupil comparisons, compilation, and warmup
+are outside timing. Timed plant input is fixed and concurrency is one. Repeat
+in fresh processes and inspect the complete plant as well as kernel timing.
+The [local comparison](../benchmarks/results/platform/2026-10-21-sh-pupil-workgroups.toml)
+records source hashes, raw samples, launch geometry, and dependency constraints.
+
+Qualify a KA upgrade separately from workgroup changes. Registered CUDA 6.4.2
+constrains KA to 0.9; a development CUDA tree with the same version string can
+have different compatibility and allocation behavior. Record exact source
+trees and retain the numerical, zero-allocation, and fixed-storage capture
+gates before adopting a new stack.
+
 Do not treat SSH success, `CUDA.functional()`, or compilation alone as model
 evidence. The test must execute the changed operation.
 

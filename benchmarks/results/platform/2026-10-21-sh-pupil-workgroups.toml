@@ -1,0 +1,400 @@
+artifact_id = "SH-PUPIL-WORKGROUPS-CUDA-2026-10-21"
+generated_on = "2026-10-21"
+base_revision = "5028cc24bae484e1c787659ac30f86e62bd1a2ff"
+source_state = "Base commit plus benchmark-only kernel-specific dispatch and the source hashes below; production launch policy was not modified"
+decision = "44x8x1x1 is the strongest isolated-kernel candidate. Complete-plant paired changes are comparable to unchanged-control variation; no production-policy change selected."
+
+[environment]
+host = "rtc-devel"
+kernel = "6.12.111+deb13-amd64"
+cpu = "AMD Ryzen 7 6800H"
+gpu = "RTX 3080 sm86"
+driver = "615.71.09"
+cuda_runtime = "13.4.0"
+julia = "1.13.2"
+cuda_jl = "6.4.2"
+kernel_abstractions = "0.9.45"
+julia_threads = "1 compute, 0 interactive, 1 GC"
+blas_threads = 1
+affinity = "Julia CPU2, passive monitor CPU6"
+governor = "powersave"
+clocks_and_power = "Unchanged system defaults; shared host, no CPU frequency/isolation trace"
+cuda_manifest_sha256 = "30a87806f0b9cbbe27d951f019f9f801d46236fe3e1792aab716c5ea8014ef73"
+CUDA_tree = "3da65a61794b3a5c01ef1eb1eb4879da4a594ac3"
+CUDACore_tree = "0293a2d0776306cd21fddbf3f02e7bdeb417da5a"
+KernelAbstractions_tree = "e51d16f9dcff134c4ecf79e7cfa764c59d2d648e"
+
+[protocol]
+fixture = "352x352 Float32 pupil; 16x16 lenslets; pad44; 25 DM commands; 352x352 noiseless CCD frame"
+launch_ndrange = [44, 44, 16, 16]
+default_logical_workgroup = [44, 17, 1, 1]
+fresh_processes = 3
+candidates = 9
+unchanged_controls = 1
+groups_per_candidate_per_process = 4
+order = "Rotating candidate order; ABBA on odd groups, BAAB on even groups"
+plant_samples_per_block = 256
+kernel_event_samples_per_block = 32
+pupil_kernels_per_event_sample = 64
+complete_plant_steps_total = 122880
+kernel_event_samples_total = 15360
+plant_boundary = "host time_ns around complete captured plant step including wait; concurrency one"
+kernel_boundary = "CUDA events around one graph of 64 repeated pupil kernels; graph scheduling overhead amortized per kernel"
+inputs = "Deterministic fixed nominal inputs during timing. Cold writes explicitly synchronized; zero,-0.7,1.3 times nominal command checked against CPU before timing. Every candidate pupil buffer compared byte-for-byte with default, including changed commands."
+oracle = "Full CPU frame parity before and after; zero warmed complete-step Julia bytes and unchanged CUDA.used_memory per block; all passed"
+plant_timed_allocation_bytes = 0
+measured_gc_collections = 0
+kernel_host_bookkeeping = "Event API bookkeeping measured and retained in raw blocks; not a zero-host-allocation kernel measurement"
+paired_effect_formula = "Per ABBA/BAAB group: exp(mean(log(candidate block p50))-mean(log(baseline block p50))). Per process: geometric mean of the four group ratios, minus 1; multiplied by100. Negative is faster."
+percentiles = "P99 and maximum are empirical complete-step summaries, not rare-tail, fixed-rate deadline or WCET guarantees. Kernel event samples average 64 launches; their tails are not individual-kernel tails."
+pilot_and_exploratory = "Excluded from reported campaign; retained under /tmp/aos-sh-workgroups-pilot* and /tmp/aos-sh-workgroups-20261021/exploratory. Final campaign adds explicit cold input-copy synchronization; timing loops unchanged."
+
+[telemetry]
+samples_total = 1801
+samples_with_midpoint_in_measured_block = 1069
+measured_blocks = 960
+blocks_with_a_sample = 572
+sample_period = "Nominal100ms plus query duration; query begin/end CLOCK_MONOTONIC brackets retained"
+sm_mhz_range_matched = [1740, 1995]
+memory_mhz_range_matched = [9251, 9251]
+pstates_matched = ["P2"]
+temperature_c_range_matched = [45, 57]
+power_w_range_matched = [110.05, 176.37]
+clock_event_masks_matched = ["0x0000000000000000", "0x0000000000000400", "0x0000000000000404", "0x0000000000000424"]
+limitation = "Sparse telemetry does not establish continuous stable clocks or absence of shared-host interference; no nearest-neighbor filling or sample exclusions."
+
+[ka_upgrade]
+decision = "Keep KA0.9.45; no compatible registered CUDA upgrade in inspected snapshot"
+registry_tree = "4278f23f95a85bf862c0240c6dccf0d0b6c5964c"
+registry_archive_modified = "2026-10-20"
+latest_09 = "0.9.45"
+latest_09_tree = "e51d16f9dcff134c4ecf79e7cfa764c59d2d648e"
+newer_observed = "0.10.1"
+newer_tree = "a4dc6eb280605e98d55f997de1f73912a6e8200d"
+cudacore_642_tree = "0293a2d0776306cd21fddbf3f02e7bdeb417da5a"
+resolver_result = "ERROR: Unsatisfiable requirements detected for package CUDACore [bd0ed864]:\n CUDACore [bd0ed864] log:\n \u251c\u2500possible versions are: 6.0.1 - 6.4.2 or uninstalled\n \u251c\u2500restricted by compatibility requirements with KernelAbstractions [63c18a36] to versions: uninstalled\n \u2502 \u2514\u2500KernelAbstractions [63c18a36] log:\n \u2502   \u251c\u2500possible versions are: 0.1.0 - 0.10.1 or uninstalled\n \u2502   \u2514\u2500restricted to versions 0.10.1 by project [fe76b545], leaving only versions: 0.10.1\n \u2502     \u2514\u2500project [fe76b545] log:\n \u2502       \u251c\u2500possible versions are: 0.0.0 or uninstalled\n \u2502       \u2514\u2500project [fe76b545] is fixed to version 0.0.0\n \u2514\u2500restricted by compatibility requirements with CUDA [052768ef] to versions: 6.4.2 \u2014 no versions left\n   \u2514\u2500CUDA [052768ef] log:\n     \u251c\u2500possible versions are: 0.1.0 - 6.4.2 or uninstalled\n     \u2514\u2500restricted to versions 6.4.2 by project [fe76b545], leaving only versions: 6.4.2\n       \u2514\u2500project [fe76b545] log: see above"
+additional_constraints = "AOS and registered AOC0.17 constrain KA to0.9. Canonical AOC compatibility change and CUDA development sources require separate exact-source qualification."
+donor_evidence = "JuliaFilterGraph docs/ka-upgrade.md records host replay allocations and rejected device allocation/free capture on development CUDA f533f037841fbcecb936a7db230bff10dcf1a845 with KA0.10.1. Not reproduced here; do not attribute those observations to KA alone."
+environments_modified = false
+
+[commands]
+environment = "JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 AOS_SH_SAMPLES=256 AOS_SH_ROUNDS=4 AOS_SH_AFFINITY=\"CPU2; monitor CPU6\""
+benchmark = "AOS_SH_RESULTS=/tmp/run1.toml taskset -c2 julia --startup-file=no --threads=1,0 --gcthreads=1 --project=test/cuda benchmarks/benchmark_sh_pupil_workgroups_cuda.jl cuda"
+resolver = "JULIA_PKG_PRECOMPILE_AUTO=0 julia --startup-file=no --project=/tmp/aos-ka-resolver-0tfn_l3c -e 'using Pkg; Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true; Pkg.resolve()'"
+telemetry = "nvidia-smi --query-gpu=clocks.current.sm,clocks.current.memory,pstate,temperature.gpu,power.draw,clocks_event_reasons.active --format=csv,noheader,nounits"
+raw_logs = "/tmp/aos-sh-workgroups-20261021"
+independent_review = "Benchmark isolation, timing boundaries, controls and gates reviewed; bitwise comparison corrected before final campaign."
+
+[source_files_sha256]
+"benchmarks/benchmark_sh_pupil_workgroups_cuda.jl" = "a622b03372ced71e44c712dc892c72bd788322a4d1573643a972dd9e0175428e"
+"benchmarks/profile_aos_gpu_plant.jl" = "08e5de96dba50f3813f93f72cca7468c0ff4e2c2e86dc4a7c7351bc4c88305c8"
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [748, 1, 1]
+role = "unchanged_control"
+grid = [768, 1, 1]
+index = 2
+workgroup = "default"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [1.6774011557012969, -0.36422815667627173, -1.238167564590864]
+kernel_round_changes_percent = [-0.053092089599315884, 6.994022276604439, 0.0, -0.05320508036289473, -0.28978511194486245, -0.3715631279214593, -0.42395501377597844, -0.3715631279214593, -1.3095766143279675, -1.1093307196418989, -1.2671580691244189, -1.2664867480740916]
+kernel_baseline_p50_us = [15.007999536464922, 15.088000509422272, 15.16799966339022]
+kernel_candidate_p50_us = [15.024000276753213, 15.040000107546803, 14.991999705671333]
+plant_paired_p50_change_percent = [-1.6726609845126972, 1.5958725499129134, -0.3307783630619343]
+plant_round_changes_percent = [-0.1573954229910024, -1.519987074852358, 0.13513592250757878, -5.060562459867334, 0.44911672950664894, 0.4241937786338523, 5.5332805420389874, 0.07609338664782417, 1.8828106722242444, -0.32773584797619604, 0.6882224752066346, -3.485991959348167]
+plant_baseline_p50_us = [95.539, 95.589, 96.05]
+plant_baseline_p99_us = [108.733, 108.083, 108.403]
+plant_baseline_max_us = [139.07, 175.328, 123.551]
+plant_candidate_p50_us = [95.208, 95.955, 95.819]
+plant_candidate_p99_us = [108.403, 110.146, 108.062]
+plant_candidate_max_us = [155.201, 148.227, 153.798]
+kernel_baseline_sampled_sm_mhz_by_process = ["1980,1995", "1965,1980", "1965,1980"]
+kernel_baseline_telemetry_samples_by_process = [16, 17, 16]
+kernel_candidate_sampled_sm_mhz_by_process = ["1740,1980,1995", "1965,1980", "1965,1980"]
+kernel_candidate_telemetry_samples_by_process = [17, 16, 16]
+plant_baseline_sampled_sm_mhz_by_process = ["1740", "1980", "1965,1980"]
+plant_baseline_telemetry_samples_by_process = [1, 1, 2]
+plant_candidate_sampled_sm_mhz_by_process = ["1980,1995", "1965,1980", "1740,1980"]
+plant_candidate_telemetry_samples_by_process = [3, 2, 2]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [64, 1, 1]
+role = "candidate"
+grid = [11264, 1, 1]
+index = 3
+workgroup = "(32, 2, 1, 1)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [18.41278666739821, 19.84299868912023, 15.630599802482404]
+kernel_round_changes_percent = [18.49097092727923, 18.483520714475144, 18.315912846758465, 18.360840144707314, 18.000006821210167, 17.87799539144228, 17.993615685097787, 25.683245162221446, 17.44370956668979, 17.502632120187034, 10.255516639920925, 17.49338865994945]
+kernel_baseline_p50_us = [15.040000107546803, 15.088000509422272, 15.2000002344721]
+kernel_candidate_p50_us = [17.823998859967105, 17.807999029173516, 17.823998859967105]
+plant_paired_p50_change_percent = [3.238264638957622, 4.164157179423911, 2.2180926637292098]
+plant_round_changes_percent = [2.79518598550601, 3.336128155223772, 3.138275162013815, 3.6854834613649468, 5.11094893061792, 3.0117058132905106, 5.051312654493145, 3.499248790109011, 3.090549084540739, 1.7144764382826194, 3.3852666430364664, 0.7049501948037662]
+plant_baseline_p50_us = [95.604, 95.364, 95.729]
+plant_baseline_p99_us = [109.625, 100.478, 100.689]
+plant_baseline_max_us = [126.868, 147.446, 149.45]
+plant_candidate_p50_us = [98.7145, 98.595, 98.224]
+plant_candidate_p99_us = [111.93, 102.302, 102.642]
+plant_candidate_max_us = [140.673, 310.672, 130.645]
+kernel_baseline_sampled_sm_mhz_by_process = ["1800,1980,1995", "1740,1965,1980", "1740,1965,1980"]
+kernel_baseline_telemetry_samples_by_process = [16, 16, 16]
+kernel_candidate_sampled_sm_mhz_by_process = ["1800,1980,1995", "1740,1965,1980", "1965,1980"]
+kernel_candidate_telemetry_samples_by_process = [17, 17, 16]
+plant_baseline_sampled_sm_mhz_by_process = ["1980", "1965,1980", "1965,1980"]
+plant_baseline_telemetry_samples_by_process = [1, 2, 2]
+plant_candidate_sampled_sm_mhz_by_process = ["1800,1980,1995", "1980", "1980"]
+plant_candidate_telemetry_samples_by_process = [3, 1, 2]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [128, 1, 1]
+role = "candidate"
+grid = [5632, 1, 1]
+index = 4
+workgroup = "(32, 4, 1, 1)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [12.333368409327727, 10.101528827867057, 12.115112901545633]
+kernel_round_changes_percent = [12.231770873199842, 12.60344270045739, 12.19841249082263, 12.300303683528547, 5.015386090312646, 11.830252884118831, 11.859913519922216, 11.863055622838981, 12.152965008759198, 12.222799690470554, 11.914929403444008, 12.17000793880838]
+kernel_baseline_p50_us = [15.007999536464922, 15.088000509422272, 15.231999896059278]
+kernel_candidate_p50_us = [16.816000425023958, 16.879999748198316, 17.08799936750438]
+plant_paired_p50_change_percent = [2.2597007097816757, 0.6961544362004135, 1.265309408749582]
+plant_round_changes_percent = [2.0429599061704717, 2.8476870377472485, 1.7565537750001026, 2.3948472412938626, 1.8476205839240256, 1.3400569751168767, 2.216642401712088, -2.5463973987171706, 1.3683987187544489, 1.8825797676092826, 1.5791077491961847, 0.2388009251588663]
+plant_baseline_p50_us = [95.639, 95.89, 96.25]
+plant_baseline_p99_us = [105.247, 109.245, 109.615]
+plant_baseline_max_us = [141.856, 285.154, 136.987]
+plant_candidate_p50_us = [97.6275, 97.603, 97.823]
+plant_candidate_p99_us = [107.862, 110.247, 115.617]
+plant_candidate_max_us = [133.67, 162.484, 145.112]
+kernel_baseline_sampled_sm_mhz_by_process = ["1815,1980,1995", "1740,1965,1980", "1740,1935,1965,1980"]
+kernel_baseline_telemetry_samples_by_process = [16, 16, 16]
+kernel_candidate_sampled_sm_mhz_by_process = ["1800,1815,1980,1995", "1965,1980", "1935,1965,1980"]
+kernel_candidate_telemetry_samples_by_process = [16, 16, 16]
+plant_baseline_sampled_sm_mhz_by_process = ["1800,1980", "", ""]
+plant_baseline_telemetry_samples_by_process = [2, 0, 0]
+plant_candidate_sampled_sm_mhz_by_process = ["1980,1995", "1965,1980", "1740,1980"]
+plant_candidate_telemetry_samples_by_process = [2, 4, 2]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [256, 1, 1]
+role = "candidate"
+grid = [3072, 1, 1]
+index = 5
+workgroup = "(32, 8, 1, 1)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [21.6710744069057, 20.602261075250915, 20.63108237457476]
+kernel_round_changes_percent = [21.095028581717944, 23.569403338188664, 21.006388293190483, 21.033003295239006, 20.594415142805246, 20.599147195649504, 20.594485621058723, 20.620998342973664, 20.863873667795787, 20.940057179383032, 19.85852790894247, 20.865201420805924]
+kernel_baseline_p50_us = [15.024000276753213, 15.088000509422272, 15.16799966339022]
+kernel_candidate_p50_us = [18.184000509791076, 18.19200042518787, 18.33600072131958]
+plant_paired_p50_change_percent = [3.427718170495142, 3.784676804373266, 3.575854146251234]
+plant_round_changes_percent = [2.8684110940868646, 4.820329895599773, 3.4350220034037537, 2.6012397038593926, 7.582172982808344, 2.7522015024593616, 1.5825664284875751, 3.3195058589746695, 4.545656250270347, 2.5128488343734157, 3.6131575622124545, 3.6417861715033473]
+plant_baseline_p50_us = [95.459, 95.569, 95.819]
+plant_baseline_p99_us = [105.117, 108.023, 100.588]
+plant_baseline_max_us = [160.4, 148.107, 156.122]
+plant_candidate_p50_us = [98.464, 98.795, 98.9205]
+plant_candidate_p99_us = [110.087, 112.831, 102.903]
+plant_candidate_max_us = [153.858, 142.166, 135.984]
+kernel_baseline_sampled_sm_mhz_by_process = ["1815,1980,1995", "1965,1980", "1935,1965,1980"]
+kernel_baseline_telemetry_samples_by_process = [16, 16, 15]
+kernel_candidate_sampled_sm_mhz_by_process = ["1740,1815,1980,1995", "1965,1980", "1965,1980"]
+kernel_candidate_telemetry_samples_by_process = [17, 16, 19]
+plant_baseline_sampled_sm_mhz_by_process = ["", "1980", "1965,1980"]
+plant_baseline_telemetry_samples_by_process = [0, 1, 2]
+plant_candidate_sampled_sm_mhz_by_process = ["1815,1980,1995", "1740,1980", "1980"]
+plant_candidate_telemetry_samples_by_process = [4, 3, 1]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [128, 1, 1]
+role = "candidate"
+grid = [4608, 1, 1]
+index = 6
+workgroup = "(16, 8, 1, 1)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [-7.972724664434471, -6.74071908308812, -6.694339291869323]
+kernel_round_changes_percent = [-6.545062407915347, -6.431105695508865, -12.208933709470148, -6.570896239087265, -6.736842558750766, -6.71264949266166, -6.818783353766323, -6.694552509185591, -6.796648730887611, -6.626193722054142, -6.701835203862039, -6.652588866613051]
+kernel_baseline_p50_us = [15.040000107546803, 15.104000340215862, 15.16799966339022]
+kernel_candidate_p50_us = [14.047999684407841, 14.080000255489722, 14.14399957866408]
+plant_paired_p50_change_percent = [-1.3931796796202711, -1.4444437815370859, -1.4004236048994256]
+plant_round_changes_percent = [-1.7878814636450358, -1.3985906121729563, -1.447447154084902, -0.936940101463668, -1.796937815263988, -1.2694820992151357, -1.4513664079818023, -1.2590273732253632, -0.6454122597230993, -2.6233374868270376, -1.0653151007505968, -1.2564332461716954]
+plant_baseline_p50_us = [95.619, 95.4685, 95.679]
+plant_baseline_p99_us = [108.152, 100.478, 100.689]
+plant_baseline_max_us = [150.181, 138.049, 152.977]
+plant_candidate_p50_us = [94.507, 94.197, 94.697]
+plant_candidate_p99_us = [106.289, 99.816, 99.987]
+plant_candidate_max_us = [135.023, 137.798, 140.052]
+kernel_baseline_sampled_sm_mhz_by_process = ["1740,1890,1980,1995", "1740,1965,1980", "1965,1980"]
+kernel_baseline_telemetry_samples_by_process = [17, 16, 19]
+kernel_candidate_sampled_sm_mhz_by_process = ["1890,1980,1995", "1740,1965,1980", "1980"]
+kernel_candidate_telemetry_samples_by_process = [16, 17, 16]
+plant_baseline_sampled_sm_mhz_by_process = ["1995", "1980", "1965"]
+plant_baseline_telemetry_samples_by_process = [1, 1, 1]
+plant_candidate_sampled_sm_mhz_by_process = ["", "1965,1980", "1980"]
+plant_candidate_telemetry_samples_by_process = [0, 2, 2]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [256, 1, 1]
+role = "candidate"
+grid = [2304, 1, 1]
+index = 7
+workgroup = "(16, 16, 1, 1)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [-4.902071088563509, -4.79794607508911, -4.880239825516119]
+kernel_round_changes_percent = [-10.667957258429016, -4.400350207144321, -6.061941162502816, 1.9480884617230299, -4.736839806332682, -4.900672920227123, -4.777067892102982, -4.777124050483672, -10.79269220330874, 1.4853302482126463, -4.910259678694451, -4.907640649983436]
+kernel_baseline_p50_us = [15.024000276753213, 15.104000340215862, 15.16799966339022]
+kernel_candidate_p50_us = [14.336000276671257, 14.368000847753137, 14.415999430639204]
+plant_paired_p50_change_percent = [-1.0676968147478538, -1.3579422340221026, 0.06428049066855568]
+plant_round_changes_percent = [0.12539879112363206, -3.168307298124784, -0.4128361791865598, -0.7827164795149999, 0.19923450231240647, 1.3864901565661558, -0.46734520405208313, -6.364957154660688, -0.8662945230075825, 0.926340165427253, 1.0439504748229744, -0.8300428280193506]
+plant_baseline_p50_us = [96.7815, 95.9195, 95.574]
+plant_baseline_p99_us = [108.443, 108.744, 100.408]
+plant_baseline_max_us = [158.467, 142.206, 172.383]
+plant_candidate_p50_us = [95.499, 95.459, 94.887]
+plant_candidate_p99_us = [107.772, 108.954, 99.497]
+plant_candidate_max_us = [159.098, 155.18, 158.768]
+kernel_baseline_sampled_sm_mhz_by_process = ["1740,1860,1980,1995", "1965,1980", "1740,1980"]
+kernel_baseline_telemetry_samples_by_process = [17, 15, 15]
+kernel_candidate_sampled_sm_mhz_by_process = ["1740,1860,1980,1995", "1965,1980", "1740,1980"]
+kernel_candidate_telemetry_samples_by_process = [17, 16, 16]
+plant_baseline_sampled_sm_mhz_by_process = ["1740,1995", "1965,1980", "1980"]
+plant_baseline_telemetry_samples_by_process = [2, 2, 1]
+plant_candidate_sampled_sm_mhz_by_process = ["1890,1980", "1980", ""]
+plant_candidate_telemetry_samples_by_process = [2, 2, 0]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [512, 1, 1]
+role = "candidate"
+grid = [1536, 1, 1]
+index = 8
+workgroup = "(32, 16, 1, 1)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [28.39457261516265, 27.931085062346227, 27.00447346085768]
+kernel_round_changes_percent = [28.357030033269616, 28.38744717827124, 28.366166510226787, 28.467676372734996, 27.889782900046267, 28.01075723764974, 27.851474590842585, 27.972388434861163, 27.09929904076216, 27.20583029336272, 26.740488979373445, 26.97274905780902]
+kernel_baseline_p50_us = [14.999999621068127, 15.088000509422272, 16.16000008652918]
+kernel_candidate_p50_us = [19.239999346609693, 19.295999663881958, 20.48800070042489]
+plant_paired_p50_change_percent = [6.177097412711441, 4.835219382442424, 5.006618055424905]
+plant_round_changes_percent = [10.321306469705993, 4.219649877066178, 5.9731559777119525, 4.308216731726899, 4.963374863939052, 4.540241114523913, 5.141751153349161, 4.696543510403561, 4.480941470126232, 5.678990631176317, 5.193382856550444, 4.677304337876853]
+plant_baseline_p50_us = [100.358, 95.449, 101.27]
+plant_baseline_p99_us = [111.178, 100.398, 111.92]
+plant_baseline_max_us = [142.617, 129.462, 142.918]
+plant_candidate_p50_us = [106.399, 100.028, 105.903]
+plant_candidate_p99_us = [115.767, 104.205, 115.286]
+plant_candidate_max_us = [148.999, 150.271, 149.54]
+kernel_baseline_sampled_sm_mhz_by_process = ["1740,1980,1995", "1965,1980", "1740,1755,1980"]
+kernel_baseline_telemetry_samples_by_process = [16, 15, 16]
+kernel_candidate_sampled_sm_mhz_by_process = ["1740,1980,1995", "1980", "1740,1755,1980"]
+kernel_candidate_telemetry_samples_by_process = [15, 16, 17]
+plant_baseline_sampled_sm_mhz_by_process = ["1980", "1965,1980", "1740"]
+plant_baseline_telemetry_samples_by_process = [1, 2, 1]
+plant_candidate_sampled_sm_mhz_by_process = ["1740,1995", "1980", "1740,1980"]
+plant_candidate_telemetry_samples_by_process = [2, 1, 2]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [352, 1, 1]
+role = "candidate"
+grid = [1536, 1, 1]
+index = 9
+workgroup = "(44, 8, 1, 1)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [-9.593738352333714, -10.3288340833394, -10.345211131895937]
+kernel_round_changes_percent = [-9.603016470878668, -9.554481686739969, -9.58466590992474, -9.632771461087742, -10.339363040281746, -10.339363040281746, -10.339363040281746, -10.297239793362722, -10.408280510375622, -10.26833279071453, -10.26655755785364, -10.437536480702281]
+kernel_baseline_p50_us = [14.991999705671333, 15.088000509422272, 15.18400040367851]
+kernel_candidate_p50_us = [13.527999726647977, 13.519999811251182, 13.59999987471383]
+plant_paired_p50_change_percent = [-1.7030578504224847, -1.22172242276134, -1.0464234891315094]
+plant_round_changes_percent = [-1.0640594272261716, -3.157214594651492, -1.2396557347843618, -1.3366000376328402, 0.7181686504223128, -3.136462979132859, -0.4159127729520984, -2.008658096646976, -0.7716704399291618, -0.4077491993965676, -1.1660385360602321, -1.8345749036710823]
+plant_baseline_p50_us = [94.948, 95.249, 97.217]
+plant_baseline_p99_us = [99.837, 100.138, 111.69]
+plant_baseline_max_us = [134.602, 137.848, 149.991]
+plant_candidate_p50_us = [93.725, 94.117, 95.2535]
+plant_candidate_p99_us = [98.024, 99.076, 108.814]
+plant_candidate_max_us = [135.063, 141.875, 148.899]
+kernel_baseline_sampled_sm_mhz_by_process = ["1980,1995", "1980", "1740,1935,1980"]
+kernel_baseline_telemetry_samples_by_process = [16, 17, 16]
+kernel_candidate_sampled_sm_mhz_by_process = ["1980,1995", "1980", "1935,1980"]
+kernel_candidate_telemetry_samples_by_process = [17, 16, 16]
+plant_baseline_sampled_sm_mhz_by_process = ["1995", "1980", "1740,1980"]
+plant_baseline_telemetry_samples_by_process = [1, 1, 2]
+plant_candidate_sampled_sm_mhz_by_process = ["1995", "1980", "1755,1980"]
+plant_candidate_telemetry_samples_by_process = [1, 2, 2]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [704, 1, 1]
+role = "candidate"
+grid = [768, 1, 1]
+index = 10
+workgroup = "(44, 16, 1, 1)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [-5.56953261552442, -5.823652459428896, -7.1836938188963195]
+kernel_round_changes_percent = [-3.944182557202791, -4.023617334793162, -10.137011366895765, -4.020242310650712, -10.179811606033585, -4.271685309169837, -4.377819170274499, -4.325907100889981, -11.535233727611715, -5.755029855338711, -5.6523907390116594, -5.650911743775266]
+kernel_baseline_p50_us = [14.944000213290565, 15.088000509422272, 15.15199983259663]
+kernel_candidate_p50_us = [14.336000276671257, 14.432000170927495, 14.287999874795787]
+plant_paired_p50_change_percent = [-0.7048647545908393, -0.3275412703768965, -0.7604207433409726]
+plant_round_changes_percent = [-0.9404601362907883, -1.7010050375802832, -0.18507174348411093, 0.01635059678914974, 1.3331310042358657, -1.2391908896986048, -0.3877516464554587, -0.996204890217367, -0.5901300880367444, -1.2628620239544697, -0.5920407440630826, -0.594947474346641]
+plant_baseline_p50_us = [94.7575, 95.489, 95.839]
+plant_baseline_p99_us = [99.406, 99.777, 100.668]
+plant_baseline_max_us = [144.671, 140.693, 133.921]
+plant_candidate_p50_us = [94.457, 95.008, 95.1285]
+plant_candidate_p99_us = [99.586, 99.537, 99.967]
+plant_candidate_max_us = [137.637, 137.949, 146.204]
+kernel_baseline_sampled_sm_mhz_by_process = ["1740,1980,1995", "1740,1980", "1740,1980"]
+kernel_baseline_telemetry_samples_by_process = [16, 16, 17]
+kernel_candidate_sampled_sm_mhz_by_process = ["1980,1995", "1980", "1740,1980"]
+kernel_candidate_telemetry_samples_by_process = [16, 17, 16]
+plant_baseline_sampled_sm_mhz_by_process = ["1980,1995", "1980", "1980"]
+plant_baseline_telemetry_samples_by_process = [3, 1, 1]
+plant_candidate_sampled_sm_mhz_by_process = ["1995", "1980", ""]
+plant_candidate_telemetry_samples_by_process = [1, 1, 0]
+
+[[comparison]]
+ndrange = [44, 44, 16, 16]
+block = [256, 1, 1]
+role = "candidate"
+grid = [2304, 1, 1]
+index = 11
+workgroup = "(8, 8, 2, 2)"
+registers_per_thread = 30
+kernel_paired_p50_change_percent = [-0.30203567548543475, -3.81187902493183, -1.232973953693317]
+kernel_round_changes_percent = [-1.9050121055115166, -1.8240920164213303, -1.90297425313124, 4.577337030048789, -2.3070461240456863, -2.255836525211685, -8.30979648003478, -2.229293924470277, -2.7983192408904456, -2.7455674728835477, -2.7704348353408292, 3.530040970473136]
+kernel_baseline_p50_us = [14.928000382496975, 15.071999769133981, 15.15199983259663]
+kernel_candidate_p50_us = [14.65599962102715, 14.7360005939845, 14.7360005939845]
+plant_paired_p50_change_percent = [1.2265637107826466, 1.4902051918832981, -0.3656616121684664]
+plant_round_changes_percent = [-0.11328720994477903, 2.052746514757353, 3.988102804899607, -0.9483067232338493, 6.722466709344932, -0.38010098527889724, -0.29468670435418565, 0.08667643804909364, 0.45536019218681556, -0.7982985990361402, -0.4843758716923774, -0.6306021879059265]
+plant_baseline_p50_us = [95.2235, 95.609, 95.9195]
+plant_baseline_p99_us = [108.362, 108.123, 108.733]
+plant_baseline_max_us = [162.234, 151.453, 144.841]
+plant_candidate_p50_us = [95.2385, 95.579, 95.2485]
+plant_candidate_p99_us = [107.892, 109.555, 108.924]
+plant_candidate_max_us = [136.586, 304.831, 144.551]
+kernel_baseline_sampled_sm_mhz_by_process = ["1980,1995", "1740,1980", "1980"]
+kernel_baseline_telemetry_samples_by_process = [16, 18, 16]
+kernel_candidate_sampled_sm_mhz_by_process = ["1740,1980,1995", "1740,1980", "1740,1980"]
+kernel_candidate_telemetry_samples_by_process = [16, 16, 16]
+plant_baseline_sampled_sm_mhz_by_process = ["1980,1995", "", "1740,1980"]
+plant_baseline_telemetry_samples_by_process = [2, 0, 3]
+plant_candidate_sampled_sm_mhz_by_process = ["1740,1995", "", "1980"]
+plant_candidate_telemetry_samples_by_process = [2, 0, 1]
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-sh-pupil-workgroups/run1.toml.gz"
+uncompressed_sha256 = "3042cc77a78fdaf6eb3a709e5d0b03fe50dbee0d2c5a1d9b24bfe77de64c035a"
+archive_sha256 = "621371842b9948874040f24b3a1944b81e421d9222684dd0cb1e74bcce32317b"
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-sh-pupil-workgroups/run2.toml.gz"
+uncompressed_sha256 = "3589dc1cc400901ffd595eebd0a60929c5ae0f884de3a00773dcd200b2b3c4b4"
+archive_sha256 = "2e696a0cb9ece4294f80bee36599b6319f992f51cfede474497bb6b8342f7531"
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-sh-pupil-workgroups/run3.toml.gz"
+uncompressed_sha256 = "98beb86d9eb953b5228835a9c89cd479b61ee092254fc8d80a0265d3cabf6b2b"
+archive_sha256 = "54f8ef299aaada38dee23151b29b562b53bb55a308a191223281ae65039f5dee"
+
+[[raw_archive]]
+path = "benchmarks/results/platform/2026-10-21-sh-pupil-workgroups/telemetry.csv.gz"
+uncompressed_sha256 = "716bb4b87beb8526783f6e61b40c2451d3b4936877f051fbe2c6b3606b17e4fa"
+archive_sha256 = "1cb017dd089e3c830843c3a2ea859d96d0b95b9a899775fc17d83ede1dd737c3"
